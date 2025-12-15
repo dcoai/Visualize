@@ -5,11 +5,13 @@ defmodule Examples.Charts.AreaChart do
   alias Visualize.SVG.Element
   alias Examples.ColorPalettes
 
-  @data (for i <- 0..30 do
-    %{
-      x: i,
-      y: :math.sin(i / 4) * 30 + 50 + :rand.uniform(10)
-    }
+  @data (for i <- 0..60 do
+    # Main wave with two higher frequency harmonics for interesting texture
+    y = :math.sin(i / 4) * 30 +
+        :math.sin(i * 31 * :math.pi * 2 / 100) * 8 +
+        :math.sin(i * 27 * :math.pi * 2 / 100) * 5 +
+        50
+    %{x: i, y: y}
   end)
 
   def title, do: "Area Chart"
@@ -95,12 +97,13 @@ defmodule Examples.Charts.AreaChart do
     |> Element.append(chart_group)
   end
 
-  # Animation: create a moving wave
+  # Animation: create a moving wave with higher frequency harmonics
   defp generate_animated_wave(tick) do
     phase = tick * 0.15
-    for i <- 0..30 do
+    for i <- 0..60 do
       y = :math.sin((i / 4) + phase) * 30 +
-          :math.sin((i / 2) + phase * 1.3) * 10 +
+          :math.sin((i * 31 * :math.pi * 2 / 100) + phase * 2.1) * 8 +
+          :math.sin((i * 27 * :math.pi * 2 / 100) + phase * 1.7) * 5 +
           50
       %{x: i, y: max(5, y)}
     end

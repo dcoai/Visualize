@@ -20,10 +20,10 @@ defmodule Examples.ColorPalettes do
 
     sunrise: %{
       name: "Sunrise",
-      description: "Deep oranges to yellow to white",
-      colors: ["#ff4500", "#ff6b35", "#ff8c42", "#ffad5a", "#ffce73", "#ffe08a", "#fff1a8", "#ffffd4"],
-      gradient: ["#8b2500", "#cd3700", "#ff4500", "#ff6b35", "#ff8c42", "#ffad5a", "#ffce73", "#ffe08a", "#ffffd4"],
-      background: "#fffef5",
+      description: "Deep oranges to warm amber",
+      colors: ["#d94500", "#e85a10", "#f06d20", "#f58035", "#fa944a", "#ffa862", "#ffbc7a", "#ffd098"],
+      gradient: ["#8b2500", "#c03800", "#d94500", "#e85a10", "#f06d20", "#f58035", "#fa944a", "#ffa862", "#ffd098"],
+      background: "#fff8f0",
       text: "#5c3d2e",
       axis: "#8b5a2b",
       grid: "#ffecd2"
@@ -31,13 +31,13 @@ defmodule Examples.ColorPalettes do
 
     winter: %{
       name: "Winter",
-      description: "Medium blues to white",
-      colors: ["#3b82f6", "#60a5fa", "#7dd3fc", "#93c5fd", "#a5d8ff", "#bae6fd", "#d4eeff", "#e8f4ff"],
-      gradient: ["#3b82f6", "#60a5fa", "#7dd3fc", "#a5d8ff", "#bae6fd", "#d4eeff", "#f0f9ff", "#ffffff"],
-      background: "#f0f9ff",
-      text: "#1e40af",
-      axis: "#3b82f6",
-      grid: "#dbeafe"
+      description: "Cool grays with blue undertones",
+      colors: ["#4a6278", "#5d7a94", "#7192aa", "#88a8bc", "#a0bccb", "#b8ced9", "#d0dfe6", "#e8eff3"],
+      gradient: ["#4a6278", "#5d7a94", "#7192aa", "#a0bccb", "#b8ced9", "#d0dfe6", "#e8eff3", "#f8fafb"],
+      background: "#f5f7f9",
+      text: "#2c3e50",
+      axis: "#4a6278",
+      grid: "#dce4ea"
     },
 
     sunset: %{
@@ -75,13 +75,13 @@ defmodule Examples.ColorPalettes do
 
     summer: %{
       name: "Summer",
-      description: "Deep blues to green to white",
-      colors: ["#1a365d", "#2563eb", "#0891b2", "#06b6d4", "#10b981", "#34d399", "#86efac", "#d1fae5"],
-      gradient: ["#1a365d", "#2563eb", "#0891b2", "#10b981", "#34d399", "#86efac", "#d1fae5", "#ffffff"],
-      background: "#f0fdfa",
-      text: "#134e4a",
-      axis: "#2d6a6a",
-      grid: "#ccfbf1"
+      description: "Deep greens to light mint",
+      colors: ["#0d5c3d", "#0f7a4e", "#15946a", "#22a87a", "#34c78e", "#5dd9a4", "#8eeabc", "#c5f5dc"],
+      gradient: ["#0d5c3d", "#0f7a4e", "#15946a", "#22a87a", "#34c78e", "#5dd9a4", "#8eeabc", "#e0fbee"],
+      background: "#f0fdf6",
+      text: "#0d4a2d",
+      axis: "#1a6b45",
+      grid: "#d4f5e4"
     }
   }
 

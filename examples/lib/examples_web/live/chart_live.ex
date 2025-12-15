@@ -67,7 +67,8 @@ defmodule ExamplesWeb.ChartLive do
           palette_info: palette_info,
           animating: false,
           animation_tick: 0,
-          animatable: chart_slug in @animatable_charts
+          animatable: chart_slug in @animatable_charts,
+          hex_radius: 20
         )}
     end
   end
@@ -93,6 +94,11 @@ defmodule ExamplesWeb.ChartLive do
       schedule_animation()
       {:noreply, assign(socket, animating: true, animation_tick: 0)}
     end
+  end
+
+  def handle_event("change_hex_radius", %{"hex_radius" => radius_str}, socket) do
+    radius = String.to_integer(radius_str)
+    {:noreply, assign(socket, hex_radius: radius)}
   end
 
   def handle_info(:animate_tick, socket) do
@@ -167,10 +173,24 @@ defmodule ExamplesWeb.ChartLive do
               <% end %>
             </div>
           <% end %>
+
+          <%= if @slug == "hexbin" do %>
+            <form phx-change="change_hex_radius" class="slider-control">
+              <label for="hex-radius-slider">Hex Size: <%= @hex_radius %>px</label>
+              <input
+                type="range"
+                id="hex-radius-slider"
+                min="8"
+                max="50"
+                value={@hex_radius}
+                name="hex_radius"
+              />
+            </form>
+          <% end %>
         </div>
 
         <div class="chart-container" style={"background-color: #{ColorPalettes.background(@current_palette)}"}>
-          <%= Phoenix.HTML.raw(render_chart(@module, @current_palette, @animation_tick, @animating)) %>
+          <%= Phoenix.HTML.raw(render_chart(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius)) %>
         </div>
 
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">Sample Code</h3>
@@ -323,15 +343,73 @@ defmodule ExamplesWeb.ChartLive do
         padding: 0.3rem 0.6rem;
         border-radius: 4px;
       }
+
+      .slider-control {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .slider-control label {
+        font-weight: 600;
+        color: #444;
+        font-size: 14px;
+        min-width: 110px;
+      }
+
+      .slider-control input[type="range"] {
+        width: 150px;
+        height: 6px;
+        -webkit-appearance: none;
+        appearance: none;
+        background: #ddd;
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+      }
+
+      .slider-control input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        background: #4e79a7;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      .slider-control input[type="range"]::-webkit-slider-thumb:hover {
+        background: #3d6089;
+      }
+
+      .slider-control input[type="range"]::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        background: #4e79a7;
+        border-radius: 50%;
+        cursor: pointer;
+        border: none;
+      }
+
+      .slider-control input[type="range"]::-moz-range-thumb:hover {
+        background: #3d6089;
+      }
     </style>
     """
   end
 
-  defp render_chart(module, palette, tick, animating) do
+  defp render_chart(module, palette, tick, animating, slug, hex_radius) do
     opts = [width: 700, height: 450, palette: palette]
 
     opts = if animating do
       Keyword.put(opts, :animation_tick, tick)
+    else
+      opts
+    end
+
+    opts = if slug == "hexbin" do
+      Keyword.put(opts, :hex_radius, hex_radius)
     else
       opts
     end

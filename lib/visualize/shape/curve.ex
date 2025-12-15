@@ -301,7 +301,8 @@ defmodule Visualize.Shape.Curve do
            if m0 * m1 <= 0 do
              0
            else
-             3 * (m0 + m1) / (2 / m0 + 1 / m1 + 2 / m0 + 1 / m1)
+             # Harmonic mean of slopes for smooth monotone interpolation
+             2 * m0 * m1 / (m0 + m1)
            end
          end)) ++
         [List.last(slopes)]

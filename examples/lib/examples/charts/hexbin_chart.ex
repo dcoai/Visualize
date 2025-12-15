@@ -48,8 +48,8 @@ defmodule Examples.Charts.HexbinChart do
     inner_width = width - margin.left - margin.right
     inner_height = height - margin.top - margin.bottom
 
-    # Hex radius
-    hex_radius = 20
+    # Hex radius (configurable via slider)
+    hex_radius = opts[:hex_radius] || 20
 
     # Get data (animate by adding jitter)
     data = if animation_tick do
@@ -103,9 +103,20 @@ defmodule Examples.Charts.HexbinChart do
     x_axis = Axis.bottom(x_scale) |> Axis.ticks(6)
     y_axis = Axis.left(y_scale) |> Axis.ticks(5)
 
+    # Create clip path for the chart area
+    clip_path = Element.defs(%{})
+      |> Element.append(
+        Element.clipPath(%{id: "hexbin-clip"})
+        |> Element.append(Element.rect(%{x: 0, y: 0, width: inner_width, height: inner_height}))
+      )
+
+    # Clipped hex group
+    hex_group = Element.g(%{clip_path: "url(#hexbin-clip)"})
+      |> Element.append(hex_elements)
+
     # Chart group with margin transform
     chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(hex_elements)
+      |> Element.append(hex_group)
       |> Element.append(
         Element.g(%{transform: "translate(0,#{inner_height})"})
         |> Element.append(Axis.generate(x_axis))
@@ -124,6 +135,7 @@ defmodule Examples.Charts.HexbinChart do
     |> Element.content("Point Density (#{length(data)} points)")
 
     Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
+    |> Element.append(clip_path)
     |> Element.append(chart_group)
     |> Element.append(title)
   end

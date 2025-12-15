@@ -6,11 +6,12 @@ defmodule Examples.Charts.LineChart do
   alias Examples.ColorPalettes
 
   @data (for i <- 0..50 do
-    %{x: i, y: :math.sin(i / 5) * 50 + 50 + :rand.uniform(10) - 5}
+    y = :math.sin(i / 5) * 40 + :math.sin(i / 3) * 15 + 50
+    %{x: i, y: y}
   end)
 
   def title, do: "Line Chart"
-  def description, do: "Sine wave with random noise"
+  def description, do: "Composite sine wave"
 
   def render(opts \\ []) do
     width = opts[:width] || 600

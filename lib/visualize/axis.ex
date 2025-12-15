@@ -203,7 +203,7 @@ defmodule Visualize.Axis do
           %{fill: "currentColor", y: k * axis.tick_size_inner + axis.tick_padding, dy: "0.71em"}
 
         :left ->
-          %{fill: "currentColor", x: -k * axis.tick_size_inner - axis.tick_padding, dy: "0.32em"}
+          %{fill: "currentColor", x: k * axis.tick_size_inner - axis.tick_padding, dy: "0.32em"}
 
         :right ->
           %{fill: "currentColor", x: k * axis.tick_size_inner + axis.tick_padding, dy: "0.32em"}
