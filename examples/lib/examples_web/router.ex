@@ -16,5 +16,9 @@ defmodule ExamplesWeb.Router do
 
     live "/", GalleryLive, :index
     live "/chart/:chart", ChartLive, :show
+    live "/performance", PerformanceLive, :index
+    live "/hybrid", HybridLive, :index
+    live "/high-performance", HighPerformanceLive, :index
+    live "/incremental", IncrementalLive, :index
   end
 end

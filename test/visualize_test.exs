@@ -180,7 +180,8 @@ defmodule VisualizeTest do
 
       element = Axis.generate(axis)
 
-      assert element.tag == :g
+      # Axis now returns IR.Element with :type instead of SVG.Element with :tag
+      assert element.type == :group
       assert length(element.children) > 1  # domain + ticks
     end
   end

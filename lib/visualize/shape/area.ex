@@ -23,7 +23,7 @@ defmodule Visualize.Shape.Area do
   """
 
   alias Visualize.Shape.Curve
-  alias Visualize.SVG.Path
+  alias Visualize.IR.Path
 
   defstruct x: nil,
             x0: nil,
@@ -108,12 +108,17 @@ defmodule Visualize.Shape.Area do
     %{area | curve: curve_type, curve_opts: opts}
   end
 
-  @doc "Generates the SVG path data string"
+  @doc """
+  Generates the SVG path data string.
+
+  Note: For backend-agnostic usage, prefer `generate_path/2`
+  and render with your chosen backend.
+  """
   @spec generate(t(), [any()]) :: String.t()
   def generate(%__MODULE__{} = area, data) do
     area
     |> generate_path(data)
-    |> Path.to_string()
+    |> Visualize.Backend.SVG.path_data()
   end
 
   @doc "Generates a Path struct"
@@ -157,21 +162,6 @@ defmodule Visualize.Shape.Area do
       # Combine: top path + line to bottom start + bottom path + close
       combine_paths(top_path, bottom_path)
     end
-  end
-
-  @doc "Generates path data and creates an SVG path element"
-  @spec to_element(t(), [any()], keyword()) :: Visualize.SVG.Element.t()
-  def to_element(%__MODULE__{} = area, data, attrs \\ []) do
-    path_data = generate(area, data)
-
-    default_attrs = %{
-      d: path_data,
-      fill: "currentColor",
-      stroke: "none"
-    }
-
-    merged_attrs = Map.merge(default_attrs, Map.new(attrs))
-    Visualize.SVG.Element.path(merged_attrs)
   end
 
   defp normalize_accessor(accessor) when is_function(accessor, 1), do: accessor

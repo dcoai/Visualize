@@ -142,16 +142,16 @@ defmodule Visualize.Shape do
   def generate(%Symbol{} = shape, data), do: Symbol.generate(shape, data)
   def generate(%Stack{} = shape, data), do: Stack.generate(shape, data)
 
-  @doc "Generates a Path struct (for Line, Area, Arc, Symbol)"
+  @doc """
+  Generates a Path struct (for Line, Area, Arc, Symbol).
+
+  Use this for backend-agnostic path generation, then render
+  with `Visualize.Render.to_string/2` or create an element with
+  `Visualize.IR.Element.path/2`.
+  """
   def generate_path(shape, data \\ nil)
   def generate_path(%Line{} = shape, data), do: Line.generate_path(shape, data)
   def generate_path(%Area{} = shape, data), do: Area.generate_path(shape, data)
   def generate_path(%Arc{} = shape, data), do: Arc.generate_path(shape, data)
   def generate_path(%Symbol{} = shape, data), do: Symbol.generate_path(shape, data)
-
-  @doc "Generates an SVG element with the shape"
-  def to_element(shape, data, attrs \\ [])
-  def to_element(%Line{} = shape, data, attrs), do: Line.to_element(shape, data, attrs)
-  def to_element(%Area{} = shape, data, attrs), do: Area.to_element(shape, data, attrs)
-  def to_element(%Arc{} = shape, data, attrs), do: Arc.to_element(shape, data, attrs)
 end

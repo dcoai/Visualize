@@ -15,7 +15,7 @@ defmodule Visualize.Shape.Symbol do
 
   """
 
-  alias Visualize.SVG.{Path, Element}
+  alias Visualize.IR.Path
 
   @sqrt3 :math.sqrt(3)
   @tau 2 * :math.pi()
@@ -58,12 +58,17 @@ defmodule Visualize.Shape.Symbol do
     %{symbol | size: size}
   end
 
-  @doc "Generates the SVG path data string"
+  @doc """
+  Generates the SVG path data string.
+
+  Note: For backend-agnostic usage, prefer `generate_path/2`
+  and render with your chosen backend.
+  """
   @spec generate(t(), any()) :: String.t()
   def generate(%__MODULE__{} = symbol, data \\ nil) do
     symbol
     |> generate_path(data)
-    |> Path.to_string()
+    |> Visualize.Backend.SVG.path_data()
   end
 
   @doc "Generates a Path struct"
@@ -86,88 +91,6 @@ defmodule Visualize.Shape.Symbol do
   @doc "Returns all available symbol types"
   @spec types() :: [symbol_type()]
   def types, do: [:circle, :cross, :diamond, :square, :star, :triangle, :wye]
-
-  @doc """
-  Generates a symbol as native SVG element(s) instead of a path.
-
-  For `:circle` and `:square`, this produces more efficient SVG using
-  native `<circle>` and `<rect>` elements. For `:cross`, it uses two
-  overlapping `<rect>` elements. Other symbols fall back to `<path>`.
-
-  ## Examples
-
-      symbol = Symbol.new() |> Symbol.type(:circle) |> Symbol.size(64)
-      element = Symbol.to_element(symbol, fill: "red")
-      # Returns an Element struct for <circle r="4.51" cx="0" cy="0" fill="red"/>
-
-      # With transformation for positioning
-      element = Symbol.to_element(symbol, fill: "blue", transform: "translate(100, 50)")
-
-  """
-  @spec to_element(t(), keyword()) :: Element.t()
-  def to_element(%__MODULE__{type: type, size: size}, attrs \\ []) do
-    symbol_type = apply_value(type, nil)
-    symbol_size = apply_value(size, nil)
-
-    case symbol_type do
-      :circle -> circle_element(symbol_size, attrs)
-      :square -> square_element(symbol_size, attrs)
-      :cross -> cross_element(symbol_size, attrs)
-      # Fall back to path for other symbols
-      _ -> path_element(symbol_type, symbol_size, attrs)
-    end
-  end
-
-  # Native SVG circle element
-  defp circle_element(size, attrs) do
-    r = :math.sqrt(size / :math.pi())
-
-    Element.circle(
-      Keyword.merge([r: r, cx: 0, cy: 0], attrs)
-    )
-  end
-
-  # Native SVG rect element for square
-  defp square_element(size, attrs) do
-    side = :math.sqrt(size)
-
-    Element.rect(
-      Keyword.merge([
-        x: -side / 2,
-        y: -side / 2,
-        width: side,
-        height: side
-      ], attrs)
-    )
-  end
-
-  # Two overlapping rects for cross
-  defp cross_element(size, attrs) do
-    r = :math.sqrt(size / 5)
-    w = r * 3
-    h = r
-
-    # Create group with two rects
-    horizontal = Element.rect(
-      Keyword.merge([x: -w / 2, y: -h / 2, width: w, height: h], attrs)
-    )
-
-    vertical = Element.rect(
-      Keyword.merge([x: -h / 2, y: -w / 2, width: h, height: w], attrs)
-    )
-
-    Element.g(attrs)
-    |> Element.append([horizontal, vertical])
-  end
-
-  # Fallback to path for other symbol types
-  defp path_element(symbol_type, size, attrs) do
-    path_data = generate(%__MODULE__{type: symbol_type, size: size})
-
-    Element.path(
-      Keyword.merge([d: path_data], attrs)
-    )
-  end
 
   # Circle: area = pi * r^2, so r = sqrt(size / pi)
   defp circle_path(size) do

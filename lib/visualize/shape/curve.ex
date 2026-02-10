@@ -5,7 +5,7 @@ defmodule Visualize.Shape.Curve do
   Curves define how points are connected in a path.
   """
 
-  alias Visualize.SVG.Path
+  alias Visualize.IR.Path
 
   @type point :: {number(), number()}
   @type curve_type ::

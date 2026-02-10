@@ -22,7 +22,7 @@ defmodule Visualize.Shape.Line do
   """
 
   alias Visualize.Shape.Curve
-  alias Visualize.SVG.Path
+  alias Visualize.IR.Path
 
   defstruct x: nil,
             y: nil,
@@ -111,12 +111,15 @@ defmodule Visualize.Shape.Line do
 
   @doc """
   Generates the SVG path data string from the data.
+
+  Note: For backend-agnostic usage, prefer `generate_path/2`
+  and render with your chosen backend.
   """
   @spec generate(t(), [any()]) :: String.t()
   def generate(%__MODULE__{} = line, data) do
     line
     |> generate_path(data)
-    |> Path.to_string()
+    |> Visualize.Backend.SVG.path_data()
   end
 
   @doc """
@@ -135,24 +138,6 @@ defmodule Visualize.Shape.Line do
     else
       Curve.generate(curve_type, points, opts)
     end
-  end
-
-  @doc """
-  Generates path data and creates an SVG path element.
-  """
-  @spec to_element(t(), [any()], keyword()) :: Visualize.SVG.Element.t()
-  def to_element(%__MODULE__{} = line, data, attrs \\ []) do
-    path_data = generate(line, data)
-
-    default_attrs = %{
-      d: path_data,
-      fill: "none",
-      stroke: "currentColor",
-      stroke_width: 1.5
-    }
-
-    merged_attrs = Map.merge(default_attrs, Map.new(attrs))
-    Visualize.SVG.Element.path(merged_attrs)
   end
 
   defp maybe_filter_defined(data, nil), do: data

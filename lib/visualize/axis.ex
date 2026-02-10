@@ -2,7 +2,7 @@ defmodule Visualize.Axis do
   @moduledoc """
   Axis generator for creating reference marks and labels.
 
-  Creates SVG groups containing tick marks, labels, and axis lines.
+  Creates element groups containing tick marks, labels, and axis lines.
 
   ## Examples
 
@@ -14,11 +14,11 @@ defmodule Visualize.Axis do
         |> Visualize.Axis.ticks(5)
         |> Visualize.Axis.tick_format(fn v -> "\#{v}%" end)
 
-      svg_element = Visualize.Axis.generate(x_axis)
+      element = Visualize.Axis.generate(x_axis)
 
   """
 
-  alias Visualize.SVG.Element
+  alias Visualize.IR.{Element, Path, Transform}
   alias Visualize.Scale
 
   defstruct scale: nil,
@@ -108,38 +108,53 @@ defmodule Visualize.Axis do
     %{axis | offset: offset}
   end
 
-  @doc "Generates the axis as an SVG Element"
+  @doc """
+  Generates the axis as an IR Element tree.
+
+  Returns a group element containing the domain line and tick groups.
+  """
   @spec generate(t()) :: Element.t()
   def generate(%__MODULE__{} = axis) do
     tick_vals = get_tick_values(axis)
-    {k, x_attr, y_attr, transform_attr} = orient_params(axis.orient)
+    {k, _x_attr, y_attr, transform_attr} = orient_params(axis.orient)
 
-    # Create axis group
-    group = Element.g(%{
-      fill: "none",
-      font_size: 10,
-      font_family: "sans-serif",
-      text_anchor: text_anchor(axis.orient)
-    })
+    # Create axis group with styling
+    group =
+      Element.group([],
+        style: %{
+          fill: :none,
+          font_size: 10,
+          font_family: "sans-serif",
+          text_anchor: text_anchor_atom(axis.orient)
+        }
+      )
 
     # Add domain line
     domain_line = create_domain_line(axis, k)
     group = Element.append(group, domain_line)
 
     # Add tick groups
-    tick_groups = Enum.map(tick_vals, fn value ->
-      create_tick_group(axis, value, k, x_attr, y_attr, transform_attr)
-    end)
+    tick_groups =
+      Enum.map(tick_vals, fn value ->
+        create_tick_group(axis, value, k, y_attr, transform_attr)
+      end)
 
     Element.append(group, tick_groups)
   end
 
-  @doc "Renders the axis directly to an SVG string"
-  @spec render(t()) :: String.t()
-  def render(%__MODULE__{} = axis) do
+  @doc """
+  Renders the axis to a string using the specified backend.
+
+  ## Options
+
+    * `:backend` - The backend to use (`:svg`, `:canvas`, or a module). Defaults to `:svg`.
+
+  """
+  @spec render(t(), keyword()) :: String.t()
+  def render(%__MODULE__{} = axis, opts \\ []) do
     axis
     |> generate()
-    |> Visualize.SVG.Renderer.render_to_string()
+    |> Visualize.Render.to_string(opts)
   end
 
   # Get tick values from explicit values, scale, or default
@@ -156,67 +171,91 @@ defmodule Visualize.Axis do
   defp orient_params(:left), do: {-1, :y, :x2, :y}
   defp orient_params(:right), do: {1, :y, :x2, :y}
 
-  defp text_anchor(:left), do: "end"
-  defp text_anchor(:right), do: "start"
-  defp text_anchor(_), do: "middle"
+  defp text_anchor_atom(:left), do: :end
+  defp text_anchor_atom(:right), do: :start
+  defp text_anchor_atom(_), do: :middle
 
-  # Create the domain line
+  # Create the domain line as an IR.Element
   defp create_domain_line(%__MODULE__{scale: scale, orient: orient, tick_size_outer: outer}, k) do
     [r0, r1] = get_range(scale)
 
-    case orient do
-      o when o in [:top, :bottom] ->
-        Element.path(%{
-          stroke: "currentColor",
-          d: "M#{r0},#{k * outer}V0H#{r1}V#{k * outer}"
-        })
+    path =
+      case orient do
+        o when o in [:top, :bottom] ->
+          Path.new()
+          |> Path.move_to(r0, k * outer)
+          |> Path.vertical_to(0)
+          |> Path.horizontal_to(r1)
+          |> Path.vertical_to(k * outer)
 
-      o when o in [:left, :right] ->
-        Element.path(%{
-          stroke: "currentColor",
-          d: "M#{k * outer},#{r0}H0V#{r1}H#{k * outer}"
-        })
-    end
+        o when o in [:left, :right] ->
+          Path.new()
+          |> Path.move_to(k * outer, r0)
+          |> Path.horizontal_to(0)
+          |> Path.vertical_to(r1)
+          |> Path.horizontal_to(k * outer)
+      end
+
+    Element.path(path, %{stroke: :current_color})
   end
 
   # Create a tick group with line and label
-  defp create_tick_group(axis, value, k, _x_attr, y_attr, transform_attr) do
+  defp create_tick_group(axis, value, k, y_attr, transform_attr) do
     pos = Scale.apply(axis.scale, value) + axis.offset
     label = format_tick(axis, value)
 
     transform =
       case transform_attr do
-        :x -> "translate(#{pos},0)"
-        :y -> "translate(0,#{pos})"
+        :x -> Transform.translate(pos, 0)
+        :y -> Transform.translate(0, pos)
       end
 
-    tick_line_attrs =
-      %{stroke: "currentColor"}
-      |> Map.put(y_attr, k * axis.tick_size_inner)
-
-    text_attrs =
-      case axis.orient do
-        :top ->
-          %{fill: "currentColor", y: -k * axis.tick_size_inner - axis.tick_padding, dy: "0em"}
-
-        :bottom ->
-          %{fill: "currentColor", y: k * axis.tick_size_inner + axis.tick_padding, dy: "0.71em"}
-
-        :left ->
-          %{fill: "currentColor", x: k * axis.tick_size_inner - axis.tick_padding, dy: "0.32em"}
-
-        :right ->
-          %{fill: "currentColor", x: k * axis.tick_size_inner + axis.tick_padding, dy: "0.32em"}
+    # Create tick line
+    tick_line =
+      case y_attr do
+        :y2 -> Element.line(0, 0, 0, k * axis.tick_size_inner, %{stroke: :current_color})
+        :x2 -> Element.line(0, 0, k * axis.tick_size_inner, 0, %{stroke: :current_color})
       end
 
-    tick_group = Element.g(%{class: "tick", transform: transform})
+    # Create tick text with position
+    tick_text = create_tick_text(axis, label, k)
 
-    tick_line = Element.line(tick_line_attrs)
-    tick_text = Element.text(text_attrs) |> Element.content(label)
+    Element.group([tick_line, tick_text],
+      style: %{class: "tick"},
+      transform: transform
+    )
+  end
 
-    tick_group
-    |> Element.append(tick_line)
-    |> Element.append(tick_text)
+  defp create_tick_text(axis, label, k) do
+    case axis.orient do
+      :top ->
+        Element.text(label,
+          y: -k * axis.tick_size_inner - axis.tick_padding,
+          dy: "0em",
+          style: %{fill: :current_color}
+        )
+
+      :bottom ->
+        Element.text(label,
+          y: k * axis.tick_size_inner + axis.tick_padding,
+          dy: "0.71em",
+          style: %{fill: :current_color}
+        )
+
+      :left ->
+        Element.text(label,
+          x: k * axis.tick_size_inner - axis.tick_padding,
+          dy: "0.32em",
+          style: %{fill: :current_color}
+        )
+
+      :right ->
+        Element.text(label,
+          x: k * axis.tick_size_inner + axis.tick_padding,
+          dy: "0.32em",
+          style: %{fill: :current_color}
+        )
+    end
   end
 
   defp format_tick(%__MODULE__{tick_format: nil}, value) when is_float(value) do

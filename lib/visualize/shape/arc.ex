@@ -18,7 +18,7 @@ defmodule Visualize.Shape.Arc do
 
   """
 
-  alias Visualize.SVG.Path
+  alias Visualize.IR.Path
 
   defstruct inner_radius: 0,
             outer_radius: nil,
@@ -88,12 +88,17 @@ defmodule Visualize.Shape.Arc do
     %{arc | pad_angle: normalize_accessor(angle)}
   end
 
-  @doc "Generates the SVG path data string"
+  @doc """
+  Generates the SVG path data string.
+
+  Note: For backend-agnostic usage, prefer `generate_path/2`
+  and render with your chosen backend.
+  """
   @spec generate(t(), map() | any()) :: String.t()
   def generate(%__MODULE__{} = arc, data) do
     arc
     |> generate_path(data)
-    |> Path.to_string()
+    |> Visualize.Backend.SVG.path_data()
   end
 
   @doc "Generates a Path struct"
@@ -139,20 +144,6 @@ defmodule Visualize.Shape.Arc do
     a = (a0 + a1) / 2
 
     {r * :math.cos(a), r * :math.sin(a)}
-  end
-
-  @doc "Generates path data and creates an SVG path element"
-  @spec to_element(t(), any(), keyword()) :: Visualize.SVG.Element.t()
-  def to_element(%__MODULE__{} = arc, data, attrs \\ []) do
-    path_data = generate(arc, data)
-
-    default_attrs = %{
-      d: path_data,
-      fill: "currentColor"
-    }
-
-    merged_attrs = Map.merge(default_attrs, Map.new(attrs))
-    Visualize.SVG.Element.path(merged_attrs)
   end
 
   defp generate_partial_arc(path, r0, r1, a0, a1, da, cw) do

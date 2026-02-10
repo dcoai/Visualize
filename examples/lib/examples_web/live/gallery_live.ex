@@ -12,6 +12,7 @@ defmodule ExamplesWeb.GalleryLive do
     {Examples.Charts.AreaChart, "area"},
     {Examples.Charts.StackedAreaChart, "stacked_area"},
     {Examples.Charts.Streamgraph, "streamgraph"},
+    {Examples.Charts.RidgelinePlot, "ridgeline"},
     {Examples.Charts.PieChart, "pie"},
     {Examples.Charts.DonutChart, "donut"},
     {Examples.Charts.ScatterPlot, "scatter"},
@@ -47,6 +48,20 @@ defmodule ExamplesWeb.GalleryLive do
       <p>D3-style data visualizations in Elixir</p>
     </header>
     <main>
+      <div class="tools-bar">
+        <a href="/high-performance" class="tool-link" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+          <span class="tool-icon">🚀</span>
+          <span>High-Performance (Area + Lines, 10K pts)</span>
+        </a>
+        <a href="/performance" class="tool-link">
+          <span class="tool-icon">⚡</span>
+          <span>Backend Performance Test</span>
+        </a>
+        <a href="/hybrid" class="tool-link">
+          <span class="tool-icon">🔀</span>
+          <span>Hybrid SVG/Canvas Demo</span>
+        </a>
+      </div>
       <div class="gallery">
         <%= for {module, slug} <- @charts do %>
           <div class="chart-card">

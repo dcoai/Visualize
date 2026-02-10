@@ -20,9 +20,9 @@ defmodule Examples.ColorPalettes do
 
     sunrise: %{
       name: "Sunrise",
-      description: "Deep oranges to warm amber",
-      colors: ["#d94500", "#e85a10", "#f06d20", "#f58035", "#fa944a", "#ffa862", "#ffbc7a", "#ffd098"],
-      gradient: ["#8b2500", "#c03800", "#d94500", "#e85a10", "#f06d20", "#f58035", "#fa944a", "#ffa862", "#ffd098"],
+      description: "Warm amber to deep oranges",
+      colors: ["#ffd098", "#ffbc7a", "#ffa862", "#fa944a", "#f58035", "#f06d20", "#e85a10", "#d94500"],
+      gradient: ["#ffd098", "#ffa862", "#fa944a", "#f58035", "#f06d20", "#e85a10", "#d94500", "#c03800", "#8b2500"],
       background: "#fff8f0",
       text: "#5c3d2e",
       axis: "#8b5a2b",
@@ -42,9 +42,9 @@ defmodule Examples.ColorPalettes do
 
     sunset: %{
       name: "Sunset",
-      description: "Deep orange to reds to purple",
-      colors: ["#ff6b35", "#ff4757", "#e84393", "#be2edd", "#8854d0", "#6c5ce7", "#5f27cd", "#341f97"],
-      gradient: ["#ff6b35", "#ff4757", "#e84393", "#be2edd", "#8854d0", "#5f27cd", "#341f97"],
+      description: "Purple to reds to deep orange",
+      colors: ["#341f97", "#5f27cd", "#6c5ce7", "#8854d0", "#be2edd", "#e84393", "#ff4757", "#ff6b35"],
+      gradient: ["#341f97", "#5f27cd", "#8854d0", "#be2edd", "#e84393", "#ff4757", "#ff6b35"],
       background: "#fef5f0",
       text: "#4a1942",
       axis: "#6d3461",
