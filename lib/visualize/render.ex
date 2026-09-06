@@ -4,11 +4,14 @@ defmodule Visualize.Render do
 
   ## Backend Selection
 
-  Backends can be selected in three ways (in order of precedence):
+  Backends are selected in two ways (in order of precedence):
 
   1. Explicit parameter: `Visualize.Render.render(element, backend: :canvas)`
-  2. Process dictionary: `Visualize.Render.with_backend(:canvas, fn -> ... end)`
-  3. Application config: `config :visualize, default_backend: :svg`
+  2. Application config: `config :visualize, default_backend: :svg`
+
+  There is deliberately no ambient, per-process override: a backend chosen at a
+  distance is invisible at the call site, and restoring it needs a `try/after`.
+  Thread the backend through as an option instead.
 
   ## Examples
 
@@ -20,12 +23,6 @@ defmodule Visualize.Render do
 
       # Render to iolist for efficiency
       iolist = Visualize.Render.render(element)
-
-      # With temporary backend override
-      Visualize.Render.with_backend(:canvas, fn ->
-        canvas_output = Visualize.Render.to_string(element)
-        # ...
-      end)
 
   """
 
@@ -106,37 +103,6 @@ defmodule Visualize.Render do
   end
 
   @doc """
-  Executes a function with a specific backend set as the default.
-
-  The backend is stored in the process dictionary and restored after
-  the function returns.
-
-  ## Example
-
-      Visualize.Render.with_backend(:canvas, fn ->
-        # All render calls in here will use Canvas backend
-        element1 |> Visualize.Render.to_string()
-        element2 |> Visualize.Render.to_string()
-      end)
-
-  """
-  @spec with_backend(atom() | module(), (-> result)) :: result when result: any()
-  def with_backend(backend, fun) when is_function(fun, 0) do
-    old = Process.get(:visualize_backend)
-    Process.put(:visualize_backend, backend)
-
-    try do
-      fun.()
-    after
-      if old do
-        Process.put(:visualize_backend, old)
-      else
-        Process.delete(:visualize_backend)
-      end
-    end
-  end
-
-  @doc """
   Returns the path data string for the current backend.
 
   For SVG, this returns the `d` attribute value.
@@ -153,10 +119,9 @@ defmodule Visualize.Render do
   # ============================================================
 
   defp resolve_backend(opts) do
-    cond do
-      backend = Keyword.get(opts, :backend) -> Backend.resolve(backend)
-      backend = Process.get(:visualize_backend) -> Backend.resolve(backend)
-      true -> Backend.default()
+    case Keyword.get(opts, :backend) do
+      nil -> Backend.default()
+      backend -> Backend.resolve(backend)
     end
   end
 
