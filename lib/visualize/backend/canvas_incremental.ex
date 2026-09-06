@@ -23,9 +23,12 @@ defmodule Visualize.Backend.CanvasIncremental do
   [mode: u8]              # 0x01=scroll_x, 0x02=scroll_y, 0x03=scroll_xy, 0x00=full
   [dx: f32]               # horizontal scroll (pixels)
   [dy: f32]               # vertical scroll (pixels)
-  [region_count: u8]      # number of exposed regions (1-3)
+  [region_count: u8]      # number of exposed regions (0-3)
   [regions...]            # region data
   ```
+
+  `exposed_regions/2` yields at most two regions (one strip, or an L of two); the record
+  admits three and `encode_incremental/3` raises on more (D-38).
 
   Each region:
   ```
@@ -71,28 +74,29 @@ defmodule Visualize.Backend.CanvasIncremental do
   Calculates the scroll mode based on scroll direction.
 
   Returns:
+  - `:none` - a zero offset: nothing moved and nothing is exposed (D-38)
   - `:scroll_x` - horizontal only
   - `:scroll_y` - vertical only
   - `:scroll_xy` - diagonal (both axes)
   - `:full_redraw` - scroll too large, use full redraw
   """
   @spec scroll_mode(scroll_offset(), canvas_size()) ::
-          :scroll_x | :scroll_y | :scroll_xy | :full_redraw
+          :none | :scroll_x | :scroll_y | :scroll_xy | :full_redraw
   def scroll_mode({dx, dy}, {width, height}) do
     cond do
+      dx == 0 and dy == 0 -> :none
       not copy_beneficial?({dx, dy}, {width, height}) -> :full_redraw
-      dx != 0 and dy == 0 -> :scroll_x
-      dx == 0 and dy != 0 -> :scroll_y
-      dx != 0 and dy != 0 -> :scroll_xy
-      # No scroll
-      true -> :full_redraw
+      dy == 0 -> :scroll_x
+      dx == 0 -> :scroll_y
+      true -> :scroll_xy
     end
   end
 
   @doc """
   Calculates the exposed regions after a scroll operation.
 
-  Returns 1-3 regions depending on scroll direction:
+  Returns 0-2 regions depending on scroll direction:
+  - No scroll: no regions
   - Horizontal only: 1 vertical strip (left or right edge)
   - Vertical only: 1 horizontal strip (top or bottom edge)
   - Diagonal: 2 regions forming an L-shape (avoiding overlap)
@@ -239,10 +243,26 @@ defmodule Visualize.Backend.CanvasIncremental do
   ## Returns
 
   Binary data in incremental format that can be decoded by CanvasIncrementalChart hook.
+
+  Raises `ArgumentError` for more than three regions (the record's `region_count` is one
+  byte and `exposed_regions/2` never yields more than two) and for a zero offset, which
+  is not an incremental update (`scroll_mode/2` classifies it `:none`).
   """
+  @max_regions 3
+
   @spec encode_incremental(scroll_offset(), canvas_size(), [{bounds(), Element.t()}]) :: binary()
   def encode_incremental({dx, dy}, {width, height}, region_elements) do
+    if length(region_elements) > @max_regions do
+      raise ArgumentError,
+            "encode_incremental/3 takes at most #{@max_regions} regions, got #{length(region_elements)}"
+    end
+
     mode = scroll_mode({dx, dy}, {width, height})
+
+    if mode == :none do
+      raise ArgumentError, "a zero scroll offset is not an incremental update"
+    end
+
     mode_byte = mode_to_byte(mode)
 
     dx_f32 = to_float(dx)

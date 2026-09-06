@@ -14,6 +14,13 @@ defmodule Visualize.Incremental do
   3. Encodes only the new data for those regions
   4. Client copies existing canvas content shifted, then renders new data
 
+  Every entry point returns the event name `"canvas_incremental"` with a payload whose
+  `mode` is `"full"`, `"scroll_x"`, `"scroll_y"`, `"scroll_xy"` or `"none"` (a zero
+  delta: nothing to draw, nothing to push). `render_viewport/1` and `initial_render/1`
+  hand the whole dataset to `build_element` with the viewport, canvas size and margin in
+  the options map; it is the callback that decides what a full frame shows. Region
+  builds receive the data filtered to the exposed region.
+
   ## Example Usage
 
   ```elixir
@@ -90,7 +97,8 @@ defmodule Visualize.Incremental do
       the element tree for a subset of data.
     * `:viewport_x` - Initial x offset (default: 0).
     * `:viewport_y` - Initial y offset (default: 0).
-    * `:margin` - Chart margins `%{top:, right:, bottom:, left:}` (default: all 0).
+    * `:margin` - Chart margins `%{top:, right:, bottom:, left:}` (default: all 0),
+      passed to `build_element` as `margin` in its options map.
 
   ## Example
 
@@ -134,8 +142,11 @@ defmodule Visualize.Incremental do
 
   A tuple of `{event_type, payload, new_state}` where:
 
-    - `event_type` - Either `"canvas_incremental"` for optimized updates or `"canvas_full"` for full redraw
-    - `payload` - Map with `:binary`, `:dx`, `:dy`, `:mode` keys
+    - `event_type` - Always `"canvas_incremental"`
+    - `payload` - Map with `:binary`, `:dx`, `:dy`, `:mode` keys; `mode` is `"full"`
+      (the scroll was too large: the whole viewport is re-sent), `"scroll_x"`,
+      `"scroll_y"` or `"scroll_xy"` (copy-shift plus the exposed regions), or `"none"`
+      for a zero delta, whose `binary` is empty and which the client ignores
     - `new_state` - Updated state with new viewport position
 
   ## Example
@@ -154,6 +165,9 @@ defmodule Visualize.Incremental do
     mode = CanvasIncremental.scroll_mode({dx, dy}, canvas_size)
 
     case mode do
+      :none ->
+        {"canvas_incremental", %{binary: "", dx: 0, dy: 0, mode: "none"}, new_state}
+
       :full_redraw ->
         # Scroll too large or no scroll - full redraw
         {binary, new_state} = render_viewport(new_state)
@@ -197,18 +211,7 @@ defmodule Visualize.Incremental do
   """
   @spec render_viewport(t()) :: {binary(), t()}
   def render_viewport(state) do
-    # Get data visible in current viewport
-    visible_data = filter_visible_data(state)
-
-    # Build element for visible data
-    opts = %{
-      viewport_x: state.viewport_x,
-      viewport_y: state.viewport_y,
-      canvas_width: state.canvas_width,
-      canvas_height: state.canvas_height
-    }
-
-    element = state.build_element.(visible_data, opts)
+    element = state.build_element.(state.data, build_opts(state))
 
     # Encode as full redraw
     binary = CanvasIncremental.encode_full_redraw(element)
@@ -248,29 +251,23 @@ defmodule Visualize.Incremental do
   # Private functions
 
   defp build_region_elements(state, regions) do
-    Enum.map(regions, fn {rx, ry, rw, rh} = bounds ->
+    Enum.map(regions, fn bounds ->
       # Filter data to this region (in screen coordinates)
       region_data = filter_data_to_region(state, bounds)
-
-      # Build element for this region's data
-      opts = %{
-        viewport_x: state.viewport_x,
-        viewport_y: state.viewport_y,
-        canvas_width: state.canvas_width,
-        canvas_height: state.canvas_height,
-        clip_region: {rx, ry, rw, rh}
-      }
-
-      element = state.build_element.(region_data, opts)
-
-      {bounds, element}
+      opts = Map.put(build_opts(state), :clip_region, bounds)
+      {bounds, state.build_element.(region_data, opts)}
     end)
   end
 
-  defp filter_visible_data(state) do
-    # Filter data to what's visible in the current viewport
-    # This is a simplified version - in practice you'd use proper viewport bounds
-    state.data
+  # What `build_element` is told about the frame it draws.
+  defp build_opts(state) do
+    %{
+      viewport_x: state.viewport_x,
+      viewport_y: state.viewport_y,
+      canvas_width: state.canvas_width,
+      canvas_height: state.canvas_height,
+      margin: state.margin
+    }
   end
 
   defp filter_data_to_region(state, {rx, ry, rw, rh}) do
