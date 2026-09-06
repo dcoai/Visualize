@@ -39,10 +39,12 @@ defmodule Visualize.Layout.Force.Simulation do
 
   @default_alpha 1.0
   @default_alpha_min 0.001
-  @default_alpha_decay 0.0228  # ~300 iterations to cool
+  # ~300 iterations to cool
+  @default_alpha_decay 0.0228
   @default_alpha_target 0
   @default_velocity_decay 0.4
-  @tick_interval 16  # ~60fps
+  # ~60fps
+  @tick_interval 16
 
   defstruct [
     :nodes,

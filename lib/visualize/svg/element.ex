@@ -62,10 +62,12 @@ defmodule Visualize.SVG.Element do
   end
 
   def append(%__MODULE__{} = parent, children) when is_list(children) do
-    svg_children = Enum.map(children, fn
-      %__MODULE__{} = el -> el
-      %IR.Element{} = ir -> from_ir(ir)
-    end)
+    svg_children =
+      Enum.map(children, fn
+        %__MODULE__{} = el -> el
+        %IR.Element{} = ir -> from_ir(ir)
+      end)
+
     %{parent | children: parent.children ++ svg_children}
   end
 
@@ -99,18 +101,20 @@ defmodule Visualize.SVG.Element do
     attrs = ir.attrs
 
     # Add path data if present
-    attrs = if ir.path do
-      Map.put(attrs, :d, IR.Path.to_string(ir.path))
-    else
-      attrs
-    end
+    attrs =
+      if ir.path do
+        Map.put(attrs, :d, IR.Path.to_string(ir.path))
+      else
+        attrs
+      end
 
     # Add transform if present
-    attrs = if ir.transform do
-      Map.put(attrs, :transform, IR.Transform.to_string(ir.transform))
-    else
-      attrs
-    end
+    attrs =
+      if ir.transform do
+        Map.put(attrs, :transform, IR.Transform.to_string(ir.transform))
+      else
+        attrs
+      end
 
     # Convert style to SVG attributes
     style_attrs = style_to_attrs(ir.style)
@@ -118,6 +122,7 @@ defmodule Visualize.SVG.Element do
   end
 
   defp style_to_attrs(style) when map_size(style) == 0, do: %{}
+
   defp style_to_attrs(style) do
     style
     |> Enum.map(fn {key, value} ->
@@ -167,7 +172,9 @@ defmodule Visualize.SVG.Element do
   @doc """
   Common SVG element constructors.
   """
-  def svg(attrs \\ %{}), do: new(:svg, Map.merge(%{xmlns: "http://www.w3.org/2000/svg"}, to_map(attrs)))
+  def svg(attrs \\ %{}),
+    do: new(:svg, Map.merge(%{xmlns: "http://www.w3.org/2000/svg"}, to_map(attrs)))
+
   def g(attrs \\ %{}), do: new(:g, to_map(attrs))
   def rect(attrs \\ %{}), do: new(:rect, to_map(attrs))
   def circle(attrs \\ %{}), do: new(:circle, to_map(attrs))

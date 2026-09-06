@@ -126,7 +126,10 @@ defmodule Visualize.Shape.Line do
   Generates a Path struct from the data.
   """
   @spec generate_path(t(), [any()]) :: Path.t()
-  def generate_path(%__MODULE__{x: x_fn, y: y_fn, defined: defined_fn, curve: curve_type, curve_opts: opts}, data) do
+  def generate_path(
+        %__MODULE__{x: x_fn, y: y_fn, defined: defined_fn, curve: curve_type, curve_opts: opts},
+        data
+      ) do
     # Filter and transform data to points
     points =
       data

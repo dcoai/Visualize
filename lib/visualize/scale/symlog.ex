@@ -140,30 +140,37 @@ defmodule Visualize.Scale.Symlog do
     ticks = []
 
     # Add negative powers if domain includes negatives
-    ticks = if min_d < 0 do
-      neg_ticks = generate_log_ticks(-min_d, c, count)
-                  |> Enum.map(&(-&1))
-                  |> Enum.filter(&(&1 >= min_d))
-      neg_ticks ++ ticks
-    else
-      ticks
-    end
+    ticks =
+      if min_d < 0 do
+        neg_ticks =
+          generate_log_ticks(-min_d, c, count)
+          |> Enum.map(&(-&1))
+          |> Enum.filter(&(&1 >= min_d))
+
+        neg_ticks ++ ticks
+      else
+        ticks
+      end
 
     # Add zero if in domain
-    ticks = if min_d <= 0 and max_d >= 0 do
-      [0 | ticks]
-    else
-      ticks
-    end
+    ticks =
+      if min_d <= 0 and max_d >= 0 do
+        [0 | ticks]
+      else
+        ticks
+      end
 
     # Add positive powers if domain includes positives
-    ticks = if max_d > 0 do
-      pos_ticks = generate_log_ticks(max_d, c, count)
-                  |> Enum.filter(&(&1 <= max_d and &1 > 0))
-      ticks ++ pos_ticks
-    else
-      ticks
-    end
+    ticks =
+      if max_d > 0 do
+        pos_ticks =
+          generate_log_ticks(max_d, c, count)
+          |> Enum.filter(&(&1 <= max_d and &1 > 0))
+
+        ticks ++ pos_ticks
+      else
+        ticks
+      end
 
     ticks
     |> Enum.uniq()

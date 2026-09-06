@@ -75,7 +75,10 @@ defmodule Visualize.Backend.Hybrid do
     margin = Keyword.get(opts, :margin, %{top: 20, right: 20, bottom: 30, left: 40})
     static = Keyword.get(opts, :static, [])
     dynamic = Keyword.get(opts, :dynamic)
-    dynamic_style = Keyword.get(opts, :dynamic_style, %{stroke: "#4e79a7", fill: :none, stroke_width: 2})
+
+    dynamic_style =
+      Keyword.get(opts, :dynamic_style, %{stroke: "#4e79a7", fill: :none, stroke_width: 2})
+
     canvas_format = Keyword.get(opts, :canvas_format, :json)
 
     # Render static SVG (axes, labels, grid)
@@ -114,7 +117,10 @@ defmodule Visualize.Backend.Hybrid do
   def render_dynamic(opts) do
     margin = Keyword.get(opts, :margin, %{top: 20, right: 20, bottom: 30, left: 40})
     dynamic = Keyword.get(opts, :dynamic)
-    dynamic_style = Keyword.get(opts, :dynamic_style, %{stroke: "#4e79a7", fill: :none, stroke_width: 2})
+
+    dynamic_style =
+      Keyword.get(opts, :dynamic_style, %{stroke: "#4e79a7", fill: :none, stroke_width: 2})
+
     canvas_format = Keyword.get(opts, :canvas_format, :json)
 
     render_dynamic_canvas(dynamic, dynamic_style, margin, canvas_format)
@@ -124,9 +130,10 @@ defmodule Visualize.Backend.Hybrid do
 
   defp render_static_svg(static_elements, width, height, margin) do
     # Wrap static elements in a group with margin transform
-    static_group = Element.group(List.wrap(static_elements),
-      transform: Transform.translate(margin.left, margin.top)
-    )
+    static_group =
+      Element.group(List.wrap(static_elements),
+        transform: Transform.translate(margin.left, margin.top)
+      )
 
     # Create SVG root with transparent background (so canvas shows through)
     root = Element.root(width, height, children: [static_group])
@@ -139,8 +146,9 @@ defmodule Visualize.Backend.Hybrid do
 
   defp render_dynamic_canvas(%Path{} = path, style, margin, format) do
     # Create element from path with style
-    element = Element.path(path, style)
-    |> Element.set_transform(Transform.translate(margin.left, margin.top))
+    element =
+      Element.path(path, style)
+      |> Element.set_transform(Transform.translate(margin.left, margin.top))
 
     Canvas.render_element(element, format: format)
     |> IO.iodata_to_binary()
@@ -156,8 +164,9 @@ defmodule Visualize.Backend.Hybrid do
 
   defp render_dynamic_canvas(elements, style, margin, format) when is_list(elements) do
     # Wrap multiple elements in a group
-    group = Element.group(elements, style: style)
-    |> Element.set_transform(Transform.translate(margin.left, margin.top))
+    group =
+      Element.group(elements, style: style)
+      |> Element.set_transform(Transform.translate(margin.left, margin.top))
 
     Canvas.render_element(group, format: format)
     |> IO.iodata_to_binary()
@@ -165,10 +174,11 @@ defmodule Visualize.Backend.Hybrid do
 
   defp generate_html(svg, canvas, width, height, format) do
     # Escape the canvas commands for HTML attribute
-    escaped_canvas = canvas
-    |> String.replace("\"", "&quot;")
-    |> String.replace("<", "&lt;")
-    |> String.replace(">", "&gt;")
+    escaped_canvas =
+      canvas
+      |> String.replace("\"", "&quot;")
+      |> String.replace("<", "&lt;")
+      |> String.replace(">", "&gt;")
 
     data_attr = if format == :json, do: "data-commands", else: "data-script"
 

@@ -40,7 +40,8 @@ defmodule Visualize.Backend.CanvasIncremental do
 
   @cmd_incremental_update 0x60
 
-  @scroll_threshold 0.5  # 50% of canvas dimension = fallback to full redraw
+  # 50% of canvas dimension = fallback to full redraw
+  @scroll_threshold 0.5
 
   @type scroll_offset :: {dx :: number(), dy :: number()}
   @type bounds :: {x :: number(), y :: number(), width :: number(), height :: number()}
@@ -63,7 +64,7 @@ defmodule Visualize.Backend.CanvasIncremental do
   @spec copy_beneficial?(scroll_offset(), canvas_size()) :: boolean()
   def copy_beneficial?({dx, dy}, {width, height}) do
     abs(dx) < width * @scroll_threshold and
-    abs(dy) < height * @scroll_threshold
+      abs(dy) < height * @scroll_threshold
   end
 
   @doc """
@@ -75,14 +76,16 @@ defmodule Visualize.Backend.CanvasIncremental do
   - `:scroll_xy` - diagonal (both axes)
   - `:full_redraw` - scroll too large, use full redraw
   """
-  @spec scroll_mode(scroll_offset(), canvas_size()) :: :scroll_x | :scroll_y | :scroll_xy | :full_redraw
+  @spec scroll_mode(scroll_offset(), canvas_size()) ::
+          :scroll_x | :scroll_y | :scroll_xy | :full_redraw
   def scroll_mode({dx, dy}, {width, height}) do
     cond do
       not copy_beneficial?({dx, dy}, {width, height}) -> :full_redraw
       dx != 0 and dy == 0 -> :scroll_x
       dx == 0 and dy != 0 -> :scroll_y
       dx != 0 and dy != 0 -> :scroll_xy
-      true -> :full_redraw  # No scroll
+      # No scroll
+      true -> :full_redraw
     end
   end
 
@@ -216,9 +219,10 @@ defmodule Visualize.Backend.CanvasIncremental do
   def filter_to_regions(data, regions, accessor) do
     Enum.filter(data, fn point ->
       {px, py} = accessor.(point)
+
       Enum.any?(regions, fn {rx, ry, rw, rh} ->
         px >= rx and px <= rx + rw and
-        py >= ry and py <= ry + rh
+          py >= ry and py <= ry + rh
       end)
     end)
   end
@@ -284,10 +288,12 @@ defmodule Visualize.Backend.CanvasIncremental do
 
     <<
       @cmd_incremental_update::8,
-      0x00::8,  # mode = full redraw
+      # mode = full redraw
+      0x00::8,
       0.0::little-float-32,
       0.0::little-float-32,
-      0::8,  # no regions
+      # no regions
+      0::8,
       element_binary::binary
     >>
   end

@@ -118,7 +118,15 @@ defmodule Visualize.Shape.Arc do
       da > @tau - @epsilon ->
         path
         |> Path.move_to(r1 * :math.cos(a0), r1 * :math.sin(a0))
-        |> Path.arc_to(r1, r1, 0, 1, bool_to_int(cw), r1 * :math.cos(a0 + :math.pi()), r1 * :math.sin(a0 + :math.pi()))
+        |> Path.arc_to(
+          r1,
+          r1,
+          0,
+          1,
+          bool_to_int(cw),
+          r1 * :math.cos(a0 + :math.pi()),
+          r1 * :math.sin(a0 + :math.pi())
+        )
         |> Path.arc_to(r1, r1, 0, 1, bool_to_int(cw), r1 * :math.cos(a0), r1 * :math.sin(a0))
         |> maybe_add_inner_ring(r0, a0, cw)
 
@@ -154,7 +162,8 @@ defmodule Visualize.Shape.Arc do
     x1_outer = r1 * :math.cos(a1)
     y1_outer = r1 * :math.sin(a1)
 
-    path = path
+    path =
+      path
       |> Path.move_to(x0_outer, y0_outer)
       |> Path.arc_to(r1, r1, 0, large_arc, bool_to_int(cw), x1_outer, y1_outer)
 
@@ -180,7 +189,15 @@ defmodule Visualize.Shape.Arc do
   defp maybe_add_inner_ring(path, r0, a0, cw) when r0 > @epsilon do
     path
     |> Path.move_to(r0 * :math.cos(a0), r0 * :math.sin(a0))
-    |> Path.arc_to(r0, r0, 0, 1, bool_to_int(not cw), r0 * :math.cos(a0 + :math.pi()), r0 * :math.sin(a0 + :math.pi()))
+    |> Path.arc_to(
+      r0,
+      r0,
+      0,
+      1,
+      bool_to_int(not cw),
+      r0 * :math.cos(a0 + :math.pi()),
+      r0 * :math.sin(a0 + :math.pi())
+    )
     |> Path.arc_to(r0, r0, 0, 1, bool_to_int(not cw), r0 * :math.cos(a0), r0 * :math.sin(a0))
   end
 

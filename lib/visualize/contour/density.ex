@@ -123,9 +123,10 @@ defmodule Visualize.Contour.Density do
     weight_fn = density.weight || fn _ -> 1 end
 
     # Extract coordinates
-    coords = Enum.map(points, fn d ->
-      {x_fn.(d), y_fn.(d), weight_fn.(d)}
-    end)
+    coords =
+      Enum.map(points, fn d ->
+        {x_fn.(d), y_fn.(d), weight_fn.(d)}
+      end)
 
     # Compute density grid
     grid = compute_density_grid(coords, density)
@@ -134,7 +135,8 @@ defmodule Visualize.Contour.Density do
     grid_width = div(density.width, density.cell_size) + 1
     grid_height = div(density.height, density.cell_size) + 1
 
-    contour = Contour.new()
+    contour =
+      Contour.new()
       |> Contour.size(grid_width, grid_height)
       |> Contour.thresholds(density.thresholds)
       |> Contour.smooth(true)

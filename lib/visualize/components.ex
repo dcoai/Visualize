@@ -75,20 +75,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
         />
 
     """
-    attr :data, :list, required: true
-    attr :x, :any, required: true
-    attr :y, :any, required: true
-    attr :width, :integer, default: 600
-    attr :height, :integer, default: 400
-    attr :margin, :map, default: @default_margin
-    attr :curve, :atom, default: :linear
-    attr :stroke, :string, default: "steelblue"
-    attr :stroke_width, :integer, default: 2
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
-    attr :x_label, :string, default: nil
-    attr :y_label, :string, default: nil
-    attr :show_points, :boolean, default: false
+    attr(:data, :list, required: true)
+    attr(:x, :any, required: true)
+    attr(:y, :any, required: true)
+    attr(:width, :integer, default: 600)
+    attr(:height, :integer, default: 400)
+    attr(:margin, :map, default: @default_margin)
+    attr(:curve, :atom, default: :linear)
+    attr(:stroke, :string, default: "steelblue")
+    attr(:stroke_width, :integer, default: 2)
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
+    attr(:x_label, :string, default: nil)
+    attr(:y_label, :string, default: nil)
+    attr(:show_points, :boolean, default: false)
 
     def line_chart(assigns) do
       margin = Map.merge(@default_margin, assigns.margin || %{})
@@ -99,14 +99,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
       y_values = Enum.map(assigns.data, assigns.y)
 
       x_scale = build_x_scale(x_values, inner_width)
-      y_scale = Scale.linear()
-                |> Scale.domain(Data.extent(y_values))
-                |> Scale.range([inner_height, 0])
 
-      line = Shape.line()
-             |> Shape.x(fn d -> Scale.scale(x_scale, assigns.x.(d)) end)
-             |> Shape.y(fn d -> Scale.scale(y_scale, assigns.y.(d)) end)
-             |> Shape.curve(assigns.curve)
+      y_scale =
+        Scale.linear()
+        |> Scale.domain(Data.extent(y_values))
+        |> Scale.range([inner_height, 0])
+
+      line =
+        Shape.line()
+        |> Shape.x(fn d -> Scale.scale(x_scale, assigns.x.(d)) end)
+        |> Shape.y(fn d -> Scale.scale(y_scale, assigns.y.(d)) end)
+        |> Shape.curve(assigns.curve)
 
       path_data = Shape.generate(line, assigns.data)
 
@@ -115,17 +118,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        margin: margin,
-        inner_width: inner_width,
-        inner_height: inner_height,
-        path_data: path_data,
-        x_axis: x_axis,
-        y_axis: y_axis,
-        x_scale: x_scale,
-        y_scale: y_scale,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          margin: margin,
+          inner_width: inner_width,
+          inner_height: inner_height,
+          path_data: path_data,
+          x_axis: x_axis,
+          y_axis: y_axis,
+          x_scale: x_scale,
+          y_scale: y_scale,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg
@@ -202,16 +206,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `padding` - Padding between bars 0-1 (default: 0.1)
 
     """
-    attr :data, :list, required: true
-    attr :x, :any, required: true
-    attr :y, :any, required: true
-    attr :width, :integer, default: 600
-    attr :height, :integer, default: 400
-    attr :margin, :map, default: @default_margin
-    attr :fill, :string, default: "steelblue"
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
-    attr :padding, :float, default: 0.1
+    attr(:data, :list, required: true)
+    attr(:x, :any, required: true)
+    attr(:y, :any, required: true)
+    attr(:width, :integer, default: 600)
+    attr(:height, :integer, default: 400)
+    attr(:margin, :map, default: @default_margin)
+    attr(:fill, :string, default: "steelblue")
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
+    attr(:padding, :float, default: 0.1)
 
     def bar_chart(assigns) do
       margin = Map.merge(@default_margin, assigns.margin || %{})
@@ -221,30 +225,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       categories = Enum.map(assigns.data, assigns.x)
       y_values = Enum.map(assigns.data, assigns.y)
 
-      x_scale = Scale.band()
-                |> Scale.domain(categories)
-                |> Scale.range([0, inner_width])
-                |> Scale.padding(assigns.padding)
+      x_scale =
+        Scale.band()
+        |> Scale.domain(categories)
+        |> Scale.range([0, inner_width])
+        |> Scale.padding(assigns.padding)
 
-      y_scale = Scale.linear()
-                |> Scale.domain([0, Enum.max(y_values)])
-                |> Scale.range([inner_height, 0])
+      y_scale =
+        Scale.linear()
+        |> Scale.domain([0, Enum.max(y_values)])
+        |> Scale.range([inner_height, 0])
 
       x_axis = Axis.bottom(x_scale)
       y_axis = Axis.left(y_scale)
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        margin: margin,
-        inner_width: inner_width,
-        inner_height: inner_height,
-        x_scale: x_scale,
-        y_scale: y_scale,
-        x_axis: x_axis,
-        y_axis: y_axis,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          margin: margin,
+          inner_width: inner_width,
+          inner_height: inner_height,
+          x_scale: x_scale,
+          y_scale: y_scale,
+          x_axis: x_axis,
+          y_axis: y_axis,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg
@@ -292,16 +299,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `padding` - Padding between bars 0-1 (default: 0.1)
 
     """
-    attr :data, :list, required: true
-    attr :x, :any, required: true
-    attr :y, :any, required: true
-    attr :width, :integer, default: 600
-    attr :height, :integer, default: 400
-    attr :margin, :map, default: %{top: 20, right: 20, bottom: 30, left: 100}
-    attr :fill, :string, default: "steelblue"
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
-    attr :padding, :float, default: 0.1
+    attr(:data, :list, required: true)
+    attr(:x, :any, required: true)
+    attr(:y, :any, required: true)
+    attr(:width, :integer, default: 600)
+    attr(:height, :integer, default: 400)
+    attr(:margin, :map, default: %{top: 20, right: 20, bottom: 30, left: 100})
+    attr(:fill, :string, default: "steelblue")
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
+    attr(:padding, :float, default: 0.1)
 
     def horizontal_bar_chart(assigns) do
       margin = Map.merge(%{top: 20, right: 20, bottom: 30, left: 100}, assigns.margin || %{})
@@ -311,30 +318,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       categories = Enum.map(assigns.data, assigns.y)
       x_values = Enum.map(assigns.data, assigns.x)
 
-      y_scale = Scale.band()
-                |> Scale.domain(categories)
-                |> Scale.range([0, inner_height])
-                |> Scale.padding(assigns.padding)
+      y_scale =
+        Scale.band()
+        |> Scale.domain(categories)
+        |> Scale.range([0, inner_height])
+        |> Scale.padding(assigns.padding)
 
-      x_scale = Scale.linear()
-                |> Scale.domain([0, Enum.max(x_values)])
-                |> Scale.range([0, inner_width])
+      x_scale =
+        Scale.linear()
+        |> Scale.domain([0, Enum.max(x_values)])
+        |> Scale.range([0, inner_width])
 
       x_axis = Axis.bottom(x_scale)
       y_axis = Axis.left(y_scale)
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        margin: margin,
-        inner_width: inner_width,
-        inner_height: inner_height,
-        x_scale: x_scale,
-        y_scale: y_scale,
-        x_axis: x_axis,
-        y_axis: y_axis,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          margin: margin,
+          inner_width: inner_width,
+          inner_height: inner_height,
+          x_scale: x_scale,
+          y_scale: y_scale,
+          x_axis: x_axis,
+          y_axis: y_axis,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg
@@ -384,50 +394,54 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `show_labels` - Show slice labels (default: true)
 
     """
-    attr :data, :list, required: true
-    attr :value, :any, required: true
-    attr :label, :any, default: nil
-    attr :width, :integer, default: 400
-    attr :height, :integer, default: 400
-    attr :inner_radius, :integer, default: 0
-    attr :outer_radius, :integer, default: nil
-    attr :pad_angle, :float, default: 0.02
-    attr :colors, :any, default: :category10
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
-    attr :show_labels, :boolean, default: true
+    attr(:data, :list, required: true)
+    attr(:value, :any, required: true)
+    attr(:label, :any, default: nil)
+    attr(:width, :integer, default: 400)
+    attr(:height, :integer, default: 400)
+    attr(:inner_radius, :integer, default: 0)
+    attr(:outer_radius, :integer, default: nil)
+    attr(:pad_angle, :float, default: 0.02)
+    attr(:colors, :any, default: :category10)
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
+    attr(:show_labels, :boolean, default: true)
 
     def pie_chart(assigns) do
       radius = min(assigns.width, assigns.height) / 2
       outer_radius = assigns.outer_radius || radius - 10
       inner_radius = assigns.inner_radius
 
-      pie = Shape.pie()
-            |> Shape.value(assigns.value)
-            |> Shape.pad_angle(assigns.pad_angle)
+      pie =
+        Shape.pie()
+        |> Shape.value(assigns.value)
+        |> Shape.pad_angle(assigns.pad_angle)
 
       arcs = Shape.generate(pie, assigns.data)
 
-      arc_generator = Shape.arc()
-                      |> Shape.inner_radius(inner_radius)
-                      |> Shape.outer_radius(outer_radius)
+      arc_generator =
+        Shape.arc()
+        |> Shape.inner_radius(inner_radius)
+        |> Shape.outer_radius(outer_radius)
 
-      label_arc = Shape.arc()
-                  |> Shape.inner_radius((inner_radius + outer_radius) / 2)
-                  |> Shape.outer_radius((inner_radius + outer_radius) / 2)
+      label_arc =
+        Shape.arc()
+        |> Shape.inner_radius((inner_radius + outer_radius) / 2)
+        |> Shape.outer_radius((inner_radius + outer_radius) / 2)
 
       color_scale = get_color_scale(assigns.colors, length(assigns.data))
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        radius: radius,
-        arcs: arcs,
-        arc_generator: arc_generator,
-        label_arc: label_arc,
-        color_scale: color_scale,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          radius: radius,
+          arcs: arcs,
+          arc_generator: arc_generator,
+          label_arc: label_arc,
+          color_scale: color_scale,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg
@@ -478,16 +492,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `animate` - Enable CSS transitions (default: false)
 
     """
-    attr :data, :list, required: true
-    attr :x, :any, required: true
-    attr :y, :any, required: true
-    attr :width, :integer, default: 600
-    attr :height, :integer, default: 400
-    attr :margin, :map, default: @default_margin
-    attr :fill, :string, default: "steelblue"
-    attr :size, :any, default: 5
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
+    attr(:data, :list, required: true)
+    attr(:x, :any, required: true)
+    attr(:y, :any, required: true)
+    attr(:width, :integer, default: 600)
+    attr(:height, :integer, default: 400)
+    attr(:margin, :map, default: @default_margin)
+    attr(:fill, :string, default: "steelblue")
+    attr(:size, :any, default: 5)
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
 
     def scatter_plot(assigns) do
       margin = Map.merge(@default_margin, assigns.margin || %{})
@@ -497,29 +511,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
       x_values = Enum.map(assigns.data, assigns.x)
       y_values = Enum.map(assigns.data, assigns.y)
 
-      x_scale = Scale.linear()
-                |> Scale.domain(Data.extent(x_values))
-                |> Scale.range([0, inner_width])
+      x_scale =
+        Scale.linear()
+        |> Scale.domain(Data.extent(x_values))
+        |> Scale.range([0, inner_width])
 
-      y_scale = Scale.linear()
-                |> Scale.domain(Data.extent(y_values))
-                |> Scale.range([inner_height, 0])
+      y_scale =
+        Scale.linear()
+        |> Scale.domain(Data.extent(y_values))
+        |> Scale.range([inner_height, 0])
 
       x_axis = Axis.bottom(x_scale)
       y_axis = Axis.left(y_scale)
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        margin: margin,
-        inner_width: inner_width,
-        inner_height: inner_height,
-        x_scale: x_scale,
-        y_scale: y_scale,
-        x_axis: x_axis,
-        y_axis: y_axis,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          margin: margin,
+          inner_width: inner_width,
+          inner_height: inner_height,
+          x_scale: x_scale,
+          y_scale: y_scale,
+          x_axis: x_axis,
+          y_axis: y_axis,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg
@@ -570,19 +587,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `animate` - Enable CSS transitions (default: false)
 
     """
-    attr :data, :list, required: true
-    attr :x, :any, required: true
-    attr :y, :any, required: true
-    attr :width, :integer, default: 600
-    attr :height, :integer, default: 400
-    attr :margin, :map, default: @default_margin
-    attr :fill, :string, default: "steelblue"
-    attr :fill_opacity, :float, default: 0.3
-    attr :stroke, :string, default: "steelblue"
-    attr :stroke_width, :integer, default: 2
-    attr :curve, :atom, default: :linear
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
+    attr(:data, :list, required: true)
+    attr(:x, :any, required: true)
+    attr(:y, :any, required: true)
+    attr(:width, :integer, default: 600)
+    attr(:height, :integer, default: 400)
+    attr(:margin, :map, default: @default_margin)
+    attr(:fill, :string, default: "steelblue")
+    attr(:fill_opacity, :float, default: 0.3)
+    attr(:stroke, :string, default: "steelblue")
+    attr(:stroke_width, :integer, default: 2)
+    attr(:curve, :atom, default: :linear)
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
 
     def area_chart(assigns) do
       margin = Map.merge(@default_margin, assigns.margin || %{})
@@ -593,20 +610,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
       y_values = Enum.map(assigns.data, assigns.y)
 
       x_scale = build_x_scale(x_values, inner_width)
-      y_scale = Scale.linear()
-                |> Scale.domain([0, Enum.max(y_values)])
-                |> Scale.range([inner_height, 0])
 
-      area = Shape.area()
-             |> Shape.x(fn d -> Scale.scale(x_scale, assigns.x.(d)) end)
-             |> Shape.y0(inner_height)
-             |> Shape.y1(fn d -> Scale.scale(y_scale, assigns.y.(d)) end)
-             |> Shape.curve(assigns.curve)
+      y_scale =
+        Scale.linear()
+        |> Scale.domain([0, Enum.max(y_values)])
+        |> Scale.range([inner_height, 0])
 
-      line = Shape.line()
-             |> Shape.x(fn d -> Scale.scale(x_scale, assigns.x.(d)) end)
-             |> Shape.y(fn d -> Scale.scale(y_scale, assigns.y.(d)) end)
-             |> Shape.curve(assigns.curve)
+      area =
+        Shape.area()
+        |> Shape.x(fn d -> Scale.scale(x_scale, assigns.x.(d)) end)
+        |> Shape.y0(inner_height)
+        |> Shape.y1(fn d -> Scale.scale(y_scale, assigns.y.(d)) end)
+        |> Shape.curve(assigns.curve)
+
+      line =
+        Shape.line()
+        |> Shape.x(fn d -> Scale.scale(x_scale, assigns.x.(d)) end)
+        |> Shape.y(fn d -> Scale.scale(y_scale, assigns.y.(d)) end)
+        |> Shape.curve(assigns.curve)
 
       area_path = Shape.generate(area, assigns.data)
       line_path = Shape.generate(line, assigns.data)
@@ -616,16 +637,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        margin: margin,
-        inner_width: inner_width,
-        inner_height: inner_height,
-        area_path: area_path,
-        line_path: line_path,
-        x_axis: x_axis,
-        y_axis: y_axis,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          margin: margin,
+          inner_width: inner_width,
+          inner_height: inner_height,
+          area_path: area_path,
+          line_path: line_path,
+          x_axis: x_axis,
+          y_axis: y_axis,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg
@@ -676,16 +698,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `padding` - Padding between bars 0-1 (default: 0.1)
 
     """
-    attr :data, :list, required: true
-    attr :x, :any, required: true
-    attr :keys, :list, required: true
-    attr :width, :integer, default: 600
-    attr :height, :integer, default: 400
-    attr :margin, :map, default: @default_margin
-    attr :colors, :any, default: :category10
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
-    attr :padding, :float, default: 0.1
+    attr(:data, :list, required: true)
+    attr(:x, :any, required: true)
+    attr(:keys, :list, required: true)
+    attr(:width, :integer, default: 600)
+    attr(:height, :integer, default: 400)
+    attr(:margin, :map, default: @default_margin)
+    attr(:colors, :any, default: :category10)
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
+    attr(:padding, :float, default: 0.1)
 
     def stacked_bar_chart(assigns) do
       margin = Map.merge(@default_margin, assigns.margin || %{})
@@ -694,23 +716,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       categories = Enum.map(assigns.data, assigns.x)
 
-      stack = Shape.stack()
-              |> Shape.keys(assigns.keys)
+      stack =
+        Shape.stack()
+        |> Shape.keys(assigns.keys)
 
       series = Shape.generate(stack, assigns.data)
 
-      max_y = series
-              |> Enum.flat_map(fn s -> Enum.map(s.points, & &1.y1) end)
-              |> Enum.max(fn -> 0 end)
+      max_y =
+        series
+        |> Enum.flat_map(fn s -> Enum.map(s.points, & &1.y1) end)
+        |> Enum.max(fn -> 0 end)
 
-      x_scale = Scale.band()
-                |> Scale.domain(categories)
-                |> Scale.range([0, inner_width])
-                |> Scale.padding(assigns.padding)
+      x_scale =
+        Scale.band()
+        |> Scale.domain(categories)
+        |> Scale.range([0, inner_width])
+        |> Scale.padding(assigns.padding)
 
-      y_scale = Scale.linear()
-                |> Scale.domain([0, max_y])
-                |> Scale.range([inner_height, 0])
+      y_scale =
+        Scale.linear()
+        |> Scale.domain([0, max_y])
+        |> Scale.range([inner_height, 0])
 
       x_axis = Axis.bottom(x_scale)
       y_axis = Axis.left(y_scale)
@@ -719,18 +745,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        margin: margin,
-        inner_width: inner_width,
-        inner_height: inner_height,
-        series: series,
-        x_scale: x_scale,
-        y_scale: y_scale,
-        x_axis: x_axis,
-        y_axis: y_axis,
-        color_scale: color_scale,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          margin: margin,
+          inner_width: inner_width,
+          inner_height: inner_height,
+          series: series,
+          x_scale: x_scale,
+          y_scale: y_scale,
+          x_axis: x_axis,
+          y_axis: y_axis,
+          color_scale: color_scale,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg

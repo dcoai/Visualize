@@ -111,7 +111,9 @@ defmodule Visualize.Layout.Cluster do
 
   defp position_leaves(leaves, separation) do
     case leaves do
-      [] -> []
+      [] ->
+        []
+
       [first | rest] ->
         first = %{first | x: 0}
 
@@ -156,11 +158,12 @@ defmodule Visualize.Layout.Cluster do
 
   defp set_y_coordinates(%Hierarchy{} = node, max_depth) do
     # For cluster layout, leaves are at max_depth, internal nodes at their depth
-    y = if is_nil(node.children) or node.children == [] do
-      max_depth
-    else
-      node.depth
-    end
+    y =
+      if is_nil(node.children) or node.children == [] do
+        max_depth
+      else
+        node.depth
+      end
 
     new_children =
       case node.children do

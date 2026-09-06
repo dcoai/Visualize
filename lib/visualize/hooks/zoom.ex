@@ -207,6 +207,7 @@ defmodule Visualize.Hooks.Zoom do
 
   def scale_transform(%{k: k, x: tx, y: ty}, scale, {cx, cy}) do
     new_k = k * scale
+
     %{
       k: new_k,
       x: cx - (cx - tx) * scale,

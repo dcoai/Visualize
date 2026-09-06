@@ -429,6 +429,7 @@ defmodule Visualize.IR.Path do
   defp command_to_string(:Z), do: "Z"
 
   defp format_num(n) when is_integer(n), do: Integer.to_string(n)
+
   defp format_num(n) when is_float(n) do
     # Format with up to 4 decimal places, removing trailing zeros
     :erlang.float_to_binary(n, decimals: 4)

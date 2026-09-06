@@ -97,11 +97,12 @@ defmodule Visualize.Scale.Power do
     # Normalize to [0, 1] using power transformation
     d_range = pow_transform(abs(d1), exp) - pow_transform(abs_d0, exp)
 
-    t = if d_range == 0 do
-      0
-    else
-      (pow_transform(abs_value, exp) - pow_transform(abs_d0, exp)) / d_range
-    end
+    t =
+      if d_range == 0 do
+        0
+      else
+        (pow_transform(abs_value, exp) - pow_transform(abs_d0, exp)) / d_range
+      end
 
     # Apply sign for negative values
     t = t * sign
@@ -140,8 +141,10 @@ defmodule Visualize.Scale.Power do
   def ticks(%__MODULE__{} = scale, count \\ 10) do
     {d0, d1} = scale.domain
     # Use linear scale's tick generation
-    linear = Visualize.Scale.Linear.new()
-             |> Visualize.Scale.Linear.domain([d0, d1])
+    linear =
+      Visualize.Scale.Linear.new()
+      |> Visualize.Scale.Linear.domain([d0, d1])
+
     Visualize.Scale.Linear.ticks(linear, count)
   end
 

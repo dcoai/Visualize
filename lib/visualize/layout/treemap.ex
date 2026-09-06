@@ -296,6 +296,7 @@ defmodule Visualize.Layout.Treemap do
       {positioned, _} =
         Enum.map_reduce(row, x0, fn {child, area}, curr_x ->
           child_width = area / row_height
+
           positioned_child = %{
             child
             | x0: curr_x + padding / 2,
@@ -315,6 +316,7 @@ defmodule Visualize.Layout.Treemap do
       {positioned, _} =
         Enum.map_reduce(row, y0, fn {child, area}, curr_y ->
           child_height = area / row_width
+
           positioned_child = %{
             child
             | x0: x0 + padding / 2,
@@ -359,11 +361,13 @@ defmodule Visualize.Layout.Treemap do
       if width > height do
         # Split horizontally
         mid_x = x0 + width * ratio
+
         tile_binary(left, x0, y0, mid_x, y1, padding) ++
           tile_binary(right, mid_x, y0, x1, y1, padding)
       else
         # Split vertically
         mid_y = y0 + height * ratio
+
         tile_binary(left, x0, y0, x1, mid_y, padding) ++
           tile_binary(right, x0, mid_y, x1, y1, padding)
       end

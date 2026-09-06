@@ -73,6 +73,7 @@ defmodule Visualize.Ease do
   @doc "Cubic ease-in-out"
   @spec cubic_in_out(number()) :: float()
   def cubic_in_out(t) when t < 0.5, do: 4 * t * t * t
+
   def cubic_in_out(t) do
     t1 = 2 * t - 2
     0.5 * t1 * t1 * t1 + 1
