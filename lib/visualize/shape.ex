@@ -7,6 +7,7 @@ defmodule Visualize.Shape do
   - Arcs for pie and donut charts
   - Symbols for scatter plots
   - Stacks for stacked bar/area charts
+  - Bands (state timelines), rules and x-bands (annotations) as element lists
 
   ## Examples
 
@@ -32,7 +33,7 @@ defmodule Visualize.Shape do
 
   """
 
-  alias Visualize.Shape.{Arc, Area, Line, Pie, Stack, Symbol}
+  alias Visualize.Shape.{Arc, Area, Band, Line, Pie, Rule, Stack, Symbol, XBand}
 
   # Line generator
   @doc "Creates a new line generator"
@@ -58,27 +59,62 @@ defmodule Visualize.Shape do
   @doc "Creates a new stack generator"
   defdelegate stack(), to: Stack, as: :new
 
+  # Element-producing marks (spec/04 §11–13)
+  @doc "Creates a new band (state timeline) generator"
+  defdelegate band(), to: Band, as: :new
+
+  @doc "Creates a new rule (vertical annotation) generator"
+  defdelegate rule(), to: Rule, as: :new
+
+  @doc "Creates a new x-band (shaded interval annotation) generator"
+  defdelegate x_band(), to: XBand, as: :new
+
   # Common configuration functions that work across generators
 
   @doc "Sets the x accessor"
   def x(%Line{} = shape, accessor), do: Line.x(shape, accessor)
   def x(%Area{} = shape, accessor), do: Area.x(shape, accessor)
+  def x(%Rule{} = shape, accessor), do: Rule.x(shape, accessor)
 
   @doc "Sets the y accessor"
   def y(%Line{} = shape, accessor), do: Line.y(shape, accessor)
   def y(%Area{} = shape, accessor), do: Area.y(shape, accessor)
+  def y(%Band{} = shape, accessor), do: Band.y(shape, accessor)
 
-  @doc "Sets the x0 accessor (for areas)"
+  @doc "Sets the x0 accessor (for areas, bands and x-bands)"
   def x0(%Area{} = shape, accessor), do: Area.x0(shape, accessor)
+  def x0(%Band{} = shape, accessor), do: Band.x0(shape, accessor)
+  def x0(%XBand{} = shape, accessor), do: XBand.x0(shape, accessor)
 
-  @doc "Sets the x1 accessor (for areas)"
+  @doc "Sets the x1 accessor (for areas, bands and x-bands)"
   def x1(%Area{} = shape, accessor), do: Area.x1(shape, accessor)
+  def x1(%Band{} = shape, accessor), do: Band.x1(shape, accessor)
+  def x1(%XBand{} = shape, accessor), do: XBand.x1(shape, accessor)
 
-  @doc "Sets the y0 accessor (baseline for areas)"
+  @doc "Sets the y0 accessor (baseline for areas; extent for rules and x-bands)"
   def y0(%Area{} = shape, accessor), do: Area.y0(shape, accessor)
+  def y0(%Rule{} = shape, accessor), do: Rule.y0(shape, accessor)
+  def y0(%XBand{} = shape, accessor), do: XBand.y0(shape, accessor)
 
-  @doc "Sets the y1 accessor (for areas)"
+  @doc "Sets the y1 accessor (for areas; extent for rules and x-bands)"
   def y1(%Area{} = shape, accessor), do: Area.y1(shape, accessor)
+  def y1(%Rule{} = shape, accessor), do: Rule.y1(shape, accessor)
+  def y1(%XBand{} = shape, accessor), do: XBand.y1(shape, accessor)
+
+  @doc "Sets the height accessor (for bands)"
+  def height(%Band{} = shape, accessor), do: Band.height(shape, accessor)
+
+  @doc "Sets the fill accessor (for bands and x-bands)"
+  def fill(%Band{} = shape, accessor), do: Band.fill(shape, accessor)
+  def fill(%XBand{} = shape, accessor), do: XBand.fill(shape, accessor)
+
+  @doc "Sets the x scale (for rules and x-bands); `nil` means pixel values"
+  def scale(%Rule{} = shape, scale), do: Rule.scale(shape, scale)
+  def scale(%XBand{} = shape, scale), do: XBand.scale(shape, scale)
+
+  @doc "Sets the label accessor (for rules and x-bands); `nil` clears it"
+  def label(%Rule{} = shape, accessor), do: Rule.label(shape, accessor)
+  def label(%XBand{} = shape, accessor), do: XBand.label(shape, accessor)
 
   @doc "Sets the curve interpolation type"
   def curve(shape, type, opts \\ [])
@@ -145,6 +181,7 @@ defmodule Visualize.Shape do
   For Pie: returns list of arc data maps
   For Symbol: returns path data string
   For Stack: returns list of series with stacked values
+  For Band, Rule, XBand: returns a list of `Visualize.IR.Element`
   """
   def generate(shape, data \\ nil)
   def generate(%Line{} = shape, data), do: Line.generate(shape, data)
@@ -153,9 +190,12 @@ defmodule Visualize.Shape do
   def generate(%Pie{} = shape, data), do: Pie.generate(shape, data)
   def generate(%Symbol{} = shape, data), do: Symbol.generate(shape, data)
   def generate(%Stack{} = shape, data), do: Stack.generate(shape, data)
+  def generate(%Band{} = shape, data), do: Band.generate(shape, data)
+  def generate(%Rule{} = shape, data), do: Rule.generate(shape, data)
+  def generate(%XBand{} = shape, data), do: XBand.generate(shape, data)
 
   @doc """
-  Generates a Path struct (for Line, Area, Arc, Symbol).
+  Generates a Path struct (for Line, Area, Arc, Symbol, Band).
 
   Use this for backend-agnostic path generation, then render
   with `Visualize.Render.to_string/2` or create an element with
@@ -166,4 +206,5 @@ defmodule Visualize.Shape do
   def generate_path(%Area{} = shape, data), do: Area.generate_path(shape, data)
   def generate_path(%Arc{} = shape, data), do: Arc.generate_path(shape, data)
   def generate_path(%Symbol{} = shape, data), do: Symbol.generate_path(shape, data)
+  def generate_path(%Band{} = shape, data), do: Band.generate_path(shape, data)
 end
