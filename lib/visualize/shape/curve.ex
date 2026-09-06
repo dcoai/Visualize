@@ -85,47 +85,41 @@ defmodule Visualize.Shape.Curve do
     linear(points)
   end
 
-  def basis([{x0, y0} | _] = points) do
-    path = Path.new() |> Path.move_to(x0, y0)
+  # d3-shape's curveBasis: a uniform cubic B-spline with the endpoints interpolated. `M p0`,
+  # `L (5p0 + p1)/6`, one `C` per point from the third on, a closing `C` to
+  # `(p[n-2] + 5p[n-1])/6`, then `L p[n-1]` — n − 1 curves for n points (D-33).
+  def basis([{x0, y0}, {x1, y1} | _] = points) do
+    path =
+      Path.new() |> Path.move_to(x0, y0) |> Path.line_to((5 * x0 + x1) / 6, (5 * y0 + y1) / 6)
 
-    points
-    |> Enum.chunk_every(4, 1, :discard)
-    |> Enum.reduce(path, fn chunk, acc ->
-      case chunk do
-        [{x0, y0}, {x1, y1}, {x2, y2}, {_x3, _y3}] ->
-          # Basis spline control points
-          Path.curve_to(
-            acc,
-            (2 * x0 + x1) / 3,
-            (2 * y0 + y1) / 3,
-            (x0 + 2 * x1) / 3,
-            (y0 + 2 * y1) / 3,
-            (x0 + 4 * x1 + x2) / 6,
-            (y0 + 4 * y1 + y2) / 6
-          )
+    path =
+      points
+      |> Enum.chunk_every(3, 1, :discard)
+      |> Enum.reduce(path, fn [{ax, ay}, {bx, by}, {cx, cy}], acc ->
+        Path.curve_to(
+          acc,
+          (2 * ax + bx) / 3,
+          (2 * ay + by) / 3,
+          (ax + 2 * bx) / 3,
+          (ay + 2 * by) / 3,
+          (ax + 4 * bx + cx) / 6,
+          (ay + 4 * by + cy) / 6
+        )
+      end)
 
-        _ ->
-          acc
-      end
-    end)
-    |> finalize_basis(points)
-  end
-
-  defp finalize_basis(path, points) when length(points) >= 2 do
-    [{xn_1, yn_1}, {xn, yn}] = Enum.take(points, -2)
+    [{px, py}, {qx, qy}] = Enum.take(points, -2)
 
     path
     |> Path.curve_to(
-      (2 * xn_1 + xn) / 3,
-      (2 * yn_1 + yn) / 3,
-      (xn_1 + 2 * xn) / 3,
-      (yn_1 + 2 * yn) / 3,
-      xn,
-      yn
+      (2 * px + qx) / 3,
+      (2 * py + qy) / 3,
+      (px + 2 * qx) / 3,
+      (py + 2 * qy) / 3,
+      (px + 5 * qx) / 6,
+      (py + 5 * qy) / 6
     )
+    |> Path.line_to(qx, qy)
   end
-
-  defp finalize_basis(path, _), do: path
 
   @doc "Cardinal spline interpolation"
   @spec cardinal([point()], number()) :: Path.t()

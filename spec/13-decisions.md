@@ -259,3 +259,11 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** Every `d` serialiser adds `0.0` after rounding, so `-0.0` and anything that rounds to it print as `0`. The contract in [02-architecture](02-architecture.md) §3 gains the clause; the goldens assert raw strings.
 
 **Consequences.** No `-0` coordinate is emitted by any backend. A caller that read the sign of a zero coordinate out of a path string never had a contract to rely on.
+
+## 33. D-33 — `Curve.basis/1` is d3's `curveBasis`
+
+**Context.** The original `basis/1` emitted one `C` per sliding window of four points and a closing `C` from the penultimate data point, so an `n`-point spline had `n − 3 + 1` segments instead of `n − 1`, skipped its last two knots, and kinked into the endpoint. The per-curve golden written for #25 made it visible (#28).
+
+**Decision.** `basis/1` is the d3-shape `curveBasis` algorithm exactly, as written in [04-shapes-and-curves](04-shapes-and-curves.md) §5.3: leading `L` to `(5p0 + p1)/6`, a `C` per point from the third on, a closing `C` and a trailing `L` to the last point. Fewer than three points remain `:linear`.
+
+**Consequences.** Every basis path changes shape (the old one was wrong, not merely different); only the `basis` line of `test/support/curve_golden.txt` moved. A property test holds the segment count and continuity for any point set.

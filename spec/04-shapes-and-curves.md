@@ -180,7 +180,7 @@ An unknown type fails to match. For every type, `[]` or a single point returns a
 
 ### 5.3 Basis
 
-`M p0`; for each sliding window `[p0, p1, p2, p3]` (windows of four, stride one, partial windows discarded), `C ((2x0+x1)/3, (2y0+y1)/3), ((x0+2x1)/3, (y0+2y1)/3), ((x0+4x1+x2)/6, (y0+4y1+y2)/6)`; then a closing `C` from the penultimate point to the last point using the thirds of that segment. The curve starts and ends on the data endpoints.
+d3-shape's `curveBasis`: a uniform cubic B-spline whose ends are pulled to the data. For `n ≥ 3` points: `M p0`; `L (5p0 + p1)/6`; for each `i ≥ 2`, `C (2p_{i−2} + p_{i−1})/3, (p_{i−2} + 2p_{i−1})/3, (p_{i−2} + 4p_{i−1} + p_i)/6`; then `C (2p_{n−2} + p_{n−1})/3, (p_{n−2} + 2p_{n−1})/3, (p_{n−2} + 5p_{n−1})/6` and `L p_{n−1}`. That is `n − 1` curves, each starting where the previous command ended, with the path beginning and ending exactly on the first and last data points (D-33). Fewer than three points fall back to `:linear`.
 
 ### 5.4 Cardinal and Catmull-Rom
 
