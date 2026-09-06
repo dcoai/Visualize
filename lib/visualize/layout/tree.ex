@@ -2,7 +2,12 @@ defmodule Visualize.Layout.Tree do
   @moduledoc """
   Tree layout algorithm for hierarchical node-link diagrams.
 
-  Implements the Reingold-Tilford "tidy" algorithm for drawing trees.
+  Implements the Reingold–Tilford "tidy" algorithm as refined by Buchheim, Jünger and
+  Leipert (linear time, threads and accumulated shifts), ported from d3-hierarchy's
+  `tree`: children of one parent are placed left to right with the gap given by
+  `separation`, every parent is centred over its children, and subtrees are shifted so
+  that nodes at the same depth never overlap while adjacent subtrees keep their
+  separation.
 
   ## Examples
 
@@ -31,6 +36,9 @@ defmodule Visualize.Layout.Tree do
   """
 
   alias Visualize.Layout.Hierarchy
+
+  # The root's parent in the layout store: d3's fake TreeNode above the root.
+  @fake_root 0
 
   defstruct size: nil,
             node_size: nil,
@@ -92,76 +100,207 @@ defmodule Visualize.Layout.Tree do
 
   @doc """
   Generates the tree layout, positioning all nodes.
+
+  Without `size` or `node_size` the coordinates are raw: `x` in separation units with
+  the root at 0, `y` the depth.
   """
   @spec generate(t(), Hierarchy.t()) :: Hierarchy.t()
   def generate(%__MODULE__{} = tree, %Hierarchy{} = root) do
-    # First pass: compute preliminary x positions
-    root_with_prelim = first_walk(root, tree.separation)
+    {store, root_id} = build_store(root)
 
-    # Second pass: compute final positions
-    root_positioned = second_walk(root_with_prelim, 0)
+    store =
+      store
+      |> walk_after(root_id, &first_walk(&1, &2, tree.separation))
+      |> then(fn store -> put_in(store, [@fake_root, :m], -store[root_id].z) end)
+      |> walk_before(root_id, &second_walk/2)
 
-    # Scale to fit size if specified
-    scale_to_size(root_positioned, tree)
+    root
+    |> assign_positions(store, root_id)
+    |> scale_to_size(tree)
   end
 
-  # First walk: bottom-up, compute preliminary x-coordinates
-  defp first_walk(%Hierarchy{children: nil} = node, _sep) do
-    %{node | x: 0}
+  # ------------------------------------------------------------------
+  # The layout works on a store of plain maps keyed by pre-order index, the analogue of
+  # d3's TreeNode wrappers: `z` prelim x, `m` modifier, `c` change, `s` shift, `t` thread
+  # (an id or nil), `a` ancestor (an id), `anc` default ancestor (an id or nil), `i` the
+  # index among siblings, `parent` and `children` as ids, `node` the hierarchy node.
+  # The root's parent is a fake node (id 0) with the root as its only child.
+  # ------------------------------------------------------------------
+
+  defp build_store(root) do
+    fake = %{parent: nil, children: [1], i: 0, z: 0, m: 0, c: 0, s: 0, t: nil, a: 0, anc: nil}
+    {store, _next} = add_node(root, @fake_root, 0, %{@fake_root => fake}, 1)
+    {store, 1}
   end
 
-  defp first_walk(%Hierarchy{children: []} = node, _sep) do
-    %{node | x: 0}
-  end
+  defp add_node(node, parent_id, i, store, id) do
+    entry = %{
+      node: node,
+      parent: parent_id,
+      children: [],
+      i: i,
+      z: 0,
+      m: 0,
+      c: 0,
+      s: 0,
+      t: nil,
+      a: id,
+      anc: nil
+    }
 
-  defp first_walk(%Hierarchy{children: children} = node, sep) do
-    # Process children first
-    processed_children = Enum.map(children, &first_walk(&1, sep))
-
-    # Position children
-    positioned_children = position_children(processed_children, sep)
-
-    # Node's x is midpoint of first and last child
-    first_child = hd(positioned_children)
-    last_child = List.last(positioned_children)
-    midpoint = (first_child.x + last_child.x) / 2
-
-    %{node | children: positioned_children, x: midpoint}
-  end
-
-  defp position_children([first | rest], sep) do
-    # First child starts at 0
-    first = %{first | x: 0}
-
-    # Position subsequent children
-    {positioned, _} =
-      Enum.map_reduce(rest, first, fn child, prev ->
-        spacing = sep.(child, prev)
-        new_x = prev.x + spacing
-        new_child = %{child | x: new_x}
-        {new_child, new_child}
+    {store, next, child_ids} =
+      (node.children || [])
+      |> Enum.with_index()
+      |> Enum.reduce({Map.put(store, id, entry), id + 1, []}, fn {child, j}, {st, nxt, ids} ->
+        {st, nxt2} = add_node(child, id, j, st, nxt)
+        {st, nxt2, [nxt | ids]}
       end)
 
-    [first | positioned]
+    {put_in(store, [id, :children], Enum.reverse(child_ids)), next}
   end
 
-  # Second walk: top-down, finalize positions
-  defp second_walk(%Hierarchy{} = node, modifier) do
-    final_x = node.x + modifier
+  defp walk_after(store, id, fun) do
+    store = Enum.reduce(store[id].children, store, &walk_after(&2, &1, fun))
+    fun.(store, id)
+  end
 
-    new_children =
-      case node.children do
-        nil ->
-          nil
+  defp walk_before(store, id, fun) do
+    store = fun.(store, id)
+    Enum.reduce(store[id].children, store, &walk_before(&2, &1, fun))
+  end
 
+  defp sep(store, a, b, separation), do: separation.(store[a].node, store[b].node)
+
+  defp first_walk(store, v, separation) do
+    siblings = store[store[v].parent].children
+    w = if store[v].i > 0, do: Enum.at(siblings, store[v].i - 1), else: nil
+
+    store =
+      case store[v].children do
         [] ->
-          nil
+          if w, do: put_in(store, [v, :z], store[w].z + sep(store, v, w, separation)), else: store
 
         children ->
-          Enum.map(children, &second_walk(&1, modifier))
+          store = execute_shifts(store, v)
+          midpoint = (store[hd(children)].z + store[List.last(children)].z) / 2
+
+          if w do
+            z = store[w].z + sep(store, v, w, separation)
+            store |> put_in([v, :z], z) |> put_in([v, :m], z - midpoint)
+          else
+            put_in(store, [v, :z], midpoint)
+          end
       end
 
-    %{node | x: final_x, y: node.depth, children: new_children}
+    parent = store[v].parent
+    {ancestor, store} = apportion(store, v, w, store[parent].anc || hd(siblings), separation)
+    put_in(store, [parent, :anc], ancestor)
+  end
+
+  defp second_walk(store, v) do
+    pm = store[store[v].parent].m
+    store |> update_in([v, :z], &(&1 + pm)) |> update_in([v, :m], &(&1 + pm))
+  end
+
+  defp execute_shifts(store, v) do
+    {store, _shift, _change} =
+      store[v].children
+      |> Enum.reverse()
+      |> Enum.reduce({store, 0, 0}, fn w, {st, shift, change} ->
+        st = st |> update_in([w, :z], &(&1 + shift)) |> update_in([w, :m], &(&1 + shift))
+        change = change + st[w].c
+        {st, shift + st[w].s + change, change}
+      end)
+
+    store
+  end
+
+  defp apportion(store, _v, nil, ancestor, _separation), do: {ancestor, store}
+
+  defp apportion(store, v, w, ancestor, separation) do
+    vom = hd(store[store[v].parent].children)
+    sums = {store[v].m, store[v].m, store[w].m, store[vom].m}
+    contour(store, v, {v, v, w, vom}, sums, ancestor, separation)
+  end
+
+  # One step along the four contours: vip/vop the inner and outer contour of the subtree
+  # at v, vim/vom the inner and outer contour of the subtrees to its left.
+  defp contour(store, v, {vip, vop, vim, vom}, {sip, sop, sim, som}, ancestor, separation) do
+    vim2 = next_right(store, vim)
+    vip2 = next_left(store, vip)
+
+    if vim2 && vip2 do
+      vom2 = next_left(store, vom)
+      vop2 = next_right(store, vop)
+      store = put_in(store, [vop2, :a], v)
+
+      shift = store[vim2].z + sim - store[vip2].z - sip + sep(store, vim2, vip2, separation)
+
+      {store, sip, sop} =
+        if shift > 0 do
+          store = move_subtree(store, next_ancestor(store, vim2, v, ancestor), v, shift)
+          {store, sip + shift, sop + shift}
+        else
+          {store, sip, sop}
+        end
+
+      sums = {sip + store[vip2].m, sop + store[vop2].m, sim + store[vim2].m, som + store[vom2].m}
+      contour(store, v, {vip2, vop2, vim2, vom2}, sums, ancestor, separation)
+    else
+      store =
+        if vim2 && next_right(store, vop) == nil do
+          store |> put_in([vop, :t], vim2) |> update_in([vop, :m], &(&1 + sim - sop))
+        else
+          store
+        end
+
+      if vip2 && next_left(store, vom) == nil do
+        store = store |> put_in([vom, :t], vip2) |> update_in([vom, :m], &(&1 + sip - som))
+        {v, store}
+      else
+        {ancestor, store}
+      end
+    end
+  end
+
+  defp next_left(store, v) do
+    case store[v].children do
+      [] -> store[v].t
+      [first | _] -> first
+    end
+  end
+
+  defp next_right(store, v) do
+    case store[v].children do
+      [] -> store[v].t
+      children -> List.last(children)
+    end
+  end
+
+  defp next_ancestor(store, vim, v, ancestor) do
+    if store[store[vim].a].parent == store[v].parent, do: store[vim].a, else: ancestor
+  end
+
+  defp move_subtree(store, wm, wp, shift) do
+    change = shift / (store[wp].i - store[wm].i)
+
+    store
+    |> update_in([wp, :c], &(&1 - change))
+    |> update_in([wp, :s], &(&1 + shift))
+    |> update_in([wm, :c], &(&1 + change))
+    |> update_in([wp, :z], &(&1 + shift))
+    |> update_in([wp, :m], &(&1 + shift))
+  end
+
+  defp assign_positions(%Hierarchy{} = node, store, id) do
+    children =
+      case node.children do
+        nil -> nil
+        [] -> nil
+        cs -> Enum.zip_with(cs, store[id].children, &assign_positions(&1, store, &2))
+      end
+
+    %{node | x: store[id].z, y: node.depth, children: children}
   end
 
   # Scale tree to fit specified size

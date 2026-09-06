@@ -160,55 +160,73 @@ defmodule Visualize.Layout.Treemap do
     pb = treemap.padding_bottom || p
     pl = treemap.padding_left || p
 
-    x0 = node.x0 + pl
-    y0 = node.y0 + pt
-    x1 = node.x1 - pr
-    y1 = node.y1 - pb
+    # An inner rectangle the paddings have inverted collapses to its midpoint, as d3's
+    # `positionNode` does, so the children below still receive (zero-area) rectangles.
+    {x0, y0, x1, y1} = collapse({node.x0 + pl, node.y0 + pt, node.x1 - pr, node.y1 - pb})
 
-    # Skip if no space
-    if x1 <= x0 or y1 <= y0 do
-      node
-    else
-      # Tile children
-      children_with_values =
-        node.children
-        |> Enum.filter(fn c -> c.value && c.value > 0 end)
+    # Every child is tiled: one whose value is nil or not positive weighs 0 and receives
+    # a zero-area rectangle at the position it would otherwise occupy.
+    tiled_children =
+      node.children
+      |> tile_children(x0, y0, x1, y1, treemap)
+      |> Enum.map(fn child ->
+        {cx0, cy0, cx1, cy1} = collapse({child.x0, child.y0, child.x1, child.y1})
+        %{child | x0: cx0, y0: cy0, x1: cx1, y1: cy1}
+      end)
 
-      if Enum.empty?(children_with_values) do
-        node
-      else
-        tiled_children =
-          tile_children(children_with_values, x0, y0, x1, y1, treemap)
+    laid_out_children = Enum.map(tiled_children, &layout_node(&1, treemap))
 
-        # Recurse to layout grandchildren
-        laid_out_children = Enum.map(tiled_children, &layout_node(&1, treemap))
-
-        %{node | children: laid_out_children}
-      end
-    end
+    %{node | children: laid_out_children}
   end
+
+  defp collapse({x0, y0, x1, y1}) do
+    {x0, x1} = if x1 < x0, do: {(x0 + x1) / 2, (x0 + x1) / 2}, else: {x0, x1}
+    {y0, y1} = if y1 < y0, do: {(y0 + y1) / 2, (y0 + y1) / 2}, else: {y0, y1}
+    {x0, y0, x1, y1}
+  end
+
+  defp weight(%Hierarchy{value: v}) when is_number(v) and v > 0, do: v
+  defp weight(_), do: 0
+
+  defp total(children), do: Enum.reduce(children, 0, fn c, acc -> acc + weight(c) end)
+
+  # With nothing to share out — no weight, or no area — every child sits at the corner.
+  defp at_corner(children, x0, y0),
+    do: Enum.map(children, &%{&1 | x0: x0, y0: y0, x1: x0, y1: y0})
 
   defp tile_children(children, x0, y0, x1, y1, %__MODULE__{tile: tile_type} = treemap) do
     inner_padding = treemap.padding_inner || 0
 
-    case tile_type do
-      :squarify -> tile_squarify(children, x0, y0, x1, y1, inner_padding)
-      :binary -> tile_binary(children, x0, y0, x1, y1, inner_padding)
-      :slice -> tile_slice(children, x0, y0, x1, y1, inner_padding)
-      :dice -> tile_dice(children, x0, y0, x1, y1, inner_padding)
-      :slice_dice -> tile_slice_dice(children, x0, y0, x1, y1, inner_padding)
+    cond do
+      total(children) == 0 or (x1 - x0) * (y1 - y0) <= 0 ->
+        at_corner(children, x0, y0)
+
+      tile_type == :squarify ->
+        tile_squarify(children, x0, y0, x1, y1, inner_padding)
+
+      tile_type == :binary ->
+        tile_binary(children, x0, y0, x1, y1, inner_padding)
+
+      tile_type == :slice ->
+        tile_slice(children, x0, y0, x1, y1, inner_padding)
+
+      tile_type == :dice ->
+        tile_dice(children, x0, y0, x1, y1, inner_padding)
+
+      tile_type == :slice_dice ->
+        tile_slice_dice(children, x0, y0, x1, y1, inner_padding)
     end
   end
 
   # Squarified treemap algorithm
   defp tile_squarify(children, x0, y0, x1, y1, padding) do
-    total_value = Enum.reduce(children, 0, fn c, acc -> acc + c.value end)
+    total_value = total(children)
     area = (x1 - x0) * (y1 - y0)
 
     # Scale values to areas
     scaled_children =
       Enum.map(children, fn c ->
-        {c, c.value / total_value * area}
+        {c, weight(c) / total_value * area}
       end)
 
     squarify_recursive(scaled_children, x0, y0, x1, y1, padding, [])
@@ -221,7 +239,7 @@ defmodule Visualize.Layout.Treemap do
     height = y1 - y0
 
     if width <= 0 or height <= 0 do
-      acc
+      acc ++ at_corner(Enum.map(children, &elem(&1, 0)), x0, y0)
     else
       # Determine layout direction (shorter side)
       horizontal = width < height
@@ -256,6 +274,12 @@ defmodule Visualize.Layout.Treemap do
     {Enum.reverse(row), []}
   end
 
+  # A zero-area child joins the open row without bearing on its aspect ratio.
+  defp build_row_recursive([{child, area} | rest], side, row, row_sum, best_ratio)
+       when area == 0 do
+    build_row_recursive(rest, side, [{child, area} | row], row_sum, best_ratio)
+  end
+
   defp build_row_recursive([{child, area} | rest], side, row, row_sum, best_ratio) do
     new_sum = row_sum + area
     new_row = [{child, area} | row]
@@ -272,14 +296,15 @@ defmodule Visualize.Layout.Treemap do
     end
   end
 
+  # Zero-area entries have no aspect ratio; a row of only those reads as 1.
   defp worst_aspect_ratio(row, row_sum, side) do
     row_side = row_sum / side
 
     row
+    |> Enum.reject(fn {_child, area} -> area == 0 end)
     |> Enum.map(fn {_child, area} ->
       child_side = area / row_side
-      ratio = Kernel.max(child_side / row_side, row_side / child_side)
-      ratio
+      Kernel.max(child_side / row_side, row_side / child_side)
     end)
     |> Enum.max(fn -> 1 end)
   end
@@ -295,7 +320,7 @@ defmodule Visualize.Layout.Treemap do
 
       {positioned, _} =
         Enum.map_reduce(row, x0, fn {child, area}, curr_x ->
-          child_width = area / row_height
+          child_width = if row_height == 0, do: 0, else: area / row_height
 
           positioned_child = %{
             child
@@ -315,7 +340,7 @@ defmodule Visualize.Layout.Treemap do
 
       {positioned, _} =
         Enum.map_reduce(row, y0, fn {child, area}, curr_y ->
-          child_height = area / row_width
+          child_height = if row_width == 0, do: 0, else: area / row_width
 
           positioned_child = %{
             child
@@ -333,26 +358,34 @@ defmodule Visualize.Layout.Treemap do
   end
 
   # Binary split algorithm
+  defp tile_binary([child], x0, y0, x1, y1, padding) do
+    [
+      %{
+        child
+        | x0: x0 + padding / 2,
+          y0: y0 + padding / 2,
+          x1: x1 - padding / 2,
+          y1: y1 - padding / 2
+      }
+    ]
+  end
+
   defp tile_binary(children, x0, y0, x1, y1, padding) do
-    total_value = Enum.reduce(children, 0, fn c, acc -> acc + c.value end)
+    total_value = total(children)
 
-    if length(children) == 1 do
-      [child] = children
-
-      [
-        %{
-          child
-          | x0: x0 + padding / 2,
-            y0: y0 + padding / 2,
-            x1: x1 - padding / 2,
-            y1: y1 - padding / 2
-        }
-      ]
+    if total_value == 0 do
+      # A weightless group has nothing to halve: every member sits at the split point.
+      at_corner(children, x0, y0)
     else
       # Find split point closest to half
-      {left, right} = split_at_half(children, total_value / 2)
+      # The prefix is never empty: a first child heavier than the rest is a part on its own.
+      {left, right} =
+        case split_at_half(children, total_value / 2) do
+          {[], [first | rest]} -> {[first], rest}
+          split -> split
+        end
 
-      left_value = Enum.reduce(left, 0, fn c, acc -> acc + c.value end)
+      left_value = total(left)
       ratio = left_value / total_value
 
       width = x1 - x0
@@ -383,7 +416,7 @@ defmodule Visualize.Layout.Treemap do
   end
 
   defp split_recursive([child | rest], target, sum, left, right) do
-    new_sum = sum + child.value
+    new_sum = sum + weight(child)
 
     if new_sum <= target do
       split_recursive(rest, target, new_sum, [child | left], right)
@@ -399,12 +432,12 @@ defmodule Visualize.Layout.Treemap do
 
   # Slice algorithm (horizontal)
   defp tile_slice(children, x0, y0, x1, y1, padding) do
-    total_value = Enum.reduce(children, 0, fn c, acc -> acc + c.value end)
+    total_value = total(children)
     height = y1 - y0
 
     {positioned, _} =
       Enum.map_reduce(children, y0, fn child, curr_y ->
-        child_height = child.value / total_value * height
+        child_height = weight(child) / total_value * height
 
         positioned_child = %{
           child
@@ -422,12 +455,12 @@ defmodule Visualize.Layout.Treemap do
 
   # Dice algorithm (vertical)
   defp tile_dice(children, x0, y0, x1, y1, padding) do
-    total_value = Enum.reduce(children, 0, fn c, acc -> acc + c.value end)
+    total_value = total(children)
     width = x1 - x0
 
     {positioned, _} =
       Enum.map_reduce(children, x0, fn child, curr_x ->
-        child_width = child.value / total_value * width
+        child_width = weight(child) / total_value * width
 
         positioned_child = %{
           child

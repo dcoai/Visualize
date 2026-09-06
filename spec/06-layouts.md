@@ -44,9 +44,7 @@ This document specifies the layout algorithms under `Visualize.Layout`: the `Hie
 | `:id` | reads `:id`, else `"id"` | Function returning a node's identifier. |
 | `:parent_id` | reads `:parent`, `"parent"`, `:parent_id`, `"parent_id"` in that order | Function returning the parent identifier; `nil` or `""` marks the root. |
 
-The root is the first datum (in list order) whose parent identifier is `nil` or `""`. If there is none, `stratify/2` raises `ArgumentError`. Children are attached in list order. A datum whose parent identifier names no datum is silently dropped. `stratify/2` MUST attach every datum reachable from the root regardless of the order in which parents and children appear in the input.
-
-> Decision: see spec/13. The current implementation attaches a snapshot of each child taken at the time it is appended to its parent, so grandchildren listed after their parent are lost; for the input `[root, c1, c2, gc(parent: c2)]` the resulting tree has three nodes and height 1.
+The root is the first datum (in list order) whose parent identifier is `nil` or `""`. If there is none, `stratify/2` raises `ArgumentError`. Children are attached in list order. A datum whose parent identifier names no datum is silently dropped. `stratify/2` attaches every datum reachable from the root regardless of the order in which parents and children appear in the input (D-41): the parent links are resolved over the whole list first, as d3's `stratify` does, and the tree is then built from the root down; for the input `[root, c1, c2, gc(parent: c2)]` the tree has four nodes and height 2.
 
 ### 1.3 Aggregation
 
@@ -63,9 +61,7 @@ The root is the first datum (in list order) whose parent identifier is `nil` or 
 - `ancestors/1` returns the parent, grandparent, and so on up to the root (root excluded from its own list; the root yields `[]`).
 - `leaves/1` returns the descendants whose `children` is `nil` or `[]`, in pre-order.
 - `links/1` returns `{parent, child}` tuples for every parent-child pair in pre-order of the parent.
-- `path/2` MUST return the shortest path from `source` to `target`: `[source, ..., lca, ..., target]` where `lca` is the lowest common ancestor, each endpoint included once.
-
-> Decision: see spec/13. The current implementation prefixes the result with every ancestor of the LCA down from the root and then appends the source-side and target-side chains; for two cousins `A1` and `B2` under `root` it returns `[root, A1, A, B, B2]` instead of `[A1, A, root, B, B2]`.
+- `path/2` returns the shortest path from `source` to `target`: `[source, ..., lca, ..., target]` where `lca` is the lowest common ancestor, each endpoint included once, as d3's `node.path` does (D-41); for two cousins `A1` and `B2` under `root` it returns `[A1, A, root, B, B2]`, and `path(n, n)` is `[n]`. Nodes are matched by the `data` of their ancestor chain from the root, so a node equals the snapshot of itself that a descendant's `parent` field holds; two siblings with identical `data` are indistinguishable.
 
 ### 1.5 Functions
 
@@ -102,13 +98,11 @@ The root is the first datum (in list order) whose parent identifier is `nil` or 
 
 `new/0` sets only the default separation. `size/2` and `node_size/2` accept a two-element list or a 2-tuple, store a tuple, and each clears the other field: the two modes are mutually exclusive and the last one set wins. `separation/2` requires an arity-2 function.
 
-With neither `size` nor `node_size`, coordinates are raw: `x` in separation units and `y` in depth levels. With `size`, `x` is normalised so the leftmost node is at 0 and the rightmost at `width`, and `y` so the root is at 0 and the deepest level at `height`; a zero extent maps to 0. With `node_size`, `x` and `y` are multiplied by `dx` and `dy` respectively without normalisation.
+With neither `size` nor `node_size`, coordinates are raw: `x` in separation units with the root at 0 (children spread to either side, so `x` may be negative) and `y` in depth levels. With `size`, `x` is normalised so the leftmost node is at 0 and the rightmost at `width`, and `y` so the root is at 0 and the deepest level at `height`; a zero extent maps to 0. With `node_size`, `x` and `y` are multiplied by `dx` and `dy` respectively without normalisation.
 
 ### 2.2 Tree.generate/2
 
-`generate/2` sets `x` and `y` on every node and returns the new root. `y` is the node's depth (before scaling). `x` MUST be assigned by the Reingold–Tilford tidy-tree algorithm: children of one parent are placed left to right with the gap given by `separation`, each parent is centred over its children, and subtrees are shifted so that no two nodes at the same depth overlap while preserving the separation between adjacent subtrees.
-
-> Decision: see spec/13. The current implementation positions every child list starting at local `x = 0` and never accumulates the parent offset in its second pass, so cousin subtrees overlap: for `root -> [A -> [A1, A2], B -> [B1, B2]]` it produces `A1 = B1 = 0` and `A2 = B2 = 1`.
+`generate/2` sets `x` and `y` on every node and returns the new root. `y` is the node's depth (before scaling). `x` is assigned by the Reingold–Tilford tidy-tree algorithm in the linear-time form of Buchheim, Jünger and Leipert, ported from d3-hierarchy's `tree` (D-41): a post-order walk computes preliminary positions and modifiers, comparing the contours of each subtree with those to its left through threads and pushing the subtree right by the greatest violation of `separation` (the shift is spread evenly over the intermediate siblings); a pre-order walk then accumulates the modifiers. Children of one parent are placed left to right with the gap given by `separation`, each parent is centred over its first and last child, and no two nodes at the same depth are closer than `separation` allows: for `root -> [A -> [A1, A2], B -> [B1, B2]]` the leaves are at `-2, -1, 1, 2`. `test/support/tree_golden.txt` records the layout of two fixed trees in every scaling mode.
 
 ### 2.3 Cluster.generate/2
 
@@ -175,9 +169,7 @@ Finally the root is scaled by `k = min(width, height) / (2 * root.r)` and centre
 
 ### 4.2 Algorithm
 
-The root occupies `x0 = 0`, `x1 = width`, `y0 = 0`, `y1 = dy`. Each child of a node receives a share of the parent's horizontal extent, minus `padding * (n - 1)`, proportional to `child.value / sum(children values)`, laid left to right in child order, one level lower. A node with no child of positive value keeps its rectangle and its children untouched. Children whose `value` is `nil` or not greater than 0 MUST be retained in the output with a zero-width rectangle at the position they would occupy.
-
-> Decision: see spec/13. The current implementation filters such children out of the parent's `children` list, so they and their subtrees disappear from the returned hierarchy.
+The root occupies `x0 = 0`, `x1 = width`, `y0 = 0`, `y1 = dy`. Each child of a node receives a share of the parent's horizontal extent, minus `padding * (n - 1)` for its `n` children, proportional to `weight(child) / sum(weights)`, laid left to right in child order, one level lower, where `weight` is the child's `value` when that is a number greater than 0 and 0 otherwise. Every child is retained (D-41): a child of weight 0 receives a zero-width rectangle at the position it would occupy (`x0 = x1` at the running offset, so with padding the zero-width children of a weightless parent sit `padding` apart), and its own children are laid out below it in the same way. A node whose children all weigh 0 therefore keeps its rectangle and gives each child a zero-width slot.
 
 ### 4.3 Functions
 
@@ -208,9 +200,7 @@ The root occupies `x0 = 0`, `x1 = width`, `y0 = 0`, `y1 = dy`. Each child of a n
 
 ### 5.2 Algorithm
 
-The root receives `x0 = 0`, `y0 = 0`, `x1 = width`, `y1 = height`. For every node with children the inner rectangle is the node's rectangle shrunk by the four paddings; if it is empty the children are left unpositioned. Children with a positive `value` are tiled into the inner rectangle by the selected algorithm, then laid out recursively. Children whose `value` is `nil` or not greater than 0 MUST be retained with a zero-area rectangle.
-
-> Decision: see spec/13. The current implementation drops such children (and their subtrees) from the returned hierarchy, as `Partition` does.
+The root receives `x0 = 0`, `y0 = 0`, `x1 = width`, `y1 = height`. For every node with children the inner rectangle is the node's rectangle shrunk by the four paddings; a side the paddings have inverted collapses to its midpoint, as d3's `positionNode` does. Every child is tiled into the inner rectangle by the selected algorithm and then laid out recursively (D-41). A child's weight is its `value` when that is a number greater than 0 and 0 otherwise; a child of weight 0 receives a zero-area rectangle at the position it would occupy — it joins the row, prefix or slice its neighbours form and takes no extent along the direction the algorithm shares out. When the children have no weight at all, or the inner rectangle has no area, every child sits at the inner rectangle's top-left corner with a zero-area rectangle. After tiling, any rectangle that `padding_inner` has inverted collapses to its midpoint on that axis, so a tile narrower than the gap becomes a point rather than a negative extent. Every descendant of the root therefore carries `x0`, `y0`, `x1`, `y1`. `test/support/treemap_golden.txt` records every algorithm and the partition over a six-node hierarchy with a zero-valued child.
 
 Tiling algorithms, with `children` in input order and areas scaled so the total equals the inner rectangle's area:
 
