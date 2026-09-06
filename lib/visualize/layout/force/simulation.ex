@@ -57,7 +57,8 @@ defmodule Visualize.Layout.Force.Simulation do
     :velocity_decay,
     :subscribers,
     :running,
-    :tick_ref
+    :tick_ref,
+    :tick_tag
   ]
 
   @type graph_node :: %{
@@ -123,7 +124,7 @@ defmodule Visualize.Layout.Force.Simulation do
     GenServer.cast(sim, :stop)
   end
 
-  @doc "Restarts the simulation with fresh alpha"
+  @doc "Resets alpha to 1.0; a running simulation keeps running, a stopped one stays stopped"
   @spec restart(GenServer.server()) :: :ok
   def restart(sim) do
     GenServer.cast(sim, :restart)
@@ -165,13 +166,13 @@ defmodule Visualize.Layout.Force.Simulation do
     GenServer.call(sim, :get_alpha)
   end
 
-  @doc "Sets the alpha value"
+  @doc "Sets the alpha value, clamped to `[0, 1]`"
   @spec set_alpha(GenServer.server(), float()) :: :ok
   def set_alpha(sim, alpha) do
     GenServer.cast(sim, {:set_alpha, alpha})
   end
 
-  @doc "Sets the target alpha"
+  @doc "Sets the target alpha, clamped to `[0, 1]`"
   @spec set_alpha_target(GenServer.server(), float()) :: :ok
   def set_alpha_target(sim, target) do
     GenServer.cast(sim, {:set_alpha_target, target})
@@ -223,7 +224,8 @@ defmodule Visualize.Layout.Force.Simulation do
       velocity_decay: opts[:velocity_decay] || @default_velocity_decay,
       subscribers: MapSet.new(),
       running: false,
-      tick_ref: nil
+      tick_ref: nil,
+      tick_tag: nil
     }
 
     # Auto-start unless explicitly disabled
@@ -237,21 +239,13 @@ defmodule Visualize.Layout.Force.Simulation do
   @impl true
   def handle_cast(:start, %{running: true} = state), do: {:noreply, state}
 
-  def handle_cast(:start, state) do
-    tick_ref = Process.send_after(self(), :tick, @tick_interval)
-    {:noreply, %{state | running: true, tick_ref: tick_ref}}
-  end
+  def handle_cast(:start, state), do: {:noreply, arm(state)}
 
-  def handle_cast(:stop, state) do
-    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
-    {:noreply, %{state | running: false, tick_ref: nil}}
-  end
+  def handle_cast(:stop, state), do: {:noreply, disarm(state)}
 
-  def handle_cast(:restart, state) do
-    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
-    tick_ref = Process.send_after(self(), :tick, @tick_interval)
-    {:noreply, %{state | running: true, tick_ref: tick_ref, alpha: @default_alpha}}
-  end
+  # Alpha goes back to 1.0. The timer discipline is untouched: a running simulation
+  # keeps its tick chain, a stopped one stays stopped (spec/06 §8.5, D-14).
+  def handle_cast(:restart, state), do: {:noreply, %{state | alpha: @default_alpha}}
 
   def handle_cast(:tick, state) do
     {:noreply, do_tick(state)}
@@ -266,11 +260,11 @@ defmodule Visualize.Layout.Force.Simulation do
   end
 
   def handle_cast({:set_alpha, alpha}, state) do
-    {:noreply, %{state | alpha: alpha}}
+    {:noreply, %{state | alpha: clamp_unit(alpha)}}
   end
 
   def handle_cast({:set_alpha_target, target}, state) do
-    {:noreply, %{state | alpha_target: target}}
+    {:noreply, %{state | alpha_target: clamp_unit(target)}}
   end
 
   def handle_cast({:fix_node, node_id, x, y}, state) do
@@ -333,34 +327,49 @@ defmodule Visualize.Layout.Force.Simulation do
     {:reply, state.alpha, state}
   end
 
+  # init/1's deferred start: a no-op when a :start has already armed the timer, so two
+  # tick chains can never run (spec/06 §8.5).
   @impl true
-  def handle_info(:start_simulation, state) do
-    tick_ref = Process.send_after(self(), :tick, @tick_interval)
-    {:noreply, %{state | running: true, tick_ref: tick_ref}}
-  end
+  def handle_info(:start_simulation, state), do: {:noreply, arm(state)}
 
-  def handle_info(:tick, %{running: false} = state), do: {:noreply, state}
-
-  def handle_info(:tick, state) do
+  # Only the tick carrying the current tag is live. A tick from a timer cancelled after
+  # its message had already reached the mailbox carries an old tag and is ignored, which
+  # is what keeps a stop followed by a start on a single chain.
+  def handle_info({:tick, tag}, %{running: true, tick_tag: tag} = state) do
     state = do_tick(state)
 
-    # Schedule next tick if still above alpha_min
-    state =
-      if state.alpha >= state.alpha_min do
-        tick_ref = Process.send_after(self(), :tick, @tick_interval)
-        %{state | tick_ref: tick_ref}
-      else
-        %{state | running: false, tick_ref: nil}
-      end
-
-    {:noreply, state}
+    if state.alpha >= state.alpha_min do
+      {:noreply, schedule_tick(state)}
+    else
+      {:noreply, %{state | running: false, tick_ref: nil, tick_tag: nil}}
+    end
   end
+
+  def handle_info({:tick, _stale_tag}, state), do: {:noreply, state}
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
   end
 
   # Private functions
+
+  # `arm/1` is idempotent: a running simulation keeps its timer.
+  defp arm(%{running: true} = state), do: state
+  defp arm(state), do: schedule_tick(%{state | running: true})
+
+  # Cancelling may find the message already delivered; the stale tag makes that harmless.
+  defp disarm(state) do
+    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+    %{state | running: false, tick_ref: nil, tick_tag: nil}
+  end
+
+  defp schedule_tick(state) do
+    tag = make_ref()
+    tick_ref = Process.send_after(self(), {:tick, tag}, @tick_interval)
+    %{state | tick_ref: tick_ref, tick_tag: tag}
+  end
+
+  defp clamp_unit(value) when is_number(value), do: value |> Kernel.max(0) |> Kernel.min(1)
 
   defp initialize_nodes(nodes) do
     nodes
