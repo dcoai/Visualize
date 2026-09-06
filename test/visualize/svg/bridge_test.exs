@@ -1,0 +1,118 @@
+defmodule Visualize.SVG.BridgeTest do
+  @moduledoc """
+  The two SVG serialisers agree (spec/02 §5, spec/09 §2; D-11, D-12, D-34): the IR backend
+  and the HEEx bridge (`from_ir/1` then `Visualize.SVG.Renderer`) emit one markup for one
+  scene, and every `d` string comes from `Visualize.IR.Path.to_string/1`.
+  """
+  use ExUnit.Case, async: true
+
+  alias Visualize.Backend
+  alias Visualize.IR.{Element, Path, Transform}
+  alias Visualize.Render
+  alias Visualize.SVG
+
+  defp scene do
+    curve =
+      Path.new()
+      |> Path.move_to(0, 0.5)
+      |> Path.curve_to(10, 20.25, 30.125, -0.00001, 40, 1.0e-5)
+      |> Path.smooth_curve_to(50, 60, 70, 80)
+      |> Path.arc_to(20, 10, 0.0, 0, 1, 90, 90)
+      |> Path.line_to_rel(1, 2)
+      |> Path.horizontal_to(100)
+      |> Path.vertical_to_rel(-3)
+      |> Path.close()
+
+    gradient =
+      Element.linear_gradient("fade",
+        x1: 0,
+        y1: 0,
+        x2: 1,
+        y2: 0,
+        stops: [Element.stop("0%", "#fff"), Element.stop("100%", "#000", opacity: 0.5)]
+      )
+
+    group =
+      Element.group(
+        [
+          Element.path(curve, %{
+            stroke: "steelblue",
+            fill: :none,
+            stroke_width: 1.5,
+            stroke_linecap: :round
+          }),
+          Element.rect(1, 2, 3, 4, %{fill: "url(#fade)", fill_opacity: 0.5, class: "bar"}),
+          Element.circle(5, 6, 7, %{fill: :current_color}),
+          Element.line(0, 0, 10, 10, %{stroke: "#000", stroke_dasharray: "2,2"}),
+          Element.text("a < b & \"c\"", 1, 2, %{
+            font_size: 12,
+            text_anchor: :middle,
+            dominant_baseline: :hanging
+          }),
+          Element.polyline([{0, 0}, {1.5, 2}, {3, -0.0}], %{stroke: "red"}),
+          Element.polygon([{0, 0}, {10, 0}, {5, 8}], %{fill: "green"}),
+          Element.image("x.png", 0, 0, 10, 10)
+        ],
+        transform: Transform.translate(40, 20) |> Transform.rotate(15) |> Transform.scale(2),
+        style: %{opacity: 0.9},
+        attrs: %{class: "plot"}
+      )
+
+    Element.root(800, 600, view_box: "0 0 400 300", children: [Element.defs([gradient]), group])
+  end
+
+  test "the IR backend and the HEEx bridge emit identical markup for one scene" do
+    element = scene()
+    assert Render.to_svg_string(element) == element |> SVG.Element.from_ir() |> SVG.to_string()
+  end
+
+  test "a root renders xmlns and viewBox on both paths, never view-box" do
+    root = Element.root(10, 20, view_box: "0 0 5 10")
+    backend = Render.to_svg_string(root)
+    bridge = root |> SVG.Element.from_ir() |> SVG.to_string()
+
+    for markup <- [backend, bridge] do
+      assert markup =~ ~s( xmlns="http://www.w3.org/2000/svg")
+      assert markup =~ ~s( viewBox="0 0 5 10")
+      refute markup =~ "view-box"
+    end
+  end
+
+  test "camel-cased SVG attributes are not hyphenated; presentation attributes are" do
+    assert SVG.Renderer.attribute_name(:view_box) == "viewBox"
+    assert SVG.Renderer.attribute_name(:preserve_aspect_ratio) == "preserveAspectRatio"
+    assert SVG.Renderer.attribute_name(:clip_path_units) == "clipPathUnits"
+    assert SVG.Renderer.attribute_name(:clip_path) == "clip-path"
+    assert SVG.Renderer.attribute_name(:stroke_width) == "stroke-width"
+    assert SVG.Renderer.attribute_name(:viewBox) == "viewBox"
+  end
+
+  test "nil attributes are omitted and stop is self-closing in the bridge renderer" do
+    element = SVG.Element.new(:stop, %{offset: "0%", stop_color: nil})
+    assert SVG.to_string(element) == ~s(<stop offset="0%"/>)
+  end
+
+  describe "one d serialiser (D-12)" do
+    @extreme %Path{
+      commands: [{:M, 1.0e20, 1.0e-5}, {:L, 0.33333333, -0.00004}, {:A, 1.5, 2, 0.0, 0, 1, 3, 4}]
+    }
+
+    test "path_data/1, SVG.Path.to_string/1 and String.Chars equal IR.Path.to_string/1" do
+      d = Path.to_string(@extreme)
+      assert d == "M100000000000000000000,0L0.3333,0A1.5,2,0,0,1,3,4"
+      assert Backend.SVG.path_data(@extreme) == d
+      assert SVG.Path.to_string(@extreme) == d
+      assert to_string(@extreme) == d
+    end
+
+    test "Render.path_data/2 with the SVG backend is the same string" do
+      assert Render.path_data(@extreme, backend: :svg) == Path.to_string(@extreme)
+    end
+  end
+
+  test "the backend serialises a transform as IR.Transform.to_string/1 does" do
+    t = Transform.translate(1, 2) |> Transform.scale(2) |> Transform.rotate(-0.0)
+    element = Element.rect(0, 0, 1, 1) |> Element.set_transform(t)
+    assert Render.to_svg_string(element) =~ ~s|transform="translate(1,2) scale(2) rotate(0)"|
+  end
+end

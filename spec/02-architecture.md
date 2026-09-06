@@ -104,10 +104,11 @@ A path is `%Visualize.IR.Path{commands, metadata}`; `metadata` is a free map for
 | `Visualize.IR.Path.command_count/1` | The number of commands. |
 | `Visualize.IR.Path.concat/1` | One path whose commands are the concatenation of the given paths' commands, in order; metadata is dropped. |
 | `Visualize.IR.Path.append/2` | The first path's commands followed by the second's; metadata is dropped. |
-| `Visualize.IR.Path.transform/2` | Applies `fn {x, y} -> {x', y'} end` to every coordinate pair. Absolute end and control points are mapped directly; relative deltas are mapped as if they were points, and `H`/`V` are mapped as `{x, 0}` / `{0, y}` keeping one axis. The function MUST therefore be linear (no translation) when the path contains relative or single-axis commands; `:Z` and arc radii/flags are untouched. |
-| `Visualize.IR.Path.to_string/1` | The SVG `d` string: commands concatenated with no separators, coordinates comma-separated, e.g. `"M10,20L100,200Z"`. Integers print as integers; floats print with at most four decimals, trailing zeros and a trailing point removed, never in exponent notation, and never as `-0` (a zero that rounds negative prints `0`, D-32). |
+| `Visualize.IR.Path.transform/2` | Applies an affine matrix `{a, b, c, d, e, f}` (`t:Visualize.IR.Transform.matrix/0`), or a `Visualize.IR.Transform` folded with `Visualize.IR.Transform.to_matrix/1`, to the path (D-35). Absolute end and control points get the full map `{a·x + c·y + e, b·x + d·y + f}`; relative deltas get the linear part only. The current point is tracked through every command (`:Z` returns to the subpath start; a leading `m` is absolute, as SVG reads it): `H`/`h` stay single-axis when `b = 0` and `V`/`v` when `c = 0`, otherwise they become `L`/`l` to the mapped point. An arc's end point is mapped; its radii and rotation are those of the exact image of its ellipse under the linear part (the singular values and left rotation of the 2×2 product), in canonical form `rx ≥ ry`, rotation in `[0, 180)`, a circle keeping its given rotation; the sweep flag flips when the determinant is negative; `large_arc` is untouched. |
+| `Visualize.IR.Path.to_string/1` | The SVG `d` string: commands concatenated with no separators, coordinates comma-separated, e.g. `"M10,20L100,200Z"`; an arc prints `Arx,ry,rot,large,sweep,x,y` with the two flags verbatim. Every number goes through `format_number/1`. |
+| `Visualize.IR.Path.format_number/1` | The one number formatter of every serialiser (D-12, D-32): an integer prints as-is; a float prints with at most four decimals, trailing zeros and a trailing point removed, never in exponent notation, and never as `-0` (a zero that rounds negative prints `0`). |
 
-`to_string/1` is the canonical `d` serialisation; `Visualize.Backend.SVG.path_data/1` MUST produce the same string for the same path (D-12). `Visualize.IR.Path` implements `String.Chars` (defined alongside `Visualize.SVG.Path`).
+`to_string/1` is the only `d` serialisation: `Visualize.Backend.SVG.path_data/1`, `Visualize.SVG.Path.to_string/1` and the `String.Chars` implementation for `Visualize.IR.Path` (defined alongside `Visualize.SVG.Path`) delegate to it (D-12, D-34).
 
 ### 2.3 `Visualize.IR.Transform`
 
@@ -129,7 +130,10 @@ A transform is `%Visualize.IR.Transform{operations}`, an ordered list applied le
 | `Visualize.IR.Transform.matrix/7` | Appends `{:matrix, a, b, c, d, e, f}` for the matrix `[a c e; b d f; 0 0 1]`. |
 | `Visualize.IR.Transform.empty?/1` | `true` iff there are no operations. |
 | `Visualize.IR.Transform.concat/2` | The first transform's operations followed by the second's. |
-| `Visualize.IR.Transform.to_string/1` | The SVG `transform` attribute: operations space-separated, e.g. `"translate(100,50) rotate(45) scale(2)"`. A scale with equal factors prints the single-argument form. Numbers format as in `Visualize.IR.Path.to_string/1`. |
+| `Visualize.IR.Transform.to_matrix/1` | The operations folded into one affine matrix `{a, b, c, d, e, f}` for `[a c e; b d f; 0 0 1]`, composed as SVG composes the attribute string: `M = Op₁ · Op₂ · … · Opₙ`, so the last operation applies to a point first. `translate` is `[1 0 tx; 0 1 ty]`, `scale` `[sx 0 0; 0 sy 0]`, `rotate(a)` `[cos −sin 0; sin cos 0]`, `rotate(a, cx, cy)` is `translate(cx, cy) rotate(a) translate(−cx, −cy)`, `skew_x(a)` `[1 tan 0; 0 1 0]`, `skew_y(a)` `[1 0 0; tan 1 0]`, `matrix` as given; angles in degrees. An empty transform is the identity. |
+| `Visualize.IR.Transform.multiply/2` | The product `m1 · m2` of two matrices: applying the result is applying `m2` first, then `m1`. |
+| `Visualize.IR.Transform.apply_matrix/2` | `apply_matrix({a, b, c, d, e, f}, {x, y})` is `{a·x + c·y + e, b·x + d·y + f}`. |
+| `Visualize.IR.Transform.to_string/1` | The SVG `transform` attribute: operations space-separated, e.g. `"translate(100,50) rotate(45) scale(2)"`. A scale with equal factors prints the single-argument form. Numbers format with `Visualize.IR.Path.format_number/1`, so `-0` never prints. This is the only transform serialisation; `Visualize.Backend.SVG` emits it (D-34). |
 
 ## 3. The backend behaviour
 
@@ -180,7 +184,7 @@ and MAY define `wrap_root(output, keyword()) :: output`, which wraps content in 
 
 ### 5.1 `Visualize.SVG.Element`
 
-`from_ir/1` maps element types to tags (`:group` → `:g`, `:root` → `:svg`, `:clip_path` → `:clipPath`, `:linear_gradient` → `:linearGradient`, `:radial_gradient` → `:radialGradient`, others unchanged), copies `attrs`, adds `d` from the path via `Visualize.IR.Path.to_string/1`, adds `transform` via `Visualize.IR.Transform.to_string/1`, converts every style key to its hyphenated SVG attribute name (`:stroke_width` → `:"stroke-width"` and so on) and every style atom value to its SVG keyword (`:none` → `"none"`, `:current_color` → `"currentColor"`, `:start`, `:middle`, `:end`, `:butt`, `:round`, `:square`, `:miter`, `:bevel`, `:bold`). Style attributes overwrite geometric attrs of the same name. A `:root` element's `view_box` attr MUST render as `viewBox` (D-11). Conversion is recursive over children.
+`from_ir/1` maps element types to tags (`:group` → `:g`, `:root` → `:svg`, `:clip_path` → `:clipPath`, `:linear_gradient` → `:linearGradient`, `:radial_gradient` → `:radialGradient`, others unchanged), copies `attrs`, adds `d` from the path via `Visualize.IR.Path.to_string/1`, adds `transform` via `Visualize.IR.Transform.to_string/1`, converts every style key to its hyphenated SVG attribute name (`:stroke_width` → `:"stroke-width"` and so on) and every style atom value to its SVG keyword (`:none` → `"none"`, `:current_color` → `"currentColor"`, `:start`, `:middle`, `:end`, `:butt`, `:round`, `:square`, `:miter`, `:bevel`, `:bold`). Style attributes overwrite geometric attrs of the same name. A `:root` element gains `xmlns="http://www.w3.org/2000/svg"` and its `view_box` attr becomes the `viewBox` key (D-11, D-34); a `:polyline`/`:polygon` whose `points` is a list of `{x, y}` tuples has it formatted as `Visualize.Backend.SVG` formats points (spec/09 §2.6). Conversion is recursive over children. The result renders, through `Visualize.SVG.Renderer`, to exactly the markup `Visualize.Backend.SVG.render_element/1` emits for the same IR (D-34); `test/visualize/svg/bridge_test.exs` holds both to it.
 
 | Function | Contract |
 |---|---|
@@ -289,13 +293,14 @@ A compatibility façade: every builder delegates to `Visualize.IR.Path` and oper
 | `Visualize.SVG.Path.concat/1` | Delegates to `Visualize.IR.Path.concat/1`. |
 | `Visualize.SVG.Path.append/2` | Delegates to `Visualize.IR.Path.append/2`. |
 | `Visualize.SVG.Path.transform/2` | Delegates to `Visualize.IR.Path.transform/2`. |
-| `Visualize.SVG.Path.to_string/1` | The `d` string via `Visualize.Backend.SVG.path_data/1`; MUST equal `Visualize.IR.Path.to_string/1` (D-12). |
+| `Visualize.SVG.Path.to_string/1` | Delegates to `Visualize.IR.Path.to_string/1`, the one `d` serialisation (D-12). |
 
 ### 5.4 `Visualize.SVG.Renderer`
 
-Serialises an `SVG.Element` tree. Attributes are emitted sorted by name, each key's underscores replaced by hyphens, values escaped (`&`, `"`, `<`, `>`); text content is escaped (`&`, `<`, `>`); child-less, content-less `circle`, `ellipse`, `line`, `path`, `polygon`, `polyline`, `rect`, `image` and `use` elements are self-closing. The iolist form is what `Phoenix.HTML.Safe` returns.
+Serialises an `SVG.Element` tree. Attributes with a `nil` value are omitted; the rest are emitted sorted by their SVG name from `attribute_name/1`, values escaped (`&`, `"`, `<`, `>`); text content is escaped (`&`, `<`, `>`); child-less, content-less `circle`, `ellipse`, `line`, `path`, `polygon`, `polyline`, `rect`, `image`, `use` and `stop` elements are self-closing. The iolist form is what `Phoenix.HTML.Safe` returns. `Visualize.Backend.SVG` renders its tags, attributes and text through the same functions, so the two serialisers cannot drift (D-34).
 
 | Function | Contract |
 |---|---|
 | `Visualize.SVG.Renderer.render/1` | The element tree as an iolist. |
 | `Visualize.SVG.Renderer.render_to_string/1` | `render/1` converted to a binary. |
+| `Visualize.SVG.Renderer.attribute_name/1` | The SVG attribute name for a key (D-11): a snake_case atom hyphenates (`:stroke_width` → `"stroke-width"`, `:clip_path` → `"clip-path"`) unless it is one of the camel-cased SVG attributes, which map to their spelling — `:view_box` → `"viewBox"`, `:preserve_aspect_ratio`, `:gradient_units`, `:gradient_transform`, `:pattern_units`, `:pattern_transform`, `:clip_path_units`, `:marker_width`, `:marker_height`, `:marker_units`, `:ref_x`, `:ref_y`, `:spread_method`, `:text_length`, `:length_adjust`; an atom already camel-cased (`:viewBox`) and a binary key pass through unchanged. |

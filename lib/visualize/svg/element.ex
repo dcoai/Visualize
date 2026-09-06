@@ -97,8 +97,7 @@ defmodule Visualize.SVG.Element do
   defp ir_type_to_tag(type), do: type
 
   defp build_attrs(%IR.Element{} = ir) do
-    # Start with geometric attrs
-    attrs = ir.attrs
+    attrs = geometric_attrs(ir)
 
     # Add path data if present
     attrs =
@@ -120,6 +119,23 @@ defmodule Visualize.SVG.Element do
     style_attrs = style_to_attrs(ir.style)
     Map.merge(attrs, style_attrs)
   end
+
+  # A root carries the namespace and its `view_box` renders as `viewBox` (D-11); points
+  # lists format as `Visualize.Backend.SVG` formats them, so both bridges emit one markup.
+  defp geometric_attrs(%IR.Element{type: :root, attrs: attrs}) do
+    {view_box, rest} = Map.pop(attrs, :view_box)
+
+    %{xmlns: "http://www.w3.org/2000/svg"}
+    |> Map.merge(rest)
+    |> Map.put(:viewBox, view_box)
+  end
+
+  defp geometric_attrs(%IR.Element{type: type, attrs: %{points: points} = attrs})
+       when type in [:polyline, :polygon] and is_list(points) do
+    Map.put(attrs, :points, Visualize.Backend.SVG.format_points(points))
+  end
+
+  defp geometric_attrs(%IR.Element{attrs: attrs}), do: attrs
 
   defp style_to_attrs(style) when map_size(style) == 0, do: %{}
 
