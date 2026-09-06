@@ -307,7 +307,7 @@ Relative commands (`0x07`, `0x0A`–`0x0F`) are stored with their relative argum
 0x03  count:u32  cx:f64 cy:f64 r:f64  … (count times)
 ```
 
-The encoders always write `count = 1`; the decoder MUST accept any count. Each circle is a full `arc(cx, cy, r, 0, 2π)` on a fresh path.
+The encoders always write `count = 1`; the decoder MUST accept any count, beginning one path that holds every circle as a full `arc(cx, cy, r, 0, 2π)` (each preceded by a `moveTo` to its rightmost point), so the `fill`/`stroke` records that follow draw them all.
 
 #### 4.3.4 `rects` (0x04)
 
@@ -315,7 +315,7 @@ The encoders always write `count = 1`; the decoder MUST accept any count. Each c
 0x04  count:u32  x:f64 y:f64 w:f64 h:f64  … (count times)
 ```
 
-The encoders always write `count = 1`.
+The encoders always write `count = 1`; the decoder begins one path holding every rectangle, as for circles.
 
 #### 4.3.5 `style` (0x10)
 
@@ -487,7 +487,7 @@ Dynamic layer, by the shape of `:dynamic`:
 - `%IR.Element{}` → the element with its transform *replaced* by the margin translate (any transform it carried is lost), rendered; `:dynamic_style` is ignored.
 - list → `IR.Element.group(list, style: dynamic_style)` with the margin translate, rendered; the group's style reaches the elements through Canvas state (3.3.1).
 
-`html`: a `<div class="hybrid-chart" style="position: relative; width: Wpx; height: Hpx;">` containing a `<div class="hybrid-svg" style="position: absolute; top: 0; left: 0; pointer-events: none;">` with the SVG, then a `<div class="hybrid-canvas" phx-hook="CanvasChart" data-commands="…" data-width="W" data-height="H" style="position: absolute; top: 0; left: 0;">` wrapping `<canvas width="W" height="H" style="display: block;"></canvas>`. The attribute is `data-commands` for `:json` and `data-script` for any other format; its value is the canvas string with `"`, `<` and `>` HTML-escaped. The library does not ship the `CanvasChart` hook (spec/10 lists the hooks it provides); the host application MUST supply one that reads the attribute and replays the commands.
+`html`: a `<div class="hybrid-chart" style="position: relative; width: Wpx; height: Hpx;">` containing a `<div class="hybrid-svg" style="position: absolute; top: 0; left: 0; pointer-events: none;">` with the SVG, then a `<div class="hybrid-canvas" phx-hook="CanvasChart" data-commands="…" data-width="W" data-height="H" style="position: absolute; top: 0; left: 0;">` wrapping `<canvas width="W" height="H" style="display: block;"></canvas>`. The attribute is `data-commands` for `:json` and `data-script` for any other format; its value is the canvas string with `"`, `<` and `>` HTML-escaped. The `CanvasChart` hook that reads either attribute ships in `Visualize.Hooks` (`Visualize.Hooks.Canvas`, spec/10 §7; D-40).
 
 ## 7. Visualize.Incremental
 

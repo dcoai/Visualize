@@ -61,7 +61,9 @@ defmodule Visualize.Backend.Hybrid do
     * `:width` - Chart width
     * `:height` - Chart height
     * `:margin` - Margin map with :top, :right, :bottom, :left
-    * `:canvas_format` - Canvas output format: :js (default), :json, :commands
+    * `:canvas_format` - Canvas output format: `:json` (default), `:js` or `:commands`;
+      the container's `CanvasChart` hook (`Visualize.Hooks.Canvas`) replays `:json` from
+      `data-commands` and `:js` from `data-script`
 
   ## Returns
 

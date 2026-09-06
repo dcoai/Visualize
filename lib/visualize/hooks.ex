@@ -2,27 +2,27 @@ defmodule Visualize.Hooks do
   @moduledoc """
   Phoenix LiveView JavaScript hooks for interactive visualizations.
 
-  This module provides hooks for:
-  - Zoom and pan interactions
-  - Brush selection
+  This module bundles five hooks:
+  - `ZoomHook` — zoom and pan interactions (`Visualize.Hooks.Zoom`)
+  - `BrushHook` — brush selection (`Visualize.Hooks.Brush`)
+  - `CanvasChart` — replays Canvas commands or a script (`Visualize.Hooks.Canvas`)
+  - `CanvasBinaryChart` — replays the canvas binary format (`Visualize.Hooks.CanvasBinary`)
+  - `CanvasIncrementalChart` — scroll-and-copy incremental canvas updates
+    (`Visualize.Hooks.CanvasIncremental`)
 
   ## Installation
 
-  1. Generate the JavaScript file:
-
-      mix visualize.gen.hooks
-
-  Or manually create the file with:
+  1. Write the JavaScript file:
 
       File.write!("assets/js/visualize_hooks.js", Visualize.Hooks.js_code())
 
+  or `Visualize.Hooks.install!/0`, which writes it to `default_path/0`.
+
   2. Import in your app.js:
 
-      import { ZoomHook, BrushHook } from "./visualize_hooks"
+      import Hooks from "./visualize_hooks"
 
-      let liveSocket = new LiveSocket("/live", Socket, {
-        hooks: { ZoomHook, BrushHook }
-      })
+      let liveSocket = new LiveSocket("/live", Socket, { hooks: Hooks })
 
   ## Usage Examples
 
@@ -53,9 +53,19 @@ defmodule Visualize.Hooks do
         {:noreply, socket}
       end
 
+  ### Canvas
+
+      <div id="chart" phx-hook="CanvasBinaryChart" phx-update="ignore"
+           data-binary={@binary} data-width="800" data-height="600">
+        <canvas width="800" height="600"></canvas>
+      </div>
+
+  See `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and
+  `Visualize.Hooks.CanvasIncremental` for the attributes and events of each.
+
   """
 
-  alias Visualize.Hooks.{Brush, Zoom}
+  alias Visualize.Hooks.{Brush, Canvas, CanvasBinary, CanvasIncremental, Zoom}
 
   @doc """
   Returns the complete JavaScript code for all hooks.
@@ -71,11 +81,19 @@ defmodule Visualize.Hooks do
 
     #{Brush.js_hook()}
 
+    #{CanvasBinary.js_decoder()}
+
+    #{Canvas.js_hook()}
+
+    #{CanvasBinary.js_hook()}
+
+    #{CanvasIncremental.js_hook()}
+
     // Export all hooks
-    export { ZoomHook, BrushHook };
+    export { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart };
 
     // Default export for convenience
-    export default { ZoomHook, BrushHook };
+    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart };
     """
   end
 
