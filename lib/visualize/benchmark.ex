@@ -103,6 +103,11 @@ defmodule Visualize.Benchmark do
     * `:duration_ms` - How long to run the benchmark (default: 5000)
     * `:data_points` - Points per frame (default: 200)
     * `:chart_type` - Chart type (default: `:line`)
+    * `:width` - Chart width (default: 800)
+    * `:height` - Chart height (default: 600)
+    * `:clock` - A zero-arity function returning milliseconds on a monotonic clock
+      (default: `System.monotonic_time(:millisecond)`); every frame count and elapsed
+      time is read from it, so a fake clock makes the benchmark deterministic (D-39)
 
   """
   @spec stream_benchmark(keyword()) :: map()
@@ -112,52 +117,51 @@ defmodule Visualize.Benchmark do
     chart_type = Keyword.get(opts, :chart_type, :line)
     width = Keyword.get(opts, :width, 800)
     height = Keyword.get(opts, :height, 600)
+    clock = Keyword.get(opts, :clock, fn -> System.monotonic_time(:millisecond) end)
 
     sample_data = generate_data(chart_type, data_points)
     {x_scale, y_scale} = build_scales(chart_type, sample_data, width, height)
     static_svg = render_static_svg(x_scale, y_scale, width, height)
     canvas_size = {width, height}
 
-    svg_results = stream_benchmark_full(:svg, duration_ms, data_points, chart_type, width, height)
+    full = fn backend ->
+      fn frame ->
+        data = generate_animated_data(chart_type, data_points, frame)
+        render_full_chart(backend, chart_type, data, width, height)
+      end
+    end
 
-    canvas_results =
-      stream_benchmark_full(:canvas, duration_ms, data_points, chart_type, width, height)
+    data_only = fn mode ->
+      fn frame ->
+        data = generate_animated_data(chart_type, data_points, frame)
+
+        case mode do
+          :hybrid ->
+            render_data_only(chart_type, data, x_scale, y_scale)
+
+          :hybrid_incremental ->
+            render_incremental(:hybrid, chart_type, data, x_scale, y_scale, canvas_size)
+
+          :canvas_incremental ->
+            render_incremental(:canvas, chart_type, data, x_scale, y_scale, canvas_size)
+        end
+      end
+    end
+
+    static_bytes = byte_size(static_svg)
+    svg_results = stream_run(full.(:svg), clock, duration_ms, data_points)
+    canvas_results = stream_run(full.(:canvas), clock, duration_ms, data_points)
 
     hybrid_results =
-      stream_benchmark_data_only(
-        :hybrid,
-        x_scale,
-        y_scale,
-        static_svg,
-        chart_type,
-        data_points,
-        duration_ms,
-        nil
-      )
+      stream_run(data_only.(:hybrid), clock, duration_ms, data_points)
+      |> Map.put(:static_svg_bytes, static_bytes)
 
     hybrid_inc_results =
-      stream_benchmark_data_only(
-        :hybrid_incremental,
-        x_scale,
-        y_scale,
-        static_svg,
-        chart_type,
-        data_points,
-        duration_ms,
-        canvas_size
-      )
+      stream_run(data_only.(:hybrid_incremental), clock, duration_ms, data_points)
+      |> Map.put(:static_svg_bytes, static_bytes)
 
     canvas_inc_results =
-      stream_benchmark_data_only(
-        :canvas_incremental,
-        x_scale,
-        y_scale,
-        nil,
-        chart_type,
-        data_points,
-        duration_ms,
-        canvas_size
-      )
+      stream_run(data_only.(:canvas_incremental), clock, duration_ms, data_points)
 
     build_stream_results(
       %{duration_ms: duration_ms, data_points: data_points, chart_type: chart_type},
@@ -422,121 +426,22 @@ defmodule Visualize.Benchmark do
   # Stream Benchmark Execution
   # ============================================================================
 
-  defp stream_benchmark_full(backend, duration_ms, data_points, chart_type, width, height) do
-    end_time = System.monotonic_time(:millisecond) + duration_ms
-
-    {frames, total_bytes, actual_ms} =
-      stream_loop_full(backend, chart_type, data_points, width, height, end_time, 0, 0)
-
-    build_stream_result(frames, total_bytes, actual_ms, data_points)
+  # Renders frames until the clock passes the budget. Elapsed time is the difference of two
+  # clock readings and nothing else (D-39); the frame count only indexes the animation.
+  defp stream_run(render_frame, clock, duration_ms, data_points) do
+    start = clock.()
+    {frames, total_bytes, finish} = stream_loop(render_frame, clock, start + duration_ms, 0, 0)
+    build_stream_result(frames, total_bytes, finish - start, data_points)
   end
 
-  defp stream_benchmark_data_only(
-         mode,
-         x_scale,
-         y_scale,
-         static_svg,
-         chart_type,
-         data_points,
-         duration_ms,
-         canvas_size
-       ) do
-    end_time = System.monotonic_time(:millisecond) + duration_ms
-
-    {frames, total_bytes, actual_ms} =
-      stream_loop_data_only(
-        mode,
-        x_scale,
-        y_scale,
-        chart_type,
-        data_points,
-        canvas_size,
-        end_time,
-        0,
-        0
-      )
-
-    result = build_stream_result(frames, total_bytes, actual_ms, data_points)
-
-    if static_svg do
-      Map.put(result, :static_svg_bytes, byte_size(static_svg))
-    else
-      result
-    end
-  end
-
-  defp stream_loop_full(
-         backend,
-         chart_type,
-         data_points,
-         width,
-         height,
-         end_time,
-         frames,
-         total_bytes
-       ) do
-    now = System.monotonic_time(:millisecond)
+  defp stream_loop(render_frame, clock, end_time, frames, total_bytes) do
+    now = clock.()
 
     if now >= end_time do
-      {frames, total_bytes, now - (end_time - frames)}
+      {frames, total_bytes, now}
     else
-      data = generate_animated_data(chart_type, data_points, frames)
-      output = render_full_chart(backend, chart_type, data, width, height)
-
-      stream_loop_full(
-        backend,
-        chart_type,
-        data_points,
-        width,
-        height,
-        end_time,
-        frames + 1,
-        total_bytes + byte_size(output)
-      )
-    end
-  end
-
-  defp stream_loop_data_only(
-         mode,
-         x_scale,
-         y_scale,
-         chart_type,
-         data_points,
-         canvas_size,
-         end_time,
-         frames,
-         total_bytes
-       ) do
-    now = System.monotonic_time(:millisecond)
-
-    if now >= end_time do
-      {frames, total_bytes, now - (end_time - frames)}
-    else
-      data = generate_animated_data(chart_type, data_points, frames)
-
-      output =
-        case mode do
-          :hybrid ->
-            render_data_only(chart_type, data, x_scale, y_scale)
-
-          :hybrid_incremental ->
-            render_incremental(:hybrid, chart_type, data, x_scale, y_scale, canvas_size)
-
-          :canvas_incremental ->
-            render_incremental(:canvas, chart_type, data, x_scale, y_scale, canvas_size)
-        end
-
-      stream_loop_data_only(
-        mode,
-        x_scale,
-        y_scale,
-        chart_type,
-        data_points,
-        canvas_size,
-        end_time,
-        frames + 1,
-        total_bytes + byte_size(output)
-      )
+      output = render_frame.(frames)
+      stream_loop(render_frame, clock, end_time, frames + 1, total_bytes + byte_size(output))
     end
   end
 
