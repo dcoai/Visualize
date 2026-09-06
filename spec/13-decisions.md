@@ -139,3 +139,27 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** Each resolves to the d3-scale reference. `Band` is d3's `rescale`: a descending range is laid out in reverse with positive step and bandwidth; `round/2` floors the step and rounds the start and bandwidth from it. `Log.ticks/2` is d3's log ticks — every `k · base^e` inside the domain when the decades fit the count, thinned powers when they do not, linear ticks when the multiples are too few — with exact logarithms for bases 10 and 2 so `1e12` is decade 12, not 11.999…. `Symlog` decades are `±c · 10^k`, since the log region begins at the constant. An unknown colour scheme raises `ArgumentError` naming `schemes/0`; RGB channels clamp to a byte. `Ordinal` on an empty range returns `unknown`; `Linear` on a degenerate domain returns `[d0]` and leaves `nice/1` alone. Every tick loop steps `0..(n − 1)//1`, so an empty tick set is `[]`. `Data.ticks/3` calls `Kernel.max/2` explicitly and handles zero and descending spans.
 
 **Consequences.** `test/visualize/scale/{band,color,ticks}_test.exs` and `test/visualize/data_test.exs` carry one regression per defect and properties (StreamData) for band arithmetic under either range direction and for tick lists being ascending, distinct and inside the domain — which is what found the three extra defects. `Log.ticks/2` returns different (and more) values than before for every domain, and `Symlog.ticks/2` differs whenever the constant is not 1; nothing in this repository or `examples/` depended on the old lists. The `import Kernel, except: [min: 2, max: 2]` in `Visualize.Data` remains a hazard for any future arithmetic in that module; every `min`/`max` there now names `Kernel` explicitly, and the regression test fails the moment one does not.
+
+## 18. D-18 — `defined/2` breaks the path into subpaths
+
+**Context.** `Line.defined/2` and `Area.defined/2` filtered undefined data out and joined what remained into one continuous path, so a gap in a time series drew as a line across it — the opposite of what the moduledoc promised and of what a dashboard panel needs to show missing data (#14). Nothing tested the path.
+
+**Decision.** d3-shape's semantics: the data are split into runs of consecutive defined data, each run is generated through the configured curve as its own subpath (each with its own `M`; for `Area`, its own closed ring), and the subpaths are concatenated in data order. A run of fewer than two points contributes nothing — it has no segment — so a lone defined point between gaps is invisible and a data list with no run of two points yields an empty path. This keeps the existing "fewer than two points is empty" contract of spec/04 §1.3 rather than adopting d3's `M x,y Z` for a lone point, which fills nothing and strokes nothing but is not empty. The run splitting is one `@doc false` helper on `Shape.Line` that `Area` shares.
+
+**Consequences.** A gap is visible. Rendered output changes for any caller that used `defined` to filter and relied on the points either side being joined; none exists in this repository or in `examples/`. The reference strings are in `test/visualize/shape/line_area_test.exs`.
+
+## 19. D-19 — `Curve.natural/1` is the natural cubic spline
+
+**Context.** The natural spline placed both control points of every segment one third of the way along the chord, which is a straight line written as a cubic Bézier: `:natural` rendered identically to `:linear` (#14). The tridiagonal solve the moduledoc and the spec announced had never been written.
+
+**Decision.** A port of d3-shape's `controlPoints`: per axis, the first control coordinates solve the open natural-spline tridiagonal system (spec/04 §5.6) by the Thomas algorithm and the second control coordinates follow from them; x and y are solved independently, as in d3. The two-point fallback to `:linear` stays.
+
+**Consequences.** `:natural` paths change for every input of three or more points. The three-point example in `test/visualize/shape/line_area_test.exs` is hand-derived from the system and matches d3; `test/support/curve_golden.txt` records every curve type over one fixed point set (the projection-golden pattern), so any later change to curve maths is a visible diff rather than a silent drift.
+
+## 20. D-20 — `Line` accepts constant accessors; `LineNx` honours `:curve`
+
+**Context.** `Line.x/2` and `Line.y/2` matched only a function or an atom while `Area` and `Arc` also took a number, so the same constant baseline needed a lambda on one generator and not another. `LineNx.generate_path/3` documented a `:curve` option it never read (#14).
+
+**Decision.** `Line` normalises a number to `fn _ -> n end`, exactly as `Area` does. `LineNx.generate_path/3` reads `:curve` (default `:linear`) and `:curve_opts` (default `[]`); `:linear` keeps the direct `M`/`L` build and every other curve passes the scaled points through `Visualize.Shape.Curve.generate/3`. Implementing the option was chosen over deleting the documentation because the point of `LineNx` is the vectorised scaling, which a curve does not disturb.
+
+**Consequences.** Default output of both is unchanged. A `LineNx` call with a curve pays the curve's per-point cost after the batch scale, which is the same cost `Line` pays.

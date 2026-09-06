@@ -267,39 +267,28 @@ defmodule Visualize.Shape.Curve do
     end)
   end
 
-  @doc "Natural cubic spline interpolation"
+  @doc """
+  Natural cubic spline interpolation.
+
+  The spline through every point with zero second derivative at both ends, as d3-shape's
+  `curveNatural`. The Bézier control points come from the tridiagonal system solved by
+  `control_points/1`, once for the x coordinates and once for the y coordinates.
+  """
   @spec natural([point()]) :: Path.t()
   def natural(points) when length(points) < 3 do
     linear(points)
   end
 
-  def natural([{x0, y0} | _] = points) do
-    n = length(points) - 1
-    xs = Enum.map(points, &elem(&1, 0))
-    ys = Enum.map(points, &elem(&1, 1))
-
-    # Solve for the spline coefficients
-    {ax, bx} = natural_spline_coefficients(xs)
-    {ay, by} = natural_spline_coefficients(ys)
+  def natural([{x0, y0} | rest] = points) do
+    {ax, bx} = points |> Enum.map(&elem(&1, 0)) |> control_points()
+    {ay, by} = points |> Enum.map(&elem(&1, 1)) |> control_points()
 
     path = Path.new() |> Path.move_to(x0, y0)
 
-    0..(n - 1)
-    |> Enum.reduce(path, fn i, acc ->
-      x1 = Enum.at(xs, i)
-      x2 = Enum.at(xs, i + 1)
-      y1 = Enum.at(ys, i)
-      y2 = Enum.at(ys, i + 1)
-
-      Path.curve_to(
-        acc,
-        x1 + Enum.at(ax, i),
-        y1 + Enum.at(ay, i),
-        x2 - Enum.at(bx, i),
-        y2 - Enum.at(by, i),
-        x2,
-        y2
-      )
+    [rest, ax, ay, bx, by]
+    |> Enum.zip()
+    |> Enum.reduce(path, fn {{x, y}, cx1, cy1, cx2, cy2}, acc ->
+      Path.curve_to(acc, cx1, cy1, cx2, cy2, x, y)
     end)
   end
 
@@ -344,26 +333,65 @@ defmodule Visualize.Shape.Curve do
     |> Enum.take(n)
   end
 
-  # Natural spline coefficient calculation
-  defp natural_spline_coefficients(values) do
+  # d3-shape's `controlPoints`: the first and second Bézier control coordinates of every
+  # segment of the natural spline through `values`, from the tridiagonal system
+  #
+  #     2·p0 + p1          = v0 + 2·v1
+  #     p(i−1) + 4·pi + p(i+1) = 4·vi + 2·v(i+1)        0 < i < n−1
+  #     2·p(n−2) + 7·p(n−1) = 8·v(n−1) + vn
+  #
+  # solved by the Thomas algorithm (forward elimination, back substitution). The second
+  # control coordinate of segment i is `2·v(i+1) − p(i+1)`, and of the last segment
+  # `(vn + p(n−1)) / 2`.
+  defp control_points(values) do
     n = length(values) - 1
+    v = List.to_tuple(values)
 
-    if n < 2 do
-      {List.duplicate(0, n), List.duplicate(0, n)}
-    else
-      # Calculate differences
-      deltas =
-        values
-        |> Enum.chunk_every(2, 1, :discard)
-        |> Enum.map(fn [v0, v1] -> v1 - v0 end)
+    {sub, diag, rhs} =
+      Enum.reduce(0..(n - 1), {[], [], []}, fn i, {a, b, r} ->
+        {ai, bi, ri} =
+          cond do
+            i == 0 -> {0, 2, elem(v, 0) + 2 * elem(v, 1)}
+            i == n - 1 -> {2, 7, 8 * elem(v, n - 1) + elem(v, n)}
+            true -> {1, 4, 4 * elem(v, i) + 2 * elem(v, i + 1)}
+          end
 
-      # Solve tridiagonal system for second derivatives
-      # Simplified: use finite differences
-      a = Enum.map(deltas, fn d -> d / 3 end)
-      b = Enum.map(deltas, fn d -> d / 3 end)
+        {[ai | a], [bi | b], [ri | r]}
+      end)
 
-      {a, b}
-    end
+    sub = Enum.reverse(sub)
+    diag = Enum.reverse(diag)
+    rhs = Enum.reverse(rhs)
+
+    # Forward elimination: each row absorbs a multiple of the one above it.
+    {diag, rhs} =
+      Enum.zip([tl(sub), tl(diag), tl(rhs)])
+      |> Enum.reduce({[hd(diag)], [hd(rhs)]}, fn {ai, bi, ri},
+                                                 {[b_prev | _] = bs, [r_prev | _] = rs} ->
+        m = ai / b_prev
+        {[bi - m | bs], [ri - m * r_prev | rs]}
+      end)
+
+    # Back substitution, walking the reversed (last-row-first) lists.
+    [b_last | diag_rest] = diag
+    [r_last | rhs_rest] = rhs
+    p_last = r_last / b_last
+
+    first =
+      Enum.zip(diag_rest, rhs_rest)
+      |> Enum.reduce([p_last], fn {bi, ri}, [p_next | _] = ps ->
+        [(ri - p_next) / bi | ps]
+      end)
+
+    second =
+      first
+      |> Enum.with_index()
+      |> Enum.map(fn
+        {p, i} when i == n - 1 -> (elem(v, n) + p) / 2
+        {_p, i} -> 2 * elem(v, i + 1) - Enum.at(first, i + 1)
+      end)
+
+    {first, second}
   end
 
   # Add phantom points for spline calculations

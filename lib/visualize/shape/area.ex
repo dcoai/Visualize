@@ -23,7 +23,7 @@ defmodule Visualize.Shape.Area do
   """
 
   alias Visualize.IR.Path
-  alias Visualize.Shape.Curve
+  alias Visualize.Shape.{Curve, Line}
 
   defstruct x: nil,
             x0: nil,
@@ -96,7 +96,7 @@ defmodule Visualize.Shape.Area do
     %{area | y1: normalize_accessor(accessor)}
   end
 
-  @doc "Sets the defined predicate function"
+  @doc "Sets the defined predicate: a falsy result breaks the area into separate rings"
   @spec defined(t(), (any() -> boolean())) :: t()
   def defined(%__MODULE__{} = area, predicate) when is_function(predicate, 1) do
     %{area | defined: predicate}
@@ -121,47 +121,38 @@ defmodule Visualize.Shape.Area do
     |> Visualize.Backend.SVG.path_data()
   end
 
-  @doc "Generates a Path struct"
+  @doc """
+  Generates a Path struct.
+
+  Each run of consecutive defined data (see `defined/2`) becomes one closed ring: the top
+  edge forward, a line to the bottom edge, the bottom edge reversed, and `Z`. A run of
+  fewer than two points draws nothing.
+  """
   @spec generate_path(t(), [any()]) :: Path.t()
   def generate_path(%__MODULE__{} = area, data) do
-    data = maybe_filter_defined(data, area.defined)
+    x0_fn = area.x0 || area.x
+    x1_fn = area.x1 || area.x
+    y0_fn = area.y0 || area.y
+    y1_fn = area.y1 || area.y
 
-    if Enum.empty?(data) do
-      Path.new()
-    else
-      # Get accessors
-      x0_fn = area.x0 || area.x
-      x1_fn = area.x1 || area.x
-      y0_fn = area.y0 || area.y
-      y1_fn = area.y1 || area.y
+    commands =
+      data
+      |> Line.defined_runs(area.defined)
+      |> Enum.flat_map(fn run ->
+        top_points =
+          Enum.map(run, fn d -> {apply_accessor(x1_fn, d), apply_accessor(y1_fn, d)} end)
 
-      # Top line points (forward)
-      top_points =
-        Enum.map(data, fn d ->
-          x = if x1_fn, do: apply_accessor(x1_fn, d), else: apply_accessor(x0_fn, d)
-          y = apply_accessor(y1_fn, d)
-          {x, y}
-        end)
+        bottom_points =
+          run
+          |> Enum.map(fn d -> {apply_accessor(x0_fn, d), apply_accessor(y0_fn, d)} end)
+          |> Enum.reverse()
 
-      # Bottom line points (reverse for closing the path)
-      bottom_points =
-        data
-        |> Enum.map(fn d ->
-          x = apply_accessor(x0_fn, d)
-          y = apply_accessor(y0_fn, d)
-          {x, y}
-        end)
-        |> Enum.reverse()
+        top_path = Curve.generate(area.curve, top_points, area.curve_opts)
+        bottom_path = Curve.generate(area.curve, bottom_points, area.curve_opts)
+        ring_commands(top_path, bottom_path)
+      end)
 
-      # Generate top curve
-      top_path = Curve.generate(area.curve, top_points, area.curve_opts)
-
-      # Generate bottom curve and append to path
-      bottom_path = Curve.generate(area.curve, bottom_points, area.curve_opts)
-
-      # Combine: top path + line to bottom start + bottom path + close
-      combine_paths(top_path, bottom_path)
-    end
+    %Path{commands: commands}
   end
 
   defp normalize_accessor(accessor) when is_function(accessor, 1), do: accessor
@@ -171,10 +162,10 @@ defmodule Visualize.Shape.Area do
   defp apply_accessor(accessor, data) when is_function(accessor, 1), do: accessor.(data)
   defp apply_accessor(accessor, _data) when is_number(accessor), do: accessor
 
-  defp maybe_filter_defined(data, nil), do: data
-  defp maybe_filter_defined(data, defined_fn), do: Enum.filter(data, defined_fn)
+  # One closed ring: an empty run (fewer than two points) contributes no commands at all.
+  defp ring_commands(%Path{commands: []}, _bottom), do: []
 
-  defp combine_paths(%Path{commands: top_cmds}, %Path{commands: bottom_cmds}) do
+  defp ring_commands(%Path{commands: top_cmds}, %Path{commands: bottom_cmds}) do
     # Get the first point of bottom path for the connecting line
     {start_x, start_y} =
       case bottom_cmds do
@@ -189,12 +180,6 @@ defmodule Visualize.Shape.Area do
         cmds -> cmds
       end
 
-    combined_commands =
-      top_cmds ++
-        [{:L, start_x, start_y}] ++
-        bottom_cmds_without_move ++
-        [:Z]
-
-    %Path{commands: combined_commands}
+    top_cmds ++ [{:L, start_x, start_y}] ++ bottom_cmds_without_move ++ [:Z]
   end
 end

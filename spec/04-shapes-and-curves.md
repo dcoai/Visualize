@@ -12,28 +12,24 @@ An accessor extracts a value from a datum. The accepted forms differ by module:
 
 | Module | 1-arity function | atom (field, `Map.get(d, field)`) | number (constant) |
 |---|---|---|---|
-| `Line` (`x`, `y`) | yes | yes | no |
+| `Line` (`x`, `y`) | yes | yes | yes |
 | `Area` (`x`, `x0`, `x1`, `y`, `y0`, `y1`) | yes | yes | yes |
 | `Arc` (radii, angles) | yes | yes | yes |
 | `Pie` (`value`) | yes | yes (`Map.get(d, field, 0)`) | yes |
 | `Stack` (`value`) | 2-arity only | no | no |
 | `Symbol` (`type`, `size`) | yes | atom is the literal type | literal size |
 
-Atom accessors read a map key and return `nil` when absent (except `Pie`, which defaults to `0`); a `nil` coordinate fails arithmetic downstream. Callers SHOULD supply functions when data are not maps.
-
-> Decision: see spec/13 — `Line.x/2` and `Line.y/2` are to accept a numeric constant, matching `Area`.
+Atom accessors read a map key and return `nil` when absent (except `Pie`, which defaults to `0`); a `nil` coordinate fails arithmetic downstream. Callers SHOULD supply functions when data are not maps. A numeric constant is the accessor `fn _ -> n end`; `Line` accepts one since D-20.
 
 ### 1.2 `defined/2`
 
-`Line.defined/2` and `Area.defined/2` take a 1-arity predicate. Data for which it returns a falsy value are **removed** before point generation; the remaining points are joined into a single continuous path. The intended (D3) semantics are that an undefined datum *breaks* the path, starting a new subpath at the next defined datum, so that gaps are visible. The moduledoc claims gaps; the code does not produce them.
-
-> Decision: see spec/13 — `defined/2` MUST split the path at undefined data.
+`Line.defined/2` and `Area.defined/2` take a 1-arity predicate. A datum for which it returns a falsy value **breaks** the path (d3-shape's `defined` semantics, D-18): the data are split into runs of consecutive defined data, each run is generated through the curve as its own subpath — for `Area`, its own closed ring — and the subpaths are concatenated in data order, so a gap is visible between them. A run of fewer than two points has no segment to draw and contributes nothing; data whose defined runs are all single points therefore produce an empty path. With no predicate the whole data list is one run.
 
 ### 1.3 `generate/2` versus `generate_path/2`
 
 `generate_path/2` returns `%Visualize.IR.Path{commands: [...]}` with commands from `{:M, x, y}`, `{:L, x, y}`, `{:H, x}`, `{:V, y}`, `{:C, x1, y1, x2, y2, x, y}`, `{:A, rx, ry, rot, large_arc, sweep, x, y}`, `:Z`. `generate/2` is `generate_path/2` piped through `Visualize.Backend.SVG.path_data/1`; the result is the SVG path-data string. Code targeting a non-SVG backend MUST use `generate_path/2` and render through `Visualize.Render`.
 
-Both `Line.generate_path/2` and `Area.generate_path/2` return an empty path (`Visualize.IR.Path.new/0`) when, after `defined` filtering, fewer than two points remain; a single point yields no `M` command.
+Both `Line.generate_path/2` and `Area.generate_path/2` return an empty path (`Visualize.IR.Path.new/0`) when no defined run (1.2) has two or more points; a lone point yields no `M` command.
 
 ## 2. `Visualize.Shape` Facade
 
@@ -82,20 +78,20 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 
 ### 3.2 Semantics
 
-`generate_path/2` filters by `defined`, maps each datum to `{x.(d), y.(d)}`, and calls `Curve.generate(curve, points, curve_opts)`.
+`generate_path/2` splits the data into defined runs (1.2), maps each run's data to `{x.(d), y.(d)}`, calls `Curve.generate(curve, points, curve_opts)` per run, and concatenates the commands; each run therefore starts with its own `M`.
 
 ### 3.3 Functions
 
 | Function | Contract |
 |---|---|
 | `Visualize.Shape.Line.new/0` | Returns a line generator reading tuple elements 0 and 1. |
-| `Visualize.Shape.Line.x/2` | Sets the x accessor: 1-arity function or atom field. |
-| `Visualize.Shape.Line.y/2` | Sets the y accessor: 1-arity function or atom field. |
+| `Visualize.Shape.Line.x/2` | Sets the x accessor: 1-arity function, atom field, or numeric constant. |
+| `Visualize.Shape.Line.y/2` | Sets the y accessor: 1-arity function, atom field, or numeric constant. |
 | `Visualize.Shape.Line.defined/2` | Sets the 1-arity defined predicate (1.2). |
 | `Visualize.Shape.Line.curve/2` | As `curve/3` with `[]` options. |
 | `Visualize.Shape.Line.curve/3` | Sets the curve type (section 5) and its option keyword list. |
 | `Visualize.Shape.Line.generate/2` | Returns the SVG path-data string. |
-| `Visualize.Shape.Line.generate_path/2` | Returns an `IR.Path`; empty for fewer than two points. |
+| `Visualize.Shape.Line.generate_path/2` | Returns an `IR.Path`, one subpath per defined run; empty when no run has two points. |
 
 ## 4. `Visualize.Shape.Area`
 
@@ -109,8 +105,8 @@ Effective accessors are `x0 || x`, `x1 || x`, `y0 || y`, `y1 || y`. `x/2` sets `
 
 `generate_path/2`:
 
-1. Filters by `defined` (1.2); returns an empty path for fewer than two points.
-2. Builds the top line `(x1, y1)` per datum, forward, and the bottom line `(x0, y0)` per datum, reversed.
+1. Splits the data into defined runs (1.2); each run of two or more points produces one closed ring by steps 2–4, and the rings are concatenated in data order. A run of one point produces nothing.
+2. Per run, builds the top line `(x1, y1)` per datum, forward, and the bottom line `(x0, y0)` per datum, reversed.
 3. Generates each line through `Curve.generate/3` with the same curve and options.
 4. Concatenates: top commands, `{:L, bx, by}` to the bottom line's first point, the bottom commands without their leading `:M`, then `:Z`.
 
@@ -174,9 +170,15 @@ Secant slopes `m_i` between consecutive points (`0` when `dx = 0`). Interior tan
 
 ### 5.6 Natural
 
-The intended curve is the natural cubic spline: second derivatives zero at the ends, interior coefficients from the tridiagonal system. The code sets both control-point offsets of every segment to `Δ/3` (one third of the chord), which is a straight line expressed as a cubic Bézier; `:natural` currently renders identically to `:linear` with `C` commands.
+The natural cubic spline — the C² interpolating cubic with zero second derivative at both ends — as d3-shape's `curveNatural` (D-19). For points `p0 … pn` and per axis, with `v_i` the coordinate of `p_i`, the first Bézier control coordinate `a_i` of each segment `i` (`0 ≤ i < n`) solves the tridiagonal system
 
-> Decision: see spec/13 — `Curve.natural/1` MUST solve the tridiagonal system.
+```
+2·a0 + a1                    = v0 + 2·v1
+a_{i−1} + 4·a_i + a_{i+1}    = 4·v_i + 2·v_{i+1}      0 < i < n − 1
+2·a_{n−2} + 7·a_{n−1}        = 8·v_{n−1} + v_n
+```
+
+by the Thomas algorithm (forward elimination, back substitution). The second control coordinate is `b_i = 2·v_{i+1} − a_{i+1}` for `i < n − 1` and `b_{n−1} = (v_n + a_{n−1}) / 2`. Segment `i` is `C a_i b_i p_{i+1}`, the x and y systems solved independently. Control points mirror across every interior knot, so the curve is C¹ there as well. The reference `d` string for the golden point set is in `test/support/curve_golden.txt`; the three-point case `(0,0) (1,1) (2,0)` gives `M0,0 C1/3,1/2 2/3,1 1,1 C4/3,1 5/3,1/2 2,0`.
 
 ### 5.7 Functions
 
@@ -191,7 +193,7 @@ The intended curve is the natural cubic spline: second derivatives zero at the e
 | `Visualize.Shape.Curve.catmull_rom/2` | Catmull-Rom spline with the given alpha. |
 | `Visualize.Shape.Curve.monotone_x/1` | Monotone cubic in x. |
 | `Visualize.Shape.Curve.monotone_y/1` | Monotone cubic in y. |
-| `Visualize.Shape.Curve.natural/1` | Natural cubic spline (currently straight segments, 5.6). |
+| `Visualize.Shape.Curve.natural/1` | Natural cubic spline as in 5.6. |
 
 ## 6. `Visualize.Shape.Arc`
 
@@ -364,20 +366,18 @@ Every path is centred on the origin. With `s` the size:
 
 ### 10.2 Semantics
 
-- `generate_path/2,3`: options `:x_domain`, `:x_range`, `:y_domain`, `:y_range`, each a `{min, max}` tuple defaulting to `{0, 1}`. Coordinates are scaled by `(v − d0) / (d1 − d0) · (r1 − r0) + r0` in one vectorised operation, then emitted as `{:M, x, y}` followed by `{:L, x, y}` per point. A `:curve` option is documented but **not read**; output is always linear.
+- `generate_path/2,3`: options `:x_domain`, `:x_range`, `:y_domain`, `:y_range`, each a `{min, max}` tuple defaulting to `{0, 1}`; `:curve` (a type from section 5, default `:linear`) and `:curve_opts` (its keyword list, default `[]`). Coordinates are scaled by `(v − d0) / (d1 − d0) · (r1 − r0) + r0` in one vectorised operation. With `:linear` they are emitted directly as `{:M, x, y}` followed by `{:L, x, y}` per point; any other curve passes the scaled points through `Visualize.Shape.Curve.generate/3` (D-20).
 - `generate_path_raw/2`: the same `M`/`L` path from already-scaled lists.
 - `batch_transform/6`: returns `{scaled_xs, scaled_ys}` as lists of floats.
 - `to_binary/6,7`: scales, adds `:translate_x`/`:translate_y` (default `0`), and encodes the `Visualize.Backend.CanvasBinary` opcode stream: an optional style block `<<0x10, flags>>` followed by fill RGBA (`flag 0x01`), stroke RGBA (`flag 0x02`), stroke width as little-endian `f32` (`flag 0x04`), present only when any of `:fill`, `:stroke`, `:stroke_width` is given; then `<<0x01, count::little-32>>` and `2·count` native-endian `f64` coordinates interleaved x, y; then `0x40` (fill) and/or `0x41` (stroke) draw ops. Colours MUST be `"#rrggbb"`; any other value encodes as opaque black; `:none` suppresses that operation.
 - `to_base64/6,7`: `Base.encode64/1` of `to_binary`.
-
-> Decision: see spec/13 — the `:curve` option is to be either implemented (via `Shape.Curve.generate/3` on the scaled points) or removed from the documentation.
 
 ### 10.3 Functions
 
 | Function | Contract |
 |---|---|
 | `Visualize.Shape.LineNx.generate_path/2` | As `generate_path/3` with `[]` options (identity domains and ranges). |
-| `Visualize.Shape.LineNx.generate_path/3` | Batch-scales `xs`, `ys` by the domain/range options and returns a linear `IR.Path`. |
+| `Visualize.Shape.LineNx.generate_path/3` | Batch-scales `xs`, `ys` by the domain/range options and returns an `IR.Path` through the `:curve` option. |
 | `Visualize.Shape.LineNx.generate_path_raw/2` | Returns a linear `IR.Path` from pre-scaled coordinate lists. |
 | `Visualize.Shape.LineNx.batch_transform/6` | Vectorised linear scaling; returns `{xs, ys}` float lists. |
 | `Visualize.Shape.LineNx.to_binary/6` | As `to_binary/7` with `[]` options. |
