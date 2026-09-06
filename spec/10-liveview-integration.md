@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks (`Visualize.Hooks.Zoom`, `Visualize.Hooks.Brush`) that add zoom/pan and brush selection to any SVG and report back to the LiveView as events, with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
+Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>` — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
 
 ## 1. Scope
 
@@ -15,6 +15,9 @@ Visualize reaches the browser through Phoenix LiveView in three ways: HEEx funct
 | `Visualize.Hooks` | always | JS bundle, install path, helper re-exports |
 | `Visualize.Hooks.Zoom` | always | `ZoomHook` JS and transform helpers |
 | `Visualize.Hooks.Brush` | always | `BrushHook` JS and selection helpers |
+| `Visualize.Hooks.Canvas` | always | `CanvasChart` JS: Canvas command and script replay |
+| `Visualize.Hooks.CanvasBinary` | always | `CanvasBinaryChart` JS and the shared binary decoder |
+| `Visualize.Hooks.CanvasIncremental` | always | `CanvasIncrementalChart` JS: scroll-and-copy updates |
 
 Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)`, so they exist only in a build where `phoenix_live_view` is a dependency of the host application. They are absent from the library's own compiled surface.
 
@@ -223,7 +226,7 @@ The radius is `min(width, height)/2`. Angles are assigned top-down: the root spa
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, `export { ZoomHook, BrushHook };` and `export default { ZoomHook, BrushHook };`. |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, then `export { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart };` and the same as the default export (D-40). |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
 | `Visualize.Hooks.transform_point/2` | Delegates to `Visualize.Hooks.Zoom.transform_point/2`. |
@@ -236,7 +239,7 @@ The radius is `min(width, height)/2`. Angles are assigned top-down: the root spa
 
 ### 4.2 Installation contract
 
-The host application writes the bundle (`install!/0`, or `File.write!/2` of `js_code/0`), imports `{ ZoomHook, BrushHook }` from it, and registers them in the `hooks:` option of `LiveSocket`. The module doc mentions a `mix visualize.gen.hooks` task; no such task ships, and `install!/0` is the supported programmatic path. The library ships only these two hooks; the `CanvasChart`, `CanvasBinaryChart` and `CanvasIncrementalChart` hooks named by the Canvas-side modules (spec/09) are the host's responsibility.
+The host application writes the bundle (`install!/0`, or `File.write!/2` of `js_code/0`), imports the hooks it uses (or the default export) from it, and registers them in the `hooks:` option of `LiveSocket`. `install!/0` is the supported programmatic path; no Mix task ships. The bundle is one ES module: the decoder functions the canvas hooks call are defined before them and exported, so a host MAY import `executeVisualizeBinary` for its own hooks. `test/visualize/hooks/canvas_hooks_test.exs` holds the bundle to this shape.
 
 ## 5. Visualize.Hooks.Zoom
 
@@ -333,9 +336,52 @@ At least one of `:x_scale`, `:y_scale` MUST be given; neither raises `ArgumentEr
 - `:y_scale` only: `{invert(y_scale, y0), invert(y_scale, y1)}` in pixel order; because SVG y grows downward, `start` is the larger domain value under the usual flipped range;
 - neither: `ArgumentError`.
 
-## 7. Elements in HEEx
+## 7. Visualize.Hooks.Canvas
 
-### 7.1 Safe implementations
+### 7.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.Canvas.js_hook/0` | Returns the source of `export const CanvasChart = {…}` (7.2). |
+
+### 7.2 `CanvasChart` behaviour
+
+Attach with `phx-hook="CanvasChart"`, an `id` and `phx-update="ignore"` on a container holding a `<canvas>`; when the container has none, `mounted()` appends one sized from `data-width`/`data-height` (defaults `800`/`600`). The hook renders on `mounted()`, on `updated()`, and on a `canvas_commands` event whose payload MAY carry `commands` and/or `script`, each stored into the matching data attribute before rendering.
+
+Rendering reads `data-commands` — the `:json` output of `Visualize.Backend.Canvas` (spec/09 §3.5) — or, when that is absent, `data-script` — its `:js` output (spec/09 §3.4), which is what `Visualize.Backend.Hybrid` emits under each attribute name (spec/09 §6.3). A value equal to the last one rendered is skipped. The hook resets the transform, clears the canvas, then for JSON executes each `{"cmd", "args"}` object as `ctx[cmd](...args)`, or as the property assignment `ctx[name] = args[0]` when `cmd` starts with `set_`; for a script it calls `new Function('ctx', script)(ctx)`. Because every command tuple names a Canvas 2D method (D-37), no other case exists.
+
+## 8. Visualize.Hooks.CanvasBinary
+
+### 8.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.CanvasBinary.js_decoder/0` | Returns the source of three exported functions: `decodeBase64(base64)` (standard Base64 to a `Uint8Array`), `drawSvgArc(ctx, x1, y1, rx, ry, phi, fA, fS, x2, y2)` (the SVG endpoint-to-centre conversion, as `Visualize.Backend.Canvas.Arc` on the server) and `executeVisualizeBinary(ctx, bytes, startOffset, endOffset)` (8.3). |
+| `Visualize.Hooks.CanvasBinary.js_hook/0` | Returns the source of `export const CanvasBinaryChart = {…}` (8.2); requires `js_decoder/0` in the same module. |
+
+### 8.2 `CanvasBinaryChart` behaviour
+
+Attach as for `CanvasChart` (7.2). The hook renders on `mounted()`, on `updated()`, and on a `canvas_update` event with a `binary` key, which it stores into `data-binary` first. Rendering reads `data-binary` (a `Visualize.Backend.CanvasBinary.to_base64/1` string), skips a value equal to the last rendered, resets the transform, clears the canvas and calls `executeVisualizeBinary(ctx, decodeBase64(value))`.
+
+### 8.3 The decoder
+
+`executeVisualizeBinary(ctx, bytes, startOffset, endOffset)` replays the records of spec/09 §4 from `startOffset` (default `0`) up to `endOffset` (default `bytes.length`) and returns the offset reached. Per opcode: `path` begins a path, `moveTo` the first point and `lineTo` the rest; `path_cubic` begins a path and executes each sub-opcode against a tracked current point and subpath start (`Z` returns to the start; `A`/`a` go through `drawSvgArc`); `circles` and `rects` begin one path holding every entry (each circle a `moveTo` to its rightmost point then a full `arc`), left for the following `fill`/`stroke` records; `style` assigns `fillStyle`/`strokeStyle` as `rgba(r,g,b,a/255)`, `lineWidth` and `globalAlpha` per its flags; `transform` kind `0x01` is `ctx.translate`, `0x03` `ctx.translate` then `ctx.scale`, `0xFF` `ctx.transform(a, b, c, d, e, f)` — composed onto the current transform, never `setTransform` (spec/09 §4.3.6); `save`, `restore`, `fill`, `stroke` are the calls. An unknown opcode, sub-opcode or transform kind throws an `Error` naming the byte and offset: a mismatch with the encoder is a bug, not something to draw past. `test/visualize/hooks/canvas_hooks_test.exs` checks that the source has a `case` for every byte of `Visualize.Backend.CanvasBinary.Opcodes`, every sub-opcode `0x01`–`0x0F` and every transform kind.
+
+## 9. Visualize.Hooks.CanvasIncremental
+
+### 9.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.CanvasIncremental.js_hook/0` | Returns the source of `export const CanvasIncrementalChart = {…}` (9.2); requires `Visualize.Hooks.CanvasBinary.js_decoder/0` in the same module. |
+
+### 9.2 `CanvasIncrementalChart` behaviour
+
+Attach as for `CanvasChart` (7.2). On `mounted()` the hook also creates an offscreen canvas of the same size for the copy. It renders only on `canvas_incremental` events, whose payload is the map `Visualize.Incremental` builds (spec/09 §7.3): mode `"none"` is ignored; mode `"full"` resets the transform, clears the canvas, checks the `0x60` header and replays the stream from byte 11 (spec/09 §5.6); any scroll mode copies the current pixels to the offscreen canvas, clears, draws them back shifted by `(−round(dx), −round(dy))` (integer shifts, since a sub-pixel copy blurs), then reads the `0x60` record's `region_count` at byte 10 and, for each region, saves, clips to its bounds, replays its `data_length` bytes with `executeVisualizeBinary` and restores (spec/09 §5.5). A payload without the `0x60` header throws.
+
+## 10. Elements in HEEx
+
+### 10.1 Safe implementations
 
 `Visualize.SVG.Element` implements `Phoenix.HTML.Safe` (defined in `Visualize.SVG.Renderer`, compiled only when `Phoenix.HTML.Safe` is loaded) with `to_iodata/1 = Visualize.SVG.Renderer.render/1`, so an element built with `Visualize.svg/1`, `Visualize.SVG.Element.new/2` or `Visualize.SVG.Element.from_ir/1` MAY be interpolated directly: `<%= @element %>` or `{@element}` in HEEx renders its markup without `raw/1`. It also implements `String.Chars`.
 
@@ -343,6 +389,6 @@ At least one of `:x_scale`, `:y_scale` MUST be given; neither raises `ArgumentEr
 
 `Visualize.IR.Path` implements `String.Chars` only (its `d` string); it MUST be interpolated as an attribute value (`d={@path}`), never as markup.
 
-### 7.2 Strings
+### 10.2 Strings
 
 `Visualize.Axis.render/2`, `Visualize.Render.to_string/2` and `Visualize.SVG.to_string/1` return plain binaries, which HEEx escapes; they MUST be wrapped in `Phoenix.HTML.raw/1` to be emitted as markup, as the components in section 2 do for axes.
