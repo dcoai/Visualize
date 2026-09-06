@@ -50,6 +50,8 @@ defmodule Visualize.MixProject do
        only: [:dev, :test],
        runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      # Property tests over the scale protocol (spec/03 §1.3; test/visualize/scale/).
+      {:stream_data, "~> 1.4", only: [:dev, :test]},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       # `mix vis.verify` (spec/12 §5): the model of the force simulation. A sibling checkout
       # when there is one, git otherwise, which is what CI sees.

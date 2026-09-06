@@ -5,6 +5,8 @@ defmodule Visualize.Scale.Band do
   Essential for bar charts where each category gets an equal-width band.
   """
 
+  @behaviour Visualize.Scale.Behaviour
+
   defstruct domain: [],
             range: [0, 1],
             padding_inner: 0,
@@ -27,18 +29,21 @@ defmodule Visualize.Scale.Band do
 
   @doc "Sets the domain (list of categories)"
   @spec domain(t(), [any()]) :: t()
+  @impl true
   def domain(%__MODULE__{} = scale, categories) when is_list(categories) do
     %{scale | domain: categories}
   end
 
   @doc "Sets the range"
   @spec range(t(), [number()]) :: t()
+  @impl true
   def range(%__MODULE__{} = scale, [r0, r1]) do
     %{scale | range: [r0, r1]}
   end
 
   @doc "Sets both inner and outer padding (0 to 1)"
   @spec padding(t(), number()) :: t()
+  @impl true
   def padding(%__MODULE__{} = scale, p) when p >= 0 and p < 1 do
     %{scale | padding_inner: p, padding_outer: p}
   end
@@ -69,6 +74,7 @@ defmodule Visualize.Scale.Band do
 
   @doc "Returns the start position for a category"
   @spec apply(t(), any()) :: number() | nil
+  @impl true
   def apply(%__MODULE__{} = scale, value) do
     case Enum.find_index(scale.domain, &(&1 == value)) do
       nil -> nil
@@ -78,10 +84,12 @@ defmodule Visualize.Scale.Band do
 
   @doc "Not applicable for band scales"
   @spec invert(t(), number()) :: nil
+  @impl true
   def invert(%__MODULE__{}, _value), do: nil
 
   @doc "Returns the width of each band"
   @spec bandwidth(t()) :: number()
+  @impl true
   def bandwidth(%__MODULE__{} = scale) do
     {band_width, _step, _start} = compute_band_params(scale)
     maybe_round(band_width, scale.round?)
@@ -96,14 +104,18 @@ defmodule Visualize.Scale.Band do
 
   @doc "Returns the domain as ticks"
   @spec ticks(t(), integer()) :: [any()]
+  @impl true
   def ticks(%__MODULE__{domain: domain}, _count), do: domain
 
   @doc "Returns the scale unchanged"
   @spec nice(t()) :: t()
+  @impl true
   def nice(%__MODULE__{} = scale), do: scale
 
-  # Not applicable
-  def clamp(scale, _), do: scale
+  @doc "Identity: a band scale never extrapolates"
+  @impl true
+  @spec clamp(t(), boolean()) :: t()
+  def clamp(%__MODULE__{} = scale, _clamp?), do: scale
 
   defp band_start(scale, index) do
     {_band_width, step, start} = compute_band_params(scale)

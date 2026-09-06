@@ -16,7 +16,7 @@
 }
 ```
 
-`orient` is one of `:top`, `:right`, `:bottom`, `:left`. The four constructors each take a scale struct and set the orientation. The scale MUST implement `ticks/2` and `apply/2` (see spec/03 section 1.3: `Power`, `Symlog`, `Quantile`, `Quantize`, and `Threshold` do not, and cannot be used with `Axis` until that decision is implemented).
+`orient` is one of `:top`, `:right`, `:bottom`, `:left`. The four constructors each take a scale struct and set the orientation. The scale MUST implement `Visualize.Scale.Behaviour` (spec/03 §1.3) and its `apply/2` MUST return a number: every continuous scale (`Linear`, `Log`, `Power`, `Symlog`, `Time`) and the two discrete position scales (`Band`, `Ordinal` with a numeric range) qualify. The discretising scales and `Color` map values to range *elements*, not positions, so an axis on them is a caller error (`ArithmeticError` at the tick offset).
 
 ### 1.2 Setters
 
@@ -59,7 +59,7 @@ Domain line path, with `[r0, r1]` the scale's range and `o = tick_size_outer`:
 - `:top`/`:bottom`: `M r0,k·o  V 0  H r1  V k·o`
 - `:left`/`:right`: `M k·o,r0  H 0  V r1  H k·o`
 
-The range is read from `scale.range` when it is a two-element list; any other shape (e.g. the tuple ranges of `Power`/`Symlog`) falls back to `[0, 1]`.
+The range is read from `scale.range`, a two-element list in every position scale (spec/03 §1.2); a struct without one falls back to `[0, 1]`.
 
 Tick line: `:top`/`:bottom` from `(0, 0)` to `(0, k·inner)`; `:left`/`:right` from `(0, 0)` to `(k·inner, 0)`.
 

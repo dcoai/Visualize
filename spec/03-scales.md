@@ -17,35 +17,31 @@ Scales map values from a data *domain* to a visual *range*. `Visualize.Scale` is
 
 ### 1.2 Domain and Range Representation
 
-Continuous domains and ranges are **two-element lists** `[d0, d1]` / `[r0, r1]` for `Linear`, `Log`, `Time`, `Band`, and `Color`. `Power`, `Symlog`, and `Quantize` accept either a two-element list or a two-tuple and **store a two-tuple** `{d0, d1}`. Callers MUST NOT pattern-match on the stored representation; they MUST use the module's accessors.
-
-> Decision: see spec/13 — the stored representation is to be unified as a two-element list across all continuous scales; the tuple form in `Power`, `Symlog`, and `Quantize` is an inconsistency, and `Visualize.Axis` (spec/05) reads `scale.range` as a list and falls back to `[0, 1]` for tuple ranges.
+Continuous domains and ranges are **two-element lists** `[d0, d1]` / `[r0, r1]` in every scale struct: `Linear`, `Log`, `Power`, `Symlog`, `Time`, `Band`, `Quantize`, and `Color`. `Power`, `Symlog`, and `Quantize` additionally accept a two-tuple on input to `domain/2` and `range/2` and store it as a list (D-15). `Visualize.Axis` (spec/05) reads `scale.range` as a two-element list, so every continuous scale draws with the range it was given.
 
 Domains MAY be descending (`d0 > d1`) and ranges MAY be descending (`r0 > r1`); the interpolation formulae below are sign-agnostic. Degenerate domains (`d0 == d1`) are not guarded and MUST be avoided by the caller: `apply/2` divides by zero.
 
 ### 1.3 The Facade Protocol
 
-`Visualize.Scale.<op>(scale, …)` calls `scale.__struct__.<op>(scale, …)`. A scale module is *protocol-complete* when it defines all of: `domain/2`, `range/2`, `apply/2`, `invert/2`, `ticks/2`, `nice/1`, `padding/2`, `bandwidth/1`, `clamp/2`. Operations that do not apply to a scale kind MUST still be defined and MUST behave as identity (`nice/1`, `padding/2`, `clamp/2`), return `nil` (`invert/2`), or return `0` (`bandwidth/1`).
+`Visualize.Scale.<op>(scale, …)` calls `scale.__struct__.<op>(scale, …)`. The protocol is the behaviour `Visualize.Scale.Behaviour`, whose nine callbacks are `domain/2`, `range/2`, `apply/2`, `invert/2`, `ticks/2`, `nice/1`, `padding/2`, `bandwidth/1`, `clamp/2`. Every scale module MUST declare `@behaviour Visualize.Scale.Behaviour` and implement all nine, so a missing operation is a compile error under `--warnings-as-errors` rather than an `UndefinedFunctionError` at dispatch (D-15). Operations that do not apply to a scale kind MUST behave as identity (`nice/1`, `padding/2`, `clamp/2`), return `nil` (`invert/2`), or return `0` (`bandwidth/1`); the discretising scales return their thresholds from `ticks/2`.
 
-The table records what each module actually defines.
+The table records what each module defines.
 
 | Module | `apply/2` | `invert/2` | `ticks/2` | `nice/1` | `padding/2` | `bandwidth/1` | `clamp/2` | Facade constructor |
 |---|---|---|---|---|---|---|---|---|
 | `Linear` | yes | yes | yes | yes | identity | `0` | yes | `linear/0` |
 | `Log` | yes | yes | yes | yes | identity | `0` | yes | `log/0,1` |
+| `Power` | yes | yes | yes | `Linear.nice/1` | identity | `0` | yes | `power/0`, `sqrt/0` |
+| `Symlog` | yes | yes | yes | `Linear.nice/1` | identity | `0` | yes | `symlog/0` |
 | `Time` | yes | yes | yes | yes | identity | `0` | yes | `time/0` |
 | `Ordinal` | yes | `nil` | domain | identity | identity | `0` | identity | `ordinal/0` |
 | `Band` | yes | `nil` | domain | identity | yes | yes | identity | `band/0` |
-| `Color` | yes | `nil` | sequential only | identity | identity | `0` | yes | `sequential/1`, `diverging/1` |
-| `Power` | **`scale/2`** | yes | yes | — | — | — | yes | `power/0`, `sqrt/0` |
-| `Symlog` | **`scale/2`** | yes | yes | — | — | — | yes | `symlog/0` |
-| `Quantile` | **`scale/2`** | — | — | — | — | — | — | `quantile/0` |
-| `Quantize` | **`scale/2`** | — | — | — | — | — | — | `quantize/0` |
-| `Threshold` | **`scale/2`** | — | — | — | — | — | — | — |
+| `Quantile` | yes | `nil` | quantiles | identity | identity | `0` | identity | `quantile/0` |
+| `Quantize` | yes | `nil` | thresholds | identity | identity | `0` | identity | `quantize/0` |
+| `Threshold` | yes | `nil` | thresholds | identity | identity | `0` | identity | `threshold/0` |
+| `Color` | yes | `nil` | domain extent | identity | identity | `0` | yes | `sequential/1`, `diverging/1` |
 
-`Power`, `Symlog`, `Quantile`, `Quantize`, and `Threshold` name their mapping function `scale/2` rather than `apply/2`, and omit the remaining protocol functions. Consequently `Visualize.Scale.apply/2` raises `UndefinedFunctionError` for a scale returned by `Visualize.Scale.power/0`, `sqrt/0`, `symlog/0`, `quantile/0`, or `quantize/0`, as do `nice/1`, `padding/2`, and `bandwidth/1`; `Visualize.Scale.invert/2` and `ticks/2` additionally raise for the three discretising scales. `Visualize.Axis` therefore cannot be built on any of these five scales. `Threshold` has no facade constructor at all.
-
-> Decision: see spec/13 — every scale module MUST be protocol-complete under the name `apply/2`. `scale/2` on the five modules is to be retained as an alias of `apply/2` for one release and then removed; `Quantile`/`Quantize`/`Threshold` MUST define `invert/2` returning `nil`, `ticks/2` returning their thresholds, and identity `nice/1`/`padding/2`/`clamp/2`; `Power`/`Symlog` MUST define `nice/1` (delegating to `Linear.nice/1` on the domain) and identity `padding/2`/`bandwidth/1`; and the facade MUST gain `threshold/0`.
+`Power`, `Symlog`, `Quantile`, `Quantize`, and `Threshold` also keep `scale/2` as an alias of `apply/2` for one release, after which it is removed; new code MUST call `apply/2`. `test/visualize/scale/protocol_test.exs` constructs every kind through the facade and calls all nine operations; it is the recurrence guard for this section.
 
 ### 1.4 Clamping
 
@@ -66,14 +62,15 @@ The table records what each module actually defines.
 | `Visualize.Scale.band/0` | Returns `Visualize.Scale.Band.new/0`. |
 | `Visualize.Scale.quantize/0` | Returns `Visualize.Scale.Quantize.new/0`. |
 | `Visualize.Scale.quantile/0` | Returns `Visualize.Scale.Quantile.new/0`. |
+| `Visualize.Scale.threshold/0` | Returns `Visualize.Scale.Threshold.new/0`. |
 | `Visualize.Scale.sequential/1` | Returns `Visualize.Scale.Color.sequential/1`. |
 | `Visualize.Scale.diverging/1` | Returns `Visualize.Scale.Color.diverging/1`. |
 | `Visualize.Scale.domain/2` | Dispatches to the scale module's `domain/2`. |
 | `Visualize.Scale.range/2` | Dispatches to the scale module's `range/2`. |
-| `Visualize.Scale.apply/2` | Dispatches to the scale module's `apply/2`; maps a domain value to a range value. Raises `UndefinedFunctionError` for the five `scale/2` modules (see 1.3). |
-| `Visualize.Scale.invert/2` | Dispatches to the scale module's `invert/2`; maps a range value back to the domain. Continuous scales only; discrete scales return `nil`. |
+| `Visualize.Scale.apply/2` | Dispatches to the scale module's `apply/2`; maps a domain value to a range value. Total over every scale this module constructs (1.3). |
+| `Visualize.Scale.invert/2` | Dispatches to the scale module's `invert/2`; maps a range value back to the domain. Continuous scales only; every other scale returns `nil`. |
 | `Visualize.Scale.ticks/1` | As `ticks/2` with count 10. |
-| `Visualize.Scale.ticks/2` | Dispatches to the scale module's `ticks/2`; returns representative domain values, ascending for continuous scales, the domain itself for discrete scales. `count` is a hint, not a guarantee. |
+| `Visualize.Scale.ticks/2` | Dispatches to the scale module's `ticks/2`; returns representative domain values, ascending for continuous scales, the domain itself for discrete scales, the thresholds for discretising scales. `count` is a hint, not a guarantee. |
 | `Visualize.Scale.nice/1` | Dispatches to the scale module's `nice/1`; extends the domain outward to round values. |
 | `Visualize.Scale.padding/2` | Dispatches to the scale module's `padding/2`; meaningful only for `Band`. |
 | `Visualize.Scale.bandwidth/1` | Dispatches to the scale module's `bandwidth/1`; `0` for every scale but `Band`. |
@@ -149,20 +146,18 @@ All logarithms are `log(x) / log(base)`.
 
 ### 5.1 Struct
 
-`%Visualize.Scale.Power{domain: {0, 1}, range: {0, 1}, exponent: 1, clamp?: false}`. `domain/2` and `range/2` accept a two-element list or a two-tuple and store a tuple.
+`%Visualize.Scale.Power{domain: [0, 1], range: [0, 1], exponent: 1, clamp?: false}`. `domain/2` and `range/2` accept a two-element list or a two-tuple and store a list.
 
 ### 5.2 Semantics
 
-Let `e` be the exponent and `P(x) = |x|^e`.
+Let `e` be the exponent and `T(x) = sign(x) · |x|^e` (D3's signed power), with inverse `T⁻¹(y) = sign(y) · |y|^(1/e)`.
 
-- `scale/2`: `D = P(d1) − P(d0)`; `t = 0` if `D == 0`, else `(P(v) − P(d0)) / D`; `t` is negated when `v < 0`; result `r0 + t · (r1 − r0)`; when `clamp?`, the result is clamped to the range bounds in either order.
-- `invert/2`: `t = (v − r0) / (r1 − r0)` (`0` if `r1 == r0`); result `(P(d0) + t · D)^(1/e)`. No sign handling: the result is always non-negative.
+- `apply/2`: `D = T(d1) − T(d0)`; `t = 0` if `D == 0`, else `(T(v) − T(d0)) / D`; result `r0 + t · (r1 − r0)`; when `clamp?`, the result is clamped to the range bounds in either order. A domain that includes negative values maps symmetrically: on `[−10, 10]` with `e = 2`, `−5` and `5` sit `0.125` either side of the midpoint.
+- `invert/2`: `t = (v − r0) / (r1 − r0)` (`0` if `r1 == r0`); result `T⁻¹(T(d0) + t · D)`, negative when the domain value is.
 - `ticks/1,2`: delegate to `Linear.ticks/2` on `[d0, d1]` (linear spacing in the domain, not in the transformed space).
+- `nice/1`: the domain becomes `Linear.nice/1`'s domain for `[d0, d1]`.
+- `padding/2` identity; `bandwidth/1` `0`.
 - `sqrt/0` is `new/0` with exponent 0.5.
-
-The intended transform is D3's: `T(x) = sign(x) · |x|^e` applied uniformly to the domain bounds and the value, so that `t = (T(v) − T(d0)) / (T(d1) − T(d0))` and `invert` applies `T⁻¹`. The code applies `P` (absolute value, no sign) to the domain bounds and only negates `t` for a negative value, so any domain containing a negative bound (e.g. `[−10, 10]`, where `D = 0`) maps every value to `r0`, and `invert/2` cannot return a negative domain value.
-
-> Decision: see spec/13 — `Power.scale/2` and `invert/2` MUST use the signed transform `T` on bounds and value alike.
 
 ### 5.3 Functions
 
@@ -170,27 +165,32 @@ The intended transform is D3's: `T(x) = sign(x) · |x|^e` applied uniformly to t
 |---|---|
 | `Visualize.Scale.Power.new/0` | Returns the default struct (exponent 1). |
 | `Visualize.Scale.Power.sqrt/0` | Returns a power scale with exponent 0.5. |
-| `Visualize.Scale.Power.domain/2` | Sets the domain from a two-element list or tuple. |
-| `Visualize.Scale.Power.range/2` | Sets the range from a two-element list or tuple. |
+| `Visualize.Scale.Power.domain/2` | Sets the domain from a two-element list or tuple; stored as a list. |
+| `Visualize.Scale.Power.range/2` | Sets the range from a two-element list or tuple; stored as a list. |
 | `Visualize.Scale.Power.exponent/2` | Sets the exponent; MUST be a number. |
 | `Visualize.Scale.Power.clamp/2` | Sets `clamp?`. |
-| `Visualize.Scale.Power.scale/2` | Maps a domain value to the range as in 5.2. This is the `apply/2` operation under a non-protocol name (see 1.3). |
-| `Visualize.Scale.Power.invert/2` | Inverse as in 5.2; result is non-negative. |
+| `Visualize.Scale.Power.apply/2` | Maps a domain value to the range as in 5.2. |
+| `Visualize.Scale.Power.scale/2` | Alias of `apply/2`, retained for one release (1.3). |
+| `Visualize.Scale.Power.invert/2` | Inverse as in 5.2; signed. |
 | `Visualize.Scale.Power.ticks/1` | As `ticks/2` with count 10. |
 | `Visualize.Scale.Power.ticks/2` | `Linear.ticks/2` over the domain. |
+| `Visualize.Scale.Power.nice/1` | `Linear.nice/1` over the domain. |
+| `Visualize.Scale.Power.padding/2` | Identity. |
+| `Visualize.Scale.Power.bandwidth/1` | Returns `0`. |
 
 ## 6. `Visualize.Scale.Symlog`
 
 ### 6.1 Struct
 
-`%Visualize.Scale.Symlog{domain: {−1, 1}, range: {0, 1}, constant: 1, clamp?: false}`. List or tuple accepted for `domain/2` and `range/2`; stored as tuples.
+`%Visualize.Scale.Symlog{domain: [−1, 1], range: [0, 1], constant: 1, clamp?: false}`. List or tuple accepted for `domain/2` and `range/2`; stored as lists.
 
 ### 6.2 Semantics
 
 The transform is `S(x) = sign(x) · ln(1 + |x| / c)` with inverse `S⁻¹(y) = sign(y) · c · (e^{|y|} − 1)`, where `c` is the constant (`> 0`, enforced by `constant/2`).
 
-- `scale/2`: `t = (S(v) − S(d0)) / (S(d1) − S(d0))` (`0` if the denominator is zero); result `r0 + t · (r1 − r0)`, clamped to the range bounds when `clamp?`.
+- `apply/2`: `t = (S(v) − S(d0)) / (S(d1) − S(d0))` (`0` if the denominator is zero); result `r0 + t · (r1 − r0)`, clamped to the range bounds when `clamp?`.
 - `invert/2`: `t = (v − r0) / (r1 − r0)` (`0` if degenerate); result `S⁻¹(S(d0) + t · (S(d1) − S(d0)))`.
+- `nice/1`: the domain becomes `Linear.nice/1`'s domain for `[d0, d1]`. `padding/2` identity; `bandwidth/1` `0`.
 - `ticks/1,2` (count `n`): with `lo = min(d0, d1)`, `hi = max(d0, d1)`, the result is the ascending, de-duplicated union of: negated decades `−10^k` for `k` in `0, s, 2s, … ≤ ⌈log10(−lo)⌉` filtered to `≥ lo` (only when `lo < 0`); `0` when `lo ≤ 0 ≤ hi`; and decades `10^k` filtered to `(0, hi]` (only when `hi > 0`). The exponent stride is `s = max(1, ⌊⌈log10 bound⌉ / n⌋)`. The constant does not influence ticks. `10^0 = 1` is always a candidate; when `hi < 1` the positive list is empty.
 
 ### 6.3 Functions
@@ -198,14 +198,18 @@ The transform is `S(x) = sign(x) · ln(1 + |x| / c)` with inverse `S⁻¹(y) = s
 | Function | Contract |
 |---|---|
 | `Visualize.Scale.Symlog.new/0` | Returns the default struct. |
-| `Visualize.Scale.Symlog.domain/2` | Sets the domain from a two-element list or tuple; MAY include zero and negatives. |
-| `Visualize.Scale.Symlog.range/2` | Sets the range from a two-element list or tuple. |
+| `Visualize.Scale.Symlog.domain/2` | Sets the domain from a two-element list or tuple; MAY include zero and negatives; stored as a list. |
+| `Visualize.Scale.Symlog.range/2` | Sets the range from a two-element list or tuple; stored as a list. |
 | `Visualize.Scale.Symlog.constant/2` | Sets the linear/log transition constant; MUST be a number `> 0`. |
 | `Visualize.Scale.Symlog.clamp/2` | Sets `clamp?`. |
-| `Visualize.Scale.Symlog.scale/2` | Maps a domain value to the range as in 6.2 (`apply/2` under a non-protocol name, see 1.3). |
+| `Visualize.Scale.Symlog.apply/2` | Maps a domain value to the range as in 6.2. |
+| `Visualize.Scale.Symlog.scale/2` | Alias of `apply/2`, retained for one release (1.3). |
 | `Visualize.Scale.Symlog.invert/2` | Inverse as in 6.2. |
 | `Visualize.Scale.Symlog.ticks/1` | As `ticks/2` with count 10. |
 | `Visualize.Scale.Symlog.ticks/2` | Signed decades and zero as in 6.2. |
+| `Visualize.Scale.Symlog.nice/1` | `Linear.nice/1` over the domain. |
+| `Visualize.Scale.Symlog.padding/2` | Identity. |
+| `Visualize.Scale.Symlog.bandwidth/1` | Returns `0`. |
 
 ## 7. `Visualize.Scale.Time`
 
@@ -370,9 +374,10 @@ Intended semantics for a descending range (`r1 < r0`) are D3's: bands are laid o
 
 - `domain/2` sorts the sample list ascending and recomputes thresholds. `range/2` stores the list and recomputes thresholds.
 - Thresholds exist only when both domain and range are non-empty and `n = length(range) > 1`: for `i` in `1 … n−1`, the `p = i/n` quantile of the sorted samples by linear interpolation at fractional index `p · (len − 1)`.
-- `scale/2`: `nil` if the range is empty; the first range element if there are no thresholds; otherwise the range element at the count of thresholds `≤ value` (buckets are half-open, `[t_{k−1}, t_k)`).
+- `apply/2`: `nil` if the range is empty; the first range element if there are no thresholds; otherwise the range element at the count of thresholds `≤ value` (buckets are half-open, `[t_{k−1}, t_k)`), so a value at or above the last threshold reaches the last range element.
 - `invert_extent/2`: `nil` if domain or range is empty or the value is not in the range; otherwise `{lo, hi}` with `lo` the first sample (bucket 0) or `t_{k−1}`, and `hi` the last sample (last bucket) or `t_k`.
-- `quantiles/1` returns the thresholds.
+- `quantiles/1` returns the thresholds; `ticks/2` returns the same list (count ignored).
+- `invert/2` `nil`; `nice/1`, `padding/2`, `clamp/2` identity; `bandwidth/1` `0`.
 
 ### 10.3 Functions
 
@@ -381,21 +386,29 @@ Intended semantics for a descending range (`r1 < r0`) are D3's: bands are laid o
 | `Visualize.Scale.Quantile.new/0` | Returns the default struct. |
 | `Visualize.Scale.Quantile.domain/2` | Sets the sample list (sorted on entry) and recomputes thresholds. |
 | `Visualize.Scale.Quantile.range/2` | Sets the discrete output list and recomputes thresholds. |
-| `Visualize.Scale.Quantile.scale/2` | Maps a value to its bucket's range element (`apply/2` under a non-protocol name, see 1.3). |
+| `Visualize.Scale.Quantile.apply/2` | Maps a value to its bucket's range element as in 10.2. |
+| `Visualize.Scale.Quantile.scale/2` | Alias of `apply/2`, retained for one release (1.3). |
 | `Visualize.Scale.Quantile.invert_extent/2` | Returns `{lo, hi}` of sample values mapping to a range element, or `nil`. |
 | `Visualize.Scale.Quantile.quantiles/1` | Returns the `n − 1` interior quantile thresholds. |
+| `Visualize.Scale.Quantile.invert/2` | Returns `nil`. |
+| `Visualize.Scale.Quantile.ticks/2` | Returns `quantiles/1`. |
+| `Visualize.Scale.Quantile.nice/1` | Identity. |
+| `Visualize.Scale.Quantile.padding/2` | Identity. |
+| `Visualize.Scale.Quantile.bandwidth/1` | Returns `0`. |
+| `Visualize.Scale.Quantile.clamp/2` | Identity. |
 
 ## 11. `Visualize.Scale.Quantize`
 
 ### 11.1 Struct
 
-`%Visualize.Scale.Quantize{domain: {0, 1}, range: []}`. `domain/2` accepts a list or tuple; stored as a tuple.
+`%Visualize.Scale.Quantize{domain: [0, 1], range: []}`. `domain/2` accepts a list or tuple; stored as a list.
 
 ### 11.2 Semantics
 
 With `n = length(range)` and `step = (d1 − d0) / n`:
 
-- `scale/2`: `nil` for an empty range; `t = (v − d0) / (d1 − d0)` (`0` if degenerate), clamped to `[0, 1]`; bucket `min(⌊t · n⌋, n − 1)`. Values outside the domain map to the first or last element (always clamped).
+- `apply/2`: `nil` for an empty range; `t = (v − d0) / (d1 − d0)` (`0` if degenerate), clamped to `[0, 1]`; bucket `min(⌊t · n⌋, n − 1)`. Values outside the domain map to the first or last element (always clamped).
+- `ticks/2` returns `thresholds/1` (count ignored); `invert/2` `nil`; `nice/1`, `padding/2`, `clamp/2` identity; `bandwidth/1` `0`.
 - `invert_extent/2`: `nil` for an empty range or unknown value; else `{d0 + k·step, d0 + (k+1)·step}`.
 - `thresholds/1`: `[]` for an empty range; else `d0 + k·step` for `k` in `1 … n−1`. For `n == 1` the Elixir range `1..0` iterates descending and returns two spurious values `[d0 + step, d0]`; intended `[]`.
 - `bucket_count/1` is `length(range)`.
@@ -407,12 +420,19 @@ With `n = length(range)` and `step = (d1 − d0) / n`:
 | Function | Contract |
 |---|---|
 | `Visualize.Scale.Quantize.new/0` | Returns the default struct. |
-| `Visualize.Scale.Quantize.domain/2` | Sets the continuous domain from a two-element list or tuple. |
+| `Visualize.Scale.Quantize.domain/2` | Sets the continuous domain from a two-element list or tuple; stored as a list. |
 | `Visualize.Scale.Quantize.range/2` | Sets the discrete output list. |
-| `Visualize.Scale.Quantize.scale/2` | Maps a value to a uniform bucket's range element (`apply/2` under a non-protocol name, see 1.3). |
+| `Visualize.Scale.Quantize.apply/2` | Maps a value to a uniform bucket's range element as in 11.2. |
+| `Visualize.Scale.Quantize.scale/2` | Alias of `apply/2`, retained for one release (1.3). |
 | `Visualize.Scale.Quantize.invert_extent/2` | Returns the domain sub-interval for a range element, or `nil`. |
 | `Visualize.Scale.Quantize.thresholds/1` | Returns the `n − 1` interior bucket boundaries. |
 | `Visualize.Scale.Quantize.bucket_count/1` | Returns the number of range elements. |
+| `Visualize.Scale.Quantize.invert/2` | Returns `nil`. |
+| `Visualize.Scale.Quantize.ticks/2` | Returns `thresholds/1`. |
+| `Visualize.Scale.Quantize.nice/1` | Identity. |
+| `Visualize.Scale.Quantize.padding/2` | Identity. |
+| `Visualize.Scale.Quantize.bandwidth/1` | Returns `0`. |
+| `Visualize.Scale.Quantize.clamp/2` | Identity. |
 
 ## 12. `Visualize.Scale.Threshold`
 
@@ -423,7 +443,8 @@ With `n = length(range)` and `step = (d1 − d0) / n`:
 ### 12.2 Semantics
 
 - `domain/2` sorts the thresholds ascending. `range/2` stores the list unchecked.
-- `scale/2`: `nil` for an empty range; otherwise `Enum.at(range, k)` where `k` is the number of thresholds `≤ value` (binary search; a value equal to a threshold falls in the upper bucket). A range shorter than `length(domain) + 1` yields `nil` for the highest buckets.
+- `apply/2`: `nil` for an empty range; otherwise `Enum.at(range, k)` where `k` is the number of thresholds `≤ value` (binary search; a value equal to a threshold falls in the upper bucket). A range shorter than `length(domain) + 1` yields `nil` for the highest buckets.
+- `ticks/2` returns the domain (count ignored); `invert/2` `nil`; `nice/1`, `padding/2`, `clamp/2` identity; `bandwidth/1` `0`.
 - `invert_extent/2`: `nil` for an empty range or unknown value; bucket 0 → `{:neg_infinity, t_0}` (or `{:neg_infinity, :infinity}` with no thresholds); last bucket → `{t_{last}, :infinity}`; middle → `{t_{k−1}, t_k}`.
 - `thresholds/1` returns the domain.
 - `copy_with_domain/3` (`scale, data, n` with `n > 0`) sorts `data` and sets the domain to the de-duplicated values at indices `⌊i · len / (n + 1)⌋` (capped at `len − 1`) for `i` in `1 … n`; `[]` for empty data. The range is untouched.
@@ -435,10 +456,17 @@ With `n = length(range)` and `step = (d1 − d0) / n`:
 | `Visualize.Scale.Threshold.new/0` | Returns the default struct. |
 | `Visualize.Scale.Threshold.domain/2` | Sets the thresholds (sorted on entry). |
 | `Visualize.Scale.Threshold.range/2` | Sets the output list; SHOULD be one longer than the domain. |
-| `Visualize.Scale.Threshold.scale/2` | Maps a value to the bucket's range element (`apply/2` under a non-protocol name, see 1.3). |
+| `Visualize.Scale.Threshold.apply/2` | Maps a value to the bucket's range element as in 12.2. |
+| `Visualize.Scale.Threshold.scale/2` | Alias of `apply/2`, retained for one release (1.3). |
 | `Visualize.Scale.Threshold.invert_extent/2` | Returns `{lo, hi}` with `:neg_infinity`/`:infinity` at the ends, or `nil`. |
 | `Visualize.Scale.Threshold.thresholds/1` | Returns the domain. |
 | `Visualize.Scale.Threshold.copy_with_domain/3` | Returns the scale with `n` thresholds inferred from data at evenly spaced ranks. |
+| `Visualize.Scale.Threshold.invert/2` | Returns `nil`. |
+| `Visualize.Scale.Threshold.ticks/2` | Returns the domain. |
+| `Visualize.Scale.Threshold.nice/1` | Identity. |
+| `Visualize.Scale.Threshold.padding/2` | Identity. |
+| `Visualize.Scale.Threshold.bandwidth/1` | Returns `0`. |
+| `Visualize.Scale.Threshold.clamp/2` | Identity. |
 
 ## 13. `Visualize.Scale.Color`
 
@@ -466,11 +494,9 @@ Stop-list interpolation: `n = length − 1`, `i = t · n`, `i0 = clamp(⌊i⌋, 
 
 - `domain/2`: sequential takes `[d0, d1]`; diverging takes `[d0, d1, d2]` with `d1` the pivot. Other lengths fail to match.
 - `apply/2` sequential: `t = (v − d0) / (d1 − d0)`. Diverging: `t = 0.5 · (v − d0) / (d1 − d0)` when `v < d1`, `0.5 + 0.5 · (v − d1) / (d2 − d1)` when `v > d1`, else `0.5`. `t` is clamped to `[0, 1]` when `clamp?` (default true), then passed to the interpolator.
-- `ticks/2`: `Linear.ticks/2` over `[d0, d1]`. Pattern-matches a two-element domain and therefore **raises `FunctionClauseError` for diverging scales**; intended: ticks over `[d0, d2]`.
+- `ticks/2`: `Linear.ticks/2` over the domain's extent — `[d0, d1]` for a sequential scale, `[d0, d2]` for a diverging one.
 - `invert/2` `nil`; `nice/1`, `padding/2` identity; `bandwidth/1` `0`.
 - `schemes/0` returns the 25 scheme names in unspecified (map-key) order; `scheme/1` returns the stop list or `nil`.
-
-> Decision: see spec/13 — `Color.ticks/2` MUST accept a three-element diverging domain.
 
 ### 13.4 Schemes
 
@@ -499,7 +525,7 @@ Categorical schemes are stop lists like any other; used with `sequential/1` they
 | `Visualize.Scale.Color.schemes/0` | Returns the list of 25 scheme atoms. |
 | `Visualize.Scale.Color.scheme/1` | Returns the stop list for a scheme atom, or `nil`. |
 | `Visualize.Scale.Color.invert/2` | Returns `nil`. |
-| `Visualize.Scale.Color.ticks/2` | `Linear.ticks/2` over the domain; sequential scales only (see 13.3). |
+| `Visualize.Scale.Color.ticks/2` | `Linear.ticks/2` over the domain's extent (see 13.3). |
 | `Visualize.Scale.Color.nice/1` | Identity. |
 | `Visualize.Scale.Color.padding/2` | Identity. |
 | `Visualize.Scale.Color.bandwidth/1` | Returns `0`. |
