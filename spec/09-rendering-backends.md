@@ -273,7 +273,7 @@ Opcodes (`Visualize.Backend.CanvasBinary.Opcodes`, internal macros so they can a
 | `fill` | `0x40` | `ctx.fill()` on the current path |
 | `stroke` | `0x41` | `ctx.stroke()` on the current path |
 
-No other opcode is defined by this module. `0x60` is defined by `Visualize.Backend.CanvasIncremental` (section 5) and encloses streams of these records. The module's own doc comment lists a different, older assignment (`0x02` circles, `0x03` rectangles); the table above, taken from `Opcodes`, is normative.
+No other opcode is defined by this module. `0x60` is defined by `Visualize.Backend.CanvasIncremental` (section 5) and encloses streams of these records. The module's doc comment carries the same table, and `test/visualize/backend/canvas_binary_test.exs` holds it to `Opcodes`. `test/support/canvas_binary_decoder.ex` is a decoder written from this section, not from the encoder, and the same test file proves `decode(encode(path))` over random paths (D-36).
 
 ### 4.3 Record layouts
 
@@ -311,9 +311,7 @@ No other opcode is defined by this module. `0x60` is defined by `Visualize.Backe
 | `0x0E` | `{:c, dx1, dy1, dx2, dy2, dx, dy}` | six f64 | 49 |
 | `0x0F` | `{:q, dx1, dy1, dx, dy}` | four f64 | 33 |
 
-Relative commands (`0x07`, `0x0A`–`0x0F`) are stored with their relative arguments; the decoder MUST track the current point. The smooth commands `S`, `s`, `T`, `t` have no sub-opcode. Today the encoder writes zero bytes for them while still counting them in `count`, which desynchronises the decoder; the intended behaviour is that `S`/`s`/`T`/`t` are rewritten to `C`/`c`/`Q`/`q` (reflecting the previous control point) before encoding so that `count` always equals the records written.
-
-> Decision: see spec/13 — smooth curve commands in the binary path stream.
+Relative commands (`0x07`, `0x0A`–`0x0F`) are stored with their relative arguments; the decoder MUST track the current point. The smooth commands `S`, `s`, `T`, `t` have no sub-opcode: the encoder rewrites them to `C`/`c`/`Q`/`q` with `Visualize.IR.Path.expand_smooth/1` (spec/02 §2.2) before encoding, so `count` always equals the records written; a command without a sub-opcode cannot reach the record writer and would fail to match rather than encode to nothing (D-36).
 
 #### 4.3.3 `circles` (0x03)
 
@@ -360,9 +358,7 @@ Alpha `a` is 0–255. The IR encoder emits a style record whenever `element.styl
 | `0x03` | `tx:f64 ty:f64 sx:f64 sy:f64` | `translate(tx, ty)` then `scale(sx, sy)` |
 | `0xFF` | `a b c d e f` (f64) | `transform(a, b, c, d, e, f)` |
 
-The IR encoder chooses `0x01` for a transform whose operation list is exactly `[{:translate, x, y}]`, `0x03` for exactly `[{:translate, x, y}, {:scale, sx, sy}]`, and `0xFF` otherwise, folding the operations into one 2×3 matrix. The matrix MUST compose the operations with SVG semantics (`M = Op₁ · Op₂ · … · Opₙ`, so the last operation applies to the point first) and MUST honour all seven IR operations. Today the fold pre-multiplies translate and scale but post-multiplies rotate, and ignores `{:rotate, a, cx, cy}`, `:skew_x`, `:skew_y` and `:matrix`, so the `0xFF` form is only correct for a lone rotation.
-
-> Decision: see spec/13 — transform matrix composition in the binary encoder.
+The IR encoder chooses `0x01` for a transform whose operation list is exactly `[{:translate, x, y}]`, `0x03` for exactly `[{:translate, x, y}, {:scale, sx, sy}]`, and `0xFF` otherwise, folding the operations into one matrix with `Visualize.IR.Transform.to_matrix/1` (spec/02 §2.3): SVG composition (`M = Op₁ · Op₂ · … · Opₙ`, the last operation applying to the point first) over all seven IR operations, `rotate(a, cx, cy)` included (D-36). The decoder MUST apply `0xFF` with `ctx.transform(a, b, c, d, e, f)`, composing onto the current transform, not `setTransform`.
 
 #### 4.3.7 `save`, `restore`, `fill`, `stroke`
 
@@ -385,20 +381,14 @@ Elements of type `:ellipse`, `:line`, `:polyline`, `:polygon`, `:text`, `:image`
 
 ### 4.5 Path form selection
 
-`encode_path/1` and the `:path` branch of `encode_element/1` choose between the two path records:
+`encode_path/1` and the `:path` branch of `encode_element/1` choose between the two path records (D-36):
 
-- The compact `path` (0x01) record MUST be used only when the command list is one `:M` followed by zero or more `:L` commands — a single open polyline, the case the record can represent losslessly.
-- Every other command list MUST be encoded as `path_cubic` (0x02).
-
-Today the encoder uses `path` whenever the list contains no `C`, `Q`, `A` or `a` command, collecting only the end points of `M` and `L` commands. That silently drops `Z`, merges multiple sub-paths into one polyline, and discards every relative command and `H`/`V`.
-
-> Decision: see spec/13 — compact path record selection.
+- The compact `path` (0x01) record is used only when the command list is one `:M` followed by zero or more `:L` commands — a single open polyline, the case the record can represent losslessly.
+- Every other command list, the empty list included, is encoded as `path_cubic` (0x02).
 
 ### 4.6 Colour parsing (IR encoder)
 
-A style colour value is converted to RGBA bytes as follows. `"#rgb"` expands each hex digit; `"#rrggbb"` gives alpha 255; `"#rrggbbaa"` carries its own alpha; `"rgb(r, g, b)"` gives alpha 255; `"rgba(r, g, b, a)"` scales `a` (0–1) to 0–255 and rounds. Any other binary (including CSS named colours such as `"steelblue"`) and any non-binary value yields opaque black `{0, 0, 0, 255}`. The `rgba` alpha MUST accept any decimal number; today `"1"` (no fractional part) raises because it is parsed with `String.to_float/1`. Named colours SHOULD resolve through `Visualize.Color.parse/1` (spec/08) rather than degrade to black.
-
-> Decision: see spec/13 — colour parsing in the binary encoder.
+A binary style colour is parsed by `Visualize.Color.parse/1` (spec/08) and written as `Visualize.Color.to_rgba/1` gives it, the opacity scaled to 0–255 and rounded: every syntax that function accepts — `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()` with any decimal alpha, `hsl()`, `hsla()` and the CSS colour names — resolves; a binary it cannot parse and any non-binary value (`:current_color` included) yields opaque black `{0, 0, 0, 255}` (D-36).
 
 ### 4.7 Encoding SVG elements (`Visualize.Backend.CanvasBinary.SVG`)
 
@@ -415,7 +405,7 @@ A style colour value is converted to RGBA bytes as follows. `"#rgb"` expands eac
 | `:text` | nothing — text is not representable |
 | any other tag | nothing |
 
-Style attributes read: `fill`, `stroke`, `stroke_width` or `"stroke-width"`, `opacity` or `fill_opacity` or `"fill-opacity"` (fill alpha), `stroke_opacity` or `"stroke-opacity"` (stroke alpha, default `1.0`). A colour is "present" unless it is `nil`, `:none` or `"none"`. Draw records: `fill` if fill is present, `stroke` if stroke is present; if neither is present and fill is not explicitly none, a single `fill` (SVG's default black fill). Colour syntax accepted: `#rrggbb`, `#rgb`, `rgb(r, g, b)`, `rgba(r, g, b, a)`, the names `black white red green blue none`, and the atoms `:white :red :green :blue`; everything else is black. The supplied opacity becomes the alpha byte (`trunc(opacity · 255)`), except that `rgba()` uses its own alpha.
+Style attributes read: `fill`, `stroke`, `stroke_width` or `"stroke-width"`, `opacity` or `fill_opacity` or `"fill-opacity"` (fill alpha), `stroke_opacity` or `"stroke-opacity"` (stroke alpha, default `1.0`). A colour is "present" unless it is `nil`, `:none` or `"none"`. Draw records: `fill` if fill is present, `stroke` if stroke is present; if neither is present and fill is not explicitly none, a single `fill` (SVG's default black fill). A colour — a binary, or an atom taken by its name — is parsed by `Visualize.Color.parse/1` as in 4.6, so every hex, `rgb()`, `hsl()` and named form resolves and an unparseable value is black; `"none"` is transparent black. The supplied opacity becomes the alpha byte (`trunc(opacity · 255)`), except that a syntax carrying its own alpha below 1 (`rgba()`, `hsla()`, `#rgba`, `#rrggbbaa`) uses that alpha.
 
 The `transform` attribute is parsed only when it begins with `translate(` (one or two numbers → kind `0x01`, missing `y` = `0`) or `scale(` (one or two numbers → kind `0x03` with zero translation); any other string, or a compound string, emits no transform record.
 
