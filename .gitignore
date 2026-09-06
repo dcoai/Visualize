@@ -34,3 +34,6 @@ erl_crash.dump
 .\#*
 .DS_Store
 
+
+# mix hex.build output
+*.tar

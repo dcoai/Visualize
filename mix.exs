@@ -14,6 +14,7 @@ defmodule Visualize.MixProject do
       source_url: "https://gitlab.conet.yarina.org/dco-tek/visualize",
       package: package(),
       docs: docs(),
+      aliases: ["vis.verify": &verify_models/1],
       test_coverage: [summary: [threshold: 0]],
       deps: deps()
     ]
@@ -21,8 +22,8 @@ defmodule Visualize.MixProject do
 
   # Only `lib/` reaches a consumer. `audit/` holds the surface scanner and its mix tasks
   # (dev and test); `test/support` compiles for tests alone.
-  defp elixirc_paths(:test), do: ["lib", "audit", "test/support"]
-  defp elixirc_paths(:dev), do: ["lib", "audit"]
+  defp elixirc_paths(:test), do: ["lib", "audit", "specs", "test/support"]
+  defp elixirc_paths(:dev), do: ["lib", "audit", "specs"]
   defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help compile.app" to learn about applications.
@@ -44,9 +45,25 @@ defmodule Visualize.MixProject do
        tag: "v0.1.0",
        only: [:dev, :test],
        runtime: false},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      # `mix vis.verify` (spec/12 §5): the model of the force simulation. A sibling checkout
+      # when there is one, git otherwise, which is what CI sees.
+      {:extla, extla_source() ++ [only: [:dev, :test], runtime: false]}
     ]
   end
+
+  defp extla_source do
+    if File.dir?("../extla") do
+      [path: "../extla"]
+    else
+      [git: "git@gitlab.conet.yarina.org:dco-tek/extla.git", branch: "main"]
+    end
+  end
+
+  # Every model, checked one at a time. `Mix.Task.rerun/2`, not a list alias: Mix remembers
+  # a task by name and silently skips it the second time.
+  @models ~w(Visualize.Specs.ForceSimulation)
+  defp verify_models(_args), do: Enum.each(@models, &Mix.Task.rerun("tla.check", [&1]))
 
   # The specification and the surface golden ship with the package: they are the contract
   # a consumer holds the library to, not internal documentation.
