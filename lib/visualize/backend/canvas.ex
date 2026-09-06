@@ -144,7 +144,12 @@ defmodule Visualize.Backend.Canvas do
     setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(style)
   end
 
-  defp element_to_commands(%Element{type: :rect, attrs: attrs, style: style, transform: transform}) do
+  defp element_to_commands(%Element{
+         type: :rect,
+         attrs: attrs,
+         style: style,
+         transform: transform
+       }) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{x: x, y: y, width: w, height: h} = attrs
 
@@ -153,7 +158,12 @@ defmodule Visualize.Backend.Canvas do
       style_apply_commands(style)
   end
 
-  defp element_to_commands(%Element{type: :circle, attrs: attrs, style: style, transform: transform}) do
+  defp element_to_commands(%Element{
+         type: :circle,
+         attrs: attrs,
+         style: style,
+         transform: transform
+       }) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{cx: cx, cy: cy, r: r} = attrs
 
@@ -162,7 +172,12 @@ defmodule Visualize.Backend.Canvas do
       style_apply_commands(style)
   end
 
-  defp element_to_commands(%Element{type: :ellipse, attrs: attrs, style: style, transform: transform}) do
+  defp element_to_commands(%Element{
+         type: :ellipse,
+         attrs: attrs,
+         style: style,
+         transform: transform
+       }) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{cx: cx, cy: cy, rx: rx, ry: ry} = attrs
 
@@ -171,7 +186,12 @@ defmodule Visualize.Backend.Canvas do
       style_apply_commands(style)
   end
 
-  defp element_to_commands(%Element{type: :line, attrs: attrs, style: style, transform: transform}) do
+  defp element_to_commands(%Element{
+         type: :line,
+         attrs: attrs,
+         style: style,
+         transform: transform
+       }) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{x1: x1, y1: y1, x2: x2, y2: y2} = attrs
 
@@ -184,7 +204,12 @@ defmodule Visualize.Backend.Canvas do
       ]
   end
 
-  defp element_to_commands(%Element{type: :polyline, attrs: attrs, style: style, transform: transform}) do
+  defp element_to_commands(%Element{
+         type: :polyline,
+         attrs: attrs,
+         style: style,
+         transform: transform
+       }) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     points = attrs[:points] || []
 
@@ -200,7 +225,12 @@ defmodule Visualize.Backend.Canvas do
     setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(style)
   end
 
-  defp element_to_commands(%Element{type: :polygon, attrs: attrs, style: style, transform: transform}) do
+  defp element_to_commands(%Element{
+         type: :polygon,
+         attrs: attrs,
+         style: style,
+         transform: transform
+       }) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     points = attrs[:points] || []
 
@@ -278,9 +308,15 @@ defmodule Visualize.Backend.Canvas do
     do: [{:bezierCurveTo_rel, [dx1, dy1, dx2, dy2, dx, dy]}]
 
   defp command_to_canvas({:S, x2, y2, x, y}), do: [{:bezierCurveTo_smooth, [x2, y2, x, y]}]
-  defp command_to_canvas({:s, dx2, dy2, dx, dy}), do: [{:bezierCurveTo_smooth_rel, [dx2, dy2, dx, dy]}]
+
+  defp command_to_canvas({:s, dx2, dy2, dx, dy}),
+    do: [{:bezierCurveTo_smooth_rel, [dx2, dy2, dx, dy]}]
+
   defp command_to_canvas({:Q, x1, y1, x, y}), do: [{:quadraticCurveTo, [x1, y1, x, y]}]
-  defp command_to_canvas({:q, dx1, dy1, dx, dy}), do: [{:quadraticCurveTo_rel, [dx1, dy1, dx, dy]}]
+
+  defp command_to_canvas({:q, dx1, dy1, dx, dy}),
+    do: [{:quadraticCurveTo_rel, [dx1, dy1, dx, dy]}]
+
   defp command_to_canvas({:T, x, y}), do: [{:quadraticCurveTo_smooth, [x, y]}]
   defp command_to_canvas({:t, dx, dy}), do: [{:quadraticCurveTo_smooth_rel, [dx, dy]}]
 
@@ -438,8 +474,12 @@ defmodule Visualize.Backend.Canvas do
   defp command_to_js_line({:set_textAlign, [align]}), do: ["ctx.textAlign = '", align, "';"]
   defp command_to_js_line({:beginPath, []}), do: "ctx.beginPath();"
   defp command_to_js_line({:closePath, []}), do: "ctx.closePath();"
-  defp command_to_js_line({:moveTo, [x, y]}), do: ["ctx.moveTo(", format_num(x), ", ", format_num(y), ");"]
-  defp command_to_js_line({:lineTo, [x, y]}), do: ["ctx.lineTo(", format_num(x), ", ", format_num(y), ");"]
+
+  defp command_to_js_line({:moveTo, [x, y]}),
+    do: ["ctx.moveTo(", format_num(x), ", ", format_num(y), ");"]
+
+  defp command_to_js_line({:lineTo, [x, y]}),
+    do: ["ctx.lineTo(", format_num(x), ", ", format_num(y), ");"]
 
   defp command_to_js_line({:bezierCurveTo, [x1, y1, x2, y2, x, y]}) do
     [
@@ -460,7 +500,17 @@ defmodule Visualize.Backend.Canvas do
   end
 
   defp command_to_js_line({:quadraticCurveTo, [x1, y1, x, y]}) do
-    ["ctx.quadraticCurveTo(", format_num(x1), ", ", format_num(y1), ", ", format_num(x), ", ", format_num(y), ");"]
+    [
+      "ctx.quadraticCurveTo(",
+      format_num(x1),
+      ", ",
+      format_num(y1),
+      ", ",
+      format_num(x),
+      ", ",
+      format_num(y),
+      ");"
+    ]
   end
 
   defp command_to_js_line({:arc, args}) do
@@ -474,7 +524,17 @@ defmodule Visualize.Backend.Canvas do
   end
 
   defp command_to_js_line({:rect, [x, y, w, h]}) do
-    ["ctx.rect(", format_num(x), ", ", format_num(y), ", ", format_num(w), ", ", format_num(h), ");"]
+    [
+      "ctx.rect(",
+      format_num(x),
+      ", ",
+      format_num(y),
+      ", ",
+      format_num(w),
+      ", ",
+      format_num(h),
+      ");"
+    ]
   end
 
   defp command_to_js_line({:fill, []}), do: "ctx.fill();"
@@ -550,7 +610,8 @@ defmodule Visualize.Backend.Canvas do
   defp command_to_js_line({:arcSvg, [rx, ry, rotation, large_arc, sweep, x, y]}) do
     [
       "// SVG Arc: arcSvgToCanvas(ctx, ",
-      Enum.map([rx, ry, rotation, large_arc, sweep, x, y], &format_num/1) |> Enum.intersperse(", "),
+      Enum.map([rx, ry, rotation, large_arc, sweep, x, y], &format_num/1)
+      |> Enum.intersperse(", "),
       ");"
     ]
   end

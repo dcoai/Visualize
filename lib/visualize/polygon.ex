@@ -65,9 +65,11 @@ defmodule Visualize.Polygon do
 
     if abs(a) < 1.0e-10 do
       # Degenerate polygon, return average of points
-      {sum_x, sum_y} = Enum.reduce(polygon, {0, 0}, fn {x, y}, {sx, sy} ->
-        {sx + x, sy + y}
-      end)
+      {sum_x, sum_y} =
+        Enum.reduce(polygon, {0, 0}, fn {x, y}, {sx, sy} ->
+          {sx + x, sy + y}
+        end)
+
       {sum_x / n, sum_y / n}
     else
       {cx, cy} =
@@ -122,7 +124,7 @@ defmodule Visualize.Polygon do
         {x1, y1} = Enum.at(polygon, rem(i + 1, n))
 
         # Check if ray from point crosses this edge
-        ((y0 > py) != (y1 > py)) and
+        y0 > py != y1 > py and
           px < (x1 - x0) * (py - y0) / (y1 - y0) + x0
       end)
 

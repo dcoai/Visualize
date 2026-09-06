@@ -119,7 +119,9 @@ defmodule Visualize.Layout.Chord do
       sorted_indices =
         if chord.sort_groups do
           group_totals
-          |> Enum.sort(fn {_i1, v1}, {_i2, v2} -> chord.sort_groups.(%{value: v1}, %{value: v2}) end)
+          |> Enum.sort(fn {_i1, v1}, {_i2, v2} ->
+            chord.sort_groups.(%{value: v1}, %{value: v2})
+          end)
           |> Enum.map(fn {i, _} -> i end)
         else
           Enum.map(0..(n - 1), & &1)
@@ -204,7 +206,6 @@ defmodule Visualize.Layout.Chord do
         value_ij = matrix |> Enum.at(i) |> Enum.at(j),
         value_ji = matrix |> Enum.at(j) |> Enum.at(i),
         value_ij > 0 or value_ji > 0 do
-
       source_angles = Map.get(group_angles, i, %{})
       target_angles = Map.get(group_angles, j, %{})
 
@@ -262,17 +263,17 @@ defmodule Visualize.Layout.Chord do
     if chord.source.index == chord.target.index do
       # Self-referencing chord (loop)
       "M#{sx0},#{sy0}" <>
-      "A#{radius},#{radius} 0 #{source_large},1 #{sx1},#{sy1}" <>
-      "Q0,0 #{sx0},#{sy0}" <>
-      "Z"
+        "A#{radius},#{radius} 0 #{source_large},1 #{sx1},#{sy1}" <>
+        "Q0,0 #{sx0},#{sy0}" <>
+        "Z"
     else
       # Regular chord connecting two groups
       "M#{sx0},#{sy0}" <>
-      "A#{radius},#{radius} 0 #{source_large},1 #{sx1},#{sy1}" <>
-      "Q0,0 #{tx0},#{ty0}" <>
-      "A#{radius},#{radius} 0 #{target_large},1 #{tx1},#{ty1}" <>
-      "Q0,0 #{sx0},#{sy0}" <>
-      "Z"
+        "A#{radius},#{radius} 0 #{source_large},1 #{sx1},#{sy1}" <>
+        "Q0,0 #{tx0},#{ty0}" <>
+        "A#{radius},#{radius} 0 #{target_large},1 #{tx1},#{ty1}" <>
+        "Q0,0 #{sx0},#{sy0}" <>
+        "Z"
     end
   end
 
@@ -299,9 +300,9 @@ defmodule Visualize.Layout.Chord do
     large_arc = if a1 - a0 > :math.pi(), do: 1, else: 0
 
     "M#{ix0},#{iy0}" <>
-    "A#{inner_radius},#{inner_radius} 0 #{large_arc},1 #{ix1},#{iy1}" <>
-    "L#{ox1},#{oy1}" <>
-    "A#{outer_radius},#{outer_radius} 0 #{large_arc},0 #{ox0},#{oy0}" <>
-    "Z"
+      "A#{inner_radius},#{inner_radius} 0 #{large_arc},1 #{ix1},#{iy1}" <>
+      "L#{ox1},#{oy1}" <>
+      "A#{outer_radius},#{outer_radius} 0 #{large_arc},0 #{ox0},#{oy0}" <>
+      "Z"
   end
 end

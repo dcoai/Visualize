@@ -175,7 +175,7 @@ defmodule Visualize.Random do
       u = :rand.uniform()
 
       if u < 1 - 0.0331 * x * x * x * x or
-         :math.log(u) < 0.5 * x * x + d * (1 - v + :math.log(v)) do
+           :math.log(u) < 0.5 * x * x + d * (1 - v + :math.log(v)) do
         d * v
       else
         gamma_loop(d, c)

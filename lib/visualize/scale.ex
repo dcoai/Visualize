@@ -42,7 +42,18 @@ defmodule Visualize.Scale do
 
   """
 
-  alias Visualize.Scale.{Linear, Log, Power, Symlog, Time, Ordinal, Band, Quantize, Quantile, Color}
+  alias Visualize.Scale.{
+    Linear,
+    Log,
+    Power,
+    Symlog,
+    Time,
+    Ordinal,
+    Band,
+    Quantize,
+    Quantile,
+    Color
+  }
 
   @doc "Creates a linear scale"
   defdelegate linear(), to: Linear, as: :new

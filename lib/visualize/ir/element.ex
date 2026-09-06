@@ -291,7 +291,8 @@ defmodule Visualize.IR.Element do
     %{parent | children: [child | children]}
   end
 
-  def prepend(%__MODULE__{children: children} = parent, new_children) when is_list(new_children) do
+  def prepend(%__MODULE__{children: children} = parent, new_children)
+      when is_list(new_children) do
     %{parent | children: new_children ++ children}
   end
 

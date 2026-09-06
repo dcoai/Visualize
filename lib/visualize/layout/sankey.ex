@@ -183,7 +183,13 @@ defmodule Visualize.Layout.Sankey do
   This creates the characteristic curved flow appearance.
   """
   @spec generate_link_path(sankey_link()) :: String.t()
-  def generate_link_path(%{source_node: source, target_node: target, y0: y0, y1: y1, width: width}) do
+  def generate_link_path(%{
+        source_node: source,
+        target_node: target,
+        y0: y0,
+        y1: y1,
+        width: width
+      }) do
     x0 = source.x1
     x1 = target.x0
 
@@ -269,7 +275,8 @@ defmodule Visualize.Layout.Sankey do
   defp compute_node_layers(nodes) do
     # Find nodes with no incoming links (sources)
     # target_ids = all node IDs that appear as targets in links (have incoming links)
-    target_ids = nodes |> Enum.flat_map(& &1.source_links) |> Enum.map(& &1.target) |> MapSet.new()
+    target_ids =
+      nodes |> Enum.flat_map(& &1.source_links) |> Enum.map(& &1.target) |> MapSet.new()
 
     # Source nodes = nodes that are NOT targets (have no incoming links)
     source_nodes =
@@ -434,7 +441,9 @@ defmodule Visualize.Layout.Sankey do
           node
         else
           total_weight = Enum.reduce(all_weighted, 0, fn {_, w}, acc -> acc + w end)
-          weighted_y = Enum.reduce(all_weighted, 0, fn {y, w}, acc -> acc + y * w end) / total_weight
+
+          weighted_y =
+            Enum.reduce(all_weighted, 0, fn {y, w}, acc -> acc + y * w end) / total_weight
 
           height = node.y1 - node.y0
           new_y0 = weighted_y - height / 2
@@ -472,6 +481,7 @@ defmodule Visualize.Layout.Sankey do
 
       # Second pass: if nodes overflow height, scale them to fit
       max_y = resolved |> Enum.map(& &1.y1) |> Enum.max(fn -> 0 end)
+
       if max_y > sankey.height do
         total_padding = (length(resolved) - 1) * sankey.node_padding
         available = sankey.height - total_padding
@@ -497,13 +507,16 @@ defmodule Visualize.Layout.Sankey do
 
     # Calculate value scale per layer (use max layer total for consistency)
     by_layer = Enum.group_by(nodes, & &1.layer)
-    max_layer_value = by_layer
+
+    max_layer_value =
+      by_layer
       |> Enum.map(fn {_layer, layer_nodes} ->
         Enum.reduce(layer_nodes, 0, fn n, acc -> acc + n.value end)
       end)
       |> Enum.max(fn -> 1 end)
 
-    max_layer_count = by_layer
+    max_layer_count =
+      by_layer
       |> Enum.map(fn {_layer, layer_nodes} -> length(layer_nodes) end)
       |> Enum.max(fn -> 1 end)
 
@@ -522,7 +535,8 @@ defmodule Visualize.Layout.Sankey do
 
         if source && target do
           width = link.value * value_scale
-          width = max(1, width)  # Minimum width
+          # Minimum width
+          width = max(1, width)
 
           y0 = Map.get(src_y, link.source, 0)
           y1 = Map.get(tgt_y, link.target, 0)

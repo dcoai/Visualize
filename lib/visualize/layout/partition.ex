@@ -119,9 +119,10 @@ defmodule Visualize.Layout.Partition do
 
       children ->
         # Filter children with value
-        children_with_value = Enum.filter(children, fn c ->
-          c.value && c.value > 0
-        end)
+        children_with_value =
+          Enum.filter(children, fn c ->
+            c.value && c.value > 0
+          end)
 
         if Enum.empty?(children_with_value) do
           node

@@ -19,7 +19,8 @@ defmodule VisualizeTest do
     end
 
     test "builds path commands" do
-      path = Path.new()
+      path =
+        Path.new()
         |> Path.move_to(10, 20)
         |> Path.line_to(100, 200)
         |> Path.close()
@@ -28,7 +29,8 @@ defmodule VisualizeTest do
     end
 
     test "appends children" do
-      svg = SVG.new()
+      svg =
+        SVG.new()
         |> SVG.append(:rect, x: 0, y: 0, width: 50, height: 50)
         |> SVG.append(:circle, cx: 100, cy: 100, r: 25)
 
@@ -40,7 +42,8 @@ defmodule VisualizeTest do
     alias Visualize.Scale
 
     test "maps domain to range" do
-      scale = Scale.linear()
+      scale =
+        Scale.linear()
         |> Scale.domain([0, 100])
         |> Scale.range([0, 500])
 
@@ -50,7 +53,8 @@ defmodule VisualizeTest do
     end
 
     test "inverts range to domain" do
-      scale = Scale.linear()
+      scale =
+        Scale.linear()
         |> Scale.domain([0, 100])
         |> Scale.range([0, 500])
 
@@ -58,7 +62,8 @@ defmodule VisualizeTest do
     end
 
     test "generates nice ticks" do
-      scale = Scale.linear()
+      scale =
+        Scale.linear()
         |> Scale.domain([0, 97])
         |> Scale.range([0, 500])
 
@@ -68,7 +73,8 @@ defmodule VisualizeTest do
     end
 
     test "extends domain to nice values" do
-      scale = Scale.linear()
+      scale =
+        Scale.linear()
         |> Scale.domain([0.5, 97.3])
         |> Scale.nice()
 
@@ -82,7 +88,8 @@ defmodule VisualizeTest do
     alias Visualize.Scale
 
     test "maps categories to positions" do
-      scale = Scale.band()
+      scale =
+        Scale.band()
         |> Scale.domain(["A", "B", "C"])
         |> Scale.range([0, 300])
 
@@ -92,7 +99,8 @@ defmodule VisualizeTest do
     end
 
     test "calculates bandwidth" do
-      scale = Scale.band()
+      scale =
+        Scale.band()
         |> Scale.domain(["A", "B", "C"])
         |> Scale.range([0, 300])
 
@@ -100,7 +108,8 @@ defmodule VisualizeTest do
     end
 
     test "respects padding" do
-      scale = Scale.band()
+      scale =
+        Scale.band()
         |> Scale.domain(["A", "B"])
         |> Scale.range([0, 200])
         |> Scale.padding(0.5)
@@ -131,7 +140,8 @@ defmodule VisualizeTest do
         %{x: 100, y: 75}
       ]
 
-      line = Shape.line()
+      line =
+        Shape.line()
         |> Shape.x(fn d -> d.x end)
         |> Shape.y(fn d -> d.y end)
 
@@ -158,7 +168,8 @@ defmodule VisualizeTest do
     test "preserves original data" do
       data = [%{name: "A", value: 10}, %{name: "B", value: 20}]
 
-      pie = Shape.pie()
+      pie =
+        Shape.pie()
         |> Shape.value(fn d -> d.value end)
 
       arcs = Shape.generate(pie, data)
@@ -171,18 +182,21 @@ defmodule VisualizeTest do
     alias Visualize.{Scale, Axis}
 
     test "generates axis elements" do
-      scale = Scale.linear()
+      scale =
+        Scale.linear()
         |> Scale.domain([0, 100])
         |> Scale.range([0, 500])
 
-      axis = Axis.bottom(scale)
+      axis =
+        Axis.bottom(scale)
         |> Axis.ticks(5)
 
       element = Axis.generate(axis)
 
       # Axis now returns IR.Element with :type instead of SVG.Element with :tag
       assert element.type == :group
-      assert length(element.children) > 1  # domain + ticks
+      # domain + ticks
+      assert length(element.children) > 1
     end
   end
 
@@ -241,7 +255,7 @@ defmodule VisualizeTest do
     alias Visualize.Format
 
     test "formats numbers with separators" do
-      assert Format.number(1234567) =~ "1,234,567"
+      assert Format.number(1_234_567) =~ "1,234,567"
     end
 
     test "formats SI prefixes" do
@@ -276,11 +290,12 @@ defmodule VisualizeTest do
         %{source: "b", target: "c"}
       ]
 
-      result = Force.run(
-        nodes: nodes,
-        links: links,
-        iterations: 50
-      )
+      result =
+        Force.run(
+          nodes: nodes,
+          links: links,
+          iterations: 50
+        )
 
       assert length(result.nodes) == 3
       assert Enum.all?(result.nodes, &Map.has_key?(&1, :x))

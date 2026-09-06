@@ -154,9 +154,13 @@ defmodule Visualize.Shape.Stack do
   defp apply_order(values, :insideout) do
     # Sort by sum, then interleave (largest in middle)
     sorted =
-      Enum.sort_by(values, fn series ->
-        Enum.reduce(series, 0, fn %{value: v}, acc -> acc + v end)
-      end, :desc)
+      Enum.sort_by(
+        values,
+        fn series ->
+          Enum.reduce(series, 0, fn %{value: v}, acc -> acc + v end)
+        end,
+        :desc
+      )
 
     interleave(sorted, [], [])
   end

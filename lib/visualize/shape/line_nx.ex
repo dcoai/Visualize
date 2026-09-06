@@ -64,7 +64,14 @@ defmodule Visualize.Shape.LineNx do
   Batch transform coordinates using Nx tensors.
   Returns lists of scaled x and y values.
   """
-  @spec batch_transform([number()], [number()], {number(), number()}, {number(), number()}, {number(), number()}, {number(), number()}) :: {[float()], [float()]}
+  @spec batch_transform(
+          [number()],
+          [number()],
+          {number(), number()},
+          {number(), number()},
+          {number(), number()},
+          {number(), number()}
+        ) :: {[float()], [float()]}
   def batch_transform(xs, ys, x_domain, x_range, y_domain, y_range) do
     # Create tensors
     x_tensor = Nx.tensor(xs, type: :f64)
@@ -97,12 +104,14 @@ defmodule Visualize.Shape.LineNx do
 
   # Build path commands from coordinate lists
   defp build_path([], []), do: Path.new()
+
   defp build_path([x | xs], [y | ys]) do
     commands = [{:M, x, y} | build_line_commands(xs, ys)]
     %Path{commands: commands}
   end
 
   defp build_line_commands([], []), do: []
+
   defp build_line_commands([x | xs], [y | ys]) do
     [{:L, x, y} | build_line_commands(xs, ys)]
   end
@@ -112,11 +121,14 @@ defmodule Visualize.Shape.LineNx do
   Most efficient for Canvas rendering - avoids intermediate IR.Element.
   """
   @spec to_binary(
-    [number()], [number()],
-    {number(), number()}, {number(), number()},
-    {number(), number()}, {number(), number()},
-    keyword()
-  ) :: binary()
+          [number()],
+          [number()],
+          {number(), number()},
+          {number(), number()},
+          {number(), number()},
+          {number(), number()},
+          keyword()
+        ) :: binary()
   def to_binary(xs, ys, x_domain, x_range, y_domain, y_range, opts \\ []) do
     # Transform coordinates
     {scaled_xs, scaled_ys} = batch_transform(xs, ys, x_domain, x_range, y_domain, y_range)
@@ -126,11 +138,12 @@ defmodule Visualize.Shape.LineNx do
     translate_y = Keyword.get(opts, :translate_y, 0)
 
     # Apply translation if needed
-    {final_xs, final_ys} = if translate_x != 0 or translate_y != 0 do
-      {Enum.map(scaled_xs, &(&1 + translate_x)), Enum.map(scaled_ys, &(&1 + translate_y))}
-    else
-      {scaled_xs, scaled_ys}
-    end
+    {final_xs, final_ys} =
+      if translate_x != 0 or translate_y != 0 do
+        {Enum.map(scaled_xs, &(&1 + translate_x)), Enum.map(scaled_ys, &(&1 + translate_y))}
+      else
+        {scaled_xs, scaled_ys}
+      end
 
     # Encode directly to binary
     encode_path_binary(final_xs, final_ys, opts)
@@ -141,11 +154,14 @@ defmodule Visualize.Shape.LineNx do
   Ready for use in HTML data attributes.
   """
   @spec to_base64(
-    [number()], [number()],
-    {number(), number()}, {number(), number()},
-    {number(), number()}, {number(), number()},
-    keyword()
-  ) :: String.t()
+          [number()],
+          [number()],
+          {number(), number()},
+          {number(), number()},
+          {number(), number()},
+          {number(), number()},
+          keyword()
+        ) :: String.t()
   def to_base64(xs, ys, x_domain, x_range, y_domain, y_range, opts \\ []) do
     xs
     |> to_binary(ys, x_domain, x_range, y_domain, y_range, opts)
@@ -167,7 +183,8 @@ defmodule Visualize.Shape.LineNx do
     style_binary = encode_style(opts)
 
     # Command type 0x01 = simple path
-    <<style_binary::binary, 0x01::8, count::little-32, coord_binary::binary, encode_draw(opts)::binary>>
+    <<style_binary::binary, 0x01::8, count::little-32, coord_binary::binary,
+      encode_draw(opts)::binary>>
   end
 
   defp encode_style(opts) do
@@ -179,25 +196,28 @@ defmodule Visualize.Shape.LineNx do
       flags = 0
       parts = []
 
-      {flags, parts} = if fill && fill != :none do
-        {r, g, b, a} = parse_color(fill)
-        {Bitwise.bor(flags, 0x01), parts ++ [<<r::8, g::8, b::8, a::8>>]}
-      else
-        {flags, parts}
-      end
+      {flags, parts} =
+        if fill && fill != :none do
+          {r, g, b, a} = parse_color(fill)
+          {Bitwise.bor(flags, 0x01), parts ++ [<<r::8, g::8, b::8, a::8>>]}
+        else
+          {flags, parts}
+        end
 
-      {flags, parts} = if stroke && stroke != :none do
-        {r, g, b, a} = parse_color(stroke)
-        {Bitwise.bor(flags, 0x02), parts ++ [<<r::8, g::8, b::8, a::8>>]}
-      else
-        {flags, parts}
-      end
+      {flags, parts} =
+        if stroke && stroke != :none do
+          {r, g, b, a} = parse_color(stroke)
+          {Bitwise.bor(flags, 0x02), parts ++ [<<r::8, g::8, b::8, a::8>>]}
+        else
+          {flags, parts}
+        end
 
-      {flags, parts} = if stroke_width do
-        {Bitwise.bor(flags, 0x04), parts ++ [<<stroke_width::little-float-32>>]}
-      else
-        {flags, parts}
-      end
+      {flags, parts} =
+        if stroke_width do
+          {Bitwise.bor(flags, 0x04), parts ++ [<<stroke_width::little-float-32>>]}
+        else
+          {flags, parts}
+        end
 
       <<0x10::8, flags::8>> <> IO.iodata_to_binary(parts)
     else
@@ -222,6 +242,7 @@ defmodule Visualize.Shape.LineNx do
       true -> {0, 0, 0, 255}
     end
   end
+
   defp parse_color(_), do: {0, 0, 0, 255}
 
   defp parse_hex("#" <> hex) do
@@ -231,6 +252,7 @@ defmodule Visualize.Shape.LineNx do
         {g, _} = Integer.parse(String.slice(hex, 2, 2), 16)
         {b, _} = Integer.parse(String.slice(hex, 4, 2), 16)
         {r, g, b, 255}
+
       _ ->
         {0, 0, 0, 255}
     end

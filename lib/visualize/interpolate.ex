@@ -178,11 +178,13 @@ defmodule Visualize.Interpolate do
 
     fn t ->
       h = h0 + dh * t
-      h = cond do
-        h < 0 -> h + 360
-        h >= 360 -> h - 360
-        true -> h
-      end
+
+      h =
+        cond do
+          h < 0 -> h + 360
+          h >= 360 -> h - 360
+          true -> h
+        end
 
       s = s0 + (s1 - s0) * t
       l = l0 + (l1 - l0) * t
@@ -294,7 +296,10 @@ defmodule Visualize.Interpolate do
 
     # Create interpolators for each pair of numbers
     interpolators =
-      Enum.zip(a_numbers ++ List.duplicate(0, max(0, length(b_numbers) - length(a_numbers))), b_numbers)
+      Enum.zip(
+        a_numbers ++ List.duplicate(0, max(0, length(b_numbers) - length(a_numbers))),
+        b_numbers
+      )
       |> Enum.map(fn {v0, v1} -> number(v0, v1) end)
 
     fn t ->
@@ -350,7 +355,9 @@ defmodule Visualize.Interpolate do
     b_transforms = parse_transform(b)
 
     # Create interpolators for each transform type
-    translate_interp = transform_interpolator(a_transforms[:translate], b_transforms[:translate], [0, 0])
+    translate_interp =
+      transform_interpolator(a_transforms[:translate], b_transforms[:translate], [0, 0])
+
     scale_interp = transform_interpolator(a_transforms[:scale], b_transforms[:scale], [1, 1])
     rotate_interp = transform_interpolator(a_transforms[:rotate], b_transforms[:rotate], [0])
 
@@ -358,10 +365,18 @@ defmodule Visualize.Interpolate do
       parts = []
 
       [tx, ty] = translate_interp.(t)
-      parts = if tx != 0 or ty != 0, do: parts ++ ["translate(#{format_num(tx)}, #{format_num(ty)})"], else: parts
+
+      parts =
+        if tx != 0 or ty != 0,
+          do: parts ++ ["translate(#{format_num(tx)}, #{format_num(ty)})"],
+          else: parts
 
       [sx, sy] = scale_interp.(t)
-      parts = if sx != 1 or sy != 1, do: parts ++ ["scale(#{format_num(sx)}, #{format_num(sy)})"], else: parts
+
+      parts =
+        if sx != 1 or sy != 1,
+          do: parts ++ ["scale(#{format_num(sx)}, #{format_num(sy)})"],
+          else: parts
 
       [r | _] = rotate_interp.(t)
       parts = if r != 0, do: parts ++ ["rotate(#{format_num(r)})"], else: parts
@@ -447,7 +462,8 @@ defmodule Visualize.Interpolate do
   @spec zoom([number()], [number()]) :: (number() -> [float()])
   def zoom([cx0, cy0, w0], [cx1, cy1, w1]) do
     # van Wijk and Nuij's smooth zoom algorithm
-    rho = 1.4  # Aesthetic parameter
+    # Aesthetic parameter
+    rho = 1.4
 
     dx = cx1 - cx0
     dy = cy1 - cy0
@@ -495,7 +511,9 @@ defmodule Visualize.Interpolate do
     case String.length(color) do
       3 ->
         <<r::binary-size(1), g::binary-size(1), b::binary-size(1)>> = color
-        {String.to_integer(r <> r, 16), String.to_integer(g <> g, 16), String.to_integer(b <> b, 16)}
+
+        {String.to_integer(r <> r, 16), String.to_integer(g <> g, 16),
+         String.to_integer(b <> b, 16)}
 
       6 ->
         <<r::binary-size(2), g::binary-size(2), b::binary-size(2)>> = color
@@ -593,7 +611,9 @@ defmodule Visualize.Interpolate do
 
   defp parse_number(str) do
     case Float.parse(str) do
-      {num, ""} -> num
+      {num, ""} ->
+        num
+
       _ ->
         case Integer.parse(str) do
           {num, ""} -> num
@@ -603,22 +623,25 @@ defmodule Visualize.Interpolate do
   end
 
   defp parse_transform(str) do
-    translate = case Regex.run(~r/translate\s*\(\s*([^,\)]+)(?:\s*,\s*([^\)]+))?\s*\)/, str) do
-      [_, x] -> [parse_number(x), 0]
-      [_, x, y] -> [parse_number(x), parse_number(y)]
-      _ -> nil
-    end
+    translate =
+      case Regex.run(~r/translate\s*\(\s*([^,\)]+)(?:\s*,\s*([^\)]+))?\s*\)/, str) do
+        [_, x] -> [parse_number(x), 0]
+        [_, x, y] -> [parse_number(x), parse_number(y)]
+        _ -> nil
+      end
 
-    scale = case Regex.run(~r/scale\s*\(\s*([^,\)]+)(?:\s*,\s*([^\)]+))?\s*\)/, str) do
-      [_, s] -> [parse_number(s), parse_number(s)]
-      [_, sx, sy] -> [parse_number(sx), parse_number(sy)]
-      _ -> nil
-    end
+    scale =
+      case Regex.run(~r/scale\s*\(\s*([^,\)]+)(?:\s*,\s*([^\)]+))?\s*\)/, str) do
+        [_, s] -> [parse_number(s), parse_number(s)]
+        [_, sx, sy] -> [parse_number(sx), parse_number(sy)]
+        _ -> nil
+      end
 
-    rotate = case Regex.run(~r/rotate\s*\(\s*([^\)]+)\s*\)/, str) do
-      [_, r] -> [parse_number(r)]
-      _ -> nil
-    end
+    rotate =
+      case Regex.run(~r/rotate\s*\(\s*([^\)]+)\s*\)/, str) do
+        [_, r] -> [parse_number(r)]
+        _ -> nil
+      end
 
     %{translate: translate, scale: scale, rotate: rotate}
   end

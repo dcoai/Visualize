@@ -38,18 +38,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `animate` - Enable CSS transitions (default: false)
 
     """
-    attr :data, :map, required: true
-    attr :width, :integer, default: 800
-    attr :height, :integer, default: 600
-    attr :margin, :map, default: %{top: 20, right: 120, bottom: 20, left: 120}
-    attr :orientation, :atom, default: :horizontal
-    attr :node_radius, :integer, default: 6
-    attr :node_fill, :string, default: "#fff"
-    attr :node_stroke, :string, default: "steelblue"
-    attr :link_stroke, :string, default: "#ccc"
-    attr :label, :any, default: nil
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
+    attr(:data, :map, required: true)
+    attr(:width, :integer, default: 800)
+    attr(:height, :integer, default: 600)
+    attr(:margin, :map, default: %{top: 20, right: 120, bottom: 20, left: 120})
+    attr(:orientation, :atom, default: :horizontal)
+    attr(:node_radius, :integer, default: 6)
+    attr(:node_fill, :string, default: "#fff")
+    attr(:node_stroke, :string, default: "steelblue")
+    attr(:link_stroke, :string, default: "#ccc")
+    attr(:label, :any, default: nil)
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
 
     def tree_diagram(assigns) do
       margin = Map.merge(%{top: 20, right: 120, bottom: 20, left: 120}, assigns.margin || %{})
@@ -60,14 +60,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       root = Hierarchy.new(assigns.data)
 
       # Apply tree layout
-      tree_layout = Tree.new()
-                    |> Tree.size(
-                      if assigns.orientation == :horizontal do
-                        [inner_height, inner_width]
-                      else
-                        [inner_width, inner_height]
-                      end
-                    )
+      tree_layout =
+        Tree.new()
+        |> Tree.size(
+          if assigns.orientation == :horizontal do
+            [inner_height, inner_width]
+          else
+            [inner_width, inner_height]
+          end
+        )
 
       positioned = Tree.generate(tree_layout, root)
 
@@ -79,13 +80,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        margin: margin,
-        nodes: nodes,
-        links: links,
-        label_fn: label_fn,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          margin: margin,
+          nodes: nodes,
+          links: links,
+          label_fn: label_fn,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg
@@ -142,30 +144,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `animate` - Enable CSS transitions (default: false)
 
     """
-    attr :data, :map, required: true
-    attr :width, :integer, default: 800
-    attr :height, :integer, default: 600
-    attr :value, :any, default: nil
-    attr :label, :any, default: nil
-    attr :tile, :atom, default: :squarify
-    attr :padding, :integer, default: 2
-    attr :colors, :any, default: :category10
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
+    attr(:data, :map, required: true)
+    attr(:width, :integer, default: 800)
+    attr(:height, :integer, default: 600)
+    attr(:value, :any, default: nil)
+    attr(:label, :any, default: nil)
+    attr(:tile, :atom, default: :squarify)
+    attr(:padding, :integer, default: 2)
+    attr(:colors, :any, default: :category10)
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
 
     def treemap_chart(assigns) do
       value_fn = assigns.value || fn d -> d[:value] || 0 end
       label_fn = assigns.label || fn d -> d[:name] || d["name"] end
 
       # Build hierarchy and compute values
-      root = Hierarchy.new(assigns.data)
-             |> Hierarchy.sum(value_fn)
+      root =
+        Hierarchy.new(assigns.data)
+        |> Hierarchy.sum(value_fn)
 
       # Apply treemap layout
-      treemap = Treemap.new()
-                |> Treemap.size({assigns.width, assigns.height})
-                |> Treemap.tile(assigns.tile)
-                |> Treemap.padding(assigns.padding)
+      treemap =
+        Treemap.new()
+        |> Treemap.size({assigns.width, assigns.height})
+        |> Treemap.tile(assigns.tile)
+        |> Treemap.padding(assigns.padding)
 
       positioned = Treemap.generate(treemap, root)
 
@@ -173,27 +177,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
       leaves = Hierarchy.leaves(positioned)
 
       # Color scale based on parent
-      unique_parents = leaves
-                       |> Enum.map(fn n -> if n.parent, do: n.parent.data, else: n.data end)
-                       |> Enum.uniq()
+      unique_parents =
+        leaves
+        |> Enum.map(fn n -> if n.parent, do: n.parent.data, else: n.data end)
+        |> Enum.uniq()
 
-      color_scale = Scale.color()
-                    |> Scale.scheme(if is_atom(assigns.colors), do: assigns.colors, else: :category10)
-                    |> Scale.domain(Enum.to_list(0..(length(unique_parents) - 1)))
+      color_scale =
+        Scale.color()
+        |> Scale.scheme(if is_atom(assigns.colors), do: assigns.colors, else: :category10)
+        |> Scale.domain(Enum.to_list(0..(length(unique_parents) - 1)))
 
-      parent_colors = unique_parents
-                      |> Enum.with_index()
-                      |> Enum.map(fn {p, i} -> {p, Scale.scale(color_scale, i)} end)
-                      |> Map.new()
+      parent_colors =
+        unique_parents
+        |> Enum.with_index()
+        |> Enum.map(fn {p, i} -> {p, Scale.scale(color_scale, i)} end)
+        |> Map.new()
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        leaves: leaves,
-        label_fn: label_fn,
-        parent_colors: parent_colors,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          leaves: leaves,
+          label_fn: label_fn,
+          parent_colors: parent_colors,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg
@@ -244,14 +252,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `animate` - Enable CSS transitions (default: false)
 
     """
-    attr :data, :map, required: true
-    attr :width, :integer, default: 600
-    attr :height, :integer, default: 600
-    attr :value, :any, default: nil
-    attr :label, :any, default: nil
-    attr :colors, :any, default: :category10
-    attr :animate, :boolean, default: false
-    attr :class, :string, default: nil
+    attr(:data, :map, required: true)
+    attr(:width, :integer, default: 600)
+    attr(:height, :integer, default: 600)
+    attr(:value, :any, default: nil)
+    attr(:label, :any, default: nil)
+    attr(:colors, :any, default: :category10)
+    attr(:animate, :boolean, default: false)
+    attr(:class, :string, default: nil)
 
     def sunburst_chart(assigns) do
       value_fn = assigns.value || fn d -> d[:value] || 0 end
@@ -260,8 +268,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       radius = min(assigns.width, assigns.height) / 2
 
       # Build hierarchy and compute values
-      root = Hierarchy.new(assigns.data)
-             |> Hierarchy.sum(value_fn)
+      root =
+        Hierarchy.new(assigns.data)
+        |> Hierarchy.sum(value_fn)
 
       # Get all descendants with computed positions
       nodes = Hierarchy.descendants(root)
@@ -275,23 +284,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
       depth_scale = fn depth -> depth / (max_depth + 1) * radius end
 
       # Color scale
-      top_level = nodes |> Enum.filter(& &1.depth == 1)
-      color_scale = Scale.color()
-                    |> Scale.scheme(if is_atom(assigns.colors), do: assigns.colors, else: :category10)
-                    |> Scale.domain(Enum.to_list(0..(length(top_level) - 1)))
+      top_level = nodes |> Enum.filter(&(&1.depth == 1))
+
+      color_scale =
+        Scale.color()
+        |> Scale.scheme(if is_atom(assigns.colors), do: assigns.colors, else: :category10)
+        |> Scale.domain(Enum.to_list(0..(length(top_level) - 1)))
 
       node_colors = assign_sunburst_colors(positioned_nodes, color_scale)
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
 
-      assigns = assign(assigns,
-        radius: radius,
-        positioned_nodes: positioned_nodes,
-        depth_scale: depth_scale,
-        node_colors: node_colors,
-        label_fn: label_fn,
-        transition_style: transition_style
-      )
+      assigns =
+        assign(assigns,
+          radius: radius,
+          positioned_nodes: positioned_nodes,
+          depth_scale: depth_scale,
+          node_colors: node_colors,
+          label_fn: label_fn,
+          transition_style: transition_style
+        )
 
       ~H"""
       <svg
@@ -326,16 +338,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp link_path(source, target, :horizontal) do
       "M#{source.y},#{source.x}" <>
-      "C#{(source.y + target.y) / 2},#{source.x}" <>
-      " #{(source.y + target.y) / 2},#{target.x}" <>
-      " #{target.y},#{target.x}"
+        "C#{(source.y + target.y) / 2},#{source.x}" <>
+        " #{(source.y + target.y) / 2},#{target.x}" <>
+        " #{target.y},#{target.x}"
     end
 
     defp link_path(source, target, :vertical) do
       "M#{source.x},#{source.y}" <>
-      "C#{source.x},#{(source.y + target.y) / 2}" <>
-      " #{target.x},#{(source.y + target.y) / 2}" <>
-      " #{target.x},#{target.y}"
+        "C#{source.x},#{(source.y + target.y) / 2}" <>
+        " #{target.x},#{(source.y + target.y) / 2}" <>
+        " #{target.x},#{target.y}"
     end
 
     defp label_x(node, :horizontal) do
@@ -354,6 +366,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp truncate_label(label, max_width) do
       chars = trunc(max_width / 7)
+
       if String.length(label) > chars do
         String.slice(label, 0, max(chars - 1, 0)) <> "…"
       else
@@ -363,7 +376,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp compute_sunburst_layout(nodes, total_value, start_angle, end_angle) do
       # Process nodes level by level, computing angles
-      root = Enum.find(nodes, & &1.depth == 0)
+      root = Enum.find(nodes, &(&1.depth == 0))
       root_with_angles = Map.merge(root, %{start_angle: start_angle, end_angle: end_angle})
 
       process_children([root_with_angles], nodes, total_value)
@@ -374,9 +387,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp process_children(parents, all_nodes, total) do
       {result, _} =
         Enum.flat_map_reduce(parents, [], fn parent, acc ->
-          children = Enum.filter(all_nodes, fn n ->
-            n.parent == get_original_node(parent, all_nodes)
-          end)
+          children =
+            Enum.filter(all_nodes, fn n ->
+              n.parent == get_original_node(parent, all_nodes)
+            end)
 
           if Enum.empty?(children) do
             {[parent], acc}
@@ -386,16 +400,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
             {positioned_children, _} =
               Enum.map_reduce(children, parent.start_angle, fn child, curr_angle ->
-                child_angle = if children_total > 0 do
-                  (child.value || 0) / children_total * angle_range
-                else
-                  angle_range / length(children)
-                end
+                child_angle =
+                  if children_total > 0 do
+                    (child.value || 0) / children_total * angle_range
+                  else
+                    angle_range / length(children)
+                  end
 
-                positioned = Map.merge(child, %{
-                  start_angle: curr_angle,
-                  end_angle: curr_angle + child_angle
-                })
+                positioned =
+                  Map.merge(child, %{
+                    start_angle: curr_angle,
+                    end_angle: curr_angle + child_angle
+                  })
 
                 {positioned, curr_angle + child_angle}
               end)
@@ -413,13 +429,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp assign_sunburst_colors(nodes, color_scale) do
-      top_level = nodes
-                  |> Enum.filter(fn n -> Map.get(n, :depth, 0) == 1 end)
-                  |> Enum.with_index()
+      top_level =
+        nodes
+        |> Enum.filter(fn n -> Map.get(n, :depth, 0) == 1 end)
+        |> Enum.with_index()
 
-      top_colors = Map.new(top_level, fn {node, i} ->
-        {node.data, Scale.scale(color_scale, i)}
-      end)
+      top_colors =
+        Map.new(top_level, fn {node, i} ->
+          {node.data, Scale.scale(color_scale, i)}
+        end)
 
       nodes
       |> Enum.map(fn node ->
@@ -433,8 +451,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       depth = Map.get(node, :depth, 0)
 
       cond do
-        depth == 0 -> "#ddd"
-        depth == 1 -> Map.get(top_colors, node.data, "#ccc")
+        depth == 0 ->
+          "#ddd"
+
+        depth == 1 ->
+          Map.get(top_colors, node.data, "#ccc")
+
         true ->
           # Find ancestor at depth 1
           case find_depth_one_ancestor(node) do
@@ -466,10 +488,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       large_arc = if end_angle - start_angle > :math.pi(), do: 1, else: 0
 
       "M#{x0},#{y0}" <>
-      "A#{outer_r},#{outer_r} 0 #{large_arc},1 #{x1},#{y1}" <>
-      "L#{x2},#{y2}" <>
-      "A#{inner_r},#{inner_r} 0 #{large_arc},0 #{x3},#{y3}" <>
-      "Z"
+        "A#{outer_r},#{outer_r} 0 #{large_arc},1 #{x1},#{y1}" <>
+        "L#{x2},#{y2}" <>
+        "A#{inner_r},#{inner_r} 0 #{large_arc},0 #{x3},#{y3}" <>
+        "Z"
     end
   end
 end

@@ -113,11 +113,11 @@ defmodule Visualize.Scale.Time do
       {21600, :hour},
       {43200, :hour},
       {86400, :day},
-      {172800, :day},
-      {604800, :week},
-      {2592000, :month},
-      {7776000, :month},
-      {31536000, :year}
+      {172_800, :day},
+      {604_800, :week},
+      {2_592_000, :month},
+      {7_776_000, :month},
+      {31_536_000, :year}
     ]
 
     {secs, unit} =
@@ -130,15 +130,19 @@ defmodule Visualize.Scale.Time do
         :hour -> fn dt -> DateTime.add(dt, secs, :second) end
         :day -> fn dt -> DateTime.add(dt, secs, :second) end
         :week -> fn dt -> DateTime.add(dt, secs, :second) end
-        :month -> fn dt -> shift_months(dt, div(secs, 2592000)) end
-        :year -> fn dt -> shift_months(dt, div(secs, 2592000)) end
+        :month -> fn dt -> shift_months(dt, div(secs, 2_592_000)) end
+        :year -> fn dt -> shift_months(dt, div(secs, 2_592_000)) end
       end
 
     {{secs, unit}, step_fn}
   end
 
   defp shift_months(dt, months) do
-    %{dt | month: rem(dt.month + months - 1, 12) + 1, year: dt.year + div(dt.month + months - 1, 12)}
+    %{
+      dt
+      | month: rem(dt.month + months - 1, 12) + 1,
+        year: dt.year + div(dt.month + months - 1, 12)
+    }
   end
 
   defp ceil_to_interval(time, {_, :day}) do

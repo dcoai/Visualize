@@ -68,13 +68,28 @@ defmodule Visualize.Benchmark do
     # Run benchmarks
     svg_results = benchmark_backend(:svg, chart_type, data, width, height, iterations)
     canvas_results = benchmark_backend(:canvas, chart_type, data, width, height, iterations)
-    hybrid_results = benchmark_hybrid(chart_type, data, x_scale, y_scale, width, height, iterations)
-    hybrid_inc_results = benchmark_incremental(:hybrid, chart_type, data, x_scale, y_scale, canvas_size, iterations)
-    canvas_inc_results = benchmark_incremental(:canvas, chart_type, data, x_scale, y_scale, canvas_size, iterations)
+
+    hybrid_results =
+      benchmark_hybrid(chart_type, data, x_scale, y_scale, width, height, iterations)
+
+    hybrid_inc_results =
+      benchmark_incremental(:hybrid, chart_type, data, x_scale, y_scale, canvas_size, iterations)
+
+    canvas_inc_results =
+      benchmark_incremental(:canvas, chart_type, data, x_scale, y_scale, canvas_size, iterations)
 
     build_run_results(
-      %{data_points: data_points, iterations: iterations, chart_type: chart_type, dimensions: {width, height}},
-      svg_results, canvas_results, hybrid_results, hybrid_inc_results, canvas_inc_results
+      %{
+        data_points: data_points,
+        iterations: iterations,
+        chart_type: chart_type,
+        dimensions: {width, height}
+      },
+      svg_results,
+      canvas_results,
+      hybrid_results,
+      hybrid_inc_results,
+      canvas_inc_results
     )
   end
 
@@ -104,14 +119,53 @@ defmodule Visualize.Benchmark do
     canvas_size = {width, height}
 
     svg_results = stream_benchmark_full(:svg, duration_ms, data_points, chart_type, width, height)
-    canvas_results = stream_benchmark_full(:canvas, duration_ms, data_points, chart_type, width, height)
-    hybrid_results = stream_benchmark_data_only(:hybrid, x_scale, y_scale, static_svg, chart_type, data_points, duration_ms, nil)
-    hybrid_inc_results = stream_benchmark_data_only(:hybrid_incremental, x_scale, y_scale, static_svg, chart_type, data_points, duration_ms, canvas_size)
-    canvas_inc_results = stream_benchmark_data_only(:canvas_incremental, x_scale, y_scale, nil, chart_type, data_points, duration_ms, canvas_size)
+
+    canvas_results =
+      stream_benchmark_full(:canvas, duration_ms, data_points, chart_type, width, height)
+
+    hybrid_results =
+      stream_benchmark_data_only(
+        :hybrid,
+        x_scale,
+        y_scale,
+        static_svg,
+        chart_type,
+        data_points,
+        duration_ms,
+        nil
+      )
+
+    hybrid_inc_results =
+      stream_benchmark_data_only(
+        :hybrid_incremental,
+        x_scale,
+        y_scale,
+        static_svg,
+        chart_type,
+        data_points,
+        duration_ms,
+        canvas_size
+      )
+
+    canvas_inc_results =
+      stream_benchmark_data_only(
+        :canvas_incremental,
+        x_scale,
+        y_scale,
+        nil,
+        chart_type,
+        data_points,
+        duration_ms,
+        canvas_size
+      )
 
     build_stream_results(
       %{duration_ms: duration_ms, data_points: data_points, chart_type: chart_type},
-      svg_results, canvas_results, hybrid_results, hybrid_inc_results, canvas_inc_results
+      svg_results,
+      canvas_results,
+      hybrid_results,
+      hybrid_inc_results,
+      canvas_inc_results
     )
   end
 
@@ -123,14 +177,15 @@ defmodule Visualize.Benchmark do
     static_overhead = results.hybrid.static_svg_bytes
     per_frame_diff = results.hybrid.avg_payload_bytes - results.svg.avg_payload_bytes
 
-    break_even_text = if per_frame_diff > 0 do
-      "N/A (Canvas binary is larger than SVG)"
-    else
-      "#{ceil(static_overhead / abs(per_frame_diff))} frames"
-    end
+    break_even_text =
+      if per_frame_diff > 0 do
+        "N/A (Canvas binary is larger than SVG)"
+      else
+        "#{ceil(static_overhead / abs(per_frame_diff))} frames"
+      end
 
     svg_100_frames = results.svg.avg_payload_bytes * 100
-    hybrid_100_frames = results.hybrid.static_svg_bytes + (results.hybrid.avg_payload_bytes * 100)
+    hybrid_100_frames = results.hybrid.static_svg_bytes + results.hybrid.avg_payload_bytes * 100
     bandwidth_at_100 = Float.round((1 - hybrid_100_frames / svg_100_frames) * 100, 1)
 
     """
@@ -217,7 +272,9 @@ defmodule Visualize.Benchmark do
   @spec format_stream_report(map()) :: String.t()
   def format_stream_report(results) do
     hybrid_total_with_static = results.hybrid.total_bytes + results.hybrid.static_svg_bytes
-    actual_bandwidth_diff = Float.round((1 - hybrid_total_with_static / max(results.svg.total_bytes, 1)) * 100, 1)
+
+    actual_bandwidth_diff =
+      Float.round((1 - hybrid_total_with_static / max(results.svg.total_bytes, 1)) * 100, 1)
 
     bytes_per_frame = fn r -> if r.frames > 0, do: round(r.total_bytes / r.frames), else: 0 end
 
@@ -327,7 +384,9 @@ defmodule Visualize.Benchmark do
   end
 
   defp benchmark_incremental(mode, chart_type, data, x_scale, y_scale, canvas_size, iterations) do
-    render_fn = fn -> render_incremental(mode, chart_type, data, x_scale, y_scale, canvas_size) end
+    render_fn = fn ->
+      render_incremental(mode, chart_type, data, x_scale, y_scale, canvas_size)
+    end
 
     warmup(render_fn)
     {total_time_us, payloads} = timed_iterations(render_fn, iterations)
@@ -365,14 +424,37 @@ defmodule Visualize.Benchmark do
 
   defp stream_benchmark_full(backend, duration_ms, data_points, chart_type, width, height) do
     end_time = System.monotonic_time(:millisecond) + duration_ms
-    {frames, total_bytes, actual_ms} = stream_loop_full(backend, chart_type, data_points, width, height, end_time, 0, 0)
+
+    {frames, total_bytes, actual_ms} =
+      stream_loop_full(backend, chart_type, data_points, width, height, end_time, 0, 0)
 
     build_stream_result(frames, total_bytes, actual_ms, data_points)
   end
 
-  defp stream_benchmark_data_only(mode, x_scale, y_scale, static_svg, chart_type, data_points, duration_ms, canvas_size) do
+  defp stream_benchmark_data_only(
+         mode,
+         x_scale,
+         y_scale,
+         static_svg,
+         chart_type,
+         data_points,
+         duration_ms,
+         canvas_size
+       ) do
     end_time = System.monotonic_time(:millisecond) + duration_ms
-    {frames, total_bytes, actual_ms} = stream_loop_data_only(mode, x_scale, y_scale, chart_type, data_points, canvas_size, end_time, 0, 0)
+
+    {frames, total_bytes, actual_ms} =
+      stream_loop_data_only(
+        mode,
+        x_scale,
+        y_scale,
+        chart_type,
+        data_points,
+        canvas_size,
+        end_time,
+        0,
+        0
+      )
 
     result = build_stream_result(frames, total_bytes, actual_ms, data_points)
 
@@ -383,34 +465,84 @@ defmodule Visualize.Benchmark do
     end
   end
 
-  defp stream_loop_full(backend, chart_type, data_points, width, height, end_time, frames, total_bytes) do
+  defp stream_loop_full(
+         backend,
+         chart_type,
+         data_points,
+         width,
+         height,
+         end_time,
+         frames,
+         total_bytes
+       ) do
     now = System.monotonic_time(:millisecond)
+
     if now >= end_time do
       {frames, total_bytes, now - (end_time - frames)}
     else
       data = generate_animated_data(chart_type, data_points, frames)
       output = render_full_chart(backend, chart_type, data, width, height)
-      stream_loop_full(backend, chart_type, data_points, width, height, end_time, frames + 1, total_bytes + byte_size(output))
+
+      stream_loop_full(
+        backend,
+        chart_type,
+        data_points,
+        width,
+        height,
+        end_time,
+        frames + 1,
+        total_bytes + byte_size(output)
+      )
     end
   end
 
-  defp stream_loop_data_only(mode, x_scale, y_scale, chart_type, data_points, canvas_size, end_time, frames, total_bytes) do
+  defp stream_loop_data_only(
+         mode,
+         x_scale,
+         y_scale,
+         chart_type,
+         data_points,
+         canvas_size,
+         end_time,
+         frames,
+         total_bytes
+       ) do
     now = System.monotonic_time(:millisecond)
+
     if now >= end_time do
       {frames, total_bytes, now - (end_time - frames)}
     else
       data = generate_animated_data(chart_type, data_points, frames)
-      output = case mode do
-        :hybrid -> render_data_only(chart_type, data, x_scale, y_scale)
-        :hybrid_incremental -> render_incremental(:hybrid, chart_type, data, x_scale, y_scale, canvas_size)
-        :canvas_incremental -> render_incremental(:canvas, chart_type, data, x_scale, y_scale, canvas_size)
-      end
-      stream_loop_data_only(mode, x_scale, y_scale, chart_type, data_points, canvas_size, end_time, frames + 1, total_bytes + byte_size(output))
+
+      output =
+        case mode do
+          :hybrid ->
+            render_data_only(chart_type, data, x_scale, y_scale)
+
+          :hybrid_incremental ->
+            render_incremental(:hybrid, chart_type, data, x_scale, y_scale, canvas_size)
+
+          :canvas_incremental ->
+            render_incremental(:canvas, chart_type, data, x_scale, y_scale, canvas_size)
+        end
+
+      stream_loop_data_only(
+        mode,
+        x_scale,
+        y_scale,
+        chart_type,
+        data_points,
+        canvas_size,
+        end_time,
+        frames + 1,
+        total_bytes + byte_size(output)
+      )
     end
   end
 
   defp build_stream_result(frames, total_bytes, actual_ms, data_points) do
     fps = frames / max(actual_ms / 1000, 0.001)
+
     %{
       frames: frames,
       fps: fps,
@@ -439,14 +571,22 @@ defmodule Visualize.Benchmark do
         svg_vs_hybrid_speed: Float.round(svg_time / max(hybrid.avg_render_time_us, 1), 2),
         svg_vs_hybrid_inc_speed: Float.round(svg_time / max(hybrid_inc.avg_render_time_us, 1), 2),
         svg_vs_canvas_inc_speed: Float.round(svg_time / max(canvas_inc.avg_render_time_us, 1), 2),
-        fastest: find_fastest([
-          svg: svg, canvas: canvas, hybrid: hybrid,
-          hybrid_incremental: hybrid_inc, canvas_incremental: canvas_inc
-        ]),
-        smallest_per_frame: find_smallest([
-          svg: svg, canvas: canvas, hybrid: hybrid,
-          hybrid_incremental: hybrid_inc, canvas_incremental: canvas_inc
-        ])
+        fastest:
+          find_fastest(
+            svg: svg,
+            canvas: canvas,
+            hybrid: hybrid,
+            hybrid_incremental: hybrid_inc,
+            canvas_incremental: canvas_inc
+          ),
+        smallest_per_frame:
+          find_smallest(
+            svg: svg,
+            canvas: canvas,
+            hybrid: hybrid,
+            hybrid_incremental: hybrid_inc,
+            canvas_incremental: canvas_inc
+          )
       }
     }
   end
@@ -518,18 +658,22 @@ defmodule Visualize.Benchmark do
     {width, _height} = canvas_size
     regions = CanvasIncremental.exposed_regions({@scroll_delta, 0}, canvas_size)
 
-    region_elements = Enum.map(regions, fn {rx, _ry, rw, _rh} = bounds ->
-      # Filter data to points in this region
-      filtered_data = filter_data_to_region(data, x_scale, rx, rw, width)
-      # Need at least 2 points for line/area charts
-      min_points = if chart_type == :scatter, do: 1, else: 2
-      element = if length(filtered_data) < min_points do
-        Element.group([])
-      else
-        build_data_element(chart_type, filtered_data, x_scale, y_scale)
-      end
-      {bounds, element}
-    end)
+    region_elements =
+      Enum.map(regions, fn {rx, _ry, rw, _rh} = bounds ->
+        # Filter data to points in this region
+        filtered_data = filter_data_to_region(data, x_scale, rx, rw, width)
+        # Need at least 2 points for line/area charts
+        min_points = if chart_type == :scatter, do: 1, else: 2
+
+        element =
+          if length(filtered_data) < min_points do
+            Element.group([])
+          else
+            build_data_element(chart_type, filtered_data, x_scale, y_scale)
+          end
+
+        {bounds, element}
+      end)
 
     CanvasIncremental.encode_incremental({@scroll_delta, 0}, canvas_size, region_elements)
     |> Base.encode64()
@@ -541,19 +685,23 @@ defmodule Visualize.Benchmark do
     {width, height} = canvas_size
     regions = CanvasIncremental.exposed_regions({@scroll_delta, 0}, canvas_size)
 
-    region_elements = Enum.map(regions, fn {rx, _ry, rw, _rh} = bounds ->
-      # Filter data to points in this region
-      filtered_data = filter_data_to_region(data, x_scale, rx, rw, width)
-      # Need at least 2 points for line/area charts
-      min_points = if chart_type == :scatter, do: 1, else: 2
-      data_element = if length(filtered_data) < min_points do
-        Element.group([])
-      else
-        build_data_element(chart_type, filtered_data, x_scale, y_scale)
-      end
-      element = Element.root(width, height, children: [data_element])
-      {bounds, element}
-    end)
+    region_elements =
+      Enum.map(regions, fn {rx, _ry, rw, _rh} = bounds ->
+        # Filter data to points in this region
+        filtered_data = filter_data_to_region(data, x_scale, rx, rw, width)
+        # Need at least 2 points for line/area charts
+        min_points = if chart_type == :scatter, do: 1, else: 2
+
+        data_element =
+          if length(filtered_data) < min_points do
+            Element.group([])
+          else
+            build_data_element(chart_type, filtered_data, x_scale, y_scale)
+          end
+
+        element = Element.root(width, height, children: [data_element])
+        {bounds, element}
+      end)
 
     CanvasIncremental.encode_incremental({@scroll_delta, 0}, canvas_size, region_elements)
     |> Base.encode64()
@@ -580,8 +728,13 @@ defmodule Visualize.Benchmark do
     x_axis_element = Axis.bottom(x_scale) |> Axis.ticks(10) |> Axis.generate()
     y_axis_element = Axis.left(y_scale) |> Axis.ticks(5) |> Axis.generate()
 
-    x_axis_group = Element.group([x_axis_element], transform: Transform.translate(0, inner_height))
-    static_group = Element.group([x_axis_group, y_axis_element], transform: Transform.translate(@margin.left, @margin.top))
+    x_axis_group =
+      Element.group([x_axis_element], transform: Transform.translate(0, inner_height))
+
+    static_group =
+      Element.group([x_axis_group, y_axis_element],
+        transform: Transform.translate(@margin.left, @margin.top)
+      )
 
     Element.root(width, height, children: [static_group])
     |> SVG.render_element([])
@@ -599,7 +752,8 @@ defmodule Visualize.Benchmark do
   end
 
   defp build_data_element(:line, data, x_scale, y_scale) do
-    path = Shape.Line.new()
+    path =
+      Shape.Line.new()
       |> Shape.Line.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
       |> Shape.Line.y(fn d -> Scale.Linear.apply(y_scale, d.y) end)
       |> Shape.Line.curve(:monotone_x)
@@ -612,7 +766,8 @@ defmodule Visualize.Benchmark do
   defp build_data_element(:area, data, x_scale, y_scale) do
     inner_height = Scale.Linear.apply(y_scale, 0)
 
-    path = Shape.Area.new()
+    path =
+      Shape.Area.new()
       |> Shape.Area.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
       |> Shape.Area.y0(fn _ -> inner_height end)
       |> Shape.Area.y1(fn d -> Scale.Linear.apply(y_scale, d.y) end)
@@ -624,14 +779,15 @@ defmodule Visualize.Benchmark do
   end
 
   defp build_data_element(:scatter, data, x_scale, y_scale) do
-    circles = Enum.map(data, fn d ->
-      Element.circle(
-        Scale.Linear.apply(x_scale, d.x),
-        Scale.Linear.apply(y_scale, d.y),
-        d.r,
-        %{fill: "#4e79a7", fill_opacity: 0.6}
-      )
-    end)
+    circles =
+      Enum.map(data, fn d ->
+        Element.circle(
+          Scale.Linear.apply(x_scale, d.x),
+          Scale.Linear.apply(y_scale, d.y),
+          d.r,
+          %{fill: "#4e79a7", fill_opacity: 0.6}
+        )
+      end)
 
     Element.group(circles)
     |> Element.set_transform(Transform.translate(@margin.left, @margin.top))
@@ -643,16 +799,32 @@ defmodule Visualize.Benchmark do
 
     case chart_type do
       :scatter ->
-        x_scale = Scale.Linear.new() |> Scale.Linear.domain([0, 100]) |> Scale.Linear.range([0, inner_width])
-        y_scale = Scale.Linear.new() |> Scale.Linear.domain([0, 100]) |> Scale.Linear.range([inner_height, 0])
+        x_scale =
+          Scale.Linear.new()
+          |> Scale.Linear.domain([0, 100])
+          |> Scale.Linear.range([0, inner_width])
+
+        y_scale =
+          Scale.Linear.new()
+          |> Scale.Linear.domain([0, 100])
+          |> Scale.Linear.range([inner_height, 0])
+
         {x_scale, y_scale}
 
       _ ->
         {min_x, max_x} = data |> Enum.map(& &1.x) |> Enum.min_max()
         {min_y, max_y} = data |> Enum.map(& &1.y) |> Enum.min_max()
 
-        x_scale = Scale.Linear.new() |> Scale.Linear.domain([min_x, max_x]) |> Scale.Linear.range([0, inner_width])
-        y_scale = Scale.Linear.new() |> Scale.Linear.domain([min_y - 5, max_y + 5]) |> Scale.Linear.range([inner_height, 0])
+        x_scale =
+          Scale.Linear.new()
+          |> Scale.Linear.domain([min_x, max_x])
+          |> Scale.Linear.range([0, inner_width])
+
+        y_scale =
+          Scale.Linear.new()
+          |> Scale.Linear.domain([min_y - 5, max_y + 5])
+          |> Scale.Linear.range([inner_height, 0])
+
         {x_scale, y_scale}
     end
   end
@@ -679,6 +851,7 @@ defmodule Visualize.Benchmark do
 
   defp generate_animated_data(:line, count, frame) do
     phase = frame * 0.1
+
     for i <- 0..(count - 1) do
       x = i / max(count - 1, 1) * 100
       y = :math.sin(x / 10 + phase) * 40 + :math.cos(x / 7 + phase * 0.7) * 20 + 50
@@ -686,13 +859,16 @@ defmodule Visualize.Benchmark do
     end
   end
 
-  defp generate_animated_data(:area, count, frame), do: generate_animated_data(:line, count, frame)
+  defp generate_animated_data(:area, count, frame),
+    do: generate_animated_data(:line, count, frame)
 
   defp generate_animated_data(:scatter, count, frame) do
     phase = frame * 0.05
+
     for i <- 1..count do
       angle = i / count * :math.pi() * 2 + phase
       radius = 30 + :math.sin(angle * 3 + phase) * 15
+
       %{
         x: 50 + :math.cos(angle) * radius,
         y: 50 + :math.sin(angle) * radius,
