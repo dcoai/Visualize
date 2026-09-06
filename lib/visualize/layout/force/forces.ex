@@ -54,11 +54,10 @@ defmodule Visualize.Layout.Force.Forces do
   Many-body force - simulates gravity or electrostatic charge.
 
   Positive strength attracts, negative repels.
-  Uses Barnes-Hut approximation for performance with many nodes.
+  Every pair is evaluated directly, O(n²) per tick; there is no Barnes-Hut approximation.
   """
   def apply_many_body(nodes, alpha, opts) do
     strength = Keyword.get(opts, :strength, -30)
-    theta = Keyword.get(opts, :theta, 0.9)
     distance_min = Keyword.get(opts, :distance_min, 1)
     distance_max = Keyword.get(opts, :distance_max, :infinity)
 
@@ -67,13 +66,7 @@ defmodule Visualize.Layout.Force.Forces do
     if n < 2 do
       nodes
     else
-      # For small graphs, use direct calculation
-      # For large graphs, would use quadtree (Barnes-Hut)
-      if n < 100 do
-        apply_many_body_direct(nodes, alpha, strength, distance_min, distance_max)
-      else
-        apply_many_body_direct(nodes, alpha, strength, distance_min, distance_max)
-      end
+      apply_many_body_direct(nodes, alpha, strength, distance_min, distance_max)
     end
   end
 
@@ -119,10 +112,7 @@ defmodule Visualize.Layout.Force.Forces do
     if Enum.empty?(links) do
       nodes
     else
-      # Create node lookup by id
-      node_map = Map.new(nodes, &{&1.id, &1})
-
-      # Apply link constraints
+      # Apply link constraints, rebuilding the id lookup each iteration
       Enum.reduce(1..iterations, nodes, fn _, nodes ->
         node_map = Map.new(nodes, &{&1.id, &1})
         apply_link_iteration(nodes, links, node_map, alpha, distance, strength)

@@ -35,7 +35,10 @@ defmodule Visualize.Shape.Curve do
   def generate(:step_after, points, _opts), do: step(points, 1)
   def generate(:basis, points, _opts), do: basis(points)
   def generate(:cardinal, points, opts), do: cardinal(points, Keyword.get(opts, :tension, 0))
-  def generate(:catmull_rom, points, opts), do: catmull_rom(points, Keyword.get(opts, :alpha, 0.5))
+
+  def generate(:catmull_rom, points, opts),
+    do: catmull_rom(points, Keyword.get(opts, :alpha, 0.5))
+
   def generate(:monotone_x, points, _opts), do: monotone_x(points)
   def generate(:monotone_y, points, _opts), do: monotone_y(points)
   def generate(:natural, points, _opts), do: natural(points)
@@ -55,17 +58,26 @@ defmodule Visualize.Shape.Curve do
   def step([{x0, y0} | rest], t) do
     path = Path.new() |> Path.move_to(x0, y0)
 
-    rest
-    |> Enum.reduce({path, x0, y0}, fn {x1, y1}, {acc, x0_prev, y0_prev} ->
-      x_mid = x0_prev + (x1 - x0_prev) * t
-      acc = acc
-        |> Path.horizontal_to(x_mid)
-        |> Path.vertical_to(y1)
-        |> Path.horizontal_to(x1)
-      {acc, x1, y1}
-    end)
-    |> elem(0)
+    # `x_pen` is where the pen sits horizontally; `x_prev` is the previous data point.
+    # Consecutive horizontals merge, so a step path never carries a zero-length or
+    # redundant segment (the same output D3 produces).
+    {path, x_pen, x_last} =
+      Enum.reduce(rest, {path, x0, x0}, fn {x1, y1}, {acc, x_pen, x_prev} ->
+        x_mid = x_prev + (x1 - x_prev) * t
+
+        acc =
+          acc
+          |> horizontal_unless_same(x_pen, x_mid)
+          |> Path.vertical_to(y1)
+
+        {acc, x_mid, x1}
+      end)
+
+    horizontal_unless_same(path, x_pen, x_last)
   end
+
+  defp horizontal_unless_same(path, from, to) when from == to, do: path
+  defp horizontal_unless_same(path, _from, to), do: Path.horizontal_to(path, to)
 
   @doc "Basis spline interpolation"
   @spec basis([point()]) :: Path.t()
@@ -80,7 +92,7 @@ defmodule Visualize.Shape.Curve do
     |> Enum.chunk_every(4, 1, :discard)
     |> Enum.reduce(path, fn chunk, acc ->
       case chunk do
-        [{x0, y0}, {x1, y1}, {x2, y2}, {x3, y3}] ->
+        [{x0, y0}, {x1, y1}, {x2, y2}, {_x3, _y3}] ->
           # Basis spline control points
           Path.curve_to(
             acc,
@@ -117,7 +129,7 @@ defmodule Visualize.Shape.Curve do
 
   @doc "Cardinal spline interpolation"
   @spec cardinal([point()], number()) :: Path.t()
-  def cardinal(points, tension) when length(points) < 3 do
+  def cardinal(points, _tension) when length(points) < 3 do
     linear(points)
   end
 
@@ -143,7 +155,7 @@ defmodule Visualize.Shape.Curve do
 
   @doc "Catmull-Rom spline interpolation"
   @spec catmull_rom([point()], number()) :: Path.t()
-  def catmull_rom(points, alpha) when length(points) < 3 do
+  def catmull_rom(points, _alpha) when length(points) < 3 do
     linear(points)
   end
 
@@ -170,10 +182,21 @@ defmodule Visualize.Shape.Curve do
       t3 = :math.pow(d3, alpha)
 
       # Control points
-      cp1x = (t1 * t1 * x2 - t2 * t2 * x0 + (2 * t1 * t1 + 3 * t1 * t2 + t2 * t2) * x1) / (3 * t1 * (t1 + t2))
-      cp1y = (t1 * t1 * y2 - t2 * t2 * y0 + (2 * t1 * t1 + 3 * t1 * t2 + t2 * t2) * y1) / (3 * t1 * (t1 + t2))
-      cp2x = (t3 * t3 * x1 - t2 * t2 * x3 + (2 * t3 * t3 + 3 * t3 * t2 + t2 * t2) * x2) / (3 * t3 * (t3 + t2))
-      cp2y = (t3 * t3 * y1 - t2 * t2 * y3 + (2 * t3 * t3 + 3 * t3 * t2 + t2 * t2) * y2) / (3 * t3 * (t3 + t2))
+      cp1x =
+        (t1 * t1 * x2 - t2 * t2 * x0 + (2 * t1 * t1 + 3 * t1 * t2 + t2 * t2) * x1) /
+          (3 * t1 * (t1 + t2))
+
+      cp1y =
+        (t1 * t1 * y2 - t2 * t2 * y0 + (2 * t1 * t1 + 3 * t1 * t2 + t2 * t2) * y1) /
+          (3 * t1 * (t1 + t2))
+
+      cp2x =
+        (t3 * t3 * x1 - t2 * t2 * x3 + (2 * t3 * t3 + 3 * t3 * t2 + t2 * t2) * x2) /
+          (3 * t3 * (t3 + t2))
+
+      cp2y =
+        (t3 * t3 * y1 - t2 * t2 * y3 + (2 * t3 * t3 + 3 * t3 * t2 + t2 * t2) * y2) /
+          (3 * t3 * (t3 + t2))
 
       Path.curve_to(acc, cp1x, cp1y, cp2x, cp2y, x2, y2)
     end)
@@ -196,6 +219,7 @@ defmodule Visualize.Shape.Curve do
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.reduce(path, fn [{{x0, y0}, t0}, {{x1, y1}, t1}], acc ->
       dx = x1 - x0
+
       Path.curve_to(
         acc,
         x0 + dx / 3,

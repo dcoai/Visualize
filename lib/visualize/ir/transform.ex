@@ -79,23 +79,19 @@ defmodule Visualize.IR.Transform do
   end
 
   @doc """
-  Creates a transform with a single scale operation.
+  Creates a transform with a single uniform scale operation.
   """
   @spec scale(number()) :: t()
-  def scale(s), do: new() |> scale(s, s)
+  def scale(s) when is_number(s), do: new() |> scale(s, s)
 
   @doc """
-  Creates a transform with a single scale operation.
+  With two numbers, creates a transform with a single scale operation.
+  With a transform and one number, adds a uniform scale operation to it.
   """
   @spec scale(number(), number()) :: t()
-  def scale(sx, sy), do: new() |> scale(sx, sy)
-
-  @doc """
-  Adds a scale operation.
-  If only one argument is provided, scales uniformly.
-  """
   @spec scale(t(), number()) :: t()
-  def scale(%__MODULE__{} = t, s), do: scale(t, s, s)
+  def scale(sx, sy) when is_number(sx) and is_number(sy), do: new() |> scale(sx, sy)
+  def scale(%__MODULE__{} = t, s) when is_number(s), do: scale(t, s, s)
 
   @doc """
   Adds a scale operation with separate x and y factors.
@@ -205,6 +201,7 @@ defmodule Visualize.IR.Transform do
   end
 
   defp format_num(n) when is_integer(n), do: Integer.to_string(n)
+
   defp format_num(n) when is_float(n) do
     :erlang.float_to_binary(n, decimals: 4)
     |> String.trim_trailing("0")

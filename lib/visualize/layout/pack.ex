@@ -102,18 +102,22 @@ defmodule Visualize.Layout.Pack do
   end
 
   defp compute_radii(%Hierarchy{children: nil} = node, pack) do
-    r = case pack.radius do
-      nil -> if node.value, do: :math.sqrt(node.value), else: 1
-      func -> func.(node)
-    end
+    r =
+      case pack.radius do
+        nil -> if node.value, do: :math.sqrt(node.value), else: 1
+        func -> func.(node)
+      end
+
     %{node | r: r}
   end
 
   defp compute_radii(%Hierarchy{children: []} = node, pack) do
-    r = case pack.radius do
-      nil -> if node.value, do: :math.sqrt(node.value), else: 1
-      func -> func.(node)
-    end
+    r =
+      case pack.radius do
+        nil -> if node.value, do: :math.sqrt(node.value), else: 1
+        func -> func.(node)
+      end
+
     %{node | r: r}
   end
 
@@ -139,9 +143,10 @@ defmodule Visualize.Layout.Pack do
     {cx, cy, r} = enclose_circles(positioned_children)
 
     # Translate children relative to parent center
-    translated_children = Enum.map(positioned_children, fn child ->
-      %{child | x: child.x - cx, y: child.y - cy}
-    end)
+    translated_children =
+      Enum.map(positioned_children, fn child ->
+        %{child | x: child.x - cx, y: child.y - cy}
+      end)
 
     %{node | children: translated_children, x: 0, y: 0, r: r + pad}
   end
@@ -158,29 +163,30 @@ defmodule Visualize.Layout.Pack do
     sorted = Enum.sort_by(circles, & &1.r, :desc)
 
     # Place circles one by one
-    {placed, _} = Enum.reduce(sorted, {[], []}, fn circle, {placed, front} ->
-      circle_with_pad = %{circle | r: circle.r + pad}
+    {placed, _} =
+      Enum.reduce(sorted, {[], []}, fn circle, {placed, front} ->
+        circle_with_pad = %{circle | r: circle.r + pad}
 
-      case placed do
-        [] ->
-          # First circle at origin
-          new_circle = %{circle | x: 0, y: 0}
-          {[new_circle], [{0, 0, circle.r}]}
+        case placed do
+          [] ->
+            # First circle at origin
+            new_circle = %{circle | x: 0, y: 0}
+            {[new_circle], [{0, 0, circle.r}]}
 
-        [first] ->
-          # Second circle to the right
-          x = first.x + first.r + circle.r + 2 * pad
-          new_circle = %{circle | x: x, y: 0}
-          {[new_circle, first], [{first.x, first.y, first.r}, {x, 0, circle.r}]}
+          [first] ->
+            # Second circle to the right
+            x = first.x + first.r + circle.r + 2 * pad
+            new_circle = %{circle | x: x, y: 0}
+            {[new_circle, first], [{first.x, first.y, first.r}, {x, 0, circle.r}]}
 
-        _ ->
-          # Find best position
-          {x, y} = find_best_position(circle_with_pad.r, placed, pad)
-          new_circle = %{circle | x: x, y: y}
-          new_front = [{x, y, circle.r} | front]
-          {[new_circle | placed], new_front}
-      end
-    end)
+          _ ->
+            # Find best position
+            {x, y} = find_best_position(circle_with_pad.r, placed, pad)
+            new_circle = %{circle | x: x, y: y}
+            new_front = [{x, y, circle.r} | front]
+            {[new_circle | placed], new_front}
+        end
+      end)
 
     placed
   end
@@ -252,8 +258,8 @@ defmodule Visualize.Layout.Pack do
 
   defp enclose_circles(circles) do
     # Simple bounding circle (not optimal but works)
-    {min_x, max_x} = circles |> Enum.map(&(&1.x - &1.r)) |> Enum.min_max()
-    {min_y, max_y} = circles |> Enum.map(&(&1.y - &1.r)) |> Enum.min_max()
+    min_x = circles |> Enum.map(&(&1.x - &1.r)) |> Enum.min()
+    min_y = circles |> Enum.map(&(&1.y - &1.r)) |> Enum.min()
 
     # Also consider right/bottom edges
     max_x2 = circles |> Enum.map(&(&1.x + &1.r)) |> Enum.max()
@@ -263,13 +269,14 @@ defmodule Visualize.Layout.Pack do
     cy = (min_y + max_y2) / 2
 
     # Radius is distance to farthest circle edge
-    r = circles
-        |> Enum.map(fn c ->
-          dx = c.x - cx
-          dy = c.y - cy
-          :math.sqrt(dx * dx + dy * dy) + c.r
-        end)
-        |> Enum.max()
+    r =
+      circles
+      |> Enum.map(fn c ->
+        dx = c.x - cx
+        dy = c.y - cy
+        :math.sqrt(dx * dx + dy * dy) + c.r
+      end)
+      |> Enum.max()
 
     {cx, cy, r}
   end
@@ -281,7 +288,9 @@ defmodule Visualize.Layout.Pack do
 
     new_children =
       case node.children do
-        nil -> nil
+        nil ->
+          nil
+
         children ->
           Enum.map(children, fn child ->
             # Children are relative to parent
@@ -299,7 +308,9 @@ defmodule Visualize.Layout.Pack do
 
     new_children =
       case node.children do
-        nil -> nil
+        nil ->
+          nil
+
         children ->
           Enum.map(children, fn child ->
             child_x = x + (child.x || 0) * k

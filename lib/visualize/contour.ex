@@ -26,8 +26,6 @@ defmodule Visualize.Contour do
 
   """
 
-  alias Visualize.SVG.Path
-
   defstruct width: 1,
             height: 1,
             thresholds: [],
@@ -128,12 +126,14 @@ defmodule Visualize.Contour do
     2 => [{2, 1}],
     3 => [{3, 1}],
     4 => [{1, 0}],
-    5 => [{3, 0}, {1, 2}],  # Saddle point
+    # Saddle point
+    5 => [{3, 0}, {1, 2}],
     6 => [{2, 0}],
     7 => [{3, 0}],
     8 => [{0, 3}],
     9 => [{0, 2}],
-    10 => [{0, 1}, {2, 3}],  # Saddle point
+    # Saddle point
+    10 => [{0, 1}, {2, 3}],
     11 => [{0, 1}],
     12 => [{1, 3}],
     13 => [{1, 2}],
@@ -154,10 +154,12 @@ defmodule Visualize.Contour do
     # Convert rings to polygon coordinates, adjusting for padding offset
     # Each ring becomes one polygon (outer or hole)
     Enum.map(rings, fn ring ->
-      [Enum.map(ring, fn {x, y} ->
-        # Offset by -1 to account for padding, and clamp to original bounds
-        [max(0, min(width - 1, x - 1)), max(0, min(height - 1, y - 1))]
-      end)]
+      [
+        Enum.map(ring, fn {x, y} ->
+          # Offset by -1 to account for padding, and clamp to original bounds
+          [max(0, min(width - 1, x - 1)), max(0, min(height - 1, y - 1))]
+        end)
+      ]
     end)
   end
 
@@ -169,17 +171,19 @@ defmodule Visualize.Contour do
     padded_width = width + 2
     padded_height = height + 2
 
-    padded = for y <- 0..(padded_height - 1), x <- 0..(padded_width - 1) do
-      cond do
-        # Border cells get minimum value
-        x == 0 or y == 0 or x == padded_width - 1 or y == padded_height - 1 ->
-          min_val
-        # Interior cells get original values (offset by 1)
-        true ->
-          orig_idx = (y - 1) * width + (x - 1)
-          Enum.at(values, orig_idx, min_val)
+    padded =
+      for y <- 0..(padded_height - 1), x <- 0..(padded_width - 1) do
+        cond do
+          # Border cells get minimum value
+          x == 0 or y == 0 or x == padded_width - 1 or y == padded_height - 1 ->
+            min_val
+
+          # Interior cells get original values (offset by 1)
+          true ->
+            orig_idx = (y - 1) * width + (x - 1)
+            Enum.at(values, orig_idx, min_val)
+        end
       end
-    end
 
     {padded, padded_width, padded_height}
   end
@@ -198,10 +202,10 @@ defmodule Visualize.Contour do
 
         # Determine case (0-15) based on which corners are above threshold
         case_index =
-          (if v0 >= threshold, do: 8, else: 0) +
-            (if v1 >= threshold, do: 4, else: 0) +
-            (if v2 >= threshold, do: 2, else: 0) +
-            (if v3 >= threshold, do: 1, else: 0)
+          if(v0 >= threshold, do: 8, else: 0) +
+            if(v1 >= threshold, do: 4, else: 0) +
+            if(v2 >= threshold, do: 2, else: 0) +
+            if v3 >= threshold, do: 1, else: 0
 
         # Get edge crossings for this case
         edges = Map.get(@cases, case_index, [])
@@ -277,7 +281,8 @@ defmodule Visualize.Contour do
 
   defp connect_rings([{start_point, next_point} | rest], start_map, rings) do
     # Follow the ring
-    {ring, remaining_segments} = follow_ring(start_point, next_point, start_map, rest, [start_point])
+    {ring, remaining_segments} =
+      follow_ring(start_point, next_point, start_map, rest, [start_point])
 
     # Update start_map by removing used segments
     new_start_map =
@@ -357,12 +362,15 @@ defmodule Visualize.Contour do
             # Only close the path if it's actually a closed ring
             # (last point is close to first point)
             last_point = List.last(rest)
-            is_closed = case last_point do
-              [x_last, y_last] ->
-                abs(x_last - x0) < 0.001 and abs(y_last - y0) < 0.001
-              _ ->
-                false
-            end
+
+            is_closed =
+              case last_point do
+                [x_last, y_last] ->
+                  abs(x_last - x0) < 0.001 and abs(y_last - y0) < 0.001
+
+                _ ->
+                  false
+              end
 
             if is_closed do
               start <> lines <> "Z"

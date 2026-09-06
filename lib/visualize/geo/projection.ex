@@ -83,8 +83,8 @@ defmodule Visualize.Geo.Projection do
             # Conic projection parameters
             parallels: {29.5, 45.5}
 
+  # Cylindrical
   @type projection_type ::
-          # Cylindrical
           :mercator
           | :transverse_mercator
           | :equirectangular
@@ -530,7 +530,9 @@ defmodule Visualize.Geo.Projection do
         sin(phi1_rad)
       else
         :math.log(cos(phi1_rad) / cos(phi2_rad)) /
-          :math.log(:math.tan(:math.pi() / 4 + phi2_rad / 2) / :math.tan(:math.pi() / 4 + phi1_rad / 2))
+          :math.log(
+            :math.tan(:math.pi() / 4 + phi2_rad / 2) / :math.tan(:math.pi() / 4 + phi1_rad / 2)
+          )
       end
 
     f = cos(phi1_rad) * :math.pow(:math.tan(:math.pi() / 4 + phi1_rad / 2), n) / n
@@ -555,7 +557,9 @@ defmodule Visualize.Geo.Projection do
         sin(phi1_rad)
       else
         :math.log(cos(phi1_rad) / cos(phi2_rad)) /
-          :math.log(:math.tan(:math.pi() / 4 + phi2_rad / 2) / :math.tan(:math.pi() / 4 + phi1_rad / 2))
+          :math.log(
+            :math.tan(:math.pi() / 4 + phi2_rad / 2) / :math.tan(:math.pi() / 4 + phi1_rad / 2)
+          )
       end
 
     f = cos(phi1_rad) * :math.pow(:math.tan(:math.pi() / 4 + phi1_rad / 2), n) / n
@@ -577,8 +581,14 @@ defmodule Visualize.Geo.Projection do
     lat2 = lat_rad * lat_rad
     lat4 = lat2 * lat2
 
-    x = lon_rad * (0.8707 - 0.131979 * lat2 + lat4 * (-0.013791 + lat4 * (0.003971 * lat2 - 0.001529 * lat4)))
-    y = lat_rad * (1.007226 + lat2 * (0.015085 + lat4 * (-0.044475 + 0.028874 * lat2 - 0.005916 * lat4)))
+    x =
+      lon_rad *
+        (0.8707 - 0.131979 * lat2 +
+           lat4 * (-0.013791 + lat4 * (0.003971 * lat2 - 0.001529 * lat4)))
+
+    y =
+      lat_rad *
+        (1.007226 + lat2 * (0.015085 + lat4 * (-0.044475 + 0.028874 * lat2 - 0.005916 * lat4)))
 
     {x, y}
   end
@@ -595,7 +605,9 @@ defmodule Visualize.Geo.Projection do
     lat4 = lat2 * lat2
 
     # Compute longitude
-    denom = 0.8707 - 0.131979 * lat2 + lat4 * (-0.013791 + lat4 * (0.003971 * lat2 - 0.001529 * lat4))
+    denom =
+      0.8707 - 0.131979 * lat2 + lat4 * (-0.013791 + lat4 * (0.003971 * lat2 - 0.001529 * lat4))
+
     lon_rad = if abs(denom) > 0.001, do: x / denom, else: 0
 
     {lon_rad * @rad_to_deg, lat_rad * @rad_to_deg}
@@ -607,7 +619,10 @@ defmodule Visualize.Geo.Projection do
     lat2 = lat * lat
     lat4 = lat2 * lat2
 
-    f = lat * (1.007226 + lat2 * (0.015085 + lat4 * (-0.044475 + 0.028874 * lat2 - 0.005916 * lat4))) - y
+    f =
+      lat *
+        (1.007226 + lat2 * (0.015085 + lat4 * (-0.044475 + 0.028874 * lat2 - 0.005916 * lat4))) -
+        y
 
     df = 1.007226 + lat2 * (0.045255 + lat4 * (-0.311325 + 0.259866 * lat2 - 0.053244 * lat4))
 
@@ -801,8 +816,6 @@ defmodule Visualize.Geo.Projection do
   defp newton_raphson_mollweide(_phi, theta, 0), do: theta
 
   defp newton_raphson_mollweide(phi, theta, iterations) do
-    sin_theta = sin(theta)
-    cos_theta = cos(theta)
     f = 2 * theta + sin(2 * theta) - :math.pi() * sin(phi)
     df = 2 + 2 * cos(2 * theta)
 
@@ -892,7 +905,7 @@ defmodule Visualize.Geo.Projection do
   end
 
   defp raw_invert(:hammer, x, y, _proj) do
-    z = :math.sqrt(1 - (x / 4) * (x / 4) - (y / 2) * (y / 2))
+    z = :math.sqrt(1 - x / 4 * (x / 4) - y / 2 * (y / 2))
     lon = 2 * :math.atan2(z * x, 2 * (2 * z * z - 1))
     lat = :math.asin(z * y)
     {lon * @rad_to_deg, lat * @rad_to_deg}
@@ -918,7 +931,10 @@ defmodule Visualize.Geo.Projection do
     theta2 = theta * theta
     theta6 = theta2 * theta2 * theta2
 
-    x = lon_rad * cos(theta) / (@ee_m * (@ee_a1 + 3 * @ee_a2 * theta2 + theta6 * (7 * @ee_a3 + 9 * @ee_a4 * theta2)))
+    x =
+      lon_rad * cos(theta) /
+        (@ee_m * (@ee_a1 + 3 * @ee_a2 * theta2 + theta6 * (7 * @ee_a3 + 9 * @ee_a4 * theta2)))
+
     y = theta * (@ee_a1 + @ee_a2 * theta2 + theta6 * (@ee_a3 + @ee_a4 * theta2))
     {x, y}
   end
@@ -929,7 +945,10 @@ defmodule Visualize.Geo.Projection do
     theta2 = theta * theta
     theta6 = theta2 * theta2 * theta2
 
-    lon = @ee_m * x * (@ee_a1 + 3 * @ee_a2 * theta2 + theta6 * (7 * @ee_a3 + 9 * @ee_a4 * theta2)) / cos(theta)
+    lon =
+      @ee_m * x * (@ee_a1 + 3 * @ee_a2 * theta2 + theta6 * (7 * @ee_a3 + 9 * @ee_a4 * theta2)) /
+        cos(theta)
+
     lat = :math.asin(sin(theta) / @ee_m)
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
@@ -957,21 +976,58 @@ defmodule Visualize.Geo.Projection do
   # ============================================
 
   # Robinson projection lookup table (latitude in 5-degree intervals)
-  @robinson_x [1.0000, 0.9986, 0.9954, 0.9900, 0.9822, 0.9730, 0.9600, 0.9427, 0.9216, 0.8962,
-               0.8679, 0.8350, 0.7986, 0.7597, 0.7186, 0.6732, 0.6213, 0.5722, 0.5322]
-  @robinson_y [0.0000, 0.0620, 0.1240, 0.1860, 0.2480, 0.3100, 0.3720, 0.4340, 0.4958, 0.5571,
-               0.6176, 0.6769, 0.7346, 0.7903, 0.8435, 0.8936, 0.9394, 0.9761, 1.0000]
+  @robinson_x [
+    1.0000,
+    0.9986,
+    0.9954,
+    0.9900,
+    0.9822,
+    0.9730,
+    0.9600,
+    0.9427,
+    0.9216,
+    0.8962,
+    0.8679,
+    0.8350,
+    0.7986,
+    0.7597,
+    0.7186,
+    0.6732,
+    0.6213,
+    0.5722,
+    0.5322
+  ]
+  @robinson_y [
+    0.0000,
+    0.0620,
+    0.1240,
+    0.1860,
+    0.2480,
+    0.3100,
+    0.3720,
+    0.4340,
+    0.4958,
+    0.5571,
+    0.6176,
+    0.6769,
+    0.7346,
+    0.7903,
+    0.8435,
+    0.8936,
+    0.9394,
+    0.9761,
+    1.0000
+  ]
 
   defp raw_project(:robinson, lon, lat, _proj) do
     lon_rad = lon * @deg_to_rad
-    lat_rad = lat * @deg_to_rad
     abs_lat = abs(lat)
 
     # Interpolate from lookup table
     {plen, pdfe} = robinson_interpolate(abs_lat)
 
     x = 0.8487 * plen * lon_rad
-    y = 1.3523 * pdfe * (if lat < 0, do: -1, else: 1)
+    y = 1.3523 * pdfe * if lat < 0, do: -1, else: 1
     {x, y}
   end
 
@@ -981,7 +1037,7 @@ defmodule Visualize.Geo.Projection do
     {plen, lat_deg} = robinson_inverse_y(abs_y)
 
     lon = x / (0.8487 * plen)
-    lat = lat_deg * (if y < 0, do: -1, else: 1)
+    lat = lat_deg * if y < 0, do: -1, else: 1
     {lon * @rad_to_deg, lat}
   end
 
@@ -1002,22 +1058,28 @@ defmodule Visualize.Geo.Projection do
 
   defp robinson_inverse_y(y) do
     # Find interval by searching Y values
-    {idx, _} = Enum.reduce_while(0..17, {0, 0}, fn i, _acc ->
-      y0 = Enum.at(@robinson_y, i)
-      y1 = Enum.at(@robinson_y, i + 1)
-      if y >= y0 and y <= y1 do
-        {:halt, {i, y0}}
-      else
-        {:cont, {i, y0}}
-      end
-    end)
+    {idx, _} =
+      Enum.reduce_while(0..17, {0, 0}, fn i, _acc ->
+        y0 = Enum.at(@robinson_y, i)
+        y1 = Enum.at(@robinson_y, i + 1)
+
+        if y >= y0 and y <= y1 do
+          {:halt, {i, y0}}
+        else
+          {:cont, {i, y0}}
+        end
+      end)
 
     y0 = Enum.at(@robinson_y, idx)
     y1 = Enum.at(@robinson_y, idx + 1)
     frac = if y1 != y0, do: (y - y0) / (y1 - y0), else: 0
 
     lat_deg = idx * 5 + frac * 5
-    plen = Enum.at(@robinson_x, idx) + (Enum.at(@robinson_x, idx + 1) - Enum.at(@robinson_x, idx)) * frac
+
+    plen =
+      Enum.at(@robinson_x, idx) +
+        (Enum.at(@robinson_x, idx + 1) - Enum.at(@robinson_x, idx)) * frac
+
     {plen, lat_deg}
   end
 
@@ -1179,7 +1241,9 @@ defmodule Visualize.Geo.Projection do
     lon_rad = lon * @deg_to_rad
     lat_rad = lat * @deg_to_rad
 
-    x = 3 * lon_rad / (2 * :math.pi()) * :math.sqrt(:math.pi() * :math.pi() / 3 - lat_rad * lat_rad)
+    x =
+      3 * lon_rad / (2 * :math.pi()) * :math.sqrt(:math.pi() * :math.pi() / 3 - lat_rad * lat_rad)
+
     y = lat_rad
     {x, y}
   end
@@ -1245,7 +1309,11 @@ defmodule Visualize.Geo.Projection do
         a2 = a * a
         g2 = g * g
 
-        x = :math.pi() * (a * (g - p2) + :math.sqrt(a2 * (g - p2) * (g - p2) - (p2 + a2) * (g2 - p2))) / (p2 + a2)
+        x =
+          :math.pi() *
+            (a * (g - p2) + :math.sqrt(a2 * (g - p2) * (g - p2) - (p2 + a2) * (g2 - p2))) /
+            (p2 + a2)
+
         x = if lon_rad < 0, do: -abs(x), else: abs(x)
 
         y = :math.pi() * abs(p * q - a * :math.sqrt((a2 + 1) * (p2 + a2) - q * q)) / (p2 + a2)
@@ -1388,21 +1456,19 @@ defmodule Visualize.Geo.Projection do
   # Eckert II (equal-area pseudocylindrical)
   # ============================================
 
-  @eckert2_k :math.sqrt(4 - 3 * :math.sin(1))
-
   defp raw_project(:eckert2, lon, lat, _proj) do
     lon_rad = lon * @deg_to_rad
     lat_rad = lat * @deg_to_rad
 
     s = :math.sqrt(4 - 3 * sin(abs(lat_rad)))
     x = 2 / :math.sqrt(6 * :math.pi()) * lon_rad * s
-    y = :math.sqrt(2 * :math.pi() / 3) * (2 - s) * (if lat_rad < 0, do: -1, else: 1)
+    y = :math.sqrt(2 * :math.pi() / 3) * (2 - s) * if lat_rad < 0, do: -1, else: 1
     {x, y}
   end
 
   defp raw_invert(:eckert2, x, y, _proj) do
     s = 2 - abs(y) / :math.sqrt(2 * :math.pi() / 3)
-    lat = :math.asin((4 - s * s) / 3) * (if y < 0, do: -1, else: 1)
+    lat = :math.asin((4 - s * s) / 3) * if y < 0, do: -1, else: 1
     lon = x / (2 / :math.sqrt(6 * :math.pi()) * s)
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
@@ -1410,8 +1476,6 @@ defmodule Visualize.Geo.Projection do
   # ============================================
   # Eckert III (pseudocylindrical)
   # ============================================
-
-  @eckert3_k :math.sqrt(:math.pi() * (4 + :math.pi()))
 
   defp raw_project(:eckert3, lon, lat, _proj) do
     lon_rad = lon * @deg_to_rad
@@ -1614,7 +1678,12 @@ defmodule Visualize.Geo.Projection do
     if abs(delta) < 0.001 do
       {lon_rad * cos(phi0_rad), delta}
     else
-      x = lon_rad * delta / :math.log(:math.tan(:math.pi() / 4 + lat_rad / 2) / :math.tan(:math.pi() / 4 + phi0_rad / 2))
+      x =
+        lon_rad * delta /
+          :math.log(
+            :math.tan(:math.pi() / 4 + lat_rad / 2) / :math.tan(:math.pi() / 4 + phi0_rad / 2)
+          )
+
       y = delta
       {x, y}
     end
@@ -1630,7 +1699,12 @@ defmodule Visualize.Geo.Projection do
       lon = x / cos(phi0_rad)
       {lon * @rad_to_deg, lat * @rad_to_deg}
     else
-      lon = x * :math.log(:math.tan(:math.pi() / 4 + lat / 2) / :math.tan(:math.pi() / 4 + phi0_rad / 2)) / y
+      lon =
+        x *
+          :math.log(
+            :math.tan(:math.pi() / 4 + lat / 2) / :math.tan(:math.pi() / 4 + phi0_rad / 2)
+          ) / y
+
       {lon * @rad_to_deg, lat * @rad_to_deg}
     end
   end
@@ -1681,7 +1755,7 @@ defmodule Visualize.Geo.Projection do
         {lon_rad, lat_rad}
       end
 
-    lon_rad = lon_rad - (-lambda * @deg_to_rad)
+    lon_rad = lon_rad - -lambda * @deg_to_rad
 
     {normalize_longitude(lon_rad * @rad_to_deg), lat_rad * @rad_to_deg}
   end
@@ -1714,7 +1788,14 @@ defmodule Visualize.Geo.Projection do
   defp normalize_longitude(lon) when lon < -180, do: normalize_longitude(lon + 360)
   defp normalize_longitude(lon), do: lon
 
-  defp clipped?(_, _, _), do: false
+  # A point is clipped when its angular distance from the projection centre
+  # exceeds the clip angle. `lon` and `lat` are already rotated and centred, in degrees.
+  defp clipped?(%{clip_angle: nil}, _lon, _lat), do: false
+
+  defp clipped?(%{clip_angle: clip_angle}, lon, lat) do
+    cos_c = cos(lat * @deg_to_rad) * cos(lon * @deg_to_rad)
+    cos_c < cos(clip_angle * @deg_to_rad) - 1.0e-9
+  end
 
   defp sin(x), do: :math.sin(x)
   defp cos(x), do: :math.cos(x)

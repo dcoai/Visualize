@@ -326,9 +326,10 @@ defmodule Visualize.Data do
   defp find_bin_index(value, bins) do
     Enum.find_index(bins, fn %{x0: x0, x1: x1} ->
       value >= x0 and value < x1
-    end) || if value == List.last(bins).x1 do
-      length(bins) - 1
-    end
+    end) ||
+      if value == List.last(bins).x1 do
+        length(bins) - 1
+      end
   end
 
   @doc """
@@ -365,10 +366,9 @@ defmodule Visualize.Data do
   """
   @spec range(number(), number(), number()) :: [number()]
   def range(start, stop, step \\ 1) when step != 0 do
-    n = max(0, ceil((stop - start) / step))
+    n = Kernel.max(0, ceil((stop - start) / step))
 
-    0..(n - 1)
-    |> Enum.map(fn i -> start + i * step end)
+    Enum.map(0..(n - 1)//1, fn i -> start + i * step end)
   end
 
   @doc """
@@ -389,7 +389,7 @@ defmodule Visualize.Data do
 
       0..(n - 1)
       |> Enum.map(fn i ->
-        start_tick + i * step
+        (start_tick + i * step)
         |> Float.round(10)
       end)
     end
