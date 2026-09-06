@@ -8,20 +8,16 @@ defmodule Visualize.Backend.SVG do
   @behaviour Visualize.Backend
 
   alias Visualize.IR.{Element, Path, Transform}
-
-  @self_closing_tags ~w(circle ellipse line path polygon polyline rect image use stop)a
+  alias Visualize.SVG.Renderer
 
   # ============================================================
   # Backend Callbacks
   # ============================================================
 
+  # The one `d` serialisation is `Visualize.IR.Path.to_string/1` (D-12).
   @impl true
   @spec path_data(Path.t()) :: String.t()
-  def path_data(%Path{commands: commands}) do
-    commands
-    |> Enum.map(&command_to_string/1)
-    |> Enum.join("")
-  end
+  def path_data(%Path{} = path), do: Path.to_string(path)
 
   @impl true
   @spec render_path(Path.t(), keyword()) :: iolist()
@@ -61,7 +57,7 @@ defmodule Visualize.Backend.SVG do
       xmlns: "http://www.w3.org/2000/svg",
       width: width,
       height: height,
-      viewBox: view_box
+      view_box: view_box
     }
 
     render_svg_tag(:svg, attrs, [content], nil)
@@ -96,15 +92,10 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:g, attrs, child_content, nil)
   end
 
+  # A root's `view_box` attr renders as `viewBox` through the shared attribute names
+  # (D-11); its style and transform are ignored.
   defp do_render_element(%Element{type: :root, attrs: attrs, children: children}) do
-    svg_attrs =
-      %{xmlns: "http://www.w3.org/2000/svg"}
-      |> Map.merge(%{
-        width: attrs[:width],
-        height: attrs[:height],
-        viewBox: attrs[:view_box]
-      })
-
+    svg_attrs = Map.merge(%{xmlns: "http://www.w3.org/2000/svg"}, attrs)
     child_content = Enum.map(children, &do_render_element/1)
     render_svg_tag(:svg, svg_attrs, child_content, nil)
   end
@@ -244,9 +235,14 @@ defmodule Visualize.Backend.SVG do
   # SVG Tag Rendering
   # ============================================================
 
-  defp render_svg_tag(tag, attrs, children, content)
-       when tag in @self_closing_tags and children == [] and content == nil do
-    ["<", Atom.to_string(tag), render_attrs(attrs), "/>"]
+  # Attribute names, ordering, escaping and self-closing tags are those of
+  # `Visualize.SVG.Renderer`, so the IR backend and the HEEx bridge emit one markup.
+  defp render_svg_tag(tag, attrs, [], nil) do
+    if Renderer.self_closing?(tag) do
+      ["<", Atom.to_string(tag), Renderer.render_attrs(attrs), "/>"]
+    else
+      ["<", Atom.to_string(tag), Renderer.render_attrs(attrs), "></", Atom.to_string(tag), ">"]
+    end
   end
 
   defp render_svg_tag(tag, attrs, children, content) do
@@ -255,7 +251,7 @@ defmodule Visualize.Backend.SVG do
     [
       "<",
       tag_str,
-      render_attrs(attrs),
+      Renderer.render_attrs(attrs),
       ">",
       render_content(content),
       children,
@@ -265,50 +261,8 @@ defmodule Visualize.Backend.SVG do
     ]
   end
 
-  defp render_attrs(attrs) when map_size(attrs) == 0, do: []
-
-  defp render_attrs(attrs) do
-    attrs
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-    |> Enum.sort_by(fn {k, _} -> Atom.to_string(k) end)
-    |> Enum.map(fn {key, value} ->
-      [" ", attr_name(key), "=\"", escape_attr(value), "\""]
-    end)
-  end
-
   defp render_content(nil), do: []
-  defp render_content(text), do: escape_html(text)
-
-  # ============================================================
-  # Attribute Helpers
-  # ============================================================
-
-  defp attr_name(key) do
-    key
-    |> Atom.to_string()
-    |> String.replace("_", "-")
-  end
-
-  defp escape_attr(value) when is_binary(value) do
-    value
-    |> String.replace("&", "&amp;")
-    |> String.replace("\"", "&quot;")
-    |> String.replace("<", "&lt;")
-    |> String.replace(">", "&gt;")
-  end
-
-  defp escape_attr(value) when is_number(value), do: to_string(value)
-  defp escape_attr(value) when is_atom(value), do: Atom.to_string(value)
-  defp escape_attr(value), do: to_string(value)
-
-  defp escape_html(text) when is_binary(text) do
-    text
-    |> String.replace("&", "&amp;")
-    |> String.replace("<", "&lt;")
-    |> String.replace(">", "&gt;")
-  end
-
-  defp escape_html(text), do: to_string(text)
+  defp render_content(text), do: Renderer.escape_text(text)
 
   # ============================================================
   # Style and Transform Helpers
@@ -336,105 +290,28 @@ defmodule Visualize.Backend.SVG do
   end
 
   defp maybe_add_transform(attrs, nil), do: attrs
+  defp maybe_add_transform(attrs, %Transform{operations: []}), do: attrs
 
-  defp maybe_add_transform(attrs, %Transform{operations: []}) do
-    attrs
-  end
-
-  defp maybe_add_transform(attrs, %Transform{operations: ops}) do
-    transform_str =
-      ops
-      |> Enum.map(&transform_to_string/1)
-      |> Enum.join(" ")
-
-    Map.put(attrs, :transform, transform_str)
-  end
-
-  defp transform_to_string({:translate, x, y}), do: "translate(#{format_num(x)},#{format_num(y)})"
-  defp transform_to_string({:rotate, angle}), do: "rotate(#{format_num(angle)})"
-
-  defp transform_to_string({:rotate, angle, cx, cy}),
-    do: "rotate(#{format_num(angle)},#{format_num(cx)},#{format_num(cy)})"
-
-  defp transform_to_string({:scale, sx, sy}), do: "scale(#{format_num(sx)},#{format_num(sy)})"
-  defp transform_to_string({:skew_x, angle}), do: "skewX(#{format_num(angle)})"
-  defp transform_to_string({:skew_y, angle}), do: "skewY(#{format_num(angle)})"
-
-  defp transform_to_string({:matrix, a, b, c, d, e, f}),
-    do:
-      "matrix(#{format_num(a)},#{format_num(b)},#{format_num(c)},#{format_num(d)},#{format_num(e)},#{format_num(f)})"
+  # The one transform serialisation is `Visualize.IR.Transform.to_string/1`.
+  defp maybe_add_transform(attrs, %Transform{} = transform),
+    do: Map.put(attrs, :transform, Transform.to_string(transform))
 
   # ============================================================
-  # Path Command Conversion
+  # Point Data
   # ============================================================
 
-  defp command_to_string({:M, x, y}), do: "M#{format_num(x)},#{format_num(y)}"
-  defp command_to_string({:m, dx, dy}), do: "m#{format_num(dx)},#{format_num(dy)}"
-  defp command_to_string({:L, x, y}), do: "L#{format_num(x)},#{format_num(y)}"
-  defp command_to_string({:l, dx, dy}), do: "l#{format_num(dx)},#{format_num(dy)}"
-  defp command_to_string({:H, x}), do: "H#{format_num(x)}"
-  defp command_to_string({:h, dx}), do: "h#{format_num(dx)}"
-  defp command_to_string({:V, y}), do: "V#{format_num(y)}"
-  defp command_to_string({:v, dy}), do: "v#{format_num(dy)}"
-
-  defp command_to_string({:C, x1, y1, x2, y2, x, y}) do
-    "C#{format_num(x1)},#{format_num(y1)},#{format_num(x2)},#{format_num(y2)},#{format_num(x)},#{format_num(y)}"
-  end
-
-  defp command_to_string({:c, dx1, dy1, dx2, dy2, dx, dy}) do
-    "c#{format_num(dx1)},#{format_num(dy1)},#{format_num(dx2)},#{format_num(dy2)},#{format_num(dx)},#{format_num(dy)}"
-  end
-
-  defp command_to_string({:S, x2, y2, x, y}) do
-    "S#{format_num(x2)},#{format_num(y2)},#{format_num(x)},#{format_num(y)}"
-  end
-
-  defp command_to_string({:s, dx2, dy2, dx, dy}) do
-    "s#{format_num(dx2)},#{format_num(dy2)},#{format_num(dx)},#{format_num(dy)}"
-  end
-
-  defp command_to_string({:Q, x1, y1, x, y}) do
-    "Q#{format_num(x1)},#{format_num(y1)},#{format_num(x)},#{format_num(y)}"
-  end
-
-  defp command_to_string({:q, dx1, dy1, dx, dy}) do
-    "q#{format_num(dx1)},#{format_num(dy1)},#{format_num(dx)},#{format_num(dy)}"
-  end
-
-  defp command_to_string({:T, x, y}), do: "T#{format_num(x)},#{format_num(y)}"
-  defp command_to_string({:t, dx, dy}), do: "t#{format_num(dx)},#{format_num(dy)}"
-
-  defp command_to_string({:A, rx, ry, rot, large, sweep, x, y}) do
-    "A#{format_num(rx)},#{format_num(ry)},#{format_num(rot)},#{large},#{sweep},#{format_num(x)},#{format_num(y)}"
-  end
-
-  defp command_to_string({:a, rx, ry, rot, large, sweep, dx, dy}) do
-    "a#{format_num(rx)},#{format_num(ry)},#{format_num(rot)},#{large},#{sweep},#{format_num(dx)},#{format_num(dy)}"
-  end
-
-  defp command_to_string(:Z), do: "Z"
-
-  # ============================================================
-  # Number Formatting
-  # ============================================================
-
-  defp format_num(n) when is_integer(n), do: Integer.to_string(n)
-
-  # `+ 0.0` folds a negative zero (or a value that rounds to one) into `0` (D-32).
-  defp format_num(n) when is_float(n) do
-    (Float.round(n, 4) + 0.0)
-    |> Float.to_string()
-    |> String.trim_trailing("0")
-    |> String.trim_trailing(".")
-  end
-
-  defp format_points(points) when is_list(points) do
+  @doc false
+  # `points` for `:polyline`/`:polygon`: `x,y` pairs joined by single spaces, numbers
+  # formatted as path data is; a binary is emitted verbatim.
+  def format_points(points) when is_list(points) do
     points
     |> Enum.map(fn {x, y} -> "#{format_num(x)},#{format_num(y)}" end)
     |> Enum.join(" ")
   end
 
-  defp format_points(points) when is_binary(points), do: points
+  def format_points(points) when is_binary(points), do: points
+
+  defp format_num(n), do: Path.format_number(n)
 end
 
 # Protocol implementations for IR.Element

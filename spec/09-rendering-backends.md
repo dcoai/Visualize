@@ -29,13 +29,9 @@ The rendering layer turns the backend-agnostic IR (`Visualize.IR.Element`, `Visu
 
 ### 1.3 Number formatting
 
-Both backends serialise numbers with the same rule wherever this document says "formatted":
+Wherever this document says "formatted", a number goes through `Visualize.IR.Path.format_number/1` (spec/02 §2.2; D-12, D-32): an integer as-is; a float with at most four decimals, trailing zeros and point trimmed, never in exponent notation, never `-0`. The SVG backend uses it for path data, transform strings and points; the Canvas backend for every numeric argument.
 
-- an integer is printed as-is;
-- a float is rounded to 4 decimal places, printed with `Float.to_string/1`, and then trailing `0` characters and a trailing `.` are stripped (`1.5`, `2`, `0.3333`);
-- anything else goes through `to_string/1`.
-
-SVG *attribute* values (as opposed to path data and transform strings) are NOT formatted: numbers are printed with `to_string/1`, so a float attribute keeps its full precision and may use exponent notation (`1.0e3`).
+SVG *attribute* values (as opposed to path data, transform strings and points) are NOT formatted: numbers are printed with `to_string/1`, so a float attribute keeps its full precision and may use exponent notation (`1.0e3`).
 
 ## 2. Visualize.Backend.SVG
 
@@ -65,7 +61,7 @@ Each `IR.Element` type maps to exactly one tag. "attrs" is `element.attrs`, "sty
 |---|---|---|---|
 | `:path` | `path` | style, `d` = `path_data/1` of `element.path`, transform | none (self-closing) |
 | `:group` | `g` | style, then attrs merged over it, transform | children rendered recursively |
-| `:root` | `svg` | `xmlns`, `width`, `height`, `viewBox` (from `attrs.view_box`); `element.style` and `element.transform` are ignored | children |
+| `:root` | `svg` | `xmlns="http://www.w3.org/2000/svg"`, then attrs (`view_box` emitted as `viewBox`, 2.4); `element.style` and `element.transform` are ignored | children |
 | `:rect`, `:circle`, `:ellipse`, `:line`, `:image` | same name | attrs, then style merged over it, transform | none |
 | `:polyline`, `:polygon` | same name | `points` (2.6), style, transform; every other key in attrs is dropped | none |
 | `:text` | `text` | attrs, style, transform | `element.content` as escaped text |
@@ -79,9 +75,11 @@ Any other type raises `FunctionClauseError`. Tags in `circle ellipse line path p
 
 ### 2.4 Attribute serialisation
 
+Tags, attributes and text are rendered by the functions of `Visualize.SVG.Renderer` (spec/02 §5.4), so this backend and the HEEx bridge emit one markup for one IR (D-34):
+
 - Attributes whose value is `nil` MUST be omitted.
-- Attributes MUST be emitted sorted by the string form of their key.
-- The key's underscores MUST be replaced by hyphens (`stroke_width` → `stroke-width`, `view_box` stays as given because the root uses `viewBox` directly).
+- Each key's SVG name comes from `Visualize.SVG.Renderer.attribute_name/1`: underscores become hyphens (`stroke_width` → `stroke-width`) except for the camel-cased SVG attributes, which map to their spelling (`view_box` → `viewBox`, D-11).
+- Attributes MUST be emitted sorted by that SVG name.
 - Binary values are escaped: `&` → `&amp;`, `"` → `&quot;`, `<` → `&lt;`, `>` → `&gt;`. Numbers and atoms are printed with `to_string/1` and `Atom.to_string/1` and are not escaped.
 - Text content is escaped for `&`, `<`, `>` only.
 
@@ -99,21 +97,21 @@ Any other type raises `FunctionClauseError`. Tags in `circle ellipse line path p
 
 Every other `{key, value}` pair passes through unchanged and is serialised per 2.4, so `stroke_width: 2` becomes `stroke-width="2"` and `font_size: 12` becomes `font-size="12"`.
 
-A transform is serialised as its operations joined by a single space, each formatted per 1.3:
+A transform is serialised by `Visualize.IR.Transform.to_string/1` (spec/02 §2.3): its operations joined by a single space, each formatted per 1.3:
 
 | Operation | String |
 |---|---|
 | `{:translate, x, y}` | `translate(x,y)` |
 | `{:rotate, a}` | `rotate(a)` |
 | `{:rotate, a, cx, cy}` | `rotate(a,cx,cy)` |
-| `{:scale, sx, sy}` | `scale(sx,sy)` |
+| `{:scale, sx, sy}` | `scale(sx,sy)`, or `scale(s)` when `sx == sy` |
 | `{:skew_x, a}` | `skewX(a)` |
 | `{:skew_y, a}` | `skewY(a)` |
 | `{:matrix, a, b, c, d, e, f}` | `matrix(a,b,c,d,e,f)` |
 
 ### 2.6 Path and point data
 
-`path_data/1` joins each `IR.Path` command with no separator, each command as its SVG letter followed by its comma-separated formatted arguments: `{:M, x, y}` → `Mx,y`; `{:L, x, y}` → `Lx,y`; `{:H, x}` → `Hx`; `{:V, y}` → `Vy`; `{:C, x1, y1, x2, y2, x, y}` → `Cx1,y1,x2,y2,x,y`; `{:S, x2, y2, x, y}` → `S…`; `{:Q, x1, y1, x, y}` → `Q…`; `{:T, x, y}` → `T…`; `{:A, rx, ry, rot, large, sweep, x, y}` → `Arx,ry,rot,large,sweep,x,y` (the two flags printed verbatim); `:Z` → `Z`. The lower-case relative forms (`:m :l :h :v :c :s :q :t :a`) MUST be emitted with the lower-case letter and the same argument layout.
+`path_data/1` is `Visualize.IR.Path.to_string/1` (spec/02 §2.2; D-12): each `IR.Path` command joined with no separator, each as its SVG letter followed by its comma-separated formatted arguments — `{:M, x, y}` → `Mx,y`; `{:L, x, y}` → `Lx,y`; `{:H, x}` → `Hx`; `{:V, y}` → `Vy`; `{:C, x1, y1, x2, y2, x, y}` → `Cx1,y1,x2,y2,x,y`; `{:S, x2, y2, x, y}` → `S…`; `{:Q, x1, y1, x, y}` → `Q…`; `{:T, x, y}` → `T…`; `{:A, rx, ry, rot, large, sweep, x, y}` → `Arx,ry,rot,large,sweep,x,y` (the two flags printed verbatim); `:Z` → `Z`. The lower-case relative forms (`:m :l :h :v :c :s :q :t :a`) are emitted with the lower-case letter and the same argument layout.
 
 `points` for `:polyline`/`:polygon` is a list of `{x, y}` tuples formatted as `x,y` pairs joined by single spaces; a binary `points` value is emitted verbatim.
 

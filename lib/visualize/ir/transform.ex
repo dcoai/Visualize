@@ -148,6 +148,84 @@ defmodule Visualize.IR.Transform do
   end
 
   # ============================================================
+  # Matrix form
+  # ============================================================
+
+  @typedoc """
+  An affine matrix `{a, b, c, d, e, f}` for `[a c e; b d f; 0 0 1]`: a point maps as
+  `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
+  """
+  @type matrix :: {number(), number(), number(), number(), number(), number()}
+
+  @doc """
+  Folds the operations into one affine matrix `{a, b, c, d, e, f}`.
+
+  Composition follows SVG: `M = Op₁ · Op₂ · … · Opₙ`, so the last operation applies to a
+  point first, exactly as the `transform` attribute string would. `rotate(a, cx, cy)` is
+  `translate(cx, cy) rotate(a) translate(-cx, -cy)`; angles are degrees.
+
+  ## Examples
+
+      iex> alias Visualize.IR.Transform
+      iex> Transform.translate(10, 20) |> Transform.to_matrix()
+      {1.0, 0.0, 0.0, 1.0, 10.0, 20.0}
+
+  """
+  @spec to_matrix(t()) :: matrix()
+  def to_matrix(%__MODULE__{operations: operations}) do
+    Enum.reduce(operations, {1.0, 0.0, 0.0, 1.0, 0.0, 0.0}, fn op, acc ->
+      multiply(acc, operation_matrix(op))
+    end)
+  end
+
+  @doc """
+  The product `m1 · m2` of two affine matrices, so that applying the result to a point is
+  applying `m2` first and then `m1`.
+  """
+  @spec multiply(matrix(), matrix()) :: matrix()
+  def multiply({a1, b1, c1, d1, e1, f1}, {a2, b2, c2, d2, e2, f2}) do
+    {
+      a1 * a2 + c1 * b2,
+      b1 * a2 + d1 * b2,
+      a1 * c2 + c1 * d2,
+      b1 * c2 + d1 * d2,
+      a1 * e2 + c1 * f2 + e1,
+      b1 * e2 + d1 * f2 + f1
+    }
+  end
+
+  @doc """
+  Applies an affine matrix to a point.
+  """
+  @spec apply_matrix(matrix(), {number(), number()}) :: {number(), number()}
+  def apply_matrix({a, b, c, d, e, f}, {x, y}), do: {a * x + c * y + e, b * x + d * y + f}
+
+  defp operation_matrix({:translate, tx, ty}), do: {1.0, 0.0, 0.0, 1.0, tx * 1.0, ty * 1.0}
+  defp operation_matrix({:scale, sx, sy}), do: {sx * 1.0, 0.0, 0.0, sy * 1.0, 0.0, 0.0}
+
+  defp operation_matrix({:rotate, angle}) do
+    rad = angle * :math.pi() / 180
+    cos = :math.cos(rad)
+    sin = :math.sin(rad)
+    {cos, sin, -sin, cos, 0.0, 0.0}
+  end
+
+  defp operation_matrix({:rotate, angle, cx, cy}) do
+    operation_matrix({:translate, cx, cy})
+    |> multiply(operation_matrix({:rotate, angle}))
+    |> multiply(operation_matrix({:translate, -cx, -cy}))
+  end
+
+  defp operation_matrix({:skew_x, angle}),
+    do: {1.0, 0.0, :math.tan(angle * :math.pi() / 180), 1.0, 0.0, 0.0}
+
+  defp operation_matrix({:skew_y, angle}),
+    do: {1.0, :math.tan(angle * :math.pi() / 180), 0.0, 1.0, 0.0, 0.0}
+
+  defp operation_matrix({:matrix, a, b, c, d, e, f}),
+    do: {a * 1.0, b * 1.0, c * 1.0, d * 1.0, e * 1.0, f * 1.0}
+
+  # ============================================================
   # Serialization
   # ============================================================
 
@@ -200,11 +278,6 @@ defmodule Visualize.IR.Transform do
     "matrix(#{format_num(a)},#{format_num(b)},#{format_num(c)},#{format_num(d)},#{format_num(e)},#{format_num(f)})"
   end
 
-  defp format_num(n) when is_integer(n), do: Integer.to_string(n)
-
-  defp format_num(n) when is_float(n) do
-    :erlang.float_to_binary(n, decimals: 4)
-    |> String.trim_trailing("0")
-    |> String.trim_trailing(".")
-  end
+  # The one number formatter of every serialiser (spec/09 §1.3, D-12, D-32).
+  defp format_num(n), do: Visualize.IR.Path.format_number(n)
 end

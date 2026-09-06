@@ -24,6 +24,8 @@ defmodule Visualize.IR.Path do
 
   """
 
+  alias Visualize.IR.Transform
+
   defstruct commands: [], metadata: %{}
 
   @type t :: %__MODULE__{commands: [command()], metadata: map()}
@@ -244,118 +246,187 @@ defmodule Visualize.IR.Path do
   end
 
   @doc """
-  Transforms all coordinates in the path using the given function.
+  Applies an affine transform to every coordinate of the path.
 
-  The function receives `{x, y}` and should return `{new_x, new_y}`.
+  The transform is a matrix `{a, b, c, d, e, f}` (`t:Visualize.IR.Transform.matrix/0`) or a
+  `Visualize.IR.Transform`, which is folded with `Visualize.IR.Transform.to_matrix/1`.
+  Absolute end and control points get the full affine map; relative deltas get its linear
+  part only. `H`/`V`/`h`/`v` are resolved against the current point and stay single-axis
+  when the transform keeps that axis (no rotation or skew into it), otherwise they become
+  `L`/`l`. An arc's end point is mapped, its radii and rotation are those of the exact image
+  ellipse, and its sweep flag flips under a reflection. `:Z` is untouched.
+
+  ## Examples
+
+      iex> alias Visualize.IR.Path
+      iex> Path.new() |> Path.move_to(1, 2) |> Path.line_to_rel(3, 4) |> Path.horizontal_to(9)
+      ...> |> Path.transform({1, 0, 0, 1, 10, 20})
+      %Visualize.IR.Path{commands: [{:M, 11, 22}, {:l, 3, 4}, {:H, 19}]}
+
   """
-  @spec transform(t(), ({number(), number()} -> {number(), number()})) :: t()
-  def transform(%__MODULE__{commands: commands} = path, transform_fn) do
-    transformed = Enum.map(commands, &transform_command(&1, transform_fn))
+  @spec transform(t(), Transform.matrix() | Transform.t()) :: t()
+  def transform(%__MODULE__{} = path, %Transform{} = t),
+    do: transform(path, Transform.to_matrix(t))
+
+  def transform(%__MODULE__{commands: commands} = path, {_, _, _, _, _, _} = m) do
+    {transformed, _} =
+      Enum.map_reduce(commands, {:first, {0, 0}, {0, 0}}, fn cmd, state ->
+        transform_command(cmd, m, state)
+      end)
+
     %{path | commands: transformed}
   end
 
-  defp transform_command({:M, x, y}, f) do
-    {nx, ny} = f.({x, y})
-    {:M, nx, ny}
+  # The state is `{position, current_point, subpath_start}`; `position` is `:first` for the
+  # leading command, where SVG reads a relative `m` as absolute.
+  defp transform_command({:M, x, y}, m, _state) do
+    {nx, ny} = point(m, {x, y})
+    {{:M, nx, ny}, {:rest, {x, y}, {x, y}}}
   end
 
-  defp transform_command({:L, x, y}, f) do
-    {nx, ny} = f.({x, y})
-    {:L, nx, ny}
+  defp transform_command({:m, dx, dy}, m, {:first, _, _}) do
+    {nx, ny} = point(m, {dx, dy})
+    {{:m, nx, ny}, {:rest, {dx, dy}, {dx, dy}}}
   end
 
-  defp transform_command({:C, x1, y1, x2, y2, x, y}, f) do
-    {nx1, ny1} = f.({x1, y1})
-    {nx2, ny2} = f.({x2, y2})
-    {nx, ny} = f.({x, y})
-    {:C, nx1, ny1, nx2, ny2, nx, ny}
+  defp transform_command({:m, dx, dy}, m, {_, {cx, cy}, _}) do
+    {ndx, ndy} = delta(m, {dx, dy})
+    {{:m, ndx, ndy}, {:rest, {cx + dx, cy + dy}, {cx + dx, cy + dy}}}
   end
 
-  defp transform_command({:Q, x1, y1, x, y}, f) do
-    {nx1, ny1} = f.({x1, y1})
-    {nx, ny} = f.({x, y})
-    {:Q, nx1, ny1, nx, ny}
+  defp transform_command({:L, x, y}, m, {_, _, start}) do
+    {nx, ny} = point(m, {x, y})
+    {{:L, nx, ny}, {:rest, {x, y}, start}}
   end
 
-  defp transform_command({:S, x2, y2, x, y}, f) do
-    {nx2, ny2} = f.({x2, y2})
-    {nx, ny} = f.({x, y})
-    {:S, nx2, ny2, nx, ny}
+  defp transform_command({:l, dx, dy}, m, {_, {cx, cy}, start}) do
+    {ndx, ndy} = delta(m, {dx, dy})
+    {{:l, ndx, ndy}, {:rest, {cx + dx, cy + dy}, start}}
   end
 
-  defp transform_command({:T, x, y}, f) do
-    {nx, ny} = f.({x, y})
-    {:T, nx, ny}
+  defp transform_command({:H, x}, {_, b, _, _, _, _} = m, {_, {_, cy}, start}) do
+    {nx, ny} = point(m, {x, cy})
+    cmd = if b == 0, do: {:H, nx}, else: {:L, nx, ny}
+    {cmd, {:rest, {x, cy}, start}}
   end
 
-  defp transform_command({:A, rx, ry, rot, large, sweep, x, y}, f) do
-    {nx, ny} = f.({x, y})
-    {:A, rx, ry, rot, large, sweep, nx, ny}
+  defp transform_command({:h, dx}, {_, b, _, _, _, _} = m, {_, {cx, cy}, start}) do
+    {ndx, ndy} = delta(m, {dx, 0})
+    cmd = if b == 0, do: {:h, ndx}, else: {:l, ndx, ndy}
+    {cmd, {:rest, {cx + dx, cy}, start}}
   end
 
-  # Relative commands - transform deltas
-  defp transform_command({:m, dx, dy}, f) do
-    {ndx, ndy} = f.({dx, dy})
-    {:m, ndx, ndy}
+  defp transform_command({:V, y}, {_, _, c, _, _, _} = m, {_, {cx, _}, start}) do
+    {nx, ny} = point(m, {cx, y})
+    cmd = if c == 0, do: {:V, ny}, else: {:L, nx, ny}
+    {cmd, {:rest, {cx, y}, start}}
   end
 
-  defp transform_command({:l, dx, dy}, f) do
-    {ndx, ndy} = f.({dx, dy})
-    {:l, ndx, ndy}
+  defp transform_command({:v, dy}, {_, _, c, _, _, _} = m, {_, {cx, cy}, start}) do
+    {ndx, ndy} = delta(m, {0, dy})
+    cmd = if c == 0, do: {:v, ndy}, else: {:l, ndx, ndy}
+    {cmd, {:rest, {cx, cy + dy}, start}}
   end
 
-  defp transform_command({:c, dx1, dy1, dx2, dy2, dx, dy}, f) do
-    {ndx1, ndy1} = f.({dx1, dy1})
-    {ndx2, ndy2} = f.({dx2, dy2})
-    {ndx, ndy} = f.({dx, dy})
-    {:c, ndx1, ndy1, ndx2, ndy2, ndx, ndy}
+  defp transform_command({:C, x1, y1, x2, y2, x, y}, m, {_, _, start}) do
+    {nx1, ny1} = point(m, {x1, y1})
+    {nx2, ny2} = point(m, {x2, y2})
+    {nx, ny} = point(m, {x, y})
+    {{:C, nx1, ny1, nx2, ny2, nx, ny}, {:rest, {x, y}, start}}
   end
 
-  defp transform_command({:q, dx1, dy1, dx, dy}, f) do
-    {ndx1, ndy1} = f.({dx1, dy1})
-    {ndx, ndy} = f.({dx, dy})
-    {:q, ndx1, ndy1, ndx, ndy}
+  defp transform_command({:c, dx1, dy1, dx2, dy2, dx, dy}, m, {_, {cx, cy}, start}) do
+    {ndx1, ndy1} = delta(m, {dx1, dy1})
+    {ndx2, ndy2} = delta(m, {dx2, dy2})
+    {ndx, ndy} = delta(m, {dx, dy})
+    {{:c, ndx1, ndy1, ndx2, ndy2, ndx, ndy}, {:rest, {cx + dx, cy + dy}, start}}
   end
 
-  defp transform_command({:s, dx2, dy2, dx, dy}, f) do
-    {ndx2, ndy2} = f.({dx2, dy2})
-    {ndx, ndy} = f.({dx, dy})
-    {:s, ndx2, ndy2, ndx, ndy}
+  defp transform_command({:S, x2, y2, x, y}, m, {_, _, start}) do
+    {nx2, ny2} = point(m, {x2, y2})
+    {nx, ny} = point(m, {x, y})
+    {{:S, nx2, ny2, nx, ny}, {:rest, {x, y}, start}}
   end
 
-  defp transform_command({:t, dx, dy}, f) do
-    {ndx, ndy} = f.({dx, dy})
-    {:t, ndx, ndy}
+  defp transform_command({:s, dx2, dy2, dx, dy}, m, {_, {cx, cy}, start}) do
+    {ndx2, ndy2} = delta(m, {dx2, dy2})
+    {ndx, ndy} = delta(m, {dx, dy})
+    {{:s, ndx2, ndy2, ndx, ndy}, {:rest, {cx + dx, cy + dy}, start}}
   end
 
-  defp transform_command({:a, rx, ry, rot, large, sweep, dx, dy}, f) do
-    {ndx, ndy} = f.({dx, dy})
-    {:a, rx, ry, rot, large, sweep, ndx, ndy}
+  defp transform_command({:Q, x1, y1, x, y}, m, {_, _, start}) do
+    {nx1, ny1} = point(m, {x1, y1})
+    {nx, ny} = point(m, {x, y})
+    {{:Q, nx1, ny1, nx, ny}, {:rest, {x, y}, start}}
   end
 
-  # Single-axis commands
-  defp transform_command({:H, x}, f) do
-    {nx, _} = f.({x, 0})
-    {:H, nx}
+  defp transform_command({:q, dx1, dy1, dx, dy}, m, {_, {cx, cy}, start}) do
+    {ndx1, ndy1} = delta(m, {dx1, dy1})
+    {ndx, ndy} = delta(m, {dx, dy})
+    {{:q, ndx1, ndy1, ndx, ndy}, {:rest, {cx + dx, cy + dy}, start}}
   end
 
-  defp transform_command({:h, dx}, f) do
-    {ndx, _} = f.({dx, 0})
-    {:h, ndx}
+  defp transform_command({:T, x, y}, m, {_, _, start}) do
+    {nx, ny} = point(m, {x, y})
+    {{:T, nx, ny}, {:rest, {x, y}, start}}
   end
 
-  defp transform_command({:V, y}, f) do
-    {_, ny} = f.({0, y})
-    {:V, ny}
+  defp transform_command({:t, dx, dy}, m, {_, {cx, cy}, start}) do
+    {ndx, ndy} = delta(m, {dx, dy})
+    {{:t, ndx, ndy}, {:rest, {cx + dx, cy + dy}, start}}
   end
 
-  defp transform_command({:v, dy}, f) do
-    {_, ndy} = f.({0, dy})
-    {:v, ndy}
+  defp transform_command({:A, rx, ry, rot, large, sweep, x, y}, m, {_, _, start}) do
+    {nrx, nry, nrot, nsweep} = ellipse(m, rx, ry, rot, sweep)
+    {nx, ny} = point(m, {x, y})
+    {{:A, nrx, nry, nrot, large, nsweep, nx, ny}, {:rest, {x, y}, start}}
   end
 
-  # Close command has no coordinates
-  defp transform_command(:Z, _f), do: :Z
+  defp transform_command({:a, rx, ry, rot, large, sweep, dx, dy}, m, {_, {cx, cy}, start}) do
+    {nrx, nry, nrot, nsweep} = ellipse(m, rx, ry, rot, sweep)
+    {ndx, ndy} = delta(m, {dx, dy})
+    {{:a, nrx, nry, nrot, large, nsweep, ndx, ndy}, {:rest, {cx + dx, cy + dy}, start}}
+  end
+
+  defp transform_command(:Z, _m, {_, _, start}), do: {:Z, {:rest, start, start}}
+
+  defp point(m, p), do: Transform.apply_matrix(m, p)
+  defp delta({a, b, c, d, _, _}, p), do: Transform.apply_matrix({a, b, c, d, 0, 0}, p)
+
+  # The image of the ellipse `rotate(rot) scale(rx, ry)` under the linear part of `m`,
+  # read off the closed-form SVD of the 2×2 product: the singular values are the new radii
+  # and the left rotation is the new axis angle. A negative determinant is a reflection,
+  # which reverses the arc's direction.
+  defp ellipse({a, b, c, d, _, _}, rx, ry, rot, sweep) do
+    rad = rot * :math.pi() / 180
+    cos = :math.cos(rad)
+    sin = :math.sin(rad)
+    p = rx * (a * cos + c * sin)
+    q = ry * (c * cos - a * sin)
+    r = rx * (b * cos + d * sin)
+    s = ry * (d * cos - b * sin)
+    e = (p + s) / 2
+    f = (p - s) / 2
+    g = (r + q) / 2
+    h = (r - q) / 2
+    big_q = :math.sqrt(e * e + h * h)
+    big_r = :math.sqrt(f * f + g * g)
+    reflected? = a * d - b * c < 0
+    new_sweep = if reflected?, do: 1 - sweep, else: sweep
+    # A circle has no axis: its rotation is kept as given rather than read off the SVD.
+    angle =
+      if big_r == 0,
+        do: rot,
+        else: normalise_degrees((:math.atan2(h, e) + :math.atan2(g, f)) / 2 * 180 / :math.pi())
+
+    {big_q + big_r, abs(big_q - big_r), angle, new_sweep}
+  end
+
+  # An ellipse's axis angle is defined modulo a half turn; canonical form is `[0, 180)`.
+  defp normalise_degrees(deg) do
+    r = :math.fmod(deg, 180.0)
+    if r < 0, do: r + 180.0, else: r
+  end
 
   defp append_command(%__MODULE__{commands: commands} = path, command) do
     %{path | commands: commands ++ [command]}
@@ -419,19 +490,36 @@ defmodule Visualize.IR.Path do
   defp command_to_string({:t, dx, dy}), do: "t#{format_num(dx)},#{format_num(dy)}"
 
   defp command_to_string({:A, rx, ry, rot, large, sweep, x, y}) do
-    "A#{format_num(rx)},#{format_num(ry)},#{rot},#{large},#{sweep},#{format_num(x)},#{format_num(y)}"
+    "A#{format_num(rx)},#{format_num(ry)},#{format_num(rot)},#{large},#{sweep},#{format_num(x)},#{format_num(y)}"
   end
 
   defp command_to_string({:a, rx, ry, rot, large, sweep, dx, dy}) do
-    "a#{format_num(rx)},#{format_num(ry)},#{rot},#{large},#{sweep},#{format_num(dx)},#{format_num(dy)}"
+    "a#{format_num(rx)},#{format_num(ry)},#{format_num(rot)},#{large},#{sweep},#{format_num(dx)},#{format_num(dy)}"
   end
 
   defp command_to_string(:Z), do: "Z"
 
-  defp format_num(n) when is_integer(n), do: Integer.to_string(n)
+  defp format_num(n), do: format_number(n)
 
-  defp format_num(n) when is_float(n) do
-    # Up to 4 decimals, trailing zeros removed; `+ 0.0` folds negative zero (D-32).
+  @doc """
+  The number formatter every serialiser shares (D-12, D-32): an integer verbatim; a float
+  with at most four decimals, trailing zeros and point trimmed, never in exponent notation,
+  and never `-0`.
+
+  ## Examples
+
+      iex> Visualize.IR.Path.format_number(1.5)
+      "1.5"
+      iex> Visualize.IR.Path.format_number(1.0e20)
+      "100000000000000000000"
+      iex> Visualize.IR.Path.format_number(-0.00001)
+      "0"
+
+  """
+  @spec format_number(number()) :: String.t()
+  def format_number(n) when is_integer(n), do: Integer.to_string(n)
+
+  def format_number(n) when is_float(n) do
     :erlang.float_to_binary(Float.round(n, 4) + 0.0, decimals: 4)
     |> String.trim_trailing("0")
     |> String.trim_trailing(".")

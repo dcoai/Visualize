@@ -58,18 +58,14 @@ defmodule Visualize.SVG.Path do
   @doc """
   Converts the path to an SVG path string (the `d` attribute value).
 
-  This uses the SVG backend to render the path data.
+  The one `d` serialisation is `Visualize.IR.Path.to_string/1` (D-12).
   """
   @spec to_string(t()) :: String.t()
-  def to_string(%IRPath{} = path) do
-    Visualize.Backend.SVG.path_data(path)
-  end
+  def to_string(%IRPath{} = path), do: IRPath.to_string(path)
 end
 
 # String.Chars implementation for backward compatibility
 # (IR.Path doesn't have this by default since it's backend-agnostic)
 defimpl String.Chars, for: Visualize.IR.Path do
-  def to_string(path) do
-    Visualize.Backend.SVG.path_data(path)
-  end
+  def to_string(path), do: Visualize.IR.Path.to_string(path)
 end
