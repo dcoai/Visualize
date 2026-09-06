@@ -231,8 +231,8 @@ The radius is `min(width, height)/2`. Angles are assigned top-down: the root spa
 | `Visualize.Hooks.identity_transform/0` | Delegates to `Visualize.Hooks.Zoom.identity_transform/0`. |
 | `Visualize.Hooks.scale_transform/3` | Delegates to `Visualize.Hooks.Zoom.scale_transform/3`. |
 | `Visualize.Hooks.translate_transform/3` | Delegates to `Visualize.Hooks.Zoom.translate_transform/3`. |
-| `Visualize.Hooks.filter_selection/3` | Delegates to `Visualize.Hooks.Brush.filter_selection/3`. |
-| `Visualize.Hooks.selection_to_domain/2` | Delegates to `Visualize.Hooks.Brush.selection_to_domain/2`. |
+| `Visualize.Hooks.filter_selection/3` | Delegates to `Visualize.Hooks.Brush.filter_selection/3`: the data within the selection on the axes whose scale is given (6.3). |
+| `Visualize.Hooks.selection_to_domain/2` | Delegates to `Visualize.Hooks.Brush.selection_to_domain/2`: a `{start, stop}` pair for a one-axis brush, the four-key map for both axes (6.3). |
 
 ### 4.2 Installation contract
 
@@ -285,8 +285,8 @@ Event: `pushEvent(eventName, {k, x, y})`, arriving in the LiveView as `handle_ev
 | Function | Contract |
 |---|---|
 | `Visualize.Hooks.Brush.js_hook/0` | Returns the source of `export const BrushHook = {…}` (6.2). |
-| `Visualize.Hooks.Brush.filter_selection/3` | Keeps the data whose scaled `{x, y}` lies within the selection rectangle, bounds inclusive (6.3). |
-| `Visualize.Hooks.Brush.selection_to_domain/2` | Inverts the four selection edges through the scales into domain values (6.3). |
+| `Visualize.Hooks.Brush.filter_selection/3` | Keeps the data whose scaled coordinates lie within the selection on every axis whose scale is given, bounds inclusive (6.3). |
+| `Visualize.Hooks.Brush.selection_to_domain/2` | Inverts the selection edges through the given scales: a `{start, stop}` pair for one axis, a four-key map for both (6.3). |
 
 ### 6.2 `BrushHook` behaviour
 
@@ -313,20 +313,25 @@ Events arrive as `handle_event("brush_select", %{"x0" => x0, "y0" => y0, "x1" =>
 
 ### 6.3 Server-side helpers
 
-A *selection* is a map with atom keys `x0`, `y0`, `x1`, `y1` in the hook's coordinate space; the string-keyed event params MUST be converted by the caller.
+A *selection* is a map with atom keys `x0`, `y0`, `x1`, `y1` in the hook's coordinate space; the string-keyed event params MUST be converted by the caller. Both helpers work on the axes whose scale they are given, so an `"x"` brush needs no y scale and a `"y"` brush no x scale (D-29). A selection MAY omit the keys of an axis that is not in use.
 
-`filter_selection(data, selection, opts)` — `opts` is a keyword list and every key is required (`Keyword.fetch!/2`):
+`filter_selection(data, selection, opts)` — `opts` is a keyword list:
 
 | Key | Meaning |
 |---|---|
-| `:x_accessor` | `(datum -> domain x)` |
-| `:y_accessor` | `(datum -> domain y)` |
+| `:x_accessor` | `(datum -> domain x)`; required with `:x_scale` |
 | `:x_scale` | any scale struct accepted by `Visualize.Scale.apply/2` |
+| `:y_accessor` | `(datum -> domain y)`; required with `:y_scale` |
 | `:y_scale` | likewise |
 
-A datum is kept when `x0 ≤ apply(x_scale, x) ≤ x1` and `y0 ≤ apply(y_scale, y) ≤ y1`. With a `"x"` brush and no extent, `y0 = y1` is the pointer's y, so callers SHOULD pass a `data-brush-extent` or widen the y bounds themselves.
+At least one of `:x_scale`, `:y_scale` MUST be given; neither raises `ArgumentError`. A datum is kept when, for every axis given, `p0 ≤ apply(scale, accessor(d)) ≤ p1` with `p0`/`p1` that axis's selection edges. With both scales this is the rectangle test; with one it is a band test that ignores the other axis entirely, so an `"x"` brush without a `data-brush-extent` no longer needs its degenerate `y0 = y1` widened.
 
-`selection_to_domain(selection, opts)` — `opts` requires `:x_scale` and `:y_scale`, which MUST support `Visualize.Scale.invert/2` (continuous scales: linear, time, log, power, symlog); returns `%{x0: invert(x_scale, x0), x1: invert(x_scale, x1), y0: invert(y_scale, y0), y1: invert(y_scale, y1)}`. Note that because SVG y grows downward, `y0` inverts to the larger domain value.
+`selection_to_domain(selection, opts)` — `opts` takes `:x_scale` and/or `:y_scale`, each of which MUST support `Visualize.Scale.invert/2` (continuous scales: linear, time, log, power, symlog):
+
+- both scales: `%{x0: invert(x_scale, x0), x1: invert(x_scale, x1), y0: invert(y_scale, y0), y1: invert(y_scale, y1)}`, as before;
+- `:x_scale` only: `{invert(x_scale, x0), invert(x_scale, x1)}` — the `{start, stop}` of an x brush in domain units, ascending for an ascending range;
+- `:y_scale` only: `{invert(y_scale, y0), invert(y_scale, y1)}` in pixel order; because SVG y grows downward, `start` is the larger domain value under the usual flipped range;
+- neither: `ArgumentError`.
 
 ## 7. Elements in HEEx
 
