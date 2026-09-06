@@ -111,3 +111,29 @@ defmodule Visualize.DefectsTest do
     end
   end
 end
+
+defmodule Visualize.NegativeZeroTest do
+  @moduledoc "D-32: no `d` serialiser prints `-0`."
+  use ExUnit.Case, async: true
+
+  alias Visualize.Backend.SVG
+  alias Visualize.IR.Path
+  alias Visualize.Shape.Arc
+
+  test "path_data/1 and IR.Path.to_string/1 fold a zero that rounds negative" do
+    path = %Path{commands: [{:M, -0.0, -0.00001}, {:L, 0.00004, -0.0}]}
+    assert SVG.path_data(path) == "M0,0L0,0"
+    assert Path.to_string(path) == "M0,0L0,0"
+  end
+
+  test "an arc sector straddling twelve o'clock ends at the origin without a sign" do
+    d =
+      Arc.new()
+      |> Arc.outer_radius(100)
+      |> Arc.start_angle(-:math.pi() / 4)
+      |> Arc.end_angle(:math.pi() / 4)
+      |> Arc.generate(%{})
+
+    assert String.ends_with?(d, "L0,0Z")
+  end
+end
