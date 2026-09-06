@@ -260,7 +260,7 @@ Sub-month steps add whole seconds. Month and year steps rewrite the `month`/`yea
 
 The intended behaviour is that every tick lies on an interval boundary within `[d0, d1]`, the `:day` ceiling is the *next* midnight when `d0` is not already at midnight, week/month/year ticks are snapped to Monday/first-of-month/first-of-year, month arithmetic clamps the day to the target month's length, and spans wider than `n` years select a multi-year interval from the linear nice-step sequence (2, 5, 10, … years). The code instead: floors the `:day` ceiling (the first tick MAY precede `d0`); does not snap week/month/year at all; can construct invalid dates (e.g. day 31 in a 30-day month) when stepping months; and, for spans wider than `n` years, falls back to **daily** ticks, producing thousands of values.
 
-> Decision: see spec/13 — `Time.ticks/2` and `nice/1` are to snap on every interval, step months with day clamping, and extend the table with multi-year intervals.
+> Decision: see spec/13 — `Visualize.Scale.Time.ticks/2` and `nice/1` are to snap on every interval, step months with day clamping, and extend the table with multi-year intervals.
 
 ### 7.4 Functions
 

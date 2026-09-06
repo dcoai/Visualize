@@ -33,7 +33,7 @@ Atom accessors read a map key and return `nil` when absent (except `Pie`, which 
 
 `generate_path/2` returns `%Visualize.IR.Path{commands: [...]}` with commands from `{:M, x, y}`, `{:L, x, y}`, `{:H, x}`, `{:V, y}`, `{:C, x1, y1, x2, y2, x, y}`, `{:A, rx, ry, rot, large_arc, sweep, x, y}`, `:Z`. `generate/2` is `generate_path/2` piped through `Visualize.Backend.SVG.path_data/1`; the result is the SVG path-data string. Code targeting a non-SVG backend MUST use `generate_path/2` and render through `Visualize.Render`.
 
-Both `Line.generate_path/2` and `Area.generate_path/2` return an empty path (`Path.new/0`) when, after `defined` filtering, fewer than two points remain; a single point yields no `M` command.
+Both `Line.generate_path/2` and `Area.generate_path/2` return an empty path (`Visualize.IR.Path.new/0`) when, after `defined` filtering, fewer than two points remain; a single point yields no `M` command.
 
 ## 2. `Visualize.Shape` Facade
 
