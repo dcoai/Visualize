@@ -118,33 +118,26 @@ defmodule Visualize.Layout.Partition do
         node
 
       children ->
-        # Filter children with value
-        children_with_value =
-          Enum.filter(children, fn c ->
-            c.value && c.value > 0
+        # Every child keeps its slot: one whose value is nil or not positive weighs 0 and
+        # receives a zero-width rectangle where it would otherwise sit (d3 behaviour).
+        total = Enum.reduce(children, 0, fn c, acc -> acc + weight(c) end)
+
+        pad = partition.padding
+        available_width = x1 - x0 - pad * (length(children) - 1)
+
+        {positioned_children, _} =
+          Enum.map_reduce(children, x0, fn child, curr_x ->
+            child_width = if total == 0, do: 0, else: weight(child) / total * available_width
+            positioned = layout_node(child, curr_x, curr_x + child_width, y1, dy, partition)
+            {positioned, curr_x + child_width + pad}
           end)
 
-        if Enum.empty?(children_with_value) do
-          node
-        else
-          # Compute total value for proportional sizing
-          total = Enum.reduce(children_with_value, 0, fn c, acc -> acc + c.value end)
-
-          # Layout children
-          pad = partition.padding
-          available_width = x1 - x0 - pad * (length(children_with_value) - 1)
-
-          {positioned_children, _} =
-            Enum.map_reduce(children_with_value, x0, fn child, curr_x ->
-              child_width = child.value / total * available_width
-              positioned = layout_node(child, curr_x, curr_x + child_width, y1, dy, partition)
-              {positioned, curr_x + child_width + pad}
-            end)
-
-          %{node | children: positioned_children}
-        end
+        %{node | children: positioned_children}
     end
   end
+
+  defp weight(%Hierarchy{value: v}) when is_number(v) and v > 0, do: v
+  defp weight(_), do: 0
 
   defp round_node(%Hierarchy{} = node) do
     new_children =

@@ -114,13 +114,6 @@ defmodule Visualize.Layout.Hierarchy do
     id_fn = Keyword.get(opts, :id, &default_id/1)
     parent_fn = Keyword.get(opts, :parent_id, &default_parent/1)
 
-    # Build lookup maps
-    nodes_by_id =
-      data
-      |> Enum.map(fn d -> {id_fn.(d), %{data: d, children: []}} end)
-      |> Map.new()
-
-    # Find root and build parent-child relationships
     root_data =
       Enum.find(data, fn d ->
         parent_id = parent_fn.(d)
@@ -131,25 +124,20 @@ defmodule Visualize.Layout.Hierarchy do
       raise ArgumentError, "No root node found (node with nil or empty parent)"
     end
 
-    root_id = id_fn.(root_data)
+    # Resolve every parent link over the whole input before building anything, as d3's
+    # `stratify` does: the tree is then a function of the links alone, not of the order
+    # in which parents and children appear. Children keep input order under their parent.
+    known = MapSet.new(data, id_fn)
 
-    # Build children lists
-    nodes_with_children =
-      Enum.reduce(data, nodes_by_id, fn d, acc ->
-        id = id_fn.(d)
+    children_by_parent =
+      data
+      |> Enum.filter(fn d ->
         parent_id = parent_fn.(d)
-
-        if parent_id && parent_id != "" && Map.has_key?(acc, parent_id) do
-          update_in(acc, [parent_id, :children], fn children ->
-            children ++ [Map.get(acc, id)]
-          end)
-        else
-          acc
-        end
+        parent_id != nil and parent_id != "" and MapSet.member?(known, parent_id)
       end)
+      |> Enum.group_by(parent_fn)
 
-    # Convert to hierarchy nodes
-    build_stratified_node(Map.get(nodes_with_children, root_id), nil, 0)
+    build_stratified_node(root_data, nil, 0, id_fn, children_by_parent)
   end
 
   @doc """
@@ -217,29 +205,23 @@ defmodule Visualize.Layout.Hierarchy do
   end
 
   @doc """
-  Returns the path from this node to the specified target node.
+  Returns the shortest path from `source` to `target`: `source`, its ancestors up to
+  the lowest common ancestor, then the ancestors of `target` down to `target`.
+
+  Nodes are matched by their `data` lineage from the root, so a node compares equal
+  to the snapshot of itself held in a descendant's `parent` field.
   """
   @spec path(t(), t()) :: [t()]
   def path(%__MODULE__{} = source, %__MODULE__{} = target) do
-    source_ancestors = [source | ancestors(source)] |> Enum.reverse()
-    target_ancestors = [target | ancestors(target)] |> Enum.reverse()
+    up = [source | ancestors(source)]
+    down = Enum.reverse([target | ancestors(target)])
+    common = common_prefix(Enum.reverse(up), down)
 
-    # Find common ancestor
-    {common_path, source_rest, target_rest} =
-      find_common_path(source_ancestors, target_ancestors, [])
-
-    # Build path: source -> common ancestor -> target
-    source_path = Enum.reverse(source_rest)
-    target_path = target_rest
-
-    Enum.reverse(common_path) ++ source_path ++ target_path
+    Enum.take(up, length(up) - common + 1) ++ Enum.drop(down, common)
   end
 
-  defp find_common_path([s | s_rest], [t | t_rest], acc) when s == t do
-    find_common_path(s_rest, t_rest, [s | acc])
-  end
-
-  defp find_common_path(s_rest, t_rest, acc), do: {acc, s_rest, t_rest}
+  defp common_prefix([a | as], [b | bs]) when a.data == b.data, do: 1 + common_prefix(as, bs)
+  defp common_prefix(_, _), do: 0
 
   @doc """
   Returns all links (parent-child pairs) in the hierarchy.
@@ -398,7 +380,7 @@ defmodule Visualize.Layout.Hierarchy do
     %{node | children: children, height: height}
   end
 
-  defp build_stratified_node(%{data: data, children: children_data}, parent, depth) do
+  defp build_stratified_node(data, parent, depth, id_fn, children_by_parent) do
     node = %__MODULE__{
       data: data,
       parent: parent,
@@ -408,12 +390,12 @@ defmodule Visualize.Layout.Hierarchy do
     }
 
     children =
-      case children_data do
+      case Map.get(children_by_parent, id_fn.(data), []) do
         [] ->
           nil
 
         list ->
-          Enum.map(list, &build_stratified_node(&1, node, depth + 1))
+          Enum.map(list, &build_stratified_node(&1, node, depth + 1, id_fn, children_by_parent))
       end
 
     height =
