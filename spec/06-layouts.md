@@ -413,12 +413,12 @@ The server state holds `running :: boolean()` and `tick_ref :: reference() | nil
 
 1. `running` is true if and only if a tick timer is armed (`tick_ref` is non-`nil`).
 2. At most one tick timer is armed at any time.
-3. `alpha` lies in `[0, 1]`.
+3. `alpha` and `alpha_target` lie in `[0, 1]`; `set_alpha/2` and `set_alpha_target/2` clamp rather than raise.
 4. A timer-driven tick that leaves `alpha < alpha_min` stops the simulation; in steady state this occurs if and only if `alpha_target < alpha_min`, so a target at or above `alpha_min` keeps the simulation running until `stop/1`.
 5. `start/1` on a running simulation is a no-op; `stop/1` cancels the timer and clears `running`.
 6. `restart/1` on a stopped simulation MUST NOT start it: it resets `alpha` and re-arms the timer only when `running` is already true.
 
-> Decision: see spec/13. Two invariants are currently violable: `handle_info(:start_simulation)` arms a timer and sets `running` without checking whether one is already armed (it is enqueued from `init/1` ahead of any client message, so the overlap is not reachable today, but the guard is absent), and `handle_cast(:restart)` cancels any timer, arms a new one and sets `running: true` unconditionally, so a stopped simulation is started by `restart/1`. In addition `set_alpha/2` and `set_alpha_target/2` do not validate their argument, so invariant 3 can be broken by a client. A third defect was found by the model rather than by review: a tick message from a timer cancelled after its message had reached the mailbox is indistinguishable from a live one, so a `stop/1` followed by `start/1` can leave two tick chains running; ticks MUST carry their timer's reference and a tick whose reference is not the current one MUST be ignored. `Visualize.Specs.ForceSimulation` (spec/12 §5) verifies invariants 1, 2 and 6 and the cooling-down property; the fixes are tracked by proposal #5.
+Tick messages are `{:tick, tag}` where `tag` is the reference the server generated when it armed the timer; the server keeps the current tag alongside the timer reference and MUST ignore a tick carrying any other tag. That is what makes a `stop/1` whose `Process.cancel_timer/1` came too late harmless: the orphaned tick arrives, matches nothing, and the chain a later `start/1` armed stays the only one. `Visualize.Specs.ForceSimulation` (spec/12 §5) verifies invariants 1, 2 and 6 and the cooling-down property; `test/visualize/layout/force/simulation_test.exs` and `test/specs/force_simulation_conformance_test.exs` hold the implementation to it (D-14).
 
 ### 8.6 Functions
 
@@ -453,15 +453,15 @@ The server state holds `running :: boolean()` and `tick_ref :: reference() | nil
 | `Visualize.Layout.Force.Simulation.child_spec/1` | Supervisor child specification wrapping `start_link/1`. |
 | `Visualize.Layout.Force.Simulation.start/1` | Arms the tick timer if not running. |
 | `Visualize.Layout.Force.Simulation.stop/1` | Cancels the timer and clears `running`. |
-| `Visualize.Layout.Force.Simulation.restart/1` | Resets `alpha` to 1.0 and re-arms the timer of a running simulation (8.5). |
+| `Visualize.Layout.Force.Simulation.restart/1` | Resets `alpha` to 1.0; the timer discipline is untouched, so a running simulation keeps its chain and a stopped one stays stopped (8.5). |
 | `Visualize.Layout.Force.Simulation.tick/1` | Advances one tick immediately, independent of the timer. |
 | `Visualize.Layout.Force.Simulation.nodes/1` | Returns the current node maps. |
 | `Visualize.Layout.Force.Simulation.links/1` | Returns links with `source`/`target` resolved to node maps. |
 | `Visualize.Layout.Force.Simulation.set_nodes/2` | Replaces and re-initialises the nodes. |
 | `Visualize.Layout.Force.Simulation.set_links/2` | Replaces the links. |
 | `Visualize.Layout.Force.Simulation.alpha/1` | Returns the current `alpha`. |
-| `Visualize.Layout.Force.Simulation.set_alpha/2` | Sets `alpha`; MUST be within `[0, 1]`. |
-| `Visualize.Layout.Force.Simulation.set_alpha_target/2` | Sets `alpha_target`; MUST be within `[0, 1]`. |
+| `Visualize.Layout.Force.Simulation.set_alpha/2` | Sets `alpha`, clamped into `[0, 1]`. |
+| `Visualize.Layout.Force.Simulation.set_alpha_target/2` | Sets `alpha_target`, clamped into `[0, 1]`. |
 | `Visualize.Layout.Force.Simulation.fix_node/4` | Sets `fx`, `fy` on the node with the given id. |
 | `Visualize.Layout.Force.Simulation.unfix_node/2` | Clears `fx`, `fy` on the node with the given id. |
 | `Visualize.Layout.Force.Simulation.subscribe/2` | Adds and monitors a subscriber pid. |
