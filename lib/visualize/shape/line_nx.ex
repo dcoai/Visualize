@@ -26,6 +26,7 @@ defmodule Visualize.Shape.LineNx do
   """
 
   alias Visualize.IR.Path
+  alias Visualize.Shape.Curve
 
   @doc """
   Generates a path from x and y coordinate lists using Nx batch transformation.
@@ -35,7 +36,8 @@ defmodule Visualize.Shape.LineNx do
     * `:x_range` - {min, max} output range for x values
     * `:y_domain` - {min, max} input domain for y values
     * `:y_range` - {min, max} output range for y values
-    * `:curve` - curve type (default: :linear)
+    * `:curve` - curve type passed to `Visualize.Shape.Curve.generate/3` (default: `:linear`)
+    * `:curve_opts` - the curve's option keyword list (default: `[]`)
   """
   @spec generate_path([number()], [number()], keyword()) :: Path.t()
   def generate_path(xs, ys, opts \\ []) do
@@ -47,8 +49,12 @@ defmodule Visualize.Shape.LineNx do
     # Convert to tensors and transform in batch
     {scaled_xs, scaled_ys} = batch_transform(xs, ys, x_domain, x_range, y_domain, y_range)
 
-    # Build path commands from scaled coordinates
-    build_path(scaled_xs, scaled_ys)
+    build_path(
+      scaled_xs,
+      scaled_ys,
+      Keyword.get(opts, :curve, :linear),
+      Keyword.get(opts, :curve_opts, [])
+    )
   end
 
   @doc """
@@ -102,7 +108,11 @@ defmodule Visualize.Shape.LineNx do
     |> Nx.add(r0)
   end
 
-  # Build path commands from coordinate lists
+  # Build path commands from coordinate lists. `:linear` is built directly, without the
+  # tuple list a curve needs; every other curve goes through `Shape.Curve`.
+  defp build_path(xs, ys, :linear, _opts), do: build_path(xs, ys)
+  defp build_path(xs, ys, curve, opts), do: Curve.generate(curve, Enum.zip(xs, ys), opts)
+
   defp build_path([], []), do: Path.new()
 
   defp build_path([x | xs], [y | ys]) do

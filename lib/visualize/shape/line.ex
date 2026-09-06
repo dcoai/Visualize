@@ -30,7 +30,7 @@ defmodule Visualize.Shape.Line do
             curve: :linear,
             curve_opts: []
 
-  @type accessor :: (any() -> number()) | atom()
+  @type accessor :: (any() -> number()) | atom() | number()
   @type t :: %__MODULE__{
           x: accessor() | nil,
           y: accessor() | nil,
@@ -49,39 +49,33 @@ defmodule Visualize.Shape.Line do
   end
 
   @doc """
-  Sets the x accessor function or field name.
+  Sets the x accessor: a 1-arity function, a field name, or a constant.
 
   ## Examples
 
       Line.x(line, fn d -> d.timestamp end)
       Line.x(line, :x)  # equivalent to fn d -> Map.get(d, :x) end
+      Line.x(line, 0)   # every point at x = 0
 
   """
   @spec x(t(), accessor()) :: t()
-  def x(%__MODULE__{} = line, accessor) when is_function(accessor, 1) do
-    %{line | x: accessor}
-  end
-
-  def x(%__MODULE__{} = line, field) when is_atom(field) do
-    %{line | x: fn d -> Map.get(d, field) end}
+  def x(%__MODULE__{} = line, accessor) do
+    %{line | x: normalize_accessor(accessor)}
   end
 
   @doc """
-  Sets the y accessor function or field name.
+  Sets the y accessor: a 1-arity function, a field name, or a constant.
   """
   @spec y(t(), accessor()) :: t()
-  def y(%__MODULE__{} = line, accessor) when is_function(accessor, 1) do
-    %{line | y: accessor}
-  end
-
-  def y(%__MODULE__{} = line, field) when is_atom(field) do
-    %{line | y: fn d -> Map.get(d, field) end}
+  def y(%__MODULE__{} = line, accessor) do
+    %{line | y: normalize_accessor(accessor)}
   end
 
   @doc """
   Sets the defined predicate function.
 
-  Points where this returns false will create gaps in the line.
+  A datum for which it returns a falsy value breaks the line: the points before it and
+  the points after it become separate subpaths, so the gap is visible.
   """
   @spec defined(t(), (any() -> boolean())) :: t()
   def defined(%__MODULE__{} = line, predicate) when is_function(predicate, 1) do
@@ -124,28 +118,41 @@ defmodule Visualize.Shape.Line do
 
   @doc """
   Generates a Path struct from the data.
+
+  Each run of consecutive defined data (see `defined/2`) becomes one subpath, generated
+  through the curve; a run of fewer than two points draws nothing.
   """
   @spec generate_path(t(), [any()]) :: Path.t()
   def generate_path(
         %__MODULE__{x: x_fn, y: y_fn, defined: defined_fn, curve: curve_type, curve_opts: opts},
         data
       ) do
-    # Filter and transform data to points
-    points =
+    commands =
       data
-      |> maybe_filter_defined(defined_fn)
-      |> Enum.map(fn d -> {x_fn.(d), y_fn.(d)} end)
+      |> defined_runs(defined_fn)
+      |> Enum.flat_map(fn run ->
+        points = Enum.map(run, fn d -> {x_fn.(d), y_fn.(d)} end)
+        Curve.generate(curve_type, points, opts).commands
+      end)
 
-    if Enum.empty?(points) do
-      Path.new()
-    else
-      Curve.generate(curve_type, points, opts)
-    end
+    %Path{commands: commands}
   end
 
-  defp maybe_filter_defined(data, nil), do: data
+  @doc false
+  @spec defined_runs([any()], (any() -> boolean()) | nil) :: [[any()]]
+  def defined_runs(data, nil), do: [data]
 
-  defp maybe_filter_defined(data, defined_fn) do
-    Enum.filter(data, defined_fn)
+  def defined_runs(data, defined_fn) do
+    data
+    |> Enum.map(&{!!defined_fn.(&1), &1})
+    |> Enum.chunk_by(&elem(&1, 0))
+    |> Enum.filter(&elem(hd(&1), 0))
+    |> Enum.map(fn run -> Enum.map(run, &elem(&1, 1)) end)
   end
+
+  @doc false
+  @spec normalize_accessor(accessor()) :: (any() -> number())
+  def normalize_accessor(accessor) when is_function(accessor, 1), do: accessor
+  def normalize_accessor(field) when is_atom(field), do: fn d -> Map.get(d, field) end
+  def normalize_accessor(constant) when is_number(constant), do: fn _d -> constant end
 end
