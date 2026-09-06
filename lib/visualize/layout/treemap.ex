@@ -445,7 +445,7 @@ defmodule Visualize.Layout.Treemap do
 
   # Slice-dice algorithm (alternating by depth)
   defp tile_slice_dice(children, x0, y0, x1, y1, padding) do
-    if length(children) > 0 do
+    if children != [] do
       depth = hd(children).depth
 
       if rem(depth, 2) == 0 do

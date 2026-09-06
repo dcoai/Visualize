@@ -26,8 +26,8 @@ defmodule Visualize.Render do
 
   """
 
-  alias Visualize.IR.{Path, Element}
   alias Visualize.Backend
+  alias Visualize.IR.{Element, Path}
 
   @type renderable :: Path.t() | Element.t() | [Element.t()]
 

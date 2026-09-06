@@ -30,7 +30,7 @@ defmodule Visualize.Backend.Canvas do
 
   @behaviour Visualize.Backend
 
-  alias Visualize.IR.{Path, Element, Transform}
+  alias Visualize.IR.{Element, Path, Transform}
 
   @type output_format :: :js | :json | :commands | :binary | :binary_base64
 

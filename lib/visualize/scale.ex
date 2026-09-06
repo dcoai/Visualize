@@ -43,16 +43,16 @@ defmodule Visualize.Scale do
   """
 
   alias Visualize.Scale.{
+    Band,
+    Color,
     Linear,
     Log,
-    Power,
-    Symlog,
-    Time,
     Ordinal,
-    Band,
-    Quantize,
+    Power,
     Quantile,
-    Color
+    Quantize,
+    Symlog,
+    Time
   }
 
   @doc "Creates a linear scale"

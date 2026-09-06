@@ -32,7 +32,7 @@ defmodule Visualize.Shape do
 
   """
 
-  alias Visualize.Shape.{Line, Area, Arc, Pie, Symbol, Stack}
+  alias Visualize.Shape.{Arc, Area, Line, Pie, Stack, Symbol}
 
   # Line generator
   @doc "Creates a new line generator"

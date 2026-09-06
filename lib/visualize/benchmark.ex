@@ -33,9 +33,9 @@ defmodule Visualize.Benchmark do
 
   """
 
-  alias Visualize.{Scale, Shape, Axis, Render}
+  alias Visualize.{Axis, Render, Scale, Shape}
+  alias Visualize.Backend.{Canvas, CanvasIncremental, SVG}
   alias Visualize.IR.{Element, Transform}
-  alias Visualize.Backend.{SVG, Canvas, CanvasIncremental}
 
   @margin %{top: 20, right: 20, bottom: 30, left: 40}
   @warmup_iterations 10

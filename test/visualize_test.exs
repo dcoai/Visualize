@@ -69,7 +69,7 @@ defmodule VisualizeTest do
 
       ticks = Scale.ticks(scale, 5)
       assert is_list(ticks)
-      assert length(ticks) > 0
+      assert ticks != []
     end
 
     test "extends domain to nice values" do
@@ -179,7 +179,7 @@ defmodule VisualizeTest do
   end
 
   describe "Axis" do
-    alias Visualize.{Scale, Axis}
+    alias Visualize.{Axis, Scale}
 
     test "generates axis elements" do
       scale =

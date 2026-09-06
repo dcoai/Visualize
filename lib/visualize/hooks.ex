@@ -55,7 +55,7 @@ defmodule Visualize.Hooks do
 
   """
 
-  alias Visualize.Hooks.{Zoom, Brush}
+  alias Visualize.Hooks.{Brush, Zoom}
 
   @doc """
   Returns the complete JavaScript code for all hooks.

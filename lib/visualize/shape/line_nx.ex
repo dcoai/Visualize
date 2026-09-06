@@ -237,10 +237,7 @@ defmodule Visualize.Shape.LineNx do
   end
 
   defp parse_color(color) when is_binary(color) do
-    cond do
-      String.starts_with?(color, "#") -> parse_hex(color)
-      true -> {0, 0, 0, 255}
-    end
+    if String.starts_with?(color, "#"), do: parse_hex(color), else: {0, 0, 0, 255}
   end
 
   defp parse_color(_), do: {0, 0, 0, 255}

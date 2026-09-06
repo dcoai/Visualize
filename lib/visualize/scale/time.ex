@@ -93,7 +93,7 @@ defmodule Visualize.Scale.Time do
   # Convert various time types to unix timestamp
   defp to_unix(%DateTime{} = dt), do: DateTime.to_unix(dt)
   defp to_unix(%NaiveDateTime{} = ndt), do: NaiveDateTime.diff(ndt, ~N[1970-01-01 00:00:00])
-  defp to_unix(%Date{} = d), do: Date.diff(d, ~D[1970-01-01]) * 86400
+  defp to_unix(%Date{} = d), do: Date.diff(d, ~D[1970-01-01]) * 86_400
 
   # Choose an appropriate time interval based on span
   defp choose_interval(span_seconds, count) do
@@ -109,10 +109,10 @@ defmodule Visualize.Scale.Time do
       {900, :minute},
       {1800, :minute},
       {3600, :hour},
-      {10800, :hour},
-      {21600, :hour},
-      {43200, :hour},
-      {86400, :day},
+      {10_800, :hour},
+      {21_600, :hour},
+      {43_200, :hour},
+      {86_400, :day},
       {172_800, :day},
       {604_800, :week},
       {2_592_000, :month},
@@ -121,7 +121,7 @@ defmodule Visualize.Scale.Time do
     ]
 
     {secs, unit} =
-      Enum.find(intervals, {86400, :day}, fn {secs, _} -> secs >= target end)
+      Enum.find(intervals, {86_400, :day}, fn {secs, _} -> secs >= target end)
 
     step_fn =
       case unit do
@@ -150,7 +150,7 @@ defmodule Visualize.Scale.Time do
     DateTime.new!(date, ~T[00:00:00])
   end
 
-  defp ceil_to_interval(time, {secs, _unit}) when secs < 86400 do
+  defp ceil_to_interval(time, {secs, _unit}) when secs < 86_400 do
     unix = to_unix(time)
     ceiled = Float.ceil(unix / secs) * secs
     DateTime.from_unix!(round(ceiled))
@@ -163,7 +163,7 @@ defmodule Visualize.Scale.Time do
     DateTime.new!(date, ~T[00:00:00])
   end
 
-  defp floor_to_interval(time, {secs, _unit}) when secs < 86400 do
+  defp floor_to_interval(time, {secs, _unit}) when secs < 86_400 do
     unix = to_unix(time)
     floored = Float.floor(unix / secs) * secs
     DateTime.from_unix!(round(floored))

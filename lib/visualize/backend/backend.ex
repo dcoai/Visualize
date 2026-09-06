@@ -42,7 +42,7 @@ defmodule Visualize.Backend do
 
   """
 
-  alias Visualize.IR.{Path, Element}
+  alias Visualize.IR.{Element, Path}
 
   @type output :: iolist() | String.t() | map() | [tuple()]
   @type options :: keyword()

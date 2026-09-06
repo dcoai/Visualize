@@ -44,8 +44,8 @@ defmodule Visualize.Backend.CanvasBinary do
   Requires the `nx` package to be installed.
   """
 
-  alias Visualize.IR.{Path, Element, Transform}
   alias Visualize.Backend.CanvasBinary.{Opcodes, PathEncoder, SVG}
+  alias Visualize.IR.{Element, Path, Transform}
   require Opcodes
 
   @doc """
