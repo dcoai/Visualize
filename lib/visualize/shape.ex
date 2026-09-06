@@ -8,6 +8,7 @@ defmodule Visualize.Shape do
   - Symbols for scatter plots
   - Stacks for stacked bar/area charts
   - Bands (state timelines), rules and x-bands (annotations) as element lists
+  - Percentile bands (median plus inner and outer bands) as a map of paths
 
   ## Examples
 
@@ -33,7 +34,7 @@ defmodule Visualize.Shape do
 
   """
 
-  alias Visualize.Shape.{Arc, Area, Band, Line, Pie, Rule, Stack, Symbol, XBand}
+  alias Visualize.Shape.{Arc, Area, Band, Line, PercentileBand, Pie, Rule, Stack, Symbol, XBand}
 
   # Line generator
   @doc "Creates a new line generator"
@@ -69,12 +70,16 @@ defmodule Visualize.Shape do
   @doc "Creates a new x-band (shaded interval annotation) generator"
   defdelegate x_band(), to: XBand, as: :new
 
+  @doc "Creates a new percentile-band generator (spec/04 §14)"
+  defdelegate percentile_band(), to: PercentileBand, as: :new
+
   # Common configuration functions that work across generators
 
   @doc "Sets the x accessor"
   def x(%Line{} = shape, accessor), do: Line.x(shape, accessor)
   def x(%Area{} = shape, accessor), do: Area.x(shape, accessor)
   def x(%Rule{} = shape, accessor), do: Rule.x(shape, accessor)
+  def x(%PercentileBand{} = shape, accessor), do: PercentileBand.x(shape, accessor)
 
   @doc "Sets the y accessor"
   def y(%Line{} = shape, accessor), do: Line.y(shape, accessor)
@@ -116,14 +121,25 @@ defmodule Visualize.Shape do
   def label(%Rule{} = shape, accessor), do: Rule.label(shape, accessor)
   def label(%XBand{} = shape, accessor), do: XBand.label(shape, accessor)
 
+  @doc "Sets the median accessor (for percentile bands); `nil` clears it"
+  def median(%PercentileBand{} = shape, accessor), do: PercentileBand.median(shape, accessor)
+
+  @doc "Sets the inner `{lo, hi}` band (for percentile bands); `nil` clears it"
+  def inner(%PercentileBand{} = shape, pair), do: PercentileBand.inner(shape, pair)
+
+  @doc "Sets the outer `{lo, hi}` band (for percentile bands); `nil` clears it"
+  def outer(%PercentileBand{} = shape, pair), do: PercentileBand.outer(shape, pair)
+
   @doc "Sets the curve interpolation type"
   def curve(shape, type, opts \\ [])
   def curve(%Line{} = shape, type, opts), do: Line.curve(shape, type, opts)
   def curve(%Area{} = shape, type, opts), do: Area.curve(shape, type, opts)
+  def curve(%PercentileBand{} = shape, type, opts), do: PercentileBand.curve(shape, type, opts)
 
   @doc "Sets the defined predicate"
   def defined(%Line{} = shape, pred), do: Line.defined(shape, pred)
   def defined(%Area{} = shape, pred), do: Area.defined(shape, pred)
+  def defined(%PercentileBand{} = shape, pred), do: PercentileBand.defined(shape, pred)
 
   @doc "Sets the value accessor (for pie and stack)"
   def value(%Pie{} = shape, accessor), do: Pie.value(shape, accessor)
@@ -182,6 +198,7 @@ defmodule Visualize.Shape do
   For Symbol: returns path data string
   For Stack: returns list of series with stacked values
   For Band, Rule, XBand: returns a list of `Visualize.IR.Element`
+  For PercentileBand: returns `%{outer:, inner:, median:}` of path strings
   """
   def generate(shape, data \\ nil)
   def generate(%Line{} = shape, data), do: Line.generate(shape, data)
@@ -193,9 +210,11 @@ defmodule Visualize.Shape do
   def generate(%Band{} = shape, data), do: Band.generate(shape, data)
   def generate(%Rule{} = shape, data), do: Rule.generate(shape, data)
   def generate(%XBand{} = shape, data), do: XBand.generate(shape, data)
+  def generate(%PercentileBand{} = shape, data), do: PercentileBand.generate(shape, data)
 
   @doc """
-  Generates a Path struct (for Line, Area, Arc, Symbol, Band).
+  Generates a Path struct (for Line, Area, Arc, Symbol, Band) or, for PercentileBand, a
+  map of them.
 
   Use this for backend-agnostic path generation, then render
   with `Visualize.Render.to_string/2` or create an element with
@@ -207,4 +226,7 @@ defmodule Visualize.Shape do
   def generate_path(%Arc{} = shape, data), do: Arc.generate_path(shape, data)
   def generate_path(%Symbol{} = shape, data), do: Symbol.generate_path(shape, data)
   def generate_path(%Band{} = shape, data), do: Band.generate_path(shape, data)
+
+  def generate_path(%PercentileBand{} = shape, data),
+    do: PercentileBand.generate_path(shape, data)
 end

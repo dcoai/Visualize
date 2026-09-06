@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, `Shape.Symbol`, and the element-producing marks `Shape.Band`, `Shape.Rule`, and `Shape.XBand` (sections 11–13); `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialised as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
+Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, `Shape.Symbol`, the element-producing marks `Shape.Band`, `Shape.Rule`, and `Shape.XBand` (sections 11–13), and the composed mark `Shape.PercentileBand` (section 14); `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialised as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
 
 ## 1. Common Model
 
@@ -20,6 +20,7 @@ An accessor extracts a value from a datum. The accepted forms differ by module:
 | `Symbol` (`type`, `size`) | yes | atom is the literal type | literal size |
 | `Band` (`x0`, `x1`, `y`, `height`; `fill`) | yes | yes | yes (`fill`: a string constant) |
 | `Rule` (`x`, `y0`, `y1`; `label`), `XBand` (`x0`, `x1`, `y0`, `y1`; `fill`, `label`) | yes | yes | yes (`fill`, `label`: a string constant) |
+| `PercentileBand` (`x`, `median`; `inner`, `outer` as `{lo, hi}` pairs) | yes | yes | yes |
 
 Atom accessors read a map key and return `nil` when absent (except `Pie`, which defaults to `0`); a `nil` coordinate fails arithmetic downstream. Callers SHOULD supply functions when data are not maps. A numeric constant is the accessor `fn _ -> n end`; `Line` accepts one since D-20.
 
@@ -34,6 +35,8 @@ Atom accessors read a map key and return `nil` when absent (except `Pie`, which 
 Both `Line.generate_path/2` and `Area.generate_path/2` return an empty path (`Visualize.IR.Path.new/0`) when no defined run (1.2) has two or more points; a lone point yields no `M` command.
 
 `Band.generate/2`, `Rule.generate/2`, and `XBand.generate/2` return a list of `Visualize.IR.Element`, one per datum, rather than a string: these marks carry per-datum style (a fill, a label) that a path cannot (D-26). The elements render through `Visualize.Render` like any other. `Band.generate_path/2` is the one path form among them, folding every rectangle into a single `IR.Path`.
+
+`PercentileBand.generate/2` and `PercentileBand.generate_path/2` return a map of three paths (`outer`, `inner`, `median`), each in the form the corresponding `Line` or `Area` call would return, or `nil` for a band that is not set (D-28).
 
 ## 2. `Visualize.Shape` Facade
 
@@ -50,7 +53,8 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.band/0` | `Shape.Band.new/0`. |
 | `Visualize.Shape.rule/0` | `Shape.Rule.new/0`. |
 | `Visualize.Shape.x_band/0` | `Shape.XBand.new/0`. |
-| `Visualize.Shape.x/2` | `Line.x/2`, `Area.x/2`, or `Rule.x/2`. |
+| `Visualize.Shape.percentile_band/0` | `Shape.PercentileBand.new/0`. |
+| `Visualize.Shape.x/2` | `Line.x/2`, `Area.x/2`, `Rule.x/2`, or `PercentileBand.x/2`. |
 | `Visualize.Shape.y/2` | `Line.y/2`, `Area.y/2`, or `Band.y/2`. |
 | `Visualize.Shape.x0/2` | `Area.x0/2`, `Band.x0/2`, or `XBand.x0/2`. |
 | `Visualize.Shape.x1/2` | `Area.x1/2`, `Band.x1/2`, or `XBand.x1/2`. |
@@ -60,9 +64,12 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.fill/2` | `Band.fill/2` or `XBand.fill/2`. |
 | `Visualize.Shape.scale/2` | `Rule.scale/2` or `XBand.scale/2`. |
 | `Visualize.Shape.label/2` | `Rule.label/2` or `XBand.label/2`. |
+| `Visualize.Shape.median/2` | `PercentileBand.median/2`. |
+| `Visualize.Shape.inner/2` | `PercentileBand.inner/2`. |
+| `Visualize.Shape.outer/2` | `PercentileBand.outer/2`. |
 | `Visualize.Shape.curve/2` | As `curve/3` with `[]` options. |
-| `Visualize.Shape.curve/3` | `Line.curve/3` or `Area.curve/3`. |
-| `Visualize.Shape.defined/2` | `Line.defined/2` or `Area.defined/2`. |
+| `Visualize.Shape.curve/3` | `Line.curve/3`, `Area.curve/3`, or `PercentileBand.curve/3`. |
+| `Visualize.Shape.defined/2` | `Line.defined/2`, `Area.defined/2`, or `PercentileBand.defined/2`. |
 | `Visualize.Shape.value/2` | `Pie.value/2` or `Stack.value/2`. |
 | `Visualize.Shape.keys/2` | `Stack.keys/2`. |
 | `Visualize.Shape.order/2` | `Stack.order/2`. |
@@ -79,9 +86,9 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.type/2` | `Symbol.type/2`. |
 | `Visualize.Shape.size/2` | `Symbol.size/2`. |
 | `Visualize.Shape.generate/1` | As `generate/2` with `nil` data (meaningful for `Symbol` only). |
-| `Visualize.Shape.generate/2` | Dispatches to the module's `generate/2`: SVG path string for `Line`, `Area`, `Arc`, `Symbol`; arc-datum list for `Pie`; series list for `Stack`; element list for `Band`, `Rule`, `XBand`. |
+| `Visualize.Shape.generate/2` | Dispatches to the module's `generate/2`: SVG path string for `Line`, `Area`, `Arc`, `Symbol`; arc-datum list for `Pie`; series list for `Stack`; element list for `Band`, `Rule`, `XBand`; path map for `PercentileBand`. |
 | `Visualize.Shape.generate_path/1` | As `generate_path/2` with `nil` data. |
-| `Visualize.Shape.generate_path/2` | Dispatches to `generate_path/2` of `Line`, `Area`, `Arc`, `Symbol`, or `Band`; `Pie`, `Stack`, `Rule`, and `XBand` are not accepted. |
+| `Visualize.Shape.generate_path/2` | Dispatches to `generate_path/2` of `Line`, `Area`, `Arc`, `Symbol`, `Band`, or `PercentileBand`; `Pie`, `Stack`, `Rule`, and `XBand` are not accepted. |
 
 Every setter of `Arc` and `Pie` is reachable through the facade; `Symbol.types/0` and `Arc.centroid/2` are not (D-21).
 
@@ -486,3 +493,37 @@ An empty data list yields `[]`.
 | `Visualize.Shape.XBand.fill/2` | Sets the fill accessor: function, atom field, or string constant. |
 | `Visualize.Shape.XBand.label/2` | Sets the label accessor: function, atom field, or string constant; `nil` clears it. |
 | `Visualize.Shape.XBand.generate/2` | Returns the list of `:group` elements as in 13.2. |
+
+## 14. `Visualize.Shape.PercentileBand`
+
+### 14.1 Struct
+
+`%Visualize.Shape.PercentileBand{x: nil, median: nil, inner: nil, outer: nil, defined: nil, curve: :linear, curve_opts: []}`. `new/0` sets `x` to `elem(d, 0)`; `median`, `inner`, and `outer` are unset.
+
+### 14.2 Semantics
+
+A percentile band is the standard reading of a distribution over time: a median line with a shaded inner band (say p25–p75) and a wider outer band (say p5–p95) around it. It is a composition of `Visualize.Shape.Area` and `Visualize.Shape.Line` with a fixed output shape (D-28), so every consumer draws it the same way.
+
+`x/2` and `median/2` are pixel accessors (1.1). `inner/2` and `outer/2` each take a `{lo, hi}` pair of pixel accessors, the lower and upper percentile; `nil` clears the band. `curve/2,3` and `defined/2` apply to all three paths alike.
+
+`generate_path/2` returns `%{outer: outer, inner: inner, median: median}` where:
+
+- `outer` is `Area.generate_path/2` for the area with `x`, `y0 = lo`, `y1 = hi` of the outer pair, the same `defined`, `curve`, and `curve_opts` — or `nil` when `outer` is unset; `inner` likewise for the inner pair;
+- `median` is `Line.generate_path/2` for the line with `x`, `y = median`, the same `defined`, `curve`, and `curve_opts` — or `nil` when `median` is unset.
+
+`generate/2` returns the same map with each path serialised by `Visualize.Backend.SVG.path_data/1`; `nil` stays `nil`. The three paths are drawn outer, inner, median — the caller fills the bands and strokes the median; a generator with no band and no median returns a map of three `nil`.
+
+### 14.3 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Shape.PercentileBand.new/0` | Returns a generator reading tuple element 0 as `x`, with no median and no bands. |
+| `Visualize.Shape.PercentileBand.x/2` | Sets the x accessor (function, atom, or number). |
+| `Visualize.Shape.PercentileBand.median/2` | Sets the median accessor; `nil` clears it. |
+| `Visualize.Shape.PercentileBand.inner/2` | Sets the inner band as a `{lo, hi}` pair of accessors; `nil` clears it. |
+| `Visualize.Shape.PercentileBand.outer/2` | Sets the outer band as a `{lo, hi}` pair of accessors; `nil` clears it. |
+| `Visualize.Shape.PercentileBand.defined/2` | Sets the 1-arity defined predicate (1.2), applied to every path. |
+| `Visualize.Shape.PercentileBand.curve/2` | As `curve/3` with `[]` options. |
+| `Visualize.Shape.PercentileBand.curve/3` | Sets the curve type and options, applied to every path. |
+| `Visualize.Shape.PercentileBand.generate/2` | Returns `%{outer:, inner:, median:}` of SVG path-data strings or `nil`, as in 14.2. |
+| `Visualize.Shape.PercentileBand.generate_path/2` | Returns `%{outer:, inner:, median:}` of `IR.Path` or `nil`, as in 14.2. |

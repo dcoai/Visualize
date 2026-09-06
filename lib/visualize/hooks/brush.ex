@@ -299,6 +299,13 @@ defmodule Visualize.Hooks.Brush do
 
   @doc """
   Helper to filter data points within a brush selection.
+  @doc \"""
+  Keeps the data within the selection on every axis whose scale is given (spec/10 §6.3,
+  D-29).
+
+  `opts` takes `:x_accessor` with `:x_scale`, `:y_accessor` with `:y_scale`, or both pairs;
+  an axis without a scale is not tested, so an `"x"` brush needs no y scale. Neither scale
+  is an `ArgumentError`.
 
   ## Example
 
@@ -306,50 +313,72 @@ defmodule Visualize.Hooks.Brush do
         data,
         selection,
         x_accessor: & &1.date,
-        y_accessor: & &1.value,
-        x_scale: x_scale,
-        y_scale: y_scale
+        x_scale: x_scale
       )
   """
+  @spec filter_selection([any()], map(), keyword()) :: [any()]
   def filter_selection(data, selection, opts) do
-    x_accessor = Keyword.fetch!(opts, :x_accessor)
-    y_accessor = Keyword.fetch!(opts, :y_accessor)
-    x_scale = Keyword.fetch!(opts, :x_scale)
-    y_scale = Keyword.fetch!(opts, :y_scale)
+    tests =
+      Enum.flat_map(axes(opts), fn {scale, accessor_key, p0_key, p1_key} ->
+        accessor = Keyword.fetch!(opts, accessor_key)
+        p0 = Map.fetch!(selection, p0_key)
+        p1 = Map.fetch!(selection, p1_key)
 
-    %{x0: x0, y0: y0, x1: x1, y1: y1} = selection
+        [
+          fn d ->
+            p = Visualize.Scale.apply(scale, accessor.(d))
+            p >= p0 and p <= p1
+          end
+        ]
+      end)
 
-    Enum.filter(data, fn d ->
-      x = Visualize.Scale.apply(x_scale, x_accessor.(d))
-      y = Visualize.Scale.apply(y_scale, y_accessor.(d))
-
-      x >= x0 and x <= x1 and y >= y0 and y <= y1
-    end)
+    Enum.filter(data, fn d -> Enum.all?(tests, & &1.(d)) end)
   end
 
   @doc """
-  Converts pixel selection to data domain values.
+  Converts a pixel selection to domain values through the scales given (spec/10 §6.3,
+  D-29).
+
+  With both `:x_scale` and `:y_scale`: `%{x0:, x1:, y0:, y1:}`. With one: the `{start, stop}`
+  pair of that axis in domain units, in pixel order — for a y brush under the usual flipped
+  range `start` is the larger value. Neither scale is an `ArgumentError`.
 
   ## Example
 
-      domain = Visualize.Hooks.Brush.selection_to_domain(
-        selection,
-        x_scale: x_scale,
-        y_scale: y_scale
-      )
-      # Returns %{x0: date1, x1: date2, y0: 0, y1: 100}
+      {from, to} = Visualize.Hooks.Brush.selection_to_domain(selection, x_scale: x_scale)
   """
+  @spec selection_to_domain(map(), keyword()) :: map() | {any(), any()}
   def selection_to_domain(selection, opts) do
-    x_scale = Keyword.fetch!(opts, :x_scale)
-    y_scale = Keyword.fetch!(opts, :y_scale)
+    case axes(opts) do
+      [{x_scale, _, _, _}, {y_scale, _, _, _}] ->
+        %{
+          x0: Visualize.Scale.invert(x_scale, Map.fetch!(selection, :x0)),
+          x1: Visualize.Scale.invert(x_scale, Map.fetch!(selection, :x1)),
+          y0: Visualize.Scale.invert(y_scale, Map.fetch!(selection, :y0)),
+          y1: Visualize.Scale.invert(y_scale, Map.fetch!(selection, :y1))
+        }
 
-    %{x0: x0, y0: y0, x1: x1, y1: y1} = selection
+      [{scale, _, p0_key, p1_key}] ->
+        {Visualize.Scale.invert(scale, Map.fetch!(selection, p0_key)),
+         Visualize.Scale.invert(scale, Map.fetch!(selection, p1_key))}
+    end
+  end
 
-    %{
-      x0: Visualize.Scale.invert(x_scale, x0),
-      x1: Visualize.Scale.invert(x_scale, x1),
-      y0: Visualize.Scale.invert(y_scale, y0),
-      y1: Visualize.Scale.invert(y_scale, y1)
-    }
+  # The axes in use, x first: {scale, accessor key, first edge key, second edge key}.
+  defp axes(opts) do
+    axes =
+      for {scale_key, accessor_key, p0, p1} <- [
+            {:x_scale, :x_accessor, :x0, :x1},
+            {:y_scale, :y_accessor, :y0, :y1}
+          ],
+          scale = Keyword.get(opts, scale_key),
+          scale != nil,
+          do: {scale, accessor_key, p0, p1}
+
+    if axes == [] do
+      raise ArgumentError, "a brush selection needs :x_scale, :y_scale, or both"
+    end
+
+    axes
   end
 end

@@ -219,3 +219,19 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** `Visualize.Shape.Rule` and `Visualize.Shape.XBand` are generators over a list of annotations whose x accessors yield *domain* values, mapped through the scale given to `scale/2`; with no scale the values are pixels, so they compose with a caller's own mapping. `Rule.new/0` reads each datum as its own value, so a list of instants is valid data. Each annotation renders as a `:group` element (a line or rect, plus a `:text` label when set) styled with `:current_color` and a `class`, so CSS can restyle it. `XBand`'s default fill is the brush selection's, so a live selection and a recorded window read alike. Neither has `generate_path/2`: a label is not a path.
 
 **Consequences.** A rule follows the axis it annotates whatever the margins, because both read the same scale. The label position is fixed (right of the upper end, 10 px in); a caller wanting another placement moves or replaces the text child.
+
+## 28. D-28 — `PercentileBand` is a composition with a fixed output shape
+
+**Context.** A median line with p25–p75 and p5–p95 bands around it is composable from `Visualize.Shape.Area` and `Visualize.Shape.Line` today, and was verified to be; but the composition is fiddly enough that every consumer would do it slightly differently — different band order, different handling of gaps, curves applied to the line and not the bands (#1).
+
+**Decision.** `Visualize.Shape.PercentileBand` holds one `x`, one `median`, and two `{lo, hi}` pairs, and `generate_path/2` returns exactly `%{outer:, inner:, median:}` built by delegating to `Area` and `Line` with the same `defined`, `curve`, and `curve_opts`. It adds no geometry of its own: each path is byte-identical to the standalone generator's, which is the whole guarantee. An unset band or median is `nil` in the map rather than an empty path, so a caller can tell "not asked for" from "no defined run".
+
+**Consequences.** `Visualize.Shape.generate/2` returns a map for this generator. Consumers get one place to change the band convention. Styling stays with the caller, as for every path generator.
+
+## 29. D-29 — Brush helpers work on the axes they are given
+
+**Context.** `Visualize.Hooks.Brush.selection_to_domain/2` and `filter_selection/3` fetched both scales with `Keyword.fetch!/2`, so an `"x"` time brush — the common dashboard gesture — could not be converted without inventing a y scale (`KeyError :y_scale`), and the filter tested a `y0 = y1` band the hook had not meant (#1, acceptance note).
+
+**Decision.** Each helper reads the scales it is given. With one scale, `selection_to_domain/2` returns a `{start, stop}` pair in domain units, in pixel order as d3's `selection.map(scale.invert)` would give; with both, the four-key map as before. `filter_selection/3` tests only the axes whose scale is present. Neither scale is an `ArgumentError`: a brush with no axis is a programming error, not an expected condition (spec/11 §5).
+
+**Consequences.** Existing two-scale callers are unchanged. One-axis callers get a tuple, not a map, so the return type follows the arguments; the spec states both shapes. The y-only pair is in pixel order, which under a flipped range is descending in the domain — documented rather than sorted, since sorting domain values of arbitrary type would need a comparator the helper does not have.
