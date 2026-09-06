@@ -22,6 +22,7 @@ defmodule Visualize.Scale.ProtocolTest do
       {"sqrt", Scale.sqrt() |> Scale.domain([0, 100]) |> Scale.range([0, 10]), 25, 5},
       {"symlog", Scale.symlog() |> Scale.domain([-100, 100]) |> Scale.range([0, 1]), 0, 0.5},
       {"time", Scale.time() |> Scale.domain([@t0, @t1]) |> Scale.range([0, 24]), @noon, 12},
+      {"radial", Scale.radial() |> Scale.domain([0, 360]), 90, :math.pi() / 2},
       {"ordinal", Scale.ordinal() |> Scale.domain([:a, :b]) |> Scale.range([1, 2]), :b, 2},
       {"band", Scale.band() |> Scale.domain([:a, :b]) |> Scale.range([0, 100]), :b, 50},
       {"quantize", Scale.quantize() |> Scale.domain([0, 100]) |> Scale.range([:lo, :hi]), 75,

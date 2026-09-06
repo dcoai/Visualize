@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Scales map values from a data *domain* to a visual *range*. `Visualize.Scale` is a facade that constructs every scale kind and dispatches the common operations (`domain/2`, `range/2`, `apply/2`, `invert/2`, `ticks/1,2`, `nice/1`, `padding/2`, `bandwidth/1`, `clamp/2`) to the module named by the scale struct. This document specifies the facade protocol, then each scale module: `Linear`, `Log`, `Power`, `Symlog`, `Time`, `Ordinal`, `Band`, `Quantile`, `Quantize`, `Threshold`, and `Color`. Every scale is an immutable struct; setters return a new struct and never mutate.
+Scales map values from a data *domain* to a visual *range*. `Visualize.Scale` is a facade that constructs every scale kind and dispatches the common operations (`domain/2`, `range/2`, `apply/2`, `invert/2`, `ticks/1,2`, `nice/1`, `padding/2`, `bandwidth/1`, `clamp/2`) to the module named by the scale struct. This document specifies the facade protocol, then each scale module: `Linear`, `Log`, `Power`, `Symlog`, `Time`, `Ordinal`, `Band`, `Quantile`, `Quantize`, `Threshold`, `Color`, and `Radial`. Every scale is an immutable struct; setters return a new struct and never mutate.
 
 ## 1. Common Model
 
@@ -10,14 +10,14 @@ Scales map values from a data *domain* to a visual *range*. `Visualize.Scale` is
 
 | Family | Modules | Domain | Range | Output |
 |---|---|---|---|---|
-| Continuous | `Linear`, `Log`, `Power`, `Symlog`, `Time` | two numbers (or two time values) | two numbers | float, interpolated |
+| Continuous | `Linear`, `Log`, `Power`, `Symlog`, `Time`, `Radial` | two numbers (or two time values) | two numbers (`Radial`: radians) | float, interpolated |
 | Discrete | `Ordinal`, `Band` | list of categories | list of values / two numbers | range element / band start |
 | Discretising | `Quantile`, `Quantize`, `Threshold` | samples / two numbers / thresholds | list of values | range element |
 | Colour | `Color` | two or three numbers | scheme, colour list, or function | `"#rrggbb"` string |
 
 ### 1.2 Domain and Range Representation
 
-Continuous domains and ranges are **two-element lists** `[d0, d1]` / `[r0, r1]` in every scale struct: `Linear`, `Log`, `Power`, `Symlog`, `Time`, `Band`, `Quantize`, and `Color`. `Power`, `Symlog`, and `Quantize` additionally accept a two-tuple on input to `domain/2` and `range/2` and store it as a list (D-15). `Visualize.Axis` (spec/05) reads `scale.range` as a two-element list, so every continuous scale draws with the range it was given.
+Continuous domains and ranges are **two-element lists** `[d0, d1]` / `[r0, r1]` in every scale struct: `Linear`, `Log`, `Power`, `Symlog`, `Time`, `Radial`, `Band`, `Quantize`, and `Color`. `Power`, `Symlog`, and `Quantize` additionally accept a two-tuple on input to `domain/2` and `range/2` and store it as a list (D-15). `Visualize.Axis` (spec/05) reads `scale.range` as a two-element list, so every continuous scale draws with the range it was given.
 
 Domains MAY be descending (`d0 > d1`) and ranges MAY be descending (`r0 > r1`); the interpolation formulae below are sign-agnostic. Degenerate domains (`d0 == d1`) are not guarded and MUST be avoided by the caller: `apply/2` divides by zero.
 
@@ -40,12 +40,13 @@ The table records what each module defines.
 | `Quantize` | yes | `nil` | thresholds | identity | identity | `0` | identity | `quantize/0` |
 | `Threshold` | yes | `nil` | thresholds | identity | identity | `0` | identity | `threshold/0` |
 | `Color` | yes | `nil` | domain extent | identity | identity | `0` | yes | `sequential/1`, `diverging/1` |
+| `Radial` | yes | yes | equal divisions | identity | identity | `0` | yes | `radial/0` |
 
 `Power`, `Symlog`, `Quantile`, `Quantize`, and `Threshold` also keep `scale/2` as an alias of `apply/2` for one release, after which it is removed; new code MUST call `apply/2`. `test/visualize/scale/protocol_test.exs` constructs every kind through the facade and calls all nine operations; it is the recurrence guard for this section.
 
 ### 1.4 Clamping
 
-`clamp/2` takes a boolean. The default is `false` for every scale except `Color`, whose default is `true`. When enabled, `Linear`, `Log`, `Time`, and `Color` clamp the normalised parameter `t` to `[0, 1]` before interpolating; `Power` and `Symlog` clamp the *output* to `[min(r0, r1), max(r0, r1)]`. The two formulations are equivalent for linear interpolation. `invert/2` never clamps.
+`clamp/2` takes a boolean. The default is `false` for every scale except `Color`, whose default is `true`. When enabled, `Linear`, `Log`, `Time`, `Radial`, and `Color` clamp the normalised parameter `t` to `[0, 1]` before interpolating; `Power` and `Symlog` clamp the *output* to `[min(r0, r1), max(r0, r1)]`. The two formulations are equivalent for linear interpolation. `invert/2` never clamps.
 
 ## 2. `Visualize.Scale` Facade
 
@@ -65,6 +66,7 @@ The table records what each module defines.
 | `Visualize.Scale.threshold/0` | Returns `Visualize.Scale.Threshold.new/0`. |
 | `Visualize.Scale.sequential/1` | Returns `Visualize.Scale.Color.sequential/1`. |
 | `Visualize.Scale.diverging/1` | Returns `Visualize.Scale.Color.diverging/1`. |
+| `Visualize.Scale.radial/0` | Returns `Visualize.Scale.Radial.new/0`: domain `[0, 1]`, range `[0, 2π]`. |
 | `Visualize.Scale.domain/2` | Dispatches to the scale module's `domain/2`. |
 | `Visualize.Scale.range/2` | Dispatches to the scale module's `range/2`. |
 | `Visualize.Scale.apply/2` | Dispatches to the scale module's `apply/2`; maps a domain value to a range value. Total over every scale this module constructs (1.3). |
@@ -504,3 +506,34 @@ Categorical schemes are stop lists like any other; used with `sequential/1` they
 | `Visualize.Scale.Color.nice/1` | Identity. |
 | `Visualize.Scale.Color.padding/2` | Identity. |
 | `Visualize.Scale.Color.bandwidth/1` | Returns `0`. |
+
+## 14. `Visualize.Scale.Radial`
+
+### 14.1 Struct
+
+`%Visualize.Scale.Radial{domain: [0, 1], range: [0, 6.283185307179586], clamp?: false}`. The range is in radians and defaults to one full turn, `[0, 2π]`; `range/2` sets any two radians, so a half rose spans `[−π/2, π/2]`.
+
+### 14.2 Semantics
+
+A radial scale maps a cyclic quantity — compass bearing, hour of day, day of year — to an angle (D-30). Angles follow `Visualize.Shape.Arc`'s convention (spec/04 §6.2): radians clockwise from 12 o'clock, so a bearing domain `[0, 360]` over the default range puts north at the top and east at the right with no further arithmetic.
+
+- `apply/2`: `Linear.apply/2` over the domain and range: `t = (v − d0) / (d1 − d0)`, clamped to `[0, 1]` when `clamp?`, result `r0 + t · (r1 − r0)` in radians. A value outside the domain extrapolates (past a full turn) unless clamped; callers wrapping a cyclic value MUST reduce it modulo the period themselves.
+- `invert/2`: `Linear.invert/2`; never clamps.
+- `ticks/2` (count `n`): `n` equal divisions of the domain from `d0`: `d0 + i · (d1 − d0) / n` for `i` in `0 … n − 1` when the range spans a full turn (`|r1 − r0| ≥ 2π − 1e−9`, where `d1` coincides with `d0` on the circle), and `i` in `0 … n` otherwise. `n ≤ 0` yields `[]`. Unlike `Linear.ticks/2`, the count is exact and the values are not rounded to a nice step: a compass asks for 4, 8, or 16 and gets them; the nice-step sequence would give `0, 100, 200, 300`.
+- `nice/1`: identity. The domain of a cyclic quantity is its period, already round; extending it would break the cycle.
+- `padding/2` identity; `bandwidth/1` `0`.
+
+### 14.3 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Scale.Radial.new/0` | Returns the default struct: domain `[0, 1]`, range `[0, 2π]`. |
+| `Visualize.Scale.Radial.domain/2` | Sets the domain; a two-element list of numbers. |
+| `Visualize.Scale.Radial.range/2` | Sets the range; a two-element list of radians. |
+| `Visualize.Scale.Radial.clamp/2` | Sets `clamp?`. |
+| `Visualize.Scale.Radial.apply/2` | Maps a domain value to radians as in 14.2; returns a float. |
+| `Visualize.Scale.Radial.invert/2` | Maps radians back to the domain; returns a float. |
+| `Visualize.Scale.Radial.ticks/2` | `count` equal divisions of the domain as in 14.2. |
+| `Visualize.Scale.Radial.nice/1` | Identity. |
+| `Visualize.Scale.Radial.padding/2` | Identity. |
+| `Visualize.Scale.Radial.bandwidth/1` | Returns `0`. |

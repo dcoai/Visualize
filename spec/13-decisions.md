@@ -235,3 +235,19 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** Each helper reads the scales it is given. With one scale, `selection_to_domain/2` returns a `{start, stop}` pair in domain units, in pixel order as d3's `selection.map(scale.invert)` would give; with both, the four-key map as before. `filter_selection/3` tests only the axes whose scale is present. Neither scale is an `ArgumentError`: a brush with no axis is a programming error, not an expected condition (spec/11 §5).
 
 **Consequences.** Existing two-scale callers are unchanged. One-axis callers get a tuple, not a map, so the return type follows the arguments; the spec states both shapes. The y-only pair is in pixel order, which under a flipped range is descending in the domain — documented rather than sorted, since sorting domain values of arbitrary type would need a comparator the helper does not have.
+
+## 30. D-30 — `Scale.Radial` ticks divide the turn; `nice/1` is identity
+
+**Context.** `Visualize.Scale` was entirely cartesian; a cyclic quantity — bearing, hour of day, day of year — needs a scale whose range is an angle (#1). Reusing `Linear` with a range of `[0, 2π]` gets the mapping but the wrong ticks: the nice-step sequence gives `0, 100, 200, 300` for a bearing domain, and `nice/1` would extend `[0, 360]` to `[0, 400]`, breaking the cycle.
+
+**Decision.** `Visualize.Scale.Radial` interpolates exactly as `Linear` (the same struct shape, range in radians, default one full turn) but `ticks/2` returns `count` equal divisions of the domain — the count exact, the last division dropped when the range is a full turn since it coincides with the first — and `nice/1` is identity. It implements `Visualize.Scale.Behaviour` in full, so the facade and the protocol test cover it; angles follow `Arc`'s clockwise-from-12 convention so a bearing domain needs no offset.
+
+**Consequences.** `ticks/2` is the one protocol operation whose count is a guarantee rather than a hint; the spec says so. A caller who wants nice-step ticks on an angular axis uses `Linear` with the same range. Values outside the domain extrapolate past a full turn unless clamped; wrapping a cyclic value modulo its period is the caller's job, as with any scale.
+
+## 31. D-31 — `Rose` is `Arc` over a radial scale
+
+**Context.** With `Scale.Radial` in place the missing piece for a wind rose was small: a mark that centres one `Arc` sector on each datum's angle and lengthens it by a value (#1). `Shape.Arc` already does the angular geometry, padding included.
+
+**Decision.** `Visualize.Shape.Rose` holds an `angle` and a `width` accessor in the scale's domain units, maps `angle ± width / 2` through `scale/2`, and delegates each datum to `Arc.generate_path/2` with the radius and pad-angle accessors. It adds no geometry of its own — every sector is byte-identical to the `Arc` call with the same numbers — and returns a list of paths, one per datum, so a stacked rose is several roses with rising inner radii, drawn by the caller. No fill accessor: as with `Arc`, styling is the caller's.
+
+**Consequences.** A sector straddling the domain's origin (bearing 0, width 45) spans negative radians, which `Arc` draws correctly since it never reduces its angles modulo a turn. A datum with a zero outer radius is an empty path, kept in the list so it stays index-aligned with the data.
