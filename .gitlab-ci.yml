@@ -39,7 +39,8 @@ default:
     - git config --global --add url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
     - mix local.hex --force
     - mix local.rebar --force
-    - elixir scripts/depdep.exs --pull
+    # A store that cannot be reached must not fail the build: fall back to compiling.
+    - elixir scripts/depdep.exs --pull || echo "depdep: bootstrap failed; compiling dependencies from source"
     - mix deps.get
   cache:
     key:
@@ -60,7 +61,7 @@ compile:
   stage: check
   script:
     - mix compile --force --warnings-as-errors
-    - elixir scripts/depdep.exs --push
+    - elixir scripts/depdep.exs --push || echo "depdep: bootstrap failed; nothing pushed"
 
 test:
   extends: .elixir
