@@ -226,45 +226,34 @@ Domain bounds and `apply/2` arguments MAY be any of `DateTime`, `Date`, `NaiveDa
 ### 7.3 Semantics
 
 - `apply/2`: linear interpolation over Unix seconds, exactly as `Linear.apply/2`; clamps `t` when `clamp?`.
-- `ticks/2` (count `n`): `target = span_seconds / n`; the interval is the first row of the table below whose seconds are `≥ target`, defaulting to `{86400, :day}` when none qualifies (i.e. when `target > 1 year`). The first tick is `d0` snapped by `ceil_to_interval`; subsequent ticks are produced by the step function until the tick exceeds `d1`.
-- `nice/1`: chooses the interval for count 10 and sets the domain to `[floor_to_interval(d0), ceil_to_interval(d1)]`.
+- `ticks/2` (count `n`): the interval is chosen as in 7.3.1 from `span_seconds / max(n, 1)`; the ticks are every boundary of that interval (7.3.2) from `ceil(d0)` up to and including `d1`. Every tick lies on a boundary inside `[d0, d1]`; the first never precedes `d0`. A descending domain yields the same ticks descending. A degenerate domain yields `[d0]` when `d0` is a whole second.
+- `nice/1`: chooses the interval for count 10 and sets the domain to `[floor(d0), ceil(d1)]` (or `[ceil(d0), floor(d1)]` when descending). A domain already on boundaries is unchanged.
+- `interval/2` (`span_seconds, count`) exposes the choice for callers that format ticks by their interval; it is not part of the scale protocol.
+
+This is d3-time's model (D-16); the interval selection and the snapping are the reference behaviour of `d3.timeTicks` and `interval.range`, with Monday-based weeks.
 
 #### 7.3.1 Interval Table
 
-| Seconds | Unit | Step |
-|---|---|---|
-| 1 | `:second` | + 1 s |
-| 5 | `:second` | + 5 s |
-| 15 | `:second` | + 15 s |
-| 30 | `:second` | + 30 s |
-| 60 | `:minute` | + 1 min |
-| 300 | `:minute` | + 5 min |
-| 900 | `:minute` | + 15 min |
-| 1800 | `:minute` | + 30 min |
-| 3600 | `:hour` | + 1 h |
-| 10800 | `:hour` | + 3 h |
-| 21600 | `:hour` | + 6 h |
-| 43200 | `:hour` | + 12 h |
-| 86400 | `:day` | + 1 day |
-| 172800 | `:day` | + 2 days |
-| 604800 | `:week` | + 7 days |
-| 2592000 | `:month` | + 1 calendar month |
-| 7776000 | `:month` | + 3 calendar months |
-| 31536000 | `:year` | + 12 calendar months |
+An interval is `{unit, n}`: `n` units per step. The candidates, with the nominal seconds one step spans (30-day months, 365-day years):
 
-Sub-month steps add whole seconds. Month and year steps rewrite the `month`/`year` fields directly (`secs / 2592000` months), preserving the day-of-month without clamping.
+| Interval | Seconds | Boundary |
+|---|---|---|
+| `{:second, 1}`, `{:second, 5}`, `{:second, 15}`, `{:second, 30}` | 1, 5, 15, 30 | Unix seconds that are a multiple of `n` |
+| `{:minute, 1}`, `{:minute, 5}`, `{:minute, 15}`, `{:minute, 30}` | 60, 300, 900, 1800 | Unix seconds that are a multiple of `60·n` |
+| `{:hour, 1}`, `{:hour, 3}`, `{:hour, 6}`, `{:hour, 12}` | 3600, 10800, 21600, 43200 | Unix seconds that are a multiple of `3600·n` (aligned to midnight UTC) |
+| `{:day, 1}`, `{:day, 2}` | 86400, 172800 | midnight UTC of a day-of-month `d` with `(d − 1) mod n = 0` (two-day ticks restart on the 1st of each month) |
+| `{:week, 1}` | 604800 | Monday 00:00 UTC |
+| `{:month, 1}`, `{:month, 3}` | 2592000, 7776000 | 00:00 UTC on the 1st of a month `m` with `(m − 1) mod n = 0` |
+| `{:year, 1}` | 31536000 | 00:00 UTC on 1 January |
+| `{:year, k}`, `k > 1` | `k · 31536000` | 00:00 UTC on 1 January of a year `y` with `y mod k = 0` |
+
+Selection, with `target = span_seconds / max(n, 1)`: of the two table rows whose seconds bracket `target`, the one closer in ratio (`target / below < above / target` picks the row below); a `target` below one second picks `{:second, 1}`. When `target` exceeds one year the interval is `{:year, k}` with `k = max(1, round(f · 10^⌊log10 raw⌋))` for `raw = span_years / n` and `f` from the d3 nice-step thresholds (`10` if `raw / 10^⌊log10 raw⌋ ≥ √50`, `5` if `≥ √10`, `2` if `≥ √2`, else `1`), so 24 years at count 10 step by 2 and three centuries by 20.
+
+Because neighbouring rows differ by at most `4.3×`, the number of ticks is within about `2.2×` of `n` either way.
 
 #### 7.3.2 Snapping
 
-| Interval | `ceil_to_interval` | `floor_to_interval` |
-|---|---|---|
-| `< 86400 s` | `⌈unix / secs⌉ · secs` | `⌊unix / secs⌋ · secs` |
-| `:day` | midnight UTC of the value's **own** date | midnight UTC of the value's own date |
-| `:week`, `:month`, `:year` | value unchanged (converted to `DateTime`) | value unchanged |
-
-The intended behaviour is that every tick lies on an interval boundary within `[d0, d1]`, the `:day` ceiling is the *next* midnight when `d0` is not already at midnight, week/month/year ticks are snapped to Monday/first-of-month/first-of-year, month arithmetic clamps the day to the target month's length, and spans wider than `n` years select a multi-year interval from the linear nice-step sequence (2, 5, 10, … years). The code instead: floors the `:day` ceiling (the first tick MAY precede `d0`); does not snap week/month/year at all; can construct invalid dates (e.g. day 31 in a 30-day month) when stepping months; and, for spans wider than `n` years, falls back to **daily** ticks, producing thousands of values.
-
-> Decision: see spec/13 — `Visualize.Scale.Time.ticks/2` and `nice/1` are to snap on every interval, step months with day clamping, and extend the table with multi-year intervals.
+`floor(t)` is the latest boundary at or before `t`; `ceil(t)` is `floor(t)` when `t` is already a boundary, else the boundary that follows. Stepping from a boundary to the next: sub-day intervals add `n` units of seconds; `{:day, n}` adds `n` days, or moves to the 1st of the next month when that would pass the month's end; `{:week, 1}` adds seven days; `{:month, n}` adds `n` calendar months; `{:year, k}` adds `k` years. Month arithmetic clamps the day to the target month's length (31 January + 1 month is the last day of February), so no step constructs an invalid date; ticks themselves always land on the 1st.
 
 ### 7.4 Functions
 
@@ -276,8 +265,9 @@ The intended behaviour is that every tick lies on an interval boundary within `[
 | `Visualize.Scale.Time.clamp/2` | Sets `clamp?`. |
 | `Visualize.Scale.Time.apply/2` | Maps a time value to the range as in 7.3; returns a float. |
 | `Visualize.Scale.Time.invert/2` | Maps a range value to a UTC `DateTime` at whole-second precision. |
-| `Visualize.Scale.Time.ticks/2` | Interval-based ticks as in 7.3; a list of UTC `DateTime`. |
-| `Visualize.Scale.Time.nice/1` | Extends the domain to interval boundaries; the domain becomes UTC `DateTime` values. |
+| `Visualize.Scale.Time.ticks/2` | Every boundary of the chosen interval inside the domain (7.3); a list of UTC `DateTime`. |
+| `Visualize.Scale.Time.nice/1` | Extends the domain outward to the boundaries of the count-10 interval; the domain becomes UTC `DateTime` values. |
+| `Visualize.Scale.Time.interval/2` | The `{unit, n}` interval `count` ticks would use over a span of seconds (7.3.1). |
 | `Visualize.Scale.Time.padding/2` | Identity. |
 | `Visualize.Scale.Time.bandwidth/1` | Returns `0`. |
 
