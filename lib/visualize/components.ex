@@ -40,7 +40,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.{Scale, Shape, Axis, SVG, Data}
+    alias Visualize.{Axis, Data, Scale, Shape, SVG}
 
     @default_margin %{top: 20, right: 20, bottom: 30, left: 40}
 

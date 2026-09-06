@@ -65,7 +65,7 @@ defmodule Visualize.Interpolate do
 
   """
   @spec discrete([any()]) :: (number() -> any())
-  def discrete(values) when is_list(values) and length(values) > 0 do
+  def discrete(values) when is_list(values) and values != [] do
     n = length(values)
 
     fn t ->

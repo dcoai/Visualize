@@ -14,7 +14,11 @@ defmodule Visualize.MixProject do
       source_url: "https://gitlab.conet.yarina.org/dco-tek/visualize",
       package: package(),
       docs: docs(),
-      aliases: ["vis.verify": &verify_models/1],
+      aliases: [
+        "vis.verify": &verify_models/1,
+        # Every gate CI runs, in CI's order; see scripts/check.exs.
+        "vis.check": ["cmd elixir scripts/check.exs"]
+      ],
       test_coverage: [summary: [threshold: 0]],
       deps: deps()
     ]
@@ -46,6 +50,7 @@ defmodule Visualize.MixProject do
        only: [:dev, :test],
        runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       # `mix vis.verify` (spec/12 §5): the model of the force simulation. A sibling checkout
       # when there is one, git otherwise, which is what CI sees.
       {:extla, extla_source() ++ [only: [:dev, :test], runtime: false]}

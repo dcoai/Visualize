@@ -7,7 +7,7 @@ defmodule Visualize.Backend.SVG do
 
   @behaviour Visualize.Backend
 
-  alias Visualize.IR.{Path, Element, Transform}
+  alias Visualize.IR.{Element, Path, Transform}
 
   @self_closing_tags ~w(circle ellipse line path polygon polyline rect image use stop)a
 

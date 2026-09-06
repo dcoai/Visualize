@@ -1,0 +1,136 @@
+# The gates every change to visualize passes (spec/12 §4). `scripts/check.exs`, run as
+# `mix vis.check`, is the local mirror of this file: every job here, in this order.
+#
+# Compiled dependencies come from the depdep store (scripts/depdep.exs): `--pull` runs
+# BEFORE `mix deps.get`, because fetching source first gives it fresh mtimes and Mix then
+# rebuilds everything it just restored. `--push` runs only after a green build. Without the
+# DEPDEP_* variables depdep is a no-op that exits 0.
+#
+# The private git dependencies (surfex, extla, depdep itself) are reached with the job token
+# through the two `insteadOf` rewrites below. This only works because dco-tek/visualize is
+# on each producer's inbound job-token allowlist (Settings → CI/CD → Token Access), which is
+# per project and not inherited from the group; the failure mode is `HTTP Basic: Access
+# denied`, which reads like a credential bug and is not.
+
+stages:
+  - check
+  - verify
+  - quality
+
+variables:
+  # Pinned to .tool-versions.
+  ELIXIR_IMAGE: hexpm/elixir:1.20.4-erlang-29.0.5-debian-bookworm-20260824-slim
+  GIT_DEPTH: "20"
+
+default:
+  tags:
+    - DCOTek
+  interruptible: true
+
+.elixir:
+  image: $ELIXIR_IMAGE
+  variables:
+    MIX_ENV: test
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends git ca-certificates
+    - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "https://${CI_SERVER_HOST}/"
+    # `--add`: both rewrites share one key and plain `git config` REPLACES a key's value.
+    - git config --global --add url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
+    - mix local.hex --force
+    - mix local.rebar --force
+    - elixir scripts/depdep.exs --pull
+    - mix deps.get
+  cache:
+    key:
+      files:
+        - mix.lock
+    paths:
+      - deps
+      - _build
+
+format:
+  extends: .elixir
+  stage: check
+  script:
+    - mix format --check-formatted
+
+compile:
+  extends: .elixir
+  stage: check
+  script:
+    - mix compile --force --warnings-as-errors
+    - elixir scripts/depdep.exs --push
+
+test:
+  extends: .elixir
+  stage: check
+  script:
+    - mix test --cover
+  coverage: '/\|\s+(\d+\.\d+)%\s+\|\s+Total\s+\|/'
+  artifacts:
+    when: on_failure
+    paths:
+      - cover
+    expire_in: 1 week
+
+# THE SURFACE GATE (spec/12 §2). HARD: API_SURFACE.md is generated, so a difference means
+# it was hand-edited or spec/ or lib/ changed without a regenerate.
+verify:api-surface:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: dev
+  script:
+    - mix vis.surface --check
+
+verify:headings:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: dev
+  script:
+    - mix vis.headings
+
+verify:models:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: dev
+  script:
+    - mix vis.verify
+
+# What a consumer compiles: lib/ alone, with neither audit/, specs/, surfex nor extla.
+consumer-compile:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: prod
+  script:
+    - mix compile --force --warnings-as-errors
+    - mix run -e 'false = Code.ensure_loaded?(Visualize.Audit); false = Code.ensure_loaded?(TLA.Spec); false = Code.ensure_loaded?(Surfex.Golden); IO.puts("consumer build is lib/ only")'
+
+# The gallery is the only thing that exercises the LiveView side; it must keep building.
+examples:compile:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: dev
+  script:
+    - cd examples
+    - mix deps.get
+    - mix compile
+
+credo:
+  extends: .elixir
+  stage: quality
+  script:
+    - mix credo --strict
+
+docs:
+  extends: .elixir
+  stage: quality
+  variables:
+    MIX_ENV: dev
+  script:
+    - mix docs --warnings-as-errors

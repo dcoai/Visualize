@@ -47,8 +47,8 @@ defmodule Visualize.Backend.Hybrid do
 
   """
 
+  alias Visualize.Backend.{Canvas, SVG}
   alias Visualize.IR.{Element, Path, Transform}
-  alias Visualize.Backend.{SVG, Canvas}
 
   @doc """
   Renders a hybrid chart with SVG static elements and Canvas dynamic data.

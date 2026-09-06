@@ -210,10 +210,10 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   defp has_color?("none"), do: false
   defp has_color?(_), do: true
 
-  defp is_none?(nil), do: true
-  defp is_none?(:none), do: true
-  defp is_none?("none"), do: true
-  defp is_none?(_), do: false
+  defp none?(nil), do: true
+  defp none?(:none), do: true
+  defp none?("none"), do: true
+  defp none?(_), do: false
 
   defp encode_svg_draw_commands(attrs) do
     fill = Map.get(attrs, :fill)
@@ -224,7 +224,7 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     cmds = if has_color?(stroke), do: cmds ++ [<<Opcodes.stroke()::8>>], else: cmds
 
     # Default to fill if nothing specified (and not explicitly none)
-    if cmds == [] && !is_none?(fill) do
+    if cmds == [] && !none?(fill) do
       [<<Opcodes.fill()::8>>]
     else
       cmds

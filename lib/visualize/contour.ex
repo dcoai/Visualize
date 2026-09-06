@@ -173,15 +173,11 @@ defmodule Visualize.Contour do
 
     padded =
       for y <- 0..(padded_height - 1), x <- 0..(padded_width - 1) do
-        cond do
-          # Border cells get minimum value
-          x == 0 or y == 0 or x == padded_width - 1 or y == padded_height - 1 ->
-            min_val
-
-          # Interior cells get original values (offset by 1)
-          true ->
-            orig_idx = (y - 1) * width + (x - 1)
-            Enum.at(values, orig_idx, min_val)
+        # Border cells get the minimum value; interior cells the original (offset by 1).
+        if x == 0 or y == 0 or x == padded_width - 1 or y == padded_height - 1 do
+          min_val
+        else
+          Enum.at(values, (y - 1) * width + (x - 1), min_val)
         end
       end
 

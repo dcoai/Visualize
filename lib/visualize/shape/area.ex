@@ -22,8 +22,8 @@ defmodule Visualize.Shape.Area do
 
   """
 
-  alias Visualize.Shape.Curve
   alias Visualize.IR.Path
+  alias Visualize.Shape.Curve
 
   defstruct x: nil,
             x0: nil,
