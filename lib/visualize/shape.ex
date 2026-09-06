@@ -108,6 +108,12 @@ defmodule Visualize.Shape do
   @doc "Sets the outer radius (for arcs)"
   def outer_radius(%Arc{} = shape, radius), do: Arc.outer_radius(shape, radius)
 
+  @doc "Sets the corner radius (for arcs)"
+  def corner_radius(%Arc{} = shape, radius), do: Arc.corner_radius(shape, radius)
+
+  @doc "Sets the pad radius (for arcs)"
+  def pad_radius(%Arc{} = shape, radius), do: Arc.pad_radius(shape, radius)
+
   @doc "Sets the start angle (for arcs and pies)"
   def start_angle(%Arc{} = shape, angle), do: Arc.start_angle(shape, angle)
   def start_angle(%Pie{} = shape, angle), do: Pie.start_angle(shape, angle)
@@ -119,6 +125,12 @@ defmodule Visualize.Shape do
   @doc "Sets the pad angle (for arcs and pies)"
   def pad_angle(%Arc{} = shape, angle), do: Arc.pad_angle(shape, angle)
   def pad_angle(%Pie{} = shape, angle), do: Pie.pad_angle(shape, angle)
+
+  @doc "Sets the data comparator (for pies); `nil` clears it"
+  def sort(%Pie{} = shape, comparator), do: Pie.sort(shape, comparator)
+
+  @doc "Sets the value comparator (for pies); `nil` clears it"
+  def sort_values(%Pie{} = shape, comparator), do: Pie.sort_values(shape, comparator)
 
   @doc "Sets the symbol type"
   def type(%Symbol{} = shape, type), do: Symbol.type(shape, type)

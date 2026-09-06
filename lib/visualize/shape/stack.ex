@@ -17,8 +17,8 @@ defmodule Visualize.Shape.Stack do
         |> Visualize.Shape.Stack.keys([:apples, :oranges, :bananas])
 
       series = Visualize.Shape.Stack.generate(stack, data)
-      # Returns list of series, each with :key and :points
-      # Points have :data, :y0 (baseline), :y1 (top)
+      # Returns one series per key, in key order, each with :key, :index (its position
+      # in the stacking order) and :points. Points have :data, :y0 (baseline), :y1 (top).
 
   """
 
@@ -34,10 +34,15 @@ defmodule Visualize.Shape.Stack do
           offset: :none | :expand | :diverging | :silhouette | :wiggle
         }
 
-  @type series :: %{
+  @type point :: %{
           key: any(),
-          points: [%{data: any(), y0: number(), y1: number(), index: non_neg_integer()}]
+          index: non_neg_integer(),
+          data: any(),
+          value: number(),
+          y0: number(),
+          y1: number()
         }
+  @type series :: %{key: any(), index: non_neg_integer(), points: [point()]}
 
   @doc "Creates a new stack generator"
   @spec new() :: t()
@@ -87,9 +92,9 @@ defmodule Visualize.Shape.Stack do
 
   - `:none` - Zero baseline (default)
   - `:expand` - Normalize to 0-1 (100% stacked)
-  - `:diverging` - Positive above zero, negative below
+  - `:diverging` - Positive values stack up from zero, negative values stack down from zero
   - `:silhouette` - Center the stack around zero
-  - `:wiggle` - Minimize wiggle (for streamgraphs)
+  - `:wiggle` - Minimize weighted wiggle (for streamgraphs)
   """
   @spec offset(t(), atom()) :: t()
   def offset(%__MODULE__{} = stack, offset)
@@ -100,185 +105,200 @@ defmodule Visualize.Shape.Stack do
   @doc """
   Generates the stacked series data.
 
-  Returns a list of series maps, each containing:
+  Returns one series per key, **in key order**, each a map with:
   - `:key` - The series key
-  - `:points` - List of points with `:data`, `:y0`, `:y1`, `:index`
+  - `:index` - The series' position in the stacking order (0 is the bottom)
+  - `:points` - One point per datum with `:data`, `:value`, `:y0`, `:y1`, `:index`
   """
   @spec generate(t(), [map()]) :: [series()]
+  def generate(%__MODULE__{keys: []}, _data), do: []
+  def generate(%__MODULE__{}, []), do: []
+
   def generate(%__MODULE__{keys: keys, value: value_fn, order: order, offset: offset}, data) do
-    n = length(data)
+    # `series` is a tuple of series in key order; each series is a list of points with
+    # `value` and provisional `y0 = 0`, `y1 = value`, as d3 initialises `[0, value]`.
+    series =
+      keys
+      |> Enum.map(fn key ->
+        points =
+          data
+          |> Enum.with_index()
+          |> Enum.map(fn {d, j} ->
+            v = value_fn.(d, key)
+            %{key: key, index: j, data: d, value: v, y0: 0, y1: v}
+          end)
 
-    if n == 0 or Enum.empty?(keys) do
-      []
-    else
-      # Extract values for each key and datum
-      values =
-        for key <- keys do
-          for {d, i} <- Enum.with_index(data) do
-            %{key: key, index: i, data: d, value: value_fn.(d, key)}
-          end
-        end
+        %{key: key, index: 0, points: points}
+      end)
+      |> List.to_tuple()
 
-      # Apply ordering
-      ordered_values = apply_order(values, order)
+    # The stacking order is a permutation of key indexes (d3's `order(series)`).
+    order_ix = stacking_order(series, order)
 
-      # Compute stack positions
-      stacked = compute_stack(ordered_values, n)
-
-      # Apply offset
-      apply_offset(stacked, offset, n)
-    end
-  end
-
-  # Order the series
-  defp apply_order(values, :none), do: values
-
-  defp apply_order(values, :reverse), do: Enum.reverse(values)
-
-  defp apply_order(values, :ascending) do
-    Enum.sort_by(values, fn series ->
-      Enum.reduce(series, 0, fn %{value: v}, acc -> acc + v end)
+    series
+    |> apply_offset(order_ix, offset, length(data))
+    |> Tuple.to_list()
+    |> Enum.with_index()
+    |> Enum.map(fn {s, key_index} ->
+      %{s | index: Enum.find_index(order_ix, &(&1 == key_index))}
     end)
   end
 
-  defp apply_order(values, :descending) do
-    Enum.sort_by(
-      values,
-      fn series ->
-        Enum.reduce(series, 0, fn %{value: v}, acc -> acc + v end)
-      end,
-      :desc
-    )
+  # --- Order: a permutation of key indexes -------------------------------------------------
+
+  defp stacking_order(series, :none), do: Enum.to_list(0..(tuple_size(series) - 1))
+  defp stacking_order(series, :reverse), do: Enum.reverse(stacking_order(series, :none))
+
+  defp stacking_order(series, :ascending) do
+    series |> stacking_order(:none) |> Enum.sort_by(&series_sum(series, &1))
   end
 
-  defp apply_order(values, :insideout) do
-    # Sort by sum, then interleave (largest in middle)
-    sorted =
-      Enum.sort_by(
-        values,
-        fn series ->
-          Enum.reduce(series, 0, fn %{value: v}, acc -> acc + v end)
-        end,
-        :desc
-      )
+  defp stacking_order(series, :descending) do
+    series |> stacking_order(:none) |> Enum.sort_by(&series_sum(series, &1), :desc)
+  end
 
-    interleave(sorted, [], [])
+  defp stacking_order(series, :insideout) do
+    # Sort by sum, then interleave (largest in middle)
+    series |> stacking_order(:descending) |> interleave([], [])
+  end
+
+  defp series_sum(series, i) do
+    series |> elem(i) |> Map.fetch!(:points) |> Enum.reduce(0, fn %{value: v}, acc -> acc + v end)
   end
 
   defp interleave([], top, bottom), do: Enum.reverse(top) ++ bottom
-
   defp interleave([a], top, bottom), do: Enum.reverse([a | top]) ++ bottom
+  defp interleave([a, b | rest], top, bottom), do: interleave(rest, [a | top], [b | bottom])
 
-  defp interleave([a, b | rest], top, bottom) do
-    interleave(rest, [a | top], [b | bottom])
+  # --- Offsets ------------------------------------------------------------------------------
+
+  # `:none` stacks each series in stacking order on the previous one's top; the bottom
+  # series keeps whatever `y0` the offset set (0 unless an offset moved the baseline).
+  defp apply_offset(series, order_ix, :none, _n), do: stack_none(series, order_ix)
+
+  defp apply_offset(series, order_ix, :expand, n) do
+    totals = column_totals(series, n)
+
+    series
+    |> map_points(fn %{index: j, value: v} = p ->
+      total = elem(totals, j)
+      v = if total == 0, do: 0, else: v / total
+      %{p | value: v, y0: 0, y1: v}
+    end)
+    |> stack_none(order_ix)
   end
 
-  # Compute basic stack positions (y0 and y1)
-  defp compute_stack(ordered_values, n) do
-    # Initialize baselines to zero
-    baselines = List.duplicate(0, n)
+  defp apply_offset(series, order_ix, :silhouette, n) do
+    totals = column_totals(series, n)
+    baselines = Enum.map(0..(n - 1), fn j -> -elem(totals, j) / 2 end)
 
-    {stacked, _} =
-      Enum.map_reduce(ordered_values, baselines, fn series, baselines ->
-        {points, new_baselines} =
-          series
-          |> Enum.zip(baselines)
-          |> Enum.map(fn {%{key: key, index: i, data: d, value: v}, baseline} ->
-            y0 = baseline
-            y1 = baseline + v
-            {%{key: key, index: i, data: d, y0: y0, y1: y1, value: v}, y1}
+    series
+    |> with_baselines(hd(order_ix), baselines)
+    |> stack_none(order_ix)
+  end
+
+  # d3's `stackOffsetDiverging`: positives accumulate upward from zero, negatives downward,
+  # each independently of the other; a zero value sits at the origin.
+  defp apply_offset(series, order_ix, :diverging, n) do
+    Enum.reduce(0..(n - 1), series, fn j, series ->
+      {series, _yp, _yn} =
+        Enum.reduce(order_ix, {series, 0, 0}, fn i, {series, yp, yn} ->
+          s = elem(series, i)
+          p = Enum.at(s.points, j)
+
+          {p, yp, yn} =
+            cond do
+              p.value > 0 -> {%{p | y0: yp, y1: yp + p.value}, yp + p.value, yn}
+              p.value < 0 -> {%{p | y1: yn, y0: yn + p.value}, yp, yn + p.value}
+              true -> {%{p | y0: 0, y1: 0}, yp, yn}
+            end
+
+          {put_elem(series, i, %{s | points: List.replace_at(s.points, j, p)}), yp, yn}
+        end)
+
+      series
+    end)
+  end
+
+  # d3's `stackOffsetWiggle` (Byron & Wattenberg's streamgraph baseline): the baseline
+  # moves between columns so as to minimise the weighted change in slope of the layers.
+  defp apply_offset(series, order_ix, :wiggle, n) do
+    values =
+      order_ix
+      |> Enum.map(fn i ->
+        series |> elem(i) |> Map.fetch!(:points) |> Enum.map(& &1.value) |> List.to_tuple()
+      end)
+      |> List.to_tuple()
+
+    m = tuple_size(values)
+
+    {baselines, y} =
+      Enum.reduce(1..(n - 1)//1, {[], 0}, fn j, {acc, y} ->
+        {s1, s2} =
+          Enum.reduce(0..(m - 1), {0, 0}, fn i, {s1, s2} ->
+            sij0 = elem(elem(values, i), j)
+            sij1 = elem(elem(values, i), j - 1)
+
+            s3 =
+              Enum.reduce(0..(i - 1)//1, (sij0 - sij1) / 2, fn k, s3 ->
+                s3 + (elem(elem(values, k), j) - elem(elem(values, k), j - 1))
+              end)
+
+            {s1 + sij0, s2 + s3 * sij0}
           end)
-          |> Enum.unzip()
 
-        series_result = %{
-          key: hd(series).key,
-          points: points
-        }
-
-        {series_result, new_baselines}
+        y_next = if s1 == 0, do: y, else: y - s2 / s1
+        {[y | acc], y_next}
       end)
 
-    stacked
+    baselines = Enum.reverse([y | baselines])
+
+    series
+    |> with_baselines(hd(order_ix), baselines)
+    |> stack_none(order_ix)
   end
 
-  # Apply offset transformations
-  defp apply_offset(stacked, :none, _n), do: stacked
+  # Sets the bottom series' y0/y1 to the given per-column baselines.
+  defp with_baselines(series, bottom_ix, baselines) do
+    s = elem(series, bottom_ix)
 
-  defp apply_offset(stacked, :expand, n) do
-    # Normalize each column to sum to 1
-    totals =
-      for i <- 0..(n - 1) do
-        Enum.reduce(stacked, 0, fn series, acc ->
-          point = Enum.at(series.points, i)
-          acc + point.value
-        end)
-      end
+    points =
+      Enum.zip_with(s.points, baselines, fn p, b -> %{p | y0: b, y1: b + p.value} end)
 
-    Enum.map(stacked, fn series ->
-      points =
-        series.points
-        |> Enum.with_index()
-        |> Enum.map(fn {point, i} ->
-          total = Enum.at(totals, i)
+    put_elem(series, bottom_ix, %{s | points: points})
+  end
 
-          if total == 0 do
-            %{point | y0: 0, y1: 0}
-          else
-            %{point | y0: point.y0 / total, y1: point.y1 / total}
-          end
-        end)
+  # d3's `stackOffsetNone`.
+  defp stack_none(series, [first | rest]) do
+    {series, _} =
+      Enum.reduce(rest, {series, first}, fn i, {series, prev_ix} ->
+        prev = elem(series, prev_ix)
+        s = elem(series, i)
 
-      %{series | points: points}
+        points =
+          Enum.zip_with(s.points, prev.points, fn p, %{y1: base} ->
+            %{p | y0: base, y1: base + p.value}
+          end)
+
+        {put_elem(series, i, %{s | points: points}), i}
+      end)
+
+    series
+  end
+
+  defp column_totals(series, n) do
+    Enum.map(0..(n - 1), fn j ->
+      series
+      |> Tuple.to_list()
+      |> Enum.reduce(0, fn s, acc -> acc + Enum.at(s.points, j).value end)
     end)
+    |> List.to_tuple()
   end
 
-  defp apply_offset(stacked, :diverging, _n) do
-    # Positive values above zero, negative below
-    # Re-compute with diverging logic
-    Enum.map(stacked, fn series ->
-      points =
-        Enum.map(series.points, fn point ->
-          if point.value >= 0 do
-            point
-          else
-            %{point | y0: point.value, y1: 0}
-          end
-        end)
-
-      %{series | points: points}
-    end)
-  end
-
-  defp apply_offset(stacked, :silhouette, n) do
-    # Center around zero
-    totals =
-      for i <- 0..(n - 1) do
-        Enum.reduce(stacked, 0, fn series, acc ->
-          point = Enum.at(series.points, i)
-          acc + point.value
-        end)
-      end
-
-    Enum.map(stacked, fn series ->
-      points =
-        series.points
-        |> Enum.with_index()
-        |> Enum.map(fn {point, i} ->
-          offset = -Enum.at(totals, i) / 2
-          %{point | y0: point.y0 + offset, y1: point.y1 + offset}
-        end)
-
-      %{series | points: points}
-    end)
-  end
-
-  defp apply_offset(stacked, :wiggle, n) do
-    # Minimize weighted wiggle (Streamgraph algorithm)
-    # Simplified version
-    if n < 2 do
-      stacked
-    else
-      apply_offset(stacked, :silhouette, n)
-    end
+  defp map_points(series, fun) do
+    series
+    |> Tuple.to_list()
+    |> Enum.map(fn s -> %{s | points: Enum.map(s.points, fun)} end)
+    |> List.to_tuple()
   end
 end

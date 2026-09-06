@@ -58,9 +58,13 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.offset/2` | `Stack.offset/2`. |
 | `Visualize.Shape.inner_radius/2` | `Arc.inner_radius/2`. |
 | `Visualize.Shape.outer_radius/2` | `Arc.outer_radius/2`. |
+| `Visualize.Shape.corner_radius/2` | `Arc.corner_radius/2`. |
+| `Visualize.Shape.pad_radius/2` | `Arc.pad_radius/2`. |
 | `Visualize.Shape.start_angle/2` | `Arc.start_angle/2` or `Pie.start_angle/2`. |
 | `Visualize.Shape.end_angle/2` | `Arc.end_angle/2` or `Pie.end_angle/2`. |
 | `Visualize.Shape.pad_angle/2` | `Arc.pad_angle/2` or `Pie.pad_angle/2`. |
+| `Visualize.Shape.sort/2` | `Pie.sort/2`. |
+| `Visualize.Shape.sort_values/2` | `Pie.sort_values/2`. |
 | `Visualize.Shape.type/2` | `Symbol.type/2`. |
 | `Visualize.Shape.size/2` | `Symbol.size/2`. |
 | `Visualize.Shape.generate/1` | As `generate/2` with `nil` data (meaningful for `Symbol` only). |
@@ -68,7 +72,7 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.generate_path/1` | As `generate_path/2` with `nil` data. |
 | `Visualize.Shape.generate_path/2` | Dispatches to `generate_path/2` of `Line`, `Area`, `Arc`, or `Symbol`; `Pie` and `Stack` are not accepted. |
 
-`Shape.corner_radius/2` is absent from the facade; use `Shape.Arc.corner_radius/2` directly. `Pie.sort/2` and `Pie.sort_values/2` likewise.
+Every setter of `Arc` and `Pie` is reachable through the facade; `Symbol.types/0` and `Arc.centroid/2` are not (D-21).
 
 ## 3. `Visualize.Shape.Line`
 
@@ -199,23 +203,26 @@ by the Thomas algorithm (forward elimination, back substitution). The second con
 
 ### 6.1 Struct
 
-`%Visualize.Shape.Arc{inner_radius: 0, outer_radius: nil, corner_radius: 0, start_angle: nil, end_angle: nil, pad_angle: 0, pad_radius: nil}`. `new/0` sets `outer_radius` to `100`, `start_angle` to `Map.get(d, :start_angle, 0)`, and `end_angle` to `Map.get(d, :end_angle, 2π)`, so a `Pie` arc datum (section 7) is consumed directly. `pad_radius` has no setter.
+`%Visualize.Shape.Arc{inner_radius: 0, outer_radius: nil, corner_radius: 0, start_angle: nil, end_angle: nil, pad_angle: 0, pad_radius: nil}`. `new/0` sets `outer_radius` to `100`, `start_angle` to `Map.get(d, :start_angle, 0)`, and `end_angle` to `Map.get(d, :end_angle, 2π)`, so a `Pie` arc datum (section 7) is consumed directly. `pad_radius/2` sets `pad_radius`; `nil` (the default) means `√(r0² + r1²)` at generation time.
 
 ### 6.2 Geometry
 
-All parameters are accessors (1.1) evaluated against the datum. Radii are in user units; angles are **radians measured clockwise from 12 o'clock** (the generator subtracts `π/2` before taking `cos`/`sin`). The path is centred on the origin; callers translate it.
+All parameters are accessors (1.1) evaluated against the datum. Radii are in user units; angles are **radians measured clockwise from 12 o'clock** (the generator subtracts `π/2` before taking `cos`/`sin`). The path is centred on the origin; callers translate it. The construction is d3-shape's `arc` (D-21).
 
-With `r0` inner, `r1` outer, `a0`/`a1` the shifted angles, `da = |a1 − a0|`, `cw = a1 > a0`, `ε = 1e−12`:
+With `r0` inner and `r1` outer (swapped when `r1 < r0`, so the outer radius is always the larger), `a0`/`a1` the shifted angles, `da = |a1 − a0|`, `cw = a1 > a0`, `ε = 1e−12`:
 
-- `da > 2π − ε` (full ring): `M` on the outer circle at `a0`, two `A` half-circles (`large_arc = 1`, `sweep = cw`) around the outer radius; then if `r0 > ε` an `M` and two reversed half-circles on the inner radius (no `Z`), else `Z`.
-- `ε < da ≤ 2π − ε` (sector): `M` outer start, `A r1 r1 0 large sweep` to outer end (`large = 1` when `da > π`); then if `r0 > ε`: `L` inner end, `A r0 r0 0 large (1 − sweep)` back to inner start, `Z`; else `L 0,0`, `Z`.
-- `da ≤ ε`: empty path.
+- `r1 ≤ ε` or `da ≤ ε`: empty path — there is nothing to draw (d3 emits a degenerate `M … Z`).
+- `da > 2π − ε` (full ring): `M` on the outer circle at `a0`, two `A` half-circles (`large_arc = 1`, `sweep = cw`) around the outer radius; then if `r0 > ε` an `M` on the inner circle at `a1` and two reversed half-circles on the inner radius; then `Z`.
+- otherwise (sector), in this order:
+  1. **Padding.** With `ap = pad_angle / 2` and, when `ap > ε`, `rp = pad_radius` (default `√(r0² + r1²)`): each ring's two ends move inward by `asin(rp / r · sin ap)` for that ring's radius `r`, so the *linear* gap `rp · pad_angle` is the same on both rings and the angular shift is larger on the inner one. A ring whose extent the pad exceeds — or whose radius is `0`, or for which `rp / r · sin ap > 1` — collapses to the sector's mid-angle with zero extent.
+  2. **Corner radius.** `rc = min(corner_radius, |r1 − r0| / 2)`. When `da < π` the corners are further limited by the sector's own geometry: with `oc` the intersection of the two straight edges, `lc = |oc|`, and `kc = 1 / sin(θ/2)` for `θ` the angle between the edges at `oc`, the inner corner radius is `min(rc, (r0 − lc) / (kc − 1))` and the outer `min(rc, (r1 − lc) / (kc + 1))`; parallel edges give `0`.
+  3. **Outer edge.** If the outer ring's padded extent is `≤ ε`: `M` at its start. Else if its corner radius is `> ε`: `M` at the first corner's tangent point on the start edge, a corner `A` (radius the corner radius) to the ring, `A r1` along the ring, and a corner `A` down to the end edge — or, when the corner radius was limited below `rc`, one corner `A` from edge to edge (the two corners have merged). Else `M` at the outer start and `A r1` (`large_arc = 1` when the padded extent is `≥ π`, `sweep = cw`) to the outer end.
+  4. **Inner edge.** If `r0 ≤ ε` or the inner ring's padded extent is `≤ ε`: `L` to the inner end (the origin for a circular sector). Else if its corner radius is `> ε`: `L` to the first inner corner's tangent point on the end edge, then the mirror of step 3 with `A r0` in the reverse sweep. Else `L` to the inner end and `A r0` (`sweep = 1 − cw`) back to the inner start.
+  5. `Z`.
 
-`centroid/2` returns `{r·cos a, r·sin a}` with `r = (r0 + r1) / 2` and `a` the mean of the shifted angles.
+Every `A` is emitted as d3-path emits it: an implicit `L` to the arc's start when the pen is not already there (within `1e−6`), `large_arc = 1` when the arc spans at least `π`, `sweep = 0` for a counter-clockwise arc. The corner construction is d3-shape's `cornerTangents`: the centre of the circle of the corner radius tangent to both the ring and the straight edge (the nearer of the two candidates), with the tangent points on the edge and on the ring. Reference strings are in `test/visualize/shape/arc_stack_test.exs`.
 
-`corner_radius` and `pad_angle` are stored and accessible but **not applied** by `generate_path/2`; the emitted geometry ignores them. Intended behaviour is D3's: `pad_angle` narrows the sector by half the pad on each side (at `pad_radius`, default `√(r0² + r1²)`), and `corner_radius` rounds the four corners with tangent arcs, limited to half the ring thickness.
-
-> Decision: see spec/13 — `Arc.generate_path/2` MUST honour `pad_angle` and `corner_radius`.
+`centroid/2` returns `{r·cos a, r·sin a}` with `r = (r0 + r1) / 2` and `a` the mean of the shifted angles; padding and corners do not move it.
 
 ### 6.3 Functions
 
@@ -224,10 +231,11 @@ With `r0` inner, `r1` outer, `a0`/`a1` the shifted angles, `da = |a1 − a0|`, `
 | `Visualize.Shape.Arc.new/0` | Returns an arc generator with `outer_radius` 100 reading `:start_angle`/`:end_angle` from the datum. |
 | `Visualize.Shape.Arc.inner_radius/2` | Sets the inner radius accessor (default `0`). |
 | `Visualize.Shape.Arc.outer_radius/2` | Sets the outer radius accessor. |
-| `Visualize.Shape.Arc.corner_radius/2` | Sets the corner radius accessor (stored; see 6.2). |
+| `Visualize.Shape.Arc.corner_radius/2` | Sets the corner radius accessor, applied as in 6.2. |
 | `Visualize.Shape.Arc.start_angle/2` | Sets the start angle accessor, radians. |
 | `Visualize.Shape.Arc.end_angle/2` | Sets the end angle accessor, radians. |
-| `Visualize.Shape.Arc.pad_angle/2` | Sets the pad angle accessor, radians (stored; see 6.2). |
+| `Visualize.Shape.Arc.pad_angle/2` | Sets the pad angle accessor, radians, applied as in 6.2. |
+| `Visualize.Shape.Arc.pad_radius/2` | Sets the pad radius accessor; `nil` restores the default `√(r0² + r1²)`. |
 | `Visualize.Shape.Arc.generate/2` | Returns the SVG path-data string for the datum. |
 | `Visualize.Shape.Arc.generate_path/2` | Returns the `IR.Path` as in 6.2. |
 | `Visualize.Shape.Arc.centroid/2` | Returns `{x, y}` at mid-radius and mid-angle. |
@@ -282,10 +290,10 @@ with `v = max(0, value.(d))`, `total = Σ v`, `da = clamp(end − start, −2π,
 `generate/2` returns `[]` when data or keys are empty; otherwise a list of
 
 ```
-%{key: k, points: [%{key: k, index: i, data: d, value: v, y0: lo, y1: hi}, …]}
+%{key: k, index: i, points: [%{key: k, index: j, data: d, value: v, y0: lo, y1: hi}, …]}
 ```
 
-one series per key **in stacking order** (after `order` is applied; the output is not restored to key order), each with one point per datum in data order.
+one series per key **in key order**, with the series' `index` its position in the stacking order (`0` at the bottom, as d3 records `series.index`), each with one point per datum in data order; a point's `index` is its datum's index (D-22).
 
 ### 8.4 Order
 
@@ -299,19 +307,15 @@ one series per key **in stacking order** (after `order` is applied; the output i
 
 ### 8.5 Offset
 
-Stacking first computes, per column, `y0 = baseline`, `y1 = baseline + v`, `baseline ← y1` across the ordered series (negatives lower the baseline). Offsets then adjust:
+The offsets are d3-shape's (D-22), applied in stacking order (8.4). Every series starts with `y0 = 0`, `y1 = v` per point. "Stacking" below means: the bottom series keeps its `y0`; each following series takes `y0` from the previous series' `y1` and `y1 = y0 + v`, so negatives lower the running top.
 
 | Offset | Adjustment |
 |---|---|
-| `:none` | none |
-| `:expand` | `y0`, `y1` divided by the column's total `Σ v`; both `0` when the total is `0` |
-| `:diverging` | points with `v < 0` become `y0 = v`, `y1 = 0`; positive points unchanged |
-| `:silhouette` | `y0`, `y1` shifted by `−total / 2` per column |
-| `:wiggle` | identical to `:silhouette` when there are at least two data; otherwise none |
-
-Intended D3 semantics differ for two offsets. `:diverging` MUST stack positives cumulatively upward from zero and negatives cumulatively downward from zero, independent of one another; the code neither accumulates negatives nor isolates positives from preceding negative series. `:wiggle` MUST minimise weighted change in slope (the streamgraph algorithm); the code substitutes `:silhouette`.
-
-> Decision: see spec/13 — `Stack` `:diverging` and `:wiggle` are to be implemented per D3.
+| `:none` | stack |
+| `:expand` | `v` divided by the column's total `Σ v` (`0` when the total is `0`), then stack |
+| `:diverging` | per column, positives accumulate upward from `0` (`y0 = yp`, `y1 = yp + v`) and negatives downward from `0` (`y1 = yn`, `y0 = yn + v`), independently of each other; a zero value is `y0 = y1 = 0` |
+| `:silhouette` | the bottom series' `y0` is `−total / 2` per column, then stack |
+| `:wiggle` | the bottom series' `y0` per column is the streamgraph baseline (Byron and Wattenberg): `0` for the first column, and for each following column `j` the previous baseline minus `Σ_i (Δ_i / 2 + Σ_{k<i} Δ_k) · v_ij / Σ_i v_ij`, with `Δ_i = v_ij − v_i(j−1)` and `i`, `k` over series in stacking order (the baseline is unchanged when `Σ_i v_ij = 0`); then stack |
 
 ### 8.6 Functions
 
