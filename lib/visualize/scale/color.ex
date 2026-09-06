@@ -396,7 +396,14 @@ defmodule Visualize.Scale.Color do
   def bandwidth(%__MODULE__{}), do: 0
 
   defp resolve_interpolator(name) when is_atom(name) do
-    Map.get(@schemes, name, @schemes.blues)
+    case Map.fetch(@schemes, name) do
+      {:ok, stops} ->
+        stops
+
+      :error ->
+        raise ArgumentError,
+              "unknown colour scheme #{inspect(name)}; see Visualize.Scale.Color.schemes/0"
+    end
   end
 
   defp resolve_interpolator(colors) when is_list(colors), do: colors
@@ -423,9 +430,9 @@ defmodule Visualize.Scale.Color do
     {r0, g0, b0} = parse_hex(c0)
     {r1, g1, b1} = parse_hex(c1)
 
-    r = round(r0 + (r1 - r0) * t)
-    g = round(g0 + (g1 - g0) * t)
-    b = round(b0 + (b1 - b0) * t)
+    r = channel(r0 + (r1 - r0) * t)
+    g = channel(g0 + (g1 - g0) * t)
+    b = channel(b0 + (b1 - b0) * t)
 
     "#" <> hex_byte(r) <> hex_byte(g) <> hex_byte(b)
   end
@@ -440,6 +447,9 @@ defmodule Visualize.Scale.Color do
          String.to_integer(b <> b, 16)}
     end
   end
+
+  # An unclamped `t` extrapolates the stops; the channel still has to be a byte.
+  defp channel(value), do: value |> round() |> max(0) |> min(255)
 
   defp hex_byte(n),
     do: n |> Integer.to_string(16) |> String.pad_leading(2, "0") |> String.downcase()

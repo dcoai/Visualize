@@ -327,11 +327,9 @@ Parameterised variants: `poly_in/2`, `poly_out/2` and `poly_in_out/2` take an ex
 - `bin/1,2` — histogram bins. Options: `:thresholds` — an integer count `n` (default 10), producing `n - 1` interior thresholds evenly spaced over the domain and hence `n` bins, or an explicit list of thresholds producing `length + 1` bins; `:domain` — `[min, max]`, defaulting to the data extent. Returns `[%{x0, x1, values}]` where each value is placed in the first bin with `x0 <= v < x1`, a value equal to the last `x1` goes in the last bin, and values outside the domain are dropped; `values` keep input order. `[]` yields `[]`.
 - `cross/2,3` — the Cartesian product of two lists as `{a, b}` tuples, or as `combine.(a, b)` when a two-arity function is given.
 - `range/2,3` — `start, stop, step = 1`: `max(0, ceil((stop - start) / step))` values `start + i * step`, so the result is empty when `stop` is not beyond `start` in the direction of `step`; negative steps count down. `step` MUST be non-zero (otherwise `FunctionClauseError`).
-- `ticks/3` — `start, stop, count > 0`: nice tick values. The step is `10^k` times 1, 2, 5 or 10, chosen from `|stop - start| / count` with the d3 thresholds `sqrt(2)`, `sqrt(10)`, `sqrt(50)`; ticks run from `ceil(start / step) * step` to `floor(stop / step) * step` inclusive, rounded to 10 decimals. A zero span MUST return `[start]`.
+- `ticks/3` — `start, stop, count > 0`: nice tick values. The step is `10^k` times 1, 2, 5 or 10, chosen from `|stop - start| / count` with the d3 thresholds `sqrt(2)`, `sqrt(10)`, `sqrt(50)`; ticks run from `ceil(start / step) * step` to `floor(stop / step) * step` inclusive, rounded to 10 decimals, and are `[]` when no multiple of the step lies inside the span. A zero span returns `[start]`; `start > stop` returns the ticks of the reversed span in descending order. `count` MUST be positive (otherwise `FunctionClauseError`).
 - `sort/2,3` — `Enum.sort_by/3` on the accessor, `:asc` (default) or `:desc`.
 - `unique/1,2` — `Enum.uniq/1`, or `Enum.uniq_by/2` with an accessor.
-
-> Decision: see spec/13. `ticks/3` currently raises `FunctionClauseError` on every call: its step computation calls `max(0, count)`, which after the module's `import Kernel, except: [min: 2, max: 2]` resolves to `Visualize.Data.max/2` with a non-list first argument. A zero span would additionally raise `ArithmeticError` from `:math.log10(0)`.
 
 ### 5.3 Functions
 

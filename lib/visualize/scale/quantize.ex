@@ -99,7 +99,7 @@ defmodule Visualize.Scale.Quantize do
     n = length(range)
     step = (d1 - d0) / n
 
-    for i <- 1..(n - 1) do
+    for i <- 1..(n - 1)//1 do
       d0 + i * step
     end
   end

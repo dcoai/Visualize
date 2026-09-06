@@ -67,15 +67,22 @@ defmodule Visualize.Scale.Linear do
   @doc "Generates tick values"
   @spec ticks(t(), integer()) :: [number()]
   @impl true
+  def ticks(%__MODULE__{domain: [d0, d1]}, _count) when d0 == d1, do: [d0]
+
+  def ticks(%__MODULE__{domain: [d0, d1]} = scale, count) when d0 > d1 do
+    ticks(%{scale | domain: [d1, d0]}, count) |> Enum.reverse()
+  end
+
   def ticks(%__MODULE__{domain: [d0, d1]}, count) do
     tick_step = nice_step(d0, d1, count)
     start = Float.ceil(d0 / tick_step) * tick_step
     stop = Float.floor(d1 / tick_step) * tick_step
 
-    # Generate ticks
+    # `//1`: when no multiple of the step lies inside the domain, `stop < start` and the
+    # count is zero or negative; a bare `0..-1` would descend and emit two ticks outside it.
     num_ticks = round((stop - start) / tick_step) + 1
 
-    0..(num_ticks - 1)
+    0..(num_ticks - 1)//1
     |> Enum.map(fn i -> start + i * tick_step end)
     |> Enum.map(&round_to_precision(&1, tick_step))
   end
@@ -83,6 +90,8 @@ defmodule Visualize.Scale.Linear do
   @doc "Extends domain to nice round values"
   @spec nice(t()) :: t()
   @impl true
+  def nice(%__MODULE__{domain: [d0, d1]} = scale) when d0 == d1, do: scale
+
   def nice(%__MODULE__{domain: [d0, d1]} = scale) do
     step = nice_step(d0, d1, 10)
     %{scale | domain: [Float.floor(d0 / step) * step, Float.ceil(d1 / step) * step]}
