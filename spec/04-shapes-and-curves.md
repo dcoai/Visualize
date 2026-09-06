@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, and `Shape.Symbol`; `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialised as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
+Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, `Shape.Symbol`, and the element-producing marks `Shape.Band`, `Shape.Rule`, and `Shape.XBand` (sections 11–13); `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialised as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
 
 ## 1. Common Model
 
@@ -18,6 +18,8 @@ An accessor extracts a value from a datum. The accepted forms differ by module:
 | `Pie` (`value`) | yes | yes (`Map.get(d, field, 0)`) | yes |
 | `Stack` (`value`) | 2-arity only | no | no |
 | `Symbol` (`type`, `size`) | yes | atom is the literal type | literal size |
+| `Band` (`x0`, `x1`, `y`, `height`; `fill`) | yes | yes | yes (`fill`: a string constant) |
+| `Rule` (`x`, `y0`, `y1`; `label`), `XBand` (`x0`, `x1`, `y0`, `y1`; `fill`, `label`) | yes | yes | yes (`fill`, `label`: a string constant) |
 
 Atom accessors read a map key and return `nil` when absent (except `Pie`, which defaults to `0`); a `nil` coordinate fails arithmetic downstream. Callers SHOULD supply functions when data are not maps. A numeric constant is the accessor `fn _ -> n end`; `Line` accepts one since D-20.
 
@@ -31,6 +33,8 @@ Atom accessors read a map key and return `nil` when absent (except `Pie`, which 
 
 Both `Line.generate_path/2` and `Area.generate_path/2` return an empty path (`Visualize.IR.Path.new/0`) when no defined run (1.2) has two or more points; a lone point yields no `M` command.
 
+`Band.generate/2`, `Rule.generate/2`, and `XBand.generate/2` return a list of `Visualize.IR.Element`, one per datum, rather than a string: these marks carry per-datum style (a fill, a label) that a path cannot (D-26). The elements render through `Visualize.Render` like any other. `Band.generate_path/2` is the one path form among them, folding every rectangle into a single `IR.Path`.
+
 ## 2. `Visualize.Shape` Facade
 
 Facade setters dispatch on the struct type and fail to match (`FunctionClauseError`) for a generator that lacks the setting.
@@ -43,12 +47,19 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.pie/0` | `Shape.Pie.new/0`. |
 | `Visualize.Shape.symbol/0` | `Shape.Symbol.new/0`. |
 | `Visualize.Shape.stack/0` | `Shape.Stack.new/0`. |
-| `Visualize.Shape.x/2` | `Line.x/2` or `Area.x/2`. |
-| `Visualize.Shape.y/2` | `Line.y/2` or `Area.y/2`. |
-| `Visualize.Shape.x0/2` | `Area.x0/2`. |
-| `Visualize.Shape.x1/2` | `Area.x1/2`. |
-| `Visualize.Shape.y0/2` | `Area.y0/2`. |
-| `Visualize.Shape.y1/2` | `Area.y1/2`. |
+| `Visualize.Shape.band/0` | `Shape.Band.new/0`. |
+| `Visualize.Shape.rule/0` | `Shape.Rule.new/0`. |
+| `Visualize.Shape.x_band/0` | `Shape.XBand.new/0`. |
+| `Visualize.Shape.x/2` | `Line.x/2`, `Area.x/2`, or `Rule.x/2`. |
+| `Visualize.Shape.y/2` | `Line.y/2`, `Area.y/2`, or `Band.y/2`. |
+| `Visualize.Shape.x0/2` | `Area.x0/2`, `Band.x0/2`, or `XBand.x0/2`. |
+| `Visualize.Shape.x1/2` | `Area.x1/2`, `Band.x1/2`, or `XBand.x1/2`. |
+| `Visualize.Shape.y0/2` | `Area.y0/2`, `Rule.y0/2`, or `XBand.y0/2`. |
+| `Visualize.Shape.y1/2` | `Area.y1/2`, `Rule.y1/2`, or `XBand.y1/2`. |
+| `Visualize.Shape.height/2` | `Band.height/2`. |
+| `Visualize.Shape.fill/2` | `Band.fill/2` or `XBand.fill/2`. |
+| `Visualize.Shape.scale/2` | `Rule.scale/2` or `XBand.scale/2`. |
+| `Visualize.Shape.label/2` | `Rule.label/2` or `XBand.label/2`. |
 | `Visualize.Shape.curve/2` | As `curve/3` with `[]` options. |
 | `Visualize.Shape.curve/3` | `Line.curve/3` or `Area.curve/3`. |
 | `Visualize.Shape.defined/2` | `Line.defined/2` or `Area.defined/2`. |
@@ -68,9 +79,9 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.type/2` | `Symbol.type/2`. |
 | `Visualize.Shape.size/2` | `Symbol.size/2`. |
 | `Visualize.Shape.generate/1` | As `generate/2` with `nil` data (meaningful for `Symbol` only). |
-| `Visualize.Shape.generate/2` | Dispatches to the module's `generate/2`: SVG path string for `Line`, `Area`, `Arc`, `Symbol`; arc-datum list for `Pie`; series list for `Stack`. |
+| `Visualize.Shape.generate/2` | Dispatches to the module's `generate/2`: SVG path string for `Line`, `Area`, `Arc`, `Symbol`; arc-datum list for `Pie`; series list for `Stack`; element list for `Band`, `Rule`, `XBand`. |
 | `Visualize.Shape.generate_path/1` | As `generate_path/2` with `nil` data. |
-| `Visualize.Shape.generate_path/2` | Dispatches to `generate_path/2` of `Line`, `Area`, `Arc`, or `Symbol`; `Pie` and `Stack` are not accepted. |
+| `Visualize.Shape.generate_path/2` | Dispatches to `generate_path/2` of `Line`, `Area`, `Arc`, `Symbol`, or `Band`; `Pie`, `Stack`, `Rule`, and `XBand` are not accepted. |
 
 Every setter of `Arc` and `Pie` is reachable through the facade; `Symbol.types/0` and `Arc.centroid/2` are not (D-21).
 
@@ -388,3 +399,90 @@ Every path is centred on the origin. With `s` the size:
 | `Visualize.Shape.LineNx.to_binary/7` | Scales and encodes directly to the CanvasBinary byte format (10.2). |
 | `Visualize.Shape.LineNx.to_base64/6` | As `to_base64/7` with `[]` options. |
 | `Visualize.Shape.LineNx.to_base64/7` | Base64 of `to_binary/7`. |
+
+## 11. `Visualize.Shape.Band`
+
+### 11.1 Struct
+
+`%Visualize.Shape.Band{x0: nil, x1: nil, y: 0, height: 10, fill: nil}`. `new/0` sets `x0` to `elem(d, 0)` and `x1` to `elem(d, 1)`, so tuple data `{start, stop}` work without configuration; `y` and `height` are the constants `0` and `10`; `fill` is unset.
+
+### 11.2 Semantics
+
+A band is a state timeline: one rectangle per datum spanning `x0` to `x1` at `y`, `height` tall, filled per datum — *which state, for how long*. All four coordinates are pixel accessors (1.1): the caller applies the x scale inside `x0`/`x1`, as with `Line` and `Area`. `fill/2` takes a 1-arity function, an atom field, or a string constant.
+
+`generate/2` returns one `Visualize.IR.Element` of type `:rect` per datum, in data order, so the list is index-aligned with the data. Its `attrs` are `x = min(x0, x1)`, `y`, `width = |x1 − x0|`, `height`; its `style` is `%{class: "band"}` plus `fill: fill` when the fill accessor yields a value other than `nil`. A datum whose edges coincide is a zero-width rectangle and is still emitted. An empty data list yields `[]`.
+
+`generate_path/2` returns one `IR.Path` of closed rectangles in the same order — per datum `{:M, x, y}`, `{:H, x + width}`, `{:V, y + height}`, `{:H, x}`, `:Z` — for a timeline filled alike; `fill` plays no part in it. `generate/2` and `generate_path/2` never raise for an empty list.
+
+### 11.3 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Shape.Band.new/0` | Returns a band generator reading tuple elements 0 and 1 as `x0`/`x1`, with `y = 0` and `height = 10`. |
+| `Visualize.Shape.Band.x0/2` | Sets the start-edge accessor (function, atom, or number), in pixels. |
+| `Visualize.Shape.Band.x1/2` | Sets the end-edge accessor, in pixels. |
+| `Visualize.Shape.Band.y/2` | Sets the top accessor, in pixels. |
+| `Visualize.Shape.Band.height/2` | Sets the height accessor, in pixels. |
+| `Visualize.Shape.Band.fill/2` | Sets the fill accessor: function, atom field, or string constant. |
+| `Visualize.Shape.Band.generate/2` | Returns the list of `:rect` elements as in 11.2. |
+| `Visualize.Shape.Band.generate_path/2` | Returns one `IR.Path` of closed rectangles as in 11.2. |
+
+## 12. `Visualize.Shape.Rule`
+
+### 12.1 Struct
+
+`%Visualize.Shape.Rule{x: nil, scale: nil, y0: 0, y1: 100, label: nil}`. `new/0` sets `x` to the identity `fn d -> d end`, so a list of bare domain values is valid data; `y0` and `y1` are constants; `scale` and `label` are unset.
+
+### 12.2 Semantics
+
+A rule marks an instant — a deploy, an incident — as a vertical line at a domain x value, drawn inside the same scale and margin system as the data marks (D-27). `x/2` is an accessor (1.1) yielding a *domain* value; `scale/2` is the scale that maps it, any struct `Visualize.Scale.apply/2` accepts; with no scale the value is taken as a pixel coordinate. `y0`/`y1` are pixel accessors giving the vertical extent. `label/2` is an accessor yielding the label text — a function, an atom field, or a string constant; `nil` (the default) draws no label.
+
+`generate/2` returns one `:group` element per datum, in data order, with `style: %{class: "rule"}`. With `px = Visualize.Scale.apply(scale, x)` (or `x` itself without a scale), the group's children are:
+
+1. a `:line` from `(px, y0)` to `(px, y1)` with `style: %{stroke: :current_color, stroke_width: 1}`;
+2. when the label is not `nil`, a `:text` with `attrs: %{x: px, y: min(y0, y1), dx: 3, dy: 10}` and `style: %{font_size: 10, font_family: "sans-serif", text_anchor: :start, fill: :current_color}` — the label sits to the right of the rule's upper end, inside the plot.
+
+An empty data list yields `[]`. The group is a plain `Visualize.IR.Element`: callers restyle it with `Visualize.IR.Element.set_style/2` and place it with `Visualize.IR.Element.translate/3` like any other element.
+
+### 12.3 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Shape.Rule.new/0` | Returns a rule generator reading each datum as its x value, with extent `0` to `100`. |
+| `Visualize.Shape.Rule.x/2` | Sets the domain-value accessor (function, atom, or number). |
+| `Visualize.Shape.Rule.scale/2` | Sets the x scale the values map through; `nil` means the values are pixels. |
+| `Visualize.Shape.Rule.y0/2` | Sets the first vertical-extent accessor, in pixels. |
+| `Visualize.Shape.Rule.y1/2` | Sets the second vertical-extent accessor, in pixels. |
+| `Visualize.Shape.Rule.label/2` | Sets the label accessor: function, atom field, or string constant; `nil` clears it. |
+| `Visualize.Shape.Rule.generate/2` | Returns the list of `:group` elements as in 12.2. |
+
+## 13. `Visualize.Shape.XBand`
+
+### 13.1 Struct
+
+`%Visualize.Shape.XBand{x0: nil, x1: nil, scale: nil, y0: 0, y1: 100, fill: nil, label: nil}`. `new/0` sets `x0` to `elem(d, 0)`, `x1` to `elem(d, 1)`, and `fill` to the constant `"rgba(119, 119, 119, 0.2)"`, so `{start, stop}` tuples of domain values are valid data and the region shades like a brush selection (spec/10 §6.2).
+
+### 13.2 Semantics
+
+An x-band shades the interval between two domain x values — an incident, a maintenance window — under the rule's model (12.2, D-27): `x0`/`x1` are domain-value accessors, `scale/2` maps them (no scale: pixels), `y0`/`y1` are the pixel extent, and `fill/2` and `label/2` are accessors that also take a string constant.
+
+`generate/2` returns one `:group` element per datum, in data order, with `style: %{class: "x-band"}`. With `p0`, `p1` the mapped edges, `left = min(p0, p1)`, `top = min(y0, y1)`, the group's children are:
+
+1. a `:rect` at `(left, top)` with `width = |p1 − p0|` and `height = |y1 − y0|`, `style: %{fill: fill}` (the key omitted when the fill is `nil`);
+2. when the label is not `nil`, a `:text` at `attrs: %{x: left, y: top, dx: 3, dy: 10}` with the rule's label style.
+
+An empty data list yields `[]`.
+
+### 13.3 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Shape.XBand.new/0` | Returns an x-band generator reading tuple elements 0 and 1 as its edges, with extent `0` to `100` and the brush's fill. |
+| `Visualize.Shape.XBand.x0/2` | Sets the first-edge domain-value accessor. |
+| `Visualize.Shape.XBand.x1/2` | Sets the second-edge domain-value accessor. |
+| `Visualize.Shape.XBand.scale/2` | Sets the x scale the edges map through; `nil` means the values are pixels. |
+| `Visualize.Shape.XBand.y0/2` | Sets the first vertical-extent accessor, in pixels. |
+| `Visualize.Shape.XBand.y1/2` | Sets the second vertical-extent accessor, in pixels. |
+| `Visualize.Shape.XBand.fill/2` | Sets the fill accessor: function, atom field, or string constant. |
+| `Visualize.Shape.XBand.label/2` | Sets the label accessor: function, atom field, or string constant; `nil` clears it. |
+| `Visualize.Shape.XBand.generate/2` | Returns the list of `:group` elements as in 13.2. |

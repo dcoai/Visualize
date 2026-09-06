@@ -203,3 +203,19 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** The format is tokenised once — `%` plus one character is a directive, everything else literal — and each directive is looked up against a fixed table: the original eight plus `%y %e %j %I %L %p %a %A %U %w %Z %z` and `%%`. A trailing lone `%` and an unknown directive pass through verbatim, as d3-time-format leaves an unknown directive in place. `%Z` and `%z` read a `DateTime`'s zone fields and are empty for `Date` and `NaiveDateTime`; no zone conversion is performed. Weeks under `%U` start on Sunday, as in C and d3, which differs from the Monday-based time ticks of D-16 because `%U` is a display convention, not a tick interval.
 
 **Consequences.** Existing formats produce the same output unless they contained `%%` or a directive whose output contained `%`-sequences. Consumers can format any label d3-time-format's common subset can; `%f`, `%q`, `%V`, `%G` and the locale-dependent `%c`/`%x`/`%X` are not provided and pass through, which is visible rather than silent.
+
+## 26. D-26 — `Band` is an element mark: one `:rect` per datum, index-aligned
+
+**Context.** A state timeline — *which state was this in, and for how long* — colours every block by its datum. The path generators return one `d` string, which carries no per-datum style, and `Visualize.Shape.Area` with a step curve cannot change fill mid-path; metresis (#1) had no primitive to build from.
+
+**Decision.** `Visualize.Shape.Band` returns a list of `Visualize.IR.Element` rectangles from `generate/2`, one per datum in data order, with the fill accessor's value in each element's style. It reuses the `Area` accessor vocabulary (`x0`, `x1`, `y`) and adds `height` and `fill`, all in pixels: the caller applies the x scale in the accessors exactly as for `Line` and `Area`, so a band and the line above it share one scale pipeline. `generate_path/2` is kept for the uniformly filled case and folds every rectangle into one path.
+
+**Consequences.** `Visualize.Shape.generate/2` is no longer path-or-data: for `Band` it returns elements, which render through `Visualize.Render` like any scene-graph node. A zero-width datum is still emitted, so the element list can be zipped with the data. The rectangles are separate DOM nodes; a timeline of thousands of states meets the SVG ceiling (spec/00) as any other mark does.
+
+## 27. D-27 — Annotations take domain values and a scale
+
+**Context.** Vertical rules and shaded x-bands were hand-rolled per chart as raw SVG, outside the scale and margin system, and misaligned the moment a margin changed (#1).
+
+**Decision.** `Visualize.Shape.Rule` and `Visualize.Shape.XBand` are generators over a list of annotations whose x accessors yield *domain* values, mapped through the scale given to `scale/2`; with no scale the values are pixels, so they compose with a caller's own mapping. `Rule.new/0` reads each datum as its own value, so a list of instants is valid data. Each annotation renders as a `:group` element (a line or rect, plus a `:text` label when set) styled with `:current_color` and a `class`, so CSS can restyle it. `XBand`'s default fill is the brush selection's, so a live selection and a recorded window read alike. Neither has `generate_path/2`: a label is not a path.
+
+**Consequences.** A rule follows the axis it annotates whatever the margins, because both read the same scale. The label position is fixed (right of the upper end, 10 px in); a caller wanting another placement moves or replaces the text child.
