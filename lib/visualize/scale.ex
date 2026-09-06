@@ -21,6 +21,18 @@ defmodule Visualize.Scale do
   - `band/0` - Discrete with bandwidth (for bar charts)
   - `quantize/0` - Continuous to discrete (uniform buckets)
   - `quantile/0` - Continuous to discrete (equal-count buckets)
+  - `threshold/0` - Continuous to discrete (explicit breakpoints)
+
+  ### Colour
+  - `sequential/1`, `diverging/1` - Colour scales over a scheme, stop list or function
+
+  ## The protocol
+
+  Every scale module implements `Visualize.Scale.Behaviour`, so each operation below
+  dispatches to `scale.__struct__` and is total over every scale this module constructs.
+  Operations that have no meaning for a scale kind are identity (`nice/1`, `padding/2`,
+  `clamp/2`), `nil` (`invert/2`), or `0` (`bandwidth/1`); the discretising scales return
+  their thresholds from `ticks/2`.
 
   ## Examples
 
@@ -52,6 +64,7 @@ defmodule Visualize.Scale do
     Quantile,
     Quantize,
     Symlog,
+    Threshold,
     Time
   }
 
@@ -84,6 +97,9 @@ defmodule Visualize.Scale do
 
   @doc "Creates a quantile scale (continuous to discrete, equal-count buckets)"
   defdelegate quantile(), to: Quantile, as: :new
+
+  @doc "Creates a threshold scale (continuous to discrete, explicit breakpoints)"
+  defdelegate threshold(), to: Threshold, as: :new
 
   @doc "Creates a sequential color scale"
   defdelegate sequential(interpolator), to: Color, as: :sequential
@@ -124,7 +140,7 @@ defmodule Visualize.Scale do
   @doc """
   Inverts the scale to get a domain value from a range value.
 
-  Only supported by continuous scales.
+  Continuous scales only; every other scale returns `nil`.
   """
   @spec invert(struct(), number()) :: any()
   def invert(scale, value) do
@@ -132,7 +148,8 @@ defmodule Visualize.Scale do
   end
 
   @doc """
-  Returns nice round tick values for the scale.
+  Returns representative domain values: nice round ticks for continuous scales, the domain
+  for discrete scales, the thresholds for discretising scales. `count` is a hint.
   """
   @spec ticks(struct(), integer()) :: [any()]
   def ticks(scale, count \\ 10) do
@@ -148,7 +165,7 @@ defmodule Visualize.Scale do
   end
 
   @doc """
-  Sets padding for band scales.
+  Sets padding for band scales; identity for every other scale.
   """
   @spec padding(struct(), number()) :: struct()
   def padding(scale, padding) do
@@ -156,7 +173,7 @@ defmodule Visualize.Scale do
   end
 
   @doc """
-  Returns the bandwidth for band scales.
+  Returns the bandwidth for band scales; `0` for every other scale.
   """
   @spec bandwidth(struct()) :: number()
   def bandwidth(scale) do

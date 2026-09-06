@@ -5,6 +5,8 @@ defmodule Visualize.Scale.Time do
   Maps time values to a continuous numeric range.
   """
 
+  @behaviour Visualize.Scale.Behaviour
+
   defstruct domain: nil,
             range: [0, 1],
             clamp?: false
@@ -21,24 +23,28 @@ defmodule Visualize.Scale.Time do
 
   @doc "Sets the domain"
   @spec domain(t(), [DateTime.t() | Date.t() | NaiveDateTime.t()]) :: t()
+  @impl true
   def domain(%__MODULE__{} = scale, [d0, d1]) do
     %{scale | domain: [d0, d1]}
   end
 
   @doc "Sets the range"
   @spec range(t(), [number()]) :: t()
+  @impl true
   def range(%__MODULE__{} = scale, [r0, r1]) do
     %{scale | range: [r0, r1]}
   end
 
   @doc "Enables or disables clamping"
   @spec clamp(t(), boolean()) :: t()
+  @impl true
   def clamp(%__MODULE__{} = scale, clamp?) do
     %{scale | clamp?: clamp?}
   end
 
   @doc "Applies the scale to a time value"
   @spec apply(t(), DateTime.t() | Date.t() | NaiveDateTime.t()) :: float()
+  @impl true
   def apply(%__MODULE__{domain: [d0, d1], range: [r0, r1], clamp?: clamp?}, value) do
     t0 = to_unix(d0)
     t1 = to_unix(d1)
@@ -52,6 +58,7 @@ defmodule Visualize.Scale.Time do
 
   @doc "Inverts the scale to get a DateTime"
   @spec invert(t(), number()) :: DateTime.t()
+  @impl true
   def invert(%__MODULE__{domain: [d0, d1], range: [r0, r1]}, value) do
     t0 = to_unix(d0)
     t1 = to_unix(d1)
@@ -64,6 +71,7 @@ defmodule Visualize.Scale.Time do
 
   @doc "Generates tick values"
   @spec ticks(t(), integer()) :: [DateTime.t()]
+  @impl true
   def ticks(%__MODULE__{domain: [d0, d1]}, count) do
     t0 = to_unix(d0)
     t1 = to_unix(d1)
@@ -79,6 +87,7 @@ defmodule Visualize.Scale.Time do
 
   @doc "Extends domain to nice time boundaries"
   @spec nice(t()) :: t()
+  @impl true
   def nice(%__MODULE__{domain: [d0, d1]} = scale) do
     span = to_unix(d1) - to_unix(d0)
     {interval, _} = choose_interval(span, 10)
@@ -86,9 +95,15 @@ defmodule Visualize.Scale.Time do
     %{scale | domain: [floor_to_interval(d0, interval), ceil_to_interval(d1, interval)]}
   end
 
-  # Not applicable
-  def padding(scale, _), do: scale
-  def bandwidth(_), do: 0
+  @doc "Identity: a time scale has no padding"
+  @impl true
+  @spec padding(t(), number()) :: t()
+  def padding(%__MODULE__{} = scale, _padding), do: scale
+
+  @doc "Returns `0`: a time scale has no bandwidth"
+  @impl true
+  @spec bandwidth(t()) :: 0
+  def bandwidth(%__MODULE__{}), do: 0
 
   # Convert various time types to unix timestamp
   defp to_unix(%DateTime{} = dt), do: DateTime.to_unix(dt)

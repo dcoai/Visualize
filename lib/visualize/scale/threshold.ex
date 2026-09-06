@@ -14,11 +14,11 @@ defmodule Visualize.Scale.Threshold do
         |> Visualize.Scale.Threshold.domain([60, 70, 80, 90])
         |> Visualize.Scale.Threshold.range(["F", "D", "C", "B", "A"])
 
-      Visualize.Scale.Threshold.scale(scale, 55)   # => "F"
-      Visualize.Scale.Threshold.scale(scale, 65)   # => "D"
-      Visualize.Scale.Threshold.scale(scale, 75)   # => "C"
-      Visualize.Scale.Threshold.scale(scale, 85)   # => "B"
-      Visualize.Scale.Threshold.scale(scale, 95)   # => "A"
+      Visualize.Scale.Threshold.apply(scale, 55)   # => "F"
+      Visualize.Scale.Threshold.apply(scale, 65)   # => "D"
+      Visualize.Scale.Threshold.apply(scale, 75)   # => "C"
+      Visualize.Scale.Threshold.apply(scale, 85)   # => "B"
+      Visualize.Scale.Threshold.apply(scale, 95)   # => "A"
 
       # Map values to colors for a choropleth
       scale = Visualize.Scale.Threshold.new()
@@ -34,6 +34,8 @@ defmodule Visualize.Scale.Threshold do
   For n thresholds, you need n+1 output values.
 
   """
+
+  @behaviour Visualize.Scale.Behaviour
 
   defstruct domain: [],
             range: []
@@ -53,6 +55,7 @@ defmodule Visualize.Scale.Threshold do
   The domain should be a sorted list of threshold values.
   Values below the first threshold map to the first range value.
   """
+  @impl true
   @spec domain(t(), [number()]) :: t()
   def domain(%__MODULE__{} = scale, thresholds) when is_list(thresholds) do
     %{scale | domain: Enum.sort(thresholds)}
@@ -63,6 +66,7 @@ defmodule Visualize.Scale.Threshold do
 
   The range must have exactly one more element than the domain.
   """
+  @impl true
   @spec range(t(), [any()]) :: t()
   def range(%__MODULE__{} = scale, values) when is_list(values) do
     %{scale | range: values}
@@ -73,14 +77,19 @@ defmodule Visualize.Scale.Threshold do
 
   Uses binary search to efficiently find the appropriate bucket.
   """
-  @spec scale(t(), number()) :: any()
-  def scale(%__MODULE__{range: []} = _scale, _value), do: nil
+  @impl true
+  @spec apply(t(), number()) :: any()
+  def apply(%__MODULE__{range: []}, _value), do: nil
 
-  def scale(%__MODULE__{domain: thresholds, range: values}, value) do
+  def apply(%__MODULE__{domain: thresholds, range: values}, value) do
     # Count how many thresholds the value is >= to
     index = binary_search(thresholds, value)
     Enum.at(values, index)
   end
+
+  @doc "Alias of `apply/2`, kept for one release (spec/03 §1.3)"
+  @spec scale(t(), number()) :: any()
+  def scale(%__MODULE__{} = scale, value), do: __MODULE__.apply(scale, value)
 
   @doc """
   Returns the extent of domain values that map to a given range value.
@@ -93,7 +102,7 @@ defmodule Visualize.Scale.Threshold do
   For the last bucket, upper_bound is `:infinity`.
   """
   @spec invert_extent(t(), any()) :: {number() | :neg_infinity, number() | :infinity} | nil
-  def invert_extent(%__MODULE__{range: []} = _scale, _value), do: nil
+  def invert_extent(%__MODULE__{range: []}, _value), do: nil
 
   def invert_extent(%__MODULE__{domain: thresholds, range: values}, value) do
     case Enum.find_index(values, &(&1 == value)) do
@@ -144,6 +153,36 @@ defmodule Visualize.Scale.Threshold do
 
     %{scale | domain: thresholds}
   end
+
+  @doc "Returns `nil`: a threshold scale maps many values to one bucket"
+  @impl true
+  @spec invert(t(), any()) :: nil
+  def invert(%__MODULE__{}, _value), do: nil
+
+  @doc "Returns the thresholds (the domain); the count is ignored"
+  @impl true
+  @spec ticks(t(), integer()) :: [number()]
+  def ticks(%__MODULE__{} = scale, _count), do: thresholds(scale)
+
+  @doc "Identity"
+  @impl true
+  @spec nice(t()) :: t()
+  def nice(%__MODULE__{} = scale), do: scale
+
+  @doc "Identity: a threshold scale has no padding"
+  @impl true
+  @spec padding(t(), number()) :: t()
+  def padding(%__MODULE__{} = scale, _padding), do: scale
+
+  @doc "Returns `0`: a threshold scale has no bandwidth"
+  @impl true
+  @spec bandwidth(t()) :: 0
+  def bandwidth(%__MODULE__{}), do: 0
+
+  @doc "Identity: a threshold scale always maps into its range"
+  @impl true
+  @spec clamp(t(), boolean()) :: t()
+  def clamp(%__MODULE__{} = scale, _clamp?), do: scale
 
   # Binary search to find the number of thresholds <= value
   defp binary_search(thresholds, value) do

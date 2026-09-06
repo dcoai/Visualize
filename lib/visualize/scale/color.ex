@@ -6,6 +6,8 @@ defmodule Visualize.Scale.Color do
   color schemes.
   """
 
+  @behaviour Visualize.Scale.Behaviour
+
   defstruct type: :sequential,
             domain: [0, 1],
             interpolator: nil,
@@ -306,6 +308,7 @@ defmodule Visualize.Scale.Color do
 
   @doc "Sets the domain"
   @spec domain(t(), [number()]) :: t()
+  @impl true
   def domain(%__MODULE__{type: :sequential} = scale, [d0, d1]) do
     %{scale | domain: [d0, d1]}
   end
@@ -316,12 +319,14 @@ defmodule Visualize.Scale.Color do
 
   @doc "Sets the range (color interpolator)"
   @spec range(t(), atom() | [String.t()]) :: t()
+  @impl true
   def range(%__MODULE__{} = scale, interpolator) do
     %{scale | interpolator: resolve_interpolator(interpolator)}
   end
 
   @doc "Applies the scale to get a color"
   @spec apply(t(), number()) :: String.t()
+  @impl true
   def apply(
         %__MODULE__{type: :sequential, domain: [d0, d1], interpolator: interp, clamp?: clamp?},
         value
@@ -348,6 +353,7 @@ defmodule Visualize.Scale.Color do
 
   @doc "Enables or disables clamping"
   @spec clamp(t(), boolean()) :: t()
+  @impl true
   def clamp(%__MODULE__{} = scale, clamp?) do
     %{scale | clamp?: clamp?}
   end
@@ -360,15 +366,34 @@ defmodule Visualize.Scale.Color do
   @spec scheme(atom()) :: [String.t()] | nil
   def scheme(name), do: Map.get(@schemes, name)
 
-  # Not applicable
-  def invert(_, _), do: nil
+  @doc "Returns `nil`: a colour scale is not invertible"
+  @impl true
+  @spec invert(t(), any()) :: nil
+  def invert(%__MODULE__{}, _value), do: nil
 
-  def ticks(%__MODULE__{domain: [d0, d1]}, count),
-    do: Visualize.Scale.Linear.ticks(%Visualize.Scale.Linear{domain: [d0, d1]}, count)
+  @doc "`Linear.ticks/2` over the domain's extent: `[d0, d1]` sequential, `[d0, d2]` diverging"
+  @impl true
+  @spec ticks(t(), integer()) :: [number()]
+  def ticks(%__MODULE__{domain: domain}, count) do
+    d0 = List.first(domain)
+    d1 = List.last(domain)
+    Visualize.Scale.Linear.ticks(%Visualize.Scale.Linear{domain: [d0, d1]}, count)
+  end
 
-  def nice(scale), do: scale
-  def padding(scale, _), do: scale
-  def bandwidth(_), do: 0
+  @doc "Identity"
+  @impl true
+  @spec nice(t()) :: t()
+  def nice(%__MODULE__{} = scale), do: scale
+
+  @doc "Identity: a colour scale has no padding"
+  @impl true
+  @spec padding(t(), number()) :: t()
+  def padding(%__MODULE__{} = scale, _padding), do: scale
+
+  @doc "Returns `0`: a colour scale has no bandwidth"
+  @impl true
+  @spec bandwidth(t()) :: 0
+  def bandwidth(%__MODULE__{}), do: 0
 
   defp resolve_interpolator(name) when is_atom(name) do
     Map.get(@schemes, name, @schemes.blues)

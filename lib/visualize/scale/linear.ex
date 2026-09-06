@@ -5,6 +5,8 @@ defmodule Visualize.Scale.Linear do
   Linear scales are the most common scale type, useful for quantitative data.
   """
 
+  @behaviour Visualize.Scale.Behaviour
+
   defstruct domain: [0, 1],
             range: [0, 1],
             clamp?: false
@@ -21,24 +23,28 @@ defmodule Visualize.Scale.Linear do
 
   @doc "Sets the domain"
   @spec domain(t(), [number()]) :: t()
+  @impl true
   def domain(%__MODULE__{} = scale, [d0, d1]) do
     %{scale | domain: [d0, d1]}
   end
 
   @doc "Sets the range"
   @spec range(t(), [number()]) :: t()
+  @impl true
   def range(%__MODULE__{} = scale, [r0, r1]) do
     %{scale | range: [r0, r1]}
   end
 
   @doc "Enables or disables clamping"
   @spec clamp(t(), boolean()) :: t()
+  @impl true
   def clamp(%__MODULE__{} = scale, clamp?) do
     %{scale | clamp?: clamp?}
   end
 
   @doc "Applies the scale to a value"
   @spec apply(t(), number()) :: float()
+  @impl true
   def apply(%__MODULE__{domain: [d0, d1], range: [r0, r1], clamp?: clamp?}, value) do
     # Normalize to [0, 1]
     t = (value - d0) / (d1 - d0)
@@ -52,6 +58,7 @@ defmodule Visualize.Scale.Linear do
 
   @doc "Inverts the scale"
   @spec invert(t(), number()) :: float()
+  @impl true
   def invert(%__MODULE__{domain: [d0, d1], range: [r0, r1]}, value) do
     t = (value - r0) / (r1 - r0)
     d0 + t * (d1 - d0)
@@ -59,6 +66,7 @@ defmodule Visualize.Scale.Linear do
 
   @doc "Generates tick values"
   @spec ticks(t(), integer()) :: [number()]
+  @impl true
   def ticks(%__MODULE__{domain: [d0, d1]}, count) do
     tick_step = nice_step(d0, d1, count)
     start = Float.ceil(d0 / tick_step) * tick_step
@@ -74,14 +82,21 @@ defmodule Visualize.Scale.Linear do
 
   @doc "Extends domain to nice round values"
   @spec nice(t()) :: t()
+  @impl true
   def nice(%__MODULE__{domain: [d0, d1]} = scale) do
     step = nice_step(d0, d1, 10)
     %{scale | domain: [Float.floor(d0 / step) * step, Float.ceil(d1 / step) * step]}
   end
 
-  # Not applicable but required by protocol
-  def padding(scale, _), do: scale
-  def bandwidth(_), do: 0
+  @doc "Identity: a linear scale has no padding"
+  @impl true
+  @spec padding(t(), number()) :: t()
+  def padding(%__MODULE__{} = scale, _padding), do: scale
+
+  @doc "Returns `0`: a linear scale has no bandwidth"
+  @impl true
+  @spec bandwidth(t()) :: 0
+  def bandwidth(%__MODULE__{}), do: 0
 
   # Calculate a nice step size
   defp nice_step(start, stop, count) do
