@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, `Shape.Symbol`, the element-producing marks `Shape.Band`, `Shape.Rule`, and `Shape.XBand` (sections 11–13), and the composed mark `Shape.PercentileBand` (section 14); `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialised as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
+Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, `Shape.Symbol`, the element-producing marks `Shape.Band`, `Shape.Rule`, and `Shape.XBand` (sections 11–13), the composed mark `Shape.PercentileBand` (section 14), and the polar mark `Shape.Rose` (section 15); `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialised as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
 
 ## 1. Common Model
 
@@ -21,6 +21,7 @@ An accessor extracts a value from a datum. The accepted forms differ by module:
 | `Band` (`x0`, `x1`, `y`, `height`; `fill`) | yes | yes | yes (`fill`: a string constant) |
 | `Rule` (`x`, `y0`, `y1`; `label`), `XBand` (`x0`, `x1`, `y0`, `y1`; `fill`, `label`) | yes | yes | yes (`fill`, `label`: a string constant) |
 | `PercentileBand` (`x`, `median`; `inner`, `outer` as `{lo, hi}` pairs) | yes | yes | yes |
+| `Rose` (`angle`, `width`, `inner_radius`, `outer_radius`, `pad_angle`) | yes | yes | yes |
 
 Atom accessors read a map key and return `nil` when absent (except `Pie`, which defaults to `0`); a `nil` coordinate fails arithmetic downstream. Callers SHOULD supply functions when data are not maps. A numeric constant is the accessor `fn _ -> n end`; `Line` accepts one since D-20.
 
@@ -54,6 +55,7 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.rule/0` | `Shape.Rule.new/0`. |
 | `Visualize.Shape.x_band/0` | `Shape.XBand.new/0`. |
 | `Visualize.Shape.percentile_band/0` | `Shape.PercentileBand.new/0`. |
+| `Visualize.Shape.rose/0` | `Shape.Rose.new/0`. |
 | `Visualize.Shape.x/2` | `Line.x/2`, `Area.x/2`, `Rule.x/2`, or `PercentileBand.x/2`. |
 | `Visualize.Shape.y/2` | `Line.y/2`, `Area.y/2`, or `Band.y/2`. |
 | `Visualize.Shape.x0/2` | `Area.x0/2`, `Band.x0/2`, or `XBand.x0/2`. |
@@ -62,7 +64,9 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.y1/2` | `Area.y1/2`, `Rule.y1/2`, or `XBand.y1/2`. |
 | `Visualize.Shape.height/2` | `Band.height/2`. |
 | `Visualize.Shape.fill/2` | `Band.fill/2` or `XBand.fill/2`. |
-| `Visualize.Shape.scale/2` | `Rule.scale/2` or `XBand.scale/2`. |
+| `Visualize.Shape.scale/2` | `Rule.scale/2`, `XBand.scale/2`, or `Rose.scale/2`. |
+| `Visualize.Shape.angle/2` | `Rose.angle/2`. |
+| `Visualize.Shape.width/2` | `Rose.width/2`. |
 | `Visualize.Shape.label/2` | `Rule.label/2` or `XBand.label/2`. |
 | `Visualize.Shape.median/2` | `PercentileBand.median/2`. |
 | `Visualize.Shape.inner/2` | `PercentileBand.inner/2`. |
@@ -74,21 +78,21 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.keys/2` | `Stack.keys/2`. |
 | `Visualize.Shape.order/2` | `Stack.order/2`. |
 | `Visualize.Shape.offset/2` | `Stack.offset/2`. |
-| `Visualize.Shape.inner_radius/2` | `Arc.inner_radius/2`. |
-| `Visualize.Shape.outer_radius/2` | `Arc.outer_radius/2`. |
+| `Visualize.Shape.inner_radius/2` | `Arc.inner_radius/2` or `Rose.inner_radius/2`. |
+| `Visualize.Shape.outer_radius/2` | `Arc.outer_radius/2` or `Rose.outer_radius/2`. |
 | `Visualize.Shape.corner_radius/2` | `Arc.corner_radius/2`. |
 | `Visualize.Shape.pad_radius/2` | `Arc.pad_radius/2`. |
 | `Visualize.Shape.start_angle/2` | `Arc.start_angle/2` or `Pie.start_angle/2`. |
 | `Visualize.Shape.end_angle/2` | `Arc.end_angle/2` or `Pie.end_angle/2`. |
-| `Visualize.Shape.pad_angle/2` | `Arc.pad_angle/2` or `Pie.pad_angle/2`. |
+| `Visualize.Shape.pad_angle/2` | `Arc.pad_angle/2`, `Pie.pad_angle/2`, or `Rose.pad_angle/2`. |
 | `Visualize.Shape.sort/2` | `Pie.sort/2`. |
 | `Visualize.Shape.sort_values/2` | `Pie.sort_values/2`. |
 | `Visualize.Shape.type/2` | `Symbol.type/2`. |
 | `Visualize.Shape.size/2` | `Symbol.size/2`. |
 | `Visualize.Shape.generate/1` | As `generate/2` with `nil` data (meaningful for `Symbol` only). |
-| `Visualize.Shape.generate/2` | Dispatches to the module's `generate/2`: SVG path string for `Line`, `Area`, `Arc`, `Symbol`; arc-datum list for `Pie`; series list for `Stack`; element list for `Band`, `Rule`, `XBand`; path map for `PercentileBand`. |
+| `Visualize.Shape.generate/2` | Dispatches to the module's `generate/2`: SVG path string for `Line`, `Area`, `Arc`, `Symbol`; arc-datum list for `Pie`; series list for `Stack`; element list for `Band`, `Rule`, `XBand`; path map for `PercentileBand`; path-string list for `Rose`. |
 | `Visualize.Shape.generate_path/1` | As `generate_path/2` with `nil` data. |
-| `Visualize.Shape.generate_path/2` | Dispatches to `generate_path/2` of `Line`, `Area`, `Arc`, `Symbol`, `Band`, or `PercentileBand`; `Pie`, `Stack`, `Rule`, and `XBand` are not accepted. |
+| `Visualize.Shape.generate_path/2` | Dispatches to `generate_path/2` of `Line`, `Area`, `Arc`, `Symbol`, `Band`, `PercentileBand`, or `Rose` (a list); `Pie`, `Stack`, `Rule`, and `XBand` are not accepted. |
 
 Every setter of `Arc` and `Pie` is reachable through the facade; `Symbol.types/0` and `Arc.centroid/2` are not (D-21).
 
@@ -527,3 +531,29 @@ A percentile band is the standard reading of a distribution over time: a median 
 | `Visualize.Shape.PercentileBand.curve/3` | Sets the curve type and options, applied to every path. |
 | `Visualize.Shape.PercentileBand.generate/2` | Returns `%{outer:, inner:, median:}` of SVG path-data strings or `nil`, as in 14.2. |
 | `Visualize.Shape.PercentileBand.generate_path/2` | Returns `%{outer:, inner:, median:}` of `IR.Path` or `nil`, as in 14.2. |
+
+## 15. `Visualize.Shape.Rose`
+
+### 15.1 Struct
+
+`%Visualize.Shape.Rose{angle: nil, width: 1, scale: nil, inner_radius: 0, outer_radius: nil, pad_angle: 0}`. `new/0` sets `angle` to `elem(d, 0)` and `outer_radius` to `elem(d, 1)`, so `{bearing, radius}` tuples are valid data; `width` is the constant `1`.
+
+### 15.2 Semantics
+
+A rose — a wind rose, a compass rose, an hour-of-day clock — is one sector per datum, centred on the datum's angle, with its length from a value (D-31). `angle/2` and `width/2` are accessors (1.1) in *domain* units of the radial scale (spec/03 §14) given to `scale/2`: the sector runs from `apply(scale, angle − width / 2)` to `apply(scale, angle + width / 2)`; with no scale the values are radians. `outer_radius/2` and `inner_radius/2` are pixel accessors — the caller maps the count through a linear or square-root scale, as for any radius. `pad_angle/2` is `Arc.pad_angle/2`'s, in radians.
+
+`generate_path/2` returns one `IR.Path` per datum, in data order: `Visualize.Shape.Arc.generate_path/2` with that datum's inner and outer radii, start and end angles, and pad angle, so the geometry — angles clockwise from 12 o'clock, the padding shift, the empty path for a zero radius — is exactly section 6's. `generate/2` returns the same list serialised as SVG path-data strings. An empty data list yields `[]`.
+
+### 15.3 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Shape.Rose.new/0` | Returns a rose generator reading tuple elements 0 and 1 as angle and outer radius, with `width` 1. |
+| `Visualize.Shape.Rose.angle/2` | Sets the sector-centre accessor, in the scale's domain units (radians without a scale). |
+| `Visualize.Shape.Rose.width/2` | Sets the sector-width accessor, in the same units. |
+| `Visualize.Shape.Rose.scale/2` | Sets the radial scale the angles map through; `nil` means radians. |
+| `Visualize.Shape.Rose.inner_radius/2` | Sets the inner radius accessor, in pixels (default `0`). |
+| `Visualize.Shape.Rose.outer_radius/2` | Sets the outer radius accessor, in pixels. |
+| `Visualize.Shape.Rose.pad_angle/2` | Sets the pad angle accessor, radians, applied as in 6.2. |
+| `Visualize.Shape.Rose.generate/2` | Returns the list of SVG path-data strings, one per datum. |
+| `Visualize.Shape.Rose.generate_path/2` | Returns the list of `IR.Path`, one per datum, as in 15.2. |

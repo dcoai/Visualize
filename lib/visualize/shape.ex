@@ -9,6 +9,7 @@ defmodule Visualize.Shape do
   - Stacks for stacked bar/area charts
   - Bands (state timelines), rules and x-bands (annotations) as element lists
   - Percentile bands (median plus inner and outer bands) as a map of paths
+  - Roses (one arc sector per datum over a radial scale) as a list of paths
 
   ## Examples
 
@@ -34,7 +35,19 @@ defmodule Visualize.Shape do
 
   """
 
-  alias Visualize.Shape.{Arc, Area, Band, Line, PercentileBand, Pie, Rule, Stack, Symbol, XBand}
+  alias Visualize.Shape.{
+    Arc,
+    Area,
+    Band,
+    Line,
+    PercentileBand,
+    Pie,
+    Rose,
+    Rule,
+    Stack,
+    Symbol,
+    XBand
+  }
 
   # Line generator
   @doc "Creates a new line generator"
@@ -72,6 +85,9 @@ defmodule Visualize.Shape do
 
   @doc "Creates a new percentile-band generator (spec/04 §14)"
   defdelegate percentile_band(), to: PercentileBand, as: :new
+
+  @doc "Creates a new rose generator (spec/04 §15)"
+  defdelegate rose(), to: Rose, as: :new
 
   # Common configuration functions that work across generators
 
@@ -116,6 +132,13 @@ defmodule Visualize.Shape do
   @doc "Sets the x scale (for rules and x-bands); `nil` means pixel values"
   def scale(%Rule{} = shape, scale), do: Rule.scale(shape, scale)
   def scale(%XBand{} = shape, scale), do: XBand.scale(shape, scale)
+  def scale(%Rose{} = shape, scale), do: Rose.scale(shape, scale)
+
+  @doc "Sets the sector-centre accessor (for roses), in the scale's domain units"
+  def angle(%Rose{} = shape, accessor), do: Rose.angle(shape, accessor)
+
+  @doc "Sets the sector-width accessor (for roses), in the scale's domain units"
+  def width(%Rose{} = shape, accessor), do: Rose.width(shape, accessor)
 
   @doc "Sets the label accessor (for rules and x-bands); `nil` clears it"
   def label(%Rule{} = shape, accessor), do: Rule.label(shape, accessor)
@@ -154,11 +177,13 @@ defmodule Visualize.Shape do
   @doc "Sets the offset for stack generator"
   def offset(%Stack{} = shape, offset), do: Stack.offset(shape, offset)
 
-  @doc "Sets the inner radius (for arcs)"
+  @doc "Sets the inner radius (for arcs and roses)"
   def inner_radius(%Arc{} = shape, radius), do: Arc.inner_radius(shape, radius)
+  def inner_radius(%Rose{} = shape, radius), do: Rose.inner_radius(shape, radius)
 
-  @doc "Sets the outer radius (for arcs)"
+  @doc "Sets the outer radius (for arcs and roses)"
   def outer_radius(%Arc{} = shape, radius), do: Arc.outer_radius(shape, radius)
+  def outer_radius(%Rose{} = shape, radius), do: Rose.outer_radius(shape, radius)
 
   @doc "Sets the corner radius (for arcs)"
   def corner_radius(%Arc{} = shape, radius), do: Arc.corner_radius(shape, radius)
@@ -174,9 +199,10 @@ defmodule Visualize.Shape do
   def end_angle(%Arc{} = shape, angle), do: Arc.end_angle(shape, angle)
   def end_angle(%Pie{} = shape, angle), do: Pie.end_angle(shape, angle)
 
-  @doc "Sets the pad angle (for arcs and pies)"
+  @doc "Sets the pad angle (for arcs, pies and roses)"
   def pad_angle(%Arc{} = shape, angle), do: Arc.pad_angle(shape, angle)
   def pad_angle(%Pie{} = shape, angle), do: Pie.pad_angle(shape, angle)
+  def pad_angle(%Rose{} = shape, angle), do: Rose.pad_angle(shape, angle)
 
   @doc "Sets the data comparator (for pies); `nil` clears it"
   def sort(%Pie{} = shape, comparator), do: Pie.sort(shape, comparator)
@@ -199,6 +225,7 @@ defmodule Visualize.Shape do
   For Stack: returns list of series with stacked values
   For Band, Rule, XBand: returns a list of `Visualize.IR.Element`
   For PercentileBand: returns `%{outer:, inner:, median:}` of path strings
+  For Rose: returns a list of path strings, one per datum
   """
   def generate(shape, data \\ nil)
   def generate(%Line{} = shape, data), do: Line.generate(shape, data)
@@ -211,10 +238,11 @@ defmodule Visualize.Shape do
   def generate(%Rule{} = shape, data), do: Rule.generate(shape, data)
   def generate(%XBand{} = shape, data), do: XBand.generate(shape, data)
   def generate(%PercentileBand{} = shape, data), do: PercentileBand.generate(shape, data)
+  def generate(%Rose{} = shape, data), do: Rose.generate(shape, data)
 
   @doc """
-  Generates a Path struct (for Line, Area, Arc, Symbol, Band) or, for PercentileBand, a
-  map of them.
+  Generates a Path struct (for Line, Area, Arc, Symbol, Band), a map of them for
+  PercentileBand, or a list of them for Rose.
 
   Use this for backend-agnostic path generation, then render
   with `Visualize.Render.to_string/2` or create an element with
@@ -229,4 +257,6 @@ defmodule Visualize.Shape do
 
   def generate_path(%PercentileBand{} = shape, data),
     do: PercentileBand.generate_path(shape, data)
+
+  def generate_path(%Rose{} = shape, data), do: Rose.generate_path(shape, data)
 end

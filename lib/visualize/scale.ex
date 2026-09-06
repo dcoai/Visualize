@@ -15,6 +15,7 @@ defmodule Visualize.Scale do
   - `sqrt/0` - Square root scale (power with exponent 0.5)
   - `symlog/0` - Symmetric log (handles zero and negatives)
   - `time/0` - DateTime scale
+  - `radial/0` - Angle scale for cyclic quantities (bearing, hour of day)
 
   ### Discrete
   - `ordinal/0` - Discrete categorical mapping
@@ -63,6 +64,7 @@ defmodule Visualize.Scale do
     Power,
     Quantile,
     Quantize,
+    Radial,
     Symlog,
     Threshold,
     Time
@@ -85,6 +87,9 @@ defmodule Visualize.Scale do
 
   @doc "Creates a time scale"
   defdelegate time(), to: Time, as: :new
+
+  @doc "Creates a radial (angle) scale: domain to `[0, 2π]` by default"
+  defdelegate radial(), to: Radial, as: :new
 
   @doc "Creates an ordinal scale"
   defdelegate ordinal(), to: Ordinal, as: :new
