@@ -6,6 +6,11 @@ defmodule Visualize.Layout.Sankey do
   to the flow quantity. Commonly used for showing energy transfers,
   money flows, or any directed weighted graph.
 
+  The layout is a port of d3-sankey: columns come from the alignment function over the
+  longest-path depth of every node, one scale sizes both node heights and link widths,
+  and the vertical positions are relaxed towards the ideal link positions with
+  two-sided collision resolution.
+
   ## Examples
 
       nodes = [
@@ -54,6 +59,8 @@ defmodule Visualize.Layout.Sankey do
           optional(:y0) => number(),
           optional(:y1) => number(),
           optional(:value) => number(),
+          optional(:depth) => non_neg_integer(),
+          optional(:height) => non_neg_integer(),
           optional(:layer) => non_neg_integer(),
           optional(:source_links) => [map()],
           optional(:target_links) => [map()]
@@ -110,24 +117,29 @@ defmodule Visualize.Layout.Sankey do
   end
 
   @doc """
-  Sets the node alignment method.
+  Sets the node alignment method (d3-sankey's `sankeyLeft`, `sankeyRight`,
+  `sankeyCenter` and `sankeyJustify`).
 
-  - `:left` - Nodes align to the left
-  - `:right` - Nodes align to the right
-  - `:center` - Nodes are centered
-  - `:justify` - Nodes stretch to fill the width (default)
+  - `:left` - every node at its depth (longest path from a source)
+  - `:right` - every node at `L - height` (longest path to a sink), so sinks share the last column
+  - `:center` - a node with incoming links at its depth, a node with only outgoing links one
+    column before its nearest target, an isolated node at 0
+  - `:justify` - every node without outgoing links in the last column, others at their depth (default)
   """
   @spec node_align(t(), :left | :right | :center | :justify) :: t()
-  def node_align(%__MODULE__{} = sankey, align) do
+  def node_align(%__MODULE__{} = sankey, align)
+      when align in [:left, :right, :center, :justify] do
     %{sankey | node_align: align}
   end
 
   @doc """
   Sets a custom link sorting function.
 
-  Links are sorted vertically within their source/target nodes.
+  Links are sorted vertically within their source/target nodes by this comparator (true
+  when the first link comes first). When `nil`, links follow the vertical order of the
+  node at their other end.
   """
-  @spec link_sort(t(), (sankey_link(), sankey_link() -> boolean())) :: t()
+  @spec link_sort(t(), (sankey_link(), sankey_link() -> boolean()) | nil) :: t()
   def link_sort(%__MODULE__{} = sankey, sort_fn) do
     %{sankey | link_sort: sort_fn}
   end
@@ -139,28 +151,17 @@ defmodule Visualize.Layout.Sankey do
   """
   @spec compute(t(), [sankey_node()], [sankey_link()]) :: t()
   def compute(%__MODULE__{} = sankey, nodes, links) do
-    # Build node index
-    node_index = build_node_index(nodes)
+    g =
+      sankey
+      |> build_graph(nodes, links)
+      |> compute_depths()
+      |> compute_heights()
+      |> compute_columns()
+      |> initialize_breadths()
+      |> relax()
+      |> compute_link_breadths()
 
-    # Initialize nodes with metadata
-    nodes = initialize_nodes(nodes, links, node_index)
-
-    # Initialize links with references
-    links = initialize_links(links, node_index, nodes)
-
-    # Compute node layers (horizontal position)
-    nodes = compute_node_layers(nodes)
-
-    # Compute horizontal positions
-    nodes = compute_node_x(nodes, sankey)
-
-    # Compute vertical positions
-    nodes = compute_node_y(nodes, links, sankey)
-
-    # Compute link positions and paths
-    links = compute_link_positions(links, nodes, sankey)
-
-    %{sankey | nodes: nodes, links: links}
+    %{sankey | nodes: output_nodes(g, nodes), links: output_links(g, links)}
   end
 
   @doc "Generates SVG path data for a link"
@@ -218,349 +219,409 @@ defmodule Visualize.Layout.Sankey do
 
   # ============================================
   # Private Implementation
+  #
+  # The graph `g` holds `nodes` (id => node map) and `links` (index => link map) for the
+  # links whose endpoints both exist; `ids` is the input order. A node's `source_links`
+  # and `target_links` are link indices, in the vertical order the layout settles on.
   # ============================================
 
-  defp build_node_index(nodes) do
-    nodes
-    |> Enum.with_index()
-    |> Enum.map(fn {node, i} -> {node.id, i} end)
-    |> Map.new()
-  end
+  defp build_graph(sankey, nodes, links) do
+    ids = Enum.map(nodes, & &1.id)
+    known = MapSet.new(ids)
 
-  defp initialize_nodes(nodes, links, node_index) do
-    # Group links by source and target
-    source_links = Enum.group_by(links, & &1.source)
-    target_links = Enum.group_by(links, & &1.target)
+    link_map =
+      links
+      |> Enum.with_index()
+      |> Enum.filter(fn {l, _} ->
+        MapSet.member?(known, l.source) and MapSet.member?(known, l.target)
+      end)
+      |> Map.new(fn {l, i} ->
+        {i,
+         %{
+           index: i,
+           source: l.source,
+           target: l.target,
+           value: l.value,
+           width: 0,
+           y0: 0,
+           y1: 0,
+           raw: l
+         }}
+      end)
 
-    Enum.map(nodes, fn node ->
-      node_source_links = Map.get(source_links, node.id, [])
-      node_target_links = Map.get(target_links, node.id, [])
+    by_source = link_map |> Map.values() |> Enum.group_by(& &1.source, & &1.index)
+    by_target = link_map |> Map.values() |> Enum.group_by(& &1.target, & &1.index)
 
-      # Node value is the max of incoming or outgoing flow
-      outgoing = Enum.reduce(node_source_links, 0, fn l, acc -> acc + l.value end)
-      incoming = Enum.reduce(node_target_links, 0, fn l, acc -> acc + l.value end)
-      value = max(outgoing, incoming)
-
-      Map.merge(node, %{
-        index: node_index[node.id],
-        source_links: node_source_links,
-        target_links: node_target_links,
-        value: value,
-        layer: nil,
-        x0: 0,
-        x1: 0,
-        y0: 0,
-        y1: 0
-      })
-    end)
-  end
-
-  defp initialize_links(links, node_index, nodes) do
-    nodes_by_id = Enum.map(nodes, fn n -> {n.id, n} end) |> Map.new()
-
-    Enum.map(links, fn link ->
-      Map.merge(link, %{
-        source_index: node_index[link.source],
-        target_index: node_index[link.target],
-        source_node: nodes_by_id[link.source],
-        target_node: nodes_by_id[link.target],
-        y0: 0,
-        y1: 0,
-        width: 0,
-        path: nil
-      })
-    end)
-  end
-
-  defp compute_node_layers(nodes) do
-    # Find nodes with no incoming links (sources)
-    # target_ids = all node IDs that appear as targets in links (have incoming links)
-    target_ids =
-      nodes |> Enum.flat_map(& &1.source_links) |> Enum.map(& &1.target) |> MapSet.new()
-
-    # Source nodes = nodes that are NOT targets (have no incoming links)
-    source_nodes =
+    node_map =
       nodes
-      |> Enum.filter(fn n -> not MapSet.member?(target_ids, n.id) end)
-      |> Enum.map(& &1.id)
-      |> MapSet.new()
+      |> Enum.with_index()
+      |> Map.new(fn {n, i} ->
+        outs = sort_links(Map.get(by_source, n.id, []), link_map, sankey.link_sort)
+        ins = sort_links(Map.get(by_target, n.id, []), link_map, sankey.link_sort)
+        value = max(sum_values(outs, link_map), sum_values(ins, link_map))
 
-    # BFS to assign layers
-    assign_layers(nodes, source_nodes, %{})
+        {n.id,
+         %{
+           id: n.id,
+           index: i,
+           value: value,
+           source_links: outs,
+           target_links: ins,
+           depth: 0,
+           height: 0,
+           layer: 0,
+           x0: 0,
+           x1: 0,
+           y0: 0,
+           y1: 0
+         }}
+      end)
+
+    %{sankey: sankey, ids: ids, nodes: node_map, links: link_map, columns: [], py: 0}
   end
 
-  defp assign_layers(nodes, _to_visit, layers) when map_size(layers) == length(nodes) do
-    # All nodes have layers assigned
-    Enum.map(nodes, fn node ->
-      %{node | layer: Map.get(layers, node.id, 0)}
-    end)
+  defp sum_values(indices, links), do: Enum.reduce(indices, 0, &(links[&1].value + &2))
+
+  defp sort_links(indices, _links, nil), do: Enum.sort(indices)
+
+  defp sort_links(indices, links, sort_fn) do
+    Enum.sort(indices, fn a, b -> sort_fn.(links[a].raw, links[b].raw) end)
   end
 
-  defp assign_layers(nodes, to_visit, layers) do
-    if MapSet.size(to_visit) == 0 do
-      # Handle cycles or disconnected nodes
-      unassigned = Enum.filter(nodes, fn n -> not Map.has_key?(layers, n.id) end)
+  # Longest path from a source (d3's computeNodeDepths): a node's depth is the round in
+  # which it was last reached. A cycle would never settle, so the walk stops after as many
+  # rounds as there are nodes and the nodes still pending keep the depth they have.
+  defp compute_depths(g), do: longest_path(g, :depth, :source_links, & &1.target)
+  defp compute_heights(g), do: longest_path(g, :height, :target_links, & &1.source)
 
-      if Enum.empty?(unassigned) do
-        Enum.map(nodes, fn node ->
-          %{node | layer: Map.get(layers, node.id, 0)}
-        end)
-      else
-        # Assign remaining nodes to layer 0
-        new_layers =
-          Enum.reduce(unassigned, layers, fn n, acc ->
-            Map.put(acc, n.id, 0)
+  defp longest_path(g, field, links_field, other) do
+    n = map_size(g.nodes)
+    walk(g, field, links_field, other, MapSet.new(g.ids), 0, n)
+  end
+
+  defp walk(g, _field, _links_field, _other, current, round, limit)
+       when round > limit or map_size(current.map) == 0,
+       do: g
+
+  defp walk(g, field, links_field, other, current, round, limit) do
+    {nodes, next} =
+      Enum.reduce(current, {g.nodes, MapSet.new()}, fn id, {nodes, next} ->
+        node = Map.put(nodes[id], field, round)
+        reached = Enum.map(node[links_field], &other.(g.links[&1]))
+        {Map.put(nodes, id, node), Enum.into(reached, next)}
+      end)
+
+    walk(%{g | nodes: nodes}, field, links_field, other, next, round + 1, limit)
+  end
+
+  # d3's computeNodeLayers: the alignment function picks a column in 0..L for every node.
+  defp compute_columns(%{sankey: sankey} = g) do
+    x = (g.nodes |> Map.values() |> Enum.map(& &1.depth) |> Enum.max(fn -> 0 end)) + 1
+    kx = if x > 1, do: (sankey.width - sankey.node_width) / (x - 1), else: 0
+
+    nodes =
+      Map.new(g.nodes, fn {id, node} ->
+        column = node |> align(sankey.node_align, x, g) |> floor() |> max(0) |> min(x - 1)
+        x0 = column * kx
+        {id, %{node | layer: column, x0: x0, x1: x0 + sankey.node_width}}
+      end)
+
+    columns =
+      g.ids
+      |> Enum.map(&nodes[&1])
+      |> Enum.group_by(& &1.layer, & &1.id)
+      |> Enum.sort()
+      |> Enum.map(fn {_, ids} -> ids end)
+
+    max_len = columns |> Enum.map(&length/1) |> Enum.max(fn -> 1 end)
+
+    py =
+      if max_len > 1,
+        do: min(sankey.node_padding, sankey.height / (max_len - 1)),
+        else: sankey.node_padding
+
+    %{g | nodes: nodes, columns: columns, py: py}
+  end
+
+  defp align(node, :left, _x, _g), do: node.depth
+  defp align(node, :right, x, _g), do: x - 1 - node.height
+  defp align(%{source_links: []}, :justify, x, _g), do: x - 1
+  defp align(node, :justify, _x, _g), do: node.depth
+  defp align(%{target_links: [_ | _]} = node, :center, _x, _g), do: node.depth
+  defp align(%{source_links: []}, :center, _x, _g), do: 0
+
+  defp align(node, :center, _x, g) do
+    (node.source_links |> Enum.map(&g.nodes[g.links[&1].target].depth) |> Enum.min()) - 1
+  end
+
+  # d3's initializeNodeBreadths: one scale `ky` for every column, so a link's width is the
+  # share of its node it occupies; each column is then centred vertically.
+  defp initialize_breadths(%{sankey: sankey, py: py} = g) do
+    ky =
+      g.columns
+      |> Enum.map(fn ids ->
+        total = Enum.reduce(ids, 0, &(g.nodes[&1].value + &2))
+        if total > 0, do: (sankey.height - (length(ids) - 1) * py) / total, else: nil
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.min(fn -> 0 end)
+
+    g =
+      Enum.reduce(g.columns, g, fn ids, g ->
+        {g, y} =
+          Enum.reduce(ids, {g, 0}, fn id, {g, y} ->
+            node = g.nodes[id]
+            y1 = y + node.value * ky
+
+            links =
+              Enum.reduce(node.source_links, g.links, fn li, links ->
+                put_in(links, [li, :width], links[li].value * ky)
+              end)
+
+            {%{g | nodes: Map.put(g.nodes, id, %{node | y0: y, y1: y1}), links: links}, y1 + py}
           end)
 
-        Enum.map(nodes, fn node ->
-          %{node | layer: Map.get(new_layers, node.id, 0)}
-        end)
-      end
+        gap = (sankey.height - y + py) / (length(ids) + 1)
+
+        ids
+        |> Enum.with_index(1)
+        |> Enum.reduce(g, fn {id, i}, g -> shift_node(g, id, gap * i) end)
+        |> reorder_links(ids)
+      end)
+
+    g
+  end
+
+  defp shift_node(g, id, dy) do
+    update_in(g, [:nodes, id], &%{&1 | y0: &1.y0 + dy, y1: &1.y1 + dy})
+  end
+
+  # Without a link_sort, links leave and enter a node in the vertical order of the node at
+  # their other end (ties by input index).
+  defp reorder_links(%{sankey: %{link_sort: nil}} = g, ids) do
+    Enum.reduce(ids, g, fn id, g ->
+      update_in(g, [:nodes, id], fn node ->
+        %{
+          node
+          | source_links: Enum.sort_by(node.source_links, &{g.nodes[g.links[&1].target].y0, &1}),
+            target_links: Enum.sort_by(node.target_links, &{g.nodes[g.links[&1].source].y0, &1})
+        }
+      end)
+    end)
+  end
+
+  defp reorder_links(g, _ids), do: g
+
+  # d3's reorderNodeLinks: after a node moves, the links of its neighbours are re-sorted.
+  defp reorder_node_links(%{sankey: %{link_sort: nil}} = g, id) do
+    node = g.nodes[id]
+    sources = Enum.map(node.target_links, &g.links[&1].source)
+    targets = Enum.map(node.source_links, &g.links[&1].target)
+    reorder_links(g, Enum.uniq(sources ++ targets))
+  end
+
+  defp reorder_node_links(g, _id), do: g
+
+  defp relax(%{sankey: %{iterations: iterations}} = g) do
+    Enum.reduce(0..(iterations - 1)//1, g, fn i, g ->
+      alpha = :math.pow(0.99, i)
+      beta = max(1 - alpha, (i + 1) / iterations)
+
+      g
+      |> relax_right_to_left(alpha, beta)
+      |> relax_left_to_right(alpha, beta)
+    end)
+  end
+
+  defp relax_left_to_right(g, alpha, beta) do
+    g.columns
+    |> Enum.drop(1)
+    |> Enum.reduce(g, fn ids, g ->
+      ids
+      |> Enum.reduce(g, fn id, g -> pull(g, id, :target_links, &target_top/3, alpha) end)
+      |> resolve_collisions(ids, beta)
+    end)
+  end
+
+  defp relax_right_to_left(g, alpha, beta) do
+    g.columns
+    |> Enum.reverse()
+    |> Enum.drop(1)
+    |> Enum.reduce(g, fn ids, g ->
+      ids
+      |> Enum.reduce(g, fn id, g -> pull(g, id, :source_links, &source_top/3, alpha) end)
+      |> resolve_collisions(ids, beta)
+    end)
+  end
+
+  # Moves a node towards the value-weighted mean of the y0 each of its links would want.
+  defp pull(g, id, links_field, ideal, alpha) do
+    node = g.nodes[id]
+
+    {y, w} =
+      Enum.reduce(node[links_field], {0, 0}, fn li, {y, w} ->
+        link = g.links[li]
+        {source, target} = {g.nodes[link.source], g.nodes[link.target]}
+        v = link.value * (target.layer - source.layer)
+        {y + ideal.(g, source, target) * v, w + v}
+      end)
+
+    if w > 0 do
+      g |> shift_node(id, (y / w - node.y0) * alpha) |> reorder_node_links(id)
     else
-      # Process nodes at current frontier
-      {new_layers, next_to_visit} =
-        Enum.reduce(to_visit, {layers, MapSet.new()}, fn node_id, {acc_layers, acc_next} ->
-          node = Enum.find(nodes, fn n -> n.id == node_id end)
-
-          if node do
-            layer =
-              if Map.has_key?(acc_layers, node_id) do
-                acc_layers[node_id]
-              else
-                # Layer is max of all source layers + 1
-                source_layers =
-                  node.target_links
-                  |> Enum.map(fn l -> Map.get(acc_layers, l.source, -1) end)
-                  |> Enum.filter(&(&1 >= 0))
-
-                if Enum.empty?(source_layers), do: 0, else: Enum.max(source_layers) + 1
-              end
-
-            new_acc_layers = Map.put(acc_layers, node_id, layer)
-
-            # Add targets to next iteration
-            targets =
-              node.source_links
-              |> Enum.map(& &1.target)
-              |> Enum.filter(fn id -> not Map.has_key?(new_acc_layers, id) end)
-              |> MapSet.new()
-
-            {new_acc_layers, MapSet.union(acc_next, targets)}
-          else
-            {acc_layers, acc_next}
-          end
-        end)
-
-      assign_layers(nodes, next_to_visit, new_layers)
+      g
     end
   end
 
-  defp compute_node_x(nodes, sankey) do
-    max_layer = nodes |> Enum.map(& &1.layer) |> Enum.max(fn -> 0 end)
+  # The target.y0 that would make the link from source to target straight (d3 targetTop).
+  defp target_top(g, source, target) do
+    y = source.y0 - (length(source.source_links) - 1) * g.py / 2
 
-    x_scale =
-      if max_layer == 0 do
-        0
-      else
-        (sankey.width - sankey.node_width) / max_layer
-      end
+    y =
+      source.source_links
+      |> Enum.take_while(&(g.links[&1].target != target.id))
+      |> Enum.reduce(y, &(&2 + g.links[&1].width + g.py))
 
-    Enum.map(nodes, fn node ->
-      x0 =
-        case sankey.node_align do
-          :left -> node.layer * x_scale
-          :right -> sankey.width - sankey.node_width - node.layer * x_scale
-          :center -> (sankey.width - sankey.node_width) / 2
-          :justify -> node.layer * x_scale
-        end
+    target.target_links
+    |> Enum.take_while(&(g.links[&1].source != source.id))
+    |> Enum.reduce(y, &(&2 - g.links[&1].width))
+  end
 
-      %{node | x0: x0, x1: x0 + sankey.node_width}
+  defp source_top(g, source, target) do
+    y = target.y0 - (length(target.target_links) - 1) * g.py / 2
+
+    y =
+      target.target_links
+      |> Enum.take_while(&(g.links[&1].source != source.id))
+      |> Enum.reduce(y, &(&2 + g.links[&1].width + g.py))
+
+    source.source_links
+    |> Enum.take_while(&(g.links[&1].target != target.id))
+    |> Enum.reduce(y, &(&2 - g.links[&1].width))
+  end
+
+  # d3's resolveCollisions: sort the column by y0, push apart from the middle node
+  # outwards, then back in from the bottom and the top edges of the diagram.
+  defp resolve_collisions(%{sankey: sankey, py: py} = g, ids, alpha) do
+    sorted = Enum.sort_by(ids, &{g.nodes[&1].y0, g.nodes[&1].index})
+    n = length(sorted)
+    i = div(n, 2)
+    subject = g.nodes[Enum.at(sorted, i)]
+
+    g
+    |> push_up(Enum.take(sorted, i), subject.y0 - py, alpha)
+    |> push_down(Enum.drop(sorted, i + 1), subject.y1 + py, alpha)
+    |> push_up(sorted, sankey.height, alpha)
+    |> push_down(sorted, 0, alpha)
+    |> Map.update!(:columns, fn columns ->
+      Enum.map(columns, fn column -> if column == ids, do: sorted, else: column end)
     end)
   end
 
-  defp compute_node_y(nodes, links, sankey) do
-    # Group nodes by layer
-    by_layer =
-      nodes
-      |> Enum.group_by(& &1.layer)
-      |> Enum.sort_by(fn {layer, _} -> layer end)
+  defp push_down(g, ids, y, alpha) do
+    {g, _} =
+      Enum.reduce(ids, {g, y}, fn id, {g, y} ->
+        dy = (y - g.nodes[id].y0) * alpha
+        g = if dy > 1.0e-6, do: shift_node(g, id, dy), else: g
+        {g, g.nodes[id].y1 + g.py}
+      end)
 
-    # Initial positioning
+    g
+  end
+
+  defp push_up(g, ids, y, alpha) do
+    {g, _} =
+      ids
+      |> Enum.reverse()
+      |> Enum.reduce({g, y}, fn id, {g, y} ->
+        dy = (g.nodes[id].y1 - y) * alpha
+        g = if dy > 1.0e-6, do: shift_node(g, id, -dy), else: g
+        {g, g.nodes[id].y0 - g.py}
+      end)
+
+    g
+  end
+
+  # Link tops: the running offset from the top of the source node (y0) and of the target
+  # node (y1), in the settled link order.
+  defp compute_link_breadths(g) do
+    links =
+      Enum.reduce(g.nodes, g.links, fn {_id, node}, links ->
+        {links, _} =
+          Enum.reduce(node.source_links, {links, node.y0}, fn li, {links, y} ->
+            {put_in(links, [li, :y0], y), y + links[li].width}
+          end)
+
+        {links, _} =
+          Enum.reduce(node.target_links, {links, node.y0}, fn li, {links, y} ->
+            {put_in(links, [li, :y1], y), y + links[li].width}
+          end)
+
+        links
+      end)
+
+    %{g | links: links}
+  end
+
+  defp output_nodes(g, nodes) do
+    Enum.map(nodes, fn n ->
+      node = g.nodes[n.id]
+
+      Map.merge(n, %{
+        index: node.index,
+        value: node.value,
+        depth: node.depth,
+        height: node.height,
+        layer: node.layer,
+        source_links: Enum.map(node.source_links, &g.links[&1].raw),
+        target_links: Enum.map(node.target_links, &g.links[&1].raw),
+        x0: node.x0,
+        x1: node.x1,
+        y0: node.y0,
+        y1: node.y1
+      })
+    end)
+  end
+
+  defp output_links(g, links) do
     nodes =
-      Enum.flat_map(by_layer, fn {_layer, layer_nodes} ->
-        total_value = Enum.reduce(layer_nodes, 0, fn n, acc -> acc + n.value end)
-        padding_total = (length(layer_nodes) - 1) * sankey.node_padding
-
-        available_height = sankey.height - padding_total
-        value_scale = if total_value > 0, do: available_height / total_value, else: 0
-
-        {positioned, _} =
-          layer_nodes
-          |> Enum.sort_by(& &1.index)
-          |> Enum.reduce({[], 0}, fn node, {acc, y} ->
-            height = node.value * value_scale
-            node = %{node | y0: y, y1: y + height}
-            {[node | acc], y + height + sankey.node_padding}
-          end)
-
-        Enum.reverse(positioned)
+      Map.new(g.nodes, fn {id, node} ->
+        {id, Map.take(node, [:id, :x0, :x1, :y0, :y1, :index, :layer, :value])}
       end)
 
-    # Iterative relaxation
-    relax_nodes(nodes, links, sankey)
-  end
+    links
+    |> Enum.with_index()
+    |> Enum.map(fn {l, i} ->
+      case g.links[i] do
+        nil ->
+          Map.merge(l, %{
+            source_index: nil,
+            target_index: nil,
+            source_node: nil,
+            target_node: nil,
+            y0: 0,
+            y1: 0,
+            width: 0,
+            path: nil
+          })
 
-  defp relax_nodes(nodes, _links, %{iterations: 0}), do: nodes
+        link ->
+          source = nodes[link.source]
+          target = nodes[link.target]
 
-  defp relax_nodes(nodes, links, sankey) do
-    nodes_by_id = Enum.map(nodes, fn n -> {n.id, n} end) |> Map.new()
+          out =
+            Map.merge(l, %{
+              source_index: source.index,
+              target_index: target.index,
+              source_node: source,
+              target_node: target,
+              y0: link.y0,
+              y1: link.y1,
+              width: link.width
+            })
 
-    # Relax nodes based on link positions
-    relaxed =
-      Enum.map(nodes, fn node ->
-        # Calculate weighted average of connected node positions
-        incoming_y =
-          node.target_links
-          |> Enum.map(fn l ->
-            source = Map.get(nodes_by_id, l.source)
-            if source, do: {(source.y0 + source.y1) / 2, l.value}, else: nil
-          end)
-          |> Enum.filter(& &1)
-
-        outgoing_y =
-          node.source_links
-          |> Enum.map(fn l ->
-            target = Map.get(nodes_by_id, l.target)
-            if target, do: {(target.y0 + target.y1) / 2, l.value}, else: nil
-          end)
-          |> Enum.filter(& &1)
-
-        all_weighted = incoming_y ++ outgoing_y
-
-        if Enum.empty?(all_weighted) do
-          node
-        else
-          total_weight = Enum.reduce(all_weighted, 0, fn {_, w}, acc -> acc + w end)
-
-          weighted_y =
-            Enum.reduce(all_weighted, 0, fn {y, w}, acc -> acc + y * w end) / total_weight
-
-          height = node.y1 - node.y0
-          new_y0 = weighted_y - height / 2
-
-          # Keep within bounds
-          new_y0 = max(0, min(sankey.height - height, new_y0))
-
-          %{node | y0: new_y0, y1: new_y0 + height}
-        end
-      end)
-
-    # Resolve overlaps
-    resolved = resolve_overlaps(relaxed, sankey)
-
-    relax_nodes(resolved, links, %{sankey | iterations: sankey.iterations - 1})
-  end
-
-  defp resolve_overlaps(nodes, sankey) do
-    # Group by layer and resolve within each layer
-    nodes
-    |> Enum.group_by(& &1.layer)
-    |> Enum.flat_map(fn {_layer, layer_nodes} ->
-      sorted = Enum.sort_by(layer_nodes, & &1.y0)
-
-      # First pass: resolve overlaps by pushing down
-      {resolved, _} =
-        Enum.reduce(sorted, {[], 0}, fn node, {acc, min_y} ->
-          y0 = max(node.y0, min_y)
-          height = node.y1 - node.y0
-          node = %{node | y0: y0, y1: y0 + height}
-          {[node | acc], y0 + height + sankey.node_padding}
-        end)
-
-      resolved = Enum.reverse(resolved)
-
-      # Second pass: if nodes overflow height, scale them to fit
-      max_y = resolved |> Enum.map(& &1.y1) |> Enum.max(fn -> 0 end)
-
-      if max_y > sankey.height do
-        total_padding = (length(resolved) - 1) * sankey.node_padding
-        available = sankey.height - total_padding
-        total_height = resolved |> Enum.map(fn n -> n.y1 - n.y0 end) |> Enum.sum()
-        scale = if total_height > 0, do: available / total_height, else: 1.0
-
-        {scaled, _} =
-          Enum.reduce(resolved, {[], 0}, fn node, {acc, y} ->
-            height = (node.y1 - node.y0) * scale
-            node = %{node | y0: y, y1: y + height}
-            {[node | acc], y + height + sankey.node_padding}
-          end)
-
-        Enum.reverse(scaled)
-      else
-        resolved
+          Map.put(out, :path, generate_link_path(out))
       end
     end)
-  end
-
-  defp compute_link_positions(links, nodes, sankey) do
-    nodes_by_id = Enum.map(nodes, fn n -> {n.id, n} end) |> Map.new()
-
-    # Calculate value scale per layer (use max layer total for consistency)
-    by_layer = Enum.group_by(nodes, & &1.layer)
-
-    max_layer_value =
-      by_layer
-      |> Enum.map(fn {_layer, layer_nodes} ->
-        Enum.reduce(layer_nodes, 0, fn n, acc -> acc + n.value end)
-      end)
-      |> Enum.max(fn -> 1 end)
-
-    max_layer_count =
-      by_layer
-      |> Enum.map(fn {_layer, layer_nodes} -> length(layer_nodes) end)
-      |> Enum.max(fn -> 1 end)
-
-    padding_total = (max_layer_count - 1) * sankey.node_padding
-    value_scale = (sankey.height - padding_total) / max_layer_value
-
-    # Track y offset for each node's outgoing/incoming links
-    source_y = Enum.map(nodes, fn n -> {n.id, n.y0} end) |> Map.new()
-    target_y = Enum.map(nodes, fn n -> {n.id, n.y0} end) |> Map.new()
-
-    {links, _, _} =
-      links
-      |> Enum.reduce({[], source_y, target_y}, fn link, {acc, src_y, tgt_y} ->
-        source = Map.get(nodes_by_id, link.source)
-        target = Map.get(nodes_by_id, link.target)
-
-        if source && target do
-          width = link.value * value_scale
-          # Minimum width
-          width = max(1, width)
-
-          y0 = Map.get(src_y, link.source, 0)
-          y1 = Map.get(tgt_y, link.target, 0)
-
-          link = %{
-            link
-            | source_node: source,
-              target_node: target,
-              y0: y0,
-              y1: y1,
-              width: width
-          }
-
-          link = %{link | path: generate_link_path(link)}
-
-          new_src_y = Map.put(src_y, link.source, y0 + width)
-          new_tgt_y = Map.put(tgt_y, link.target, y1 + width)
-
-          {[link | acc], new_src_y, new_tgt_y}
-        else
-          {[link | acc], src_y, tgt_y}
-        end
-      end)
-
-    Enum.reverse(links)
   end
 end

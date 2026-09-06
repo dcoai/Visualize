@@ -139,11 +139,13 @@ With neither `size` nor `node_size`, coordinates are raw: `x` in separation unit
 
 ### 3.2 Algorithm
 
-`generate/2` expects `value` to have been set (by `sum/2` or `count/1`) unless `radius` is given. Siblings are packed bottom-up: the children of a node are sorted by descending radius; the first is placed at the origin, the second tangent to its right, and each further circle at the candidate position tangent to some pair of already placed circles that is closest to the origin and overlaps none of them. Sibling circles are separated by `2 * padding` (each circle is inflated by `padding`). When no tangent candidate is free the circle is placed on the enclosing circle of the placed set at a random angle drawn from `:rand`; such layouts are not reproducible.
+`generate/2` expects `value` to have been set (by `sum/2` or `count/1`) unless `radius` is given; a leaf radius below 0 is clamped to 0. Siblings are packed bottom-up by d3-hierarchy's `packSiblings` (D-42), in child order (no sorting): the first circle sits at the origin, the second tangent to its right, the third tangent to both, and every further circle is placed tangent to the current pair `(a, b)` of the front chain — the circular list of circles still exposed on the outside — then tested against the chain, walking forward from `b` and backward from `a` along whichever side has accumulated the smaller radius so far; when the candidate intersects a chain circle, the chain is shortened to that circle and the placement retried. After a placement the pair whose weighted midpoint is nearest the origin becomes the next `(a, b)`. The layout is a pure function of the input: every tie is broken by order and nothing is drawn from `:rand`.
 
-The enclosing circle of a set of siblings is centred on the middle of their bounding box with radius equal to the greatest centre distance plus that circle's radius; it is not the minimal enclosing circle (`enclose_circles` in `lib/visualize/layout/pack.ex`). The parent's radius is that radius plus `padding`. Children are stored relative to the parent's centre until the final pass.
+The enclosing circle of a set of siblings is the minimal enclosing circle of the front chain by Welzl's algorithm (d3's `packEnclose`), over a Fisher–Yates shuffle of the chain driven by d3's linear congruential generator (`a = 1664525`, `c = 1013904223`, `m = 2^32`, seed 1), so the shuffle — and therefore the result — is fixed. The siblings are translated so that this circle is centred on the origin, and children are stored relative to the parent's centre until the final pass.
 
-Finally the root is scaled by `k = min(width, height) / (2 * root.r)` and centred at `{width / 2, height / 2}`; every `x`, `y` and `r` is multiplied by `k` and positions are made absolute. A root with radius 0 (or `nil`) is returned without scaling and with leaf positions unset.
+Padding is in output units and is applied as d3 does: a first, unpadded, pass finds the root radius `r0`; a second pass inflates every child of a node by `padding(node) * r0 / min(width, height)` before packing, deflates it afterwards and adds the inflation to the parent's radius, so the parent's boundary also keeps that distance from its children. With `r1` the padded root radius, the gap between tangent siblings after scaling is `padding * r0 / r1` output units — the padding, less the amount by which the padding itself enlarged the layout.
+
+Finally the root is scaled by `k = min(width, height) / (2 * r1)` and centred at `{width / 2, height / 2}`; every `x`, `y` and `r` is multiplied by `k` and positions are made absolute. A root with radius 0 (or `nil`) is returned without scaling and with leaf positions unset. `test/support/pack_golden.txt` records a five-leaf hierarchy with and without padding.
 
 ### 3.3 Functions
 
@@ -281,7 +283,7 @@ One chord is produced for every pair `i <= j` with `matrix[i][j] > 0` or `matrix
 | `node_padding` | `8` | Vertical gap between nodes in the same layer. |
 | `iterations` | `6` | Number of vertical relaxation passes. |
 | `node_align` | `:justify` | One of `:left`, `:right`, `:center`, `:justify`. |
-| `link_sort` | `nil` | `fn link, link -> boolean end`; accepted and stored but not consulted by `compute/3`. |
+| `link_sort` | `nil` | `fn link, link -> boolean end` ordering the links within every node (true when the first comes first); `nil` orders them by the vertical position of the node at their other end. |
 | `nodes`, `links` | `[]` | Output of `compute/3`. |
 
 ### 7.2 Input
@@ -290,17 +292,15 @@ One chord is produced for every pair `i <= j` with `matrix[i][j] > 0` or `matrix
 
 ### 7.3 Algorithm
 
-Every node's `value` is the greater of its total outgoing and total incoming link value. Layers are assigned by breadth-first traversal from the nodes with no incoming link: a node's layer is one more than the greatest layer among its already-assigned sources at the time it is first reached, and 0 for a source. Nodes unreachable from a source (cycles, isolated nodes) receive layer 0.
+The layout is a port of d3-sankey (D-42). Links naming a node that is not in `nodes` take no part in it. Every node's `value` is the greater of its total outgoing and total incoming link value. A node's `depth` is the length of the longest path to it from a node with no incoming link, and its `height` the length of the longest path from it to a node with no outgoing link (d3's `computeNodeDepths` and `computeNodeHeights`: repeated frontier walks in which a node keeps the round it was last reached in). A cycle never settles; the walk stops after as many rounds as there are nodes, so the nodes of a cycle keep that count as their depth.
 
-Horizontal position: with `L` the greatest layer and `xs = (width - node_width) / L` (0 when `L` is 0), `x0` is `layer * xs` for `:left`; `width - node_width - layer * xs` for `:right`; `x1 = x0 + node_width`. `:justify` MUST place every node without outgoing links in layer `L` and every other node at its layer. `:center` MUST place a node with incoming links at its layer, a node with only outgoing links one layer before its earliest target, and an isolated node at layer 0.
+Horizontal position: with `L` the greatest depth and `xs = (width - node_width) / L` (0 when `L` is 0), every node is assigned a column in `0..L` by the alignment function, clamped to that range, and `layer` is that column; `x0 = layer * xs`, `x1 = x0 + node_width`. The alignment functions are d3-sankey's: `:left` is `depth`; `:right` is `L - height`, so every sink shares the last column; `:justify` is `L` for a node without outgoing links and `depth` otherwise; `:center` is `depth` for a node with incoming links, one less than the least `depth` among its targets for a node with only outgoing links, and 0 for an isolated node.
 
-> Decision: see spec/13. The current implementation makes `:justify` identical to `:left` and places every node at `x0 = (width - node_width) / 2` under `:center`, collapsing the diagram into one column.
+Vertical position: with `n` the size of the largest column, the effective padding is `py = min(node_padding, height / (n - 1))` (`node_padding` when `n` is 1), and one scale `ky` — the least over the columns of `(height - (count - 1) * py) / column_total`, columns of total 0 ignored — sizes both nodes and links: a node's height is `value * ky` and a link's `width` is `value * ky`, so the links leaving a node tile its height exactly and no minimum width applies. Each column is stacked in input order from the top and then centred by spreading the remaining height evenly above, between and below its nodes. Then `iterations` relaxation passes, `i` from 0, with `alpha = 0.99^i` and `beta = max(1 - alpha, (i + 1) / iterations)`, sweep the columns right to left and then left to right; each sweep moves every node by `alpha` times the distance from its `y0` to the value-weighted mean of the `y0` each of its links would want for a straight ribbon (weights are `value * (target.layer - source.layer)`), re-sorts the column by `y0`, and resolves collisions with strength `beta`: outward from the middle node, then back in from the bottom and the top of the diagram. When `link_sort` is `nil`, the links of every node are ordered by the `y0` of the node at their other end (ties by input index) and re-ordered whenever a neighbour moves; otherwise they are sorted once by `link_sort` and kept.
 
-Vertical position: within each layer, nodes are stacked in input order with heights `value * (height - (n - 1) * node_padding) / layer_total`, so every layer initially fills the full height. Then `iterations` relaxation passes move each node's centre to the value-weighted mean of its neighbours' centres, clamp it to the diagram, push overlapping nodes down in `y0` order, and, if the column overflows, rescale the layer's node heights to fit.
+Links: `y0` is the running offset from the top of the source node and `y1` the running offset from the top of the target node, in the settled link order, so a link's ribbon occupies `[y0, y0 + width]` at the source and `[y1, y1 + width]` at the target. Each link receives `source_node`, `target_node` (position snapshots), `source_index`, `target_index`, `y0`, `y1`, `width` and `path`, in input order. A link naming an unknown node keeps `width` 0, `path` `nil` and `nil` endpoints.
 
-Links: with one global scale `(height - (max_nodes_in_a_layer - 1) * node_padding) / max_layer_total`, each link's `width` is `max(1, value * scale)`. Links are assigned in input order; `y0` is the running offset from the top of the source node and `y1` the running offset from the top of the target node. Each link receives `source_node`, `target_node` (position snapshots), `source_index`, `target_index`, `y0`, `y1`, `width` and `path`. A link naming an unknown node keeps `width` 0 and `path` `nil`.
-
-Output nodes carry their input keys plus `index`, `layer`, `value`, `source_links`, `target_links` (the raw input links), `x0`, `x1`, `y0`, `y1`.
+Output nodes carry their input keys plus `index`, `depth`, `height`, `layer`, `value`, `source_links`, `target_links` (the raw input links, in the settled order), `x0`, `x1`, `y0`, `y1`. `test/support/sankey_golden.txt` records a five-node graph under every alignment.
 
 ### 7.4 Paths
 
@@ -315,8 +315,8 @@ Output nodes carry their input keys plus `index`, `layer`, `value`, `source_link
 | `Visualize.Layout.Sankey.node_width/2` | Sets `node_width`. |
 | `Visualize.Layout.Sankey.node_padding/2` | Sets `node_padding`. |
 | `Visualize.Layout.Sankey.iterations/2` | Sets the relaxation pass count. |
-| `Visualize.Layout.Sankey.node_align/2` | Sets the alignment atom. |
-| `Visualize.Layout.Sankey.link_sort/2` | Stores a link comparator (not applied by `compute/3`). |
+| `Visualize.Layout.Sankey.node_align/2` | Sets the alignment atom; any other atom raises `FunctionClauseError`. |
+| `Visualize.Layout.Sankey.link_sort/2` | Sets or clears the link comparator applied within every node (7.3). |
 | `Visualize.Layout.Sankey.compute/3` | Computes node and link positions; returns the layout with `nodes` and `links` filled (7.3). |
 | `Visualize.Layout.Sankey.link_path/1` | The link's stored path, else a freshly generated one. |
 | `Visualize.Layout.Sankey.link_paths/1` | Paths for every link of a computed layout. |
