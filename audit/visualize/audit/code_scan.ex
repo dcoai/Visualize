@@ -4,9 +4,8 @@ defmodule Visualize.Audit.CodeScan do
 
   A definition is *public* when it is a `def`, `defmacro`, `defguard` or `defdelegate`
   that Elixir would document: `@doc false` hides every arity of the definition it precedes,
-  and `@impl` hides the callback arity unless an explicit `@doc` accompanies it (the arities
-  a default argument generates keep their own visibility, which is what `Code.fetch_docs/1`
-  reports). Functions a `use` injects are not in the source; the ones that matter here are
+  and `@impl` without an explicit `@doc` hides it likewise, default-argument arities
+  included (what `Code.fetch_docs/1` reports). Functions a `use` injects are not in the source; the ones that matter here are
   listed in `@injected`.
 
   Each function is versioned with `Surfex.SourceScan.definition_hash/1` over all of its
@@ -148,9 +147,10 @@ defmodule Visualize.Audit.CodeScan do
     end)
   end
 
-  # `@doc false` hides every arity; `@impl` without `@doc` hides the callback arity only.
+  # `@doc false` hides the definition; so does `@impl` without an explicit `@doc`. Both
+  # cover every arity a default argument generates, as `Code.fetch_docs/1` reports.
   defp hidden?(%{doc: :hidden}, _full?), do: true
-  defp hidden?(%{impl?: true, doc: doc}, true) when doc != :documented, do: true
+  defp hidden?(%{impl?: true, doc: doc}, _full?) when doc != :documented, do: true
   defp hidden?(_state, _full?), do: false
 
   defp name_and_args({:when, _, [head | _]}), do: name_and_args(head)

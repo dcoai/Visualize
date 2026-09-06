@@ -29,6 +29,7 @@ defmodule Visualize.Hooks.Brush do
 
   3. Handle brush events in your LiveView:
 
+      ```elixir
       def handle_event("brush_select", %{"x0" => x0, "y0" => y0, "x1" => x1, "y1" => y1}, socket) do
         # Filter data within selection
         {:noreply, assign(socket, selection: {x0, y0, x1, y1})}
@@ -37,6 +38,7 @@ defmodule Visualize.Hooks.Brush do
       def handle_event("brush_clear", _params, socket) do
         {:noreply, assign(socket, selection: nil)}
       end
+      ```
 
   ## Brush Types
 

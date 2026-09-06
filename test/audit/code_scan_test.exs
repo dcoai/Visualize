@@ -52,12 +52,12 @@ defmodule Visualize.Audit.CodeScanTest do
     refute Enum.any?(entries(), &(&1.name == :private))
   end
 
-  test "@doc false hides every arity; @impl hides the callback arity only" do
+  test "@doc false and @impl hide every arity of a definition" do
     hidden = for e <- entries(), e.hidden?, do: "#{e.name}/#{e.arity}"
     assert "hidden/1" in hidden
     assert "init/1" in hidden
     assert "handle_call/4" in hidden
-    assert "handle_call/3" in visible()
+    assert "handle_call/3" in hidden
   end
 
   test "use GenServer injects a public child_spec/1" do

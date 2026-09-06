@@ -41,11 +41,7 @@ SVG *attribute* values (as opposed to path data and transform strings) are NOT f
 
 ### 2.1 Functions
 
-| Function | Contract |
-|---|---|
-| `Visualize.Backend.SVG.render_element/1` | Renders one `IR.Element` tree to an SVG iolist per 2.3; equivalent to the hidden `render_element/2` with empty options. |
-| `Visualize.Backend.SVG.render_path/1` | Renders one `IR.Path` as a bare `<path d="..."/>` iolist with no style; equivalent to `render_path/2` with empty options. |
-| `Visualize.Backend.SVG.render_scene/1` | Renders a list of `IR.Element` and wraps the result in an `<svg>` root sized 800×600; equivalent to `render_scene/2` with empty options. |
+Every function of this module is an `@impl` callback of `Visualize.Backend` (`render_element/2`, `render_path/2`, `render_scene/2`, `path_data/1`, `wrap_root/2`) or a default-argument head of one, and is therefore internal: it is reached through `Visualize.Render` (spec/02 §3) or by a backend-agnostic caller holding the module. The contracts below describe the callbacks.
 
 ### 2.2 Options
 
@@ -129,11 +125,7 @@ This module defines `String.Chars` for `Visualize.IR.Element` (`to_string/1` = `
 
 ### 3.1 Functions
 
-| Function | Contract |
-|---|---|
-| `Visualize.Backend.Canvas.render_element/1` | Renders one `IR.Element` tree to Canvas 2D commands in the default `:js` format; equivalent to the hidden `render_element/2` with empty options. |
-| `Visualize.Backend.Canvas.render_path/1` | Renders one `IR.Path` as `beginPath` followed by its path commands, with no style, in `:js` format; equivalent to `render_path/2` with empty options. |
-| `Visualize.Backend.Canvas.render_scene/1` | Renders a list of `IR.Element` to a self-invoking JavaScript function `(function(ctx){…})(context)`; equivalent to `render_scene/2` with empty options. |
+Every function of this module is an `@impl` callback of `Visualize.Backend` (`render_element/2`, `render_path/2`, `render_scene/2`, `path_data/1`) or a default-argument head of one, and is therefore internal: it is reached through `Visualize.Render` (spec/02 §3) or by a backend-agnostic caller holding the module. The contracts below describe the callbacks.
 
 ### 3.2 Options and output formats
 
