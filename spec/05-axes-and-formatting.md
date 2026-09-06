@@ -40,7 +40,7 @@
 | `:left` | `−1` | y | `translate(0, pos)` | `:end` |
 | `:right` | `+1` | y | `translate(0, pos)` | `:start` |
 
-`k` is the direction multiplier: ticks extend away from the plot area. `pos = Scale.apply(scale, value) + offset`.
+`k` is the direction multiplier: ticks extend away from the plot area. `pos = Scale.apply(scale, value) + offset + c`, where `c = max(0, bandwidth − 2·offset) / 2` is d3-axis's band centring — `bandwidth` from `Visualize.Scale.bandwidth/1`, so `0` on every scale but `Band` — rounded when the band scale rounds (D-23).
 
 ### 1.4 Element Structure
 
@@ -65,22 +65,18 @@ Tick line: `:top`/`:bottom` from `(0, 0)` to `(0, k·inner)`; `:left`/`:right` f
 
 Tick label attributes, with `i = tick_size_inner`, `p = tick_padding`:
 
-| Orient | Attributes | Intended |
-|---|---|---|
-| `:top` | `y: −k·i − p` (evaluates to `i − p`), `dy: "0em"` | `y: k·(i + p)` |
-| `:bottom` | `y: k·i + p`, `dy: "0.71em"` | as coded |
-| `:left` | `x: k·i − p`, `dy: "0.32em"` | as coded |
-| `:right` | `x: k·i + p`, `dy: "0.32em"` | as coded |
+| Orient | Attributes |
+|---|---|
+| `:top` | `y: k·(i + p)` (`−9` at defaults), `dy: "0em"` |
+| `:bottom` | `y: k·i + p` (`9`), `dy: "0.71em"` |
+| `:left` | `x: k·i − p` (`−9`), `dy: "0.32em"` |
+| `:right` | `x: k·i + p` (`9`), `dy: "0.32em"` |
 
-For `:top`, `k = −1` makes `−k·i − p = i − p` (`+3` at defaults), placing the label *below* the axis line, inside the plot; the label MUST sit at `−(i + p)`.
-
-> Decision: see spec/13 — the `:top` label offset is to be `k·(tick_size_inner + tick_padding)`.
+Every label therefore sits `i + p` beyond the tick, away from the plot, as in d3-axis (D-23). The rendered SVG of every orientation over a linear, a band and a rounded band scale is recorded in `test/support/axis_golden.txt`.
 
 ### 1.5 Tick Values and Labels
 
-Tick values are `tick_values` when set, else `Scale.ticks(scale, ticks || 10)`. For a `Band` or `Ordinal` scale that is the domain; the tick is placed at `apply/2`, i.e. the **band start**. D3 centres band ticks by adding `bandwidth / 2`; callers wanting centred ticks MUST add it through `offset/2`.
-
-> Decision: see spec/13 — `Axis` SHOULD centre ticks on band scales by adding half the bandwidth to the position.
+Tick values are `tick_values` when set, else `Scale.ticks(scale, ticks || 10)`. For a `Band` or `Ordinal` scale that is the domain. On a `Band` scale each tick is centred in its band by the `c` term of 1.3, so `offset/2` is only the pixel offset; on every other scale the tick sits at `apply/2` (D-23).
 
 Default label (no `tick_format`): floats are rounded to 6 decimal places and printed with trailing zeros and a trailing `.` removed (`2.0 → "2"`, `0.1 + 0.2 → "0.3"`); any other value is `to_string/1` (`DateTime` therefore prints ISO 8601). A custom formatter receives the raw tick value.
 
@@ -118,9 +114,7 @@ Options: `:precision` (decimal places; default automatic), `:separator` (thousan
 - Float input: automatic precision is `0` for `|v| ≥ 100`, `1` for `≥ 10`, `2` for `≥ 1`, else `3`. The value is rounded to the precision; the fraction is padded/truncated to exactly `precision` digits; `precision: 0` yields no fraction.
 - The integer part is grouped in threes from the right.
 
-Grouping operates on the signed digit string, so a negative integer part whose digit count is a multiple of three gains a stray separator (`−123456 → "-,123,456"`). Intended: the sign is stripped before grouping and restored afterwards (`"-123,456"`).
-
-> Decision: see spec/13 — `Format.number/2` MUST group the magnitude and prepend the sign.
+The magnitude is grouped and the sign prepended afterwards (`−123456 → "-123,456"`, `−0.5 → "-0.500"`); a negative whose magnitude rounds to all zeros at the precision has no sign (`number(−0.0001, precision: 2) → "0.00"`) (D-24).
 
 ### 2.2 `si/1,2`
 
@@ -164,35 +158,75 @@ Options `:symbol` (default `"$"`), `:precision` (default `2`). Output is `sign <
 
 ### 2.7 `formatter/1`
 
-Parses a D3-like specifier string and returns a 1-arity formatter. Precision is the digits after the first `.` in the specifier (`~r/\.(\d+)/`). Detection is by substring, tested **in this order**; the first match wins:
+`formatter(specifier)` parses a d3-format specifier and returns a 1-arity formatter; the parser and the formatting pipeline are d3-format's (D-24). The grammar is
 
-| Contains | Formatter |
+```
+[[fill]align][sign][symbol][0][width][,][.precision][~][type]
+```
+
+matched by d3's regular expression `^(?:(.)?([<>=^]))?([+\-( ])?([$#])?(0)?(\d+)?(,)?(\.\d+)?(~)?([a-z%])?$` (case-insensitive). A string it does not match raises `ArgumentError`.
+
+| Part | Values | Default |
+|---|---|---|
+| `fill` | any one character, only with `align` | space |
+| `align` | `>` right, `<` left, `^` centre, `=` after sign and symbol | `>` |
+| `sign` | `-` minus for negatives, `+` plus or minus, `(` parentheses for negatives, space for positives | `-` |
+| `symbol` | `$` currency prefix `"$"`; `#` prefix `0b`/`0o`/`0x` for types `b`/`o`/`x`/`X` | none |
+| `0` | zero padding: `fill = "0"`, `align = "="` | off |
+| `width` | minimum length of the whole output | none |
+| `,` | group thousands with `","` | off |
+| `.precision` | digits after the point for `e`, `f`, `%`; significant digits for `g`, `r`, `s`, `p`; ignored by the integer types | `6`; `12` with no type |
+| `~` | trim insignificant trailing zeros (and a bare point), stopping at an exponent | off |
+| `type` | below | none |
+
+`n` is `,g`. No type (or an unrecognised letter) is `~g` with default precision `12`, so `formatter("").(1234.5)` is `"1234.5"` and `formatter("").(0.1 + 0.2)` is `"0.3"`. Significant precision is clamped to `[1, 21]`, fixed precision to `[0, 20]`.
+
+Types, applied to the magnitude `|v|` (JavaScript's number methods are named where the output must match them):
+
+| Type | Output |
 |---|---|
-| `s` | `si(v, precision: p \|\| 3)` |
-| `%` | `percent(v, precision: p \|\| 1)` |
-| `e` | `exponential(v, precision: p \|\| 2)` |
-| `f` | `number(v, precision: p \|\| 2)` when the specifier also contains `,`; else `fixed(v, p \|\| 2)` |
-| `d` | `number(round(v))` with `,`; else `Integer.to_string(round(v))` |
-| none | `to_string/1` |
+| `e` | `toExponential(p)`: `d.ddde+X`, exponent unpadded with an explicit sign (`1234 → "1.23e+3"` at `.2e`) |
+| `f` | `toFixed(p)` |
+| `g` | `toPrecision(p)`: exponential when the decimal exponent is `< −6` or `≥ p`, else fixed with `p` significant digits |
+| `r` | `p` significant digits in plain notation, zero-filled (`12345 → "12000"` at `.2r`) |
+| `s` | the mantissa for the SI prefix of the thousands exponent (multiples of 3 in `[−24, 24]`), `p` significant digits across mantissa and prefix (`1234567 → "1.2M"` at `.2s`); the prefix letter is appended after the number |
+| `%` | `f` of `100·v` with `"%"` appended |
+| `p` | `r` of `100·v` with `"%"` appended |
+| `d` | the integer nearest `|v|` (halves up), base 10 |
+| `b`, `o`, `x`, `X` | that integer in base 2, 8, 16 lower-case, 16 upper-case |
+| `c` | `to_string/1` of the value, no sign handling |
 
-Because detection is by substring, any specifier containing `s` (or `e`) selects that branch irrespective of position; `formatter/1` is not a full D3 format parser and does not support fill, alignment, sign, `#`, zero-padding, width, `~`, or the `g`, `r`, `b`, `o`, `x`, `X`, `c` types.
+Then, as d3's `format`: a negative whose formatted magnitude is all zeros shows no sign unless `+` was requested; the sign is an ASCII `-` (d3's locale default is U+2212; the rest of this module uses `-`); grouping applies to the integer digits before the point or exponent — before padding, or after padding and limited to `width` when the fill is `0` (`"012,d"` of `1234567` is `"0,001,234,567"`); padding to `width` uses `fill`; `^` splits the padding with the smaller half on the left; `=` puts it after the sign and symbol. A non-number formats as `"NaN"`, padded like any other value. The reference table, from d3-format's documentation and implementation, is in `test/visualize/axis_format_test.exs`.
+
+`exponential/2` keeps Erlang's exponent form (`"1.23e3"`, 2.4); only the parser follows JavaScript's.
 
 ### 2.8 `time/1,2`
 
-`time(value, format \\ "%Y-%m-%d")` accepts `DateTime`, `Date`, or `NaiveDateTime` (a `Date` has hour, minute, and second `0`). Directives are replaced sequentially by `String.replace/3` in the order listed; unknown directives and all other text pass through verbatim, and there is no escape for a literal `%`.
+`time(value, format \\ "%Y-%m-%d")` accepts `DateTime`, `Date`, or `NaiveDateTime`. The format is tokenised in one pass: `%` followed by one character is a directive, everything else is literal, so a directive's output is never re-scanned (`"%%Y"` is the text `%Y`). A `%` at the end of the format is literal. An unknown directive passes through verbatim (`"%Q" → "%Q"`) (D-25).
 
 | Directive | Value |
 |---|---|
-| `%Y` | 4-digit year, zero-padded |
-| `%m` | 2-digit month |
-| `%d` | 2-digit day of month |
-| `%H` | 2-digit hour, 24-hour clock |
-| `%M` | 2-digit minute |
-| `%S` | 2-digit second |
-| `%b` | abbreviated English month name (`Jan` … `Dec`) |
-| `%B` | full English month name |
+| `%Y` | four-digit year, zero-padded |
+| `%y` | two-digit year |
+| `%m` | month `01`–`12` |
+| `%d` | day of month `01`–`31` |
+| `%e` | day of month, space-padded to two |
+| `%j` | day of year `001`–`366` |
+| `%H` | hour `00`–`23` |
+| `%I` | hour `01`–`12` (`12` at midnight and noon) |
+| `%M` | minute `00`–`59` |
+| `%S` | second `00`–`60` |
+| `%L` | milliseconds `000`–`999` (the microsecond field ÷ 1000) |
+| `%p` | `AM` for hours `0`–`11`, else `PM` |
+| `%a`, `%A` | abbreviated and full English weekday name |
+| `%b`, `%B` | abbreviated and full English month name |
+| `%U` | week of the year with Sunday as the first day, `00`–`53` (days before the first Sunday are week `00`) |
+| `%w` | weekday as a number, Sunday `0` … Saturday `6` |
+| `%Z` | `zone_abbr` of a `DateTime`; empty for the other structs |
+| `%z` | `+hhmm`/`-hhmm` from a `DateTime`'s `utc_offset + std_offset`; empty for the other structs |
+| `%%` | a literal `%` |
 
-No other strftime directive (`%y`, `%j`, `%a`, `%A`, `%I`, `%p`, `%Z`, `%z`, `%f`, `%%`, …) is supported. Time zones are ignored; the struct's fields are printed as stored.
+A `Date` has hour, minute, second and milliseconds `0`. Fields are printed as stored; no conversion between zones takes place.
 
 ### 2.9 Functions
 
@@ -209,6 +243,6 @@ No other strftime directive (`%y`, `%j`, `%a`, `%A`, `%I`, `%p`, `%Z`, `%z`, `%f
 | `Visualize.Format.fixed/2` | Fixed decimal places (2.5). |
 | `Visualize.Format.currency/1` | As `currency/2` with `"$"` and 2 decimals. |
 | `Visualize.Format.currency/2` | Currency string (2.6). |
-| `Visualize.Format.formatter/1` | Returns a formatter function for a specifier (2.7). |
+| `Visualize.Format.formatter/1` | Parses a d3-format specifier and returns a formatter function (2.7); raises `ArgumentError` on an invalid one. |
 | `Visualize.Format.time/1` | As `time/2` with format `"%Y-%m-%d"`. |
-| `Visualize.Format.time/2` | Directive substitution over a date/time struct (2.8). |
+| `Visualize.Format.time/2` | One-pass strftime-style formatting of a date/time struct (2.8). |

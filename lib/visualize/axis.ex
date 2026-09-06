@@ -201,7 +201,7 @@ defmodule Visualize.Axis do
 
   # Create a tick group with line and label
   defp create_tick_group(axis, value, k, y_attr, transform_attr) do
-    pos = Scale.apply(axis.scale, value) + axis.offset
+    pos = Scale.apply(axis.scale, value) + axis.offset + band_centre(axis)
     label = format_tick(axis, value)
 
     transform =
@@ -230,7 +230,7 @@ defmodule Visualize.Axis do
     case axis.orient do
       :top ->
         Element.text(label,
-          y: -k * axis.tick_size_inner - axis.tick_padding,
+          y: k * (axis.tick_size_inner + axis.tick_padding),
           dy: "0em",
           style: %{fill: :current_color}
         )
@@ -256,6 +256,15 @@ defmodule Visualize.Axis do
           style: %{fill: :current_color}
         )
     end
+  end
+
+  # d3-axis's `center`: a tick on a band scale sits at the middle of its band. The centring
+  # offset shrinks by the pixel offset on each side (so `offset` still lands the tick on a
+  # pixel centre) and is rounded when the band scale rounds, as d3 does; on every other
+  # scale the bandwidth is 0 and this adds nothing.
+  defp band_centre(%__MODULE__{scale: scale, offset: offset}) do
+    centre = max(0, Scale.bandwidth(scale) - 2 * offset) / 2
+    if match?(%{round?: true}, scale), do: round(centre), else: centre
   end
 
   defp format_tick(%__MODULE__{tick_format: nil}, value) when is_float(value) do
