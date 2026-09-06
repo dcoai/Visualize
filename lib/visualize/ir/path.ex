@@ -433,6 +433,157 @@ defmodule Visualize.IR.Path do
   end
 
   # ============================================================
+  # Normalisation
+  # ============================================================
+
+  @doc """
+  Rewrites the smooth curve commands `S`/`s`/`T`/`t` as `C`/`c`/`Q`/`q`.
+
+  The first control point is the reflection of the previous command's last control point
+  about the current point when that command was a cubic (for `S`) or a quadratic (for
+  `T`), and the current point itself otherwise — SVG's rule. Every other command is kept as
+  it is, so relative commands stay relative.
+
+  ## Examples
+
+      iex> alias Visualize.IR.Path
+      iex> Path.new() |> Path.move_to(0, 0) |> Path.curve_to(1, 1, 2, 1, 3, 0)
+      ...> |> Path.smooth_curve_to(5, -1, 6, 0) |> Path.expand_smooth()
+      %Visualize.IR.Path{commands: [{:M, 0, 0}, {:C, 1, 1, 2, 1, 3, 0}, {:C, 4, -1, 5, -1, 6, 0}]}
+
+  """
+  @spec expand_smooth(t()) :: t()
+  def expand_smooth(%__MODULE__{commands: commands} = path) do
+    {expanded, _} = Enum.map_reduce(commands, initial_state(), &expand_smooth_command/2)
+    %{path | commands: expanded}
+  end
+
+  @doc """
+  Rewrites every command as an absolute `M`, `L`, `C`, `Q`, `A` or `Z`.
+
+  Relative commands are resolved against the current point (a leading `m` is absolute, as
+  SVG reads it), `H`/`V` become `L`, and the smooth commands are expanded as in
+  `expand_smooth/1`. An arc keeps its radii, rotation and flags. The result draws the same
+  figure and is what a target without relative commands, such as Canvas, replays.
+
+  ## Examples
+
+      iex> alias Visualize.IR.Path
+      iex> Path.new() |> Path.move_to(1, 1) |> Path.line_to_rel(2, 0) |> Path.vertical_to(5)
+      ...> |> Path.close() |> Path.absolute()
+      %Visualize.IR.Path{commands: [{:M, 1, 1}, {:L, 3, 1}, {:L, 3, 5}, :Z]}
+
+  """
+  @spec absolute(t()) :: t()
+  def absolute(%__MODULE__{commands: commands} = path) do
+    {absolute, _} = Enum.map_reduce(commands, initial_state(), &absolute_command/2)
+    %{path | commands: absolute}
+  end
+
+  # The walker's state: the current point, the subpath start, the last cubic and quadratic
+  # control points (absolute; `nil` when the previous command was not of that kind) and
+  # whether the next command is the path's first.
+  defp initial_state, do: %{cur: {0, 0}, start: {0, 0}, cubic: nil, quad: nil, first?: true}
+
+  defp expand_smooth_command({:S, x2, y2, x, y}, state) do
+    {x1, y1} = reflect(state.cubic, state.cur)
+    cmd = {:C, x1, y1, x2, y2, x, y}
+    {cmd, step(cmd, state)}
+  end
+
+  defp expand_smooth_command({:s, dx2, dy2, dx, dy}, %{cur: {cx, cy}} = state) do
+    {x1, y1} = reflect(state.cubic, state.cur)
+    cmd = {:c, x1 - cx, y1 - cy, dx2, dy2, dx, dy}
+    {cmd, step(cmd, state)}
+  end
+
+  defp expand_smooth_command({:T, x, y}, state) do
+    {x1, y1} = reflect(state.quad, state.cur)
+    cmd = {:Q, x1, y1, x, y}
+    {cmd, step(cmd, state)}
+  end
+
+  defp expand_smooth_command({:t, dx, dy}, %{cur: {cx, cy}} = state) do
+    {x1, y1} = reflect(state.quad, state.cur)
+    cmd = {:q, x1 - cx, y1 - cy, dx, dy}
+    {cmd, step(cmd, state)}
+  end
+
+  defp expand_smooth_command(cmd, state), do: {cmd, step(cmd, state)}
+
+  defp absolute_command(cmd, state) do
+    {expanded, _} = expand_smooth_command(cmd, state)
+    next = step(expanded, state)
+    {absolutize(expanded, state), next}
+  end
+
+  defp absolutize({:M, x, y}, _), do: {:M, x, y}
+  defp absolutize({:m, dx, dy}, %{first?: true}), do: {:M, dx, dy}
+  defp absolutize({:m, dx, dy}, %{cur: {cx, cy}}), do: {:M, cx + dx, cy + dy}
+  defp absolutize({:L, x, y}, _), do: {:L, x, y}
+  defp absolutize({:l, dx, dy}, %{cur: {cx, cy}}), do: {:L, cx + dx, cy + dy}
+  defp absolutize({:H, x}, %{cur: {_, cy}}), do: {:L, x, cy}
+  defp absolutize({:h, dx}, %{cur: {cx, cy}}), do: {:L, cx + dx, cy}
+  defp absolutize({:V, y}, %{cur: {cx, _}}), do: {:L, cx, y}
+  defp absolutize({:v, dy}, %{cur: {cx, cy}}), do: {:L, cx, cy + dy}
+  defp absolutize({:C, _, _, _, _, _, _} = cmd, _), do: cmd
+
+  defp absolutize({:c, dx1, dy1, dx2, dy2, dx, dy}, %{cur: {cx, cy}}),
+    do: {:C, cx + dx1, cy + dy1, cx + dx2, cy + dy2, cx + dx, cy + dy}
+
+  defp absolutize({:Q, _, _, _, _} = cmd, _), do: cmd
+
+  defp absolutize({:q, dx1, dy1, dx, dy}, %{cur: {cx, cy}}),
+    do: {:Q, cx + dx1, cy + dy1, cx + dx, cy + dy}
+
+  defp absolutize({:A, _, _, _, _, _, _, _} = cmd, _), do: cmd
+
+  defp absolutize({:a, rx, ry, rot, large, sweep, dx, dy}, %{cur: {cx, cy}}),
+    do: {:A, rx, ry, rot, large, sweep, cx + dx, cy + dy}
+
+  defp absolutize(:Z, _), do: :Z
+
+  # The control point a smooth command reflects: the previous one of its kind, else the
+  # current point (which makes the first control point the current point itself).
+  defp reflect(nil, cur), do: cur
+  defp reflect({px, py}, {cx, cy}), do: {2 * cx - px, 2 * cy - py}
+
+  # Advances the walker past one (already smooth-expanded) command.
+  defp step({:M, x, y}, state),
+    do: %{state | cur: {x, y}, start: {x, y}, cubic: nil, quad: nil, first?: false}
+
+  defp step({:m, dx, dy}, %{first?: true} = state), do: step({:M, dx, dy}, state)
+
+  defp step({:m, dx, dy}, %{cur: {cx, cy}} = state), do: step({:M, cx + dx, cy + dy}, state)
+
+  defp step({:L, x, y}, state), do: %{state | cur: {x, y}, cubic: nil, quad: nil, first?: false}
+  defp step({:l, dx, dy}, %{cur: {cx, cy}} = state), do: step({:L, cx + dx, cy + dy}, state)
+  defp step({:H, x}, %{cur: {_, cy}} = state), do: step({:L, x, cy}, state)
+  defp step({:h, dx}, %{cur: {cx, cy}} = state), do: step({:L, cx + dx, cy}, state)
+  defp step({:V, y}, %{cur: {cx, _}} = state), do: step({:L, cx, y}, state)
+  defp step({:v, dy}, %{cur: {cx, cy}} = state), do: step({:L, cx, cy + dy}, state)
+
+  defp step({:C, _, _, x2, y2, x, y}, state),
+    do: %{state | cur: {x, y}, cubic: {x2, y2}, quad: nil, first?: false}
+
+  defp step({:c, _, _, dx2, dy2, dx, dy}, %{cur: {cx, cy}} = state),
+    do: %{state | cur: {cx + dx, cy + dy}, cubic: {cx + dx2, cy + dy2}, quad: nil, first?: false}
+
+  defp step({:Q, x1, y1, x, y}, state),
+    do: %{state | cur: {x, y}, cubic: nil, quad: {x1, y1}, first?: false}
+
+  defp step({:q, dx1, dy1, dx, dy}, %{cur: {cx, cy}} = state),
+    do: %{state | cur: {cx + dx, cy + dy}, cubic: nil, quad: {cx + dx1, cy + dy1}, first?: false}
+
+  defp step({:A, _, _, _, _, _, x, y}, state), do: step({:L, x, y}, state)
+
+  defp step({:a, _, _, _, _, _, dx, dy}, %{cur: {cx, cy}} = state),
+    do: step({:L, cx + dx, cy + dy}, state)
+
+  defp step(:Z, %{start: start} = state),
+    do: %{state | cur: start, cubic: nil, quad: nil, first?: false}
+
+  # ============================================================
   # Serialization
   # ============================================================
 

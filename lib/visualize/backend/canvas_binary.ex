@@ -4,34 +4,33 @@ defmodule Visualize.Backend.CanvasBinary do
   @moduledoc """
   Binary encoding for Canvas 2D rendering commands.
 
-  Uses Nx to efficiently encode path and shape data as binary that can be
-  transferred to the browser and decoded directly into typed arrays for
-  fast Canvas rendering.
+  Packs an element tree into a compact little-endian stream of records that the
+  `CanvasBinaryChart` hook (`Visualize.Hooks.CanvasBinary`) replays on a Canvas 2D
+  context. The byte-level contract is spec/09 §4.
 
-  ## Binary Format
+  ## Records
 
-  The format uses a simple command-based structure:
+  A stream is a concatenation of records; each begins with one opcode byte from
+  `Visualize.Backend.CanvasBinary.Opcodes`, which fixes its layout:
 
-  ```
-  [header: 1 byte][payload...]
+  | Name | Byte | Record |
+  |---|---|---|
+  | `path` | `0x01` | `count:u32` then `count` points `x:f64 y:f64` — one open polyline |
+  | `path_cubic` | `0x02` | `count:u32` then `count` path commands, each a sub-opcode and its arguments |
+  | `circles` | `0x03` | `count:u32` then `cx:f64 cy:f64 r:f64` per circle |
+  | `rects` | `0x04` | `count:u32` then `x:f64 y:f64 w:f64 h:f64` per rectangle |
+  | `style` | `0x10` | `flags:u8` then the fields the flags select: fill RGBA, stroke RGBA, `stroke_width:f32`, `opacity:f32` |
+  | `transform` | `0x20` | `kind:u8` then `tx ty` (`0x01`), `tx ty sx sy` (`0x03`) or a full matrix `a b c d e f` (`0xFF`), all f64 |
+  | `save` | `0x30` | `ctx.save()` |
+  | `restore` | `0x31` | `ctx.restore()` |
+  | `fill` | `0x40` | `ctx.fill()` on the current path |
+  | `stroke` | `0x41` | `ctx.stroke()` on the current path |
 
-  Header byte meanings:
-    0x01 = Path (line data)
-    0x02 = Circles
-    0x03 = Rectangles
-    0x10 = Style block
-    0x20 = Transform
-  ```
-
-  ### Path format (0x01):
-  ```
-  [0x01][point_count: u32][x0: f64][y0: f64][x1: f64][y1: f64]...
-  ```
-
-  ### Style format (0x10):
-  ```
-  [0x10][flags: u8][stroke_width: f32][r: u8][g: u8][b: u8][a: u8]...
-  ```
+  The compact `path` record is used only for a path that is one `M` followed by `L`
+  commands — the one shape it can hold without loss; every other path is a `path_cubic`
+  stream, with the smooth curves `S`/`T` expanded to `C`/`Q` first so the command count
+  is exact (D-36). Transforms fold into one matrix in SVG order. Colours are parsed by
+  `Visualize.Color.parse/1`.
 
   ## Performance
 
@@ -45,6 +44,7 @@ defmodule Visualize.Backend.CanvasBinary do
   """
 
   alias Visualize.Backend.CanvasBinary.{Opcodes, PathEncoder, SVG}
+  alias Visualize.Color
   alias Visualize.IR.{Element, Path, Transform}
   require Opcodes
 
@@ -138,48 +138,29 @@ defmodule Visualize.Backend.CanvasBinary do
   # Internal Encoding Functions
   # ============================================================
 
+  # The compact record holds exactly one open polyline, so it is chosen only for one `M`
+  # followed by `L` commands; anything else — `Z`, a second subpath, `H`/`V`, a relative
+  # or curved command — goes into the full command stream (D-36).
   defp do_encode_path(commands) do
-    # Extract points from path commands
-    {points, has_cubic} = extract_path_points(commands)
-
-    if has_cubic do
-      PathEncoder.encode_cubic_path(commands)
+    if polyline?(commands) do
+      encode_simple_path(Enum.map(commands, fn {_, x, y} -> {x, y} end))
     else
-      encode_simple_path(points)
+      %Path{commands: expanded} = Path.expand_smooth(%Path{commands: commands})
+      PathEncoder.encode_cubic_path(expanded)
     end
   end
 
-  defp extract_path_points(commands) do
-    {points, has_complex} =
-      Enum.reduce(commands, {[], false}, fn cmd, {pts, complex} ->
-        case cmd do
-          {:M, x, y} -> {[{x, y} | pts], complex}
-          {:L, x, y} -> {[{x, y} | pts], complex}
-          {:C, _, _, _, _, x, y} -> {[{x, y} | pts], true}
-          {:Q, _, _, x, y} -> {[{x, y} | pts], true}
-          {:A, _, _, _, _, _, x, y} -> {[{x, y} | pts], true}
-          {:a, _, _, _, _, _, _, _} -> {pts, true}
-          :Z -> {pts, complex}
-          _ -> {pts, complex}
-        end
-      end)
-
-    {Enum.reverse(points), has_complex}
-  end
+  defp polyline?([{:M, _, _} | rest]), do: Enum.all?(rest, &match?({:L, _, _}, &1))
+  defp polyline?(_), do: false
 
   defp encode_simple_path(points) do
-    count = length(points)
-
-    # Create tensor from points
     coords =
       points
       |> Enum.flat_map(fn {x, y} -> [x, y] end)
       |> Nx.tensor(type: :f64)
+      |> Nx.to_binary()
 
-    binary = Nx.to_binary(coords)
-
-    # Header: command type + point count
-    <<Opcodes.path()::8, count::little-32, binary::binary>>
+    <<Opcodes.path()::8, length(points)::little-32, coords::binary>>
   end
 
   defp do_encode_element(%Element{type: :path, path: path, style: style, transform: transform}) do
@@ -310,46 +291,23 @@ defmodule Visualize.Backend.CanvasBinary do
     <<>>
   end
 
-  defp encode_transform(%Transform{operations: ops}) do
-    # For now, encode just translate which is most common
+  # The two compact kinds cover the common cases exactly; everything else folds into one
+  # matrix with SVG composition order (`Visualize.IR.Transform.to_matrix/1`).
+  defp encode_transform(%Transform{operations: ops} = transform) do
     case ops do
       [{:translate, x, y}] ->
-        <<Opcodes.transform()::8, 0x01::8, x::little-float-64, y::little-float-64>>
+        <<Opcodes.transform()::8, 0x01::8, x * 1.0::little-float-64, y * 1.0::little-float-64>>
 
       [{:translate, x, y}, {:scale, sx, sy}] ->
-        <<Opcodes.transform()::8, 0x03::8, x::little-float-64, y::little-float-64,
-          sx::little-float-64, sy::little-float-64>>
+        <<Opcodes.transform()::8, 0x03::8, x * 1.0::little-float-64, y * 1.0::little-float-64,
+          sx * 1.0::little-float-64, sy * 1.0::little-float-64>>
 
       _ ->
-        # General 2D transform matrix
-        {a, b, c, d, e, f} = compute_transform_matrix(ops)
+        {a, b, c, d, e, f} = Transform.to_matrix(transform)
 
         <<Opcodes.transform()::8, 0xFF::8, a::little-float-64, b::little-float-64,
           c::little-float-64, d::little-float-64, e::little-float-64, f::little-float-64>>
     end
-  end
-
-  defp compute_transform_matrix(ops) do
-    Enum.reduce(ops, {1.0, 0.0, 0.0, 1.0, 0.0, 0.0}, fn op, {a, b, c, d, e, f} ->
-      case op do
-        {:translate, tx, ty} ->
-          {a, b, c, d, e + tx, f + ty}
-
-        {:scale, sx, sy} ->
-          {a * sx, b * sy, c * sx, d * sy, e * sx, f * sy}
-
-        {:rotate, angle} ->
-          rad = angle * :math.pi() / 180
-          cos_a = :math.cos(rad)
-          sin_a = :math.sin(rad)
-
-          {a * cos_a + c * sin_a, b * cos_a + d * sin_a, c * cos_a - a * sin_a,
-           d * cos_a - b * sin_a, e, f}
-
-        _ ->
-          {a, b, c, d, e, f}
-      end
-    end)
   end
 
   defp encode_style(style) do
@@ -418,59 +376,18 @@ defmodule Visualize.Backend.CanvasBinary do
     cmds
   end
 
+  # Every colour syntax `Visualize.Color.parse/1` knows — hex, `rgb()`/`rgba()`, `hsl()`
+  # and the CSS names — to RGBA bytes; anything it cannot parse is opaque black.
   defp parse_color(color) when is_binary(color) do
-    cond do
-      String.starts_with?(color, "#") ->
-        parse_hex_color(color)
+    case Color.parse(color) do
+      %Color{} = parsed ->
+        {r, g, b, a} = Color.to_rgba(parsed)
+        {r, g, b, round(a * 255)}
 
-      String.starts_with?(color, "rgb") ->
-        parse_rgb_color(color)
-
-      true ->
-        # Named color - default to black
+      nil ->
         {0, 0, 0, 255}
     end
   end
 
   defp parse_color(_), do: {0, 0, 0, 255}
-
-  defp parse_hex_color("#" <> hex) do
-    case String.length(hex) do
-      3 ->
-        <<r::binary-1, g::binary-1, b::binary-1>> = hex
-
-        {String.to_integer(r <> r, 16), String.to_integer(g <> g, 16),
-         String.to_integer(b <> b, 16), 255}
-
-      6 ->
-        {r, _} = Integer.parse(String.slice(hex, 0, 2), 16)
-        {g, _} = Integer.parse(String.slice(hex, 2, 2), 16)
-        {b, _} = Integer.parse(String.slice(hex, 4, 2), 16)
-        {r, g, b, 255}
-
-      8 ->
-        {r, _} = Integer.parse(String.slice(hex, 0, 2), 16)
-        {g, _} = Integer.parse(String.slice(hex, 2, 2), 16)
-        {b, _} = Integer.parse(String.slice(hex, 4, 2), 16)
-        {a, _} = Integer.parse(String.slice(hex, 6, 2), 16)
-        {r, g, b, a}
-
-      _ ->
-        {0, 0, 0, 255}
-    end
-  end
-
-  defp parse_rgb_color(color) do
-    case Regex.run(~r/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/, color) do
-      [_, r, g, b] ->
-        {String.to_integer(r), String.to_integer(g), String.to_integer(b), 255}
-
-      [_, r, g, b, a] ->
-        alpha = (String.to_float(a) * 255) |> round()
-        {String.to_integer(r), String.to_integer(g), String.to_integer(b), alpha}
-
-      _ ->
-        {0, 0, 0, 255}
-    end
-  end
 end

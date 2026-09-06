@@ -8,9 +8,10 @@ defmodule Visualize.Backend.CanvasBinary.PathEncoder do
   require Opcodes
 
   @doc false
+  # The full command stream: `count` then one record per command. The caller expands the
+  # smooth curves first (`Visualize.IR.Path.expand_smooth/1`); a command without a
+  # sub-opcode is a bug and fails to match rather than encoding to nothing (D-36).
   def encode_cubic_path(commands) do
-    # For cubic paths, encode full command stream
-    # Format: [cmd_type: u8][args...]
     command_data =
       commands
       |> Enum.map(&encode_path_command/1)
@@ -43,13 +44,13 @@ defmodule Visualize.Backend.CanvasBinary.PathEncoder do
 
   # SVG arc: rx, ry, rotation, large_arc, sweep, x, y
   defp encode_path_command({:A, rx, ry, rotation, large_arc, sweep, x, y}) do
-    <<0x06::8, rx::little-float-64, ry::little-float-64, rotation::little-float-64,
+    <<0x06::8, rx::little-float-64, ry::little-float-64, rotation * 1.0::little-float-64,
       large_arc::little-32, sweep::little-32, x::little-float-64, y::little-float-64>>
   end
 
+  # Relative arc: the decoder resolves the end point against the current point.
   defp encode_path_command({:a, rx, ry, rotation, large_arc, sweep, dx, dy}) do
-    # Relative arc - encode as absolute (will need current position tracking on decode)
-    <<0x07::8, rx::little-float-64, ry::little-float-64, rotation::little-float-64,
+    <<0x07::8, rx::little-float-64, ry::little-float-64, rotation * 1.0::little-float-64,
       large_arc::little-32, sweep::little-32, dx::little-float-64, dy::little-float-64>>
   end
 
@@ -94,8 +95,6 @@ defmodule Visualize.Backend.CanvasBinary.PathEncoder do
     <<0x0F::8, dx1::little-float-64, dy1::little-float-64, dx::little-float-64,
       dy::little-float-64>>
   end
-
-  defp encode_path_command(_), do: <<>>
 
   @doc false
   def to_float(n) when is_number(n), do: n * 1.0

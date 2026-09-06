@@ -442,13 +442,6 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     end
   end
 
-  # Atom colours used by the IR (`:current_color` defaults to black).
-  defp named_atom_rgb(:white), do: {255, 255, 255}
-  defp named_atom_rgb(:red), do: {255, 0, 0}
-  defp named_atom_rgb(:green), do: {0, 128, 0}
-  defp named_atom_rgb(:blue), do: {0, 0, 255}
-  defp named_atom_rgb(_), do: {0, 0, 0}
-
   defp alpha_byte(nil), do: 255
   defp alpha_byte(n) when is_number(n), do: trunc(n * 255)
 
@@ -459,62 +452,26 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     end
   end
 
-  defp parse_color(color, opacity) when is_atom(color) do
-    {r, g, b} = named_atom_rgb(color)
-    {r, g, b, alpha_byte(opacity)}
-  end
+  # A colour is parsed by `Visualize.Color.parse/1` (an atom by its name); the supplied
+  # opacity is the alpha unless the colour syntax carried its own (`rgba()`, `#rgba`,
+  # `#rrggbbaa`). `"none"` is transparent; anything unparseable is black.
+  defp parse_color("none", _opacity), do: {0, 0, 0, 0}
+
+  defp parse_color(color, opacity) when is_atom(color),
+    do: parse_color(Atom.to_string(color), opacity)
 
   defp parse_color(color, opacity) when is_binary(color) do
-    a = alpha_byte(opacity)
+    case Visualize.Color.parse(color) do
+      %Visualize.Color{opacity: own} = parsed when own < 1.0 ->
+        {r, g, b, _} = Visualize.Color.to_rgba(parsed)
+        {r, g, b, trunc(own * 255)}
 
-    cond do
-      String.starts_with?(color, "#") && String.length(color) == 7 ->
-        <<r::8, g::8, b::8>> = Base.decode16!(String.slice(color, 1..-1//1), case: :mixed)
-        {r, g, b, a}
+      %Visualize.Color{} = parsed ->
+        {r, g, b, _} = Visualize.Color.to_rgba(parsed)
+        {r, g, b, alpha_byte(opacity)}
 
-      String.starts_with?(color, "#") && String.length(color) == 4 ->
-        [r, g, b] =
-          String.slice(color, 1..-1//1)
-          |> String.graphemes()
-          |> Enum.map(fn c ->
-            <<v::8>> = Base.decode16!(c <> c, case: :mixed)
-            v
-          end)
-
-        {r, g, b, a}
-
-      String.starts_with?(color, "rgb(") ->
-        case Regex.run(~r/rgb\((\d+),\s*(\d+),\s*(\d+)\)/, color) do
-          [_, r, g, b] ->
-            {String.to_integer(r), String.to_integer(g), String.to_integer(b), a}
-
-          _ ->
-            {0, 0, 0, a}
-        end
-
-      String.starts_with?(color, "rgba(") ->
-        case Regex.run(~r/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/, color) do
-          [_, r, g, b, alpha] ->
-            {alpha_f, _} = Float.parse(alpha)
-
-            {String.to_integer(r), String.to_integer(g), String.to_integer(b),
-             trunc(alpha_f * 255)}
-
-          _ ->
-            {0, 0, 0, a}
-        end
-
-      true ->
-        # Named colors (basic support)
-        case color do
-          "black" -> {0, 0, 0, a}
-          "white" -> {255, 255, 255, a}
-          "red" -> {255, 0, 0, a}
-          "green" -> {0, 128, 0, a}
-          "blue" -> {0, 0, 255, a}
-          "none" -> {0, 0, 0, 0}
-          _ -> {0, 0, 0, a}
-        end
+      nil ->
+        {0, 0, 0, alpha_byte(opacity)}
     end
   end
 end

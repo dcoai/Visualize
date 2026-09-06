@@ -99,39 +99,8 @@ defmodule Visualize.IR.PathTransformTest do
     assert [_, {:A, _, _, _, 0, 0, 30, -30}] = Path.transform(arc, {1, 0, 0, -1, 0, 0}).commands
   end
 
-  defp coord, do: float(min: -1000.0, max: 1000.0)
-
-  defp command do
-    one_of([
-      tuple({constant(:M), coord(), coord()}),
-      tuple({constant(:m), coord(), coord()}),
-      tuple({constant(:L), coord(), coord()}),
-      tuple({constant(:l), coord(), coord()}),
-      tuple({constant(:H), coord()}),
-      tuple({constant(:h), coord()}),
-      tuple({constant(:V), coord()}),
-      tuple({constant(:v), coord()}),
-      tuple({constant(:C), coord(), coord(), coord(), coord(), coord(), coord()}),
-      tuple({constant(:c), coord(), coord(), coord(), coord(), coord(), coord()}),
-      tuple({constant(:S), coord(), coord(), coord(), coord()}),
-      tuple({constant(:s), coord(), coord(), coord(), coord()}),
-      tuple({constant(:Q), coord(), coord(), coord(), coord()}),
-      tuple({constant(:q), coord(), coord(), coord(), coord()}),
-      tuple({constant(:T), coord(), coord()}),
-      tuple({constant(:t), coord(), coord()}),
-      tuple(
-        {constant(:A), float(min: 1.0, max: 50.0), float(min: 1.0, max: 50.0),
-         float(min: 0.0, max: 180.0), member_of([0, 1]), member_of([0, 1]), coord(), coord()}
-      ),
-      tuple(
-        {constant(:a), float(min: 1.0, max: 50.0), float(min: 1.0, max: 50.0),
-         float(min: 0.0, max: 180.0), member_of([0, 1]), member_of([0, 1]), coord(), coord()}
-      ),
-      constant(:Z)
-    ])
-  end
-
-  def path_gen, do: map(list_of(command(), max_length: 12), &%Path{commands: &1})
+  defp coord, do: Visualize.PathGen.coord()
+  defp path_gen, do: Visualize.PathGen.path()
 
   # An arc's ellipse is the same under swapped radii with a quarter turn, and its rotation
   # is an axis angle defined modulo a half turn; compare the canonical form (D-35).
