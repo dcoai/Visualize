@@ -86,13 +86,11 @@ The table records what each module defines.
 
 - `apply/2`: `t = (v − d0) / (d1 − d0)`; if `clamp?`, `t` is clamped to `[0, 1]`; result is `r0 + t · (r1 − r0)`, always a float.
 - `invert/2`: `t = (v − r0) / (r1 − r0)`; result `d0 + t · (d1 − d0)`. Never clamps.
-- `ticks/2` (count `n`): the *nice step* is computed from `span = |d1 − d0|`, `raw = span / max(n, 1)`, `mag = 10^⌊log10 raw⌋`, `q = raw / mag`, and factor `1` if `q < 1.5`, `2` if `q < 3`, `5` if `q < 7`, else `10`; `step = factor · mag`. Ticks run from `⌈d0/step⌉·step` to `⌊d1/step⌋·step` inclusive, each rounded to `max(0, −⌊log10 step⌋)` decimal places. The tick count is approximately `n`; it is never guaranteed.
+- `ticks/2` (count `n`): the *nice step* is computed from `span = |d1 − d0|`, `raw = span / max(n, 1)`, `mag = 10^⌊log10 raw⌋`, `q = raw / mag`, and factor `1` if `q < 1.5`, `2` if `q < 3`, `5` if `q < 7`, else `10`; `step = factor · mag`. Ticks run from `⌈d0/step⌉·step` to `⌊d1/step⌋·step` inclusive, each rounded to `max(0, −⌊log10 step⌋)` decimal places; when no multiple of the step lies inside the domain the result is `[]`, never a value outside it. The tick count is approximately `n`; it is never guaranteed.
 - `nice/1`: with the step for count 10, domain becomes `[⌊d0/step⌋·step, ⌈d1/step⌉·step]` (floats).
 - `padding/2` is identity; `bandwidth/1` is `0`.
 
-A descending domain (`d0 > d1`) yields the same ticks in descending order (the iteration range descends). A degenerate domain (`d0 == d1`) MUST yield `[d0]` from `ticks/2` and leave `nice/1` unchanged; the code raises `ArithmeticError` on `log10(0)` in both.
-
-> Decision: see spec/13 — `Linear.ticks/2` and `nice/1` are to short-circuit on a zero span.
+A descending domain (`d0 > d1`) yields the same ticks in descending order. A degenerate domain (`d0 == d1`) yields `[d0]` from `ticks/2` and leaves `nice/1` unchanged (D-17).
 
 ### 3.3 Functions
 
@@ -122,7 +120,7 @@ All logarithms are `log(x) / log(base)`.
 - `domain/2` requires both bounds `> 0`; any other input fails to match (`FunctionClauseError`).
 - `apply/2` requires `value > 0` (`FunctionClauseError` otherwise). `t = (log v − log d0) / (log d1 − log d0)`, clamped to `[0, 1]` when `clamp?`; result `r0 + t · (r1 − r0)`.
 - `invert/2`: `t = (v − r0) / (r1 − r0)`; result `base ^ (log d0 + t · (log d1 − log d0))`.
-- `ticks/2`: the integer powers `base^k` for `k` from `⌈log d0⌉` to `⌊log d1⌋`. **The count argument is ignored**; a domain spanning many decades returns one tick per decade regardless of count, and a sub-decade domain MAY return `[]`.
+- `ticks/2` (count `n`): d3-scale's log ticks (D-17). With `i = log d0`, `j = log d1` (swapped and the result reversed when descending): when the base is an integer and `j − i < n`, every `k · base^e` for `1 ≤ k < base` and `e` from `⌊i⌋` to `⌈j⌉` that lies inside the domain — `1, 2, … 9, 10, 20, …` — and, when that yields fewer than `n / 2` values, `Visualize.Data.ticks/3` over the domain instead; otherwise `Visualize.Data.ticks(i, j, min(⌈j − i⌉, n))` mapped through `base^e`, so many decades are thinned to about `n` powers. Negative exponents divide (`3 / 10`, not `3 · 0.1`), and bases 10 and 2 use exact logarithms, so the values print as the decimals they are. A sub-decade domain yields linear ticks rather than `[]`; as with `Linear`, a count of 1 MAY still yield `[]` when no multiple of the step lies inside the domain.
 - `nice/1`: domain becomes `[base^⌊log d0⌋, base^⌈log d1⌉]`.
 - `padding/2` identity; `bandwidth/1` `0`.
 
@@ -137,7 +135,7 @@ All logarithms are `log(x) / log(base)`.
 | `Visualize.Scale.Log.clamp/2` | Sets `clamp?`. |
 | `Visualize.Scale.Log.apply/2` | Log interpolation as in 4.2; `value` MUST be positive. |
 | `Visualize.Scale.Log.invert/2` | Inverse as in 4.2. |
-| `Visualize.Scale.Log.ticks/2` | Integer powers of the base within the domain; count ignored. |
+| `Visualize.Scale.Log.ticks/2` | d3's log ticks as in 4.2: about `count` values, multiples within a decade, thinned powers across many. |
 | `Visualize.Scale.Log.nice/1` | Extends the domain to integer powers of the base. |
 | `Visualize.Scale.Log.padding/2` | Identity. |
 | `Visualize.Scale.Log.bandwidth/1` | Returns `0`. |
@@ -191,7 +189,7 @@ The transform is `S(x) = sign(x) · ln(1 + |x| / c)` with inverse `S⁻¹(y) = s
 - `apply/2`: `t = (S(v) − S(d0)) / (S(d1) − S(d0))` (`0` if the denominator is zero); result `r0 + t · (r1 − r0)`, clamped to the range bounds when `clamp?`.
 - `invert/2`: `t = (v − r0) / (r1 − r0)` (`0` if degenerate); result `S⁻¹(S(d0) + t · (S(d1) − S(d0)))`.
 - `nice/1`: the domain becomes `Linear.nice/1`'s domain for `[d0, d1]`. `padding/2` identity; `bandwidth/1` `0`.
-- `ticks/1,2` (count `n`): with `lo = min(d0, d1)`, `hi = max(d0, d1)`, the result is the ascending, de-duplicated union of: negated decades `−10^k` for `k` in `0, s, 2s, … ≤ ⌈log10(−lo)⌉` filtered to `≥ lo` (only when `lo < 0`); `0` when `lo ≤ 0 ≤ hi`; and decades `10^k` filtered to `(0, hi]` (only when `hi > 0`). The exponent stride is `s = max(1, ⌊⌈log10 bound⌉ / n⌋)`. The constant does not influence ticks. `10^0 = 1` is always a candidate; when `hi < 1` the positive list is empty.
+- `ticks/1,2` (count `n`): with `lo = min(d0, d1)`, `hi = max(d0, d1)`, the result is the ascending, de-duplicated union of: negated decades `−c · 10^k` for `k` in `0, s, 2s, … ≤ ⌈log10(−lo / c)⌉` (only when `lo < 0`); `0` when `lo ≤ 0 ≤ hi`; and decades `c · 10^k` for `k` up to `⌈log10(hi / c)⌉` (only when `hi > 0`) — every candidate filtered to `[lo, hi]`. The exponent stride is `s = max(1, ⌊⌈log10(bound / c)⌉ / n⌋)`. The decades start at the constant `c`, where the log region begins (D-17); with `c = 1` they are the powers of ten. A domain that contains no decade yields `[]`.
 
 ### 6.3 Functions
 
@@ -206,7 +204,7 @@ The transform is `S(x) = sign(x) · ln(1 + |x| / c)` with inverse `S⁻¹(y) = s
 | `Visualize.Scale.Symlog.scale/2` | Alias of `apply/2`, retained for one release (1.3). |
 | `Visualize.Scale.Symlog.invert/2` | Inverse as in 6.2. |
 | `Visualize.Scale.Symlog.ticks/1` | As `ticks/2` with count 10. |
-| `Visualize.Scale.Symlog.ticks/2` | Signed decades and zero as in 6.2. |
+| `Visualize.Scale.Symlog.ticks/2` | Signed decades of the constant, and zero, as in 6.2. |
 | `Visualize.Scale.Symlog.nice/1` | `Linear.nice/1` over the domain. |
 | `Visualize.Scale.Symlog.padding/2` | Identity. |
 | `Visualize.Scale.Symlog.bandwidth/1` | Returns `0`. |
@@ -279,11 +277,8 @@ Because neighbouring rows differ by at most `4.3×`, the number of ticks is with
 
 ### 8.2 Semantics
 
-- `apply/2`: the index `i` of the first domain element equal (`==`) to the value; when not found the `unknown` value is returned. Otherwise `Enum.at(range, rem(i, length(range)))`: the range **cycles** when the domain is longer. The domain is never extended implicitly.
-- An empty range with a found value raises `ArithmeticError` (`rem` by zero). Intended: return `unknown`.
+- `apply/2`: `unknown` when the range is empty. Otherwise the index `i` of the first domain element equal (`==`) to the value; when not found the `unknown` value is returned, else `Enum.at(range, rem(i, length(range)))`: the range **cycles** when the domain is longer. The domain is never extended implicitly.
 - `invert/2` returns `nil`; `ticks/2` returns the domain (count ignored); `nice/1`, `clamp/2`, `padding/2` identity; `bandwidth/1` `0`.
-
-> Decision: see spec/13 — `Ordinal.apply/2` with an empty range MUST return `unknown`.
 
 ### 8.3 Functions
 
@@ -321,18 +316,14 @@ Violations fail to match (`FunctionClauseError`).
 
 ### 9.3 Band Maths
 
-With `n = length(domain)`, `pi = padding_inner`, `po = padding_outer`, `span = r1 − r0`:
+This is d3-scale's `rescale` (D-17). With `n = length(domain)`, `pi = padding_inner`, `po = padding_outer`, `reverse = r1 < r0`, `lo = min(r0, r1)`, `hi = max(r0, r1)`:
 
-- `n == 0`: `bandwidth = 0`, `step = 0`, `start = r0`.
-- Otherwise `step = span / max(1, n − pi + 2·po)`, `bandwidth = step · (1 − pi)`, `start = r0 + (span − step · (n − pi)) · align`.
-- Position of category at index `i` is `start + i · step`.
-- When `round?` is true, `bandwidth/1` and `apply/2` return `Kernel.round/1` of the value (an integer); `step/1` is **not** rounded.
+- `n == 0`: `bandwidth = 0`, `step = 0`, every position `nil`.
+- Otherwise `step = (hi − lo) / max(1, n − pi + 2·po)`, floored when `round?`; `start = lo + (hi − lo − step · (n − pi)) · align`; `bandwidth = step · (1 − pi)`; when `round?`, `start` and `bandwidth` are rounded (from the floored step) and every position is therefore an integer-valued float.
+- Position of the category at index `i` is `start + i · step`, or `start + (n − 1 − i) · step` when `reverse`: a descending range lays the bands out in reverse with positive `step` and `bandwidth`.
+- `step/1` returns `step` (floored when `round?`); `bandwidth/1` returns `bandwidth`.
 
-`apply/2` returns `nil` for a value not in the domain. `ticks/2` returns the domain; `invert/2` returns `nil`; `nice/1`, `clamp/2` identity.
-
-Intended semantics for a descending range (`r1 < r0`) are D3's: bands are laid out in reverse order with positive `bandwidth` and `step`. The code computes a negative `span`, hence negative `step` and `bandwidth`. The `max(1, …)` guard on the denominator, and rounding `bandwidth` without rounding `step` (D3 floors both, and recomputes `start` from the rounded step), are further departures.
-
-> Decision: see spec/13 — `Band` is to adopt D3's reverse-range handling and round `step` together with `bandwidth`.
+`apply/2` returns `nil` for a value not in the domain. `ticks/2` returns the domain; `invert/2` returns `nil`; `nice/1`, `clamp/2` identity. Under `round?` the rounded start plus the rounded bandwidth MAY overshoot the range by under one unit, as in D3.
 
 ### 9.4 Functions
 
@@ -345,11 +336,11 @@ Intended semantics for a descending range (`r1 < r0`) are D3's: bands are laid o
 | `Visualize.Scale.Band.padding_inner/2` | Sets inner padding (`0 ≤ p < 1`). |
 | `Visualize.Scale.Band.padding_outer/2` | Sets outer padding (`p ≥ 0`). |
 | `Visualize.Scale.Band.align/2` | Sets the distribution of outer space (`0` = all at end, `0.5` = centred, `1` = all at start). |
-| `Visualize.Scale.Band.round/2` | Enables integer rounding of positions and bandwidth. |
+| `Visualize.Scale.Band.round/2` | Enables rounding: the step is floored, the start and bandwidth rounded. |
 | `Visualize.Scale.Band.apply/2` | Returns the band start for a category, or `nil` if absent. |
 | `Visualize.Scale.Band.invert/2` | Returns `nil`. |
 | `Visualize.Scale.Band.bandwidth/1` | Returns the band width as in 9.3. |
-| `Visualize.Scale.Band.step/1` | Returns the distance between adjacent band starts (never rounded). |
+| `Visualize.Scale.Band.step/1` | Returns the distance between adjacent band starts (floored when `round?`). |
 | `Visualize.Scale.Band.ticks/2` | Returns the domain. |
 | `Visualize.Scale.Band.nice/1` | Identity. |
 | `Visualize.Scale.Band.clamp/2` | Identity. |
@@ -400,10 +391,8 @@ With `n = length(range)` and `step = (d1 − d0) / n`:
 - `apply/2`: `nil` for an empty range; `t = (v − d0) / (d1 − d0)` (`0` if degenerate), clamped to `[0, 1]`; bucket `min(⌊t · n⌋, n − 1)`. Values outside the domain map to the first or last element (always clamped).
 - `ticks/2` returns `thresholds/1` (count ignored); `invert/2` `nil`; `nice/1`, `padding/2`, `clamp/2` identity; `bandwidth/1` `0`.
 - `invert_extent/2`: `nil` for an empty range or unknown value; else `{d0 + k·step, d0 + (k+1)·step}`.
-- `thresholds/1`: `[]` for an empty range; else `d0 + k·step` for `k` in `1 … n−1`. For `n == 1` the Elixir range `1..0` iterates descending and returns two spurious values `[d0 + step, d0]`; intended `[]`.
+- `thresholds/1`: `[]` for an empty or single-element range; else `d0 + k·step` for `k` in `1 … n−1`.
 - `bucket_count/1` is `length(range)`.
-
-> Decision: see spec/13 — `Quantize.thresholds/1` MUST return `[]` for a single-element range.
 
 ### 11.3 Functions
 
@@ -470,15 +459,11 @@ With `n = length(range)` and `step = (d1 − d0) / n`:
 
 | Input | Resolution |
 |---|---|
-| atom | a scheme name from 13.4; an **unknown atom silently resolves to `:blues`** |
+| atom | a scheme name from 13.4; an unknown atom raises `ArgumentError` naming `schemes/0` (D-17) |
 | list of colour strings | used as evenly spaced stops; each MUST be `"#rgb"` or `"#rrggbb"` |
 | 1-arity function | called with `t ∈ [0, 1]`, MUST return a colour string |
 
-The intended behaviour for an unknown scheme name is a `FunctionClauseError` (or `ArgumentError`), not a silent fallback.
-
-> Decision: see spec/13 — an unknown scheme atom MUST raise.
-
-Stop-list interpolation: `n = length − 1`, `i = t · n`, `i0 = clamp(⌊i⌋, 0, n − 1)`, `i1 = min(i0 + 1, n)`, `local = i − i0`; each RGB channel is `round(c0 + (c1 − c0) · local)`; output is lowercase `"#rrggbb"`. With `clamp?` false and `t` outside `[0, 1]`, `local` leaves `[0, 1]` and channels extrapolate beyond `0…255`, producing malformed hex; callers that disable clamping MUST keep values within the domain.
+Stop-list interpolation: `n = length − 1`, `i = t · n`, `i0 = clamp(⌊i⌋, 0, n − 1)`, `i1 = min(i0 + 1, n)`, `local = i − i0`; each RGB channel is `round(c0 + (c1 − c0) · local)` clamped to `0…255`; output is lowercase `"#rrggbb"`. With `clamp?` false and `t` outside `[0, 1]`, `local` leaves `[0, 1]` and the end stops are extrapolated along their last segment; the channel clamp keeps the result a well-formed colour.
 
 ### 13.3 Semantics
 

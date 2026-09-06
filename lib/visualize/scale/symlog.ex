@@ -102,7 +102,7 @@ defmodule Visualize.Scale.Symlog do
     symlog_inverse(t_d0 + t * (symlog_transform(d1, c) - t_d0), c)
   end
 
-  @doc "Generates nice tick values for the scale: signed decades and zero"
+  @doc "Generates nice tick values for the scale: signed decades of the constant, and zero"
   @impl true
   @spec ticks(t(), integer()) :: [number()]
   def ticks(%__MODULE__{domain: [d0, d1], constant: c}, count \\ 10) do
@@ -113,7 +113,7 @@ defmodule Visualize.Scale.Symlog do
       if min_d < 0 do
         generate_log_ticks(-min_d, c, count)
         |> Enum.map(&(-&1))
-        |> Enum.filter(&(&1 >= min_d))
+        |> Enum.filter(&(&1 >= min_d and &1 <= max_d))
       else
         []
       end
@@ -123,7 +123,7 @@ defmodule Visualize.Scale.Symlog do
     positive =
       if max_d > 0 do
         generate_log_ticks(max_d, c, count)
-        |> Enum.filter(&(&1 <= max_d and &1 > 0))
+        |> Enum.filter(&(&1 >= min_d and &1 <= max_d and &1 > 0))
       else
         []
       end
@@ -162,16 +162,16 @@ defmodule Visualize.Scale.Symlog do
     sign * c * (:math.exp(abs(y)) - 1)
   end
 
+  # c · 10^k for k from 0 to ⌈log10(max / c)⌉, thinned to about `count` values: the decades
+  # of the log region, which begins at the constant.
   defp generate_log_ticks(max_val, _c, _count) when max_val <= 0, do: []
 
-  defp generate_log_ticks(max_val, _c, count) do
-    max_exp = :math.log10(max_val) |> ceil() |> trunc()
-    min_exp = 0
+  defp generate_log_ticks(max_val, c, count) do
+    max_exp = :math.log10(max_val / c) |> ceil() |> trunc()
+    step = max(1, div(max_exp, count))
 
-    step = max(1, div(max_exp - min_exp, count))
-
-    for exp <- min_exp..max_exp//step do
-      :math.pow(10, exp)
+    for exp <- 0..max_exp//step do
+      c * :math.pow(10, exp)
     end
   end
 

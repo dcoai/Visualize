@@ -377,6 +377,9 @@ defmodule Visualize.Data do
   Useful for creating axis ticks without a scale.
   """
   @spec ticks(number(), number(), integer()) :: [number()]
+  def ticks(start, stop, _count) when start == stop, do: [start]
+  def ticks(start, stop, count) when start > stop, do: ticks(stop, start, count) |> Enum.reverse()
+
   def ticks(start, stop, count) when count > 0 do
     step = tick_step(start, stop, count)
 
@@ -385,9 +388,11 @@ defmodule Visualize.Data do
     else
       start_tick = ceil(start / step) * step
       stop_tick = floor(stop / step) * step
+      # `//1`: no multiple of the step inside the domain makes `n` zero or negative, and a
+      # bare `0..-1` would descend and emit two ticks outside the domain.
       n = round((stop_tick - start_tick) / step) + 1
 
-      0..(n - 1)
+      0..(n - 1)//1
       |> Enum.map(fn i ->
         (start_tick + i * step)
         |> Float.round(10)
@@ -397,7 +402,9 @@ defmodule Visualize.Data do
 
   defp tick_step(start, stop, count) do
     span = abs(stop - start)
-    raw_step = span / max(0, count)
+    # `Kernel.max/2` explicitly: this module's `import Kernel, except: [min: 2, max: 2]`
+    # would otherwise resolve `max/2` to `Visualize.Data.max/2` and crash on a number.
+    raw_step = span / Kernel.max(1, count)
 
     power = floor(:math.log10(raw_step))
     error = raw_step / :math.pow(10, power)

@@ -44,6 +44,8 @@ defmodule Visualize.Scale.Ordinal do
   @doc "Applies the scale to a categorical value"
   @spec apply(t(), any()) :: any()
   @impl true
+  def apply(%__MODULE__{range: [], unknown: unknown}, _value), do: unknown
+
   def apply(%__MODULE__{domain: domain, range: range, unknown: unknown}, value) do
     case Enum.find_index(domain, &(&1 == value)) do
       nil ->
