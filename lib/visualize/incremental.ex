@@ -63,16 +63,16 @@ defmodule Visualize.Incremental do
   ]
 
   @type t :: %__MODULE__{
-    canvas_width: number(),
-    canvas_height: number(),
-    viewport_x: number(),
-    viewport_y: number(),
-    data: list(),
-    x_accessor: (any() -> number()),
-    y_accessor: (any() -> number()),
-    build_element: (list(), map() -> Element.t()),
-    margin: map()
-  }
+          canvas_width: number(),
+          canvas_height: number(),
+          viewport_x: number(),
+          viewport_y: number(),
+          data: list(),
+          x_accessor: (any() -> number()),
+          y_accessor: (any() -> number()),
+          build_element: (list(), map() -> Element.t()),
+          margin: map()
+        }
 
   @type scroll_offset :: {dx :: number(), dy :: number()}
   @type bounds :: {x :: number(), y :: number(), width :: number(), height :: number()}
@@ -144,15 +144,12 @@ defmodule Visualize.Incremental do
       push_event(socket, event_type, payload)
   """
   @spec scroll(t(), scroll_offset()) ::
-    {String.t(), map(), t()}
+          {String.t(), map(), t()}
   def scroll(state, {dx, dy}) do
     canvas_size = {state.canvas_width, state.canvas_height}
 
     # Update viewport position
-    new_state = %{state |
-      viewport_x: state.viewport_x + dx,
-      viewport_y: state.viewport_y + dy
-    }
+    new_state = %{state | viewport_x: state.viewport_x + dx, viewport_y: state.viewport_y + dy}
 
     mode = CanvasIncremental.scroll_mode({dx, dy}, canvas_size)
 
@@ -160,12 +157,14 @@ defmodule Visualize.Incremental do
       :full_redraw ->
         # Scroll too large or no scroll - full redraw
         {binary, new_state} = render_viewport(new_state)
+
         payload = %{
           binary: Base.encode64(binary),
           dx: 0,
           dy: 0,
           mode: "full"
         }
+
         {"canvas_incremental", payload, new_state}
 
       _ ->
@@ -289,5 +288,4 @@ defmodule Visualize.Incremental do
   defp mode_to_string(:scroll_x), do: "scroll_x"
   defp mode_to_string(:scroll_y), do: "scroll_y"
   defp mode_to_string(:scroll_xy), do: "scroll_xy"
-  defp mode_to_string(_), do: "full"
 end

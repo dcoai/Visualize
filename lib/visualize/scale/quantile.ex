@@ -47,6 +47,7 @@ defmodule Visualize.Scale.Quantile do
   @spec domain(t(), [number()]) :: t()
   def domain(%__MODULE__{} = scale, values) when is_list(values) do
     sorted = Enum.sort(values)
+
     %{scale | domain: sorted}
     |> recompute_thresholds()
   end
@@ -83,17 +84,19 @@ defmodule Visualize.Scale.Quantile do
         nil
 
       index ->
-        min_val = if index == 0 do
-          List.first(scale.domain)
-        else
-          Enum.at(scale.thresholds, index - 1)
-        end
+        min_val =
+          if index == 0 do
+            List.first(scale.domain)
+          else
+            Enum.at(scale.thresholds, index - 1)
+          end
 
-        max_val = if index >= length(scale.thresholds) do
-          List.last(scale.domain)
-        else
-          Enum.at(scale.thresholds, index)
-        end
+        max_val =
+          if index >= length(scale.thresholds) do
+            List.last(scale.domain)
+          else
+            Enum.at(scale.thresholds, index)
+          end
 
         {min_val, max_val}
     end
@@ -144,7 +147,7 @@ defmodule Visualize.Scale.Quantile do
     end
   end
 
-  defp find_bucket_index(value, [], _index), do: 0
+  defp find_bucket_index(_value, [], _index), do: 0
 
   defp find_bucket_index(value, [threshold | rest], index) do
     if value < threshold do

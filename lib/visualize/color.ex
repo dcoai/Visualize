@@ -52,7 +52,6 @@ defmodule Visualize.Color do
   @t3 @t1 * @t1 * @t1
 
   # Brighter/darker constant
-  @k 18
   @kn 18
 
   # CSS Named Colors (all 147)
@@ -533,11 +532,13 @@ defmodule Visualize.Color do
 
     # Shortest path for hue
     dh = hsl2.h - hsl1.h
-    dh = cond do
-      dh > 180 -> dh - 360
-      dh < -180 -> dh + 360
-      true -> dh
-    end
+
+    dh =
+      cond do
+        dh > 180 -> dh - 360
+        dh < -180 -> dh + 360
+        true -> dh
+      end
 
     h = hsl1.h + dh * t
     s = hsl1.s + (hsl2.s - hsl1.s) * t
@@ -569,11 +570,13 @@ defmodule Visualize.Color do
 
     # Shortest path for hue
     dh = hcl2.h - hcl1.h
-    dh = cond do
-      dh > 180 -> dh - 360
-      dh < -180 -> dh + 360
-      true -> dh
-    end
+
+    dh =
+      cond do
+        dh > 180 -> dh - 360
+        dh < -180 -> dh + 360
+        true -> dh
+      end
 
     h = hcl1.h + dh * t
     c = hcl1.c + (hcl2.c - hcl1.c) * t
@@ -591,6 +594,7 @@ defmodule Visualize.Color do
     case String.length(hex) do
       3 ->
         <<r::binary-size(1), g::binary-size(1), b::binary-size(1)>> = hex
+
         rgb(
           String.to_integer(r <> r, 16),
           String.to_integer(g <> g, 16),
@@ -599,6 +603,7 @@ defmodule Visualize.Color do
 
       4 ->
         <<r::binary-size(1), g::binary-size(1), b::binary-size(1), a::binary-size(1)>> = hex
+
         rgb(
           String.to_integer(r <> r, 16),
           String.to_integer(g <> g, 16),
@@ -608,6 +613,7 @@ defmodule Visualize.Color do
 
       6 ->
         <<r::binary-size(2), g::binary-size(2), b::binary-size(2)>> = hex
+
         rgb(
           String.to_integer(r, 16),
           String.to_integer(g, 16),
@@ -616,6 +622,7 @@ defmodule Visualize.Color do
 
       8 ->
         <<r::binary-size(2), g::binary-size(2), b::binary-size(2), a::binary-size(2)>> = hex
+
         rgb(
           String.to_integer(r, 16),
           String.to_integer(g, 16),
@@ -698,7 +705,8 @@ defmodule Visualize.Color do
     end
   end
 
-  defp hex_byte(n), do: n |> Integer.to_string(16) |> String.pad_leading(2, "0") |> String.downcase()
+  defp hex_byte(n),
+    do: n |> Integer.to_string(16) |> String.pad_leading(2, "0") |> String.downcase()
 
   defp clamp(value, min_val, max_val), do: value |> max(min_val) |> min(max_val)
 

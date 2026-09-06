@@ -42,7 +42,7 @@ defmodule Visualize.Geo.Delaunay do
     n = length(points)
 
     if n < 3 do
-      %__MODULE__{points: points, triangles: [], halfedges: [], hull: Enum.to_list(0..(n-1))}
+      %__MODULE__{points: points, triangles: [], halfedges: [], hull: Enum.to_list(0..(n - 1))}
     else
       # Use Bowyer-Watson algorithm for Delaunay triangulation
       compute_delaunay(points)
@@ -109,7 +109,9 @@ defmodule Visualize.Geo.Delaunay do
   @spec render_hull(t()) :: String.t()
   def render_hull(%__MODULE__{hull: hull, points: pts}) do
     case hull do
-      [] -> ""
+      [] ->
+        ""
+
       [first | rest] ->
         {x0, y0} = Enum.at(pts, first)
         path = "M#{x0},#{y0}"
@@ -128,7 +130,6 @@ defmodule Visualize.Geo.Delaunay do
 
   # Bowyer-Watson algorithm implementation
   defp compute_delaunay(points) do
-    n = length(points)
     indexed_points = Enum.with_index(points)
 
     # Find bounding box
@@ -154,8 +155,10 @@ defmodule Visualize.Geo.Delaunay do
     all_points = super_tri ++ points
 
     {final_triangles, _} =
-      Enum.reduce(indexed_points, {initial_triangles, all_points}, fn {{_px, _py}, orig_idx}, {tris, pts} ->
-        point_idx = orig_idx + 3  # Offset for super-triangle vertices
+      Enum.reduce(indexed_points, {initial_triangles, all_points}, fn {{_px, _py}, orig_idx},
+                                                                      {tris, pts} ->
+        # Offset for super-triangle vertices
+        point_idx = orig_idx + 3
 
         # Find triangles whose circumcircle contains the new point
         {bad_triangles, good_triangles} =
@@ -168,8 +171,9 @@ defmodule Visualize.Geo.Delaunay do
           end)
 
         # Find boundary of polygonal hole
-        edges = bad_triangles
-                |> Enum.flat_map(fn {i, j, k} -> [{i, j}, {j, k}, {k, i}] end)
+        edges =
+          bad_triangles
+          |> Enum.flat_map(fn {i, j, k} -> [{i, j}, {j, k}, {k, i}] end)
 
         # Keep only edges that appear once (boundary edges)
         boundary_edges =
@@ -223,9 +227,10 @@ defmodule Visualize.Geo.Delaunay do
     cx = x2 - px
     cy = y2 - py
 
-    det = (ax * ax + ay * ay) * (bx * cy - cx * by) -
-          (bx * bx + by * by) * (ax * cy - cx * ay) +
-          (cx * cx + cy * cy) * (ax * by - bx * ay)
+    det =
+      (ax * ax + ay * ay) * (bx * cy - cx * by) -
+        (bx * bx + by * by) * (ax * cy - cx * ay) +
+        (cx * cx + cy * cy) * (ax * by - bx * ay)
 
     det > 0
   end
@@ -257,7 +262,7 @@ defmodule Visualize.Geo.Delaunay do
     gift_wrap(points, start_idx, start_idx, [])
   end
 
-  defp gift_wrap(points, current, start, hull) when length(hull) > length(points) do
+  defp gift_wrap(points, _current, _start, hull) when length(hull) > length(points) do
     # Safety: prevent infinite loop
     Enum.reverse(hull)
   end
@@ -273,7 +278,9 @@ defmodule Visualize.Geo.Delaunay do
           best
         else
           case ccw(points, current, best, candidate) do
-            :left -> candidate
+            :left ->
+              candidate
+
             :collinear ->
               # Pick farther point
               if distance_sq(points, current, candidate) > distance_sq(points, current, best) do
@@ -281,7 +288,9 @@ defmodule Visualize.Geo.Delaunay do
               else
                 best
               end
-            :right -> best
+
+            :right ->
+              best
           end
         end
       end)

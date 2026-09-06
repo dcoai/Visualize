@@ -99,7 +99,8 @@ defmodule Visualize.Backend.CanvasBinary do
 
   Accepts either Visualize.IR.Element or Visualize.SVG.Element structs.
   """
-  @spec encode_element(Element.t() | Visualize.SVG.Element.t()) :: {:ok, binary()} | {:error, :nx_not_available}
+  @spec encode_element(Element.t() | Visualize.SVG.Element.t()) ::
+          {:ok, binary()} | {:error, :nx_not_available}
   def encode_element(%Element{} = element) do
     if available?() do
       {:ok, do_encode_element(element)}
@@ -267,13 +268,14 @@ defmodule Visualize.Backend.CanvasBinary do
 
   # Relative cubic bezier - c
   defp encode_path_command({:c, dx1, dy1, dx2, dy2, dx, dy}) do
-    <<0x0E::8, dx1::little-float-64, dy1::little-float-64, dx2::little-float-64, dy2::little-float-64,
-      dx::little-float-64, dy::little-float-64>>
+    <<0x0E::8, dx1::little-float-64, dy1::little-float-64, dx2::little-float-64,
+      dy2::little-float-64, dx::little-float-64, dy::little-float-64>>
   end
 
   # Relative quadratic bezier - q
   defp encode_path_command({:q, dx1, dy1, dx, dy}) do
-    <<0x0F::8, dx1::little-float-64, dy1::little-float-64, dx::little-float-64, dy::little-float-64>>
+    <<0x0F::8, dx1::little-float-64, dy1::little-float-64, dx::little-float-64,
+      dy::little-float-64>>
   end
 
   defp encode_path_command(_), do: <<>>
@@ -306,7 +308,12 @@ defmodule Visualize.Backend.CanvasBinary do
     IO.iodata_to_binary(parts)
   end
 
-  defp do_encode_element(%Element{type: :circle, attrs: attrs, style: style, transform: transform}) do
+  defp do_encode_element(%Element{
+         type: :circle,
+         attrs: attrs,
+         style: style,
+         transform: transform
+       }) do
     %{cx: cx, cy: cy, r: r} = attrs
 
     parts = []
@@ -326,7 +333,12 @@ defmodule Visualize.Backend.CanvasBinary do
       end
 
     # Circle data
-    parts = parts ++ [<<@cmd_circles::8, 1::little-32, cx::little-float-64, cy::little-float-64, r::little-float-64>>]
+    parts =
+      parts ++
+        [
+          <<@cmd_circles::8, 1::little-32, cx::little-float-64, cy::little-float-64,
+            r::little-float-64>>
+        ]
 
     # Draw commands
     parts = parts ++ encode_draw_commands(style)
@@ -354,7 +366,12 @@ defmodule Visualize.Backend.CanvasBinary do
       end
 
     # Rect data
-    parts = parts ++ [<<@cmd_rects::8, 1::little-32, x::little-float-64, y::little-float-64, w::little-float-64, h::little-float-64>>]
+    parts =
+      parts ++
+        [
+          <<@cmd_rects::8, 1::little-32, x::little-float-64, y::little-float-64,
+            w::little-float-64, h::little-float-64>>
+        ]
 
     # Draw commands
     parts = parts ++ encode_draw_commands(style)
@@ -405,31 +422,35 @@ defmodule Visualize.Backend.CanvasBinary do
     parts = []
 
     # Handle transform attribute
-    parts = case Map.get(attrs, :transform) do
-      nil -> parts
-      transform_str -> parts ++ [encode_svg_transform(transform_str)]
-    end
+    parts =
+      case Map.get(attrs, :transform) do
+        nil -> parts
+        transform_str -> parts ++ [encode_svg_transform(transform_str)]
+      end
 
     # Save context if we have transform
-    parts = if Map.has_key?(attrs, :transform) do
-      [<<@cmd_save::8>>] ++ parts
-    else
-      parts
-    end
+    parts =
+      if Map.has_key?(attrs, :transform) do
+        [<<@cmd_save::8>>] ++ parts
+      else
+        parts
+      end
 
     # Encode children
-    child_data = children
-    |> Enum.map(&do_encode_svg_element/1)
-    |> IO.iodata_to_binary()
+    child_data =
+      children
+      |> Enum.map(&do_encode_svg_element/1)
+      |> IO.iodata_to_binary()
 
     parts = parts ++ [child_data]
 
     # Restore context if we saved
-    parts = if Map.has_key?(attrs, :transform) do
-      parts ++ [<<@cmd_restore::8>>]
-    else
-      parts
-    end
+    parts =
+      if Map.has_key?(attrs, :transform) do
+        parts ++ [<<@cmd_restore::8>>]
+      else
+        parts
+      end
 
     IO.iodata_to_binary(parts)
   end
@@ -446,8 +467,12 @@ defmodule Visualize.Backend.CanvasBinary do
     parts = parts ++ [encode_svg_style(attrs)]
 
     # Rectangle command
-    parts = parts ++ [<<@cmd_rects::8, 1::little-32, x::little-float-64, y::little-float-64,
-                       width::little-float-64, height::little-float-64>>]
+    parts =
+      parts ++
+        [
+          <<@cmd_rects::8, 1::little-32, x::little-float-64, y::little-float-64,
+            width::little-float-64, height::little-float-64>>
+        ]
 
     # Draw commands
     parts = parts ++ encode_svg_draw_commands(attrs)
@@ -466,7 +491,12 @@ defmodule Visualize.Backend.CanvasBinary do
     parts = parts ++ [encode_svg_style(attrs)]
 
     # Circle command
-    parts = parts ++ [<<@cmd_circles::8, 1::little-32, cx::little-float-64, cy::little-float-64, r::little-float-64>>]
+    parts =
+      parts ++
+        [
+          <<@cmd_circles::8, 1::little-32, cx::little-float-64, cy::little-float-64,
+            r::little-float-64>>
+        ]
 
     # Draw commands
     parts = parts ++ encode_svg_draw_commands(attrs)
@@ -478,7 +508,9 @@ defmodule Visualize.Backend.CanvasBinary do
     d = Map.get(attrs, :d, "")
 
     case parse_svg_path(d) do
-      [] -> <<>>
+      [] ->
+        <<>>
+
       commands ->
         parts = []
 
@@ -529,35 +561,42 @@ defmodule Visualize.Backend.CanvasBinary do
     fill = Map.get(attrs, :fill)
     stroke = Map.get(attrs, :stroke)
     stroke_width = Map.get(attrs, :stroke_width) || Map.get(attrs, :"stroke-width")
-    opacity = Map.get(attrs, :opacity) || Map.get(attrs, :fill_opacity) || Map.get(attrs, :"fill-opacity")
+
+    opacity =
+      Map.get(attrs, :opacity) || Map.get(attrs, :fill_opacity) || Map.get(attrs, :"fill-opacity")
 
     flags = 0
     data = []
 
     # Fill color (skip if none or not specified)
-    {flags, data} = if has_color?(fill) do
-      {r, g, b, a} = parse_color(fill, opacity)
-      {flags ||| 0x01, data ++ [<<r::8, g::8, b::8, a::8>>]}
-    else
-      {flags, data}
-    end
+    {flags, data} =
+      if has_color?(fill) do
+        {r, g, b, a} = parse_color(fill, opacity)
+        {flags ||| 0x01, data ++ [<<r::8, g::8, b::8, a::8>>]}
+      else
+        {flags, data}
+      end
 
     # Stroke color
-    {flags, data} = if has_color?(stroke) do
-      stroke_opacity = Map.get(attrs, :stroke_opacity) || Map.get(attrs, :"stroke-opacity") || 1.0
-      {r, g, b, a} = parse_color(stroke, stroke_opacity)
-      {flags ||| 0x02, data ++ [<<r::8, g::8, b::8, a::8>>]}
-    else
-      {flags, data}
-    end
+    {flags, data} =
+      if has_color?(stroke) do
+        stroke_opacity =
+          Map.get(attrs, :stroke_opacity) || Map.get(attrs, :"stroke-opacity") || 1.0
+
+        {r, g, b, a} = parse_color(stroke, stroke_opacity)
+        {flags ||| 0x02, data ++ [<<r::8, g::8, b::8, a::8>>]}
+      else
+        {flags, data}
+      end
 
     # Stroke width
-    {flags, data} = if stroke_width do
-      sw = to_float(stroke_width)
-      {flags ||| 0x04, data ++ [<<sw::little-float-32>>]}
-    else
-      {flags, data}
-    end
+    {flags, data} =
+      if stroke_width do
+        sw = to_float(stroke_width)
+        {flags ||| 0x04, data ++ [<<sw::little-float-32>>]}
+      else
+        {flags, data}
+      end
 
     if flags == 0 do
       <<>>
@@ -599,10 +638,12 @@ defmodule Visualize.Backend.CanvasBinary do
           [_, x_str] ->
             x = parse_number_string(x_str)
             <<@cmd_transform::8, 0x01::8, x::little-float-64, 0.0::little-float-64>>
+
           [_, x_str, y_str] ->
             x = parse_number_string(x_str)
             y = parse_number_string(y_str)
             <<@cmd_transform::8, 0x01::8, x::little-float-64, y::little-float-64>>
+
           _ ->
             <<>>
         end
@@ -611,11 +652,17 @@ defmodule Visualize.Backend.CanvasBinary do
         case Regex.run(~r/scale\(([-\d.]+),?\s*([-\d.]+)?\)/, transform_str) do
           [_, s_str] ->
             s = parse_number_string(s_str)
-            <<@cmd_transform::8, 0x03::8, 0.0::little-float-64, 0.0::little-float-64, s::little-float-64, s::little-float-64>>
+
+            <<@cmd_transform::8, 0x03::8, 0.0::little-float-64, 0.0::little-float-64,
+              s::little-float-64, s::little-float-64>>
+
           [_, sx_str, sy_str] ->
             sx = parse_number_string(sx_str)
             sy = parse_number_string(sy_str)
-            <<@cmd_transform::8, 0x03::8, 0.0::little-float-64, 0.0::little-float-64, sx::little-float-64, sy::little-float-64>>
+
+            <<@cmd_transform::8, 0x03::8, 0.0::little-float-64, 0.0::little-float-64,
+              sx::little-float-64, sy::little-float-64>>
+
           _ ->
             <<>>
         end
@@ -629,7 +676,9 @@ defmodule Visualize.Backend.CanvasBinary do
 
   defp parse_number_string(str) do
     case Float.parse(str) do
-      {f, _} -> f
+      {f, _} ->
+        f
+
       :error ->
         case Integer.parse(str) do
           {i, _} -> i * 1.0
@@ -639,6 +688,7 @@ defmodule Visualize.Backend.CanvasBinary do
   end
 
   defp parse_svg_path(""), do: []
+
   defp parse_svg_path(d) when is_binary(d) do
     # Simple SVG path parser
     d
@@ -647,6 +697,7 @@ defmodule Visualize.Backend.CanvasBinary do
   end
 
   defp parse_path_commands("", acc), do: Enum.reverse(acc)
+
   defp parse_path_commands(str, acc) do
     str = String.trim_leading(str)
 
@@ -703,11 +754,15 @@ defmodule Visualize.Backend.CanvasBinary do
         parse_path_commands(rest, [{:q, dx1, dy1, dx, dy} | acc])
 
       String.starts_with?(str, "A") ->
-        {rx, ry, rotation, large_arc, sweep, x, y, rest} = parse_arc_numbers(String.slice(str, 1..-1//1))
+        {rx, ry, rotation, large_arc, sweep, x, y, rest} =
+          parse_arc_numbers(String.slice(str, 1..-1//1))
+
         parse_path_commands(rest, [{:A, rx, ry, rotation, large_arc, sweep, x, y} | acc])
 
       String.starts_with?(str, "a") ->
-        {rx, ry, rotation, large_arc, sweep, dx, dy, rest} = parse_arc_numbers(String.slice(str, 1..-1//1))
+        {rx, ry, rotation, large_arc, sweep, dx, dy, rest} =
+          parse_arc_numbers(String.slice(str, 1..-1//1))
+
         parse_path_commands(rest, [{:a, rx, ry, rotation, large_arc, sweep, dx, dy} | acc])
 
       String.starts_with?(str, "Z") or String.starts_with?(str, "z") ->
@@ -716,7 +771,9 @@ defmodule Visualize.Backend.CanvasBinary do
       true ->
         # Try to parse implicit lineto (numbers after moveto)
         case parse_number(str) do
-          {nil, _} -> Enum.reverse(acc)
+          {nil, _} ->
+            Enum.reverse(acc)
+
           {x, rest} ->
             {y, rest2} = parse_one_number(rest)
             parse_path_commands(rest2, [{:L, x, y} | acc])
@@ -761,58 +818,65 @@ defmodule Visualize.Backend.CanvasBinary do
     {sweep, rest} = parse_number(String.trim_leading(rest))
     {x, rest} = parse_number(String.trim_leading(rest))
     {y, rest} = parse_number(String.trim_leading(rest))
-    {rx || 0, ry || 0, rotation || 0, trunc(large_arc || 0), trunc(sweep || 0), x || 0, y || 0, rest}
+
+    {rx || 0, ry || 0, rotation || 0, trunc(large_arc || 0), trunc(sweep || 0), x || 0, y || 0,
+     rest}
   end
 
   defp parse_number(str) do
     str = str |> String.trim_leading() |> String.replace(~r/^,\s*/, "")
+
     case Regex.run(~r/^(-?[\d.]+(?:e[-+]?\d+)?)/, str) do
       [match, num_str] ->
-        num = case Float.parse(num_str) do
-          {n, _} -> n
-          :error -> 0.0
-        end
+        num =
+          case Float.parse(num_str) do
+            {n, _} -> n
+            :error -> 0.0
+          end
+
         rest = String.slice(str, String.length(match)..-1//1)
         {num, rest}
+
       _ ->
         {nil, str}
     end
   end
 
   defp to_float(n) when is_number(n), do: n * 1.0
+
   defp to_float(s) when is_binary(s) do
     case Float.parse(s) do
       {f, _} -> f
       :error -> 0.0
     end
   end
+
   defp to_float(_), do: 0.0
 
-  defp parse_color(color, opacity) when is_atom(color) do
-    # Handle atom colors like :current_color, :black, etc.
-    case color do
-      :current_color -> {0, 0, 0, 255}  # Default to black for currentColor
-      :black -> {0, 0, 0, 255}
-      :white -> {255, 255, 255, 255}
-      :red -> {255, 0, 0, 255}
-      :green -> {0, 128, 0, 255}
-      :blue -> {0, 0, 255, 255}
-      _ -> {0, 0, 0, 255}
+  # Atom colours used by the IR (`:current_color` defaults to black).
+  defp named_atom_rgb(:white), do: {255, 255, 255}
+  defp named_atom_rgb(:red), do: {255, 0, 0}
+  defp named_atom_rgb(:green), do: {0, 128, 0}
+  defp named_atom_rgb(:blue), do: {0, 0, 255}
+  defp named_atom_rgb(_), do: {0, 0, 0}
+
+  defp alpha_byte(nil), do: 255
+  defp alpha_byte(n) when is_number(n), do: trunc(n * 255)
+
+  defp alpha_byte(s) when is_binary(s) do
+    case Float.parse(s) do
+      {f, _} -> trunc(f * 255)
+      :error -> 255
     end
   end
 
-  defp parse_color(color, opacity) when is_binary(color) do
-    opacity = case opacity do
-      nil -> 1.0
-      n when is_number(n) -> n
-      s when is_binary(s) ->
-        case Float.parse(s) do
-          {f, _} -> f
-          :error -> 1.0
-        end
-    end
+  defp parse_color(color, opacity) when is_atom(color) do
+    {r, g, b} = named_atom_rgb(color)
+    {r, g, b, alpha_byte(opacity)}
+  end
 
-    a = trunc(opacity * 255)
+  defp parse_color(color, opacity) when is_binary(color) do
+    a = alpha_byte(opacity)
 
     cond do
       String.starts_with?(color, "#") && String.length(color) == 7 ->
@@ -820,18 +884,21 @@ defmodule Visualize.Backend.CanvasBinary do
         {r, g, b, a}
 
       String.starts_with?(color, "#") && String.length(color) == 4 ->
-        [r, g, b] = String.slice(color, 1..-1//1)
-                    |> String.graphemes()
-                    |> Enum.map(fn c ->
-          <<v::8>> = Base.decode16!(c <> c, case: :mixed)
-          v
-        end)
+        [r, g, b] =
+          String.slice(color, 1..-1//1)
+          |> String.graphemes()
+          |> Enum.map(fn c ->
+            <<v::8>> = Base.decode16!(c <> c, case: :mixed)
+            v
+          end)
+
         {r, g, b, a}
 
       String.starts_with?(color, "rgb(") ->
         case Regex.run(~r/rgb\((\d+),\s*(\d+),\s*(\d+)\)/, color) do
           [_, r, g, b] ->
             {String.to_integer(r), String.to_integer(g), String.to_integer(b), a}
+
           _ ->
             {0, 0, 0, a}
         end
@@ -840,7 +907,10 @@ defmodule Visualize.Backend.CanvasBinary do
         case Regex.run(~r/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/, color) do
           [_, r, g, b, alpha] ->
             {alpha_f, _} = Float.parse(alpha)
-            {String.to_integer(r), String.to_integer(g), String.to_integer(b), trunc(alpha_f * 255)}
+
+            {String.to_integer(r), String.to_integer(g), String.to_integer(b),
+             trunc(alpha_f * 255)}
+
           _ ->
             {0, 0, 0, a}
         end
@@ -866,11 +936,13 @@ defmodule Visualize.Backend.CanvasBinary do
         <<@cmd_transform::8, 0x01::8, x::little-float-64, y::little-float-64>>
 
       [{:translate, x, y}, {:scale, sx, sy}] ->
-        <<@cmd_transform::8, 0x03::8, x::little-float-64, y::little-float-64, sx::little-float-64, sy::little-float-64>>
+        <<@cmd_transform::8, 0x03::8, x::little-float-64, y::little-float-64, sx::little-float-64,
+          sy::little-float-64>>
 
       _ ->
         # General 2D transform matrix
         {a, b, c, d, e, f} = compute_transform_matrix(ops)
+
         <<@cmd_transform::8, 0xFF::8, a::little-float-64, b::little-float-64, c::little-float-64,
           d::little-float-64, e::little-float-64, f::little-float-64>>
     end
@@ -889,8 +961,9 @@ defmodule Visualize.Backend.CanvasBinary do
           rad = angle * :math.pi() / 180
           cos_a = :math.cos(rad)
           sin_a = :math.sin(rad)
-          {a * cos_a + c * sin_a, b * cos_a + d * sin_a,
-           c * cos_a - a * sin_a, d * cos_a - b * sin_a, e, f}
+
+          {a * cos_a + c * sin_a, b * cos_a + d * sin_a, c * cos_a - a * sin_a,
+           d * cos_a - b * sin_a, e, f}
 
         _ ->
           {a, b, c, d, e, f}
@@ -905,8 +978,12 @@ defmodule Visualize.Backend.CanvasBinary do
 
     {flags, parts} =
       case style[:fill] do
-        nil -> {flags, parts}
-        :none -> {flags, parts}
+        nil ->
+          {flags, parts}
+
+        :none ->
+          {flags, parts}
+
         color ->
           {r, g, b, a} = parse_color(color)
           {flags ||| 0x01, parts ++ [<<r::8, g::8, b::8, a::8>>]}
@@ -914,8 +991,12 @@ defmodule Visualize.Backend.CanvasBinary do
 
     {flags, parts} =
       case style[:stroke] do
-        nil -> {flags, parts}
-        :none -> {flags, parts}
+        nil ->
+          {flags, parts}
+
+        :none ->
+          {flags, parts}
+
         color ->
           {r, g, b, a} = parse_color(color)
           {flags ||| 0x02, parts ++ [<<r::8, g::8, b::8, a::8>>]}
@@ -976,6 +1057,7 @@ defmodule Visualize.Backend.CanvasBinary do
     case String.length(hex) do
       3 ->
         <<r::binary-1, g::binary-1, b::binary-1>> = hex
+
         {String.to_integer(r <> r, 16), String.to_integer(g <> g, 16),
          String.to_integer(b <> b, 16), 255}
 
@@ -1003,7 +1085,7 @@ defmodule Visualize.Backend.CanvasBinary do
         {String.to_integer(r), String.to_integer(g), String.to_integer(b), 255}
 
       [_, r, g, b, a] ->
-        alpha = String.to_float(a) * 255 |> round()
+        alpha = (String.to_float(a) * 255) |> round()
         {String.to_integer(r), String.to_integer(g), String.to_integer(b), alpha}
 
       _ ->

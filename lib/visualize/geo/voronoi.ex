@@ -226,8 +226,6 @@ defmodule Visualize.Geo.Voronoi do
       # Each edge of the triangle corresponds to an adjacent triangle
       [{i, j}, {j, k}, {k, i}]
       |> Enum.flat_map(fn {a, b} ->
-        edge = if a < b, do: {a, b}, else: {b, a}
-
         # Find other triangle sharing this edge
         other_idx =
           triangles
@@ -237,12 +235,16 @@ defmodule Visualize.Geo.Voronoi do
           end)
 
         case other_idx do
-          nil -> []
+          nil ->
+            []
+
           {_, idx} when idx > tri_idx ->
             c1 = Enum.at(circumcenters, tri_idx)
             c2 = Enum.at(circumcenters, idx)
             if c1 && c2, do: [{c1, c2}], else: []
-          _ -> []
+
+          _ ->
+            []
         end
       end)
     end)
