@@ -251,3 +251,11 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** `Visualize.Shape.Rose` holds an `angle` and a `width` accessor in the scale's domain units, maps `angle ± width / 2` through `scale/2`, and delegates each datum to `Arc.generate_path/2` with the radius and pad-angle accessors. It adds no geometry of its own — every sector is byte-identical to the `Arc` call with the same numbers — and returns a list of paths, one per datum, so a stacked rose is several roses with rising inner radii, drawn by the caller. No fill accessor: as with `Arc`, styling is the caller's.
 
 **Consequences.** A sector straddling the domain's origin (bearing 0, width 45) spans negative radians, which `Arc` draws correctly since it never reduces its angles modulo a turn. A datum with a zero outer radius is an empty path, kept in the list so it stays index-aligned with the data.
+
+## 32. D-32 — The `d` serialisers fold negative zero
+
+**Context.** `Visualize.Backend.SVG.path_data/1`, `Visualize.Backend.Canvas` and `Visualize.IR.Path.to_string/1` printed a float that is `-0.0`, or rounds to it at four decimals, as `-0`: an `Arc` sector whose inner edge is the origin ended `L0,-0Z`. Valid SVG, but a byte difference in every path golden for a value whose sign is not a property of the maths; D-6 had already settled the same question for the projection golden, and the rose goldens were folding `-0` in the test instead.
+
+**Decision.** Every `d` serialiser adds `0.0` after rounding, so `-0.0` and anything that rounds to it print as `0`. The contract in [02-architecture](02-architecture.md) §3 gains the clause; the goldens assert raw strings.
+
+**Consequences.** No `-0` coordinate is emitted by any backend. A caller that read the sign of a zero coordinate out of a path string never had a contract to rely on.

@@ -13,15 +13,11 @@ defmodule Visualize.Shape.RoseTest do
 
   defp bearing, do: Scale.radial() |> Scale.domain([0, 360])
 
-  # `Visualize.Backend.SVG.path_data/1` prints a float that rounds to -0.0 as `-0`; an Arc
-  # sector's `L` to the origin hits it (pre-existing, tracked as #32). The
-  # sign of zero is not part of the contract (D-6), so the goldens fold it.
-  defp fold_negative_zero(d), do: String.replace(d, "-0,", "0,") |> String.replace("-0Z", "0Z")
   defp rose, do: Rose.new() |> Rose.scale(bearing()) |> Rose.width(90)
 
   describe "generate/2" do
     test "the compass renders the recorded sectors, index-aligned with the data" do
-      assert Rose.generate(rose(), @compass) |> Enum.map(&fold_negative_zero/1) == [
+      assert Rose.generate(rose(), @compass) == [
                "M-70.7107,-70.7107A100,100,0,0,1,70.7107,-70.7107L0,0Z",
                "M42.4264,-42.4264A60,60,0,0,1,42.4264,42.4264L0,0Z",
                "",
@@ -88,7 +84,7 @@ defmodule Visualize.Shape.RoseTest do
         |> Shape.pad_angle(0)
 
       assert ["M-70.7107,-70.7107A100,100,0,0,1,70.7107,-70.7107L0,0Z"] =
-               Shape.generate(shape, [%{bearing: 0, r: 100}]) |> Enum.map(&fold_negative_zero/1)
+               Shape.generate(shape, [%{bearing: 0, r: 100}])
 
       assert [%Visualize.IR.Path{}] = Shape.generate_path(shape, [%{bearing: 0, r: 100}])
     end

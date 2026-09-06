@@ -105,7 +105,7 @@ A path is `%Visualize.IR.Path{commands, metadata}`; `metadata` is a free map for
 | `Visualize.IR.Path.concat/1` | One path whose commands are the concatenation of the given paths' commands, in order; metadata is dropped. |
 | `Visualize.IR.Path.append/2` | The first path's commands followed by the second's; metadata is dropped. |
 | `Visualize.IR.Path.transform/2` | Applies `fn {x, y} -> {x', y'} end` to every coordinate pair. Absolute end and control points are mapped directly; relative deltas are mapped as if they were points, and `H`/`V` are mapped as `{x, 0}` / `{0, y}` keeping one axis. The function MUST therefore be linear (no translation) when the path contains relative or single-axis commands; `:Z` and arc radii/flags are untouched. |
-| `Visualize.IR.Path.to_string/1` | The SVG `d` string: commands concatenated with no separators, coordinates comma-separated, e.g. `"M10,20L100,200Z"`. Integers print as integers; floats print with at most four decimals, trailing zeros and a trailing point removed, never in exponent notation. |
+| `Visualize.IR.Path.to_string/1` | The SVG `d` string: commands concatenated with no separators, coordinates comma-separated, e.g. `"M10,20L100,200Z"`. Integers print as integers; floats print with at most four decimals, trailing zeros and a trailing point removed, never in exponent notation, and never as `-0` (a zero that rounds negative prints `0`, D-32). |
 
 `to_string/1` is the canonical `d` serialisation; `Visualize.Backend.SVG.path_data/1` MUST produce the same string for the same path (D-12). `Visualize.IR.Path` implements `String.Chars` (defined alongside `Visualize.SVG.Path`).
 

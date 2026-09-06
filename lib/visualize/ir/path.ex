@@ -431,8 +431,8 @@ defmodule Visualize.IR.Path do
   defp format_num(n) when is_integer(n), do: Integer.to_string(n)
 
   defp format_num(n) when is_float(n) do
-    # Format with up to 4 decimal places, removing trailing zeros
-    :erlang.float_to_binary(n, decimals: 4)
+    # Up to 4 decimals, trailing zeros removed; `+ 0.0` folds negative zero (D-32).
+    :erlang.float_to_binary(Float.round(n, 4) + 0.0, decimals: 4)
     |> String.trim_trailing("0")
     |> String.trim_trailing(".")
   end

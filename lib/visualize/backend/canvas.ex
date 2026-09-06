@@ -674,9 +674,9 @@ defmodule Visualize.Backend.Canvas do
 
   defp format_num(n) when is_integer(n), do: Integer.to_string(n)
 
+  # `+ 0.0` folds a negative zero (or a value that rounds to one) into `0` (D-32).
   defp format_num(n) when is_float(n) do
-    n
-    |> Float.round(4)
+    (Float.round(n, 4) + 0.0)
     |> Float.to_string()
     |> String.trim_trailing("0")
     |> String.trim_trailing(".")
