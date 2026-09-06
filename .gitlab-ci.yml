@@ -40,7 +40,8 @@ default:
     - mix local.hex --force
     - mix local.rebar --force
     # A store that cannot be reached must not fail the build: fall back to compiling.
-    - elixir scripts/depdep.exs --pull || echo "depdep: bootstrap failed; compiling dependencies from source"
+    # (No colon inside the message: a `: ` in a plain scalar makes the item a YAML mapping.)
+    - elixir scripts/depdep.exs --pull || echo "depdep bootstrap failed - compiling dependencies from source"
     - mix deps.get
   cache:
     key:
@@ -61,7 +62,7 @@ compile:
   stage: check
   script:
     - mix compile --force --warnings-as-errors
-    - elixir scripts/depdep.exs --push || echo "depdep: bootstrap failed; nothing pushed"
+    - elixir scripts/depdep.exs --push || echo "depdep bootstrap failed - nothing pushed"
 
 test:
   extends: .elixir
