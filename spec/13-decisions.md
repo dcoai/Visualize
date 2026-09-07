@@ -395,3 +395,11 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** `Visualize.Scale.Behaviour.normalize/3` is the one place the fraction is computed: `0.5` when the interval is collapsed, `(v − a) / (b − a)` otherwise. Every continuous scale's `apply/2` and `invert/2` use it, so a collapsed domain maps every value to the range midpoint and a collapsed range inverts to the domain midpoint. Nothing raises.
 
 **Consequences.** A single-datum chart draws its point in the middle of the axis, as it does in d3. `Power` and `Symlog` moved from `0` to `0.5` on the collapsed case. The components' own widening stays as a chart-level policy for readable axes; it is no longer load-bearing.
+
+## 50. D-50 — Optional-dependency modules compile warning-free without the dependency
+
+**Context.** `Visualize.Shape.LineNx` and `Visualize.Backend.CanvasBinary` call `Nx` directly. In this repository Nx is always fetched, so the build never showed it; in a consumer that does not depend on Nx every call printed `Nx.… is undefined` while visualize compiled — nine warnings, not the one #46 first reported, once the consumer check kept the whole output.
+
+**Decision.** Both modules declare `@compile {:no_warn_undefined, Nx}`, Elixir's mechanism for exactly this case. The calls stay direct, so a missing Nx still raises `UndefinedFunctionError` at the call as spec/04 §10.1 promises. `scripts/consumer_check.exs` compiles visualize inside the throwaway consumer with its output captured and fails on any `warning:` line, which is the recurrence guard; the consumer's own `--warnings-as-errors` never covered a dependency's compile.
+
+**Consequences.** An Nx-less consumer builds silently. Any future optional dependency gets the same declaration or the gate goes red.
