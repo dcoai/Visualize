@@ -17,7 +17,7 @@ defmodule Visualize.Geo.ProjectionRotationTest do
 
   Code.require_file("test/visualize/geo/projection_golden_test.exs")
 
-  @types Golden.types() -- [:transverse_mercator]
+  @types Golden.types()
   @deg :math.pi() / 180
 
   defp gen_point, do: {float(min: -179.0, max: 179.0), float(min: -85.0, max: 85.0)}

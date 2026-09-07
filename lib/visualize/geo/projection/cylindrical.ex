@@ -83,8 +83,11 @@ defmodule Visualize.Geo.Projection.Cylindrical do
     cos_y = cos(y)
     sin_y = sin(y)
 
+    # Snyder's spherical inverse: |sin y / cosh x| <= 1 always, so no point of the plane
+    # leaves asin's domain, and cos y < 0 correctly returns the back hemisphere (D-51).
+    cosh_x = (:math.exp(x) + :math.exp(-x)) / 2
     lon = :math.atan2(sinh_x, cos_y)
-    lat = :math.asin(sin_y / :math.sqrt(sinh_x * sinh_x + cos_y * cos_y))
+    lat = :math.asin(sin_y / cosh_x)
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
 

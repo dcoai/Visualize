@@ -22,10 +22,6 @@ defmodule Visualize.Geo.ProjectionGoldenTest do
             eckert6 hammer kavrayskiy7 wagner4 wagner6 fahey collignon loximuthal
             natural_earth equal_earth robinson winkel_tripel aitoff van_der_grinten)a
 
-  # `invert/3` for `:transverse_mercator` raises ArithmeticError away from the central
-  # meridian (pre-existing on main, tracked as #9); its inverse is excluded until fixed.
-  @no_inverse [:transverse_mercator]
-
   @lons [-170, -120, -60, -15, 0, 15, 60, 120, 170]
   @lats [-80, -60, -30, -5, 0, 5, 30, 60, 80]
 
@@ -41,13 +37,9 @@ defmodule Visualize.Geo.ProjectionGoldenTest do
 
         {x, y} ->
           inv =
-            if type in @no_inverse do
-              "excluded"
-            else
-              case Projection.invert(proj, x, y) do
-                nil -> "nil"
-                {ilon, ilat} -> "#{fmt(ilon)} #{fmt(ilat)}"
-              end
+            case Projection.invert(proj, x, y) do
+              nil -> "nil"
+              {ilon, ilat} -> "#{fmt(ilon)} #{fmt(ilat)}"
             end
 
           "#{type} #{lon} #{lat} -> #{fmt(x)} #{fmt(y)} | #{inv}"

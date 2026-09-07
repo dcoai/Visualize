@@ -40,7 +40,7 @@ This is the architecture decision record. Each entry states the context that for
 
 **Context.** `Visualize.Geo.Projection.invert/3` for `:transverse_mercator` raises `ArithmeticError` for points away from the central meridian, where the inverse series leaves its domain. This predates the projection split and is tracked as issue #9.
 
-**Decision.** The contract is that `invert/3` returns `nil` outside the valid domain, as every other projection does ([11-public-api](11-public-api.md) §4). The fix is not yet implemented. Until it is, the projection golden records the transverse Mercator inverse as `excluded` so the golden neither crashes nor freezes the wrong behaviour.
+**Decision.** The contract is that `invert/3` returns `nil` outside the valid domain, as every other projection does ([11-public-api](11-public-api.md) §4). Implemented under D-51, which found that no point of the plane is outside the inverse's domain. Until it is, the projection golden records the transverse Mercator inverse as `excluded` so the golden neither crashes nor freezes the wrong behaviour.
 
 **Consequences.** Callers inverting transverse Mercator points MUST expect the exception until #9 closes. When it does, the golden is regenerated to record the inverse and the `@no_inverse` exclusion is removed; this entry then stands as the record of the gap.
 
@@ -403,3 +403,11 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** Both modules declare `@compile {:no_warn_undefined, Nx}`, Elixir's mechanism for exactly this case. The calls stay direct, so a missing Nx still raises `UndefinedFunctionError` at the call as spec/04 §10.1 promises. `scripts/consumer_check.exs` compiles visualize inside the throwaway consumer with its output captured and fails on any `warning:` line, which is the recurrence guard; the consumer's own `--warnings-as-errors` never covered a dependency's compile.
 
 **Consequences.** An Nx-less consumer builds silently. Any future optional dependency gets the same declaration or the gate goes red.
+
+## 51. D-51 — Transverse Mercator inverts on the whole sphere
+
+**Context.** D-5 recorded the crash (`asin` of a value outside `[−1, 1]` away from the central meridian) and proposed `nil` outside the projection's domain plus a forward clip at 90° from the meridian. Working it through showed the domain question was moot: the code computed `asin(sin y / sqrt(sinh² x + cos² y))`, whose denominator can be smaller than `|sin y|`; Snyder's spherical inverse divides by `cosh x ≥ 1`, so the argument is always in range, and `atan2(sinh x, cos y)` with `cos y < 0` returns the back hemisphere correctly. The forward projection covers the sphere except the two points where `cos(lat) · sin(lon) = ±1`, which it clamps.
+
+**Decision.** `invert/3` is Snyder's inverse; the forward projection is unchanged and still never returns `nil`. Transverse Mercator rejoins the projection golden's inverse column and the rotation round-trip property (D-43) with no exclusion.
+
+**Consequences.** Every projection type now inverts on the golden grid; D-5's `nil` contract remains true in the sense that there is no point to return it for. The 36 grid points that raised are a unit test.
