@@ -305,7 +305,7 @@ Attach with `phx-hook="BrushHook"` and an `id` on an `<svg>`. The hook uses `cre
 | `data-brush-event` | `"brush_select"` | event pushed when a selection ends |
 | `data-brush-clear-event` | `"brush_clear"` | event pushed when the selection is cleared |
 | `data-brush-extent` | unset | `"x0,y0,x1,y1"`: clamps pointer positions and sizes the capture area; also supplies the full-height/width edges for 1-D brushes |
-| `data-brush-color` | `"rgba(119, 119, 119, 0.2)"` | selection rectangle fill (the module doc states `rgba(0,0,0,0.1)`; the JS default is normative) |
+| `data-brush-color` | `"rgba(119, 119, 119, 0.2)"` | selection rectangle fill |
 | `data-brush-stroke` | `"#666"` | selection rectangle stroke |
 
 On mount the hook finds or appends a `<g class="brush-overlay">`, inserts into it a transparent `<rect class="brush-capture" cursor="crosshair">` covering the extent (or the element's bounding box) that receives pointer events, and a hidden `<rect class="brush-selection" stroke-width="1">` that displays the selection. Move and release listeners are attached to `document` so a drag may leave the SVG.
@@ -314,9 +314,7 @@ Coordinates are in the SVG's user coordinate system (`getScreenCTM().inverse()`)
 
 On `updated()` the hook reads `data-selection-x0`, `-y0`, `-x1`, `-y1`; when all four parse it shows that selection (server-driven selection); else if `data-selection-clear="true"` it clears.
 
-Events arrive as `handle_event("brush_select", %{"x0" => x0, "y0" => y0, "x1" => x1, "y1" => y1}, socket)` and `handle_event("brush_clear", %{}, socket)`. `destroyed()` calls `removeEventListener` with freshly bound functions, which does not match the listeners added in `mounted()`, so the `document` listeners persist after the element is removed; the intended behaviour is that the bound handlers are stored on mount and those same references removed.
-
-> Decision: see spec/13 — BrushHook listener clean-up.
+Events arrive as `handle_event("brush_select", %{"x0" => x0, "y0" => y0, "x1" => x1, "y1" => y1}, socket)` and `handle_event("brush_clear", %{}, socket)`. `mounted()` binds each handler once and stores the bound function on the hook (`onMouseDown`, `onMouseMove`, `onMouseUp`, `onTouchStart`, `onTouchMove`, `onTouchEnd`, `onClear`) before adding it as a listener, and `destroyed()` removes the four `document` listeners (`mousemove`, `mouseup`, `touchmove`, `touchend`) with those same references, so nothing outlives the element; the capture rect's own listeners are discarded with it (D-47). `test/visualize/hooks/brush_test.exs` holds the source to this shape.
 
 ### 6.3 Server-side helpers
 

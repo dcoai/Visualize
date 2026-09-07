@@ -101,4 +101,51 @@ defmodule Visualize.Hooks.BrushTest do
              ) == 7
     end
   end
+
+  describe "js_hook/0" do
+    @document_handlers ~w(MouseMove MouseUp TouchMove TouchEnd)
+
+    test "mounted binds each handler once and stores the reference it adds" do
+      js = Brush.js_hook()
+      {mounted, _} = section(js, "mounted() {", "getSVGPoint(")
+
+      for handler <- @document_handlers ++ ~w(MouseDown TouchStart Clear) do
+        assert mounted =~ "this.on#{handler} = this.handle#{handler}.bind(this);"
+      end
+
+      for handler <- @document_handlers do
+        assert mounted =~ ~r/document\.addEventListener\('[a-z]+', this\.on#{handler}[,)]/
+      end
+
+      # The only binds are the seven stored ones: none inline in an addEventListener call.
+      refute mounted =~ "addEventListener('mousemove', this.handleMouseMove"
+      assert length(Regex.scan(~r/\.bind\(this\)/, mounted)) == 7
+    end
+
+    test "destroyed removes exactly the stored document references, binding nothing" do
+      js = Brush.js_hook()
+      {destroyed, _} = section(js, "destroyed() {", "};")
+
+      for handler <- @document_handlers do
+        assert destroyed =~ ~r/document\.removeEventListener\('[a-z]+', this\.on#{handler}\)/
+      end
+
+      refute destroyed =~ ".bind("
+      assert length(Regex.scan(~r/removeEventListener/, destroyed)) == 4
+    end
+
+    test "the documented default brush colour is the one the hook applies" do
+      assert Brush.js_hook() =~ "this.el.dataset.brushColor || 'rgba(119, 119, 119, 0.2)'"
+      {:docs_v1, _, _, _, %{"en" => moduledoc}, _, _} = Code.fetch_docs(Brush)
+      assert moduledoc =~ ~s|default: "rgba(119, 119, 119, 0.2)"|
+      refute moduledoc =~ "rgba(0,0,0,0.1)"
+    end
+
+    # The source between the first occurrence of `from` and the next `to` after it.
+    defp section(js, from, to) do
+      [_, rest] = String.split(js, from, parts: 2)
+      [body, tail] = String.split(rest, to, parts: 2)
+      {body, tail}
+    end
+  end
 end
