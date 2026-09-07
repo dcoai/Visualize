@@ -19,7 +19,7 @@ defmodule Visualize.Hooks.CanvasHooksTest do
       assert length(String.split(js, "export const #{hook} = {")) == 2
     end
 
-    assert js =~ "export { #{Enum.join(@hooks, ", ")} };"
+    refute js =~ ~r/^\s*export\s*\{/m
     assert js =~ "export default { #{Enum.join(@hooks, ", ")} };"
     refute js =~ "console.log"
   end

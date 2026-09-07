@@ -379,3 +379,11 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** `mounted()` binds each handler once, stores it on the hook (`onMouseMove` and the rest) and adds those references; `destroyed()` removes the four `document` listeners by the same references. The capture rect's listeners are left to go with the element. The module doc states the colour the script applies. The test holds the source to the shape rather than exercising a DOM: it asserts that every `.bind(this)` in `mounted()` is a stored one, that `destroyed()` binds nothing and removes the four stored document references, and that the documented default is the applied one.
 
 **Consequences.** Unmounting a brushed chart releases it. `ZoomHook` binds inline too but only on `this.el`, whose listeners die with the element, so it needs no clean-up and its `destroyed()` stays empty.
+
+## 48. D-48 — `Hooks.js_code/0` exports each hook once
+
+**Context.** The generated module declared every hook with `export const` and then appended `export { ZoomHook, … }`, a second export of each name. esbuild refuses a module that exports a name twice, so a consumer that bundles the file (metresis's `mix assets.deploy`) could not use it as written and stripped the closing list itself.
+
+**Decision.** `Visualize.Hooks.js_code/0` emits per-hook `export const` declarations and one `export default { … }` object, nothing else. A test asserts each export name appears exactly once and that the default object lists every hook.
+
+**Consequences.** Named imports and the default import both work; the file bundles unchanged.

@@ -89,9 +89,6 @@ defmodule Visualize.Hooks do
 
     #{CanvasIncremental.js_hook()}
 
-    // Export all hooks
-    export { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart };
-
     // Default export for convenience
     export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart };
     """
