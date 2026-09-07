@@ -55,7 +55,7 @@ defmodule Visualize.Scale.Log do
     log_d1 = log_base(d1, base)
     log_v = log_base(value, base)
 
-    t = (log_v - log_d0) / (log_d1 - log_d0)
+    t = Visualize.Scale.Behaviour.normalize(log_v, log_d0, log_d1)
     t = if clamp?, do: clamp_value(t, 0, 1), else: t
 
     r0 + t * (r1 - r0)
@@ -68,7 +68,7 @@ defmodule Visualize.Scale.Log do
     log_d0 = log_base(d0, base)
     log_d1 = log_base(d1, base)
 
-    t = (value - r0) / (r1 - r0)
+    t = Visualize.Scale.Behaviour.normalize(value, r0, r1)
     log_value = log_d0 + t * (log_d1 - log_d0)
 
     :math.pow(base, log_value)

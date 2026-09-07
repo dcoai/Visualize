@@ -88,9 +88,7 @@ defmodule Visualize.Scale.Power do
   @spec apply(t(), number()) :: number()
   def apply(%__MODULE__{domain: [d0, d1], range: [r0, r1], exponent: e} = scale, value) do
     t_d0 = transform(d0, e)
-    span = transform(d1, e) - t_d0
-
-    t = if span == 0, do: 0, else: (transform(value, e) - t_d0) / span
+    t = Visualize.Scale.Behaviour.normalize(transform(value, e), t_d0, transform(d1, e))
     result = r0 + t * (r1 - r0)
 
     if scale.clamp?, do: clamp_value(result, r0, r1), else: result
@@ -104,7 +102,7 @@ defmodule Visualize.Scale.Power do
   @impl true
   @spec invert(t(), number()) :: number()
   def invert(%__MODULE__{domain: [d0, d1], range: [r0, r1], exponent: e}, value) do
-    t = if r1 == r0, do: 0, else: (value - r0) / (r1 - r0)
+    t = Visualize.Scale.Behaviour.normalize(value, r0, r1)
     t_d0 = transform(d0, e)
 
     untransform(t_d0 + t * (transform(d1, e) - t_d0), e)
