@@ -38,9 +38,8 @@ Type-specific behaviour:
 - `:mercator` clamps latitude to ±1.4844 rad (about ±85.05°); `:miller` clamps to ±1.4 rad; `:transverse_mercator` clamps `cos(lat) * sin(lon)` to ±0.9999. None of the cylindrical types returns `nil`.
 - `:orthographic` returns `nil` for the far hemisphere; `:gnomonic` returns `nil` when the point is on or beyond the horizon; `:stereographic` and `:azimuthal_equal_area` return `nil` within 0.001 of the antipode. `orthographic` `invert/3` returns `nil` outside the unit disc.
 - `:albers` and `:conic_equal_area` are the same projection; the conic types read both parallels, `:bonne` and `:loximuthal` read only `phi1`. `:polyconic`, `:mollweide`, `:fahey`, `:natural_earth`, `:equal_earth`, `:winkel_tripel`, `:aitoff` and `:van_der_grinten` invert iteratively with a bounded number of steps, so their `invert/3` is approximate.
-- `:transverse_mercator` `invert/3` MUST satisfy `lat = asin(sin(y) / cosh(x))` and `lon = atan2(sinh(x), cos(y))` so that `invert(project(p)) == p` for every projectable `p`.
+- `:transverse_mercator` `invert/3` is Snyder's spherical inverse, `lat = asin(sin(y) / cosh(x))` and `lon = atan2(sinh(x), cos(y))`: `|sin(y) / cosh(x)| ≤ 1` for every point of the plane, so it never raises, and `cos(y) < 0` returns the back hemisphere, so `invert(project(p)) == p` on the whole sphere except the two singular points `(0°, ±90°)` where the forward clamp applies (D-51).
 
-> Decision: see spec/13. The current transverse Mercator inverse computes `lat = asin(sin(y) / sqrt(sinh(x)^2 + cos(y)^2))`, which agrees with the forward projection only on the central meridian (issue #9, D-5).
 
 ### 1.3 Projection pipeline
 
