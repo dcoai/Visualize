@@ -20,7 +20,7 @@ defmodule Visualize.ConsumerCheck do
 
     IO.puts("consumer project in #{dir}")
     mix(dir, ~w(deps.get))
-    mix(dir, ~w(compile --force --warnings-as-errors))
+    compile_warning_free(dir)
     mix(dir, ["run", "-e", probe()])
 
     File.rm_rf!(dir)
@@ -44,6 +44,29 @@ defmodule Visualize.ConsumerCheck do
     absent = Enum.map(@absent, &"false = Code.ensure_loaded?(#{&1})")
     present = Enum.map(@present, &"true = Code.ensure_loaded?(#{&1})")
     Enum.join(absent ++ present, "; ")
+  end
+
+  # `--warnings-as-errors` only covers the consumer's own (empty) code; a warning printed
+  # while compiling the visualize dependency is what an optional-dependency slip looks like.
+  defp compile_warning_free(dir) do
+    {output, status} =
+      System.cmd("mix", ~w(compile --force),
+        cd: dir,
+        env: [{"MIX_ENV", "prod"}],
+        stderr_to_stdout: true
+      )
+
+    IO.write(output)
+    warnings = output |> String.split("\n") |> Enum.filter(&String.contains?(&1, "warning:"))
+
+    if status != 0 or warnings != [] do
+      IO.puts(
+        :stderr,
+        "consumer check failed: exit #{status}, #{length(warnings)} warning(s) while compiling visualize"
+      )
+
+      System.halt(1)
+    end
   end
 
   defp mix(dir, args) do

@@ -388,7 +388,7 @@ Every path is centred on the origin. With `s` the size:
 
 ### 10.1 Requirements
 
-`Nx` is an optional dependency (`{:nx, "~> 0.9", optional: true}`). The module compiles without it; calling any transforming function without `Nx` loaded raises `UndefinedFunctionError`. Applications MUST add `:nx` to their own dependencies to use this module. Tensors are `:f64`.
+`Nx` is an optional dependency (`{:nx, "~> 0.9", optional: true}`). The module compiles without it and without warnings (it declares `@compile {:no_warn_undefined, Nx}`, as does `Visualize.Backend.CanvasBinary`; the consumer-compile gate fails on any warning, D-50); calling any transforming function without `Nx` loaded raises `UndefinedFunctionError`. Applications MUST add `:nx` to their own dependencies to use this module. Tensors are `:f64`.
 
 ### 10.2 Semantics
 

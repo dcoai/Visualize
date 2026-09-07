@@ -26,6 +26,12 @@ defmodule Visualize.Shape.LineNx do
   """
 
   alias Visualize.IR.Path
+
+  # Nx is optional: the calls below stay direct (so a missing Nx raises
+  # UndefinedFunctionError at the call, spec/04 §10.1) and the compiler is told not to warn
+  # about them in a consumer that never fetched it (D-50).
+  @compile {:no_warn_undefined, Nx}
+
   alias Visualize.Shape.Curve
 
   @doc """
