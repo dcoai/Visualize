@@ -41,8 +41,9 @@ def deps do
 end
 ```
 
-Phoenix is optional: `Visualize.Components` compiles only when `Phoenix.Component` is
-present.
+Phoenix is optional too: `phoenix_live_view` is declared `optional: true`, so a host that
+has LiveView compiles `Visualize.Components` and `Visualize.Components.Tree`, and one that
+does not never fetches Phoenix.
 
 ## Documentation
 

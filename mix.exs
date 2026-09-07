@@ -41,6 +41,12 @@ defmodule Visualize.MixProject do
   defp deps do
     [
       {:nx, "~> 0.9", optional: true},
+      # The LiveView components (spec/10 §2-3) compile only when `Phoenix.Component` is
+      # loaded. `optional:` is load-bearing, and `only:` would not do: Mix prunes the code
+      # path to a dependency's declared deps while compiling it, so a guard over an
+      # undeclared Phoenix never fires in a host. A host without LiveView never fetches it;
+      # scripts/consumer_check.exs proves that on every pipeline (D-45).
+      {:phoenix_live_view, "~> 1.0", optional: true},
       # `mix vis.surface` (spec/12 §2): the source-scan primitives and the golden renderer
       # shared with extc and extla. `only:` is load-bearing: dev/test deps are not transitive,
       # so nothing here reaches a consumer of visualize.

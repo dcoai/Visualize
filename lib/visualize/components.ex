@@ -1,79 +1,75 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Components do
     @moduledoc """
-    Phoenix LiveView components for common chart types.
+    Phoenix LiveView function components for the common chart types (spec/10 §2).
 
-    Provides ready-to-use chart components that integrate with LiveView
-    for reactive, real-time data visualization.
+    Each component builds one complete `<svg>` from its assigns through the library's own
+    layers: `Visualize.Scale.apply/2` for every coordinate, `Visualize.Shape.generate/2`
+    for every path and `Visualize.Axis.render/1` for the axes.
 
     ## Usage
 
-        # In your LiveView or component
         use Phoenix.Component
         import Visualize.Components
 
-        # Then in your template
-        <.line_chart
-          data={@data}
-          x={& &1.date}
-          y={& &1.value}
-          width={600}
-          height={400}
-        />
+        <.line_chart data={@data} x={& &1.date} y={& &1.value} width={600} height={400} />
 
-    ## Available Components
+    ## Components
 
-    - `line_chart/1` - Line charts for time series
-    - `bar_chart/1` - Vertical bar charts
-    - `horizontal_bar_chart/1` - Horizontal bar charts
-    - `pie_chart/1` - Pie and donut charts
-    - `scatter_plot/1` - Scatter plots
-    - `area_chart/1` - Area charts
-    - `stacked_bar_chart/1` - Stacked bar charts
+    - `line_chart/1` and `area_chart/1` - one series over a time, linear or band x axis
+    - `bar_chart/1`, `horizontal_bar_chart/1` and `stacked_bar_chart/1` - bars on a band
+      scale
+    - `scatter_plot/1` - one circle per datum on two linear axes
+    - `pie_chart/1` - a pie or donut with optional labels
 
-    ## Animation
+    ## Conventions
 
-    All components support CSS transitions for smooth updates.
-    Set `animate={true}` and values will transition on change.
+    - Empty `data` renders the frame - the `<svg>` and, where the chart has them, its axes
+      over a `[0, 1]` domain - with no marks. A domain whose ends coincide (one datum, or
+      every value zero) spans one unit from its value, so a single datum renders too.
+    - `colors` is a scheme atom of `Visualize.Scale.Color.schemes/0`, whose colours are
+      taken by index and cycled, or an explicit list of colours used as given. An unknown
+      scheme or an empty list raises `ArgumentError`.
+    - `animate={true}` puts `style="transition: all 0.3s ease-in-out;"` on every mark, so
+      LiveView's DOM patches animate through CSS.
+    - `margin` is merged over the component's default, so `%{left: 60}` moves one side.
 
+    This module compiles only when `Phoenix.Component` is loaded: `phoenix_live_view` is an
+    optional dependency, present in a host that has LiveView and never fetched otherwise.
     """
 
     use Phoenix.Component
 
-    alias Visualize.{Axis, Data, Scale, Shape, SVG}
+    alias Visualize.{Axis, Scale, Shape}
+    alias Visualize.Components.Support
 
     @default_margin %{top: 20, right: 20, bottom: 30, left: 40}
+    @horizontal_margin %{top: 20, right: 20, bottom: 30, left: 100}
 
     @doc """
-    Renders a line chart.
+    Renders a line chart: one series with bottom and left axes.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - List of data points (required)
-    * `x` - Accessor function for x values (required)
-    * `y` - Accessor function for y values (required)
-    * `width` - Chart width in pixels (default: 600)
-    * `height` - Chart height in pixels (default: 400)
-    * `margin` - Map with :top, :right, :bottom, :left (optional)
-    * `curve` - Curve type: :linear, :monotone_x, :cardinal, etc. (default: :linear)
-    * `stroke` - Line color (default: "steelblue")
-    * `stroke_width` - Line width (default: 2)
-    * `animate` - Enable CSS transitions (default: false)
-    * `class` - Additional CSS class for the SVG
-    * `x_label` - Label for x-axis
-    * `y_label` - Label for y-axis
-    * `show_points` - Show data points (default: false)
+    * `data` - the data points (required); empty renders the frame alone
+    * `x` - accessor to the x value: a `DateTime`, `NaiveDateTime` or `Date` gives a time
+      scale, a number a linear scale, anything else a band scale, decided by the first
+      datum (required)
+    * `y` - accessor to a numeric y value; the y domain is the extent of the values
+      (required)
+    * `width`, `height` - pixels (default 600 by 400)
+    * `margin` - `%{top:, right:, bottom:, left:}`, merged over
+      `%{top: 20, right: 20, bottom: 30, left: 40}`
+    * `curve` - any curve type of `Visualize.Shape.curve/3` (default `:linear`)
+    * `stroke` - line colour, also the point fill (default `"steelblue"`)
+    * `stroke_width` - (default 2)
+    * `show_points` - draw an `r="4"` circle at each datum (default `false`)
+    * `x_label`, `y_label` - axis titles as `<text class="axis-label">`
+    * `animate`, `class` - per the module conventions
 
     ## Example
 
-        <.line_chart
-          data={@sales_data}
-          x={& &1.date}
-          y={& &1.revenue}
-          curve={:monotone_x}
-          stroke="blue"
-        />
-
+        <.line_chart data={@sales} x={& &1.date} y={& &1.revenue} curve={:monotone_x} />
     """
     attr(:data, :list, required: true)
     attr(:x, :any, required: true)
@@ -91,120 +87,81 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:show_points, :boolean, default: false)
 
     def line_chart(assigns) do
-      margin = Map.merge(@default_margin, assigns.margin || %{})
-      inner_width = assigns.width - margin.left - margin.right
-      inner_height = assigns.height - margin.top - margin.bottom
-
-      x_values = Enum.map(assigns.data, assigns.x)
-      y_values = Enum.map(assigns.data, assigns.y)
-
-      x_scale = build_x_scale(x_values, inner_width)
+      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
+      x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
 
       y_scale =
         Scale.linear()
-        |> Scale.domain(Data.extent(y_values))
+        |> Scale.domain(Support.extent(assigns.data, assigns.y))
         |> Scale.range([inner_height, 0])
 
-      line =
-        Shape.line()
-        |> Shape.x(fn d -> Scale.scale(x_scale, assigns.x.(d)) end)
-        |> Shape.y(fn d -> Scale.scale(y_scale, assigns.y.(d)) end)
-        |> Shape.curve(assigns.curve)
+      x = fn d -> Scale.apply(x_scale, assigns.x.(d)) end
+      y = fn d -> Scale.apply(y_scale, assigns.y.(d)) end
+      line = Shape.line() |> Shape.x(x) |> Shape.y(y) |> Shape.curve(assigns.curve)
 
-      path_data = Shape.generate(line, assigns.data)
-
-      x_axis = Axis.bottom(x_scale)
-      y_axis = Axis.left(y_scale)
-
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
+      points =
+        if assigns.show_points, do: Enum.map(assigns.data, &{fmt(x.(&1)), fmt(y.(&1))}), else: []
 
       assigns =
         assign(assigns,
           margin: margin,
           inner_width: inner_width,
           inner_height: inner_height,
-          path_data: path_data,
-          x_axis: x_axis,
-          y_axis: y_axis,
-          x_scale: x_scale,
-          y_scale: y_scale,
-          transition_style: transition_style
+          path: Shape.generate(line, assigns.data),
+          points: points,
+          x_axis: axis(Axis.bottom(x_scale)),
+          y_axis: axis(Axis.left(y_scale)),
+          transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
-          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>
-            <%= raw(Axis.render(@x_axis)) %>
-          </g>
-          <g class="y-axis">
-            <%= raw(Axis.render(@y_axis)) %>
-          </g>
-
+          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
+          <g class="y-axis">{@y_axis}</g>
           <path
-            d={@path_data}
+            :if={@data != []}
+            d={@path}
             fill="none"
             stroke={@stroke}
             stroke-width={@stroke_width}
-            style={@transition_style}
+            {@transition}
           />
-
-          <%= if @show_points do %>
-            <%= for d <- @data do %>
-              <circle
-                cx={Scale.scale(@x_scale, @x.(d))}
-                cy={Scale.scale(@y_scale, @y.(d))}
-                r="4"
-                fill={@stroke}
-                style={@transition_style}
-              />
-            <% end %>
-          <% end %>
-
-          <%= if @x_label do %>
-            <text
-              x={@inner_width / 2}
-              y={@inner_height + @margin.bottom - 5}
-              text-anchor="middle"
-              class="axis-label"
-            ><%= @x_label %></text>
-          <% end %>
-
-          <%= if @y_label do %>
-            <text
-              transform={"rotate(-90)"}
-              x={-@inner_height / 2}
-              y={-@margin.left + 15}
-              text-anchor="middle"
-              class="axis-label"
-            ><%= @y_label %></text>
-          <% end %>
+          <circle :for={{cx, cy} <- @points} cx={cx} cy={cy} r="4" fill={@stroke} {@transition} />
+          <text
+            :if={@x_label}
+            x={fmt(@inner_width / 2)}
+            y={@inner_height + @margin.bottom - 5}
+            text-anchor="middle"
+            class="axis-label"
+          >{@x_label}</text>
+          <text
+            :if={@y_label}
+            transform="rotate(-90)"
+            x={fmt(-@inner_height / 2)}
+            y={-@margin.left + 15}
+            text-anchor="middle"
+            class="axis-label"
+          >{@y_label}</text>
         </g>
       </svg>
       """
     end
 
     @doc """
-    Renders a vertical bar chart.
+    Renders a vertical bar chart: a band x scale over the categories in data order and a
+    linear y scale from zero.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - List of data points (required)
-    * `x` - Accessor function for category/x values (required)
-    * `y` - Accessor function for numeric/y values (required)
-    * `width` - Chart width in pixels (default: 600)
-    * `height` - Chart height in pixels (default: 400)
-    * `margin` - Map with :top, :right, :bottom, :left (optional)
-    * `fill` - Bar fill color (default: "steelblue")
-    * `animate` - Enable CSS transitions (default: false)
-    * `class` - Additional CSS class
-    * `padding` - Padding between bars 0-1 (default: 0.1)
-
+    * `data` - the data points (required); empty renders the frame alone
+    * `x` - accessor to the category (required)
+    * `y` - accessor to a non-negative number; the y domain is `[0, max]` (required)
+    * `width`, `height` - pixels (default 600 by 400)
+    * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
+    * `fill` - bar colour (default `"steelblue"`)
+    * `padding` - band padding, 0 to 1 (default 0.1)
+    * `animate`, `class` - per the module conventions
     """
     attr(:data, :list, required: true)
     attr(:x, :any, required: true)
@@ -218,159 +175,132 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:padding, :float, default: 0.1)
 
     def bar_chart(assigns) do
-      margin = Map.merge(@default_margin, assigns.margin || %{})
-      inner_width = assigns.width - margin.left - margin.right
-      inner_height = assigns.height - margin.top - margin.bottom
-
-      categories = Enum.map(assigns.data, assigns.x)
-      y_values = Enum.map(assigns.data, assigns.y)
+      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
 
       x_scale =
         Scale.band()
-        |> Scale.domain(categories)
+        |> Scale.domain(Enum.map(assigns.data, assigns.x))
         |> Scale.range([0, inner_width])
         |> Scale.padding(assigns.padding)
 
       y_scale =
         Scale.linear()
-        |> Scale.domain([0, Enum.max(y_values)])
+        |> Scale.domain(Support.from_zero(assigns.data, assigns.y))
         |> Scale.range([inner_height, 0])
 
-      x_axis = Axis.bottom(x_scale)
-      y_axis = Axis.left(y_scale)
+      bandwidth = Scale.bandwidth(x_scale)
 
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
+      bars =
+        for d <- assigns.data do
+          y = Scale.apply(y_scale, assigns.y.(d))
+
+          %{
+            x: fmt(Scale.apply(x_scale, assigns.x.(d))),
+            y: fmt(y),
+            w: fmt(bandwidth),
+            h: fmt(inner_height - y)
+          }
+        end
 
       assigns =
         assign(assigns,
           margin: margin,
-          inner_width: inner_width,
           inner_height: inner_height,
-          x_scale: x_scale,
-          y_scale: y_scale,
-          x_axis: x_axis,
-          y_axis: y_axis,
-          transition_style: transition_style
+          bars: bars,
+          x_axis: axis(Axis.bottom(x_scale)),
+          y_axis: axis(Axis.left(y_scale)),
+          transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
-          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>
-            <%= raw(Axis.render(@x_axis)) %>
-          </g>
-          <g class="y-axis">
-            <%= raw(Axis.render(@y_axis)) %>
-          </g>
-
-          <%= for d <- @data do %>
-            <rect
-              x={Scale.scale(@x_scale, @x.(d))}
-              y={Scale.scale(@y_scale, @y.(d))}
-              width={Scale.bandwidth(@x_scale)}
-              height={@inner_height - Scale.scale(@y_scale, @y.(d))}
-              fill={@fill}
-              style={@transition_style}
-            />
-          <% end %>
+          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
+          <g class="y-axis">{@y_axis}</g>
+          <rect
+            :for={bar <- @bars}
+            x={bar.x}
+            y={bar.y}
+            width={bar.w}
+            height={bar.h}
+            fill={@fill}
+            {@transition}
+          />
         </g>
       </svg>
       """
     end
 
     @doc """
-    Renders a horizontal bar chart.
+    Renders a horizontal bar chart: `bar_chart/1` with the roles swapped - `y` is the
+    category accessor on a band scale down the left, `x` the numeric accessor on a linear
+    scale from zero along the bottom.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - List of data points (required)
-    * `x` - Accessor for numeric values (required)
-    * `y` - Accessor for category values (required)
-    * `width` - Chart width in pixels (default: 600)
-    * `height` - Chart height in pixels (default: 400)
-    * `margin` - Map with :top, :right, :bottom, :left (optional)
-    * `fill` - Bar fill color (default: "steelblue")
-    * `animate` - Enable CSS transitions (default: false)
-    * `padding` - Padding between bars 0-1 (default: 0.1)
-
+    As `bar_chart/1`, with `margin` merged over `%{top: 20, right: 20, bottom: 30, left: 100}`
+    to leave room for the category labels.
     """
     attr(:data, :list, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
     attr(:width, :integer, default: 600)
     attr(:height, :integer, default: 400)
-    attr(:margin, :map, default: %{top: 20, right: 20, bottom: 30, left: 100})
+    attr(:margin, :map, default: @horizontal_margin)
     attr(:fill, :string, default: "steelblue")
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:padding, :float, default: 0.1)
 
     def horizontal_bar_chart(assigns) do
-      margin = Map.merge(%{top: 20, right: 20, bottom: 30, left: 100}, assigns.margin || %{})
-      inner_width = assigns.width - margin.left - margin.right
-      inner_height = assigns.height - margin.top - margin.bottom
-
-      categories = Enum.map(assigns.data, assigns.y)
-      x_values = Enum.map(assigns.data, assigns.x)
+      {margin, inner_width, inner_height} = Support.frame(assigns, @horizontal_margin)
 
       y_scale =
         Scale.band()
-        |> Scale.domain(categories)
+        |> Scale.domain(Enum.map(assigns.data, assigns.y))
         |> Scale.range([0, inner_height])
         |> Scale.padding(assigns.padding)
 
       x_scale =
         Scale.linear()
-        |> Scale.domain([0, Enum.max(x_values)])
+        |> Scale.domain(Support.from_zero(assigns.data, assigns.x))
         |> Scale.range([0, inner_width])
 
-      x_axis = Axis.bottom(x_scale)
-      y_axis = Axis.left(y_scale)
+      bandwidth = Scale.bandwidth(y_scale)
 
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
+      bars =
+        for d <- assigns.data do
+          %{
+            y: fmt(Scale.apply(y_scale, assigns.y.(d))),
+            w: fmt(Scale.apply(x_scale, assigns.x.(d))),
+            h: fmt(bandwidth)
+          }
+        end
 
       assigns =
         assign(assigns,
           margin: margin,
-          inner_width: inner_width,
           inner_height: inner_height,
-          x_scale: x_scale,
-          y_scale: y_scale,
-          x_axis: x_axis,
-          y_axis: y_axis,
-          transition_style: transition_style
+          bars: bars,
+          x_axis: axis(Axis.bottom(x_scale)),
+          y_axis: axis(Axis.left(y_scale)),
+          transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
-          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>
-            <%= raw(Axis.render(@x_axis)) %>
-          </g>
-          <g class="y-axis">
-            <%= raw(Axis.render(@y_axis)) %>
-          </g>
-
-          <%= for d <- @data do %>
-            <rect
-              x={0}
-              y={Scale.scale(@y_scale, @y.(d))}
-              width={Scale.scale(@x_scale, @x.(d))}
-              height={Scale.bandwidth(@y_scale)}
-              fill={@fill}
-              style={@transition_style}
-            />
-          <% end %>
+          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
+          <g class="y-axis">{@y_axis}</g>
+          <rect
+            :for={bar <- @bars}
+            x="0"
+            y={bar.y}
+            width={bar.w}
+            height={bar.h}
+            fill={@fill}
+            {@transition}
+          />
         </g>
       </svg>
       """
@@ -379,20 +309,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc """
     Renders a pie or donut chart.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - List of data points (required)
-    * `value` - Accessor function for slice values (required)
-    * `label` - Accessor function for labels (optional)
-    * `width` - Chart width in pixels (default: 400)
-    * `height` - Chart height in pixels (default: 400)
-    * `inner_radius` - Inner radius for donut chart (default: 0)
-    * `outer_radius` - Outer radius (default: auto-calculated)
-    * `pad_angle` - Padding between slices in radians (default: 0.02)
-    * `colors` - Color scheme name or list of colors (default: :category10)
-    * `animate` - Enable CSS transitions (default: false)
-    * `show_labels` - Show slice labels (default: true)
+    * `data` - the slices (required); empty renders an empty `<svg>`
+    * `value` - accessor to the slice value (required)
+    * `label` - accessor to the label text; drawn only when `show_labels` is also true
+    * `width`, `height` - pixels (default 400 by 400)
+    * `inner_radius` - greater than 0 makes a donut (default 0)
+    * `outer_radius` - `nil` means `min(width, height) / 2 - 10`
+    * `pad_angle` - radians between slices (default 0.02)
+    * `colors` - scheme atom or colour list; the i-th slice takes the i-th colour
+      (default `:category10`)
+    * `show_labels` - (default `true`)
+    * `animate`, `class` - per the module conventions
 
+    A label sits at the centroid of the slice's mid-radius, as `Visualize.Shape.Arc.centroid/2`
+    computes it.
     """
     attr(:data, :list, required: true)
     attr(:value, :any, required: true)
@@ -408,68 +340,46 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:show_labels, :boolean, default: true)
 
     def pie_chart(assigns) do
-      radius = min(assigns.width, assigns.height) / 2
-      outer_radius = assigns.outer_radius || radius - 10
-      inner_radius = assigns.inner_radius
+      outer_radius = assigns.outer_radius || min(assigns.width, assigns.height) / 2 - 10
+      pie = Shape.pie() |> Shape.value(assigns.value) |> Shape.pad_angle(assigns.pad_angle)
 
-      pie =
-        Shape.pie()
-        |> Shape.value(assigns.value)
-        |> Shape.pad_angle(assigns.pad_angle)
-
-      arcs = Shape.generate(pie, assigns.data)
-
-      arc_generator =
+      arc =
         Shape.arc()
-        |> Shape.inner_radius(inner_radius)
+        |> Shape.inner_radius(assigns.inner_radius)
         |> Shape.outer_radius(outer_radius)
 
-      label_arc =
-        Shape.arc()
-        |> Shape.inner_radius((inner_radius + outer_radius) / 2)
-        |> Shape.outer_radius((inner_radius + outer_radius) / 2)
+      arcs = Shape.generate(pie, assigns.data)
+      palette = Support.palette(assigns.colors, length(arcs))
+      label = if assigns.show_labels, do: assigns.label
 
-      color_scale = get_color_scale(assigns.colors, length(assigns.data))
+      slices =
+        for {a, i} <- Enum.with_index(arcs) do
+          {x, y} = Shape.Arc.centroid(arc, a)
 
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
+          %{
+            d: Shape.generate(arc, a),
+            fill: Scale.apply(palette, i),
+            label: label && label.(a.data),
+            x: fmt(x),
+            y: fmt(y)
+          }
+        end
 
-      assigns =
-        assign(assigns,
-          radius: radius,
-          arcs: arcs,
-          arc_generator: arc_generator,
-          label_arc: label_arc,
-          color_scale: color_scale,
-          transition_style: transition_style
-        )
+      assigns = assign(assigns, slices: slices, transition: Support.transition(assigns.animate))
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
-        <g transform={"translate(#{@width / 2}, #{@height / 2})"}>
-          <%= for {arc, i} <- Enum.with_index(@arcs) do %>
-            <% path_data = Shape.generate(@arc_generator, arc) %>
-            <path
-              d={path_data}
-              fill={Enum.at(@color_scale, i)}
-              stroke="white"
-              stroke-width="2"
-              style={@transition_style}
-            />
-            <%= if @show_labels && @label do %>
-              <% centroid = arc_centroid(@label_arc, arc) %>
-              <text
-                x={elem(centroid, 0)}
-                y={elem(centroid, 1)}
-                text-anchor="middle"
-                dominant-baseline="middle"
-                font-size="12"
-              ><%= @label.(arc.data) %></text>
-            <% end %>
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+        <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
+          <%= for slice <- @slices do %>
+            <path d={slice.d} fill={slice.fill} stroke="white" stroke-width="2" {@transition} />
+            <text
+              :if={slice.label}
+              x={slice.x}
+              y={slice.y}
+              text-anchor="middle"
+              dominant-baseline="middle"
+              font-size="12"
+            >{slice.label}</text>
           <% end %>
         </g>
       </svg>
@@ -477,20 +387,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    Renders a scatter plot.
+    Renders a scatter plot: one circle per datum on two linear scales over the extents of
+    the values.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - List of data points (required)
-    * `x` - Accessor function for x values (required)
-    * `y` - Accessor function for y values (required)
-    * `width` - Chart width in pixels (default: 600)
-    * `height` - Chart height in pixels (default: 400)
-    * `margin` - Map with :top, :right, :bottom, :left (optional)
-    * `fill` - Point fill color (default: "steelblue")
-    * `size` - Point radius or accessor function (default: 5)
-    * `animate` - Enable CSS transitions (default: false)
-
+    * `data` - the data points (required); empty renders the frame alone
+    * `x`, `y` - numeric accessors (required)
+    * `width`, `height` - pixels (default 600 by 400)
+    * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
+    * `fill` - point colour (default `"steelblue"`)
+    * `size` - the radius, or a one-argument function of the datum returning it
+      (default 5)
+    * `animate`, `class` - per the module conventions
     """
     attr(:data, :list, required: true)
     attr(:x, :any, required: true)
@@ -504,88 +413,71 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
 
     def scatter_plot(assigns) do
-      margin = Map.merge(@default_margin, assigns.margin || %{})
-      inner_width = assigns.width - margin.left - margin.right
-      inner_height = assigns.height - margin.top - margin.bottom
-
-      x_values = Enum.map(assigns.data, assigns.x)
-      y_values = Enum.map(assigns.data, assigns.y)
+      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
 
       x_scale =
         Scale.linear()
-        |> Scale.domain(Data.extent(x_values))
+        |> Scale.domain(Support.extent(assigns.data, assigns.x))
         |> Scale.range([0, inner_width])
 
       y_scale =
         Scale.linear()
-        |> Scale.domain(Data.extent(y_values))
+        |> Scale.domain(Support.extent(assigns.data, assigns.y))
         |> Scale.range([inner_height, 0])
 
-      x_axis = Axis.bottom(x_scale)
-      y_axis = Axis.left(y_scale)
-
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
+      points =
+        for d <- assigns.data do
+          %{
+            cx: fmt(Scale.apply(x_scale, assigns.x.(d))),
+            cy: fmt(Scale.apply(y_scale, assigns.y.(d))),
+            r: fmt(radius(assigns.size, d))
+          }
+        end
 
       assigns =
         assign(assigns,
           margin: margin,
-          inner_width: inner_width,
           inner_height: inner_height,
-          x_scale: x_scale,
-          y_scale: y_scale,
-          x_axis: x_axis,
-          y_axis: y_axis,
-          transition_style: transition_style
+          points: points,
+          x_axis: axis(Axis.bottom(x_scale)),
+          y_axis: axis(Axis.left(y_scale)),
+          transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
-          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>
-            <%= raw(Axis.render(@x_axis)) %>
-          </g>
-          <g class="y-axis">
-            <%= raw(Axis.render(@y_axis)) %>
-          </g>
-
-          <%= for d <- @data do %>
-            <circle
-              cx={Scale.scale(@x_scale, @x.(d))}
-              cy={Scale.scale(@y_scale, @y.(d))}
-              r={get_size(@size, d)}
-              fill={@fill}
-              opacity="0.7"
-              style={@transition_style}
-            />
-          <% end %>
+          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
+          <g class="y-axis">{@y_axis}</g>
+          <circle
+            :for={point <- @points}
+            cx={point.cx}
+            cy={point.cy}
+            r={point.r}
+            fill={@fill}
+            opacity="0.7"
+            {@transition}
+          />
         </g>
       </svg>
       """
     end
 
     @doc """
-    Renders an area chart.
+    Renders an area chart: the area from the baseline up to the series, then the series
+    line on top of it.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - List of data points (required)
-    * `x` - Accessor function for x values (required)
-    * `y` - Accessor function for y values (required)
-    * `width` - Chart width in pixels (default: 600)
-    * `height` - Chart height in pixels (default: 400)
-    * `margin` - Map with :top, :right, :bottom, :left (optional)
-    * `fill` - Area fill color (default: "steelblue")
-    * `fill_opacity` - Fill opacity 0-1 (default: 0.3)
-    * `stroke` - Line stroke color (default: "steelblue")
-    * `stroke_width` - Line width (default: 2)
-    * `curve` - Curve type (default: :linear)
-    * `animate` - Enable CSS transitions (default: false)
-
+    * `data` - the data points (required); empty renders the frame alone
+    * `x` - as `line_chart/1`: time, linear or band by the first datum (required)
+    * `y` - accessor to a non-negative number; the y domain is `[0, max]` (required)
+    * `width`, `height` - pixels (default 600 by 400)
+    * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
+    * `fill`, `fill_opacity` - the area (default `"steelblue"` at 0.3)
+    * `stroke`, `stroke_width` - the line (default `"steelblue"`, 2)
+    * `curve` - applied to both the area and the line (default `:linear`)
+    * `animate`, `class` - per the module conventions
     """
     attr(:data, :list, required: true)
     attr(:x, :any, required: true)
@@ -602,80 +494,56 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
 
     def area_chart(assigns) do
-      margin = Map.merge(@default_margin, assigns.margin || %{})
-      inner_width = assigns.width - margin.left - margin.right
-      inner_height = assigns.height - margin.top - margin.bottom
-
-      x_values = Enum.map(assigns.data, assigns.x)
-      y_values = Enum.map(assigns.data, assigns.y)
-
-      x_scale = build_x_scale(x_values, inner_width)
+      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
+      x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
 
       y_scale =
         Scale.linear()
-        |> Scale.domain([0, Enum.max(y_values)])
+        |> Scale.domain(Support.from_zero(assigns.data, assigns.y))
         |> Scale.range([inner_height, 0])
+
+      x = fn d -> Scale.apply(x_scale, assigns.x.(d)) end
+      y = fn d -> Scale.apply(y_scale, assigns.y.(d)) end
 
       area =
         Shape.area()
-        |> Shape.x(fn d -> Scale.scale(x_scale, assigns.x.(d)) end)
+        |> Shape.x(x)
         |> Shape.y0(inner_height)
-        |> Shape.y1(fn d -> Scale.scale(y_scale, assigns.y.(d)) end)
+        |> Shape.y1(y)
         |> Shape.curve(assigns.curve)
 
-      line =
-        Shape.line()
-        |> Shape.x(fn d -> Scale.scale(x_scale, assigns.x.(d)) end)
-        |> Shape.y(fn d -> Scale.scale(y_scale, assigns.y.(d)) end)
-        |> Shape.curve(assigns.curve)
-
-      area_path = Shape.generate(area, assigns.data)
-      line_path = Shape.generate(line, assigns.data)
-
-      x_axis = Axis.bottom(x_scale)
-      y_axis = Axis.left(y_scale)
-
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
+      line = Shape.line() |> Shape.x(x) |> Shape.y(y) |> Shape.curve(assigns.curve)
 
       assigns =
         assign(assigns,
           margin: margin,
-          inner_width: inner_width,
           inner_height: inner_height,
-          area_path: area_path,
-          line_path: line_path,
-          x_axis: x_axis,
-          y_axis: y_axis,
-          transition_style: transition_style
+          area_path: Shape.generate(area, assigns.data),
+          line_path: Shape.generate(line, assigns.data),
+          x_axis: axis(Axis.bottom(x_scale)),
+          y_axis: axis(Axis.left(y_scale)),
+          transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
-          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>
-            <%= raw(Axis.render(@x_axis)) %>
-          </g>
-          <g class="y-axis">
-            <%= raw(Axis.render(@y_axis)) %>
-          </g>
-
+          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
+          <g class="y-axis">{@y_axis}</g>
           <path
+            :if={@data != []}
             d={@area_path}
             fill={@fill}
             fill-opacity={@fill_opacity}
-            style={@transition_style}
+            {@transition}
           />
           <path
+            :if={@data != []}
             d={@line_path}
             fill="none"
             stroke={@stroke}
             stroke-width={@stroke_width}
-            style={@transition_style}
+            {@transition}
           />
         </g>
       </svg>
@@ -683,20 +551,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    Renders a stacked bar chart.
+    Renders a stacked bar chart: one bar per category, one segment per key, stacked by
+    `Visualize.Shape.stack/0`.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - List of data points (required)
-    * `x` - Accessor function for category values (required)
-    * `keys` - List of keys to stack (required)
-    * `width` - Chart width in pixels (default: 600)
-    * `height` - Chart height in pixels (default: 400)
-    * `margin` - Map with :top, :right, :bottom, :left (optional)
-    * `colors` - Color scheme or list (default: :category10)
-    * `animate` - Enable CSS transitions (default: false)
-    * `padding` - Padding between bars 0-1 (default: 0.1)
+    * `data` - one map per category (required); empty renders the frame alone
+    * `x` - accessor to the category, applied to each point's `data` (required)
+    * `keys` - the series keys read from each datum (required)
+    * `width`, `height` - pixels (default 600 by 400)
+    * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
+    * `colors` - scheme atom or colour list, one colour per key in order
+      (default `:category10`)
+    * `padding` - band padding (default 0.1)
+    * `animate`, `class` - per the module conventions
 
+    The y domain is `[0, max y1]` over every point of every series.
     """
     attr(:data, :list, required: true)
     attr(:x, :any, required: true)
@@ -710,134 +580,72 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:padding, :float, default: 0.1)
 
     def stacked_bar_chart(assigns) do
-      margin = Map.merge(@default_margin, assigns.margin || %{})
-      inner_width = assigns.width - margin.left - margin.right
-      inner_height = assigns.height - margin.top - margin.bottom
-
-      categories = Enum.map(assigns.data, assigns.x)
-
-      stack =
-        Shape.stack()
-        |> Shape.keys(assigns.keys)
-
-      series = Shape.generate(stack, assigns.data)
-
-      max_y =
-        series
-        |> Enum.flat_map(fn s -> Enum.map(s.points, & &1.y1) end)
-        |> Enum.max(fn -> 0 end)
+      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
+      series = Shape.generate(Shape.stack() |> Shape.keys(assigns.keys), assigns.data)
+      tops = for s <- series, p <- s.points, do: p.y1
 
       x_scale =
         Scale.band()
-        |> Scale.domain(categories)
+        |> Scale.domain(Enum.map(assigns.data, assigns.x))
         |> Scale.range([0, inner_width])
         |> Scale.padding(assigns.padding)
 
       y_scale =
         Scale.linear()
-        |> Scale.domain([0, max_y])
+        |> Scale.domain(Support.span([0, max(0, Enum.max(tops, fn -> 0 end))]))
         |> Scale.range([inner_height, 0])
 
-      x_axis = Axis.bottom(x_scale)
-      y_axis = Axis.left(y_scale)
+      bandwidth = Scale.bandwidth(x_scale)
+      palette = Support.palette(assigns.colors, length(assigns.keys))
 
-      color_scale = get_color_scale(assigns.colors, length(assigns.keys))
+      bars =
+        for {s, i} <- Enum.with_index(series), p <- s.points do
+          y1 = Scale.apply(y_scale, p.y1)
 
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
+          %{
+            x: fmt(Scale.apply(x_scale, assigns.x.(p.data))),
+            y: fmt(y1),
+            w: fmt(bandwidth),
+            h: fmt(Scale.apply(y_scale, p.y0) - y1),
+            fill: Scale.apply(palette, i)
+          }
+        end
 
       assigns =
         assign(assigns,
           margin: margin,
-          inner_width: inner_width,
           inner_height: inner_height,
-          series: series,
-          x_scale: x_scale,
-          y_scale: y_scale,
-          x_axis: x_axis,
-          y_axis: y_axis,
-          color_scale: color_scale,
-          transition_style: transition_style
+          bars: bars,
+          x_axis: axis(Axis.bottom(x_scale)),
+          y_axis: axis(Axis.left(y_scale)),
+          transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
-          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>
-            <%= raw(Axis.render(@x_axis)) %>
-          </g>
-          <g class="y-axis">
-            <%= raw(Axis.render(@y_axis)) %>
-          </g>
-
-          <%= for {s, i} <- Enum.with_index(@series) do %>
-            <%= for point <- s.points do %>
-              <rect
-                x={Scale.scale(@x_scale, @x.(point.data))}
-                y={Scale.scale(@y_scale, point.y1)}
-                width={Scale.bandwidth(@x_scale)}
-                height={Scale.scale(@y_scale, point.y0) - Scale.scale(@y_scale, point.y1)}
-                fill={Enum.at(@color_scale, i)}
-                style={@transition_style}
-              />
-            <% end %>
-          <% end %>
+          <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
+          <g class="y-axis">{@y_axis}</g>
+          <rect
+            :for={bar <- @bars}
+            x={bar.x}
+            y={bar.y}
+            width={bar.w}
+            height={bar.h}
+            fill={bar.fill}
+            {@transition}
+          />
         </g>
       </svg>
       """
     end
 
-    # Helper functions
+    # `Visualize.Axis.render/1` is a plain string; `raw/1` marks it safe for HEEx.
+    defp axis(axis), do: Phoenix.HTML.raw(Axis.render(axis))
 
-    defp build_x_scale(values, width) do
-      first = hd(values)
+    defp fmt(number), do: Support.fmt(number)
 
-      cond do
-        is_struct(first, DateTime) or is_struct(first, NaiveDateTime) ->
-          Scale.time()
-          |> Scale.domain(Data.extent(values))
-          |> Scale.range([0, width])
-
-        is_number(first) ->
-          Scale.linear()
-          |> Scale.domain(Data.extent(values))
-          |> Scale.range([0, width])
-
-        true ->
-          Scale.band()
-          |> Scale.domain(values)
-          |> Scale.range([0, width])
-          |> Scale.padding(0.1)
-      end
-    end
-
-    defp get_color_scale(scheme, count) when is_atom(scheme) do
-      Scale.color()
-      |> Scale.scheme(scheme)
-      |> Scale.domain(Enum.to_list(0..(count - 1)//1))
-      |> then(fn scale ->
-        Enum.map(0..(count - 1)//1, &Scale.scale(scale, &1))
-      end)
-    end
-
-    defp get_color_scale(colors, _count) when is_list(colors), do: colors
-
-    defp get_size(size, _d) when is_number(size), do: size
-    defp get_size(size_fn, d) when is_function(size_fn, 1), do: size_fn.(d)
-
-    defp arc_centroid(arc_generator, arc_data) do
-      mid_angle = (arc_data.start_angle + arc_data.end_angle) / 2
-      inner = arc_generator.inner_radius
-      outer = arc_generator.outer_radius
-      r = (inner + outer) / 2
-
-      x = r * :math.sin(mid_angle)
-      y = -r * :math.cos(mid_angle)
-      {x, y}
-    end
+    defp radius(size, _d) when is_number(size), do: size
+    defp radius(size, d) when is_function(size, 1), do: size.(d)
   end
 end

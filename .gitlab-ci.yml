@@ -102,7 +102,9 @@ verify:models:
   script:
     - mix vis.verify
 
-# What a consumer compiles: lib/ alone, with neither audit/, specs/, surfex nor extla.
+# What a consumer compiles: lib/ alone, with neither audit/, specs/, surfex nor extla, and
+# neither Phoenix nor Nx. This checkout's own prod build carries the optional deps, so the
+# proof is a throwaway project depending on visualize and on nothing else (spec/12 §4).
 consumer-compile:
   extends: .elixir
   stage: verify
@@ -110,7 +112,7 @@ consumer-compile:
     MIX_ENV: prod
   script:
     - mix compile --force --warnings-as-errors
-    - mix run -e 'false = Code.ensure_loaded?(Visualize.Audit); false = Code.ensure_loaded?(TLA.Spec); false = Code.ensure_loaded?(Surfex.Golden); IO.puts("consumer build is lib/ only")'
+    - elixir scripts/consumer_check.exs
 
 # The gallery is the only thing that exercises the LiveView side; it must keep building.
 examples:compile:

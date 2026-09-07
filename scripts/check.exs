@@ -11,12 +11,7 @@ defmodule Visualize.Check do
     {"verify:headings", "dev", ~w(vis.headings)},
     {"verify:models", "dev", ~w(vis.verify)},
     {"consumer-compile", "prod", ~w(compile --force --warnings-as-errors)},
-    {"consumer-compile", "prod",
-     [
-       "run",
-       "-e",
-       ~s|false = Code.ensure_loaded?(Visualize.Audit); false = Code.ensure_loaded?(TLA.Spec); false = Code.ensure_loaded?(Surfex.Golden); IO.puts("consumer build is lib/ only")|
-     ]},
+    {"consumer-compile", "prod", {"elixir", ~w(scripts/consumer_check.exs)}},
     {"examples:compile", "dev", ~w(compile), "examples"},
     {"credo", "test", ~w(credo --strict)},
     {"docs", "dev", ~w(docs --warnings-as-errors)}
@@ -28,6 +23,19 @@ defmodule Visualize.Check do
   end
 
   defp job({name, env, args}), do: job({name, env, args, "."})
+
+  # A job is `mix` with arguments, or `{command, arguments}` for a script run directly.
+  defp job({name, env, {command, args}, dir}) do
+    IO.puts("\n== #{name} (MIX_ENV=#{env}#{if dir != ".", do: ", in #{dir}"}) ==")
+
+    {_, status} =
+      System.cmd(command, args, env: [{"MIX_ENV", env}], cd: dir, into: IO.stream(:stdio, :line))
+
+    if status != 0 do
+      IO.puts(:stderr, "\nvis.check: #{name} failed (exit #{status})")
+      System.halt(status)
+    end
+  end
 
   defp job({name, env, args, dir}) do
     IO.puts("\n== #{name} (MIX_ENV=#{env}#{if dir != ".", do: ", in #{dir}"}) ==")

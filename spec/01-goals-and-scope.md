@@ -16,7 +16,7 @@ The library MUST expose the primitives, not just finished charts: scales map dat
 
 ### 1.3 Phoenix is optional
 
-Phoenix MUST NOT be a dependency. `Visualize.Components` and `Visualize.Components.Tree` compile only when `Phoenix.Component` is loaded, and the `Phoenix.HTML.Safe` implementations only when `Phoenix.HTML.Safe` is (D-7). Without Phoenix every other module works unchanged and renders to strings or iolists.
+Phoenix MUST NOT be a required dependency; `phoenix_live_view` is declared `optional: true` (D-45), which is what lets a host that has LiveView compile the components at all — Mix keeps only a dependency's declared deps on the code path while compiling it. `Visualize.Components` and `Visualize.Components.Tree` compile only when `Phoenix.Component` is loaded, and the `Phoenix.HTML.Safe` implementations only when `Phoenix.HTML.Safe` is (D-7). Without Phoenix every other module works unchanged and renders to strings or iolists, and a consumer without LiveView never fetches Phoenix ([12-testing-and-conformance](12-testing-and-conformance.md) §4).
 
 ### 1.4 Nx is optional
 

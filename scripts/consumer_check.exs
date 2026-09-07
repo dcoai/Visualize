@@ -1,0 +1,64 @@
+# The consumer-compile gate (spec/12 §4): what a project that depends on visualize and on
+# nothing else actually builds. A throwaway Mix project is generated under the system temp
+# directory with `{:visualize, path: <this checkout>}` as its only dependency, compiled in
+# `MIX_ENV=prod`, and asked what it can load. Phoenix and Nx are optional dependencies of
+# visualize, so neither may arrive; the audit, the models and the golden renderer compile
+# from directories a consumer never sees (`elixirc_paths/1` in mix.exs).
+#
+# Run from the repository root: `elixir scripts/consumer_check.exs`. Exits non-zero, with
+# the failing assertion, when the consumer build carries anything it should not.
+defmodule Visualize.ConsumerCheck do
+  @absent ~w(Phoenix.Component Phoenix.HTML.Safe Nx Visualize.Components
+             Visualize.Components.Tree Visualize.Audit TLA.Spec Surfex.Golden)
+  @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Backend.CanvasBinary)
+
+  def run do
+    root = File.cwd!()
+    dir = Path.join(System.tmp_dir!(), "visualize_consumer_#{System.os_time(:millisecond)}")
+    File.mkdir_p!(Path.join(dir, "lib"))
+    File.write!(Path.join(dir, "mix.exs"), mix_exs(root))
+
+    IO.puts("consumer project in #{dir}")
+    mix(dir, ~w(deps.get))
+    mix(dir, ~w(compile --force --warnings-as-errors))
+    mix(dir, ["run", "-e", probe()])
+
+    File.rm_rf!(dir)
+    IO.puts("consumer build is lib/ only - no Phoenix, no Nx")
+  end
+
+  defp mix_exs(root) do
+    """
+    defmodule Consumer.MixProject do
+      use Mix.Project
+
+      def project do
+        [app: :consumer, version: "0.1.0", deps: [{:visualize, path: #{inspect(root)}}]]
+      end
+    end
+    """
+  end
+
+  # One `=` per module: a match error names the module that broke the claim.
+  defp probe do
+    absent = Enum.map(@absent, &"false = Code.ensure_loaded?(#{&1})")
+    present = Enum.map(@present, &"true = Code.ensure_loaded?(#{&1})")
+    Enum.join(absent ++ present, "; ")
+  end
+
+  defp mix(dir, args) do
+    {_, status} =
+      System.cmd("mix", args,
+        cd: dir,
+        env: [{"MIX_ENV", "prod"}],
+        into: IO.stream(:stdio, :line)
+      )
+
+    if status != 0 do
+      IO.puts(:stderr, "consumer check failed at mix #{Enum.join(args, " ")} (exit #{status})")
+      System.halt(status)
+    end
+  end
+end
+
+Visualize.ConsumerCheck.run()
