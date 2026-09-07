@@ -6,6 +6,11 @@ defmodule Visualize.Geo.Delaunay do
   no point is inside the circumcircle of any triangle. This is useful
   for interpolation, mesh generation, and computing Voronoi diagrams.
 
+  The triangulation is built by incremental insertion (Bowyer–Watson) over ghost
+  triangles that stand for the unbounded region beyond each hull edge, so no finite
+  super-triangle can distort the hull. Every triangle is counter-clockwise, which is
+  what makes the in-circle determinant's sign meaningful.
+
   ## Examples
 
       points = [{0, 0}, {100, 0}, {50, 100}, {25, 50}, {75, 50}]
@@ -36,17 +41,33 @@ defmodule Visualize.Geo.Delaunay do
           hull: [non_neg_integer()]
         }
 
-  @doc "Creates a new Delaunay triangulation from points"
+  @doc """
+  Creates a new Delaunay triangulation from points.
+
+  `triangles` holds three point indices per triangle, counter-clockwise; `halfedges[e]`
+  is the index of the half-edge opposite half-edge `e` (`3t + k` runs from
+  `triangles[3t + k]` to `triangles[3t + (k + 1) rem 3]`) or `-1` on the hull; `hull`
+  lists the convex hull counter-clockwise from the leftmost point. Coincident points
+  after the first are left out of the triangulation.
+  """
   @spec new([point()]) :: t()
   def new(points) when is_list(points) do
     n = length(points)
+    coords = points |> Enum.with_index() |> Map.new(fn {p, i} -> {i, p} end)
 
-    if n < 3 do
-      %__MODULE__{points: points, triangles: [], halfedges: [], hull: Enum.to_list(0..(n - 1))}
-    else
-      # Use Bowyer-Watson algorithm for Delaunay triangulation
-      compute_delaunay(points)
-    end
+    triangles = if n < 3, do: [], else: triangulate(coords, n)
+    real = Enum.reject(triangles, &ghost?/1)
+
+    hull =
+      cond do
+        n < 3 -> Enum.to_list(0..(n - 1)//1)
+        real == [] -> collinear_hull(coords, n)
+        true -> hull_from_ghosts(triangles, coords)
+      end
+
+    flat = Enum.flat_map(real, fn {a, b, c} -> [a, b, c] end)
+
+    %__MODULE__{points: points, triangles: flat, halfedges: halfedges(real), hull: hull}
   end
 
   @doc "Returns the triangles as lists of point indices"
@@ -128,111 +149,173 @@ defmodule Visualize.Geo.Delaunay do
     end
   end
 
-  # Bowyer-Watson algorithm implementation
-  defp compute_delaunay(points) do
-    indexed_points = Enum.with_index(points)
+  # ------------------------------------------------------------------
+  # Construction. Triangles are `{a, b, c}` tuples of point indices, counter-clockwise.
+  # A ghost `{v, u, :inf}` stands for the unbounded region beyond the hull edge u -> v
+  # (the real triangle lies to the left of u -> v, the ghost to its right), so the cavity
+  # a new point opens is found by one rule for real and ghost triangles alike.
+  # ------------------------------------------------------------------
 
-    # Find bounding box
-    {min_x, max_x} = points |> Enum.map(&elem(&1, 0)) |> Enum.min_max()
-    {min_y, max_y} = points |> Enum.map(&elem(&1, 1)) |> Enum.min_max()
+  defp ghost?({_, _, :inf}), do: true
+  defp ghost?(_), do: false
 
-    dx = max_x - min_x
-    dy = max_y - min_y
-    delta = max(dx, dy) * 10
+  defp triangulate(coords, n) do
+    # Seed with the first three distinct, non-collinear points; distinct points that
+    # were collinear with the first two are inserted afterwards like any other.
+    {seed, pending, _seen, rest} = find_seed(coords, n)
 
-    # Create super-triangle that contains all points
-    super_tri = [
-      {min_x - delta, min_y - delta},
-      {max_x + delta, min_y - delta},
-      {(min_x + max_x) / 2, max_y + delta}
-    ]
+    case seed do
+      nil ->
+        []
 
-    # Initial triangulation is just the super-triangle
-    # Triangles stored as list of {p0, p1, p2} tuples
-    initial_triangles = [{0, 1, 2}]
+      {a, b, c} ->
+        {a, b, c} = if orient(coords, a, b, c) > 0, do: {a, b, c}, else: {a, c, b}
+        initial = [{a, b, c}, {b, a, :inf}, {c, b, :inf}, {a, c, :inf}]
+        seen = MapSet.new([coords[a], coords[b], coords[c]])
 
-    # Add points one by one
-    all_points = super_tri ++ points
-
-    {final_triangles, _} =
-      Enum.reduce(indexed_points, {initial_triangles, all_points}, fn {{_px, _py}, orig_idx},
-                                                                      {tris, pts} ->
-        # Offset for super-triangle vertices
-        point_idx = orig_idx + 3
-
-        # Find triangles whose circumcircle contains the new point
-        {bad_triangles, good_triangles} =
-          Enum.split_with(tris, fn {i, j, k} ->
-            {x0, y0} = Enum.at(pts, i)
-            {x1, y1} = Enum.at(pts, j)
-            {x2, y2} = Enum.at(pts, k)
-            {px, py} = Enum.at(pts, point_idx)
-            in_circumcircle?(px, py, x0, y0, x1, y1, x2, y2)
+        {tris, _seen} =
+          Enum.reduce(pending ++ rest, {initial, seen}, fn i, {tris, seen} ->
+            if MapSet.member?(seen, coords[i]) do
+              {tris, seen}
+            else
+              {insert(tris, coords, i), MapSet.put(seen, coords[i])}
+            end
           end)
 
-        # Find boundary of polygonal hole
-        edges =
-          bad_triangles
-          |> Enum.flat_map(fn {i, j, k} -> [{i, j}, {j, k}, {k, i}] end)
-
-        # Keep only edges that appear once (boundary edges)
-        boundary_edges =
-          edges
-          |> Enum.reduce(%{}, fn {a, b}, acc ->
-            edge = if a < b, do: {a, b}, else: {b, a}
-            Map.update(acc, edge, 1, &(&1 + 1))
-          end)
-          |> Enum.filter(fn {_edge, count} -> count == 1 end)
-          |> Enum.map(fn {edge, _} -> edge end)
-
-        # Create new triangles from boundary edges to new point
-        new_triangles =
-          boundary_edges
-          |> Enum.map(fn {a, b} -> {a, b, point_idx} end)
-
-        {good_triangles ++ new_triangles, pts}
-      end)
-
-    # Remove triangles that share vertices with super-triangle
-    real_triangles =
-      final_triangles
-      |> Enum.reject(fn {i, j, k} -> i < 3 or j < 3 or k < 3 end)
-      |> Enum.map(fn {i, j, k} -> {i - 3, j - 3, k - 3} end)
-
-    # Flatten triangles to list of indices
-    flat_triangles =
-      real_triangles
-      |> Enum.flat_map(fn {i, j, k} -> [i, j, k] end)
-
-    # Compute convex hull using gift wrapping
-    hull = compute_hull(points)
-
-    # Compute halfedges (simplified - just store empty for now)
-    halfedges = []
-
-    %__MODULE__{
-      points: points,
-      triangles: flat_triangles,
-      halfedges: halfedges,
-      hull: hull
-    }
+        tris
+    end
   end
 
-  defp in_circumcircle?(px, py, x0, y0, x1, y1, x2, y2) do
-    # Check if point (px, py) is inside circumcircle of triangle
-    ax = x0 - px
-    ay = y0 - py
-    bx = x1 - px
-    by = y1 - py
-    cx = x2 - px
-    cy = y2 - py
+  defp find_seed(coords, n), do: find_seed(coords, Enum.to_list(0..(n - 1)//1), [], MapSet.new())
+
+  defp find_seed(_coords, [], pending, seen), do: {nil, Enum.reverse(pending), seen, []}
+
+  defp find_seed(coords, [i | rest], pending, seen) do
+    cond do
+      MapSet.member?(seen, coords[i]) ->
+        find_seed(coords, rest, pending, seen)
+
+      length(pending) < 2 ->
+        find_seed(coords, rest, [i | pending], MapSet.put(seen, coords[i]))
+
+      true ->
+        # `pending` is newest-first; the seed pair is the first two distinct points.
+        [a, b | others] = Enum.reverse(pending)
+
+        if orient(coords, a, b, i) == 0 do
+          find_seed(coords, rest, [i | pending], MapSet.put(seen, coords[i]))
+        else
+          {{a, b, i}, others, MapSet.put(seen, coords[i]), rest}
+        end
+    end
+  end
+
+  defp insert(tris, coords, p) do
+    {bad, good} = Enum.split_with(tris, &in_cavity?(&1, coords, p))
+
+    edges = Enum.flat_map(bad, fn {a, b, c} -> [{a, b}, {b, c}, {c, a}] end)
+    edge_set = MapSet.new(edges)
+
+    fresh =
+      edges
+      |> Enum.reject(fn {u, v} -> MapSet.member?(edge_set, {v, u}) end)
+      |> Enum.map(fn
+        {:inf, v} -> {v, p, :inf}
+        {u, :inf} -> {p, u, :inf}
+        {u, v} -> {u, v, p}
+      end)
+
+    good ++ fresh
+  end
+
+  # A real triangle is opened when p is strictly inside its circumcircle; a ghost when p
+  # lies beyond its hull edge, or on that edge between the endpoints.
+  defp in_cavity?({v, u, :inf}, coords, p) do
+    case orient(coords, v, u, p) do
+      o when o > 0 -> true
+      o when o < 0 -> false
+      _ -> between?(coords, u, v, p)
+    end
+  end
+
+  defp in_cavity?({a, b, c}, coords, p), do: in_circle(coords, a, b, c, p) > 0
+
+  # Twice the signed area of a -> b -> c: positive when counter-clockwise.
+  defp orient(coords, a, b, c) do
+    {ax, ay} = coords[a]
+    {bx, by} = coords[b]
+    {cx, cy} = coords[c]
+    (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+  end
+
+  # The in-circle determinant, normalised by the triangle's orientation so it is
+  # positive exactly when p is strictly inside the circumcircle, whatever the vertex order.
+  defp in_circle(coords, a, b, c, p) do
+    {ax, ay} = coords[a]
+    {bx, by} = coords[b]
+    {cx, cy} = coords[c]
+    {px, py} = coords[p]
+
+    adx = ax - px
+    ady = ay - py
+    bdx = bx - px
+    bdy = by - py
+    cdx = cx - px
+    cdy = cy - py
 
     det =
-      (ax * ax + ay * ay) * (bx * cy - cx * by) -
-        (bx * bx + by * by) * (ax * cy - cx * ay) +
-        (cx * cx + cy * cy) * (ax * by - bx * ay)
+      (adx * adx + ady * ady) * (bdx * cdy - cdx * bdy) -
+        (bdx * bdx + bdy * bdy) * (adx * cdy - cdx * ady) +
+        (cdx * cdx + cdy * cdy) * (adx * bdy - bdx * ady)
 
-    det > 0
+    o = orient(coords, a, b, c)
+
+    cond do
+      o > 0 -> det
+      o < 0 -> -det
+      true -> 0
+    end
+  end
+
+  defp between?(coords, u, v, p) do
+    {ux, uy} = coords[u]
+    {vx, vy} = coords[v]
+    {px, py} = coords[p]
+    (px - ux) * (px - vx) + (py - uy) * (py - vy) < 0
+  end
+
+  # Ghost {v, u, :inf} is the hull edge u -> v; chaining them walks the hull
+  # counter-clockwise. The walk starts at the leftmost point (lowest x, then lowest y).
+  defp hull_from_ghosts(tris, coords) do
+    next = tris |> Enum.filter(&ghost?/1) |> Map.new(fn {v, u, :inf} -> {u, v} end)
+    start = next |> Map.keys() |> Enum.min_by(&coords[&1])
+    walk_hull(next, start, next[start], [start])
+  end
+
+  defp walk_hull(_next, start, start, acc), do: Enum.reverse(acc)
+
+  defp walk_hull(next, start, current, acc),
+    do: walk_hull(next, start, next[current], [current | acc])
+
+  # Every point on one line: the hull is its two extreme distinct points.
+  defp collinear_hull(coords, n) do
+    distinct = Enum.uniq_by(0..(n - 1)//1, &coords[&1])
+    {lo, hi} = Enum.min_max_by(distinct, &coords[&1])
+    Enum.uniq([lo, hi])
+  end
+
+  defp halfedges(real) do
+    index =
+      real
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {{a, b, c}, t} ->
+        [{{a, b}, 3 * t}, {{b, c}, 3 * t + 1}, {{c, a}, 3 * t + 2}]
+      end)
+      |> Map.new()
+
+    Enum.flat_map(real, fn {a, b, c} ->
+      Enum.map([{b, a}, {c, b}, {a, c}], &Map.get(index, &1, -1))
+    end)
   end
 
   defp point_in_triangle?(px, py, x0, y0, x1, y1, x2, y2) do
@@ -248,77 +331,5 @@ defmodule Visualize.Geo.Delaunay do
 
       a >= 0 and a <= 1 and b >= 0 and b <= 1 and c >= 0 and c <= 1
     end
-  end
-
-  defp compute_hull(points) when length(points) < 3, do: Enum.to_list(0..(length(points) - 1))
-
-  defp compute_hull(points) do
-    indexed = Enum.with_index(points)
-
-    # Find leftmost point
-    {_, start_idx} = Enum.min_by(indexed, fn {{x, _y}, _i} -> x end)
-
-    # Gift wrapping algorithm
-    gift_wrap(points, start_idx, start_idx, [])
-  end
-
-  defp gift_wrap(points, _current, _start, hull) when length(hull) > length(points) do
-    # Safety: prevent infinite loop
-    Enum.reverse(hull)
-  end
-
-  defp gift_wrap(points, current, start, hull) do
-    hull = [current | hull]
-    n = length(points)
-
-    # Find the most counter-clockwise point
-    next =
-      Enum.reduce(0..(n - 1), rem(current + 1, n), fn candidate, best ->
-        if candidate == current do
-          best
-        else
-          case ccw(points, current, best, candidate) do
-            :left ->
-              candidate
-
-            :collinear ->
-              # Pick farther point
-              if distance_sq(points, current, candidate) > distance_sq(points, current, best) do
-                candidate
-              else
-                best
-              end
-
-            :right ->
-              best
-          end
-        end
-      end)
-
-    if next == start do
-      Enum.reverse(hull)
-    else
-      gift_wrap(points, next, start, hull)
-    end
-  end
-
-  defp ccw(points, a, b, c) do
-    {ax, ay} = Enum.at(points, a)
-    {bx, by} = Enum.at(points, b)
-    {cx, cy} = Enum.at(points, c)
-
-    cross = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-
-    cond do
-      cross > 1.0e-10 -> :left
-      cross < -1.0e-10 -> :right
-      true -> :collinear
-    end
-  end
-
-  defp distance_sq(points, a, b) do
-    {ax, ay} = Enum.at(points, a)
-    {bx, by} = Enum.at(points, b)
-    (bx - ax) * (bx - ax) + (by - ay) * (by - ay)
   end
 end

@@ -127,20 +127,18 @@ Vertices whose projection is `nil` are dropped from lines and rings; lines are n
 
 ## 3. Delaunay triangulation
 
-`Visualize.Geo.Delaunay.new/1` takes a list of `{x, y}` points and returns a struct with `points` (the input), `triangles` (a flat list of point indices, three per triangle), `halfedges` (always `[]`; half-edge adjacency is not computed) and `hull` (point indices of the convex hull).
+`Visualize.Geo.Delaunay.new/1` takes a list of `{x, y}` points and returns a struct with `points` (the input), `triangles` (a flat list of point indices, three per triangle, each triangle counter-clockwise), `halfedges` (one entry per triangle vertex, in d3-delaunay's form: half-edge `e = 3t + k` runs from `triangles[e]` to `triangles[3t + (k + 1) rem 3]`, and `halfedges[e]` is the index of the opposite half-edge or `-1` on the hull) and `hull` (point indices of the convex hull, counter-clockwise from the leftmost point — lowest `x`, then lowest `y`).
 
 ### 3.1 Algorithm and guarantees
 
-The triangulation MUST be Delaunay: no input point lies strictly inside the circumcircle of any triangle, the triangles MUST cover the convex hull of the points without overlap, and for points in general position there MUST be exactly `2n - 2 - h` triangles where `h` is the hull size. Triangle vertex order is not normalised. Fewer than three points yields no triangles and a hull listing every index; the empty input MUST yield an empty hull.
+The triangulation is Delaunay (D-43): no input point lies strictly inside the circumcircle of any triangle, the triangles cover the convex hull of the points without overlap, and there are exactly `2n - 2 - h` triangles, where `h` counts the points on the hull boundary (collinear boundary points included), whenever the points are not all collinear. Every triangle is counter-clockwise, so `halfedges[halfedges[e]] == e` and the unpaired half-edges are exactly the hull edges. Fewer than three points yields no triangles and a hull listing every index; the empty input yields an empty hull; points all on one line yield no triangles and a hull of the two extreme distinct points. A point coincident with an earlier one is left out of the triangulation, the hull and the half-edges. Four or more cocircular points admit more than one Delaunay triangulation; which one results depends on input order.
 
-The implementation is Bowyer–Watson insertion into a super-triangle, with the hull computed separately by gift wrapping (Jarvis march) starting from the leftmost point.
-
-> Decision: see spec/13. The current circumcircle predicate (`det > 0`) is orientation-dependent while new triangles are formed from boundary edges whose orientation has been discarded, so the output is neither Delaunay nor a valid triangulation: 40 random points produce 147 triangles (67 expected) of which 138 contain another point in their circumcircle. Separately, `new([])` returns `hull: [0, -1]` because `0..-1` is a descending range.
+The implementation is incremental insertion (Bowyer–Watson) with ghost triangles in place of a finite super-triangle: each hull edge `u -> v` carries a ghost `{v, u, inf}` standing for the unbounded region beyond it, so the cavity a new point opens is the set of real triangles whose circumcircle strictly contains it together with the ghosts whose hull edge it lies beyond (or on, between the endpoints); the cavity's boundary is the set of directed edges of those triangles whose reverse is not also one, and the new triangles join each boundary edge to the point in that direction, which keeps them counter-clockwise. The in-circle determinant is multiplied by the sign of the triangle's orientation, so it is positive exactly for a point strictly inside the circumcircle whatever the vertex order. The seed is the first three distinct non-collinear points in input order; distinct points collinear with the first two are inserted afterwards. Predicates are evaluated in floating point without adaptive precision, so the guarantees hold for points in general position and for exactly representable collinear or cocircular configurations (integer or grid coordinates). Each insertion scans every triangle, so construction is quadratic in the number of points.
 
 ### 3.2 Queries and rendering
 
-- `triangles/1` — `[[i, j, k]]` in construction order.
-- `hull/1` — hull indices in traversal order from the leftmost point.
+- `triangles/1` — `[[i, j, k]]` in construction order, each counter-clockwise.
+- `hull/1` — hull indices counter-clockwise from the leftmost point.
 - `neighbors/2` — indices of every point sharing a triangle with the given index, unique, in triangle order.
 - `find/2` — index (into `triangles/1`) of the first triangle containing `{x, y}` by an inclusive barycentric test, or `-1`.
 - `points/1` — the input points.
@@ -151,8 +149,8 @@ The implementation is Bowyer–Watson insertion into a super-triangle, with the 
 
 | Function | Contract |
 |---|---|
-| `Visualize.Geo.Delaunay.new/1` | Triangulates a list of `{x, y}` points (3.1). |
-| `Visualize.Geo.Delaunay.triangles/1` | Triangles as `[i, j, k]` index lists. |
+| `Visualize.Geo.Delaunay.new/1` | Triangulates a list of `{x, y}` points; fills `triangles`, `halfedges` and `hull` (3.1). |
+| `Visualize.Geo.Delaunay.triangles/1` | Triangles as counter-clockwise `[i, j, k]` index lists. |
 | `Visualize.Geo.Delaunay.points/1` | The input points. |
 | `Visualize.Geo.Delaunay.hull/1` | Convex hull as point indices. |
 | `Visualize.Geo.Delaunay.find/2` | Index of the triangle containing a point, or `-1`. |
@@ -169,7 +167,7 @@ The implementation is Bowyer–Watson insertion into a super-triangle, with the 
 - `cell/2` — the circumcentres of the triangles incident to the site, sorted by `atan2` angle around the site, then clipped to `bounds` by Sutherland–Hodgman when bounds are set; `[]` for a site with no incident triangle. Cells of hull sites consist only of finite circumcentres; they are not extended to infinity, so their unbounded region is absent even after clipping.
 - `cell_unclipped/2` — the same without clipping.
 - `cells/1` — `cell/2` for every site index in order.
-- `edges/1` — one `{c1, c2}` segment between the circumcentres of every pair of triangles sharing an edge; unbounded edges are omitted. Quadratic in the number of triangles.
+- `edges/1` — one `{c1, c2}` segment between the circumcentres of every pair of triangles sharing an edge; unbounded edges are omitted. Quadratic in the number of triangles (it searches the triangle list rather than reading `halfedges`).
 - `find/2` — the index of the site nearest to `{x, y}` (Euclidean), independent of cells.
 
 ### 4.2 Rendering
