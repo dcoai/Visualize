@@ -53,7 +53,7 @@ defmodule Visualize.Hooks.Brush do
   - `data-brush-event` - Event name for selection (default: "brush_select")
   - `data-brush-clear-event` - Event name for clearing (default: "brush_clear")
   - `data-brush-extent` - Constrains brush to "x0,y0,x1,y1" (optional)
-  - `data-brush-color` - Selection rectangle fill color (default: "rgba(0,0,0,0.1)")
+  - `data-brush-color` - Selection rectangle fill color (default: "rgba(119, 119, 119, 0.2)")
   - `data-brush-stroke` - Selection rectangle stroke color (default: "#666")
 
   """
@@ -122,18 +122,27 @@ defmodule Visualize.Hooks.Brush do
         this.captureRect.setAttribute('height', height);
         this.overlay.insertBefore(this.captureRect, this.selectionRect);
 
-        // Bind event handlers
-        this.captureRect.addEventListener('mousedown', this.handleMouseDown.bind(this));
-        document.addEventListener('mousemove', this.handleMouseMove.bind(this));
-        document.addEventListener('mouseup', this.handleMouseUp.bind(this));
+        // Each handler is bound once and kept on the hook: removeEventListener only
+        // matches the reference that was added, so destroyed() removes these same ones.
+        this.onMouseDown = this.handleMouseDown.bind(this);
+        this.onMouseMove = this.handleMouseMove.bind(this);
+        this.onMouseUp = this.handleMouseUp.bind(this);
+        this.onTouchStart = this.handleTouchStart.bind(this);
+        this.onTouchMove = this.handleTouchMove.bind(this);
+        this.onTouchEnd = this.handleTouchEnd.bind(this);
+        this.onClear = this.handleClear.bind(this);
+
+        this.captureRect.addEventListener('mousedown', this.onMouseDown);
+        document.addEventListener('mousemove', this.onMouseMove);
+        document.addEventListener('mouseup', this.onMouseUp);
 
         // Touch support
-        this.captureRect.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
-        document.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
-        document.addEventListener('touchend', this.handleTouchEnd.bind(this));
+        this.captureRect.addEventListener('touchstart', this.onTouchStart, { passive: false });
+        document.addEventListener('touchmove', this.onTouchMove, { passive: false });
+        document.addEventListener('touchend', this.onTouchEnd);
 
         // Double-click to clear
-        this.captureRect.addEventListener('dblclick', this.handleClear.bind(this));
+        this.captureRect.addEventListener('dblclick', this.onClear);
       },
 
       getSVGPoint(clientX, clientY) {
@@ -287,19 +296,19 @@ defmodule Visualize.Hooks.Brush do
         }
       },
 
+      // The capture rect's listeners go with the element; the document's must be removed
+      // by hand, with the references mounted() stored.
       destroyed() {
-        document.removeEventListener('mousemove', this.handleMouseMove.bind(this));
-        document.removeEventListener('mouseup', this.handleMouseUp.bind(this));
-        document.removeEventListener('touchmove', this.handleTouchMove.bind(this));
-        document.removeEventListener('touchend', this.handleTouchEnd.bind(this));
+        document.removeEventListener('mousemove', this.onMouseMove);
+        document.removeEventListener('mouseup', this.onMouseUp);
+        document.removeEventListener('touchmove', this.onTouchMove);
+        document.removeEventListener('touchend', this.onTouchEnd);
       }
     };
     """
   end
 
   @doc """
-  Helper to filter data points within a brush selection.
-  @doc \"""
   Keeps the data within the selection on every axis whose scale is given (spec/10 §6.3,
   D-29).
 
