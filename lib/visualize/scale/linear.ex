@@ -47,7 +47,7 @@ defmodule Visualize.Scale.Linear do
   @impl true
   def apply(%__MODULE__{domain: [d0, d1], range: [r0, r1], clamp?: clamp?}, value) do
     # Normalize to [0, 1]
-    t = (value - d0) / (d1 - d0)
+    t = Visualize.Scale.Behaviour.normalize(value, d0, d1)
 
     # Clamp if needed
     t = if clamp?, do: clamp_value(t, 0, 1), else: t
@@ -60,7 +60,7 @@ defmodule Visualize.Scale.Linear do
   @spec invert(t(), number()) :: float()
   @impl true
   def invert(%__MODULE__{domain: [d0, d1], range: [r0, r1]}, value) do
-    t = (value - r0) / (r1 - r0)
+    t = Visualize.Scale.Behaviour.normalize(value, r0, r1)
     d0 + t * (d1 - d0)
   end
 

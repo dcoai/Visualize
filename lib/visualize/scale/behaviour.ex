@@ -42,4 +42,14 @@ defmodule Visualize.Scale.Behaviour do
 
   @doc "Enables or disables clamping; identity where the scale never extrapolates."
   @callback clamp(scale, boolean()) :: scale
+  @doc """
+  The position of `value` between `a` and `b` as a fraction, `0.5` when `a == b`.
+
+  d3-scale's `normalize`: a collapsed domain maps every value to the middle of the range and
+  a collapsed range inverts to the middle of the domain, instead of dividing by zero (D-49).
+  Every continuous scale's `apply/2` and `invert/2` go through it.
+  """
+  @spec normalize(number(), number(), number()) :: float()
+  def normalize(_value, a, b) when a == b, do: 0.5
+  def normalize(value, a, b), do: (value - a) / (b - a)
 end

@@ -84,7 +84,7 @@ defmodule Visualize.Scale.Time do
     t1 = to_unix(d1)
     tv = to_unix(value)
 
-    t = (tv - t0) / (t1 - t0)
+    t = Visualize.Scale.Behaviour.normalize(tv, t0, t1)
     t = if clamp?, do: clamp_value(t, 0, 1), else: t
 
     r0 + t * (r1 - r0)
@@ -97,7 +97,7 @@ defmodule Visualize.Scale.Time do
     t0 = to_unix(d0)
     t1 = to_unix(d1)
 
-    t = (value - r0) / (r1 - r0)
+    t = Visualize.Scale.Behaviour.normalize(value, r0, r1)
     unix = t0 + t * (t1 - t0)
 
     DateTime.from_unix!(round(unix))

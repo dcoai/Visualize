@@ -80,9 +80,14 @@ defmodule Visualize.Scale.Symlog do
   @spec apply(t(), number()) :: number()
   def apply(%__MODULE__{domain: [d0, d1], range: [r0, r1], constant: c} = scale, value) do
     t_d0 = symlog_transform(d0, c)
-    span = symlog_transform(d1, c) - t_d0
 
-    t = if span == 0, do: 0, else: (symlog_transform(value, c) - t_d0) / span
+    t =
+      Visualize.Scale.Behaviour.normalize(
+        symlog_transform(value, c),
+        t_d0,
+        symlog_transform(d1, c)
+      )
+
     result = r0 + t * (r1 - r0)
 
     if scale.clamp?, do: clamp_value(result, r0, r1), else: result
@@ -96,7 +101,7 @@ defmodule Visualize.Scale.Symlog do
   @impl true
   @spec invert(t(), number()) :: number()
   def invert(%__MODULE__{domain: [d0, d1], range: [r0, r1], constant: c}, value) do
-    t = if r1 == r0, do: 0, else: (value - r0) / (r1 - r0)
+    t = Visualize.Scale.Behaviour.normalize(value, r0, r1)
     t_d0 = symlog_transform(d0, c)
 
     symlog_inverse(t_d0 + t * (symlog_transform(d1, c) - t_d0), c)

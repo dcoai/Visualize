@@ -19,13 +19,17 @@ Scales map values from a data *domain* to a visual *range*. `Visualize.Scale` is
 
 Continuous domains and ranges are **two-element lists** `[d0, d1]` / `[r0, r1]` in every scale struct: `Linear`, `Log`, `Power`, `Symlog`, `Time`, `Radial`, `Band`, `Quantize`, and `Color`. `Power`, `Symlog`, and `Quantize` additionally accept a two-tuple on input to `domain/2` and `range/2` and store it as a list (D-15). `Visualize.Axis` (spec/05) reads `scale.range` as a two-element list, so every continuous scale draws with the range it was given.
 
-Domains MAY be descending (`d0 > d1`) and ranges MAY be descending (`r0 > r1`); the interpolation formulae below are sign-agnostic. Degenerate domains (`d0 == d1`) are not guarded and MUST be avoided by the caller: `apply/2` divides by zero.
+Domains MAY be descending (`d0 > d1`) and ranges MAY be descending (`r0 > r1`); the interpolation formulae below are sign-agnostic. A collapsed domain (`d0 == d1`) never raises: every continuous scale maps every value to the midpoint of the range, and a collapsed range inverts to the midpoint of the domain, through `Visualize.Scale.Behaviour.normalize/3` (d3-scale's `normalize`, D-49).
 
 ### 1.3 The Facade Protocol
 
-`Visualize.Scale.<op>(scale, …)` calls `scale.__struct__.<op>(scale, …)`. The protocol is the behaviour `Visualize.Scale.Behaviour`, whose nine callbacks are `domain/2`, `range/2`, `apply/2`, `invert/2`, `ticks/2`, `nice/1`, `padding/2`, `bandwidth/1`, `clamp/2`. Every scale module MUST declare `@behaviour Visualize.Scale.Behaviour` and implement all nine, so a missing operation is a compile error under `--warnings-as-errors` rather than an `UndefinedFunctionError` at dispatch (D-15). Operations that do not apply to a scale kind MUST behave as identity (`nice/1`, `padding/2`, `clamp/2`), return `nil` (`invert/2`), or return `0` (`bandwidth/1`); the discretising scales return their thresholds from `ticks/2`.
+`Visualize.Scale.<op>(scale, …)` calls `scale.__struct__.<op>(scale, …)`. The protocol is the behaviour `Visualize.Scale.Behaviour`, whose nine callbacks are `domain/2`, `range/2`, `apply/2`, `invert/2`, `ticks/2`, `nice/1`, `padding/2`, `bandwidth/1`, `clamp/2`. Every scale module MUST declare `@behaviour Visualize.Scale.Behaviour` and implement all nine (the module also provides the shared fraction, table below), so a missing operation is a compile error under `--warnings-as-errors` rather than an `UndefinedFunctionError` at dispatch (D-15). Operations that do not apply to a scale kind MUST behave as identity (`nice/1`, `padding/2`, `clamp/2`), return `nil` (`invert/2`), or return `0` (`bandwidth/1`); the discretising scales return their thresholds from `ticks/2`.
 
 The table records what each module defines.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Scale.Behaviour.normalize/3` | The position of a value between two bounds as a fraction: `(v − a) / (b − a)`, or `0.5` when `a == b` (D-49). Every continuous scale's `apply/2` and `invert/2` use it. |
 
 | Module | `apply/2` | `invert/2` | `ticks/2` | `nice/1` | `padding/2` | `bandwidth/1` | `clamp/2` | Facade constructor |
 |---|---|---|---|---|---|---|---|---|
@@ -86,7 +90,7 @@ The table records what each module defines.
 
 ### 3.2 Semantics
 
-- `apply/2`: `t = (v − d0) / (d1 − d0)`; if `clamp?`, `t` is clamped to `[0, 1]`; result is `r0 + t · (r1 − r0)`, always a float.
+- `apply/2`: `t = (v − d0) / (d1 − d0)` (`0.5` when `d0 == d1`); if `clamp?`, `t` is clamped to `[0, 1]`; result is `r0 + t · (r1 − r0)`, always a float.
 - `invert/2`: `t = (v − r0) / (r1 − r0)`; result `d0 + t · (d1 − d0)`. Never clamps.
 - `ticks/2` (count `n`): the *nice step* is computed from `span = |d1 − d0|`, `raw = span / max(n, 1)`, `mag = 10^⌊log10 raw⌋`, `q = raw / mag`, and factor `1` if `q < 1.5`, `2` if `q < 3`, `5` if `q < 7`, else `10`; `step = factor · mag`. Ticks run from `⌈d0/step⌉·step` to `⌊d1/step⌋·step` inclusive, each rounded to `max(0, −⌊log10 step⌋)` decimal places; when no multiple of the step lies inside the domain the result is `[]`, never a value outside it. The tick count is approximately `n`; it is never guaranteed.
 - `nice/1`: with the step for count 10, domain becomes `[⌊d0/step⌋·step, ⌈d1/step⌉·step]` (floats).
@@ -152,8 +156,8 @@ All logarithms are `log(x) / log(base)`.
 
 Let `e` be the exponent and `T(x) = sign(x) · |x|^e` (D3's signed power), with inverse `T⁻¹(y) = sign(y) · |y|^(1/e)`.
 
-- `apply/2`: `D = T(d1) − T(d0)`; `t = 0` if `D == 0`, else `(T(v) − T(d0)) / D`; result `r0 + t · (r1 − r0)`; when `clamp?`, the result is clamped to the range bounds in either order. A domain that includes negative values maps symmetrically: on `[−10, 10]` with `e = 2`, `−5` and `5` sit `0.125` either side of the midpoint.
-- `invert/2`: `t = (v − r0) / (r1 − r0)` (`0` if `r1 == r0`); result `T⁻¹(T(d0) + t · D)`, negative when the domain value is.
+- `apply/2`: `D = T(d1) − T(d0)`; `t = 0.5` if `D == 0`, else `(T(v) − T(d0)) / D`; result `r0 + t · (r1 − r0)`; when `clamp?`, the result is clamped to the range bounds in either order. A domain that includes negative values maps symmetrically: on `[−10, 10]` with `e = 2`, `−5` and `5` sit `0.125` either side of the midpoint.
+- `invert/2`: `t = (v − r0) / (r1 − r0)` (`0.5` if `r1 == r0`); result `T⁻¹(T(d0) + t · D)`, negative when the domain value is.
 - `ticks/1,2`: delegate to `Linear.ticks/2` on `[d0, d1]` (linear spacing in the domain, not in the transformed space).
 - `nice/1`: the domain becomes `Linear.nice/1`'s domain for `[d0, d1]`.
 - `padding/2` identity; `bandwidth/1` `0`.
@@ -188,8 +192,8 @@ Let `e` be the exponent and `T(x) = sign(x) · |x|^e` (D3's signed power), with 
 
 The transform is `S(x) = sign(x) · ln(1 + |x| / c)` with inverse `S⁻¹(y) = sign(y) · c · (e^{|y|} − 1)`, where `c` is the constant (`> 0`, enforced by `constant/2`).
 
-- `apply/2`: `t = (S(v) − S(d0)) / (S(d1) − S(d0))` (`0` if the denominator is zero); result `r0 + t · (r1 − r0)`, clamped to the range bounds when `clamp?`.
-- `invert/2`: `t = (v − r0) / (r1 − r0)` (`0` if degenerate); result `S⁻¹(S(d0) + t · (S(d1) − S(d0)))`.
+- `apply/2`: `t = (S(v) − S(d0)) / (S(d1) − S(d0))` (`0.5` if the denominator is zero); result `r0 + t · (r1 − r0)`, clamped to the range bounds when `clamp?`.
+- `invert/2`: `t = (v − r0) / (r1 − r0)` (`0.5` if degenerate); result `S⁻¹(S(d0) + t · (S(d1) − S(d0)))`.
 - `nice/1`: the domain becomes `Linear.nice/1`'s domain for `[d0, d1]`. `padding/2` identity; `bandwidth/1` `0`.
 - `ticks/1,2` (count `n`): with `lo = min(d0, d1)`, `hi = max(d0, d1)`, the result is the ascending, de-duplicated union of: negated decades `−c · 10^k` for `k` in `0, s, 2s, … ≤ ⌈log10(−lo / c)⌉` (only when `lo < 0`); `0` when `lo ≤ 0 ≤ hi`; and decades `c · 10^k` for `k` up to `⌈log10(hi / c)⌉` (only when `hi > 0`) — every candidate filtered to `[lo, hi]`. The exponent stride is `s = max(1, ⌊⌈log10(bound / c)⌉ / n⌋)`. The decades start at the constant `c`, where the log region begins (D-17); with `c = 1` they are the powers of ten. A domain that contains no decade yields `[]`.
 

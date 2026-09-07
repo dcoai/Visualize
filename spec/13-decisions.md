@@ -387,3 +387,11 @@ This is the architecture decision record. Each entry states the context that for
 **Decision.** `Visualize.Hooks.js_code/0` emits per-hook `export const` declarations and one `export default { … }` object, nothing else. A test asserts each export name appears exactly once and that the default object lists every hook.
 
 **Consequences.** Named imports and the default import both work; the file bundles unchanged.
+
+## 49. D-49 — A collapsed domain maps to the range midpoint
+
+**Context.** `Visualize.Scale.Linear.apply/2` and `Visualize.Scale.Time.apply/2` computed `(v − d0) / (d1 − d0)` and raised `ArithmeticError` when the domain's ends coincided — the extent of a single datum, or `[0, 0]` for an all-zero bar chart. `Visualize.Scale.Power` and `Visualize.Scale.Symlog` guarded the same case with `t = 0`, so the five continuous scales disagreed with each other and with d3, whose `normalize` returns a constant `0.5` for a degenerate interval. `Visualize.Components` had started widening collapsed domains itself (spec/10 §1.3), a chart-level workaround for a scale-level gap (#47).
+
+**Decision.** `Visualize.Scale.Behaviour.normalize/3` is the one place the fraction is computed: `0.5` when the interval is collapsed, `(v − a) / (b − a)` otherwise. Every continuous scale's `apply/2` and `invert/2` use it, so a collapsed domain maps every value to the range midpoint and a collapsed range inverts to the domain midpoint. Nothing raises.
+
+**Consequences.** A single-datum chart draws its point in the middle of the axis, as it does in d3. `Power` and `Symlog` moved from `0` to `0.5` on the collapsed case. The components' own widening stays as a chart-level policy for readable axes; it is no longer load-bearing.
