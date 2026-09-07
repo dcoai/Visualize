@@ -397,7 +397,7 @@ defmodule Visualize.Geo.Path do
     n = length(points)
 
     sum =
-      0..(n - 1)
+      0..(n - 1)//1
       |> Enum.reduce(0, fn i, acc ->
         {x0, y0} = get_point(points, i)
         {x1, y1} = get_point(points, rem(i + 1, n))

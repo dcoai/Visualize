@@ -319,7 +319,7 @@ defmodule Visualize.Data do
   defp compute_thresholds(d0, d1, count) do
     step = (d1 - d0) / count
 
-    1..(count - 1)
+    1..(count - 1)//1
     |> Enum.map(fn i -> d0 + i * step end)
   end
 

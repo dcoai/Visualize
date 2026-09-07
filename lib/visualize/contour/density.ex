@@ -190,8 +190,8 @@ defmodule Visualize.Contour.Density do
       y1 = min(grid_height - 1, ceil(gy) + radius)
 
       # Add Gaussian contribution to each cell
-      Enum.reduce(y0..y1, acc_grid, fn cy, grid_y ->
-        Enum.reduce(x0..x1, grid_y, fn cx, grid_x ->
+      Enum.reduce(y0..y1//1, acc_grid, fn cy, grid_y ->
+        Enum.reduce(x0..x1//1, grid_y, fn cx, grid_x ->
           # Distance from point to cell center
           dx = cx - gx
           dy = cy - gy

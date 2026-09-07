@@ -75,7 +75,7 @@ defmodule Visualize.Scale.Radial do
   def ticks(%__MODULE__{domain: [d0, d1], range: [r0, r1]}, count) do
     last = if abs(r1 - r0) >= @tau - @epsilon, do: count - 1, else: count
     step = (d1 - d0) / count
-    Enum.map(0..last, fn i -> d0 + i * step end)
+    Enum.map(0..last//1, fn i -> d0 + i * step end)
   end
 
   @doc "Identity: the domain of a cyclic quantity is its period"

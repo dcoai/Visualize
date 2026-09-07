@@ -818,9 +818,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp get_color_scale(scheme, count) when is_atom(scheme) do
       Scale.color()
       |> Scale.scheme(scheme)
-      |> Scale.domain(Enum.to_list(0..(count - 1)))
+      |> Scale.domain(Enum.to_list(0..(count - 1)//1))
       |> then(fn scale ->
-        Enum.map(0..(count - 1), &Scale.scale(scale, &1))
+        Enum.map(0..(count - 1)//1, &Scale.scale(scale, &1))
       end)
     end
 

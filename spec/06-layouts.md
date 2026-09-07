@@ -351,7 +351,7 @@ Integration: after all forces have been applied, each free coordinate is updated
 | | `:iterations` | `1` | Passes per tick. Per link, with `d` the distance between `pos + vel` of the endpoints, `k = (d - distance) / d * alpha * strength`; the full displacement `delta * k` is added to the source velocity and subtracted from the target velocity. Links whose endpoints are not found are ignored. |
 | `:collision` | `:radius` | `10` | Number or `fn node -> number end`. |
 | | `:strength` | `1` | |
-| | `:iterations` | `1` | Passes per tick. For each overlapping pair (distance less than the sum of radii) the pair MUST be pushed apart along its axis, each node by half of `(r - d) / d * strength * alpha`. |
+| | `:iterations` | `1` | Passes per tick. For each overlapping pair (distance `d` less than the sum of radii `r`, with `d` floored at 0.001) the pair is pushed apart along its axis, each node by half of `(r - d) / d * strength * alpha` in opposite directions (D-44). Displacements are summed over every pair before any velocity changes, so the result does not depend on node order and the total momentum imparted is zero. Unlike d3, the split is equal rather than weighted by the squared radii. |
 | `:x` | `:x` | `0` | Number or `fn node -> number end`; `vx += (target - x) * strength * alpha`. |
 | | `:strength` | `0.1` | |
 | `:y` | `:y` | `0` | Number or function; `vy += (target - y) * strength * alpha`. |
@@ -360,7 +360,6 @@ Integration: after all forces have been applied, each free coordinate is updated
 | | `:x`, `:y` | `0`, `0` | Circle centre. |
 | | `:strength` | `0.1` | |
 
-> Decision: see spec/13. The current collision force iterates ordered pairs `i < j` and applies the (halved) displacement only to node `i`; node `j` is never pushed, so the force is asymmetric.
 
 The default force list, used when `:forces` is absent, is `[{:center, x: 0, y: 0}, {:many_body, strength: -30}, {:link, distance: 30}]`.
 

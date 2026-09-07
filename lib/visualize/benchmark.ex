@@ -405,7 +405,7 @@ defmodule Visualize.Benchmark do
 
   defp timed_iterations(render_fn, iterations) do
     :timer.tc(fn ->
-      for _ <- 1..iterations, do: render_fn.()
+      for _ <- 1..iterations//1, do: render_fn.()
     end)
   end
 
@@ -739,7 +739,7 @@ defmodule Visualize.Benchmark do
   # ============================================================================
 
   defp generate_data(:line, count) do
-    for i <- 0..(count - 1) do
+    for i <- 0..(count - 1)//1 do
       x = i / max(count - 1, 1) * 100
       y = :math.sin(x / 10) * 40 + :math.cos(x / 7) * 20 + 50 + :rand.uniform() * 5
       %{x: x, y: y}
@@ -749,7 +749,7 @@ defmodule Visualize.Benchmark do
   defp generate_data(:area, count), do: generate_data(:line, count)
 
   defp generate_data(:scatter, count) do
-    for _ <- 1..count do
+    for _ <- 1..count//1 do
       %{x: :rand.uniform() * 100, y: :rand.uniform() * 100, r: :rand.uniform() * 5 + 2}
     end
   end
@@ -757,7 +757,7 @@ defmodule Visualize.Benchmark do
   defp generate_animated_data(:line, count, frame) do
     phase = frame * 0.1
 
-    for i <- 0..(count - 1) do
+    for i <- 0..(count - 1)//1 do
       x = i / max(count - 1, 1) * 100
       y = :math.sin(x / 10 + phase) * 40 + :math.cos(x / 7 + phase * 0.7) * 20 + 50
       %{x: x, y: y}
@@ -770,7 +770,7 @@ defmodule Visualize.Benchmark do
   defp generate_animated_data(:scatter, count, frame) do
     phase = frame * 0.05
 
-    for i <- 1..count do
+    for i <- 1..count//1 do
       angle = i / count * :math.pi() * 2 + phase
       radius = 30 + :math.sin(angle * 3 + phase) * 15
 

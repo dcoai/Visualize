@@ -172,7 +172,7 @@ defmodule Visualize.Contour do
     padded_height = height + 2
 
     padded =
-      for y <- 0..(padded_height - 1), x <- 0..(padded_width - 1) do
+      for y <- 0..(padded_height - 1)//1, x <- 0..(padded_width - 1)//1 do
         # Border cells get the minimum value; interior cells the original (offset by 1).
         if x == 0 or y == 0 or x == padded_width - 1 or y == padded_height - 1 do
           min_val
@@ -186,8 +186,8 @@ defmodule Visualize.Contour do
 
   defp build_segments(values, width, height, threshold, smooth?) do
     # Iterate over each cell (excluding boundary)
-    for y <- 0..(height - 2),
-        x <- 0..(width - 2),
+    for y <- 0..(height - 2)//1,
+        x <- 0..(width - 2)//1,
         reduce: [] do
       acc ->
         # Get corner values
@@ -334,7 +334,7 @@ defmodule Visualize.Contour do
     max_val = Enum.max(values)
     step = (max_val - min_val) / (count + 1)
 
-    for i <- 1..count do
+    for i <- 1..count//1 do
       min_val + i * step
     end
   end

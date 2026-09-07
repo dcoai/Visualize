@@ -392,7 +392,7 @@ defmodule Visualize.Ease do
   """
   @spec frames((number() -> float()), pos_integer()) :: [float()]
   def frames(easing_fn, count) when count > 1 do
-    for i <- 0..(count - 1) do
+    for i <- 0..(count - 1)//1 do
       t = i / (count - 1)
       easing_fn.(t)
     end

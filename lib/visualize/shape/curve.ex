@@ -342,7 +342,7 @@ defmodule Visualize.Shape.Curve do
     v = List.to_tuple(values)
 
     {sub, diag, rhs} =
-      Enum.reduce(0..(n - 1), {[], [], []}, fn i, {a, b, r} ->
+      Enum.reduce(0..(n - 1)//1, {[], [], []}, fn i, {a, b, r} ->
         {ai, bi, ri} =
           cond do
             i == 0 -> {0, 2, elem(v, 0) + 2 * elem(v, 1)}

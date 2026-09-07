@@ -185,7 +185,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color_scale =
         Scale.color()
         |> Scale.scheme(if is_atom(assigns.colors), do: assigns.colors, else: :category10)
-        |> Scale.domain(Enum.to_list(0..(length(unique_parents) - 1)))
+        |> Scale.domain(Enum.to_list(0..(length(unique_parents) - 1)//1))
 
       parent_colors =
         unique_parents
@@ -289,7 +289,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color_scale =
         Scale.color()
         |> Scale.scheme(if is_atom(assigns.colors), do: assigns.colors, else: :category10)
-        |> Scale.domain(Enum.to_list(0..(length(top_level) - 1)))
+        |> Scale.domain(Enum.to_list(0..(length(top_level) - 1)//1))
 
       node_colors = assign_sunburst_colors(positioned_nodes, color_scale)
 
