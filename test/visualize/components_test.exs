@@ -1,0 +1,255 @@
+defmodule Visualize.ComponentsTest do
+  @moduledoc """
+  Render goldens for the seven chart components of `Visualize.Components` (spec/10 §2).
+
+  Each component is rendered through `Phoenix.LiveViewTest.render_component/2` on a small
+  fixed dataset and on empty data, and compared byte for byte with
+  `test/support/components/<name>.svg` and `<name>_empty.svg`. The goldens are the
+  recurrence guard for the component layer having never rendered (D-45). Regenerate only
+  when a component's output changes on purpose:
+
+      mix run -e 'Visualize.ComponentsTest.write!()'
+  """
+  use ExUnit.Case, async: true
+
+  import Phoenix.LiveViewTest, only: [render_component: 2]
+
+  alias Visualize.Components
+
+  @dir "test/support/components"
+
+  @t0 ~U[2024-01-01 00:00:00Z]
+
+  @series for {v, h} <- Enum.with_index([4, 9, 2, 7]),
+              do: %{at: DateTime.add(@t0, h * 6 * 3600, :second), value: v}
+  @categories [%{name: "a", value: 30}, %{name: "b", value: 80}, %{name: "c", value: 45}]
+  @points [%{x: 1, y: 10}, %{x: 4, y: 3}, %{x: 7, y: 12}, %{x: 9, y: 6}]
+  @stacked [
+    %{month: "Jan", apples: 10, pears: 20},
+    %{month: "Feb", apples: 15, pears: 5},
+    %{month: "Mar", apples: 0, pears: 25}
+  ]
+
+  @case_names ~w(line_chart line_chart_points bar_chart horizontal_bar_chart pie_chart
+                 donut_chart scatter_plot scatter_plot_sized area_chart stacked_bar_chart)a
+  @empty_names ~w(line_chart bar_chart horizontal_bar_chart pie_chart scatter_plot area_chart
+                  stacked_bar_chart)a
+
+  # Accessors are anonymous functions, which a module attribute cannot hold.
+  def cases do
+    [
+      line_chart: {&Components.line_chart/1, %{data: @series, x: & &1.at, y: & &1.value}},
+      line_chart_points:
+        {&Components.line_chart/1,
+         %{
+           data: @points,
+           x: & &1.x,
+           y: & &1.y,
+           show_points: true,
+           curve: :monotone_x,
+           x_label: "x",
+           y_label: "y",
+           animate: true,
+           class: "chart"
+         }},
+      bar_chart: {&Components.bar_chart/1, %{data: @categories, x: & &1.name, y: & &1.value}},
+      horizontal_bar_chart:
+        {&Components.horizontal_bar_chart/1, %{data: @categories, x: & &1.value, y: & &1.name}},
+      pie_chart:
+        {&Components.pie_chart/1, %{data: @categories, value: & &1.value, label: & &1.name}},
+      donut_chart:
+        {&Components.pie_chart/1,
+         %{data: @categories, value: & &1.value, inner_radius: 60, colors: ["#111", "#222"]}},
+      scatter_plot: {&Components.scatter_plot/1, %{data: @points, x: & &1.x, y: & &1.y}},
+      scatter_plot_sized:
+        {&Components.scatter_plot/1, %{data: @points, x: & &1.x, y: & &1.y, size: & &1.y}},
+      area_chart:
+        {&Components.area_chart/1, %{data: @series, x: & &1.at, y: & &1.value, curve: :step}},
+      stacked_bar_chart:
+        {&Components.stacked_bar_chart/1,
+         %{data: @stacked, x: & &1.month, keys: [:apples, :pears], colors: :set2}}
+    ]
+  end
+
+  def empty do
+    [
+      line_chart: {&Components.line_chart/1, %{data: [], x: & &1.at, y: & &1.value}},
+      bar_chart: {&Components.bar_chart/1, %{data: [], x: & &1.name, y: & &1.value}},
+      horizontal_bar_chart:
+        {&Components.horizontal_bar_chart/1, %{data: [], x: & &1.value, y: & &1.name}},
+      pie_chart: {&Components.pie_chart/1, %{data: [], value: & &1.value, label: & &1.name}},
+      scatter_plot: {&Components.scatter_plot/1, %{data: [], x: & &1.x, y: & &1.y}},
+      area_chart: {&Components.area_chart/1, %{data: [], x: & &1.at, y: & &1.value}},
+      stacked_bar_chart:
+        {&Components.stacked_bar_chart/1, %{data: [], x: & &1.month, keys: [:apples, :pears]}}
+    ]
+  end
+
+  def render_case({component, assigns}), do: render_component(component, assigns)
+
+  def goldens do
+    Enum.map(cases(), fn {name, c} -> {"#{name}.svg", render_case(c)} end) ++
+      Enum.map(empty(), fn {name, c} -> {"#{name}_empty.svg", render_case(c)} end)
+  end
+
+  def write! do
+    File.mkdir_p!(@dir)
+    Enum.each(goldens(), fn {file, svg} -> File.write!(Path.join(@dir, file), svg) end)
+  end
+
+  for name <- @case_names do
+    test "#{name} renders as recorded" do
+      c = Keyword.fetch!(cases(), unquote(name))
+      assert File.read!(Path.join(@dir, "#{unquote(name)}.svg")) == render_case(c)
+    end
+  end
+
+  for name <- @empty_names do
+    test "#{name} renders the frame alone with no data" do
+      svg = render_case(Keyword.fetch!(empty(), unquote(name)))
+      assert File.read!(Path.join(@dir, "#{unquote(name)}_empty.svg")) == svg
+      # The axes are paths too; a mark is a rect, a circle, or a path in the mark colour.
+      assert svg =~ "<svg"
+      refute svg =~ "<rect"
+      refute svg =~ "<circle"
+      refute svg =~ "steelblue"
+      refute svg =~ ~r/<path d="[^"]*" fill="#/
+    end
+  end
+
+  test "every chart component has a golden and an empty-data golden" do
+    names = ~w(line_chart bar_chart horizontal_bar_chart pie_chart scatter_plot area_chart
+               stacked_bar_chart)
+
+    for name <- names do
+      assert File.exists?(Path.join(@dir, "#{name}.svg"))
+      assert File.exists?(Path.join(@dir, "#{name}_empty.svg"))
+    end
+  end
+
+  describe "colors" do
+    test "a colour list is used as given and cycled" do
+      svg =
+        render_component(&Components.pie_chart/1, %{
+          data: @categories,
+          value: & &1.value,
+          colors: ["#111", "#222"]
+        })
+
+      fills = Regex.scan(~r/fill="(#[0-9a-f]+)"/, svg) |> Enum.map(&Enum.at(&1, 1))
+      assert fills == ["#111", "#222", "#111"]
+    end
+
+    test "a scheme atom is taken by index" do
+      svg =
+        render_component(&Components.stacked_bar_chart/1, %{
+          data: @stacked,
+          x: & &1.month,
+          keys: [:apples, :pears],
+          colors: :category10
+        })
+
+      [first, second | _] = Visualize.Scale.Color.scheme(:category10)
+      assert svg =~ ~s(fill="#{first}")
+      assert svg =~ ~s(fill="#{second}")
+    end
+
+    test "an unknown scheme is an ArgumentError naming schemes/0" do
+      assert_raise ArgumentError, ~r/schemes\/0/, fn ->
+        render_component(&Components.pie_chart/1, %{
+          data: @categories,
+          value: & &1.value,
+          colors: :no_such_scheme
+        })
+      end
+    end
+
+    test "an empty colour list is an ArgumentError" do
+      assert_raise ArgumentError, fn ->
+        render_component(&Components.pie_chart/1, %{
+          data: @categories,
+          value: & &1.value,
+          colors: []
+        })
+      end
+    end
+  end
+
+  describe "degenerate data" do
+    test "a single datum renders: the collapsed domain spans one unit" do
+      svg =
+        render_component(&Components.line_chart/1, %{
+          data: [hd(@series)],
+          x: & &1.at,
+          y: & &1.value
+        })
+
+      assert svg =~ "<path"
+
+      svg =
+        render_component(&Components.scatter_plot/1, %{
+          data: [%{x: 3, y: 3}],
+          x: & &1.x,
+          y: & &1.y
+        })
+
+      assert svg =~ ~s(cx="0")
+    end
+
+    test "all-zero bars render with zero height" do
+      svg =
+        render_component(&Components.bar_chart/1, %{
+          data: [%{name: "a", value: 0}],
+          x: & &1.name,
+          y: & &1.value
+        })
+
+      assert svg =~ ~s(height="0")
+    end
+
+    test "a Date x axis is a time scale" do
+      data = [%{d: ~D[2024-01-01], v: 1}, %{d: ~D[2024-01-31], v: 2}]
+      svg = render_component(&Components.line_chart/1, %{data: data, x: & &1.d, y: & &1.v})
+      assert svg =~ "<path"
+    end
+  end
+
+  describe "assigns" do
+    test "a partial margin overrides one side" do
+      svg =
+        render_component(&Components.bar_chart/1, %{
+          data: @categories,
+          x: & &1.name,
+          y: & &1.value,
+          margin: %{left: 60}
+        })
+
+      assert svg =~ ~s|transform="translate(60, 20)"|
+    end
+
+    test "animate puts the transition on every mark and class lands on the svg" do
+      svg =
+        render_component(&Components.scatter_plot/1, %{
+          data: @points,
+          x: & &1.x,
+          y: & &1.y,
+          animate: true,
+          class: "c"
+        })
+
+      assert svg =~ ~s(<svg width="600" height="400" class="c")
+      assert length(Regex.scan(~r/transition: all 0.3s ease-in-out;/, svg)) == length(@points)
+    end
+
+    test "pie labels are drawn only with show_labels and a label accessor" do
+      name = fn d -> d.name end
+      base = %{data: @categories, value: fn d -> d.value end}
+      labelled = Map.put(base, :label, name)
+      hidden = Map.put(labelled, :show_labels, false)
+
+      refute render_component(&Components.pie_chart/1, base) =~ "<text"
+      refute render_component(&Components.pie_chart/1, hidden) =~ "<text"
+      assert render_component(&Components.pie_chart/1, labelled) =~ ">a</text>"
+    end
+  end
+end

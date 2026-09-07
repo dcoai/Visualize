@@ -17,8 +17,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
+    alias Visualize.Components.Support
     alias Visualize.Layout.{Hierarchy, Tree, Treemap}
-    alias Visualize.{Scale, Shape, SVG}
+    alias Visualize.Scale
 
     @doc """
     Renders a tree diagram (node-link visualization).
@@ -182,15 +183,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> Enum.map(fn n -> if n.parent, do: n.parent.data, else: n.data end)
         |> Enum.uniq()
 
-      color_scale =
-        Scale.color()
-        |> Scale.scheme(if is_atom(assigns.colors), do: assigns.colors, else: :category10)
-        |> Scale.domain(Enum.to_list(0..(length(unique_parents) - 1)//1))
+      color_scale = Support.palette(assigns.colors, length(unique_parents))
 
       parent_colors =
         unique_parents
         |> Enum.with_index()
-        |> Enum.map(fn {p, i} -> {p, Scale.scale(color_scale, i)} end)
+        |> Enum.map(fn {p, i} -> {p, Scale.apply(color_scale, i)} end)
         |> Map.new()
 
       transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
@@ -286,10 +284,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       # Color scale
       top_level = nodes |> Enum.filter(&(&1.depth == 1))
 
-      color_scale =
-        Scale.color()
-        |> Scale.scheme(if is_atom(assigns.colors), do: assigns.colors, else: :category10)
-        |> Scale.domain(Enum.to_list(0..(length(top_level) - 1)//1))
+      color_scale = Support.palette(assigns.colors, length(top_level))
 
       node_colors = assign_sunburst_colors(positioned_nodes, color_scale)
 
@@ -354,9 +349,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       if node.children, do: -10, else: 10
     end
 
-    defp label_x(node, :vertical) do
-      0
-    end
+    defp label_x(_node, :vertical), do: 0
 
     defp label_anchor(node, :horizontal) do
       if node.children, do: "end", else: "start"
@@ -436,7 +429,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       top_colors =
         Map.new(top_level, fn {node, i} ->
-          {node.data, Scale.scale(color_scale, i)}
+          {node.data, Scale.apply(color_scale, i)}
         end)
 
       nodes

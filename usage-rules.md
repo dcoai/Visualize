@@ -40,9 +40,12 @@ a pure function over immutable structs; builders are `new/0` plus setter pipelin
    variants raise. Surface bugs, do not hide them.
 5. **Backends are explicit.** Pass `backend:` to `Visualize.Render` functions or set
    `config :visualize, default_backend:`. There is no per-process override.
-6. **Phoenix and Nx are optional.** `Visualize.Components` compiles only when
-   `Phoenix.Component` is loaded; `Backend.CanvasBinary` and `Shape.LineNx` need Nx. Never
-   add either as a required dependency.
+6. **Phoenix and Nx are optional.** Both are `optional: true` dependencies — declared, so
+   a host that has them gets them on the code path; never fetched by a host that does not.
+   `Visualize.Components` compiles only when `Phoenix.Component` is loaded;
+   `Backend.CanvasBinary` and `Shape.LineNx` need Nx. Never make either required, and
+   never guard on a module of an undeclared dependency: Mix prunes the code path to the
+   declared ones, so such a guard is always false in a host (D-45).
 7. **About 1,000 points is the SVG ceiling.** Beyond that use the canvas backends, or
    reduce resolution before rendering; see `spec/00-prior-art.md`.
 8. **Files stay under 1,000 lines**; split by family (`Geo.Projection.*` is the pattern).

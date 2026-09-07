@@ -35,15 +35,15 @@ Each row is `{Item, Section, Status, Version, Locus}`:
 
 ## 4. The CI pipeline
 
-**Agreed; not yet built.** Three stages, each blocking the next:
+**Implemented** (`.gitlab-ci.yml`). Three stages, each blocking the next:
 
 | Stage | Jobs |
 |---|---|
 | `check` | `mix format --check-formatted`; `mix compile --warnings-as-errors`; `mix test` |
-| `verify` | `mix vis.surface --check`; `mix tla.check` over the models in §5; a `MIX_ENV=prod` consumer compile (a throwaway project depending on `visualize` with neither Phoenix nor Nx, proving the optional-dependency guards); compilation of every example under `examples/` |
-| `quality` | `mix credo --strict` |
+| `verify` | `mix vis.surface --check`; `mix vis.headings` (§3); `mix vis.verify` over the models in §5; the consumer compile: `mix compile --force --warnings-as-errors` in `MIX_ENV=prod`, then `elixir scripts/consumer_check.exs`, which generates a throwaway project depending on `visualize` by path and on nothing else, compiles it in `MIX_ENV=prod` and asserts that `Phoenix.Component`, `Phoenix.HTML.Safe`, `Nx`, `Visualize.Components`, `Visualize.Components.Tree`, `Visualize.Audit`, `TLA.Spec` and `Surfex.Golden` cannot be loaded while `Visualize`, `Visualize.Scale`, `Visualize.Hooks` and `Visualize.Backend.CanvasBinary` can — the proof that the optional dependencies (D-45) and the `elixirc_paths/1` split reach no consumer; compilation of the gallery under `examples/` |
+| `quality` | `mix credo --strict`; `mix docs --warnings-as-errors` |
 
-`mix vis.check` runs the same jobs locally in the same order and MUST be the last thing run before submitting a change for review. The `check` stage exists today as individual commands; the alias and the `verify` and `quality` stages do not.
+`mix vis.check` (`scripts/check.exs`) runs the same jobs locally in the same order and MUST be the last thing run before submitting a change for review.
 
 ## 5. The ExTLA model of the force simulation
 
@@ -64,3 +64,5 @@ Three constants select the intended behaviour (default `true`) or the defect the
 ## 6. Unit and regression tests
 
 **Implemented.** `mix test` runs the ExUnit suite. `test/visualize/defects_test.exs` holds one regression per recorded defect fix (D-1, D-3, D-8 and the `Data.range/3` step handling), and each future decision that changes behaviour MUST add a regression there or in the module's own test file.
+
+The LiveView components have render goldens of the same kind as §1: `test/visualize/components_test.exs` renders every chart component of [10-liveview-integration](10-liveview-integration.md) §2 through `Phoenix.LiveViewTest.render_component/2` on a small fixed dataset and on empty data, and asserts byte equality with `test/support/components/<name>.svg` and `<name>_empty.svg` (D-45). They are regenerated with `mix run -e 'Visualize.ComponentsTest.write!()'` only when a component's output changes on purpose, and the regeneration is committed with the change.
