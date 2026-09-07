@@ -171,10 +171,10 @@ The stack yields one series per key with points `%{data, y0, y1}`; the y domain 
 | Function | Contract |
 |---|---|
 | `Visualize.Components.Tree.tree_diagram/1` | Renders a node-link tree from nested data using the tidy tree layout (3.2). |
-| `Visualize.Components.Tree.treemap_chart/1` | Renders a treemap of the hierarchy's leaves coloured by top-level parent (3.3). |
-| `Visualize.Components.Tree.sunburst_chart/1` | Renders a radial partition with one arc per non-root node (3.4). |
+| `Visualize.Components.Tree.treemap_chart/1` | Renders a treemap of the hierarchy's leaves coloured by the child of the root above each (3.3). |
+| `Visualize.Components.Tree.sunburst_chart/1` | Renders a radial partition with one arc per non-root node of positive value, labelled (3.4). |
 
-All three build the hierarchy with `Visualize.Layout.Hierarchy.new/1`, so `data` MUST be a map whose children are under `:children` or `"children"`; node labels default to `:name` or `"name"`.
+All three build the hierarchy with `Visualize.Layout.Hierarchy.new/1`, so `data` MUST be a map whose children are under `:children` or `"children"`; node labels default to `:name` or `"name"`, leaf values to `:value` or `"value"` (missing → 0). A root-only hierarchy is the empty case: the tree draws its one node, the treemap one cell, the sunburst no arc. `colors` follows 1.3 with one rule for which mark takes which index: the i-th child of the root takes the i-th colour and every descendant of that child inherits it, so a whole top-level branch shares a colour however deep it goes (D-46); the root itself, where drawn, is `"#ddd"`. Coordinates print as in 1.2.
 
 ### 3.2 `tree_diagram/1`
 
@@ -192,7 +192,7 @@ All three build the hierarchy with `Visualize.Layout.Hierarchy.new/1`, so `data`
 | `label` | `:any` | `nil` | accessor of a node's `data`; `nil` → `:name`/`"name"` |
 | `animate`, `class` | | | per 1.2 |
 
-Layout is `Visualize.Layout.Tree` sized `[inner_height, inner_width]` for horizontal and `[inner_width, inner_height]` for vertical. Links are cubic Béziers between parent and child with control points at the midpoint of the depth axis, `fill="none" stroke={link_stroke} stroke-width="1.5"`. Each node is a `<g transform="translate(…)">` (horizontal swaps the layout's `x`/`y`) holding a `<circle r={node_radius} stroke={node_stroke} stroke-width="2">` and a `<text dy="0.31em" font-size="12">`: horizontal labels sit at `x = −10` with `text-anchor="end"` for internal nodes and `x = 10`/`"start"` for leaves; vertical labels are centred at `x = 0`.
+Layout is `Visualize.Layout.Tree` sized `[inner_height, inner_width]` for horizontal and `[inner_width, inner_height]` for vertical. Links are cubic Béziers between parent and child with both control points at the midpoint of the depth axis, `fill="none" stroke={link_stroke} stroke-width="1.5"`, drawn before the nodes. Each node is a `<g transform="translate(…)">` (horizontal swaps the layout's `x`/`y`) holding a `<circle r={node_radius} stroke={node_stroke} stroke-width="2">` filled `node_stroke` for an internal node and `node_fill` for a leaf (a node whose `children` is `nil` or `[]`), and a `<text dy="0.31em" font-size="12">`: horizontal labels sit at `x = −10` with `text-anchor="end"` for internal nodes and `x = 10`/`"start"` for leaves; vertical labels are centred at `x = 0`. A root-only hierarchy is one node at the origin of the plot area and no link.
 
 ### 3.3 `treemap_chart/1`
 
@@ -201,14 +201,14 @@ Layout is `Visualize.Layout.Tree` sized `[inner_height, inner_width]` for horizo
 | `data` | `:map` | required | nested map with leaf values |
 | `width` | `:integer` | `800` | |
 | `height` | `:integer` | `600` | |
-| `value` | `:any` | `nil` | leaf value accessor; `nil` → `:value` (missing → 0) |
+| `value` | `:any` | `nil` | leaf value accessor; `nil` → `:value`/`"value"` (missing → 0) |
 | `label` | `:any` | `nil` | as 3.2 |
 | `tile` | `:atom` | `:squarify` | any `Visualize.Layout.Treemap.tile/2` algorithm (spec/06) |
 | `padding` | `:integer` | `2` | uniform cell padding |
-| `colors` | `:any` | `:category10` | scheme atom; a list is not honoured and falls back to `:category10` |
+| `colors` | `:any` | `:category10` | scheme atom or colour list, by child of the root (3.1) |
 | `animate`, `class` | | | per 1.2 |
 
-The hierarchy is summed with `value`, laid out with `Visualize.Layout.Treemap` at `{width, height}`, and only leaves are drawn: `<rect x={x0} y={y0} width={x1−x0} height={y1−y0} stroke="white" stroke-width="1">` filled by the colour of the leaf's parent (each distinct parent gets the next scheme colour; a leaf with no parent uses its own data as key). A white `font-size="11"` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` when the cell is wider than 30 and taller than 15, truncated with `…` to `trunc((cell width − 8) / 7)` characters.
+The hierarchy is summed with `value`, laid out with `Visualize.Layout.Treemap` at `{width, height}`, and only leaves are drawn, in hierarchy order: `<rect x={x0} y={y0} width={max(0, x1−x0)} height={max(0, y1−y0)} fill={colour} stroke="white" stroke-width="1">`. A zero-valued leaf keeps its zero-area cell (D-41). A white `font-size="11"` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` when the cell is wider than 30 and taller than 15, truncated with `…` to `trunc((cell width − 8) / 7)` characters. A root-only hierarchy is one cell the size of the `<svg>`.
 
 ### 3.4 `sunburst_chart/1`
 
@@ -218,11 +218,11 @@ The hierarchy is summed with `value`, laid out with `Visualize.Layout.Treemap` a
 | `width` | `:integer` | `600` | |
 | `height` | `:integer` | `600` | |
 | `value` | `:any` | `nil` | as 3.3 |
-| `label` | `:any` | `nil` | accepted, computed, but not rendered |
-| `colors` | `:any` | `:category10` | scheme atom, as 3.3 |
+| `label` | `:any` | `nil` | as 3.2; drawn at the arc's centroid when the arc can hold text (below) |
+| `colors` | `:any` | `:category10` | as 3.3 |
 | `animate`, `class` | | | per 1.2 |
 
-The radius is `min(width, height)/2`. Angles are assigned top-down: the root spans `[0, 2π]`, and each child spans a share of its parent's arc proportional to its summed value (equal shares when the children sum to 0). Ring radii are `depth/(max_depth + 1) · radius`. Every node of depth ≥ 1 is a `<path fill={colour} stroke="white" stroke-width="1">` whose `d` is an annular sector from the inner to outer ring, angles measured clockwise from 12 o'clock. Colour is that of the node's depth-1 ancestor (`"#ccc"` when none); the root is not drawn.
+The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visualize.Layout.Partition` sized `{2π, radius}` (spec/06 §4): the root spans `[0, 2π]`, each child a share of its parent's arc proportional to its summed value, and a node whose value is not positive a zero-width slot (D-41); ring radii are `depth / (height + 1) · radius` with `height` the root's. Every node of depth ≥ 1 whose angular extent is positive is a `<path fill={colour} stroke="white" stroke-width="1">` whose `d` is `Visualize.Shape.Arc` with `x0`/`x1` as the start and end angles — clockwise from 12 o'clock, the arc's own convention (spec/04 §7) — and `y0`/`y1` as the inner and outer radii, inside `<g transform="translate(width/2, height/2)">`. The root is not drawn, and a zero-extent node draws nothing. A label is a `<text text-anchor="middle" dominant-baseline="middle" font-size="11">` at `Visualize.Shape.Arc.centroid/2` of the arc, drawn when the ring is thicker than 15 and the arc's length at mid-radius, `(x1 − x0) · (y0 + y1) / 2`, exceeds 30, and truncated as in 3.3 to that length − 8.
 
 ## 4. Visualize.Hooks
 

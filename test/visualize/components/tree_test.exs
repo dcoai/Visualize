@@ -1,0 +1,187 @@
+defmodule Visualize.Components.TreeTest do
+  @moduledoc """
+  Render goldens for the three hierarchy components of `Visualize.Components.Tree`
+  (spec/10 §3), in the manner of `Visualize.ComponentsTest`: a small fixed hierarchy and
+  a root-only one, each rendered through `Phoenix.LiveViewTest.render_component/2` and
+  compared byte for byte with `test/support/components/<name>.svg` (D-46).
+
+      mix run -e 'Visualize.Components.TreeTest.write!()'
+  """
+  use ExUnit.Case, async: true
+
+  import Phoenix.LiveViewTest, only: [render_component: 2]
+
+  alias Visualize.Components.Tree
+
+  @dir "test/support/components"
+
+  @hierarchy %{
+    name: "root",
+    children: [
+      %{name: "a", children: [%{name: "a1", value: 10}, %{name: "a2", value: 20}]},
+      %{name: "b", value: 30},
+      %{name: "c", children: [%{name: "c1", value: 5}, %{name: "c2", value: 0}]}
+    ]
+  }
+  @root_only %{name: "root", value: 1}
+  @strings %{
+    "name" => "root",
+    "children" => [%{"name" => "x", "value" => 2}, %{"name" => "y", "value" => 1}]
+  }
+
+  @case_names ~w(tree_diagram tree_diagram_vertical treemap_chart treemap_chart_slice
+                 sunburst_chart sunburst_chart_colors)a
+  @empty_names ~w(tree_diagram treemap_chart sunburst_chart)a
+
+  def cases do
+    [
+      tree_diagram: {&Tree.tree_diagram/1, %{data: @hierarchy}},
+      tree_diagram_vertical:
+        {&Tree.tree_diagram/1,
+         %{
+           data: @hierarchy,
+           orientation: :vertical,
+           width: 400,
+           height: 300,
+           margin: %{left: 40, right: 40},
+           node_radius: 4,
+           label: &String.upcase(&1.name),
+           animate: true,
+           class: "tree"
+         }},
+      treemap_chart: {&Tree.treemap_chart/1, %{data: @hierarchy}},
+      treemap_chart_slice:
+        {&Tree.treemap_chart/1,
+         %{data: @strings, tile: :slice, padding: 0, colors: ["#111", "#222"]}},
+      sunburst_chart: {&Tree.sunburst_chart/1, %{data: @hierarchy}},
+      sunburst_chart_colors:
+        {&Tree.sunburst_chart/1,
+         %{
+           data: @hierarchy,
+           width: 300,
+           height: 400,
+           colors: :set2,
+           value: fn d -> d[:value] || 1 end,
+           label: & &1.name
+         }}
+    ]
+  end
+
+  def empty do
+    [
+      tree_diagram: {&Tree.tree_diagram/1, %{data: @root_only}},
+      treemap_chart: {&Tree.treemap_chart/1, %{data: @root_only}},
+      sunburst_chart: {&Tree.sunburst_chart/1, %{data: @root_only}}
+    ]
+  end
+
+  def render_case({component, assigns}), do: render_component(component, assigns)
+
+  def goldens do
+    Enum.map(cases(), fn {name, c} -> {"#{name}.svg", render_case(c)} end) ++
+      Enum.map(empty(), fn {name, c} -> {"#{name}_empty.svg", render_case(c)} end)
+  end
+
+  def write! do
+    File.mkdir_p!(@dir)
+    Enum.each(goldens(), fn {file, svg} -> File.write!(Path.join(@dir, file), svg) end)
+  end
+
+  for name <- @case_names do
+    test "#{name} renders as recorded" do
+      c = Keyword.fetch!(cases(), unquote(name))
+      assert File.read!(Path.join(@dir, "#{unquote(name)}.svg")) == render_case(c)
+    end
+  end
+
+  for name <- @empty_names do
+    test "#{name} renders a root-only hierarchy as recorded" do
+      svg = render_case(Keyword.fetch!(empty(), unquote(name)))
+      assert File.read!(Path.join(@dir, "#{unquote(name)}_empty.svg")) == svg
+      assert svg =~ "<svg"
+    end
+  end
+
+  describe "tree_diagram/1" do
+    test "one node per hierarchy node, one link per edge" do
+      svg = render_component(&Tree.tree_diagram/1, %{data: @hierarchy})
+      assert length(Regex.scan(~r/<circle/, svg)) == 8
+      assert length(Regex.scan(~r/<path d="M/, svg)) == 7
+      assert svg =~ ~s(text-anchor="end" font-size="12">root</text>)
+      assert svg =~ ~s(text-anchor="start" font-size="12">a1</text>)
+    end
+
+    test "a root-only hierarchy is one node and no link" do
+      svg = render_component(&Tree.tree_diagram/1, %{data: @root_only})
+      assert length(Regex.scan(~r/<circle/, svg)) == 1
+      refute svg =~ "<path"
+      assert svg =~ ~s(fill="#fff")
+    end
+  end
+
+  describe "treemap_chart/1" do
+    test "one cell per leaf, coloured by the child of the root above it" do
+      svg = render_component(&Tree.treemap_chart/1, %{data: @hierarchy})
+      [c0, c1, c2 | _] = Visualize.Scale.Color.scheme(:category10)
+      fills = Regex.scan(~r/<rect[^>]* fill="([^"]+)"/, svg) |> Enum.map(&Enum.at(&1, 1))
+      assert fills == [c0, c0, c1, c2, c2]
+    end
+
+    test "a colour list is used as given and cycled" do
+      svg = render_component(&Tree.treemap_chart/1, %{data: @hierarchy, colors: ["#111", "#222"]})
+      fills = Regex.scan(~r/<rect[^>]* fill="([^"]+)"/, svg) |> Enum.map(&Enum.at(&1, 1))
+      assert fills == ["#111", "#111", "#222", "#111", "#111"]
+    end
+
+    test "an unknown scheme is an ArgumentError" do
+      assert_raise ArgumentError, ~r/schemes\/0/, fn ->
+        render_component(&Tree.treemap_chart/1, %{data: @hierarchy, colors: :nope})
+      end
+    end
+
+    test "a zero-valued leaf is a zero-area cell without a label" do
+      svg = render_component(&Tree.treemap_chart/1, %{data: @hierarchy})
+      assert svg =~ ~r/(width|height)="0"/
+      refute svg =~ ">c2</text>"
+      assert svg =~ ">a2</text>"
+    end
+  end
+
+  describe "sunburst_chart/1" do
+    test "one arc per node below the root with a positive value, labels rendered" do
+      svg = render_component(&Tree.sunburst_chart/1, %{data: @hierarchy})
+      # Seven non-root nodes, one of them (c2) zero-valued and therefore undrawn.
+      assert length(Regex.scan(~r/<path d="M/, svg)) == 6
+      assert svg =~ ">a</text>"
+      assert svg =~ ">b</text>"
+      refute svg =~ ">c2</text>"
+    end
+
+    test "a label accessor is honoured" do
+      svg =
+        render_component(&Tree.sunburst_chart/1, %{
+          data: @hierarchy,
+          label: &String.upcase(&1.name)
+        })
+
+      assert svg =~ ">A</text>"
+      refute svg =~ ">a</text>"
+    end
+
+    test "colours follow the child of the root" do
+      svg =
+        render_component(&Tree.sunburst_chart/1, %{
+          data: @hierarchy,
+          colors: ["#111", "#222", "#333"]
+        })
+
+      fills = Regex.scan(~r/<path[^>]* fill="([^"]+)"/, svg) |> Enum.map(&Enum.at(&1, 1))
+      assert fills == ["#111", "#111", "#111", "#222", "#333", "#333"]
+    end
+
+    test "a root-only hierarchy draws no arc" do
+      svg = render_component(&Tree.sunburst_chart/1, %{data: @root_only})
+      refute svg =~ "<path"
+    end
+  end
+end
