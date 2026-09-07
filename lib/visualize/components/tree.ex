@@ -1,48 +1,67 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Components.Tree do
     @moduledoc """
-    Phoenix LiveView components for hierarchical tree visualizations.
+    Phoenix LiveView function components for hierarchies (spec/10 §3): a node-link tree,
+    a treemap and a sunburst.
+
+    Each takes nested `data` — a map whose children are under `:children` or `"children"`,
+    as `Visualize.Layout.Hierarchy.new/1` reads it — and lays it out with the matching
+    layout of `Visualize.Layout`. Node labels default to the `:name` or `"name"` of a
+    node's data; leaf values to its `:value` or `"value"`.
 
     ## Usage
 
+        use Phoenix.Component
         import Visualize.Components.Tree
 
-        <.tree_diagram
-          data={@hierarchy_data}
-          width={800}
-          height={600}
-        />
+        <.tree_diagram data={@hierarchy} width={800} height={600} />
 
+    ## Conventions
+
+    - A root-only hierarchy is the empty case: the tree draws its one node, the treemap
+      one cell, the sunburst nothing but the `<svg>` (the root is never an arc).
+    - `colors` is a scheme atom of `Visualize.Scale.Color.schemes/0` or an explicit colour
+      list, taken by index and cycled, as in `Visualize.Components`; an unknown scheme or an
+      empty list raises `ArgumentError`.
+    - `animate={true}` puts `style="transition: all 0.3s ease-in-out;"` on every mark;
+      `class` lands on the `<svg>`; coordinates print with at most four decimals.
     """
 
     use Phoenix.Component
 
     alias Visualize.Components.Support
-    alias Visualize.Layout.{Hierarchy, Tree, Treemap}
-    alias Visualize.Scale
+    alias Visualize.Layout.{Hierarchy, Partition, Tree, Treemap}
+    alias Visualize.{Scale, Shape}
+
+    @tree_margin %{top: 20, right: 120, bottom: 20, left: 120}
 
     @doc """
-    Renders a tree diagram (node-link visualization).
+    Renders a node-link tree laid out by `Visualize.Layout.Tree`.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - Nested map with :children key (required)
-    * `width` - Chart width in pixels (default: 800)
-    * `height` - Chart height in pixels (default: 600)
-    * `margin` - Map with :top, :right, :bottom, :left (optional)
-    * `orientation` - :horizontal or :vertical (default: :horizontal)
-    * `node_radius` - Radius of node circles (default: 6)
-    * `node_fill` - Fill color for nodes (default: "#fff")
-    * `node_stroke` - Stroke color for nodes (default: "steelblue")
-    * `link_stroke` - Link line color (default: "#ccc")
-    * `label` - Accessor for node labels (default: & &1[:name])
-    * `animate` - Enable CSS transitions (default: false)
+    * `data` - the nested map (required)
+    * `width`, `height` - pixels (default 800 by 600)
+    * `margin` - merged over `%{top: 20, right: 120, bottom: 20, left: 120}`, which
+      leaves room for the labels of the root and of the leaves
+    * `orientation` - `:horizontal` (root at the left, depth along x) or `:vertical`
+      (root at the top) (default `:horizontal`)
+    * `node_radius` - (default 6)
+    * `node_fill` - fill of leaf circles (default `"#fff"`)
+    * `node_stroke` - circle stroke, and the fill of internal nodes (default `"steelblue"`)
+    * `link_stroke` - (default `"#ccc"`)
+    * `label` - accessor of a node's data; `nil` reads `:name` or `"name"`
+    * `animate`, `class` - per the module conventions
 
+    Links are cubic Béziers between parent and child with both control points at the
+    midpoint of the depth axis. Horizontal labels sit at `x = −10`, anchored `end`, for
+    internal nodes and at `x = 10`, anchored `start`, for leaves; vertical labels are
+    centred at `x = 0`.
     """
     attr(:data, :map, required: true)
     attr(:width, :integer, default: 800)
     attr(:height, :integer, default: 600)
-    attr(:margin, :map, default: %{top: 20, right: 120, bottom: 20, left: 120})
+    attr(:margin, :map, default: @tree_margin)
     attr(:orientation, :atom, default: :horizontal)
     attr(:node_radius, :integer, default: 6)
     attr(:node_fill, :string, default: "#fff")
@@ -53,97 +72,76 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
 
     def tree_diagram(assigns) do
-      margin = Map.merge(%{top: 20, right: 120, bottom: 20, left: 120}, assigns.margin || %{})
-      inner_width = assigns.width - margin.left - margin.right
-      inner_height = assigns.height - margin.top - margin.bottom
+      {margin, inner_width, inner_height} = Support.frame(assigns, @tree_margin)
+      orientation = assigns.orientation
 
-      # Build hierarchy
-      root = Hierarchy.new(assigns.data)
+      size =
+        case orientation do
+          :horizontal -> [inner_height, inner_width]
+          :vertical -> [inner_width, inner_height]
+        end
 
-      # Apply tree layout
-      tree_layout =
-        Tree.new()
-        |> Tree.size(
-          if assigns.orientation == :horizontal do
-            [inner_height, inner_width]
-          else
-            [inner_width, inner_height]
-          end
-        )
+      root = Tree.new() |> Tree.size(size) |> Tree.generate(Hierarchy.new(assigns.data))
+      label = assigns.label || (&name/1)
 
-      positioned = Tree.generate(tree_layout, root)
+      links =
+        for {source, target} <- Hierarchy.links(root) do
+          link_path(point(source, orientation), point(target, orientation), orientation)
+        end
 
-      # Get nodes and links
-      nodes = Hierarchy.descendants(positioned)
-      links = Hierarchy.links(positioned)
+      nodes =
+        for node <- Hierarchy.descendants(root) do
+          {x, y} = point(node, orientation)
+          internal? = internal?(node)
 
-      label_fn = assigns.label || fn d -> d[:name] || d["name"] end
-
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
+          %{
+            transform: "translate(#{fmt(x)}, #{fmt(y)})",
+            fill: if(internal?, do: assigns.node_stroke, else: assigns.node_fill),
+            label_x: label_x(orientation, internal?),
+            anchor: label_anchor(orientation, internal?),
+            label: label.(node.data)
+          }
+        end
 
       assigns =
         assign(assigns,
           margin: margin,
-          nodes: nodes,
           links: links,
-          label_fn: label_fn,
-          transition_style: transition_style
+          nodes: nodes,
+          transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
-          <%= for {source, target} <- @links do %>
-            <path
-              d={link_path(source, target, @orientation)}
-              fill="none"
-              stroke={@link_stroke}
-              stroke-width="1.5"
-              style={@transition_style}
-            />
-          <% end %>
-
-          <%= for node <- @nodes do %>
-            <g transform={node_transform(node, @orientation)} style={@transition_style}>
-              <circle
-                r={@node_radius}
-                fill={if node.children, do: @node_stroke, else: @node_fill}
-                stroke={@node_stroke}
-                stroke-width="2"
-              />
-              <text
-                dy="0.31em"
-                x={label_x(node, @orientation)}
-                text-anchor={label_anchor(node, @orientation)}
-                font-size="12"
-              ><%= @label_fn.(node.data) %></text>
-            </g>
-          <% end %>
+          <path :for={d <- @links} d={d} fill="none" stroke={@link_stroke} stroke-width="1.5" {@transition} />
+          <g :for={node <- @nodes} transform={node.transform} {@transition}>
+            <circle r={@node_radius} fill={node.fill} stroke={@node_stroke} stroke-width="2" />
+            <text dy="0.31em" x={node.label_x} text-anchor={node.anchor} font-size="12">{node.label}</text>
+          </g>
         </g>
       </svg>
       """
     end
 
     @doc """
-    Renders a treemap visualization.
+    Renders a treemap of the hierarchy's leaves laid out by `Visualize.Layout.Treemap`.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - Nested map with :children and :value keys (required)
-    * `width` - Chart width in pixels (default: 800)
-    * `height` - Chart height in pixels (default: 600)
-    * `value` - Accessor for leaf values (default: & &1[:value])
-    * `label` - Accessor for labels (default: & &1[:name])
-    * `tile` - Tiling algorithm: :squarify, :binary, :slice, :dice (default: :squarify)
-    * `padding` - Padding between cells (default: 2)
-    * `colors` - Color scheme (default: :category10)
-    * `animate` - Enable CSS transitions (default: false)
+    * `data` - the nested map with leaf values (required)
+    * `width`, `height` - pixels (default 800 by 600); the layout fills the whole `<svg>`
+    * `value` - leaf value accessor; `nil` reads `:value` or `"value"`, missing is 0
+    * `label` - as `tree_diagram/1`
+    * `tile` - a `Visualize.Layout.Treemap.tile/2` algorithm (default `:squarify`)
+    * `padding` - uniform cell padding (default 2)
+    * `colors` - per the module conventions; each child of the root takes the next colour
+      and every leaf beneath it that colour (default `:category10`)
+    * `animate`, `class` - per the module conventions
 
+    A white `font-size="11"` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` in a
+    cell wider than 30 and taller than 15, truncated with `…` to fit `cell width − 8`
+    at seven pixels a character.
     """
     attr(:data, :map, required: true)
     attr(:width, :integer, default: 800)
@@ -157,98 +155,73 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
 
     def treemap_chart(assigns) do
-      value_fn = assigns.value || fn d -> d[:value] || 0 end
-      label_fn = assigns.label || fn d -> d[:name] || d["name"] end
+      label = assigns.label || (&name/1)
 
-      # Build hierarchy and compute values
       root =
-        Hierarchy.new(assigns.data)
-        |> Hierarchy.sum(value_fn)
-
-      # Apply treemap layout
-      treemap =
         Treemap.new()
         |> Treemap.size({assigns.width, assigns.height})
         |> Treemap.tile(assigns.tile)
         |> Treemap.padding(assigns.padding)
+        |> Treemap.generate(summed(assigns.data, assigns.value))
 
-      positioned = Treemap.generate(treemap, root)
+      cells =
+        for {node, colour} <- coloured(root, assigns.colors), leaf?(node) do
+          width = max(0, node.x1 - node.x0)
+          height = max(0, node.y1 - node.y0)
 
-      # Get leaf nodes for rendering
-      leaves = Hierarchy.leaves(positioned)
+          %{
+            x: fmt(node.x0),
+            y: fmt(node.y0),
+            width: fmt(width),
+            height: fmt(height),
+            fill: colour,
+            label:
+              if(width > 30 and height > 15,
+                do: Support.truncate(label.(node.data), width - 8)
+              ),
+            label_x: fmt(node.x0 + 4),
+            label_y: fmt(node.y0 + 14)
+          }
+        end
 
-      # Color scale based on parent
-      unique_parents =
-        leaves
-        |> Enum.map(fn n -> if n.parent, do: n.parent.data, else: n.data end)
-        |> Enum.uniq()
-
-      color_scale = Support.palette(assigns.colors, length(unique_parents))
-
-      parent_colors =
-        unique_parents
-        |> Enum.with_index()
-        |> Enum.map(fn {p, i} -> {p, Scale.apply(color_scale, i)} end)
-        |> Map.new()
-
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
-
-      assigns =
-        assign(assigns,
-          leaves: leaves,
-          label_fn: label_fn,
-          parent_colors: parent_colors,
-          transition_style: transition_style
-        )
+      assigns = assign(assigns, cells: cells, transition: Support.transition(assigns.animate))
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
-        <%= for node <- @leaves do %>
-          <% parent_data = if node.parent, do: node.parent.data, else: node.data %>
-          <g>
-            <rect
-              x={node.x0}
-              y={node.y0}
-              width={max(0, node.x1 - node.x0)}
-              height={max(0, node.y1 - node.y0)}
-              fill={Map.get(@parent_colors, parent_data, "#ccc")}
-              stroke="white"
-              stroke-width="1"
-              style={@transition_style}
-            />
-            <%= if (node.x1 - node.x0) > 30 and (node.y1 - node.y0) > 15 do %>
-              <text
-                x={node.x0 + 4}
-                y={node.y0 + 14}
-                font-size="11"
-                fill="white"
-                style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);"
-              ><%= truncate_label(@label_fn.(node.data), node.x1 - node.x0 - 8) %></text>
-            <% end %>
-          </g>
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+        <%= for cell <- @cells do %>
+          <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.fill} stroke="white" stroke-width="1" {@transition} />
+          <text
+            :if={cell.label}
+            x={cell.label_x}
+            y={cell.label_y}
+            font-size="11"
+            fill="white"
+            style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);"
+          >{cell.label}</text>
         <% end %>
       </svg>
       """
     end
 
     @doc """
-    Renders a sunburst (radial treemap) visualization.
+    Renders a sunburst: the radial partition of `Visualize.Layout.Partition` with one arc
+    per node below the root.
 
-    ## Attributes
+    ## Assigns
 
-    * `data` - Nested map with :children and :value keys (required)
-    * `width` - Chart width in pixels (default: 600)
-    * `height` - Chart height in pixels (default: 600)
-    * `value` - Accessor for leaf values (default: & &1[:value])
-    * `label` - Accessor for labels (default: & &1[:name])
-    * `colors` - Color scheme (default: :category10)
-    * `animate` - Enable CSS transitions (default: false)
+    * `data` - the nested map with leaf values (required)
+    * `width`, `height` - pixels (default 600 by 600); the radius is half the smaller
+    * `value` - as `treemap_chart/1`
+    * `label` - as `tree_diagram/1`; drawn at the centroid of an arc thick enough and long
+      enough to hold text
+    * `colors` - as `treemap_chart/1`
+    * `animate`, `class` - per the module conventions
 
+    Angles are `Visualize.Layout.Partition` over `{2π, radius}`: the root spans the full
+    turn, each child a share of its parent's arc proportional to its summed value, and a
+    node of value 0 a zero-width slot that draws nothing. Ring radii are
+    `depth / (height + 1) · radius`. Each arc is `Visualize.Shape.Arc` — angles clockwise
+    from 12 o'clock — as a `<path fill={colour} stroke="white" stroke-width="1">`.
     """
     attr(:data, :map, required: true)
     attr(:width, :integer, default: 600)
@@ -260,231 +233,113 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
 
     def sunburst_chart(assigns) do
-      value_fn = assigns.value || fn d -> d[:value] || 0 end
-      label_fn = assigns.label || fn d -> d[:name] || d["name"] end
-
+      label = assigns.label || (&name/1)
       radius = min(assigns.width, assigns.height) / 2
 
-      # Build hierarchy and compute values
       root =
-        Hierarchy.new(assigns.data)
-        |> Hierarchy.sum(value_fn)
+        Partition.new()
+        |> Partition.size({2 * :math.pi(), radius})
+        |> Partition.generate(summed(assigns.data, assigns.value))
 
-      # Get all descendants with computed positions
-      nodes = Hierarchy.descendants(root)
-      total_value = root.value || 1
+      arc =
+        Shape.arc()
+        |> Shape.inner_radius(& &1.y0)
+        |> Shape.outer_radius(& &1.y1)
+        |> Shape.start_angle(& &1.x0)
+        |> Shape.end_angle(& &1.x1)
 
-      # Compute angular positions for each node
-      {positioned_nodes, _} = compute_sunburst_layout(nodes, total_value, 0, 2 * :math.pi())
+      arcs =
+        for {node, colour} <- coloured(root, assigns.colors),
+            node.depth > 0,
+            node.x1 - node.x0 > 0 do
+          {cx, cy} = Shape.Arc.centroid(arc, node)
+          thickness = node.y1 - node.y0
+          length = (node.x1 - node.x0) * (node.y0 + node.y1) / 2
 
-      # Depth-based radius scale
-      max_depth = nodes |> Enum.map(& &1.depth) |> Enum.max(fn -> 0 end)
-      depth_scale = fn depth -> depth / (max_depth + 1) * radius end
+          %{
+            d: Shape.generate(arc, node),
+            fill: colour,
+            label:
+              if(thickness > 15 and length > 30,
+                do: Support.truncate(label.(node.data), length - 8)
+              ),
+            cx: fmt(cx),
+            cy: fmt(cy)
+          }
+        end
 
-      # Color scale
-      top_level = nodes |> Enum.filter(&(&1.depth == 1))
-
-      color_scale = Support.palette(assigns.colors, length(top_level))
-
-      node_colors = assign_sunburst_colors(positioned_nodes, color_scale)
-
-      transition_style = if assigns.animate, do: "transition: all 0.3s ease-in-out;", else: ""
-
-      assigns =
-        assign(assigns,
-          radius: radius,
-          positioned_nodes: positioned_nodes,
-          depth_scale: depth_scale,
-          node_colors: node_colors,
-          label_fn: label_fn,
-          transition_style: transition_style
-        )
+      assigns = assign(assigns, arcs: arcs, transition: Support.transition(assigns.animate))
 
       ~H"""
-      <svg
-        width={@width}
-        height={@height}
-        class={@class}
-        viewBox={"0 0 #{@width} #{@height}"}
-      >
-        <g transform={"translate(#{@width / 2}, #{@height / 2})"}>
-          <%= for node <- @positioned_nodes do %>
-            <%= if node.depth > 0 do %>
-              <% inner_r = @depth_scale.(node.depth - 1) %>
-              <% outer_r = @depth_scale.(node.depth) %>
-              <path
-                d={sunburst_arc_path(inner_r, outer_r, node.start_angle, node.end_angle)}
-                fill={Map.get(@node_colors, node, "#ccc")}
-                stroke="white"
-                stroke-width="1"
-                style={@transition_style}
-              />
-            <% end %>
+      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+        <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
+          <%= for a <- @arcs do %>
+            <path d={a.d} fill={a.fill} stroke="white" stroke-width="1" {@transition} />
+            <text
+              :if={a.label}
+              x={a.cx}
+              y={a.cy}
+              text-anchor="middle"
+              dominant-baseline="middle"
+              font-size="11"
+            >{a.label}</text>
           <% end %>
         </g>
       </svg>
       """
     end
 
-    # Helper functions
-
-    defp node_transform(node, :horizontal), do: "translate(#{node.y}, #{node.x})"
-    defp node_transform(node, :vertical), do: "translate(#{node.x}, #{node.y})"
-
-    defp link_path(source, target, :horizontal) do
-      "M#{source.y},#{source.x}" <>
-        "C#{(source.y + target.y) / 2},#{source.x}" <>
-        " #{(source.y + target.y) / 2},#{target.x}" <>
-        " #{target.y},#{target.x}"
+    # The hierarchy with every node's value summed from the leaves.
+    defp summed(data, value) do
+      value = value || (&leaf_value/1)
+      data |> Hierarchy.new() |> Hierarchy.sum(value)
     end
 
-    defp link_path(source, target, :vertical) do
-      "M#{source.x},#{source.y}" <>
-        "C#{source.x},#{(source.y + target.y) / 2}" <>
-        " #{target.x},#{(source.y + target.y) / 2}" <>
-        " #{target.x},#{target.y}"
-    end
+    defp name(data), do: data[:name] || data["name"]
+    defp leaf_value(data), do: data[:value] || data["value"] || 0
 
-    defp label_x(node, :horizontal) do
-      if node.children, do: -10, else: 10
-    end
+    defp leaf?(%Hierarchy{children: children}), do: children in [nil, []]
+    defp internal?(node), do: not leaf?(node)
 
-    defp label_x(_node, :vertical), do: 0
+    # Every node paired with its colour: the i-th child of the root takes the i-th colour
+    # of the palette and hands it down; the root itself takes `"#ddd"`.
+    defp coloured(root, colors) do
+      children = root.children || []
+      palette = Support.palette(colors, length(children))
 
-    defp label_anchor(node, :horizontal) do
-      if node.children, do: "end", else: "start"
-    end
-
-    defp label_anchor(_node, :vertical), do: "middle"
-
-    defp truncate_label(label, max_width) do
-      chars = trunc(max_width / 7)
-
-      if String.length(label) > chars do
-        String.slice(label, 0, max(chars - 1, 0)) <> "…"
-      else
-        label
-      end
-    end
-
-    defp compute_sunburst_layout(nodes, total_value, start_angle, end_angle) do
-      # Process nodes level by level, computing angles
-      root = Enum.find(nodes, &(&1.depth == 0))
-      root_with_angles = Map.merge(root, %{start_angle: start_angle, end_angle: end_angle})
-
-      process_children([root_with_angles], nodes, total_value)
-    end
-
-    defp process_children([], _all_nodes, _total), do: {[], 0}
-
-    defp process_children(parents, all_nodes, total) do
-      {result, _} =
-        Enum.flat_map_reduce(parents, [], fn parent, acc ->
-          children =
-            Enum.filter(all_nodes, fn n ->
-              n.parent == get_original_node(parent, all_nodes)
-            end)
-
-          if Enum.empty?(children) do
-            {[parent], acc}
-          else
-            angle_range = parent.end_angle - parent.start_angle
-            children_total = Enum.reduce(children, 0, fn c, a -> a + (c.value || 0) end)
-
-            {positioned_children, _} =
-              Enum.map_reduce(children, parent.start_angle, fn child, curr_angle ->
-                child_angle =
-                  if children_total > 0 do
-                    (child.value || 0) / children_total * angle_range
-                  else
-                    angle_range / length(children)
-                  end
-
-                positioned =
-                  Map.merge(child, %{
-                    start_angle: curr_angle,
-                    end_angle: curr_angle + child_angle
-                  })
-
-                {positioned, curr_angle + child_angle}
-              end)
-
-            {grandchildren, _} = process_children(positioned_children, all_nodes, total)
-            {[parent | grandchildren], acc}
-          end
+      [{root, "#ddd"}] ++
+        Enum.flat_map(Enum.with_index(children), fn {child, i} ->
+          walk(child, Scale.apply(palette, i))
         end)
-
-      {result, 0}
     end
 
-    defp get_original_node(positioned, all_nodes) do
-      Enum.find(all_nodes, fn n -> n.data == positioned.data and n.depth == positioned.depth end)
+    defp walk(node, colour) do
+      [{node, colour} | Enum.flat_map(node.children || [], &walk(&1, colour))]
     end
 
-    defp assign_sunburst_colors(nodes, color_scale) do
-      top_level =
-        nodes
-        |> Enum.filter(fn n -> Map.get(n, :depth, 0) == 1 end)
-        |> Enum.with_index()
+    # The layout's `x` runs along the breadth of the tree and `y` along its depth;
+    # horizontal puts depth on the page's x axis.
+    defp point(node, :horizontal), do: {node.y, node.x}
+    defp point(node, :vertical), do: {node.x, node.y}
 
-      top_colors =
-        Map.new(top_level, fn {node, i} ->
-          {node.data, Scale.apply(color_scale, i)}
-        end)
-
-      nodes
-      |> Enum.map(fn node ->
-        color = find_ancestor_color(node, nodes, top_colors)
-        {node, color}
-      end)
-      |> Map.new()
+    defp link_path({sx, sy}, {tx, ty}, :horizontal) do
+      mid = fmt((sx + tx) / 2)
+      "M#{fmt(sx)},#{fmt(sy)}C#{mid},#{fmt(sy)} #{mid},#{fmt(ty)} #{fmt(tx)},#{fmt(ty)}"
     end
 
-    defp find_ancestor_color(node, _nodes, top_colors) do
-      depth = Map.get(node, :depth, 0)
-
-      cond do
-        depth == 0 ->
-          "#ddd"
-
-        depth == 1 ->
-          Map.get(top_colors, node.data, "#ccc")
-
-        true ->
-          # Find ancestor at depth 1
-          case find_depth_one_ancestor(node) do
-            nil -> "#ccc"
-            ancestor -> Map.get(top_colors, ancestor.data, "#ccc")
-          end
-      end
+    defp link_path({sx, sy}, {tx, ty}, :vertical) do
+      mid = fmt((sy + ty) / 2)
+      "M#{fmt(sx)},#{fmt(sy)}C#{fmt(sx)},#{mid} #{fmt(tx)},#{mid} #{fmt(tx)},#{fmt(ty)}"
     end
 
-    defp find_depth_one_ancestor(%{parent: nil}), do: nil
-    defp find_depth_one_ancestor(%{depth: 1} = node), do: node
-    defp find_depth_one_ancestor(%{parent: parent}), do: find_depth_one_ancestor(parent)
-    defp find_depth_one_ancestor(_), do: nil
+    defp label_x(:horizontal, true), do: -10
+    defp label_x(:horizontal, false), do: 10
+    defp label_x(:vertical, _internal?), do: 0
 
-    defp sunburst_arc_path(inner_r, outer_r, start_angle, end_angle) do
-      # Adjust angles (SVG starts at 12 o'clock, we want 3 o'clock)
-      start_angle = start_angle - :math.pi() / 2
-      end_angle = end_angle - :math.pi() / 2
+    defp label_anchor(:horizontal, true), do: "end"
+    defp label_anchor(:horizontal, false), do: "start"
+    defp label_anchor(:vertical, _internal?), do: "middle"
 
-      x0 = outer_r * :math.cos(start_angle)
-      y0 = outer_r * :math.sin(start_angle)
-      x1 = outer_r * :math.cos(end_angle)
-      y1 = outer_r * :math.sin(end_angle)
-      x2 = inner_r * :math.cos(end_angle)
-      y2 = inner_r * :math.sin(end_angle)
-      x3 = inner_r * :math.cos(start_angle)
-      y3 = inner_r * :math.sin(start_angle)
-
-      large_arc = if end_angle - start_angle > :math.pi(), do: 1, else: 0
-
-      "M#{x0},#{y0}" <>
-        "A#{outer_r},#{outer_r} 0 #{large_arc},1 #{x1},#{y1}" <>
-        "L#{x2},#{y2}" <>
-        "A#{inner_r},#{inner_r} 0 #{large_arc},0 #{x3},#{y3}" <>
-        "Z"
-    end
+    defp fmt(number), do: Support.fmt(number)
   end
 end

@@ -1,0 +1,30 @@
+<svg width="400" height="300" class="tree" viewBox="0 0 400 300">
+  <g transform="translate(40, 20)">
+    <path d="M160,0C160,65 40,65 40,130" fill="none" stroke="#ccc" stroke-width="1.5" style="transition: all 0.3s ease-in-out;"></path><path d="M160,0C160,65 160,65 160,130" fill="none" stroke="#ccc" stroke-width="1.5" style="transition: all 0.3s ease-in-out;"></path><path d="M160,0C160,65 280,65 280,130" fill="none" stroke="#ccc" stroke-width="1.5" style="transition: all 0.3s ease-in-out;"></path><path d="M40,130C40,195 0,195 0,260" fill="none" stroke="#ccc" stroke-width="1.5" style="transition: all 0.3s ease-in-out;"></path><path d="M40,130C40,195 80,195 80,260" fill="none" stroke="#ccc" stroke-width="1.5" style="transition: all 0.3s ease-in-out;"></path><path d="M280,130C280,195 240,195 240,260" fill="none" stroke="#ccc" stroke-width="1.5" style="transition: all 0.3s ease-in-out;"></path><path d="M280,130C280,195 320,195 320,260" fill="none" stroke="#ccc" stroke-width="1.5" style="transition: all 0.3s ease-in-out;"></path>
+    <g transform="translate(160, 0)" style="transition: all 0.3s ease-in-out;">
+      <circle r="4" fill="steelblue" stroke="steelblue" stroke-width="2"></circle>
+      <text dy="0.31em" x="0" text-anchor="middle" font-size="12">ROOT</text>
+    </g><g transform="translate(40, 130)" style="transition: all 0.3s ease-in-out;">
+      <circle r="4" fill="steelblue" stroke="steelblue" stroke-width="2"></circle>
+      <text dy="0.31em" x="0" text-anchor="middle" font-size="12">A</text>
+    </g><g transform="translate(0, 260)" style="transition: all 0.3s ease-in-out;">
+      <circle r="4" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
+      <text dy="0.31em" x="0" text-anchor="middle" font-size="12">A1</text>
+    </g><g transform="translate(80, 260)" style="transition: all 0.3s ease-in-out;">
+      <circle r="4" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
+      <text dy="0.31em" x="0" text-anchor="middle" font-size="12">A2</text>
+    </g><g transform="translate(160, 130)" style="transition: all 0.3s ease-in-out;">
+      <circle r="4" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
+      <text dy="0.31em" x="0" text-anchor="middle" font-size="12">B</text>
+    </g><g transform="translate(280, 130)" style="transition: all 0.3s ease-in-out;">
+      <circle r="4" fill="steelblue" stroke="steelblue" stroke-width="2"></circle>
+      <text dy="0.31em" x="0" text-anchor="middle" font-size="12">C</text>
+    </g><g transform="translate(240, 260)" style="transition: all 0.3s ease-in-out;">
+      <circle r="4" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
+      <text dy="0.31em" x="0" text-anchor="middle" font-size="12">C1</text>
+    </g><g transform="translate(320, 260)" style="transition: all 0.3s ease-in-out;">
+      <circle r="4" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
+      <text dy="0.31em" x="0" text-anchor="middle" font-size="12">C2</text>
+    </g>
+  </g>
+</svg>
