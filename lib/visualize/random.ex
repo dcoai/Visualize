@@ -103,7 +103,7 @@ defmodule Visualize.Random do
   """
   @spec binomial(non_neg_integer(), number()) :: non_neg_integer()
   def binomial(n, p) do
-    Enum.reduce(1..n, 0, fn _, acc -> acc + bernoulli(p) end)
+    Enum.reduce(1..n//1, 0, fn _, acc -> acc + bernoulli(p) end)
   end
 
   @doc """
@@ -233,7 +233,7 @@ defmodule Visualize.Random do
   """
   @spec samples((-> number()), non_neg_integer()) :: [number()]
   def samples(random_fn, n) do
-    Enum.map(1..n, fn _ -> random_fn.() end)
+    Enum.map(1..n//1, fn _ -> random_fn.() end)
   end
 
   @doc """

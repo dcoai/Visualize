@@ -255,7 +255,7 @@ Parameterised variants: `poly_in/2`, `poly_out/2` and `poly_in_out/2` take an ex
 - `sample/2` (`list, n`): `n` distinct elements of a shuffled list (fewer when the list is shorter).
 - `pick/1`: a random element, or `nil` for `[]`.
 
-> Decision: see spec/13. `binomial/2` and `samples/2` iterate `1..n`, which for `n = 0` is the descending range `[1, 0]`, so `binomial(0, p)` performs two trials and `samples(fun, 0)` returns two samples.
+`binomial(0, p)` is 0 and `samples(fun, 0)` is `[]`: both iterate `1..n//1`, which is empty for `n = 0` (D-44).
 
 ### 4.3 Functions
 

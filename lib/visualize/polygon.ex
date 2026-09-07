@@ -39,7 +39,7 @@ defmodule Visualize.Polygon do
     n = length(polygon)
 
     sum =
-      0..(n - 1)
+      0..(n - 1)//1
       |> Enum.reduce(0, fn i, acc ->
         {x0, y0} = Enum.at(polygon, i)
         {x1, y1} = Enum.at(polygon, rem(i + 1, n))
@@ -73,7 +73,7 @@ defmodule Visualize.Polygon do
       {sum_x / n, sum_y / n}
     else
       {cx, cy} =
-        0..(n - 1)
+        0..(n - 1)//1
         |> Enum.reduce({0, 0}, fn i, {cx, cy} ->
           {x0, y0} = Enum.at(polygon, i)
           {x1, y1} = Enum.at(polygon, rem(i + 1, n))
@@ -96,7 +96,7 @@ defmodule Visualize.Polygon do
   def perimeter(polygon) do
     n = length(polygon)
 
-    0..(n - 1)
+    0..(n - 1)//1
     |> Enum.reduce(0, fn i, acc ->
       {x0, y0} = Enum.at(polygon, i)
       {x1, y1} = Enum.at(polygon, rem(i + 1, n))
@@ -118,7 +118,7 @@ defmodule Visualize.Polygon do
     n = length(polygon)
 
     crossings =
-      0..(n - 1)
+      0..(n - 1)//1
       |> Enum.count(fn i ->
         {x0, y0} = Enum.at(polygon, i)
         {x1, y1} = Enum.at(polygon, rem(i + 1, n))

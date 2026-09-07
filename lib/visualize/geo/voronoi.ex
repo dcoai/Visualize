@@ -97,7 +97,7 @@ defmodule Visualize.Geo.Voronoi do
   @spec cells(t()) :: [[point()]]
   def cells(%__MODULE__{} = voronoi) do
     n = length(voronoi.delaunay.points)
-    Enum.map(0..(n - 1), &cell(voronoi, &1))
+    Enum.map(0..(n - 1)//1, &cell(voronoi, &1))
   end
 
   @doc "Finds which cell contains the given point"
@@ -124,7 +124,7 @@ defmodule Visualize.Geo.Voronoi do
   def render_cells(%__MODULE__{} = voronoi) do
     n = length(voronoi.delaunay.points)
 
-    0..(n - 1)
+    0..(n - 1)//1
     |> Enum.map(&render_cell(voronoi, &1))
     |> Enum.join()
   end
@@ -204,7 +204,7 @@ defmodule Visualize.Geo.Voronoi do
   defp render_cells_unclipped(%__MODULE__{} = voronoi) do
     n = length(voronoi.delaunay.points)
 
-    0..(n - 1)
+    0..(n - 1)//1
     |> Enum.map(fn i ->
       vertices = cell_unclipped(voronoi, i)
       polygon_to_path(vertices)
@@ -336,7 +336,7 @@ defmodule Visualize.Geo.Voronoi do
     if n == 0 do
       []
     else
-      0..(n - 1)
+      0..(n - 1)//1
       |> Enum.flat_map(fn i ->
         current = Enum.at(polygon, i)
         next = Enum.at(polygon, rem(i + 1, n))

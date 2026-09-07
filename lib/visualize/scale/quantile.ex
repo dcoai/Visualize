@@ -158,7 +158,7 @@ defmodule Visualize.Scale.Quantile do
     else
       # Compute quantile thresholds
       thresholds =
-        for i <- 1..(n - 1) do
+        for i <- 1..(n - 1)//1 do
           p = i / n
           quantile_value(scale.domain, p)
         end

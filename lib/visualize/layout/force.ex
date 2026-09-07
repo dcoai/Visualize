@@ -149,7 +149,7 @@ defmodule Visualize.Layout.Force do
 
     # Run simulation
     {final_nodes, _alpha} =
-      Enum.reduce_while(1..iterations, {initialized_nodes, alpha}, fn _, {nodes, alpha} ->
+      Enum.reduce_while(1..iterations//1, {initialized_nodes, alpha}, fn _, {nodes, alpha} ->
         if alpha < alpha_min do
           {:halt, {nodes, alpha}}
         else

@@ -144,7 +144,7 @@ defmodule Visualize.Scale.Threshold do
       if len == 0 do
         []
       else
-        for i <- 1..n do
+        for i <- 1..n//1 do
           index = trunc(i * len / (n + 1))
           Enum.at(sorted, min(index, len - 1))
         end

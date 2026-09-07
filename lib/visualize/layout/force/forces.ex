@@ -113,7 +113,7 @@ defmodule Visualize.Layout.Force.Forces do
       nodes
     else
       # Apply link constraints, rebuilding the id lookup each iteration
-      Enum.reduce(1..iterations, nodes, fn _, nodes ->
+      Enum.reduce(1..iterations//1, nodes, fn _, nodes ->
         node_map = Map.new(nodes, &{&1.id, &1})
         apply_link_iteration(nodes, links, node_map, alpha, distance, strength)
       end)
@@ -177,42 +177,40 @@ defmodule Visualize.Layout.Force.Forces do
         r when is_number(r) -> fn _ -> r end
       end
 
-    Enum.reduce(1..iterations, nodes, fn _, nodes ->
+    Enum.reduce(1..iterations//1, nodes, fn _, nodes ->
       apply_collision_iteration(nodes, alpha, radius_fn, strength)
     end)
   end
 
+  # Every overlapping pair is pushed apart along its axis, each node by half of the
+  # overlap (d3-force collide's symmetric push; D-44). Displacements accumulate over all
+  # pairs before any velocity changes, so the result does not depend on node order.
   defp apply_collision_iteration(nodes, alpha, radius_fn, strength) do
-    indexed_nodes = Enum.with_index(nodes)
+    indexed = Enum.with_index(nodes)
+    radii = Map.new(indexed, fn {node, i} -> {i, radius_fn.(node)} end)
 
-    Enum.map(indexed_nodes, fn {node, i} ->
-      ri = radius_fn.(node)
+    pushes =
+      for {a, i} <- indexed, {b, j} <- indexed, i < j, reduce: %{} do
+        acc ->
+          r = radii[i] + radii[j]
+          dx = a.x - b.x
+          dy = a.y - b.y
+          d2 = dx * dx + dy * dy
 
-      {dvx, dvy} =
-        Enum.reduce(indexed_nodes, {0, 0}, fn {other, j}, {vx, vy} ->
-          if i >= j do
-            {vx, vy}
+          if d2 < r * r do
+            d = max(:math.sqrt(d2), 0.001)
+            k = (r - d) / d * strength * alpha * 0.5
+
+            acc
+            |> Map.update(i, {dx * k, dy * k}, fn {vx, vy} -> {vx + dx * k, vy + dy * k} end)
+            |> Map.update(j, {-dx * k, -dy * k}, fn {vx, vy} -> {vx - dx * k, vy - dy * k} end)
           else
-            rj = radius_fn.(other)
-            r = ri + rj
-
-            dx = node.x - other.x
-            dy = node.y - other.y
-            d2 = dx * dx + dy * dy
-
-            if d2 < r * r do
-              d = :math.sqrt(d2)
-              d = max(d, 0.001)
-
-              k = (r - d) / d * strength * alpha * 0.5
-
-              {vx + dx * k, vy + dy * k}
-            else
-              {vx, vy}
-            end
+            acc
           end
-        end)
+      end
 
+    Enum.map(indexed, fn {node, i} ->
+      {dvx, dvy} = Map.get(pushes, i, {0, 0})
       %{node | vx: node.vx + dvx, vy: node.vy + dvy}
     end)
   end

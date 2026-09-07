@@ -393,46 +393,52 @@ defmodule Visualize.Geo.Projection do
 
   defp apply_inverse_rotation(lon, lat, {0, 0, 0}), do: {lon, lat}
 
+  # The forward rotation is lambda, then phi about x, then gamma about z; its inverse
+  # undoes them in reverse order: gamma, then phi, then lambda (D-44).
   defp apply_inverse_rotation(lon, lat, {lambda, phi, gamma}) do
     lon_rad = lon * @deg_to_rad
     lat_rad = lat * @deg_to_rad
 
-    # Reverse the rotation
     {lon_rad, lat_rad} =
       if phi != 0 or gamma != 0 do
-        spherical_rotate(lon_rad, lat_rad, phi * @deg_to_rad, gamma * @deg_to_rad)
+        spherical_unrotate(lon_rad, lat_rad, phi * @deg_to_rad, gamma * @deg_to_rad)
       else
         {lon_rad, lat_rad}
       end
 
-    lon_rad = lon_rad - -lambda * @deg_to_rad
+    lon_rad = lon_rad + lambda * @deg_to_rad
 
     {normalize_longitude(lon_rad * @rad_to_deg), lat_rad * @rad_to_deg}
   end
 
+  # Rotate about the x axis by phi, then about the z axis by gamma.
   defp spherical_rotate(lon, lat, phi, gamma) do
-    cos_lat = cos(lat)
-    x = cos_lat * cos(lon)
-    y = cos_lat * sin(lon)
-    z = sin(lat)
-
-    # Rotate around x-axis (phi)
-    cos_phi = cos(phi)
-    sin_phi = sin(phi)
-    y1 = y * cos_phi - z * sin_phi
-    z1 = y * sin_phi + z * cos_phi
-
-    # Rotate around z-axis (gamma)
-    cos_gamma = cos(gamma)
-    sin_gamma = sin(gamma)
-    x2 = x * cos_gamma - y1 * sin_gamma
-    y2 = x * sin_gamma + y1 * cos_gamma
-
-    new_lon = :math.atan2(y2, x2)
-    new_lat = :math.asin(max(-1, min(1, z1)))
-
-    {new_lon, new_lat}
+    {x, y, z} = to_cartesian(lon, lat)
+    {y1, z1} = rotate2(y, z, phi)
+    {x2, y2} = rotate2(x, y1, gamma)
+    to_spherical(x2, y2, z1)
   end
+
+  # Rotate about the z axis by gamma, then about the x axis by phi.
+  defp spherical_unrotate(lon, lat, phi, gamma) do
+    {x, y, z} = to_cartesian(lon, lat)
+    {x1, y1} = rotate2(x, y, gamma)
+    {y2, z2} = rotate2(y1, z, phi)
+    to_spherical(x1, y2, z2)
+  end
+
+  defp rotate2(a, b, angle) do
+    c = cos(angle)
+    s = sin(angle)
+    {a * c - b * s, a * s + b * c}
+  end
+
+  defp to_cartesian(lon, lat) do
+    cos_lat = cos(lat)
+    {cos_lat * cos(lon), cos_lat * sin(lon), sin(lat)}
+  end
+
+  defp to_spherical(x, y, z), do: {:math.atan2(y, x), :math.asin(max(-1, min(1, z)))}
 
   defp normalize_longitude(lon) when lon > 180, do: normalize_longitude(lon - 360)
   defp normalize_longitude(lon) when lon < -180, do: normalize_longitude(lon + 360)

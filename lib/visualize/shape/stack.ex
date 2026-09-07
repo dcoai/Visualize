@@ -146,7 +146,7 @@ defmodule Visualize.Shape.Stack do
 
   # --- Order: a permutation of key indexes -------------------------------------------------
 
-  defp stacking_order(series, :none), do: Enum.to_list(0..(tuple_size(series) - 1))
+  defp stacking_order(series, :none), do: Enum.to_list(0..(tuple_size(series) - 1)//1)
   defp stacking_order(series, :reverse), do: Enum.reverse(stacking_order(series, :none))
 
   defp stacking_order(series, :ascending) do
@@ -190,7 +190,7 @@ defmodule Visualize.Shape.Stack do
 
   defp apply_offset(series, order_ix, :silhouette, n) do
     totals = column_totals(series, n)
-    baselines = Enum.map(0..(n - 1), fn j -> -elem(totals, j) / 2 end)
+    baselines = Enum.map(0..(n - 1)//1, fn j -> -elem(totals, j) / 2 end)
 
     series
     |> with_baselines(hd(order_ix), baselines)
@@ -200,7 +200,7 @@ defmodule Visualize.Shape.Stack do
   # d3's `stackOffsetDiverging`: positives accumulate upward from zero, negatives downward,
   # each independently of the other; a zero value sits at the origin.
   defp apply_offset(series, order_ix, :diverging, n) do
-    Enum.reduce(0..(n - 1), series, fn j, series ->
+    Enum.reduce(0..(n - 1)//1, series, fn j, series ->
       {series, _yp, _yn} =
         Enum.reduce(order_ix, {series, 0, 0}, fn i, {series, yp, yn} ->
           s = elem(series, i)
@@ -235,7 +235,7 @@ defmodule Visualize.Shape.Stack do
     {baselines, y} =
       Enum.reduce(1..(n - 1)//1, {[], 0}, fn j, {acc, y} ->
         {s1, s2} =
-          Enum.reduce(0..(m - 1), {0, 0}, fn i, {s1, s2} ->
+          Enum.reduce(0..(m - 1)//1, {0, 0}, fn i, {s1, s2} ->
             sij0 = elem(elem(values, i), j)
             sij1 = elem(elem(values, i), j - 1)
 
@@ -287,7 +287,7 @@ defmodule Visualize.Shape.Stack do
   end
 
   defp column_totals(series, n) do
-    Enum.map(0..(n - 1), fn j ->
+    Enum.map(0..(n - 1)//1, fn j ->
       series
       |> Tuple.to_list()
       |> Enum.reduce(0, fn s, acc -> acc + Enum.at(s.points, j).value end)

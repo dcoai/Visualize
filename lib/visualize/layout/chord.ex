@@ -124,7 +124,7 @@ defmodule Visualize.Layout.Chord do
           end)
           |> Enum.map(fn {i, _} -> i end)
         else
-          Enum.map(0..(n - 1), & &1)
+          Enum.map(0..(n - 1)//1, & &1)
         end
 
       # Total of all values (each edge counted once for angle calculation)
@@ -200,8 +200,8 @@ defmodule Visualize.Layout.Chord do
   defp generate_chords(matrix, group_angles, n) do
     # Generate a chord for each non-zero matrix entry
     # Only generate once per pair (i < j for asymmetric, both for symmetric)
-    for i <- 0..(n - 1),
-        j <- 0..(n - 1),
+    for i <- 0..(n - 1)//1,
+        j <- 0..(n - 1)//1,
         i <= j,
         value_ij = matrix |> Enum.at(i) |> Enum.at(j),
         value_ji = matrix |> Enum.at(j) |> Enum.at(i),
