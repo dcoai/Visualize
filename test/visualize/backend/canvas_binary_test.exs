@@ -18,14 +18,17 @@ defmodule Visualize.Backend.CanvasBinaryTest do
   require Opcodes
 
   describe "path form selection" do
-    property "a polyline takes the compact record and round-trips" do
+    property "a polyline takes the point-list record and round-trips at either width" do
       check all(path <- PathGen.polyline()) do
-        <<0x01, _::binary>> = binary = CanvasBinary.encode_path!(path)
-        assert Decoder.decode_path(binary) == path
+        <<0x05, _::binary>> = binary = CanvasBinary.encode_path!(path)
+        assert Decoder.decode_path(binary) == PathGen.round_f32(path)
+
+        <<0x01, _::binary>> = f64 = CanvasBinary.encode_path!(path, precision: :f64)
+        assert Decoder.decode_path(f64) == path
       end
     end
 
-    test "anything the compact record would lose is a full command stream" do
+    test "anything the point-list record would lose is a full command stream" do
       for commands <- [
             [{:M, 0.0, 0.0}, {:L, 1.0, 1.0}, :Z],
             [{:M, 0.0, 0.0}, {:L, 1.0, 1.0}, {:M, 2.0, 2.0}, {:L, 3.0, 3.0}],
@@ -35,20 +38,79 @@ defmodule Visualize.Backend.CanvasBinaryTest do
             []
           ] do
         path = %Path{commands: commands}
-        assert <<0x02, _::binary>> = binary = CanvasBinary.encode_path!(path)
+        assert <<0x06, _::binary>> = binary = CanvasBinary.encode_path!(path)
         assert Decoder.decode_path(binary) == path
+
+        assert <<0x02, _::binary>> = f64 = CanvasBinary.encode_path!(path, precision: :f64)
+        assert Decoder.decode_path(f64) == path
       end
+    end
+
+    test "the precision option is :f32 or :f64" do
+      path = %Path{commands: [{:M, 0.0, 0.0}]}
+
+      assert_raise ArgumentError, ~r/precision: :f32 or :f64/, fn ->
+        CanvasBinary.encode_path!(path, precision: :single)
+      end
+
+      assert_raise ArgumentError, fn ->
+        CanvasBinary.encode_element!(Element.path(path), precision: 32)
+      end
+    end
+  end
+
+  describe "the f32 records (D-73)" do
+    property "an f32 holds a coordinate below 16,384 to within 2^-11" do
+      check all(v <- float(min: -16_384.0, max: 16_384.0)) do
+        <<rounded::float-32>> = <<v::float-32>>
+        assert abs(v - rounded) <= :math.pow(2, -11)
+      end
+    end
+
+    property "the f32 command stream is the f64 one with every argument rounded" do
+      check all(path <- PathGen.path()) do
+        f32 = CanvasBinary.encode_path!(path)
+        f64 = CanvasBinary.encode_path!(path, precision: :f64)
+        assert Decoder.decode_path(f32) == PathGen.round_f32(Decoder.decode_path(f64))
+      end
+    end
+
+    test "an element stream is f32 by default and f64 on request, every path record alike" do
+      curve = Path.new() |> Path.move_to(0.0, 0.0) |> Path.curve_to(1.0, 1.0, 2.0, 1.0, 3.0, 0.0)
+      line = Path.new() |> Path.move_to(0.0, 0.0) |> Path.line_to(1.0, 1.0)
+      group = Element.group([Element.path(curve), Element.path(line)])
+
+      assert [:save, {:path_cubic32, _}, {:path32, _}, :restore] =
+               Decoder.decode(CanvasBinary.encode_element!(group))
+
+      assert [:save, {:path_cubic, _}, {:path, _}, :restore] =
+               Decoder.decode(CanvasBinary.encode_element!(group, precision: :f64))
+
+      svg = SVG.Element.path(%{d: "M0,0L1,1", fill: "none", stroke: "red"})
+
+      assert [{:style, _}, {:path_cubic32, _}, :stroke] =
+               Decoder.decode(CanvasBinary.encode_element!(svg))
+
+      assert [{:style, _}, {:path_cubic, _}, :stroke] =
+               Decoder.decode(CanvasBinary.encode_element!(svg, precision: :f64))
     end
   end
 
   describe "the command stream" do
     property "decode(encode(path)) is the path with its smooth curves expanded" do
       check all(path <- PathGen.path()) do
-        binary = CanvasBinary.encode_path!(path)
         expected = Path.expand_smooth(path)
 
-        unless match?(<<0x01, _::binary>>, binary) do
-          assert Decoder.decode_path(binary) == expected
+        binary = CanvasBinary.encode_path!(path)
+
+        unless match?(<<0x05, _::binary>>, binary) do
+          assert Decoder.decode_path(binary) == PathGen.round_f32(expected)
+        end
+
+        f64 = CanvasBinary.encode_path!(path, precision: :f64)
+
+        unless match?(<<0x01, _::binary>>, f64) do
+          assert Decoder.decode_path(f64) == expected
         end
       end
     end
@@ -63,7 +125,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
         |> Path.smooth_quad_to(10.0, 0.0)
         |> Path.smooth_curve_to_rel(1.0, 1.0, 2.0, 0.0)
 
-      <<0x02, count::little-32, _::binary>> = binary = CanvasBinary.encode_path!(path)
+      <<0x06, count::little-32, _::binary>> = binary = CanvasBinary.encode_path!(path)
       assert count == 6
 
       assert Decoder.decode_path(binary).commands == [
@@ -185,6 +247,8 @@ defmodule Visualize.Backend.CanvasBinaryTest do
              path_cubic: Opcodes.path_cubic(),
              circles: Opcodes.circles(),
              rects: Opcodes.rects(),
+             path32: Opcodes.path32(),
+             path_cubic32: Opcodes.path_cubic32(),
              style: Opcodes.style(),
              transform: Opcodes.transform(),
              save: Opcodes.save(),
@@ -210,7 +274,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
              :save,
              {:transform, :translate, {5.0, 6.0}},
              {:style, %{fill: nil, stroke: {255, 0, 0, 255}, stroke_width: 2.0, opacity: nil}},
-             {:path_cubic, [{:M, 0.0, 0.0}, {:L, 1.0, 1.0}, :Z]},
+             {:path_cubic32, [{:M, 0.0, 0.0}, {:L, 1.0, 1.0}, :Z]},
              :stroke,
              {:style, %{fill: {0, 0, 255, 255}, stroke: nil, stroke_width: nil, opacity: 0.5}},
              {:circles, [{1.0, 2.0, 3.0}]},

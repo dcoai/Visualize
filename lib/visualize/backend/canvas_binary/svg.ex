@@ -12,13 +12,13 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   # SVG Element Encoding
 
   @doc false
-  def encode_element(%Visualize.SVG.Element{tag: :svg, children: children}) do
+  def encode_element(%Visualize.SVG.Element{tag: :svg, children: children}, precision) do
     children
-    |> Enum.map(&encode_element/1)
+    |> Enum.map(&encode_element(&1, precision))
     |> IO.iodata_to_binary()
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :g, attrs: attrs, children: children}) do
+  def encode_element(%Visualize.SVG.Element{tag: :g, attrs: attrs, children: children}, precision) do
     parts = []
 
     # Handle transform attribute
@@ -39,7 +39,7 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     # Encode children
     child_data =
       children
-      |> Enum.map(&encode_element/1)
+      |> Enum.map(&encode_element(&1, precision))
       |> IO.iodata_to_binary()
 
     parts = parts ++ [child_data]
@@ -55,7 +55,7 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     IO.iodata_to_binary(parts)
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :rect, attrs: attrs}) do
+  def encode_element(%Visualize.SVG.Element{tag: :rect, attrs: attrs}, _precision) do
     x = Map.get(attrs, :x, 0) |> PathEncoder.to_float()
     y = Map.get(attrs, :y, 0) |> PathEncoder.to_float()
     width = Map.get(attrs, :width, 0) |> PathEncoder.to_float()
@@ -80,7 +80,7 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     IO.iodata_to_binary(parts)
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :circle, attrs: attrs}) do
+  def encode_element(%Visualize.SVG.Element{tag: :circle, attrs: attrs}, _precision) do
     cx = Map.get(attrs, :cx, 0) |> PathEncoder.to_float()
     cy = Map.get(attrs, :cy, 0) |> PathEncoder.to_float()
     r = Map.get(attrs, :r, 0) |> PathEncoder.to_float()
@@ -104,7 +104,7 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     IO.iodata_to_binary(parts)
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :path, attrs: attrs}) do
+  def encode_element(%Visualize.SVG.Element{tag: :path, attrs: attrs}, precision) do
     d = Map.get(attrs, :d, "")
 
     case parse_svg_path(d) do
@@ -118,7 +118,7 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
         parts = parts ++ [encode_svg_style(attrs)]
 
         # Path data
-        parts = parts ++ [PathEncoder.encode_cubic_path(commands)]
+        parts = parts ++ [PathEncoder.encode_cubic_path(commands, precision)]
 
         # Draw commands
         parts = parts ++ encode_svg_draw_commands(attrs)
@@ -127,7 +127,7 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     end
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :line, attrs: attrs}) do
+  def encode_element(%Visualize.SVG.Element{tag: :line, attrs: attrs}, precision) do
     x1 = Map.get(attrs, :x1, 0) |> PathEncoder.to_float()
     y1 = Map.get(attrs, :y1, 0) |> PathEncoder.to_float()
     x2 = Map.get(attrs, :x2, 0) |> PathEncoder.to_float()
@@ -140,7 +140,7 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
 
     # Path as move + line
     commands = [{:M, x1, y1}, {:L, x2, y2}]
-    parts = parts ++ [PathEncoder.encode_cubic_path(commands)]
+    parts = parts ++ [PathEncoder.encode_cubic_path(commands, precision)]
 
     # Always stroke lines
     parts = parts ++ [<<Opcodes.stroke()::8>>]
@@ -148,12 +148,12 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     IO.iodata_to_binary(parts)
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :text}) do
+  def encode_element(%Visualize.SVG.Element{tag: :text}, _precision) do
     # Text not supported in binary canvas format
     <<>>
   end
 
-  def encode_element(_element) do
+  def encode_element(_element, _precision) do
     <<>>
   end
 

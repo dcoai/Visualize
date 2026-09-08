@@ -47,6 +47,8 @@ defmodule Visualize.Hooks.CanvasHooksTest do
             Opcodes.path_cubic(),
             Opcodes.circles(),
             Opcodes.rects(),
+            Opcodes.path32(),
+            Opcodes.path_cubic32(),
             Opcodes.style(),
             Opcodes.transform(),
             Opcodes.save(),
@@ -66,6 +68,17 @@ defmodule Visualize.Hooks.CanvasHooksTest do
       end
 
       for byte <- [0x01, 0x03, 0xFF], do: assert(decoder =~ case_literal(byte))
+    end
+
+    test "the f32 path records share the f64 readers at a 4-byte width (D-73)" do
+      decoder = Hooks.CanvasBinary.js_decoder()
+      assert decoder =~ "case 0x05: { // path32"
+      assert decoder =~ "case 0x06: { // path_cubic32"
+      assert decoder =~ "drawPolyline(ctx, view, offset + 4, count, 4)"
+      assert decoder =~ "drawPathCommands(ctx, view, bytes, offset + 4, cmdCount, 4)"
+
+      assert decoder =~
+               "width === 4 ? view.getFloat32(offset, true) : view.getFloat64(offset, true)"
     end
 
     test "composes a full matrix with ctx.transform and throws on an unknown byte" do

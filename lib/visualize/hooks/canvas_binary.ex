@@ -18,14 +18,16 @@ defmodule Visualize.Hooks.CanvasBinary do
 
   The decoder (`js_decoder/0`) is shared with `Visualize.Hooks.CanvasIncremental` and is
   written against `Visualize.Backend.CanvasBinary.Opcodes`: every opcode and every
-  `path_cubic` sub-opcode has a case, and an unknown byte throws rather than desynchronise
-  silently. A full-matrix transform (`0xFF`) composes with `ctx.transform`.
+  command-stream sub-opcode has a case — the f64 and the f32 path records (D-73) share one
+  reader taking the coordinate width — and an unknown byte throws rather than
+  desynchronise silently. A full-matrix transform (`0xFF`) composes with `ctx.transform`.
   """
 
   @doc """
   Returns the JavaScript of the shared decoder: `decodeBase64`, `drawSvgArc` and
   `executeVisualizeBinary(ctx, bytes, startOffset, endOffset)`, which replays one stream
-  and returns the offset it reached.
+  and returns the offset it reached, with the module-private readers of the path records
+  it calls.
   """
   def js_decoder do
     ~S"""
@@ -107,6 +109,150 @@ defmodule Visualize.Hooks.CanvasBinary do
       ctx.ellipse(cx, cy, rx, ry, phi, theta1, theta1 + dtheta, fS === 0);
     }
 
+    // One coordinate of a path record: 8 bytes (f64) or 4 (f32), little-endian.
+    function readCoord(view, offset, width) {
+      return width === 4 ? view.getFloat32(offset, true) : view.getFloat64(offset, true);
+    }
+
+    // The point-list records `path` (f64) and `path32` (f32): moveTo the first point,
+    // lineTo the rest, the path left open. Returns the offset after the last point.
+    function drawPolyline(ctx, view, offset, count, width) {
+      ctx.beginPath();
+      for (let i = 0; i < count; i++) {
+        const x = readCoord(view, offset, width);
+        const y = readCoord(view, offset + width, width);
+        offset += 2 * width;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      return offset;
+    }
+
+    // The command-stream records `path_cubic` (f64) and `path_cubic32` (f32): one
+    // sub-opcode per command (spec/09 §4.3.2, §4.3.9) against a tracked current point and
+    // subpath start; the arc flags are u32 at either width. Returns the offset reached.
+    function drawPathCommands(ctx, view, bytes, offset, cmdCount, width) {
+      const f = (o) => readCoord(view, o, width);
+      const w = width;
+      ctx.beginPath();
+      let curX = 0, curY = 0, startX = 0, startY = 0;
+      for (let i = 0; i < cmdCount; i++) {
+        const subcmd = bytes[offset++];
+        switch (subcmd) {
+          case 0x01: { // M
+            curX = f(offset); curY = f(offset + w);
+            startX = curX; startY = curY;
+            ctx.moveTo(curX, curY);
+            offset += 2 * w;
+            break;
+          }
+          case 0x02: { // L
+            curX = f(offset); curY = f(offset + w);
+            ctx.lineTo(curX, curY);
+            offset += 2 * w;
+            break;
+          }
+          case 0x03: { // C
+            const x1 = f(offset), y1 = f(offset + w), x2 = f(offset + 2 * w), y2 = f(offset + 3 * w);
+            curX = f(offset + 4 * w); curY = f(offset + 5 * w);
+            ctx.bezierCurveTo(x1, y1, x2, y2, curX, curY);
+            offset += 6 * w;
+            break;
+          }
+          case 0x04: { // Q
+            const qx1 = f(offset), qy1 = f(offset + w);
+            curX = f(offset + 2 * w); curY = f(offset + 3 * w);
+            ctx.quadraticCurveTo(qx1, qy1, curX, curY);
+            offset += 4 * w;
+            break;
+          }
+          case 0x05: { // Z
+            ctx.closePath();
+            curX = startX; curY = startY;
+            break;
+          }
+          case 0x06: { // A (absolute end point)
+            const rx = f(offset), ry = f(offset + w);
+            const rotation = f(offset + 2 * w) * Math.PI / 180;
+            const largeArc = view.getUint32(offset + 3 * w, true);
+            const sweep = view.getUint32(offset + 3 * w + 4, true);
+            const x = f(offset + 3 * w + 8), y = f(offset + 4 * w + 8);
+            offset += 5 * w + 8;
+            drawSvgArc(ctx, curX, curY, rx, ry, rotation, largeArc, sweep, x, y);
+            curX = x; curY = y;
+            break;
+          }
+          case 0x07: { // a (end point relative to the current point)
+            const rx = f(offset), ry = f(offset + w);
+            const rotation = f(offset + 2 * w) * Math.PI / 180;
+            const largeArc = view.getUint32(offset + 3 * w, true);
+            const sweep = view.getUint32(offset + 3 * w + 4, true);
+            const x = curX + f(offset + 3 * w + 8), y = curY + f(offset + 4 * w + 8);
+            offset += 5 * w + 8;
+            drawSvgArc(ctx, curX, curY, rx, ry, rotation, largeArc, sweep, x, y);
+            curX = x; curY = y;
+            break;
+          }
+          case 0x08: { // H
+            curX = f(offset);
+            ctx.lineTo(curX, curY);
+            offset += w;
+            break;
+          }
+          case 0x09: { // V
+            curY = f(offset);
+            ctx.lineTo(curX, curY);
+            offset += w;
+            break;
+          }
+          case 0x0A: { // h
+            curX += f(offset);
+            ctx.lineTo(curX, curY);
+            offset += w;
+            break;
+          }
+          case 0x0B: { // v
+            curY += f(offset);
+            ctx.lineTo(curX, curY);
+            offset += w;
+            break;
+          }
+          case 0x0C: { // m
+            curX += f(offset); curY += f(offset + w);
+            startX = curX; startY = curY;
+            ctx.moveTo(curX, curY);
+            offset += 2 * w;
+            break;
+          }
+          case 0x0D: { // l
+            curX += f(offset); curY += f(offset + w);
+            ctx.lineTo(curX, curY);
+            offset += 2 * w;
+            break;
+          }
+          case 0x0E: { // c
+            const dx1 = f(offset), dy1 = f(offset + w), dx2 = f(offset + 2 * w), dy2 = f(offset + 3 * w);
+            const dx = f(offset + 4 * w), dy = f(offset + 5 * w);
+            ctx.bezierCurveTo(curX + dx1, curY + dy1, curX + dx2, curY + dy2, curX + dx, curY + dy);
+            curX += dx; curY += dy;
+            offset += 6 * w;
+            break;
+          }
+          case 0x0F: { // q
+            const dx1 = f(offset), dy1 = f(offset + w);
+            const dx = f(offset + 2 * w), dy = f(offset + 3 * w);
+            ctx.quadraticCurveTo(curX + dx1, curY + dy1, curX + dx, curY + dy);
+            curX += dx; curY += dy;
+            offset += 4 * w;
+            break;
+          }
+          default:
+            throw new Error('Unknown canvas binary path command 0x' + subcmd.toString(16) + ' at offset ' + (offset - 1));
+        }
+      }
+      return offset;
+    }
+
     // Replays one canvas binary stream (Visualize.Backend.CanvasBinary, spec/09 §4) on ctx
     // from startOffset up to endOffset (default: the end of bytes). Returns the offset
     // reached. Opcodes are those of Visualize.Backend.CanvasBinary.Opcodes; an unknown
@@ -120,159 +266,27 @@ defmodule Visualize.Hooks.CanvasBinary do
         const cmd = bytes[offset++];
 
         switch (cmd) {
-          case 0x01: { // path: one open polyline
+          case 0x01: { // path: one open polyline, f64
             const count = view.getUint32(offset, true);
-            offset += 4;
-            ctx.beginPath();
-            for (let i = 0; i < count; i++) {
-              const x = view.getFloat64(offset, true);
-              const y = view.getFloat64(offset + 8, true);
-              offset += 16;
-              if (i === 0) ctx.moveTo(x, y);
-              else ctx.lineTo(x, y);
-            }
+            offset = drawPolyline(ctx, view, offset + 4, count, 8);
             break;
           }
 
-          case 0x02: { // path_cubic: the full command stream
+          case 0x05: { // path32: one open polyline, f32
+            const count = view.getUint32(offset, true);
+            offset = drawPolyline(ctx, view, offset + 4, count, 4);
+            break;
+          }
+
+          case 0x02: { // path_cubic: the full command stream, f64
             const cmdCount = view.getUint32(offset, true);
-            offset += 4;
-            ctx.beginPath();
-            let curX = 0, curY = 0, startX = 0, startY = 0;
-            for (let i = 0; i < cmdCount; i++) {
-              const subcmd = bytes[offset++];
-              switch (subcmd) {
-                case 0x01: { // M
-                  curX = view.getFloat64(offset, true);
-                  curY = view.getFloat64(offset + 8, true);
-                  startX = curX; startY = curY;
-                  ctx.moveTo(curX, curY);
-                  offset += 16;
-                  break;
-                }
-                case 0x02: { // L
-                  curX = view.getFloat64(offset, true);
-                  curY = view.getFloat64(offset + 8, true);
-                  ctx.lineTo(curX, curY);
-                  offset += 16;
-                  break;
-                }
-                case 0x03: { // C
-                  const x1 = view.getFloat64(offset, true);
-                  const y1 = view.getFloat64(offset + 8, true);
-                  const x2 = view.getFloat64(offset + 16, true);
-                  const y2 = view.getFloat64(offset + 24, true);
-                  curX = view.getFloat64(offset + 32, true);
-                  curY = view.getFloat64(offset + 40, true);
-                  ctx.bezierCurveTo(x1, y1, x2, y2, curX, curY);
-                  offset += 48;
-                  break;
-                }
-                case 0x04: { // Q
-                  const qx1 = view.getFloat64(offset, true);
-                  const qy1 = view.getFloat64(offset + 8, true);
-                  curX = view.getFloat64(offset + 16, true);
-                  curY = view.getFloat64(offset + 24, true);
-                  ctx.quadraticCurveTo(qx1, qy1, curX, curY);
-                  offset += 32;
-                  break;
-                }
-                case 0x05: { // Z
-                  ctx.closePath();
-                  curX = startX; curY = startY;
-                  break;
-                }
-                case 0x06: { // A (absolute end point)
-                  const rx = view.getFloat64(offset, true);
-                  const ry = view.getFloat64(offset + 8, true);
-                  const rotation = view.getFloat64(offset + 16, true) * Math.PI / 180;
-                  const largeArc = view.getUint32(offset + 24, true);
-                  const sweep = view.getUint32(offset + 28, true);
-                  const x = view.getFloat64(offset + 32, true);
-                  const y = view.getFloat64(offset + 40, true);
-                  offset += 48;
-                  drawSvgArc(ctx, curX, curY, rx, ry, rotation, largeArc, sweep, x, y);
-                  curX = x; curY = y;
-                  break;
-                }
-                case 0x07: { // a (end point relative to the current point)
-                  const rx = view.getFloat64(offset, true);
-                  const ry = view.getFloat64(offset + 8, true);
-                  const rotation = view.getFloat64(offset + 16, true) * Math.PI / 180;
-                  const largeArc = view.getUint32(offset + 24, true);
-                  const sweep = view.getUint32(offset + 28, true);
-                  const x = curX + view.getFloat64(offset + 32, true);
-                  const y = curY + view.getFloat64(offset + 40, true);
-                  offset += 48;
-                  drawSvgArc(ctx, curX, curY, rx, ry, rotation, largeArc, sweep, x, y);
-                  curX = x; curY = y;
-                  break;
-                }
-                case 0x08: { // H
-                  curX = view.getFloat64(offset, true);
-                  ctx.lineTo(curX, curY);
-                  offset += 8;
-                  break;
-                }
-                case 0x09: { // V
-                  curY = view.getFloat64(offset, true);
-                  ctx.lineTo(curX, curY);
-                  offset += 8;
-                  break;
-                }
-                case 0x0A: { // h
-                  curX += view.getFloat64(offset, true);
-                  ctx.lineTo(curX, curY);
-                  offset += 8;
-                  break;
-                }
-                case 0x0B: { // v
-                  curY += view.getFloat64(offset, true);
-                  ctx.lineTo(curX, curY);
-                  offset += 8;
-                  break;
-                }
-                case 0x0C: { // m
-                  curX += view.getFloat64(offset, true);
-                  curY += view.getFloat64(offset + 8, true);
-                  startX = curX; startY = curY;
-                  ctx.moveTo(curX, curY);
-                  offset += 16;
-                  break;
-                }
-                case 0x0D: { // l
-                  curX += view.getFloat64(offset, true);
-                  curY += view.getFloat64(offset + 8, true);
-                  ctx.lineTo(curX, curY);
-                  offset += 16;
-                  break;
-                }
-                case 0x0E: { // c
-                  const dx1 = view.getFloat64(offset, true);
-                  const dy1 = view.getFloat64(offset + 8, true);
-                  const dx2 = view.getFloat64(offset + 16, true);
-                  const dy2 = view.getFloat64(offset + 24, true);
-                  const dx = view.getFloat64(offset + 32, true);
-                  const dy = view.getFloat64(offset + 40, true);
-                  ctx.bezierCurveTo(curX + dx1, curY + dy1, curX + dx2, curY + dy2, curX + dx, curY + dy);
-                  curX += dx; curY += dy;
-                  offset += 48;
-                  break;
-                }
-                case 0x0F: { // q
-                  const dx1 = view.getFloat64(offset, true);
-                  const dy1 = view.getFloat64(offset + 8, true);
-                  const dx = view.getFloat64(offset + 16, true);
-                  const dy = view.getFloat64(offset + 24, true);
-                  ctx.quadraticCurveTo(curX + dx1, curY + dy1, curX + dx, curY + dy);
-                  curX += dx; curY += dy;
-                  offset += 32;
-                  break;
-                }
-                default:
-                  throw new Error('Unknown canvas binary path command 0x' + subcmd.toString(16) + ' at offset ' + (offset - 1));
-              }
-            }
+            offset = drawPathCommands(ctx, view, bytes, offset + 4, cmdCount, 8);
+            break;
+          }
+
+          case 0x06: { // path_cubic32: the full command stream, f32
+            const cmdCount = view.getUint32(offset, true);
+            offset = drawPathCommands(ctx, view, bytes, offset + 4, cmdCount, 4);
             break;
           }
 
