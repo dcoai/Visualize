@@ -60,7 +60,7 @@ Each `IR.Element` type maps to exactly one tag. "attrs" is `element.attrs`, "sty
 
 | IR type | Tag | Attributes emitted | Children / content |
 |---|---|---|---|
-| `:path` | `path` | style, `d` = `path_data/1` of `element.path`, transform | none (self-closing) |
+| `:path` | `path` | attrs, then style merged over it, `d` = `path_data/1` of `element.path`, transform | none (self-closing) |
 | `:group` | `g` | style, then attrs merged over it, transform | children rendered recursively |
 | `:root` | `svg` | `xmlns="http://www.w3.org/2000/svg"`, then attrs (`view_box` emitted as `viewBox`, 2.4); `element.style` and `element.transform` are ignored | children |
 | `:rect`, `:circle`, `:ellipse`, `:line`, `:image` | same name | attrs, then style merged over it, transform | none |
@@ -73,7 +73,7 @@ Each `IR.Element` type maps to exactly one tag. "attrs" is `element.attrs`, "sty
 | `:radial_gradient` | `radialGradient` | attrs verbatim | children |
 | `:stop` | `stop` | attrs, style | none |
 
-Any other type raises `FunctionClauseError`. Tags in `circle ellipse line path polygon polyline rect image use stop` are emitted self-closing (`<rect …/>`) when they have neither children nor content; all other tags are emitted as `<tag …>content children</tag>`.
+A path's attrs are the data attributes of spec/10 §12.2 and §14.2 — the datum a per-series path carries and its `data-series` (D-75, D-77); before those a path had no attrs to print. Any other type raises `FunctionClauseError`. Tags in `circle ellipse line path polygon polyline rect image use stop` are emitted self-closing (`<rect …/>`) when they have neither children nor content; all other tags are emitted as `<tag …>content children</tag>`.
 
 ### 2.4 Attribute serialisation
 

@@ -564,6 +564,20 @@ defmodule Visualize.Chart.MarkTest do
     end
   end
 
+  describe "legend toggling" do
+    test "each series path names its series; a mark without the channel names none" do
+      group = generate(%{type: :line, channels: %{x: :t, y: :v, series: :k}})
+      assert Enum.map(group.children, & &1.attrs["data-series"]) == ["k0", "k1"]
+
+      area = generate(%{type: :area, channels: %{x: :t, y: :v, series: :k}})
+      assert Enum.map(area.children, & &1.attrs["data-series"]) == ["k0", "k1"]
+
+      plain = generate(%{type: :line, channels: %{x: :t, y: :v}})
+      assert hd(plain.children).attrs == %{}
+      assert Render.to_string(group) =~ ~s|<path d="M0,120L200,160" data-series="k0"|
+    end
+  end
+
   describe "inline label" do
     test "one text per element at the anchor point, the field read from the datum" do
       label = %{text: ["v=", {:field, :v}], anchor: :right, dx: 1, dy: 2}

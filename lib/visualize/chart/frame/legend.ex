@@ -67,7 +67,7 @@ defmodule Visualize.Chart.Frame.Legend do
     |> Scale.ticks(5)
     |> Enum.with_index(1)
     |> Enum.map(fn {value, i} ->
-      {Axis.default_label(value), swatch(Scale.apply(scale, value), i, theme, mode)}
+      {value, Axis.default_label(value), swatch(Scale.apply(scale, value), i, theme, mode)}
     end)
   end
 
@@ -96,7 +96,7 @@ defmodule Visualize.Chart.Frame.Legend do
         else: []
 
     items =
-      Enum.with_index(entries, fn {label, colour}, i ->
+      Enum.with_index(entries, fn {value, label, colour}, i ->
         Element.group(
           [
             Element.rect(if(right?, do: -@swatch, else: 0), 0, @swatch, @swatch, %{fill: colour}),
@@ -108,6 +108,7 @@ defmodule Visualize.Chart.Frame.Legend do
             )
           ],
           style: %{class: "legend-item"},
+          attrs: series(value),
           transform: Transform.translate(0, offset + i * @row)
         )
       end)
@@ -122,7 +123,7 @@ defmodule Visualize.Chart.Frame.Legend do
     title_width = if title, do: @per_char * font_size * String.length(title) + @inset, else: 0
 
     {items, width} =
-      Enum.reduce(entries, {[], title_width}, fn {label, colour}, {acc, x} ->
+      Enum.reduce(entries, {[], title_width}, fn {value, label, colour}, {acc, x} ->
         item =
           Element.group(
             [
@@ -135,6 +136,7 @@ defmodule Visualize.Chart.Frame.Legend do
               )
             ],
             style: %{class: "legend-item"},
+            attrs: series(value),
             transform: Transform.translate(x, 0)
           )
 
@@ -144,6 +146,9 @@ defmodule Visualize.Chart.Frame.Legend do
     title_element = if title, do: [title(title, :start, fill)], else: []
     {title_element ++ Enum.reverse(items), max(width - @inset, 0)}
   end
+
+  # An entry names what it explains, the string a series path carries (spec/14 §4.5, D-77).
+  defp series(value), do: %{"data-series" => to_string(value)}
 
   defp title(title, anchor, fill) do
     Element.text(title,

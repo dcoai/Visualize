@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>`, `Visualize.Hooks.Resize` reports a container's size so the server can re-render at it, `Visualize.Hooks.Tooltip` shows a datum's fields under the pointer from attributes the server wrote, and `Visualize.Hooks.Crosshair` snaps a rule and markers to the nearest x of an array the server wrote once — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
+Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>`, `Visualize.Hooks.Resize` reports a container's size so the server can re-render at it, `Visualize.Hooks.Tooltip` shows a datum's fields under the pointer from attributes the server wrote, `Visualize.Hooks.Crosshair` snaps a rule and markers to the nearest x of an array the server wrote once, and `Visualize.Hooks.Legend` hides a series from its legend entry — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
 
 ## 1. Scope
 
@@ -21,6 +21,7 @@ Visualize reaches the browser through Phoenix LiveView in three ways: HEEx funct
 | `Visualize.Hooks.Resize` | always | `ResizeHook` JS: the container's size pushed to the LiveView once per settle |
 | `Visualize.Hooks.Tooltip` | always | `TooltipHook` JS: a tooltip from the datum attributes of an element, with no round trip |
 | `Visualize.Hooks.Crosshair` | always | `CrosshairHook` JS and the server-side `attrs/3`: a rule and markers snapped to the data over SVG or canvas |
+| `Visualize.Hooks.Legend` | always | `LegendHook` JS: a legend entry hides and shows the series it names |
 
 Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)`. For that guard to be true in a host, `phoenix_live_view` MUST be a declared dependency of this library: Mix prunes the code path to a dependency's own declared deps while compiling it, so a guard over an undeclared module is always false in a host, whatever the host itself depends on. It is therefore declared `optional: true` (D-45): a host that has LiveView compiles the components, one that does not never fetches Phoenix, and `scripts/consumer_check.exs` proves the second claim on every pipeline ([12-testing-and-conformance](12-testing-and-conformance.md) §4). The library's own builds carry the optional dependency, so the components compile, are documented and are rendered under test here.
 
@@ -240,7 +241,7 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, then one `export default { … }` object listing the eight hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, then one `export default { … }` object listing the nine hooks — each name is exported exactly once (D-40, D-48). |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
 | `Visualize.Hooks.transform_point/2` | Delegates to `Visualize.Hooks.Zoom.transform_point/2`. |
@@ -496,3 +497,27 @@ Attach with `phx-hook="CrosshairHook"` and an `id` on a *container* holding the 
 | `data-crosshair-colors` | unset | a JSON array of one fill per series of `data-ys`, in order |
 
 On `mounted()` the hook creates an overlay `<svg class="crosshair">` with `position: absolute` and `pointer-events: none`, appends it to `document.body` — never inside the container, so a LiveView patch of the chart neither removes it nor sees it — and inside it a group translated to the plot's origin holding a `<line class="crosshair-rule">` from `0` to the plot's height and one `<circle class="crosshair-marker" r="4">` per series of `data-ys`; the overlay is hidden until a move. It binds `mousemove`, `mouseleave`, `touchmove` and `touchend` on the container, each handler bound once and kept (D-47). On a move the hook reads the container's bounding rectangle, sizes and places the overlay over it with the chart's `viewBox` (`0 0 width height` of `data-size`, else the rectangle's size), converts the pointer into chart units by the ratio of the two, subtracts the plot's origin, and hides the overlay when the point is outside the plot area; otherwise it finds the nearest x by binary search over `data-xs` — the lower of two equidistant neighbours — moves the rule to it, moves each series' marker to its y there and hides a marker whose y is `null`, and, when `data-crosshair-event` is set and the index differs from the last pushed, pushes `pushEvent(event, {index})`, arriving as `handle_event("hover", %{"index" => 3}, socket)` with an integer. A touch move uses its first touch; `touchend` and `mouseleave` hide the overlay. `updated()` re-reads the four arrays and rebuilds the markers when the series count changed; `destroyed()` removes the four listeners with the kept references and the overlay from the document. `test/visualize/hooks/crosshair_test.exs` holds the source to this shape.
+
+## 14. Visualize.Hooks.Legend
+
+### 14.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.Legend.js_hook/0` | Returns the source of `export const LegendHook = {…}` (14.3). |
+
+### 14.2 The series attributes
+
+A legend entry names what it explains and a series element names its series, with the same string, so a hook can join the two without a lookup table (D-77). The frame writes both; nothing on the server is configured:
+
+| Attribute | On | Value |
+|---|---|---|
+| `data-series` | every `legend-item` group of a frame's legend ([14-declarative-chart](14-declarative-chart.md) §4.5) | `to_string/1` of the entry's value — a tick of the legend's scale |
+| `data-series` | every per-series `path` of a `:line` or an `:area` mark with a `series` channel (spec/14 §5.6) | `to_string/1` of the series value |
+| `data-legend-event` | the hook element, set by the host | the event pushed on every toggle; absent, the hook pushes nothing |
+
+The two strings coincide when the legend explains the `color` scale the series channel reads through — the usual case, where the scale's domain is the series values — and an entry whose string no element carries toggles nothing. A hand-built chart writes the same two attributes to take part.
+
+### 14.3 `LegendHook` behaviour
+
+Attach with `phx-hook="LegendHook"` and an `id` on the `<svg>`, or on any ancestor holding both the legend and the marks. On `mounted()` the hook gives every `.legend-item[data-series]` under the element `cursor: pointer` and binds one `click` listener on the element, bound once and kept (D-47); the hidden set starts empty. A click whose target is inside a `.legend-item[data-series]` toggles that series: when it becomes hidden, every element matching `.mark [data-series="<value>"]` under the hook element gets `display="none"` and the entry's group gets `class` `legend-item legend-item-hidden` and `opacity="0.35"`; when it becomes shown again, the `display` attribute is removed from those elements and the entry's class and opacity are restored. `display` is an SVG presentation attribute and applies in the SVG namespace, which the HTML `hidden` attribute does not (D-77). `updated()` re-applies the hidden set after a LiveView patch — the server re-renders the chart without knowing what the client hid, and the patch would otherwise show every series again — and re-sets the cursor on entries the patch replaced. When `data-legend-event` is set, every toggle pushes `pushEvent(event, {series, hidden})`, arriving as `handle_event("legend_toggle", %{"series" => "west", "hidden" => true}, socket)`; unset, nothing is pushed. `destroyed()` removes the click listener with the kept reference; the attributes it set stay on elements the DOM will discard with the hook's element. `test/visualize/hooks/legend_test.exs` holds the source to this shape.

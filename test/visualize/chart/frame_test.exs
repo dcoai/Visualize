@@ -317,6 +317,7 @@ defmodule Visualize.Chart.FrameTest do
             )
           ],
           style: %{class: "legend-item"},
+          attrs: %{"data-series" => label},
           transform: Transform.translate(0, i * 16)
         )
       end
