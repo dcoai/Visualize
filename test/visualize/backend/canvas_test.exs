@@ -152,4 +152,13 @@ defmodule Visualize.Backend.CanvasTest do
     assert Render.to_canvas(elements, format: :binary) == expected
     assert Render.to_canvas(elements, format: :binary_base64) == Base.encode64(expected)
   end
+
+  test "a title and a desc draw nothing on a canvas (D-56)" do
+    root = Element.root(10, 10, title: "t", description: "d", children: [Element.circle(1, 1, 1)])
+
+    assert Canvas.render_element(root, format: :commands) ==
+             Canvas.render_element(Element.root(10, 10, children: [Element.circle(1, 1, 1)]),
+               format: :commands
+             )
+  end
 end

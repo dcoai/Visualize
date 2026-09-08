@@ -50,6 +50,8 @@ defmodule Visualize.IR.Element do
           | :radial_gradient
           | :stop
           | :root
+          | :title
+          | :desc
 
   @type style :: %{
           optional(:fill) => String.t() | :none | :current_color,
@@ -254,7 +256,19 @@ defmodule Visualize.IR.Element do
   end
 
   @doc """
-  Creates a root SVG element.
+  Creates a title element: the accessible name of the element it is the first child of.
+  """
+  @spec title(String.t()) :: t()
+  def title(text) when is_binary(text), do: new(:title, content: text)
+
+  @doc """
+  Creates a desc element: the accessible description of its parent.
+  """
+  @spec desc(String.t()) :: t()
+  def desc(text) when is_binary(text), do: new(:desc, content: text)
+
+  @doc """
+  Creates a root SVG element, `role="img"`.
 
   ## Options
 
@@ -264,6 +278,12 @@ defmodule Visualize.IR.Element do
     * `:responsive` - when true, `preserveAspectRatio="xMidYMid meet"` (unless given) and
       `style="width:100%;height:auto"`, so the `<svg>` fills its container's width at the
       drawing's aspect ratio while `width` and `height` stay its intrinsic size (D-54)
+    * `:title`, `:description` - the accessible name and description (D-56): a `<title>`
+      and a `<desc>` become the first children, each with an id, and `aria-labelledby`
+      names them
+    * `:id` - the root's id and the prefix of the two child ids (`<id>-title`,
+      `<id>-desc`); defaults to `vis-` and a hash of the two texts, and is only set when
+      a title or description is given
   """
   @spec root(number(), number(), keyword()) :: t()
   def root(width, height, opts \\ []) do
@@ -271,13 +291,44 @@ defmodule Visualize.IR.Element do
     responsive = Keyword.get(opts, :responsive, false)
     default_ratio = if responsive, do: "xMidYMid meet"
     ratio = Keyword.get(opts, :preserve_aspect_ratio, default_ratio)
+    title = Keyword.get(opts, :title)
+    description = Keyword.get(opts, :description)
+    ids = label_ids(Keyword.get(opts, :id), title, description)
 
     attrs =
-      %{width: width, height: height, view_box: view_box}
+      %{width: width, height: height, view_box: view_box, role: "img"}
       |> put_unless_nil(:preserve_aspect_ratio, ratio)
       |> put_unless_nil(:style, if(responsive, do: "width:100%;height:auto"))
+      |> put_unless_nil(:id, ids.root)
+      |> put_unless_nil(:aria_labelledby, ids.labelledby)
 
-    new(:root, attrs: attrs, children: Keyword.get(opts, :children, []))
+    labels =
+      Enum.reject(
+        [
+          title && set_attrs(title(title), %{id: ids.title}),
+          description && set_attrs(desc(description), %{id: ids.desc})
+        ],
+        &is_nil/1
+      )
+
+    new(:root, attrs: attrs, children: labels ++ Keyword.get(opts, :children, []))
+  end
+
+  @doc false
+  # The ids of a root's accessible name and description (D-56): `nil` for each text that
+  # is absent, and `nil` throughout when both are; `labelledby` is the `aria-labelledby`
+  # value naming the ids present. The prefix is the given id or `vis-` plus a base-36
+  # hash of the two texts, so equal charts share ids and different ones do not.
+  def label_ids(_id, nil, nil), do: %{root: nil, title: nil, desc: nil, labelledby: nil}
+
+  def label_ids(id, title, description) do
+    prefix =
+      id || "vis-" <> String.downcase(Integer.to_string(:erlang.phash2({title, description}), 36))
+
+    title_id = if title, do: prefix <> "-title"
+    desc_id = if description, do: prefix <> "-desc"
+    labelledby = Enum.join(Enum.reject([title_id, desc_id], &is_nil/1), " ")
+    %{root: prefix, title: title_id, desc: desc_id, labelledby: labelledby}
   end
 
   defp put_unless_nil(map, _key, nil), do: map

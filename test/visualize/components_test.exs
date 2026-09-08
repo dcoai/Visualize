@@ -51,7 +51,9 @@ defmodule Visualize.ComponentsTest do
            x_label: "x",
            y_label: "y",
            animate: true,
-           class: "chart"
+           class: "chart",
+           title: "Points",
+           description: "Four points on a monotone curve"
          }},
       bar_chart: {&Components.bar_chart/1, %{data: @categories, x: & &1.name, y: & &1.value}},
       bar_chart_responsive:
@@ -140,6 +142,33 @@ defmodule Visualize.ComponentsTest do
 
     assert String.replace(responsive, ~r/<svg[^>]*>/, "") ==
              String.replace(plain, ~r/<svg[^>]*>/, "")
+  end
+
+  describe "accessibility (spec/10 §1.2, D-56)" do
+    test "every <svg> is role=img; a titled one names itself first" do
+      plain = render_case(Keyword.fetch!(cases(), :bar_chart))
+      assert plain =~ ~s| role="img" |
+      refute plain =~ "aria-labelledby"
+      refute plain =~ "<title"
+
+      titled = render_case(Keyword.fetch!(cases(), :line_chart_points))
+      [_, id] = Regex.run(~r/aria-labelledby="([^"]+)-title/, titled)
+      assert titled =~ ~s|role="img" aria-labelledby="#{id}-title #{id}-desc"|
+      assert titled =~ ~s|<title id="#{id}-title">Points</title>|
+      assert titled =~ ~s|<desc id="#{id}-desc">Four points on a monotone curve</desc>|
+      assert titled =~ ~s|<g class="x-axis" transform="translate(0, 350)"><g aria-hidden="true"|
+
+      only_desc =
+        render_component(&Components.pie_chart/1, %{
+          data: @categories,
+          value: & &1.value,
+          description: "Three slices"
+        })
+
+      assert only_desc =~ ~r/aria-labelledby="vis-[a-z0-9]+-desc"/
+      refute only_desc =~ "<title"
+      assert only_desc =~ ~r/<desc id="vis-[a-z0-9]+-desc">Three slices<\/desc>/
+    end
   end
 
   describe "theme (spec/10 §1.2, D-55)" do

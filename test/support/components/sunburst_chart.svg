@@ -1,4 +1,6 @@
-<svg width="600" height="600" font-family="var(--vis-font-family, sans-serif)" viewBox="0 0 600 600">
+<svg width="600" height="600" font-family="var(--vis-font-family, sans-serif)" role="img" viewBox="0 0 600 600">
+  
+  
   <g transform="translate(300, 300)">
     
       <path d="M0,-200A200,200,0,0,1,47.8631,194.1884L23.9316,97.0942A100,100,0,0,0,0,-100Z" fill="#1f77b4" stroke="var(--vis-background, #ffffff)" stroke-width="1"></path>

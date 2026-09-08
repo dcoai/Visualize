@@ -98,9 +98,43 @@ defmodule Visualize.SVG.BridgeTest do
                width: 1,
                height: 1,
                view_box: "0 0 1 1",
+               role: "img",
                preserve_aspect_ratio: "xMinYMin slice",
                style: "width:100%;height:auto"
              }
+  end
+
+  test "a named root has a title, a desc and aria-labelledby on both paths (D-56)" do
+    named = Element.root(10, 20, title: "Sales", description: "Monthly sales, 2024 & 2025")
+    plain = Element.root(10, 20)
+    only_title = Element.root(10, 20, title: "Sales", id: "chart")
+
+    for render <- [&Render.to_svg_string/1, &(&1 |> SVG.Element.from_ir() |> SVG.to_string())] do
+      svg = render.(named)
+      [_, id] = Regex.run(~r/ id="([^"]+)"/, svg)
+      assert String.starts_with?(id, "vis-")
+      assert svg =~ ~s( role="img")
+      assert svg =~ ~s( aria-labelledby="#{id}-title #{id}-desc")
+
+      assert svg =~
+               ~s(><title id="#{id}-title">Sales</title><desc id="#{id}-desc">Monthly sales, 2024 &amp; 2025</desc>)
+
+      assert render.(plain) =~ ~s( role="img")
+      refute render.(plain) =~ "aria-labelledby"
+      refute render.(plain) =~ "<title"
+      refute render.(plain) =~ ~s( id=")
+
+      assert render.(only_title) =~ ~s( id="chart" role="img")
+      assert render.(only_title) =~ ~s( aria-labelledby="chart-title")
+      assert render.(only_title) =~ ~s(<title id="chart-title">Sales</title>)
+      refute render.(only_title) =~ "<desc"
+    end
+
+    assert Element.root(1, 1, title: "a").attrs.id == Element.root(2, 2, title: "a").attrs.id
+    refute Element.root(1, 1, title: "a").attrs.id == Element.root(1, 1, title: "b").attrs.id
+
+    assert [%Element{type: :title}, %Element{type: :desc}, %Element{type: :group}] =
+             Element.root(1, 1, title: "t", description: "d", children: [Element.group()]).children
   end
 
   test "camel-cased SVG attributes are not hyphenated; presentation attributes are" do

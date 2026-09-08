@@ -531,6 +531,7 @@ defmodule ExamplesWeb.ChartLive do
     opts = build_chart_opts(palette, tick, animating, slug, hex_radius)
 
     module.render(opts)
+    |> Examples.Accessible.name(module.title(), module.description())
     |> Visualize.SVG.Renderer.render_to_string()
   end
 

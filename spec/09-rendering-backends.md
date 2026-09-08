@@ -66,6 +66,7 @@ Each `IR.Element` type maps to exactly one tag. "attrs" is `element.attrs`, "sty
 | `:rect`, `:circle`, `:ellipse`, `:line`, `:image` | same name | attrs, then style merged over it, transform | none |
 | `:polyline`, `:polygon` | same name | `points` (2.6), style, transform; every other key in attrs is dropped | none |
 | `:text` | `text` | attrs, style, transform | `element.content` as escaped text |
+| `:title`, `:desc` | same name | attrs (the `id`) | `element.content` as escaped text |
 | `:defs` | `defs` | none | children |
 | `:clip_path` | `clipPath` | attrs verbatim | children |
 | `:linear_gradient` | `linearGradient` | attrs verbatim | children |
@@ -167,7 +168,7 @@ Each element produces, in order, its *setup* (transform commands per 3.3.4, then
 | `:group` | `{:save, []}`, T, S, children's commands, `{:restore, []}` |
 | `:root` | children's commands only |
 | `:image` | T, `{:drawImage, [href, x, y, width, height]}` |
-| `:defs`, `:clip_path`, `:linear_gradient`, `:radial_gradient`, `:stop` | nothing |
+| `:defs`, `:clip_path`, `:linear_gradient`, `:radial_gradient`, `:stop`, `:title`, `:desc` | nothing |
 
 A `:group`'s style setup is emitted after its transform, inside the `save`/`restore` pair, so that children without their own style inherit fill, stroke and line width through Canvas state; `Visualize.Backend.Hybrid` relies on this when it wraps a list of dynamic elements in a styled group (6.3) (D-37).
 
@@ -365,7 +366,7 @@ Single-byte records with no payload.
 | `:root` | each child's records, nothing else |
 | any other type | nothing (zero bytes) |
 
-Elements of type `:ellipse`, `:line`, `:polyline`, `:polygon`, `:text`, `:image`, `:defs`, `:clip_path`, gradients and `:stop` are silently dropped from the binary stream. Text has no binary representation by design; the other geometric types SHOULD be encoded as `path_cubic` records.
+Elements of type `:ellipse`, `:line`, `:polyline`, `:polygon`, `:text`, `:title`, `:desc`, `:image`, `:defs`, `:clip_path`, gradients and `:stop` are silently dropped from the binary stream. Text has no binary representation by design; the other geometric types SHOULD be encoded as `path_cubic` records.
 
 ### 4.5 Path form selection
 

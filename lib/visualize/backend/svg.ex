@@ -92,6 +92,12 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:g, attrs, child_content, nil)
   end
 
+  # A title or desc is its content, escaped, under its attrs (the id); no style (D-56).
+  defp do_render_element(%Element{type: type, attrs: attrs, content: content})
+       when type in [:title, :desc] do
+    render_svg_tag(type, attrs, [], content || "")
+  end
+
   # A root's `view_box` attr renders as `viewBox` through the shared attribute names
   # (D-11); its style and transform are ignored.
   defp do_render_element(%Element{type: :root, attrs: attrs, children: children}) do

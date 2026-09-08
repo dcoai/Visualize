@@ -47,7 +47,9 @@ defmodule Visualize.Components.TreeTest do
            node_radius: 4,
            label: &String.upcase(&1.name),
            animate: true,
-           class: "tree"
+           class: "tree",
+           title: "Org",
+           description: "A vertical tree"
          }},
       treemap_chart: {&Tree.treemap_chart/1, %{data: @hierarchy}},
       treemap_chart_slice:

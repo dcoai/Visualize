@@ -1,4 +1,6 @@
-<svg width="800" height="600" font-family="var(--vis-font-family, sans-serif)" viewBox="0 0 800 600">
+<svg width="800" height="600" font-family="var(--vis-font-family, sans-serif)" role="img" viewBox="0 0 800 600">
+  
+  
   
     <rect x="0" y="0" width="800" height="400" fill="#111" stroke="var(--vis-background, #ffffff)" stroke-width="1"></rect>
     <text x="4" y="14" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">x</text>

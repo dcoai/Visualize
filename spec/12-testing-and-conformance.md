@@ -66,3 +66,5 @@ Three constants select the intended behaviour (default `true`) or the defect the
 **Implemented.** `mix test` runs the ExUnit suite. `test/visualize/defects_test.exs` holds one regression per recorded defect fix (D-1, D-3, D-8 and the `Data.range/3` step handling), and each future decision that changes behaviour MUST add a regression there or in the module's own test file.
 
 The LiveView components have render goldens of the same kind as §1: `test/visualize/components_test.exs` renders every chart component of [10-liveview-integration](10-liveview-integration.md) §2 through `Phoenix.LiveViewTest.render_component/2` on a small fixed dataset and on empty data, and asserts byte equality with `test/support/components/<name>.svg` and `<name>_empty.svg` (D-45). They are regenerated with `mix run -e 'Visualize.ComponentsTest.write!()'` only when a component's output changes on purpose, and the regeneration is committed with the change.
+
+`test/visualize/theme_contrast_test.exs` holds both built-in themes and every colour scheme to the contrast floors of [08-utilities](08-utilities.md) §7.4.

@@ -302,9 +302,9 @@ defmodule Visualize.Backend.Canvas do
     Enum.flat_map(children, &element_to_commands/1)
   end
 
-  # Skip defs, gradients, clip paths (not directly renderable to Canvas)
+  # Skip defs, gradients, clip paths and the accessible name and description: none draws
   defp element_to_commands(%Element{type: type})
-       when type in [:defs, :clip_path, :linear_gradient, :radial_gradient, :stop] do
+       when type in [:defs, :clip_path, :linear_gradient, :radial_gradient, :stop, :title, :desc] do
     []
   end
 

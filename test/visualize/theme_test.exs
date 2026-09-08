@@ -2,7 +2,7 @@ defmodule Visualize.ThemeTest do
   @moduledoc "`Visualize.Theme` (spec/08 §7, D-55): slots, both modes, both themes' contrast."
   use ExUnit.Case, async: true
 
-  alias Visualize.{Backend, Color, Theme}
+  alias Visualize.{Backend, Theme}
 
   doctest Theme
 
@@ -92,24 +92,6 @@ defmodule Visualize.ThemeTest do
       assert css =~ "\n  --vis-font-family: sans-serif;\n"
       assert String.ends_with?(css, "  --vis-title-size: 16px;\n}\n")
       assert length(String.split(css, "\n  --vis-")) == 1 + length(Theme.slots(Theme.dark()))
-    end
-  end
-
-  describe "contrast (spec/08 §7.2)" do
-    for name <- [:default, :dark] do
-      test "the #{name} theme holds its floors against its background" do
-        theme = apply(Theme, unquote(name), [])
-        bg = Color.parse(theme.background)
-        against = fn hex -> Color.contrast(Color.parse(hex), bg) end
-
-        assert against.(theme.text) >= 4.5
-        assert against.(theme.axis) >= 3.0
-        assert against.(theme.grid) >= 1.2
-
-        for colour <- theme.series do
-          assert against.(colour) >= 3.0, "#{colour} is #{against.(colour)} on #{theme.name}"
-        end
-      end
     end
   end
 end

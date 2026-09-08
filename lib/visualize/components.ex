@@ -69,7 +69,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `stroke_width` - (default 2)
     * `show_points` - draw an `r="4"` circle at each datum (default `false`)
     * `x_label`, `y_label` - axis titles as `<text class="axis-label">`
-    * `animate`, `class`, `responsive`, `theme` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
+      conventions
 
     ## Example
 
@@ -88,6 +89,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
     attr(:x_label, :string, default: nil)
     attr(:y_label, :string, default: nil)
     attr(:show_points, :boolean, default: false)
@@ -95,6 +98,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def line_chart(assigns) do
       assigns = Support.rows(assigns)
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
       x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
 
@@ -121,13 +125,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           text: Support.css(theme, :text),
           label_size: Support.css(theme, :label_size),
           theme: theme,
+          ids: ids,
           x_axis: axis(Axis.bottom(x_scale), theme),
           y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -177,7 +184,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
     * `fill` - bar colour (default `nil`: the theme's `:series_1`)
     * `padding` - band padding, 0 to 1 (default 0.1)
-    * `animate`, `class`, `responsive`, `theme` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
+      conventions
     """
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
@@ -190,11 +198,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
     attr(:padding, :float, default: 0.1)
 
     def bar_chart(assigns) do
       assigns = Support.rows(assigns)
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
 
       x_scale =
@@ -229,13 +240,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           bars: bars,
           fill: Support.colour(assigns.fill, theme, :series_1),
           theme: theme,
+          ids: ids,
           x_axis: axis(Axis.bottom(x_scale), theme),
           y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -274,11 +288,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
     attr(:padding, :float, default: 0.1)
 
     def horizontal_bar_chart(assigns) do
       assigns = Support.rows(assigns)
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
       {margin, inner_width, inner_height} = Support.frame(assigns, @horizontal_margin)
 
       y_scale =
@@ -310,13 +327,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           bars: bars,
           fill: Support.colour(assigns.fill, theme, :series_1),
           theme: theme,
+          ids: ids,
           x_axis: axis(Axis.bottom(x_scale), theme),
           y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -349,7 +369,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `colors` - scheme atom or colour list; the i-th slice takes the i-th colour
       (default `:category10`)
     * `show_labels` - (default `true`)
-    * `animate`, `class`, `responsive`, `theme` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
+      conventions
 
     A label sits at the centroid of the slice's mid-radius, as `Visualize.Shape.Arc.centroid/2`
     computes it.
@@ -367,11 +388,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
     attr(:show_labels, :boolean, default: true)
 
     def pie_chart(assigns) do
       assigns = Support.rows(assigns)
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
       outer_radius = assigns.outer_radius || min(assigns.width, assigns.height) / 2 - 10
       pie = Shape.pie() |> Shape.value(assigns.value) |> Shape.pad_angle(assigns.pad_angle)
 
@@ -401,13 +425,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
         assign(assigns,
           slices: slices,
           theme: theme,
+          ids: ids,
           background: Support.css(theme, :background),
           label_size: Support.css(theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
           <%= for slice <- @slices do %>
             <path d={slice.d} fill={slice.fill} stroke={@background} stroke-width="2" {@transition} />
@@ -439,7 +466,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `fill` - point colour (default `nil`: the theme's `:series_1`)
     * `size` - the radius, or a one-argument function of the datum returning it
       (default 5)
-    * `animate`, `class`, `responsive`, `theme` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
+      conventions
     """
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
@@ -453,10 +481,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
 
     def scatter_plot(assigns) do
       assigns = Support.rows(assigns)
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
 
       x_scale =
@@ -485,13 +516,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           points: points,
           fill: Support.colour(assigns.fill, theme, :series_1),
           theme: theme,
+          ids: ids,
           x_axis: axis(Axis.bottom(x_scale), theme),
           y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -523,7 +557,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `fill`, `fill_opacity` - the area (default `nil`, the theme's `:series_1`, at 0.3)
     * `stroke`, `stroke_width` - the line (default `nil`, the theme's `:series_1`, 2)
     * `curve` - applied to both the area and the line (default `:linear`)
-    * `animate`, `class`, `responsive`, `theme` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
+      conventions
     """
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
@@ -540,10 +575,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
 
     def area_chart(assigns) do
       assigns = Support.rows(assigns)
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
       x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
 
@@ -573,13 +611,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           fill: Support.colour(assigns.fill, theme, :series_1),
           stroke: Support.colour(assigns.stroke, theme, :series_1),
           theme: theme,
+          ids: ids,
           x_axis: axis(Axis.bottom(x_scale), theme),
           y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -617,7 +658,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `colors` - scheme atom or colour list, one colour per key in order
       (default `:category10`)
     * `padding` - band padding (default 0.1)
-    * `animate`, `class`, `responsive`, `theme` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
+      conventions
 
     The y domain is `[0, max y1]` over every point of every series.
     """
@@ -632,11 +674,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
     attr(:padding, :float, default: 0.1)
 
     def stacked_bar_chart(assigns) do
       assigns = Support.rows(assigns)
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
       series = Shape.generate(Shape.stack() |> Shape.keys(assigns.keys), assigns.data)
       tops = for s <- series, p <- s.points, do: p.y1
@@ -674,13 +719,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           inner_height: inner_height,
           bars: bars,
           theme: theme,
+          ids: ids,
           x_axis: axis(Axis.bottom(x_scale), theme),
           y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
