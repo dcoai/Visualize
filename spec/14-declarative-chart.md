@@ -4,7 +4,7 @@
 
 A chart is a nested map — a *design* — that names its data, its coordinate frame, its marks and its labels without a function anywhere in it, so that a design can be stored, diffed, shared, built by a tool and rendered against different data. This document is the contract for the whole layer: the map at every level with every key's type, facet, default and merge rule; the style grammar; sources as typed slots and variables as terms; version and migration; the validator and its error shape; the JSON form; and, as agreed prose, application, composition and compilation. Vega-Lite is the precedent for a stored design and its flat several-hundred-key specification is the warning: the map keeps the three-noun nesting of theme, style and frame (D-57).
 
-Each section states what is implemented. The schema, the validator, the `Visualize.Chart` struct with its map and JSON round-trips, variables and version handling, the frame — its scales, inference, axes, grid, legend and labels, rendered as the static furniture — and the marks — every mark type drawn from the frame's scales by the existing generators, the transforms as steps of a mark's data pipeline, and the style grammar resolved to an SVG and a canvas output — and the presets — the ten LiveView components of [10-liveview-integration](10-liveview-integration.md) as stored designs plus an assign mapping (§15) — and application and composition — variables resolved and slots bound by `Visualize.Chart.apply/2` into an applied chart, fragments merged by `Visualize.Chart.compose/2` under the schema's merge rules (§7.3, §8) — and compilation — the static/dynamic split computed from the design, a render target per mark from the bound data, the hybrid chart map per tick, the streaming window over the incremental path, and the payload measured (§12) — are **Implemented**.
+Each section states what is implemented. The schema, the validator, the `Visualize.Chart` struct with its map and JSON round-trips, variables and version handling, the frame — its scales, inference, axes, grid, legend and labels, rendered as the static furniture — and the marks — every mark type drawn from the frame's scales by the existing generators, the transforms as steps of a mark's data pipeline, and the style grammar resolved to an SVG and a canvas output — and the presets — the ten LiveView components of [10-liveview-integration](10-liveview-integration.md) as stored designs plus an assign mapping (§15) — and application and composition — variables resolved and slots bound by `Visualize.Chart.apply/2` into an applied chart, fragments merged by `Visualize.Chart.compose/2` under the schema's merge rules (§7.3, §8) — and compilation — the static/dynamic split computed from the design, a render target per mark from the bound data, the hybrid chart map per tick, the streaming window over the incremental path, and the payload measured (§12) — are **Implemented**. The builder — `Visualize.Chart.Build`, whose every function returns a fragment the composition of §8 folds into a design (§16) — is **Implemented**.
 
 ## 1. The map
 
@@ -893,6 +893,51 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.Compiled.tick/2` | As `tick/3` with `[]` options: the window's `hi` is the newest bound value. |
 | `Visualize.Chart.Compiled.tick/3` | `tick(compiled, sources, opts)`: `{payload, compiled}` — the per-tick payload of §12.4 (`svg`, `canvas`, `canvas_format`, `incremental`, `bytes`) and the compiled chart holding the tick's sources and, for a viewport design, the window state of §12.5; `now:` fixes the window's upper end. |
 
+### 14.12 `Visualize.Chart.Build`
+
+**Implemented** (work item 1 of #91, D-78). The builder of §16. Every function returns a *fragment* — a design map carrying the keys that one function sets and no others (§8) — except `from/1` and the transform appenders, which return a mark's `:data` node (§5.4). Every function's trailing `opts` are the remaining keys of the node it builds, checked against `Visualize.Chart.Schema.describe/1`: an option that is not a key of that node kind raises `ArgumentError` naming the key and the kind. Nothing here validates, defaults or realises anything — a fragment becomes a chart through `Visualize.Chart.from_map/1` or `Visualize.Chart.apply/2`.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Build.chart/0` | As `chart/1` with `[]`. |
+| `Visualize.Chart.Build.chart/1` | `chart(opts)`: the seed a design is folded onto — `%{version: v}` with `v` the integer `Visualize.Chart.Migration.current/0`; `opts` are the remaining keys of the `:design` node (§2.1). |
+| `Visualize.Chart.Build.source/2` | As `source/3` with `[]`. |
+| `Visualize.Chart.Build.source/3` | `source(name, fields, opts)`: `%{sources: %{name => %{fields: fields}}}`, one typed slot (§2.3); `opts` are the slot's remaining keys, `default:` among them. |
+| `Visualize.Chart.Build.var/2` | As `var/3` with `[]`. |
+| `Visualize.Chart.Build.var/3` | `var(name, default, opts)`: `%{vars: %{name => %{default: default}}}`, the *declaration* of a variable (§2.4). `Visualize.Chart.var/1` builds the term that *uses* one; the two are different functions of different modules and different arities (§16.2). |
+| `Visualize.Chart.Build.style/2` | As `style/3` with `[]`. |
+| `Visualize.Chart.Build.style/3` | `style(name, keys, opts)`: `%{styles: %{name => node}}` with the node the style keys of §3.1 — `keys` as a map or a keyword list, `opts` merged over it, every key checked. |
+| `Visualize.Chart.Build.theme/1` | `theme(theme)`: `%{theme: theme}`, a theme name or an inline `:theme` node (§2.5). |
+| `Visualize.Chart.Build.cartesian/2` | As `cartesian/3` with `[]`. |
+| `Visualize.Chart.Build.cartesian/3` | `cartesian(width, height, opts)`: `%{frame: %{kind: :cartesian, size: %{width: width, height: height}}}`; `opts` are the frame's remaining keys (§4.1). |
+| `Visualize.Chart.Build.polar/2` | As `polar/3` with `[]`. |
+| `Visualize.Chart.Build.polar/3` | `polar(width, height, opts)`: as `cartesian/3` with `kind: :polar` (§4.6). |
+| `Visualize.Chart.Build.geo/2` | As `geo/3` with `[]`. |
+| `Visualize.Chart.Build.geo/3` | `geo(width, height, opts)`: as `cartesian/3` with `kind: :geo`; the projection is the frame's `projection:` key, a `:projection` node (§4.6). |
+| `Visualize.Chart.Build.facet/2` | As `facet/3` with `[]`. |
+| `Visualize.Chart.Build.facet/3` | `facet(width, height, opts)`: as `cartesian/3` with `kind: :facet`; `by:` and `columns:`, the keys of the `:facet` node, are lifted into the frame's `facet` key (§4.6). |
+| `Visualize.Chart.Build.scale/2` | As `scale/3` with `[]`. |
+| `Visualize.Chart.Build.scale/3` | `scale(name, kind, opts)`: `%{frame: %{scales: %{name => %{kind: kind}}}}`, one declared scale (§4.3); `opts` are the scale's remaining keys. |
+| `Visualize.Chart.Build.axis/2` | As `axis/3` with `[]`. |
+| `Visualize.Chart.Build.axis/3` | `axis(scale, side, opts)`: `%{frame: %{axes: [%{scale: scale, side: side}]}}`, one axis (§4.4); `opts` are its remaining keys. |
+| `Visualize.Chart.Build.legend/1` | As `legend/2` with `[]`. |
+| `Visualize.Chart.Build.legend/2` | `legend(scale, opts)`: `%{frame: %{legend: %{scale: scale}}}` (§4.5). |
+| `Visualize.Chart.Build.label/2` | As `label/3` with `[]`. |
+| `Visualize.Chart.Build.label/3` | `label(anchor, text, opts)`: `%{labels: [%{anchor: anchor, text: text}]}`, one frame label (§6.1). |
+| `Visualize.Chart.Build.title/1` | As `title/2` with `[]`. |
+| `Visualize.Chart.Build.title/2` | `title(text, opts)`: `label(:title, text, opts)`. |
+| `Visualize.Chart.Build.mark/3` | As `mark/4` with `[]`. |
+| `Visualize.Chart.Build.mark/4` | `mark(type, data, channels, opts)`: `%{marks: [%{type: type, data: data, channels: channels}]}` (§5.1). `data` is a source name or a `:data` node; `channels` is a map or a keyword list whose keys MUST be channels of the type (`Visualize.Chart.Schema.channels/1`); an `options:` option's keys MUST be options of the type (`Visualize.Chart.Schema.options/1`); either raises `ArgumentError`. A `%Visualize.Chart.Var{}` given as the whole channels or options node is passed through unchecked. |
+| `Visualize.Chart.Build.from/1` | `from(source)`: `%{source: source}`, the `:data` node of a mark (§5.4) — not a fragment; the transform appenders below extend it. |
+| `Visualize.Chart.Build.bin/2` | As `bin/3` with `[]`. |
+| `Visualize.Chart.Build.bin/3` | `bin(data, field, opts)`: the data node with `%{op: :bin, field: field}` appended to its `transforms` (§5.4.1); `data` is a node or a source name, which is read as `from/1` of it. |
+| `Visualize.Chart.Build.filter/2` | As `filter/3` with `[]`. |
+| `Visualize.Chart.Build.filter/3` | `filter(data, field, opts)`: as `bin/3` with `%{op: :filter, field: field}`; `test:` and `value:` are its remaining keys. |
+| `Visualize.Chart.Build.stack/2` | As `stack/3` with `[]`. |
+| `Visualize.Chart.Build.stack/3` | `stack(data, fields, opts)`: as `bin/3` with `%{op: :stack, fields: fields}`. |
+| `Visualize.Chart.Build.treemap/1` | As `treemap/2` with `[]`. |
+| `Visualize.Chart.Build.treemap/2` | `treemap(data, opts)`: as `bin/3` with `%{op: :treemap}`. |
+
 ## 15. Presets
 
 ### 15.1 A component is a preset design plus an assign mapping
@@ -948,3 +993,79 @@ Where the layer's rule and the component's old arithmetic differed, the layer's 
 | `sunburst_chart` | `:polar`, no margin | `%{op: :partition, id: :id, by: :parent, field: :value, size: [2π, R]}` with `R = min(width, height) / 2`, then `%{op: :filter, field: :depth, test: :gt, value: 0}` (below the root) and `%{op: :filter, field: :value, test: :gt, value: 0}` (a positive extent) | `%{type: :arc, channels: %{start: :x0, end: :x1, inner: :y0, outer: :y1}, style: :arc, label: %{text: [{:field, :label}], anchor: :middle, style: :arc_label}}` with `arc: %{fill: {:field, :branch}, stroke: :background, stroke_width: 1}` and `arc_label: %{fill: :background, font_size: :label_size}` |
 
 The component prints the elements of `Visualize.Chart.Frame.generate/2` as the chart components do (§15.1), and reads the rows of `Visualize.Chart.Mark.rows/3` beside them where its markup depends on the node: the tree's links are the `:path` mark's elements — the row's `path`, the link of the design's orientation (§5.4.2) — and its nodes are the circle-and-text groups of spec/10 §3.2, one per `:circle` element at its `cx cy`, filled `node_stroke` when the row's `height` is not `0` and its text placed as spec/10 §3.2 says, since a group whose text's anchor and offset depend on the node is the one shape the layer has no mark for and the `:circle` with a `label` is the nearest it has; the treemap's cells are the `:rect` elements — `x y width height` and the element's fill — with the component's label rule (spec/10 §3.3) over the row; the sunburst's arcs are the `:arc` elements — `d` and the element's fill — and its labels the mark's `text` elements at the centroid, kept when the row's ring is thick and long enough and truncated as spec/10 §3.4 says. An element's fill is `Visualize.Chart.Style.bind/4` of the mark's style over its row, the colour scale's output resolved as §3.4 says. Rendered through `Visualize.Chart.Frame.render/2`, each design therefore carries the elements the component prints, in count and geometry — the tree's paths, circles and texts, the treemap's leaf rectangles, the sunburst's arcs and labels — and `test/visualize/chart/presets_test.exs` holds it; what differs is the shell of §15.1 and where the tree's text sits.
+
+## 16. The builder
+
+### 16.1 Fragments and the pipe
+
+**Implemented** (work item 1 of #91, D-78). `Visualize.Chart.Build` is a module to `import` whose every function returns a *fragment* — a design map carrying the keys that one function sets and no others — and whose pipe is `Visualize.Chart.compose/2`: a design is the fold of its fragments, `Visualize.Chart.compose/1` over the list (§8). A design written this way is the same map as the literal, key for key; the literal remains the contract and the builder is sugar in the strict sense, so anything the builder cannot express is written as a map and composed with the rest.
+
+Nothing in the builder validates, defaults or realises anything. A fragment need not carry `version` or `frame`, its references need not resolve, and no default of §2 is filled: the fold is a fragment too and becomes a chart through `Visualize.Chart.from_map/1`, or an applied chart through `Visualize.Chart.apply/2`, which is where it MUST validate (§8). Order therefore matters exactly where §8 says it does and nowhere else — marks and labels appear in the order their fragments do, axes in the order theirs do, a scalar takes the last fragment's word, and two fragments that declare one name differently are `:conflict` at that name's path rather than a silent overwrite.
+
+What the builder adds over the literal is the schema, twice.
+
+- **Every option is a key of the node the function builds.** Each function sets the node's required keys from its positional arguments and takes the rest as `opts`, checked against `Visualize.Chart.Schema.describe/1` of that kind: a misspelt `stoke_width` on a style, or `ticks:` on a legend, raises `ArgumentError` naming the key and the kind at the call, rather than reaching the validator as an `:unknown_key` at a path in a design fifty lines long. A mark's channels and options are checked the same way against the mark's type (§16.4).
+- **A mark declares only what its type reads.** The channels and the options a mark takes are read from the schema at the call (§16.4), so the builder accepts exactly what §5.2 and §5.3 declare of that type. Work item 2 of #91 carries this the whole way: the mark, transform and scale functions become one generated function per type, so a schema addition grows the builder with no edit to it.
+
+A `%Visualize.Chart.Var{}` is a value like any other and may stand anywhere the map admits one (§7.1), including as a whole node: `mark(:band, :states, %{x0: :t0, x1: :t1}, options: var(:band))` is the design of `test/support/designs/state_timeline.exs`.
+
+### 16.2 The design and its declarations
+
+**Implemented.** `chart/1` is the seed: the current version (§9) and whatever design-level keys it is given. The four declaration functions each add one named entry under the design's `:union` keys (§1.5), so a house style sheet, a source list and a chart's own fragments compose in any order and disagree loudly:
+
+```elixir
+import Visualize.Chart.Build
+import Visualize.Chart, only: [var: 1]
+
+{:ok, design} =
+  Visualize.Chart.compose([
+    chart(meta: %{name: "Uptime"}),
+    source(:primary, [:t, :v], default: :gitlab_uptime),
+    var(:unit, "%"),
+    theme(:default),
+    style(:series, stroke: var(:accent), stroke_width: 2, curve: :step_after)
+  ])
+```
+
+`Visualize.Chart.Build.var/2` and `Visualize.Chart.var/1` are different functions and are not confusable: the first *declares* a variable and its default under `vars` (§2.4) and belongs to the builder; the second *builds* the `%Visualize.Chart.Var{}` term that uses one (§7.1) and belongs to the chart. They differ in module and in arity, so a module that imports both reads `var(:unit, "%")` for the declaration and `var(:unit)` for the use, and neither import shadows the other.
+
+### 16.3 The frame
+
+**Implemented.** A frame is assembled from fragments, never from one call: the kind and the size come from the kind's own function, and each scale, axis and legend is its own fragment, which is what lets a standard axis pair or a house frame size compose with a chart's own scales.
+
+```elixir
+cartesian(600, 300, margin: %{top: 20, right: 20, bottom: 30, left: 40})
+scale(:x, :time)
+scale(:y, :linear, domain: [0, :auto], nice: true)
+axis(:x, :bottom, ticks: 6, format: "%H:%M")
+axis(:y, :left, ticks: 5, grid: true)
+legend(:color, position: :top_right)
+```
+
+The four kinds are `cartesian/3`, `polar/3`, `geo/3` and `facet/3`, each taking the width and the height because a frame always has both (§4.2) and the frame's remaining keys as options. `geo/3` takes its projection as the frame's `projection:` key. `facet/3` is the one place an option is not a key of the node the function builds: `by:` and `columns:` are the keys of the `:facet` node (§4.6) and are lifted into the frame's `facet` key, because a `:facet` frame and its `facet` node name the same thing and `facet(600, 400, facet: %{by: :region})` would say it twice. Scales union, axes concatenate and every other frame key is the last fragment's (§1.5), so `scale/3` and `axis/3` may precede or follow the kind.
+
+### 16.4 Marks and labels
+
+**Implemented.** `mark/4` is the generic mark: a type, its data, its channels, and the mark's remaining keys as options. `label/3` and `title/2` are the frame's labels (§6). Marks and labels are `:concat` keys, so the order of their fragments is the order they draw in.
+
+```elixir
+mark(:line, :primary, %{x: :t, y: :v}, style: :series)
+mark(:rule, :deploys, %{x: :at}, style: :muted, label: %{text: ["deploy ", {:field, :sha}]})
+title(["Uptime — ", var(:unit)])
+label({:axis, :y}, ["unit: ", var(:unit)])
+```
+
+A channel the type does not read, and an option key the type does not read, raise `ArgumentError` at the call — the two lists are `Visualize.Chart.Schema.channels/1` and `Visualize.Chart.Schema.options/1`, so the builder accepts exactly what §5.2 and §5.3 declare. What it does *not* check is that the required channels are present: an `:arc` is required to carry `value` only when it carries neither `start` nor `end` (D-69), and a rule with that much context belongs to the validator, which sees the whole node (§10.2). The builder rejects what can never be right; the validator decides what is right here.
+
+### 16.5 Data nodes and transforms
+
+**Implemented.** A mark's `data` is a source name or a `:data` node (§5.4), and the node is built by `from/1` and extended by one appender per transform op, each taking the node and returning it with its step appended:
+
+```elixir
+mark(:rect, from(:primary) |> bin(:v, thresholds: 20), %{x0: :x0, x1: :x1, y0: :y0, y1: :count})
+mark(:area, from(:series) |> stack([:a, :b, :c]), %{x: :t, y: :y1, y0: :y0, series: :key})
+```
+
+`from/1` returns `%{source: source}` and no `transforms` key, so a mark that reads its source directly and one built by `from/1` alone are the same map. An appender given a source name in place of a node reads it as `from/1` of that name, so `bin(:samples, :w)` is `from(:samples) |> bin(:w)`. `transforms` is a `:concat` key, so a pipeline built in two fragments runs in the order it was written (§8).
+
+The appenders of this work item are `bin/3`, `filter/3`, `stack/3` and `treemap/2`, written by hand; work item 2 of #91 replaces them with one generated appender per op of §5.4.
