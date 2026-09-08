@@ -4,7 +4,7 @@
 
 A chart is a nested map — a *design* — that names its data, its coordinate frame, its marks and its labels without a function anywhere in it, so that a design can be stored, diffed, shared, built by a tool and rendered against different data. This document is the contract for the whole layer: the map at every level with every key's type, facet, default and merge rule; the style grammar; sources as typed slots and variables as terms; version and migration; the validator and its error shape; the JSON form; and, as agreed prose, application, composition and compilation. Vega-Lite is the precedent for a stored design and its flat several-hundred-key specification is the warning: the map keeps the three-noun nesting of theme, style and frame (D-57).
 
-Each section states what is implemented. The schema, the validator, the `Visualize.Chart` struct with its map and JSON round-trips, variables and version handling, the frame — its scales, inference, axes, grid, legend and labels, rendered as the static furniture — and the marks — every mark type drawn from the frame's scales by the existing generators, the transforms as steps of a mark's data pipeline, and the style grammar resolved to an SVG and a canvas output — and the presets — the ten LiveView components of [10-liveview-integration](10-liveview-integration.md) as stored designs plus an assign mapping (§15) — and application and composition — variables resolved and slots bound by `Visualize.Chart.apply/2` into an applied chart, fragments merged by `Visualize.Chart.compose/2` under the schema's merge rules (§7.3, §8) — and compilation — the static/dynamic split computed from the design, a render target per mark from the bound data, the hybrid chart map per tick, the streaming window over the incremental path, and the payload measured (§12) — are **Implemented**. The builder — `Visualize.Chart.Build`, whose every function returns a fragment the composition of §8 folds into a design (§16) — is **Implemented**.
+Each section states what is implemented. The schema, the validator, the `Visualize.Chart` struct with its map and JSON round-trips, variables and version handling, the frame — its scales, inference, axes, grid, legend and labels, rendered as the static furniture — and the marks — every mark type drawn from the frame's scales by the existing generators, the transforms as steps of a mark's data pipeline, and the style grammar resolved to an SVG and a canvas output — and the presets — the ten LiveView components of [10-liveview-integration](10-liveview-integration.md) as stored designs plus an assign mapping (§15) — and application and composition — variables resolved and slots bound by `Visualize.Chart.apply/2` into an applied chart, fragments merged by `Visualize.Chart.compose/2` and layered by `Visualize.Chart.stack/1` under the schema's merge rules (§7.3, §8) — and compilation — the static/dynamic split computed from the design, a render target per mark from the bound data, the hybrid chart map per tick, the streaming window over the incremental path, and the payload measured (§12) — are **Implemented**. The builder — `Visualize.Chart.Build`, whose every function returns a fragment the composition of §8 folds into a design (§16) — is **Implemented**.
 
 ## 1. The map
 
@@ -76,7 +76,7 @@ A `%Visualize.Chart.Var{}` (§7.1) is accepted wherever a value of any type is e
 
 ### 1.5 Merge rules
 
-**Implemented** as data, applied by `Visualize.Chart.compose/2` (§8). Every key declares how two fragments combine under it:
+**Implemented** as data, applied by `Visualize.Chart.compose/2` and `Visualize.Chart.stack/2` (§8). Every key declares how two fragments combine under it; the Effect column is the union's, and the cascade's difference where two fragments collide is §8.2:
 
 | Rule | Keys | Effect |
 |---|---|---|
@@ -561,7 +561,11 @@ An axis title follows the side of the first axis that names its scale; with no a
 
 The result is a `%Visualize.Chart.Applied{}` (§14.10): `chart`, the concrete `%Visualize.Chart{}` — no variable anywhere in it, `vars` empty, the slot declarations kept as the data contract, everything else as the design wrote it; `sources`, the bound sources by slot name; and `frame`, the realised frame, whose `Visualize.Chart.Frame.scales/1` is the escape hatch. `Visualize.Chart.render/2` draws it: `Visualize.Chart.Frame.render/2` of the frame over the bound sources, with the same options. The design, its fragments and a binding are storable; the applied chart holds data and is not — it has no map form and no JSON form.
 
-## 8. Composition
+## 8. Composition and the stack
+
+**Implemented.** Two operations close over fragments, and both are total in the sense that matters: their result is a fragment, so a stored composition is a part of another composition and a stored stack is a layer of another stack. `Visualize.Chart.compose/2` is the *union* — it assembles one design from disjoint parts and reports a name two fragments declare differently as a fault. `Visualize.Chart.stack/2` is the *cascade* — it layers a house theme, a shared frame and a panel's own overrides, and a name two layers declare differently is the higher layer's word. Neither validates nor defaults: the result becomes a chart through `Visualize.Chart.from_map/1` or `Visualize.Chart.apply/2`, which is where it MUST validate.
+
+### 8.1 `compose/2`: the union
 
 **Implemented** (work item 5 of #53, D-65). `Visualize.Chart.compose/2` merges two fragments — design maps, or `%Visualize.Chart{}`s taken as their maps — into one map by the merge rule of every key (§1.5), the second over the first, and returns `{:ok, map}` or `{:error, errors}`; `Visualize.Chart.compose/1` folds a list left to right, so `compose([a, b, c])` is `compose(b, c)` over `compose(a, b)`, and `compose([])` is `{:ok, %{}}`. A fragment is any map with the design's keys: it need not carry `version` or `frame`, and nothing is validated or defaulted — the result is a fragment too, and becomes a chart through `Visualize.Chart.from_map/1` or `Visualize.Chart.apply/2`, which is where it MUST validate.
 
@@ -572,6 +576,28 @@ For each key present in either fragment, by the key's spec in the node kind bein
 - `:override` — the later fragment's value, except that a key whose type is a node — `{:node, kind}`, or a `{:one_of, …}` that admits one, such as `theme` — given as a map by both fragments composes key by key under that kind's rules: `frame` merges, its `scales` union, its `axes` concatenate, its `size` is the later's; `meta` merges likewise. A key the schema does not know is `:override`.
 
 A key present in one fragment alone is taken as it is. Over a list, `:concat` and `:union` keys compose associatively and `:override` keys last-wins, so the order of the fragments is the order of their marks and labels and the precedence of their scalars: a standard label set, a house style sheet and a chart-specific fragment compose in that order into one design.
+
+### 8.2 `stack/1`: the cascade
+
+**Implemented** (#97, D-81). `Visualize.Chart.stack/2` merges two fragments as a cascade: for every key the higher layer wins. `Visualize.Chart.stack/1` folds a list left to right, the later layer the higher, so `stack([a, b, c])` is `stack(stack(a, b), c)`; `stack([])` is `%{}` and `stack([a])` is `a` itself. A layer is a design map or a `%Visualize.Chart{}` taken as its map, exactly as a fragment of `compose/2` is.
+
+The cascade cannot fail — there is no disagreement for it to report, since a disagreement is what it exists to resolve — so `stack/1` and `stack/2` return the fragment itself and not an `{:ok, fragment}` tuple. That is the second difference from `compose/2` (§8.3) and it is what makes `stack([a]) == a` an equality rather than a comparison of wrappers.
+
+For each key present in either layer, by the key's spec in the node kind being merged:
+
+- `:concat` — the higher layer's elements after the lower's, as `compose/2` appends them.
+- `:union` — the union of the two name-keyed maps; a name both layers declare is the **higher layer's entry**, where `compose/2` reports `:conflict`. The entry is taken *whole*: a style the higher layer redeclares replaces the lower's rather than merging into it, so the result is a style some layer actually wrote. Derivation within a style is `extends` (§3.5), which is the key-by-key operation on styles and is unrelated to the cascade.
+- `:override` — the higher layer's value, except that a key whose type is a node — `{:node, kind}`, or a `{:one_of, …}` that admits one — given as a map by **both** layers cascades key by key under that kind's rules, exactly as `compose/2` recurses: a panel fragment's frame adds its own scales and axes to the shared frame's and takes precedence on the frame's scalars. A node either layer gives as anything else — a name, a variable — is the higher layer's value whole. A key the schema does not know is `:override`.
+
+A key present in one layer alone is taken as it is. `:concat`, `:union` and `:override` keys all cascade associatively, so a stack is a list of layers in precedence order and the fold over it may be built in parts: a house sheet stacked with a frame is a layer of the panel's stack.
+
+### 8.3 Why there are two operations
+
+**Implemented.** The two are not one operation with a flag, and neither is the other's default.
+
+`compose/2` assembles one design from parts that are *meant to be disjoint* — a standard label set, a source list, the fragments a builder function returns (§16) — and a name declared twice there is a mistake: two authors believing they own `:series` produce a design neither of them wrote, silently, and the `:conflict` is the whole value of the operation. `stack/1` layers designs that are *meant to overlap* — a house theme, a shared frame, a panel's overrides, a dashboard's per-panel edits — and a name declared twice there is the point: the higher layer is saying what it is for.
+
+They agree exactly where the fragments are disjoint. Over two fragments that declare no `:union` name and no `:override` key in common, `stack(a, b)` is the map of `compose(a, b)`, which is the property that holds the two definitions together as the schema's merge rules grow.
 
 ## 9. Version and migration
 
@@ -813,7 +839,9 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.apply/1` | As `apply/2` with `[]` options: every variable takes its default and the pool is empty, so a slot with a default is unbound too — it applies a design that declares no source. |
 | `Visualize.Chart.apply/2` | `apply(design, opts)`: `{:ok, %Visualize.Chart.Applied{}}` for a chart or a design map with the variables of `vars:` resolved, the slots bound from the pool of `sources:` and the frame realised with `theme:` (§7.3), else `{:error, errors}` by path — the map's own errors, the unresolved variables, the unbound slots and missing fields, or the validator's, whichever step fails first. Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does. |
 | `Visualize.Chart.compose/1` | `compose(fragments)`: the fragments folded left to right through `compose/2`; `{:ok, %{}}` for `[]`. |
-| `Visualize.Chart.compose/2` | `compose(a, b)`: `{:ok, map}`, the second fragment merged over the first by the merge rule of every key (§8), else `{:error, errors}` with `:conflict` at the path of every `:union` name the two declare differently. |
+| `Visualize.Chart.compose/2` | `compose(a, b)`: `{:ok, map}`, the second fragment merged over the first by the merge rule of every key (§8.1), else `{:error, errors}` with `:conflict` at the path of every `:union` name the two declare differently. |
+| `Visualize.Chart.stack/1` | `stack(layers)`: the layers cascaded left to right, the later the higher (§8.2); `%{}` for `[]` and the layer itself for one. The cascade cannot fail, so the result is the fragment, not an ok tuple. |
+| `Visualize.Chart.stack/2` | `stack(lower, higher)`: the higher fragment cascaded over the lower by the rule of every key (§8.2) — a `:union` name both declare taken from the higher, a node both give as a map cascading key by key. |
 | `Visualize.Chart.compile/1` | As `compile/2` with `[]` options: an applied chart compiled as it is, or a design applied with no options first. |
 | `Visualize.Chart.compile/2` | `compile(design, opts)`: `{:ok, %Visualize.Chart.Compiled{}}` for an applied chart, or for a chart or a design map applied first with `sources:`, `vars:` and `theme:` as `apply/2` takes them (§12.1), with `ceiling:` the point-count ceiling of §12.3 (`1000`); else the `{:error, errors}` of application. Raises `ArgumentError` as `apply/2` does, and for a `ceiling:` that is not a positive integer. |
 | `Visualize.Chart.render/1` | As `render/2` with `[]` options. |
