@@ -2,7 +2,7 @@ defmodule Visualize.Hooks do
   @moduledoc """
   Phoenix LiveView JavaScript hooks for interactive visualizations.
 
-  This module bundles eight hooks:
+  This module bundles nine hooks:
   - `ZoomHook` — zoom and pan interactions (`Visualize.Hooks.Zoom`)
   - `BrushHook` — brush selection (`Visualize.Hooks.Brush`)
   - `CanvasChart` — replays Canvas commands or a script (`Visualize.Hooks.Canvas`)
@@ -14,6 +14,8 @@ defmodule Visualize.Hooks do
     (`Visualize.Hooks.Tooltip`)
   - `CrosshairHook` — a rule and markers snapped to the nearest x of the data
     (`Visualize.Hooks.Crosshair`)
+  - `LegendHook` — a legend entry hides and shows the series it names
+    (`Visualize.Hooks.Legend`)
 
   ## Installation
 
@@ -102,6 +104,15 @@ defmodule Visualize.Hooks do
   The arrays are computed once on the server and the hook snaps to them, so it works over
   a canvas as over an SVG. See `Visualize.Hooks.Crosshair`.
 
+  ### Legend
+
+      <svg id="chart" phx-hook="LegendHook" data-legend-event="legend_toggle">
+        <!-- a frame with a legend: every legend-item and every series path carry data-series -->
+      </svg>
+
+  A click on an entry hides the series it names with `display="none"` and shows it again
+  on the next; the event is optional. See `Visualize.Hooks.Legend`.
+
   """
 
   alias Visualize.Hooks.{
@@ -110,6 +121,7 @@ defmodule Visualize.Hooks do
     CanvasBinary,
     CanvasIncremental,
     Crosshair,
+    Legend,
     Resize,
     Tooltip,
     Zoom
@@ -143,8 +155,10 @@ defmodule Visualize.Hooks do
 
     #{Crosshair.js_hook()}
 
+    #{Legend.js_hook()}
+
     // Default export for convenience
-    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook, CrosshairHook };
+    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook, CrosshairHook, LegendHook };
     """
   end
 

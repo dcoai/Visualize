@@ -67,9 +67,16 @@ defmodule Visualize.Backend.SVG do
   # Element Rendering
   # ============================================================
 
-  defp do_render_element(%Element{type: :path, path: path, style: style, transform: transform}) do
+  defp do_render_element(%Element{
+         type: :path,
+         path: path,
+         style: style,
+         transform: transform,
+         attrs: extra_attrs
+       }) do
     attrs =
-      style_to_attrs(style)
+      extra_attrs
+      |> Map.merge(style_to_attrs(style))
       |> Map.put(:d, path_data(path))
       |> maybe_add_transform(transform)
 

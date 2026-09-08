@@ -48,7 +48,7 @@ defmodule Visualize.Chart.Mark.Shapes do
         |> defined(rows, [:x, :y], &Line.defined/2)
         |> Line.generate_path(rows)
 
-      child(Element.path(path), rows, series_style(ctx, value, j), last_point(rows, :x, :y))
+      child(series_path(path, value), rows, series_style(ctx, value, j), last_point(rows, :x, :y))
     end)
   end
 
@@ -77,7 +77,12 @@ defmodule Visualize.Chart.Mark.Shapes do
         |> defined(rows, [:x0, :x1, :y0, :y1], &Area.defined/2)
         |> Area.generate_path(rows)
 
-      child(Element.path(path), rows, series_style(ctx, value, j), last_point(rows, :x1, :y1))
+      child(
+        series_path(path, value),
+        rows,
+        series_style(ctx, value, j),
+        last_point(rows, :x1, :y1)
+      )
     end)
   end
 
@@ -115,6 +120,13 @@ defmodule Visualize.Chart.Mark.Shapes do
       [{nil, rows, nil}]
     end
   end
+
+  # A series' path names its series, the string the legend's entries carry (spec/14 §5.6,
+  # D-77); a mark without the channel names none.
+  defp series_path(path, nil), do: Element.path(path)
+
+  defp series_path(path, value),
+    do: Element.set_attrs(Element.path(path), %{"data-series" => to_string(value)})
 
   # A series' paint: the colour scale's value for the series, else the theme's series
   # colour for its position (spec/14 §5.6).

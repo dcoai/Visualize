@@ -276,12 +276,14 @@ The frame builds the legend from the realised scale: one entry per value of `Vis
 ```
 group  style: %{class: "legend", font_family: <font_family>, font_size: <font_size>}, transform: translate(x, y)
 ├── text   style: %{fill: <fill>, font_weight: :bold}, content: title            — when the title is given
-└── group  style: %{class: "legend-item"}, transform: translate(…)                — one per entry
+└── group  style: %{class: "legend-item"}, attrs: %{"data-series" => value}, transform: translate(…)  — one per entry
     ├── rect  0 0 12 12, style: %{fill: <swatch>}
     └── text  x: 16 (or −4, anchored end), y: 6, dy: "0.32em", style: %{fill: <fill>}, content: label
 ```
 
 Entries are 16 apart and the title, when given, is the first row. `position` places the legend inside the plot area, 8 user units from its edges: the four corner positions stack the entries downward from the corner, the right-hand ones laid out right to left — the swatch at the edge and the label anchored `end` to its left — so no text width is needed; `:left` and `:right` stack them likewise, centred on the plot's height; `:top` and `:bottom` lay them in one row centred on the plot's width, each entry's width taken as 16 plus 0.6 × the font size per character of its label — the one place the layout estimates text.
+
+Every entry's group carries `data-series`, `to_string/1` of the entry's value — the string a series path carries (§5.6) — so `LegendHook` (spec/10 §14) can hide what the entry explains; it is written whatever the scale and is inert without the hook (D-77).
 
 ### 4.6 Kind-specific nodes
 
@@ -454,7 +456,7 @@ group  style: %{class: "mark mark-<type>[ <class>]", …the resolved style}
 └── text  style: %{class: "mark-label", …}                                — the inline label (§5.5)
 ```
 
-With a `tooltip` node (§5.7) the group also carries `data-tooltip-template` and `data-tooltip-event` when the node gives them, and every element the mark draws carries the datum attributes of spec/10 §12.2 through `Visualize.IR.Element.datum/2` — a per-datum element its own datum's fields, a per-series path (`:line`, `:area`) and the paths of a `:percentile_band` the first row's of their series, so `{series}` names the line under the pointer.
+With a `tooltip` node (§5.7) the group also carries `data-tooltip-template` and `data-tooltip-event` when the node gives them, and every element the mark draws carries the datum attributes of spec/10 §12.2 through `Visualize.IR.Element.datum/2` — a per-datum element its own datum's fields, a per-series path (`:line`, `:area`) and the paths of a `:percentile_band` the first row's of their series, so `{series}` names the line under the pointer. A per-series path of a `:line` or an `:area` carries `data-series`, `to_string/1` of its series value, the string the legend's entries carry (§4.5); a mark without the channel carries none (D-77).
 
 The elements are the generators' own, so a mark is byte for byte the direct call with the same numbers (D-61):
 

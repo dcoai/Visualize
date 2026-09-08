@@ -3,7 +3,8 @@ defmodule ExamplesWeb.InteractionLive do
   The client-side interaction page (#56): one chart drawn by the declarative layer, with
   `TooltipHook` reading the datum attributes its marks carry (spec/10 §12) and
   `CrosshairHook` snapping to the arrays `Visualize.Hooks.Crosshair.attrs/3` wrote once
-  (spec/10 §13) — over the SVG and over the same chart on a binary canvas.
+  (spec/10 §13) — over the SVG and over the same chart on a binary canvas — and
+  `LegendHook` hiding a series from its legend entry (spec/10 §14).
   """
   use Phoenix.LiveView
 
@@ -79,7 +80,7 @@ defmodule ExamplesWeb.InteractionLive do
   }
 
   def mount(_params, _session, socket) do
-    {:ok, socket |> assign(build()) |> assign(picked: nil, hovered: nil)}
+    {:ok, socket |> assign(build()) |> assign(picked: nil, hovered: nil, hidden: %{})}
   end
 
   def handle_event("point_click", %{"series" => series, "hour" => hour, "value" => value}, socket) do
@@ -88,6 +89,10 @@ defmodule ExamplesWeb.InteractionLive do
 
   def handle_event("hover", %{"index" => index}, socket) do
     {:noreply, assign(socket, hovered: index)}
+  end
+
+  def handle_event("legend_toggle", %{"series" => series, "hidden" => hidden?}, socket) do
+    {:noreply, update(socket, :hidden, &Map.put(&1, series, hidden?))}
   end
 
   # The chart once: its SVG, the same frame on a binary canvas with literal paints, and
@@ -190,6 +195,26 @@ defmodule ExamplesWeb.InteractionLive do
           </div>
         </div>
 
+        <h2 style="margin-top: 2.5rem;">Legend toggling</h2>
+        <p style="color: #666; margin-bottom: 1rem;">
+          Every legend entry and every series path carry the same <code>data-series</code>;
+          <code>LegendHook</code> hides a series with <code>display="none"</code> when its
+          entry is clicked and pushes <code>legend_toggle</code>. The hidden set survives a
+          patch: the LiveView re-renders on every event and the series stays hidden.
+        </p>
+
+        <div class="chart-container">
+          <div id="legend-chart" phx-hook="LegendHook" data-legend-event="legend_toggle">
+            <%= Phoenix.HTML.raw(@svg) %>
+          </div>
+        </div>
+
+        <p class="picked">
+          Hidden on the server's record:
+          <strong><%= @hidden |> Enum.filter(fn {_, h} -> h end) |> Enum.map(&elem(&1, 0)) |> Enum.join(", ") %></strong>
+          <%= if Enum.all?(@hidden, fn {_, h} -> not h end), do: "none" %>
+        </p>
+
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">The design and the markup</h3>
         <pre><code><%= design_code() %></code></pre>
       </div>
@@ -225,6 +250,9 @@ defmodule ExamplesWeb.InteractionLive do
 
     # The tooltip reads the attributes the mark wrote; nothing is fetched on hover.
     <div id="chart" phx-hook="TooltipHook">{raw(svg)}</div>
+
+    # The legend's entries and the series paths share data-series; the hook joins them.
+    <div id="chart" phx-hook="LegendHook" data-legend-event="legend_toggle">{raw(svg)}</div>
 
     # The crosshair reads the arrays attrs/3 wrote once, over SVG or canvas alike.
     crosshair = Visualize.Hooks.Crosshair.attrs(applied.frame, applied.sources)
