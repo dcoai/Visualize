@@ -30,8 +30,9 @@ defmodule Visualize.ComponentsTest do
     %{month: "Mar", apples: 0, pears: 25}
   ]
 
-  @case_names ~w(line_chart line_chart_points bar_chart horizontal_bar_chart pie_chart
-                 donut_chart scatter_plot scatter_plot_sized area_chart stacked_bar_chart)a
+  @case_names ~w(line_chart line_chart_points bar_chart bar_chart_responsive
+                 horizontal_bar_chart pie_chart donut_chart scatter_plot scatter_plot_sized
+                 area_chart stacked_bar_chart)a
   @empty_names ~w(line_chart bar_chart horizontal_bar_chart pie_chart scatter_plot area_chart
                   stacked_bar_chart)a
 
@@ -53,6 +54,9 @@ defmodule Visualize.ComponentsTest do
            class: "chart"
          }},
       bar_chart: {&Components.bar_chart/1, %{data: @categories, x: & &1.name, y: & &1.value}},
+      bar_chart_responsive:
+        {&Components.bar_chart/1,
+         %{data: @categories, x: & &1.name, y: & &1.value, responsive: true, class: "chart"}},
       horizontal_bar_chart:
         {&Components.horizontal_bar_chart/1, %{data: @categories, x: & &1.value, y: & &1.name}},
       pie_chart:
@@ -125,6 +129,17 @@ defmodule Visualize.ComponentsTest do
       assert File.exists?(Path.join(@dir, "#{name}.svg"))
       assert File.exists?(Path.join(@dir, "#{name}_empty.svg"))
     end
+  end
+
+  test "responsive puts the CSS-scaling attributes on the <svg> and nothing else (D-54)" do
+    plain = render_case(Keyword.fetch!(cases(), :bar_chart))
+    responsive = render_case(Keyword.fetch!(cases(), :bar_chart_responsive))
+    refute plain =~ "preserveAspectRatio"
+    assert responsive =~ ~s(<svg width="600" height="400" class="chart" )
+    assert responsive =~ ~s(preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto")
+
+    assert String.replace(responsive, ~r/<svg[^>]*>/, "") ==
+             String.replace(plain, ~r/<svg[^>]*>/, "")
   end
 
   describe "colors" do

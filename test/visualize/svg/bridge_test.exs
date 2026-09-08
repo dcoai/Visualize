@@ -78,6 +78,31 @@ defmodule Visualize.SVG.BridgeTest do
     end
   end
 
+  test "a responsive root scales by CSS on both paths; a plain root emits neither attribute" do
+    plain = Element.root(10, 20)
+    responsive = Element.root(10, 20, responsive: true)
+    ratio = Element.root(10, 20, preserve_aspect_ratio: "none")
+
+    for render <- [&Render.to_svg_string/1, &(&1 |> SVG.Element.from_ir() |> SVG.to_string())] do
+      refute render.(plain) =~ "preserveAspectRatio"
+      refute render.(plain) =~ "style="
+      assert render.(responsive) =~ ~s( preserveAspectRatio="xMidYMid meet")
+      assert render.(responsive) =~ ~s( style="width:100%;height:auto")
+      assert render.(responsive) =~ ~s( width="10")
+      assert render.(ratio) =~ ~s( preserveAspectRatio="none")
+      refute render.(ratio) =~ "style="
+    end
+
+    assert Element.root(1, 1, responsive: true, preserve_aspect_ratio: "xMinYMin slice").attrs ==
+             %{
+               width: 1,
+               height: 1,
+               view_box: "0 0 1 1",
+               preserve_aspect_ratio: "xMinYMin slice",
+               style: "width:100%;height:auto"
+             }
+  end
+
   test "camel-cased SVG attributes are not hyphenated; presentation attributes are" do
     assert SVG.Renderer.attribute_name(:view_box) == "viewBox"
     assert SVG.Renderer.attribute_name(:preserve_aspect_ratio) == "preserveAspectRatio"

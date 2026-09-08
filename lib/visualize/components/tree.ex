@@ -51,7 +51,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `node_stroke` - circle stroke, and the fill of internal nodes (default `"steelblue"`)
     * `link_stroke` - (default `"#ccc"`)
     * `label` - accessor of a node's data; `nil` reads `:name` or `"name"`
-    * `animate`, `class` - per the module conventions
+    * `animate`, `class`, `responsive` - per the module conventions
 
     Links are cubic Béziers between parent and child with both control points at the
     midpoint of the depth axis. Horizontal labels sit at `x = −10`, anchored `end`, for
@@ -70,6 +70,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:label, :any, default: nil)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
 
     def tree_diagram(assigns) do
       {margin, inner_width, inner_height} = Support.frame(assigns, @tree_margin)
@@ -112,7 +113,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <path :for={d <- @links} d={d} fill="none" stroke={@link_stroke} stroke-width="1.5" {@transition} />
           <g :for={node <- @nodes} transform={node.transform} {@transition}>
@@ -137,7 +138,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `padding` - uniform cell padding (default 2)
     * `colors` - per the module conventions; each child of the root takes the next colour
       and every leaf beneath it that colour (default `:category10`)
-    * `animate`, `class` - per the module conventions
+    * `animate`, `class`, `responsive` - per the module conventions
 
     A white `font-size="11"` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` in a
     cell wider than 30 and taller than 15, truncated with `…` to fit `cell width − 8`
@@ -153,6 +154,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:colors, :any, default: :category10)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
 
     def treemap_chart(assigns) do
       label = assigns.label || (&name/1)
@@ -187,7 +189,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns = assign(assigns, cells: cells, transition: Support.transition(assigns.animate))
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <%= for cell <- @cells do %>
           <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.fill} stroke="white" stroke-width="1" {@transition} />
           <text
@@ -215,7 +217,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `label` - as `tree_diagram/1`; drawn at the centroid of an arc thick enough and long
       enough to hold text
     * `colors` - as `treemap_chart/1`
-    * `animate`, `class` - per the module conventions
+    * `animate`, `class`, `responsive` - per the module conventions
 
     Angles are `Visualize.Layout.Partition` over `{2π, radius}`: the root spans the full
     turn, each child a share of its parent's arc proportional to its summed value, and a
@@ -231,6 +233,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:colors, :any, default: :category10)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
 
     def sunburst_chart(assigns) do
       label = assigns.label || (&name/1)
@@ -271,7 +274,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns = assign(assigns, arcs: arcs, transition: Support.transition(assigns.animate))
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
           <%= for a <- @arcs do %>
             <path d={a.d} fill={a.fill} stroke="white" stroke-width="1" {@transition} />

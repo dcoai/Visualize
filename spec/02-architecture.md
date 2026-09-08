@@ -62,7 +62,7 @@ An element is `%Visualize.IR.Element{type, attrs, style, transform, children, co
 | `Visualize.IR.Element.stop/2` | As `stop/3` with no options. |
 | `Visualize.IR.Element.stop/3` | A `:stop` with attr `offset`, style `stop_color`, and `stop_opacity` when `:opacity` is given. |
 | `Visualize.IR.Element.root/2` | As `root/3` with no options. |
-| `Visualize.IR.Element.root/3` | A `:root` with attrs `width`, `height`, `view_box` (default `"0 0 #{width} #{height}"`) and children from `:children`. |
+| `Visualize.IR.Element.root/3` | A `:root` with attrs `width`, `height`, `view_box` (default `"0 0 #{width} #{height}"`) and children from `:children`, plus the responsive options of D-54: `:preserve_aspect_ratio` sets the attr of that name (rendered `preserveAspectRatio`, spec/09 §2.4), absent by default; `responsive: true` sets it to `"xMidYMid meet"` unless given and adds `style: "width:100%;height:auto"`, so the `<svg>` keeps `width` and `height` as its intrinsic size and aspect ratio but fills the width of its container. |
 | `Visualize.IR.Element.append/2` | Appends one element or a list of elements to `children`. |
 | `Visualize.IR.Element.prepend/2` | Prepends one element or a list of elements to `children`. |
 | `Visualize.IR.Element.set_transform/2` | Replaces the element's transform. |

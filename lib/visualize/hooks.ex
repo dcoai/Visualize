@@ -2,13 +2,14 @@ defmodule Visualize.Hooks do
   @moduledoc """
   Phoenix LiveView JavaScript hooks for interactive visualizations.
 
-  This module bundles five hooks:
+  This module bundles six hooks:
   - `ZoomHook` — zoom and pan interactions (`Visualize.Hooks.Zoom`)
   - `BrushHook` — brush selection (`Visualize.Hooks.Brush`)
   - `CanvasChart` — replays Canvas commands or a script (`Visualize.Hooks.Canvas`)
   - `CanvasBinaryChart` — replays the canvas binary format (`Visualize.Hooks.CanvasBinary`)
   - `CanvasIncrementalChart` — scroll-and-copy incremental canvas updates
     (`Visualize.Hooks.CanvasIncremental`)
+  - `ResizeHook` — the container's size pushed once per settle (`Visualize.Hooks.Resize`)
 
   ## Installation
 
@@ -63,9 +64,21 @@ defmodule Visualize.Hooks do
   See `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and
   `Visualize.Hooks.CanvasIncremental` for the attributes and events of each.
 
+  ### Resize
+
+      <div id="panel" phx-hook="ResizeHook">
+        <!-- the chart, rendered at the pushed width and height -->
+      </div>
+
+      def handle_event("resize", %{"width" => width, "height" => height}, socket) do
+        {:noreply, assign(socket, width: width, height: height)}
+      end
+
+  See `Visualize.Hooks.Resize`.
+
   """
 
-  alias Visualize.Hooks.{Brush, Canvas, CanvasBinary, CanvasIncremental, Zoom}
+  alias Visualize.Hooks.{Brush, Canvas, CanvasBinary, CanvasIncremental, Resize, Zoom}
 
   @doc """
   Returns the complete JavaScript code for all hooks.
@@ -89,8 +102,10 @@ defmodule Visualize.Hooks do
 
     #{CanvasIncremental.js_hook()}
 
+    #{Resize.js_hook()}
+
     // Default export for convenience
-    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart };
+    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook };
     """
   end
 

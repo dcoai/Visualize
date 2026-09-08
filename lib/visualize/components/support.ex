@@ -8,6 +8,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Scale
 
     @transition "transition: all 0.3s ease-in-out;"
+    @responsive [preserveAspectRatio: "xMidYMid meet", style: "width:100%;height:auto"]
 
     @doc false
     # The `data` assign as rows (spec/10 §1.2): any `Visualize.Data.Table.rows/1` source, read
@@ -32,9 +33,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def transition(false), do: []
 
     @doc false
-    # The `class` attribute of the `<svg>` as an attribute list: absent when `nil`.
-    def class(nil), do: []
-    def class(class), do: [class: class]
+    # The attributes of the `<svg>` beyond its size (spec/10 §1.2): `class` when given,
+    # and under `responsive` the `preserveAspectRatio` and `style` that let CSS scale it
+    # (D-54), matching `Visualize.IR.Element.root/3` under `responsive: true`.
+    def svg_attrs(class, responsive) do
+      class = if class, do: [class: class], else: []
+      class ++ if(responsive, do: @responsive, else: [])
+    end
 
     @doc false
     # Coordinates print through the one number formatter of every serialiser (spec/02 §3):
