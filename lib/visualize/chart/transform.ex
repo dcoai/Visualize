@@ -1,7 +1,8 @@
 defmodule Visualize.Chart.Transform do
   @moduledoc """
-  The data pipeline of a mark (spec/14 §5.4, D-62): binning, stacking, aggregation, the
-  layouts of `Visualize.Layout` and the geo algorithms as `%{op: …}` steps over rows.
+  The data pipeline of a mark (spec/14 §5.4, D-62): filtering, binning, stacking,
+  aggregation, the layouts of `Visualize.Layout` and the geo algorithms as `%{op: …}`
+  steps over rows.
 
   `apply/3` runs the steps of a mark's `data.transforms` in order over its source's rows,
   each a pure function of the rows before it and its node, and yields the rows the mark
@@ -27,7 +28,7 @@ defmodule Visualize.Chart.Transform do
   @typedoc "What a step sees of the frame: the plot area and, in a `:geo` frame, its projection."
   @type context :: %{size: [number()], projection: Projection.t() | nil}
 
-  @data_ops [:bin, :stack, :sum, :sort]
+  @data_ops [:filter, :bin, :stack, :sum, :sort]
   @layout_ops [:tree, :cluster, :pack, :partition, :treemap, :chord, :sankey, :force]
   @geo_ops [:delaunay, :voronoi, :contour, :density, :projection]
 
