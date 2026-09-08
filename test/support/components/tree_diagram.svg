@@ -1,30 +1,30 @@
-<svg width="800" height="600" viewBox="0 0 800 600">
+<svg width="800" height="600" font-family="var(--vis-font-family, sans-serif)" viewBox="0 0 800 600">
   <g transform="translate(120, 20)">
-    <path d="M0,280C140,280 140,70 280,70" fill="none" stroke="#ccc" stroke-width="1.5"></path><path d="M0,280C140,280 140,280 280,280" fill="none" stroke="#ccc" stroke-width="1.5"></path><path d="M0,280C140,280 140,490 280,490" fill="none" stroke="#ccc" stroke-width="1.5"></path><path d="M280,70C420,70 420,0 560,0" fill="none" stroke="#ccc" stroke-width="1.5"></path><path d="M280,70C420,70 420,140 560,140" fill="none" stroke="#ccc" stroke-width="1.5"></path><path d="M280,490C420,490 420,420 560,420" fill="none" stroke="#ccc" stroke-width="1.5"></path><path d="M280,490C420,490 420,560 560,560" fill="none" stroke="#ccc" stroke-width="1.5"></path>
+    <path d="M0,280C140,280 140,70 280,70" fill="none" stroke="var(--vis-grid, #e0e0e0)" stroke-width="1.5"></path><path d="M0,280C140,280 140,280 280,280" fill="none" stroke="var(--vis-grid, #e0e0e0)" stroke-width="1.5"></path><path d="M0,280C140,280 140,490 280,490" fill="none" stroke="var(--vis-grid, #e0e0e0)" stroke-width="1.5"></path><path d="M280,70C420,70 420,0 560,0" fill="none" stroke="var(--vis-grid, #e0e0e0)" stroke-width="1.5"></path><path d="M280,70C420,70 420,140 560,140" fill="none" stroke="var(--vis-grid, #e0e0e0)" stroke-width="1.5"></path><path d="M280,490C420,490 420,420 560,420" fill="none" stroke="var(--vis-grid, #e0e0e0)" stroke-width="1.5"></path><path d="M280,490C420,490 420,560 560,560" fill="none" stroke="var(--vis-grid, #e0e0e0)" stroke-width="1.5"></path>
     <g transform="translate(0, 280)">
-      <circle r="6" fill="steelblue" stroke="steelblue" stroke-width="2"></circle>
-      <text dy="0.31em" x="-10" text-anchor="end" font-size="12">root</text>
+      <circle r="6" fill="var(--vis-series-1, #3b6fa8)" stroke="var(--vis-series-1, #3b6fa8)" stroke-width="2"></circle>
+      <text dy="0.31em" x="-10" text-anchor="end" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">root</text>
     </g><g transform="translate(280, 70)">
-      <circle r="6" fill="steelblue" stroke="steelblue" stroke-width="2"></circle>
-      <text dy="0.31em" x="-10" text-anchor="end" font-size="12">a</text>
+      <circle r="6" fill="var(--vis-series-1, #3b6fa8)" stroke="var(--vis-series-1, #3b6fa8)" stroke-width="2"></circle>
+      <text dy="0.31em" x="-10" text-anchor="end" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">a</text>
     </g><g transform="translate(560, 0)">
-      <circle r="6" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
-      <text dy="0.31em" x="10" text-anchor="start" font-size="12">a1</text>
+      <circle r="6" fill="var(--vis-background, #ffffff)" stroke="var(--vis-series-1, #3b6fa8)" stroke-width="2"></circle>
+      <text dy="0.31em" x="10" text-anchor="start" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">a1</text>
     </g><g transform="translate(560, 140)">
-      <circle r="6" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
-      <text dy="0.31em" x="10" text-anchor="start" font-size="12">a2</text>
+      <circle r="6" fill="var(--vis-background, #ffffff)" stroke="var(--vis-series-1, #3b6fa8)" stroke-width="2"></circle>
+      <text dy="0.31em" x="10" text-anchor="start" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">a2</text>
     </g><g transform="translate(280, 280)">
-      <circle r="6" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
-      <text dy="0.31em" x="10" text-anchor="start" font-size="12">b</text>
+      <circle r="6" fill="var(--vis-background, #ffffff)" stroke="var(--vis-series-1, #3b6fa8)" stroke-width="2"></circle>
+      <text dy="0.31em" x="10" text-anchor="start" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">b</text>
     </g><g transform="translate(280, 490)">
-      <circle r="6" fill="steelblue" stroke="steelblue" stroke-width="2"></circle>
-      <text dy="0.31em" x="-10" text-anchor="end" font-size="12">c</text>
+      <circle r="6" fill="var(--vis-series-1, #3b6fa8)" stroke="var(--vis-series-1, #3b6fa8)" stroke-width="2"></circle>
+      <text dy="0.31em" x="-10" text-anchor="end" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">c</text>
     </g><g transform="translate(560, 420)">
-      <circle r="6" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
-      <text dy="0.31em" x="10" text-anchor="start" font-size="12">c1</text>
+      <circle r="6" fill="var(--vis-background, #ffffff)" stroke="var(--vis-series-1, #3b6fa8)" stroke-width="2"></circle>
+      <text dy="0.31em" x="10" text-anchor="start" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">c1</text>
     </g><g transform="translate(560, 560)">
-      <circle r="6" fill="#fff" stroke="steelblue" stroke-width="2"></circle>
-      <text dy="0.31em" x="10" text-anchor="start" font-size="12">c2</text>
+      <circle r="6" fill="var(--vis-background, #ffffff)" stroke="var(--vis-series-1, #3b6fa8)" stroke-width="2"></circle>
+      <text dy="0.31em" x="10" text-anchor="start" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">c2</text>
     </g>
   </g>
 </svg>

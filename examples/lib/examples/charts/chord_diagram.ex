@@ -57,7 +57,7 @@ defmodule Examples.Charts.ChordDiagram do
       )
       |> Element.append(
         # Add label
-        create_group_label(group, outer_radius + 10)
+        create_group_label(group, outer_radius + 10, palette)
       )
     end)
 
@@ -84,7 +84,7 @@ defmodule Examples.Charts.ChordDiagram do
     |> Element.append(chart_group)
   end
 
-  defp create_group_label(group, radius) do
+  defp create_group_label(group, radius, palette) do
     mid_angle = (group.start_angle + group.end_angle) / 2
     x = radius * :math.sin(mid_angle)
     y = -radius * :math.cos(mid_angle)
@@ -100,7 +100,7 @@ defmodule Examples.Charts.ChordDiagram do
       y: y,
       text_anchor: text_anchor,
       font_size: 11,
-      fill: "#333",
+      fill: ColorPalettes.text_color(palette),
       transform: "rotate(#{rotation},#{x},#{y})"
     })
     |> Element.content(name)

@@ -107,15 +107,19 @@ defmodule Visualize.Components.TreeTest do
       svg = render_component(&Tree.tree_diagram/1, %{data: @hierarchy})
       assert length(Regex.scan(~r/<circle/, svg)) == 8
       assert length(Regex.scan(~r/<path d="M/, svg)) == 7
-      assert svg =~ ~s(text-anchor="end" font-size="12">root</text>)
-      assert svg =~ ~s(text-anchor="start" font-size="12">a1</text>)
+
+      assert svg =~
+               ~s|text-anchor="end" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">root</text>|
+
+      assert svg =~
+               ~s|text-anchor="start" font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)">a1</text>|
     end
 
     test "a root-only hierarchy is one node and no link" do
       svg = render_component(&Tree.tree_diagram/1, %{data: @root_only})
       assert length(Regex.scan(~r/<circle/, svg)) == 1
       refute svg =~ "<path"
-      assert svg =~ ~s(fill="#fff")
+      assert svg =~ ~s{fill="var(--vis-background, #ffffff)"}
     end
   end
 

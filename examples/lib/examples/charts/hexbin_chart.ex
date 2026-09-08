@@ -100,8 +100,8 @@ defmodule Examples.Charts.HexbinChart do
     end)
 
     # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.ticks(6)
-    y_axis = Axis.left(y_scale) |> Axis.ticks(5)
+    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(6)
+    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(5)
 
     # Create clip path for the chart area
     clip_path = Element.defs(%{})
@@ -130,7 +130,7 @@ defmodule Examples.Charts.HexbinChart do
       text_anchor: "middle",
       font_size: 14,
       font_weight: "bold",
-      fill: "#333"
+      fill: ColorPalettes.text_color(palette)
     })
     |> Element.content("Point Density (#{length(data)} points)")
 

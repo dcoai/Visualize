@@ -14,7 +14,7 @@ defmodule Visualize.ComponentsTest do
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
-  alias Visualize.Components
+  alias Visualize.{Components, Theme}
 
   @dir "test/support/components"
 
@@ -140,6 +140,68 @@ defmodule Visualize.ComponentsTest do
 
     assert String.replace(responsive, ~r/<svg[^>]*>/, "") ==
              String.replace(plain, ~r/<svg[^>]*>/, "")
+  end
+
+  describe "theme (spec/10 §1.2, D-55)" do
+    test "the default theme's slots render as var() references with their fallbacks" do
+      svg = render_case(Keyword.fetch!(cases(), :bar_chart))
+
+      assert svg =~
+               ~s|<svg width="600" height="400" font-family="var(--vis-font-family, sans-serif)" |
+
+      assert svg =~ ~s|fill="var(--vis-series-1, #3b6fa8)"|
+      assert svg =~ ~s|stroke="var(--vis-axis, #666666)"|
+      assert svg =~ ~s|fill="var(--vis-text, #333333)"|
+      refute svg =~ "currentColor"
+    end
+
+    test "the dark theme changes every fallback and nothing else" do
+      light = render_case(Keyword.fetch!(cases(), :bar_chart))
+
+      dark =
+        render_component(&Components.bar_chart/1, %{
+          data: @categories,
+          x: & &1.name,
+          y: & &1.value,
+          theme: Theme.dark()
+        })
+
+      assert dark =~ ~s|fill="var(--vis-series-1, #7fb3e6)"|
+      assert dark =~ ~s|stroke="var(--vis-axis, #a0a4ab)"|
+      assert dark =~ ~s|fill="var(--vis-text, #e6e6e6)"|
+
+      relit =
+        dark
+        |> String.replace("#7fb3e6", "#3b6fa8")
+        |> String.replace("#a0a4ab", "#666666")
+        |> String.replace("#e6e6e6", "#333333")
+
+      assert relit == light
+    end
+
+    test "an explicit colour assign is used as given; a label over a mark takes :background" do
+      svg = render_case(Keyword.fetch!(cases(), :line_chart_points))
+      pie = render_case(Keyword.fetch!(cases(), :pie_chart))
+
+      custom =
+        render_component(&Components.bar_chart/1, %{
+          data: @categories,
+          x: & &1.name,
+          y: & &1.value,
+          fill: "tomato"
+        })
+
+      assert custom =~ ~s|fill="tomato"|
+      refute custom =~ "--vis-series"
+
+      assert svg =~
+               ~s|font-size="var(--vis-label-size, 12px)" fill="var(--vis-text, #333333)" class="axis-label"|
+
+      assert pie =~ ~s|stroke="var(--vis-background, #ffffff)" stroke-width="2"|
+
+      assert pie =~
+               ~s|font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)"|
+    end
   end
 
   describe "colors" do

@@ -99,7 +99,7 @@ defmodule Examples.Charts.BubbleChart do
               y: y + 4,
               text_anchor: "middle",
               font_size: 9,
-              fill: "#333",
+              fill: ColorPalettes.text_color(palette),
               font_weight: "bold"
             })
             |> Element.content(d.name)
@@ -116,10 +116,10 @@ defmodule Examples.Charts.BubbleChart do
 
       Element.g(%{})
       |> Element.append(
-        Element.line(%{x1: x, x2: x, y1: chart_height, y2: chart_height + 5, stroke: "#666"})
+        Element.line(%{x1: x, x2: x, y1: chart_height, y2: chart_height + 5, stroke: ColorPalettes.axis_color(palette)})
       )
       |> Element.append(
-        Element.text(%{x: x, y: chart_height + 20, text_anchor: "middle", font_size: 10, fill: "#666"})
+        Element.text(%{x: x, y: chart_height + 20, text_anchor: "middle", font_size: 10, fill: ColorPalettes.axis_color(palette)})
         |> Element.content("#{tick}")
       )
     end)
@@ -129,7 +129,7 @@ defmodule Examples.Charts.BubbleChart do
       y: chart_height + 40,
       text_anchor: "middle",
       font_size: 11,
-      fill: "#333"
+      fill: ColorPalettes.text_color(palette)
     })
     |> Element.content("Population (millions)")
 
@@ -143,7 +143,7 @@ defmodule Examples.Charts.BubbleChart do
         Element.line(%{x1: -5, x2: chart_width, y1: y, y2: y, stroke: "#eee"})
       )
       |> Element.append(
-        Element.text(%{x: -10, y: y + 4, text_anchor: "end", font_size: 10, fill: "#666"})
+        Element.text(%{x: -10, y: y + 4, text_anchor: "end", font_size: 10, fill: ColorPalettes.axis_color(palette)})
         |> Element.content("$#{tick}T")
       )
     end)
@@ -153,7 +153,7 @@ defmodule Examples.Charts.BubbleChart do
       y: -50,
       text_anchor: "middle",
       font_size: 11,
-      fill: "#333",
+      fill: ColorPalettes.text_color(palette),
       transform: "rotate(-90)"
     })
     |> Element.content("GDP (trillions USD)")
@@ -167,7 +167,7 @@ defmodule Examples.Charts.BubbleChart do
           Element.circle(%{cx: 8, cy: 8, r: 8, fill: Enum.at(colors, rem(i, length(colors))), fill_opacity: 0.7})
         )
         |> Element.append(
-          Element.text(%{x: 22, y: 12, font_size: 10, fill: "#333"})
+          Element.text(%{x: 22, y: 12, font_size: 10, fill: ColorPalettes.text_color(palette)})
           |> Element.content(region)
         )
       end)
@@ -175,7 +175,7 @@ defmodule Examples.Charts.BubbleChart do
     # Size legend
     size_legend = Element.g(%{transform: "translate(#{chart_width + 20},#{length(@regions) * 25 + 50})"})
       |> Element.append(
-        Element.text(%{font_size: 9, fill: "#666"})
+        Element.text(%{font_size: 9, fill: ColorPalettes.axis_color(palette)})
         |> Element.content("Size = GDP/capita")
       )
 

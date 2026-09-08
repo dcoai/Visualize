@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping) and `Visualize.Data.Table` (tabular sources as rows). All are pure except `Random`, which reads and advances the calling process's `:rand` state.
+This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping), `Visualize.Data.Table` (tabular sources as rows) and `Visualize.Theme` (the colours, font and sizes every mark draws with). All are pure except `Random`, which reads and advances the calling process's `:rand` state.
 
 ## 1. Color
 
@@ -402,3 +402,73 @@ A source names its columns with atoms or strings and a caller writes accessors i
 | `Visualize.Data.Table.accessor/1` | `fn row -> get(row, name) end`; a function is returned unchanged. |
 | `Visualize.Data.Table.time_columns/1` | The names whose whole column is temporal (6.3). |
 | `Visualize.Data.Table.temporal?/1` | Whether a value is a `DateTime`, `Date`, `NaiveDateTime` or ISO 8601 string. |
+
+## 7. Theme
+
+`Visualize.Theme` names the colours, font and sizes a chart draws with, so that no axis, mark or component carries a colour literal and a consumer restyles every chart from one place — a theme struct in Elixir, or CSS custom properties in a stylesheet (D-55). Ggity's `Theme` and Tucan's themes are the precedent; the CSS half is this library's own, because its output lives in a page.
+
+### 7.1 Struct and slots
+
+`%Visualize.Theme{name, series, axis, grid, text, background, font_family, font_size, label_size, title_size}`. `name` is an atom naming the theme (`:default`, `:dark`, or the consumer's own); `series` is a non-empty list of colour strings; `axis`, `grid`, `text` and `background` are colour strings; `font_family` is a CSS font-family string; the three sizes are numbers in user units (pixels).
+
+A *slot* names one value of a theme:
+
+| Slot | Field | Used for |
+|---|---|---|
+| `:series_1` … `:series_n`, or `{:series, i}` | `series` | the i-th categorical colour; `{:series, i}` cycles, so on a ten-colour theme `{:series, 11}` is `:series_1`, and `i` is any positive integer |
+| `:axis` | `axis` | domain lines and tick lines |
+| `:grid` | `grid` | grid lines, tree links, and any mark that sits behind the data |
+| `:text` | `text` | tick labels, axis titles and any label beside a mark |
+| `:background` | `background` | the colour the chart is drawn on: separators between marks, and a label drawn over a mark |
+| `:font_family` | `font_family` | every text |
+| `:font_size` | `font_size` | tick labels |
+| `:label_size` | `label_size` | mark labels and axis titles |
+| `:title_size` | `title_size` | chart titles |
+
+`slots/1` lists a theme's slots in that order, `:series_1` to `:series_n` first. `series_slot/2` is the `:series_k` atom that `{:series, i}` cycles to. A slot that is none of these, or `:series_k` with `k > n` or `k < 1`, raises `ArgumentError` in every function that takes a slot.
+
+### 7.2 Built-in themes
+
+| Field | `default/0` | `dark/0` |
+|---|---|---|
+| `name` | `:default` | `:dark` |
+| `series` | `#3b6fa8 #d9730d #c8373b #2f8f86 #3f8a37 #a8891a #8f5f99 #c9527f #8a6a4f #6f7480` | `#7fb3e6 #f7a35c #f47c7c #6fd3c8 #86d67c #f2d15b #c99bd6 #ffb3c1 #cfa98b #b7bcc6` |
+| `axis` | `#666666` | `#a0a4ab` |
+| `grid` | `#e0e0e0` | `#33373f` |
+| `text` | `#333333` | `#e6e6e6` |
+| `background` | `#ffffff` | `#1b1e24` |
+| `font_family` | `sans-serif` | `sans-serif` |
+| `font_size` | `10` | `10` |
+| `label_size` | `12` | `12` |
+| `title_size` | `16` | `16` |
+
+Both palettes are ten hues in the order of d3's `category10` — blue, orange, red, teal, green, yellow, purple, pink, brown, grey — each adjusted until it holds at least 3:1 (`Visualize.Color.contrast/2`, §1.5) against its own background; `text` holds at least 4.5:1 and `axis` at least 3:1. Neither palette is a d3 scheme, because every d3 categorical scheme has a colour under 2.1:1 on white (`category10`'s olive is 2.0:1), and a theme that promises contrast cannot ship one unchanged. `test/visualize/theme_test.exs` holds both themes to those floors.
+
+`new/1` is `default/0` with the given keyword fields replaced; `merge/2` replaces the fields of any theme. An unknown field raises `KeyError`; an empty `series` raises `ArgumentError`.
+
+### 7.3 Resolution
+
+`resolve(theme, slot, mode)` is the one door through which anything reads a theme, and the mode is what the render target needs:
+
+- `:literal` — the slot's value as stored: a colour or font string, or a number for a size. A canvas colour is a literal, so every canvas backend resolves this way.
+- `:css` — a CSS custom-property reference with the literal as its fallback: `var(--vis-axis, #666666)`, `var(--vis-series-3, #c8373b)`, `var(--vis-font-size, 10px)` (a size gains `px`). What the SVG output carries.
+
+`css_name/1` is the property name of a slot atom: `--vis-` and the slot with `_` as `-` (`:series_1` → `--vis-series-1`, `:font_family` → `--vis-font-family`). `mode/1` maps a backend — a module, `:svg`, `:canvas` or `nil`, resolved by `Visualize.Backend.resolve/1` (spec/02 §3.2) — to the mode: `Visualize.Backend.SVG` is `:css`, every other backend `:literal`. `Visualize.Axis.render/2` applies it (spec/05 §1.6) and the style grammar of the declarative layer resolves through the same call.
+
+The reference carries its fallback rather than the root declaring the property (D-55). A declaration on the `<svg>` — inline or in a `<style>` — would beat every ancestor rule in the cascade, so a consumer could not switch a theme from a class without `!important`; with the fallback form a chart rendered outside any stylesheet (a standalone `.svg`, an `<img>`) still draws in its theme, and a rule on any ancestor, `.night { --vis-axis: #a0a4ab }`, overrides it. `stylesheet/1` writes that rule for a whole theme — `.vis-theme-<name> {` then one `  --vis-<slot>: <value>;` line per slot of `slots/1`, sizes with `px`, then `}` — so a consumer that includes `stylesheet(dark())` in its CSS switches every chart under an element with `class="vis-theme-dark"` without touching Elixir.
+
+### 7.4 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Theme.default/0` | The light theme of 7.2. |
+| `Visualize.Theme.dark/0` | The dark theme of 7.2. |
+| `Visualize.Theme.new/1` | `default/0` with the given keyword fields replaced (7.2). |
+| `Visualize.Theme.merge/2` | The theme with the given keyword fields replaced (7.2). |
+| `Visualize.Theme.slots/1` | The theme's slot names in the order of 7.1. |
+| `Visualize.Theme.series_slot/2` | `series_slot(theme, i)`: the `:series_k` atom the positive index `i` cycles to (7.1). |
+| `Visualize.Theme.resolve/3` | The slot's value as a literal or as a CSS reference with the literal fallback (7.3). |
+| `Visualize.Theme.css_name/1` | The custom-property name of a slot atom (7.3). |
+| `Visualize.Theme.mode/1` | `:css` for the SVG backend, `:literal` for any other (7.3). |
+| `Visualize.Theme.stylesheet/1` | The `.vis-theme-<name>` rule declaring every slot (7.3). |
+

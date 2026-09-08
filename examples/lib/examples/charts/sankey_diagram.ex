@@ -121,7 +121,7 @@ defmodule Examples.Charts.SankeyDiagram do
               width: node.x1 - node.x0,
               height: node_height,
               fill: color,
-              stroke: "#333",
+              stroke: ColorPalettes.text_color(palette),
               stroke_width: 0.5
             })
           )
@@ -139,7 +139,7 @@ defmodule Examples.Charts.SankeyDiagram do
             y: node.y0 + node_height / 2 + 4,
             text_anchor: text_anchor,
             font_size: 11,
-            fill: "#333"
+            fill: ColorPalettes.text_color(palette)
           })
           |> Element.content(node.name || node.id)
         )

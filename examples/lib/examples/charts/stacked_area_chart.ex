@@ -81,8 +81,8 @@ defmodule Examples.Charts.StackedAreaChart do
       end)
 
     # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.ticks(10)
-    y_axis = Axis.left(y_scale) |> Axis.ticks(5)
+    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(10)
+    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(5)
 
     # Legend
     legend = keys
@@ -94,7 +94,7 @@ defmodule Examples.Charts.StackedAreaChart do
         Element.g(%{transform: "translate(#{inner_width + 15},#{y_pos})"})
         |> Element.append(Element.rect(%{width: 16, height: 16, fill: color, rx: 2}))
         |> Element.append(
-          Element.text(%{x: 22, y: 12, font_size: 12, fill: "#333"})
+          Element.text(%{x: 22, y: 12, font_size: 12, fill: ColorPalettes.text_color(palette)})
           |> Element.content(Atom.to_string(key) |> String.capitalize())
         )
       end)

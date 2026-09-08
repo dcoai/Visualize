@@ -34,7 +34,7 @@ Every document carries a `**Status:**` line immediately after its title.
 | 05 | [Axes and formatting](05-axes-and-formatting.md) | Axis generation, tick placement, number and time formatting | Implemented |
 | 06 | [Layouts](06-layouts.md) | Hierarchy, tree, cluster, pack, partition, treemap, chord, sankey, force simulation | Implemented |
 | 07 | [Geo](07-geo.md) | Projections and their families, GeoJSON paths, Delaunay, Voronoi | Implemented |
-| 08 | [Utilities](08-utilities.md) | Data, colour, interpolate, ease, random, polygon, contour | Implemented |
+| 08 | [Utilities](08-utilities.md) | Data, colour, interpolate, ease, random, polygon, contour, themes | Implemented |
 | 09 | [Rendering backends](09-rendering-backends.md) | SVG and Canvas backends, binary encoding, hybrid and incremental rendering | Implemented |
 | 10 | [LiveView integration](10-liveview-integration.md) | Components, hooks, HEEx-safe elements, the JS hook contract | Implemented |
 | 11 | [Public API](11-public-api.md) | The facade module, what is public, naming and error conventions | Implemented |

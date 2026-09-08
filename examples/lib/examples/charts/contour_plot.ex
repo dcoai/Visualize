@@ -56,7 +56,7 @@ defmodule Examples.Charts.ContourPlot do
       end)
 
     # Add legend
-    legend = create_legend(thresholds, gradient, width - 80, 20)
+    legend = create_legend(thresholds, gradient, width - 80, 20, palette)
 
     Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
     |> Element.append(contour_elements)
@@ -154,7 +154,7 @@ defmodule Examples.Charts.ContourPlot do
     "#" <> r_hex <> g_hex <> b_hex
   end
 
-  defp create_legend(thresholds, gradient, x, y) do
+  defp create_legend(thresholds, gradient, x, y, palette) do
     items = thresholds
       |> Enum.with_index()
       |> Enum.map(fn {threshold, i} ->
@@ -163,10 +163,10 @@ defmodule Examples.Charts.ContourPlot do
 
         Element.g(%{transform: "translate(0,#{i * 18})"})
         |> Element.append(
-          Element.rect(%{width: 15, height: 15, fill: color, stroke: "#666", stroke_width: 0.5})
+          Element.rect(%{width: 15, height: 15, fill: color, stroke: ColorPalettes.axis_color(palette), stroke_width: 0.5})
         )
         |> Element.append(
-          Element.text(%{x: 20, y: 12, font_size: 10, fill: "#333"})
+          Element.text(%{x: 20, y: 12, font_size: 10, fill: ColorPalettes.text_color(palette)})
           |> Element.content("#{Float.round(threshold, 2)}")
         )
       end)

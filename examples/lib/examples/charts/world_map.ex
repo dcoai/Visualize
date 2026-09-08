@@ -92,7 +92,7 @@ defmodule Examples.Charts.WorldMap do
       rx: rx,
       ry: ry,
       fill: "none",
-      stroke: "#666",
+      stroke: ColorPalettes.axis_color(palette),
       stroke_width: 1.5
     })
 

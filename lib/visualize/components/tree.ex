@@ -47,11 +47,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `orientation` - `:horizontal` (root at the left, depth along x) or `:vertical`
       (root at the top) (default `:horizontal`)
     * `node_radius` - (default 6)
-    * `node_fill` - fill of leaf circles (default `"#fff"`)
-    * `node_stroke` - circle stroke, and the fill of internal nodes (default `"steelblue"`)
-    * `link_stroke` - (default `"#ccc"`)
+    * `node_fill` - fill of leaf circles (default `nil`: the theme's `:background`)
+    * `node_stroke` - circle stroke, and the fill of internal nodes (default `nil`: the
+      theme's `:series_1`)
+    * `link_stroke` - (default `nil`: the theme's `:grid`)
     * `label` - accessor of a node's data; `nil` reads `:name` or `"name"`
-    * `animate`, `class`, `responsive` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme` - per the module conventions
 
     Links are cubic Béziers between parent and child with both control points at the
     midpoint of the depth axis. Horizontal labels sit at `x = −10`, anchored `end`, for
@@ -64,17 +65,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:margin, :map, default: @tree_margin)
     attr(:orientation, :atom, default: :horizontal)
     attr(:node_radius, :integer, default: 6)
-    attr(:node_fill, :string, default: "#fff")
-    attr(:node_stroke, :string, default: "steelblue")
-    attr(:link_stroke, :string, default: "#ccc")
+    attr(:node_fill, :string, default: nil)
+    attr(:node_stroke, :string, default: nil)
+    attr(:link_stroke, :string, default: nil)
     attr(:label, :any, default: nil)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
 
     def tree_diagram(assigns) do
       {margin, inner_width, inner_height} = Support.frame(assigns, @tree_margin)
       orientation = assigns.orientation
+      theme = Support.theme(assigns.theme)
+      node_fill = Support.colour(assigns.node_fill, theme, :background)
+      node_stroke = Support.colour(assigns.node_stroke, theme, :series_1)
 
       size =
         case orientation do
@@ -97,7 +102,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
           %{
             transform: "translate(#{fmt(x)}, #{fmt(y)})",
-            fill: if(internal?, do: assigns.node_stroke, else: assigns.node_fill),
+            fill: if(internal?, do: node_stroke, else: node_fill),
             label_x: label_x(orientation, internal?),
             anchor: label_anchor(orientation, internal?),
             label: label.(node.data)
@@ -109,16 +114,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
           margin: margin,
           links: links,
           nodes: nodes,
+          theme: theme,
+          node_stroke: node_stroke,
+          link_stroke: Support.colour(assigns.link_stroke, theme, :grid),
+          text: Support.css(theme, :text),
+          label_size: Support.css(theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <path :for={d <- @links} d={d} fill="none" stroke={@link_stroke} stroke-width="1.5" {@transition} />
           <g :for={node <- @nodes} transform={node.transform} {@transition}>
             <circle r={@node_radius} fill={node.fill} stroke={@node_stroke} stroke-width="2" />
-            <text dy="0.31em" x={node.label_x} text-anchor={node.anchor} font-size="12">{node.label}</text>
+            <text dy="0.31em" x={node.label_x} text-anchor={node.anchor} font-size={@label_size} fill={@text}>{node.label}</text>
           </g>
         </g>
       </svg>
@@ -138,9 +148,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `padding` - uniform cell padding (default 2)
     * `colors` - per the module conventions; each child of the root takes the next colour
       and every leaf beneath it that colour (default `:category10`)
-    * `animate`, `class`, `responsive` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme` - per the module conventions
 
-    A white `font-size="11"` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` in a
+    A `:background`-filled `:label_size` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` in a
     cell wider than 30 and taller than 15, truncated with `…` to fit `cell width − 8`
     at seven pixels a character.
     """
@@ -155,9 +165,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
 
     def treemap_chart(assigns) do
       label = assigns.label || (&name/1)
+      theme = Support.theme(assigns.theme)
 
       root =
         Treemap.new()
@@ -167,7 +179,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> Treemap.generate(summed(assigns.data, assigns.value))
 
       cells =
-        for {node, colour} <- coloured(root, assigns.colors), leaf?(node) do
+        for {node, colour} <- coloured(root, assigns.colors, theme), leaf?(node) do
           width = max(0, node.x1 - node.x0)
           height = max(0, node.y1 - node.y0)
 
@@ -186,18 +198,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
           }
         end
 
-      assigns = assign(assigns, cells: cells, transition: Support.transition(assigns.animate))
+      assigns =
+        assign(assigns,
+          cells: cells,
+          theme: theme,
+          background: Support.css(theme, :background),
+          label_size: Support.css(theme, :label_size),
+          transition: Support.transition(assigns.animate)
+        )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <%= for cell <- @cells do %>
-          <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.fill} stroke="white" stroke-width="1" {@transition} />
+          <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.fill} stroke={@background} stroke-width="1" {@transition} />
           <text
             :if={cell.label}
             x={cell.label_x}
             y={cell.label_y}
-            font-size="11"
-            fill="white"
+            font-size={@label_size}
+            fill={@background}
             style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);"
           >{cell.label}</text>
         <% end %>
@@ -217,13 +236,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `label` - as `tree_diagram/1`; drawn at the centroid of an arc thick enough and long
       enough to hold text
     * `colors` - as `treemap_chart/1`
-    * `animate`, `class`, `responsive` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme` - per the module conventions
 
     Angles are `Visualize.Layout.Partition` over `{2π, radius}`: the root spans the full
     turn, each child a share of its parent's arc proportional to its summed value, and a
     node of value 0 a zero-width slot that draws nothing. Ring radii are
     `depth / (height + 1) · radius`. Each arc is `Visualize.Shape.Arc` — angles clockwise
-    from 12 o'clock — as a `<path fill={colour} stroke="white" stroke-width="1">`.
+    from 12 o'clock — as a `<path fill={colour} stroke={:background} stroke-width="1">`.
     """
     attr(:data, :map, required: true)
     attr(:width, :integer, default: 600)
@@ -234,9 +253,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
 
     def sunburst_chart(assigns) do
       label = assigns.label || (&name/1)
+      theme = Support.theme(assigns.theme)
       radius = min(assigns.width, assigns.height) / 2
 
       root =
@@ -252,7 +273,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> Shape.end_angle(& &1.x1)
 
       arcs =
-        for {node, colour} <- coloured(root, assigns.colors),
+        for {node, colour} <- coloured(root, assigns.colors, theme),
             node.depth > 0,
             node.x1 - node.x0 > 0 do
           {cx, cy} = Shape.Arc.centroid(arc, node)
@@ -271,20 +292,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
           }
         end
 
-      assigns = assign(assigns, arcs: arcs, transition: Support.transition(assigns.animate))
+      assigns =
+        assign(assigns,
+          arcs: arcs,
+          theme: theme,
+          background: Support.css(theme, :background),
+          label_size: Support.css(theme, :label_size),
+          transition: Support.transition(assigns.animate)
+        )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
           <%= for a <- @arcs do %>
-            <path d={a.d} fill={a.fill} stroke="white" stroke-width="1" {@transition} />
+            <path d={a.d} fill={a.fill} stroke={@background} stroke-width="1" {@transition} />
             <text
               :if={a.label}
               x={a.cx}
               y={a.cy}
               text-anchor="middle"
               dominant-baseline="middle"
-              font-size="11"
+              font-size={@label_size}
+              fill={@background}
             >{a.label}</text>
           <% end %>
         </g>
@@ -305,12 +334,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp internal?(node), do: not leaf?(node)
 
     # Every node paired with its colour: the i-th child of the root takes the i-th colour
-    # of the palette and hands it down; the root itself takes `"#ddd"`.
-    defp coloured(root, colors) do
+    # of the palette and hands it down; the root itself takes the theme's `:grid`.
+    defp coloured(root, colors, theme) do
       children = root.children || []
       palette = Support.palette(colors, length(children))
 
-      [{root, "#ddd"}] ++
+      [{root, Support.css(theme, :grid)}] ++
         Enum.flat_map(Enum.with_index(children), fn {child, i} ->
           walk(child, Scale.apply(palette, i))
         end)

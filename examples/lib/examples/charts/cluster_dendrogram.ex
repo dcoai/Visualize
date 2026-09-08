@@ -114,7 +114,7 @@ defmodule Examples.Charts.ClusterDendrogram do
             y: 4,
             text_anchor: "start",
             font_size: 9,
-            fill: "#333"
+            fill: ColorPalettes.text_color(palette)
           })
           |> Element.content(node.data.name)
         )
@@ -125,7 +125,7 @@ defmodule Examples.Charts.ClusterDendrogram do
             y: 4,
             text_anchor: "end",
             font_size: 9,
-            fill: "#666"
+            fill: ColorPalettes.axis_color(palette)
           })
           |> Element.content(node.data.name)
         )

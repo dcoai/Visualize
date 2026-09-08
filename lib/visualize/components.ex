@@ -32,6 +32,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       scheme or an empty list raises `ArgumentError`.
     - `animate={true}` puts `style="transition: all 0.3s ease-in-out;"` on every mark, so
       LiveView's DOM patches animate through CSS.
+    - `theme` is a `Visualize.Theme` (default `Visualize.Theme.default/0`); every colour,
+      font and size that is not an explicit assign is a slot of it, rendered as a CSS
+      reference with the literal as fallback so a stylesheet overrides it (D-55). A colour
+      assign left `nil` takes the slot its documentation names.
     - `margin` is merged over the component's default, so `%{left: 60}` moves one side.
 
     This module compiles only when `Phoenix.Component` is loaded: `phoenix_live_view` is an
@@ -61,11 +65,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `margin` - `%{top:, right:, bottom:, left:}`, merged over
       `%{top: 20, right: 20, bottom: 30, left: 40}`
     * `curve` - any curve type of `Visualize.Shape.curve/3` (default `:linear`)
-    * `stroke` - line colour, also the point fill (default `"steelblue"`)
+    * `stroke` - line colour, also the point fill (default `nil`: the theme's `:series_1`)
     * `stroke_width` - (default 2)
     * `show_points` - draw an `r="4"` circle at each datum (default `false`)
     * `x_label`, `y_label` - axis titles as `<text class="axis-label">`
-    * `animate`, `class`, `responsive` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme` - per the module conventions
 
     ## Example
 
@@ -78,17 +82,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:height, :integer, default: 400)
     attr(:margin, :map, default: @default_margin)
     attr(:curve, :atom, default: :linear)
-    attr(:stroke, :string, default: "steelblue")
+    attr(:stroke, :string, default: nil)
     attr(:stroke_width, :integer, default: 2)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
     attr(:x_label, :string, default: nil)
     attr(:y_label, :string, default: nil)
     attr(:show_points, :boolean, default: false)
 
     def line_chart(assigns) do
       assigns = Support.rows(assigns)
+      theme = Support.theme(assigns.theme)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
       x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
 
@@ -111,13 +117,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
           inner_height: inner_height,
           path: Shape.generate(line, assigns.data),
           points: points,
-          x_axis: axis(Axis.bottom(x_scale)),
-          y_axis: axis(Axis.left(y_scale)),
+          stroke: Support.colour(assigns.stroke, theme, :series_1),
+          text: Support.css(theme, :text),
+          label_size: Support.css(theme, :label_size),
+          theme: theme,
+          x_axis: axis(Axis.bottom(x_scale), theme),
+          y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -135,6 +145,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             x={fmt(@inner_width / 2)}
             y={@inner_height + @margin.bottom - 5}
             text-anchor="middle"
+            font-size={@label_size}
+            fill={@text}
             class="axis-label"
           >{@x_label}</text>
           <text
@@ -143,6 +155,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             x={fmt(-@inner_height / 2)}
             y={-@margin.left + 15}
             text-anchor="middle"
+            font-size={@label_size}
+            fill={@text}
             class="axis-label"
           >{@y_label}</text>
         </g>
@@ -161,9 +175,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `y` - accessor to a non-negative number; the y domain is `[0, max]` (required)
     * `width`, `height` - pixels (default 600 by 400)
     * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
-    * `fill` - bar colour (default `"steelblue"`)
+    * `fill` - bar colour (default `nil`: the theme's `:series_1`)
     * `padding` - band padding, 0 to 1 (default 0.1)
-    * `animate`, `class`, `responsive` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme` - per the module conventions
     """
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
@@ -171,14 +185,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:width, :integer, default: 600)
     attr(:height, :integer, default: 400)
     attr(:margin, :map, default: @default_margin)
-    attr(:fill, :string, default: "steelblue")
+    attr(:fill, :string, default: nil)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
     attr(:padding, :float, default: 0.1)
 
     def bar_chart(assigns) do
       assigns = Support.rows(assigns)
+      theme = Support.theme(assigns.theme)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
 
       x_scale =
@@ -211,13 +227,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
           margin: margin,
           inner_height: inner_height,
           bars: bars,
-          x_axis: axis(Axis.bottom(x_scale)),
-          y_axis: axis(Axis.left(y_scale)),
+          fill: Support.colour(assigns.fill, theme, :series_1),
+          theme: theme,
+          x_axis: axis(Axis.bottom(x_scale), theme),
+          y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -251,14 +269,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:width, :integer, default: 600)
     attr(:height, :integer, default: 400)
     attr(:margin, :map, default: @horizontal_margin)
-    attr(:fill, :string, default: "steelblue")
+    attr(:fill, :string, default: nil)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
     attr(:padding, :float, default: 0.1)
 
     def horizontal_bar_chart(assigns) do
       assigns = Support.rows(assigns)
+      theme = Support.theme(assigns.theme)
       {margin, inner_width, inner_height} = Support.frame(assigns, @horizontal_margin)
 
       y_scale =
@@ -288,13 +308,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
           margin: margin,
           inner_height: inner_height,
           bars: bars,
-          x_axis: axis(Axis.bottom(x_scale)),
-          y_axis: axis(Axis.left(y_scale)),
+          fill: Support.colour(assigns.fill, theme, :series_1),
+          theme: theme,
+          x_axis: axis(Axis.bottom(x_scale), theme),
+          y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -327,7 +349,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `colors` - scheme atom or colour list; the i-th slice takes the i-th colour
       (default `:category10`)
     * `show_labels` - (default `true`)
-    * `animate`, `class`, `responsive` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme` - per the module conventions
 
     A label sits at the centroid of the slice's mid-radius, as `Visualize.Shape.Arc.centroid/2`
     computes it.
@@ -344,10 +366,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
     attr(:show_labels, :boolean, default: true)
 
     def pie_chart(assigns) do
       assigns = Support.rows(assigns)
+      theme = Support.theme(assigns.theme)
       outer_radius = assigns.outer_radius || min(assigns.width, assigns.height) / 2 - 10
       pie = Shape.pie() |> Shape.value(assigns.value) |> Shape.pad_angle(assigns.pad_angle)
 
@@ -373,20 +397,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
           }
         end
 
-      assigns = assign(assigns, slices: slices, transition: Support.transition(assigns.animate))
+      assigns =
+        assign(assigns,
+          slices: slices,
+          theme: theme,
+          background: Support.css(theme, :background),
+          label_size: Support.css(theme, :label_size),
+          transition: Support.transition(assigns.animate)
+        )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
           <%= for slice <- @slices do %>
-            <path d={slice.d} fill={slice.fill} stroke="white" stroke-width="2" {@transition} />
+            <path d={slice.d} fill={slice.fill} stroke={@background} stroke-width="2" {@transition} />
             <text
               :if={slice.label}
               x={slice.x}
               y={slice.y}
               text-anchor="middle"
               dominant-baseline="middle"
-              font-size="12"
+              font-size={@label_size}
+              fill={@background}
             >{slice.label}</text>
           <% end %>
         </g>
@@ -404,10 +436,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `x`, `y` - numeric accessors (required)
     * `width`, `height` - pixels (default 600 by 400)
     * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
-    * `fill` - point colour (default `"steelblue"`)
+    * `fill` - point colour (default `nil`: the theme's `:series_1`)
     * `size` - the radius, or a one-argument function of the datum returning it
       (default 5)
-    * `animate`, `class`, `responsive` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme` - per the module conventions
     """
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
@@ -415,14 +447,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:width, :integer, default: 600)
     attr(:height, :integer, default: 400)
     attr(:margin, :map, default: @default_margin)
-    attr(:fill, :string, default: "steelblue")
+    attr(:fill, :string, default: nil)
     attr(:size, :any, default: 5)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
 
     def scatter_plot(assigns) do
       assigns = Support.rows(assigns)
+      theme = Support.theme(assigns.theme)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
 
       x_scale =
@@ -449,13 +483,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
           margin: margin,
           inner_height: inner_height,
           points: points,
-          x_axis: axis(Axis.bottom(x_scale)),
-          y_axis: axis(Axis.left(y_scale)),
+          fill: Support.colour(assigns.fill, theme, :series_1),
+          theme: theme,
+          x_axis: axis(Axis.bottom(x_scale), theme),
+          y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -484,10 +520,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `y` - accessor to a non-negative number; the y domain is `[0, max]` (required)
     * `width`, `height` - pixels (default 600 by 400)
     * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
-    * `fill`, `fill_opacity` - the area (default `"steelblue"` at 0.3)
-    * `stroke`, `stroke_width` - the line (default `"steelblue"`, 2)
+    * `fill`, `fill_opacity` - the area (default `nil`, the theme's `:series_1`, at 0.3)
+    * `stroke`, `stroke_width` - the line (default `nil`, the theme's `:series_1`, 2)
     * `curve` - applied to both the area and the line (default `:linear`)
-    * `animate`, `class`, `responsive` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme` - per the module conventions
     """
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
@@ -495,17 +531,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:width, :integer, default: 600)
     attr(:height, :integer, default: 400)
     attr(:margin, :map, default: @default_margin)
-    attr(:fill, :string, default: "steelblue")
+    attr(:fill, :string, default: nil)
     attr(:fill_opacity, :float, default: 0.3)
-    attr(:stroke, :string, default: "steelblue")
+    attr(:stroke, :string, default: nil)
     attr(:stroke_width, :integer, default: 2)
     attr(:curve, :atom, default: :linear)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
 
     def area_chart(assigns) do
       assigns = Support.rows(assigns)
+      theme = Support.theme(assigns.theme)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
       x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
 
@@ -532,13 +570,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           inner_height: inner_height,
           area_path: Shape.generate(area, assigns.data),
           line_path: Shape.generate(line, assigns.data),
-          x_axis: axis(Axis.bottom(x_scale)),
-          y_axis: axis(Axis.left(y_scale)),
+          fill: Support.colour(assigns.fill, theme, :series_1),
+          stroke: Support.colour(assigns.stroke, theme, :series_1),
+          theme: theme,
+          x_axis: axis(Axis.bottom(x_scale), theme),
+          y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -576,7 +617,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `colors` - scheme atom or colour list, one colour per key in order
       (default `:category10`)
     * `padding` - band padding (default 0.1)
-    * `animate`, `class`, `responsive` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme` - per the module conventions
 
     The y domain is `[0, max y1]` over every point of every series.
     """
@@ -590,10 +631,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
+    attr(:theme, :any, default: nil)
     attr(:padding, :float, default: 0.1)
 
     def stacked_bar_chart(assigns) do
       assigns = Support.rows(assigns)
+      theme = Support.theme(assigns.theme)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
       series = Shape.generate(Shape.stack() |> Shape.keys(assigns.keys), assigns.data)
       tops = for s <- series, p <- s.points, do: p.y1
@@ -630,13 +673,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           margin: margin,
           inner_height: inner_height,
           bars: bars,
-          x_axis: axis(Axis.bottom(x_scale)),
-          y_axis: axis(Axis.left(y_scale)),
+          theme: theme,
+          x_axis: axis(Axis.bottom(x_scale), theme),
+          y_axis: axis(Axis.left(y_scale), theme),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -655,7 +699,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # `Visualize.Axis.render/1` is a plain string; `raw/1` marks it safe for HEEx.
-    defp axis(axis), do: Phoenix.HTML.raw(Axis.render(axis))
+    defp axis(axis, theme), do: Phoenix.HTML.raw(Axis.render(Axis.theme(axis, theme)))
 
     defp fmt(number), do: Support.fmt(number)
 

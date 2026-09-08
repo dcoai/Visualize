@@ -1,23 +1,23 @@
-<svg width="300" height="400" viewBox="0 0 300 400">
+<svg width="300" height="400" font-family="var(--vis-font-family, sans-serif)" viewBox="0 0 300 400">
   <g transform="translate(150, 200)">
     
-      <path d="M0,-100A100,100,0,0,1,23.2305,97.2643L11.6153,48.6321A50,50,0,0,0,0,-50Z" fill="#66c2a5" stroke="white" stroke-width="1"></path>
-      <text x="74.4853" y="-8.7716" text-anchor="middle" dominant-baseline="middle" font-size="11">a</text>
+      <path d="M0,-100A100,100,0,0,1,23.2305,97.2643L11.6153,48.6321A50,50,0,0,0,0,-50Z" fill="#66c2a5" stroke="var(--vis-background, #ffffff)" stroke-width="1"></path>
+      <text x="74.4853" y="-8.7716" text-anchor="middle" dominant-baseline="middle" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)">a</text>
     
-      <path d="M0,-150A150,150,0,0,1,123.6521,-84.9126L82.4347,-56.6084A100,100,0,0,0,0,-100Z" fill="#66c2a5" stroke="white" stroke-width="1"></path>
-      <text x="58.2234" y="-110.6121" text-anchor="middle" dominant-baseline="middle" font-size="11">a1</text>
+      <path d="M0,-150A150,150,0,0,1,123.6521,-84.9126L82.4347,-56.6084A100,100,0,0,0,0,-100Z" fill="#66c2a5" stroke="var(--vis-background, #ffffff)" stroke-width="1"></path>
+      <text x="58.2234" y="-110.6121" text-anchor="middle" dominant-baseline="middle" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)">a1</text>
     
-      <path d="M123.6521,-84.9126A150,150,0,0,1,34.8458,145.8964L23.2305,97.2643A100,100,0,0,0,82.4347,-56.6084Z" fill="#66c2a5" stroke="white" stroke-width="1"></path>
-      <text x="116.6625" y="44.8872" text-anchor="middle" dominant-baseline="middle" font-size="11">a2</text>
+      <path d="M123.6521,-84.9126A150,150,0,0,1,34.8458,145.8964L23.2305,97.2643A100,100,0,0,0,82.4347,-56.6084Z" fill="#66c2a5" stroke="var(--vis-background, #ffffff)" stroke-width="1"></path>
+      <text x="116.6625" y="44.8872" text-anchor="middle" dominant-baseline="middle" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)">a2</text>
     
-      <path d="M23.2305,97.2643A100,100,0,0,1,-53.3449,-84.5832L-26.6725,-42.2916A50,50,0,0,0,11.6153,48.6321Z" fill="#fc8d62" stroke="white" stroke-width="1"></path>
-      <text x="-69.1216" y="29.1069" text-anchor="middle" dominant-baseline="middle" font-size="11">b</text>
+      <path d="M23.2305,97.2643A100,100,0,0,1,-53.3449,-84.5832L-26.6725,-42.2916A50,50,0,0,0,11.6153,48.6321Z" fill="#fc8d62" stroke="var(--vis-background, #ffffff)" stroke-width="1"></path>
+      <text x="-69.1216" y="29.1069" text-anchor="middle" dominant-baseline="middle" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)">b</text>
     
-      <path d="M-53.3449,-84.5832A100,100,0,0,1,0,-100L0,-50A50,50,0,0,0,-26.6725,-42.2916Z" fill="#8da0cb" stroke="white" stroke-width="1"></path>
-      <text x="-20.823" y="-72.0514" text-anchor="middle" dominant-baseline="middle" font-size="11">c</text>
+      <path d="M-53.3449,-84.5832A100,100,0,0,1,0,-100L0,-50A50,50,0,0,0,-26.6725,-42.2916Z" fill="#8da0cb" stroke="var(--vis-background, #ffffff)" stroke-width="1"></path>
+      <text x="-20.823" y="-72.0514" text-anchor="middle" dominant-baseline="middle" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)">c</text>
     
-      <path d="M-80.0174,-126.8748A150,150,0,0,1,0,-150L0,-100A100,100,0,0,0,-53.3449,-84.5832Z" fill="#8da0cb" stroke="white" stroke-width="1"></path>
-      <text x="-34.705" y="-120.0856" text-anchor="middle" dominant-baseline="middle" font-size="11">c1</text>
+      <path d="M-80.0174,-126.8748A150,150,0,0,1,0,-150L0,-100A100,100,0,0,0,-53.3449,-84.5832Z" fill="#8da0cb" stroke="var(--vis-background, #ffffff)" stroke-width="1"></path>
+      <text x="-34.705" y="-120.0856" text-anchor="middle" dominant-baseline="middle" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)">c1</text>
     
   </g>
 </svg>

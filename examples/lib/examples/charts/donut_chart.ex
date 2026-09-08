@@ -80,7 +80,7 @@ defmodule Examples.Charts.DonutChart do
         Element.g(%{transform: "translate(0,#{y_pos})"})
         |> Element.append(Element.rect(%{width: 16, height: 16, fill: color, rx: 2}))
         |> Element.append(
-          Element.text(%{x: 22, y: 12, font_size: 12, fill: "#333"})
+          Element.text(%{x: 22, y: 12, font_size: 12, fill: ColorPalettes.text_color(palette)})
           |> Element.content(arc_data.data.category)
         )
       end)

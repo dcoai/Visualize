@@ -75,8 +75,8 @@ defmodule Examples.Charts.MultiLineChart do
       end)
 
     # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.ticks(10)
-    y_axis = Axis.left(y_scale) |> Axis.ticks(5)
+    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(10)
+    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(5)
 
     # Legend
     legend = series_keys
@@ -90,7 +90,7 @@ defmodule Examples.Charts.MultiLineChart do
           Element.line(%{x1: 0, y1: 8, x2: 20, y2: 8, stroke: color, stroke_width: 2})
         )
         |> Element.append(
-          Element.text(%{x: 26, y: 12, font_size: 12, fill: "#333"})
+          Element.text(%{x: 26, y: 12, font_size: 12, fill: ColorPalettes.text_color(palette)})
           |> Element.content(format_key(key))
         )
       end)

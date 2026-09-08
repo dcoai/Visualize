@@ -2,20 +2,38 @@ defmodule Examples.ColorPalettes do
   @moduledoc """
   Color palette definitions for chart examples.
 
-  Each palette provides a cohesive set of colors that work well together
-  for data visualization.
+  Each palette provides a cohesive set of colors that work well together for data
+  visualization. The `:default` and `:dark` palettes are `Visualize.Theme.default/0` and
+  `Visualize.Theme.dark/0`; every palette is available as a `Visualize.Theme` through
+  `theme/1`, which is what the charts hand their axes.
   """
+
+  alias Visualize.Theme
+
+  @light Theme.default()
+  @dark Theme.dark()
 
   @palettes %{
     default: %{
       name: "Default",
-      description: "Classic D3-style colors",
-      colors: ["#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949", "#af7aa1", "#ff9da7"],
-      gradient: ["#4e79a7", "#6b92b9", "#89abcb", "#a7c4dd", "#c5ddef"],
-      background: "#ffffff",
-      text: "#333333",
-      axis: "#666666",
-      grid: "#eeeeee"
+      description: "The library's light theme",
+      colors: @light.series,
+      gradient: ["#3b6fa8", "#5f8abb", "#83a5cd", "#a7c0e0", "#cbdbf2"],
+      background: @light.background,
+      text: @light.text,
+      axis: @light.axis,
+      grid: @light.grid
+    },
+
+    dark: %{
+      name: "Dark",
+      description: "The library's dark theme",
+      colors: @dark.series,
+      gradient: ["#2b4a6e", "#4a6f97", "#6a95c0", "#8abbe8", "#b0d4f5"],
+      background: @dark.background,
+      text: @dark.text,
+      axis: @dark.axis,
+      grid: @dark.grid
     },
 
     sunrise: %{
@@ -105,9 +123,25 @@ defmodule Examples.ColorPalettes do
   end
 
   def get(key) when is_binary(key) do
-    get(String.to_existing_atom(key))
-  rescue
-    ArgumentError -> @palettes.default
+    get(Enum.find(list_palettes(), :default, &(Atom.to_string(&1) == key)))
+  end
+
+  @doc "The palette as a `Visualize.Theme`: its colours as the series, its base colours as the slots"
+  def theme(key) when is_binary(key) do
+    theme(Enum.find(list_palettes(), :default, &(Atom.to_string(&1) == key)))
+  end
+
+  def theme(key) when is_atom(key) do
+    palette = get(key)
+
+    Theme.new(
+      name: if(Map.has_key?(@palettes, key), do: key, else: :default),
+      series: palette.colors,
+      background: palette.background,
+      text: palette.text,
+      axis: palette.axis,
+      grid: palette.grid
+    )
   end
 
   @doc "Get the colors array from a palette"

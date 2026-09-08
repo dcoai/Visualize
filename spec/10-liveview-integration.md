@@ -29,6 +29,7 @@ Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)
 - Every component renders one `<svg width={width} height={height} viewBox="0 0 {width} {height}">`.
 - `responsive` (`:boolean`, default `false`) is accepted by every component; when true the `<svg>` also carries `preserveAspectRatio="xMidYMid meet"` and `style="width:100%;height:auto"`, the CSS-scaled case of D-54, exactly as `Visualize.IR.Element.root/3` under `responsive: true` (spec/02 §2.1); when false neither attribute is present. The round-trip case is `ResizeHook` (§10) on the container, with the pushed size assigned to `width` and `height`.
 - `class` (`:string`, default `nil`) is accepted by every component and placed on the `<svg>` as `class={class}`; when `nil` the attribute is absent.
+- `theme` (`:any`, default `nil`) is accepted by every component: a `Visualize.Theme` ([08-utilities](08-utilities.md) §7), `nil` meaning `Visualize.Theme.default/0`. Every colour, font and size a component draws with that is not an explicit assign is a slot of that theme resolved with `Visualize.Theme.resolve/3` in `:css` mode, so the markup carries `var(--vis-…, literal)` references a stylesheet can override (D-55); the `<svg>` carries `font-family={resolve(:font_family)}` so every text inherits the theme's font; the axes take the theme through `Visualize.Axis.theme/2`. A colour assign (`fill`, `stroke`, `node_fill`, `node_stroke`, `link_stroke`) defaults to `nil`, which resolves to the slot named in the component's table; a string is used as given.
 - `animate` (`:boolean`, default `false`) is accepted by every component; when true, every data mark carries `style="transition: all 0.3s ease-in-out;"` so DOM patches animate via CSS; when false a mark carries no `style` attribute.
 - `margin` is merged over the component's default margin with `Map.merge/2`, so a partial map such as `%{left: 60}` overrides one side only. `inner_width = width − left − right`, `inner_height = height − top − bottom`, and the plot area is a `<g transform="translate(left, top)">`.
 - Axes are `Visualize.Axis.bottom/1` and `Visualize.Axis.left/1` over the component's scales, rendered with `Visualize.Axis.render/1` into `<g class="x-axis" transform="translate(0, inner_height)">` and `<g class="y-axis">` through `Phoenix.HTML.raw/1`.
@@ -70,12 +71,12 @@ Every coordinate is `Visualize.Scale.apply/2` over the component's scale; every 
 | `height` | `:integer` | `400` | |
 | `margin` | `:map` | `%{top: 20, right: 20, bottom: 30, left: 40}` | |
 | `curve` | `:atom` | `:linear` | any curve type of spec/04 |
-| `stroke` | `:string` | `"steelblue"` | line colour, also the point fill |
+| `stroke` | `:string` | `nil` | line colour, also the point fill; `nil` → `:series_1` |
 | `stroke_width` | `:integer` | `2` | |
 | `show_points` | `:boolean` | `false` | draw an `r="4"` circle at each datum |
-| `x_label` | `:string` | `nil` | centred `<text class="axis-label">` below the x axis at `y = inner_height + margin.bottom − 5` |
-| `y_label` | `:string` | `nil` | rotated −90° `<text class="axis-label">` at `y = −margin.left + 15` |
-| `animate`, `class` | | | per 1.2 |
+| `x_label` | `:string` | `nil` | centred `<text class="axis-label">` below the x axis at `y = inner_height + margin.bottom − 5`, filled `:text` at `:label_size` |
+| `y_label` | `:string` | `nil` | rotated −90° `<text class="axis-label">` at `y = −margin.left + 15`, filled `:text` at `:label_size` |
+| `animate`, `class`, `responsive`, `theme` | | | per 1.2 |
 
 The y domain is the extent of the y values (1.3) with range `[inner_height, 0]`. The line is `Visualize.Shape.line/0` with the scaled accessors and `curve`, generated with `Visualize.Shape.generate/2` into the `d` of a `<path fill="none" stroke={stroke} stroke-width={stroke_width}>`, drawn only when `data` is non-empty; the axes and labels are drawn regardless.
 
@@ -89,9 +90,9 @@ The y domain is the extent of the y values (1.3) with range `[inner_height, 0]`.
 | `width` | `:integer` | `600` | |
 | `height` | `:integer` | `400` | |
 | `margin` | `:map` | `%{top: 20, right: 20, bottom: 30, left: 40}` | |
-| `fill` | `:string` | `"steelblue"` | |
+| `fill` | `:string` | `nil` | `nil` → `:series_1` |
 | `padding` | `:float` | `0.1` | band padding 0–1 |
-| `animate`, `class` | | | per 1.2 |
+| `animate`, `class`, `responsive`, `theme` | | | per 1.2 |
 
 x is a band scale over the categories in data order with range `[0, inner_width]`; y is linear over `[0, max(y)]` — `[0, 1]` when there is no datum or the maximum is not positive (1.3) — with range `[inner_height, 0]`. Each datum is a `<rect x={band start} y={scaled y} width={bandwidth} height={inner_height − scaled y} fill={fill}>`.
 
@@ -113,9 +114,9 @@ Same assigns as 2.3 with `margin` defaulting to `%{top: 20, right: 20, bottom: 3
 | `pad_angle` | `:float` | `0.02` | radians between slices |
 | `colors` | `:any` | `:category10` | scheme atom or explicit colour list; the i-th slice takes the i-th colour (1.3) |
 | `show_labels` | `:boolean` | `true` | |
-| `animate`, `class` | | | per 1.2 |
+| `animate`, `class`, `responsive`, `theme` | | | per 1.2 |
 
-Slices come from `Visualize.Shape.pie/0` with `value` and `pad_angle`; each is a `<path d={arc} fill={colour} stroke="white" stroke-width="2">` inside `<g transform="translate(width/2, height/2)">`; with no data the group is empty. A label is a `<text text-anchor="middle" dominant-baseline="middle" font-size="12">` at `Visualize.Shape.Arc.centroid/2` of the slice — the mid-radius `(inner + outer)/2` at the slice's mid angle, which is the D3 convention `x = r·sin(a)`, `y = −r·cos(a)`.
+Slices come from `Visualize.Shape.pie/0` with `value` and `pad_angle`; each is a `<path d={arc} fill={colour} stroke={:background} stroke-width="2">` inside `<g transform="translate(width/2, height/2)">`; with no data the group is empty. A label is a `<text text-anchor="middle" dominant-baseline="middle" font-size={:label_size} fill={:background}>` — a label over a mark takes the background slot (1.2) — at `Visualize.Shape.Arc.centroid/2` of the slice — the mid-radius `(inner + outer)/2` at the slice's mid angle, which is the D3 convention `x = r·sin(a)`, `y = −r·cos(a)`.
 
 ### 2.6 `scatter_plot/1`
 
@@ -126,9 +127,9 @@ Slices come from `Visualize.Shape.pie/0` with `value` and `pad_angle`; each is a
 | `width` | `:integer` | `600` | |
 | `height` | `:integer` | `400` | |
 | `margin` | `:map` | `%{top: 20, right: 20, bottom: 30, left: 40}` | |
-| `fill` | `:string` | `"steelblue"` | |
+| `fill` | `:string` | `nil` | `nil` → `:series_1` |
 | `size` | `:any` | `5` | a number (radius) or a one-argument function of the datum returning the radius |
-| `animate`, `class` | | | per 1.2 |
+| `animate`, `class`, `responsive`, `theme` | | | per 1.2 |
 
 Each datum is a `<circle cx cy r={size} fill={fill} opacity="0.7">`. Unlike `line_chart/1`, the x scale is always linear, so `x` MUST return numbers.
 
@@ -142,12 +143,12 @@ Each datum is a `<circle cx cy r={size} fill={fill} opacity="0.7">`. Unlike `lin
 | `width` | `:integer` | `600` | |
 | `height` | `:integer` | `400` | |
 | `margin` | `:map` | `%{top: 20, right: 20, bottom: 30, left: 40}` | |
-| `fill` | `:string` | `"steelblue"` | area fill |
+| `fill` | `:string` | `nil` | area fill; `nil` → `:series_1` |
 | `fill_opacity` | `:float` | `0.3` | |
-| `stroke` | `:string` | `"steelblue"` | top-line colour |
+| `stroke` | `:string` | `nil` | top-line colour; `nil` → `:series_1` |
 | `stroke_width` | `:integer` | `2` | |
 | `curve` | `:atom` | `:linear` | applied to both the area and the line |
-| `animate`, `class` | | | per 1.2 |
+| `animate`, `class`, `responsive`, `theme` | | | per 1.2 |
 
 Two paths are drawn when `data` is non-empty: the area (`Visualize.Shape.area/0`, `y0 = inner_height`, `y1` = scaled y) as `<path fill={fill} fill-opacity={fill_opacity}>`, then the line as `<path fill="none" stroke={stroke} stroke-width={stroke_width}>`.
 
@@ -163,7 +164,7 @@ Two paths are drawn when `data` is non-empty: the area (`Visualize.Shape.area/0`
 | `margin` | `:map` | `%{top: 20, right: 20, bottom: 30, left: 40}` | |
 | `colors` | `:any` | `:category10` | scheme atom or colour list, one per key in order (1.3) |
 | `padding` | `:float` | `0.1` | |
-| `animate`, `class` | | | per 1.2 |
+| `animate`, `class`, `responsive`, `theme` | | | per 1.2 |
 
 The stack yields one series per key with points `%{data, y0, y1}`; the y domain is `[0, max(y1)]`, `[0, 1]` when there are no points or the maximum is not positive (1.3). Each point is a `<rect x={band of x.(data)} y={scaled y1} width={bandwidth} height={scaled y0 − scaled y1} fill={series colour}>`.
 
@@ -189,13 +190,13 @@ All three build the hierarchy with `Visualize.Layout.Hierarchy.new/1`, so `data`
 | `margin` | `:map` | `%{top: 20, right: 120, bottom: 20, left: 120}` | merged over that default |
 | `orientation` | `:atom` | `:horizontal` | `:horizontal` (root at left, depth along x) or `:vertical` (root at top) |
 | `node_radius` | `:integer` | `6` | |
-| `node_fill` | `:string` | `"#fff"` | fill of leaf circles |
-| `node_stroke` | `:string` | `"steelblue"` | circle stroke; also the fill of internal nodes |
-| `link_stroke` | `:string` | `"#ccc"` | |
+| `node_fill` | `:string` | `nil` | fill of leaf circles; `nil` → `:background` |
+| `node_stroke` | `:string` | `nil` | circle stroke; also the fill of internal nodes; `nil` → `:series_1` |
+| `link_stroke` | `:string` | `nil` | `nil` → `:grid` |
 | `label` | `:any` | `nil` | accessor of a node's `data`; `nil` → `:name`/`"name"` |
-| `animate`, `class` | | | per 1.2 |
+| `animate`, `class`, `responsive`, `theme` | | | per 1.2 |
 
-Layout is `Visualize.Layout.Tree` sized `[inner_height, inner_width]` for horizontal and `[inner_width, inner_height]` for vertical. Links are cubic Béziers between parent and child with both control points at the midpoint of the depth axis, `fill="none" stroke={link_stroke} stroke-width="1.5"`, drawn before the nodes. Each node is a `<g transform="translate(…)">` (horizontal swaps the layout's `x`/`y`) holding a `<circle r={node_radius} stroke={node_stroke} stroke-width="2">` filled `node_stroke` for an internal node and `node_fill` for a leaf (a node whose `children` is `nil` or `[]`), and a `<text dy="0.31em" font-size="12">`: horizontal labels sit at `x = −10` with `text-anchor="end"` for internal nodes and `x = 10`/`"start"` for leaves; vertical labels are centred at `x = 0`. A root-only hierarchy is one node at the origin of the plot area and no link.
+Layout is `Visualize.Layout.Tree` sized `[inner_height, inner_width]` for horizontal and `[inner_width, inner_height]` for vertical. Links are cubic Béziers between parent and child with both control points at the midpoint of the depth axis, `fill="none" stroke={link_stroke} stroke-width="1.5"`, drawn before the nodes. Each node is a `<g transform="translate(…)">` (horizontal swaps the layout's `x`/`y`) holding a `<circle r={node_radius} stroke={node_stroke} stroke-width="2">` filled `node_stroke` for an internal node and `node_fill` for a leaf (a node whose `children` is `nil` or `[]`), and a `<text dy="0.31em" font-size={:label_size} fill={:text}>`: horizontal labels sit at `x = −10` with `text-anchor="end"` for internal nodes and `x = 10`/`"start"` for leaves; vertical labels are centred at `x = 0`. A root-only hierarchy is one node at the origin of the plot area and no link.
 
 ### 3.3 `treemap_chart/1`
 
@@ -208,10 +209,10 @@ Layout is `Visualize.Layout.Tree` sized `[inner_height, inner_width]` for horizo
 | `label` | `:any` | `nil` | as 3.2 |
 | `tile` | `:atom` | `:squarify` | any `Visualize.Layout.Treemap.tile/2` algorithm (spec/06) |
 | `padding` | `:integer` | `2` | uniform cell padding |
-| `colors` | `:any` | `:category10` | scheme atom or colour list, by child of the root (3.1) |
-| `animate`, `class` | | | per 1.2 |
+| `colors` | `:any` | `:category10` | scheme atom or colour list, by child of the root (3.1); the root itself, drawn only when it is the whole hierarchy, takes `:grid` |
+| `animate`, `class`, `responsive`, `theme` | | | per 1.2 |
 
-The hierarchy is summed with `value`, laid out with `Visualize.Layout.Treemap` at `{width, height}`, and only leaves are drawn, in hierarchy order: `<rect x={x0} y={y0} width={max(0, x1−x0)} height={max(0, y1−y0)} fill={colour} stroke="white" stroke-width="1">`. A zero-valued leaf keeps its zero-area cell (D-41). A white `font-size="11"` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` when the cell is wider than 30 and taller than 15, truncated with `…` to `trunc((cell width − 8) / 7)` characters. A root-only hierarchy is one cell the size of the `<svg>`.
+The hierarchy is summed with `value`, laid out with `Visualize.Layout.Treemap` at `{width, height}`, and only leaves are drawn, in hierarchy order: `<rect x={x0} y={y0} width={max(0, x1−x0)} height={max(0, y1−y0)} fill={colour} stroke={:background} stroke-width="1">`. A zero-valued leaf keeps its zero-area cell (D-41). A `font-size={:label_size} fill={:background}` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` when the cell is wider than 30 and taller than 15, truncated with `…` to `trunc((cell width − 8) / 7)` characters. A root-only hierarchy is one cell the size of the `<svg>`.
 
 ### 3.4 `sunburst_chart/1`
 
@@ -223,9 +224,9 @@ The hierarchy is summed with `value`, laid out with `Visualize.Layout.Treemap` a
 | `value` | `:any` | `nil` | as 3.3 |
 | `label` | `:any` | `nil` | as 3.2; drawn at the arc's centroid when the arc can hold text (below) |
 | `colors` | `:any` | `:category10` | as 3.3 |
-| `animate`, `class` | | | per 1.2 |
+| `animate`, `class`, `responsive`, `theme` | | | per 1.2 |
 
-The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visualize.Layout.Partition` sized `{2π, radius}` (spec/06 §4): the root spans `[0, 2π]`, each child a share of its parent's arc proportional to its summed value, and a node whose value is not positive a zero-width slot (D-41); ring radii are `depth / (height + 1) · radius` with `height` the root's. Every node of depth ≥ 1 whose angular extent is positive is a `<path fill={colour} stroke="white" stroke-width="1">` whose `d` is `Visualize.Shape.Arc` with `x0`/`x1` as the start and end angles — clockwise from 12 o'clock, the arc's own convention (spec/04 §7) — and `y0`/`y1` as the inner and outer radii, inside `<g transform="translate(width/2, height/2)">`. The root is not drawn, and a zero-extent node draws nothing. A label is a `<text text-anchor="middle" dominant-baseline="middle" font-size="11">` at `Visualize.Shape.Arc.centroid/2` of the arc, drawn when the ring is thicker than 15 and the arc's length at mid-radius, `(x1 − x0) · (y0 + y1) / 2`, exceeds 30, and truncated as in 3.3 to that length − 8.
+The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visualize.Layout.Partition` sized `{2π, radius}` (spec/06 §4): the root spans `[0, 2π]`, each child a share of its parent's arc proportional to its summed value, and a node whose value is not positive a zero-width slot (D-41); ring radii are `depth / (height + 1) · radius` with `height` the root's. Every node of depth ≥ 1 whose angular extent is positive is a `<path fill={colour} stroke={:background} stroke-width="1">` whose `d` is `Visualize.Shape.Arc` with `x0`/`x1` as the start and end angles — clockwise from 12 o'clock, the arc's own convention (spec/04 §7) — and `y0`/`y1` as the inner and outer radii, inside `<g transform="translate(width/2, height/2)">`. The root is not drawn, and a zero-extent node draws nothing. A label is a `<text text-anchor="middle" dominant-baseline="middle" font-size={:label_size} fill={:background}>` at `Visualize.Shape.Arc.centroid/2` of the arc, drawn when the ring is thicker than 15 and the arc's length at mid-radius, `(x1 − x0) · (y0 + y1) / 2`, exceeds 30, and truncated as in 3.3 to that length − 8.
 
 ## 4. Visualize.Hooks
 

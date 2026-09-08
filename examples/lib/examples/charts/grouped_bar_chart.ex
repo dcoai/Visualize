@@ -93,7 +93,7 @@ defmodule Examples.Charts.GroupedBarChart do
         y: chart_height + 20,
         text_anchor: "middle",
         font_size: 11,
-        fill: "#333"
+        fill: ColorPalettes.text_color(palette)
       })
       |> Element.content(d.category)
     end)
@@ -109,7 +109,7 @@ defmodule Examples.Charts.GroupedBarChart do
         Element.line(%{x1: -5, x2: chart_width, y1: y, y2: y, stroke: "#ddd", stroke_width: 1})
       )
       |> Element.append(
-        Element.text(%{x: -10, y: y + 4, text_anchor: "end", font_size: 10, fill: "#666"})
+        Element.text(%{x: -10, y: y + 4, text_anchor: "end", font_size: 10, fill: ColorPalettes.axis_color(palette)})
         |> Element.content("#{trunc(tick)}")
       )
     end)
@@ -123,7 +123,7 @@ defmodule Examples.Charts.GroupedBarChart do
           Element.rect(%{width: 15, height: 15, fill: Enum.at(colors, rem(i, length(colors))), rx: 2})
         )
         |> Element.append(
-          Element.text(%{x: 20, y: 12, font_size: 11, fill: "#333"})
+          Element.text(%{x: 20, y: 12, font_size: 11, fill: ColorPalettes.text_color(palette)})
           |> Element.content(Atom.to_string(key) |> String.capitalize())
         )
       end)

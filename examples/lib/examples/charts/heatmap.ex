@@ -73,7 +73,7 @@ defmodule Examples.Charts.Heatmap do
           y: i * cell_height + cell_height / 2 + 4,
           text_anchor: "end",
           font_size: 10,
-          fill: "#333"
+          fill: ColorPalettes.text_color(palette)
         })
         |> Element.content(day)
       end)
@@ -86,13 +86,13 @@ defmodule Examples.Charts.Heatmap do
           y: chart_height + 15,
           text_anchor: "middle",
           font_size: 9,
-          fill: "#333"
+          fill: ColorPalettes.text_color(palette)
         })
         |> Element.content(Enum.at(@hours, h))
       end)
 
     # Color legend
-    legend = create_color_legend(min_val, max_val, gradient, chart_width - 100, -20)
+    legend = create_color_legend(min_val, max_val, gradient, chart_width - 100, -20, palette)
 
     # Compose SVG
     chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
@@ -187,7 +187,7 @@ defmodule Examples.Charts.Heatmap do
     {r, g, b}
   end
 
-  defp create_color_legend(min_val, max_val, gradient, x, y) do
+  defp create_color_legend(min_val, max_val, gradient, x, y, palette) do
     gradient_width = 100
     gradient_height = 10
 
@@ -207,11 +207,11 @@ defmodule Examples.Charts.Heatmap do
     Element.g(%{transform: "translate(#{x},#{y})"})
     |> Element.append(stops)
     |> Element.append(
-      Element.text(%{x: 0, y: gradient_height + 12, font_size: 9, fill: "#333"})
+      Element.text(%{x: 0, y: gradient_height + 12, font_size: 9, fill: ColorPalettes.text_color(palette)})
       |> Element.content("#{trunc(min_val)}")
     )
     |> Element.append(
-      Element.text(%{x: gradient_width, y: gradient_height + 12, text_anchor: "end", font_size: 9, fill: "#333"})
+      Element.text(%{x: gradient_width, y: gradient_height + 12, text_anchor: "end", font_size: 9, fill: ColorPalettes.text_color(palette)})
       |> Element.content("#{trunc(max_val)}")
     )
   end

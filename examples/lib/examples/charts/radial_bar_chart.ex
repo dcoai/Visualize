@@ -94,7 +94,7 @@ defmodule Examples.Charts.RadialBarChart do
           y: y,
           text_anchor: text_anchor,
           font_size: 11,
-          fill: "#333",
+          fill: ColorPalettes.text_color(palette),
           transform: "rotate(#{rotation},#{x},#{y})"
         })
         |> Element.content(d.name)
@@ -106,11 +106,11 @@ defmodule Examples.Charts.RadialBarChart do
 
     center_label = Element.g(%{text_anchor: "middle"})
       |> Element.append(
-        Element.text(%{y: -5, font_size: 24, font_weight: "bold", fill: "#333"})
+        Element.text(%{y: -5, font_size: 24, font_weight: "bold", fill: ColorPalettes.text_color(palette)})
         |> Element.content("#{avg}")
       )
       |> Element.append(
-        Element.text(%{y: 15, font_size: 12, fill: "#666"})
+        Element.text(%{y: 15, font_size: 12, fill: ColorPalettes.axis_color(palette)})
         |> Element.content("Average")
       )
 

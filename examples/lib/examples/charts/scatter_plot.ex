@@ -52,8 +52,8 @@ defmodule Examples.Charts.ScatterPlot do
       |> Scale.Linear.range([inner_height, 0])
 
     # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.ticks(10)
-    y_axis = Axis.left(y_scale) |> Axis.ticks(10)
+    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(10)
+    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(10)
 
     # Generate circles
     circles = Enum.map(data, fn d ->
@@ -73,7 +73,7 @@ defmodule Examples.Charts.ScatterPlot do
         Element.g(%{transform: "translate(#{inner_width - 60},#{i * 22})"})
         |> Element.append(Element.circle(%{cx: 6, cy: 6, r: 6, fill: color}))
         |> Element.append(
-          Element.text(%{x: 18, y: 10, font_size: 12, fill: "#333"})
+          Element.text(%{x: 18, y: 10, font_size: 12, fill: ColorPalettes.text_color(palette)})
           |> Element.content("Category #{cat}")
         )
       end)
