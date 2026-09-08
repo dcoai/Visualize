@@ -21,6 +21,7 @@ defmodule Visualize.Backend.CanvasBinary do
   | `rects` | `0x04` | `count:u32` then `x:f64 y:f64 w:f64 h:f64` per rectangle |
   | `path32` | `0x05` | `path` with every coordinate an f32 |
   | `path_cubic32` | `0x06` | `path_cubic` with every f64 argument an f32 |
+  | `cubic_run` | `0x07` | `count:u32`, the start point `x0:f32 y0:f32`, then six f32 per cubic curve, no sub-opcodes |
   | `style` | `0x10` | `flags:u8` then the fields the flags select: fill RGBA, stroke RGBA, `stroke_width:f32`, `opacity:f32` |
   | `transform` | `0x20` | `kind:u8` then `tx ty` (`0x01`), `tx ty sx sy` (`0x03`) or a full matrix `a b c d e f` (`0xFF`), all f64 |
   | `save` | `0x30` | `ctx.save()` |
@@ -29,9 +30,10 @@ defmodule Visualize.Backend.CanvasBinary do
   | `stroke` | `0x41` | `ctx.stroke()` on the current path |
 
   The point-list record is used only for a path that is one `M` followed by `L`
-  commands — the one shape it can hold without loss; every other path is a command
-  stream, with the smooth curves `S`/`T` expanded to `C`/`Q` first so the command count
-  is exact (D-36). Both come in an f32 and an f64 form: the encoder writes the f32
+  commands, and the cubic run only for one `M` followed by `C` commands — the shapes
+  those records hold without loss, the run being what a curve generator emits (D-74);
+  every other path is a command stream, with the smooth curves `S`/`T` expanded to
+  `C`/`Q` first so the command count is exact (D-36). Both come in an f32 and an f64 form: the encoder writes the f32
   records by default, since a canvas coordinate is a pixel position and an f32 holds a
   value below 16,384 to within 2⁻¹¹ px, and `precision: :f64` selects the f64 records
   (D-73; spec/09 §4.5). Transforms fold into one matrix in SVG order. Colours are parsed
@@ -187,17 +189,26 @@ defmodule Visualize.Backend.CanvasBinary do
   end
 
   # The point-list record holds exactly one open polyline, so it is chosen only for one
-  # `M` followed by `L` commands; anything else — `Z`, a second subpath, `H`/`V`, a
-  # relative or curved command — goes into the full command stream (D-36). The precision
-  # picks the f32 or the f64 form of whichever record (D-73).
+  # `M` followed by `L` commands, and the f32 cubic run exactly one `M` followed by `C`s
+  # once the smooth curves are expanded (D-74); anything else — `Z`, a second subpath,
+  # `H`/`V`, a relative command, a mixed run — goes into the full command stream (D-36).
+  # The precision picks the f32 or the f64 form of whichever record (D-73).
   defp do_encode_path(commands, precision) do
     if polyline?(commands) do
       encode_simple_path(Enum.map(commands, fn {_, x, y} -> {x, y} end), precision)
     else
       %Path{commands: expanded} = Path.expand_smooth(%Path{commands: commands})
-      PathEncoder.encode_cubic_path(expanded, precision)
+
+      if precision == :f32 and cubic_run?(expanded),
+        do: PathEncoder.encode_cubic_run(hd(expanded), tl(expanded)),
+        else: PathEncoder.encode_cubic_path(expanded, precision)
     end
   end
+
+  defp cubic_run?([{:M, _, _}, _ | _] = run),
+    do: Enum.all?(tl(run), &match?({:C, _, _, _, _, _, _}, &1))
+
+  defp cubic_run?(_), do: false
 
   defp polyline?([{:M, _, _} | rest]), do: Enum.all?(rest, &match?({:L, _, _}, &1))
   defp polyline?(_), do: false

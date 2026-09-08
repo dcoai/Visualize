@@ -7,7 +7,8 @@ defmodule Visualize.CanvasBinaryDecoder do
   `decode/1` returns the records of a stream in order:
 
   - `{:path, [{x, y}]}`, `{:path_cubic, [command]}` with `Visualize.IR.Path` commands, and
-    `{:path32, [{x, y}]}`, `{:path_cubic32, [command]}` for the f32 records (D-73)
+    `{:path32, [{x, y}]}`, `{:path_cubic32, [command]}` for the f32 records (D-73), and
+    `{:cubic_run, {x0, y0}, [{x1, y1, x2, y2, x, y}]}` for the cubic run (D-74)
   - `{:circles, [{cx, cy, r}]}`, `{:rects, [{x, y, w, h}]}`
   - `{:style, %{fill:, stroke:, stroke_width:, opacity:}}` (`nil` for an absent field)
   - `{:transform, :translate, {tx, ty}}`, `{:transform, :translate_scale, {tx, ty, sx, sy}}`,
@@ -45,6 +46,14 @@ defmodule Visualize.CanvasBinaryDecoder do
 
       [{:path_cubic32, commands}] ->
         %Path{commands: commands}
+
+      [{:cubic_run, {x0, y0}, curves}] ->
+        %Path{
+          commands: [
+            {:M, x0, y0}
+            | Enum.map(curves, fn {x1, y1, x2, y2, x, y} -> {:C, x1, y1, x2, y2, x, y} end)
+          ]
+        }
     end
   end
 
@@ -69,6 +78,13 @@ defmodule Visualize.CanvasBinaryDecoder do
   defp decode(<<0x06, count::little-32, rest::binary>>, acc) do
     {commands, rest} = take(rest, count, &command(32, &1))
     decode(rest, [{:path_cubic32, commands} | acc])
+  end
+
+  # The cubic run (spec/09 §4.3.10): the start point, then six f32 per curve.
+  defp decode(<<0x07, count::little-32, rest::binary>>, acc) do
+    {start, rest} = point(32, rest)
+    {curves, rest} = take(rest, count, &curve/1)
+    decode(rest, [{:cubic_run, start, curves} | acc])
   end
 
   defp decode(<<0x03, count::little-32, rest::binary>>, acc) do
@@ -137,6 +153,11 @@ defmodule Visualize.CanvasBinaryDecoder do
     {item, rest} = fun.(rest)
     {items, rest} = take(rest, count - 1, fun)
     {[item | items], rest}
+  end
+
+  defp curve(rest) do
+    {[x1, y1, x2, y2, x, y], rest} = floats(32, rest, 6)
+    {{x1, y1, x2, y2, x, y}, rest}
   end
 
   defp point(w, rest) do

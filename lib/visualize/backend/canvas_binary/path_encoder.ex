@@ -2,8 +2,8 @@ defmodule Visualize.Backend.CanvasBinary.PathEncoder do
   @moduledoc """
   Encodes the path records of the canvas binary format — the point list (`path`,
   `path32`) and the full command stream (`path_cubic`, `path_cubic32`) in either
-  coordinate width (spec/09 §4.3, §4.5) — and the number coercion the SVG and IR
-  encoders share.
+  coordinate width, and the f32 cubic run (`cubic_run`) (spec/09 §4.3, §4.5) — and the
+  number coercion the SVG and IR encoders share.
   """
 
   alias Visualize.Backend.CanvasBinary.Opcodes
@@ -37,6 +37,22 @@ defmodule Visualize.Backend.CanvasBinary.PathEncoder do
       |> IO.iodata_to_binary()
 
     <<cubic_opcode(precision)::8, length(commands)::little-32, command_data::binary>>
+  end
+
+  @doc false
+  # The cubic run (spec/09 §4.3.10): `count`, the start point, then six f32 per `C` with no
+  # sub-opcode. f32 only; the caller has already matched one `M` then `C`s.
+  def encode_cubic_run({:M, x0, y0}, curves) do
+    curve_data =
+      curves
+      |> Enum.map(fn {:C, x1, y1, x2, y2, x, y} ->
+        <<x1::little-float-32, y1::little-float-32, x2::little-float-32, y2::little-float-32,
+          x::little-float-32, y::little-float-32>>
+      end)
+      |> IO.iodata_to_binary()
+
+    <<Opcodes.cubic_run()::8, length(curves)::little-32, x0::little-float-32, y0::little-float-32,
+      curve_data::binary>>
   end
 
   defp bits(:f32), do: 32

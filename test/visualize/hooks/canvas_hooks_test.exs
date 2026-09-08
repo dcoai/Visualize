@@ -49,6 +49,7 @@ defmodule Visualize.Hooks.CanvasHooksTest do
             Opcodes.rects(),
             Opcodes.path32(),
             Opcodes.path_cubic32(),
+            Opcodes.cubic_run(),
             Opcodes.style(),
             Opcodes.transform(),
             Opcodes.save(),
@@ -79,6 +80,15 @@ defmodule Visualize.Hooks.CanvasHooksTest do
 
       assert decoder =~
                "width === 4 ? view.getFloat32(offset, true) : view.getFloat64(offset, true)"
+    end
+
+    test "the cubic run moves to its start point and draws each six-f32 entry (D-74)" do
+      decoder = Hooks.CanvasBinary.js_decoder()
+      assert decoder =~ "case 0x07: { // cubic_run"
+      assert decoder =~ "drawCubicRun(ctx, view, offset + 4, count)"
+
+      assert decoder =~
+               ~r/function drawCubicRun.*?ctx\.moveTo\(view\.getFloat32.*?ctx\.bezierCurveTo\(/s
     end
 
     test "composes a full matrix with ctx.transform and throws on an unknown byte" do
