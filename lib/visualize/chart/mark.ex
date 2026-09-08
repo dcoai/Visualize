@@ -56,7 +56,7 @@ defmodule Visualize.Chart.Mark do
   @typedoc """
   What the element builders see of a mark: the frame, the mark node, its rows, its
   resolved style split into the static part and the `{:field, f}` bindings, its paint
-  as `{key, colour}`, its options and inline label, and the render mode.
+  as `{key, colour}`, its options, inline label and tooltip node, and the render mode.
   """
   @type context :: %{
           frame: Frame.t(),
@@ -69,7 +69,8 @@ defmodule Visualize.Chart.Mark do
           bound: map(),
           paint: {:fill | :stroke, term()},
           options: map(),
-          label: map() | nil
+          label: map() | nil,
+          tooltip: map() | nil
         }
 
   @doc "As `generate/3` with `[]` options: no source bound, an empty mark group."
@@ -111,13 +112,17 @@ defmodule Visualize.Chart.Mark do
       bound: bound,
       paint: paint(type, style_node, index, frame.theme, mode),
       options: options(mark),
-      label: label(mark)
+      label: label(mark),
+      tooltip: node(mark, :tooltip)
     }
 
     children = if type in @shapes, do: Shapes.elements(ctx), else: Generic.elements(ctx)
     elements = Enum.map(children, &bind(&1, ctx))
 
-    Element.group(elements ++ Label.elements(children, ctx), style: group_style(ctx))
+    Element.group(elements ++ Label.elements(children, ctx),
+      style: group_style(ctx),
+      attrs: tooltip_attrs(ctx)
+    )
     |> centre(ctx)
   end
 
@@ -160,11 +165,38 @@ defmodule Visualize.Chart.Mark do
     end
   end
 
-  defp label(mark) do
-    case Map.get(mark, :label) do
+  defp label(mark), do: node(mark, :label)
+
+  defp node(mark, key) do
+    case Map.get(mark, key) do
       %Var{name: name} -> Style.unresolved!(name)
-      label -> label
+      node -> node
     end
+  end
+
+  # The group's `data-tooltip-template` and `data-tooltip-event` (spec/14 §5.7).
+  defp tooltip_attrs(%{tooltip: nil}), do: %{}
+
+  defp tooltip_attrs(%{tooltip: tooltip}) do
+    for {key, name} <- [template: "data-tooltip-template", event: "data-tooltip-event"],
+        value = Map.get(tooltip, key),
+        value != nil,
+        into: %{},
+        do: {name, to_string(value)}
+  end
+
+  # The datum attributes of spec/10 §12.2 on an element: the tooltip's fields read from
+  # the datum, or every column of the datum in sorted order when it names none.
+  defp datum_attrs(element, _datum, %{tooltip: nil}), do: element
+
+  defp datum_attrs(element, datum, %{tooltip: tooltip}) do
+    fields =
+      case Map.get(tooltip, :fields, []) do
+        [] -> datum |> Map.keys() |> Enum.sort() |> Enum.map(&{&1, Map.get(datum, &1)})
+        fields -> Enum.map(fields, &{&1, Table.get(datum, &1)})
+      end
+
+    Element.datum(element, fields)
   end
 
   # The paint: the style's value for the paint key, else the theme's series colour for
@@ -211,7 +243,9 @@ defmodule Visualize.Chart.Mark do
         _ -> %{}
       end
 
-    Element.set_style(element, style |> Map.merge(paint) |> Map.merge(bound))
+    element
+    |> Element.set_style(style |> Map.merge(paint) |> Map.merge(bound))
+    |> datum_attrs(datum, ctx)
   end
 
   defp centre(group, %{type: type, frame: %{kind: kind, plot: plot}})

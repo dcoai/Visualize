@@ -71,6 +71,7 @@ An element is `%Visualize.IR.Element{type, attrs, style, transform, children, co
 | `Visualize.IR.Element.translate/3` | Adds a translate operation: creates the transform when `nil`, otherwise appends to it. |
 | `Visualize.IR.Element.set_style/2` | Merges the given style over the existing style. |
 | `Visualize.IR.Element.set_attrs/2` | Merges the given attrs over the existing attrs. |
+| `Visualize.IR.Element.datum/2` | Writes the datum attributes of spec/10 §12.2 over the element's attrs, under string keys: `"data-datum"`, the field names space-separated in order, and `"data-datum-<field>"` per field with `_` as `-` and `to_string/1` of the value, a `nil` value omitted; the fields are a map (written in `Enum.sort/1` order) or a keyword list (in its order). What `TooltipHook` reads (D-75). |
 | `Visualize.IR.Element.set_content/2` | Sets the text content. |
 | `Visualize.IR.Element.translate_group/3` | Wraps an element or list of elements in a `:group` carrying `Transform.translate(x, y)`. |
 

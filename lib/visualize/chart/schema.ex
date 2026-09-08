@@ -60,7 +60,16 @@ defmodule Visualize.Chart.Schema do
     :facet,
     :viewport
   ]
-  @mark_kinds [:mark, :data, :transform, :channels, :mark_scales, :options, :mark_label]
+  @mark_kinds [
+    :mark,
+    :data,
+    :transform,
+    :channels,
+    :mark_scales,
+    :options,
+    :mark_label,
+    :tooltip
+  ]
 
   @curve_types [
     :linear,

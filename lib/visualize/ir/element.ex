@@ -400,6 +400,43 @@ defmodule Visualize.IR.Element do
   end
 
   @doc """
+  Writes a datum's fields onto the element as the data attributes `TooltipHook` reads
+  (spec/10 §12.2, D-75).
+
+  `fields` is a map — written in `Enum.sort/1` order — or a keyword list, in its order.
+  `data-datum` lists the field names; `data-datum-<field>` carries `to_string/1` of each
+  value, with every `_` in the name as `-`, and a `nil` value writes no attribute. The keys
+  are strings, so no atom is created from a row's names.
+
+  ## Examples
+
+      iex> Visualize.IR.Element.circle(1, 2, 3)
+      ...> |> Visualize.IR.Element.datum(at: ~U[2024-01-01 00:00:00Z], big_v: 4, gap: nil)
+      ...> |> Map.fetch!(:attrs)
+      %{
+        "data-datum" => "at big_v gap",
+        "data-datum-at" => "2024-01-01 00:00:00Z",
+        "data-datum-big-v" => "4",
+        cx: 1,
+        cy: 2,
+        r: 3
+      }
+
+  """
+  @spec datum(t(), map() | keyword()) :: t()
+  def datum(%__MODULE__{} = element, fields) when is_map(fields) or is_list(fields) do
+    pairs = if is_map(fields), do: Enum.sort(fields), else: fields
+    names = Enum.map_join(pairs, " ", fn {field, _value} -> to_string(field) end)
+
+    attrs =
+      for {field, value} <- pairs, value != nil, into: %{"data-datum" => names} do
+        {"data-datum-" <> String.replace(to_string(field), "_", "-"), to_string(value)}
+      end
+
+    set_attrs(element, attrs)
+  end
+
+  @doc """
   Sets the text content of an element.
   """
   @spec set_content(t(), String.t()) :: t()

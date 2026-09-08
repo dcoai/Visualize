@@ -2,7 +2,7 @@ defmodule Visualize.Hooks do
   @moduledoc """
   Phoenix LiveView JavaScript hooks for interactive visualizations.
 
-  This module bundles six hooks:
+  This module bundles seven hooks:
   - `ZoomHook` — zoom and pan interactions (`Visualize.Hooks.Zoom`)
   - `BrushHook` — brush selection (`Visualize.Hooks.Brush`)
   - `CanvasChart` — replays Canvas commands or a script (`Visualize.Hooks.Canvas`)
@@ -10,6 +10,8 @@ defmodule Visualize.Hooks do
   - `CanvasIncrementalChart` — scroll-and-copy incremental canvas updates
     (`Visualize.Hooks.CanvasIncremental`)
   - `ResizeHook` — the container's size pushed once per settle (`Visualize.Hooks.Resize`)
+  - `TooltipHook` — a tooltip from the datum attributes an element carries
+    (`Visualize.Hooks.Tooltip`)
 
   ## Installation
 
@@ -76,9 +78,20 @@ defmodule Visualize.Hooks do
 
   See `Visualize.Hooks.Resize`.
 
+  ### Tooltip
+
+      <svg id="chart" phx-hook="TooltipHook">
+        <g class="mark" data-tooltip-template="{t}: {v}">
+          <circle cx="10" cy="20" r="3" data-datum="t v" data-datum-t="1" data-datum-v="4"/>
+        </g>
+      </svg>
+
+  The attributes are what `Visualize.IR.Element.datum/2` writes, and what a mark with a
+  `tooltip` node writes on every element. See `Visualize.Hooks.Tooltip`.
+
   """
 
-  alias Visualize.Hooks.{Brush, Canvas, CanvasBinary, CanvasIncremental, Resize, Zoom}
+  alias Visualize.Hooks.{Brush, Canvas, CanvasBinary, CanvasIncremental, Resize, Tooltip, Zoom}
 
   @doc """
   Returns the complete JavaScript code for all hooks.
@@ -104,8 +117,10 @@ defmodule Visualize.Hooks do
 
     #{Resize.js_hook()}
 
+    #{Tooltip.js_hook()}
+
     // Default export for convenience
-    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook };
+    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook };
     """
   end
 
