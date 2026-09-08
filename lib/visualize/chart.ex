@@ -13,7 +13,7 @@ defmodule Visualize.Chart do
   A design is a template: its sources are typed slots and its variables are terms.
   `apply/2` resolves the variables, binds the slots from a pool of named sources and
   realises the frame into a `Visualize.Chart.Applied` that `render/2` draws (spec/14 §7.3);
-  `compose/2` merges fragments by the schema's merge rules (§8).
+  `compose/2` merges fragments by the schema's merge rules and `stack/1` layers them (§8).
 
   ## Examples
 
@@ -45,6 +45,7 @@ defmodule Visualize.Chart do
     Compose,
     Frame,
     Migration,
+    Stack,
     Template,
     Validator,
     Var
@@ -237,6 +238,55 @@ defmodule Visualize.Chart do
   """
   @spec compose(t() | map(), t() | map()) :: {:ok, map()} | {:error, [Validator.error(), ...]}
   def compose(a, b), do: Compose.merge(fragment(a), fragment(b))
+
+  @doc """
+  The layers cascaded left to right, the later layer the higher (spec/14 §8.2).
+
+  `stack([])` is `%{}` and `stack([a])` is `a` itself, taken as its map: the cascade
+  cannot fail, so there is no tuple to unwrap.
+
+  ## Examples
+
+      iex> theme = %{version: 1, theme: :default, frame: %{kind: :cartesian}}
+      iex> house = %{theme: :dark, frame: %{size: %{width: 800, height: 400}}}
+      iex> panel = %{frame: %{size: %{width: 600, height: 300}}}
+      iex> design = Visualize.Chart.stack([theme, house, panel])
+      iex> {design.theme, design.frame.kind, design.frame.size}
+      {:dark, :cartesian, %{width: 600, height: 300}}
+
+  """
+  @spec stack([t() | map()]) :: map()
+  def stack(layers) when is_list(layers), do: Enum.reduce(layers, %{}, &stack(&2, &1))
+
+  @doc """
+  The higher fragment cascaded over the lower by the merge rule of every key (spec/14 §8.2).
+
+  For every key the higher layer wins. Lists of nodes append; a name-keyed declaration
+  both layers carry is the higher layer's entry *whole*, where `compose/2` reports
+  `:conflict` — derivation within a style is `extends` (spec/14 §3.5), never the cascade;
+  and a node both layers give as a map cascades key by key, so a panel's frame adds its
+  scales to a shared frame's and takes precedence on the frame's scalars. Nothing is
+  validated or defaulted: the result is a fragment too, and a layer of another stack.
+
+  `compose/2` is the other operation over fragments and is unchanged: it assembles parts
+  that are meant to be disjoint and reports a name declared twice. Where two fragments
+  are disjoint the two agree (spec/14 §8.3).
+
+  ## Examples
+
+      iex> house = %{theme: :dark, styles: %{series: %{stroke: :series_1, stroke_width: 2}}}
+      iex> panel = %{styles: %{series: %{stroke_width: 3}}, labels: [%{anchor: :title, text: ["Uptime"]}]}
+      iex> design = Visualize.Chart.stack(house, panel)
+      iex> design.styles.series
+      %{stroke_width: 3}
+      iex> {design.theme, length(design.labels)}
+      {:dark, 1}
+      iex> Visualize.Chart.compose(house, panel)
+      {:error, [{[:styles, :series], :conflict}]}
+
+  """
+  @spec stack(t() | map(), t() | map()) :: map()
+  def stack(lower, higher), do: Stack.cascade(fragment(lower), fragment(higher))
 
   defp fragment(%__MODULE__{} = chart), do: to_map(chart)
   defp fragment(map) when is_map(map), do: map
