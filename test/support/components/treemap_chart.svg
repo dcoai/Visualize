@@ -1,18 +1,18 @@
-<svg width="800" height="600" viewBox="0 0 800 600">
+<svg width="800" height="600" font-family="var(--vis-font-family, sans-serif)" viewBox="0 0 800 600">
   
-    <rect x="4" y="4" width="363.3846" height="197.3333" fill="#1f77b4" stroke="white" stroke-width="1"></rect>
-    <text x="8" y="18" font-size="11" fill="white" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">a1</text>
+    <rect x="4" y="4" width="363.3846" height="197.3333" fill="#1f77b4" stroke="var(--vis-background, #ffffff)" stroke-width="1"></rect>
+    <text x="8" y="18" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">a1</text>
   
-    <rect x="4" y="201.3333" width="363.3846" height="394.6667" fill="#1f77b4" stroke="white" stroke-width="1"></rect>
-    <text x="8" y="215.3333" font-size="11" fill="white" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">a2</text>
+    <rect x="4" y="201.3333" width="363.3846" height="394.6667" fill="#1f77b4" stroke="var(--vis-background, #ffffff)" stroke-width="1"></rect>
+    <text x="8" y="215.3333" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">a2</text>
   
-    <rect x="369.3846" y="2" width="428.6154" height="510.8571" fill="#ff7f0e" stroke="white" stroke-width="1"></rect>
-    <text x="373.3846" y="16" font-size="11" fill="white" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">b</text>
+    <rect x="369.3846" y="2" width="428.6154" height="510.8571" fill="#ff7f0e" stroke="var(--vis-background, #ffffff)" stroke-width="1"></rect>
+    <text x="373.3846" y="16" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">b</text>
   
-    <rect x="371.3846" y="514.8571" width="424.6154" height="81.1429" fill="#2ca02c" stroke="white" stroke-width="1"></rect>
-    <text x="375.3846" y="528.8571" font-size="11" fill="white" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">c1</text>
+    <rect x="371.3846" y="514.8571" width="424.6154" height="81.1429" fill="#2ca02c" stroke="var(--vis-background, #ffffff)" stroke-width="1"></rect>
+    <text x="375.3846" y="528.8571" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">c1</text>
   
-    <rect x="371.3846" y="596" width="424.6154" height="0" fill="#2ca02c" stroke="white" stroke-width="1"></rect>
+    <rect x="371.3846" y="596" width="424.6154" height="0" fill="#2ca02c" stroke="var(--vis-background, #ffffff)" stroke-width="1"></rect>
     
   
 </svg>

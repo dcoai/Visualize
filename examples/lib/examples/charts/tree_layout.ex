@@ -106,7 +106,7 @@ defmodule Examples.Charts.TreeLayout do
           y: dy,
           text_anchor: text_anchor,
           font_size: 10,
-          fill: "#333"
+          fill: ColorPalettes.text_color(palette)
         })
         |> Element.content(node.data.name)
       )

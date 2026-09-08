@@ -56,11 +56,11 @@ defmodule Examples.Charts.HorizontalBarChart do
       |> Scale.Linear.nice()
 
     # Create axes
-    x_axis = Axis.bottom(x_scale)
+    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette))
       |> Axis.ticks(5)
       |> Axis.tick_format(&format_population/1)
 
-    y_axis = Axis.left(y_scale)
+    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette))
 
     # Build bars
     bars = sorted_data

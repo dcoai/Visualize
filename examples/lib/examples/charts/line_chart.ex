@@ -54,8 +54,8 @@ defmodule Examples.Charts.LineChart do
     path_data = Shape.Line.generate(line, data)
 
     # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.ticks(10)
-    y_axis = Axis.left(y_scale) |> Axis.ticks(5)
+    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(10)
+    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(5)
 
     # Build chart
     chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})

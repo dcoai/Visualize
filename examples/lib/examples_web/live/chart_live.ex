@@ -91,6 +91,7 @@ defmodule ExamplesWeb.ChartLive do
       "fall" -> :fall
       "spring" -> :spring
       "summer" -> :summer
+      "dark" -> :dark
       _ -> :default
     end
     {:noreply, assign(socket, current_palette: palette)}

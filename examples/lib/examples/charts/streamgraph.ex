@@ -100,7 +100,7 @@ defmodule Examples.Charts.Streamgraph do
         y: chart_height + 20,
         text_anchor: "middle",
         font_size: 10,
-        fill: "#666"
+        fill: ColorPalettes.axis_color(palette)
       })
       |> Element.content("Month #{month}")
     end)
@@ -114,7 +114,7 @@ defmodule Examples.Charts.Streamgraph do
           Element.rect(%{width: 15, height: 15, fill: Enum.at(colors, rem(i, length(colors))), rx: 2})
         )
         |> Element.append(
-          Element.text(%{x: 20, y: 12, font_size: 10, fill: "#333"})
+          Element.text(%{x: 20, y: 12, font_size: 10, fill: ColorPalettes.text_color(palette)})
           |> Element.content(Atom.to_string(key) |> String.capitalize())
         )
       end)

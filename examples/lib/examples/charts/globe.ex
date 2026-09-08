@@ -55,7 +55,7 @@ defmodule Examples.Charts.Globe do
       cy: cy,
       r: radius,
       fill: "#a8d5e5",
-      stroke: "#666",
+      stroke: ColorPalettes.axis_color(palette),
       stroke_width: 1
     })
 
@@ -91,7 +91,7 @@ defmodule Examples.Charts.Globe do
       cy: cy,
       r: radius,
       fill: "none",
-      stroke: "#666",
+      stroke: ColorPalettes.axis_color(palette),
       stroke_width: 1.5
     })
 

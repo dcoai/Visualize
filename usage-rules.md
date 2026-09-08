@@ -16,7 +16,8 @@ is the source of truth; these rules are the short form.
 | `Visualize.IR.*` | Backend-agnostic scene graph: `Element`, `Path`, `Transform` |
 | `Visualize.Backend.*`, `Visualize.Render` | SVG and canvas backends; binary, hybrid and incremental encoders |
 | `Visualize.SVG.*` | The HEEx-facing element struct (`Phoenix.HTML.Safe`) and its renderer |
-| `Visualize.Components`, `Visualize.Hooks` | LiveView function components (Phoenix optional) and the zoom/brush JS hooks |
+| `Visualize.Components`, `Visualize.Hooks` | LiveView function components (Phoenix optional) and the zoom/brush/canvas/resize JS hooks |
+| `Visualize.Theme` | Colours, font and sizes as named slots; `resolve/3` gives CSS `var()` references for SVG or literals for canvas |
 
 ## The pipeline
 

@@ -71,8 +71,8 @@ defmodule Examples.Charts.BarChart do
       |> Scale.Linear.nice()
 
     # Create axes
-    x_axis = Axis.bottom(x_scale)
-    y_axis = Axis.left(y_scale)
+    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette))
+    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette))
       |> Axis.ticks(10)
       |> Axis.tick_format(&format_percent/1)
 

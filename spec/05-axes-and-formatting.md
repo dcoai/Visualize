@@ -12,11 +12,12 @@
 %Visualize.Axis{
   scale: nil, orient: :bottom,
   ticks: nil, tick_values: nil, tick_format: nil,
-  tick_size_inner: 6, tick_size_outer: 6, tick_padding: 3, offset: 0
+  tick_size_inner: 6, tick_size_outer: 6, tick_padding: 3, offset: 0,
+  theme: nil
 }
 ```
 
-`orient` is one of `:top`, `:right`, `:bottom`, `:left`. The four constructors each take a scale struct and set the orientation. The scale MUST implement `Visualize.Scale.Behaviour` (spec/03 §1.3) and its `apply/2` MUST return a number: every continuous scale (`Linear`, `Log`, `Power`, `Symlog`, `Time`) and the two discrete position scales (`Band`, `Ordinal` with a numeric range) qualify. The discretising scales and `Color` map values to range *elements*, not positions, so an axis on them is a caller error (`ArithmeticError` at the tick offset).
+`theme` is a `Visualize.Theme` ([08-utilities](08-utilities.md) §7) or `nil`, which stands for `Visualize.Theme.default/0`. `orient` is one of `:top`, `:right`, `:bottom`, `:left`. The four constructors each take a scale struct and set the orientation. The scale MUST implement `Visualize.Scale.Behaviour` (spec/03 §1.3) and its `apply/2` MUST return a number: every continuous scale (`Linear`, `Log`, `Power`, `Symlog`, `Time`) and the two discrete position scales (`Band`, `Ordinal` with a numeric range) qualify. The discretising scales and `Color` map values to range *elements*, not positions, so an axis on them is a caller error (`ArithmeticError` at the tick offset).
 
 ### 1.2 Setters
 
@@ -30,6 +31,7 @@
 | `tick_size/2` | number | sets inner and outer together |
 | `tick_padding/2` | number | gap between tick line end and label |
 | `offset/2` | number | added to every tick position (for crisp half-pixel alignment) |
+| `theme/2` | `%Visualize.Theme{}` | the theme the axis's colours, font and size resolve from (1.4) |
 
 ### 1.3 Orientation Parameters
 
@@ -44,15 +46,17 @@
 
 ### 1.4 Element Structure
 
-`generate/1` returns:
+`generate/1,2` returns:
 
 ```
-group  style: %{fill: :none, font_size: 10, font_family: "sans-serif", text_anchor: <1.3>}
-├── path   style: %{stroke: :current_color}          — the domain line
+group  style: %{fill: :none, font_size: <font_size>, font_family: <font_family>, text_anchor: <1.3>}
+├── path   style: %{stroke: <axis>}                   — the domain line
 └── group  style: %{class: "tick"}, transform: <1.3>  — one per tick value
-    ├── line  attrs: %{x1: 0, y1: 0, x2: …, y2: …}, style: %{stroke: :current_color}
-    └── text  attrs: %{x | y, dy}, style: %{fill: :current_color}, content: label
+    ├── line  attrs: %{x1: 0, y1: 0, x2: …, y2: …}, style: %{stroke: <axis>}
+    └── text  attrs: %{x | y, dy}, style: %{fill: <text>}, content: label
 ```
+
+`<axis>`, `<text>`, `<font_size>` and `<font_family>` are `Visualize.Theme.resolve/3` of the axis's theme for the slots of those names ([08-utilities](08-utilities.md) §7.1), in the mode of the `:resolve` option of `generate/2` — `:css` by default, so an SVG axis reads `stroke="var(--vis-axis, #666666)"` and a consumer restyles it in CSS; `:literal` gives a canvas the plain values. Nothing in an axis is `currentColor` any more (D-55).
 
 Domain line path, with `[r0, r1]` the scale's range and `o = tick_size_outer`:
 
@@ -82,7 +86,7 @@ Default label (no `tick_format`): floats are rounded to 6 decimal places and pri
 
 ### 1.6 Rendering
 
-`render/1,2` is `generate/1` followed by `Visualize.Render.to_string/2` with the same options. `:backend` is `:svg`, `:canvas`, or a backend module; when omitted the configured default (`config :visualize, default_backend:`, itself defaulting to `:svg`) applies. Other options pass through to the backend.
+`render/1,2` is `generate/2` followed by `Visualize.Render.to_string/2` with the same options. `:backend` is `:svg`, `:canvas`, or a backend module; when omitted the configured default (`config :visualize, default_backend:`, itself defaulting to `:svg`) applies. `:resolve` is the theme mode of 1.4; when omitted it is `Visualize.Theme.mode/1` of the backend, so an SVG axis carries CSS references and a canvas axis literals without the caller saying so. Other options pass through to the backend.
 
 ### 1.7 Functions
 
@@ -100,7 +104,9 @@ Default label (no `tick_format`): floats are rounded to 6 decimal places and pri
 | `Visualize.Axis.tick_size/2` | Sets both tick sizes. |
 | `Visualize.Axis.tick_padding/2` | Sets the tick-to-label gap (default 3). |
 | `Visualize.Axis.offset/2` | Sets the position offset added to every tick (default 0). |
-| `Visualize.Axis.generate/1` | Returns the `IR.Element` group described in 1.4. |
+| `Visualize.Axis.theme/2` | Sets the theme (default `nil`, meaning `Visualize.Theme.default/0`). |
+| `Visualize.Axis.generate/1` | As `generate/2` with `resolve: :css`. |
+| `Visualize.Axis.generate/2` | Returns the `IR.Element` group described in 1.4, its theme slots resolved in the `:resolve` mode. |
 | `Visualize.Axis.render/1` | As `render/2` with `[]` options. |
 | `Visualize.Axis.render/2` | Renders `generate/1` through `Visualize.Render.to_string/2`; returns a string. |
 

@@ -5,7 +5,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # behind a `colors` assign, the one-unit span of a collapsed domain, and the label
     # truncation of the hierarchy components.
 
-    alias Visualize.Scale
+    alias Visualize.{Scale, Theme}
 
     @transition "transition: all 0.3s ease-in-out;"
     @responsive [preserveAspectRatio: "xMidYMid meet", style: "width:100%;height:auto"]
@@ -34,12 +34,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc false
     # The attributes of the `<svg>` beyond its size (spec/10 §1.2): `class` when given,
-    # and under `responsive` the `preserveAspectRatio` and `style` that let CSS scale it
-    # (D-54), matching `Visualize.IR.Element.root/3` under `responsive: true`.
-    def svg_attrs(class, responsive) do
+    # the theme's font so every text inherits it, and under `responsive` the
+    # `preserveAspectRatio` and `style` that let CSS scale it (D-54), matching
+    # `Visualize.IR.Element.root/3` under `responsive: true`.
+    def svg_attrs(class, responsive, theme) do
       class = if class, do: [class: class], else: []
-      class ++ if(responsive, do: @responsive, else: [])
+      font = ["font-family": Theme.resolve(theme, :font_family, :css)]
+      class ++ font ++ if(responsive, do: @responsive, else: [])
     end
+
+    @doc false
+    # The `theme` assign as a struct: `nil` is the default theme (spec/10 §1.2).
+    def theme(nil), do: Theme.default()
+    def theme(%Theme{} = theme), do: theme
+
+    @doc false
+    # A colour assign: the string as given, or the theme slot when `nil`, as a CSS
+    # reference (D-55).
+    def colour(nil, theme, slot), do: css(theme, slot)
+    def colour(value, _theme, _slot), do: value
+
+    @doc false
+    # A theme slot as the CSS reference the markup carries.
+    def css(theme, slot), do: Theme.resolve(theme, slot, :css)
 
     @doc false
     # Coordinates print through the one number formatter of every serialiser (spec/02 §3):
