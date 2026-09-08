@@ -336,7 +336,7 @@ defmodule Visualize.Chart.Presets do
         :vertical -> {[width, height], %{x: :x, y: :y}}
       end
 
-    layout = %{op: :tree, id: :id, by: :parent, size: size}
+    layout = %{op: :tree, id: :id, by: :parent, size: size, orientation: a.orientation}
 
     styles = %{
       link: %{stroke: colour(a.link_stroke, :grid), stroke_width: 1.5},
@@ -347,6 +347,8 @@ defmodule Visualize.Chart.Presets do
       }
     }
 
+    # The node's text is the nearest the layer has to the component's circle-and-text
+    # group, whose anchor and offset follow the node (spec/14 §15.4, D-70).
     marks = [
       :path
       |> mark(%{path: :path}, :link)
@@ -354,6 +356,7 @@ defmodule Visualize.Chart.Presets do
       :circle
       |> mark(channels, :node)
       |> Map.put(:options, %{radius: a.node_radius})
+      |> Map.put(:label, %{text: [{:field, :label}], anchor: :middle})
       |> Map.put(:data, %{source: :data, transforms: [Map.put(layout, :output, :nodes)]})
     ]
 
@@ -374,10 +377,13 @@ defmodule Visualize.Chart.Presets do
       tile: a.tile
     }
 
+    # The leaves alone (spec/10 §3.3).
+    leaves = %{op: :filter, field: :height, test: :eq, value: 0}
+
     mark =
       :rect
       |> mark(%{x0: :x0, x1: :x1, y0: :y0, y1: :y1}, :cell)
-      |> Map.put(:data, %{source: :data, transforms: [layout]})
+      |> Map.put(:data, %{source: :data, transforms: [layout, leaves]})
 
     styles = %{cell: %{fill: {:field, :branch}, stroke: :background, stroke_width: 1}}
     hierarchy(a, styles, [mark], layout_frame(a, %{color: branch_scale(a)}))
@@ -397,12 +403,22 @@ defmodule Visualize.Chart.Presets do
       size: [2 * :math.pi(), radius]
     }
 
+    # The nodes below the root with a positive extent (spec/10 §3.4), each arc over its
+    # own angles (D-69) and labelled at its centroid as the pie is.
+    below_root = %{op: :filter, field: :depth, test: :gt, value: 0}
+    positive = %{op: :filter, field: :value, test: :gt, value: 0}
+
     mark =
       :arc
-      |> mark(%{value: :value, inner: :y0, outer: :y1}, :arc)
-      |> Map.put(:data, %{source: :data, transforms: [layout]})
+      |> mark(%{start: :x0, end: :x1, inner: :y0, outer: :y1}, :arc)
+      |> Map.put(:label, %{text: [{:field, :label}], anchor: :middle, style: :arc_label})
+      |> Map.put(:data, %{source: :data, transforms: [layout, below_root, positive]})
 
-    styles = %{arc: %{fill: {:field, :branch}, stroke: :background, stroke_width: 1}}
+    styles = %{
+      arc: %{fill: {:field, :branch}, stroke: :background, stroke_width: 1},
+      arc_label: %{fill: :background, font_size: :label_size}
+    }
+
     hierarchy(a, styles, [mark], polar(a, %{color: branch_scale(a)}))
   end
 

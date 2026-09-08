@@ -157,6 +157,27 @@ defmodule Visualize.Chart.TransformTest do
       assert hd(rows).id == "root" and hd(rows).value == 10
     end
 
+    test ":tree links carry the link of their orientation, positions unchanged (D-70)" do
+      [link | _] = run(%{op: :tree, output: :links}, @tree)
+      %{x0: x0, y0: y0, x1: x1, y1: y1} = link
+      ym = (y0 + y1) / 2
+      assert link.path.commands == [{:M, x0, y0}, {:C, x0, ym, x1, ym, x1, y1}]
+
+      [swapped | _] = run(%{op: :tree, output: :links, orientation: :horizontal}, @tree)
+      keys = [:source, :target, :x0, :y0, :x1, :y1]
+      assert Map.take(swapped, keys) == Map.take(link, keys)
+      assert swapped.path.commands == [{:M, y0, x0}, {:C, ym, x0, ym, x1, y1, x1}]
+
+      assert run(%{op: :tree, output: :links, orientation: :vertical}, @tree) ==
+               run(%{op: :tree, output: :links}, @tree)
+
+      assert run(%{op: :tree, orientation: :horizontal}, @tree) == run(%{op: :tree}, @tree)
+
+      [cluster | _] = run(%{op: :cluster, output: :links, orientation: :horizontal}, @tree)
+      assert [{:M, cy0, cx0}, {:C, _, _, _, _, _, _}] = cluster.path.commands
+      assert {cx0, cy0} == {cluster.x0, cluster.y0}
+    end
+
     test ":tree links carry the vertical link and :pack links the straight line" do
       [link | _] = run(%{op: :tree, output: :links}, @tree)
 

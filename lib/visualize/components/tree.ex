@@ -5,11 +5,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     a treemap and a sunburst.
 
     Each is a preset design of `Visualize.Chart.Presets` plus an assign mapping (spec/14
-    §15.4, D-64): the nested `data` — a map whose children are under `:children` or
-    `"children"` — is flattened to one row per node, the design's transform (`:tree`,
-    `:treemap` or `:partition`) lays the rows out through `Visualize.Chart.Mark.rows/3`,
-    and the component draws the markup spec/10 §3 declares from them. Node labels default
-    to the `:name` or `"name"` of a node's data; leaf values to its `:value` or `"value"`.
+    §15.4, D-64, D-70): the nested `data` — a map whose children are under `:children` or
+    `"children"` — is flattened to one row per node, the design's transforms (`:tree`,
+    `:treemap` or `:partition`, then the `:filter` steps that keep what spec/10 §3 draws)
+    lay the rows out, the marks draw them through `Visualize.Chart.Frame.generate/2`, and
+    the component prints the elements in the markup spec/10 §3 declares, reading the rows
+    beside them for what follows the node — the tree's circle-and-text group, the treemap's
+    and the sunburst's label rules. Node labels default to the `:name` or `"name"` of a
+    node's data; leaf values to its `:value` or `"value"`.
 
     ## Usage
 
@@ -34,7 +37,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Chart.Presets
     alias Visualize.Components.Support
-    alias Visualize.Shape
+    alias Visualize.IR.Path
 
     @tree Presets.defaults(:tree_diagram)
     @treemap Presets.defaults(:treemap_chart)
@@ -83,40 +86,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:description, :string, default: @tree.description)
 
     def tree_diagram(assigns) do
-      drawn = Support.layout(:tree_diagram, assigns)
-      [links, nodes] = drawn.rows
+      drawn = Support.draw(:tree_diagram, assigns)
+      [links, nodes] = Support.marks(drawn.group)
+      [_link_rows, node_rows] = drawn.rows
       orientation = assigns.orientation
-      link = Support.style(drawn.frame, :link, %{})
-      node = Support.style(drawn.frame, :node, %{})
+      circles = Enum.filter(nodes.children, &(&1.type == :circle))
 
-      links =
-        for l <- links do
-          link_path(point(l.x0, l.y0, orientation), point(l.x1, l.y1, orientation), orientation)
-        end
-
-      nodes =
-        for n <- nodes do
-          {x, y} = point(n.x, n.y, orientation)
+      # One group per circle at the circle's centre; the text's anchor and offset follow
+      # the node (spec/10 §3.2), which is why the group is the component's (spec/14 §15.4).
+      groups =
+        Enum.zip_with(circles, node_rows, fn circle, n ->
           internal? = n.height > 0
 
           %{
-            transform: "translate(#{fmt(x)}, #{fmt(y)})",
-            fill: if(internal?, do: node.stroke, else: node.fill),
+            transform: "translate(#{fmt(circle.attrs.cx)}, #{fmt(circle.attrs.cy)})",
+            fill: if(internal?, do: nodes.style.stroke, else: nodes.style.fill),
             label_x: label_x(orientation, internal?),
             anchor: label_anchor(orientation, internal?),
             label: n.label
           }
-        end
+        end)
 
       assigns =
         assign(assigns,
           margin: drawn.margin,
-          links: links,
-          nodes: nodes,
+          links: Enum.map(links.children, &link_d/1),
+          nodes: groups,
           theme: drawn.theme,
           ids: drawn.ids,
-          node_stroke: node.stroke,
-          link_stroke: link.stroke,
+          node_stroke: nodes.style.stroke,
+          link_stroke: links.style.stroke,
           text: Support.css(drawn.theme, :text),
           label_size: Support.css(drawn.theme, :label_size),
           transition: Support.transition(assigns.animate)
@@ -174,29 +173,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:description, :string, default: @treemap.description)
 
     def treemap_chart(assigns) do
-      drawn = Support.layout(:treemap_chart, assigns)
-      [nodes] = drawn.rows
+      drawn = Support.draw(:treemap_chart, assigns)
+      [cells] = Support.marks(drawn.group)
+      [leaves] = drawn.rows
       root_fill = Support.css(drawn.theme, :grid)
 
+      # One cell per `:rect` element — the design filters to the leaves — with the
+      # component's label rule over the row (spec/10 §3.3). A root-only hierarchy's cell
+      # has no `branch`, so no bound fill, and takes the theme's `:grid`.
       cells =
-        for node <- nodes, node.height == 0 do
-          width = max(0, node.x1 - node.x0)
-          height = max(0, node.y1 - node.y0)
-          style = Support.style(drawn.frame, :cell, node)
+        Enum.zip_with(cells.children, leaves, fn rect, leaf ->
+          %{x: x, y: y, width: width, height: height} = rect.attrs
 
           %{
-            x: fmt(node.x0),
-            y: fmt(node.y0),
+            x: fmt(x),
+            y: fmt(y),
             width: fmt(width),
             height: fmt(height),
-            fill: Map.get(style, :fill, root_fill),
-            stroke: style.stroke,
-            stroke_width: style.stroke_width,
-            label: if(width > 30 and height > 15, do: Support.truncate(node.label, width - 8)),
-            label_x: fmt(node.x0 + 4),
-            label_y: fmt(node.y0 + 14)
+            fill: Map.get(rect.style, :fill, root_fill),
+            stroke: cells.style.stroke,
+            stroke_width: cells.style.stroke_width,
+            label: if(width > 30 and height > 15, do: Support.truncate(leaf.label, width - 8)),
+            label_x: fmt(x + 4),
+            label_y: fmt(y + 14)
           }
-        end
+        end)
 
       assigns =
         assign(assigns,
@@ -262,34 +263,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:description, :string, default: @sunburst.description)
 
     def sunburst_chart(assigns) do
-      drawn = Support.layout(:sunburst_chart, assigns)
+      drawn = Support.draw(:sunburst_chart, assigns)
+      [mark] = Support.marks(drawn.group)
       [nodes] = drawn.rows
+      {paths, texts} = Enum.split_with(mark.children, &(&1.type == :path))
 
-      arc =
-        Shape.arc()
-        |> Shape.inner_radius(& &1.y0)
-        |> Shape.outer_radius(& &1.y1)
-        |> Shape.start_angle(& &1.x0)
-        |> Shape.end_angle(& &1.x1)
-
+      # One arc per `:arc` element — the design filters to the nodes below the root with a
+      # positive extent — and its label at the mark's own text, the centroid, kept when
+      # the row's ring is thick and long enough (spec/10 §3.4).
       arcs =
-        for node <- nodes, node.depth > 0, node.x1 - node.x0 > 0 do
-          {cx, cy} = Shape.Arc.centroid(arc, node)
+        Enum.zip_with([paths, texts, nodes], fn [path, text, node] ->
           thickness = node.y1 - node.y0
           length = (node.x1 - node.x0) * (node.y0 + node.y1) / 2
-          style = Support.style(drawn.frame, :arc, node)
 
           %{
-            d: Shape.generate(arc, node),
-            fill: style.fill,
-            stroke: style.stroke,
-            stroke_width: style.stroke_width,
+            d: Support.d(path),
+            fill: path.style.fill,
+            stroke: mark.style.stroke,
+            stroke_width: mark.style.stroke_width,
             label:
-              if(thickness > 15 and length > 30, do: Support.truncate(node.label, length - 8)),
-            cx: fmt(cx),
-            cy: fmt(cy)
+              if(thickness > 15 and length > 30, do: Support.truncate(text.content, length - 8)),
+            cx: fmt(text.attrs.x),
+            cy: fmt(text.attrs.y)
           }
-        end
+        end)
 
       assigns =
         assign(assigns,
@@ -324,21 +321,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       """
     end
 
-    # The layout's `x` runs along the breadth of the tree and `y` along its depth;
-    # horizontal puts depth on the page's x axis.
-    defp point(x, y, :horizontal), do: {y, x}
-    defp point(x, y, :vertical), do: {x, y}
-
-    defp link_path({sx, sy}, {tx, ty}, :horizontal) do
-      mid = fmt((sx + tx) / 2)
-      "M#{fmt(sx)},#{fmt(sy)}C#{mid},#{fmt(sy)} #{mid},#{fmt(ty)} #{fmt(tx)},#{fmt(ty)}"
+    # The link `d` in the form spec/10 §3.2's goldens hold — the three points of the cubic
+    # space-separated — from the layer's path; `Visualize.IR.Path.to_string/1` would
+    # comma-separate them.
+    defp link_d(%{path: %Path{commands: [{:M, x0, y0}, {:C, cx0, cy0, cx1, cy1, x1, y1}]}}) do
+      "M#{fmt(x0)},#{fmt(y0)}C#{fmt(cx0)},#{fmt(cy0)} #{fmt(cx1)},#{fmt(cy1)} " <>
+        "#{fmt(x1)},#{fmt(y1)}"
     end
 
-    defp link_path({sx, sy}, {tx, ty}, :vertical) do
-      mid = fmt((sy + ty) / 2)
-      "M#{fmt(sx)},#{fmt(sy)}C#{fmt(sx)},#{mid} #{fmt(tx)},#{mid} #{fmt(tx)},#{fmt(ty)}"
-    end
-
+    # Horizontal labels sit beside the node, internal ones to its left (spec/10 §3.2).
     defp label_x(:horizontal, true), do: -10
     defp label_x(:horizontal, false), do: 10
     defp label_x(:vertical, _internal?), do: 0

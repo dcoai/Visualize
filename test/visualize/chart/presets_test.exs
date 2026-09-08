@@ -189,14 +189,41 @@ defmodule Visualize.Chart.PresetsTest do
     assert [%{type: :path, data: %{transforms: [links]}}, %{type: :circle, channels: channels}] =
              tree.marks
 
-    assert links == %{op: :tree, id: :id, by: :parent, size: [160, 260], output: :links}
+    assert links == %{
+             op: :tree,
+             id: :id,
+             by: :parent,
+             size: [160, 260],
+             orientation: :vertical,
+             output: :links
+           }
+
     assert channels == %{x: :x, y: :y}
+    assert Enum.at(tree.marks, 1).label == %{text: [{:field, :label}], anchor: :middle}
+
+    horizontal = Presets.tree_diagram(%{data: @hierarchy})
+    assert hd(horizontal.marks).data.transforms |> hd() |> Map.fetch!(:orientation) == :horizontal
+    assert Enum.at(horizontal.marks, 1).channels == %{x: :y, y: :x}
+
+    treemap = Presets.treemap_chart(assigns().treemap_chart)
+
+    assert [%{data: %{transforms: [%{op: :treemap}, leaves]}}] = treemap.marks
+    assert leaves == %{op: :filter, field: :height, test: :eq, value: 0}
 
     sunburst = Presets.sunburst_chart(assigns().sunburst_chart)
     assert sunburst.meta == %{description: ["Rings"]}
     assert sunburst.frame.scales.color.domain == [0, 1]
-    assert [%{data: %{transforms: [%{op: :partition, size: [angle, 300.0]}]}}] = sunburst.marks
+
+    assert [%{channels: arc_channels, label: arc_label, data: %{transforms: steps}}] =
+             sunburst.marks
+
+    assert [%{op: :partition, size: [angle, 300.0]}, below_root, positive] = steps
     assert_in_delta angle, 2 * :math.pi(), 1.0e-9
+    assert below_root == %{op: :filter, field: :depth, test: :gt, value: 0}
+    assert positive == %{op: :filter, field: :value, test: :gt, value: 0}
+    assert arc_channels == %{start: :x0, end: :x1, inner: :y0, outer: :y1}
+    assert arc_label == %{text: [{:field, :label}], anchor: :middle, style: :arc_label}
+    assert sunburst.styles.arc_label == %{fill: :background, font_size: :label_size}
   end
 
   test "a chart preset renders through the layer on its own, and binds to another source" do
@@ -243,6 +270,115 @@ defmodule Visualize.Chart.PresetsTest do
     svg = Frame.render(frame, sources: sources)
     assert length(Regex.scan(~r/class="panel"/, svg)) == 2
     assert length(Regex.scan(~r/<rect /, svg)) == 3
+  end
+
+  describe "the hierarchy presets through the layer (spec/14 §15.4, D-70)" do
+    import Phoenix.LiveViewTest, only: [render_component: 2]
+
+    alias Visualize.Components.Tree
+
+    @tree_hierarchy %{
+      name: "root",
+      children: [
+        %{name: "a", children: [%{name: "a1", value: 10}, %{name: "a2", value: 20}]},
+        %{name: "b", value: 30},
+        %{name: "c", children: [%{name: "c1", value: 5}, %{name: "c2", value: 0}]}
+      ]
+    }
+    @root_only %{name: "root", value: 1}
+
+    # The design rendered by the layer alone, over the assign mapping's rows.
+    defp layer(name, a) do
+      chart = Chart.from_map!(Presets.design(name, a))
+      sources = Presets.sources(name, a)
+      Frame.render(Frame.new(chart, sources: sources), sources: sources)
+    end
+
+    # Every `<tag …>` of an SVG string as a map of its attributes, in document order.
+    defp tags(svg, tag) do
+      for [_, attrs] <- Regex.scan(~r/<#{tag}\b([^>]*)>/, svg) do
+        Map.new(Regex.scan(~r/([\w-]+)="([^"]*)"/, attrs), fn [_, k, v] -> {k, v} end)
+      end
+    end
+
+    defp texts(svg), do: for([_, t] <- Regex.scan(~r/<text[^>]*>([^<]*)<\/text>/, svg), do: t)
+
+    # The layer prints an attribute as its number and the component through the
+    # four-decimal formatter (spec/10 §1.2), so a layer value is formatted before comparing.
+    defp num(string) do
+      case Float.parse(string) do
+        {number, ""} -> Visualize.IR.Path.format_number(number)
+        _ -> string
+      end
+    end
+
+    test "the tree's links, circles and labels are the component's, in count and geometry" do
+      for a <- [
+            %{data: @tree_hierarchy},
+            %{data: @tree_hierarchy, orientation: :vertical, width: 400, height: 300},
+            %{data: @root_only}
+          ] do
+        svg = layer(:tree_diagram, a)
+        component = render_component(&Tree.tree_diagram/1, a)
+
+        # The component prints the cubic's points space-separated (spec/10 §3.2's goldens)
+        # where `Visualize.IR.Path.to_string/1` comma-separates; the numbers are the same.
+        paths = Enum.map(tags(svg, "path"), & &1["d"])
+        assert paths == Enum.map(tags(component, "path"), &String.replace(&1["d"], " ", ","))
+        assert length(paths) == length(Presets.sources(:tree_diagram, a).data) - 1
+
+        centres = Enum.map(tags(svg, "circle"), &{num(&1["cx"]), num(&1["cy"])})
+
+        assert centres ==
+                 for(
+                   [_, x, y] <- Regex.scan(~r/translate\(([^,]+), ([^)]+)\)/, component),
+                   do: {x, y}
+                 )
+                 |> tl()
+
+        assert texts(svg) == texts(component)
+        assert length(centres) == length(Presets.sources(:tree_diagram, a).data)
+      end
+    end
+
+    test "the treemap's cells are the component's leaves, in count and geometry" do
+      for a <- [%{data: @tree_hierarchy}, %{data: @root_only}] do
+        svg = layer(:treemap_chart, a)
+        component = render_component(&Tree.treemap_chart/1, a)
+
+        geometry = fn markup ->
+          for r <- tags(markup, "rect"), do: Map.new(~w(x y width height), &{&1, num(r[&1])})
+        end
+
+        assert geometry.(svg) == geometry.(component)
+        rows = Presets.sources(:treemap_chart, a).data
+        parents = MapSet.new(rows, & &1.parent)
+        assert length(geometry.(svg)) == Enum.count(rows, &(&1.id not in parents))
+      end
+
+      svg = layer(:treemap_chart, %{data: @tree_hierarchy, colors: ["#111", "#222"]})
+      assert Enum.map(tags(svg, "rect"), & &1["fill"]) == ["#111", "#111", "#222", "#111", "#111"]
+    end
+
+    test "the sunburst's arcs and labels are the component's, in count and geometry" do
+      for a <- [%{data: @tree_hierarchy}, %{data: @root_only}] do
+        svg = layer(:sunburst_chart, a)
+        component = render_component(&Tree.sunburst_chart/1, a)
+
+        assert Enum.map(tags(svg, "path"), & &1["d"]) ==
+                 Enum.map(tags(component, "path"), & &1["d"])
+
+        assert Enum.map(tags(svg, "path"), & &1["fill"]) ==
+                 Enum.map(tags(component, "path"), & &1["fill"])
+
+        position = &Enum.map(tags(&1, "text"), fn t -> {num(t["x"]), num(t["y"])} end)
+        assert position.(svg) == position.(component)
+        assert texts(svg) == texts(component)
+      end
+
+      # Seven nodes below the root, one of them zero-valued and therefore undrawn.
+      assert length(tags(layer(:sunburst_chart, %{data: @tree_hierarchy}), "path")) == 6
+    end
   end
 
   defp has_function?(term) when is_function(term), do: true
