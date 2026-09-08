@@ -13,15 +13,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @responsive [preserveAspectRatio: "xMidYMid meet", style: "width:100%;height:auto"]
 
     @typedoc """
-    A component's preset drawn: the frame, the mapped source, the frame's generated group
-    (`nil` until `draw/2`), the rows of each mark (`nil` until `layout/2`), the theme, the
-    accessibility ids, and the margin and plot area the template lays out with.
+    A component's preset drawn: the frame, the mapped source, the frame's generated group,
+    the rows of each mark in the order of the design's marks — what a hierarchy template
+    reads beside the elements for the parts of its markup that follow the node (spec/14
+    §15.4) — the theme, the accessibility ids, and the margin and plot area the template
+    lays out with.
     """
     @type drawn :: %{
             frame: Frame.t(),
             sources: %{data: [map()]},
-            group: Element.t() | nil,
-            rows: [[map()]] | nil,
+            group: Element.t(),
+            rows: [[map()]],
             theme: Theme.t(),
             ids: map(),
             margin: map(),
@@ -30,25 +32,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc false
     # The preset of `name` over the assigns, drawn: the design through `Visualize.Chart`,
-    # the frame over the mapped source, and `Visualize.Chart.Frame.generate/2` with the
-    # source so the marks are drawn too (spec/14 §15.1).
+    # the frame over the mapped source, `Visualize.Chart.Frame.generate/2` with the source
+    # so the marks are drawn too (spec/14 §15.1), and each mark's rows through its pipeline.
     @spec draw(Presets.name(), map()) :: drawn()
     def draw(name, assigns) do
-      drawn = realise(name, assigns)
-      %{drawn | group: Frame.generate(drawn.frame, sources: drawn.sources)}
-    end
-
-    @doc false
-    # The preset of `name` laid out: the frame, and the rows of each mark through its
-    # pipeline (spec/14 §15.4), in the order of the design's marks.
-    @spec layout(Presets.name(), map()) :: drawn()
-    def layout(name, assigns) do
-      drawn = realise(name, assigns)
-      rows = Enum.map(drawn.frame.marks, &Mark.rows(drawn.frame, &1, drawn.sources))
-      %{drawn | rows: rows}
-    end
-
-    defp realise(name, assigns) do
       theme = theme(assigns.theme)
       sources = Presets.sources(name, assigns)
       chart = Chart.from_map!(Presets.design(name, assigns))
@@ -57,8 +44,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{
         frame: frame,
         sources: sources,
-        group: nil,
-        rows: nil,
+        group: Frame.generate(frame, sources: sources),
+        rows: Enum.map(frame.marks, &Mark.rows(frame, &1, sources)),
         theme: theme,
         ids: label_ids(assigns.title, assigns.description),
         margin: frame.margin,

@@ -36,9 +36,15 @@ defmodule Visualize.Chart.Transform.Layout do
     laid = op |> layout(node, size) |> generate(op, root)
 
     case Map.get(node, :output, :nodes) do
-      :nodes -> Enum.map(Hierarchy.descendants(laid), &node_row(op, &1))
-      :links -> Enum.map(Hierarchy.links(laid), &link_row(op, &1, id))
-      other -> raise ArgumentError, "#{inspect(op)} yields no #{inspect(other)} (spec/14 §5.4.2)"
+      :nodes ->
+        Enum.map(Hierarchy.descendants(laid), &node_row(op, &1))
+
+      :links ->
+        orientation = Map.get(node, :orientation, :vertical)
+        Enum.map(Hierarchy.links(laid), &link_row(op, &1, id, orientation))
+
+      other ->
+        raise ArgumentError, "#{inspect(op)} yields no #{inspect(other)} (spec/14 §5.4.2)"
     end
   end
 
@@ -77,7 +83,9 @@ defmodule Visualize.Chart.Transform.Layout do
   defp fields(:pack), do: [:x, :y, :r]
   defp fields(op) when op in [:partition, :treemap], do: [:x0, :y0, :x1, :y1]
 
-  defp link_row(op, {parent, child}, id) when op in [:tree, :cluster, :pack] do
+  # The positions are the layout's own in either orientation; only the path is oriented
+  # (spec/14 §5.4.2, D-70).
+  defp link_row(op, {parent, child}, id, orientation) when op in [:tree, :cluster, :pack] do
     %{
       source: Table.get(parent.data, id),
       target: Table.get(child.data, id),
@@ -85,20 +93,27 @@ defmodule Visualize.Chart.Transform.Layout do
       y0: parent.y,
       x1: child.x,
       y1: child.y,
-      path: link_path(op, parent.x, parent.y, child.x, child.y)
+      path: link_path(op, orientation, parent.x, parent.y, child.x, child.y)
     }
   end
 
-  defp link_row(op, _link, _id) do
+  defp link_row(op, _link, _id, _orientation) do
     raise ArgumentError, "#{inspect(op)} yields no :links (spec/14 §5.4.2)"
   end
 
-  defp link_path(:pack, x0, y0, x1, y1),
+  defp link_path(:pack, _orientation, x0, y0, x1, y1),
     do: Path.new() |> Path.move_to(x0, y0) |> Path.line_to(x1, y1)
 
-  defp link_path(_tree_or_cluster, x0, y0, x1, y1) do
+  # The cubic between parent and child with both control points at the mid-depth;
+  # horizontal is the same curve with the axes swapped.
+  defp link_path(_tree_or_cluster, :vertical, x0, y0, x1, y1) do
     ym = (y0 + y1) / 2
     Path.new() |> Path.move_to(x0, y0) |> Path.curve_to(x0, ym, x1, ym, x1, y1)
+  end
+
+  defp link_path(_tree_or_cluster, :horizontal, x0, y0, x1, y1) do
+    ym = (y0 + y1) / 2
+    Path.new() |> Path.move_to(y0, x0) |> Path.curve_to(ym, x0, ym, x1, y1, x1)
   end
 
   # -- flows ------------------------------------------------------------------------------
