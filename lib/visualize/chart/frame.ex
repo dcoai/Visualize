@@ -302,7 +302,18 @@ defmodule Visualize.Chart.Frame do
     Furniture.polar(frame, mode, marks(frame, mode, sources, []))
   end
 
-  defp furniture(%{kind: :facet, facet: %{columns: columns}} = frame, mode, sources) do
+  defp furniture(%{kind: :facet} = frame, mode, sources), do: panels(frame, mode, sources)
+
+  defp furniture(frame, mode, sources) do
+    Furniture.cartesian(frame, mode, marks(frame, mode, sources, []))
+  end
+
+  @doc false
+  # The panels of a facet frame (spec/14 §4.6): one `class="panel"` group per panel
+  # value, translated to its cell, holding the grid, the marks drawn from the rows whose
+  # `by` is the value, the axes and the value as a title.
+  @spec panels(t(), Theme.mode(), map() | nil) :: [Element.t()]
+  def panels(%__MODULE__{kind: :facet, facet: %{columns: columns}} = frame, mode, sources) do
     panel = panel_plot(frame.plot, columns, frame.panels)
     inner = %{frame | plot: panel}
     style = Style.resolve(Style.node(frame.styles, :label), frame.theme, mode)
@@ -318,10 +329,6 @@ defmodule Visualize.Chart.Frame do
         transform: Transform.translate(x, y)
       )
     end)
-  end
-
-  defp furniture(frame, mode, sources) do
-    Furniture.cartesian(frame, mode, marks(frame, mode, sources, []))
   end
 
   # Every mark of the design at its one-based position, or nothing without sources.

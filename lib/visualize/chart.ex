@@ -38,7 +38,17 @@ defmodule Visualize.Chart do
   # `apply/2` is a function of this module (spec/14 §7.3), never the kernel's.
   import Kernel, except: [apply: 2]
 
-  alias Visualize.Chart.{Applied, Codec, Compose, Frame, Migration, Template, Validator, Var}
+  alias Visualize.Chart.{
+    Applied,
+    Codec,
+    Compiled,
+    Compose,
+    Frame,
+    Migration,
+    Template,
+    Validator,
+    Var
+  }
 
   @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :frame, :marks, :labels]
 
@@ -230,6 +240,43 @@ defmodule Visualize.Chart do
 
   defp fragment(%__MODULE__{} = chart), do: to_map(chart)
   defp fragment(map) when is_map(map), do: map
+
+  @doc """
+  The design compiled for rendering per tick (spec/14 §12): the split into static and
+  dynamic regions computed from the design, a render target per mark chosen from the
+  bound data, and a `Visualize.Chart.Compiled` that draws only what moves.
+
+  An applied chart is compiled as it is; a chart or a design map is applied first with
+  the `sources:`, `vars:` and `theme:` options of `apply/2`, and its errors are this
+  function's. The one option of the compiler's own is `:ceiling`, the point count above
+  which `render: :auto` leaves SVG for the canvas (default `1000`, spec/00 §3.2).
+
+  ## Examples
+
+      iex> design = %{
+      ...>   version: 1,
+      ...>   sources: %{primary: %{fields: [:t, :v]}},
+      ...>   frame: %{kind: :cartesian, scales: %{x: %{kind: :linear, domain: [0, 10]}, y: %{kind: :linear, domain: [0, 10]}}},
+      ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
+      ...> }
+      iex> {:ok, compiled} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}}, ceiling: 1)
+      iex> Visualize.Chart.Compiled.dynamic_regions(compiled)
+      [{{:mark, 0}, :data}]
+      iex> Visualize.Chart.Compiled.targets(compiled)
+      [{:binary, 2}]
+
+  """
+  @spec compile(Applied.t() | t() | map(), keyword()) ::
+          {:ok, Compiled.t()} | {:error, [Validator.error(), ...]}
+  def compile(design, opts \\ [])
+
+  def compile(%Applied{} = applied, opts), do: {:ok, Compiled.new(applied, opts)}
+
+  def compile(design, opts) do
+    with {:ok, applied} <- __MODULE__.apply(design, Keyword.take(opts, [:sources, :vars, :theme])) do
+      compile(applied, opts)
+    end
+  end
 
   @doc "As `render/2` with `[]` options."
   @spec render(Applied.t()) :: String.t()
