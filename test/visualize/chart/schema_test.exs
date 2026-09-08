@@ -81,6 +81,12 @@ defmodule Visualize.Chart.SchemaTest do
              %{required: [:x, :median], optional: [:inner_lo, :inner_hi, :outer_lo, :outer_hi]}
 
     assert Schema.channels(:path) == %{required: [:path], optional: []}
+
+    assert Schema.channels(:arc) == %{
+             required: [:value],
+             optional: [:start, :end, :inner, :outer]
+           }
+
     assert Schema.transform_keys(:bin) == %{required: [:field], optional: [:thresholds, :as]}
     assert Schema.transform_keys(:projection) == %{required: [:fields], optional: []}
     assert Schema.transform_keys(:filter) == %{required: [:field], optional: [:test, :value]}
