@@ -41,6 +41,9 @@ defmodule Visualize.MixProject do
   defp deps do
     [
       {:nx, "~> 0.9", optional: true},
+      # `Visualize.Chart.to_json/1` and `from_json/1` (spec/14 §11): optional like Nx, so a
+      # consumer without Jason builds silently and the two functions return an error value.
+      {:jason, "~> 1.4", optional: true},
       # `Data.Table.rows/1` (spec/08 §6) reads Explorer frames, and anything else that
       # implements `Table.Reader`, through the protocol. The package is the protocol and
       # two impls, optional like Nx: without it lists, column maps and tensors still work
@@ -142,6 +145,7 @@ defmodule Visualize.MixProject do
       ],
       groups_for_modules: [
         Facade: [Visualize],
+        "Declarative chart": ~r"Visualize\\.Chart",
         Scales: ~r"Visualize\.Scale",
         Shapes: ~r"Visualize\.Shape",
         "Axes and formatting": [Visualize.Axis, Visualize.Format],

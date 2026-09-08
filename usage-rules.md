@@ -18,6 +18,7 @@ is the source of truth; these rules are the short form.
 | `Visualize.SVG.*` | The HEEx-facing element struct (`Phoenix.HTML.Safe`) and its renderer |
 | `Visualize.Components`, `Visualize.Hooks` | LiveView function components (Phoenix optional) and the zoom/brush/canvas/resize JS hooks |
 | `Visualize.Theme` | Colours, font and sizes as named slots; `resolve/3` gives CSS `var()` references for SVG or literals for canvas |
+| `Visualize.Chart` | A chart as a design map (spec/14): `from_map/1`, `to_map/1`, the JSON round trip (Jason optional), `var/1`; `Chart.Schema` is the schema as data, `Chart.Validator` reports faults by path |
 
 ## The pipeline
 
