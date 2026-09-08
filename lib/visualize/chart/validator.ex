@@ -35,6 +35,10 @@ defmodule Visualize.Chart.Validator do
           | {:unsupported_version, term()}
           | {:json, String.t()}
           | {:missing_dependency, :jason}
+          | {:unresolved, :var, atom()}
+          | {:unbound, :source, atom()}
+          | {:missing_field, atom()}
+          | :conflict
 
   @type error :: {path(), reason()}
 
@@ -408,6 +412,17 @@ defmodule Visualize.Chart.Validator do
 
   defp words({:json, message}), do: "JSON does not parse: #{message}"
   defp words({:missing_dependency, :jason}), do: "needs the optional dependency Jason"
+
+  defp words({:unresolved, :var, name}) do
+    "variable #{inspect(name)} has no value at application and no default"
+  end
+
+  defp words({:unbound, :source, name}) do
+    "slot #{inspect(name)} has no source in the pool under its name or its default"
+  end
+
+  defp words({:missing_field, field}), do: "has no field #{inspect(field)}"
+  defp words(:conflict), do: "is declared differently by two fragments"
 
   defp type_words(:integer), do: "an integer"
   defp type_words(:number), do: "a number"

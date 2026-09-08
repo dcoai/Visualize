@@ -4,7 +4,7 @@
 
 A chart is a nested map — a *design* — that names its data, its coordinate frame, its marks and its labels without a function anywhere in it, so that a design can be stored, diffed, shared, built by a tool and rendered against different data. This document is the contract for the whole layer: the map at every level with every key's type, facet, default and merge rule; the style grammar; sources as typed slots and variables as terms; version and migration; the validator and its error shape; the JSON form; and, as agreed prose, application, composition and compilation. Vega-Lite is the precedent for a stored design and its flat several-hundred-key specification is the warning: the map keeps the three-noun nesting of theme, style and frame (D-57).
 
-Each section states what is implemented. The schema, the validator, the `Visualize.Chart` struct with its map and JSON round-trips, variables and version handling, the frame — its scales, inference, axes, grid, legend and labels, rendered as the static furniture — and the marks — every mark type drawn from the frame's scales by the existing generators, the transforms as steps of a mark's data pipeline, and the style grammar resolved to an SVG and a canvas output — and the presets — the ten LiveView components of [10-liveview-integration](10-liveview-integration.md) as stored designs plus an assign mapping (§15) — are **Implemented**; application, composition and compilation are **Agreed** and land in the following work items of proposal #53.
+Each section states what is implemented. The schema, the validator, the `Visualize.Chart` struct with its map and JSON round-trips, variables and version handling, the frame — its scales, inference, axes, grid, legend and labels, rendered as the static furniture — and the marks — every mark type drawn from the frame's scales by the existing generators, the transforms as steps of a mark's data pipeline, and the style grammar resolved to an SVG and a canvas output — and the presets — the ten LiveView components of [10-liveview-integration](10-liveview-integration.md) as stored designs plus an assign mapping (§15) — and application and composition — variables resolved and slots bound by `Visualize.Chart.apply/2` into an applied chart, fragments merged by `Visualize.Chart.compose/2` under the schema's merge rules (§7.3, §8) — are **Implemented**; compilation is **Agreed** and lands in work item 6 of proposal #53.
 
 ## 1. The map
 
@@ -76,13 +76,13 @@ A `%Visualize.Chart.Var{}` (§7.1) is accepted wherever a value of any type is e
 
 ### 1.5 Merge rules
 
-**Implemented** as data; the composition that applies them is **Agreed** (§8). Every key declares how two fragments combine under it:
+**Implemented** as data, applied by `Visualize.Chart.compose/2` (§8). Every key declares how two fragments combine under it:
 
 | Rule | Keys | Effect |
 |---|---|---|
-| `:concat` | every list of nodes: `marks`, `labels`, `axes`, `transforms` | the later fragment's elements follow the earlier's |
-| `:union` | every name-keyed declaration: `sources`, `vars`, `styles`, `scales` | the union of the two maps; the same name declared differently in both is an error at that path |
-| `:override` | every scalar and every other node: `version`, `theme`, `size`, `kind`, `type`, `text`, … | the later fragment's value replaces the earlier's; a node is replaced whole, not merged key by key |
+| `:concat` | every list of nodes: `marks`, `labels`, `axes`, `transforms` | the later fragment's elements follow the earlier's; the elements are never merged with each other |
+| `:union` | every name-keyed declaration: `sources`, `vars`, `styles`, `scales` | the union of the two maps; a name declared with equal values in both is taken once, and declared differently in both is `:conflict` at the name's path |
+| `:override` | every scalar and every other node: `version`, `theme`, `size`, `kind`, `type`, `text`, … | the later fragment's value replaces the earlier's. A node given as a map by both fragments composes key by key under its own kind's rules, so a frame fragment adds its scales and axes to another's (§8); given as anything else by either — a name, a variable — it is replaced whole |
 
 ## 2. The design node
 
@@ -113,7 +113,7 @@ A `%Visualize.Chart.Var{}` (§7.1) is accepted wherever a value of any type is e
 
 ### 2.3 Sources
 
-**Implemented.** A `:source` is a typed slot (§7.2): the fields the design reads from it, and the name of the source that fills it when application supplies none.
+**Implemented.** A `:source` is a typed slot (§7.2): the fields the design reads from it, and the name of the pool entry that fills it when application supplies none under the slot's own name (§7.3).
 
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
@@ -512,19 +512,33 @@ An axis title follows the side of the first axis that names its scale; with no a
 
 ### 7.1 Variables
 
-**Implemented.** `Visualize.Chart.var/1` builds `%Visualize.Chart.Var{name: name}`, a term allowed wherever a value can appear — a style value, a text part, a channel, a whole node (`style: var(:style)`). The term carries only the name; the default is declared once under `vars` (§2.4), so two fragments cannot disagree about it (D-59). The validator requires every variable used to be declared (`{:undeclared, :var, name}`) and does not type the value, which is unknown until application.
+**Implemented.** `Visualize.Chart.var/1` builds `%Visualize.Chart.Var{name: name}`, a term allowed wherever a value can appear — a style value, a text part, a channel, a whole node (`style: var(:style)`, `margin: var(:margin)`). The term carries only the name; the default is declared once under `vars` (§2.4), so two fragments cannot disagree about it (D-59). The validator requires every variable used to be declared (`{:undeclared, :var, name}`) and does not type the value, which is unknown until application: the value is typed by the validator at the path where the variable stood, once `Visualize.Chart.apply/2` has put it there (§7.3).
 
 ### 7.2 Sources as slots
 
-**Implemented** as schema. A source declaration is a slot: the fields the design reads are the contract, and binding maps slot to source at application — "made for `{a, b, c}` but showing `{d, e, f}`" is one rebinding. A source with a `default` is filled by the source of that name when application supplies none. A dashboard picker validates a candidate source against `fields` before offering it.
+**Implemented.** A source declaration is a slot: the fields the design reads are the contract, and binding maps slot to source at application — "made for `{a, b, c}` but showing `{d, e, f}`" is one rebinding, `Visualize.Chart.apply/2` with another `sources:` map. Application takes a *pool* of named sources; a slot binds to the pool's entry under its own name, else under its `default`, and a slot with neither is unbound (§7.3). A dashboard picker validates a candidate source against `fields` before offering it, by the rule application applies: every declared field is a key of some row of the source, in either spelling (D-52).
 
 ### 7.3 Application
 
-**Agreed** (work item 5 of #53). `Chart.apply(design, sources: %{name => source}, vars: %{name => value})` resolves every variable (an unresolved one without a default is reported by path), binds each slot to its source and checks the source has the slot's fields (`sources.primary: has no field :v`, by path), infers every `:auto` domain from the bound columns, validates the result against the schema, and returns the concrete chart. A source is anything `Visualize.Data.Table.rows/1` reads; a rank-1 `Nx` tensor bound to a dense slot stays a tensor and reaches `Visualize.Shape.LineNx` without becoming rows (D-52). The design, its fragments and a binding are storable; the applied chart is not.
+**Implemented** (work item 5 of #53, D-65). `Visualize.Chart.apply/2` takes a design — a `%Visualize.Chart{}`, or a design map that goes through `Visualize.Chart.from_map/1` first, so an invalid map is its errors — and the options `sources:` (the pool, a map from name to source, `%{}`), `vars:` (a map from variable name to value, `%{}`) and `theme:` (a `%Visualize.Theme{}`, as `Visualize.Chart.Frame.new/2` takes it), and returns `{:ok, applied}` or `{:error, errors}` — the errors of §10.1 by path, ordered by path — in three steps. Each step reports every fault it finds and a step with faults stops before the next, so resolution faults are never mixed with binding faults, nor either with the validator's.
+
+1. **Variables resolve.** Every `%Visualize.Chart.Var{}` in the design — a value, a text part, a whole node — is replaced by the value `vars:` gives its name, else by the declared `default` (§2.4); a variable with neither is `{:unresolved, :var, name}` at the path of its use, and every use is reported. A name in `vars:` that no declaration carries is `{:undeclared, :var, name}` at `[:vars, name]`. In a text a resolved part that is a number or an atom is written with `to_string/1`, so `["n = ", var(:n)]` with `n: 3` reads `["n = ", "3"]`; every other value stands as it is, where the validator types it. The `vars` declarations are dropped: the concrete chart has none and no variable anywhere in it, which is what `Visualize.Chart.Frame.new/2` requires (§4.7).
+2. **Slots bind.** Each slot of `sources` (§2.3) binds to the pool's entry under its own name, else under its `default`; a slot with neither is `{:unbound, :source, name}` at `[:sources, name]`. Pool entries that no slot names are ignored, so one pool serves many designs. A bound source is anything `Visualize.Data.Table.rows/1` reads and is kept as given — the frame reads it through `rows/1` as it does any source, and a rank-1 `Nx` tensor stays a tensor for the dense path (D-52). Every field the slot declares MUST be a key of some row of the bound source, in either spelling; a field no row carries is `{:missing_field, field}` at `[:sources, name]`, one error per field, which is the "made for `{a, b, c}`" contract failing loudly (§7.2). A source with no rows binds without a check. A field a channel, a text or a transform reads is checked against the slot's declaration by the validator (§5.4), so a field the design reads and the source lacks is caught at one or the other.
+3. **The result validates and its frame is realised.** `Visualize.Chart.Validator.validate/1` runs over the resolved, bound design — the value a variable took is typed here, at the path where it stood — and `Visualize.Chart.Frame.new/2` builds the frame over the bound sources, inferring every `:auto` domain from the bound columns (§4.3). A value a scale cannot take, or a theme name `theme:` does not resolve, raises `ArgumentError` from the frame as it does for any chart: those are faults of the data or the consumer, not of the binding.
+
+The result is a `%Visualize.Chart.Applied{}` (§14.10): `chart`, the concrete `%Visualize.Chart{}` — no variable anywhere in it, `vars` empty, the slot declarations kept as the data contract, everything else as the design wrote it; `sources`, the bound sources by slot name; and `frame`, the realised frame, whose `Visualize.Chart.Frame.scales/1` is the escape hatch. `Visualize.Chart.render/2` draws it: `Visualize.Chart.Frame.render/2` of the frame over the bound sources, with the same options. The design, its fragments and a binding are storable; the applied chart holds data and is not — it has no map form and no JSON form.
 
 ## 8. Composition
 
-**Agreed** (work item 5 of #53). `Chart.compose(fragments)` merges a list of designs or partial designs into one by the merge rule of every key (§1.5), in order: collections concatenate, declarations union, scalars are overridden by the later fragment. A `:union` key declared with different values in two fragments is an error at the name's path; a fragment need not carry `version` or `frame`, and the result MUST validate. A standard label set, a house style sheet and a chart-specific fragment compose into one design.
+**Implemented** (work item 5 of #53, D-65). `Visualize.Chart.compose/2` merges two fragments — design maps, or `%Visualize.Chart{}`s taken as their maps — into one map by the merge rule of every key (§1.5), the second over the first, and returns `{:ok, map}` or `{:error, errors}`; `Visualize.Chart.compose/1` folds a list left to right, so `compose([a, b, c])` is `compose(b, c)` over `compose(a, b)`, and `compose([])` is `{:ok, %{}}`. A fragment is any map with the design's keys: it need not carry `version` or `frame`, and nothing is validated or defaulted — the result is a fragment too, and becomes a chart through `Visualize.Chart.from_map/1` or `Visualize.Chart.apply/2`, which is where it MUST validate.
+
+For each key present in either fragment, by the key's spec in the node kind being merged:
+
+- `:concat` — the later fragment's elements after the earlier's: `marks`, `labels`, `axes`, `transforms`. Elements are never merged with each other.
+- `:union` — the union of the two name-keyed maps: `sources`, `vars`, `styles`, `scales`. A name in both with equal values is taken once; with different values it is `:conflict` at the name's path (`[:styles, :series]`, `[:frame, :scales, :x]`), every conflict reported. A house style sheet composes with a chart's own styles and disagrees loudly, never silently.
+- `:override` — the later fragment's value, except that a key whose type is a node — `{:node, kind}`, or a `{:one_of, …}` that admits one, such as `theme` — given as a map by both fragments composes key by key under that kind's rules: `frame` merges, its `scales` union, its `axes` concatenate, its `size` is the later's; `meta` merges likewise. A key the schema does not know is `:override`.
+
+A key present in one fragment alone is taken as it is. Over a list, `:concat` and `:union` keys compose associatively and `:override` keys last-wins, so the order of the fragments is the order of their marks and labels and the precedence of their scalars: a standard label set, a house style sheet and a chart-specific fragment compose in that order into one design.
 
 ## 9. Version and migration
 
@@ -547,8 +561,12 @@ An axis title follows the side of the first axis that names its scale; with no a
 | `{:unsupported_version, v}` | §9 |
 | `{:json, message}` | `Visualize.Chart.from_json/1` could not parse the document |
 | `{:missing_dependency, :jason}` | the JSON functions were called without `Jason` (§11) |
+| `{:unresolved, :var, name}` | a variable used here with no value at application and no default (§7.3) |
+| `{:unbound, :source, name}` | a slot with no source in the pool under its name or its default (§7.3) |
+| `{:missing_field, field}` | the bound source has no row carrying a field the slot declares (§7.3) |
+| `:conflict` | a `:union` key declared with different values by two fragments (§8) |
 
-`Visualize.Chart.Validator.format/1` renders one error as a line a person reads, `marks[1].channels.y: field :temp is not declared by the mark's source`.
+The last four are reported by `Visualize.Chart.apply/2` and `Visualize.Chart.compose/2` in the same shape, so one reader serves every error of the layer. `Visualize.Chart.Validator.format/1` renders one error as a line a person reads, `marks[1].channels.y: field :temp is not declared by the mark's source`, `sources.primary: has no field :v`.
 
 ### 10.2 Checks
 
@@ -651,7 +669,7 @@ import Visualize.Chart, only: [var: 1]
 }
 ```
 
-Its application, once item 5 lands, is `Chart.apply(design, sources: %{primary: idle, deploys: deploys}, vars: %{unit: "mg/hr"})`; `Chart.compile/1` then splits it into the static frame and the dynamic marks. It renders today: `Visualize.Chart.Frame.new(chart, sources: sources)` once the variables are supplied, then `Visualize.Chart.Frame.render(frame, sources: sources)` for the furniture and the marks, or without sources for the furniture alone over the unit domains (§4.3).
+Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, deploys: deploys}, vars: %{unit: "mg/hr"})` (§7.3): the variables resolve, both slots bind and are checked, the design validates; bound to `%{gitlab_uptime: uptime, deploys: deploys}` instead, `primary` fills from its default. Realising the frame is where this example, which shows every construct once, meets its limit: the third mark bins `v` and draws the bins as `x0`/`x1` on the `x` scale, which is `:time` and cannot place a number (§4.3), so the design applies without that mark, and #72 re-shapes it. `Visualize.Chart.render/2` draws an applied chart; `Chart.compile/1`, once item 6 lands, splits it into the static frame and the dynamic marks. The frame alone renders without any application: `Visualize.Chart.Frame.new/1` of a design that uses no variable, then `Visualize.Chart.Frame.render/1` for the furniture over the unit domains.
 
 ## 14. Functions
 
@@ -667,6 +685,12 @@ Its application, once item 5 lands, is `Chart.apply(design, sources: %{primary: 
 | `Visualize.Chart.from_json/1` | `from_map/1` over a JSON document decoded as §11; `{:error, [{[], {:json, message}}]}` for a document that does not parse, `{:error, {:missing_dependency, :jason}}` without Jason. |
 | `Visualize.Chart.to_json/1` | `{:ok, json}` for `to_map/1` encoded as §11, `{:error, {:missing_dependency, :jason}}` without Jason. |
 | `Visualize.Chart.var/1` | `%Visualize.Chart.Var{name: name}` for an atom (§7.1). |
+| `Visualize.Chart.apply/1` | As `apply/2` with `[]` options: every variable takes its default and the pool is empty, so a slot with a default is unbound too — it applies a design that declares no source. |
+| `Visualize.Chart.apply/2` | `apply(design, opts)`: `{:ok, %Visualize.Chart.Applied{}}` for a chart or a design map with the variables of `vars:` resolved, the slots bound from the pool of `sources:` and the frame realised with `theme:` (§7.3), else `{:error, errors}` by path — the map's own errors, the unresolved variables, the unbound slots and missing fields, or the validator's, whichever step fails first. Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does. |
+| `Visualize.Chart.compose/1` | `compose(fragments)`: the fragments folded left to right through `compose/2`; `{:ok, %{}}` for `[]`. |
+| `Visualize.Chart.compose/2` | `compose(a, b)`: `{:ok, map}`, the second fragment merged over the first by the merge rule of every key (§8), else `{:error, errors}` with `:conflict` at the path of every `:union` name the two declare differently. |
+| `Visualize.Chart.render/1` | As `render/2` with `[]` options. |
+| `Visualize.Chart.render/2` | `render(applied, opts)`: `Visualize.Chart.Frame.render/2` of the applied chart's frame over its bound sources — `backend:` and `resolve:` as that function takes them, `sources:` supplied by the applied chart. |
 
 ### 14.2 `Visualize.Chart.Schema`
 
@@ -772,6 +796,10 @@ Its application, once item 5 lands, is `Chart.apply(design, sources: %{primary: 
 | `Visualize.Chart.Presets.tree_diagram/1` | The design of §15.4 for spec/10 §3.2. |
 | `Visualize.Chart.Presets.treemap_chart/1` | The design of §15.4 for spec/10 §3.3. |
 | `Visualize.Chart.Presets.sunburst_chart/1` | The design of §15.4 for spec/10 §3.4. |
+
+### 14.10 `Visualize.Chart.Applied`
+
+**Implemented.** The applied chart of §7.3, a struct with no functions of its own: `chart`, the concrete `%Visualize.Chart{}`; `sources`, the bound sources by slot name, each as the pool gave it; `frame`, its `%Visualize.Chart.Frame{}` realised over them. `Visualize.Chart.apply/2` is its only constructor and `Visualize.Chart.render/2` its renderer; it has no map or JSON form, because it holds the data the design was applied to.
 
 ## 15. Presets
 

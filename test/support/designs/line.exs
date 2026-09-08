@@ -1,8 +1,11 @@
-# metresis `line`: the default for a gauge — one series over time, deploys ruled.
+# metresis `line`: the default for a gauge — one series over time, deploys ruled. The
+# series is a slot filled by the pool's `series` when nothing binds `primary`; the title
+# and the unit are variables with defaults.
 %{
   version: 1,
   meta: %{name: "line"},
-  sources: %{series: %{fields: [:t, :v]}, events: %{fields: [:at, :sha]}},
+  sources: %{primary: %{fields: [:t, :v], default: :series}, events: %{fields: [:at, :sha]}},
+  vars: %{title: %{default: "Weight"}, unit: %{default: "kg"}},
   styles: %{series: %{stroke_width: 1.5}, muted: %{stroke: :axis, opacity: 0.6}},
   frame: %{
     kind: :cartesian,
@@ -15,7 +18,7 @@
     ]
   },
   marks: [
-    %{type: :line, data: :series, channels: %{x: :t, y: :v}, style: :series},
+    %{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :series},
     %{
       type: :rule,
       data: :events,
@@ -24,5 +27,8 @@
       style: :muted
     }
   ],
-  labels: [%{anchor: :title, text: ["Weight"]}, %{anchor: {:axis, :y}, text: ["kg"]}]
+  labels: [
+    %{anchor: :title, text: [Visualize.Chart.var(:title)]},
+    %{anchor: {:axis, :y}, text: [Visualize.Chart.var(:unit)]}
+  ]
 }

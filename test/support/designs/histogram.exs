@@ -1,8 +1,10 @@
-# metresis `histogram`: the distribution within the window — a bin transform under a rect.
+# metresis `histogram`: the distribution within the window — a bin transform under a rect;
+# the bin count is a variable.
 %{
   version: 1,
   meta: %{name: "histogram"},
   sources: %{samples: %{fields: [:w]}},
+  vars: %{bins: %{default: 5}},
   frame: %{
     kind: :cartesian,
     size: %{width: 400, height: 200},
@@ -13,7 +15,10 @@
   marks: [
     %{
       type: :rect,
-      data: %{source: :samples, transforms: [%{op: :bin, field: :w, thresholds: 5}]},
+      data: %{
+        source: :samples,
+        transforms: [%{op: :bin, field: :w, thresholds: Visualize.Chart.var(:bins)}]
+      },
       channels: %{x0: :x0, x1: :x1, y0: :y0, y1: :count}
     }
   ],

@@ -4,13 +4,13 @@ defmodule Visualize.Designs do
   `stacked_area`, `bar` and `stacked_bar`, `state_timeline`, `status_strip`, `single_stat`,
   `heatmap`, `histogram`, `scatter`, `rose`; `table` is not a chart) as stored designs
   under `test/support/designs/`, one `.exs` file returning the design map each, with the
-  fixture sources every one binds to. `render/2` draws a design through
-  `Visualize.Chart.Frame.new/2` and `Visualize.Chart.Frame.render/2` — frame and marks —
-  which is what the goldens of spec/14 §5 hold.
+  fixture sources every one binds to. `render/2` applies a design to the fixture pool
+  through `Visualize.Chart.apply/2` — slots bound, variables their defaults — and draws
+  it through `Visualize.Chart.render/2`, frame and marks, which is what the goldens of
+  spec/14 §5 hold.
   """
 
   alias Visualize.Chart
-  alias Visualize.Chart.Frame
 
   @dir Path.join(__DIR__, "designs")
   @names ~w(line step area stacked_area bar stacked_bar state_timeline status_strip
@@ -70,11 +70,19 @@ defmodule Visualize.Designs do
     }
   end
 
-  @doc "The design rendered through the frame with the fixture sources."
+  @doc """
+  The design applied to the fixture pool — its slots bound, its variables their defaults
+  — with `sources:` and `vars:` as `Visualize.Chart.apply/2` takes them.
+  """
+  def apply(name, opts \\ []) do
+    {:ok, applied} = Chart.apply(chart(name), Keyword.put_new(opts, :sources, sources()))
+    applied
+  end
+
+  @doc "The design rendered, frame and marks, over the fixture sources."
   def render(name, opts \\ []) do
-    sources = sources()
-    frame = Frame.new(chart(name), sources: sources)
-    Frame.render(frame, Keyword.put(opts, :sources, sources))
+    {binding, opts} = Keyword.split(opts, [:sources, :vars])
+    Chart.render(__MODULE__.apply(name, binding), opts)
   end
 
   defp at(h), do: DateTime.add(@t0, h * 4 * 3600, :second)
