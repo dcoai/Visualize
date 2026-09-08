@@ -27,7 +27,7 @@ The three nouns of the design are the *theme* (visual constants as named slots, 
 |---|---|---|
 | 1 | the design | `:design` |
 | 2 | meta, sources, vars, theme, styles, frame, marks, labels | `:meta`, `:source`, `:var`, `:theme`, `:style`, `:frame`, `:mark`, `:label` |
-| 3 | size, margin, scales, axes, legend, projection, facet, viewport; a mark's data, channels, scales, options and inline label; a style's curve options | `:size`, `:margin`, `:scale`, `:axis`, `:legend`, `:projection`, `:facet`, `:viewport`, `:data`, `:channels`, `:mark_scales`, `:options`, `:mark_label`, `:curve_opts` |
+| 3 | size, margin, scales, axes, legend, projection, facet, viewport; a mark's data, channels, scales, options, inline label and tooltip; a style's curve options | `:size`, `:margin`, `:scale`, `:axis`, `:legend`, `:projection`, `:facet`, `:viewport`, `:data`, `:channels`, `:mark_scales`, `:options`, `:mark_label`, `:tooltip`, `:curve_opts` |
 | 4 | tick specs; transforms; text parts | `:ticks`, `:transform`, and the `text` type of §1.4 |
 
 Collections are lists (`marks`, `axes`, `labels`, `transforms`); named declarations are maps keyed by name (`sources`, `vars`, `styles`, `scales`). A name is an atom. Marks reference scales, styles and sources by name, never by nesting: that is what makes fragments composable (§8) and the map diffable.
@@ -326,6 +326,7 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 | `style` | `{:ref, :style}` | `:style` | `nil` (§3.3) | `:override` |
 | `label` | `{:node, :mark_label}` | `:content` | `nil` | `:override` |
 | `render` | `{:enum, [:auto, :svg, :canvas, :binary]}` | `:geometry` | `:auto` | `:override` |
+| `tooltip` | `{:node, :tooltip}` | `:content` | `nil` | `:override` |
 
 `scales` is the mark's word on which scale a channel family reads through (§4.3). A `:mark_scales` node's keys are the scale names of the frame kinds' tables — `x`, `y`, `angle`, `r` and `color` — each `{:ref, :scale}`, `:channel`, `nil` by default, `:override`; a key the frame's kind does not use names nothing. `scales: %{x: :count}` sends the mark's `x`, `x0` and `x1` through the declared scale `count`, and every channel not renamed reads the scale of the kind's table as before. The name must be one the frame declares (`{:undeclared, :scale, name}` otherwise), so a mark still references scales by name and never by nesting (§1.2).
 
@@ -453,6 +454,8 @@ group  style: %{class: "mark mark-<type>[ <class>]", …the resolved style}
 └── text  style: %{class: "mark-label", …}                                — the inline label (§5.5)
 ```
 
+With a `tooltip` node (§5.7) the group also carries `data-tooltip-template` and `data-tooltip-event` when the node gives them, and every element the mark draws carries the datum attributes of spec/10 §12.2 through `Visualize.IR.Element.datum/2` — a per-datum element its own datum's fields, a per-series path (`:line`, `:area`) and the paths of a `:percentile_band` the first row's of their series, so `{series}` names the line under the pointer.
+
 The elements are the generators' own, so a mark is byte for byte the direct call with the same numbers (D-61):
 
 | Type | Elements |
@@ -473,6 +476,18 @@ The elements are the generators' own, so a mark is byte for byte the direct call
 A mark's *paint* is the colour its elements are drawn in: the style's `fill` for a filled type (`area`, `band`, `x_band`, `rose`, `symbol`, `arc`, `path`, `rect`, `circle`, the bands of a `percentile_band`) and its `stroke` for a stroked one (`line`, `rule`, the median of a `percentile_band`). When the style gives no value for that key, the paint is the theme's `{:series, i}` for the mark's one-based position among the design's marks (§3.3), set on the group as that key, and a `:line` also takes `fill: :none`. The generators of a `:rule` and an `:x_band` draw in `current_color` and the brush's fill, which a group's style does not reach, so the stroke keys of the resolved style and the paint are set on the rule's line and the fill keys and the paint on the x-band's rectangle. With a `series` channel each series' element takes the frame's `color` scale's value for its series value when the frame declares one — a slot atom resolved through `Visualize.Theme.resolve/3`, exactly as the legend does — and `{:series, j}` for its position among the series otherwise. A `:rect`'s `value` reaches the colour scale the same way, as the element's `fill`. A `{:field, f}` on any style key is bound per element (§3.4). Every slot resolves in the `:resolve` mode, so the SVG carries `var(--vis-series-1, #3b6fa8)` and a canvas the literal; on a canvas the same tree renders through `Visualize.Backend.Canvas` with literal paints, an inline label as `fillText`, and nothing for a text on the binary stream (spec/09 §4).
 
 The group is returned untranslated. `Visualize.Chart.Frame.generate/2` places every mark of the design after the grid, inside the group the margins translate — inside the centred group of a `:polar` frame, inside each panel of a `:facet` frame from the rows whose `by` is the panel's value — when it is given `sources:`, and draws the furniture alone without them (§4.7). A `:rose` and an `:arc` mark are about the plot centre in every kind, so `generate/3` translates their group there in a frame that is not polar. A `%Visualize.Chart.Var{}` reached while drawing raises `ArgumentError` naming it, as the frame does.
+
+### 5.7 Tooltip
+
+**Implemented.** A `:tooltip` node asks the mark to carry each datum's fields on its elements, for `TooltipHook` of spec/10 §12 to show under the pointer with no round trip (D-75):
+
+| Key | Type | Facet | Default | Merge |
+|---|---|---|---|---|
+| `fields` | `{:list, :field}` | `:binding` | `[]` | `:override` |
+| `template` | `:string` | `:content` | `nil` | `:override` |
+| `event` | `:name` | `:binding` | `nil` | `:override` |
+
+`fields` names the columns written, in that order, each read from the datum through `Visualize.Data.Table.get/2`; `[]` writes every column of the datum in `Enum.sort/1` order of its keys. The datum is the row the element was drawn from — after the mark's transforms, so a `:stack` row's `key`, `y0` and `y1` are fields a tooltip can name (§5.4). A field named in `fields` is checked against the source's declared `fields` when the mark reads the source directly, as a channel is (§5.4). `template` is the `data-tooltip-template` of the group — `{field}` placeholders, spec/10 §12.2 — and `event` its `data-tooltip-event`, the name a click pushes. The node changes nothing the mark draws: only attributes are added (§5.6), so a design without one renders byte for byte as before.
 
 ## 6. Labels
 

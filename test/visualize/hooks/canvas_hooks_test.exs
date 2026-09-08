@@ -1,6 +1,6 @@
 defmodule Visualize.Hooks.CanvasHooksTest do
   @moduledoc """
-  The shipped canvas hooks (spec/10 §4, §7–§9; D-40): the bundle exports all six, and the
+  The shipped canvas hooks (spec/10 §4, §7–§9; D-40): the bundle exports all seven, and the
   JavaScript decoder is written against every opcode and sub-opcode the encoder emits.
   """
   use ExUnit.Case, async: true
@@ -10,9 +10,9 @@ defmodule Visualize.Hooks.CanvasHooksTest do
 
   require Opcodes
 
-  @hooks ~w(ZoomHook BrushHook CanvasChart CanvasBinaryChart CanvasIncrementalChart ResizeHook)
+  @hooks ~w(ZoomHook BrushHook CanvasChart CanvasBinaryChart CanvasIncrementalChart ResizeHook TooltipHook)
 
-  test "js_code/0 defines and exports the six hooks once each" do
+  test "js_code/0 defines and exports the seven hooks once each" do
     js = Hooks.js_code()
 
     for hook <- @hooks do

@@ -484,6 +484,86 @@ defmodule Visualize.Chart.MarkTest do
     end
   end
 
+  describe "tooltip" do
+    test "without a tooltip node no element carries a datum attribute" do
+      group = generate(%{type: :circle, channels: %{x: :t, y: :v}})
+      assert group.attrs == %{}
+      refute Enum.any?(group.children, &Map.has_key?(&1.attrs, "data-datum"))
+    end
+
+    test "the named fields go on every element in order, the template and event on the group" do
+      group =
+        generate(%{
+          type: :circle,
+          channels: %{x: :t, y: :v},
+          tooltip: %{fields: [:v, :k], template: "{k}: {v}", event: :point_click}
+        })
+
+      assert group.attrs == %{
+               "data-tooltip-template" => "{k}: {v}",
+               "data-tooltip-event" => "point_click"
+             }
+
+      assert Enum.map(group.children, & &1.attrs["data-datum"]) == List.duplicate("v k", 4)
+      assert Enum.map(group.children, & &1.attrs["data-datum-v"]) == ~w(4 9 2 7)
+      assert Enum.map(group.children, & &1.attrs["data-datum-k"]) == ~w(k0 k1 k0 k1)
+      assert Render.to_string(group) =~ ~s|data-datum="v k" data-datum-k="k0" data-datum-v="4"|
+    end
+
+    test "no fields writes every column of the datum in sorted order, and nothing on the group" do
+      [first | _] = generate(%{type: :circle, channels: %{x: :t, y: :v}, tooltip: %{}}).children
+      assert first.attrs["data-datum"] == "hi hi2 k lo lo2 t v"
+      assert first.attrs["data-datum-hi2"] == "6"
+    end
+
+    test "a transformed row's own columns are fields, and a per-series path carries its first row" do
+      group =
+        generate(%{
+          type: :line,
+          data: %{source: :primary, transforms: [%{op: :sort, field: :v}]},
+          channels: %{x: :t, y: :v, series: :k},
+          tooltip: %{fields: [:k, :v]}
+        })
+
+      assert Enum.map(group.children, & &1.attrs["data-datum-k"]) == ~w(k0 k1)
+      assert Enum.map(group.children, & &1.attrs["data-datum-v"]) == ~w(2 7)
+    end
+
+    test "a nil field value writes no attribute and a rule's group carries the datum" do
+      [rule | _] =
+        generate(
+          %{type: :rule, channels: %{x: :t}, tooltip: %{fields: [:t, :gone]}},
+          %{sources: %{primary: %{fields: [:t, :gone]}}}
+        ).children
+
+      assert rule.type == :group
+      assert rule.attrs["data-datum"] == "t gone"
+      refute Map.has_key?(rule.attrs, "data-datum-gone")
+    end
+
+    test "the node validates: an undeclared field is reported, and it round-trips the map" do
+      design = %{
+        version: 1,
+        sources: %{primary: %{fields: [:t, :v]}},
+        frame: @frame,
+        marks: [
+          %{
+            type: :circle,
+            data: :primary,
+            channels: %{x: :t, y: :v},
+            tooltip: %{fields: [:t, :w]}
+          }
+        ]
+      }
+
+      assert {:error, [{[:marks, 0, :tooltip, :fields, 1], {:undeclared, :field, :w}}]} =
+               Chart.from_map(design)
+
+      ok = put_in(design, [:marks, Access.at(0), :tooltip], %{fields: [:t], event: :pick})
+      assert hd(Chart.to_map(Chart.from_map!(ok)).marks).tooltip == %{fields: [:t], event: :pick}
+    end
+  end
+
   describe "inline label" do
     test "one text per element at the anchor point, the field read from the datum" do
       label = %{text: ["v=", {:field, :v}], anchor: :right, dx: 1, dy: 2}

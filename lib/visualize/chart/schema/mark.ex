@@ -126,7 +126,8 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:options, {:node, :options}, :geometry, default: %{}),
       spec(:style, {:ref, :style}, :style),
       spec(:label, {:node, :mark_label}, :content),
-      spec(:render, {:enum, [:auto, :svg, :canvas, :binary]}, :geometry, default: :auto)
+      spec(:render, {:enum, [:auto, :svg, :canvas, :binary]}, :geometry, default: :auto),
+      spec(:tooltip, {:node, :tooltip}, :content)
     ]
   end
 
@@ -171,6 +172,15 @@ defmodule Visualize.Chart.Schema.Mark do
 
   def describe(:options) do
     for key <- @option_keys, do: spec(key, :number, :geometry)
+  end
+
+  # The fields a mark carries on its elements for `TooltipHook` (spec/14 §5.7, D-75).
+  def describe(:tooltip) do
+    [
+      spec(:fields, {:list, :field}, :binding, default: []),
+      spec(:template, :string, :content),
+      spec(:event, :name, :binding)
+    ]
   end
 
   def describe(:mark_label) do

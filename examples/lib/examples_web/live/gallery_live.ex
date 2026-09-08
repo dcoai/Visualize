@@ -61,6 +61,10 @@ defmodule ExamplesWeb.GalleryLive do
           <span class="tool-icon">🔀</span>
           <span>Hybrid SVG/Canvas Demo</span>
         </a>
+        <a href="/interaction" class="tool-link" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+          <span class="tool-icon">🎯</span>
+          <span>Client-side Interaction (tooltip)</span>
+        </a>
       </div>
       <div class="gallery">
         <%= for {module, slug} <- @charts do %>

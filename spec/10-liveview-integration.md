@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>`, and `Visualize.Hooks.Resize` reports a container's size so the server can re-render at it — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
+Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>`, `Visualize.Hooks.Resize` reports a container's size so the server can re-render at it, and `Visualize.Hooks.Tooltip` shows a datum's fields under the pointer from attributes the server wrote — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
 
 ## 1. Scope
 
@@ -19,6 +19,7 @@ Visualize reaches the browser through Phoenix LiveView in three ways: HEEx funct
 | `Visualize.Hooks.CanvasBinary` | always | `CanvasBinaryChart` JS and the shared binary decoder |
 | `Visualize.Hooks.CanvasIncremental` | always | `CanvasIncrementalChart` JS: scroll-and-copy updates |
 | `Visualize.Hooks.Resize` | always | `ResizeHook` JS: the container's size pushed to the LiveView once per settle |
+| `Visualize.Hooks.Tooltip` | always | `TooltipHook` JS: a tooltip from the datum attributes of an element, with no round trip |
 
 Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)`. For that guard to be true in a host, `phoenix_live_view` MUST be a declared dependency of this library: Mix prunes the code path to a dependency's own declared deps while compiling it, so a guard over an undeclared module is always false in a host, whatever the host itself depends on. It is therefore declared `optional: true` (D-45): a host that has LiveView compiles the components, one that does not never fetches Phoenix, and `scripts/consumer_check.exs` proves the second claim on every pipeline ([12-testing-and-conformance](12-testing-and-conformance.md) §4). The library's own builds carry the optional dependency, so the components compile, are documented and are rendered under test here.
 
@@ -238,7 +239,7 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, then one `export default { … }` object listing the six hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, then one `export default { … }` object listing the seven hooks — each name is exported exactly once (D-40, D-48). |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
 | `Visualize.Hooks.transform_point/2` | Delegates to `Visualize.Hooks.Zoom.transform_point/2`. |
@@ -425,3 +426,36 @@ The hook is the round-trip half of responsive sizing (D-54); the CSS-scaled half
 ### 11.2 Strings
 
 `Visualize.Axis.render/2`, `Visualize.Render.to_string/2` and `Visualize.SVG.to_string/1` return plain binaries, which HEEx escapes; they MUST be wrapped in `Phoenix.HTML.raw/1` to be emitted as markup, as the components in section 2 do for axes.
+
+## 12. Visualize.Hooks.Tooltip
+
+### 12.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.Tooltip.js_hook/0` | Returns the source of `export const TooltipHook = {…}` (12.3). |
+
+### 12.2 The datum attributes
+
+The tooltip needs no round trip because the server writes each datum's fields onto the element that draws it, as data attributes, and the hook reads them under the pointer. `Visualize.IR.Element.datum/2` (spec/02 §2.1) is the writer, and every mark with a `tooltip` node ([14-declarative-chart](14-declarative-chart.md) §5.7) writes them through it; a hand-built chart calls it directly. The attributes are the contract (D-75):
+
+| Attribute | On | Value |
+|---|---|---|
+| `data-datum` | every element that carries a datum | the field names, space-separated, in the order the fields were given — the order the tooltip lists them in |
+| `data-datum-<field>` | the same element, one per field | the field's name with every `_` as `-` after `data-datum-`, and `to_string/1` of the value; a `nil` value writes no attribute, and the template reads it as `""` |
+| `data-tooltip-template` | the element or any ancestor of it up to the hook element — a mark's group | the tooltip's text with `{field}` placeholders; the nearest one to the element wins |
+| `data-tooltip-event` | likewise | the event pushed on click; absent, a click pushes nothing |
+
+`Visualize.IR.Element.datum/2` takes the element and the fields as a map or a keyword list of `{field, value}` — a map's fields are written in `Enum.sort/1` order, a keyword list's in its own — and merges the attributes over the element's `attrs` under string keys (`"data-datum"`, `"data-datum-v"`), which `Visualize.SVG.Renderer.attribute_name/1` prints as given (spec/09 §2.4); an existing attribute of the same name is replaced. A field is an atom or a string; the value is any term `to_string/1` accepts, so a `DateTime` prints in ISO 8601 and a float with its decimals — the formatting a chart wants is the template's job, or the server's before it builds the map.
+
+### 12.3 `TooltipHook` behaviour
+
+Attach with `phx-hook="TooltipHook"` and an `id` on the `<svg>`, or on any ancestor of the elements that carry `data-datum`; one hook serves every mark under it. Data attributes read on `mounted()`:
+
+| Attribute | Default | Meaning |
+|---|---|---|
+| `data-tooltip-class` | `"vis-tooltip"` | the class of the tooltip element the hook creates, for a stylesheet |
+
+On `mounted()` the hook creates one `<div>` with that class, `position: absolute`, `pointer-events: none`, `white-space: pre` and `display: none`, appends it to `document.body`, and binds `mousemove`, `mouseleave`, `touchmove`, `touchend` and `click` on the element, each handler bound once and kept on the hook (D-47). On a move the *datum element* is the event target's nearest ancestor-or-self with `data-datum` (`closest`); none under the pointer hides the tooltip. Otherwise the text is built without a round trip: with a `data-tooltip-template` on the datum element or an ancestor of it — the nearest wins, searched no further than the hook element — every `{field}` becomes that field's `data-datum-<field>` value (`_` as `-`), `""` when the element has no such attribute; without a template, one line per field of `data-datum` in its order, `field: value`, joined with newlines. The text is set with `textContent`, never as markup, so a value is never interpreted. The tooltip is shown at 12 CSS pixels right of and below the pointer's page position, flipped to the left of the pointer when its width would cross the viewport's right edge and above it when its height would cross the bottom. A touch move uses its first touch; `touchend` and `mouseleave` hide.
+
+A click on a datum element whose nearest `data-tooltip-event` is set pushes `pushEvent(event, fields)` with one key per field of `data-datum` and the attribute strings as values, arriving as `handle_event("point_click", %{"t" => "2024-01-01T00:00:00Z", "v" => "4"}, socket)` — strings, since the attributes are strings; the server parses what it needs. A click elsewhere, or without an event, pushes nothing. `destroyed()` removes the five listeners with the kept references and removes the tooltip element from the document. `test/visualize/hooks/tooltip_test.exs` holds the source to this shape.

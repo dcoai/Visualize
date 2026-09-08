@@ -35,6 +35,6 @@ defmodule Visualize.Hooks.ResizeTest do
   test "the bundle carries the hook once and exports it" do
     js = Hooks.js_code()
     assert length(String.split(js, "export const ResizeHook = {")) == 2
-    assert js =~ "ResizeHook };"
+    assert js =~ ~r/export default \{[^}]*\bResizeHook\b/
   end
 end

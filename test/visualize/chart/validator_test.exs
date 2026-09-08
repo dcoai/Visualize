@@ -106,7 +106,8 @@ defmodule Visualize.Chart.ValidatorTest do
     channels: [:marks, 2, :channels],
     mark_scales: [:marks, 2, :scales],
     options: [:marks, 2, :options],
-    mark_label: [:marks, 1, :label]
+    mark_label: [:marks, 1, :label],
+    tooltip: [:marks, 2, :tooltip]
   }
 
   defp errors(design) do
