@@ -26,6 +26,10 @@ Nx MUST NOT be a required dependency; it is declared `optional: true`. The binar
 
 The library's `deps` MUST contain no required entries. Everything from projections to the force simulation is implemented in Elixir over the standard library and OTP.
 
+### 1.6 `table` is optional
+
+The `table` package (the `Table.Reader` protocol) MUST NOT be a required dependency; it is declared `optional: true` (D-52). `Visualize.Data.Table.rows/1` reads Explorer frames and any other struct implementing the protocol only when it is present; lists, column maps and Nx tensors are read natively and work without it ([08-utilities](08-utilities.md) §6).
+
 ## 2. Non-goals
 
 - **A client-side charting runtime.** The library ships JavaScript only as hook text (`Visualize.Hooks`) that a host installs; it does not draw in the browser, manage a scene graph there, or depend on any JS charting library.

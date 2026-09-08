@@ -41,6 +41,14 @@ defmodule Visualize.MixProject do
   defp deps do
     [
       {:nx, "~> 0.9", optional: true},
+      # `Data.Table.rows/1` (spec/08 §6) reads Explorer frames, and anything else that
+      # implements `Table.Reader`, through the protocol. The package is the protocol and
+      # two impls, optional like Nx: without it lists, column maps and tensors still work
+      # and a struct source raises at the call (D-52).
+      {:table, "~> 0.1.2", optional: true},
+      # Explorer frames in the `Data.Table` tests only; scripts/consumer_check.exs proves
+      # neither Explorer nor `Table.Reader` reaches a consumer.
+      {:explorer, "~> 0.12", only: :test},
       # The LiveView components (spec/10 §2-3) compile only when `Phoenix.Component` is
       # loaded. `optional:` is load-bearing, and `only:` would not do: Mix prunes the code
       # path to a dependency's declared deps while compiling it, so a guard over an
@@ -144,7 +152,8 @@ defmodule Visualize.MixProject do
           Visualize.Interpolate,
           Visualize.Ease,
           Visualize.Random,
-          Visualize.Data
+          Visualize.Data,
+          Visualize.Data.Table
         ],
         "IR and rendering": [
           ~r"Visualize\.IR",
