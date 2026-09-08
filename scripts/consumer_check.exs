@@ -24,7 +24,7 @@ defmodule Visualize.ConsumerCheck do
     mix(dir, ["run", "-e", probe()])
 
     File.rm_rf!(dir)
-    IO.puts("consumer build is lib/ only - no Phoenix, no Nx")
+    IO.puts("consumer build is lib/ only - no Phoenix, no Nx, no table, no Explorer")
   end
 
   defp mix_exs(root) do

@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates) and `Visualize.Data` (statistics and data shaping). All are pure except `Random`, which reads and advances the calling process's `:rand` state.
+This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping) and `Visualize.Data.Table` (tabular sources as rows). All are pure except `Random`, which reads and advances the calling process's `:rand` state.
 
 ## 1. Color
 
@@ -366,3 +366,39 @@ Parameterised variants: `poly_in/2`, `poly_out/2` and `poly_in_out/2` take an ex
 | `Visualize.Data.sort/3` | Sort by accessor in `:asc` or `:desc` order. |
 | `Visualize.Data.unique/1` | `unique(data, nil)`. |
 | `Visualize.Data.unique/2` | Distinct elements by accessor, first occurrence kept. |
+
+## 6. Data.Table
+
+`Visualize.Data.Table` turns the shapes chart data arrives in into the list of rows every generator consumes ([04-shapes-and-curves](04-shapes-and-curves.md) §1). The `table` package (the `Table.Reader` protocol and its `List` and `Map` impls) is an optional dependency like Nx (D-52): a host that has it reads Explorer frames and any other struct implementing the protocol; without it lists, column maps and tensors still work and a struct source raises `UndefinedFunctionError` at `Table.to_rows/1`.
+
+### 6.1 Sources
+
+`Visualize.Data.Table.rows/1` accepts, and distinguishes by shape:
+
+| Source | Rows |
+|---|---|
+| A list of rows (maps or tuples) | The list itself: no copy, no traversal. |
+| A keyword list whose values are equal-length lists | One map per index, keyed by the keys. A keyword list is read as columns before rows, as `table` reads a list; `[{:a, [1]}]` is therefore one column. A keyword list whose lists differ in length is rows. |
+| A map whose values are equal-length lists | One map per index, keyed by the map's keys (atoms or strings, as given). Any other non-empty plain map raises `ArgumentError`. |
+| `%Nx.Tensor{}` of rank 2 | One tuple per row in column order, which is what the default `Visualize.Shape.Line` accessors read. Rank 1 yields the list of values; any other rank raises `ArgumentError`. |
+| Any other struct | `Table.to_rows/1`: rows keyed by the reader's column names as it spells them (Explorer: strings), whether the reader traverses by rows or by columns. A struct with no `Table.Reader` impl raises `Protocol.UndefinedError`; a reader answering `:none` raises `ArgumentError`. |
+
+`[]`, `%{}` and the empty keyword list yield `[]`. A rank-1 tensor bound to a dense series stays a first-class source for `Visualize.Shape.LineNx` and the binary path; `Visualize.Data.Table.rows/1` does not stand between them.
+
+### 6.2 Column names
+
+A source names its columns with atoms or strings and a caller writes accessors in either. `Visualize.Data.Table.get/2` reads the row by the given spelling first, then by the other: an atom name falls back to `Atom.to_string/1`, a string name to the atom key that spells the same. No atom is ever created. `nil` when neither is a key, so a missing column behaves as an absent map key does in [04-shapes-and-curves](04-shapes-and-curves.md) §1.1. `Visualize.Data.Table.accessor/1` is `fn row -> get(row, name) end`, and returns a 1-arity function unchanged so a generator normalises every accessor form through one call. A tuple row has no names: `get/2` raises `BadMapError`.
+
+### 6.3 Time columns
+
+`Visualize.Data.Table.time_columns/1` names the columns a time scale could be inferred from: every key of every map row, sorted by term order (a row without the key contributes `nil`), kept when the column has at least one non-`nil` value and every value is `nil` or `temporal?/1`. `Visualize.Data.Table.temporal?/1` is true for `DateTime`, `Date` and `NaiveDateTime` and for a string one of `DateTime.from_iso8601/1`, `NaiveDateTime.from_iso8601/1` or `Date.from_iso8601/1` parses; anything else, including a bare year or a non-ISO date, is false. Detection reads the whole column, not the first row as Tucan does: every row is visited and every string parsed, so the cost is the size of the table, and a column that starts temporal and stops being so is not temporal. Tuple rows have no names and yield `[]`.
+
+### 6.4 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Data.Table.rows/1` | The row list of any source in 6.1; a list of rows is returned as-is. |
+| `Visualize.Data.Table.get/2` | The named column of a map row by either spelling of the name (6.2); `nil` when absent. |
+| `Visualize.Data.Table.accessor/1` | `fn row -> get(row, name) end`; a function is returned unchanged. |
+| `Visualize.Data.Table.time_columns/1` | The names whose whole column is temporal (6.3). |
+| `Visualize.Data.Table.temporal?/1` | Whether a value is a `DateTime`, `Date`, `NaiveDateTime` or ISO 8601 string. |
