@@ -27,7 +27,7 @@ The three nouns of the design are the *theme* (visual constants as named slots, 
 |---|---|---|
 | 1 | the design | `:design` |
 | 2 | meta, sources, vars, theme, styles, frame, marks, labels | `:meta`, `:source`, `:var`, `:theme`, `:style`, `:frame`, `:mark`, `:label` |
-| 3 | size, margin, scales, axes, legend, projection, facet, viewport; a mark's data, channels, options and inline label; a style's curve options | `:size`, `:margin`, `:scale`, `:axis`, `:legend`, `:projection`, `:facet`, `:viewport`, `:data`, `:channels`, `:options`, `:mark_label`, `:curve_opts` |
+| 3 | size, margin, scales, axes, legend, projection, facet, viewport; a mark's data, channels, scales, options and inline label; a style's curve options | `:size`, `:margin`, `:scale`, `:axis`, `:legend`, `:projection`, `:facet`, `:viewport`, `:data`, `:channels`, `:mark_scales`, `:options`, `:mark_label`, `:curve_opts` |
 | 4 | tick specs; transforms; text parts | `:ticks`, `:transform`, and the `text` type of §1.4 |
 
 Collections are lists (`marks`, `axes`, `labels`, `transforms`); named declarations are maps keyed by name (`sources`, `vars`, `styles`, `scales`). A name is an atom. Marks reference scales, styles and sources by name, never by nesting: that is what makes fragments composable (§8) and the map diffable.
@@ -231,7 +231,7 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 
 **Inference.** `domain: :auto`, or an extent with `:auto` at one end, is inferred at construction from every mark channel that names the scale, over the sources given to `new/2`, whole column (Tucan's first-row rule is the documented limit, D-52):
 
-- A channel names a scale by the frame's kind. In a `:cartesian` (and a `:facet`) frame `x`, `x0` and `x1` name `x`; `y`, `y0`, `y1`, `median`, `inner_lo`, `inner_hi`, `outer_lo` and `outer_hi` name `y`; `series` names `color`, and so does `value` on a `:rect`. In a `:polar` frame `angle` names `angle`; `value` on a `:rose`, `inner` and `outer` name `r`. In a `:geo` frame `series` names `color`. The `value` of a `:symbol`, a `:circle` and an `:arc` is a size or a share (§5.2) and names nothing. A `{:field, f}` on a `:colour` key of a mark's style names `color` in every kind (§3.2).
+- A channel names a scale by the frame's kind. In a `:cartesian` (and a `:facet`) frame `x`, `x0` and `x1` name `x`; `y`, `y0`, `y1`, `median`, `inner_lo`, `inner_hi`, `outer_lo` and `outer_hi` name `y`; `series` names `color`, and so does `value` on a `:rect`. In a `:polar` frame `angle` names `angle`; `value` on a `:rose`, `inner` and `outer` name `r`. In a `:geo` frame `series` names `color`. The `value` of a `:symbol`, a `:circle` and an `:arc` is a size or a share (§5.2) and names nothing. A mark's `scales` node (§5.1) renames what its channels name: `scales: %{x: :count}` sends that mark's `x`, `x0` and `x1` through the frame's `count` scale instead of `x`, so a scale of any other name — a marginal histogram's counts, a second `y` — is inferred from, and drawn by, the marks that name it (D-67). A `{:field, f}` on a `:colour` key of a mark's style names `color` in every kind (§3.2), whatever the mark's `scales` say.
 - The values are the channel's column of the mark's source through `Visualize.Data.Table.get/2` — the field itself, or the `f` of a `{:field, f}` — with `nil`s dropped; a number channel contributes the number. A mark whose source is not among the bound sources contributes nothing; a mark that reads its source through transforms contributes the column of the *transformed* rows — the pipeline of §5.4 runs at construction over the bound source, so a `:bin`'s `count` or a `:stack`'s `y1` infers the domain it is drawn on (D-62).
 - The domain follows the kind. Continuous scales (`:linear`, `:log`, `:power`, `:sqrt`, `:symlog`, `:radial`, `:quantize`, `:threshold`, `:sequential`) take the extent `[lo, hi]` of `Visualize.Data.extent/2`; `:diverging` takes `[lo, (lo + hi) / 2, hi]`. `:time` takes the extent under the values' own ordering (`DateTime`, `Date` or `NaiveDateTime` compare by their module, never by term order), an ISO 8601 string read as `Visualize.Data.Table.temporal?/1` reads it, and a value that is not temporal raises `ArgumentError` naming the scale. `:quantile` takes every value as its samples. `:ordinal` and `:band` take the distinct values in order of first appearance.
 - `[0, :auto]` fixes the lower end and infers the upper; `[:auto, hi]` the reverse.
@@ -321,10 +321,13 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 | `type` | `{:enum, mark types}` | `:channel` | required | `:override` |
 | `data` | `{:one_of, [{:ref, :source}, {:node, :data}]}` | `:binding` | required | `:override` |
 | `channels` | `{:node, :channels}` | `:channel` | `%{}` | `:override` |
+| `scales` | `{:node, :mark_scales}` | `:channel` | `%{}` | `:override` |
 | `options` | `{:node, :options}` | `:geometry` | `%{}` | `:override` |
 | `style` | `{:ref, :style}` | `:style` | `nil` (§3.3) | `:override` |
 | `label` | `{:node, :mark_label}` | `:content` | `nil` | `:override` |
 | `render` | `{:enum, [:auto, :svg, :canvas, :binary]}` | `:geometry` | `:auto` | `:override` |
+
+`scales` is the mark's word on which scale a channel family reads through (§4.3). A `:mark_scales` node's keys are the scale names of the frame kinds' tables — `x`, `y`, `angle`, `r` and `color` — each `{:ref, :scale}`, `:channel`, `nil` by default, `:override`; a key the frame's kind does not use names nothing. `scales: %{x: :count}` sends the mark's `x`, `x0` and `x1` through the declared scale `count`, and every channel not renamed reads the scale of the kind's table as before. The name must be one the frame declares (`{:undeclared, :scale, name}` otherwise), so a mark still references scales by name and never by nesting (§1.2).
 
 ### 5.2 Types and channels
 
@@ -659,7 +662,7 @@ When the chart has a binary canvas layer (`canvas_format` `:binary_base64`, §12
 
 ## 13. Worked example
 
-**Implemented** as a valid design (`test/visualize/chart/example_test.exs` holds it and round-trips it). Every construct of the layer appears once:
+**Implemented** as a valid design that renders (`test/visualize/chart/example_test.exs` reads it from this section, round-trips it, applies it and draws it). Every construct of the layer appears once:
 
 ```elixir
 import Visualize.Chart, only: [var: 1]
@@ -684,11 +687,13 @@ import Visualize.Chart, only: [var: 1]
     scales: %{
       x: %{kind: :time, domain: :auto},
       y: %{kind: :linear, domain: [0, :auto], nice: true},
+      count: %{kind: :linear, domain: [0, :auto], range: [0, 120]},
       color: %{kind: :ordinal, range: :category10}
     },
     axes: [
       %{scale: :x, side: :bottom, ticks: 6, format: "%H:%M"},
-      %{scale: :y, side: :left, ticks: 5, grid: true}
+      %{scale: :y, side: :left, ticks: 5, grid: true},
+      %{scale: :count, side: :top, ticks: 3}
     ],
     legend: %{scale: :color, position: :top_right}
   },
@@ -704,8 +709,9 @@ import Visualize.Chart, only: [var: 1]
     %{
       type: :rect,
       data: %{source: :primary, transforms: [%{op: :bin, field: :v, thresholds: 20}]},
-      channels: %{x0: :x0, x1: :x1, y0: :y0, y1: :count},
-      style: :series
+      channels: %{x0: 0, x1: :count, y0: :x0, y1: :x1},
+      scales: %{x: :count},
+      style: :muted
     }
   ],
   labels: [
@@ -717,7 +723,7 @@ import Visualize.Chart, only: [var: 1]
 }
 ```
 
-Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, deploys: deploys}, vars: %{unit: "mg/hr"})` (§7.3): the variables resolve, both slots bind and are checked, the design validates; bound to `%{gitlab_uptime: uptime, deploys: deploys}` instead, `primary` fills from its default. Realising the frame is where this example, which shows every construct once, meets its limit: the third mark bins `v` and draws the bins as `x0`/`x1` on the `x` scale, which is `:time` and cannot place a number (§4.3), so the design applies without that mark, and #72 re-shapes it. `Visualize.Chart.render/2` draws an applied chart; `Visualize.Chart.compile/2` splits it into the static frame and the dynamic marks (§12). The frame alone renders without any application: `Visualize.Chart.Frame.new/1` of a design that uses no variable, then `Visualize.Chart.Frame.render/1` for the furniture over the unit domains.
+Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, deploys: deploys}, vars: %{unit: "mg/hr"})` (§7.3): the variables resolve, both slots bind and are checked, the design validates; bound to `%{gitlab_uptime: uptime, deploys: deploys}` instead, `primary` fills from its default. The third mark is the marginal histogram of `v`: its `:bin` yields one row per bin with the edges `x0`, `x1` and the `count`, and the mark draws the edges along the frame's own `y` — the scale `v` is drawn on, so the bins line up with the line — and the counts from `0` through `count`, the second linear scale its `scales` node names for `x` (§5.1), whose axis on `:top` spans the first 120 pixels of the plot (§4.3). Bins of a number cannot be placed on the `:time` scale `x`, which is why the mark names its own (D-67). It renders: `Visualize.Chart.render/2` draws the applied chart on SVG, with one group per mark, or on a canvas with `backend: :canvas`; `Visualize.Chart.compile/2` splits it into the static frame and the dynamic marks (§12), and `Visualize.Chart.Compiled.svg/2` is the same SVG. The frame alone renders without any application: `Visualize.Chart.Frame.new/1` of a design that uses no variable, then `Visualize.Chart.Frame.render/1` for the furniture over the unit domains.
 
 ## 14. Functions
 

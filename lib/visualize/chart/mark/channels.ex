@@ -31,7 +31,7 @@ defmodule Visualize.Chart.Mark.Channels do
         pixel =
           if channel in @raw_always or channel in raw,
             do: value,
-            else: map(frame, ctx.type, channel, value)
+            else: map(frame, ctx.mark, channel, value)
 
         Map.put(acc, channel, pixel)
       end)
@@ -55,8 +55,8 @@ defmodule Visualize.Chart.Mark.Channels do
   @doc false
   # The realised scale a channel of the mark maps through, or `nil`.
   @spec scale(map(), atom()) :: struct() | nil
-  def scale(%{frame: frame, type: type}, channel) do
-    case Scales.scale_for(frame.kind, type, channel) do
+  def scale(%{frame: frame, mark: mark}, channel) do
+    case Scales.scale_for(frame.kind, mark, channel) do
       nil -> nil
       name -> Map.get(frame.scales, name)
     end
@@ -77,10 +77,10 @@ defmodule Visualize.Chart.Mark.Channels do
   defp read({:field, field}, row), do: Table.get(row, field)
   defp read(field, row) when is_atom(field), do: Table.get(row, field)
 
-  defp map(_frame, _type, _channel, nil), do: nil
+  defp map(_frame, _mark, _channel, nil), do: nil
 
-  defp map(frame, type, channel, value) do
-    case Scales.scale_for(frame.kind, type, channel) do
+  defp map(frame, mark, channel, value) do
+    case Scales.scale_for(frame.kind, mark, channel) do
       nil -> value
       name -> place(Map.get(frame.scales, name), channel, value)
     end

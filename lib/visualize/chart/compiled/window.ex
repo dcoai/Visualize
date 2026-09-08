@@ -135,9 +135,9 @@ defmodule Visualize.Chart.Compiled.Window do
   # -- values ---------------------------------------------------------------------------
 
   # The fields of a mark's channels that name the scale (spec/14 §4.3).
-  defp fields(kind, %{type: type} = mark, scale) do
+  defp fields(kind, mark, scale) do
     for {channel, value} <- Map.get(mark, :channels, %{}),
-        Scales.scale_for(kind, type, channel) == scale,
+        Scales.scale_for(kind, mark, channel) == scale,
         field = field(value),
         field != nil,
         do: field

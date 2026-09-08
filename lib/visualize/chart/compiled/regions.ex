@@ -75,7 +75,7 @@ defmodule Visualize.Chart.Compiled.Regions do
   def mark_scales(%Chart{frame: node, styles: styles}, mark) do
     channels =
       for {channel, _value} <- Map.get(mark, :channels, %{}),
-          scale = Scales.scale_for(node.kind, mark.type, channel),
+          scale = Scales.scale_for(node.kind, mark, channel),
           scale != nil,
           do: scale
 

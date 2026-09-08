@@ -108,6 +108,29 @@ defmodule Visualize.Chart.FrameTest do
       assert Frame.scale(frame, :color).domain == ["c0", "c1"]
     end
 
+    test "a mark's scales node sends a channel family to the scale it names (D-67)" do
+      marks = [
+        line(%{x: :t, y: :v}),
+        %{
+          type: :rect,
+          data: :primary,
+          channels: %{x0: 0, x1: :n, y0: :v, y1: :v},
+          scales: %{x: :count}
+        }
+      ]
+
+      scales = %{
+        x: %{kind: :time},
+        y: %{kind: :linear},
+        count: %{kind: :linear, domain: [0, :auto], range: [0, 120]}
+      }
+
+      frame = frame(scales, marks)
+      assert Frame.scale(frame, :count).domain == [0, 3]
+      assert Frame.scale(frame, :count).range == [0, 120]
+      assert Frame.scale(frame, :x).domain == [@t0, DateTime.add(@t0, 3 * 3600, :second)]
+    end
+
     test "a constant channel contributes its number only when the mark has rows (#61)" do
       marks = [%{type: :rect, data: :primary, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}}]
       scales = %{x: %{kind: :band}, y: %{kind: :linear, domain: [0, :auto]}}

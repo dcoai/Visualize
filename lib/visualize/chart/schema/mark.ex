@@ -118,6 +118,7 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:type, {:enum, @types}, :channel, required: true),
       spec(:data, {:one_of, [{:ref, :source}, {:node, :data}]}, :binding, required: true),
       spec(:channels, {:node, :channels}, :channel, default: %{}),
+      spec(:scales, {:node, :mark_scales}, :channel, default: %{}),
       spec(:options, {:node, :options}, :geometry, default: %{}),
       spec(:style, {:ref, :style}, :style),
       spec(:label, {:node, :mark_label}, :content),
@@ -153,6 +154,12 @@ defmodule Visualize.Chart.Schema.Mark do
 
   def describe(:channels) do
     for key <- @channel_keys, do: spec(key, :channel, :channel)
+  end
+
+  # The scale names of the frame kinds' tables (spec/14 §4.3), each renamed to a declared
+  # scale by a mark's `scales` node (§5.1).
+  def describe(:mark_scales) do
+    for key <- [:x, :y, :angle, :r, :color], do: spec(key, {:ref, :scale}, :channel)
   end
 
   def describe(:options) do

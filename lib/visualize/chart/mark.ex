@@ -5,7 +5,8 @@ defmodule Visualize.Chart.Mark do
   `generate/3` is one mark node as one `Visualize.IR.Element` group in the plot area's
   coordinates: its rows are the bound source through the mark's pipeline (`rows/3`,
   spec/14 §5.4), each channel is read from the rows and mapped through the scale it
-  names in `Visualize.Chart.Frame.scales/1`, and every element is the generator's own —
+  names in `Visualize.Chart.Frame.scales/1` — the frame kind's table, renamed by the
+  mark's `scales` node (spec/14 §5.1) — and every element is the generator's own —
   `Visualize.Shape.Line`, `Visualize.Shape.Area`, `Visualize.Shape.Band`,
   `Visualize.Shape.Rule`, `Visualize.Shape.XBand`, `Visualize.Shape.PercentileBand`,
   `Visualize.Shape.Rose`, `Visualize.Shape.Symbol`, `Visualize.Shape.Pie` over
