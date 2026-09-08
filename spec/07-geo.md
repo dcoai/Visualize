@@ -236,6 +236,8 @@ The implementation is incremental insertion (Bowyer–Watson) with ghost triangl
 
 `compute/2` returns one map per threshold: `%{value: threshold, type: "MultiPolygon", coordinates: polygons}` where `polygons` is a list of polygons, each polygon a list containing a single ring, and each ring a list of `[x, y]` two-element lists. Coordinates are grid units — `x` the column, `y` the row — and are clamped to `[0, width - 1]` by `[0, height - 1]`. A grid corner is inside when its value is `>= threshold`. The grid is padded with a border of `min - 1000` before tracing so that regions touching the edge close along it. Rings are traced by following segments end to start; saddle cells (cases 5 and 10) always emit two separate segments. Holes are not distinguished from outer rings — each ring is its own single-ring polygon — and a ring that cannot be closed is emitted as an open polyline.
 
+The grid is an indexed structure: `compute/2` turns the list into a tuple and pads it once, before any threshold, so a corner read is constant-time and one threshold costs time linear in the number of cells (D-72). The segments of a threshold are collected in cell order, and the tracing walks them through a map from each segment's start point to its end, taking a segment out of the map as it is followed, so tracing a threshold's rings is linear in its segment count and always terminates. Rings begin at the first untraced segment in cell order, and a ring's points are removed from the map when the ring closes. A start point that carries more than one segment — a corner exactly on a threshold puts crossings on a shared corner — is followed once and its other segments are dropped with the ring; what such a degenerate grid should trace is not specified.
+
 `render/2` returns `[%{value, path}]`, where `path` is `M..L..` per ring with numbers rounded to 3 decimals, followed by `Z` only when the ring's last point coincides with its first (within 0.001).
 
 ### 6.4 Functions
@@ -269,6 +271,8 @@ The implementation is incremental insertion (Bowyer–Watson) with ghost triangl
 ### 7.2 Algorithm
 
 The grid has `div(width, cell_size) + 1` columns and `div(height, cell_size) + 1` rows. Each point `{px, py, w}` adds `w * exp(-d² / (2σ²)) / (2πσ²)` to every cell within a square of half-side `ceil(3 * bandwidth / cell_size)` cells around it (clamped to the grid), where `d` is the distance from the point to the cell in cell units and `σ = bandwidth / cell_size`. Densities are therefore expressed per cell². Contours are computed with smoothing on, and every coordinate is multiplied by `cell_size` so the result is in pixels. `compute/2` returns the same shape as 6.3; `render/2` returns `[%{value, path}]` with every ring closed by `Z`.
+
+A point touches only the cells of its footprint, and its contributions accumulate in a map keyed by cell index that is materialised into the grid once, so the estimate costs time proportional to the points times the footprint plus the cells, never the points times the grid; a cell's contributions are summed in point order, so the surface is the same whatever the order of accumulation (D-72). With the defaults of 7.1 — a 241 × 126 grid and 20 thresholds — `compute/2` over a handful of points completes well inside a second, and `test/visualize/contour_test.exs` holds it to that and holds the cost of `Visualize.Contour.compute/2` to grow no faster than about linearly in the cells.
 
 ### 7.3 Functions
 
