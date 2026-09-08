@@ -169,43 +169,45 @@ defmodule Visualize.Contour.Density do
     grid_width = div(density.width, cell_size) + 1
     grid_height = div(density.height, cell_size) + 1
 
-    # Initialize grid
     grid_size = grid_width * grid_height
-    grid = List.duplicate(0.0, grid_size)
 
     # Radius of influence (3 standard deviations)
     radius = ceil(density.bandwidth * 3 / cell_size)
     bw = density.bandwidth / cell_size
 
-    # For each point, add contribution to nearby grid cells
-    Enum.reduce(coords, grid, fn {px, py, weight}, acc_grid ->
-      # Convert to grid coordinates
-      gx = px / cell_size
-      gy = py / cell_size
+    # Each point adds its contribution to the cells of its footprint only, accumulated in a
+    # map keyed by cell index in point order and laid out as the grid once (D-72).
+    cells =
+      Enum.reduce(coords, %{}, fn {px, py, weight}, acc_grid ->
+        # Convert to grid coordinates
+        gx = px / cell_size
+        gy = py / cell_size
 
-      # Grid cell range to update
-      x0 = max(0, floor(gx) - radius)
-      x1 = min(grid_width - 1, ceil(gx) + radius)
-      y0 = max(0, floor(gy) - radius)
-      y1 = min(grid_height - 1, ceil(gy) + radius)
+        # Grid cell range to update
+        x0 = max(0, floor(gx) - radius)
+        x1 = min(grid_width - 1, ceil(gx) + radius)
+        y0 = max(0, floor(gy) - radius)
+        y1 = min(grid_height - 1, ceil(gy) + radius)
 
-      # Add Gaussian contribution to each cell
-      Enum.reduce(y0..y1//1, acc_grid, fn cy, grid_y ->
-        Enum.reduce(x0..x1//1, grid_y, fn cx, grid_x ->
-          # Distance from point to cell center
-          dx = cx - gx
-          dy = cy - gy
-          d2 = dx * dx + dy * dy
+        # Add Gaussian contribution to each cell
+        Enum.reduce(y0..y1//1, acc_grid, fn cy, grid_y ->
+          Enum.reduce(x0..x1//1, grid_y, fn cx, grid_x ->
+            # Distance from point to cell center
+            dx = cx - gx
+            dy = cy - gy
+            d2 = dx * dx + dy * dy
 
-          # Gaussian kernel
-          k = weight * gaussian_kernel(d2, bw)
+            # Gaussian kernel
+            k = weight * gaussian_kernel(d2, bw)
 
-          # Update grid
-          idx = cy * grid_width + cx
-          List.update_at(grid_x, idx, &(&1 + k))
+            # Update grid
+            idx = cy * grid_width + cx
+            Map.update(grid_x, idx, k, &(&1 + k))
+          end)
         end)
       end)
-    end)
+
+    for idx <- 0..(grid_size - 1)//1, do: Map.get(cells, idx, 0.0)
   end
 
   # Gaussian kernel: K(u) = exp(-u²/2) / (2π)

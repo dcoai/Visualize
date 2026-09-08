@@ -86,9 +86,12 @@ defmodule Visualize.Contour do
     # Resolve thresholds
     threshold_values = resolve_thresholds(contour.thresholds, values)
 
+    # Pad the grid once, as a tuple, so every corner read is constant-time (spec/07 §6.3).
+    padded = pad_grid(values, width, height)
+
     # Generate contours for each threshold
     Enum.map(threshold_values, fn threshold ->
-      polygons = march_squares(values, width, height, threshold, contour.smooth?)
+      polygons = march_squares(padded, width, height, threshold, contour.smooth?)
 
       %{
         value: threshold,
@@ -141,11 +144,14 @@ defmodule Visualize.Contour do
     15 => []
   }
 
-  defp march_squares(values, width, height, threshold, smooth?) do
-    # Pad the grid with low values to ensure contours close at boundaries
-    {padded_values, padded_width, padded_height} = pad_grid(values, width, height)
-
-    # Build contour segments on padded grid
+  defp march_squares(
+         {padded_values, padded_width, padded_height},
+         width,
+         height,
+         threshold,
+         smooth?
+       ) do
+    # Build contour segments on the padded grid
     segments = build_segments(padded_values, padded_width, padded_height, threshold, smooth?)
 
     # Connect segments into rings
@@ -163,9 +169,12 @@ defmodule Visualize.Contour do
     end)
   end
 
-  # Pad the grid with a border of very low values to close boundary contours
+  # Pad the grid with a border of very low values to close boundary contours. The result is
+  # a tuple indexed `y * padded_width + x`, built once per compute (D-72).
   defp pad_grid(values, width, height) do
     min_val = Enum.min(values) - 1000
+    cells = List.to_tuple(values)
+    cell_count = tuple_size(cells)
 
     # Create padded grid (width+2 x height+2)
     padded_width = width + 2
@@ -174,14 +183,17 @@ defmodule Visualize.Contour do
     padded =
       for y <- 0..(padded_height - 1)//1, x <- 0..(padded_width - 1)//1 do
         # Border cells get the minimum value; interior cells the original (offset by 1).
-        if x == 0 or y == 0 or x == padded_width - 1 or y == padded_height - 1 do
+        index = (y - 1) * width + (x - 1)
+
+        if x == 0 or y == 0 or x == padded_width - 1 or y == padded_height - 1 or
+             index >= cell_count do
           min_val
         else
-          Enum.at(values, (y - 1) * width + (x - 1), min_val)
+          elem(cells, index)
         end
       end
 
-    {padded, padded_width, padded_height}
+    {List.to_tuple(padded), padded_width, padded_height}
   end
 
   defp build_segments(values, width, height, threshold, smooth?) do
@@ -206,16 +218,15 @@ defmodule Visualize.Contour do
         # Get edge crossings for this case
         edges = Map.get(@cases, case_index, [])
 
-        # Convert edge crossings to segments
-        new_segments =
-          Enum.map(edges, fn {from_edge, to_edge} ->
-            from_point = edge_point(x, y, from_edge, v0, v1, v2, v3, threshold, smooth?)
-            to_point = edge_point(x, y, to_edge, v0, v1, v2, v3, threshold, smooth?)
-            {from_point, to_point}
-          end)
-
-        acc ++ new_segments
+        # Convert edge crossings to segments, prepended and reversed at the end so the
+        # list is in cell order.
+        Enum.reduce(edges, acc, fn {from_edge, to_edge}, acc ->
+          from_point = edge_point(x, y, from_edge, v0, v1, v2, v3, threshold, smooth?)
+          to_point = edge_point(x, y, to_edge, v0, v1, v2, v3, threshold, smooth?)
+          [{from_point, to_point} | acc]
+        end)
     end
+    |> Enum.reverse()
   end
 
   defp edge_point(x, y, edge, v0, v1, v2, v3, threshold, smooth?) do
@@ -250,62 +261,56 @@ defmodule Visualize.Contour do
     end
   end
 
-  defp get_value(values, width, x, y) do
-    index = y * width + x
-    Enum.at(values, index, 0)
-  end
+  defp get_value(values, width, x, y), do: elem(values, y * width + x)
 
+  # Rings are traced through a map from each segment's start point to its ends; a point's
+  # entry is taken out of the map as it is followed, so every segment is visited at most
+  # once and the tracing is linear in the segment count (spec/07 §6.3, D-72).
   defp connect_segments([]), do: []
 
   defp connect_segments(segments) do
-    # Build adjacency map
-    {start_map, _end_map} = build_adjacency(segments)
-
-    # Connect segments into rings
-    connect_rings(segments, start_map, [])
-  end
-
-  defp build_adjacency(segments) do
-    Enum.reduce(segments, {%{}, %{}}, fn {from, to}, {start_map, end_map} ->
-      start_map = Map.update(start_map, from, [to], &[to | &1])
-      end_map = Map.update(end_map, to, [from], &[from | &1])
-      {start_map, end_map}
-    end)
-  end
-
-  defp connect_rings([], _start_map, rings), do: rings
-
-  defp connect_rings([{start_point, next_point} | rest], start_map, rings) do
-    # Follow the ring
-    {ring, remaining_segments} =
-      follow_ring(start_point, next_point, start_map, rest, [start_point])
-
-    # Update start_map by removing used segments
-    new_start_map =
-      Enum.reduce(ring, start_map, fn point, map ->
-        Map.delete(map, point)
+    start_map =
+      Enum.reduce(segments, %{}, fn {from, to}, start_map ->
+        Map.update(start_map, from, [to], &[to | &1])
       end)
 
-    connect_rings(remaining_segments, new_start_map, [ring | rings])
+    connect_rings(segments, start_map, MapSet.new(), [])
   end
 
-  defp follow_ring(start_point, current_point, start_map, segments, ring) do
-    ring = ring ++ [current_point]
+  # A point that a ring continued from has no segment left to start a ring; a ring's other
+  # points (its start, and the point it closed on) may still head a segment of the cell
+  # order, which then begins a ring of its own, as it always did.
+  defp connect_rings([], _start_map, _used, rings), do: rings
 
-    if close_enough?(current_point, start_point) and length(ring) > 2 do
-      # Ring is closed
-      {ring, segments}
+  defp connect_rings([{start_point, next_point} | rest], start_map, used, rings) do
+    if MapSet.member?(used, start_point) do
+      connect_rings(rest, start_map, used, rings)
     else
-      # Find next segment
-      case Map.get(start_map, current_point) do
-        nil ->
-          # No continuation, return what we have
-          {ring, segments}
+      {ring, start_map, used} =
+        follow_ring(start_point, next_point, start_map, used, [start_point], 1)
 
-        [next | _] ->
-          # Remove this segment from available
-          new_segments = Enum.reject(segments, fn {from, _} -> from == current_point end)
-          follow_ring(start_point, next, start_map, new_segments, ring)
+      # The ring's points are used up, whichever segments they still carried
+      start_map = Enum.reduce(ring, start_map, &Map.delete(&2, &1))
+      connect_rings(rest, start_map, used, [ring | rings])
+    end
+  end
+
+  defp follow_ring(start_point, current_point, start_map, used, ring, count) do
+    ring = [current_point | ring]
+    count = count + 1
+
+    if count > 2 and close_enough?(current_point, start_point) do
+      # Ring is closed
+      {Enum.reverse(ring), start_map, used}
+    else
+      case Map.pop(start_map, current_point) do
+        {nil, start_map} ->
+          # No continuation, return what we have
+          {Enum.reverse(ring), start_map, used}
+
+        {[next | _], start_map} ->
+          used = MapSet.put(used, current_point)
+          follow_ring(start_point, next, start_map, used, ring, count)
       end
     end
   end
