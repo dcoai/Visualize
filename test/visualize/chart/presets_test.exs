@@ -321,10 +321,9 @@ defmodule Visualize.Chart.PresetsTest do
         svg = layer(:tree_diagram, a)
         component = render_component(&Tree.tree_diagram/1, a)
 
-        # The component prints the cubic's points space-separated (spec/10 §3.2's goldens)
-        # where `Visualize.IR.Path.to_string/1` comma-separates; the numbers are the same.
+        # Both print the row's path through `Visualize.IR.Path.to_string/1` (D-71).
         paths = Enum.map(tags(svg, "path"), & &1["d"])
-        assert paths == Enum.map(tags(component, "path"), &String.replace(&1["d"], " ", ","))
+        assert paths == Enum.map(tags(component, "path"), & &1["d"])
         assert length(paths) == length(Presets.sources(:tree_diagram, a).data) - 1
 
         centres = Enum.map(tags(svg, "circle"), &{num(&1["cx"]), num(&1["cy"])})
