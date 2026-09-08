@@ -2,7 +2,7 @@ defmodule Visualize.Hooks do
   @moduledoc """
   Phoenix LiveView JavaScript hooks for interactive visualizations.
 
-  This module bundles seven hooks:
+  This module bundles eight hooks:
   - `ZoomHook` — zoom and pan interactions (`Visualize.Hooks.Zoom`)
   - `BrushHook` — brush selection (`Visualize.Hooks.Brush`)
   - `CanvasChart` — replays Canvas commands or a script (`Visualize.Hooks.Canvas`)
@@ -12,6 +12,8 @@ defmodule Visualize.Hooks do
   - `ResizeHook` — the container's size pushed once per settle (`Visualize.Hooks.Resize`)
   - `TooltipHook` — a tooltip from the datum attributes an element carries
     (`Visualize.Hooks.Tooltip`)
+  - `CrosshairHook` — a rule and markers snapped to the nearest x of the data
+    (`Visualize.Hooks.Crosshair`)
 
   ## Installation
 
@@ -89,9 +91,29 @@ defmodule Visualize.Hooks do
   The attributes are what `Visualize.IR.Element.datum/2` writes, and what a mark with a
   `tooltip` node writes on every element. See `Visualize.Hooks.Tooltip`.
 
+  ### Crosshair
+
+      <div id="chart" phx-hook="CrosshairHook" {@crosshair} data-crosshair-event="hover">
+        {Phoenix.HTML.raw(@svg)}
+      </div>
+
+      crosshair = Visualize.Hooks.Crosshair.attrs(applied.frame, applied.sources)
+
+  The arrays are computed once on the server and the hook snaps to them, so it works over
+  a canvas as over an SVG. See `Visualize.Hooks.Crosshair`.
+
   """
 
-  alias Visualize.Hooks.{Brush, Canvas, CanvasBinary, CanvasIncremental, Resize, Tooltip, Zoom}
+  alias Visualize.Hooks.{
+    Brush,
+    Canvas,
+    CanvasBinary,
+    CanvasIncremental,
+    Crosshair,
+    Resize,
+    Tooltip,
+    Zoom
+  }
 
   @doc """
   Returns the complete JavaScript code for all hooks.
@@ -119,8 +141,10 @@ defmodule Visualize.Hooks do
 
     #{Tooltip.js_hook()}
 
+    #{Crosshair.js_hook()}
+
     // Default export for convenience
-    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook };
+    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook, CrosshairHook };
     """
   end
 

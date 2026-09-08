@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>`, `Visualize.Hooks.Resize` reports a container's size so the server can re-render at it, and `Visualize.Hooks.Tooltip` shows a datum's fields under the pointer from attributes the server wrote — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
+Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>`, `Visualize.Hooks.Resize` reports a container's size so the server can re-render at it, `Visualize.Hooks.Tooltip` shows a datum's fields under the pointer from attributes the server wrote, and `Visualize.Hooks.Crosshair` snaps a rule and markers to the nearest x of an array the server wrote once — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
 
 ## 1. Scope
 
@@ -20,6 +20,7 @@ Visualize reaches the browser through Phoenix LiveView in three ways: HEEx funct
 | `Visualize.Hooks.CanvasIncremental` | always | `CanvasIncrementalChart` JS: scroll-and-copy updates |
 | `Visualize.Hooks.Resize` | always | `ResizeHook` JS: the container's size pushed to the LiveView once per settle |
 | `Visualize.Hooks.Tooltip` | always | `TooltipHook` JS: a tooltip from the datum attributes of an element, with no round trip |
+| `Visualize.Hooks.Crosshair` | always | `CrosshairHook` JS and the server-side `attrs/3`: a rule and markers snapped to the data over SVG or canvas |
 
 Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)`. For that guard to be true in a host, `phoenix_live_view` MUST be a declared dependency of this library: Mix prunes the code path to a dependency's own declared deps while compiling it, so a guard over an undeclared module is always false in a host, whatever the host itself depends on. It is therefore declared `optional: true` (D-45): a host that has LiveView compiles the components, one that does not never fetches Phoenix, and `scripts/consumer_check.exs` proves the second claim on every pipeline ([12-testing-and-conformance](12-testing-and-conformance.md) §4). The library's own builds carry the optional dependency, so the components compile, are documented and are rendered under test here.
 
@@ -239,7 +240,7 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, then one `export default { … }` object listing the seven hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, then one `export default { … }` object listing the eight hooks — each name is exported exactly once (D-40, D-48). |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
 | `Visualize.Hooks.transform_point/2` | Delegates to `Visualize.Hooks.Zoom.transform_point/2`. |
@@ -459,3 +460,39 @@ Attach with `phx-hook="TooltipHook"` and an `id` on the `<svg>`, or on any ances
 On `mounted()` the hook creates one `<div>` with that class, `position: absolute`, `pointer-events: none`, `white-space: pre` and `display: none`, appends it to `document.body`, and binds `mousemove`, `mouseleave`, `touchmove`, `touchend` and `click` on the element, each handler bound once and kept on the hook (D-47). On a move the *datum element* is the event target's nearest ancestor-or-self with `data-datum` (`closest`); none under the pointer hides the tooltip. Otherwise the text is built without a round trip: with a `data-tooltip-template` on the datum element or an ancestor of it — the nearest wins, searched no further than the hook element — every `{field}` becomes that field's `data-datum-<field>` value (`_` as `-`), `""` when the element has no such attribute; without a template, one line per field of `data-datum` in its order, `field: value`, joined with newlines. The text is set with `textContent`, never as markup, so a value is never interpreted. The tooltip is shown at 12 CSS pixels right of and below the pointer's page position, flipped to the left of the pointer when its width would cross the viewport's right edge and above it when its height would cross the bottom. A touch move uses its first touch; `touchend` and `mouseleave` hide.
 
 A click on a datum element whose nearest `data-tooltip-event` is set pushes `pushEvent(event, fields)` with one key per field of `data-datum` and the attribute strings as values, arriving as `handle_event("point_click", %{"t" => "2024-01-01T00:00:00Z", "v" => "4"}, socket)` — strings, since the attributes are strings; the server parses what it needs. A click elsewhere, or without an event, pushes nothing. `destroyed()` removes the five listeners with the kept references and removes the tooltip element from the document. `test/visualize/hooks/tooltip_test.exs` holds the source to this shape.
+
+## 13. Visualize.Hooks.Crosshair
+
+### 13.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.Crosshair.js_hook/0` | Returns the source of `export const CrosshairHook = {…}` (13.3). |
+| `Visualize.Hooks.Crosshair.attrs/2` | As `attrs/3` with no options: the first mark. |
+| `Visualize.Hooks.Crosshair.attrs/3` | `attrs(frame, sources, opts)`: the attributes of 13.2 for one mark of a realised `Visualize.Chart.Frame`, as a map from attribute name (string) to value (string), computed once on the server. `:mark` is the one-based position of the mark among the frame's marks (default `1`). Raises `ArgumentError` when the frame is a `:facet` or a `:polar` one — the crosshair is a cartesian interaction over one plot area — or when the mark has no `x` and `y` channels. |
+
+### 13.2 The data arrays
+
+The crosshair snaps to the data without a DOM: the server writes the mark's x pixels once, and the hook finds the nearest one to the pointer in that array. It therefore works over a mark the compiler sent to the canvas layer (spec/14 §12.3), which has no element per datum, exactly as over an SVG (D-76). `Visualize.Hooks.Crosshair.attrs/3` builds them from the rows a mark draws — `Visualize.Chart.Mark.rows/3` through the mark's channels and the frame's scales, the placed rows only (spec/14 §5.2) — and the host puts them on the hook element:
+
+| Attribute | Value |
+|---|---|
+| `data-xs` | a JSON array of the distinct x pixels of the placed rows, ascending, in the plot area's coordinates — the array the pointer snaps to |
+| `data-ys` | a JSON array with one entry per series — the `series` channel's distinct values in order of first appearance, one unnamed series without the channel — each an array parallel to `data-xs` of the series' y pixel at that x, the first row's when the series has several there, `null` where it has none |
+| `data-plot` | `left,top,width,height`: the plot area inside the chart — the frame's margins and plot size — so the hook converts a pointer position into plot coordinates and spans the rule over the plot's height |
+| `data-size` | `width,height`: the frame's size, the chart's `viewBox`, so a CSS-scaled chart maps the pointer correctly; absent, the hook takes the container's own pixel size |
+
+Every number prints through `Visualize.IR.Path.format_number/1` (at most four decimals, never `-0`), and the arrays are built by the library, so the attributes need no JSON library. A chart of `n` distinct x values and `s` series costs `n` numbers plus `n × s` numbers once per render, whatever the render target.
+
+### 13.3 `CrosshairHook` behaviour
+
+Attach with `phx-hook="CrosshairHook"` and an `id` on a *container* holding the chart — the `<div>` around an `<svg>`, or the canvas hook's container — with the attributes of 13.2 on it. Data attributes read on `mounted()` and again on `updated()`, so a chart re-rendered with new data snaps to the new arrays:
+
+| Attribute | Default | Meaning |
+|---|---|---|
+| `data-xs`, `data-ys`, `data-plot`, `data-size` | required, `data-ys` and `data-size` optional | 13.2 |
+| `data-crosshair-event` | unset | when set, the event pushed with `{index}` — the index into `data-xs` — each time the nearest index changes; unset, the hook pushes nothing |
+| `data-crosshair-color` | `"#666"` | the rule's stroke, and the markers' fill for a series `data-crosshair-colors` does not cover |
+| `data-crosshair-colors` | unset | a JSON array of one fill per series of `data-ys`, in order |
+
+On `mounted()` the hook creates an overlay `<svg class="crosshair">` with `position: absolute` and `pointer-events: none`, appends it to `document.body` — never inside the container, so a LiveView patch of the chart neither removes it nor sees it — and inside it a group translated to the plot's origin holding a `<line class="crosshair-rule">` from `0` to the plot's height and one `<circle class="crosshair-marker" r="4">` per series of `data-ys`; the overlay is hidden until a move. It binds `mousemove`, `mouseleave`, `touchmove` and `touchend` on the container, each handler bound once and kept (D-47). On a move the hook reads the container's bounding rectangle, sizes and places the overlay over it with the chart's `viewBox` (`0 0 width height` of `data-size`, else the rectangle's size), converts the pointer into chart units by the ratio of the two, subtracts the plot's origin, and hides the overlay when the point is outside the plot area; otherwise it finds the nearest x by binary search over `data-xs` — the lower of two equidistant neighbours — moves the rule to it, moves each series' marker to its y there and hides a marker whose y is `null`, and, when `data-crosshair-event` is set and the index differs from the last pushed, pushes `pushEvent(event, {index})`, arriving as `handle_event("hover", %{"index" => 3}, socket)` with an integer. A touch move uses its first touch; `touchend` and `mouseleave` hide the overlay. `updated()` re-reads the four arrays and rebuilds the markers when the series count changed; `destroyed()` removes the four listeners with the kept references and the overlay from the document. `test/visualize/hooks/crosshair_test.exs` holds the source to this shape.
