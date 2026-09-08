@@ -74,8 +74,17 @@ defmodule Visualize.Chart.SchemaTest do
              :circle
            ]
 
-    assert Schema.channels(:area) == %{required: [:x, :y], optional: [:x0, :x1, :y0, :y1]}
-    assert Schema.channels(:percentile_band).required == [:x, :median, :inner, :outer]
+    assert Schema.channels(:area) ==
+             %{required: [:x, :y], optional: [:x0, :x1, :y0, :y1, :series]}
+
+    assert Schema.channels(:percentile_band) ==
+             %{required: [:x, :median], optional: [:inner_lo, :inner_hi, :outer_lo, :outer_hi]}
+
+    assert Schema.channels(:path) == %{required: [:path], optional: []}
+    assert Schema.transform_keys(:bin) == %{required: [:field], optional: [:thresholds, :as]}
+    assert Schema.transform_keys(:projection) == %{required: [:fields], optional: []}
+    assert :projection in Schema.transform_ops()
+    assert_raise ArgumentError, fn -> Schema.transform_keys(:nope) end
 
     assert Schema.options(:arc) == [
              :inner_radius,

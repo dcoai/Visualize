@@ -132,6 +132,10 @@ defmodule Visualize.Chart.Schema do
   @spec transform_ops() :: [atom(), ...]
   def transform_ops, do: Mark.ops()
 
+  @doc "The required and optional keys of a transform op (spec/14 §5.4)."
+  @spec transform_keys(atom()) :: %{required: [atom()], optional: [atom()]}
+  def transform_keys(op), do: Mark.transform_keys(op)
+
   @doc "The scale kinds of spec/14 §4.3."
   @spec scale_kinds() :: [atom(), ...]
   def scale_kinds, do: Frame.scale_kinds()

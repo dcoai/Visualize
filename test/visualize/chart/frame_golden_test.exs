@@ -92,6 +92,7 @@ defmodule Visualize.Chart.FrameGoldenTest do
     %{
       version: 1,
       sources: %{primary: %{fields: [:lon, :lat, :v]}},
+      styles: %{by_v: %{fill: {:field, :v}}},
       frame: %{
         kind: :geo,
         size: %{width: 400, height: 200},
@@ -100,7 +101,7 @@ defmodule Visualize.Chart.FrameGoldenTest do
         scales: %{color: %{kind: :sequential, domain: [0, :auto]}},
         legend: %{scale: :color, position: :bottom, title: ["v"]}
       },
-      marks: [%{type: :circle, data: :primary, channels: %{x: :lon, y: :lat, value: :v}}],
+      marks: [%{type: :circle, data: :primary, channels: %{x: :lon, y: :lat}, style: :by_v}],
       labels: [%{anchor: :title, text: ["Geo"]}, %{anchor: {:data, [0, 0]}, text: ["origin"]}]
     }
   end

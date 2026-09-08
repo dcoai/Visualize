@@ -21,20 +21,22 @@ defmodule Visualize.Chart.Frame.Furniture do
   @group_keys [:opacity, :class, :font_family, :font_size, :font_weight]
 
   @doc false
-  # The grid group when any axis asks for one, then one group per axis (cartesian).
-  @spec cartesian(map(), atom()) :: [Element.t()]
-  def cartesian(frame, mode) do
+  # The grid group when any axis asks for one, then the marks given, then one group per
+  # axis (cartesian).
+  @spec cartesian(map(), atom(), [Element.t()]) :: [Element.t()]
+  def cartesian(frame, mode, marks \\ []) do
     axes = Enum.map(frame.axes, &{&1, axis(frame, &1)})
 
     grid(frame, axes, mode) ++
+      marks ++
       Enum.map(axes, fn {node, axis} -> place(frame, node, axis, mode) end)
   end
 
   @doc false
-  # One group at the plot centre holding the polar grid and the ring and spoke axes;
-  # an axis on any other scale draws as a cartesian one.
-  @spec polar(map(), atom()) :: [Element.t()]
-  def polar(frame, mode) do
+  # One group at the plot centre holding the polar grid, the marks given, and the ring
+  # and spoke axes; an axis on any other scale draws as a cartesian one.
+  @spec polar(map(), atom(), [Element.t()]) :: [Element.t()]
+  def polar(frame, mode, marks \\ []) do
     {polar, other} = Enum.split_with(frame.axes, &(&1.scale in [:angle, :r]))
     axes = Enum.map(polar, &{&1, axis(frame, &1)})
     centre = Transform.translate(frame.plot.width / 2, frame.plot.height / 2)
@@ -51,7 +53,7 @@ defmodule Visualize.Chart.Frame.Furniture do
 
     groups = Enum.map(axes, fn {node, axis} -> polar_axis(frame, node, axis, mode) end)
 
-    [Element.group(grid ++ groups, style: %{class: "polar"}, transform: centre)] ++
+    [Element.group(grid ++ marks ++ groups, style: %{class: "polar"}, transform: centre)] ++
       cartesian(%{frame | axes: other}, mode)
   end
 

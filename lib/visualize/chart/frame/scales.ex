@@ -5,7 +5,7 @@ defmodule Visualize.Chart.Frame.Scales do
   # bound column of every mark channel naming the scale, `:auto` ranges from the plot
   # area by the scale's name, and the unit domain when nothing is bound (D-60).
 
-  alias Visualize.Chart.{Schema, Style, Var}
+  alias Visualize.Chart.{Schema, Style, Transform, Var}
   alias Visualize.{Data, Scale, Theme}
   alias Visualize.Data.Table
   alias Visualize.Scale.{Band, Color, Ordinal, Power, Symlog}
@@ -24,20 +24,26 @@ defmodule Visualize.Chart.Frame.Scales do
     y0: :y,
     y1: :y,
     median: :y,
-    inner: :y,
-    outer: :y,
-    value: :color
+    inner_lo: :y,
+    inner_hi: :y,
+    outer_lo: :y,
+    outer_hi: :y,
+    value: :color,
+    series: :color
   }
   @polar %{angle: :angle, value: :r, inner: :r, outer: :r}
-  @geo %{value: :color}
+  @geo %{value: :color, series: :color}
+
+  # The mark types whose `value` is a size or a share and names no scale (spec/14 §5.2).
+  @unscaled_value [:symbol, :circle, :arc]
 
   @doc false
   # Every scale of the frame node realised: `%{name => struct}`.
-  @spec realise(map(), atom(), map(), Theme.t(), map(), %{atom() => map()}) ::
+  @spec realise(map(), atom(), map(), Theme.t(), map(), %{atom() => map()}, map()) ::
           %{atom() => struct()}
-  def realise(design, kind, plot, theme, sources, styles) do
+  def realise(design, kind, plot, theme, sources, styles, ctx) do
     frame = design.frame
-    columns = columns(design, kind, sources, styles)
+    columns = columns(design, kind, sources, styles, ctx)
     axes = Map.get(frame, :axes, [])
 
     Map.new(Map.get(frame, :scales, %{}), fn {name, node} ->
@@ -53,13 +59,25 @@ defmodule Visualize.Chart.Frame.Scales do
   def channel_scales(_cartesian_or_facet), do: @cartesian
 
   @doc false
-  # The rows of a mark's source when it is bound, `[]` otherwise; only map rows carry
-  # names a channel can read.
-  @spec mark_rows(map(), map()) :: [map()]
-  def mark_rows(mark, sources) do
+  # The scale a channel of a mark type names in a frame kind, or `nil` when it names
+  # none (spec/14 §4.3, §5.2).
+  @spec scale_for(atom(), atom(), atom()) :: atom() | nil
+  def scale_for(_kind, type, :value) when type in @unscaled_value, do: nil
+  def scale_for(kind, _type, channel), do: Map.get(channel_scales(kind), channel)
+
+  @doc false
+  # The rows a mark draws: its source's rows through its transforms with the plot area
+  # and the projection as the pipeline's context (spec/14 §5.4), `[]` when the source is
+  # not bound; only map rows carry names a channel can read.
+  @spec mark_rows(map(), map(), map()) :: [map()]
+  def mark_rows(mark, sources, ctx) do
     case Map.fetch(sources, source_name(mark.data)) do
-      {:ok, source} -> source |> Table.rows() |> Enum.filter(&is_map/1)
-      :error -> []
+      {:ok, source} ->
+        rows = source |> Table.rows() |> Enum.filter(&is_map/1)
+        Transform.apply(transforms(mark.data), rows, size: ctx.size, projection: ctx.projection)
+
+      :error ->
+        []
     end
   end
 
@@ -67,23 +85,24 @@ defmodule Visualize.Chart.Frame.Scales do
   defp source_name(name) when is_atom(name), do: name
   defp source_name(%{source: name}), do: name
 
+  defp transforms(%{transforms: steps}) when is_list(steps), do: steps
+  defp transforms(_data), do: []
+
   # -- the bound columns per scale --------------------------------------------------
 
-  defp columns(design, kind, sources, styles) do
-    table = channel_scales(kind)
-
+  defp columns(design, kind, sources, styles, ctx) do
     design.marks
-    |> Enum.flat_map(fn mark -> mark_columns(mark, table, sources, styles) end)
+    |> Enum.flat_map(fn mark -> mark_columns(mark, kind, sources, styles, ctx) end)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
     |> Map.new(fn {scale, columns} -> {scale, List.flatten(columns)} end)
   end
 
-  defp mark_columns(mark, table, sources, styles) do
-    rows = mark_rows(mark, sources)
+  defp mark_columns(mark, kind, sources, styles, ctx) do
+    rows = mark_rows(mark, sources, ctx)
 
     channels =
       for {channel, value} <- Map.get(mark, :channels, %{}),
-          scale = Map.get(table, channel),
+          scale = scale_for(kind, mark.type, channel),
           scale != nil,
           do: {scale, values(value, rows)}
 

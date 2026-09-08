@@ -10,8 +10,10 @@ defmodule Visualize.Chart.Frame do
   the escape hatch for annotations, brush conversion and custom marks; `put_scale/3`
   replaces one. `generate/2` is the furniture as one `Visualize.IR.Element` group with
   the margins applied and every theme slot resolved through `Visualize.Theme.resolve/3`;
-  `render/2` is the same as a string. A frame renders with no source at all, over its
-  unit domains, which is what the static split of a compiled chart needs (spec/14 §12).
+  `render/2` is the same as a string. Given `sources:`, both also draw every mark of the
+  design between the grid and the axes through `Visualize.Chart.Mark.generate/3`
+  (spec/14 §5.6); without them a frame renders the furniture alone, over its unit
+  domains, which is what the static split of a compiled chart needs (spec/14 §12).
 
   ## Examples
 
@@ -39,7 +41,7 @@ defmodule Visualize.Chart.Frame do
 
   alias Visualize.{Chart, Theme}
   alias Visualize.Chart.Frame.{Furniture, Labels, Legend, Scales}
-  alias Visualize.Chart.{Schema, Style, Var}
+  alias Visualize.Chart.{Mark, Schema, Style, Var}
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
 
@@ -54,6 +56,7 @@ defmodule Visualize.Chart.Frame do
             axes: [],
             legend: nil,
             labels: [],
+            marks: [],
             theme: nil,
             styles: %{},
             design_styles: %{}
@@ -73,6 +76,7 @@ defmodule Visualize.Chart.Frame do
           axes: [map()],
           legend: map() | nil,
           labels: [map()],
+          marks: [map()],
           theme: Theme.t(),
           styles: %{atom() => map()},
           design_styles: %{atom() => map()}
@@ -106,22 +110,25 @@ defmodule Visualize.Chart.Frame do
 
     theme = theme(chart.theme, Keyword.get(opts, :theme))
     styles = Style.all(chart.styles)
-    panels = panels(kind, node, chart, sources)
+    projection = projection(kind, node, plot)
+    panels = panels(kind, node, chart, sources, context(plot, projection))
     facet = facet(kind, node, panels)
     scale_plot = if facet, do: panel_plot(plot, facet.columns, panels), else: plot
+    ctx = context(scale_plot, projection)
 
     %__MODULE__{
       kind: kind,
       size: size,
       margin: margin,
       plot: plot,
-      scales: Scales.realise(chart, kind, scale_plot, theme, sources, styles),
-      projection: projection(kind, node, plot),
+      scales: Scales.realise(chart, kind, scale_plot, theme, sources, styles, ctx),
+      projection: projection,
       panels: panels,
       facet: facet,
       axes: Map.get(node, :axes, []),
       legend: Map.get(node, :legend),
       labels: chart.labels,
+      marks: chart.marks,
       theme: theme,
       styles: styles,
       design_styles: chart.styles
@@ -156,19 +163,24 @@ defmodule Visualize.Chart.Frame do
   def generate(%__MODULE__{} = frame), do: generate(frame, [])
 
   @doc """
-  The static furniture as one `Visualize.IR.Element` group (spec/14 §4.7).
+  The frame as one `Visualize.IR.Element` group (spec/14 §4.7): the static furniture,
+  and every mark of the design between the grid and the axes when sources are given.
 
   ## Options
 
     * `:resolve` - how the theme's slots render: `:css` (default) for references a
       stylesheet can override, `:literal` for the plain values a canvas needs
+    * `:sources` - a map from source name to anything `Visualize.Data.Table.rows/1`
+      reads, as `new/2` takes; when given, the marks are drawn from them (spec/14 §5.6)
   """
   @spec generate(t(), keyword()) :: Element.t()
   def generate(%__MODULE__{} = frame, opts) do
     mode = Keyword.get(opts, :resolve, :css)
+    sources = Keyword.get(opts, :sources)
 
     children =
-      furniture(frame, mode) ++ Legend.generate(frame, mode) ++ Labels.generate(frame, mode)
+      furniture(frame, mode, sources) ++
+        Legend.generate(frame, mode) ++ Labels.generate(frame, mode)
 
     Element.group(children,
       style: %{class: "frame"},
@@ -188,17 +200,22 @@ defmodule Visualize.Chart.Frame do
     * `:backend` - `:svg`, `:canvas`, or a module; defaults to the configured backend
     * `:resolve` - the theme mode of `generate/2`; defaults to `Visualize.Theme.mode/1`
       of the backend
+    * `:sources` - as `generate/2` takes it
   """
   @spec render(t(), keyword()) :: String.t()
   def render(%__MODULE__{} = frame, opts) do
     {mode, opts} = Keyword.pop_lazy(opts, :resolve, fn -> Theme.mode(opts[:backend]) end)
+    {sources, opts} = Keyword.pop(opts, :sources)
 
     frame
-    |> generate(resolve: mode)
+    |> generate(resolve: mode, sources: sources)
     |> Visualize.Render.to_string(opts)
   end
 
   # -- construction ---------------------------------------------------------------------
+
+  # What a mark's pipeline sees of the frame (spec/14 §5.4).
+  defp context(plot, projection), do: %{size: [plot.width, plot.height], projection: projection}
 
   defp margin(%Var{name: name}), do: Style.unresolved!(name)
 
@@ -254,10 +271,10 @@ defmodule Visualize.Chart.Frame do
 
   # The facet's panels: the distinct values of `by` over every bound source, in order of
   # first appearance; one panel with no value when nothing is bound (spec/14 §4.6).
-  defp panels(:facet, %{facet: %{by: by}}, chart, sources) do
+  defp panels(:facet, %{facet: %{by: by}}, chart, sources, ctx) do
     values =
       chart.marks
-      |> Enum.flat_map(&Scales.mark_rows(&1, sources))
+      |> Enum.flat_map(&Scales.mark_rows(&1, sources, ctx))
       |> Enum.map(&Visualize.Data.Table.get(&1, by))
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
@@ -265,7 +282,7 @@ defmodule Visualize.Chart.Frame do
     if values == [], do: [nil], else: values
   end
 
-  defp panels(_kind, _node, _chart, _sources), do: []
+  defp panels(_kind, _node, _chart, _sources, _ctx), do: []
 
   # The facet with its effective column count: `columns` as given, else one row.
   defp facet(:facet, %{facet: %{by: by} = spec}, panels) do
@@ -281,9 +298,11 @@ defmodule Visualize.Chart.Frame do
 
   # -- furniture by kind ----------------------------------------------------------------
 
-  defp furniture(%{kind: :polar} = frame, mode), do: Furniture.polar(frame, mode)
+  defp furniture(%{kind: :polar} = frame, mode, sources) do
+    Furniture.polar(frame, mode, marks(frame, mode, sources, []))
+  end
 
-  defp furniture(%{kind: :facet, facet: %{columns: columns}} = frame, mode) do
+  defp furniture(%{kind: :facet, facet: %{columns: columns}} = frame, mode, sources) do
     panel = panel_plot(frame.plot, columns, frame.panels)
     inner = %{frame | plot: panel}
     style = Style.resolve(Style.node(frame.styles, :label), frame.theme, mode)
@@ -292,15 +311,27 @@ defmodule Visualize.Chart.Frame do
       x = rem(i, columns) * panel.width
       y = div(i, columns) * panel.height
       title = if value == nil, do: [], else: [panel_title(value, style)]
+      marks = marks(inner, mode, sources, panel: value)
 
-      Element.group(Furniture.cartesian(inner, mode) ++ title,
+      Element.group(Furniture.cartesian(inner, mode, marks) ++ title,
         style: %{class: "panel"},
         transform: Transform.translate(x, y)
       )
     end)
   end
 
-  defp furniture(frame, mode), do: Furniture.cartesian(frame, mode)
+  defp furniture(frame, mode, sources) do
+    Furniture.cartesian(frame, mode, marks(frame, mode, sources, []))
+  end
+
+  # Every mark of the design at its one-based position, or nothing without sources.
+  defp marks(_frame, _mode, nil, _opts), do: []
+
+  defp marks(frame, mode, sources, opts) do
+    Enum.with_index(frame.marks, fn mark, i ->
+      Mark.generate(frame, mark, [sources: sources, resolve: mode, index: i + 1] ++ opts)
+    end)
+  end
 
   defp panel_title(value, style) do
     Element.new(:text,
