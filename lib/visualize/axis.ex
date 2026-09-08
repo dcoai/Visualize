@@ -226,7 +226,7 @@ defmodule Visualize.Axis do
 
   # Create a tick group with line and label
   defp create_tick_group(axis, value, k, y_attr, transform_attr, stroke, fill) do
-    pos = Scale.apply(axis.scale, value) + axis.offset + band_centre(axis)
+    pos = tick_position(axis, value)
     label = format_tick(axis, value)
 
     transform =
@@ -283,6 +283,30 @@ defmodule Visualize.Axis do
     end
   end
 
+  @doc false
+  # The position of a tick value along the axis: the scale's value plus the pixel offset
+  # and the band centring of spec/05 §1.3. The frame's grid lines are drawn at these
+  # positions, so the arithmetic lives here once.
+  @spec tick_position(t(), any()) :: number()
+  def tick_position(%__MODULE__{scale: scale, offset: offset} = axis, value) do
+    Scale.apply(scale, value) + offset + band_centre(axis)
+  end
+
+  @doc false
+  # The default tick label of spec/05 §1.5: a float rounded to six places with trailing
+  # zeros and point removed, anything else `to_string/1`. The frame's legend labels its
+  # entries the same way.
+  @spec default_label(any()) :: String.t()
+  def default_label(value) when is_float(value) do
+    value
+    |> Float.round(6)
+    |> Float.to_string()
+    |> String.trim_trailing("0")
+    |> String.trim_trailing(".")
+  end
+
+  def default_label(value), do: to_string(value)
+
   # d3-axis's `center`: a tick on a band scale sits at the middle of its band. The centring
   # offset shrinks by the pixel offset on each side (so `offset` still lands the tick on a
   # pixel centre) and is rounded when the band scale rounds, as d3 does; on every other
@@ -292,21 +316,8 @@ defmodule Visualize.Axis do
     if match?(%{round?: true}, scale), do: round(centre), else: centre
   end
 
-  defp format_tick(%__MODULE__{tick_format: nil}, value) when is_float(value) do
-    value
-    |> Float.round(6)
-    |> Float.to_string()
-    |> String.trim_trailing("0")
-    |> String.trim_trailing(".")
-  end
-
-  defp format_tick(%__MODULE__{tick_format: nil}, value) do
-    to_string(value)
-  end
-
-  defp format_tick(%__MODULE__{tick_format: formatter}, value) do
-    formatter.(value)
-  end
+  defp format_tick(%__MODULE__{tick_format: nil}, value), do: default_label(value)
+  defp format_tick(%__MODULE__{tick_format: formatter}, value), do: formatter.(value)
 
   defp get_range(scale) do
     # Access the range from various scale types

@@ -39,6 +39,7 @@ defmodule Visualize.Chart.Validator do
   @type error :: {path(), reason()}
 
   @frame_anchors [:title, :subtitle, :caption]
+  @corners [:top_left, :top_right, :bottom_left, :bottom_right]
   @not_names [nil, true, false]
 
   @doc "`:ok`, or every fault of the design ordered by path."
@@ -263,6 +264,12 @@ defmodule Visualize.Chart.Validator do
     if name?(s), do: ref(:scale, s, path, ctx), else: [{path, {:type, :anchor}}]
   end
 
+  defp check(:anchor, {:frame, c}, _path, _ctx) when c in @corners, do: []
+
+  defp check(:anchor, {:data, [x, y]}, path, _ctx) do
+    if term?(x) and term?(y), do: [], else: [{path, {:type, :anchor}}]
+  end
+
   defp check(:colour, v, _path, _ctx) when is_binary(v) or v == :none, do: []
   defp check(:colour, v, path, ctx), do: slot_or(:colour, v, path, ctx)
   defp check(:size, v, _path, _ctx) when is_number(v), do: []
@@ -392,7 +399,12 @@ defmodule Visualize.Chart.Validator do
   defp type_words(:channel), do: "a field name, a number or {:field, name}"
   defp type_words(:extent), do: "an extent: :auto, [lo, hi] or a list of categories"
   defp type_words(:text), do: "a list of strings, variables and field references"
-  defp type_words(:anchor), do: "an anchor: :title, :subtitle, :caption or {:axis, scale}"
+
+  defp type_words(:anchor) do
+    "an anchor: :title, :subtitle, :caption, {:axis, scale}, {:frame, corner} or " <>
+      "{:data, [x, y]}"
+  end
+
   defp type_words(:colour), do: "a colour string, :none or a theme slot"
   defp type_words(:size), do: "a number or a theme slot"
   defp type_words(:font), do: "a font string or a theme slot"

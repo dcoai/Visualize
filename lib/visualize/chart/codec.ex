@@ -58,6 +58,8 @@ defmodule Visualize.Chart.Codec do
   defp value(:text, v) when is_list(v), do: Enum.map(v, &value(:term, &1))
   defp value(:anchor, v) when is_atom(v), do: Atom.to_string(v)
   defp value(:anchor, {:axis, s}) when is_atom(s), do: %{"$axis" => Atom.to_string(s)}
+  defp value(:anchor, {:frame, c}) when is_atom(c), do: %{"$frame" => Atom.to_string(c)}
+  defp value(:anchor, {:data, [x, y]}), do: %{"$data" => [term(x), term(y)]}
   defp value(_type, v), do: term(v)
 
   defp category(:auto), do: "auto"
@@ -135,6 +137,12 @@ defmodule Visualize.Chart.Codec do
 
   defp read(:anchor, %{"$axis" => s} = v) when map_size(v) == 1 and is_binary(s),
     do: {:axis, String.to_atom(s)}
+
+  defp read(:anchor, %{"$frame" => c} = v) when map_size(v) == 1 and is_binary(c),
+    do: {:frame, String.to_atom(c)}
+
+  defp read(:anchor, %{"$data" => [x, y]} = v) when map_size(v) == 1,
+    do: {:data, [read_term(x), read_term(y)]}
 
   defp read(_type, v), do: read_term(v)
 

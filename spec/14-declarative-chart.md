@@ -4,7 +4,7 @@
 
 A chart is a nested map — a *design* — that names its data, its coordinate frame, its marks and its labels without a function anywhere in it, so that a design can be stored, diffed, shared, built by a tool and rendered against different data. This document is the contract for the whole layer: the map at every level with every key's type, facet, default and merge rule; the style grammar; sources as typed slots and variables as terms; version and migration; the validator and its error shape; the JSON form; and, as agreed prose, application, composition and compilation. Vega-Lite is the precedent for a stored design and its flat several-hundred-key specification is the warning: the map keeps the three-noun nesting of theme, style and frame (D-57).
 
-Each section states what is implemented. The schema, the validator, the `Visualize.Chart` struct with its map and JSON round-trips, variables and version handling are **Implemented**; the frame's rendering, the marks and transforms, application, composition and compilation are **Agreed** and land in the following work items of proposal #53.
+Each section states what is implemented. The schema, the validator, the `Visualize.Chart` struct with its map and JSON round-trips, variables and version handling, and the frame — its scales, inference, axes, grid, legend and labels, rendered as the static furniture — are **Implemented**; the marks and transforms, application, composition and compilation are **Agreed** and land in the following work items of proposal #53.
 
 ## 1. The map
 
@@ -65,7 +65,7 @@ A container's facet is the facet of what it holds: `marks` is `:channel` because
 | `:channel` | a `:field`, a number (a constant channel) or a `:field_ref` |
 | `:extent` | `:auto`; a two-element list of numbers, `DateTime`s or `:auto`; or a list of categories (numbers, strings, atoms) |
 | `:text` | a list whose elements are strings, variables and `:field_ref`s — never a parsed string |
-| `:anchor` | `:title`, `:subtitle`, `:caption`, or `{:axis, s}` with `s` a `{:ref, :scale}` |
+| `:anchor` | `:title`, `:subtitle`, `:caption`; `{:axis, s}` with `s` a `{:ref, :scale}`; `{:frame, c}` with `c` one of `:top_left`, `:top_right`, `:bottom_left`, `:bottom_right`; or `{:data, [x, y]}` with `x` and `y` values in the domains of the frame's position scales (§6.3) |
 | `:colour` | a colour string, `:none`, or a theme slot |
 | `:size` | a number or a theme slot |
 | `:font` | a string or a theme slot |
@@ -176,13 +176,13 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 
 ### 3.3 Built-in styles
 
-**Agreed.** Four style names are always declared, derived from the theme's slots by the compiler, and a `styles` entry of the same name replaces one: `:axis` (`stroke: :axis`, `fill: :text`, `font_family: :font_family`, `font_size: :font_size`), `:grid` (`stroke: :grid`), `:label` (`fill: :text`, `font_family: :font_family`, `font_size: :label_size`) and `:title` (as `:label` with `font_size: :title_size`, `font_weight: :bold`). `Visualize.Chart.Schema.builtin_styles/0` lists them, and a `{:ref, :style}` resolves against the union of the built-in and the declared names (**Implemented**). A mark with no `style` takes the theme's `{:series, i}` for its one-based position among the marks.
+**Implemented.** Four style names are always declared, derived from the theme's slots, and a `styles` entry of the same name replaces one whole: `:axis` (`stroke: :axis`, `fill: :text`, `font_family: :font_family`, `font_size: :font_size`), `:grid` (`stroke: :grid`), `:label` (`fill: :text`, `font_family: :font_family`, `font_size: :label_size`) and `:title` (as `:label` with `font_size: :title_size`, `font_weight: :bold`). `Visualize.Chart.Schema.builtin_styles/0` lists them, a `{:ref, :style}` resolves against the union of the built-in and the declared names, and the frame resolves a style to an element's style map by `Visualize.Theme.resolve/3` for every slot in it (§4.7). A mark with no `style` takes the theme's `{:series, i}` for its one-based position among the marks (**Agreed**, work item 3 of #53).
 
 ## 4. The frame
 
 ### 4.1 Keys
 
-**Implemented** as schema; the rendering of the furniture is **Agreed** (work item 2 of #53).
+**Implemented.** The frame node is the coordinate system and its furniture. `Visualize.Chart.Frame.new/2` realises a chart's frame into a `%Visualize.Chart.Frame{}` (§4.7) — every scale built once, the theme resolved — and `Visualize.Chart.Frame.generate/2` renders the furniture: grid, axes, legend and labels, the static part of a chart that a data change never touches (§12).
 
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
@@ -198,11 +198,11 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 
 ### 4.2 Size and margin
 
-**Implemented.** `:size` has `width` and `height`, both `:number`, `:geometry`, required. `:margin` has `top`, `right`, `bottom` and `left`, each `:number`, `:geometry`, default `0`. The plot area is the size less the margins; `Visualize.Chart.Schema.default/2` gives the frame's defaults so a consumer never repeats them.
+**Implemented.** `:size` has `width` and `height`, both `:number`, `:geometry`, required. `:margin` has `top`, `right`, `bottom` and `left`, each `:number`, `:geometry`, default `0`. The plot area is the size less the margins; `Visualize.Chart.Schema.default/2` gives the frame's defaults so a consumer never repeats them, and the frame struct carries the plot area as `plot` (§4.7).
 
 ### 4.3 Scales
 
-**Implemented** as schema; inference is **Agreed**. A `:scale` node is one of the fourteen kinds `Visualize.Scale` constructs ([03-scales](03-scales.md) §2) with the kind's parameters; every key is `:geometry` and `:override`.
+**Implemented.** A `:scale` node is one of the fourteen kinds `Visualize.Scale` constructs ([03-scales](03-scales.md) §2) with the kind's parameters; every key is `:geometry` and `:override`.
 
 | Key | Type | Default | Applies to |
 |---|---|---|---|
@@ -221,11 +221,22 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 | `round` | `:boolean` | `false` | `:band` |
 | `unknown` | `:term` | `nil` | `:ordinal` |
 
-`domain: :auto` is inferred at application from every mark channel that names the scale: the extent of the bound columns by `Visualize.Data.extent/2`, the whole column read (Tucan's first-row rule is the documented limit, D-52). `[0, :auto]` fixes one end. `range: :auto` is the plot area's extent along the scale's axis — the scale named `x` runs left to right, `y` bottom to top, `angle` the turn, `r` the radius; a colour scale's `:auto` range is the theme's series. A scale name is any atom; the names `x`, `y`, `angle`, `r` and `color` carry the meanings above, so an axis or a legend on any other name MUST say which axis it follows through `side` and `position`.
+**Realisation.** `Visualize.Chart.Frame.new/2` builds one scale struct per entry through the constructors of `Visualize.Scale` — `:linear` by `Visualize.Scale.linear/0`; `:log` by `Visualize.Scale.log/1` with `base`; `:power` by `Visualize.Scale.power/0` with `exponent`; `:sqrt`; `:symlog` with `constant`; `:time`; `:radial`; `:ordinal` with `unknown`; `:band` with `padding` or, when either is given, `padding_inner` and `padding_outer`, then `align` and `round`; `:quantize`, `:quantile` and `:threshold`; `:sequential` and `:diverging` by `Visualize.Scale.Color` over the range — then the domain, the range, and `Visualize.Scale.nice/1` and `Visualize.Scale.clamp/2` when the flags are true. The realised scales are cached on the frame and read through `Visualize.Chart.Frame.scales/1`, the escape hatch for annotations, brush conversion and custom marks; `Visualize.Chart.Frame.put_scale/3` replaces one after construction, which is the code-level override of §1.1 — an axis drawn for that name follows the replacement (D-60).
+
+**Inference.** `domain: :auto`, or an extent with `:auto` at one end, is inferred at construction from every mark channel that names the scale, over the sources given to `new/2`, whole column (Tucan's first-row rule is the documented limit, D-52):
+
+- A channel names a scale by the frame's kind. In a `:cartesian` (and a `:facet`) frame `x`, `x0` and `x1` name `x`; `y`, `y0`, `y1`, `median`, `inner` and `outer` name `y`; `value` names `color`. In a `:polar` frame `angle` names `angle`; `value`, `inner` and `outer` name `r`. In a `:geo` frame `value` names `color`. A `{:field, f}` on a `:colour` key of a mark's style names `color` in every kind (§3.2).
+- The values are the channel's column of the mark's source through `Visualize.Data.Table.get/2` — the field itself, or the `f` of a `{:field, f}` — with `nil`s dropped; a number channel contributes the number. A mark whose source is not among the bound sources contributes nothing, and a mark that reads its source through transforms contributes the named column of the untransformed source when it has one (the transformed columns exist at application, §7.3).
+- The domain follows the kind. Continuous scales (`:linear`, `:log`, `:power`, `:sqrt`, `:symlog`, `:radial`, `:quantize`, `:threshold`, `:sequential`) take the extent `[lo, hi]` of `Visualize.Data.extent/2`; `:diverging` takes `[lo, (lo + hi) / 2, hi]`. `:time` takes the extent under the values' own ordering (`DateTime`, `Date` or `NaiveDateTime` compare by their module, never by term order), an ISO 8601 string read as `Visualize.Data.Table.temporal?/1` reads it, and a value that is not temporal raises `ArgumentError` naming the scale. `:quantile` takes every value as its samples. `:ordinal` and `:band` take the distinct values in order of first appearance.
+- `[0, :auto]` fixes the lower end and infers the upper; `[:auto, hi]` the reverse.
+- A collapsed extent — one distinct value — stays `[v, v]`: every continuous scale maps it to the range midpoint and its axis draws one tick (D-49). The frame never widens a domain; an author who wants a readable axis fixes an end.
+- Nothing bound gives the unit domain: `[0, 1]` for a continuous scale (`[1, 10]` for `:log`, whose domain excludes zero), `[0, 0.5, 1]` diverging, one day from the Unix epoch for `:time`, `[]` for the discrete and quantile scales. A frame therefore renders without any source, over its unit domains, which is what the static split needs (§12).
+
+**Range.** `range: :auto` follows the scale's name. `x` is `[0, width]` of the plot area and `y` is `[height, 0]`; `angle` is `[0, 2π]`, radians clockwise from 12 o'clock ([04-shapes-and-curves](04-shapes-and-curves.md) §6.2); `r` is `[0, min(width, height) / 2]`; `color` on a discrete scale is the theme's series as slot atoms, `[:series_1, …, :series_n]`, which the legend and the marks resolve through `Visualize.Theme.resolve/3` in the mode of their render target, so a theme swap recolours the scale's output. A `:sequential` scale, whatever its name, runs from the theme's `background` to its first series colour and a `:diverging` one from the second series colour through the background to the first: a colour scale's output is a colour, and the plot area has nothing to offer it. Any other name follows the first axis that names it — `:top` or `:bottom` as `x`, `:left` or `:right` as `y` — and is `[0, 1]` when no axis does. A range given as a list is used as it is; a scheme name is `Visualize.Scale.Color.scheme/1`'s stops, the colours of a discrete scale or the interpolator of a colour scale. A scale name is any atom; the names `x`, `y`, `angle`, `r` and `color` carry the meanings above, so an axis or a legend on any other name MUST say where it draws through `side` and `position`.
 
 ### 4.4 Axes and tick specs
 
-**Implemented** as schema. An `:axis` node draws a scale on one side of the plot area; tick geometry is a `:ticks` node, the fourth level.
+**Implemented.** An `:axis` node draws a scale on one side of the plot area; tick geometry is a `:ticks` node, the fourth level.
 
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
@@ -237,11 +248,15 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 | `offset` | `:number` | `:geometry` | `0` | `:override` |
 | `style` | `{:ref, :style}` | `:style` | `:axis` | `:override` |
 
-`ticks` as an integer is the count hint, as a list the explicit values, as a `:ticks` node both with the sizes: `count` (`:integer`, `:geometry`), `values` (`{:list, :term}`, `:content`), `size_inner` and `size_outer` (`:number`, `:geometry`, `6`) and `padding` (`:number`, `:geometry`, `3`) — the setters of [05-axes-and-formatting](05-axes-and-formatting.md) §1.2 by name. `format` is a `Visualize.Format` specifier applied to every tick value. `grid: true` extends each tick across the plot area in the `:grid` style, `aria-hidden` like the axis (D-56). The axis's line, ticks and labels draw in its `style`; tick sizes stay geometry.
+`ticks` as an integer is the count hint, as a list the explicit values, as a `:ticks` node both with the sizes: `count` (`:integer`, `:geometry`), `values` (`{:list, :term}`, `:content`), `size_inner` and `size_outer` (`:number`, `:geometry`, `6`) and `padding` (`:number`, `:geometry`, `3`) — the setters of [05-axes-and-formatting](05-axes-and-formatting.md) §1.2 by name. Explicit values beat the count, and the count beats the scale's default of ten.
+
+Each axis is a `Visualize.Axis` on the realised scale, oriented by `side`, with the tick spec, `offset` and the frame's theme applied, generated in the `:resolve` mode of the render (spec/05 §1.4) and placed at its side of the plot area: `:bottom` at `translate(0, height)`, `:right` at `translate(width, 0)`, `:top` and `:left` at the origin. A frame's axis is therefore byte for byte the axis a caller builds by hand from the same scale, and `test/visualize/chart/frame_test.exs` holds it to that. `format` is a `Visualize.Format` specifier applied to every tick value: `Visualize.Format.time/2` on a `:time` scale, `Visualize.Format.formatter/1` on any other, a tick value that is not a number passing through `to_string/1`.
+
+`grid: true` draws a line at each tick position across the plot area — the height for a `:top` or `:bottom` axis, the width for a `:left` or `:right` one — in the `:grid` style, behind every axis, in one group `class="grid"` that is `aria-hidden` like the axes (D-56). The axis's line, ticks and labels draw in its `style`; tick sizes stay geometry. A `style` other than `:axis` restyles the generated axis: `stroke`, `stroke_width`, `stroke_dasharray`, `stroke_linecap`, `stroke_linejoin` and `stroke_opacity` reach the domain line and the tick lines, `fill` and the font keys reach the tick labels, `opacity` and `class` the axis group.
 
 ### 4.5 Legend
 
-**Implemented** as schema. A `:legend` node explains one scale, normally the colour scale.
+**Implemented.** A `:legend` node explains one scale, normally the colour scale.
 
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
@@ -250,14 +265,43 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 | `title` | `:text` | `:content` | `[]` | `:override` |
 | `style` | `{:ref, :style}` | `:style` | `:label` | `:override` |
 
+The frame builds the legend from the realised scale: one entry per value of `Visualize.Scale.ticks/2` — the domain of a discrete scale, five ticks of a continuous one — each a 12 × 12 swatch and, 16 user units to its right, the value's label as an axis would print it (spec/05 §1.5). The swatch is filled with the scale's value for the entry when that is a colour — a string, or a theme slot resolved through `Visualize.Theme.resolve/3` (§4.3) — and with the theme's `{:series, i}` for the i-th entry of a scale that yields anything else. The labels and the title take the legend's `style`.
+
+```
+group  style: %{class: "legend", font_family: <font_family>, font_size: <font_size>}, transform: translate(x, y)
+├── text   style: %{fill: <fill>, font_weight: :bold}, content: title            — when the title is given
+└── group  style: %{class: "legend-item"}, transform: translate(…)                — one per entry
+    ├── rect  0 0 12 12, style: %{fill: <swatch>}
+    └── text  x: 16 (or −4, anchored end), y: 6, dy: "0.32em", style: %{fill: <fill>}, content: label
+```
+
+Entries are 16 apart and the title, when given, is the first row. `position` places the legend inside the plot area, 8 user units from its edges: the four corner positions stack the entries downward from the corner, the right-hand ones laid out right to left — the swatch at the edge and the label anchored `end` to its left — so no text width is needed; `:left` and `:right` stack them likewise, centred on the plot's height; `:top` and `:bottom` lay them in one row centred on the plot's width, each entry's width taken as 16 plus 0.6 × the font size per character of its label — the one place the layout estimates text.
+
 ### 4.6 Kind-specific nodes
 
-**Implemented** as schema; semantics **Agreed**.
+**Implemented.**
 
-- `:cartesian` reads `scales`, `axes` and `legend`; `:polar` the same, with `angle` and `r` as its position scales and axes drawn as rings and spokes.
-- `:geo` takes a `:projection` node in place of position scales: `type` (`:name`, required, a type of `Visualize.Geo.Projection`), `scale` (`:number`), `translate`, `center`, `rotate`, `parallels` (`{:list, :number}`) and `clip_angle` (`:number`), every key `:geometry` and `:override`, defaults those of `Visualize.Geo.Projection.new/1`. Delaunay, Voronoi and contours are transforms (§5.4).
-- `:facet` repeats the frame over a grouping: a `:facet` node with `by` (`:field`, `:binding`, required) and `columns` (`:integer`, `:geometry`, `nil` for one row). Every panel shares the frame's scales and axes; the facet's data contract beyond that is settled by work item 2.
-- `viewport` makes a streaming window: `scale` (`{:ref, :scale}`, required) and `span` (`:number`, required), both `:geometry`. A compiled chart over a design with a viewport is stateful (§12).
+- `:cartesian` reads `scales`, `axes` and `legend` as §4.3–4.5 give them.
+- `:polar` places its furniture with `translate(width / 2, height / 2)`, the plot centre, and uses `angle` and `r` as its position scales with `R = min(width, height) / 2` the outer radius (§4.3). An axis on `angle` draws a *ring*: the domain circle at `R`, at each tick a line from `R` outward by `size_inner` along the tick's spoke and its label `size_inner + padding` beyond that, anchored `middle` with `dy: "0.32em"`; `grid: true` adds a spoke from the centre to `R` per tick. An axis on `r` draws a *spoke*: the domain line from the centre to `R` in the direction its `side` names (`:top` upward, `:right`, `:bottom`, `:left`), at each tick a line of `size_inner` across the spoke with its label `padding` beyond it, and `grid: true` adds a ring at each tick's radius. An axis on any other scale draws as in a cartesian frame. Its groups are `class="axis axis-angle"` and `class="axis axis-r"`; every polar coordinate is rounded to six decimals with negative zero folded (D-6), so a right angle lands on the axis, and a grid ring of zero radius is not drawn.
+- `:geo` takes a `:projection` node in place of position scales: `type` (`:name`, required, a type of `Visualize.Geo.Projection`), `scale` (`:number`), `translate`, `center`, `rotate`, `parallels` (`{:list, :number}`) and `clip_angle` (`:number`), every key `:geometry` and `:override`, defaults those of `Visualize.Geo.Projection.new/1` except `translate`, which defaults to the plot centre. The frame realises it through that module's setters and `Visualize.Chart.Frame.projection/1` returns it; an axis or a legend on a declared scale draws as in a cartesian frame. Delaunay, Voronoi and contours are transforms (§5.4).
+- `:facet` repeats the frame over a grouping: a `:facet` node with `by` (`:field`, `:binding`, required) and `columns` (`:integer`, `:geometry`, `nil` for one row). The panels are the distinct values of `by`, in order of first appearance, over the bound source of every mark (a source without the column contributes nothing), so a frame with no bound source has one panel; `Visualize.Chart.Frame.new/2` records them as `panels`. The panels tile the plot area in `columns` columns and as many rows as they need, each `width / columns` by `height / rows`; the scales' `:auto` ranges run over one panel and their domains are shared, so every panel is drawn to the same axes; each panel is a group `class="panel"` translated to its cell holding the grid and the axes, with its value written at the panel's top-left in the `:label` style. The legend and the labels are drawn once, over the whole plot area.
+- `viewport` makes a streaming window: `scale` (`{:ref, :scale}`, required) and `span` (`:number`, required), both `:geometry`. A compiled chart over a design with a viewport is stateful (§12, **Agreed**).
+
+### 4.7 The frame struct and its rendering
+
+**Implemented.** `%Visualize.Chart.Frame{}` is the realised frame: `kind`; `size` and `margin` with the schema's defaults filled; `plot`, `%{width, height}` of the plot area; `scales`, the realised structs by name (§4.3); `projection`, a `%Visualize.Geo.Projection{}` in a `:geo` frame and `nil` otherwise; `panels`, the facet values of §4.6, `[]` in any other kind, and `facet`, `%{by, columns}` with the effective column count in a `:facet` frame and `nil` otherwise; `axes`, `legend` and `labels` as the design gives them; `theme`, the `%Visualize.Theme{}` the design names — a built-in name or an inline `:theme` node — or the `theme:` option of `new/2`, which is taken for any name and required for one that is neither built-in nor inline; and `styles`, the declared styles over the built-in four (§3.3).
+
+`Visualize.Chart.Frame.generate/2` is the static furniture as one `Visualize.IR.Element` group with the margins applied, every theme slot resolved through `Visualize.Theme.resolve/3` in its `:resolve` mode (`:css` by default), and every text a string:
+
+```
+group  style: %{class: "frame"}, transform: translate(margin.left, margin.top)
+├── group  style: %{class: "grid"}, attrs: %{aria_hidden: "true"}   — when any axis has grid: true (§4.4)
+├── group  style: %{class: "axis axis-<side>"}, transform            — one per axis, holding the Visualize.Axis group
+├── group  style: %{class: "legend"}                                 — when a legend is given (§4.5)
+└── text   style: %{class: "label", …}                               — one per label (§6.3)
+```
+
+A `:facet` frame holds one `class="panel"` group per panel in place of the grid and axes; a `:polar` frame's grid and axes sit inside a group translated to the plot centre. A `%Visualize.Chart.Var{}` reached while building — in a text, a style or a node — raises `ArgumentError` naming it: variables resolve at application (§7.3), and a frame is built from an applied design or from one that uses none. `Visualize.Chart.Frame.render/2` is `generate/2` followed by `Visualize.Render.to_string/2`, with `:resolve` defaulting to `Visualize.Theme.mode/1` of the `:backend`, as `Visualize.Axis.render/2` does.
 
 ## 5. Marks
 
@@ -351,11 +395,32 @@ A field named in a mark's `channels`, in its inline label's text or in its trans
 | `dx` | `:number` | `:geometry` | `0` | `:override` |
 | `dy` | `:number` | `:geometry` | `0` | `:override` |
 
-`{:axis, s}` anchors the label as the title of the axis drawn for scale `s`; `s` is a scale reference and is checked as one.
+`{:axis, s}` anchors the label as the title of the axis drawn for scale `s`; `s` is a scale reference and is checked as one. `{:frame, c}` anchors it at a corner of the plot area and `{:data, [x, y]}` at a point of the data (§6.3).
 
 ### 6.2 Text
 
 **Implemented.** A text is a list, never a parsed string: `["Uptime — ", var(:unit)]`, `["deploy ", {:field, :sha}]`. Strings are literal, a variable resolves at application, a field reference reads the datum (inline labels) or is an error (frame labels, which have no datum: `{:invalid_for, :label}`). A `"{{unit}}"` string form MAY be added later as sugar that compiles to the list.
+
+### 6.3 Placement
+
+**Implemented.** The frame draws each label as one `text` element in its `style`, `class="label"`, at the anchor's position; `dx` and `dy` are added to it. With `w` and `h` the plot area and `m` the margin:
+
+| Anchor | Position | `text_anchor` | Default style |
+|---|---|---|---|
+| `:title` | `(w / 2, −m.top / 2)`, `dy: "0.32em"`: centred in the top margin | `:middle` | `:title` |
+| `:subtitle` | `(w / 2, −4)`: just above the plot area | `:middle` | `:label` |
+| `:caption` | `(0, h + m.bottom − 4)`: the bottom-left of the chart | `:start` | `:label` |
+| `{:axis, s}`, axis on `:bottom` | `(w / 2, h + m.bottom − 5)` | `:middle` | `:label` |
+| `{:axis, s}`, axis on `:top` | `(w / 2, −m.top + 5)`, `dy: "0.71em"` | `:middle` | `:label` |
+| `{:axis, s}`, axis on `:left` | `rotate(−90)`, `(−h / 2, −m.left + 15)` | `:middle` | `:label` |
+| `{:axis, s}`, axis on `:right` | `rotate(90)`, `(h / 2, −(w + m.right − 15))` | `:middle` | `:label` |
+| `{:frame, :top_left}` | `(4, 4)`, `dy: "0.71em"` | `:start` | `:label` |
+| `{:frame, :top_right}` | `(w − 4, 4)`, `dy: "0.71em"` | `:end` | `:label` |
+| `{:frame, :bottom_left}` | `(4, h − 4)` | `:start` | `:label` |
+| `{:frame, :bottom_right}` | `(w − 4, h − 4)` | `:end` | `:label` |
+| `{:data, [x, y]}` | the point through the frame's position scales | `:start` | `:label` |
+
+An axis title follows the side of the first axis that names its scale; with no axis on the scale, `x` is taken as `:bottom`, `y` as `:left`, and any other name as `:bottom`. A data anchor maps `[x, y]` through the scales named `x` and `y` in a `:cartesian` or `:facet` frame (the first panel), through `angle` and `r` in a `:polar` frame — `(R sin a, −R cos a)` from the centre — and through the projection in a `:geo` frame, where the pair is `[longitude, latitude]` and a point the projection clips is not drawn. A `text_anchor` in the label's style replaces the anchor's own.
 
 ## 7. Variables and slots
 
@@ -419,6 +484,8 @@ A field named in a mark's `channels`, in its inline label's text or in its trans
 | `{:field, :sha}` | `{"$field": "sha"}` |
 | `{:series, 3}` | `{"$series": 3}` |
 | `{:axis, :y}` | `{"$axis": "y"}` |
+| `{:frame, :top_left}` | `{"$frame": "top_left"}` |
+| `{:data, [x, y]}` | `{"$data": [x, y]}`, the two values as terms |
 | `:none` as a colour | `"none"` |
 | `:auto` in an extent | `"auto"` (so a category spelled `"auto"` reads back as `:auto`) |
 | a `DateTime` | `{"$time": "2026-09-08T00:00:00Z"}` (ISO 8601, UTC) |
@@ -491,12 +558,14 @@ import Visualize.Chart, only: [var: 1]
   ],
   labels: [
     %{anchor: :title, text: ["Uptime — ", var(:unit)]},
-    %{anchor: {:axis, :y}, text: ["unit: ", var(:unit)]}
+    %{anchor: {:axis, :y}, text: ["unit: ", var(:unit)]},
+    %{anchor: {:frame, :top_right}, text: ["last 24 h"]},
+    %{anchor: {:data, [~U[2026-09-08 12:00:00Z], 99.5]}, text: ["target"]}
   ]
 }
 ```
 
-Its application, once item 5 lands, is `Chart.apply(design, sources: %{primary: idle, deploys: deploys}, vars: %{unit: "mg/hr"})`; `Chart.compile/1` then splits it into the static frame and the dynamic marks.
+Its application, once item 5 lands, is `Chart.apply(design, sources: %{primary: idle, deploys: deploys}, vars: %{unit: "mg/hr"})`; `Chart.compile/1` then splits it into the static frame and the dynamic marks. Its frame renders today: `Visualize.Chart.Frame.new(chart, sources: %{primary: idle, deploys: deploys})` once the variables are supplied, or without sources over the unit domains (§4.3).
 
 ## 14. Functions
 
@@ -549,3 +618,20 @@ Its application, once item 5 lands, is `Chart.apply(design, sources: %{primary: 
 |---|---|
 | `Visualize.Chart.Migration.current/0` | The schema version this library writes: `1`. |
 | `Visualize.Chart.Migration.migrate/1` | `{:ok, map}` at the current version after stepping an older design forward, else `{:error, [{[:version], reason}]}` (§9). |
+
+### 14.5 `Visualize.Chart.Frame`
+
+**Implemented.** The realised frame of §4.7.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Frame.new/1` | As `new/2` with `[]` options: no source bound, every `:auto` domain the unit domain. |
+| `Visualize.Chart.Frame.new/2` | `new(chart, opts)`: the `%Visualize.Chart.Frame{}` of a `%Visualize.Chart{}`, every scale realised (§4.3) from `sources:` — a map from source name to anything `Visualize.Data.Table.rows/1` reads, `%{}` by default — and the theme resolved, `theme:` supplying a `%Visualize.Theme{}` that is taken for any theme name and required for one that is neither built-in nor inline (§4.7). Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, or a bound value a scale cannot take. |
+| `Visualize.Chart.Frame.scales/1` | The realised scales by name (§4.3): the escape hatch. |
+| `Visualize.Chart.Frame.scale/2` | `scale(frame, name)`: one realised scale; `ArgumentError` when the frame declares no such scale. |
+| `Visualize.Chart.Frame.put_scale/3` | `put_scale(frame, name, scale)`: the frame with the realised scale replaced by the given struct; the override of §4.3. |
+| `Visualize.Chart.Frame.projection/1` | The `%Visualize.Geo.Projection{}` of a `:geo` frame (§4.6), `nil` for any other kind. |
+| `Visualize.Chart.Frame.generate/1` | As `generate/2` with `resolve: :css`. |
+| `Visualize.Chart.Frame.generate/2` | The static furniture as the `Visualize.IR.Element` group of §4.7, theme slots resolved in the `:resolve` mode. |
+| `Visualize.Chart.Frame.render/1` | As `render/2` with `[]` options. |
+| `Visualize.Chart.Frame.render/2` | `generate/2` rendered through `Visualize.Render.to_string/2`; `:resolve` defaults to `Visualize.Theme.mode/1` of the `:backend`. |

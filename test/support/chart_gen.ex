@@ -318,7 +318,14 @@ defmodule Visualize.ChartGen do
 
   defp labels(vars, styles, frame) do
     scales = Map.keys(frame.scales)
-    frame_anchors = [member_of([:title, :subtitle, :caption])]
+    corners = [:top_left, :top_right, :bottom_left, :bottom_right]
+
+    frame_anchors = [
+      member_of([:title, :subtitle, :caption]),
+      map(member_of(corners), &{:frame, &1}),
+      map(tuple({json_term(), json_term()}), fn {x, y} -> {:data, [x, y]} end)
+    ]
+
     axis_anchors = if scales == [], do: [], else: [map(member_of(scales), &{:axis, &1})]
 
     label =
