@@ -114,7 +114,7 @@ defmodule Visualize.Shape.Area do
   Note: For backend-agnostic usage, prefer `generate_path/2`
   and render with your chosen backend.
   """
-  @spec generate(t(), [any()]) :: String.t()
+  @spec generate(t(), Visualize.Data.Table.source()) :: String.t()
   def generate(%__MODULE__{} = area, data) do
     area
     |> generate_path(data)
@@ -128,7 +128,7 @@ defmodule Visualize.Shape.Area do
   edge forward, a line to the bottom edge, the bottom edge reversed, and `Z`. A run of
   fewer than two points draws nothing.
   """
-  @spec generate_path(t(), [any()]) :: Path.t()
+  @spec generate_path(t(), Visualize.Data.Table.source()) :: Path.t()
   def generate_path(%__MODULE__{} = area, data) do
     x0_fn = area.x0 || area.x
     x1_fn = area.x1 || area.x
@@ -137,6 +137,7 @@ defmodule Visualize.Shape.Area do
 
     commands =
       data
+      |> Visualize.Data.Table.rows()
       |> Line.defined_runs(area.defined)
       |> Enum.flat_map(fn run ->
         top_points =
@@ -156,7 +157,10 @@ defmodule Visualize.Shape.Area do
   end
 
   defp normalize_accessor(accessor) when is_function(accessor, 1), do: accessor
-  defp normalize_accessor(accessor) when is_atom(accessor), do: fn d -> Map.get(d, accessor) end
+
+  defp normalize_accessor(accessor) when is_atom(accessor) or is_binary(accessor),
+    do: Visualize.Data.Table.accessor(accessor)
+
   defp normalize_accessor(accessor) when is_number(accessor), do: fn _d -> accessor end
 
   defp apply_accessor(accessor, data) when is_function(accessor, 1), do: accessor.(data)

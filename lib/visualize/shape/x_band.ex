@@ -86,9 +86,9 @@ defmodule Visualize.Shape.XBand do
   @doc """
   Returns one `:group` element per datum: the rectangle, then the label when there is one.
   """
-  @spec generate(t(), [any()]) :: [Element.t()]
+  @spec generate(t(), Visualize.Data.Table.source()) :: [Element.t()]
   def generate(%__MODULE__{} = band, data) do
-    Enum.map(data, fn d ->
+    Enum.map(Visualize.Data.Table.rows(data), fn d ->
       p0 = Annotation.position(band.scale, Annotation.value(band.x0, d))
       p1 = Annotation.position(band.scale, Annotation.value(band.x1, d))
       y0 = Annotation.value(band.y0, d)

@@ -57,7 +57,7 @@ defmodule Visualize.Shape.Pie do
       value: fn d ->
         cond do
           is_number(d) -> d
-          is_map(d) -> Map.get(d, :value, 0)
+          is_map(d) -> field_or_zero(d, :value)
           true -> 0
         end
       end
@@ -121,8 +121,9 @@ defmodule Visualize.Shape.Pie do
   - `:end_angle` - end angle in radians
   - `:pad_angle` - padding angle in radians
   """
-  @spec generate(t(), [any()]) :: [arc_data()]
+  @spec generate(t(), Visualize.Data.Table.source()) :: [arc_data()]
   def generate(%__MODULE__{} = pie, data) do
+    data = Visualize.Data.Table.rows(data)
     n = length(data)
 
     if n == 0 do
@@ -184,10 +185,21 @@ defmodule Visualize.Shape.Pie do
   end
 
   defp normalize_accessor(accessor) when is_function(accessor, 1), do: accessor
-  defp normalize_accessor(field) when is_atom(field), do: fn d -> Map.get(d, field, 0) end
+
+  defp normalize_accessor(field) when is_atom(field) or is_binary(field),
+    do: &field_or_zero(&1, field)
+
   defp normalize_accessor(value) when is_number(value), do: fn _ -> value end
 
   defp apply_accessor(accessor, data) when is_function(accessor, 1), do: accessor.(data)
+
+  # A field of either spelling; absent or nil is a zero-size slice (spec/04 §1.1).
+  defp field_or_zero(d, field) do
+    case Visualize.Data.Table.get(d, field) do
+      nil -> 0
+      value -> value
+    end
+  end
 
   defp apply_angle(angle, _data) when is_number(angle), do: angle
   defp apply_angle(angle, data) when is_function(angle, 1), do: angle.(data)

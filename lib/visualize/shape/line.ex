@@ -54,7 +54,7 @@ defmodule Visualize.Shape.Line do
   ## Examples
 
       Line.x(line, fn d -> d.timestamp end)
-      Line.x(line, :x)  # equivalent to fn d -> Map.get(d, :x) end
+      Line.x(line, :x)  # a field: reads :x or "x", see Visualize.Data.Table.get/2
       Line.x(line, 0)   # every point at x = 0
 
   """
@@ -109,7 +109,7 @@ defmodule Visualize.Shape.Line do
   Note: For backend-agnostic usage, prefer `generate_path/2`
   and render with your chosen backend.
   """
-  @spec generate(t(), [any()]) :: String.t()
+  @spec generate(t(), Visualize.Data.Table.source()) :: String.t()
   def generate(%__MODULE__{} = line, data) do
     line
     |> generate_path(data)
@@ -122,13 +122,14 @@ defmodule Visualize.Shape.Line do
   Each run of consecutive defined data (see `defined/2`) becomes one subpath, generated
   through the curve; a run of fewer than two points draws nothing.
   """
-  @spec generate_path(t(), [any()]) :: Path.t()
+  @spec generate_path(t(), Visualize.Data.Table.source()) :: Path.t()
   def generate_path(
         %__MODULE__{x: x_fn, y: y_fn, defined: defined_fn, curve: curve_type, curve_opts: opts},
         data
       ) do
     commands =
       data
+      |> Visualize.Data.Table.rows()
       |> defined_runs(defined_fn)
       |> Enum.flat_map(fn run ->
         points = Enum.map(run, fn d -> {x_fn.(d), y_fn.(d)} end)
@@ -153,6 +154,9 @@ defmodule Visualize.Shape.Line do
   @doc false
   @spec normalize_accessor(accessor()) :: (any() -> number())
   def normalize_accessor(accessor) when is_function(accessor, 1), do: accessor
-  def normalize_accessor(field) when is_atom(field), do: fn d -> Map.get(d, field) end
+
+  def normalize_accessor(field) when is_atom(field) or is_binary(field),
+    do: Visualize.Data.Table.accessor(field)
+
   def normalize_accessor(constant) when is_number(constant), do: fn _d -> constant end
 end

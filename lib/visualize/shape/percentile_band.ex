@@ -88,7 +88,7 @@ defmodule Visualize.Shape.PercentileBand do
   end
 
   @doc "Returns `%{outer:, inner:, median:}` of SVG path-data strings, `nil` where unset"
-  @spec generate(t(), [any()]) :: output(String.t())
+  @spec generate(t(), Visualize.Data.Table.source()) :: output(String.t())
   def generate(%__MODULE__{} = band, data) do
     band
     |> generate_path(data)
@@ -99,8 +99,10 @@ defmodule Visualize.Shape.PercentileBand do
   end
 
   @doc "Returns `%{outer:, inner:, median:}` of `IR.Path`, `nil` where unset"
-  @spec generate_path(t(), [any()]) :: output(Path.t())
+  @spec generate_path(t(), Visualize.Data.Table.source()) :: output(Path.t())
   def generate_path(%__MODULE__{} = band, data) do
+    data = Visualize.Data.Table.rows(data)
+
     %{
       outer: area_path(band, band.outer, data),
       inner: area_path(band, band.inner, data),

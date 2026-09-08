@@ -462,7 +462,9 @@ defmodule Visualize.Shape.Arc do
 
   defp normalize_accessor(value) when is_function(value, 1), do: value
   defp normalize_accessor(value) when is_number(value), do: fn _ -> value end
-  defp normalize_accessor(value) when is_atom(value), do: fn d -> Map.get(d, value) end
+
+  defp normalize_accessor(value) when is_atom(value) or is_binary(value),
+    do: Visualize.Data.Table.accessor(value)
 
   defp apply_accessor(accessor, data) when is_function(accessor, 1), do: accessor.(data)
   defp apply_accessor(accessor, _data) when is_number(accessor), do: accessor

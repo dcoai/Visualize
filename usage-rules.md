@@ -20,7 +20,8 @@ is the source of truth; these rules are the short form.
 
 ## The pipeline
 
-Data → `Scale` (domain to pixels) → `Shape` (pixels to a path) → `IR.Element` (a scene
+Data (a row list, or any `Visualize.Data.Table.rows/1` source: a column map, a keyword list
+of columns, an Explorer frame, an Nx tensor) → `Scale` (domain to pixels) → `Shape` (pixels to a path) → `IR.Element` (a scene
 graph) → a `Backend` (SVG string, canvas commands, or binary) → `Render`. Every stage is
 a pure function over immutable structs; builders are `new/0` plus setter pipelines plus a
 `generate`/`compute` call.

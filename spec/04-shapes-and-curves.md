@@ -10,12 +10,12 @@ Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Sh
 
 An accessor extracts a value from a datum. The accepted forms differ by module:
 
-| Module | 1-arity function | atom (field, `Map.get(d, field)`) | number (constant) |
+| Module | 1-arity function | atom or string (field, `Visualize.Data.Table.get/2`) | number (constant) |
 |---|---|---|---|
 | `Line` (`x`, `y`) | yes | yes | yes |
 | `Area` (`x`, `x0`, `x1`, `y`, `y0`, `y1`) | yes | yes | yes |
 | `Arc` (radii, angles) | yes | yes | yes |
-| `Pie` (`value`) | yes | yes (`Map.get(d, field, 0)`) | yes |
+| `Pie` (`value`) | yes | yes (`0` when absent or `nil`) | yes |
 | `Stack` (`value`) | 2-arity only | no | no |
 | `Symbol` (`type`, `size`) | yes | atom is the literal type | literal size |
 | `Band` (`x0`, `x1`, `y`, `height`; `fill`) | yes | yes | yes (`fill`: a string constant) |
@@ -23,7 +23,7 @@ An accessor extracts a value from a datum. The accepted forms differ by module:
 | `PercentileBand` (`x`, `median`; `inner`, `outer` as `{lo, hi}` pairs) | yes | yes | yes |
 | `Rose` (`angle`, `width`, `inner_radius`, `outer_radius`, `pad_angle`) | yes | yes | yes |
 
-Atom accessors read a map key and return `nil` when absent (except `Pie`, which defaults to `0`); a `nil` coordinate fails arithmetic downstream. Callers SHOULD supply functions when data are not maps. A numeric constant is the accessor `fn _ -> n end`; `Line` accepts one since D-20.
+A field accessor, an atom or a string, reads the datum through `Visualize.Data.Table.get/2` ([08-utilities](08-utilities.md) §6.2): `:v` reaches a column named `"v"` and the other way round, and the value is `nil` when neither spelling is a key (except `Pie`, where absent or `nil` is `0`); a `nil` coordinate fails arithmetic downstream. Callers SHOULD supply functions when data are not maps. A numeric constant is the accessor `fn _ -> n end`; `Line` accepts one since D-20.
 
 ### 1.2 `defined/2`
 
@@ -38,6 +38,10 @@ Both `Line.generate_path/2` and `Area.generate_path/2` return an empty path (`Vi
 `Band.generate/2`, `Rule.generate/2`, and `XBand.generate/2` return a list of `Visualize.IR.Element`, one per datum, rather than a string: these marks carry per-datum style (a fill, a label) that a path cannot (D-26). The elements render through `Visualize.Render` like any other. `Band.generate_path/2` is the one path form among them, folding every rectangle into a single `IR.Path`.
 
 `PercentileBand.generate/2` and `PercentileBand.generate_path/2` return a map of three paths (`outer`, `inner`, `median`), each in the form the corresponding `Line` or `Area` call would return, or `nil` for a band that is not set (D-28).
+
+### 1.4 Tabular data
+
+Every generator that takes a list of data — `Line`, `Area`, `Pie`, `Stack`, `Band`, `Rule`, `XBand`, `PercentileBand` and `Rose` — passes it through `Visualize.Data.Table.rows/1` ([08-utilities](08-utilities.md) §6) before reading a datum, so a column map, a keyword list of columns, an `Nx.Tensor` or a `Table.Reader` struct such as an Explorer DataFrame is accepted wherever a row list is. The row-list path is zero-copy: the list the caller passed is the list the accessors see, unchanged. `Arc` and `Symbol` take one datum, not a list, and read it as given. `Visualize.Shape.LineNx` (section 10) takes coordinate lists and tensors directly and is not routed through `rows/1`: a tensor bound to a dense series stays a first-class source of the batch and binary paths (D-53).
 
 ## 2. `Visualize.Shape` Facade
 
@@ -266,7 +270,7 @@ Every `A` is emitted as d3-path emits it: an implicit `L` to the arc's start whe
 
 ### 7.1 Struct
 
-`%Visualize.Shape.Pie{value: nil, sort: nil, sort_values: nil, start_angle: 0, end_angle: 2π, pad_angle: 0}`. `new/0` sets `value` to: the datum itself when a number; `Map.get(d, :value, 0)` when a map; otherwise `0`.
+`%Visualize.Shape.Pie{value: nil, sort: nil, sort_values: nil, start_angle: 0, end_angle: 2π, pad_angle: 0}`. `new/0` sets `value` to: the datum itself when a number; `Visualize.Data.Table.get(d, :value)` when a map, `0` when absent or `nil`; otherwise `0`.
 
 Angles are radians. `start_angle`, `end_angle`, and `pad_angle` are numbers, or 1-arity functions of the **whole data list** (evaluated once per `generate/2`).
 
@@ -301,7 +305,7 @@ with `v = max(0, value.(d))`, `total = Σ v`, `da = clamp(end − start, −2π,
 
 ### 8.1 Struct
 
-`%Visualize.Shape.Stack{keys: [], value: nil, order: :none, offset: :none}`. `new/0` sets `value` to `fn d, key -> Map.get(d, key, 0) end`.
+`%Visualize.Shape.Stack{keys: [], value: nil, order: :none, offset: :none}`. `new/0` sets `value` to `fn d, key -> Visualize.Data.Table.get(d, key) end`, with `0` for an absent or `nil` value, so a key reaches a column of either spelling (1.1).
 
 ### 8.2 Enumerations
 
@@ -343,7 +347,7 @@ The offsets are d3-shape's (D-22), applied in stacking order (8.4). Every series
 
 | Function | Contract |
 |---|---|
-| `Visualize.Shape.Stack.new/0` | Returns a stack generator reading `Map.get(d, key, 0)`. |
+| `Visualize.Shape.Stack.new/0` | Returns a stack generator reading `key` through `Visualize.Data.Table.get/2`, `0` when absent or `nil`. |
 | `Visualize.Shape.Stack.keys/2` | Sets the list of series keys. |
 | `Visualize.Shape.Stack.value/2` | Sets the 2-arity `(datum, key) -> number` accessor. |
 | `Visualize.Shape.Stack.order/2` | Sets the series order (8.4). |

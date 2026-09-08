@@ -87,15 +87,15 @@ defmodule Visualize.Shape.Rose do
   end
 
   @doc "Returns one SVG path-data string per datum"
-  @spec generate(t(), [any()]) :: [String.t()]
+  @spec generate(t(), Visualize.Data.Table.source()) :: [String.t()]
   def generate(%__MODULE__{} = rose, data) do
     rose |> generate_path(data) |> Enum.map(&Visualize.Backend.SVG.path_data/1)
   end
 
   @doc "Returns one `IR.Path` per datum: the `Arc` sector centred on its angle"
-  @spec generate_path(t(), [any()]) :: [Path.t()]
+  @spec generate_path(t(), Visualize.Data.Table.source()) :: [Path.t()]
   def generate_path(%__MODULE__{} = rose, data) do
-    Enum.map(data, fn d ->
+    Enum.map(Visualize.Data.Table.rows(data), fn d ->
       centre = Annotation.value(rose.angle, d)
       half = Annotation.value(rose.width, d) / 2
 

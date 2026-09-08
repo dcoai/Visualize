@@ -257,14 +257,14 @@ The implementation is incremental insertion (Bowyer–Watson) with ghost triangl
 
 | Field | Default | Meaning |
 |---|---|---|
-| `x`, `y` | `nil` | Accessors `fn datum -> number end`. When `nil`, a map datum is read at `:x`/`:y` (0 when absent) and a tuple datum at elements 0/1. |
+| `x`, `y` | `nil` | Accessors `fn datum -> number end`. When `nil`, a map datum is read at `:x`/`:y` through `Visualize.Data.Table.get/2` (`0` when absent or `nil`) and a tuple datum at elements 0/1. |
 | `weight` | `nil` | Accessor; when `nil` every datum weighs 1. |
 | `width`, `height` | `960`, `500` | Output extent in pixels. |
 | `cell_size` | `4` | Grid cell size in pixels. |
 | `bandwidth` | `20` | Kernel standard deviation in pixels. |
 | `thresholds` | `20` | List or count, as in 6.2, applied to density values. |
 
-`x/2`, `y/2` and `weight/2` require arity-1 functions.
+`x/2`, `y/2` and `weight/2` require arity-1 functions. `compute/2` passes its points through `Visualize.Data.Table.rows/1` ([08-utilities](08-utilities.md) §6) first, so a column map, an `Nx.Tensor` of rank 2 or a `Table.Reader` struct is accepted wherever a point list is; a list is read as given.
 
 ### 7.2 Algorithm
 
