@@ -19,7 +19,8 @@ defmodule Visualize.Hooks.CanvasBinary do
   The decoder (`js_decoder/0`) is shared with `Visualize.Hooks.CanvasIncremental` and is
   written against `Visualize.Backend.CanvasBinary.Opcodes`: every opcode and every
   command-stream sub-opcode has a case — the f64 and the f32 path records (D-73) share one
-  reader taking the coordinate width — and an unknown byte throws rather than
+  reader taking the coordinate width, and the cubic run (D-74) has its own — and an unknown
+  byte throws rather than
   desynchronise silently. A full-matrix transform (`0xFF`) composes with `ctx.transform`.
   """
 
@@ -253,6 +254,23 @@ defmodule Visualize.Hooks.CanvasBinary do
       return offset;
     }
 
+    // The cubic run `cubic_run` (spec/09 §4.3.10): the start point, then six f32 per curve
+    // with no sub-opcode. Returns the offset after the last curve.
+    function drawCubicRun(ctx, view, offset, count) {
+      ctx.beginPath();
+      ctx.moveTo(view.getFloat32(offset, true), view.getFloat32(offset + 4, true));
+      offset += 8;
+      for (let i = 0; i < count; i++) {
+        ctx.bezierCurveTo(
+          view.getFloat32(offset, true), view.getFloat32(offset + 4, true),
+          view.getFloat32(offset + 8, true), view.getFloat32(offset + 12, true),
+          view.getFloat32(offset + 16, true), view.getFloat32(offset + 20, true)
+        );
+        offset += 24;
+      }
+      return offset;
+    }
+
     // Replays one canvas binary stream (Visualize.Backend.CanvasBinary, spec/09 §4) on ctx
     // from startOffset up to endOffset (default: the end of bytes). Returns the offset
     // reached. Opcodes are those of Visualize.Backend.CanvasBinary.Opcodes; an unknown
@@ -287,6 +305,12 @@ defmodule Visualize.Hooks.CanvasBinary do
           case 0x06: { // path_cubic32: the full command stream, f32
             const cmdCount = view.getUint32(offset, true);
             offset = drawPathCommands(ctx, view, bytes, offset + 4, cmdCount, 4);
+            break;
+          }
+
+          case 0x07: { // cubic_run: a start point and a run of cubic curves, f32
+            const count = view.getUint32(offset, true);
+            offset = drawCubicRun(ctx, view, offset + 4, count);
             break;
           }
 

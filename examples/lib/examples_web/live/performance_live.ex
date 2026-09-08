@@ -468,14 +468,18 @@ defmodule ExamplesWeb.PerformanceLive do
       Map.new([:svg, :binary], fn target ->
         {:ok, compiled} = Chart.compile(compiled_design(target), sources: %{primary: hd(frames)})
 
-        {bytes, _compiled} =
-          Enum.reduce(frames, {0, compiled}, fn data, {sum, compiled} ->
+        {bytes, raw, _compiled} =
+          Enum.reduce(frames, {0, 0, compiled}, fn data, {sum, raw, compiled} ->
             {payload, compiled} = Compiled.tick(compiled, %{primary: data})
-            {sum + payload.bytes, compiled}
+            {sum + payload.bytes, raw + raw_bytes(payload), compiled}
           end)
 
         {target,
-         %{static_bytes: byte_size(Compiled.static(compiled)), bytes_per_update: div(bytes, updates)}}
+         %{
+           static_bytes: byte_size(Compiled.static(compiled)),
+           bytes_per_update: div(bytes, updates),
+           raw_bytes_per_update: div(raw, updates)
+         }}
       end)
 
     %{
@@ -485,6 +489,11 @@ defmodule ExamplesWeb.PerformanceLive do
       compiled: compiled
     }
   end
+
+  # What a tick would transmit without the base64 of the canvas layer (#73 item 3): the SVG
+  # layer as it is and the canvas stream decoded — the bytes a binary frame would carry.
+  defp raw_bytes(%{svg: svg, canvas: canvas}),
+    do: byte_size(svg) + byte_size(Base.decode64!(canvas))
 
   # The old path: the design applied to the frame's data and rendered whole.
   defp old_path(data) do
@@ -1404,22 +1413,25 @@ defmodule ExamplesWeb.PerformanceLive do
           <%= if @compiled_measure do %>
             <table class="results-table">
               <thead>
-                <tr><th>Path</th><th>Bytes / update</th><th>Static, once</th></tr>
+                <tr><th>Path</th><th>Bytes / update</th><th>Before base64</th><th>Static, once</th></tr>
               </thead>
               <tbody>
                 <tr>
                   <td>Old: the design rendered as one SVG string per update</td>
                   <td><%= format_bytes(@compiled_measure.old_bytes_per_update) %></td>
                   <td>-</td>
+                  <td>-</td>
                 </tr>
                 <tr>
                   <td>Compiled, <code>render: :svg</code></td>
                   <td><%= format_bytes(@compiled_measure.compiled.svg.bytes_per_update) %></td>
+                  <td><%= format_bytes(@compiled_measure.compiled.svg.raw_bytes_per_update) %></td>
                   <td><%= format_bytes(@compiled_measure.compiled.svg.static_bytes) %></td>
                 </tr>
                 <tr>
                   <td>Compiled, <code>render: :binary</code></td>
                   <td><%= format_bytes(@compiled_measure.compiled.binary.bytes_per_update) %></td>
+                  <td><%= format_bytes(@compiled_measure.compiled.binary.raw_bytes_per_update) %></td>
                   <td><%= format_bytes(@compiled_measure.compiled.binary.static_bytes) %></td>
                 </tr>
               </tbody>

@@ -261,6 +261,7 @@ Opcodes (`Visualize.Backend.CanvasBinary.Opcodes`, internal macros so they can a
 | `rects` | `0x04` | Rectangle list (4.3.4) |
 | `path32` | `0x05` | Polyline point list, f32 coordinates (4.3.8) |
 | `path_cubic32` | `0x06` | Full path command stream, f32 arguments (4.3.9) |
+| `cubic_run` | `0x07` | A start point and a run of cubic curves, f32, no sub-opcodes (4.3.10) |
 | `style` | `0x10` | Fill/stroke/width/opacity (4.3.5) |
 | `transform` | `0x20` | Coordinate transform (4.3.6) |
 | `save` | `0x30` | `ctx.save()` |
@@ -384,6 +385,14 @@ The `path_cubic` record of 4.3.2 with every f64 argument a little-endian f32: th
 | `0x06`, `0x07` | `A`, `a` (`rx ry rot` f32, `large sweep` u32, `x y` f32) | 29 |
 | `0x08`–`0x0B` | `H`, `V`, `h`, `v` | 5 |
 
+#### 4.3.10 `cubic_run` (0x07)
+
+```
+0x07  count:u32  x0:f32 y0:f32  x1:f32 y1:f32 x2:f32 y2:f32 x:f32 y:f32  … (count times)
+```
+
+The path `M x0,y0` followed by `count` absolute cubic curves `C x1,y1 x2,y2 x,y`, every coordinate a little-endian f32 and no sub-opcode per curve: `1 + 4 + 8 + 24·count` bytes, against `5 + 9 + 25·count` for the same path as `path_cubic32` and `5 + 9 + 49·count` as `path_cubic`. It is the shape the cubic curve generators of spec/04 §5 emit — `Visualize.Shape.Curve.monotone_x/1`, `monotone_y/1`, `cardinal/2`, `catmull_rom/2` and `natural/1` produce one `M` then `C`s and nothing else — so a curved line mark is one run. `basis/1` is the one cubic generator that is not: it opens with an `L` to its first control point and closes with an `L` to the last point, so a basis curve stays a command stream (4.3.9), one byte per curve larger than a run. The decoder MUST begin a path, `moveTo` the start point and `bezierCurveTo` each curve in order, leaving the path open; it MUST accept any `count`, though the encoder writes the record only for one curve or more (4.5). There is no f64 form: under `precision: :f64` the same path is a `path_cubic` record (D-74).
+
 ### 4.4 Encoding IR elements
 
 `encode_element/1` on an `IR.Element` writes, per type:
@@ -404,7 +413,10 @@ Elements of type `:ellipse`, `:line`, `:polyline`, `:polygon`, `:text`, `:title`
 `encode_path/2` and the `:path` branch of `encode_element/2` choose the path record from the command list, with the smooth curves already expanded, and from the `precision:` option (D-36, D-73):
 
 - One `:M` followed by zero or more `:L` commands — a single open polyline, the case the point-list records represent without loss of shape — is `path32` (0x05) under `precision: :f32`, the default, and `path` (0x01) under `:f64`.
+- One `:M` followed by one or more `:C` commands — a single open cubic run, what the curve generators emit — is `cubic_run` (0x07) under `:f32` (4.3.10); under `:f64` it is `path_cubic` (0x02), the run having no f64 form (D-74).
 - Every other command list, the empty list included, is `path_cubic32` (0x06) under `:f32` and `path_cubic` (0x02) under `:f64`.
+
+The three tests are on the command list after `Visualize.IR.Path.expand_smooth/1`, so a run written with `S` after its first `C` is a run too; a `Z`, a second subpath, a relative command or a mixed run of `L` and `C` falls to the command stream, which holds it exactly.
 
 The default is f32 because the stream carries canvas coordinates, which are pixel positions: an f32 stores a value below 2¹⁴ = 16,384 in magnitude to within 2⁻¹¹ (≈ 0.0005 px) and one below 2¹¹ = 2,048 to within 2⁻¹³ (≈ 0.0001 px) — the rounding error is at most half an ULP, and the ULP of a value in `[2ⁿ, 2ⁿ⁺¹)` is 2ⁿ⁻²³ — which is far under the half pixel a rasteriser resolves, while every f64 path record is twice the size for precision the canvas cannot show. That bound is the contract of the f32 records: `test/visualize/backend/canvas_binary_test.exs` holds it over random coordinates, and holds `decode(encode(path))` to the path with every argument rounded to its nearest f32. `precision: :f64` writes the records of 4.3.1 and 4.3.2 — byte for byte the stream before D-73 — for a consumer whose values are not pixels or exceed 2²⁴, where an f32 no longer holds every integer. The option governs the path records alone: `circles`, `rects` and `transform` keep their f64 layouts, and `Visualize.Shape.LineNx.to_binary/6,7` (spec/04 §10.2) writes the f64 `path` record as it always has.
 

@@ -65,6 +65,17 @@ defmodule Visualize.PathGen do
 
   defp round_arg(v), do: v
 
+  @doc "A path that is one `M` followed by one or more `C` commands — the cubic-run form."
+  def cubic_run do
+    curve = tuple({constant(:C), coord(), coord(), coord(), coord(), coord(), coord()})
+
+    bind(tuple({coord(), coord()}), fn {x, y} ->
+      map(list_of(curve, min_length: 1, max_length: 10), fn curves ->
+        %Path{commands: [{:M, x, y} | curves]}
+      end)
+    end)
+  end
+
   @doc "A path that is one `M` followed by `L` commands — the compact binary form."
   def polyline do
     bind(tuple({coord(), coord()}), fn {x, y} ->

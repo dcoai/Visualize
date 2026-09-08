@@ -59,6 +59,59 @@ defmodule Visualize.Backend.CanvasBinaryTest do
     end
   end
 
+  describe "the cubic run (D-74)" do
+    property "one M then Cs is a cubic_run and round-trips to the rounded path" do
+      check all(path <- PathGen.cubic_run()) do
+        <<0x07, count::little-32, _::binary>> = binary = CanvasBinary.encode_path!(path)
+        assert count == length(path.commands) - 1
+        assert byte_size(binary) == 13 + 24 * count
+        assert Decoder.decode_path(binary) == PathGen.round_f32(path)
+
+        <<0x02, _::binary>> = f64 = CanvasBinary.encode_path!(path, precision: :f64)
+        assert Decoder.decode_path(f64) == path
+      end
+    end
+
+    test "a run broken by any other command, or with no curve, is a command stream" do
+      c = {:C, 1.0, 1.0, 2.0, 1.0, 3.0, 0.0}
+
+      for commands <- [
+            [{:M, 0.0, 0.0}],
+            [{:M, 0.0, 0.0}, {:L, 1.0, 1.0}, c],
+            [{:M, 0.0, 0.0}, c, {:L, 4.0, 0.0}],
+            [{:M, 0.0, 0.0}, c, :Z],
+            [{:M, 0.0, 0.0}, c, {:M, 5.0, 5.0}, c],
+            [{:M, 0.0, 0.0}, {:c, 1.0, 1.0, 2.0, 1.0, 3.0, 0.0}],
+            [c]
+          ] do
+        path = %Path{commands: commands}
+        assert <<opcode, _::binary>> = CanvasBinary.encode_path!(path)
+        assert opcode in [0x05, 0x06], inspect(commands)
+      end
+    end
+
+    test "a smooth continuation counts as a run, and the curve generators emit runs" do
+      smooth =
+        Path.new()
+        |> Path.move_to(0.0, 0.0)
+        |> Path.curve_to(1.0, 1.0, 2.0, 1.0, 3.0, 0.0)
+        |> Path.smooth_curve_to(5.0, -1.0, 6.0, 0.0)
+
+      assert <<0x07, 2::little-32, _::binary>> = CanvasBinary.encode_path!(smooth)
+
+      points = for i <- 0..9, do: {i * 10.0, :math.sin(i) * 20.0}
+
+      for curve <- [:monotone_x, :monotone_y, :cardinal, :catmull_rom, :natural] do
+        assert <<0x07, 9::little-32, _::binary>> =
+                 CanvasBinary.encode_path!(Visualize.Shape.Curve.generate(curve, points)),
+               "#{curve} is not a run"
+      end
+
+      assert <<0x06, _::binary>> =
+               CanvasBinary.encode_path!(Visualize.Shape.Curve.generate(:basis, points))
+    end
+  end
+
   describe "the f32 records (D-73)" do
     property "an f32 holds a coordinate below 16,384 to within 2^-11" do
       check all(v <- float(min: -16_384.0, max: 16_384.0)) do
@@ -80,7 +133,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
       line = Path.new() |> Path.move_to(0.0, 0.0) |> Path.line_to(1.0, 1.0)
       group = Element.group([Element.path(curve), Element.path(line)])
 
-      assert [:save, {:path_cubic32, _}, {:path32, _}, :restore] =
+      assert [:save, {:cubic_run, _, _}, {:path32, _}, :restore] =
                Decoder.decode(CanvasBinary.encode_element!(group))
 
       assert [:save, {:path_cubic, _}, {:path, _}, :restore] =
@@ -249,6 +302,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
              rects: Opcodes.rects(),
              path32: Opcodes.path32(),
              path_cubic32: Opcodes.path_cubic32(),
+             cubic_run: Opcodes.cubic_run(),
              style: Opcodes.style(),
              transform: Opcodes.transform(),
              save: Opcodes.save(),

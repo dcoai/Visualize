@@ -19,6 +19,8 @@ defmodule Visualize.Backend.CanvasBinary.Opcodes do
   @doc false
   defmacro path_cubic32, do: 0x06
   @doc false
+  defmacro cubic_run, do: 0x07
+  @doc false
   defmacro style, do: 0x10
   @doc false
   defmacro transform, do: 0x20
