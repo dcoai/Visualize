@@ -25,11 +25,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   # axis (cartesian).
   @spec cartesian(map(), atom(), [Element.t()]) :: [Element.t()]
   def cartesian(frame, mode, marks \\ []) do
-    axes = Enum.map(frame.axes, &{&1, axis(frame, &1)})
-
-    grid(frame, axes, mode) ++
-      marks ++
-      Enum.map(axes, fn {node, axis} -> place(frame, node, axis, mode) end)
+    grid(frame, mode) ++ marks ++ Enum.map(frame.axes, &place_axis(frame, &1, mode))
   end
 
   @doc false
@@ -37,24 +33,54 @@ defmodule Visualize.Chart.Frame.Furniture do
   # and spoke axes; an axis on any other scale draws as a cartesian one.
   @spec polar(map(), atom(), [Element.t()]) :: [Element.t()]
   def polar(frame, mode, marks \\ []) do
-    {polar, other} = Enum.split_with(frame.axes, &(&1.scale in [:angle, :r]))
-    axes = Enum.map(polar, &{&1, axis(frame, &1)})
-    centre = Transform.translate(frame.plot.width / 2, frame.plot.height / 2)
+    {polar, other} = polar_split(frame)
+    rings = Enum.map(polar, &polar_axis(frame, &1, mode))
 
-    lines =
-      polar
-      |> Enum.zip(axes)
-      |> Enum.flat_map(fn {node, {_, axis}} -> polar_grid(frame, node, axis) end)
-
-    grid =
-      if lines == [],
-        do: [],
-        else: [group(lines, "grid", Style.resolve(style(frame, :grid), frame.theme, mode))]
-
-    groups = Enum.map(axes, fn {node, axis} -> polar_axis(frame, node, axis, mode) end)
-
-    [Element.group(grid ++ marks ++ groups, style: %{class: "polar"}, transform: centre)] ++
+    [centred(frame, polar_grid(frame, mode) ++ marks ++ rings)] ++
       cartesian(%{frame | axes: other}, mode)
+  end
+
+  @doc false
+  # The cartesian grid: one hidden group of lines at the tick positions of every axis
+  # with `grid: true`, or nothing (spec/14 §4.4).
+  @spec grid(map(), atom()) :: [Element.t()]
+  def grid(frame, mode), do: grid(frame, Enum.map(frame.axes, &{&1, axis(frame, &1)}), mode)
+
+  @doc false
+  # One axis node drawn and placed at its side of the plot area.
+  @spec place_axis(map(), map(), atom()) :: Element.t()
+  def place_axis(frame, node, mode), do: place(frame, node, axis(frame, node), mode)
+
+  @doc false
+  # The axes on `angle` and `r`, then the others, of a polar frame (spec/14 §4.6).
+  @spec polar_split(map()) :: {[map()], [map()]}
+  def polar_split(frame), do: Enum.split_with(frame.axes, &(&1.scale in [:angle, :r]))
+
+  @doc false
+  # The polar grid — spokes and rings — of the axes on `angle` and `r`, or nothing.
+  @spec polar_grid(map(), atom()) :: [Element.t()]
+  def polar_grid(frame, mode) do
+    {polar, _other} = polar_split(frame)
+    lines = Enum.flat_map(polar, &polar_grid(frame, &1, axis(frame, &1)))
+
+    if lines == [],
+      do: [],
+      else: [group(lines, "grid", Style.resolve(style(frame, :grid), frame.theme, mode))]
+  end
+
+  @doc false
+  # A ring (on `angle`) or a spoke (on `r`) axis about the plot centre.
+  @spec polar_axis(map(), map(), atom()) :: Element.t()
+  def polar_axis(frame, node, mode), do: polar_axis(frame, node, axis(frame, node), mode)
+
+  @doc false
+  # The group at the plot centre that holds a polar frame's grid, marks and polar axes.
+  @spec centred(map(), [Element.t()]) :: Element.t()
+  def centred(frame, children) do
+    Element.group(children,
+      style: %{class: "polar"},
+      transform: Transform.translate(frame.plot.width / 2, frame.plot.height / 2)
+    )
   end
 
   @doc false

@@ -8,7 +8,8 @@ defmodule ExamplesWeb.PerformanceLive do
 
   use Phoenix.LiveView
 
-  alias Visualize.{Scale, Shape, Render}
+  alias Visualize.{Chart, Scale, Shape, Render}
+  alias Visualize.Chart.Compiled
   alias Visualize.IR.Element
   alias Visualize.Backend.CanvasIncremental
 
@@ -57,6 +58,15 @@ defmodule ExamplesWeb.PerformanceLive do
       hybrid_static_svg: nil,
       hybrid_static_svg_bytes: 0,
 
+      # Compiled design (spec/14 §12): the compiled chart, its static SVG rendered
+      # once, the dynamic SVG of the last tick, the results of live runs and of the
+      # headless measurement
+      compiled: nil,
+      compiled_static: nil,
+      compiled_svg: "",
+      compiled_results: nil,
+      compiled_measure: nil,
+
       # Internal timing
       frame_times: [],
       render_times: [],
@@ -103,6 +113,22 @@ defmodule ExamplesWeb.PerformanceLive do
 
   def handle_event("start_test", _params, socket) do
     schedule_frame(socket.assigns.update_interval)
+
+    # Compiled modes: compile the line design once over the first frame; the static
+    # furniture is rendered here and never again (spec/14 §12.4)
+    socket = if socket.assigns.backend in [:compiled_svg, :compiled_binary] do
+      target = if socket.assigns.backend == :compiled_svg, do: :svg, else: :binary
+      data = generate_animated_data(:line, socket.assigns.data_points, 0)
+      {:ok, compiled} = Chart.compile(compiled_design(target), sources: %{primary: data})
+      assign(socket,
+        chart_type: :line,
+        compiled: compiled,
+        compiled_static: Compiled.static(compiled),
+        compiled_svg: ""
+      )
+    else
+      socket
+    end
 
     # For hybrid modes, pre-render static SVG (axes) once
     {hybrid_static_svg, hybrid_static_svg_bytes} = if socket.assigns.backend in [:hybrid, :hybrid_incremental] do
@@ -174,6 +200,13 @@ defmodule ExamplesWeb.PerformanceLive do
       results
     end
 
+    # Add the static SVG bytes for the compiled modes
+    results = if socket.assigns.backend in [:compiled_svg, :compiled_binary] do
+      Map.put(results, :static_svg_bytes, byte_size(socket.assigns.compiled_static || ""))
+    else
+      results
+    end
+
     # Add scroll_delta for incremental modes
     results = if socket.assigns.backend in [:canvas_incremental, :hybrid_incremental] do
       Map.put(results, :scroll_delta, @scroll_delta)
@@ -187,6 +220,9 @@ defmodule ExamplesWeb.PerformanceLive do
       :hybrid -> assign(socket, hybrid_results: results)
       :canvas_incremental -> assign(socket, canvas_inc_results: results)
       :hybrid_incremental -> assign(socket, hybrid_inc_results: results)
+      backend when backend in [:compiled_svg, :compiled_binary] ->
+        compiled_results = Map.put(socket.assigns.compiled_results || %{}, backend, results)
+        assign(socket, compiled_results: compiled_results)
     end
 
     {:noreply, assign(socket, running: false)}
@@ -198,8 +234,15 @@ defmodule ExamplesWeb.PerformanceLive do
       canvas_results: nil,
       hybrid_results: nil,
       canvas_inc_results: nil,
-      hybrid_inc_results: nil
+      hybrid_inc_results: nil,
+      compiled_results: nil,
+      compiled_measure: nil
     )}
+  end
+
+  def handle_event("measure_compiled", _params, socket) do
+    measure = measure_compiled(data_points: socket.assigns.data_points, updates: 100)
+    {:noreply, assign(socket, compiled_measure: measure)}
   end
 
   def handle_event("run_quick_benchmark", _params, socket) do
@@ -304,7 +347,10 @@ defmodule ExamplesWeb.PerformanceLive do
       else
         render_start = System.monotonic_time(:microsecond)
 
-        output = case socket.assigns.backend do
+        {output, socket} = if socket.assigns.backend in [:compiled_svg, :compiled_binary] do
+          compiled_frame(socket, data)
+        else
+          {case socket.assigns.backend do
           :hybrid ->
             # Hybrid mode: render data only using binary format
             render_data_only_binary(socket.assigns.chart_type, data, 700, 400)
@@ -331,6 +377,7 @@ defmodule ExamplesWeb.PerformanceLive do
             else
               render_incremental(:hybrid, socket.assigns.chart_type, data, 700, 400)
             end
+          end, socket}
         end
 
         render_time = System.monotonic_time(:microsecond) - render_start
@@ -377,6 +424,86 @@ defmodule ExamplesWeb.PerformanceLive do
     else
       {:noreply, socket}
     end
+  end
+
+  @doc """
+  The line design of spec/14 §12.6 over the page's animated line data: fixed `x` and `y`
+  domains so the whole frame is static, both axes with a grid, a title, and one `:line`
+  mark whose `render` is the target given (`:svg`, `:binary`, or `:auto`).
+  """
+  def compiled_design(target \\ :auto) do
+    %{
+      version: 1,
+      meta: %{name: "Performance line"},
+      sources: %{primary: %{fields: [:x, :y]}},
+      styles: %{series: %{stroke_width: 2, curve: :monotone_x}},
+      frame: %{
+        kind: :cartesian,
+        size: %{width: 700, height: 400},
+        margin: @margin,
+        scales: %{x: %{kind: :linear, domain: [0, 100]}, y: %{kind: :linear, domain: [-10, 110]}},
+        axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left, grid: true}]
+      },
+      marks: [
+        %{type: :line, data: :primary, channels: %{x: :x, y: :y}, style: :series, render: target}
+      ],
+      labels: [%{anchor: :title, text: ["Compiled line"]}]
+    }
+  end
+
+  @doc """
+  The measurement of spec/14 §12.6: bytes per update over `:updates` (100) frames of
+  `:data_points` (#{@default_data_points}) points — the old path, `Visualize.Chart.render/2`
+  of the design applied to each frame as one SVG string, against the compiled path,
+  `Visualize.Chart.Compiled.static/1` once and the tick payload's `bytes` per frame, for
+  `render: :svg` and `render: :binary`.
+  """
+  def measure_compiled(opts \\ []) do
+    points = Keyword.get(opts, :data_points, @default_data_points)
+    updates = Keyword.get(opts, :updates, 100)
+    frames = for frame <- 1..updates, do: generate_animated_data(:line, points, frame)
+    old = frames |> Enum.map(&byte_size(old_path(&1))) |> Enum.sum()
+
+    compiled =
+      Map.new([:svg, :binary], fn target ->
+        {:ok, compiled} = Chart.compile(compiled_design(target), sources: %{primary: hd(frames)})
+
+        {bytes, _compiled} =
+          Enum.reduce(frames, {0, compiled}, fn data, {sum, compiled} ->
+            {payload, compiled} = Compiled.tick(compiled, %{primary: data})
+            {sum + payload.bytes, compiled}
+          end)
+
+        {target,
+         %{static_bytes: byte_size(Compiled.static(compiled)), bytes_per_update: div(bytes, updates)}}
+      end)
+
+    %{
+      updates: updates,
+      data_points: points,
+      old_bytes_per_update: div(old, updates),
+      compiled: compiled
+    }
+  end
+
+  # The old path: the design applied to the frame's data and rendered whole.
+  defp old_path(data) do
+    {:ok, applied} = Chart.apply(compiled_design(:svg), sources: %{primary: data})
+    Chart.render(applied)
+  end
+
+  # One frame of a compiled mode: the tick's dynamic SVG replaces the last, its canvas
+  # (binary) is pushed to the hook; the transmitted bytes are the two together.
+  defp compiled_frame(socket, data) do
+    {payload, compiled} = Compiled.tick(socket.assigns.compiled, %{primary: data})
+    socket = assign(socket, compiled: compiled, compiled_svg: payload.svg)
+
+    socket =
+      if payload.canvas == "",
+        do: socket,
+        else: push_event(socket, "canvas_update", %{binary: payload.canvas})
+
+    {payload.svg <> payload.canvas, socket}
   end
 
   defp schedule_frame(interval) do
@@ -965,6 +1092,28 @@ defmodule ExamplesWeb.PerformanceLive do
                 Hybrid-Inc
               </button>
             </div>
+            <div class="button-group" style="margin-top: 0.5rem;">
+              <button
+                type="button"
+                phx-click="set_backend"
+                phx-value-backend="compiled_svg"
+                class={"btn #{if @backend == :compiled_svg, do: "active"}"}
+                disabled={@running}
+                title="Compiled design (spec/14 §12): static furniture once, the line as SVG per update"
+              >
+                Compiled-SVG
+              </button>
+              <button
+                type="button"
+                phx-click="set_backend"
+                phx-value-backend="compiled_binary"
+                class={"btn #{if @backend == :compiled_binary, do: "active"}"}
+                disabled={@running}
+                title="Compiled design (spec/14 §12): static furniture once, the line as binary canvas per update"
+              >
+                Compiled-Binary
+              </button>
+            </div>
           </div>
 
           <div class="control-group">
@@ -1139,6 +1288,22 @@ defmodule ExamplesWeb.PerformanceLive do
             <%= if @backend == :svg do %>
               <%= Phoenix.HTML.raw(@chart_output) %>
             <% else %>
+              <%= if @backend in [:compiled_svg, :compiled_binary] do %>
+              <!-- Compiled modes: the canvas under the static SVG under the dynamic SVG (spec/14 §12.4) -->
+              <div class="canvas-wrapper" style="position: relative; width: 700px; height: 400px; background: white; border: 1px solid #ddd;">
+                <%= if @backend == :compiled_binary do %>
+                  <div id="perf-compiled-binary" phx-hook="CanvasBinaryChart" phx-update="ignore" data-binary="" data-width="700" data-height="400" style="position: absolute; top: 0; left: 0; z-index: 1;">
+                    <canvas width="700" height="400" style="display: block;"></canvas>
+                  </div>
+                <% end %>
+                <div class="compiled-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(@compiled_static || "") %>
+                </div>
+                <div class="compiled-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(@compiled_svg) %>
+                </div>
+              </div>
+              <% else %>
               <div class="canvas-wrapper" style="position: relative; width: 700px; height: 400px; background: white; border: 1px solid #ddd;">
                 <%= if @backend in [:hybrid, :hybrid_incremental] && @hybrid_static_svg do %>
                   <!-- Hybrid modes: static SVG axes layer -->
@@ -1158,6 +1323,7 @@ defmodule ExamplesWeb.PerformanceLive do
                   </div>
                 <% end %>
               </div>
+              <% end %>
             <% end %>
           </div>
         </div>
@@ -1224,6 +1390,63 @@ defmodule ExamplesWeb.PerformanceLive do
             </p>
           </div>
         <% end %>
+
+        <div class="comparison-panel">
+          <h3>Compiled design (spec/14 §12)</h3>
+          <p class="comparison-note">
+            The line design of <code>compiled_design/1</code> streamed through
+            <code>Visualize.Chart.Compiled.tick/3</code>: the static furniture is sent once, the
+            mark per update. The old path applies the design and renders one SVG string per update.
+          </p>
+          <button type="button" phx-click="measure_compiled" class="btn" disabled={@running}>
+            Measure 100 updates
+          </button>
+          <%= if @compiled_measure do %>
+            <table class="results-table">
+              <thead>
+                <tr><th>Path</th><th>Bytes / update</th><th>Static, once</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Old: the design rendered as one SVG string per update</td>
+                  <td><%= format_bytes(@compiled_measure.old_bytes_per_update) %></td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>Compiled, <code>render: :svg</code></td>
+                  <td><%= format_bytes(@compiled_measure.compiled.svg.bytes_per_update) %></td>
+                  <td><%= format_bytes(@compiled_measure.compiled.svg.static_bytes) %></td>
+                </tr>
+                <tr>
+                  <td>Compiled, <code>render: :binary</code></td>
+                  <td><%= format_bytes(@compiled_measure.compiled.binary.bytes_per_update) %></td>
+                  <td><%= format_bytes(@compiled_measure.compiled.binary.static_bytes) %></td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="comparison-note">
+              <%= @compiled_measure.data_points %> points, <%= @compiled_measure.updates %> updates.
+            </p>
+          <% end %>
+          <%= if @compiled_results do %>
+            <table class="results-table">
+              <thead>
+                <tr><th>Live run</th><th>FPS</th><th>Render Time</th><th>Payload / update</th><th>Static, once</th></tr>
+              </thead>
+              <tbody>
+                <%= for {backend, r} <- @compiled_results do %>
+                  <tr>
+                    <td><%= backend %></td>
+                    <td><%= Float.round(r.fps, 1) %></td>
+                    <td><%= format_time(r.avg_render_time_us) %></td>
+                    <td><%= format_bytes(r.avg_payload_bytes) %></td>
+                    <td><%= format_bytes(r.static_svg_bytes) %></td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          <% end %>
+        </div>
       </div>
     </main>
 

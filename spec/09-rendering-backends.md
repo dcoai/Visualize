@@ -475,7 +475,7 @@ The decoder MUST copy the existing canvas content shifted by `(−dx, −dy)`, t
 | `:dynamic_style` | `%{stroke: "#4e79a7", fill: :none, stroke_width: 2}` | `render/1`, `render_dynamic/1` | Style applied when `:dynamic` is a path or a list |
 | `:canvas_format` | `:json` | `render/1`, `render_dynamic/1` | `:js`, `:json` or `:commands`, passed to `Canvas.render_element/2` |
 
-The doc comment on `render/1` states a `:js` default for `:canvas_format`; the implemented and normative default is `:json`, which is what the emitted container (6.3) expects.
+The doc comment on `render/1` states a `:js` default for `:canvas_format`; the implemented and normative default is `:json`, which is what the emitted container (6.3) expects. `render_dynamic/1` passes any format of 3.2 through, `:binary` and `:binary_base64` included, for a caller that feeds the `CanvasBinaryChart` hook itself — the compiled chart of [14-declarative-chart](14-declarative-chart.md) §12.4 does; the container of `render/1` reads `:json` and `:js` only.
 
 ### 6.3 Output
 
