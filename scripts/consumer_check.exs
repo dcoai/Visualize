@@ -8,7 +8,7 @@
 # Run from the repository root: `elixir scripts/consumer_check.exs`. Exits non-zero, with
 # the failing assertion, when the consumer build carries anything it should not.
 defmodule Visualize.ConsumerCheck do
-  @absent ~w(Phoenix.Component Phoenix.HTML.Safe Nx Visualize.Components
+  @absent ~w(Phoenix.Component Phoenix.HTML.Safe Nx Jason Visualize.Components
              Visualize.Components.Tree Visualize.Audit TLA.Spec Surfex.Golden)
   @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Backend.CanvasBinary)
 
@@ -24,7 +24,7 @@ defmodule Visualize.ConsumerCheck do
     mix(dir, ["run", "-e", probe()])
 
     File.rm_rf!(dir)
-    IO.puts("consumer build is lib/ only - no Phoenix, no Nx, no table, no Explorer")
+    IO.puts("consumer build is lib/ only - no Phoenix, no Nx, no Jason, no table, no Explorer")
   end
 
   defp mix_exs(root) do
