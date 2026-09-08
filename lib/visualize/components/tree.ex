@@ -37,7 +37,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Chart.Presets
     alias Visualize.Components.Support
-    alias Visualize.IR.Path
 
     @tree Presets.defaults(:tree_diagram)
     @treemap Presets.defaults(:treemap_chart)
@@ -110,7 +109,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns =
         assign(assigns,
           margin: drawn.margin,
-          links: Enum.map(links.children, &link_d/1),
+          links: Enum.map(links.children, &Support.d/1),
           nodes: groups,
           theme: drawn.theme,
           ids: drawn.ids,
@@ -319,14 +318,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </g>
       </svg>
       """
-    end
-
-    # The link `d` in the form spec/10 §3.2's goldens hold — the three points of the cubic
-    # space-separated — from the layer's path; `Visualize.IR.Path.to_string/1` would
-    # comma-separate them.
-    defp link_d(%{path: %Path{commands: [{:M, x0, y0}, {:C, cx0, cy0, cx1, cy1, x1, y1}]}}) do
-      "M#{fmt(x0)},#{fmt(y0)}C#{fmt(cx0)},#{fmt(cy0)} #{fmt(cx1)},#{fmt(cy1)} " <>
-        "#{fmt(x1)},#{fmt(y1)}"
     end
 
     # Horizontal labels sit beside the node, internal ones to its left (spec/10 §3.2).

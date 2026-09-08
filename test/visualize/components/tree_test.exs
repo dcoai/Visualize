@@ -104,6 +104,19 @@ defmodule Visualize.Components.TreeTest do
     end
   end
 
+  # Every component prints its paths through `Visualize.IR.Path.to_string/1`, the one `d`
+  # serialiser (spec/02 §2.2, D-34), whose coordinates are comma-separated; a space inside a
+  # `d` is a hand format of the component's own (D-71). Every golden of the chart and the
+  # hierarchy components is held, so the guard is one place for all ten.
+  test "no component golden's d contains a space" do
+    goldens = Path.wildcard(Path.join(@dir, "*.svg"))
+    assert length(goldens) == 27
+
+    for file <- goldens, [_, d] <- Regex.scan(~r/ d="([^"]*)"/, File.read!(file)) do
+      refute d =~ " ", "#{Path.basename(file)}: #{d}"
+    end
+  end
+
   describe "tree_diagram/1" do
     test "one node per hierarchy node, one link per edge" do
       svg = render_component(&Tree.tree_diagram/1, %{data: @hierarchy})
