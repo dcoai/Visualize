@@ -65,7 +65,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `stroke_width` - (default 2)
     * `show_points` - draw an `r="4"` circle at each datum (default `false`)
     * `x_label`, `y_label` - axis titles as `<text class="axis-label">`
-    * `animate`, `class` - per the module conventions
+    * `animate`, `class`, `responsive` - per the module conventions
 
     ## Example
 
@@ -82,6 +82,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:stroke_width, :integer, default: 2)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
     attr(:x_label, :string, default: nil)
     attr(:y_label, :string, default: nil)
     attr(:show_points, :boolean, default: false)
@@ -116,7 +117,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -162,7 +163,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
     * `fill` - bar colour (default `"steelblue"`)
     * `padding` - band padding, 0 to 1 (default 0.1)
-    * `animate`, `class` - per the module conventions
+    * `animate`, `class`, `responsive` - per the module conventions
     """
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
@@ -173,6 +174,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:fill, :string, default: "steelblue")
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
     attr(:padding, :float, default: 0.1)
 
     def bar_chart(assigns) do
@@ -215,7 +217,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -252,6 +254,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:fill, :string, default: "steelblue")
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
     attr(:padding, :float, default: 0.1)
 
     def horizontal_bar_chart(assigns) do
@@ -291,7 +294,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -324,7 +327,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `colors` - scheme atom or colour list; the i-th slice takes the i-th colour
       (default `:category10`)
     * `show_labels` - (default `true`)
-    * `animate`, `class` - per the module conventions
+    * `animate`, `class`, `responsive` - per the module conventions
 
     A label sits at the centroid of the slice's mid-radius, as `Visualize.Shape.Arc.centroid/2`
     computes it.
@@ -340,6 +343,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:colors, :any, default: :category10)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
     attr(:show_labels, :boolean, default: true)
 
     def pie_chart(assigns) do
@@ -372,7 +376,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns = assign(assigns, slices: slices, transition: Support.transition(assigns.animate))
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
           <%= for slice <- @slices do %>
             <path d={slice.d} fill={slice.fill} stroke="white" stroke-width="2" {@transition} />
@@ -403,7 +407,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `fill` - point colour (default `"steelblue"`)
     * `size` - the radius, or a one-argument function of the datum returning it
       (default 5)
-    * `animate`, `class` - per the module conventions
+    * `animate`, `class`, `responsive` - per the module conventions
     """
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
@@ -415,6 +419,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:size, :any, default: 5)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
 
     def scatter_plot(assigns) do
       assigns = Support.rows(assigns)
@@ -450,7 +455,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -482,7 +487,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `fill`, `fill_opacity` - the area (default `"steelblue"` at 0.3)
     * `stroke`, `stroke_width` - the line (default `"steelblue"`, 2)
     * `curve` - applied to both the area and the line (default `:linear`)
-    * `animate`, `class` - per the module conventions
+    * `animate`, `class`, `responsive` - per the module conventions
     """
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
@@ -497,6 +502,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:curve, :atom, default: :linear)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
 
     def area_chart(assigns) do
       assigns = Support.rows(assigns)
@@ -532,7 +538,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -570,7 +576,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `colors` - scheme atom or colour list, one colour per key in order
       (default `:category10`)
     * `padding` - band padding (default 0.1)
-    * `animate`, `class` - per the module conventions
+    * `animate`, `class`, `responsive` - per the module conventions
 
     The y domain is `[0, max y1]` over every point of every series.
     """
@@ -583,6 +589,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:colors, :any, default: :category10)
     attr(:animate, :boolean, default: false)
     attr(:class, :string, default: nil)
+    attr(:responsive, :boolean, default: false)
     attr(:padding, :float, default: 0.1)
 
     def stacked_bar_chart(assigns) do
@@ -629,7 +636,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.class(@class)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive)} viewBox={"0 0 #{@width} #{@height}"}>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>

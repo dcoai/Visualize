@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>` — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
+Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>`, and `Visualize.Hooks.Resize` reports a container's size so the server can re-render at it — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
 
 ## 1. Scope
 
@@ -18,6 +18,7 @@ Visualize reaches the browser through Phoenix LiveView in three ways: HEEx funct
 | `Visualize.Hooks.Canvas` | always | `CanvasChart` JS: Canvas command and script replay |
 | `Visualize.Hooks.CanvasBinary` | always | `CanvasBinaryChart` JS and the shared binary decoder |
 | `Visualize.Hooks.CanvasIncremental` | always | `CanvasIncrementalChart` JS: scroll-and-copy updates |
+| `Visualize.Hooks.Resize` | always | `ResizeHook` JS: the container's size pushed to the LiveView once per settle |
 
 Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)`. For that guard to be true in a host, `phoenix_live_view` MUST be a declared dependency of this library: Mix prunes the code path to a dependency's own declared deps while compiling it, so a guard over an undeclared module is always false in a host, whatever the host itself depends on. It is therefore declared `optional: true` (D-45): a host that has LiveView compiles the components, one that does not never fetches Phoenix, and `scripts/consumer_check.exs` proves the second claim on every pipeline ([12-testing-and-conformance](12-testing-and-conformance.md) §4). The library's own builds carry the optional dependency, so the components compile, are documented and are rendered under test here.
 
@@ -26,6 +27,7 @@ Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)
 - Every component is a function component `name/1` taking an assigns map and returning rendered HEEx; it is used as `<.name … />` after `import Visualize.Components` (or `Visualize.Components.Tree`).
 - Every component declares its assigns with `attr/3`, so an unknown assign or a missing required one is a compile-time warning in the caller, and each listed default is applied by `Phoenix.Component`.
 - Every component renders one `<svg width={width} height={height} viewBox="0 0 {width} {height}">`.
+- `responsive` (`:boolean`, default `false`) is accepted by every component; when true the `<svg>` also carries `preserveAspectRatio="xMidYMid meet"` and `style="width:100%;height:auto"`, the CSS-scaled case of D-54, exactly as `Visualize.IR.Element.root/3` under `responsive: true` (spec/02 §2.1); when false neither attribute is present. The round-trip case is `ResizeHook` (§10) on the container, with the pushed size assigned to `width` and `height`.
 - `class` (`:string`, default `nil`) is accepted by every component and placed on the `<svg>` as `class={class}`; when `nil` the attribute is absent.
 - `animate` (`:boolean`, default `false`) is accepted by every component; when true, every data mark carries `style="transition: all 0.3s ease-in-out;"` so DOM patches animate via CSS; when false a mark carries no `style` attribute.
 - `margin` is merged over the component's default margin with `Map.merge/2`, so a partial map such as `%{left: 60}` overrides one side only. `inner_width = width − left − right`, `inner_height = height − top − bottom`, and the plot area is a `<g transform="translate(left, top)">`.
@@ -231,7 +233,7 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, then one `export default { … }` object listing the five hooks — each name is exported exactly once (D-40, D-48). | |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, then one `export default { … }` object listing the six hooks — each name is exported exactly once (D-40, D-48). |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
 | `Visualize.Hooks.transform_point/2` | Delegates to `Visualize.Hooks.Zoom.transform_point/2`. |
@@ -382,9 +384,32 @@ Attach as for `CanvasChart` (7.2). The hook renders on `mounted()`, on `updated(
 
 Attach as for `CanvasChart` (7.2). On `mounted()` the hook also creates an offscreen canvas of the same size for the copy. It renders only on `canvas_incremental` events, whose payload is the map `Visualize.Incremental` builds (spec/09 §7.3): mode `"none"` is ignored; mode `"full"` resets the transform, clears the canvas, checks the `0x60` header and replays the stream from byte 11 (spec/09 §5.6); any scroll mode copies the current pixels to the offscreen canvas, clears, draws them back shifted by `(−round(dx), −round(dy))` (integer shifts, since a sub-pixel copy blurs), then reads the `0x60` record's `region_count` at byte 10 and, for each region, saves, clips to its bounds, replays its `data_length` bytes with `executeVisualizeBinary` and restores (spec/09 §5.5). A payload without the `0x60` header throws.
 
-## 10. Elements in HEEx
+## 10. Visualize.Hooks.Resize
 
-### 10.1 Safe implementations
+### 10.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.Resize.js_hook/0` | Returns the source of `export const ResizeHook = {…}` (10.2). |
+
+### 10.2 `ResizeHook` behaviour
+
+Attach with `phx-hook="ResizeHook"` and an `id` on the container whose size the chart should follow — the element CSS sizes, not the `<svg>` inside it, which the server re-renders at the pushed size. Data attributes read on `mounted()`:
+
+| Attribute | Default | Meaning |
+|---|---|---|
+| `data-resize-event` | `"resize"` | name of the event pushed to the LiveView |
+| `data-resize-debounce` | `150` | milliseconds the size must hold before it is pushed |
+
+On mount the hook creates a `ResizeObserver` on the element. Every observation records the element's content box (`contentRect.width` and `contentRect.height`, each rounded to an integer) and restarts a timer of `debounce` milliseconds; when the timer fires — once per settle, however many observations a drag produced — the hook pushes `pushEvent(eventName, {width, height})` unless that size equals the last size pushed. The first observation, which `ResizeObserver` delivers on `observe()`, therefore pushes the initial size after one debounce period, so a LiveView learns its container's width without a round trip of its own. `destroyed()` disconnects the observer and clears a pending timer, so nothing outlives the element (D-47). A browser without `ResizeObserver` gets no events: `mounted()` returns without observing.
+
+Event: `handle_event("resize", %{"width" => w, "height" => h}, socket)` with integers.
+
+The hook is the round-trip half of responsive sizing (D-54); the CSS-scaled half needs no hook: a root built with `Visualize.IR.Element.root/3` under `responsive: true` (spec/02 §2.1), or a component with `responsive={true}` (1.2), follows its container by `viewBox` and `preserveAspectRatio` alone. `test/visualize/hooks/resize_test.exs` holds the source to this shape.
+
+## 11. Elements in HEEx
+
+### 11.1 Safe implementations
 
 `Visualize.SVG.Element` implements `Phoenix.HTML.Safe` (defined in `Visualize.SVG.Renderer`, compiled only when `Phoenix.HTML.Safe` is loaded) with `to_iodata/1 = Visualize.SVG.Renderer.render/1`, so an element built with `Visualize.svg/1`, `Visualize.SVG.Element.new/2` or `Visualize.SVG.Element.from_ir/1` MAY be interpolated directly: `<%= @element %>` or `{@element}` in HEEx renders its markup without `raw/1`. It also implements `String.Chars`.
 
@@ -392,6 +417,6 @@ Attach as for `CanvasChart` (7.2). On `mounted()` the hook also creates an offsc
 
 `Visualize.IR.Path` implements `String.Chars` only (its `d` string); it MUST be interpolated as an attribute value (`d={@path}`), never as markup.
 
-### 10.2 Strings
+### 11.2 Strings
 
 `Visualize.Axis.render/2`, `Visualize.Render.to_string/2` and `Visualize.SVG.to_string/1` return plain binaries, which HEEx escapes; they MUST be wrapped in `Phoenix.HTML.raw/1` to be emitted as markup, as the components in section 2 do for axes.

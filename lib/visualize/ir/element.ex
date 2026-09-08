@@ -255,17 +255,33 @@ defmodule Visualize.IR.Element do
 
   @doc """
   Creates a root SVG element.
+
+  ## Options
+
+    * `:view_box` - the `viewBox` (default `"0 0 <width> <height>"`)
+    * `:children` - the child elements (default `[]`)
+    * `:preserve_aspect_ratio` - the `preserveAspectRatio` attribute; absent by default
+    * `:responsive` - when true, `preserveAspectRatio="xMidYMid meet"` (unless given) and
+      `style="width:100%;height:auto"`, so the `<svg>` fills its container's width at the
+      drawing's aspect ratio while `width` and `height` stay its intrinsic size (D-54)
   """
   @spec root(number(), number(), keyword()) :: t()
   def root(width, height, opts \\ []) do
     view_box = Keyword.get(opts, :view_box, "0 0 #{width} #{height}")
-    children = Keyword.get(opts, :children, [])
+    responsive = Keyword.get(opts, :responsive, false)
+    default_ratio = if responsive, do: "xMidYMid meet"
+    ratio = Keyword.get(opts, :preserve_aspect_ratio, default_ratio)
 
-    new(:root,
-      attrs: %{width: width, height: height, view_box: view_box},
-      children: children
-    )
+    attrs =
+      %{width: width, height: height, view_box: view_box}
+      |> put_unless_nil(:preserve_aspect_ratio, ratio)
+      |> put_unless_nil(:style, if(responsive, do: "width:100%;height:auto"))
+
+    new(:root, attrs: attrs, children: Keyword.get(opts, :children, []))
   end
+
+  defp put_unless_nil(map, _key, nil), do: map
+  defp put_unless_nil(map, key, value), do: Map.put(map, key, value)
 
   # ============================================================
   # Element Manipulation
