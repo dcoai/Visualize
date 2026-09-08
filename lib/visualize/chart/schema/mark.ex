@@ -6,22 +6,40 @@ defmodule Visualize.Chart.Schema.Mark do
 
   # Type, required channels, optional channels, option keys (spec/14 §5.2-5.3).
   @marks [
-    {:line, [:x, :y], [], []},
-    {:area, [:x, :y], [:x0, :x1, :y0, :y1], []},
+    {:line, [:x, :y], [:series], []},
+    {:area, [:x, :y], [:x0, :x1, :y0, :y1, :series], []},
     {:band, [:x0, :x1], [:y], [:height]},
     {:rule, [:x], [], []},
     {:x_band, [:x0, :x1], [], []},
-    {:percentile_band, [:x, :median, :inner, :outer], [], []},
+    {:percentile_band, [:x, :median], [:inner_lo, :inner_hi, :outer_lo, :outer_hi], []},
     {:rose, [:angle], [:value], [:width, :inner_radius, :outer_radius, :pad_angle]},
     {:symbol, [:x, :y], [:value], []},
     {:arc, [:value], [:inner, :outer],
      [:inner_radius, :outer_radius, :corner_radius, :pad_angle, :start_angle, :end_angle]},
-    {:path, [:x, :y], [], []},
+    {:path, [:path], [], []},
     {:rect, [:x0, :x1, :y0, :y1], [:value], [:corner_radius]},
     {:circle, [:x, :y], [:value], [:radius]}
   ]
   @types Enum.map(@marks, &elem(&1, 0))
-  @channel_keys [:x, :y, :x0, :x1, :y0, :y1, :value, :angle, :median, :inner, :outer]
+  @channel_keys [
+    :x,
+    :y,
+    :x0,
+    :x1,
+    :y0,
+    :y1,
+    :value,
+    :angle,
+    :median,
+    :inner,
+    :outer,
+    :inner_lo,
+    :inner_hi,
+    :outer_lo,
+    :outer_hi,
+    :series,
+    :path
+  ]
   @option_keys [
     :height,
     :width,
@@ -33,26 +51,33 @@ defmodule Visualize.Chart.Schema.Mark do
     :start_angle,
     :end_angle
   ]
-  @ops [
-    :bin,
-    :stack,
-    :sum,
-    :sort,
-    :tree,
-    :cluster,
-    :pack,
-    :partition,
-    :treemap,
-    :chord,
-    :sankey,
-    :force,
-    :contour,
-    :density,
-    :delaunay,
-    :voronoi
+
+  # Op, required keys, optional keys (spec/14 §5.4).
+  @hierarchy_keys [:id, :by, :field, :size, :output]
+  @transforms [
+    {:bin, [:field], [:thresholds, :as]},
+    {:stack, [:fields], [:order, :offset]},
+    {:sum, [:field], [:by, :as]},
+    {:sort, [:field], [:order]},
+    {:tree, [], @hierarchy_keys},
+    {:cluster, [], @hierarchy_keys},
+    {:pack, [], @hierarchy_keys ++ [:padding]},
+    {:partition, [], @hierarchy_keys ++ [:padding]},
+    {:treemap, [], @hierarchy_keys ++ [:padding, :tile]},
+    {:chord, [:fields, :field], [:size, :padding, :output]},
+    {:sankey, [:fields, :field], [:size, :padding, :output]},
+    {:force, [:fields], [:field, :size, :output]},
+    {:contour, [:field, :size], [:thresholds]},
+    {:density, [:fields], [:field, :size, :bandwidth, :thresholds]},
+    {:delaunay, [:fields], [:output]},
+    {:voronoi, [:fields], [:size, :output]},
+    {:projection, [:fields], []}
   ]
+  @ops Enum.map(@transforms, &elem(&1, 0))
   @orders [:none, :ascending, :descending, :inside_out, :reverse, :appearance]
   @offsets [:none, :expand, :silhouette, :wiggle, :diverging]
+  @tiles [:squarify, :binary, :slice, :dice, :slice_dice]
+  @outputs [:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges]
   @anchors [:top, :bottom, :left, :right, :start, :middle, :end]
 
   @doc false
@@ -71,6 +96,15 @@ defmodule Visualize.Chart.Schema.Mark do
   def options(type) do
     {_, _, _, options} = mark(type)
     options
+  end
+
+  @doc false
+  def transform_keys(op) do
+    {_, required, optional} =
+      List.keyfind(@transforms, op, 0) ||
+        raise ArgumentError, "not a transform op: #{inspect(op)}"
+
+    %{required: required, optional: optional}
   end
 
   defp mark(type) do
@@ -104,12 +138,16 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:field, :field, :binding),
       spec(:fields, {:list, :field}, :binding),
       spec(:by, :field, :binding),
+      spec(:id, :field, :binding),
       spec(:as, :name, :binding),
       spec(:thresholds, {:one_of, [:integer, {:list, :number}]}, :geometry),
       spec(:order, {:enum, @orders}, :geometry),
       spec(:offset, {:enum, @offsets}, :geometry),
       spec(:size, {:list, :number}, :geometry),
-      spec(:padding, :number, :geometry)
+      spec(:padding, :number, :geometry),
+      spec(:tile, {:enum, @tiles}, :geometry),
+      spec(:bandwidth, :number, :geometry),
+      spec(:output, {:enum, @outputs}, :binding)
     ]
   end
 

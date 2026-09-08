@@ -141,11 +141,24 @@ defmodule Visualize.Chart.ValidatorTest do
     assert Validator.validate(@full) == :ok
   end
 
+  # The full design, its transform on an op that reads `key` when the kind is a transform.
+  defp reading(:transform, key) when key != :op do
+    op =
+      Enum.find(Schema.transform_ops(), fn op ->
+        %{required: r, optional: o} = Schema.transform_keys(op)
+        key in (r ++ o)
+      end)
+
+    put_at(@full, @paths[:transform], %{op: op})
+  end
+
+  defp reading(_kind, _key), do: @full
+
   describe "types" do
     test "every key of every node kind reports a wrong type at its path" do
       for kind <- Schema.kinds() -- [:channels, :options], spec <- Schema.describe(kind) do
         path = @paths[kind] ++ [spec.key]
-        errors = errors(put_at(@full, path, {:bad}))
+        errors = errors(put_at(reading(kind, spec.key), path, {:bad}))
 
         assert Enum.any?(errors, fn
                  {^path, {:type, _}} -> true
@@ -180,12 +193,16 @@ defmodule Visualize.Chart.ValidatorTest do
     test "a required channel of the mark type reports its absence" do
       design = design_with_mark(:percentile_band)
       design = put_at(design, [:marks, 0, :channels], %{x: :t})
+      assert errors(design) == [{[:marks, 0, :channels, :median], :required}]
+    end
 
-      assert errors(design) == [
-               {[:marks, 0, :channels, :inner], :required},
-               {[:marks, 0, :channels, :median], :required},
-               {[:marks, 0, :channels, :outer], :required}
-             ]
+    test "a key a transform op requires reports its absence, one it does not read is invalid" do
+      path = @paths[:transform]
+      missing = put_at(@full, path, %{op: :stack, order: :none})
+      assert errors(missing) == [{path ++ [:fields], :required}]
+
+      extra = put_at(@full, path ++ [:offset], :expand)
+      assert errors(extra) == [{path ++ [:offset], {:invalid_for, :bin}}]
     end
 
     test "an unknown key reports at its path in every node kind" do

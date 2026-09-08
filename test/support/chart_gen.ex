@@ -286,17 +286,30 @@ defmodule Visualize.ChartGen do
   end
 
   defp transform do
-    node(%{op: member_of(Schema.transform_ops())}, %{
+    bind(member_of(Schema.transform_ops()), fn op ->
+      %{required: required, optional: optional} = Schema.transform_keys(op)
+      keys = transform_keys()
+      required = keys |> Map.take(required) |> Map.put(:op, constant(op))
+      node(required, Map.take(keys, optional))
+    end)
+  end
+
+  defp transform_keys do
+    %{
       field: member_of(@fields),
-      fields: list_of(member_of(@fields), max_length: 3),
+      fields: list_of(member_of(@fields), length: 2),
       by: member_of(@fields),
+      id: member_of(@fields),
       as: member_of(@names),
       thresholds: one_of([integer(1..50), list_of(number(), max_length: 3)]),
       order: member_of(@orders),
       offset: member_of(@offsets),
       size: list_of(number(), length: 2),
-      padding: number()
-    })
+      padding: number(),
+      tile: member_of([:squarify, :binary, :slice, :dice, :slice_dice]),
+      bandwidth: number(),
+      output: member_of([:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges])
+    }
   end
 
   defp channels(type, fields, vars) do

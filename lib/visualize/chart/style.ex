@@ -1,13 +1,29 @@
 defmodule Visualize.Chart.Style do
-  @moduledoc false
-  # Style resolution for the declarative layer (spec/14 §3): the four built-in styles
-  # derived from the theme's slots, and the mapping of a style node to the style map of
-  # a `Visualize.IR.Element`, every slot resolved through `Visualize.Theme.resolve/3` in
-  # the mode of the render target. Shared by the frame's furniture now and by the marks
-  # of work item 3.
+  @moduledoc """
+  Style resolution for the declarative layer (spec/14 §3.4, D-63): one style node, two
+  outputs by the mode of the render target.
+
+  `resolve/3` turns a `:style` node into the style map of a `Visualize.IR.Element`: the
+  fourteen element keys, every theme slot resolved through `Visualize.Theme.resolve/3` —
+  a CSS custom-property reference in `:css`, the literal a canvas needs in `:literal` —
+  a dash-array list joined, a literal passed through. A `{:field, f}` survives it, and
+  `bind/4` then reads it from a datum, a colour key's reading through the frame's `color`
+  scale when the frame declares one. The frame's furniture and the marks share this
+  resolver.
+
+  ## Examples
+
+      iex> theme = Visualize.Theme.default()
+      iex> Visualize.Chart.Style.resolve(%{stroke: :axis, stroke_width: 2, curve: :step}, theme, :css)
+      %{stroke: "var(--vis-axis, #666666)", stroke_width: 2}
+      iex> Visualize.Chart.Style.resolve(%{stroke: :axis, stroke_dasharray: [2, 2]}, theme, :literal)
+      %{stroke: "#666666", stroke_dasharray: "2 2"}
+
+  """
 
   alias Visualize.Chart.Var
-  alias Visualize.Theme
+  alias Visualize.Data.Table
+  alias Visualize.{Scale, Theme}
 
   @colour_keys [:fill, :stroke]
   @size_keys [:stroke_width, :opacity, :fill_opacity, :stroke_opacity, :font_size, :symbol_size]
@@ -28,6 +44,55 @@ defmodule Visualize.Chart.Style do
     :text_anchor,
     :class
   ]
+
+  @doc """
+  The element style map of a style node, every slot resolved in `mode` (spec/14 §3.4).
+
+  Only the keys an element renders are kept; `curve`, `curve_opts`, `symbol` and
+  `symbol_size` reach the mark's generator instead. A `{:field, f}` is kept for `bind/4`.
+  Raises `ArgumentError` for a variable: variables resolve at application (spec/14 §7.3).
+  """
+  @spec resolve(map(), Theme.t(), Theme.mode()) :: map()
+  def resolve(%Var{name: name}, _theme, _mode), do: unresolved!(name)
+
+  def resolve(node, theme, mode) when is_map(node) do
+    node
+    |> Map.take(@element_keys)
+    |> Map.new(fn {key, value} -> {key, value(key, value, theme, mode)} end)
+  end
+
+  @doc """
+  The map of `resolve/3` with every `{:field, f}` read from the datum (spec/14 §3.4).
+
+  A colour key's reading passes through the frame's `color` scale when the frame
+  declares one and is resolved as a theme slot when it is one; a `nil` reading — a
+  column the datum lacks, or a category the scale does not hold — drops the key.
+  """
+  @spec bind(map(), term(), map(), Theme.mode()) :: map()
+  def bind(style, datum, frame, mode) do
+    Enum.reduce(style, %{}, fn
+      {key, {:field, field}}, acc -> put_reading(acc, key, Table.get(datum, field), frame, mode)
+      {key, value}, acc -> Map.put(acc, key, value)
+    end)
+  end
+
+  defp put_reading(acc, _key, nil, _frame, _mode), do: acc
+
+  defp put_reading(acc, key, reading, frame, mode) when key in @colour_keys do
+    case Map.get(frame.scales, :color) do
+      nil -> Map.put(acc, key, colour(reading, frame.theme, mode))
+      scale -> put_colour(acc, key, Scale.apply(scale, reading), frame.theme, mode)
+    end
+  end
+
+  defp put_reading(acc, key, reading, frame, mode) do
+    Map.put(acc, key, value(key, reading, frame.theme, mode))
+  end
+
+  defp put_colour(acc, _key, nil, _theme, _mode), do: acc
+
+  defp put_colour(acc, key, colour, theme, mode),
+    do: Map.put(acc, key, colour(colour, theme, mode))
 
   @doc false
   # The built-in style nodes of spec/14 §3.3, as an author would declare them.
@@ -53,21 +118,10 @@ defmodule Visualize.Chart.Style do
 
   @doc false
   # The style node of a name, or the empty node when nothing declares it.
-  @spec node(%{atom() => map()}, atom()) :: map()
+  @spec node(%{atom() => map()}, atom() | nil) :: map()
+  def node(_styles, nil), do: %{}
+  def node(_styles, %Var{name: name}), do: unresolved!(name)
   def node(styles, name), do: Map.get(styles, name, %{})
-
-  @doc false
-  # The element style map of a style node: only the keys an element renders, every slot
-  # resolved, a dash array joined. A variable in the node is an author error at this
-  # point: variables resolve at application (spec/14 §7.3).
-  @spec resolve(map(), Theme.t(), Theme.mode()) :: map()
-  def resolve(%Var{name: name}, _theme, _mode), do: unresolved!(name)
-
-  def resolve(node, theme, mode) when is_map(node) do
-    node
-    |> Map.take(@element_keys)
-    |> Map.new(fn {key, value} -> {key, value(key, value, theme, mode)} end)
-  end
 
   @doc false
   # One style value resolved: a slot through the theme, a literal as it is.

@@ -67,6 +67,7 @@ defmodule Visualize.Chart.Validator do
       vars: declared(map[:vars]),
       slots: slots(Map.get(map, :theme, Schema.default(:design, :theme))),
       mark_type: nil,
+      op: nil,
       fields: :unknown,
       datum?: false
     }
@@ -145,6 +146,12 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp enter(:label, _map, ctx), do: %{ctx | datum?: false}
+
+  defp enter(:transform, map, ctx) do
+    op = map[:op]
+    %{ctx | op: if(op in Schema.transform_ops(), do: op)}
+  end
+
   defp enter(_kind, _map, ctx), do: ctx
 
   defp mark_fields(name, ctx) when is_atom(name), do: fields_of(name, ctx)
@@ -171,6 +178,15 @@ defmodule Visualize.Chart.Validator do
     end
   end
 
+  # The keys a transform op reads, the op's required ones required (spec/14 §5.4).
+  defp specs(:transform, %{op: op}) when op != nil do
+    %{required: required, optional: optional} = Schema.transform_keys(op)
+
+    for s <- Schema.describe(:transform), s.key == :op or s.key in (required ++ optional) do
+      %{s | required: s.key == :op or s.key in required}
+    end
+  end
+
   defp specs(kind, _ctx), do: Schema.describe(kind)
 
   defp allowed(:channels, type) do
@@ -185,6 +201,10 @@ defmodule Visualize.Chart.Validator do
 
   defp unknown_reason(kind, key, %{mark_type: type}) when kind in [:channels, :options] do
     if type != nil and Schema.key(kind, key) != nil, do: {:invalid_for, type}, else: :unknown_key
+  end
+
+  defp unknown_reason(:transform, key, %{op: op}) when op != nil do
+    if Schema.key(:transform, key) != nil, do: {:invalid_for, op}, else: :unknown_key
   end
 
   defp unknown_reason(_kind, _key, _ctx), do: :unknown_key
