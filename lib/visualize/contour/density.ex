@@ -115,11 +115,11 @@ defmodule Visualize.Contour.Density do
 
   Returns a list of contour objects compatible with Visualize.Contour.
   """
-  @spec compute(t(), [any()]) :: [Contour.contour_result()]
-  def compute(%__MODULE__{} = density, points) when is_list(points) do
-    # Use default accessors if not provided
-    x_fn = density.x || fn d -> if is_map(d), do: Map.get(d, :x, 0), else: elem(d, 0) end
-    y_fn = density.y || fn d -> if is_map(d), do: Map.get(d, :y, 0), else: elem(d, 1) end
+  @spec compute(t(), Visualize.Data.Table.source()) :: [Contour.contour_result()]
+  def compute(%__MODULE__{} = density, points) do
+    points = Visualize.Data.Table.rows(points)
+    x_fn = density.x || fn d -> if is_map(d), do: field_or_zero(d, :x), else: elem(d, 0) end
+    y_fn = density.y || fn d -> if is_map(d), do: field_or_zero(d, :y), else: elem(d, 1) end
     weight_fn = density.weight || fn _ -> 1 end
 
     # Extract coordinates
@@ -256,4 +256,12 @@ defmodule Visualize.Contour.Density do
 
   defp format_num(n) when is_float(n), do: Float.round(n, 3) |> Kernel.to_string()
   defp format_num(n), do: Kernel.to_string(n)
+
+  # A field of either spelling; absent or nil is 0 (spec/07 §7.1).
+  defp field_or_zero(d, field) do
+    case Visualize.Data.Table.get(d, field) do
+      nil -> 0
+      value -> value
+    end
+  end
 end

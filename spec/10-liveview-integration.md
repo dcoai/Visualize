@@ -30,7 +30,8 @@ Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)
 - `animate` (`:boolean`, default `false`) is accepted by every component; when true, every data mark carries `style="transition: all 0.3s ease-in-out;"` so DOM patches animate via CSS; when false a mark carries no `style` attribute.
 - `margin` is merged over the component's default margin with `Map.merge/2`, so a partial map such as `%{left: 60}` overrides one side only. `inner_width = width − left − right`, `inner_height = height − top − bottom`, and the plot area is a `<g transform="translate(left, top)">`.
 - Axes are `Visualize.Axis.bottom/1` and `Visualize.Axis.left/1` over the component's scales, rendered with `Visualize.Axis.render/1` into `<g class="x-axis" transform="translate(0, inner_height)">` and `<g class="y-axis">` through `Phoenix.HTML.raw/1`.
-- Accessor assigns (`x`, `y`, `value`, `label`, `size`) are `:any` and hold one-argument functions applied to each element of `data`.
+- `data` is `:any`: a row list, or any other source `Visualize.Data.Table.rows/1` accepts ([08-utilities](08-utilities.md) §6) — a column map, a keyword list of columns, an Explorer DataFrame. The component reads it through `rows/1` once, before anything else; a row list is used as given.
+- Accessor assigns (`x`, `y`, `value`, `label`, `size`) are `:any` and hold one-argument functions applied to each row of `data`.
 - Every computed coordinate and length prints through `Visualize.IR.Path.format_number/1` (at most four decimals, never `-0`), as the axes and paths already do; assigns such as `width` and `margin` print as given.
 - Empty `data` renders the frame — the `<svg>` and, where the chart has them, its axes — with no marks; it never raises (1.3).
 
@@ -60,7 +61,7 @@ Every coordinate is `Visualize.Scale.apply/2` over the component's scale; every 
 
 | Assign | Type | Default | Meaning |
 |---|---|---|---|
-| `data` | `:list` | required | data points; MAY be empty (1.3) |
+| `data` | `:any` | required | data points; MAY be empty (1.3) |
 | `x` | `:any` | required | accessor to the x value: a `DateTime`, `NaiveDateTime` or `Date` (time scale), a number (linear scale) or anything else (band scale with padding 0.1) — decided by the first datum |
 | `y` | `:any` | required | accessor to a numeric y value |
 | `width` | `:integer` | `600` | |
@@ -80,7 +81,7 @@ The y domain is the extent of the y values (1.3) with range `[inner_height, 0]`.
 
 | Assign | Type | Default | Meaning |
 |---|---|---|---|
-| `data` | `:list` | required | MAY be empty (1.3) |
+| `data` | `:any` | required | MAY be empty (1.3) |
 | `x` | `:any` | required | accessor to the category |
 | `y` | `:any` | required | accessor to a non-negative number |
 | `width` | `:integer` | `600` | |
@@ -100,7 +101,7 @@ Same assigns as 2.3 with `margin` defaulting to `%{top: 20, right: 20, bottom: 3
 
 | Assign | Type | Default | Meaning |
 |---|---|---|---|
-| `data` | `:list` | required | |
+| `data` | `:any` | required | |
 | `value` | `:any` | required | accessor to the slice value |
 | `label` | `:any` | `nil` | accessor to the label text; labels are drawn only when both `show_labels` and `label` are set |
 | `width` | `:integer` | `400` | |
@@ -118,7 +119,7 @@ Slices come from `Visualize.Shape.pie/0` with `value` and `pad_angle`; each is a
 
 | Assign | Type | Default | Meaning |
 |---|---|---|---|
-| `data` | `:list` | required | MAY be empty (1.3) |
+| `data` | `:any` | required | MAY be empty (1.3) |
 | `x`, `y` | `:any` | required | numeric accessors; both scales are linear over the value extents (1.3) |
 | `width` | `:integer` | `600` | |
 | `height` | `:integer` | `400` | |
@@ -133,7 +134,7 @@ Each datum is a `<circle cx cy r={size} fill={fill} opacity="0.7">`. Unlike `lin
 
 | Assign | Type | Default | Meaning |
 |---|---|---|---|
-| `data` | `:list` | required | MAY be empty (1.3) |
+| `data` | `:any` | required | MAY be empty (1.3) |
 | `x` | `:any` | required | as in 2.2 (time, linear or band by first datum) |
 | `y` | `:any` | required | numeric; y domain is `[0, max(y)]` as in 2.3 |
 | `width` | `:integer` | `600` | |
@@ -152,7 +153,7 @@ Two paths are drawn when `data` is non-empty: the area (`Visualize.Shape.area/0`
 
 | Assign | Type | Default | Meaning |
 |---|---|---|---|
-| `data` | `:list` | required | one map per category; MAY be empty (1.3) |
+| `data` | `:any` | required | one map per category; MAY be empty (1.3) |
 | `x` | `:any` | required | accessor to the category, applied to each point's `data` |
 | `keys` | `:list` | required | the series keys read from each datum by `Visualize.Shape.stack/0` |
 | `width` | `:integer` | `600` | |

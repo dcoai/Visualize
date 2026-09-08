@@ -20,7 +20,7 @@ defmodule Visualize.Shape.Annotation do
   @spec text(text_accessor() | nil) :: (any() -> String.t() | nil) | nil
   def text(nil), do: nil
   def text(accessor) when is_function(accessor, 1), do: accessor
-  def text(field) when is_atom(field), do: fn d -> Map.get(d, field) end
+  def text(field) when is_atom(field), do: Visualize.Data.Table.accessor(field)
   def text(constant) when is_binary(constant), do: fn _d -> constant end
 
   @doc false

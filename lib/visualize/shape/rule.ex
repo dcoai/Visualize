@@ -68,9 +68,9 @@ defmodule Visualize.Shape.Rule do
   @doc """
   Returns one `:group` element per datum: the line, then the label when there is one.
   """
-  @spec generate(t(), [any()]) :: [Element.t()]
+  @spec generate(t(), Visualize.Data.Table.source()) :: [Element.t()]
   def generate(%__MODULE__{} = rule, data) do
-    Enum.map(data, fn d ->
+    Enum.map(Visualize.Data.Table.rows(data), fn d ->
       px = Annotation.position(rule.scale, Annotation.value(rule.x, d))
       y0 = Annotation.value(rule.y0, d)
       y1 = Annotation.value(rule.y1, d)

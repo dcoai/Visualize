@@ -10,6 +10,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @transition "transition: all 0.3s ease-in-out;"
 
     @doc false
+    # The `data` assign as rows (spec/10 §1.2): any `Visualize.Data.Table.rows/1` source, read
+    # once; a row list is the same term, so the assign is unchanged.
+    def rows(assigns) do
+      Phoenix.Component.assign(assigns, :data, Visualize.Data.Table.rows(assigns.data))
+    end
+
+    @doc false
     # `{margin, inner_width, inner_height}`: the assign merged over the component's default.
     def frame(assigns, default_margin) do
       margin = Map.merge(default_margin, assigns.margin || %{})

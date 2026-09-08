@@ -48,7 +48,12 @@ defmodule Visualize.Shape.Stack do
   @spec new() :: t()
   def new do
     %__MODULE__{
-      value: fn d, key -> Map.get(d, key, 0) end
+      value: fn d, key ->
+        case Visualize.Data.Table.get(d, key) do
+          nil -> 0
+          value -> value
+        end
+      end
     }
   end
 
@@ -110,11 +115,14 @@ defmodule Visualize.Shape.Stack do
   - `:index` - The series' position in the stacking order (0 is the bottom)
   - `:points` - One point per datum with `:data`, `:value`, `:y0`, `:y1`, `:index`
   """
-  @spec generate(t(), [map()]) :: [series()]
-  def generate(%__MODULE__{keys: []}, _data), do: []
-  def generate(%__MODULE__{}, []), do: []
+  @spec generate(t(), Visualize.Data.Table.source()) :: [series()]
+  def generate(%__MODULE__{} = stack, data),
+    do: generate_rows(stack, Visualize.Data.Table.rows(data))
 
-  def generate(%__MODULE__{keys: keys, value: value_fn, order: order, offset: offset}, data) do
+  defp generate_rows(%__MODULE__{keys: []}, _data), do: []
+  defp generate_rows(%__MODULE__{}, []), do: []
+
+  defp generate_rows(%__MODULE__{keys: keys, value: value_fn, order: order, offset: offset}, data) do
     # `series` is a tuple of series in key order; each series is a list of points with
     # `value` and provisional `y0 = 0`, `y1 = value`, as d3 initialises `[0, value]`.
     series =

@@ -79,9 +79,9 @@ defmodule Visualize.Shape.Band do
   The rectangle is normalised so `x` is the lesser edge and `width` is non-negative; the
   style is `%{class: "band"}` plus `fill:` when the fill accessor yields a value.
   """
-  @spec generate(t(), [any()]) :: [Element.t()]
+  @spec generate(t(), Visualize.Data.Table.source()) :: [Element.t()]
   def generate(%__MODULE__{} = band, data) do
-    Enum.map(data, fn d ->
+    Enum.map(Visualize.Data.Table.rows(data), fn d ->
       {x, y, w, h} = box(band, d)
       Element.rect(x, y, w, h, Annotation.fill_style(%{class: "band"}, band.fill, d))
     end)
@@ -90,10 +90,10 @@ defmodule Visualize.Shape.Band do
   @doc """
   Returns one `IR.Path` of closed rectangles, in data order, for a uniformly filled band.
   """
-  @spec generate_path(t(), [any()]) :: Path.t()
+  @spec generate_path(t(), Visualize.Data.Table.source()) :: Path.t()
   def generate_path(%__MODULE__{} = band, data) do
     commands =
-      Enum.flat_map(data, fn d ->
+      Enum.flat_map(Visualize.Data.Table.rows(data), fn d ->
         {x, y, w, h} = box(band, d)
         [{:M, x, y}, {:H, x + w}, {:V, y + h}, {:H, x}, :Z]
       end)

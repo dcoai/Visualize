@@ -71,7 +71,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         <.line_chart data={@sales} x={& &1.date} y={& &1.revenue} curve={:monotone_x} />
     """
-    attr(:data, :list, required: true)
+    attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
     attr(:width, :integer, default: 600)
@@ -87,6 +87,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:show_points, :boolean, default: false)
 
     def line_chart(assigns) do
+      assigns = Support.rows(assigns)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
       x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
 
@@ -163,7 +164,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `padding` - band padding, 0 to 1 (default 0.1)
     * `animate`, `class` - per the module conventions
     """
-    attr(:data, :list, required: true)
+    attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
     attr(:width, :integer, default: 600)
@@ -175,6 +176,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:padding, :float, default: 0.1)
 
     def bar_chart(assigns) do
+      assigns = Support.rows(assigns)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
 
       x_scale =
@@ -241,7 +243,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     As `bar_chart/1`, with `margin` merged over `%{top: 20, right: 20, bottom: 30, left: 100}`
     to leave room for the category labels.
     """
-    attr(:data, :list, required: true)
+    attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
     attr(:width, :integer, default: 600)
@@ -253,6 +255,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:padding, :float, default: 0.1)
 
     def horizontal_bar_chart(assigns) do
+      assigns = Support.rows(assigns)
       {margin, inner_width, inner_height} = Support.frame(assigns, @horizontal_margin)
 
       y_scale =
@@ -326,7 +329,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     A label sits at the centroid of the slice's mid-radius, as `Visualize.Shape.Arc.centroid/2`
     computes it.
     """
-    attr(:data, :list, required: true)
+    attr(:data, :any, required: true)
     attr(:value, :any, required: true)
     attr(:label, :any, default: nil)
     attr(:width, :integer, default: 400)
@@ -340,6 +343,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:show_labels, :boolean, default: true)
 
     def pie_chart(assigns) do
+      assigns = Support.rows(assigns)
       outer_radius = assigns.outer_radius || min(assigns.width, assigns.height) / 2 - 10
       pie = Shape.pie() |> Shape.value(assigns.value) |> Shape.pad_angle(assigns.pad_angle)
 
@@ -401,7 +405,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       (default 5)
     * `animate`, `class` - per the module conventions
     """
-    attr(:data, :list, required: true)
+    attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
     attr(:width, :integer, default: 600)
@@ -413,6 +417,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
 
     def scatter_plot(assigns) do
+      assigns = Support.rows(assigns)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
 
       x_scale =
@@ -479,7 +484,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `curve` - applied to both the area and the line (default `:linear`)
     * `animate`, `class` - per the module conventions
     """
-    attr(:data, :list, required: true)
+    attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
     attr(:width, :integer, default: 600)
@@ -494,6 +499,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
 
     def area_chart(assigns) do
+      assigns = Support.rows(assigns)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
       x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
 
@@ -568,7 +574,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     The y domain is `[0, max y1]` over every point of every series.
     """
-    attr(:data, :list, required: true)
+    attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:keys, :list, required: true)
     attr(:width, :integer, default: 600)
@@ -580,6 +586,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:padding, :float, default: 0.1)
 
     def stacked_bar_chart(assigns) do
+      assigns = Support.rows(assigns)
       {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
       series = Shape.generate(Shape.stack() |> Shape.keys(assigns.keys), assigns.data)
       tops = for s <- series, p <- s.points, do: p.y1
