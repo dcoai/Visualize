@@ -59,6 +59,11 @@ defmodule Visualize.Chart.BuildTest do
       end
     end
 
+    test "a style may name the parent it extends" do
+      assert style(:heavy, extends: :series, stroke_width: 3) ==
+               %{styles: %{heavy: %{extends: :series, stroke_width: 3}}}
+    end
+
     test "the keys a node does know are kept as given" do
       assert axis(:x, :bottom, ticks: 6, format: "%H:%M", grid: true) == %{
                frame: %{

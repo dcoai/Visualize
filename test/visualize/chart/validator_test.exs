@@ -416,4 +416,44 @@ defmodule Visualize.Chart.ValidatorTest do
   end
 
   defp read_keys(:options, type), do: Schema.options(type)
+
+  describe "extends (spec/14 §3.5)" do
+    defp with_styles(styles) do
+      %{version: 1, styles: styles, frame: %{kind: :cartesian}}
+    end
+
+    test "a chain of three validates and a built-in parent resolves" do
+      styles = %{
+        a: %{stroke: "#001"},
+        b: %{extends: :a, opacity: 0.5},
+        c: %{extends: :b, stroke_width: 2},
+        d: %{extends: :axis}
+      }
+
+      assert Validator.validate(with_styles(styles)) == :ok
+    end
+
+    test "a parent nothing declares is undeclared at the key's path" do
+      assert Validator.validate(with_styles(%{a: %{extends: :nope}})) ==
+               {:error, [{[:styles, :a, :extends], {:undeclared, :style, :nope}}]}
+    end
+
+    test "a style that extends itself is :cycle at the style's path" do
+      assert Validator.validate(with_styles(%{a: %{extends: :a}})) ==
+               {:error, [{[:styles, :a], :cycle}]}
+    end
+
+    test "every style on a cycle is reported, and one merely reaching it is not" do
+      styles = %{a: %{extends: :b}, b: %{extends: :c}, c: %{extends: :a}, d: %{extends: :a}}
+
+      assert Validator.validate(with_styles(styles)) ==
+               {:error,
+                [{[:styles, :a], :cycle}, {[:styles, :b], :cycle}, {[:styles, :c], :cycle}]}
+    end
+
+    test "the reason reads as a line" do
+      assert Validator.format({[:styles, :series], :cycle}) ==
+               "styles.series: extends itself, directly or through a chain of `extends`"
+    end
+  end
 end

@@ -140,10 +140,11 @@ A `%Visualize.Chart.Var{}` (§7.1) is accepted wherever a value of any type is e
 
 ### 3.1 Keys
 
-**Implemented.** A `:style` node has eighteen keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema.
+**Implemented.** A `:style` node has nineteen keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema.
 
 | Key | Type | Notes |
 |---|---|---|
+| `extends` | `{:ref, :style}` | the style this one derives from (§3.5) |
 | `fill` | `:colour` | |
 | `stroke` | `:colour` | |
 | `stroke_width` | `:size` | user units |
@@ -172,7 +173,7 @@ A `%Visualize.Chart.Var{}` (§7.1) is accepted wherever a value of any type is e
 - a **variable** (§7.1) for any key;
 - a **channel binding** `{:field, f}` for any key, which is how `Visualize.Shape.Band`'s per-datum fill is expressed: the value is read from the datum at render — per element for a mark that draws one element per datum, from the series' first datum for a mark that draws one path per series (§5.6) — and, for a `:colour` key, passed through the scale named `color` when the frame declares one (§3.4).
 
-Fourteen keys reach the element the mark draws; the other four — `curve`, `curve_opts`, `symbol` and `symbol_size` — reach the mark's generator (§5.6) and never an element.
+Fourteen keys reach the element the mark draws; four more — `curve`, `curve_opts`, `symbol` and `symbol_size` — reach the mark's generator (§5.6) and never an element; and `extends` reaches neither, being consumed by the lookup that flattens it (§3.5).
 
 For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font` key an atom is a slot, and `:none` is the literal "no paint". The validator checks a slot against the theme's `Visualize.Theme.slots/1` when the theme is built-in or inline (§2.5) and reports `{:undeclared, :slot, name}` otherwise.
 
@@ -183,6 +184,14 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 ### 3.4 Resolution: one node, two outputs
 
 **Implemented.** A style node resolves to the style map of a `Visualize.IR.Element` through `Visualize.Chart.Style.resolve/3` in the mode of the render target, and the mode is what makes one node serve two backends (D-63): in `:css` the SVG output carries classes and CSS custom-property references — `class="mark mark-line series"`, `stroke="var(--vis-series-1, #3b6fa8)"` — that a stylesheet overrides; in `:literal` a canvas gets the plain colour, width and font it needs, which `Visualize.Backend.Canvas` reads as they are (spec/09 §3). `resolve/3` keeps the fourteen element keys, resolves every slot through `Visualize.Theme.resolve/3`, joins a dash-array list with spaces and passes a literal through; a `{:field, f}` survives it unchanged, and `Visualize.Chart.Style.bind/4` then reads it from a datum through `Visualize.Data.Table.get/2` — a `:colour` key's reading through the frame's `color` scale when the frame declares one, the scale's output resolved as a slot when it is one — and drops the key when the reading is `nil`. A variable in either raises `ArgumentError` naming it: variables resolve at application (§7.3).
+
+### 3.5 Derivation: `extends`
+
+**Implemented** (work item 3 of #91, D-80). A style MAY name a parent under `extends`, a `{:ref, :style}` like any other style reference: the lookup flattens the parent's keys first and the child's over them, key by key, so `%{extends: :axis, stroke_width: 2}` is the axis style drawn heavier and the four keys of §3.3 are not copied. A chain of any length resolves, each link flattened over the one above it; the parent is looked up among the declared styles and the built-in four, so a design derives from `:axis`, `:grid`, `:label` or `:title` without declaring them.
+
+Derivation is *within* a style; composition (§8) is *between* fragments, and the two never meet. `Visualize.Chart.compose/2` unions two `styles` maps and reports `:conflict` where they declare one name differently, and `extends` is a value of a style node like any other key while it does so. What derivation buys is that a dashboard wanting "the series style, but heavier" writes one key instead of copying four that then drift.
+
+A cycle — a style that reaches itself through `extends`, directly or through a chain — is `:cycle` at the style's path (`[:styles, :series]`), reported by the validator for every style that reaches itself, and a design with one does not validate. `extends` reaches neither the element nor the mark's generator: the lookup consumes it, so a flattened style node never carries it and `Visualize.Chart.Style.resolve/3` never sees it.
 
 ## 4. The frame
 
@@ -589,6 +598,7 @@ A key present in one fragment alone is taken as it is. Over a list, `:concat` an
 | `{:unbound, :source, name}` | a slot with no source in the pool under its name or its default (§7.3) |
 | `{:missing_field, field}` | the bound source has no row carrying a field the slot declares (§7.3) |
 | `:conflict` | a `:union` key declared with different values by two fragments (§8) |
+| `:cycle` | a style that reaches itself through `extends` (§3.5) |
 
 The last four are reported by `Visualize.Chart.apply/2` and `Visualize.Chart.compose/2` in the same shape, so one reader serves every error of the layer. `Visualize.Chart.Validator.format/1` renders one error as a line a person reads, `marks[1].channels.y: field :temp is not declared by the mark's source`, `sources.primary: has no field :v`.
 
@@ -744,6 +754,46 @@ import Visualize.Chart, only: [var: 1]
 }
 ```
 
+The same design as a `Visualize.Chart.Build` pipeline (§16), which folds to the identical map (`test/visualize/chart/example_test.exs` reads both blocks from this section and holds them equal):
+
+```elixir
+import Visualize.Chart.Build
+import Visualize.Chart, only: [var: 1]
+
+Visualize.Chart.compose([
+  chart(meta: %{name: "Uptime", description: ["Uptime in ", var(:unit)]}),
+  source(:primary, [:t, :v], default: :gitlab_uptime),
+  source(:deploys, [:at, :sha]),
+  var(:unit, "%"),
+  var(:accent, :series_1),
+  theme(:default),
+  style(:series, stroke: var(:accent), stroke_width: 2, curve: :step_after),
+  style(:muted, stroke: :axis, stroke_width: 1, opacity: 0.6),
+  cartesian(600, 300, margin: %{top: 20, right: 20, bottom: 30, left: 40}),
+  time_scale(:x, domain: :auto),
+  linear_scale(:y, domain: [0, :auto], nice: true),
+  linear_scale(:count, domain: [0, :auto], range: [0, 120]),
+  ordinal_scale(:color, range: :category10),
+  axis(:x, :bottom, ticks: 6, format: "%H:%M"),
+  axis(:y, :left, ticks: 5, grid: true),
+  axis(:count, :top, ticks: 3),
+  legend(:color, position: :top_right),
+  line(:primary, %{x: :t, y: :v}, style: :series),
+  rule(:deploys, %{x: :at},
+    label: %{text: ["deploy ", {:field, :sha}], anchor: :top},
+    style: :muted
+  ),
+  rect(from(:primary) |> bin(:v, thresholds: 20), %{x0: 0, x1: :count, y0: :x0, y1: :x1},
+    scales: %{x: :count},
+    style: :muted
+  ),
+  title(["Uptime — ", var(:unit)]),
+  label({:axis, :y}, ["unit: ", var(:unit)]),
+  label({:frame, :top_right}, ["last 24 h"]),
+  label({:data, [~U[2026-09-08 12:00:00Z], 99.5]}, ["target"])
+])
+```
+
 Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, deploys: deploys}, vars: %{unit: "mg/hr"})` (§7.3): the variables resolve, both slots bind and are checked, the design validates; bound to `%{gitlab_uptime: uptime, deploys: deploys}` instead, `primary` fills from its default. The third mark is the marginal histogram of `v`: its `:bin` yields one row per bin with the edges `x0`, `x1` and the `count`, and the mark draws the edges along the frame's own `y` — the scale `v` is drawn on, so the bins line up with the line — and the counts from `0` through `count`, the second linear scale its `scales` node names for `x` (§5.1), whose axis on `:top` spans the first 120 pixels of the plot (§4.3). Bins of a number cannot be placed on the `:time` scale `x`, which is why the mark names its own (D-67). It renders: `Visualize.Chart.render/2` draws the applied chart on SVG, with one group per mark, or on a canvas with `backend: :canvas`; `Visualize.Chart.compile/2` splits it into the static frame and the dynamic marks (§12), and `Visualize.Chart.Compiled.svg/2` is the same SVG. The frame alone renders without any application: `Visualize.Chart.Frame.new/1` of a design that uses no variable, then `Visualize.Chart.Frame.render/1` for the furniture over the unit domains.
 
 ## 14. Functions
@@ -852,6 +902,8 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 |---|---|
 | `Visualize.Chart.Style.resolve/3` | `resolve(node, theme, mode)`: the element style map of a style node — the fourteen element keys, every slot resolved through `Visualize.Theme.resolve/3` in `mode`, a dash-array list joined, a `{:field, f}` kept for `bind/4`. Raises `ArgumentError` for a variable. |
 | `Visualize.Chart.Style.bind/4` | `bind(style, datum, frame, mode)`: the map of `resolve/3` with every `{:field, f}` read from the datum; a colour key's reading passes through the frame's `color` scale when it declares one and resolves as a slot when it is one; a `nil` reading drops the key. |
+
+A style is looked up by name among the declared styles and the built-in four (§3.3) with its `extends` chain flattened first (§3.5), so neither function ever sees that key; a cycle reached at resolution raises `ArgumentError`, the validator having reported it by path (§10.1).
 
 ### 14.9 `Visualize.Chart.Presets`
 
@@ -1043,7 +1095,7 @@ The scale functions, one per kind of §4.3. The name carries the `_scale` suffix
 - **Every number and every paint is the layer's.** The axes are the frame's (§4.4); a path's `d`, a rectangle's `x y width height`, a circle's `cx cy r`, an arc's `d` and its label's centroid, an axis title's position are read from the `Visualize.IR.Element`s of `generate/2`; a colour is the resolved style of the mark's group or, for a per-datum colour, the element's own (§3.4). The component keeps no scale, no generator call and no extent of its own.
 - **A design is not a template.** The preset takes the assigns because two of the design's choices depend on them — the kind of the `x` scale of a line or an area chart is decided by the first datum, as spec/10 §2.2 says, and a hierarchy's colour domain is the count of the root's children — and because sizes, margins, colours and options are assigns. Everything else in the design is constant, and `Visualize.Chart.Presets.design/2` of the same assigns without `data` is the same design over the unit domains (§4.3).
 
-The assign mapping puts the accessor assigns out of the design: a design carries no function (§1.1), so `x`, `y`, `value`, `label` and `size` are applied once, by `Visualize.Chart.Presets.sources/2`, and the design's channels name the resulting columns.
+Each preset is a list of fragments folded by `Visualize.Chart.compose/1` (§16.7): the helpers ten designs written in Elixir needed are the builder's, not one module's private section. The assign mapping puts the accessor assigns out of the design: a design carries no function (§1.1), so `x`, `y`, `value`, `label` and `size` are applied once, by `Visualize.Chart.Presets.sources/2`, and the design's channels name the resulting columns.
 
 ### 15.2 The assign mapping
 
@@ -1184,3 +1236,11 @@ Three things follow from generating them rather than writing them.
 The generic forms remain: `mark/4` takes a type that is a value rather than a name in the source, and `scale/3` a kind, which is what a consumer building a design from stored data needs.
 
 A generated function is not in the source of `lib/`, so the surface scanner cannot find it by reading the file (spec/12 §2). A module that injects functions through `use` therefore declares what it injects, and the scanner asks it, so every generated function is a row of `API_SURFACE.md` like any other and a type dropped from the schema drops its rows.
+
+### 16.7 The presets are written with it
+
+**Implemented** (work item 3 of #91, D-80). `Visualize.Chart.Presets` (§15) is the builder's first consumer and the reason it exists: ten designs written in Elixir had grown a private construction section — a mark, a design, a cartesian frame and an axis label — which is the shape of a library function in the wrong place. Each preset is now a list of fragments folded by `Visualize.Chart.compose/1`, and the private construction helpers are gone.
+
+What is left in `Visualize.Chart.Presets` is what the builder cannot supply: the assign mapping of §15.2, and the two choices the assigns force on the design — the kind of a series chart's `x` scale, decided by the first datum (§15.3), and a hierarchy's colour domain, the count of the root's children (§15.4). Those are decisions, not construction, and each is one call to a builder function.
+
+The ten render goldens of `test/support/components/` are unchanged by the rewrite, byte for byte, which is what says the fold and the literal are the same map.

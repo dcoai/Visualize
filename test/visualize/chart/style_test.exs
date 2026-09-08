@@ -1,7 +1,8 @@
 defmodule Visualize.Chart.StyleTest do
   @moduledoc """
   Style resolution of spec/14 §3.4 and D-63: one node, two outputs by mode, a `{:field, f}`
-  bound per datum through the frame's colour scale.
+  bound per datum through the frame's colour scale, and the `extends` chain flattened at
+  the lookup (§3.5, D-80).
   """
   use ExUnit.Case, async: true
 
@@ -99,6 +100,55 @@ defmodule Visualize.Chart.StyleTest do
       frame = frame(%{color: %{kind: :ordinal, domain: ["a"]}})
       assert Style.bind(%{fill: {:field, :k}, opacity: 1}, %{}, frame, :css) == %{opacity: 1}
       assert Style.bind(%{fill: {:field, :k}}, %{k: "zzz"}, frame, :css) == %{}
+    end
+  end
+
+  describe "extends (spec/14 §3.5)" do
+    defp styles(declared), do: Style.all(declared)
+
+    test "the parent's keys first, the child's over them" do
+      styles = styles(%{series: %{stroke: "#f00", stroke_width: 1}})
+
+      assert Style.node(styles, :series) == %{stroke: "#f00", stroke_width: 1}
+
+      styles = styles(%{series: %{stroke: "#f00", stroke_width: 1}, heavy: %{extends: :series}})
+      assert Style.node(styles, :heavy) == %{stroke: "#f00", stroke_width: 1}
+
+      styles =
+        styles(%{
+          series: %{stroke: "#f00", stroke_width: 1},
+          heavy: %{extends: :series, stroke_width: 3}
+        })
+
+      assert Style.node(styles, :heavy) == %{stroke: "#f00", stroke_width: 3}
+    end
+
+    test "a chain of three, and a built-in style as the parent" do
+      styles =
+        styles(%{
+          a: %{stroke: "#001", opacity: 0.2},
+          b: %{extends: :a, opacity: 0.5, fill: "#002"},
+          c: %{extends: :b, fill: "#003"}
+        })
+
+      assert Style.node(styles, :c) == %{stroke: "#001", opacity: 0.5, fill: "#003"}
+
+      assert Style.node(styles(%{heavy: %{extends: :axis, stroke_width: 2}}), :heavy) ==
+               Map.put(Style.builtin(:axis), :stroke_width, 2)
+    end
+
+    test "the key never reaches a resolved node" do
+      styles = styles(%{base: %{stroke: :axis}, derived: %{extends: :base, stroke_width: 2}})
+      node = Style.node(styles, :derived)
+
+      refute Map.has_key?(node, :extends)
+      assert Style.resolve(node, @theme, :literal) == %{stroke: "#666666", stroke_width: 2}
+    end
+
+    test "a cycle raises at resolution, having been reported by the validator" do
+      styles = styles(%{a: %{extends: :b}, b: %{extends: :a}})
+
+      assert_raise ArgumentError, ~r/style :a extends itself/, fn -> Style.node(styles, :a) end
     end
   end
 end

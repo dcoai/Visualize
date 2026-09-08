@@ -31,6 +31,9 @@ defmodule Visualize.Chart.Presets do
 
   """
 
+  import Visualize.Chart.Build
+
+  alias Visualize.Chart
   alias Visualize.Data.Table
 
   @names [
@@ -131,7 +134,8 @@ defmodule Visualize.Chart.Presets do
     sunburst_chart: %{width: 600, height: 600, value: nil, label: nil, colors: :category10}
   }
 
-  @axes [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
+  @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
+  @hierarchy_fields [:id, :parent, :label, :value, :branch]
   @temporal [DateTime, NaiveDateTime, Date]
   @hierarchies [:tree_diagram, :treemap_chart, :sunburst_chart]
 
@@ -185,21 +189,23 @@ defmodule Visualize.Chart.Presets do
     a = assigns(:line_chart, assigns)
     stroke = colour(a.stroke, :series_1)
 
-    styles = %{
-      line: %{stroke: stroke, stroke_width: a.stroke_width, curve: a.curve},
-      point: %{fill: stroke}
-    }
+    points =
+      if a.show_points,
+        do: [circle(:data, %{x: :x, y: :y}, options: %{radius: 4}, style: :point)],
+        else: []
 
-    marks =
-      [mark(:line, %{x: :x, y: :y}, :line)] ++
-        if(a.show_points,
-          do: [Map.put(mark(:circle, %{x: :x, y: :y}, :point), :options, %{radius: 4})],
-          else: []
-        )
-
-    design(a, [:x, :y], styles, marks,
-      frame: cartesian(a, %{x: x_scale(a), y: %{kind: :linear}}),
-      labels: axis_label(:x, a.x_label) ++ axis_label(:y, a.y_label)
+    fold(
+      seed(a, [:x, :y]) ++
+        [
+          style(:line, stroke: stroke, stroke_width: a.stroke_width, curve: a.curve),
+          style(:point, fill: stroke),
+          cartesian(a.width, a.height, margin: margin(a)),
+          x_scale(a),
+          linear_scale(:y),
+          axis(:x, :bottom),
+          axis(:y, :left),
+          line(:data, %{x: :x, y: :y}, style: :line)
+        ] ++ points ++ axis_labels(a)
     )
   end
 
@@ -207,14 +213,18 @@ defmodule Visualize.Chart.Presets do
   @spec bar_chart(assigns()) :: map()
   def bar_chart(assigns) do
     a = assigns(:bar_chart, assigns)
-    scales = %{x: %{kind: :band, padding: a.padding}, y: %{kind: :linear, domain: [0, :auto]}}
 
-    design(
-      a,
-      [:x, :y],
-      %{bar: %{fill: colour(a.fill, :series_1)}},
-      [mark(:rect, %{x0: :x, x1: :x, y0: 0, y1: :y}, :bar)],
-      frame: cartesian(a, scales)
+    fold(
+      seed(a, [:x, :y]) ++
+        [
+          style(:bar, fill: colour(a.fill, :series_1)),
+          cartesian(a.width, a.height, margin: margin(a)),
+          band_scale(:x, padding: a.padding),
+          linear_scale(:y, domain: [0, :auto]),
+          axis(:x, :bottom),
+          axis(:y, :left),
+          rect(:data, %{x0: :x, x1: :x, y0: 0, y1: :y}, style: :bar)
+        ]
     )
   end
 
@@ -224,17 +234,18 @@ defmodule Visualize.Chart.Presets do
     a = assigns(:horizontal_bar_chart, assigns)
     {_width, height} = plot(a)
 
-    scales = %{
-      x: %{kind: :linear, domain: [0, :auto]},
-      y: %{kind: :band, padding: a.padding, range: [0, height]}
-    }
-
-    design(
-      a,
-      [:x, :y],
-      %{bar: %{fill: colour(a.fill, :series_1)}},
-      [mark(:rect, %{x0: 0, x1: :x, y0: :y, y1: :y}, :bar)],
-      frame: cartesian(a, scales)
+    # The `y` range is fixed because `:auto` runs upward and the categories read downward.
+    fold(
+      seed(a, [:x, :y]) ++
+        [
+          style(:bar, fill: colour(a.fill, :series_1)),
+          cartesian(a.width, a.height, margin: margin(a)),
+          linear_scale(:x, domain: [0, :auto]),
+          band_scale(:y, padding: a.padding, range: [0, height]),
+          axis(:x, :bottom),
+          axis(:y, :left),
+          rect(:data, %{x0: 0, x1: :x, y0: :y, y1: :y}, style: :bar)
+        ]
     )
   end
 
@@ -245,27 +256,23 @@ defmodule Visualize.Chart.Presets do
     labelled? = a.label != nil
     outer = a.outer_radius || min(a.width, a.height) / 2 - 10
 
-    styles = %{
-      slice: %{fill: {:field, :index}, stroke: :background, stroke_width: 2},
-      slice_label: %{fill: :background, font_size: :label_size}
-    }
+    opts = [
+      options: %{inner_radius: a.inner_radius, outer_radius: outer, pad_angle: a.pad_angle},
+      style: :slice
+    ]
 
-    mark =
-      :arc
-      |> mark(%{value: :value}, :slice)
-      |> Map.put(:options, %{
-        inner_radius: a.inner_radius,
-        outer_radius: outer,
-        pad_angle: a.pad_angle
-      })
-      |> put_if(
-        labelled? and a.show_labels,
-        :label,
-        %{text: [{:field, :label}], anchor: :middle, style: :slice_label}
-      )
+    label = %{text: [{:field, :label}], anchor: :middle, style: :slice_label}
+    opts = if labelled? and a.show_labels, do: Keyword.put(opts, :label, label), else: opts
 
-    design(a, [:value, :index] ++ if(labelled?, do: [:label], else: []), styles, [mark],
-      frame: polar(a, %{color: %{kind: :ordinal, range: a.colors}})
+    fold(
+      seed(a, [:value, :index] ++ if(labelled?, do: [:label], else: [])) ++
+        [
+          style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 2),
+          style(:slice_label, fill: :background, font_size: :label_size),
+          polar(a.width, a.height, margin: @zero_margin),
+          ordinal_scale(:color, range: a.colors),
+          arc(:data, %{value: :value}, opts)
+        ]
     )
   end
 
@@ -274,12 +281,17 @@ defmodule Visualize.Chart.Presets do
   def scatter_plot(assigns) do
     a = assigns(:scatter_plot, assigns)
 
-    design(
-      a,
-      [:x, :y, :r],
-      %{point: %{fill: colour(a.fill, :series_1), opacity: 0.7}},
-      [mark(:circle, %{x: :x, y: :y, value: :r}, :point)],
-      frame: cartesian(a, %{x: %{kind: :linear}, y: %{kind: :linear}})
+    fold(
+      seed(a, [:x, :y, :r]) ++
+        [
+          style(:point, fill: colour(a.fill, :series_1), opacity: 0.7),
+          cartesian(a.width, a.height, margin: margin(a)),
+          linear_scale(:x),
+          linear_scale(:y),
+          axis(:x, :bottom),
+          axis(:y, :left),
+          circle(:data, %{x: :x, y: :y, value: :r}, style: :point)
+        ]
     )
   end
 
@@ -288,15 +300,27 @@ defmodule Visualize.Chart.Presets do
   def area_chart(assigns) do
     a = assigns(:area_chart, assigns)
 
-    styles = %{
-      area: %{fill: colour(a.fill, :series_1), fill_opacity: a.fill_opacity, curve: a.curve},
-      line: %{stroke: colour(a.stroke, :series_1), stroke_width: a.stroke_width, curve: a.curve}
-    }
-
-    marks = [mark(:area, %{x: :x, y: :y}, :area), mark(:line, %{x: :x, y: :y}, :line)]
-
-    design(a, [:x, :y], styles, marks,
-      frame: cartesian(a, %{x: x_scale(a), y: %{kind: :linear, domain: [0, :auto]}})
+    fold(
+      seed(a, [:x, :y]) ++
+        [
+          style(:area,
+            fill: colour(a.fill, :series_1),
+            fill_opacity: a.fill_opacity,
+            curve: a.curve
+          ),
+          style(:line,
+            stroke: colour(a.stroke, :series_1),
+            stroke_width: a.stroke_width,
+            curve: a.curve
+          ),
+          cartesian(a.width, a.height, margin: margin(a)),
+          x_scale(a),
+          linear_scale(:y, domain: [0, :auto]),
+          axis(:x, :bottom),
+          axis(:y, :left),
+          area(:data, %{x: :x, y: :y}, style: :area),
+          line(:data, %{x: :x, y: :y}, style: :line)
+        ]
     )
   end
 
@@ -306,19 +330,18 @@ defmodule Visualize.Chart.Presets do
     a = assigns(:stacked_bar_chart, assigns)
     keys = Map.fetch!(a, :keys)
 
-    scales = %{
-      x: %{kind: :band, padding: a.padding},
-      y: %{kind: :linear, domain: [0, :auto]},
-      color: %{kind: :ordinal, domain: keys, range: a.colors}
-    }
-
-    mark =
-      :rect
-      |> mark(%{x0: :x, x1: :x, y0: :y0, y1: :y1}, :segment)
-      |> Map.put(:data, %{source: :data, transforms: [%{op: :stack, fields: keys}]})
-
-    design(a, [:x | keys], %{segment: %{fill: {:field, :key}}}, [mark],
-      frame: cartesian(a, scales)
+    fold(
+      seed(a, [:x | keys]) ++
+        [
+          style(:segment, fill: {:field, :key}),
+          cartesian(a.width, a.height, margin: margin(a)),
+          band_scale(:x, padding: a.padding),
+          linear_scale(:y, domain: [0, :auto]),
+          ordinal_scale(:color, domain: keys, range: a.colors),
+          axis(:x, :bottom),
+          axis(:y, :left),
+          rect(stack(from(:data), keys), %{x0: :x, x1: :x, y0: :y0, y1: :y1}, style: :segment)
+        ]
     )
   end
 
@@ -336,31 +359,28 @@ defmodule Visualize.Chart.Presets do
         :vertical -> {[width, height], %{x: :x, y: :y}}
       end
 
-    layout = %{op: :tree, id: :id, by: :parent, size: size, orientation: a.orientation}
-
-    styles = %{
-      link: %{stroke: colour(a.link_stroke, :grid), stroke_width: 1.5},
-      node: %{
-        fill: colour(a.node_fill, :background),
-        stroke: colour(a.node_stroke, :series_1),
-        stroke_width: 2
-      }
-    }
+    layout = [id: :id, by: :parent, size: size, orientation: a.orientation]
 
     # The node's text is the nearest the layer has to the component's circle-and-text
     # group, whose anchor and offset follow the node (spec/14 §15.4, D-70).
-    marks = [
-      :path
-      |> mark(%{path: :path}, :link)
-      |> Map.put(:data, %{source: :data, transforms: [Map.put(layout, :output, :links)]}),
-      :circle
-      |> mark(channels, :node)
-      |> Map.put(:options, %{radius: a.node_radius})
-      |> Map.put(:label, %{text: [{:field, :label}], anchor: :middle})
-      |> Map.put(:data, %{source: :data, transforms: [Map.put(layout, :output, :nodes)]})
-    ]
-
-    hierarchy(a, styles, marks, layout_frame(a, %{}))
+    fold(
+      seed(a, @hierarchy_fields) ++
+        [
+          style(:link, stroke: colour(a.link_stroke, :grid), stroke_width: 1.5),
+          style(:node,
+            fill: colour(a.node_fill, :background),
+            stroke: colour(a.node_stroke, :series_1),
+            stroke_width: 2
+          ),
+          cartesian(a.width, a.height, margin: margin(a)),
+          path(tree(from(:data), layout ++ [output: :links]), %{path: :path}, style: :link),
+          circle(tree(from(:data), layout ++ [output: :nodes]), channels,
+            options: %{radius: a.node_radius},
+            label: %{text: [{:field, :label}], anchor: :middle},
+            style: :node
+          )
+        ]
+    )
   end
 
   @doc "The `treemap_chart` design (spec/14 §15.4, spec/10 §3.3)."
@@ -368,25 +388,21 @@ defmodule Visualize.Chart.Presets do
   def treemap_chart(assigns) do
     a = assigns(:treemap_chart, assigns)
 
-    layout = %{
-      op: :treemap,
-      id: :id,
-      by: :parent,
-      field: :value,
-      padding: a.padding,
-      tile: a.tile
-    }
-
     # The leaves alone (spec/10 §3.3).
-    leaves = %{op: :filter, field: :height, test: :eq, value: 0}
+    data =
+      from(:data)
+      |> treemap(id: :id, by: :parent, field: :value, padding: a.padding, tile: a.tile)
+      |> filter(:height, test: :eq, value: 0)
 
-    mark =
-      :rect
-      |> mark(%{x0: :x0, x1: :x1, y0: :y0, y1: :y1}, :cell)
-      |> Map.put(:data, %{source: :data, transforms: [layout, leaves]})
-
-    styles = %{cell: %{fill: {:field, :branch}, stroke: :background, stroke_width: 1}}
-    hierarchy(a, styles, [mark], layout_frame(a, %{color: branch_scale(a)}))
+    fold(
+      seed(a, @hierarchy_fields) ++
+        [
+          style(:cell, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
+          cartesian(a.width, a.height, margin: margin(a)),
+          branch_scale(a),
+          rect(data, %{x0: :x0, x1: :x1, y0: :y0, y1: :y1}, style: :cell)
+        ]
+    )
   end
 
   @doc "The `sunburst_chart` design (spec/14 §15.4, spec/10 §3.4)."
@@ -395,82 +411,63 @@ defmodule Visualize.Chart.Presets do
     a = assigns(:sunburst_chart, assigns)
     radius = min(a.width, a.height) / 2
 
-    layout = %{
-      op: :partition,
-      id: :id,
-      by: :parent,
-      field: :value,
-      size: [2 * :math.pi(), radius]
-    }
-
     # The nodes below the root with a positive extent (spec/10 §3.4), each arc over its
     # own angles (D-69) and labelled at its centroid as the pie is.
-    below_root = %{op: :filter, field: :depth, test: :gt, value: 0}
-    positive = %{op: :filter, field: :value, test: :gt, value: 0}
+    data =
+      from(:data)
+      |> partition(id: :id, by: :parent, field: :value, size: [2 * :math.pi(), radius])
+      |> filter(:depth, test: :gt, value: 0)
+      |> filter(:value, test: :gt, value: 0)
 
-    mark =
-      :arc
-      |> mark(%{start: :x0, end: :x1, inner: :y0, outer: :y1}, :arc)
-      |> Map.put(:label, %{text: [{:field, :label}], anchor: :middle, style: :arc_label})
-      |> Map.put(:data, %{source: :data, transforms: [layout, below_root, positive]})
-
-    styles = %{
-      arc: %{fill: {:field, :branch}, stroke: :background, stroke_width: 1},
-      arc_label: %{fill: :background, font_size: :label_size}
-    }
-
-    hierarchy(a, styles, [mark], polar(a, %{color: branch_scale(a)}))
+    fold(
+      seed(a, @hierarchy_fields) ++
+        [
+          style(:arc, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
+          style(:arc_label, fill: :background, font_size: :label_size),
+          polar(a.width, a.height, margin: @zero_margin),
+          branch_scale(a),
+          arc(data, %{start: :x0, end: :x1, inner: :y0, outer: :y1},
+            label: %{text: [{:field, :label}], anchor: :middle, style: :arc_label},
+            style: :arc
+          )
+        ]
+    )
   end
 
-  # -- the design ------------------------------------------------------------------------
+  # -- the fold (spec/14 §16.7) -----------------------------------------------------------
 
-  defp design(a, fields, styles, marks, opts) do
-    %{
-      version: 1,
-      sources: %{data: %{fields: fields}},
-      theme: :default,
-      styles: styles,
-      frame: Keyword.fetch!(opts, :frame),
-      marks: marks
-    }
-    |> put_meta(a)
-    |> put_if(Keyword.get(opts, :labels, []) != [], :labels, Keyword.get(opts, :labels, []))
+  # The fragments of a preset folded into its design; a preset writes no design node of its
+  # own, so a fault here is a fault of `Visualize.Chart.compose/2`, not of a preset.
+  defp fold(fragments) do
+    {:ok, design} = Chart.compose(fragments)
+    design
   end
 
-  defp hierarchy(a, styles, marks, frame) do
-    design(a, [:id, :parent, :label, :value, :branch], styles, marks, frame: frame)
-  end
-
-  defp put_meta(design, a) do
+  # The three fragments every preset opens with: the seed with its meta, the one source and
+  # the theme, which reaches the frame as an option rather than as a design key (§15.3).
+  defp seed(a, fields) do
     meta =
       %{}
       |> put_if(a.title != nil, :name, a.title)
       |> put_if(a.description != nil, :description, [a.description])
 
-    put_if(design, meta != %{}, :meta, meta)
+    seed = if meta == %{}, do: chart(), else: chart(meta: meta)
+    [seed, source(:data, fields), theme(:default)]
+  end
+
+  defp axis_labels(a) do
+    for {scale, text} <- [x: a.x_label, y: a.y_label], text != nil do
+      label({:axis, scale}, [text])
+    end
   end
 
   defp put_if(map, true, key, value), do: Map.put(map, key, value)
   defp put_if(map, false, _key, _value), do: map
 
-  defp mark(type, channels, style),
-    do: %{type: type, data: :data, channels: channels, style: style}
-
-  # A cartesian frame with the component's axes; a hierarchy's has the colour scale alone.
-  defp cartesian(a, scales), do: Map.put(frame(:cartesian, a, scales, margin(a)), :axes, @axes)
-  defp layout_frame(a, scales), do: frame(:cartesian, a, scales, margin(a))
-  defp polar(a, scales), do: frame(:polar, a, scales, zero_margin())
-
-  defp frame(kind, a, scales, margin) do
-    %{kind: kind, size: %{width: a.width, height: a.height}, margin: margin, scales: scales}
-  end
-
-  defp zero_margin, do: %{top: 0, right: 0, bottom: 0, left: 0}
-
   # The margin merged over the component's default (spec/10 §1.2); a hierarchy without a
   # `margin` assign fills its `<svg>`.
   defp margin(a) do
-    Map.merge(Map.get(@defaults[a.preset], :margin, zero_margin()), Map.get(a, :margin) || %{})
+    Map.merge(Map.get(@defaults[a.preset], :margin, @zero_margin), Map.get(a, :margin) || %{})
   end
 
   defp plot(a) do
@@ -478,29 +475,28 @@ defmodule Visualize.Chart.Presets do
     {a.width - m.left - m.right, a.height - m.top - m.bottom}
   end
 
-  defp axis_label(_scale, nil), do: []
-  defp axis_label(scale, text), do: [%{anchor: {:axis, scale}, text: [text]}]
-
   # A colour assign: the literal as given, or the theme slot when `nil` (spec/10 §1.2).
   defp colour(nil, slot), do: slot
   defp colour(value, _slot), do: value
 
-  # The `x` scale of a series chart, decided by the first datum (spec/10 §2.2).
+  # The `x` scale of a series chart, decided by the first datum (spec/10 §2.2): one of the
+  # two choices the assigns force on the design (spec/14 §16.7).
   defp x_scale(a) do
     case Map.get(a, :data, []) |> Table.rows() |> Enum.take(1) do
-      [] -> %{kind: :linear}
+      [] -> linear_scale(:x)
       [first] -> x_kind(Map.fetch!(a, :x).(first))
     end
   end
 
-  defp x_kind(%mod{}) when mod in @temporal, do: %{kind: :time}
-  defp x_kind(n) when is_number(n), do: %{kind: :linear}
-  defp x_kind(_category), do: %{kind: :band, padding: 0.1}
+  defp x_kind(%mod{}) when mod in @temporal, do: time_scale(:x)
+  defp x_kind(n) when is_number(n), do: linear_scale(:x)
+  defp x_kind(_category), do: band_scale(:x, padding: 0.1)
 
-  # The colour scale of a hierarchy: one index per child of the root (D-46).
+  # The colour scale of a hierarchy: one index per child of the root (D-46) — the other
+  # choice the assigns force.
   defp branch_scale(a) do
     n = length(children(Map.get(a, :data, %{})))
-    %{kind: :ordinal, domain: Enum.to_list(0..(n - 1)//1), range: a.colors}
+    ordinal_scale(:color, domain: Enum.to_list(0..(n - 1)//1), range: a.colors)
   end
 
   # -- the assign mapping (spec/14 §15.2) -------------------------------------------------
