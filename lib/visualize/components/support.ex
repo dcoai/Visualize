@@ -1,30 +1,139 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Components.Support do
     @moduledoc false
-    # What every component shares (spec/10 §1.2): the frame arithmetic, the colour palette
-    # behind a `colors` assign, the one-unit span of a collapsed domain, and the label
-    # truncation of the hierarchy components.
+    # What every component shares (spec/10 §1.2, D-64): the preset drawn through the layer,
+    # the elements a template prints picked out of the frame's group, the `<svg>` shell
+    # attributes, the transition, and the label truncation of the hierarchy components.
 
-    alias Visualize.{Scale, Theme}
+    alias Visualize.{Chart, Theme}
+    alias Visualize.Chart.{Frame, Mark, Presets, Style}
+    alias Visualize.IR.{Element, Path, Transform}
 
     @transition "transition: all 0.3s ease-in-out;"
     @responsive [preserveAspectRatio: "xMidYMid meet", style: "width:100%;height:auto"]
 
+    @typedoc """
+    A component's preset drawn: the frame, the mapped source, the frame's generated group
+    (`nil` until `draw/2`), the rows of each mark (`nil` until `layout/2`), the theme, the
+    accessibility ids, and the margin and plot area the template lays out with.
+    """
+    @type drawn :: %{
+            frame: Frame.t(),
+            sources: %{data: [map()]},
+            group: Element.t() | nil,
+            rows: [[map()]] | nil,
+            theme: Theme.t(),
+            ids: map(),
+            margin: map(),
+            plot: map()
+          }
+
     @doc false
-    # The `data` assign as rows (spec/10 §1.2): any `Visualize.Data.Table.rows/1` source, read
-    # once; a row list is the same term, so the assign is unchanged.
-    def rows(assigns) do
-      Phoenix.Component.assign(assigns, :data, Visualize.Data.Table.rows(assigns.data))
+    # The preset of `name` over the assigns, drawn: the design through `Visualize.Chart`,
+    # the frame over the mapped source, and `Visualize.Chart.Frame.generate/2` with the
+    # source so the marks are drawn too (spec/14 §15.1).
+    @spec draw(Presets.name(), map()) :: drawn()
+    def draw(name, assigns) do
+      drawn = realise(name, assigns)
+      %{drawn | group: Frame.generate(drawn.frame, sources: drawn.sources)}
     end
 
     @doc false
-    # `{margin, inner_width, inner_height}`: the assign merged over the component's default.
-    def frame(assigns, default_margin) do
-      margin = Map.merge(default_margin, assigns.margin || %{})
-
-      {margin, assigns.width - margin.left - margin.right,
-       assigns.height - margin.top - margin.bottom}
+    # The preset of `name` laid out: the frame, and the rows of each mark through its
+    # pipeline (spec/14 §15.4), in the order of the design's marks.
+    @spec layout(Presets.name(), map()) :: drawn()
+    def layout(name, assigns) do
+      drawn = realise(name, assigns)
+      rows = Enum.map(drawn.frame.marks, &Mark.rows(drawn.frame, &1, drawn.sources))
+      %{drawn | rows: rows}
     end
+
+    defp realise(name, assigns) do
+      theme = theme(assigns.theme)
+      sources = Presets.sources(name, assigns)
+      chart = Chart.from_map!(Presets.design(name, assigns))
+      frame = Frame.new(chart, sources: sources, theme: theme)
+
+      %{
+        frame: frame,
+        sources: sources,
+        group: nil,
+        rows: nil,
+        theme: theme,
+        ids: label_ids(assigns.title, assigns.description),
+        margin: frame.margin,
+        plot: frame.plot
+      }
+    end
+
+    # -- the elements a template prints -------------------------------------------------
+
+    @doc false
+    # The mark groups of the frame's group in design order (spec/14 §4.7), reaching into
+    # the centred group of a polar frame.
+    @spec marks(Element.t()) :: [Element.t()]
+    def marks(%Element{children: children}) do
+      Enum.flat_map(children, fn
+        %Element{style: %{class: "polar"}} = polar -> marks(polar)
+        %Element{style: %{class: "mark " <> _}} = mark -> [mark]
+        _other -> []
+      end)
+    end
+
+    @doc false
+    # The axis on `side` as the frame drew it: the `Visualize.Axis` group inside the
+    # frame's `axis axis-<side>` group, rendered and marked safe for the template.
+    @spec axis(Element.t(), :top | :right | :bottom | :left) :: Phoenix.HTML.safe()
+    def axis(%Element{children: children}, side) do
+      class = "axis axis-#{side}"
+      %Element{children: [axis]} = Enum.find(children, &(&1.style[:class] == class))
+      Phoenix.HTML.raw(Visualize.Render.to_string(axis))
+    end
+
+    @doc false
+    # The frame's labels (spec/14 §6.3) as the template prints them: position, anchor,
+    # style and the rotation, if any, as a transform attribute.
+    @spec labels(Element.t()) :: [map()]
+    def labels(%Element{children: children}) do
+      for %Element{type: :text, style: %{class: "label"} = style} = text <- children do
+        %{
+          x: fmt(text.attrs.x),
+          y: fmt(text.attrs.y),
+          anchor: style.text_anchor,
+          font_size: style.font_size,
+          fill: style.fill,
+          transform: if(text.transform, do: Transform.to_string(text.transform)),
+          text: text.content
+        }
+      end
+    end
+
+    @doc false
+    # The `d` of a path mark's only element, `nil` when the mark drew nothing to print — no
+    # row placed, or an empty path.
+    @spec path(Element.t()) :: String.t() | nil
+    def path(%Element{children: [%Element{path: %Path{commands: [_ | _]} = path}]}),
+      do: Path.to_string(path)
+
+    def path(%Element{}), do: nil
+
+    @doc false
+    # The `d` of a path element.
+    @spec d(Element.t()) :: String.t()
+    def d(%Element{path: %Path{} = path}), do: Path.to_string(path)
+
+    @doc false
+    # A style name's element style bound to a row (spec/14 §3.4): the colour scale's output
+    # for a `{:field, f}`, every slot as a CSS reference.
+    @spec style(Frame.t(), atom(), map()) :: map()
+    def style(%Frame{} = frame, name, row) do
+      frame.styles
+      |> Style.node(name)
+      |> Style.resolve(frame.theme, :css)
+      |> Style.bind(row, frame, :css)
+    end
+
+    # -- the shell ---------------------------------------------------------------------
 
     @doc false
     # The attribute list a mark spreads: the CSS transition when animating, nothing
@@ -47,18 +156,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc false
     # The ids of the `<title>` and `<desc>` a titled component renders first (spec/10 §1.2),
     # derived as `Visualize.IR.Element.root/3` derives them (D-56).
-    def label_ids(title, description), do: Visualize.IR.Element.label_ids(nil, title, description)
+    def label_ids(title, description), do: Element.label_ids(nil, title, description)
 
     @doc false
     # The `theme` assign as a struct: `nil` is the default theme (spec/10 §1.2).
     def theme(nil), do: Theme.default()
     def theme(%Theme{} = theme), do: theme
-
-    @doc false
-    # A colour assign: the string as given, or the theme slot when `nil`, as a CSS
-    # reference (D-55).
-    def colour(nil, theme, slot), do: css(theme, slot)
-    def colour(value, _theme, _slot), do: value
 
     @doc false
     # A theme slot as the CSS reference the markup carries.
@@ -67,85 +170,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc false
     # Coordinates print through the one number formatter of every serialiser (spec/02 §3):
     # at most four decimals, never `-0`, so a golden does not record float noise.
-    defdelegate fmt(number), to: Visualize.IR.Path, as: :format_number
-
-    @doc false
-    # An ordinal scale from `0..n-1` to the colours of a scheme atom or an explicit list;
-    # `Visualize.Scale.Ordinal.apply/2` cycles when the list is shorter than `n`.
-    def palette(colors, n) when is_list(colors) and colors != [] do
-      Scale.ordinal() |> Scale.domain(Enum.to_list(0..(n - 1)//1)) |> Scale.range(colors)
-    end
-
-    def palette([], _n), do: raise(ArgumentError, "colors: an empty list has no colour to draw")
-
-    def palette(scheme, n) when is_atom(scheme) do
-      case Scale.Color.scheme(scheme) do
-        nil ->
-          raise ArgumentError,
-                "colors: unknown scheme #{inspect(scheme)}; see Visualize.Scale.Color.schemes/0"
-
-        stops ->
-          palette(stops, n)
-      end
-    end
-
-    @doc false
-    # A two-element domain for a continuous scale. Equal ends would divide by zero in
-    # `apply/2`, so a collapsed domain spans one unit (one second for times) from its value.
-    def span([lo, hi]) when lo == hi, do: [lo, step(lo)]
-    def span([lo, hi]), do: [lo, hi]
-
-    defp step(%DateTime{} = t), do: DateTime.add(t, 1, :second)
-    defp step(%NaiveDateTime{} = t), do: NaiveDateTime.add(t, 1, :second)
-    defp step(%Date{} = d), do: Date.add(d, 1)
-    defp step(n) when is_number(n), do: n + 1
-
-    @doc false
-    # `[lo, hi]` of the accessor over `data`, or `[0, 1]` when there is no data. Time values
-    # are ordered by their own module: term order on a `DateTime` compares its fields
-    # alphabetically, day before year.
-    def extent([], _accessor), do: [0, 1]
-
-    def extent(data, accessor) do
-      values = Enum.map(data, accessor)
-
-      {lo, hi} =
-        case hd(values) do
-          %mod{} when mod in [DateTime, NaiveDateTime, Date] -> Enum.min_max(values, mod)
-          _ -> Visualize.Data.extent(values)
-        end
-
-      span([lo, hi])
-    end
-
-    @doc false
-    # The x scale of a series chart, decided by the first datum: a time scale for
-    # `DateTime`, `NaiveDateTime` or `Date`, linear for a number, a band scale with padding
-    # 0.1 for anything else; linear over `[0, 1]` with no data.
-    def x_scale([], _accessor, width),
-      do: Scale.linear() |> Scale.domain([0, 1]) |> Scale.range([0, width])
-
-    def x_scale(data, accessor, width) do
-      case accessor.(hd(data)) do
-        %mod{} when mod in [DateTime, NaiveDateTime, Date] ->
-          Scale.time() |> Scale.domain(extent(data, accessor)) |> Scale.range([0, width])
-
-        n when is_number(n) ->
-          Scale.linear() |> Scale.domain(extent(data, accessor)) |> Scale.range([0, width])
-
-        _ ->
-          Scale.band()
-          |> Scale.domain(Enum.map(data, accessor))
-          |> Scale.range([0, width])
-          |> Scale.padding(0.1)
-      end
-    end
-
-    @doc false
-    # `[0, max]` of the accessor over `data`, `[0, 1]` when there is no data or the maximum
-    # is not positive.
-    def from_zero([], _accessor), do: [0, 1]
-    def from_zero(data, accessor), do: span([0, max(0, Enum.max(Enum.map(data, accessor)))])
+    defdelegate fmt(number), to: Path, as: :format_number
 
     @doc false
     # Cuts `label` to the characters that fit `max_width` pixels at seven pixels each,

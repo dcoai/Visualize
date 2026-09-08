@@ -25,6 +25,7 @@ Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)
 ### 1.2 Conventions shared by every component
 
 - Every component is a function component `name/1` taking an assigns map and returning rendered HEEx; it is used as `<.name … />` after `import Visualize.Components` (or `Visualize.Components.Tree`).
+- Every component is a *preset design* of [14-declarative-chart](14-declarative-chart.md) §15 plus an assign mapping (D-64): the component's assigns go to `Visualize.Chart.Presets.design/2` for the design and to `Visualize.Chart.Presets.sources/2` for the rows its source binds to; `Visualize.Chart.Frame.new/2` realises the frame over them and `Visualize.Chart.Frame.generate/2` draws it, and the component prints the elements the layer returns in the markup this document declares — its HEEx template is the `<svg>` shell and the attribute order of each mark, nothing more. Every coordinate, path and paint below is therefore the layer's, and the render goldens of `test/support/components/` hold each component to what it drew before it was a preset.
 - Every component declares its assigns with `attr/3`, so an unknown assign or a missing required one is a compile-time warning in the caller, and each listed default is applied by `Phoenix.Component`.
 - Every component renders one `<svg width={width} height={height} role="img" viewBox="0 0 {width} {height}">`.
 - `responsive` (`:boolean`, default `false`) is accepted by every component; when true the `<svg>` also carries `preserveAspectRatio="xMidYMid meet"` and `style="width:100%;height:auto"`, the CSS-scaled case of D-54, exactly as `Visualize.IR.Element.root/3` under `responsive: true` (spec/02 §2.1); when false neither attribute is present. The round-trip case is `ResizeHook` (§10) on the container, with the pushed size assigned to `width` and `height`.
@@ -33,33 +34,35 @@ Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)
 - `theme` (`:any`, default `nil`) is accepted by every component: a `Visualize.Theme` ([08-utilities](08-utilities.md) §7), `nil` meaning `Visualize.Theme.default/0`. Every colour, font and size a component draws with that is not an explicit assign is a slot of that theme resolved with `Visualize.Theme.resolve/3` in `:css` mode, so the markup carries `var(--vis-…, literal)` references a stylesheet can override (D-55); the `<svg>` carries `font-family={resolve(:font_family)}` so every text inherits the theme's font; the axes take the theme through `Visualize.Axis.theme/2`. A colour assign (`fill`, `stroke`, `node_fill`, `node_stroke`, `link_stroke`) defaults to `nil`, which resolves to the slot named in the component's table; a string is used as given.
 - `animate` (`:boolean`, default `false`) is accepted by every component; when true, every data mark carries `style="transition: all 0.3s ease-in-out;"` so DOM patches animate via CSS; when false a mark carries no `style` attribute.
 - `margin` is merged over the component's default margin with `Map.merge/2`, so a partial map such as `%{left: 60}` overrides one side only. `inner_width = width − left − right`, `inner_height = height − top − bottom`, and the plot area is a `<g transform="translate(left, top)">`.
-- Axes are `Visualize.Axis.bottom/1` and `Visualize.Axis.left/1` over the component's scales, rendered with `Visualize.Axis.render/1` into `<g class="x-axis" transform="translate(0, inner_height)">` and `<g class="y-axis">` through `Phoenix.HTML.raw/1`.
+- Axes are the frame's (spec/14 §4.4) — byte for byte `Visualize.Axis.bottom/1` and `Visualize.Axis.left/1` over the realised scales, rendered with `Visualize.Render.to_string/2` — placed by the template into `<g class="x-axis" transform="translate(0, inner_height)">` and `<g class="y-axis">` through `Phoenix.HTML.raw/1`.
 - `data` is `:any`: a row list, or any other source `Visualize.Data.Table.rows/1` accepts ([08-utilities](08-utilities.md) §6) — a column map, a keyword list of columns, an Explorer DataFrame. The component reads it through `rows/1` once, before anything else; a row list is used as given.
 - Accessor assigns (`x`, `y`, `value`, `label`, `size`) are `:any` and hold one-argument functions applied to each row of `data`.
 - Every computed coordinate and length prints through `Visualize.IR.Path.format_number/1` (at most four decimals, never `-0`), as the axes and paths already do; assigns such as `width` and `margin` print as given.
 - Empty `data` renders the frame — the `<svg>` and, where the chart has them, its axes — with no marks; it never raises (1.3).
 
-### 1.3 Scale and colour calls the components depend on
+### 1.3 Scale and colour rules the components depend on
 
-Every coordinate is `Visualize.Scale.apply/2` over the component's scale; every path is `Visualize.Shape.generate/2`; the axes are section 1.2's. Three conventions are shared by every component that has the assign (D-45):
+Every coordinate is the frame's scale applied by the mark that draws it (spec/14 §5.2), every path the generator the mark names (spec/14 §5.6, D-61), the axes section 1.2's. Three conventions are shared by every component that has the assign (D-45, D-64):
 
-- **Colours.** A `colors` atom names a scheme of `Visualize.Scale.Color.schemes/0`; its stop list from `Visualize.Scale.Color.scheme/1` is the range of a `Visualize.Scale.Ordinal` over the indexes `0..n−1`, so the i-th mark takes the i-th colour and the list cycles when there are more marks than colours. A `colors` list is used the same way, as given. An unknown scheme atom raises `ArgumentError` naming `schemes/0`; an empty list raises `ArgumentError`.
-- **Continuous domains.** An extent from `Visualize.Data.extent/1` (or, for `DateTime`, `NaiveDateTime` and `Date` values, `Enum.min_max/2` with the value's module, since term order on a `DateTime` is not chronological) becomes the two-element list `[min, max]` that `Visualize.Scale.domain/2` takes. A domain whose ends coincide — one datum, or every value zero on a `[0, max]` axis — spans one unit from its value: `[v, v + 1]` for numbers, one second for `DateTime` and `NaiveDateTime`, one day for `Date`; the datum then sits at the start of the range. Without it `Visualize.Scale.apply/2` would divide by zero.
+- **Colours.** A `colors` atom names a scheme of `Visualize.Scale.Color.schemes/0`; it is the `range` of the design's `color` scale, a `Visualize.Scale.Ordinal` over the mark indexes `0..n−1` (spec/14 §4.3), so the i-th mark takes the i-th colour and the list cycles when there are more marks than colours. A `colors` list is used the same way, as given. An unknown scheme atom raises `ArgumentError` naming `schemes/0`; an empty list raises `ArgumentError`.
+- **Continuous domains.** Every domain is inferred by the frame from the whole bound column (spec/14 §4.3): the extent of the values, time values ordered chronologically, `[0, max]` where a table below says so. A domain whose ends coincide — one datum, or every value zero on a `[0, max]` axis — stays `[v, v]`: the frame never widens (D-60), the scale maps every value to the range midpoint (D-49) and the axis draws one tick, so a single datum sits mid-axis, as it does in d3. A line or an area over a band x scale sits at the band centres (spec/14 §5.2); a band domain is the distinct categories in order of first appearance, so a repeated category is one band.
 - **Empty data.** With no data every continuous domain is `[0, 1]` and every band domain is `[]`, so the axes render with their `0…1` ticks (or bare domain line) and the chart draws no mark.
 
 ## 2. Visualize.Components
+
+Each function is the preset of the same name in `Visualize.Chart.Presets` (spec/14 §15.3), drawn entirely by the layer: the frame's axes and labels and the preset's marks, whose elements the component prints as the tables below say. The preset's defaults are `Visualize.Chart.Presets.defaults/1`, which the `attr/3` declarations read.
 
 ### 2.1 Functions
 
 | Function | Contract |
 |---|---|
-| `Visualize.Components.line_chart/1` | Renders a single-series line chart with bottom and left axes from `data`, `x` and `y` (2.2). |
-| `Visualize.Components.bar_chart/1` | Renders vertical bars on a band x-scale and a linear y-scale from 0 (2.3). |
-| `Visualize.Components.horizontal_bar_chart/1` | Renders horizontal bars on a band y-scale and a linear x-scale from 0 (2.4). |
-| `Visualize.Components.pie_chart/1` | Renders a pie or donut from `data` and `value`, with optional centroid labels (2.5). |
-| `Visualize.Components.scatter_plot/1` | Renders one circle per datum on two linear scales (2.6). |
-| `Visualize.Components.area_chart/1` | Renders a filled area from the baseline plus its top line (2.7). |
-| `Visualize.Components.stacked_bar_chart/1` | Renders one stacked bar per category from `keys` (2.8). |
+| `Visualize.Components.line_chart/1` | Renders a single-series line chart with bottom and left axes from `data`, `x` and `y` (2.2): the `line_chart` preset. |
+| `Visualize.Components.bar_chart/1` | Renders vertical bars on a band x-scale and a linear y-scale from 0 (2.3): the `bar_chart` preset. |
+| `Visualize.Components.horizontal_bar_chart/1` | Renders horizontal bars on a band y-scale and a linear x-scale from 0 (2.4): the `horizontal_bar_chart` preset. |
+| `Visualize.Components.pie_chart/1` | Renders a pie or donut from `data` and `value`, with optional centroid labels (2.5): the `pie_chart` preset. |
+| `Visualize.Components.scatter_plot/1` | Renders one circle per datum on two linear scales (2.6): the `scatter_plot` preset. |
+| `Visualize.Components.area_chart/1` | Renders a filled area from the baseline plus its top line (2.7): the `area_chart` preset. |
+| `Visualize.Components.stacked_bar_chart/1` | Renders one stacked bar per category from `keys` (2.8): the `stacked_bar_chart` preset. |
 
 ### 2.2 `line_chart/1`
 
@@ -79,7 +82,7 @@ Every coordinate is `Visualize.Scale.apply/2` over the component's scale; every 
 | `y_label` | `:string` | `nil` | rotated −90° `<text class="axis-label">` at `y = −margin.left + 15`, filled `:text` at `:label_size` |
 | `animate`, `class`, `responsive`, `theme`, `title`, `description` | | | per 1.2 |
 
-The y domain is the extent of the y values (1.3) with range `[inner_height, 0]`. The line is `Visualize.Shape.line/0` with the scaled accessors and `curve`, generated with `Visualize.Shape.generate/2` into the `d` of a `<path fill="none" stroke={stroke} stroke-width={stroke_width}>`, drawn only when `data` is non-empty; the axes and labels are drawn regardless.
+The y domain is the extent of the y values (1.3) with range `[inner_height, 0]`. The line is the preset's `:line` mark — `Visualize.Shape.Line` in `curve` through the frame's scales (spec/14 §5.6) — printed as the `d` of a `<path fill="none" stroke={stroke} stroke-width={stroke_width}>`, drawn only when `data` is non-empty; the points are its `:circle` mark; the axis titles are the frame's labels at `{:axis, :x}` and `{:axis, :y}` (spec/14 §6.3); the axes and labels are drawn regardless.
 
 ### 2.3 `bar_chart/1`
 
@@ -95,7 +98,7 @@ The y domain is the extent of the y values (1.3) with range `[inner_height, 0]`.
 | `padding` | `:float` | `0.1` | band padding 0–1 |
 | `animate`, `class`, `responsive`, `theme`, `title`, `description` | | | per 1.2 |
 
-x is a band scale over the categories in data order with range `[0, inner_width]`; y is linear over `[0, max(y)]` — `[0, 1]` when there is no datum or the maximum is not positive (1.3) — with range `[inner_height, 0]`. Each datum is a `<rect x={band start} y={scaled y} width={bandwidth} height={inner_height − scaled y} fill={fill}>`.
+x is a band scale over the categories in data order with range `[0, inner_width]`; y is linear over `[0, max(y)]` — `[0, 1]` when there is no datum (1.3) — with range `[inner_height, 0]`. Each datum is a `<rect x={band start} y={scaled y} width={bandwidth} height={inner_height − scaled y} fill={fill}>`.
 
 ### 2.4 `horizontal_bar_chart/1`
 
@@ -117,7 +120,7 @@ Same assigns as 2.3 with `margin` defaulting to `%{top: 20, right: 20, bottom: 3
 | `show_labels` | `:boolean` | `true` | |
 | `animate`, `class`, `responsive`, `theme`, `title`, `description` | | | per 1.2 |
 
-Slices come from `Visualize.Shape.pie/0` with `value` and `pad_angle`; each is a `<path d={arc} fill={colour} stroke={:background} stroke-width="2">` inside `<g transform="translate(width/2, height/2)">`; with no data the group is empty. A label is a `<text text-anchor="middle" dominant-baseline="middle" font-size={:label_size} fill={:background}>` — a label over a mark takes the background slot (1.2) — at `Visualize.Shape.Arc.centroid/2` of the slice — the mid-radius `(inner + outer)/2` at the slice's mid angle, which is the D3 convention `x = r·sin(a)`, `y = −r·cos(a)`.
+Slices are the preset's `:arc` mark — `Visualize.Shape.Pie` over `value` with `pad_angle`, then `Visualize.Shape.Arc` (spec/14 §5.6) — each a `<path d={arc} fill={colour} stroke={:background} stroke-width="2">` inside `<g transform="translate(width/2, height/2)">`; with no data the group is empty. A label is a `<text text-anchor="middle" dominant-baseline="middle" font-size={:label_size} fill={:background}>` — a label over a mark takes the background slot (1.2) — at `Visualize.Shape.Arc.centroid/2` of the slice — the mid-radius `(inner + outer)/2` at the slice's mid angle, which is the D3 convention `x = r·sin(a)`, `y = −r·cos(a)`.
 
 ### 2.6 `scatter_plot/1`
 
@@ -151,7 +154,7 @@ Each datum is a `<circle cx cy r={size} fill={fill} opacity="0.7">`. Unlike `lin
 | `curve` | `:atom` | `:linear` | applied to both the area and the line |
 | `animate`, `class`, `responsive`, `theme`, `title`, `description` | | | per 1.2 |
 
-Two paths are drawn when `data` is non-empty: the area (`Visualize.Shape.area/0`, `y0 = inner_height`, `y1` = scaled y) as `<path fill={fill} fill-opacity={fill_opacity}>`, then the line as `<path fill="none" stroke={stroke} stroke-width={stroke_width}>`.
+Two paths are drawn when `data` is non-empty: the preset's `:area` mark (`Visualize.Shape.Area` from the y scale's zero, spec/14 §5.6) as `<path fill={fill} fill-opacity={fill_opacity}>`, then its `:line` mark as `<path fill="none" stroke={stroke} stroke-width={stroke_width}>`.
 
 ### 2.8 `stacked_bar_chart/1`
 
@@ -167,7 +170,7 @@ Two paths are drawn when `data` is non-empty: the area (`Visualize.Shape.area/0`
 | `padding` | `:float` | `0.1` | |
 | `animate`, `class`, `responsive`, `theme`, `title`, `description` | | | per 1.2 |
 
-The stack yields one series per key with points `%{data, y0, y1}`; the y domain is `[0, max(y1)]`, `[0, 1]` when there are no points or the maximum is not positive (1.3). Each point is a `<rect x={band of x.(data)} y={scaled y1} width={bandwidth} height={scaled y0 − scaled y1} fill={series colour}>`.
+The preset's `:stack` transform yields one row per key per datum with `key`, `y0` and `y1` (spec/14 §5.4.1); the y domain is `[0, max(y1)]`, `[0, 1]` when there are no points (1.3). Each point is a `<rect x={band of x.(data)} y={scaled y1} width={bandwidth} height={scaled y0 − scaled y1} fill={series colour}>`.
 
 ## 3. Visualize.Components.Tree
 
@@ -175,11 +178,11 @@ The stack yields one series per key with points `%{data, y0, y1}`; the y domain 
 
 | Function | Contract |
 |---|---|
-| `Visualize.Components.Tree.tree_diagram/1` | Renders a node-link tree from nested data using the tidy tree layout (3.2). |
-| `Visualize.Components.Tree.treemap_chart/1` | Renders a treemap of the hierarchy's leaves coloured by the child of the root above each (3.3). |
-| `Visualize.Components.Tree.sunburst_chart/1` | Renders a radial partition with one arc per non-root node of positive value, labelled (3.4). |
+| `Visualize.Components.Tree.tree_diagram/1` | Renders a node-link tree from nested data using the tidy tree layout (3.2): the `tree_diagram` preset. |
+| `Visualize.Components.Tree.treemap_chart/1` | Renders a treemap of the hierarchy's leaves coloured by the child of the root above each (3.3): the `treemap_chart` preset. |
+| `Visualize.Components.Tree.sunburst_chart/1` | Renders a radial partition with one arc per non-root node of positive value, labelled (3.4): the `sunburst_chart` preset. |
 
-All three build the hierarchy with `Visualize.Layout.Hierarchy.new/1`, so `data` MUST be a map whose children are under `:children` or `"children"`; node labels default to `:name` or `"name"`, leaf values to `:value` or `"value"` (missing → 0). A root-only hierarchy is the empty case: the tree draws its one node, the treemap one cell, the sunburst no arc. `colors` follows 1.3 with one rule for which mark takes which index: the i-th child of the root takes the i-th colour and every descendant of that child inherits it, so a whole top-level branch shares a colour however deep it goes (D-46); the root itself, where drawn, is `"#ddd"`. Coordinates print as in 1.2.
+Each function is the preset of the same name in `Visualize.Chart.Presets` (spec/14 §15.4), laid out by the layer and drawn by the component: the assign mapping flattens the nested map into one row per node (spec/14 §15.2), the preset's transform — `:tree`, `:treemap` or `:partition` over `Visualize.Layout.Hierarchy.stratify/2` — yields the laid-out rows through `Visualize.Chart.Mark.rows/3`, and the component prints the markup below from them. `data` MUST be a map whose children are under `:children` or `"children"`; node labels default to `:name` or `"name"`, leaf values to `:value` or `"value"` (missing → 0). A root-only hierarchy is the empty case: the tree draws its one node, the treemap one cell, the sunburst no arc. `colors` follows 1.3 with one rule for which mark takes which index: the i-th child of the root takes the i-th colour and every descendant of that child inherits it, so a whole top-level branch shares a colour however deep it goes (D-46) — the design's `color` scale over the row's `branch`, bound through `Visualize.Chart.Style.bind/4`; the root itself, where drawn, is the theme's `:grid`. Coordinates print as in 1.2.
 
 ### 3.2 `tree_diagram/1`
 

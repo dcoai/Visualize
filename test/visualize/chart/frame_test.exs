@@ -108,6 +108,13 @@ defmodule Visualize.Chart.FrameTest do
       assert Frame.scale(frame, :color).domain == ["c0", "c1"]
     end
 
+    test "a constant channel contributes its number only when the mark has rows (#61)" do
+      marks = [%{type: :rect, data: :primary, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}}]
+      scales = %{x: %{kind: :band}, y: %{kind: :linear, domain: [0, :auto]}}
+      assert Frame.scale(frame(scales, marks), :y).domain == [0, 9]
+      assert Frame.scale(frame(scales, marks, %{primary: []}), :y).domain == [0, 1]
+    end
+
     test "a polar frame maps angle and value onto its own scales" do
       chart =
         chart(%{kind: :polar, scales: %{angle: %{kind: :radial}, r: %{kind: :sqrt}}}, %{

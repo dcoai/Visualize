@@ -282,7 +282,7 @@ defmodule Visualize.ComponentsTest do
   end
 
   describe "degenerate data" do
-    test "a single datum renders: the collapsed domain spans one unit" do
+    test "a single datum renders mid-axis: the collapsed domain stays [v, v] (D-49, D-60)" do
       svg =
         render_component(&Components.line_chart/1, %{
           data: [hd(@series)],
@@ -299,7 +299,8 @@ defmodule Visualize.ComponentsTest do
           y: & &1.y
         })
 
-      assert svg =~ ~s(cx="0")
+      assert svg =~ ~s(<circle cx="270" cy="175")
+      assert length(Regex.scan(~r/class="tick"/, svg)) == 2
     end
 
     test "all-zero bars render with zero height" do

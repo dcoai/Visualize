@@ -3,9 +3,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @moduledoc """
     Phoenix LiveView function components for the common chart types (spec/10 §2).
 
-    Each component builds one complete `<svg>` from its assigns through the library's own
-    layers: `Visualize.Scale.apply/2` for every coordinate, `Visualize.Shape.generate/2`
-    for every path and `Visualize.Axis.render/1` for the axes.
+    Each component is a preset design of `Visualize.Chart.Presets` plus an assign mapping
+    (spec/14 §15, D-64): its assigns become a design and the rows the design's source binds
+    to, `Visualize.Chart.Frame` realises and draws the design, and the component prints the
+    elements the layer returns — the axes, every path, rectangle, circle and label — in the
+    markup spec/10 declares. Its template is the `<svg>` shell and the attribute order of
+    each mark, nothing more.
 
     ## Usage
 
@@ -26,7 +29,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     - Empty `data` renders the frame - the `<svg>` and, where the chart has them, its axes
       over a `[0, 1]` domain - with no marks. A domain whose ends coincide (one datum, or
-      every value zero) spans one unit from its value, so a single datum renders too.
+      every value zero) stays collapsed and maps to the middle of the axis (D-49, D-60).
     - `colors` is a scheme atom of `Visualize.Scale.Color.schemes/0`, whose colours are
       taken by index and cycled, or an explicit list of colours used as given. An unknown
       scheme or an empty list raises `ArgumentError`.
@@ -37,6 +40,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       reference with the literal as fallback so a stylesheet overrides it (D-55). A colour
       assign left `nil` takes the slot its documentation names.
     - `margin` is merged over the component's default, so `%{left: 60}` moves one side.
+    - The defaults below are `Visualize.Chart.Presets.defaults/1`.
 
     This module compiles only when `Phoenix.Component` is loaded: `phoenix_live_view` is an
     optional dependency, present in a host that has LiveView and never fetched otherwise.
@@ -44,11 +48,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.{Axis, Scale, Shape}
+    alias Visualize.Chart.Presets
     alias Visualize.Components.Support
 
-    @default_margin %{top: 20, right: 20, bottom: 30, left: 40}
-    @horizontal_margin %{top: 20, right: 20, bottom: 30, left: 100}
+    @line Presets.defaults(:line_chart)
+    @bar Presets.defaults(:bar_chart)
+    @horizontal Presets.defaults(:horizontal_bar_chart)
+    @pie Presets.defaults(:pie_chart)
+    @scatter Presets.defaults(:scatter_plot)
+    @area Presets.defaults(:area_chart)
+    @stacked Presets.defaults(:stacked_bar_chart)
 
     @doc """
     Renders a line chart: one series with bottom and left axes.
@@ -79,55 +88,45 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
-    attr(:width, :integer, default: 600)
-    attr(:height, :integer, default: 400)
-    attr(:margin, :map, default: @default_margin)
-    attr(:curve, :atom, default: :linear)
-    attr(:stroke, :string, default: nil)
-    attr(:stroke_width, :integer, default: 2)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
-    attr(:x_label, :string, default: nil)
-    attr(:y_label, :string, default: nil)
-    attr(:show_points, :boolean, default: false)
+    attr(:width, :integer, default: @line.width)
+    attr(:height, :integer, default: @line.height)
+    attr(:margin, :map, default: @line.margin)
+    attr(:curve, :atom, default: @line.curve)
+    attr(:stroke, :string, default: @line.stroke)
+    attr(:stroke_width, :integer, default: @line.stroke_width)
+    attr(:animate, :boolean, default: @line.animate)
+    attr(:class, :string, default: @line.class)
+    attr(:responsive, :boolean, default: @line.responsive)
+    attr(:theme, :any, default: @line.theme)
+    attr(:title, :string, default: @line.title)
+    attr(:description, :string, default: @line.description)
+    attr(:x_label, :string, default: @line.x_label)
+    attr(:y_label, :string, default: @line.y_label)
+    attr(:show_points, :boolean, default: @line.show_points)
 
     def line_chart(assigns) do
-      assigns = Support.rows(assigns)
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
-      x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
-
-      y_scale =
-        Scale.linear()
-        |> Scale.domain(Support.extent(assigns.data, assigns.y))
-        |> Scale.range([inner_height, 0])
-
-      x = fn d -> Scale.apply(x_scale, assigns.x.(d)) end
-      y = fn d -> Scale.apply(y_scale, assigns.y.(d)) end
-      line = Shape.line() |> Shape.x(x) |> Shape.y(y) |> Shape.curve(assigns.curve)
+      drawn = Support.draw(:line_chart, assigns)
+      [line | points] = Support.marks(drawn.group)
+      {x_title, y_title} = titles(Support.labels(drawn.group), assigns.x_label)
 
       points =
-        if assigns.show_points, do: Enum.map(assigns.data, &{fmt(x.(&1)), fmt(y.(&1))}), else: []
+        for mark <- points,
+            circle <- mark.children,
+            do: {fmt(circle.attrs.cx), fmt(circle.attrs.cy)}
 
       assigns =
         assign(assigns,
-          margin: margin,
-          inner_width: inner_width,
-          inner_height: inner_height,
-          path: Shape.generate(line, assigns.data),
+          margin: drawn.margin,
+          inner_height: drawn.plot.height,
+          path: Support.path(line),
           points: points,
-          stroke: Support.colour(assigns.stroke, theme, :series_1),
-          text: Support.css(theme, :text),
-          label_size: Support.css(theme, :label_size),
-          theme: theme,
-          ids: ids,
-          x_axis: axis(Axis.bottom(x_scale), theme),
-          y_axis: axis(Axis.left(y_scale), theme),
+          stroke: line.style.stroke,
+          x_title: x_title,
+          y_title: y_title,
+          theme: drawn.theme,
+          ids: drawn.ids,
+          x_axis: Support.axis(drawn.group, :bottom),
+          y_axis: Support.axis(drawn.group, :left),
           transition: Support.transition(assigns.animate)
         )
 
@@ -139,7 +138,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
           <path
-            :if={@data != []}
+            :if={@path}
             d={@path}
             fill="none"
             stroke={@stroke}
@@ -148,24 +147,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
           />
           <circle :for={{cx, cy} <- @points} cx={cx} cy={cy} r="4" fill={@stroke} {@transition} />
           <text
-            :if={@x_label}
-            x={fmt(@inner_width / 2)}
-            y={@inner_height + @margin.bottom - 5}
-            text-anchor="middle"
-            font-size={@label_size}
-            fill={@text}
+            :if={@x_title}
+            x={@x_title.x}
+            y={@x_title.y}
+            text-anchor={@x_title.anchor}
+            font-size={@x_title.font_size}
+            fill={@x_title.fill}
             class="axis-label"
-          >{@x_label}</text>
+          >{@x_title.text}</text>
           <text
-            :if={@y_label}
-            transform="rotate(-90)"
-            x={fmt(-@inner_height / 2)}
-            y={-@margin.left + 15}
-            text-anchor="middle"
-            font-size={@label_size}
-            fill={@text}
+            :if={@y_title}
+            transform={@y_title.transform}
+            x={@y_title.x}
+            y={@y_title.y}
+            text-anchor={@y_title.anchor}
+            font-size={@y_title.font_size}
+            fill={@y_title.fill}
             class="axis-label"
-          >{@y_label}</text>
+          >{@y_title.text}</text>
         </g>
       </svg>
       """
@@ -190,59 +189,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
-    attr(:width, :integer, default: 600)
-    attr(:height, :integer, default: 400)
-    attr(:margin, :map, default: @default_margin)
-    attr(:fill, :string, default: nil)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
-    attr(:padding, :float, default: 0.1)
+    attr(:width, :integer, default: @bar.width)
+    attr(:height, :integer, default: @bar.height)
+    attr(:margin, :map, default: @bar.margin)
+    attr(:fill, :string, default: @bar.fill)
+    attr(:animate, :boolean, default: @bar.animate)
+    attr(:class, :string, default: @bar.class)
+    attr(:responsive, :boolean, default: @bar.responsive)
+    attr(:theme, :any, default: @bar.theme)
+    attr(:title, :string, default: @bar.title)
+    attr(:description, :string, default: @bar.description)
+    attr(:padding, :float, default: @bar.padding)
 
     def bar_chart(assigns) do
-      assigns = Support.rows(assigns)
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
-
-      x_scale =
-        Scale.band()
-        |> Scale.domain(Enum.map(assigns.data, assigns.x))
-        |> Scale.range([0, inner_width])
-        |> Scale.padding(assigns.padding)
-
-      y_scale =
-        Scale.linear()
-        |> Scale.domain(Support.from_zero(assigns.data, assigns.y))
-        |> Scale.range([inner_height, 0])
-
-      bandwidth = Scale.bandwidth(x_scale)
-
-      bars =
-        for d <- assigns.data do
-          y = Scale.apply(y_scale, assigns.y.(d))
-
-          %{
-            x: fmt(Scale.apply(x_scale, assigns.x.(d))),
-            y: fmt(y),
-            w: fmt(bandwidth),
-            h: fmt(inner_height - y)
-          }
-        end
+      drawn = Support.draw(:bar_chart, assigns)
+      [bars] = Support.marks(drawn.group)
 
       assigns =
         assign(assigns,
-          margin: margin,
-          inner_height: inner_height,
-          bars: bars,
-          fill: Support.colour(assigns.fill, theme, :series_1),
-          theme: theme,
-          ids: ids,
-          x_axis: axis(Axis.bottom(x_scale), theme),
-          y_axis: axis(Axis.left(y_scale), theme),
+          margin: drawn.margin,
+          inner_height: drawn.plot.height,
+          bars: Enum.map(bars.children, &rect/1),
+          fill: bars.style.fill,
+          theme: drawn.theme,
+          ids: drawn.ids,
+          x_axis: Support.axis(drawn.group, :bottom),
+          y_axis: Support.axis(drawn.group, :left),
           transition: Support.transition(assigns.animate)
         )
 
@@ -280,56 +252,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
-    attr(:width, :integer, default: 600)
-    attr(:height, :integer, default: 400)
-    attr(:margin, :map, default: @horizontal_margin)
-    attr(:fill, :string, default: nil)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
-    attr(:padding, :float, default: 0.1)
+    attr(:width, :integer, default: @horizontal.width)
+    attr(:height, :integer, default: @horizontal.height)
+    attr(:margin, :map, default: @horizontal.margin)
+    attr(:fill, :string, default: @horizontal.fill)
+    attr(:animate, :boolean, default: @horizontal.animate)
+    attr(:class, :string, default: @horizontal.class)
+    attr(:responsive, :boolean, default: @horizontal.responsive)
+    attr(:theme, :any, default: @horizontal.theme)
+    attr(:title, :string, default: @horizontal.title)
+    attr(:description, :string, default: @horizontal.description)
+    attr(:padding, :float, default: @horizontal.padding)
 
     def horizontal_bar_chart(assigns) do
-      assigns = Support.rows(assigns)
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-      {margin, inner_width, inner_height} = Support.frame(assigns, @horizontal_margin)
-
-      y_scale =
-        Scale.band()
-        |> Scale.domain(Enum.map(assigns.data, assigns.y))
-        |> Scale.range([0, inner_height])
-        |> Scale.padding(assigns.padding)
-
-      x_scale =
-        Scale.linear()
-        |> Scale.domain(Support.from_zero(assigns.data, assigns.x))
-        |> Scale.range([0, inner_width])
-
-      bandwidth = Scale.bandwidth(y_scale)
-
-      bars =
-        for d <- assigns.data do
-          %{
-            y: fmt(Scale.apply(y_scale, assigns.y.(d))),
-            w: fmt(Scale.apply(x_scale, assigns.x.(d))),
-            h: fmt(bandwidth)
-          }
-        end
+      drawn = Support.draw(:horizontal_bar_chart, assigns)
+      [bars] = Support.marks(drawn.group)
 
       assigns =
         assign(assigns,
-          margin: margin,
-          inner_height: inner_height,
-          bars: bars,
-          fill: Support.colour(assigns.fill, theme, :series_1),
-          theme: theme,
-          ids: ids,
-          x_axis: axis(Axis.bottom(x_scale), theme),
-          y_axis: axis(Axis.left(y_scale), theme),
+          margin: drawn.margin,
+          inner_height: drawn.plot.height,
+          bars: Enum.map(bars.children, &rect/1),
+          fill: bars.style.fill,
+          theme: drawn.theme,
+          ids: drawn.ids,
+          x_axis: Support.axis(drawn.group, :bottom),
+          y_axis: Support.axis(drawn.group, :left),
           transition: Support.transition(assigns.animate)
         )
 
@@ -342,7 +290,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <g class="y-axis">{@y_axis}</g>
           <rect
             :for={bar <- @bars}
-            x="0"
+            x={bar.x}
             y={bar.y}
             width={bar.w}
             height={bar.h}
@@ -377,57 +325,47 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     attr(:data, :any, required: true)
     attr(:value, :any, required: true)
-    attr(:label, :any, default: nil)
-    attr(:width, :integer, default: 400)
-    attr(:height, :integer, default: 400)
-    attr(:inner_radius, :integer, default: 0)
-    attr(:outer_radius, :integer, default: nil)
-    attr(:pad_angle, :float, default: 0.02)
-    attr(:colors, :any, default: :category10)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
-    attr(:show_labels, :boolean, default: true)
+    attr(:label, :any, default: @pie.label)
+    attr(:width, :integer, default: @pie.width)
+    attr(:height, :integer, default: @pie.height)
+    attr(:inner_radius, :integer, default: @pie.inner_radius)
+    attr(:outer_radius, :integer, default: @pie.outer_radius)
+    attr(:pad_angle, :float, default: @pie.pad_angle)
+    attr(:colors, :any, default: @pie.colors)
+    attr(:animate, :boolean, default: @pie.animate)
+    attr(:class, :string, default: @pie.class)
+    attr(:responsive, :boolean, default: @pie.responsive)
+    attr(:theme, :any, default: @pie.theme)
+    attr(:title, :string, default: @pie.title)
+    attr(:description, :string, default: @pie.description)
+    attr(:show_labels, :boolean, default: @pie.show_labels)
 
     def pie_chart(assigns) do
-      assigns = Support.rows(assigns)
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-      outer_radius = assigns.outer_radius || min(assigns.width, assigns.height) / 2 - 10
-      pie = Shape.pie() |> Shape.value(assigns.value) |> Shape.pad_angle(assigns.pad_angle)
-
-      arc =
-        Shape.arc()
-        |> Shape.inner_radius(assigns.inner_radius)
-        |> Shape.outer_radius(outer_radius)
-
-      arcs = Shape.generate(pie, assigns.data)
-      palette = Support.palette(assigns.colors, length(arcs))
-      label = if assigns.show_labels, do: assigns.label
+      drawn = Support.draw(:pie_chart, assigns)
+      [arcs] = Support.marks(drawn.group)
+      {paths, texts} = Enum.split_with(arcs.children, &(&1.type == :path))
 
       slices =
-        for {a, i} <- Enum.with_index(arcs) do
-          {x, y} = Shape.Arc.centroid(arc, a)
-
+        Enum.zip_with(paths, texts ++ List.duplicate(nil, length(paths)), fn path, text ->
           %{
-            d: Shape.generate(arc, a),
-            fill: Scale.apply(palette, i),
-            label: label && label.(a.data),
-            x: fmt(x),
-            y: fmt(y)
+            d: Support.d(path),
+            fill: path.style.fill,
+            label: if(text && text.content != "", do: text.content),
+            x: text && fmt(text.attrs.x),
+            y: text && fmt(text.attrs.y)
           }
-        end
+        end)
 
       assigns =
         assign(assigns,
           slices: slices,
-          theme: theme,
-          ids: ids,
-          background: Support.css(theme, :background),
-          label_size: Support.css(theme, :label_size),
+          centre: {fmt(drawn.plot.width / 2), fmt(drawn.plot.height / 2)},
+          stroke: arcs.style.stroke,
+          stroke_width: arcs.style.stroke_width,
+          theme: drawn.theme,
+          ids: drawn.ids,
+          background: Support.css(drawn.theme, :background),
+          label_size: Support.css(drawn.theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
 
@@ -435,9 +373,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
         <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
-        <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
+        <g transform={"translate(#{elem(@centre, 0)}, #{elem(@centre, 1)})"}>
           <%= for slice <- @slices do %>
-            <path d={slice.d} fill={slice.fill} stroke={@background} stroke-width="2" {@transition} />
+            <path d={slice.d} fill={slice.fill} stroke={@stroke} stroke-width={@stroke_width} {@transition} />
             <text
               :if={slice.label}
               x={slice.x}
@@ -472,53 +410,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
-    attr(:width, :integer, default: 600)
-    attr(:height, :integer, default: 400)
-    attr(:margin, :map, default: @default_margin)
-    attr(:fill, :string, default: nil)
-    attr(:size, :any, default: 5)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
+    attr(:width, :integer, default: @scatter.width)
+    attr(:height, :integer, default: @scatter.height)
+    attr(:margin, :map, default: @scatter.margin)
+    attr(:fill, :string, default: @scatter.fill)
+    attr(:size, :any, default: @scatter.size)
+    attr(:animate, :boolean, default: @scatter.animate)
+    attr(:class, :string, default: @scatter.class)
+    attr(:responsive, :boolean, default: @scatter.responsive)
+    attr(:theme, :any, default: @scatter.theme)
+    attr(:title, :string, default: @scatter.title)
+    attr(:description, :string, default: @scatter.description)
 
     def scatter_plot(assigns) do
-      assigns = Support.rows(assigns)
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
+      drawn = Support.draw(:scatter_plot, assigns)
+      [points] = Support.marks(drawn.group)
 
-      x_scale =
-        Scale.linear()
-        |> Scale.domain(Support.extent(assigns.data, assigns.x))
-        |> Scale.range([0, inner_width])
-
-      y_scale =
-        Scale.linear()
-        |> Scale.domain(Support.extent(assigns.data, assigns.y))
-        |> Scale.range([inner_height, 0])
-
-      points =
-        for d <- assigns.data do
-          %{
-            cx: fmt(Scale.apply(x_scale, assigns.x.(d))),
-            cy: fmt(Scale.apply(y_scale, assigns.y.(d))),
-            r: fmt(radius(assigns.size, d))
-          }
-        end
+      circles =
+        for %{attrs: %{cx: cx, cy: cy, r: r}} <- points.children,
+            do: %{cx: fmt(cx), cy: fmt(cy), r: fmt(r)}
 
       assigns =
         assign(assigns,
-          margin: margin,
-          inner_height: inner_height,
-          points: points,
-          fill: Support.colour(assigns.fill, theme, :series_1),
-          theme: theme,
-          ids: ids,
-          x_axis: axis(Axis.bottom(x_scale), theme),
-          y_axis: axis(Axis.left(y_scale), theme),
+          margin: drawn.margin,
+          inner_height: drawn.plot.height,
+          points: circles,
+          fill: points.style.fill,
+          opacity: points.style.opacity,
+          theme: drawn.theme,
+          ids: drawn.ids,
+          x_axis: Support.axis(drawn.group, :bottom),
+          y_axis: Support.axis(drawn.group, :left),
           transition: Support.transition(assigns.animate)
         )
 
@@ -535,7 +457,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             cy={point.cy}
             r={point.r}
             fill={@fill}
-            opacity="0.7"
+            opacity={@opacity}
             {@transition}
           />
         </g>
@@ -563,57 +485,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:y, :any, required: true)
-    attr(:width, :integer, default: 600)
-    attr(:height, :integer, default: 400)
-    attr(:margin, :map, default: @default_margin)
-    attr(:fill, :string, default: nil)
-    attr(:fill_opacity, :float, default: 0.3)
-    attr(:stroke, :string, default: nil)
-    attr(:stroke_width, :integer, default: 2)
-    attr(:curve, :atom, default: :linear)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
+    attr(:width, :integer, default: @area.width)
+    attr(:height, :integer, default: @area.height)
+    attr(:margin, :map, default: @area.margin)
+    attr(:fill, :string, default: @area.fill)
+    attr(:fill_opacity, :float, default: @area.fill_opacity)
+    attr(:stroke, :string, default: @area.stroke)
+    attr(:stroke_width, :integer, default: @area.stroke_width)
+    attr(:curve, :atom, default: @area.curve)
+    attr(:animate, :boolean, default: @area.animate)
+    attr(:class, :string, default: @area.class)
+    attr(:responsive, :boolean, default: @area.responsive)
+    attr(:theme, :any, default: @area.theme)
+    attr(:title, :string, default: @area.title)
+    attr(:description, :string, default: @area.description)
 
     def area_chart(assigns) do
-      assigns = Support.rows(assigns)
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
-      x_scale = Support.x_scale(assigns.data, assigns.x, inner_width)
-
-      y_scale =
-        Scale.linear()
-        |> Scale.domain(Support.from_zero(assigns.data, assigns.y))
-        |> Scale.range([inner_height, 0])
-
-      x = fn d -> Scale.apply(x_scale, assigns.x.(d)) end
-      y = fn d -> Scale.apply(y_scale, assigns.y.(d)) end
-
-      area =
-        Shape.area()
-        |> Shape.x(x)
-        |> Shape.y0(inner_height)
-        |> Shape.y1(y)
-        |> Shape.curve(assigns.curve)
-
-      line = Shape.line() |> Shape.x(x) |> Shape.y(y) |> Shape.curve(assigns.curve)
+      drawn = Support.draw(:area_chart, assigns)
+      [area, line] = Support.marks(drawn.group)
 
       assigns =
         assign(assigns,
-          margin: margin,
-          inner_height: inner_height,
-          area_path: Shape.generate(area, assigns.data),
-          line_path: Shape.generate(line, assigns.data),
-          fill: Support.colour(assigns.fill, theme, :series_1),
-          stroke: Support.colour(assigns.stroke, theme, :series_1),
-          theme: theme,
-          ids: ids,
-          x_axis: axis(Axis.bottom(x_scale), theme),
-          y_axis: axis(Axis.left(y_scale), theme),
+          margin: drawn.margin,
+          inner_height: drawn.plot.height,
+          area_path: Support.path(area),
+          line_path: Support.path(line),
+          fill: area.style.fill,
+          stroke: line.style.stroke,
+          theme: drawn.theme,
+          ids: drawn.ids,
+          x_axis: Support.axis(drawn.group, :bottom),
+          y_axis: Support.axis(drawn.group, :left),
           transition: Support.transition(assigns.animate)
         )
 
@@ -625,14 +527,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
           <path
-            :if={@data != []}
+            :if={@area_path}
             d={@area_path}
             fill={@fill}
             fill-opacity={@fill_opacity}
             {@transition}
           />
           <path
-            :if={@data != []}
+            :if={@line_path}
             d={@line_path}
             fill="none"
             stroke={@stroke}
@@ -646,7 +548,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     Renders a stacked bar chart: one bar per category, one segment per key, stacked by
-    `Visualize.Shape.stack/0`.
+    the `:stack` transform of spec/14 §5.4.
 
     ## Assigns
 
@@ -666,62 +568,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:data, :any, required: true)
     attr(:x, :any, required: true)
     attr(:keys, :list, required: true)
-    attr(:width, :integer, default: 600)
-    attr(:height, :integer, default: 400)
-    attr(:margin, :map, default: @default_margin)
-    attr(:colors, :any, default: :category10)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
-    attr(:padding, :float, default: 0.1)
+    attr(:width, :integer, default: @stacked.width)
+    attr(:height, :integer, default: @stacked.height)
+    attr(:margin, :map, default: @stacked.margin)
+    attr(:colors, :any, default: @stacked.colors)
+    attr(:animate, :boolean, default: @stacked.animate)
+    attr(:class, :string, default: @stacked.class)
+    attr(:responsive, :boolean, default: @stacked.responsive)
+    attr(:theme, :any, default: @stacked.theme)
+    attr(:title, :string, default: @stacked.title)
+    attr(:description, :string, default: @stacked.description)
+    attr(:padding, :float, default: @stacked.padding)
 
     def stacked_bar_chart(assigns) do
-      assigns = Support.rows(assigns)
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-      {margin, inner_width, inner_height} = Support.frame(assigns, @default_margin)
-      series = Shape.generate(Shape.stack() |> Shape.keys(assigns.keys), assigns.data)
-      tops = for s <- series, p <- s.points, do: p.y1
-
-      x_scale =
-        Scale.band()
-        |> Scale.domain(Enum.map(assigns.data, assigns.x))
-        |> Scale.range([0, inner_width])
-        |> Scale.padding(assigns.padding)
-
-      y_scale =
-        Scale.linear()
-        |> Scale.domain(Support.span([0, max(0, Enum.max(tops, fn -> 0 end))]))
-        |> Scale.range([inner_height, 0])
-
-      bandwidth = Scale.bandwidth(x_scale)
-      palette = Support.palette(assigns.colors, length(assigns.keys))
-
-      bars =
-        for {s, i} <- Enum.with_index(series), p <- s.points do
-          y1 = Scale.apply(y_scale, p.y1)
-
-          %{
-            x: fmt(Scale.apply(x_scale, assigns.x.(p.data))),
-            y: fmt(y1),
-            w: fmt(bandwidth),
-            h: fmt(Scale.apply(y_scale, p.y0) - y1),
-            fill: Scale.apply(palette, i)
-          }
-        end
+      drawn = Support.draw(:stacked_bar_chart, assigns)
+      [segments] = Support.marks(drawn.group)
 
       assigns =
         assign(assigns,
-          margin: margin,
-          inner_height: inner_height,
-          bars: bars,
-          theme: theme,
-          ids: ids,
-          x_axis: axis(Axis.bottom(x_scale), theme),
-          y_axis: axis(Axis.left(y_scale), theme),
+          margin: drawn.margin,
+          inner_height: drawn.plot.height,
+          bars: Enum.map(segments.children, &Map.put(rect(&1), :fill, &1.style.fill)),
+          theme: drawn.theme,
+          ids: drawn.ids,
+          x_axis: Support.axis(drawn.group, :bottom),
+          y_axis: Support.axis(drawn.group, :left),
           transition: Support.transition(assigns.animate)
         )
 
@@ -746,12 +617,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       """
     end
 
-    # `Visualize.Axis.render/1` is a plain string; `raw/1` marks it safe for HEEx.
-    defp axis(axis, theme), do: Phoenix.HTML.raw(Axis.render(Axis.theme(axis, theme)))
+    # The frame's labels as the x and y axis titles: the x title first when it is given.
+    defp titles(labels, nil), do: {nil, List.first(labels)}
+    defp titles([x | rest], _x_label), do: {x, List.first(rest)}
+
+    # A rect element's geometry as the template prints it.
+    defp rect(%{attrs: %{x: x, y: y, width: w, height: h}}),
+      do: %{x: fmt(x), y: fmt(y), w: fmt(w), h: fmt(h)}
 
     defp fmt(number), do: Support.fmt(number)
-
-    defp radius(size, _d) when is_number(size), do: size
-    defp radius(size, d) when is_function(size, 1), do: size.(d)
   end
 end

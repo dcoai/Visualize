@@ -115,6 +115,9 @@ defmodule Visualize.Chart.Frame.Scales do
   end
 
   defp values(%Var{name: name}, _rows), do: Style.unresolved!(name)
+  # A constant contributes its number once the mark has a row to draw it on; with none it
+  # contributes nothing, so an empty source leaves the unit domain (spec/14 §4.3).
+  defp values(_n, []), do: []
   defp values(n, _rows) when is_number(n), do: [n]
   defp values({:field, field}, rows), do: column(rows, field)
   defp values(field, rows) when is_atom(field), do: column(rows, field)
@@ -303,6 +306,10 @@ defmodule Visualize.Chart.Frame.Scales do
       raise ArgumentError,
             "scale #{inspect(name)}: #{inspect(scheme)} is not a scheme of " <>
               "Visualize.Scale.Color.schemes/0"
+  end
+
+  defp range(_kind, name, [], _plot, _theme, _axes) do
+    raise ArgumentError, "scale #{inspect(name)}: an empty range has no value to map to"
   end
 
   defp range(_kind, _name, list, _plot, _theme, _axes) when is_list(list), do: list
