@@ -17,6 +17,13 @@ defmodule Visualize.Chart.Build do
   same way against `Visualize.Chart.Schema.channels/1` and `Visualize.Chart.Schema.options/1`
   of its type.
 
+  The mark, transform and scale functions are not written here: they are generated from
+  the schema at compile time (spec/14 §16.6, D-79), one documented function per mark type
+  (`line/3`, `rect/3`, …), per transform op (`bin/3`, `stack/3`, `treemap/2`, …) and per
+  scale kind (`linear_scale/2`, `time_scale/2`, `band_scale/2`, … — every kind takes the
+  suffix because `band` is a mark type as well). A type added to the schema grows the
+  builder with no edit to it; `mark/4` and `scale/3` remain for a type that is a value.
+
   `var/2` declares a variable and its default under the design's `vars`;
   `Visualize.Chart.var/1` builds the `%Visualize.Chart.Var{}` term that *uses* one. They
   are different modules and different arities, so a caller may import both.
@@ -29,10 +36,10 @@ defmodule Visualize.Chart.Build do
       ...>     chart(meta: %{name: "Uptime"}),
       ...>     source(:primary, [:t, :v]),
       ...>     cartesian(400, 200),
-      ...>     scale(:x, :time),
-      ...>     scale(:y, :linear, domain: [0, :auto]),
+      ...>     time_scale(:x),
+      ...>     linear_scale(:y, domain: [0, :auto]),
       ...>     axis(:x, :bottom, ticks: 4),
-      ...>     mark(:line, :primary, %{x: :t, y: :v}),
+      ...>     line(:primary, %{x: :t, y: :v}),
       ...>     title(["Uptime"])
       ...>   ])
       iex> design.marks
@@ -53,6 +60,10 @@ defmodule Visualize.Chart.Build do
 
   @typedoc "A node's remaining keys, as a keyword list or a map."
   @type opts :: keyword() | map()
+
+  # The mark, transform and scale functions are the schema's, emitted at compile time
+  # (spec/14 §16.6, D-79).
+  use Visualize.Chart.Build.Generate
 
   # -- the design and its declarations (spec/14 §16.2) ------------------------------------
 
@@ -238,46 +249,10 @@ defmodule Visualize.Chart.Build do
   The `:data` node of a mark reading `source` (spec/14 §5.4) — a node, not a fragment.
 
   It carries no `transforms` key, so a mark that reads its source directly and one built
-  by `from/1` alone are the same map; the appenders below add the steps.
+  by `from/1` alone are the same map; the generated appenders — one per transform op (spec/14 §16.6) — add the steps.
   """
   @spec from(atom()) :: map()
   def from(source) when is_atom(source), do: %{source: source}
-
-  @doc "As `bin/3` with no options."
-  @spec bin(data(), atom()) :: map()
-  def bin(data, field), do: bin(data, field, [])
-
-  @doc "A `:bin` step over `field` appended to the data node (spec/14 §5.4.1)."
-  @spec bin(data(), atom(), opts()) :: map()
-  def bin(data, field, opts), do: step(data, %{op: :bin, field: field}, opts)
-
-  @doc "As `filter/3` with no options."
-  @spec filter(data(), atom()) :: map()
-  def filter(data, field), do: filter(data, field, [])
-
-  @doc """
-  A `:filter` step over `field` appended to the data node (spec/14 §5.4.1).
-
-  `test:` and `value:` are the step's remaining keys.
-  """
-  @spec filter(data(), atom(), opts()) :: map()
-  def filter(data, field, opts), do: step(data, %{op: :filter, field: field}, opts)
-
-  @doc "As `stack/3` with no options."
-  @spec stack(data(), [atom()]) :: map()
-  def stack(data, fields), do: stack(data, fields, [])
-
-  @doc "A `:stack` step over the series `fields` appended to the data node (spec/14 §5.4.1)."
-  @spec stack(data(), [atom()], opts()) :: map()
-  def stack(data, fields, opts), do: step(data, %{op: :stack, fields: fields}, opts)
-
-  @doc "As `treemap/2` with no options."
-  @spec treemap(data()) :: map()
-  def treemap(data), do: treemap(data, [])
-
-  @doc "A `:treemap` step appended to the data node (spec/14 §5.4.2)."
-  @spec treemap(data(), opts()) :: map()
-  def treemap(data, opts), do: step(data, %{op: :treemap}, opts)
 
   # -- the schema's word on every key -----------------------------------------------------
 
