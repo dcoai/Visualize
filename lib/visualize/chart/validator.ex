@@ -39,6 +39,7 @@ defmodule Visualize.Chart.Validator do
           | {:unbound, :source, atom()}
           | {:missing_field, atom()}
           | :conflict
+          | :cycle
 
   @type error :: {path(), reason()}
 
@@ -49,7 +50,7 @@ defmodule Visualize.Chart.Validator do
   @doc "`:ok`, or every fault of the design ordered by path."
   @spec validate(term()) :: :ok | {:error, [error(), ...]}
   def validate(map) when is_map(map) and not is_struct(map) do
-    case node(:design, map, [], context(map)) do
+    case node(:design, map, [], context(map)) ++ cycles(map) do
       [] -> :ok
       errors -> {:error, Enum.sort_by(errors, &elem(&1, 0))}
     end
@@ -60,6 +61,39 @@ defmodule Visualize.Chart.Validator do
   @doc "One error as `path: reason` in words; the path in `marks[1].channels.y` form."
   @spec format(error()) :: String.t()
   def format({path, reason}), do: "#{format_path(path)}: #{words(reason)}"
+
+  # -- style derivation (spec/14 §3.5) --------------------------------------------------
+
+  # A style that reaches itself through `extends` is `:cycle` at its own path; a style that
+  # merely extends one that is on a cycle is not at fault and is not reported.
+  defp cycles(map) do
+    case map[:styles] do
+      styles when is_map(styles) and not is_struct(styles) ->
+        for {name, _node} <- styles,
+            name?(name),
+            walk(styles, parent(styles, name), name, []),
+            do: {[:styles, name], :cycle}
+
+      _other ->
+        []
+    end
+  end
+
+  defp walk(_styles, nil, _target, _seen), do: false
+  defp walk(_styles, target, target, _seen), do: true
+
+  defp walk(styles, name, target, seen) do
+    if name in seen,
+      do: false,
+      else: walk(styles, parent(styles, name), target, [name | seen])
+  end
+
+  defp parent(styles, name) do
+    case Map.get(styles, name) do
+      %{extends: parent} -> if name?(parent), do: parent
+      _other -> nil
+    end
+  end
 
   # -- context: what the design declares -----------------------------------------------
 
@@ -436,6 +470,8 @@ defmodule Visualize.Chart.Validator do
 
   defp words({:missing_field, field}), do: "has no field #{inspect(field)}"
   defp words(:conflict), do: "is declared differently by two fragments"
+
+  defp words(:cycle), do: "extends itself, directly or through a chain of `extends`"
 
   defp type_words(:integer), do: "an integer"
   defp type_words(:number), do: "a number"

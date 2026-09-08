@@ -242,6 +242,7 @@ defmodule Visualize.Chart.Schema do
 
   defp design_node(:style) do
     [
+      spec(:extends, {:ref, :style}, :style),
       spec(:fill, :colour, :style),
       spec(:stroke, :colour, :style),
       spec(:stroke_width, :size, :style),

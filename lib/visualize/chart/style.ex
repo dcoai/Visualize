@@ -11,6 +11,10 @@ defmodule Visualize.Chart.Style do
   scale when the frame declares one. The frame's furniture and the marks share this
   resolver.
 
+  A style is looked up by name with its `extends` chain flattened first — the parent's keys,
+  the child's over them (spec/14 §3.5, D-80) — so no consumer sees that key and a resolved
+  node never carries it. A cycle raises `ArgumentError`; the validator reports it by path.
+
   ## Examples
 
       iex> theme = Visualize.Theme.default()
@@ -117,11 +121,33 @@ defmodule Visualize.Chart.Style do
   end
 
   @doc false
-  # The style node of a name, or the empty node when nothing declares it.
+  # The style node of a name with its `extends` chain flattened — the parent's keys first,
+  # the child's over them (spec/14 §3.5) — or the empty node when nothing declares it.
   @spec node(%{atom() => map()}, atom() | nil) :: map()
   def node(_styles, nil), do: %{}
   def node(_styles, %Var{name: name}), do: unresolved!(name)
-  def node(styles, name), do: Map.get(styles, name, %{})
+  def node(styles, name), do: flatten(styles, name, [])
+
+  defp flatten(_styles, %Var{name: name}, _seen), do: unresolved!(name)
+
+  defp flatten(styles, name, seen) do
+    if name in seen, do: cycle!(name)
+
+    node = Map.get(styles, name, %{})
+
+    case Map.fetch(node, :extends) do
+      :error ->
+        node
+
+      {:ok, parent} ->
+        Map.merge(flatten(styles, parent, [name | seen]), Map.delete(node, :extends))
+    end
+  end
+
+  defp cycle!(name) do
+    raise ArgumentError,
+          "style #{inspect(name)} extends itself: a cycle of `extends` (spec/14 §3.5)"
+  end
 
   @doc false
   # One style value resolved: a slot through the theme, a literal as it is.

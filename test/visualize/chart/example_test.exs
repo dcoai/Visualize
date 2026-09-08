@@ -2,7 +2,8 @@ defmodule Visualize.Chart.ExampleTest do
   @moduledoc """
   The worked example of spec/14 §13, read from the document itself so the two cannot
   drift: it validates, round-trips as a map and as JSON, its JSON carries the tagged
-  terms of §11.2, and it renders over the sources the section names — through
+  terms of §11.2, its `Visualize.Chart.Build` pipeline (§16) folds to the identical map,
+  and it renders over the sources the section names — through
   `Visualize.Chart.apply/2` and `Visualize.Chart.render/2` on SVG and canvas, and through
   `Visualize.Chart.compile/2` (#72, D-67).
   """
@@ -13,19 +14,31 @@ defmodule Visualize.Chart.ExampleTest do
 
   @spec_path Path.expand("../../../spec/14-declarative-chart.md", __DIR__)
 
-  defp example do
-    [_, rest] = @spec_path |> File.read!() |> String.split("```elixir\n", parts: 2)
-    [block | _] = String.split(rest, "\n```", parts: 2)
-
-    {design, _} = Code.eval_string(block)
-    design
+  # The `elixir` blocks of the document, in order: §13's literal design first, its `Build`
+  # pipeline second (§16), then the builder's own fragments, which are not whole designs.
+  defp blocks do
+    [_ | rest] = @spec_path |> File.read!() |> String.split("```elixir\n")
+    for block <- rest, do: block |> String.split("\n```", parts: 2) |> hd()
   end
+
+  defp eval(block) do
+    {value, _binding} = Code.eval_string(block)
+    value
+  end
+
+  defp example, do: blocks() |> Enum.at(0) |> eval()
+  defp pipeline, do: blocks() |> Enum.at(1) |> eval()
 
   defp at(h), do: DateTime.add(~U[2026-09-08 00:00:00Z], h * 3600, :second)
 
   defp idle, do: for({v, h} <- Enum.with_index([97.5, 99.1, 98.2, 99.9]), do: %{t: at(h), v: v})
   defp deploys, do: [%{at: at(1), sha: "a1b2c3"}, %{at: at(3), sha: "d4e5f6"}]
   defp sources, do: %{primary: idle(), deploys: deploys()}
+
+  test "the Build pipeline beside the literal folds to the identical map" do
+    assert {:ok, built} = pipeline()
+    assert built == example()
+  end
 
   test "validates and round-trips" do
     design = example()
