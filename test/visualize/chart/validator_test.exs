@@ -70,6 +70,7 @@ defmodule Visualize.Chart.ValidatorTest do
           transforms: [%{op: :bin, field: :v, thresholds: 20, as: :count}]
         },
         channels: %{value: :count},
+        scales: %{color: :color},
         options: %{inner_radius: 10, outer_radius: 50}
       }
     ],
@@ -103,6 +104,7 @@ defmodule Visualize.Chart.ValidatorTest do
     data: [:marks, 2, :data],
     transform: [:marks, 2, :data, :transforms, 0],
     channels: [:marks, 2, :channels],
+    mark_scales: [:marks, 2, :scales],
     options: [:marks, 2, :options],
     mark_label: [:marks, 1, :label]
   }
@@ -267,7 +269,8 @@ defmodule Visualize.Chart.ValidatorTest do
       for path <- [
             [:frame, :axes, 0, :scale],
             [:frame, :legend, :scale],
-            [:frame, :viewport, :scale]
+            [:frame, :viewport, :scale],
+            [:marks, 2, :scales, :color]
           ] do
         assert errors(put_at(@full, path, :nope)) == [{path, {:undeclared, :scale, :nope}}]
       end

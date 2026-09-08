@@ -16,14 +16,12 @@ defmodule Visualize.Chart.ApplyTest do
 
   @spec_path Path.expand("../../../spec/14-declarative-chart.md", __DIR__)
 
-  # The worked example of spec/14 §13, read from the document itself, without its third
-  # mark: that histogram shows the transform construct and bins `v` onto the time axis,
-  # which a render cannot place.
+  # The worked example of spec/14 §13, read from the document itself.
   defp example do
     [_, rest] = @spec_path |> File.read!() |> String.split("```elixir\n", parts: 2)
     [block | _] = String.split(rest, "\n```", parts: 2)
     {design, _} = Code.eval_string(block)
-    Map.update!(design, :marks, &Enum.take(&1, 2))
+    design
   end
 
   defp at(h), do: DateTime.add(~U[2026-09-08 00:00:00Z], h * 3600, :second)
@@ -78,6 +76,7 @@ defmodule Visualize.Chart.ApplyTest do
       svg_a = Chart.render(a)
       svg_b = Chart.render(b)
       assert svg_a =~ ~s(class="mark mark-line") and svg_a =~ "deploy a1b2c3"
+      assert svg_a =~ ~s(class="mark mark-rect")
       assert svg_b =~ ~s(class="mark mark-line") and svg_b =~ "Uptime — %"
       refute svg_a == svg_b
 

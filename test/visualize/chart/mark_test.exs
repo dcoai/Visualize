@@ -322,6 +322,20 @@ defmodule Visualize.Chart.MarkTest do
       assert circle.attrs == %{cx: 0, cy: 50, r: 3}
     end
 
+    test "a mark's scales node places a channel family through the scale it names (D-67)" do
+      scales = Map.put(@frame.scales, :count, %{kind: :linear, domain: [0, 10], range: [0, 100]})
+
+      chart =
+        chart(
+          %{type: :rect, channels: %{x0: 0, x1: :v, y0: :t, y1: :t}, scales: %{x: :count}},
+          %{frame: Map.put(@frame, :scales, scales)}
+        )
+
+      frame = Frame.new(chart, sources: @sources)
+      [rect | _] = Mark.generate(frame, hd(chart.marks), sources: @sources).children
+      assert rect.attrs == %{x: 0, y: 200.0, width: 40.0, height: 0.0}
+    end
+
     test "rows/3 runs the mark's pipeline and is [] for an unbound source" do
       chart =
         chart(%{

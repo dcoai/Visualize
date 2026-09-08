@@ -59,11 +59,17 @@ defmodule Visualize.Chart.Frame.Scales do
   def channel_scales(_cartesian_or_facet), do: @cartesian
 
   @doc false
-  # The scale a channel of a mark type names in a frame kind, or `nil` when it names
-  # none (spec/14 §4.3, §5.2).
-  @spec scale_for(atom(), atom(), atom()) :: atom() | nil
-  def scale_for(_kind, type, :value) when type in @unscaled_value, do: nil
-  def scale_for(kind, _type, channel), do: Map.get(channel_scales(kind), channel)
+  # The scale a channel of a mark names in a frame kind — the kind's table, renamed by
+  # the mark's `scales` node — or `nil` when it names none (spec/14 §4.3, §5.1, §5.2).
+  @spec scale_for(atom(), map(), atom()) :: atom() | nil
+  def scale_for(_kind, %{type: type}, :value) when type in @unscaled_value, do: nil
+
+  def scale_for(kind, mark, channel) do
+    case Map.get(channel_scales(kind), channel) do
+      nil -> nil
+      name -> Map.get(Map.get(mark, :scales, %{}), name, name)
+    end
+  end
 
   @doc false
   # The rows a mark draws: its source's rows through its transforms with the plot area
@@ -102,7 +108,7 @@ defmodule Visualize.Chart.Frame.Scales do
 
     channels =
       for {channel, value} <- Map.get(mark, :channels, %{}),
-          scale = scale_for(kind, mark.type, channel),
+          scale = scale_for(kind, mark, channel),
           scale != nil,
           do: {scale, values(value, rows)}
 
