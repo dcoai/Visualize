@@ -929,14 +929,109 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.Build.mark/3` | As `mark/4` with `[]`. |
 | `Visualize.Chart.Build.mark/4` | `mark(type, data, channels, opts)`: `%{marks: [%{type: type, data: data, channels: channels}]}` (§5.1). `data` is a source name or a `:data` node; `channels` is a map or a keyword list whose keys MUST be channels of the type (`Visualize.Chart.Schema.channels/1`); an `options:` option's keys MUST be options of the type (`Visualize.Chart.Schema.options/1`); either raises `ArgumentError`. A `%Visualize.Chart.Var{}` given as the whole channels or options node is passed through unchecked. |
 | `Visualize.Chart.Build.from/1` | `from(source)`: `%{source: source}`, the `:data` node of a mark (§5.4) — not a fragment; the transform appenders below extend it. |
-| `Visualize.Chart.Build.bin/2` | As `bin/3` with `[]`. |
-| `Visualize.Chart.Build.bin/3` | `bin(data, field, opts)`: the data node with `%{op: :bin, field: field}` appended to its `transforms` (§5.4.1); `data` is a node or a source name, which is read as `from/1` of it. |
-| `Visualize.Chart.Build.filter/2` | As `filter/3` with `[]`. |
-| `Visualize.Chart.Build.filter/3` | `filter(data, field, opts)`: as `bin/3` with `%{op: :filter, field: field}`; `test:` and `value:` are its remaining keys. |
-| `Visualize.Chart.Build.stack/2` | As `stack/3` with `[]`. |
-| `Visualize.Chart.Build.stack/3` | `stack(data, fields, opts)`: as `bin/3` with `%{op: :stack, fields: fields}`. |
-| `Visualize.Chart.Build.treemap/1` | As `treemap/2` with `[]`. |
-| `Visualize.Chart.Build.treemap/2` | `treemap(data, opts)`: as `bin/3` with `%{op: :treemap}`. |
+
+The mark, transform and scale functions are generated from the schema (§16.6), so the three tables below are the schema's own and change with it. `mark/4` and `scale/3` remain the generic forms, taking a type and a kind as values.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Build.line/2` | As `line/3` with no options. |
+| `Visualize.Chart.Build.line/3` | `line(data, channels, opts)`: `mark/4` of the `:line` type (§5.2) — required channels `x`, `y`; optional `series`. |
+| `Visualize.Chart.Build.area/2` | As `area/3` with no options. |
+| `Visualize.Chart.Build.area/3` | `area(data, channels, opts)`: `mark/4` of the `:area` type (§5.2) — required channels `x`, `y`; optional `x0`, `x1`, `y0`, `y1`, `series`. |
+| `Visualize.Chart.Build.band/2` | As `band/3` with no options. |
+| `Visualize.Chart.Build.band/3` | `band(data, channels, opts)`: `mark/4` of the `:band` type (§5.2) — required channels `x0`, `x1`; optional `y`; options `height`. |
+| `Visualize.Chart.Build.rule/2` | As `rule/3` with no options. |
+| `Visualize.Chart.Build.rule/3` | `rule(data, channels, opts)`: `mark/4` of the `:rule` type (§5.2) — required channels `x`. |
+| `Visualize.Chart.Build.x_band/2` | As `x_band/3` with no options. |
+| `Visualize.Chart.Build.x_band/3` | `x_band(data, channels, opts)`: `mark/4` of the `:x_band` type (§5.2) — required channels `x0`, `x1`. |
+| `Visualize.Chart.Build.percentile_band/2` | As `percentile_band/3` with no options. |
+| `Visualize.Chart.Build.percentile_band/3` | `percentile_band(data, channels, opts)`: `mark/4` of the `:percentile_band` type (§5.2) — required channels `x`, `median`; optional `inner_lo`, `inner_hi`, `outer_lo`, `outer_hi`. |
+| `Visualize.Chart.Build.rose/2` | As `rose/3` with no options. |
+| `Visualize.Chart.Build.rose/3` | `rose(data, channels, opts)`: `mark/4` of the `:rose` type (§5.2) — required channels `angle`; optional `value`; options `width`, `inner_radius`, `outer_radius`, `pad_angle`. |
+| `Visualize.Chart.Build.symbol/2` | As `symbol/3` with no options. |
+| `Visualize.Chart.Build.symbol/3` | `symbol(data, channels, opts)`: `mark/4` of the `:symbol` type (§5.2) — required channels `x`, `y`; optional `value`. |
+| `Visualize.Chart.Build.arc/2` | As `arc/3` with no options. |
+| `Visualize.Chart.Build.arc/3` | `arc(data, channels, opts)`: `mark/4` of the `:arc` type (§5.2) — required channels `value`; optional `start`, `end`, `inner`, `outer`; options `inner_radius`, `outer_radius`, `corner_radius`, `pad_angle`, `start_angle`, `end_angle`. |
+| `Visualize.Chart.Build.path/2` | As `path/3` with no options. |
+| `Visualize.Chart.Build.path/3` | `path(data, channels, opts)`: `mark/4` of the `:path` type (§5.2) — required channels `path`. |
+| `Visualize.Chart.Build.rect/2` | As `rect/3` with no options. |
+| `Visualize.Chart.Build.rect/3` | `rect(data, channels, opts)`: `mark/4` of the `:rect` type (§5.2) — required channels `x0`, `x1`, `y0`, `y1`; optional `value`; options `corner_radius`. |
+| `Visualize.Chart.Build.circle/2` | As `circle/3` with no options. |
+| `Visualize.Chart.Build.circle/3` | `circle(data, channels, opts)`: `mark/4` of the `:circle` type (§5.2) — required channels `x`, `y`; optional `value`; options `radius`. |
+
+The transform appenders, one per op of §5.4 (`Visualize.Chart.Schema.transform_ops/0`, the `:projection` step among them), each taking the data node — a `:data` node or a source name, read as `from/1` of it — and returning it with the step appended. The positional arguments after the node are the op's required keys, in the schema's order.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Build.filter/2` | As `filter/3` with no options. |
+| `Visualize.Chart.Build.filter/3` | `filter(data, field, opts)`: a `:filter` step appended to the data node (§5.4) — `opts` are `test`, `value`. |
+| `Visualize.Chart.Build.bin/2` | As `bin/3` with no options. |
+| `Visualize.Chart.Build.bin/3` | `bin(data, field, opts)`: a `:bin` step appended to the data node (§5.4) — `opts` are `thresholds`, `as`. |
+| `Visualize.Chart.Build.stack/2` | As `stack/3` with no options. |
+| `Visualize.Chart.Build.stack/3` | `stack(data, fields, opts)`: a `:stack` step appended to the data node (§5.4) — `opts` are `order`, `offset`. |
+| `Visualize.Chart.Build.sum/2` | As `sum/3` with no options. |
+| `Visualize.Chart.Build.sum/3` | `sum(data, field, opts)`: a `:sum` step appended to the data node (§5.4) — `opts` are `by`, `as`. |
+| `Visualize.Chart.Build.sort/2` | As `sort/3` with no options. |
+| `Visualize.Chart.Build.sort/3` | `sort(data, field, opts)`: a `:sort` step appended to the data node (§5.4) — `opts` are `order`. |
+| `Visualize.Chart.Build.tree/1` | As `tree/2` with no options. |
+| `Visualize.Chart.Build.tree/2` | `tree(data, opts)`: a `:tree` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `orientation`. |
+| `Visualize.Chart.Build.cluster/1` | As `cluster/2` with no options. |
+| `Visualize.Chart.Build.cluster/2` | `cluster(data, opts)`: a `:cluster` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `orientation`. |
+| `Visualize.Chart.Build.pack/1` | As `pack/2` with no options. |
+| `Visualize.Chart.Build.pack/2` | `pack(data, opts)`: a `:pack` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `padding`. |
+| `Visualize.Chart.Build.partition/1` | As `partition/2` with no options. |
+| `Visualize.Chart.Build.partition/2` | `partition(data, opts)`: a `:partition` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `padding`. |
+| `Visualize.Chart.Build.treemap/1` | As `treemap/2` with no options. |
+| `Visualize.Chart.Build.treemap/2` | `treemap(data, opts)`: a `:treemap` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `padding`, `tile`. |
+| `Visualize.Chart.Build.chord/3` | As `chord/4` with no options. |
+| `Visualize.Chart.Build.chord/4` | `chord(data, fields, field, opts)`: a `:chord` step appended to the data node (§5.4) — `opts` are `size`, `padding`, `output`. |
+| `Visualize.Chart.Build.sankey/3` | As `sankey/4` with no options. |
+| `Visualize.Chart.Build.sankey/4` | `sankey(data, fields, field, opts)`: a `:sankey` step appended to the data node (§5.4) — `opts` are `size`, `padding`, `output`. |
+| `Visualize.Chart.Build.force/2` | As `force/3` with no options. |
+| `Visualize.Chart.Build.force/3` | `force(data, fields, opts)`: a `:force` step appended to the data node (§5.4) — `opts` are `field`, `size`, `output`. |
+| `Visualize.Chart.Build.contour/3` | As `contour/4` with no options. |
+| `Visualize.Chart.Build.contour/4` | `contour(data, field, size, opts)`: a `:contour` step appended to the data node (§5.4) — `opts` are `thresholds`. |
+| `Visualize.Chart.Build.density/2` | As `density/3` with no options. |
+| `Visualize.Chart.Build.density/3` | `density(data, fields, opts)`: a `:density` step appended to the data node (§5.4) — `opts` are `field`, `size`, `bandwidth`, `thresholds`. |
+| `Visualize.Chart.Build.delaunay/2` | As `delaunay/3` with no options. |
+| `Visualize.Chart.Build.delaunay/3` | `delaunay(data, fields, opts)`: a `:delaunay` step appended to the data node (§5.4) — `opts` are `output`. |
+| `Visualize.Chart.Build.voronoi/2` | As `voronoi/3` with no options. |
+| `Visualize.Chart.Build.voronoi/3` | `voronoi(data, fields, opts)`: a `:voronoi` step appended to the data node (§5.4) — `opts` are `size`, `output`. |
+| `Visualize.Chart.Build.projection/2` | As `projection/3` with no options. |
+| `Visualize.Chart.Build.projection/3` | `projection(data, fields, opts)`: a `:projection` step appended to the data node (§5.4). |
+
+The scale functions, one per kind of §4.3. The name carries the `_scale` suffix because a kind and a mark type may spell the same word: `band` is both.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Build.linear_scale/1` | As `linear_scale/2` with no options. |
+| `Visualize.Chart.Build.linear_scale/2` | `linear_scale(name, opts)`: `scale/3` of the `:linear` kind (§4.3). |
+| `Visualize.Chart.Build.log_scale/1` | As `log_scale/2` with no options. |
+| `Visualize.Chart.Build.log_scale/2` | `log_scale(name, opts)`: `scale/3` of the `:log` kind (§4.3). |
+| `Visualize.Chart.Build.power_scale/1` | As `power_scale/2` with no options. |
+| `Visualize.Chart.Build.power_scale/2` | `power_scale(name, opts)`: `scale/3` of the `:power` kind (§4.3). |
+| `Visualize.Chart.Build.sqrt_scale/1` | As `sqrt_scale/2` with no options. |
+| `Visualize.Chart.Build.sqrt_scale/2` | `sqrt_scale(name, opts)`: `scale/3` of the `:sqrt` kind (§4.3). |
+| `Visualize.Chart.Build.symlog_scale/1` | As `symlog_scale/2` with no options. |
+| `Visualize.Chart.Build.symlog_scale/2` | `symlog_scale(name, opts)`: `scale/3` of the `:symlog` kind (§4.3). |
+| `Visualize.Chart.Build.time_scale/1` | As `time_scale/2` with no options. |
+| `Visualize.Chart.Build.time_scale/2` | `time_scale(name, opts)`: `scale/3` of the `:time` kind (§4.3). |
+| `Visualize.Chart.Build.ordinal_scale/1` | As `ordinal_scale/2` with no options. |
+| `Visualize.Chart.Build.ordinal_scale/2` | `ordinal_scale(name, opts)`: `scale/3` of the `:ordinal` kind (§4.3). |
+| `Visualize.Chart.Build.band_scale/1` | As `band_scale/2` with no options. |
+| `Visualize.Chart.Build.band_scale/2` | `band_scale(name, opts)`: `scale/3` of the `:band` kind (§4.3). |
+| `Visualize.Chart.Build.quantize_scale/1` | As `quantize_scale/2` with no options. |
+| `Visualize.Chart.Build.quantize_scale/2` | `quantize_scale(name, opts)`: `scale/3` of the `:quantize` kind (§4.3). |
+| `Visualize.Chart.Build.quantile_scale/1` | As `quantile_scale/2` with no options. |
+| `Visualize.Chart.Build.quantile_scale/2` | `quantile_scale(name, opts)`: `scale/3` of the `:quantile` kind (§4.3). |
+| `Visualize.Chart.Build.threshold_scale/1` | As `threshold_scale/2` with no options. |
+| `Visualize.Chart.Build.threshold_scale/2` | `threshold_scale(name, opts)`: `scale/3` of the `:threshold` kind (§4.3). |
+| `Visualize.Chart.Build.sequential_scale/1` | As `sequential_scale/2` with no options. |
+| `Visualize.Chart.Build.sequential_scale/2` | `sequential_scale(name, opts)`: `scale/3` of the `:sequential` kind (§4.3). |
+| `Visualize.Chart.Build.diverging_scale/1` | As `diverging_scale/2` with no options. |
+| `Visualize.Chart.Build.diverging_scale/2` | `diverging_scale(name, opts)`: `scale/3` of the `:diverging` kind (§4.3). |
+| `Visualize.Chart.Build.radial_scale/1` | As `radial_scale/2` with no options. |
+| `Visualize.Chart.Build.radial_scale/2` | `radial_scale(name, opts)`: `scale/3` of the `:radial` kind (§4.3). |
 
 ## 15. Presets
 
@@ -1005,7 +1100,7 @@ Nothing in the builder validates, defaults or realises anything. A fragment need
 What the builder adds over the literal is the schema, twice.
 
 - **Every option is a key of the node the function builds.** Each function sets the node's required keys from its positional arguments and takes the rest as `opts`, checked against `Visualize.Chart.Schema.describe/1` of that kind: a misspelt `stoke_width` on a style, or `ticks:` on a legend, raises `ArgumentError` naming the key and the kind at the call, rather than reaching the validator as an `:unknown_key` at a path in a design fifty lines long. A mark's channels and options are checked the same way against the mark's type (§16.4).
-- **A mark declares only what its type reads.** The channels and the options a mark takes are read from the schema at the call (§16.4), so the builder accepts exactly what §5.2 and §5.3 declare of that type. Work item 2 of #91 carries this the whole way: the mark, transform and scale functions become one generated function per type, so a schema addition grows the builder with no edit to it.
+- **A mark declares only what its type reads.** The channels and the options a mark takes are read from the schema at the call (§16.4), so the builder accepts exactly what §5.2 and §5.3 declare of that type. The mark, transform and scale functions carry it the whole way: each is generated from the schema (§16.6), so a schema addition grows the builder with no edit to it.
 
 A `%Visualize.Chart.Var{}` is a value like any other and may stand anywhere the map admits one (§7.1), including as a whole node: `mark(:band, :states, %{x0: :t0, x1: :t1}, options: var(:band))` is the design of `test/support/designs/state_timeline.exs`.
 
@@ -1035,8 +1130,8 @@ import Visualize.Chart, only: [var: 1]
 
 ```elixir
 cartesian(600, 300, margin: %{top: 20, right: 20, bottom: 30, left: 40})
-scale(:x, :time)
-scale(:y, :linear, domain: [0, :auto], nice: true)
+time_scale(:x)
+linear_scale(:y, domain: [0, :auto], nice: true)
 axis(:x, :bottom, ticks: 6, format: "%H:%M")
 axis(:y, :left, ticks: 5, grid: true)
 legend(:color, position: :top_right)
@@ -1049,8 +1144,8 @@ The four kinds are `cartesian/3`, `polar/3`, `geo/3` and `facet/3`, each taking 
 **Implemented.** `mark/4` is the generic mark: a type, its data, its channels, and the mark's remaining keys as options. `label/3` and `title/2` are the frame's labels (§6). Marks and labels are `:concat` keys, so the order of their fragments is the order they draw in.
 
 ```elixir
-mark(:line, :primary, %{x: :t, y: :v}, style: :series)
-mark(:rule, :deploys, %{x: :at}, style: :muted, label: %{text: ["deploy ", {:field, :sha}]})
+line(:primary, %{x: :t, y: :v}, style: :series)
+rule(:deploys, %{x: :at}, style: :muted, label: %{text: ["deploy ", {:field, :sha}]})
 title(["Uptime — ", var(:unit)])
 label({:axis, :y}, ["unit: ", var(:unit)])
 ```
@@ -1062,10 +1157,30 @@ A channel the type does not read, and an option key the type does not read, rais
 **Implemented.** A mark's `data` is a source name or a `:data` node (§5.4), and the node is built by `from/1` and extended by one appender per transform op, each taking the node and returning it with its step appended:
 
 ```elixir
-mark(:rect, from(:primary) |> bin(:v, thresholds: 20), %{x0: :x0, x1: :x1, y0: :y0, y1: :count})
-mark(:area, from(:series) |> stack([:a, :b, :c]), %{x: :t, y: :y1, y0: :y0, series: :key})
+rect(from(:primary) |> bin(:v, thresholds: 20), %{x0: :x0, x1: :x1, y0: :y0, y1: :count})
+area(from(:series) |> stack([:a, :b, :c]), %{x: :t, y: :y1, y0: :y0, series: :key})
 ```
 
 `from/1` returns `%{source: source}` and no `transforms` key, so a mark that reads its source directly and one built by `from/1` alone are the same map. An appender given a source name in place of a node reads it as `from/1` of that name, so `bin(:samples, :w)` is `from(:samples) |> bin(:w)`. `transforms` is a `:concat` key, so a pipeline built in two fragments runs in the order it was written (§8).
 
-The appenders of this work item are `bin/3`, `filter/3`, `stack/3` and `treemap/2`, written by hand; work item 2 of #91 replaces them with one generated appender per op of §5.4.
+There is one appender per op of §5.4, generated from the schema (§16.6).
+
+### 16.6 Generated from the schema
+
+**Implemented** (work item 2 of #91, D-79). The builder's mark, transform and scale functions are not written. `Visualize.Chart.Build` uses a hidden macro module that reads `Visualize.Chart.Schema.mark_types/0`, `channels/1`, `options/1`, `transform_ops/0`, `transform_keys/1` and `scale_kinds/0` at compile time and emits one documented function per type, per op and per kind, each delegating to the generic `mark/4`, the data-node appender or `scale/3`. A type added to the schema — as #71 added three transform ops — grows the builder with no edit to it, and the builder cannot fall behind the schema, which is the acceptance of this work item.
+
+| Generated | Name and shape | Read from |
+|---|---|---|
+| one per mark type | `<type>(data, channels, opts \\ [])`, `mark/4` of the type | `Visualize.Chart.Schema.mark_types/0` |
+| one per transform op | `<op>(data, …the op's required keys…, opts \\ [])` | `Visualize.Chart.Schema.transform_ops/0` and `Visualize.Chart.Schema.transform_keys/1` |
+| one per scale kind | `<kind>_scale(name, opts \\ [])`, `scale/3` of the kind | `Visualize.Chart.Schema.scale_kinds/0` |
+
+Three things follow from generating them rather than writing them.
+
+- **A name takes a suffix where two vocabularies collide.** A scale kind and a mark type may spell the same word — `band` is both (§4.3, §5.2) — so a scale's function is `<kind>_scale`, and *every* kind takes the suffix rather than only the one that collides: a rule that holds for one name and not another is a rule a reader has to look up.
+- **A transform's positional arguments are the op's required keys, in the schema's order.** `chord/4` is `chord(data, fields, field, opts)` because `Visualize.Chart.Schema.transform_keys/1` requires `fields` then `field` for that op; an op with no required key, `:treemap` among them, is `treemap/2`. The op's optional keys go in `opts` and are checked as every option is (§16.1).
+- **The documentation is the schema's.** Each generated function's documentation lists the channels, the options or the keys the schema gives it, so the answer to "what channels does a rose take" comes from the same table the validator reads.
+
+The generic forms remain: `mark/4` takes a type that is a value rather than a name in the source, and `scale/3` a kind, which is what a consumer building a design from stored data needs.
+
+A generated function is not in the source of `lib/`, so the surface scanner cannot find it by reading the file (spec/12 §2). A module that injects functions through `use` therefore declares what it injects, and the scanner asks it, so every generated function is a row of `API_SURFACE.md` like any other and a type dropped from the schema drops its rows.

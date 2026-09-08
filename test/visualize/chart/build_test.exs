@@ -7,7 +7,8 @@ defmodule Visualize.Chart.BuildTest do
   `test/support/designs/` is written here as a `Visualize.Chart.Build` pipeline, and
   `Visualize.Chart.compose/1` of it must be the identical map — so a builder function that
   writes a key the literal does not, or misses one it does, fails here rather than in a
-  golden. The rest holds the schema's word on every option (D-78).
+  golden. The rest holds the schema's word on every option (D-78) and the correspondence
+  between the schema and the generated mark, transform and scale functions (D-79).
   """
   use ExUnit.Case, async: true
 
@@ -15,6 +16,7 @@ defmodule Visualize.Chart.BuildTest do
 
   alias Visualize.Chart
   alias Visualize.Chart.Build
+  alias Visualize.Chart.Build.Generate
   alias Visualize.Designs
 
   doctest Build
@@ -69,13 +71,13 @@ defmodule Visualize.Chart.BuildTest do
   describe "a mark takes exactly its type's channels and options" do
     test "a channel the type does not read" do
       assert_raise ArgumentError, ~r/:angle is not a channel of a :line mark/, fn ->
-        mark(:line, :series, %{x: :t, y: :v, angle: :a})
+        line(:series, %{x: :t, y: :v, angle: :a})
       end
     end
 
     test "an option the type does not read" do
       assert_raise ArgumentError, ~r/:height is not an option of a :line mark/, fn ->
-        mark(:line, :series, %{x: :t, y: :v}, options: %{height: 10})
+        line(:series, %{x: :t, y: :v}, options: %{height: 10})
       end
     end
 
@@ -99,10 +101,87 @@ defmodule Visualize.Chart.BuildTest do
 
     test "a variable standing for a whole node passes through" do
       assert %{marks: [mark]} =
-               mark(:band, :states, %{x0: :t0, x1: :t1}, options: Chart.var(:band))
+               band(:states, %{x0: :t0, x1: :t1}, options: Chart.var(:band))
 
       assert mark.options == Chart.var(:band)
       assert %{marks: [%{channels: %Chart.Var{}}]} = mark(:line, :series, Chart.var(:c))
+    end
+  end
+
+  describe "the schema generates the mark, transform and scale functions" do
+    test "one function per mark type, taking exactly its channels and options" do
+      for type <- Chart.Schema.mark_types() do
+        %{required: required, optional: optional} = Chart.Schema.channels(type)
+        channels = Map.new(required ++ optional, &{&1, :f})
+        options = Map.new(Chart.Schema.options(type), &{&1, 1})
+
+        assert function_exported?(Build, type, 2)
+        assert function_exported?(Build, type, 3)
+
+        assert apply(Build, type, [:src, channels, [options: options, style: :s]]) ==
+                 mark(type, :src, channels, options: options, style: :s)
+
+        assert_raise ArgumentError, fn -> apply(Build, type, [:src, %{nope: :f}]) end
+      end
+    end
+
+    test "one appender per transform op, its required keys as its arguments" do
+      for op <- Chart.Schema.transform_ops() do
+        %{required: required, optional: optional} = Chart.Schema.transform_keys(op)
+        args = Enum.map(required, fn _ -> :f end)
+
+        assert function_exported?(Build, op, 1 + length(required))
+        assert function_exported?(Build, op, 2 + length(required))
+
+        node = apply(Build, op, [from(:src) | args] ++ [Enum.map(optional, &{&1, :v})])
+        assert [step] = node.transforms
+        assert step.op == op
+        assert Map.take(step, required) == Map.new(required, &{&1, :f})
+        assert Map.take(step, optional) == Map.new(optional, &{&1, :v})
+        assert apply(Build, op, [:src | args]) == apply(Build, op, [from(:src) | args])
+      end
+    end
+
+    test "one function per scale kind, suffixed because band is also a mark type" do
+      assert :band in Chart.Schema.mark_types()
+      assert :band in Chart.Schema.scale_kinds()
+
+      for kind <- Chart.Schema.scale_kinds() do
+        name = :"#{kind}_scale"
+        assert function_exported?(Build, name, 1)
+        assert function_exported?(Build, name, 2)
+        assert apply(Build, name, [:s, [domain: :auto]]) == scale(:s, kind, domain: :auto)
+      end
+    end
+
+    test "a generated function's documentation is the schema's" do
+      assert {:docs_v1, _, _, _, _, _, docs} = Code.fetch_docs(Build)
+      assert [%{"en" => text}] = for({{:function, :rose, 3}, _, _, doc, _} <- docs, do: doc)
+      assert text =~ "A `:rose` mark"
+      assert text =~ "Required channels: `angle`."
+      assert text =~ "Optional channels: `value`."
+      assert text =~ "Options: `width`, `inner_radius`, `outer_radius`, `pad_angle`."
+    end
+
+    test "every generated function is declared to the surface scanner" do
+      injected = MapSet.new(Generate.injected())
+
+      for type <- Chart.Schema.mark_types(), arity <- [2, 3] do
+        assert {type, arity} in injected
+      end
+
+      for kind <- Chart.Schema.scale_kinds(), arity <- [1, 2] do
+        assert {:"#{kind}_scale", arity} in injected
+      end
+
+      for op <- Chart.Schema.transform_ops() do
+        n = length(Chart.Schema.transform_keys(op).required)
+        assert {op, 1 + n} in injected
+        assert {op, 2 + n} in injected
+      end
+
+      kinds = Chart.Schema.mark_types() ++ Chart.Schema.scale_kinds()
+      assert MapSet.size(injected) == 2 * length(kinds ++ Chart.Schema.transform_ops())
     end
   end
 
@@ -169,12 +248,12 @@ defmodule Visualize.Chart.BuildTest do
       style(:series, stroke_width: 1.5),
       style(:muted, stroke: :axis, opacity: 0.6),
       cartesian(400, 200, margin: @margin),
-      scale(:x, :time),
-      scale(:y, :linear, domain: [0, :auto], nice: true),
+      time_scale(:x),
+      linear_scale(:y, domain: [0, :auto], nice: true),
       axis(:x, :bottom, ticks: 4, format: "%H:%M"),
       axis(:y, :left, ticks: 4, grid: true),
-      mark(:line, :primary, %{x: :t, y: :v}, style: :series),
-      mark(:rule, :events, %{x: :at},
+      line(:primary, %{x: :t, y: :v}, style: :series),
+      rule(:events, %{x: :at},
         label: %{text: ["deploy ", {:field, :sha}]},
         style: :muted
       ),
@@ -189,11 +268,11 @@ defmodule Visualize.Chart.BuildTest do
       source(:series, [:t, :mood]),
       style(:series, stroke_width: 1.5, curve: :step_after),
       cartesian(400, 200, margin: %{top: 20, right: 20, bottom: 30, left: 50}),
-      scale(:x, :time),
-      scale(:y, :band, domain: ["down", "base", "up"]),
+      time_scale(:x),
+      band_scale(:y, domain: ["down", "base", "up"]),
       axis(:x, :bottom, ticks: 4, format: "%H:%M"),
       axis(:y, :left, grid: true),
-      mark(:line, :series, %{x: :t, y: :mood}, style: :series),
+      line(:series, %{x: :t, y: :mood}, style: :series),
       title(["Mood"])
     ]
   end
@@ -204,11 +283,11 @@ defmodule Visualize.Chart.BuildTest do
       source(:series, [:t, :v]),
       style(:series, fill_opacity: 0.4, stroke: :series_1),
       cartesian(400, 200, margin: @margin),
-      scale(:x, :time),
-      scale(:y, :linear, domain: [0, :auto], nice: true),
+      time_scale(:x),
+      linear_scale(:y, domain: [0, :auto], nice: true),
       axis(:x, :bottom, ticks: 4, format: "%H:%M"),
       axis(:y, :left, ticks: 4),
-      mark(:area, :series, %{x: :t, y: :v}, style: :series),
+      area(:series, %{x: :t, y: :v}, style: :series),
       title(["Area"])
     ]
   end
@@ -218,13 +297,13 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "stacked_area"}),
       source(:series, [:t, :a, :b, :c]),
       cartesian(400, 200, margin: @margin),
-      scale(:x, :time),
-      scale(:y, :linear, domain: [0, :auto], nice: true),
-      scale(:color, :ordinal),
+      time_scale(:x),
+      linear_scale(:y, domain: [0, :auto], nice: true),
+      ordinal_scale(:color),
       axis(:x, :bottom, ticks: 4, format: "%H:%M"),
       axis(:y, :left, ticks: 4),
       legend(:color, position: :top_left),
-      mark(:area, stack(from(:series), [:a, :b, :c]), %{x: :t, y: :y1, y0: :y0, series: :key}),
+      area(stack(from(:series), [:a, :b, :c]), %{x: :t, y: :y1, y0: :y0, series: :key}),
       title(["Stacked area"])
     ]
   end
@@ -234,11 +313,11 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "bar"}),
       source(:categories, [:cat, :n]),
       cartesian(400, 200, margin: @margin),
-      scale(:x, :band, domain: :auto, padding: 0.2),
-      scale(:y, :linear, domain: [0, :auto], nice: true),
+      band_scale(:x, domain: :auto, padding: 0.2),
+      linear_scale(:y, domain: [0, :auto], nice: true),
       axis(:x, :bottom),
       axis(:y, :left, ticks: 4, grid: true),
-      mark(:rect, :categories, %{x0: :cat, x1: :cat, y0: 0, y1: :n},
+      rect(:categories, %{x0: :cat, x1: :cat, y0: 0, y1: :n},
         label: %{text: [{:field, :n}], anchor: :top}
       ),
       title(["Bar"])
@@ -250,17 +329,19 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "stacked_bar"}),
       source(:categories, [:cat, :a, :b, :c]),
       cartesian(400, 200, margin: @margin),
-      scale(:x, :band, padding: 0.2),
-      scale(:y, :linear, domain: [0, :auto], nice: true),
-      scale(:color, :ordinal),
+      band_scale(:x, padding: 0.2),
+      linear_scale(:y, domain: [0, :auto], nice: true),
+      ordinal_scale(:color),
       axis(:x, :bottom),
       axis(:y, :left, ticks: 4, grid: true),
       legend(:color, position: :top_right),
-      mark(
-        :rect,
-        stack(from(:categories), [:a, :b, :c]),
-        %{x0: :cat, x1: :cat, y0: :y0, y1: :y1, value: :key}
-      ),
+      rect(stack(from(:categories), [:a, :b, :c]), %{
+        x0: :cat,
+        x1: :cat,
+        y0: :y0,
+        y1: :y1,
+        value: :key
+      }),
       title(["Stacked bar"])
     ]
   end
@@ -273,11 +354,11 @@ defmodule Visualize.Chart.BuildTest do
       style(:by_state, fill: {:field, :state}, stroke: :background),
       style(:over, fill: :background, font_size: :font_size, font_family: :font_family),
       cartesian(400, 100, margin: %{top: 20, right: 20, bottom: 30, left: 20}),
-      scale(:x, :time),
-      scale(:color, :ordinal, domain: ["ok", "degraded", "down"]),
+      time_scale(:x),
+      ordinal_scale(:color, domain: ["ok", "degraded", "down"]),
       axis(:x, :bottom, ticks: 6, format: "%H:%M"),
       legend(:color, position: :top),
-      mark(:band, :states, %{x0: :t0, x1: :t1},
+      band(:states, %{x0: :t0, x1: :t1},
         options: Chart.var(:band),
         style: :by_state,
         label: %{text: [{:field, :state}], anchor: :middle, style: :over}
@@ -292,10 +373,10 @@ defmodule Visualize.Chart.BuildTest do
       source(:flags, [:t0, :t1, :ok]),
       style(:flag, fill: {:field, :ok}),
       cartesian(400, 60, margin: %{top: 10, right: 10, bottom: 30, left: 10}),
-      scale(:x, :time),
-      scale(:color, :ordinal, domain: ["pass", "fail"], range: ["#3f8a37", "#c8373b"]),
+      time_scale(:x),
+      ordinal_scale(:color, domain: ["pass", "fail"], range: ["#3f8a37", "#c8373b"]),
       axis(:x, :bottom, ticks: 6, format: "%H:%M"),
-      mark(:band, :flags, %{x0: :t0, x1: :t1}, options: %{height: 20}, style: :flag)
+      band(:flags, %{x0: :t0, x1: :t1}, options: %{height: 20}, style: :flag)
     ]
   end
 
@@ -308,9 +389,9 @@ defmodule Visualize.Chart.BuildTest do
       style(:spark, stroke: :series_1, stroke_width: 1),
       style(:big, fill: :text, font_size: :title_size, font_weight: :bold),
       cartesian(200, 100, margin: %{top: 40, right: 10, bottom: 10, left: 10}),
-      scale(:x, :time),
-      scale(:y, :linear, domain: [0, :auto]),
-      mark(:line, :series, %{x: :t, y: :v}, style: :spark),
+      time_scale(:x),
+      linear_scale(:y, domain: [0, :auto]),
+      line(:series, %{x: :t, y: :v}, style: :spark),
       label({:frame, :top_left}, [Chart.var(:value)], style: :big, dy: -30),
       label({:frame, :top_right}, [Chart.var(:delta)], dy: -30)
     ]
@@ -321,13 +402,13 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "heatmap"}),
       source(:heat, [:hour, :day, :v]),
       cartesian(400, 200, margin: @margin),
-      scale(:x, :band, padding: 0.05),
-      scale(:y, :band, padding: 0.05),
-      scale(:color, :sequential, domain: [0, :auto]),
+      band_scale(:x, padding: 0.05),
+      band_scale(:y, padding: 0.05),
+      sequential_scale(:color, domain: [0, :auto]),
       axis(:x, :bottom),
       axis(:y, :left),
       legend(:color, position: :top_right),
-      mark(:rect, :heat, %{x0: :hour, x1: :hour, y0: :day, y1: :day, value: :v}),
+      rect(:heat, %{x0: :hour, x1: :hour, y0: :day, y1: :day, value: :v}),
       title(["Heatmap"])
     ]
   end
@@ -338,15 +419,16 @@ defmodule Visualize.Chart.BuildTest do
       source(:samples, [:w]),
       var(:bins, 5),
       cartesian(400, 200, margin: @margin),
-      scale(:x, :linear),
-      scale(:y, :linear, domain: [0, :auto]),
+      linear_scale(:x),
+      linear_scale(:y, domain: [0, :auto]),
       axis(:x, :bottom, ticks: 5),
       axis(:y, :left, ticks: 4, grid: true),
-      mark(
-        :rect,
-        bin(from(:samples), :w, thresholds: Chart.var(:bins)),
-        %{x0: :x0, x1: :x1, y0: :y0, y1: :count}
-      ),
+      rect(bin(from(:samples), :w, thresholds: Chart.var(:bins)), %{
+        x0: :x0,
+        x1: :x1,
+        y0: :y0,
+        y1: :count
+      }),
       title(["Histogram"]),
       label({:axis, :x}, ["kg"])
     ]
@@ -358,11 +440,11 @@ defmodule Visualize.Chart.BuildTest do
       source(:samples, [:w, :s]),
       style(:dot, symbol: :circle, symbol_size: 40, fill_opacity: 0.7),
       cartesian(400, 200, margin: @margin),
-      scale(:x, :linear, nice: true),
-      scale(:y, :linear, nice: true),
+      linear_scale(:x, nice: true),
+      linear_scale(:y, nice: true),
       axis(:x, :bottom, ticks: 5, grid: true),
       axis(:y, :left, ticks: 4, grid: true),
-      mark(:symbol, :samples, %{x: :w, y: :s}, style: :dot),
+      symbol(:samples, %{x: :w, y: :s}, style: :dot),
       title(["Weight against sleep"]),
       label({:axis, :x}, ["kg"]),
       label({:axis, :y}, ["h"])
@@ -375,11 +457,11 @@ defmodule Visualize.Chart.BuildTest do
       source(:wind, [:bearing, :count]),
       style(:petal, fill: :series_1, stroke: :background),
       polar(300, 300, margin: %{top: 30, right: 30, bottom: 30, left: 30}),
-      scale(:angle, :radial, domain: [0, 360]),
-      scale(:r, :sqrt, domain: [0, :auto]),
+      radial_scale(:angle, domain: [0, 360]),
+      sqrt_scale(:r, domain: [0, :auto]),
       axis(:angle, :bottom, ticks: 8, grid: true),
       axis(:r, :top, ticks: 3, grid: true),
-      mark(:rose, :wind, %{angle: :bearing, value: :count},
+      rose(:wind, %{angle: :bearing, value: :count},
         options: %{width: 45, pad_angle: 0.02},
         style: :petal
       ),

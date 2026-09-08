@@ -5,8 +5,9 @@ defmodule Visualize.Audit.CodeScan do
   A definition is *public* when it is a `def`, `defmacro`, `defguard` or `defdelegate`
   that Elixir would document: `@doc false` hides every arity of the definition it precedes,
   and `@impl` without an explicit `@doc` hides it likewise, default-argument arities
-  included (what `Code.fetch_docs/1` reports). Functions a `use` injects are not in the source; the ones that matter here are
-  listed in `@injected`.
+  included (what `Code.fetch_docs/1` reports). Functions a `use` injects are not in the
+  source: a module that generates its injections declares them through a zero-arity
+  `injected` export, which the scanner asks for, and `GenServer` is listed here (spec/12 §2).
 
   Each function is versioned with `Surfex.SourceScan.definition_hash/1` over all of its
   clauses, so the golden's `Version` column changes when the definition changes and not when
@@ -25,8 +26,9 @@ defmodule Visualize.Audit.CodeScan do
         }
 
   # Functions injected by `use`, per module used: not visible in the source, documented by
-  # the injecting module, and public.
-  @injected %{GenServer => [child_spec: 1]}
+  # the injecting module, and public. A module that generates its injections declares them
+  # instead, through a zero-arity `injected` export the scanner asks for (spec/12 §2), which
+  # is how the builder's schema-generated functions reach the golden (spec/14 §16.6, D-79).
 
   @definers [:def, :defmacro, :defguard]
 
@@ -62,7 +64,7 @@ defmodule Visualize.Audit.CodeScan do
   defp scan_module({:defmodule, _, [{:__aliases__, _, parts}, [do: body]]}, file) do
     module = Enum.map_join(parts, ".", &Atom.to_string/1)
 
-    {defs, injected, _state} =
+    {defs, use_injections, _state} =
       body
       |> statements()
       |> Enum.reduce({%{}, [], %{doc: nil, impl?: false}}, &do_statement/2)
@@ -81,7 +83,7 @@ defmodule Visualize.Audit.CodeScan do
       end)
 
     from_use =
-      for {name, arity} <- injected,
+      for {name, arity} <- use_injections,
           not Map.has_key?(defs, {name, arity}),
           do: %{
             module: module,
@@ -112,8 +114,7 @@ defmodule Visualize.Audit.CodeScan do
     do: {defs, inj, %{state | impl?: true}}
 
   defp do_statement({:use, _, [{:__aliases__, _, parts} | _]}, {defs, inj, state}) do
-    mod = Module.concat(parts)
-    {defs, inj ++ Map.get(@injected, mod, []), state}
+    {defs, inj ++ injected(Module.concat(parts)), state}
   end
 
   defp do_statement({definer, _, [head | _]} = node, {defs, inj, state})
@@ -132,6 +133,16 @@ defmodule Visualize.Audit.CodeScan do
   end
 
   defp do_statement(_other, acc), do: acc
+
+  # What a `use`d module injects: `GenServer`'s own, and otherwise whatever a module that
+  # generates its definitions declares through a zero-arity `injected` export (spec/12 §2).
+  defp injected(GenServer), do: [child_spec: 1]
+
+  defp injected(mod) do
+    if Code.ensure_loaded?(mod) and function_exported?(mod, :injected, 0),
+      do: mod.injected(),
+      else: []
+  end
 
   defp register(defs, head, node, state) do
     {name, args} = name_and_args(head)
