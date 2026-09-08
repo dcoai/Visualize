@@ -49,14 +49,14 @@
 `generate/1,2` returns:
 
 ```
-group  style: %{fill: :none, font_size: <font_size>, font_family: <font_family>, text_anchor: <1.3>}
+group  style: %{fill: :none, font_size: <font_size>, font_family: <font_family>, text_anchor: <1.3>}, attrs: %{aria_hidden: "true"}
 ├── path   style: %{stroke: <axis>}                   — the domain line
 └── group  style: %{class: "tick"}, transform: <1.3>  — one per tick value
     ├── line  attrs: %{x1: 0, y1: 0, x2: …, y2: …}, style: %{stroke: <axis>}
     └── text  attrs: %{x | y, dy}, style: %{fill: <text>}, content: label
 ```
 
-`<axis>`, `<text>`, `<font_size>` and `<font_family>` are `Visualize.Theme.resolve/3` of the axis's theme for the slots of those names ([08-utilities](08-utilities.md) §7.1), in the mode of the `:resolve` option of `generate/2` — `:css` by default, so an SVG axis reads `stroke="var(--vis-axis, #666666)"` and a consumer restyles it in CSS; `:literal` gives a canvas the plain values. Nothing in an axis is `currentColor` any more (D-55).
+`<axis>`, `<text>`, `<font_size>` and `<font_family>` are `Visualize.Theme.resolve/3` of the axis's theme for the slots of those names ([08-utilities](08-utilities.md) §7.1), in the mode of the `:resolve` option of `generate/2` — `:css` by default, so an SVG axis reads `stroke="var(--vis-axis, #666666)"` and a consumer restyles it in CSS; `:literal` gives a canvas the plain values. Nothing in an axis is `currentColor` any more (D-55). The group's `aria_hidden` attr renders as `aria-hidden="true"` (D-56): an axis is decoration a screen reader skips, the chart's `<title>` and `<desc>` carrying its meaning.
 
 Domain line path, with `[r0, r1]` the scale's range and `o = tick_size_outer`:
 

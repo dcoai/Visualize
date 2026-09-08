@@ -52,7 +52,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       theme's `:series_1`)
     * `link_stroke` - (default `nil`: the theme's `:grid`)
     * `label` - accessor of a node's data; `nil` reads `:name` or `"name"`
-    * `animate`, `class`, `responsive`, `theme` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
+      conventions
 
     Links are cubic Béziers between parent and child with both control points at the
     midpoint of the depth axis. Horizontal labels sit at `x = −10`, anchored `end`, for
@@ -73,11 +74,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
 
     def tree_diagram(assigns) do
       {margin, inner_width, inner_height} = Support.frame(assigns, @tree_margin)
       orientation = assigns.orientation
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
       node_fill = Support.colour(assigns.node_fill, theme, :background)
       node_stroke = Support.colour(assigns.node_stroke, theme, :series_1)
 
@@ -115,6 +119,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           links: links,
           nodes: nodes,
           theme: theme,
+          ids: ids,
           node_stroke: node_stroke,
           link_stroke: Support.colour(assigns.link_stroke, theme, :grid),
           text: Support.css(theme, :text),
@@ -123,7 +128,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <path :for={d <- @links} d={d} fill="none" stroke={@link_stroke} stroke-width="1.5" {@transition} />
           <g :for={node <- @nodes} transform={node.transform} {@transition}>
@@ -148,7 +155,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `padding` - uniform cell padding (default 2)
     * `colors` - per the module conventions; each child of the root takes the next colour
       and every leaf beneath it that colour (default `:category10`)
-    * `animate`, `class`, `responsive`, `theme` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
+      conventions
 
     A `:background`-filled `:label_size` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` in a
     cell wider than 30 and taller than 15, truncated with `…` to fit `cell width − 8`
@@ -166,10 +174,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
 
     def treemap_chart(assigns) do
       label = assigns.label || (&name/1)
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
 
       root =
         Treemap.new()
@@ -202,13 +213,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
         assign(assigns,
           cells: cells,
           theme: theme,
+          ids: ids,
           background: Support.css(theme, :background),
           label_size: Support.css(theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <%= for cell <- @cells do %>
           <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.fill} stroke={@background} stroke-width="1" {@transition} />
           <text
@@ -236,7 +250,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `label` - as `tree_diagram/1`; drawn at the centroid of an arc thick enough and long
       enough to hold text
     * `colors` - as `treemap_chart/1`
-    * `animate`, `class`, `responsive`, `theme` - per the module conventions
+    * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
+      conventions
 
     Angles are `Visualize.Layout.Partition` over `{2π, radius}`: the root spans the full
     turn, each child a share of its parent's arc proportional to its summed value, and a
@@ -254,10 +269,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:class, :string, default: nil)
     attr(:responsive, :boolean, default: false)
     attr(:theme, :any, default: nil)
+    attr(:title, :string, default: nil)
+    attr(:description, :string, default: nil)
 
     def sunburst_chart(assigns) do
       label = assigns.label || (&name/1)
       theme = Support.theme(assigns.theme)
+      ids = Support.label_ids(assigns.title, assigns.description)
       radius = min(assigns.width, assigns.height) / 2
 
       root =
@@ -296,13 +314,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
         assign(assigns,
           arcs: arcs,
           theme: theme,
+          ids: ids,
           background: Support.css(theme, :background),
           label_size: Support.css(theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+        <title :if={@ids.title} id={@ids.title}>{@title}</title>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
           <%= for a <- @arcs do %>
             <path d={a.d} fill={a.fill} stroke={@background} stroke-width="1" {@transition} />

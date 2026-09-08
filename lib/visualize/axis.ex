@@ -136,6 +136,7 @@ defmodule Visualize.Axis do
     tick_vals = get_tick_values(axis)
     {k, _x_attr, y_attr, transform_attr} = orient_params(axis.orient)
 
+    # An axis is decoration a screen reader skips; the chart's title names it (D-56).
     group =
       Element.group([],
         style: %{
@@ -143,7 +144,8 @@ defmodule Visualize.Axis do
           font_size: slot.(:font_size),
           font_family: slot.(:font_family),
           text_anchor: text_anchor_atom(axis.orient)
-        }
+        },
+        attrs: %{aria_hidden: "true"}
       )
 
     domain_line = create_domain_line(axis, k, slot.(:axis))

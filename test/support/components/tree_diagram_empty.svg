@@ -1,4 +1,6 @@
-<svg width="800" height="600" font-family="var(--vis-font-family, sans-serif)" viewBox="0 0 800 600">
+<svg width="800" height="600" font-family="var(--vis-font-family, sans-serif)" role="img" viewBox="0 0 800 600">
+  
+  
   <g transform="translate(120, 20)">
     
     <g transform="translate(0, 0)">

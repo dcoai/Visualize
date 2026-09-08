@@ -37,11 +37,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # the theme's font so every text inherits it, and under `responsive` the
     # `preserveAspectRatio` and `style` that let CSS scale it (D-54), matching
     # `Visualize.IR.Element.root/3` under `responsive: true`.
-    def svg_attrs(class, responsive, theme) do
+    def svg_attrs(class, responsive, theme, ids) do
       class = if class, do: [class: class], else: []
       font = ["font-family": Theme.resolve(theme, :font_family, :css)]
-      class ++ font ++ if(responsive, do: @responsive, else: [])
+      labelled = if ids.labelledby, do: ["aria-labelledby": ids.labelledby], else: []
+      class ++ font ++ [role: "img"] ++ labelled ++ if(responsive, do: @responsive, else: [])
     end
+
+    @doc false
+    # The ids of the `<title>` and `<desc>` a titled component renders first (spec/10 §1.2),
+    # derived as `Visualize.IR.Element.root/3` derives them (D-56).
+    def label_ids(title, description), do: Visualize.IR.Element.label_ids(nil, title, description)
 
     @doc false
     # The `theme` assign as a struct: `nil` is the default theme (spec/10 §1.2).
