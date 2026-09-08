@@ -84,6 +84,46 @@ defmodule Visualize.Chart.TransformTest do
       assert Enum.map(sorted, & &1.v) == [4, 3, 2, 1, 0, 0]
       assert Enum.map(sorted, & &1.t) == [2, 4, 1, 3, 0, 5]
     end
+
+    test ":filter keeps the rows whose reading passes the test, a missing field reading nil" do
+      # `v` is 0 2 4 1 3 0 over `t` 0..5; the last row lacks `v` altogether.
+      rows = Enum.take(@rows, 5) ++ [%{t: 5}]
+      kept = fn node -> node |> run(rows) |> Enum.map(& &1.t) end
+
+      assert kept.(%{op: :filter, field: :v}) == [0, 1, 2, 3, 4]
+      assert kept.(%{op: :filter, field: :v, test: :present}) == [0, 1, 2, 3, 4]
+      assert kept.(%{op: :filter, field: :v, test: :absent}) == [5]
+      assert kept.(%{op: :filter, field: :v, test: :eq, value: 0}) == [0]
+      assert kept.(%{op: :filter, field: :v, test: :ne, value: 0}) == [1, 2, 3, 4, 5]
+      assert kept.(%{op: :filter, field: :v, test: :lt, value: 2}) == [0, 3]
+      assert kept.(%{op: :filter, field: :v, test: :lte, value: 2}) == [0, 1, 3]
+      assert kept.(%{op: :filter, field: :v, test: :gt, value: 2}) == [2, 4]
+      assert kept.(%{op: :filter, field: :v, test: :gte, value: 2}) == [1, 2, 4]
+
+      # A field the rows never carry: everything under `:absent`, nothing otherwise.
+      assert kept.(%{op: :filter, field: :nope, test: :absent}) == [0, 1, 2, 3, 4, 5]
+      assert kept.(%{op: :filter, field: :nope}) == []
+      assert kept.(%{op: :filter, field: :nope, test: :gte, value: 0}) == []
+
+      # The step is a pure row step: a kept row is the row, and order is kept.
+      assert run(%{op: :filter, field: :k, test: :eq, value: "k1"}, @rows) ==
+               Enum.filter(@rows, &(&1.k == "k1"))
+
+      # A leaves-only hierarchy and a rootless one (spec/14 §5.4.1).
+      nodes = [%{id: "r", parent: nil}, %{id: "a", parent: "r"}, %{id: "b", parent: "r"}]
+
+      assert [%{id: "a"}, %{id: "b"}] =
+               Transform.apply(
+                 [%{op: :treemap}, %{op: :filter, field: :height, test: :eq, value: 0}],
+                 nodes
+               )
+
+      assert [%{id: "a"}, %{id: "b"}] =
+               Transform.apply(
+                 [%{op: :treemap}, %{op: :filter, field: :depth, test: :gt, value: 0}],
+                 nodes
+               )
+    end
   end
 
   describe "hierarchies" do

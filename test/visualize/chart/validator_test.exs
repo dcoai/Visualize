@@ -205,6 +205,16 @@ defmodule Visualize.Chart.ValidatorTest do
 
       extra = put_at(@full, path ++ [:offset], :expand)
       assert errors(extra) == [{path ++ [:offset], {:invalid_for, :bin}}]
+
+      filter = %{op: :filter, field: :v, test: :gt, value: 0}
+      assert Validator.validate(put_at(@full, path, filter)) == :ok
+      assert errors(put_at(@full, path, %{op: :filter})) == [{path ++ [:field], :required}]
+
+      assert errors(put_at(@full, path, Map.put(filter, :as, :n))) ==
+               [{path ++ [:as], {:invalid_for, :filter}}]
+
+      assert errors(put_at(@full, path, %{filter | test: :like})) ==
+               [{path ++ [:test], {:enum, [:eq, :ne, :lt, :lte, :gt, :gte, :present, :absent]}}]
     end
 
     test "an unknown key reports at its path in every node kind" do

@@ -83,7 +83,9 @@ defmodule Visualize.Chart.SchemaTest do
     assert Schema.channels(:path) == %{required: [:path], optional: []}
     assert Schema.transform_keys(:bin) == %{required: [:field], optional: [:thresholds, :as]}
     assert Schema.transform_keys(:projection) == %{required: [:fields], optional: []}
-    assert :projection in Schema.transform_ops()
+    assert Schema.transform_keys(:filter) == %{required: [:field], optional: [:test, :value]}
+    assert Schema.default(:transform, :test) == :present
+    assert :projection in Schema.transform_ops() and :filter in Schema.transform_ops()
     assert_raise ArgumentError, fn -> Schema.transform_keys(:nope) end
 
     assert Schema.options(:arc) == [

@@ -1,7 +1,8 @@
 defmodule Visualize.Chart.Transform.Data do
   @moduledoc false
   # The data steps of a mark's pipeline (spec/14 §5.4.1): `:bin` over `Visualize.Data.bin/2`,
-  # `:stack` over `Visualize.Shape.Stack`, `:sum` and `:sort` over the rows themselves.
+  # `:stack` over `Visualize.Shape.Stack`, `:filter`, `:sum` and `:sort` over the rows
+  # themselves.
 
   alias Visualize.Data
   alias Visualize.Data.Table
@@ -9,10 +10,31 @@ defmodule Visualize.Chart.Transform.Data do
 
   @doc false
   @spec run(atom(), map(), [map()]) :: [map()]
+  def run(:filter, node, rows), do: filter(node, rows)
   def run(:bin, node, rows), do: bin(node, rows)
   def run(:stack, node, rows), do: stack(node, rows)
   def run(:sum, node, rows), do: sum(node, rows)
   def run(:sort, node, rows), do: sort(node, rows)
+
+  # -- filter -----------------------------------------------------------------------------
+
+  # The rows whose reading of `field` passes `test` against `value` (D-68): a `nil`
+  # reading is what `:present` and `:absent` test, and never passes an ordering.
+  defp filter(node, rows) do
+    test = Map.get(node, :test, :present)
+    value = Map.get(node, :value)
+    Enum.filter(rows, &passes?(test, Table.get(&1, node.field), value))
+  end
+
+  defp passes?(:present, reading, _value), do: reading != nil
+  defp passes?(:absent, reading, _value), do: reading == nil
+  defp passes?(:eq, reading, value), do: reading == value
+  defp passes?(:ne, reading, value), do: reading != value
+  defp passes?(_ordering, nil, _value), do: false
+  defp passes?(:lt, reading, value), do: reading < value
+  defp passes?(:lte, reading, value), do: reading <= value
+  defp passes?(:gt, reading, value), do: reading > value
+  defp passes?(:gte, reading, value), do: reading >= value
 
   # -- bin --------------------------------------------------------------------------------
 

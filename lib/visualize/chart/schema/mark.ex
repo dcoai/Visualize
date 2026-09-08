@@ -55,6 +55,7 @@ defmodule Visualize.Chart.Schema.Mark do
   # Op, required keys, optional keys (spec/14 §5.4).
   @hierarchy_keys [:id, :by, :field, :size, :output]
   @transforms [
+    {:filter, [:field], [:test, :value]},
     {:bin, [:field], [:thresholds, :as]},
     {:stack, [:fields], [:order, :offset]},
     {:sum, [:field], [:by, :as]},
@@ -74,6 +75,7 @@ defmodule Visualize.Chart.Schema.Mark do
     {:projection, [:fields], []}
   ]
   @ops Enum.map(@transforms, &elem(&1, 0))
+  @tests [:eq, :ne, :lt, :lte, :gt, :gte, :present, :absent]
   @orders [:none, :ascending, :descending, :inside_out, :reverse, :appearance]
   @offsets [:none, :expand, :silhouette, :wiggle, :diverging]
   @tiles [:squarify, :binary, :slice, :dice, :slice_dice]
@@ -147,6 +149,8 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:size, {:list, :number}, :geometry),
       spec(:padding, :number, :geometry),
       spec(:tile, {:enum, @tiles}, :geometry),
+      spec(:test, {:enum, @tests}, :binding, default: :present),
+      spec(:value, :term, :binding),
       spec(:bandwidth, :number, :geometry),
       spec(:output, {:enum, @outputs}, :binding)
     ]
