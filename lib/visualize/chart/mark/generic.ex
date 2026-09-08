@@ -94,9 +94,26 @@ defmodule Visualize.Chart.Mark.Generic do
 
   # -- arc -----------------------------------------------------------------------------
 
+  # The pie over `value`, or each datum's own `start` and `end` when the mark gives both
+  # (spec/14 §5.6, D-69); the radii are the `inner`/`outer` channels, else the options.
   defp arc(ctx) do
     inner = Shapes.option(ctx, :inner_radius, 0)
     outer = Shapes.option(ctx, :outer_radius, Shapes.outer_radius(ctx))
+    pad = Shapes.option(ctx, :pad_angle, 0)
+
+    generator =
+      Arc.new()
+      |> Arc.inner_radius(fn a -> Map.get(a, :inner) || inner end)
+      |> Arc.outer_radius(fn a -> Map.get(a, :outer) || outer end)
+      |> Arc.corner_radius(Shapes.option(ctx, :corner_radius, 0))
+
+    if Channels.has?(ctx, :start) and Channels.has?(ctx, :end),
+      do: angled_arcs(ctx, generator, pad),
+      else: pie_arcs(ctx, generator, pad)
+  end
+
+  # The pie pads its slices itself, so the arc's own pad angle stays at its default.
+  defp pie_arcs(ctx, generator, pad) do
     rows = ctx |> Channels.pixels() |> Channels.placed([:value])
 
     arcs =
@@ -104,22 +121,33 @@ defmodule Visualize.Chart.Mark.Generic do
       |> Pie.value(& &1.value)
       |> Pie.start_angle(Shapes.option(ctx, :start_angle, 0))
       |> Pie.end_angle(Shapes.option(ctx, :end_angle, 2 * :math.pi()))
-      |> Pie.pad_angle(Shapes.option(ctx, :pad_angle, 0))
+      |> Pie.pad_angle(pad)
       |> Pie.generate(rows)
 
-    generator =
-      Arc.new()
-      |> Arc.inner_radius(fn a -> Map.get(a.data, :inner) || inner end)
-      |> Arc.outer_radius(fn a -> Map.get(a.data, :outer) || outer end)
-      |> Arc.corner_radius(Shapes.option(ctx, :corner_radius, 0))
+    radii = generator |> Arc.inner_radius(&generator.inner_radius.(&1.data))
+    radii = Arc.outer_radius(radii, &generator.outer_radius.(&1.data))
+    Enum.map(arcs, &arc_child(radii, &1, &1.data.datum))
+  end
 
-    Enum.map(arcs, fn arc ->
-      %{
-        element: Element.path(Arc.generate_path(generator, arc)),
-        datum: arc.data.datum,
-        style: %{},
-        anchor: Arc.centroid(generator, arc)
-      }
-    end)
+  # No pie: every datum placed on both angles is the direct call over its own row.
+  defp angled_arcs(ctx, generator, pad) do
+    rows = ctx |> Channels.pixels() |> Channels.placed([:start, :end])
+
+    angled =
+      generator
+      |> Arc.start_angle(& &1.start)
+      |> Arc.end_angle(&Map.fetch!(&1, :end))
+      |> Arc.pad_angle(pad)
+
+    Enum.map(rows, &arc_child(angled, &1, &1.datum))
+  end
+
+  defp arc_child(generator, data, datum) do
+    %{
+      element: Element.path(Arc.generate_path(generator, data)),
+      datum: datum,
+      style: %{},
+      anchor: Arc.centroid(generator, data)
+    }
   end
 end

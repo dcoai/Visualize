@@ -232,6 +232,15 @@ defmodule Visualize.Chart.ValidatorTest do
       assert errors(design) == [{[:marks, 0, :options, :radius], {:invalid_for, :line}}]
     end
 
+    test "an arc needs value, or both start and end (D-69)" do
+      arc = fn channels -> put_at(design_with_mark(:arc), [:marks, 0, :channels], channels) end
+      assert Validator.validate(arc.(%{start: :t, end: :t})) == :ok
+      assert Validator.validate(arc.(%{value: :t, start: :t, end: :t, inner: :t})) == :ok
+      assert errors(arc.(%{start: :t})) == [{[:marks, 0, :channels, :end], :required}]
+      assert errors(arc.(%{end: :t, inner: :t})) == [{[:marks, 0, :channels, :start], :required}]
+      assert errors(arc.(%{inner: :t})) == [{[:marks, 0, :channels, :value], :required}]
+    end
+
     test "a field reference in a frame label has no datum" do
       design = put_at(@full, [:labels, 0, :text], ["a", {:field, :sha}])
       assert errors(design) == [{[:labels, 0, :text, 1], {:invalid_for, :label}}]

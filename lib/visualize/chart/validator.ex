@@ -73,7 +73,8 @@ defmodule Visualize.Chart.Validator do
       mark_type: nil,
       op: nil,
       fields: :unknown,
-      datum?: false
+      datum?: false,
+      channel_keys: []
     }
   end
 
@@ -150,6 +151,7 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp enter(:label, _map, ctx), do: %{ctx | datum?: false}
+  defp enter(:channels, map, ctx), do: %{ctx | channel_keys: Map.keys(map)}
 
   defp enter(:transform, map, ctx) do
     op = map[:op]
@@ -174,11 +176,12 @@ defmodule Visualize.Chart.Validator do
 
   # The channels and options a mark type reads; every key, none required, when the type
   # is unknown (its own error is reported on `type`).
-  defp specs(kind, %{mark_type: type}) when kind in [:channels, :options] and type != nil do
+  defp specs(kind, %{mark_type: type} = ctx) when kind in [:channels, :options] and type != nil do
     allowed = allowed(kind, type)
+    required = required(kind, type, ctx)
 
     for s <- Schema.describe(kind), s.key in allowed do
-      %{s | required: s.key in required(kind, type)}
+      %{s | required: s.key in required}
     end
   end
 
@@ -200,8 +203,18 @@ defmodule Visualize.Chart.Validator do
 
   defp allowed(:options, type), do: Schema.options(type)
 
-  defp required(:channels, type), do: Schema.channels(type).required
-  defp required(:options, _type), do: []
+  # An arc's `value` is required unless both `start` and `end` are given, and either of
+  # the pair requires the other (spec/14 §5.2, D-69).
+  defp required(:channels, :arc, %{channel_keys: keys}) do
+    case Enum.filter([:start, :end], &(&1 in keys)) do
+      [] -> [:value]
+      [_, _] -> []
+      [_one] -> [:start, :end]
+    end
+  end
+
+  defp required(:channels, type, _ctx), do: Schema.channels(type).required
+  defp required(:options, _type, _ctx), do: []
 
   defp unknown_reason(kind, key, %{mark_type: type}) when kind in [:channels, :options] do
     if type != nil and Schema.key(kind, key) != nil, do: {:invalid_for, type}, else: :unknown_key

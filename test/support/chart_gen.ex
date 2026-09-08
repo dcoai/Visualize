@@ -312,10 +312,29 @@ defmodule Visualize.ChartGen do
     }
   end
 
+  # An arc's `start` and `end` come as a pair, drawn together or not at all (spec/14 §5.2,
+  # D-69): the validator holds either one to the other.
+  defp channels(:arc, fields, vars) do
+    %{required: required, optional: optional} = Schema.channels(:arc)
+    value = channel_value(fields, vars)
+    pair = fixed_map(%{start: value, end: value})
+    single = Map.new(optional -- [:start, :end], &{&1, value})
+
+    node(Map.new(required, &{&1, value}), Map.put(single, :angles, pair))
+    |> map(fn channels ->
+      {angles, rest} = Map.pop(channels, :angles, %{})
+      Map.merge(rest, angles)
+    end)
+  end
+
   defp channels(type, fields, vars) do
     %{required: required, optional: optional} = Schema.channels(type)
-    value = with_var([member_of(fields), number(), field_ref(fields)], vars)
+    value = channel_value(fields, vars)
     node(Map.new(required, &{&1, value}), Map.new(optional, &{&1, value}))
+  end
+
+  defp channel_value(fields, vars) do
+    with_var([member_of(fields), number(), field_ref(fields)], vars)
   end
 
   defp options(type), do: optional_map(Map.new(Schema.options(type), &{&1, number()}))

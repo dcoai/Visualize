@@ -261,6 +261,51 @@ defmodule Visualize.Chart.MarkTest do
       end
     end
 
+    test ":arc with start and end is Shape.Arc over each datum's own angles, no pie (D-69)" do
+      pi = :math.pi()
+
+      rows =
+        for {a0, a1, r} <- [{0, pi / 2, 40}, {pi / 2, pi, 60}, {pi, 2 * pi, 100}],
+            do: %{a0: a0, a1: a1, r: r}
+
+      sources = %{primary: rows}
+
+      mark = %{
+        type: :arc,
+        channels: %{start: :a0, end: :a1, outer: :r},
+        options: %{inner_radius: 20, pad_angle: 0.1, corner_radius: 3, start_angle: 1},
+        label: %{text: ["r=", {:field, :r}], anchor: :middle}
+      }
+
+      chart = chart(mark, %{sources: %{primary: %{fields: [:a0, :a1, :r]}}})
+      frame = Frame.new(chart, sources: sources)
+      group = Mark.generate(frame, hd(chart.marks), sources: sources)
+      {paths, texts} = Enum.split_with(group.children, &(&1.type == :path))
+
+      expected =
+        for row <- rows do
+          Arc.new()
+          |> Arc.inner_radius(20)
+          |> Arc.outer_radius(row.r)
+          |> Arc.start_angle(row.a0)
+          |> Arc.end_angle(row.a1)
+          |> Arc.pad_angle(0.1)
+          |> Arc.corner_radius(3)
+        end
+
+      assert Enum.map(paths, &d/1) == Enum.map(expected, &Arc.generate(&1, %{}))
+
+      assert Enum.map(texts, &{&1.attrs.x, &1.attrs.y}) ==
+               Enum.map(expected, &Arc.centroid(&1, %{}))
+
+      assert Enum.map(texts, & &1.content) == ["r=40", "r=60", "r=100"]
+      assert group.transform == Visualize.IR.Transform.translate(150.0, 100.0)
+
+      # A datum without both angles is dropped; the pie's angle options are not read.
+      more = %{primary: rows ++ [%{a0: 0, a1: nil, r: 10}]}
+      assert length(Mark.generate(frame, hd(chart.marks), sources: more).children) == 6
+    end
+
     test ":rect and :circle are one element per datum in pixels" do
       [rect | _] =
         generate(%{
