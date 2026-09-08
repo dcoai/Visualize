@@ -4,10 +4,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     Phoenix LiveView function components for hierarchies (spec/10 §3): a node-link tree,
     a treemap and a sunburst.
 
-    Each takes nested `data` — a map whose children are under `:children` or `"children"`,
-    as `Visualize.Layout.Hierarchy.new/1` reads it — and lays it out with the matching
-    layout of `Visualize.Layout`. Node labels default to the `:name` or `"name"` of a
-    node's data; leaf values to its `:value` or `"value"`.
+    Each is a preset design of `Visualize.Chart.Presets` plus an assign mapping (spec/14
+    §15.4, D-64): the nested `data` — a map whose children are under `:children` or
+    `"children"` — is flattened to one row per node, the design's transform (`:tree`,
+    `:treemap` or `:partition`) lays the rows out through `Visualize.Chart.Mark.rows/3`,
+    and the component draws the markup spec/10 §3 declares from them. Node labels default
+    to the `:name` or `"name"` of a node's data; leaf values to its `:value` or `"value"`.
 
     ## Usage
 
@@ -25,18 +27,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
       empty list raises `ArgumentError`.
     - `animate={true}` puts `style="transition: all 0.3s ease-in-out;"` on every mark;
       `class` lands on the `<svg>`; coordinates print with at most four decimals.
+    - The defaults below are `Visualize.Chart.Presets.defaults/1`.
     """
 
     use Phoenix.Component
 
+    alias Visualize.Chart.Presets
     alias Visualize.Components.Support
-    alias Visualize.Layout.{Hierarchy, Partition, Tree, Treemap}
-    alias Visualize.{Scale, Shape}
+    alias Visualize.Shape
 
-    @tree_margin %{top: 20, right: 120, bottom: 20, left: 120}
+    @tree Presets.defaults(:tree_diagram)
+    @treemap Presets.defaults(:treemap_chart)
+    @sunburst Presets.defaults(:sunburst_chart)
 
     @doc """
-    Renders a node-link tree laid out by `Visualize.Layout.Tree`.
+    Renders a node-link tree laid out by the `:tree` transform (`Visualize.Layout.Tree`).
 
     ## Assigns
 
@@ -61,69 +66,59 @@ if Code.ensure_loaded?(Phoenix.Component) do
     centred at `x = 0`.
     """
     attr(:data, :map, required: true)
-    attr(:width, :integer, default: 800)
-    attr(:height, :integer, default: 600)
-    attr(:margin, :map, default: @tree_margin)
-    attr(:orientation, :atom, default: :horizontal)
-    attr(:node_radius, :integer, default: 6)
-    attr(:node_fill, :string, default: nil)
-    attr(:node_stroke, :string, default: nil)
-    attr(:link_stroke, :string, default: nil)
-    attr(:label, :any, default: nil)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
+    attr(:width, :integer, default: @tree.width)
+    attr(:height, :integer, default: @tree.height)
+    attr(:margin, :map, default: @tree.margin)
+    attr(:orientation, :atom, default: @tree.orientation)
+    attr(:node_radius, :integer, default: @tree.node_radius)
+    attr(:node_fill, :string, default: @tree.node_fill)
+    attr(:node_stroke, :string, default: @tree.node_stroke)
+    attr(:link_stroke, :string, default: @tree.link_stroke)
+    attr(:label, :any, default: @tree.label)
+    attr(:animate, :boolean, default: @tree.animate)
+    attr(:class, :string, default: @tree.class)
+    attr(:responsive, :boolean, default: @tree.responsive)
+    attr(:theme, :any, default: @tree.theme)
+    attr(:title, :string, default: @tree.title)
+    attr(:description, :string, default: @tree.description)
 
     def tree_diagram(assigns) do
-      {margin, inner_width, inner_height} = Support.frame(assigns, @tree_margin)
+      drawn = Support.layout(:tree_diagram, assigns)
+      [links, nodes] = drawn.rows
       orientation = assigns.orientation
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-      node_fill = Support.colour(assigns.node_fill, theme, :background)
-      node_stroke = Support.colour(assigns.node_stroke, theme, :series_1)
-
-      size =
-        case orientation do
-          :horizontal -> [inner_height, inner_width]
-          :vertical -> [inner_width, inner_height]
-        end
-
-      root = Tree.new() |> Tree.size(size) |> Tree.generate(Hierarchy.new(assigns.data))
-      label = assigns.label || (&name/1)
+      link = Support.style(drawn.frame, :link, %{})
+      node = Support.style(drawn.frame, :node, %{})
 
       links =
-        for {source, target} <- Hierarchy.links(root) do
-          link_path(point(source, orientation), point(target, orientation), orientation)
+        for l <- links do
+          link_path(point(l.x0, l.y0, orientation), point(l.x1, l.y1, orientation), orientation)
         end
 
       nodes =
-        for node <- Hierarchy.descendants(root) do
-          {x, y} = point(node, orientation)
-          internal? = internal?(node)
+        for n <- nodes do
+          {x, y} = point(n.x, n.y, orientation)
+          internal? = n.height > 0
 
           %{
             transform: "translate(#{fmt(x)}, #{fmt(y)})",
-            fill: if(internal?, do: node_stroke, else: node_fill),
+            fill: if(internal?, do: node.stroke, else: node.fill),
             label_x: label_x(orientation, internal?),
             anchor: label_anchor(orientation, internal?),
-            label: label.(node.data)
+            label: n.label
           }
         end
 
       assigns =
         assign(assigns,
-          margin: margin,
+          margin: drawn.margin,
           links: links,
           nodes: nodes,
-          theme: theme,
-          ids: ids,
-          node_stroke: node_stroke,
-          link_stroke: Support.colour(assigns.link_stroke, theme, :grid),
-          text: Support.css(theme, :text),
-          label_size: Support.css(theme, :label_size),
+          theme: drawn.theme,
+          ids: drawn.ids,
+          node_stroke: node.stroke,
+          link_stroke: link.stroke,
+          text: Support.css(drawn.theme, :text),
+          label_size: Support.css(drawn.theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
 
@@ -143,7 +138,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    Renders a treemap of the hierarchy's leaves laid out by `Visualize.Layout.Treemap`.
+    Renders a treemap of the hierarchy's leaves laid out by the `:treemap` transform
+    (`Visualize.Layout.Treemap`).
 
     ## Assigns
 
@@ -163,47 +159,40 @@ if Code.ensure_loaded?(Phoenix.Component) do
     at seven pixels a character.
     """
     attr(:data, :map, required: true)
-    attr(:width, :integer, default: 800)
-    attr(:height, :integer, default: 600)
-    attr(:value, :any, default: nil)
-    attr(:label, :any, default: nil)
-    attr(:tile, :atom, default: :squarify)
-    attr(:padding, :integer, default: 2)
-    attr(:colors, :any, default: :category10)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
+    attr(:width, :integer, default: @treemap.width)
+    attr(:height, :integer, default: @treemap.height)
+    attr(:value, :any, default: @treemap.value)
+    attr(:label, :any, default: @treemap.label)
+    attr(:tile, :atom, default: @treemap.tile)
+    attr(:padding, :integer, default: @treemap.padding)
+    attr(:colors, :any, default: @treemap.colors)
+    attr(:animate, :boolean, default: @treemap.animate)
+    attr(:class, :string, default: @treemap.class)
+    attr(:responsive, :boolean, default: @treemap.responsive)
+    attr(:theme, :any, default: @treemap.theme)
+    attr(:title, :string, default: @treemap.title)
+    attr(:description, :string, default: @treemap.description)
 
     def treemap_chart(assigns) do
-      label = assigns.label || (&name/1)
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-
-      root =
-        Treemap.new()
-        |> Treemap.size({assigns.width, assigns.height})
-        |> Treemap.tile(assigns.tile)
-        |> Treemap.padding(assigns.padding)
-        |> Treemap.generate(summed(assigns.data, assigns.value))
+      drawn = Support.layout(:treemap_chart, assigns)
+      [nodes] = drawn.rows
+      root_fill = Support.css(drawn.theme, :grid)
 
       cells =
-        for {node, colour} <- coloured(root, assigns.colors, theme), leaf?(node) do
+        for node <- nodes, node.height == 0 do
           width = max(0, node.x1 - node.x0)
           height = max(0, node.y1 - node.y0)
+          style = Support.style(drawn.frame, :cell, node)
 
           %{
             x: fmt(node.x0),
             y: fmt(node.y0),
             width: fmt(width),
             height: fmt(height),
-            fill: colour,
-            label:
-              if(width > 30 and height > 15,
-                do: Support.truncate(label.(node.data), width - 8)
-              ),
+            fill: Map.get(style, :fill, root_fill),
+            stroke: style.stroke,
+            stroke_width: style.stroke_width,
+            label: if(width > 30 and height > 15, do: Support.truncate(node.label, width - 8)),
             label_x: fmt(node.x0 + 4),
             label_y: fmt(node.y0 + 14)
           }
@@ -212,10 +201,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns =
         assign(assigns,
           cells: cells,
-          theme: theme,
-          ids: ids,
-          background: Support.css(theme, :background),
-          label_size: Support.css(theme, :label_size),
+          theme: drawn.theme,
+          ids: drawn.ids,
+          background: Support.css(drawn.theme, :background),
+          label_size: Support.css(drawn.theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
 
@@ -224,7 +213,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
         <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <%= for cell <- @cells do %>
-          <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.fill} stroke={@background} stroke-width="1" {@transition} />
+          <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.fill} stroke={cell.stroke} stroke-width={cell.stroke_width} {@transition} />
           <text
             :if={cell.label}
             x={cell.label_x}
@@ -239,8 +228,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    Renders a sunburst: the radial partition of `Visualize.Layout.Partition` with one arc
-    per node below the root.
+    Renders a sunburst: the radial partition of the `:partition` transform
+    (`Visualize.Layout.Partition`) with one arc per node below the root.
 
     ## Assigns
 
@@ -260,28 +249,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     from 12 o'clock — as a `<path fill={colour} stroke={:background} stroke-width="1">`.
     """
     attr(:data, :map, required: true)
-    attr(:width, :integer, default: 600)
-    attr(:height, :integer, default: 600)
-    attr(:value, :any, default: nil)
-    attr(:label, :any, default: nil)
-    attr(:colors, :any, default: :category10)
-    attr(:animate, :boolean, default: false)
-    attr(:class, :string, default: nil)
-    attr(:responsive, :boolean, default: false)
-    attr(:theme, :any, default: nil)
-    attr(:title, :string, default: nil)
-    attr(:description, :string, default: nil)
+    attr(:width, :integer, default: @sunburst.width)
+    attr(:height, :integer, default: @sunburst.height)
+    attr(:value, :any, default: @sunburst.value)
+    attr(:label, :any, default: @sunburst.label)
+    attr(:colors, :any, default: @sunburst.colors)
+    attr(:animate, :boolean, default: @sunburst.animate)
+    attr(:class, :string, default: @sunburst.class)
+    attr(:responsive, :boolean, default: @sunburst.responsive)
+    attr(:theme, :any, default: @sunburst.theme)
+    attr(:title, :string, default: @sunburst.title)
+    attr(:description, :string, default: @sunburst.description)
 
     def sunburst_chart(assigns) do
-      label = assigns.label || (&name/1)
-      theme = Support.theme(assigns.theme)
-      ids = Support.label_ids(assigns.title, assigns.description)
-      radius = min(assigns.width, assigns.height) / 2
-
-      root =
-        Partition.new()
-        |> Partition.size({2 * :math.pi(), radius})
-        |> Partition.generate(summed(assigns.data, assigns.value))
+      drawn = Support.layout(:sunburst_chart, assigns)
+      [nodes] = drawn.rows
 
       arc =
         Shape.arc()
@@ -291,20 +273,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> Shape.end_angle(& &1.x1)
 
       arcs =
-        for {node, colour} <- coloured(root, assigns.colors, theme),
-            node.depth > 0,
-            node.x1 - node.x0 > 0 do
+        for node <- nodes, node.depth > 0, node.x1 - node.x0 > 0 do
           {cx, cy} = Shape.Arc.centroid(arc, node)
           thickness = node.y1 - node.y0
           length = (node.x1 - node.x0) * (node.y0 + node.y1) / 2
+          style = Support.style(drawn.frame, :arc, node)
 
           %{
             d: Shape.generate(arc, node),
-            fill: colour,
+            fill: style.fill,
+            stroke: style.stroke,
+            stroke_width: style.stroke_width,
             label:
-              if(thickness > 15 and length > 30,
-                do: Support.truncate(label.(node.data), length - 8)
-              ),
+              if(thickness > 15 and length > 30, do: Support.truncate(node.label, length - 8)),
             cx: fmt(cx),
             cy: fmt(cy)
           }
@@ -313,10 +294,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns =
         assign(assigns,
           arcs: arcs,
-          theme: theme,
-          ids: ids,
-          background: Support.css(theme, :background),
-          label_size: Support.css(theme, :label_size),
+          centre: {fmt(drawn.plot.width / 2), fmt(drawn.plot.height / 2)},
+          theme: drawn.theme,
+          ids: drawn.ids,
+          background: Support.css(drawn.theme, :background),
+          label_size: Support.css(drawn.theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
 
@@ -324,9 +306,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
         <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
-        <g transform={"translate(#{fmt(@width / 2)}, #{fmt(@height / 2)})"}>
+        <g transform={"translate(#{elem(@centre, 0)}, #{elem(@centre, 1)})"}>
           <%= for a <- @arcs do %>
-            <path d={a.d} fill={a.fill} stroke={@background} stroke-width="1" {@transition} />
+            <path d={a.d} fill={a.fill} stroke={a.stroke} stroke-width={a.stroke_width} {@transition} />
             <text
               :if={a.label}
               x={a.cx}
@@ -342,38 +324,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       """
     end
 
-    # The hierarchy with every node's value summed from the leaves.
-    defp summed(data, value) do
-      value = value || (&leaf_value/1)
-      data |> Hierarchy.new() |> Hierarchy.sum(value)
-    end
-
-    defp name(data), do: data[:name] || data["name"]
-    defp leaf_value(data), do: data[:value] || data["value"] || 0
-
-    defp leaf?(%Hierarchy{children: children}), do: children in [nil, []]
-    defp internal?(node), do: not leaf?(node)
-
-    # Every node paired with its colour: the i-th child of the root takes the i-th colour
-    # of the palette and hands it down; the root itself takes the theme's `:grid`.
-    defp coloured(root, colors, theme) do
-      children = root.children || []
-      palette = Support.palette(colors, length(children))
-
-      [{root, Support.css(theme, :grid)}] ++
-        Enum.flat_map(Enum.with_index(children), fn {child, i} ->
-          walk(child, Scale.apply(palette, i))
-        end)
-    end
-
-    defp walk(node, colour) do
-      [{node, colour} | Enum.flat_map(node.children || [], &walk(&1, colour))]
-    end
-
     # The layout's `x` runs along the breadth of the tree and `y` along its depth;
     # horizontal puts depth on the page's x axis.
-    defp point(node, :horizontal), do: {node.y, node.x}
-    defp point(node, :vertical), do: {node.x, node.y}
+    defp point(x, y, :horizontal), do: {y, x}
+    defp point(x, y, :vertical), do: {x, y}
 
     defp link_path({sx, sy}, {tx, ty}, :horizontal) do
       mid = fmt((sx + tx) / 2)
