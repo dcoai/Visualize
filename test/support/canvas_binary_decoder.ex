@@ -6,7 +6,8 @@ defmodule Visualize.CanvasBinaryDecoder do
 
   `decode/1` returns the records of a stream in order:
 
-  - `{:path, [{x, y}]}`, `{:path_cubic, [command]}` with `Visualize.IR.Path` commands
+  - `{:path, [{x, y}]}`, `{:path_cubic, [command]}` with `Visualize.IR.Path` commands, and
+    `{:path32, [{x, y}]}`, `{:path_cubic32, [command]}` for the f32 records (D-73)
   - `{:circles, [{cx, cy, r}]}`, `{:rects, [{x, y, w, h}]}`
   - `{:style, %{fill:, stroke:, stroke_width:, opacity:}}` (`nil` for an absent field)
   - `{:transform, :translate, {tx, ty}}`, `{:transform, :translate_scale, {tx, ty, sx, sy}}`,
@@ -33,7 +34,16 @@ defmodule Visualize.CanvasBinaryDecoder do
       [{:path, []}] ->
         %Path{commands: []}
 
+      [{:path32, [{x, y} | rest]}] ->
+        %Path{commands: [{:M, x, y} | Enum.map(rest, fn {lx, ly} -> {:L, lx, ly} end)]}
+
+      [{:path32, []}] ->
+        %Path{commands: []}
+
       [{:path_cubic, commands}] ->
+        %Path{commands: commands}
+
+      [{:path_cubic32, commands}] ->
         %Path{commands: commands}
     end
   end
@@ -41,13 +51,24 @@ defmodule Visualize.CanvasBinaryDecoder do
   defp decode(<<>>, acc), do: Enum.reverse(acc)
 
   defp decode(<<0x01, count::little-32, rest::binary>>, acc) do
-    {points, rest} = take(rest, count, &point/1)
+    {points, rest} = take(rest, count, &point(64, &1))
     decode(rest, [{:path, points} | acc])
   end
 
   defp decode(<<0x02, count::little-32, rest::binary>>, acc) do
-    {commands, rest} = take(rest, count, &command/1)
+    {commands, rest} = take(rest, count, &command(64, &1))
     decode(rest, [{:path_cubic, commands} | acc])
+  end
+
+  # The f32 records (spec/09 §4.3.8–4.3.9): the same layouts at 32 bits a coordinate.
+  defp decode(<<0x05, count::little-32, rest::binary>>, acc) do
+    {points, rest} = take(rest, count, &point(32, &1))
+    decode(rest, [{:path32, points} | acc])
+  end
+
+  defp decode(<<0x06, count::little-32, rest::binary>>, acc) do
+    {commands, rest} = take(rest, count, &command(32, &1))
+    decode(rest, [{:path_cubic32, commands} | acc])
   end
 
   defp decode(<<0x03, count::little-32, rest::binary>>, acc) do
@@ -118,7 +139,10 @@ defmodule Visualize.CanvasBinaryDecoder do
     {[item | items], rest}
   end
 
-  defp point(<<x::little-float-64, y::little-float-64, rest::binary>>), do: {{x, y}, rest}
+  defp point(w, rest) do
+    {[x, y], rest} = floats(w, rest, 2)
+    {{x, y}, rest}
+  end
 
   defp circle(<<cx::little-float-64, cy::little-float-64, r::little-float-64, rest::binary>>),
     do: {{cx, cy, r}, rest}
@@ -132,59 +156,45 @@ defmodule Visualize.CanvasBinaryDecoder do
   defp rgba(<<r::8, g::8, b::8, a::8, rest::binary>>), do: {{r, g, b, a}, rest}
   defp f32(<<v::little-float-32, rest::binary>>), do: {v, rest}
 
-  # The `path_cubic` sub-opcodes of spec/09 §4.3.2.
-  defp command(<<0x01, x::little-float-64, y::little-float-64, rest::binary>>),
-    do: {{:M, x, y}, rest}
+  # The sub-opcodes of spec/09 §4.3.2 with their IR command and the count of float
+  # arguments, each `w` bits wide (64 for `path_cubic`, 32 for `path_cubic32`, §4.3.9).
+  # `Z` has none and the arcs carry two u32 flags between their floats.
+  @commands %{
+    0x01 => {:M, 2},
+    0x02 => {:L, 2},
+    0x03 => {:C, 6},
+    0x04 => {:Q, 4},
+    0x08 => {:H, 1},
+    0x09 => {:V, 1},
+    0x0A => {:h, 1},
+    0x0B => {:v, 1},
+    0x0C => {:m, 2},
+    0x0D => {:l, 2},
+    0x0E => {:c, 6},
+    0x0F => {:q, 4}
+  }
 
-  defp command(<<0x02, x::little-float-64, y::little-float-64, rest::binary>>),
-    do: {{:L, x, y}, rest}
+  defp command(_w, <<0x05, rest::binary>>), do: {:Z, rest}
 
-  defp command(
-         <<0x03, x1::little-float-64, y1::little-float-64, x2::little-float-64,
-           y2::little-float-64, x::little-float-64, y::little-float-64, rest::binary>>
-       ),
-       do: {{:C, x1, y1, x2, y2, x, y}, rest}
+  defp command(w, <<arc, rest::binary>>) when arc in [0x06, 0x07] do
+    {[rx, ry, rot], rest} = floats(w, rest, 3)
+    <<large::little-32, sweep::little-32, rest::binary>> = rest
+    {[x, y], rest} = floats(w, rest, 2)
+    tag = if arc == 0x06, do: :A, else: :a
+    {{tag, rx, ry, rot, large, sweep, x, y}, rest}
+  end
 
-  defp command(
-         <<0x04, x1::little-float-64, y1::little-float-64, x::little-float-64, y::little-float-64,
-           rest::binary>>
-       ),
-       do: {{:Q, x1, y1, x, y}, rest}
+  defp command(w, <<sub, rest::binary>>) do
+    {tag, arity} = Map.fetch!(@commands, sub)
+    {args, rest} = floats(w, rest, arity)
+    {List.to_tuple([tag | args]), rest}
+  end
 
-  defp command(<<0x05, rest::binary>>), do: {:Z, rest}
+  defp floats(_w, rest, 0), do: {[], rest}
 
-  defp command(
-         <<0x06, rx::little-float-64, ry::little-float-64, rot::little-float-64, large::little-32,
-           sweep::little-32, x::little-float-64, y::little-float-64, rest::binary>>
-       ),
-       do: {{:A, rx, ry, rot, large, sweep, x, y}, rest}
-
-  defp command(
-         <<0x07, rx::little-float-64, ry::little-float-64, rot::little-float-64, large::little-32,
-           sweep::little-32, x::little-float-64, y::little-float-64, rest::binary>>
-       ),
-       do: {{:a, rx, ry, rot, large, sweep, x, y}, rest}
-
-  defp command(<<0x08, x::little-float-64, rest::binary>>), do: {{:H, x}, rest}
-  defp command(<<0x09, y::little-float-64, rest::binary>>), do: {{:V, y}, rest}
-  defp command(<<0x0A, x::little-float-64, rest::binary>>), do: {{:h, x}, rest}
-  defp command(<<0x0B, y::little-float-64, rest::binary>>), do: {{:v, y}, rest}
-
-  defp command(<<0x0C, x::little-float-64, y::little-float-64, rest::binary>>),
-    do: {{:m, x, y}, rest}
-
-  defp command(<<0x0D, x::little-float-64, y::little-float-64, rest::binary>>),
-    do: {{:l, x, y}, rest}
-
-  defp command(
-         <<0x0E, x1::little-float-64, y1::little-float-64, x2::little-float-64,
-           y2::little-float-64, x::little-float-64, y::little-float-64, rest::binary>>
-       ),
-       do: {{:c, x1, y1, x2, y2, x, y}, rest}
-
-  defp command(
-         <<0x0F, x1::little-float-64, y1::little-float-64, x::little-float-64, y::little-float-64,
-           rest::binary>>
-       ),
-       do: {{:q, x1, y1, x, y}, rest}
+  defp floats(w, rest, count) do
+    <<v::little-float-size(^w), rest::binary>> = rest
+    {values, rest} = floats(w, rest, count - 1)
+    {[v | values], rest}
+  end
 end

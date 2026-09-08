@@ -45,6 +45,26 @@ defmodule Visualize.PathGen do
   def path(max_length \\ 12),
     do: map(list_of(command(), max_length: max_length), &%Path{commands: &1})
 
+  @doc """
+  The path with every float argument rounded to its nearest f32 — what the f32 binary
+  records of spec/09 §4.3.8–4.3.9 carry (D-73). Integer arguments (the arc flags) are
+  left as they are.
+  """
+  def round_f32(%Path{commands: commands}),
+    do: %Path{commands: Enum.map(commands, &round_command/1)}
+
+  defp round_command(:Z), do: :Z
+
+  defp round_command(command) when is_tuple(command),
+    do: command |> Tuple.to_list() |> Enum.map(&round_arg/1) |> List.to_tuple()
+
+  defp round_arg(v) when is_float(v) do
+    <<rounded::float-32>> = <<v::float-32>>
+    rounded
+  end
+
+  defp round_arg(v), do: v
+
   @doc "A path that is one `M` followed by `L` commands — the compact binary form."
   def polyline do
     bind(tuple({coord(), coord()}), fn {x, y} ->

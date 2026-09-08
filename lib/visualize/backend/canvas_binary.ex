@@ -16,9 +16,11 @@ defmodule Visualize.Backend.CanvasBinary do
   | Name | Byte | Record |
   |---|---|---|
   | `path` | `0x01` | `count:u32` then `count` points `x:f64 y:f64` — one open polyline |
-  | `path_cubic` | `0x02` | `count:u32` then `count` path commands, each a sub-opcode and its arguments |
+  | `path_cubic` | `0x02` | `count:u32` then `count` path commands, each a sub-opcode and its f64 arguments |
   | `circles` | `0x03` | `count:u32` then `cx:f64 cy:f64 r:f64` per circle |
   | `rects` | `0x04` | `count:u32` then `x:f64 y:f64 w:f64 h:f64` per rectangle |
+  | `path32` | `0x05` | `path` with every coordinate an f32 |
+  | `path_cubic32` | `0x06` | `path_cubic` with every f64 argument an f32 |
   | `style` | `0x10` | `flags:u8` then the fields the flags select: fill RGBA, stroke RGBA, `stroke_width:f32`, `opacity:f32` |
   | `transform` | `0x20` | `kind:u8` then `tx ty` (`0x01`), `tx ty sx sy` (`0x03`) or a full matrix `a b c d e f` (`0xFF`), all f64 |
   | `save` | `0x30` | `ctx.save()` |
@@ -26,17 +28,20 @@ defmodule Visualize.Backend.CanvasBinary do
   | `fill` | `0x40` | `ctx.fill()` on the current path |
   | `stroke` | `0x41` | `ctx.stroke()` on the current path |
 
-  The compact `path` record is used only for a path that is one `M` followed by `L`
-  commands — the one shape it can hold without loss; every other path is a `path_cubic`
+  The point-list record is used only for a path that is one `M` followed by `L`
+  commands — the one shape it can hold without loss; every other path is a command
   stream, with the smooth curves `S`/`T` expanded to `C`/`Q` first so the command count
-  is exact (D-36). Transforms fold into one matrix in SVG order. Colours are parsed by
-  `Visualize.Color.parse/1`.
+  is exact (D-36). Both come in an f32 and an f64 form: the encoder writes the f32
+  records by default, since a canvas coordinate is a pixel position and an f32 holds a
+  value below 16,384 to within 2⁻¹¹ px, and `precision: :f64` selects the f64 records
+  (D-73; spec/09 §4.5). Transforms fold into one matrix in SVG order. Colours are parsed
+  by `Visualize.Color.parse/1`.
 
   ## Performance
 
   Binary encoding reduces payload size by ~80% compared to JSON and eliminates
-  JSON parsing overhead in the browser. The browser can create Float64Array
-  views directly on the binary data.
+  JSON parsing overhead in the browser. The browser can create typed-array views
+  directly on the binary data.
 
   ## Requirements
 
@@ -53,6 +58,9 @@ defmodule Visualize.Backend.CanvasBinary do
   # about them in a consumer that never fetched it (D-50).
   @compile {:no_warn_undefined, Nx}
 
+  @typedoc "The coordinate width of the path records: f32 by default (D-73)."
+  @type precision :: :f32 | :f64
+
   @doc """
   Checks if Nx is available for binary encoding.
   """
@@ -61,31 +69,50 @@ defmodule Visualize.Backend.CanvasBinary do
     Code.ensure_loaded?(Nx)
   end
 
+  @doc "As `encode_path/2` with no options."
+  @spec encode_path(Path.t()) :: {:ok, binary()} | {:error, :nx_not_available}
+  def encode_path(%Path{} = path), do: encode_path(path, [])
+
   @doc """
   Encodes a path element as binary data.
 
   Returns `{:ok, binary}` on success or `{:error, reason}` if Nx is not available.
-  """
 
-  @spec encode_path(Path.t()) :: {:ok, binary()} | {:error, :nx_not_available}
-  def encode_path(%Path{commands: commands}) do
+  ## Options
+
+    * `:precision` - `:f32` (the default) writes the `path32`/`path_cubic32` records,
+      `:f64` the `path`/`path_cubic` ones (spec/09 §4.5)
+  """
+  @spec encode_path(Path.t(), keyword()) :: {:ok, binary()} | {:error, :nx_not_available}
+  def encode_path(%Path{commands: commands}, opts) do
+    precision = precision!(opts)
+
     if available?() do
-      {:ok, do_encode_path(commands)}
+      {:ok, do_encode_path(commands, precision)}
     else
       {:error, :nx_not_available}
     end
   end
 
-  @doc """
-  Encodes a path element as binary, raising on error.
-  """
+  @doc "As `encode_path!/2` with no options."
   @spec encode_path!(Path.t()) :: binary()
-  def encode_path!(%Path{} = path) do
-    case encode_path(path) do
+  def encode_path!(%Path{} = path), do: encode_path!(path, [])
+
+  @doc """
+  Encodes a path element as binary, raising on error. Options as `encode_path/2`.
+  """
+  @spec encode_path!(Path.t(), keyword()) :: binary()
+  def encode_path!(%Path{} = path, opts) do
+    case encode_path(path, opts) do
       {:ok, binary} -> binary
       {:error, reason} -> raise "Failed to encode path: #{reason}"
     end
   end
+
+  @doc "As `encode_element/2` with no options."
+  @spec encode_element(Element.t() | Visualize.SVG.Element.t()) ::
+          {:ok, binary()} | {:error, :nx_not_available}
+  def encode_element(element), do: encode_element(element, [])
 
   @doc """
   Encodes an element tree as binary data.
@@ -93,39 +120,48 @@ defmodule Visualize.Backend.CanvasBinary do
   Returns a binary blob that can be sent to the browser and decoded
   by the CanvasBinaryChart JavaScript hook.
 
-  Accepts either Visualize.IR.Element or Visualize.SVG.Element structs.
+  Accepts either Visualize.IR.Element or Visualize.SVG.Element structs. Options as
+  `encode_path/2`; the precision governs every path record in the stream.
   """
-  @spec encode_element(Element.t() | Visualize.SVG.Element.t()) ::
+  @spec encode_element(Element.t() | Visualize.SVG.Element.t(), keyword()) ::
           {:ok, binary()} | {:error, :nx_not_available}
-  def encode_element(%Element{} = element) do
+  def encode_element(%Element{} = element, opts) do
+    precision = precision!(opts)
+
     if available?() do
-      {:ok, do_encode_element(element)}
+      {:ok, do_encode_element(element, precision)}
     else
       {:error, :nx_not_available}
     end
   end
 
-  def encode_element(%Visualize.SVG.Element{} = svg_element) do
+  def encode_element(%Visualize.SVG.Element{} = svg_element, opts) do
+    precision = precision!(opts)
+
     if available?() do
-      {:ok, SVG.encode_element(svg_element)}
+      {:ok, SVG.encode_element(svg_element, precision)}
     else
       {:error, :nx_not_available}
     end
   end
+
+  @doc "As `encode_element!/2` with no options."
+  @spec encode_element!(Element.t() | Visualize.SVG.Element.t()) :: binary()
+  def encode_element!(element), do: encode_element!(element, [])
 
   @doc """
-  Encodes element, raising on error.
+  Encodes element, raising on error. Options as `encode_path/2`.
   """
-  @spec encode_element!(Element.t() | Visualize.SVG.Element.t()) :: binary()
-  def encode_element!(%Element{} = element) do
-    case encode_element(element) do
+  @spec encode_element!(Element.t() | Visualize.SVG.Element.t(), keyword()) :: binary()
+  def encode_element!(%Element{} = element, opts) do
+    case encode_element(element, opts) do
       {:ok, binary} -> binary
       {:error, reason} -> raise "Failed to encode element: #{reason}"
     end
   end
 
-  def encode_element!(%Visualize.SVG.Element{} = svg_element) do
-    case encode_element(svg_element) do
+  def encode_element!(%Visualize.SVG.Element{} = svg_element, opts) do
+    case encode_element(svg_element, opts) do
       {:ok, binary} -> binary
       {:error, reason} -> raise "Failed to encode SVG element: #{reason}"
     end
@@ -143,22 +179,32 @@ defmodule Visualize.Backend.CanvasBinary do
   # Internal Encoding Functions
   # ============================================================
 
-  # The compact record holds exactly one open polyline, so it is chosen only for one `M`
-  # followed by `L` commands; anything else — `Z`, a second subpath, `H`/`V`, a relative
-  # or curved command — goes into the full command stream (D-36).
-  defp do_encode_path(commands) do
+  defp precision!(opts) do
+    case Keyword.get(opts, :precision, :f32) do
+      p when p in [:f32, :f64] -> p
+      other -> raise ArgumentError, "precision: :f32 or :f64 is needed, got: #{inspect(other)}"
+    end
+  end
+
+  # The point-list record holds exactly one open polyline, so it is chosen only for one
+  # `M` followed by `L` commands; anything else — `Z`, a second subpath, `H`/`V`, a
+  # relative or curved command — goes into the full command stream (D-36). The precision
+  # picks the f32 or the f64 form of whichever record (D-73).
+  defp do_encode_path(commands, precision) do
     if polyline?(commands) do
-      encode_simple_path(Enum.map(commands, fn {_, x, y} -> {x, y} end))
+      encode_simple_path(Enum.map(commands, fn {_, x, y} -> {x, y} end), precision)
     else
       %Path{commands: expanded} = Path.expand_smooth(%Path{commands: commands})
-      PathEncoder.encode_cubic_path(expanded)
+      PathEncoder.encode_cubic_path(expanded, precision)
     end
   end
 
   defp polyline?([{:M, _, _} | rest]), do: Enum.all?(rest, &match?({:L, _, _}, &1))
   defp polyline?(_), do: false
 
-  defp encode_simple_path(points) do
+  # The f64 point list is written through an Nx tensor as it always was, so its bytes are
+  # unchanged; the f32 one by the binary constructor.
+  defp encode_simple_path(points, :f64) do
     coords =
       points
       |> Enum.flat_map(fn {x, y} -> [x, y] end)
@@ -168,7 +214,12 @@ defmodule Visualize.Backend.CanvasBinary do
     <<Opcodes.path()::8, length(points)::little-32, coords::binary>>
   end
 
-  defp do_encode_element(%Element{type: :path, path: path, style: style, transform: transform}) do
+  defp encode_simple_path(points, :f32), do: PathEncoder.encode_polyline(points, :f32)
+
+  defp do_encode_element(
+         %Element{type: :path, path: path, style: style, transform: transform},
+         precision
+       ) do
     parts = []
 
     # Transform
@@ -188,7 +239,7 @@ defmodule Visualize.Backend.CanvasBinary do
       end
 
     # Path data
-    parts = parts ++ [do_encode_path(path.commands)]
+    parts = parts ++ [do_encode_path(path.commands, precision)]
 
     # Draw commands
     parts = parts ++ encode_draw_commands(style)
@@ -196,12 +247,10 @@ defmodule Visualize.Backend.CanvasBinary do
     IO.iodata_to_binary(parts)
   end
 
-  defp do_encode_element(%Element{
-         type: :circle,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp do_encode_element(
+         %Element{type: :circle, attrs: attrs, style: style, transform: transform},
+         _precision
+       ) do
     %{cx: cx, cy: cy, r: r} = attrs
 
     parts = []
@@ -234,7 +283,10 @@ defmodule Visualize.Backend.CanvasBinary do
     IO.iodata_to_binary(parts)
   end
 
-  defp do_encode_element(%Element{type: :rect, attrs: attrs, style: style, transform: transform}) do
+  defp do_encode_element(
+         %Element{type: :rect, attrs: attrs, style: style, transform: transform},
+         _precision
+       ) do
     %{x: x, y: y, width: w, height: h} = attrs
 
     parts = []
@@ -267,7 +319,10 @@ defmodule Visualize.Backend.CanvasBinary do
     IO.iodata_to_binary(parts)
   end
 
-  defp do_encode_element(%Element{type: :group, children: children, transform: transform}) do
+  defp do_encode_element(
+         %Element{type: :group, children: children, transform: transform},
+         precision
+       ) do
     parts = [<<Opcodes.save()::8>>]
 
     parts =
@@ -278,7 +333,7 @@ defmodule Visualize.Backend.CanvasBinary do
       end
 
     # Encode all children
-    child_data = Enum.map(children, &do_encode_element/1)
+    child_data = Enum.map(children, &do_encode_element(&1, precision))
     parts = parts ++ child_data
 
     parts = parts ++ [<<Opcodes.restore()::8>>]
@@ -286,13 +341,13 @@ defmodule Visualize.Backend.CanvasBinary do
     IO.iodata_to_binary(parts)
   end
 
-  defp do_encode_element(%Element{type: :root, children: children}) do
+  defp do_encode_element(%Element{type: :root, children: children}, precision) do
     children
-    |> Enum.map(&do_encode_element/1)
+    |> Enum.map(&do_encode_element(&1, precision))
     |> IO.iodata_to_binary()
   end
 
-  defp do_encode_element(_element) do
+  defp do_encode_element(_element, _precision) do
     <<>>
   end
 

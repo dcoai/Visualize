@@ -237,15 +237,19 @@ The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<n
 | Function | Contract |
 |---|---|
 | `Visualize.Backend.CanvasBinary.available?/0` | Returns `true` when the `Nx` module is loaded; binary encoding requires it. |
-| `Visualize.Backend.CanvasBinary.encode_path/1` | Encodes an `IR.Path` to one path record (4.5); returns `{:ok, binary}` or `{:error, :nx_not_available}`. |
-| `Visualize.Backend.CanvasBinary.encode_path!/1` | As `encode_path/1` but returns the binary directly and raises `RuntimeError` when Nx is absent. |
-| `Visualize.Backend.CanvasBinary.encode_element/1` | Encodes an `IR.Element` (4.4) or a `Visualize.SVG.Element` (4.7) tree to a binary command stream; returns `{:ok, binary}` or `{:error, :nx_not_available}`. |
-| `Visualize.Backend.CanvasBinary.encode_element!/1` | As `encode_element/1` but returns the binary directly and raises `RuntimeError` when Nx is absent. |
+| `Visualize.Backend.CanvasBinary.encode_path/1` | `encode_path(path, [])`. |
+| `Visualize.Backend.CanvasBinary.encode_path/2` | Encodes an `IR.Path` to one path record (4.5); returns `{:ok, binary}` or `{:error, :nx_not_available}`. The one option is `precision:`, `:f32` (the default) or `:f64`, which selects the f32 or the f64 path records (4.5). |
+| `Visualize.Backend.CanvasBinary.encode_path!/1` | `encode_path!(path, [])`. |
+| `Visualize.Backend.CanvasBinary.encode_path!/2` | As `encode_path/2` but returns the binary directly and raises `RuntimeError` when Nx is absent. |
+| `Visualize.Backend.CanvasBinary.encode_element/1` | `encode_element(element, [])`. |
+| `Visualize.Backend.CanvasBinary.encode_element/2` | Encodes an `IR.Element` (4.4) or a `Visualize.SVG.Element` (4.7) tree to a binary command stream; returns `{:ok, binary}` or `{:error, :nx_not_available}`. Takes `precision:` as `encode_path/2` does; it governs every path record in the stream. |
+| `Visualize.Backend.CanvasBinary.encode_element!/1` | `encode_element!(element, [])`. |
+| `Visualize.Backend.CanvasBinary.encode_element!/2` | As `encode_element/2` but returns the binary directly and raises `RuntimeError` when Nx is absent. |
 | `Visualize.Backend.CanvasBinary.to_base64/1` | Standard Base64 (`Base.encode64/1`, padded) of a binary, for embedding in an HTML attribute or a LiveView event payload. |
 
 ### 4.2 Stream model and opcodes
 
-A stream is a concatenation of records. Every record begins with a one-byte opcode; the opcode fixes the record's layout, so the stream is self-delimiting and carries no length prefix or header. All multi-byte integers are little-endian unsigned 32-bit (`u32`); all coordinates are little-endian IEEE-754 binary64 (`f64`) except where a record states `f32`. Colour components are single unsigned bytes.
+A stream is a concatenation of records. Every record begins with a one-byte opcode; the opcode fixes the record's layout, so the stream is self-delimiting and carries no length prefix or header. All multi-byte integers are little-endian unsigned 32-bit (`u32`); all coordinates are little-endian IEEE-754 binary64 (`f64`) except where a record states `f32`, which is little-endian binary32. The two path records exist in an f64 and an f32 form under different opcodes — `path`/`path32`, `path_cubic`/`path_cubic32` — with the same layout apart from the width of every coordinate (D-73); 4.5 says which the encoder writes. Colour components are single unsigned bytes.
 
 Opcodes (`Visualize.Backend.CanvasBinary.Opcodes`, internal macros so they can appear in binary patterns):
 
@@ -255,6 +259,8 @@ Opcodes (`Visualize.Backend.CanvasBinary.Opcodes`, internal macros so they can a
 | `path_cubic` | `0x02` | Full path command stream (4.3.2) |
 | `circles` | `0x03` | Circle list (4.3.3) |
 | `rects` | `0x04` | Rectangle list (4.3.4) |
+| `path32` | `0x05` | Polyline point list, f32 coordinates (4.3.8) |
+| `path_cubic32` | `0x06` | Full path command stream, f32 arguments (4.3.9) |
 | `style` | `0x10` | Fill/stroke/width/opacity (4.3.5) |
 | `transform` | `0x20` | Coordinate transform (4.3.6) |
 | `save` | `0x30` | `ctx.save()` |
@@ -353,6 +359,31 @@ The IR encoder chooses `0x01` for a transform whose operation list is exactly `[
 
 Single-byte records with no payload.
 
+#### 4.3.8 `path32` (0x05)
+
+```
+0x05  count:u32  x0:f32 y0:f32  x1:f32 y1:f32 … x(count-1):f32 y(count-1):f32
+```
+
+The `path` record of 4.3.1 with every coordinate a little-endian f32: `count` points, 8 bytes each (`1 + 4 + 8·count` bytes total). The decoder draws it exactly as 4.3.1 — `moveTo` the first point, `lineTo` each subsequent one, the path left open. Each coordinate is the nearest f32 to the encoder's value (`<<v::little-float-32>>`, round to nearest even), so the record is lossy within the bound of 4.5; there is no Nx tensor in the f32 path, the coordinates are written by the binary constructor.
+
+#### 4.3.9 `path_cubic32` (0x06)
+
+```
+0x06  count:u32  command₀ command₁ … command(count-1)
+```
+
+The `path_cubic` record of 4.3.2 with every f64 argument a little-endian f32: the same sub-opcodes, the same commands, the same argument order, `large` and `sweep` still `u32`, and the same rules — `count` MUST equal the records that follow, the smooth commands are expanded first, relative commands carry relative arguments. Only the sizes change:
+
+| Sub-opcode | IR command | Bytes |
+|---|---|---|
+| `0x01`, `0x02`, `0x0C`, `0x0D` | `M`, `L`, `m`, `l` | 9 |
+| `0x03`, `0x0E` | `C`, `c` | 25 |
+| `0x04`, `0x0F` | `Q`, `q` | 17 |
+| `0x05` | `Z` | 1 |
+| `0x06`, `0x07` | `A`, `a` (`rx ry rot` f32, `large sweep` u32, `x y` f32) | 29 |
+| `0x08`–`0x0B` | `H`, `V`, `h`, `v` | 5 |
+
 ### 4.4 Encoding IR elements
 
 `encode_element/1` on an `IR.Element` writes, per type:
@@ -370,10 +401,12 @@ Elements of type `:ellipse`, `:line`, `:polyline`, `:polygon`, `:text`, `:title`
 
 ### 4.5 Path form selection
 
-`encode_path/1` and the `:path` branch of `encode_element/1` choose between the two path records (D-36):
+`encode_path/2` and the `:path` branch of `encode_element/2` choose the path record from the command list, with the smooth curves already expanded, and from the `precision:` option (D-36, D-73):
 
-- The compact `path` (0x01) record is used only when the command list is one `:M` followed by zero or more `:L` commands — a single open polyline, the case the record can represent losslessly.
-- Every other command list, the empty list included, is encoded as `path_cubic` (0x02).
+- One `:M` followed by zero or more `:L` commands — a single open polyline, the case the point-list records represent without loss of shape — is `path32` (0x05) under `precision: :f32`, the default, and `path` (0x01) under `:f64`.
+- Every other command list, the empty list included, is `path_cubic32` (0x06) under `:f32` and `path_cubic` (0x02) under `:f64`.
+
+The default is f32 because the stream carries canvas coordinates, which are pixel positions: an f32 stores a value below 2¹⁴ = 16,384 in magnitude to within 2⁻¹¹ (≈ 0.0005 px) and one below 2¹¹ = 2,048 to within 2⁻¹³ (≈ 0.0001 px) — the rounding error is at most half an ULP, and the ULP of a value in `[2ⁿ, 2ⁿ⁺¹)` is 2ⁿ⁻²³ — which is far under the half pixel a rasteriser resolves, while every f64 path record is twice the size for precision the canvas cannot show. That bound is the contract of the f32 records: `test/visualize/backend/canvas_binary_test.exs` holds it over random coordinates, and holds `decode(encode(path))` to the path with every argument rounded to its nearest f32. `precision: :f64` writes the records of 4.3.1 and 4.3.2 — byte for byte the stream before D-73 — for a consumer whose values are not pixels or exceed 2²⁴, where an f32 no longer holds every integer. The option governs the path records alone: `circles`, `rects` and `transform` keep their f64 layouts, and `Visualize.Shape.LineNx.to_binary/6,7` (spec/04 §10.2) writes the f64 `path` record as it always has.
 
 ### 4.6 Colour parsing (IR encoder)
 
@@ -389,8 +422,8 @@ A binary style colour is parsed by `Visualize.Color.parse/1` (spec/08) and writt
 | `:g` | if `attrs.transform` is present: `save`, the parsed transform (below), children, `restore`; otherwise children only |
 | `:rect` | style (if any flag set), `rects` from `x y width height` (default `0`, numbers or numeric strings), draw records |
 | `:circle` | style, `circles` from `cx cy r`, draw records |
-| `:path` | style, `path_cubic` from the parsed `d` string, draw records; a `d` that parses to no commands produces zero bytes |
-| `:line` | style, `path_cubic` `[{:M, x1, y1}, {:L, x2, y2}]`, then an unconditional `stroke` |
+| `:path` | style, the command-stream record — `path_cubic32` under `precision: :f32`, `path_cubic` under `:f64` (4.5) — from the parsed `d` string, draw records; a `d` that parses to no commands produces zero bytes |
+| `:line` | style, the command-stream record of `[{:M, x1, y1}, {:L, x2, y2}]`, then an unconditional `stroke` |
 | `:text` | nothing — text is not representable |
 | any other tag | nothing |
 

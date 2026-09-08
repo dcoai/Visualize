@@ -395,7 +395,7 @@ defmodule Visualize.Chart.CompiledTest do
       assert [{:full_redraw, records}] =
                payload.incremental.binary |> Base.decode64!() |> Decoder.decode()
 
-      assert Enum.any?(records, &match?({:path, points} when length(points) == 11, &1))
+      assert Enum.any?(records, &match?({:path32, points} when length(points) == 11, &1))
     end
 
     test "with a fake clock the canvas layer scrolls by the window's movement, then rests" do
@@ -413,7 +413,7 @@ defmodule Visualize.Chart.CompiledTest do
       assert [{:incremental, :scroll_x, 20.0, +0.0, [{{80.0, 0.0, 20.0, 100.0}, records}]}] =
                second.incremental.binary |> Base.decode64!() |> Decoder.decode()
 
-      assert Enum.any?(records, &match?({:path, _}, &1))
+      assert Enum.any?(records, &match?({:path32, _}, &1))
       assert second.bytes == byte_size(second.svg) + byte_size(second.incremental.binary)
 
       {third, compiled} = Compiled.tick(compiled, sources, now: 22)
