@@ -5,6 +5,9 @@ defmodule Visualize.IR.PathTransformTest do
 
   alias Visualize.IR.{Path, Transform}
 
+  doctest Path
+  doctest Transform
+
   @path %Path{
     commands: [
       {:M, 1, 2},
