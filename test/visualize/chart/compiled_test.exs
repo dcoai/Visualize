@@ -10,6 +10,8 @@ defmodule Visualize.Chart.CompiledTest do
   alias Visualize.CanvasBinaryDecoder, as: Decoder
   alias Visualize.Chart
   alias Visualize.Chart.{Compiled, Frame}
+
+  doctest Compiled
   alias Visualize.Designs
 
   @t0 ~U[2026-09-08 00:00:00Z]

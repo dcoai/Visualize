@@ -18,7 +18,7 @@ defmodule Visualize.Chart.Schema do
       iex> Visualize.Chart.Schema.default(:frame, :margin)
       %{top: 20, right: 20, bottom: 30, left: 40}
       iex> Visualize.Chart.Schema.channels(:line)
-      %{required: [:x, :y], optional: []}
+      %{required: [:x, :y], optional: [:series]}
 
   """
 

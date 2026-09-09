@@ -7,6 +7,8 @@ defmodule Visualize.IncrementalTest do
   alias Visualize.Incremental
   alias Visualize.IR.Element
 
+  doctest CanvasIncremental
+
   @size {800, 600}
 
   test "a zero offset is :none, not a full redraw" do

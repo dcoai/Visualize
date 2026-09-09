@@ -9,6 +9,8 @@ defmodule Visualize.Chart.ValidatorTest do
 
   alias Visualize.Chart.{Schema, Validator}
 
+  doctest Validator
+
   # Every node kind present once, every reference resolving.
   @full %{
     version: 1,
