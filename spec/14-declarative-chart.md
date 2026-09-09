@@ -1494,6 +1494,25 @@ A blank control removes the binding rather than setting it to nothing, so a vari
 
 Both are behind the optional `Jason` dependency (§11.1): without it each returns `{:missing_dependency, :jason}`, which the panel shows as its one error rather than as a crash, because a consumer without Jason has a builder that edits and previews and cannot import or export — which is exactly what the optional dependency means.
 
+### 18.14 The style palette, and a reference as a choice
+
+**A design's `styles` is a map of name to style node (§3), and a mark refers to one by name** — and until this section there was no way to *add* a name. §18.5 says "adding a node is adding the key, which is the same edit as any other", but no control added one, so a style could be edited only where some layer had already declared it. A mark's `style` fared no better: its type is `{:ref, :style}`, whose widget is `:text` (§18.6), so a person spelled a name into a box and learned from the error list whether it was one that existed.
+
+`Visualize.Chart.Builder.Palette.panel/1` is the answer to both.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Palette.panel/1` | the palette: the declared styles, and the form that adds one |
+| `Visualize.Chart.Builder.Palette.names/1` | the style names a design declares, in name order |
+
+The palette is a view of the **stacked** design, because the stack is what a mark's reference resolves against: a style the house layer declares is available to a mark in the panel layer, and a palette that showed only the selected layer's styles would be lying about what a mark may name. Each row is the name, what the style declares, and a swatch — shown only where the style names a colour outright, since a stroke given as a theme slot such as `:series_1` has no colour until the theme resolves it, and a guessed swatch is worse than none.
+
+**Creating** a style writes `styles.<name>` into the **selected** layer, because that is where every other edit goes, and the editor opens on the new node: creating a style and not being taken to it is half a gesture. The name is read with `Visualize.Chart.Builder.Editor.parse/2` at `{:ref, :style}`, so a name becomes an atom exactly as a typed reference already did (§18.6) and no second spelling of that rule exists. A blank name is a notice, not a style called `:""`.
+
+**Selecting** one opens the node that owns it, in the layer that declares it — the highest such layer, which is the one whose value the stack takes, the same rule the inspector follows (§18.9). This is why the palette can be a view of the stack and still get a person to an editable node.
+
+**A reference becomes a choice.** `Visualize.Chart.Builder.Editor.panel/1` takes a `refs` assign — the names a `{:ref, kind}` may take, by kind — and renders a select over them instead of a text box wherever it has them. `Visualize.Chart.Builder.Editor.widget/1` is unchanged and stays a function of the type alone, which is the property that makes it total over the schema (§18.6); the panel is what narrows a reference when it happens to know the names. A kind the caller knows no names for is still a text box, so the editor remains renderable over any node with no palette at all.
+
 ### 18.13 The shell and its stylesheet
 
 Every section above describes a panel by what it *is a view of*, and none of them says where it sits or what it looks like. That silence was itself a decision, and the wrong one: a component whose panels are eight full-width blocks in source order is a component nobody reads, however honest each block is. The builder therefore has a shell, and it ships the stylesheet that draws it (D-94).
