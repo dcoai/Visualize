@@ -1,232 +1,226 @@
 defmodule Examples.Charts.SunburstChart do
-  @moduledoc "Sunburst radial partition layout example"
+  @moduledoc """
+  Sunburst chart as a design (#126): a `:partition` transform under one `:arc` mark.
 
-  alias Visualize.Layout.{Partition, Hierarchy}
-  alias Visualize.Shape.Arc
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  The radial partition is a step of the mark's data pipeline (spec/14 §5.4.2), and the
+  `:arc` reads its four columns directly — `start` and `end` are the sector's own angles and
+  `inner` and `outer` its own radii, so no pie is computed (D-69). Two `:filter` steps drop
+  the root and the empty sectors, which is the whole of what the hand-written version's
+  `if depth == 0` did.
+
+  The nested map reaches the design as a flat node list, which is the shape a hierarchy
+  transform reads and the shape `Visualize.Chart.Presets` maps a component's tree into.
+
+  Two deliberate differences from the hand-built version, neither an approximation:
+
+  - **Colour follows the branch**, as `Visualize.Chart.Presets.sunburst_chart/1` does — the
+    root child a node descends from. The hand-written scheme gave every node below the first
+    ring a darkened shade of one colour, so the outer ring told you nothing.
+  - **Labels print in full.** A mark label cannot be fitted to the sector it sits in (#138),
+    so the truncation the hand-written version did is not expressible.
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
+  @fields [:id, :parent, :name, :value, :branch]
 
   @data %{
     name: "root",
     children: [
-      %{name: "Tech", children: [
-        %{name: "Software", value: 400},
-        %{name: "Hardware", value: 300},
-        %{name: "Services", value: 200}
-      ]},
-      %{name: "Finance", children: [
-        %{name: "Banking", value: 350},
-        %{name: "Insurance", value: 250}
-      ]},
-      %{name: "Health", children: [
-        %{name: "Pharma", value: 280},
-        %{name: "Biotech", value: 180},
-        %{name: "Devices", value: 120}
-      ]},
-      %{name: "Energy", children: [
-        %{name: "Oil", value: 220},
-        %{name: "Renewable", value: 160}
-      ]}
+      %{
+        name: "Tech",
+        children: [
+          %{name: "Software", value: 400},
+          %{name: "Hardware", value: 300},
+          %{name: "Services", value: 200}
+        ]
+      },
+      %{
+        name: "Finance",
+        children: [
+          %{name: "Banking", value: 350},
+          %{name: "Insurance", value: 250}
+        ]
+      },
+      %{
+        name: "Health",
+        children: [
+          %{name: "Pharma", value: 280},
+          %{name: "Biotech", value: 180},
+          %{name: "Devices", value: 120}
+        ]
+      },
+      %{
+        name: "Energy",
+        children: [
+          %{name: "Oil", value: 220},
+          %{name: "Renewable", value: 160}
+        ]
+      }
     ]
   }
 
   def title, do: "Sunburst Chart"
   def description, do: "Radial hierarchical partition"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 500
     height = opts[:height] || 500
-    radius = min(width, height) / 2 - 10
-    animation_tick = opts[:animation_tick]
+    tree = nodes(opts)
+    branches = length(children(tree))
 
-    data = if animation_tick do
-      generate_animated_data(animation_tick)
-    else
-      opts[:data] || @data
+    # The nodes below the root with a positive extent, each arc over its own angles.
+    data =
+      from(:nodes)
+      |> partition(
+        id: :id,
+        by: :parent,
+        field: :value,
+        size: [2 * :math.pi(), min(width, height) / 2 - 10]
+      )
+      |> filter(:depth, test: :gt, value: 0)
+      |> filter(:value, test: :gt, value: 0)
+
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:nodes, @fields),
+        style(:sector, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
+        style(:sector_label,
+          extends: :label,
+          fill: :background,
+          font_size: 10,
+          font_weight: :bold
+        ),
+        polar(width, height, margin: @zero_margin),
+        ordinal_scale(:color, domain: Enum.to_list(0..(branches - 1)//1)),
+        arc(data, %{start: :x0, end: :x1, inner: :y0, outer: :y1},
+          label: %{text: [{:field, :name}], anchor: :middle, style: :sector_label},
+          style: :sector
+        )
+      ])
+
+    {design, %{nodes: flatten(tree, "0", nil, nil)}}
+  end
+
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  defp nodes(opts) do
+    case opts[:animation_tick] do
+      nil -> opts[:data] || @data
+      tick -> animated(tick)
     end
+  end
 
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
+  # One row per node in pre-order: the dotted position as `id`, its parent's, and the root's
+  # child it descends from, which is what the colour scale reads.
+  defp flatten(node, id, parent, branch) do
+    row = %{
+      id: id,
+      parent: parent,
+      name: node[:name],
+      value: node[:value] || 0,
+      branch: branch
+    }
 
-    # Build hierarchy
-    root = Hierarchy.new(data)
-      |> Hierarchy.sum(fn d -> d[:value] || 0 end)
-
-    # Create partition layout (radial)
-    # x0/x1 will be angles, y0/y1 will be radius levels
-    partition = Partition.new()
-      |> Partition.size([2 * :math.pi(), radius])
-
-    positioned = Partition.generate(partition, root)
-
-    # Get all nodes
-    all_nodes = get_all_nodes(positioned)
-
-    # Draw arcs
-    arc_elements = all_nodes
+    children =
+      node
+      |> children()
       |> Enum.with_index()
-      |> Enum.map(fn {{node, depth}, _i} ->
-        if depth == 0 do
-          # Skip root
-          nil
-        else
-          color = get_color(node, depth, colors)
+      |> Enum.flat_map(fn {child, i} -> flatten(child, "#{id}.#{i}", id, branch || i) end)
 
-          # Convert partition coordinates to arc
-          inner_r = node.y0
-          outer_r = node.y1
-          start_angle = node.x0
-          end_angle = node.x1
-
-          arc = Arc.new()
-            |> Arc.inner_radius(inner_r)
-            |> Arc.outer_radius(outer_r)
-
-          arc_data = %{start_angle: start_angle, end_angle: end_angle}
-          path_data = Arc.generate(arc, arc_data)
-
-          group = Element.g(%{})
-            |> Element.append(
-              Element.path(%{
-                d: path_data,
-                fill: color,
-                stroke: "white",
-                stroke_width: 1
-              })
-            )
-
-          # Add label for larger arcs
-          angle_extent = end_angle - start_angle
-          if angle_extent > 0.15 && (outer_r - inner_r) > 20 do
-            mid_angle = (start_angle + end_angle) / 2 - :math.pi() / 2
-            mid_r = (inner_r + outer_r) / 2
-            label_x = mid_r * :math.cos(mid_angle)
-            label_y = mid_r * :math.sin(mid_angle)
-
-            Element.append(group,
-              Element.text(%{
-                x: label_x,
-                y: label_y + 4,
-                text_anchor: "middle",
-                font_size: 10,
-                fill: "white",
-                font_weight: "bold"
-              })
-              |> Element.content(truncate(node.data.name, (outer_r - inner_r) * angle_extent))
-            )
-          else
-            group
-          end
-        end
-      end)
-      |> Enum.filter(& &1)
-
-    chart_group = Element.g(%{transform: "translate(#{width / 2},#{height / 2})"})
-      |> Element.append(arc_elements)
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    [row | children]
   end
 
-  defp get_all_nodes(%Hierarchy{} = node, depth \\ 0) do
-    children_nodes = case node.children do
-      nil -> []
-      [] -> []
-      children -> Enum.flat_map(children, &get_all_nodes(&1, depth + 1))
-    end
+  defp children(node), do: node[:children] || []
 
-    [{node, depth} | children_nodes]
-  end
-
-  defp get_color(node, depth, colors) do
-    # Get root ancestor for color grouping
-    if depth == 1 do
-      # First level children get their own color
-      index = get_sibling_index(node)
-      Enum.at(colors, rem(index, length(colors)))
-    else
-      # Deeper nodes inherit color from parent (darker shade)
-      base_index = 0
-      base_color = Enum.at(colors, rem(base_index, length(colors)))
-      darken(base_color, depth * 0.1)
-    end
-  end
-
-  defp get_sibling_index(%{parent: nil}), do: 0
-  defp get_sibling_index(%{parent: parent, data: data}) do
-    case parent.children do
-      nil -> 0
-      children ->
-        Enum.find_index(children, fn c -> c.data.name == data.name end) || 0
-    end
-  end
-
-  defp darken(hex_color, amount) do
-    # Simple darken - just return a slightly darker shade
-    alpha = max(0.4, 1 - amount)
-    "#{hex_color}#{trunc(alpha * 255) |> Integer.to_string(16) |> String.pad_leading(2, "0")}"
-  end
-
-  defp truncate(text, size) do
-    max_chars = trunc(size / 6)
-    if String.length(text) > max_chars do
-      String.slice(text, 0, max(1, max_chars - 1)) <> ".."
-    else
-      text
-    end
-  end
-
-  # Animation: vary sector values with smooth waves
-  defp generate_animated_data(tick) do
+  # Animation: vary sector values with smooth waves.
+  defp animated(tick) do
     phase = tick * 0.06
 
     %{
       name: "root",
       children: [
-        %{name: "Tech", children: [
-          %{name: "Software", value: animate_value(400, phase, 0, 100)},
-          %{name: "Hardware", value: animate_value(300, phase, 0.8, 80)},
-          %{name: "Services", value: animate_value(200, phase, 1.6, 60)}
-        ]},
-        %{name: "Finance", children: [
-          %{name: "Banking", value: animate_value(350, phase, 2.4, 90)},
-          %{name: "Insurance", value: animate_value(250, phase, 3.2, 70)}
-        ]},
-        %{name: "Health", children: [
-          %{name: "Pharma", value: animate_value(280, phase, 4.0, 75)},
-          %{name: "Biotech", value: animate_value(180, phase, 4.8, 50)},
-          %{name: "Devices", value: animate_value(120, phase, 5.6, 35)}
-        ]},
-        %{name: "Energy", children: [
-          %{name: "Oil", value: animate_value(220, phase, 6.4, 60)},
-          %{name: "Renewable", value: animate_value(160, phase, 7.2, 50)}
-        ]}
+        %{
+          name: "Tech",
+          children: [
+            %{name: "Software", value: wave(400, phase, 0, 100)},
+            %{name: "Hardware", value: wave(300, phase, 0.8, 80)},
+            %{name: "Services", value: wave(200, phase, 1.6, 60)}
+          ]
+        },
+        %{
+          name: "Finance",
+          children: [
+            %{name: "Banking", value: wave(350, phase, 2.4, 90)},
+            %{name: "Insurance", value: wave(250, phase, 3.2, 70)}
+          ]
+        },
+        %{
+          name: "Health",
+          children: [
+            %{name: "Pharma", value: wave(280, phase, 4.0, 75)},
+            %{name: "Biotech", value: wave(180, phase, 4.8, 50)},
+            %{name: "Devices", value: wave(120, phase, 5.6, 35)}
+          ]
+        },
+        %{
+          name: "Energy",
+          children: [
+            %{name: "Oil", value: wave(220, phase, 6.4, 60)},
+            %{name: "Renewable", value: wave(160, phase, 7.2, 50)}
+          ]
+        }
       ]
     }
   end
 
-  defp animate_value(base, phase, offset, amplitude) do
+  defp wave(base, phase, offset, amplitude) do
     trunc(max(30, base + :math.sin(phase + offset) * amplitude))
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Layout.{Partition, Hierarchy}
-    alias Visualize.Shape.Arc
+    import Visualize.Chart.Build
 
-    root = Hierarchy.new(data)
-      |> Hierarchy.sum(fn d -> d[:value] || 0 end)
+    # The tree reaches the design as a flat node list, which is what a hierarchy reads.
+    rows = [
+      %{id: "0", parent: nil, name: "root", value: 0, branch: nil},
+      %{id: "0.0", parent: "0", name: "Tech", value: 0, branch: 0},
+      %{id: "0.0.0", parent: "0.0", name: "Software", value: 400, branch: 0},
+      ...
+    ]
 
-    # Radial partition - x is angle, y is radius
-    partition = Partition.new()
-      |> Partition.size([2 * :math.pi(), radius])
+    # The layout is a step of the mark's pipeline; the two filters drop the root and the
+    # empty sectors.
+    data =
+      from(:nodes)
+      |> partition(id: :id, by: :parent, field: :value, size: [2 * :math.pi(), 240])
+      |> filter(:depth, test: :gt, value: 0)
+      |> filter(:value, test: :gt, value: 0)
 
-    positioned = Partition.generate(partition, root)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Sunburst Chart"}),
+        source(:nodes, [:id, :parent, :name, :value, :branch]),
+        style(:sector, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
+        style(:sector_label, extends: :label, fill: :background, font_size: 10, font_weight: :bold),
+        polar(500, 500, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        ordinal_scale(:color, domain: [0, 1, 2, 3]),
 
-    # Convert to arcs
-    arc = Arc.new()
-      |> Arc.inner_radius(node.y0)
-      |> Arc.outer_radius(node.y1)
+        # `start`/`end` and `inner`/`outer` are the sector's own angles and radii: no pie.
+        arc(data, %{start: :x0, end: :x1, inner: :y0, outer: :y1},
+          label: %{text: [{:field, :name}], anchor: :middle, style: :sector_label},
+          style: :sector
+        )
+      ])
+
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{nodes: rows})
+    Visualize.Chart.render(applied)
     """
   end
 end

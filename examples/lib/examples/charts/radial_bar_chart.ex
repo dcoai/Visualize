@@ -1,5 +1,14 @@
 defmodule Examples.Charts.RadialBarChart do
-  @moduledoc "Radial bar chart example"
+  @moduledoc """
+  Radial bar chart example — **left imperative** (#126).
+
+  The bars themselves are a `:rose` mark over an `angle` and an `r` scale, and the value
+  colouring is a sequential `color` scale: the chart is expressible right up to its
+  annotation. What is not is the ring of weekday names outside the bars, each rotated to its
+  own spoke — a mark label has no radial offset and no rotation, and an `angle` axis places
+  its labels from the scale's tick values rather than from the data. Filed as #137 with this
+  chart as the evidence; a radial bar whose sectors are not named is not the same example.
+  """
 
   alias Visualize.{Scale, Shape}
   alias Visualize.SVG.Element
