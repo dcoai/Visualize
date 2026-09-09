@@ -1490,3 +1490,38 @@ A blank control removes the binding rather than setting it to nothing, so a vari
 **Import** is `Visualize.Chart.from_json/1` of a pasted document, and a document that reads becomes the builder's **single layer**, named `imported`: a document is a whole design, not a layer of somebody else's stack, and dropping it on top of the layers already there would silently mix two designs. A document that does not parse is `{:json, message}` at the design's path and a document that parses but does not validate is the validator's errors, both shown in the panel.
 
 Both are behind the optional `Jason` dependency (§11.1): without it each returns `{:missing_dependency, :jason}`, which the panel shows as its one error rather than as a crash, because a consumer without Jason has a builder that edits and previews and cannot import or export — which is exactly what the optional dependency means.
+
+### 18.13 The shell and its stylesheet
+
+Every section above describes a panel by what it *is a view of*, and none of them says where it sits or what it looks like. That silence was itself a decision, and the wrong one: a component whose panels are eight full-width blocks in source order is a component nobody reads, however honest each block is. The builder therefore has a shell, and it ships the stylesheet that draws it (D-94).
+
+**The builder ships its CSS the way it ships its JavaScript.** `Visualize.Chart.Builder.css/0` returns the stylesheet as a binary, exactly as `Visualize.Hooks.js_code/0` returns the hook source (spec/10 §14), and `Visualize.Chart.Builder.styles/1` is the function component that renders it in a `<style>` element. The builder renders it at its own root, so a host with no asset pipeline at all — the examples application, a Livebook, a page assembled by hand — has a legible builder from the `<.live_component>` call and nothing else. A host that *has* a pipeline writes `css/0` to disk and drops the `<style>` by passing `styles={false}`, which is the same choice the hooks offer.
+
+Two properties bound what the stylesheet may do, and both are testable:
+
+- **Every rule is scoped under `.vis-builder`.** No bare element selector, no class of the host's, nothing at `:root`. The builder is a guest on somebody else's page and a stylesheet that restyled their headings would be a defect, not a theme.
+- **Every colour and metric is a custom property declared on `.vis-builder`** — `--vis-builder-bg`, `--vis-builder-line`, `--vis-builder-accent`, `--vis-builder-radius`, and the rest. A host restyles by setting properties on the root element, not by out-specifying rules it did not write. A dark page is a short block of overrides, and no rule in `css/0` needs to know that dark pages exist.
+
+**The three regions.** The shell is a grid:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ toolbar                                        [ Save ]  │
+├────────────┬─────────────────────────────────────────────┤
+│  LAYERS    │  design │ frame │ frame.scales.x │ marks[0] │
+│            ├─────────────────────────────────────────────┤
+│  ⠿ house   │  binding · channel · geometry · style       │
+│  ⠿ shared  │                                             │
+│  ⠿ panel   │  the form for the open node                 │
+│            ├─────────────────────────────────────────────┤
+│            │  preview                                    │
+└────────────┴─────────────────────────────────────────────┘
+```
+
+The **sidebar** is the stack panel of §18.8, unchanged in order, contents and events: the layers in the order `Visualize.Chart.stack/1` reads them, the higher last. What the shell adds is that it *looks* like what it is — a fixed-width column of rows, each with a drag handle, a selected state and a dimmed disabled state. Dragging a layer already reordered the stack (§18.10); a bulleted list simply never said so.
+
+The **main column** is the selected layer, and its nodes (§18.5) are a tab strip across the top: one tab per node the schema's walk reaches, the open one marked, the strip scrolling horizontally rather than wrapping, because the node list of a large fragment is long and a wrapped strip changes height as a person clicks through it. The facets of the open node (§18.7) are a row of chips beneath the strip, and the form fills the rest. The preview sits below the form in the same column, so an edit and its effect are on screen together.
+
+The tab strip is a view of `Visualize.Chart.Builder.Editor.nodes/1` and of nothing else, which is the same discipline every other panel is held to: a node kind added to the schema becomes a tab with no edit here.
+
+**Nothing in the shell is a capability.** No event, assign, message or panel signature changes because a shell exists; every panel remains independently renderable, which is what keeps the tests that assert on one panel's markup meaningful. The shell is where the panels are placed, and `css/0` is how they are drawn.
