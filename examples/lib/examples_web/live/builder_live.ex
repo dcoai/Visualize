@@ -35,9 +35,23 @@ defmodule ExamplesWeb.BuilderLive do
     end
 
     defp fragments do
+      # Each fragment must name things this page's stack actually declares: `grid` used to
+      # reference a scale `:y`, which nothing here declares, so adding it replaced the chart
+      # with `frame.axes[2].scale: scale :y is not declared` — which reads as doing nothing.
+      # An axis is identified by its `{scale, side}`, so naming `:value` merges with the left
+      # axis the shared layer already declares rather than adding a third.
       :persistent_term.get(@key, %{
         "dark" => %{theme: :dark},
-        "grid" => %{frame: %{axes: [%{scale: :y, side: :left, grid: true}]}}
+        "no grid" => %{frame: %{axes: [%{scale: :value, side: :left, grid: false}]}},
+        "dense ticks" => %{
+          frame: %{
+            axes: [
+              %{scale: :hour, side: :bottom, ticks: 12},
+              %{scale: :value, side: :left, ticks: 10}
+            ]
+          }
+        },
+        "thick line" => %{styles: %{series: %{stroke_width: 5}}}
       })
     end
   end
@@ -102,8 +116,11 @@ defmodule ExamplesWeb.BuilderLive do
   def handle_info({:design_saved, _id, design}, socket) do
     result =
       case Chart.apply(design, sources: socket.assigns.sources) do
-        {:ok, _applied} -> "saved: the design applies"
-        {:error, errors} -> "not saved: " <> Enum.map_join(errors, "; ", &Chart.Validator.format/1)
+        {:ok, _applied} ->
+          "saved: the design applies"
+
+        {:error, errors} ->
+          "not saved: " <> Enum.map_join(errors, "; ", &Chart.Validator.format/1)
       end
 
     {:noreply, assign(socket, :saved, result)}
