@@ -35,11 +35,17 @@ Element.root(500, 300)
 ```elixir
 def deps do
   [
-    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", branch: "main"},
+    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", tag: "v0.1.0"},
     {:nx, "~> 0.9"}      # optional: binary canvas encoding and Nx-accelerated paths
   ]
 end
 ```
+
+Pin the tag, not `branch: "main"`: a branch dependency takes whatever `main` happens to be
+at fetch time, and two builds of it cannot be told apart. [`CHANGELOG.md`](CHANGELOG.md)
+records what each tag changed in the surface and in behaviour, so it is what to read before
+moving the pin. This is pre-1.0 — a breaking change opens `0.2.0` rather than bending the
+meaning of a patch.
 
 Phoenix is optional too: `phoenix_live_view` is declared `optional: true`, so a host that
 has LiveView compiles `Visualize.Components` and `Visualize.Components.Tree`, and one that
@@ -52,6 +58,8 @@ does not never fetches Phoenix.
 - [`API_SURFACE.md`](API_SURFACE.md) is generated from the spec and the code and gated in
   CI, so the two cannot disagree silently.
 - [`usage-rules.md`](usage-rules.md) is the short form for contributors and agents.
+- [`CHANGELOG.md`](CHANGELOG.md) records what each tag changed, for a consumer deciding
+  which one to pin.
 - `dev_docs/liveview_plotting_strategies.md` is the research essay behind the
   performance design; it describes strategies, not all of which are built.
 - `examples/` is a Phoenix gallery of every chart type: `cd examples && ./run.sh`.

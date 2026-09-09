@@ -144,6 +144,10 @@ defmodule Visualize.MixProject do
         [
           "README.md",
           "usage-rules.md",
+          # The changelog ships in `files:`, so the README's Installation section links it
+          # as the reference for moving a pinned tag. A link from a shipping document has
+          # to resolve in the published docs too, which means being an extra.
+          "CHANGELOG.md",
           {"spec/README.md", filename: "specification", title: "Specification index"}
           | Path.wildcard("spec/[0-9]*.md")
         ] ++ ["API_SURFACE.md"],
