@@ -143,6 +143,58 @@ defmodule ExamplesWeb.BuilderLive do
       </p>
       <p :if={@saved} class="builder-saved">{@saved}</p>
       <p><a href="/">← back to the gallery</a></p>
+      <!--
+        Drag diagnostics. Drag and drop is four steps and any one of them failing looks the
+        same from outside: the module loads, the hook registers, the browser fires the
+        events, and the server changes the order. This says which step you got to.
+      -->
+      <div id="drag-diagnostics" class="builder-diagnostics" phx-update="ignore">
+        <strong>drag diagnostics</strong>
+        <span id="diag-module">module: …</span>
+        <span id="diag-mounted">hook mounted: …</span>
+        <span id="diag-events">events: none yet</span>
+      </div>
+      <script>
+        (() => {
+          const seen = [];
+          const show = () => {
+            const el = document.getElementById("diag-events");
+            if (el) el.textContent = "events: " + (seen.length ? seen.join(" → ") : "none yet");
+          };
+
+          // The browser's own events, watched in the capture phase so nothing can stop them
+          // reaching here. If `drop` never appears, the problem is before the hook.
+          for (const name of ["dragstart", "dragover", "drop", "dragend"]) {
+            document.addEventListener(name, (e) => {
+              const at = e.target.closest && e.target.closest("[data-builder-layer], [data-builder-fragment]");
+              let what = "(gap)";
+              if (at && at.hasAttribute("data-builder-fragment")) what = "(library)";
+              else if (at) what = "(layer " + at.getAttribute("data-builder-layer") + ")";
+              const tag = name + what;
+              if (seen[seen.length - 1] !== tag) { seen.push(tag); if (seen.length > 10) seen.shift(); show(); }
+            }, true);
+          }
+
+          const report = () => {
+            const hooks = window.VisualizeHooks || {};
+            const names = Object.keys(hooks);
+            const module = document.getElementById("diag-module");
+            if (module) {
+              module.textContent = names.length
+                ? "module: " + names.length + " hooks, BuilderHook " + (hooks.BuilderHook ? "present" : "MISSING")
+                : "module: DID NOT LOAD";
+            }
+
+            const all = document.querySelectorAll("[phx-hook='BuilderHook']");
+            const up = document.querySelectorAll("[phx-hook='BuilderHook'][data-builder-mounted]");
+            const mounted = document.getElementById("diag-mounted");
+            if (mounted) mounted.textContent = "hook mounted: " + up.length + " of " + all.length;
+          };
+
+          window.addEventListener("DOMContentLoaded", () => setTimeout(report, 400));
+          setTimeout(report, 1500);
+        })();
+      </script>
     </header>
     <main>
       <.live_component

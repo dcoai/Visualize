@@ -1626,7 +1626,14 @@ The dragged name travels in `dataTransfer` under `application/x-visualize-fragme
 | `reorder` | `%{"from" => integer, "to" => integer}` | a layer moved within the stack (§18.10) |
 | `insert` | `%{"name" => string, "at" => integer}` | a library fragment dropped at a position |
 
-**Where it lands.** A drop over a layer inserts *before* it when the pointer is in its upper half and *after* it when in its lower half, so both sides of every layer are reachable; a drop in the stack's empty space appends. The position is clamped to the stack, because a hook is a client and a client's number is not to be trusted.
+**Where it lands** is one rule for both drags, and the rule is a **gap**, not a row. The pointer's position is compared with each row's midpoint: the result is the first row whose midpoint is below the pointer, and the end of the stack when none is. A gap is therefore always named — including the gap above the first row and the gap below the last — and the pointer never has to be inside a row at all.
+
+That last part is the substance. An earlier rule required the drop to land on a row and computed a side from it, which left both ends of the stack unreachable: the space above the first layer and below the last belongs to the container, not to any row, so a drop there was simply discarded. The stack accepts a drop anywhere within itself, and reserves some empty space below the last row for exactly this.
+
+A **move** is the same gap, adjusted: `at` is a gap in the list as it stands, and once the dragged layer is lifted out every gap after it shifts down by one, so the position sent is `at - 1` where `at` is beyond the layer's own position. The position is clamped server-side regardless, because a hook is a client and a client's number is not to be trusted.
+
+**A drag must be able to start.** A browser will not begin a drag from a form control however draggable its ancestor is, so a row whose visible surface is a button says `draggable` on the button as well as on the row. A library item is such a row: the button is the whole of it.
+
 
 **What follows the insert.** The selected layer and the disabled set are *positions*, so both shift by one where they sit at or below the insertion — the same rule a move already follows (§18.8). A name the store does not hold is a notice and changes no layer, exactly as adding one is.
 

@@ -41,6 +41,9 @@ defmodule Visualize.Hooks.Builder do
     """
     export const BuilderHook = {
       mounted() {
+        // Says the hook is registered AND attached to this element. Without it, a hook that
+        // never loaded and a hook that loaded but does nothing look identical from outside.
+        this.el.setAttribute('data-builder-mounted', 'true');
         this.target = this.el.dataset.builderTarget || null;
         this.from = null;
         this.onDragStart = this.handleDragStart.bind(this);
@@ -111,22 +114,36 @@ defmodule Visualize.Hooks.Builder do
         return stored === '' ? null : stored;
       },
 
-      // Without preventDefault the browser refuses the drop. A drag from the library is
-      // accepted anywhere in the stack, including its empty space, which is what makes
-      // dropping at the end possible.
+      // Without preventDefault the browser refuses the drop. The whole stack accepts, not
+      // just its rows: the space above the first layer and below the last is how the ends
+      // are reached, and requiring the pointer to be over a row made them unreachable.
       handleDragOver(e) {
         if (!this.accepts(e)) return;
         e.preventDefault();
-        this.clearOver();
-        const layer = this.layerAt(e);
-        if (layer) layer.classList.add('vis-builder-layer-over');
+        this.markPoint(this.insertionPoint(e));
       },
 
       accepts(e) {
         if (!this.el.hasAttribute('data-builder-stack')) return false;
-        if (this.from !== null) return this.layerAt(e) !== null;
+        if (this.from !== null) return true;
         return e.dataTransfer && Array.from(e.dataTransfer.types || [])
           .includes('application/x-visualize-fragment');
+      },
+
+      // Where the drop lands, as a position BETWEEN layers: 0 above the first, n below the
+      // last. One rule for both drags, and the only one that can name either end — the
+      // pointer is compared with each row's midpoint, so there is no row it must be inside.
+      insertionPoint(e) {
+        const layers = this.layers();
+        for (let i = 0; i < layers.length; i++) {
+          const box = layers[i].getBoundingClientRect();
+          if (e.clientY < box.top + box.height / 2) return i;
+        }
+        return layers.length;
+      },
+
+      layers() {
+        return Array.from(this.el.querySelectorAll('[data-builder-layer]'));
       },
 
       handleDrop(e) {
@@ -134,34 +151,33 @@ defmodule Visualize.Hooks.Builder do
         e.preventDefault();
         this.clearOver();
 
-        const layer = this.layerAt(e);
+        const at = this.insertionPoint(e);
 
-        // A move within the stack.
+        // A move within the stack. `at` is a gap in the list as it stands; once the dragged
+        // layer is lifted out, every gap after it shifts down by one.
         if (this.from !== null) {
-          if (!layer) return;
-          const to = this.position(layer);
+          const to = at > this.from ? at - 1 : at;
           if (to !== this.from) this.push('reorder', { from: this.from, to: to });
           return;
         }
 
-        // An insert from the library: before the layer dropped on, or at the end when the
-        // drop landed in the stack's empty space.
         const stored = this.dragged(e);
         if (stored === null) return;
-        const at = layer ? this.dropIndex(e, layer) : this.count();
         this.push('insert', { name: stored, at: at });
       },
 
-      // Which side of the layer the pointer is on, so a fragment can be put above or below
-      // the one it was dropped over rather than always before it.
-      dropIndex(e, layer) {
-        const box = layer.getBoundingClientRect();
-        const below = e.clientY > box.top + box.height / 2;
-        return this.position(layer) + (below ? 1 : 0);
-      },
+      // The gap the drop would land in, drawn on the row below it, or under the last row
+      // when the gap is the end.
+      markPoint(at) {
+        this.clearOver();
+        const layers = this.layers();
+        if (layers.length === 0) return;
 
-      count() {
-        return this.el.querySelectorAll('[data-builder-layer]').length;
+        if (at >= layers.length) {
+          layers[layers.length - 1].classList.add('vis-builder-layer-over-end');
+        } else {
+          layers[at].classList.add('vis-builder-layer-over');
+        }
       },
 
       // A drag that ended anywhere leaves no marks, dropped or not.
@@ -176,9 +192,11 @@ defmodule Visualize.Hooks.Builder do
       },
 
       clearOver() {
-        this.el.querySelectorAll('.vis-builder-layer-over').forEach((node) => {
-          node.classList.remove('vis-builder-layer-over');
-        });
+        this.el.querySelectorAll('.vis-builder-layer-over, .vis-builder-layer-over-end')
+          .forEach((node) => {
+            node.classList.remove('vis-builder-layer-over');
+            node.classList.remove('vis-builder-layer-over-end');
+          });
       },
 
       // The highlight is the browser's: it needs no round trip. The selection is the

@@ -377,8 +377,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
       opacity: 0.4;
     }
 
+    /* The gap a drop would land in, drawn on the row below it — or under the last row when
+       the gap is the end of the stack. */
     .vis-builder-layer-over {
-      border-top: 2px solid var(--vis-builder-accent);
+      border-top-color: var(--vis-builder-accent);
+      box-shadow: inset 0 2px 0 var(--vis-builder-accent);
+    }
+
+    .vis-builder-layer-over-end {
+      border-bottom-color: var(--vis-builder-accent);
+      box-shadow: inset 0 -2px 0 var(--vis-builder-accent);
+    }
+
+    /* The stack accepts a drop in its empty space too, so it needs some. */
+    .vis-builder-layers {
+      min-height: 60px;
+      padding-bottom: 16px;
     }
 
     /* The four actions are icons in the row and words to a screen reader. Each selector

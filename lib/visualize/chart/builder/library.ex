@@ -176,6 +176,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               >
                 <button
                   type="button"
+                  draggable="true"
                   class="vis-builder-fragment"
                   phx-click="add_layer"
                   phx-value-name={item.stored}
