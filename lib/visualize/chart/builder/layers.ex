@@ -8,6 +8,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     reversed it would teach the opposite of the specification. Each layer offers three
     things: select it, disable it, and drag it into place through `Visualize.Hooks.Builder`.
 
+    **The row is the control.** Clicking anywhere on it selects the layer and dragging it
+    reorders it, because a row that can only be selected through a 22px icon reads as a row
+    that cannot be selected at all. The one button left is the toggle, and it says
+    `draggable="false"`: a control inside a draggable row is itself a drag source unless it
+    says otherwise, and a mousedown that moves a pixel becomes a drag whose click never
+    fires.
+
     Disabling is not deleting: a disabled layer stays in the list and is dropped from the
     stack, so "what does this look like without the house theme" is one click and one click
     back (D-87).
@@ -51,19 +58,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
           class={entry.class}
           data-builder-layer={entry.index}
           draggable="true"
+          title={"Click to edit " <> entry.name <> ", drag to reorder it"}
+          phx-click="select_layer"
+          phx-value-index={entry.index}
+          phx-target={@target}
         >
           <span class="vis-builder-layer-name">{entry.name}</span>
           <button
             type="button"
-            class="vis-builder-layer-select"
-            title={"Edit " <> entry.name}
-            aria-label={"Edit " <> entry.name}
-            phx-click="select_layer"
-            phx-value-index={entry.index}
-            phx-target={@target}
-          ><span class="vis-builder-action-label">Edit</span></button>
-          <button
-            type="button"
+            draggable="false"
             class="vis-builder-layer-toggle"
             title={entry.toggle <> " " <> entry.name}
             aria-label={entry.toggle <> " " <> entry.name}

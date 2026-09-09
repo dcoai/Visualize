@@ -259,28 +259,30 @@ defmodule Visualize.Chart.BuilderTest do
     test "every action carries an accessible name and hides its word" do
       html = BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), :layers))
 
-      for {class, label} <- [
-            {"vis-builder-layer-select", "Edit house"},
-            {"vis-builder-layer-toggle", "Disable house"}
-          ] do
-        assert html =~ ~s(class="#{class}")
-        assert html =~ ~s(title="#{label}")
-        assert html =~ ~s(aria-label="#{label}")
-      end
+      # The row is the control: clicking it selects, dragging it reorders.
+      assert html =~ ~s(phx-click="select_layer" phx-value-index="0")
+      assert html =~ ~s(title="Click to edit house, drag to reorder it")
 
-      assert html =~ ~s(<span class="vis-builder-action-label">Edit</span>)
+      # The one button left names itself, and is not a drag source: a control inside a
+      # draggable row swallows its own click otherwise (spec/14 §18.8).
+      assert html =~ ~s(class="vis-builder-layer-toggle")
+      assert html =~ ~s(title="Disable house")
+      assert html =~ ~s(aria-label="Disable house")
+      assert html =~ ~s(draggable="false")
       assert html =~ ~s(<span class="vis-builder-action-label">Disable</span>)
 
-      # Moving is dragging and nothing else (spec/14 §18.8).
+      # Moving is dragging, and selecting no longer needs an icon of its own.
       refute html =~ "vis-builder-layer-up"
       refute html =~ "vis-builder-layer-down"
+      # `vis-builder-layer-selected` contains this as a substring, so match the attribute.
+      refute html =~ ~s(class="vis-builder-layer-select")
     end
 
     test "no action rule is out-specified by the generic control rule" do
       # `.vis-builder button` is (0,1,1). A rule written as a bare `.vis-builder-layer-up` is
       # (0,1,0) and loses to it, which is how the icons were defeated the first time; every
       # action rule must therefore be compound.
-      for class <- ~w(layer-select layer-toggle action-label) do
+      for class <- ~w(layer-toggle action-label) do
         bare = ~r/(^|,)\s*\.vis-builder-#{class}\b[^,{]*\{/m
 
         refute Regex.match?(bare, Builder.css()),

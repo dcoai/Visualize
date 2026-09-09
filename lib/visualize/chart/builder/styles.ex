@@ -399,7 +399,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
        carries the component class as well as the action's own, because `.vis-builder button`
        is (0,1,1) and would otherwise out-specify a bare `.vis-builder-layer-up` at (0,1,0)
        and restore the label, the padding and the border. */
-    .vis-builder .vis-builder-layer-select,
     .vis-builder .vis-builder-layer-toggle {
       position: relative;
       flex: 0 0 auto;
@@ -428,7 +427,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       white-space: nowrap;
     }
 
-    .vis-builder .vis-builder-layer-select::before,
     .vis-builder .vis-builder-layer-toggle::before {
       display: flex;
       align-items: center;
@@ -437,22 +435,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
       height: 100%;
     }
 
-    .vis-builder .vis-builder-layer-select::before { content: "✎"; }
     .vis-builder .vis-builder-layer-toggle::before { content: "◉"; }
 
     .vis-builder .vis-builder-layer-disabled .vis-builder-layer-toggle::before {
       content: "○";
     }
 
-    .vis-builder .vis-builder-layer-select:hover,
     .vis-builder .vis-builder-layer-toggle:hover {
       border-color: var(--vis-builder-line);
       background: var(--vis-builder-panel);
       color: var(--vis-builder-ink);
     }
 
-    .vis-builder .vis-builder-layer-selected .vis-builder-layer-select {
-      color: var(--vis-builder-accent);
+    /* The row is the control, so it says so on hover. */
+    .vis-builder-layer {
+      cursor: pointer;
     }
 
     /* ── the node tabs ───────────────────────────────────────────────────────── */

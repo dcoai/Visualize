@@ -164,7 +164,7 @@ defmodule ExamplesWeb.BuilderLive do
 
           // The browser's own events, watched in the capture phase so nothing can stop them
           // reaching here. If `drop` never appears, the problem is before the hook.
-          for (const name of ["dragstart", "dragover", "drop", "dragend"]) {
+          for (const name of ["click", "dragstart", "dragover", "drop", "dragend"]) {
             document.addEventListener(name, (e) => {
               const at = e.target.closest && e.target.closest("[data-builder-layer], [data-builder-fragment]");
               let what = "(gap)";
