@@ -5,13 +5,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     The layers are listed in the order `Visualize.Chart.stack/1` reads them — the higher
     layer last — because that is the order the cascade is defined in, and a panel that
-    reversed it would teach the opposite of the specification. Each layer offers four
-    things: select it, move it up or down, disable it, and drag it into place through
-    `Visualize.Hooks.Builder`.
+    reversed it would teach the opposite of the specification. Each layer offers three
+    things: select it, disable it, and drag it into place through `Visualize.Hooks.Builder`.
 
     Disabling is not deleting: a disabled layer stays in the list and is dropped from the
     stack, so "what does this look like without the house theme" is one click and one click
     back (D-87).
+
+    Moving is dragging and nothing else. The panel carried up and down buttons beside every
+    layer, which is two more controls per row to say what one gesture already says, and a
+    stack of any depth is not reordered a step at a time. `Visualize.Hooks.Builder` is the
+    one way a layer moves (§18.10, §18.17).
 
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
@@ -58,26 +62,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-value-index={entry.index}
             phx-target={@target}
           ><span class="vis-builder-action-label">Edit</span></button>
-          <button
-            type="button"
-            class="vis-builder-layer-up"
-            title={"Move " <> entry.name <> " up"}
-            aria-label={"Move " <> entry.name <> " up"}
-            phx-click="move_layer"
-            phx-value-index={entry.index}
-            phx-value-to={entry.index - 1}
-            phx-target={@target}
-          ><span class="vis-builder-action-label">Up</span></button>
-          <button
-            type="button"
-            class="vis-builder-layer-down"
-            title={"Move " <> entry.name <> " down"}
-            aria-label={"Move " <> entry.name <> " down"}
-            phx-click="move_layer"
-            phx-value-index={entry.index}
-            phx-value-to={entry.index + 1}
-            phx-target={@target}
-          ><span class="vis-builder-action-label">Down</span></button>
           <button
             type="button"
             class="vis-builder-layer-toggle"

@@ -125,7 +125,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       socket = socket(selected: 2, disabled: MapSet.new([0]))
 
       {:noreply, moved} =
-        Builder.handle_event("move_layer", %{"index" => "2", "to" => "0"}, socket)
+        Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, socket)
 
       [house, shared, panel] = BuilderFixture.layers()
       assert moved.assigns.layers == [panel, house, shared]
@@ -135,13 +135,13 @@ defmodule Visualize.Chart.Builder.StackTest do
 
     test "a move off either end changes nothing" do
       socket = socket()
-      {:noreply, up} = Builder.handle_event("move_layer", %{"index" => "0", "to" => "-1"}, socket)
+      {:noreply, up} = Builder.handle_event("reorder", %{"from" => 0, "to" => -1}, socket)
 
       {:noreply, down} =
-        Builder.handle_event("move_layer", %{"index" => "2", "to" => "3"}, socket)
+        Builder.handle_event("reorder", %{"from" => 2, "to" => 3}, socket)
 
       {:noreply, same} =
-        Builder.handle_event("move_layer", %{"index" => "1", "to" => "1"}, socket)
+        Builder.handle_event("reorder", %{"from" => 1, "to" => 1}, socket)
 
       for unchanged <- [up, down, same] do
         assert unchanged.assigns.layers == BuilderFixture.layers()

@@ -213,7 +213,7 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "a move, an added layer and a node edit all survive it", %{host: host, socket: socket} do
       {:noreply, moved} =
-        Builder.handle_event("move_layer", %{"index" => "0", "to" => "2"}, socket)
+        Builder.handle_event("reorder", %{"from" => 0, "to" => 2}, socket)
 
       {:ok, moved} = Builder.update(host, moved)
       assert names(moved) == [:shared, :panel, :house]
@@ -261,8 +261,6 @@ defmodule Visualize.Chart.BuilderTest do
 
       for {class, label} <- [
             {"vis-builder-layer-select", "Edit house"},
-            {"vis-builder-layer-up", "Move house up"},
-            {"vis-builder-layer-down", "Move house down"},
             {"vis-builder-layer-toggle", "Disable house"}
           ] do
         assert html =~ ~s(class="#{class}")
@@ -272,20 +270,24 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert html =~ ~s(<span class="vis-builder-action-label">Edit</span>)
       assert html =~ ~s(<span class="vis-builder-action-label">Disable</span>)
+
+      # Moving is dragging and nothing else (spec/14 §18.8).
+      refute html =~ "vis-builder-layer-up"
+      refute html =~ "vis-builder-layer-down"
     end
 
     test "no action rule is out-specified by the generic control rule" do
       # `.vis-builder button` is (0,1,1). A rule written as a bare `.vis-builder-layer-up` is
       # (0,1,0) and loses to it, which is how the icons were defeated the first time; every
       # action rule must therefore be compound.
-      for class <- ~w(layer-select layer-up layer-down layer-toggle action-label) do
+      for class <- ~w(layer-select layer-toggle action-label) do
         bare = ~r/(^|,)\s*\.vis-builder-#{class}\b[^,{]*\{/m
 
         refute Regex.match?(bare, Builder.css()),
                "a bare .vis-builder-#{class} rule loses to `.vis-builder button`"
       end
 
-      assert Builder.css() =~ ".vis-builder .vis-builder-layer-up"
+      assert Builder.css() =~ ".vis-builder .vis-builder-layer-toggle"
     end
   end
 

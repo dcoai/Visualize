@@ -386,8 +386,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
        is (0,1,1) and would otherwise out-specify a bare `.vis-builder-layer-up` at (0,1,0)
        and restore the label, the padding and the border. */
     .vis-builder .vis-builder-layer-select,
-    .vis-builder .vis-builder-layer-up,
-    .vis-builder .vis-builder-layer-down,
     .vis-builder .vis-builder-layer-toggle {
       position: relative;
       flex: 0 0 auto;
@@ -417,8 +415,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     .vis-builder .vis-builder-layer-select::before,
-    .vis-builder .vis-builder-layer-up::before,
-    .vis-builder .vis-builder-layer-down::before,
     .vis-builder .vis-builder-layer-toggle::before {
       display: flex;
       align-items: center;
@@ -428,8 +424,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     .vis-builder .vis-builder-layer-select::before { content: "✎"; }
-    .vis-builder .vis-builder-layer-up::before { content: "↑"; }
-    .vis-builder .vis-builder-layer-down::before { content: "↓"; }
     .vis-builder .vis-builder-layer-toggle::before { content: "◉"; }
 
     .vis-builder .vis-builder-layer-disabled .vis-builder-layer-toggle::before {
@@ -437,8 +431,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     .vis-builder .vis-builder-layer-select:hover,
-    .vis-builder .vis-builder-layer-up:hover,
-    .vis-builder .vis-builder-layer-down:hover,
     .vis-builder .vis-builder-layer-toggle:hover {
       border-color: var(--vis-builder-line);
       background: var(--vis-builder-panel);

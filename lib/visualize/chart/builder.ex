@@ -283,10 +283,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, update(socket, :disabled, &toggle(&1, position(index)))}
     end
 
-    def handle_event("move_layer", %{"index" => from, "to" => to}, socket) do
-      {:noreply, moved(socket, position(from), position(to))}
-    end
-
     def handle_event("reorder", %{"from" => from, "to" => to}, socket) do
       {:noreply, moved(socket, position(from), position(to))}
     end
