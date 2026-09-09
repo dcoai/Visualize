@@ -1399,3 +1399,48 @@ Nothing in the behaviour validates: a fragment is a fragment (§8), and a store 
 A fault the *frame* raises rather than reports — a value a scale cannot take, a theme name nothing resolves — raises here as it does anywhere else (§7.3): those are faults of the data or of the host's pool, not of the design being edited, and hiding them in a panel would be hiding a bug in the host.
 
 The preview draws the **enabled** layers stacked, so disabling a layer is how a person asks what the design looks like without it, and it draws through the ordinary path — `Visualize.Chart.apply/2` then `Visualize.Chart.render/2` — so what the preview shows and what the host gets from the saved design cannot differ.
+
+### 18.5 The nodes of a fragment
+
+**Implemented** (work item 2 of #54, D-86). A fragment is a tree of nodes (§1.2), and the editor edits one node at a time. `Visualize.Chart.Builder.Editor.nodes/1` is that list: one entry per node the *schema's own walk* reaches in a fragment, so no kind, key or path is written by hand and a node kind added to the schema becomes editable with no edit to the builder.
+
+| Key | What |
+|---|---|
+| `path` | the keys and list indexes from the fragment to the node: `[]` for the fragment itself, `[:frame]`, `[:frame, :scales, :x]`, `[:marks, 0, :channels]` |
+| `kind` | the node kind at that path (§1.2), which is what `Visualize.Chart.Schema.describe/1` is asked for |
+| `label` | the path as a person reads it: `design` for the root, else `frame.scales.x`, `marks[0].channels` — the spelling `Visualize.Chart.Validator.format/1` uses for an error's path (§10.1) |
+
+The walk starts at the `:design` kind and descends by the type of every key the node actually carries: a `{:node, kind}` is one node at that key, a `{:map, {:node, kind}}` is one node per declared name in name order, a `{:list, {:node, kind}}` is one node per element at its index, and a `{:one_of, …}` that admits a node kind is that node when the value is a map — which is what makes an inline `theme` (§2.5) editable and a named one a value. Nothing else is descended into: a text, an extent, a channel and a reference are *values* of the node that carries them, and are edited there (§18.6). Entries are in the order the walk reaches them, the root first, so the list reads as the fragment does.
+
+A key a fragment does not carry has no node, because a fragment is not a whole design (§8): the editor offers what is there. Adding a node is adding the key, which is the same edit as any other.
+
+### 18.6 Widgets and values
+
+**Implemented.** Which control a key gets is a function of its type (§1.4) and of nothing else: `Visualize.Chart.Builder.Editor.widget/1` takes a `t:Visualize.Chart.Schema.type/0` and returns the control, and `Visualize.Chart.Builder.Editor.parse/2` reads a submitted string back as a value of that type. The two are the whole of the editor's knowledge of values, and both are total over the schema's types, which is the property that says the editor cannot fall behind it.
+
+| Type | Widget |
+|---|---|
+| `:boolean` | `:checkbox` |
+| `:integer`, `:number` | `:number` |
+| `{:enum, allowed}` | `{:select, allowed}` |
+| `:string`, `:name`, `:field`, `:colour`, `:size`, `:font`, `:slot`, `{:ref, _}` | `:text` |
+| every other type — `:channel`, `:field_ref`, `:extent`, `:anchor`, `:text`, `:term`, `{:list, _}`, `{:map, _}`, `{:node, _}` | `:textarea` |
+| `{:one_of, [first | _rest]}` | the widget of `first` |
+
+`Visualize.Chart.Builder.Editor.parse/2` reads a `{:one_of, …}` as its first alternative too, the one whose widget the control is, so what a person can type and what the reader accepts are the same thing.
+
+A `:textarea` holds the value as `inspect/1` writes it and `parse/2` reads it back as a **literal**: the string is parsed with `Code.string_to_quoted/1` — parsed, never evaluated — and the quoted form is accepted only where it is a number, a string, an atom, `true`, `false`, `nil`, a list, a tuple, a map, a `%Visualize.Chart.Var{}` or a `~U` sigil, which is the whole vocabulary a design may contain (§1.4). Anything else — a call, an operator, a variable, any other struct — is `:error`, so a design map cannot acquire a function or a term the codec has no form for (§11). That the reader is one walk over the literal grammar rather than a rule per type is what keeps it total: a type added to the schema needs no case here.
+
+The other widgets read what their control can produce: a checkbox is `true` or `false`, a number is an integer for `:integer` and an integer or a float for `:number`, a select is the listed atom the string names, a `:text` control is the string itself for `:string`, the atom of the string for a name, a field, a slot or a reference, and otherwise the loose reading a person expects — a leading `:` is an atom, a numeral is a number, and everything else is the string, which is how `#3b6fa8` reaches a `:colour` and `:series_1` reaches the same key as a theme slot. A blank string is `:error` for every type, and blanking a control is how a key is removed rather than set to nothing.
+
+Reading an atom from a submitted string creates it, as `Visualize.Chart.from_json/1` does for the same reason (§11.1): a design is authored, and its names are the author's vocabulary. A host that exposes the builder to an untrusted author bounds that itself, as it does for the JSON form.
+
+### 18.7 The form and its errors
+
+**Implemented.** `Visualize.Chart.Builder.Editor.panel/1` renders one form for one node: the *facets* of the node's keys as tabs, in the order of §1.3, and the keys of the open tab in the order of the node's table in this document — which is the order `Visualize.Chart.Schema.describe/1` returns them in, so the form reads as the specification does. A facet no key of the *node kind* carries has no tab — the tabs are the kind's, not the node's, so every key the kind declares is reachable and adding one is the same edit as changing one — and a kind whose keys are all one facet has one tab.
+
+Each key is a `<label>` holding its name, the control `Visualize.Chart.Builder.Editor.widget/1` chose, the value the node carries, and — where the node does not carry the key — the schema's default as the control's placeholder, so what a key would be if left alone is visible without being written into the design. The key's own errors are listed under its control: an error of the validator whose path is exactly this node's path followed by this key (§10.1), rendered by `Visualize.Chart.Validator.format/1`. An error at a path no key of the open tab owns is not shown twice — it belongs to the node that owns that path, and the tab that holds it.
+
+The errors are the *stacked* design's, the ones the preview lists (§18.4), and a layer's node sits at the same path in the stack as in the layer unless a higher layer replaced it — which is the one case where a fault shown against a key belongs to another layer's value at that path. Recomputing them per layer would mean validating a fragment, and a fragment is not a design: it is the stack that is validated, which is exactly what §8 says.
+
+Editing a control writes the parsed value into the selected layer at the node's path, and a control blanked removes the key. Nothing else happens: the layer is a fragment, the stack is recomputed, the preview redraws, and no validation runs until application does it (§8).

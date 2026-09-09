@@ -15,7 +15,7 @@ defmodule Visualize.BuilderFixture do
 
   alias Visualize.Chart
   alias Visualize.Chart.Builder
-  alias Visualize.Chart.Builder.Preview
+  alias Visualize.Chart.Builder.{Editor, Preview}
 
   @dir "test/support/builder"
 
@@ -123,9 +123,38 @@ defmodule Visualize.BuilderFixture do
       preview_errors: {&Preview.panel/1, %{design: Chart.stack(incomplete()), sources: %{}}},
       builder: {Builder, %{id: "builder", layers: layers(), sources: sources()}},
       builder_store:
-        {Builder, %{id: "builder", layers: layers(), sources: sources(), store: Library}}
+        {Builder, %{id: "builder", layers: layers(), sources: sources(), store: Library}},
+      editor_design: {&Editor.panel/1, %{kind: :design, node: layer(:house), path: []}},
+      editor_mark:
+        {&Editor.panel/1,
+         %{
+           kind: :mark,
+           node: mark(),
+           path: [:marks, 0],
+           facet: :channel
+         }},
+      editor_style_errors:
+        {&Editor.panel/1,
+         %{
+           kind: :style,
+           node: %{stroke: :series_1, stroke_width: 2},
+           path: [:styles, :series],
+           errors: [
+             {[:styles, :series, :stroke], {:undeclared, :slot, :series_1}},
+             {[:styles, :series, :curve], {:enum, [:linear, :step]}},
+             {[:marks, 0, :style], {:undeclared, :style, :series}}
+           ]
+         }}
     ]
   end
+
+  @doc false
+  # One named layer's fragment.
+  def layer(name), do: layers() |> Keyword.fetch!(name)
+
+  @doc false
+  # The panel layer's one mark, the node `editor_mark` edits.
+  def mark, do: :panel |> layer() |> Map.fetch!(:marks) |> hd()
 
   @doc false
   def dir, do: @dir

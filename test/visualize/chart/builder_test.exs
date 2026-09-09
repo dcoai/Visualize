@@ -159,6 +159,70 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "editing (spec/14 §18.7)" do
+    test "the open node and the open tab are the component's own state" do
+      socket = socket(BuilderFixture.layers())
+      {:noreply, moved} = Builder.handle_event("select_node", %{"node" => "frame.size"}, socket)
+      {:noreply, tabbed} = Builder.handle_event("facet", %{"facet" => "style"}, socket)
+      {:noreply, unknown} = Builder.handle_event("facet", %{"facet" => "nonsense"}, socket)
+
+      assert moved.assigns.node_label == "frame.size"
+      assert moved.assigns.facet == nil
+      assert tabbed.assigns.facet == :style
+      assert unknown.assigns.facet == nil
+    end
+
+    test "a parsed value is written into the selected layer at the node's path" do
+      socket = socket(BuilderFixture.layers(), node_label: "frame.size")
+      params = %{"_target" => ["width"], "width" => "640", "height" => "200"}
+      {:noreply, edited} = Builder.handle_event("edit", params, socket)
+
+      assert {:house, house} = hd(edited.assigns.layers)
+      assert house.frame.size == %{width: 640, height: 200}
+      assert Enum.drop(edited.assigns.layers, 1) == Enum.drop(BuilderFixture.layers(), 1)
+    end
+
+    test "a blank control removes the key, and an unchecked checkbox writes false" do
+      socket = socket(BuilderFixture.layers(), selected: 1, node_label: "frame.axes[0]")
+      blank = %{"_target" => ["ticks"], "ticks" => ""}
+      {:noreply, removed} = Builder.handle_event("edit", blank, socket)
+
+      assert {:shared, shared} = Enum.at(removed.assigns.layers, 1)
+      assert hd(shared.frame.axes) == %{scale: :x, side: :bottom}
+
+      {:noreply, unchecked} = Builder.handle_event("edit", %{"_target" => ["grid"]}, socket)
+      assert {:shared, off} = Enum.at(unchecked.assigns.layers, 1)
+      assert hd(off.frame.axes).grid == false
+    end
+
+    test "a key the node kind does not declare changes nothing" do
+      socket = socket(BuilderFixture.layers())
+      params = %{"_target" => ["stoke_width"], "stoke_width" => "3"}
+      {:noreply, edited} = Builder.handle_event("edit", params, socket)
+
+      assert edited.assigns.layers == BuilderFixture.layers()
+    end
+
+    test "a chart layer becomes the map it is, which is the same design" do
+      {:ok, chart} = Chart.from_map(Chart.stack(BuilderFixture.layers()))
+      socket = socket([chart], node_label: "frame.size")
+      params = %{"_target" => ["width"], "width" => "640"}
+      {:noreply, edited} = Builder.handle_event("edit", params, socket)
+
+      [layer] = edited.assigns.layers
+      assert is_map(layer) and not is_struct(layer)
+      assert layer.frame.size.width == 640
+      assert Map.delete(layer.frame, :size) == Map.delete(Chart.to_map(chart).frame, :size)
+    end
+
+    test "the editor is rendered over the selected layer, with the design's faults" do
+      html = rendered(:builder)
+      assert html =~ ~s(<div class="vis-builder-editor">)
+      assert html =~ ~s(phx-value-node="frame.size")
+      refute html =~ "vis-builder-key-errors"
+    end
+  end
+
   defp rendered(name),
     do: BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), name))
 
@@ -170,7 +234,13 @@ defmodule Visualize.Chart.BuilderTest do
         disabled: MapSet.new(),
         notice: nil,
         store: nil,
-        on_save: :visualize_chart_saved
+        on_save: :visualize_chart_saved,
+        selected: 0,
+        facet: nil,
+        node_label: "design",
+        sources: BuilderFixture.sources(),
+        vars: %{},
+        theme: nil
       ]
       |> Keyword.merge(opts)
       |> Map.new()
