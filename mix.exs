@@ -1,10 +1,15 @@
 defmodule Visualize.MixProject do
   use Mix.Project
 
+  # The version between releases carries `-dev`, so no commit claims to be the release it
+  # merely follows. `~/Projects/claude-tools/release.exs` moves this attribute — it edits
+  # `@version`, not an inline `version:` — and RELEASING.md describes the lifecycle.
+  @version "0.1.0-dev"
+
   def project do
     [
       app: :visualize,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -89,12 +94,15 @@ defmodule Visualize.MixProject do
   @models ~w(Visualize.Specs.ForceSimulation)
   defp verify_models(_args), do: Enum.each(@models, &Mix.Task.rerun("tla.check", [&1]))
 
-  # The specification and the surface golden ship with the package: they are the contract
-  # a consumer holds the library to, not internal documentation.
+  # The specification, the surface golden and the changelog ship with the package: they are
+  # the contract a consumer holds the library to, and the record of what an upgrade brings,
+  # not internal documentation. RELEASING.md is deliberately absent — it is a maintainer
+  # document, and nothing that ships may link to a file that does not.
   defp package do
     [
-      files: ~w(lib spec mix.exs README.md usage-rules.md API_SURFACE.md .formatter.exs),
-      licenses: [],
+      files:
+        ~w(lib spec mix.exs README.md LICENSE CHANGELOG.md usage-rules.md API_SURFACE.md .formatter.exs),
+      licenses: ["MIT"],
       links: %{"GitLab" => "https://gitlab.conet.yarina.org/dco-tek/visualize"}
     ]
   end
