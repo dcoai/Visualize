@@ -3,6 +3,11 @@ defmodule Visualize.Chart.StackTest do
   The cascade over fragments (spec/14 §8.2, D-81): for every key the higher layer wins,
   a `:union` name both layers declare is the higher layer's entry whole, a node both
   give as a map cascades key by key, and the result is a fragment like the layers.
+
+  A struct is a leaf of the walk (§1.4, D-92): a mergeable key either layer gives as a
+  whole-node variable is the higher layer's value whole, where `compose/2` reports a
+  conflict. That is a *replacement*, so the cascade is associative only where every layer
+  gives its mergeable keys as maps — `stack/1` is the left fold and computes it either way.
   """
   use ExUnit.Case, async: true
   use ExUnitProperties
@@ -132,6 +137,45 @@ defmodule Visualize.Chart.StackTest do
       assert Chart.stack(%{styles: var}, %{styles: %{a: %{}}}) == %{styles: %{a: %{}}}
       assert Chart.stack(%{styles: %{a: %{}}}, %{styles: var}) == %{styles: var}
       assert Chart.stack(%{theme: :dark}, %{theme: %{name: :house}}) == %{theme: %{name: :house}}
+    end
+
+    test "every union key given as a whole-node variable is the higher layer's, where compose conflicts" do
+      v = Chart.var(:v)
+
+      for {declared, variable, path} <- [
+            {%{sources: %{p: %{fields: [:t]}}}, %{sources: v}, [:sources]},
+            {%{vars: %{unit: %{default: "%"}}}, %{vars: v}, [:vars]},
+            {%{styles: %{series: %{stroke_width: 2}}}, %{styles: v}, [:styles]},
+            {%{frame: %{scales: %{x: %{kind: :time}}}}, %{frame: %{scales: v}}, [:frame, :scales]}
+          ] do
+        assert Chart.stack(declared, variable) == variable
+        assert Chart.stack(variable, declared) == declared
+        assert Chart.stack(variable, variable) == variable
+
+        assert Chart.compose(declared, variable) == {:error, [{path, :conflict}]}
+        assert Chart.compose(variable, declared) == {:error, [{path, :conflict}]}
+      end
+    end
+
+    test "a layer replacing a mergeable key whole is an erasure, so regrouping may differ" do
+      # spec/14 §8.2, D-92: `stack/1` is the LEFT fold and computes this; the middle
+      # layer's whole-node variable erases what the lowest declared, and that erasure
+      # cannot survive being regrouped, because the intermediate would not be a fragment.
+      a = %{vars: %{n: %{default: 0}}}
+      b = %{vars: Chart.var(:sheet)}
+      c = %{vars: %{}}
+
+      assert Chart.stack([a, b, c]) == %{vars: %{}}
+      assert Chart.stack(Chart.stack(a, b), c) == %{vars: %{}}
+      assert Chart.stack(a, Chart.stack(b, c)) == %{vars: %{n: %{default: 0}}}
+
+      # The same holds for a node key, where the rule is to recurse rather than unite.
+      f = %{frame: %{kind: :polar}}
+      g = %{frame: Chart.var(:f)}
+      h = %{frame: %{size: %{width: 1}}}
+
+      assert Chart.stack([f, g, h]) == %{frame: %{size: %{width: 1}}}
+      assert Chart.stack(f, Chart.stack(g, h)) == %{frame: %{kind: :polar, size: %{width: 1}}}
     end
 
     test "a key the schema does not know is the higher layer's" do
@@ -321,6 +365,12 @@ defmodule Visualize.Chart.StackTest do
   defp names(pool, gen),
     do: map(list_of(tuple({member_of(pool), gen}), max_length: 3), &Map.new/1)
 
+  # A `:union` key may be given as a whole-node variable instead of a name map (spec/14
+  # §1.4, §8.2, D-92): the cascade takes the higher layer's value whole, where `compose/2`
+  # reports a conflict. One in five, so the name-map branches stay the common case.
+  defp declaration(pool, gen),
+    do: frequency([{4, names(pool, gen)}, {1, map(member_of([:sheet, :other]), &Chart.var/1)}])
+
   defp label do
     gen all(anchor <- member_of([:title, :caption]), id <- member_of([nil, :head, :foot])) do
       base = %{anchor: anchor, text: ["t"]}
@@ -339,7 +389,7 @@ defmodule Visualize.Chart.StackTest do
     optional_map(%{
       kind: member_of([:cartesian, :polar]),
       size: fixed_map(%{width: integer(100..900), height: integer(100..900)}),
-      scales: names(@scale_names, scale()),
+      scales: declaration(@scale_names, scale()),
       axes:
         list_of(fixed_map(%{scale: member_of(@scale_names), side: member_of([:top, :left])}),
           max_length: 2
@@ -351,19 +401,34 @@ defmodule Visualize.Chart.StackTest do
     optional_map(%{
       version: constant(1),
       theme: member_of([:default, :dark]),
-      styles: names(@style_names, style()),
-      vars: names([:unit, :n], fixed_map(%{default: integer()})),
+      sources: declaration([:primary, :other], fixed_map(%{fields: constant([:t, :v])})),
+      styles: declaration(@style_names, style()),
+      vars: declaration([:unit, :n], fixed_map(%{default: integer()})),
       frame: frame(),
       marks: list_of(mark(), max_length: 3),
       labels: list_of(label(), max_length: 3)
     })
   end
 
-  property "the cascade is associative over a list" do
+  property "the cascade is the left fold, and is associative where no layer replaces a union key whole" do
     check all(a <- fragment(), b <- fragment(), c <- fragment()) do
-      assert Chart.stack(Chart.stack(a, b), c) == Chart.stack(a, Chart.stack(b, c))
       assert Chart.stack([a, b, c]) == Chart.stack(Chart.stack(a, b), c)
+
+      if Enum.all?([a, b, c], &unions_are_maps?/1) do
+        assert Chart.stack(Chart.stack(a, b), c) == Chart.stack(a, Chart.stack(b, c))
+      end
     end
+  end
+
+  # A layer that gives a `:union` key as a whole-node variable *replaces* the declaration
+  # rather than merging into it, and an erasure in the middle of a fold does not survive
+  # regrouping (spec/14 §8.2, D-92). The generator produces them, so the associativity
+  # property asks for the layers where every mergeable key is a map.
+  defp unions_are_maps?(fragment) do
+    scales = fragment |> Map.get(:frame, %{}) |> Map.get(:scales, %{})
+
+    Enum.all?([:sources, :styles, :vars], &(not is_struct(Map.get(fragment, &1, %{})))) and
+      not is_struct(scales)
   end
 
   property "one layer is itself and the empty fragment is the identity" do
@@ -387,10 +452,21 @@ defmodule Visualize.Chart.StackTest do
 
       assert Map.get(stacked, :theme) == higher(a, b, :theme)
 
-      for key <- [:styles, :vars], Map.has_key?(a, key) or Map.has_key?(b, key) do
-        assert Map.get(stacked, key) ==
-                 Map.merge(Map.get(a, key, %{}), Map.get(b, key, %{}))
+      for key <- [:sources, :styles, :vars], Map.has_key?(a, key) or Map.has_key?(b, key) do
+        assert Map.get(stacked, key) == united(a, b, key)
       end
+    end
+  end
+
+  # A `:union` key both layers give as a name map unites, the higher layer's entry winning
+  # each name; either layer giving it as a struct makes it one value, and the higher
+  # layer's whole (spec/14 §8.2, D-92).
+  defp united(a, b, key) do
+    case {Map.get(a, key), Map.get(b, key)} do
+      {x, nil} -> x
+      {nil, y} -> y
+      {x, y} when is_struct(x) or is_struct(y) -> y
+      {x, y} -> Map.merge(x, y)
     end
   end
 
@@ -442,7 +518,7 @@ defmodule Visualize.Chart.StackTest do
       [:marks, :labels],
       &(shared_ids(a, b, &1) == [] and unique_ids?(a, &1) and unique_ids?(b, &1))
     ) and
-      Enum.all?([:styles, :vars, :theme, :version, :frame], fn key ->
+      Enum.all?([:sources, :styles, :vars, :theme, :version, :frame], fn key ->
         not (Map.has_key?(a, key) and Map.has_key?(b, key))
       end)
   end

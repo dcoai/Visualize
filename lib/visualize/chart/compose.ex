@@ -4,6 +4,11 @@ defmodule Visualize.Chart.Compose do
   # `:concat` lists append, `:union` name maps unite with a conflict at a name declared
   # differently by both, `:override` takes the later fragment's value — recursing into a
   # node both fragments give as a map, so a frame's own keys follow their own rules.
+  #
+  # A struct is a leaf of every walk (spec/14 §1.4, D-92): a `%Var{}` stands *for* a value
+  # rather than being one, so it is never descended into and never merged as a map, even
+  # though Elixir says it is one. At a `:union` key that makes it a whole value two
+  # fragments can disagree about, which is `:conflict` at the key's own path.
 
   alias Visualize.Chart.{Schema, Validator}
 
@@ -45,6 +50,21 @@ defmodule Visualize.Chart.Compose do
   defp rule(:concat, _type, va, vb, _path) when is_list(va) and is_list(vb), do: {va ++ vb, []}
 
   defp rule(:union, _type, va, vb, path) when is_map(va) and is_map(vb) do
+    if node_map?(va) and node_map?(vb), do: union(va, vb, path), else: whole(va, vb, path)
+  end
+
+  defp rule(_merge, type, va, vb, path) when is_map(va) and is_map(vb) do
+    with true <- node_map?(va) and node_map?(vb),
+         kind when kind != nil <- node_kind(type) do
+      node(kind, va, vb, path)
+    else
+      _other -> {vb, []}
+    end
+  end
+
+  defp rule(_merge, _type, _va, vb, _path), do: {vb, []}
+
+  defp union(va, vb, path) do
     keys = Enum.uniq(Map.keys(va) ++ Map.keys(vb))
 
     Enum.reduce(keys, {%{}, []}, fn name, {acc, errors} ->
@@ -57,15 +77,13 @@ defmodule Visualize.Chart.Compose do
     end)
   end
 
-  defp rule(_merge, type, va, vb, path)
-       when is_map(va) and not is_struct(va) and is_map(vb) and not is_struct(vb) do
-    case node_kind(type) do
-      nil -> {vb, []}
-      kind -> node(kind, va, vb, path)
-    end
-  end
+  # A `:union` key either fragment gives as a struct carries no names to unite, so it is
+  # one value: taken once where the two agree, `:conflict` at the key's path where they
+  # do not — the disagreement `compose/2` exists to report (spec/14 §8.1, D-92).
+  defp whole(v, v, _path), do: {v, []}
+  defp whole(_va, vb, path), do: {vb, [{path, :conflict}]}
 
-  defp rule(_merge, _type, _va, vb, _path), do: {vb, []}
+  defp node_map?(v), do: is_map(v) and not is_struct(v)
 
   defp node_kind({:node, kind}), do: kind
   defp node_kind({:one_of, types}), do: Enum.find_value(types, &node_kind/1)
