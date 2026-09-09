@@ -30,6 +30,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `store` - a module implementing `Visualize.Chart.Builder.Store`, or `nil` for no
       library (default `nil`)
     * `on_save` - the tag of the message saving sends (default `:visualize_chart_saved`)
+    * `styles` - render the stylesheet in a `<style>` element (default `true`); `false` when
+      the host ships `Visualize.Chart.Builder.css/0` through its own asset pipeline
     * `class` - appended to the builder's root class
 
     ## Handling the message
@@ -47,7 +49,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     use Phoenix.LiveComponent
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{Document, Editor, Inspector, Layers, Params, Preview}
+    alias Visualize.Chart.Builder.{Document, Editor, Inspector, Layers, Params, Preview, Styles}
     alias Visualize.Chart.Schema
 
     @doc false
@@ -62,6 +64,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         theme: nil,
         store: nil,
         on_save: :visualize_chart_saved,
+        styles: true,
         class: nil
       ]
     end
@@ -73,6 +76,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:theme, :any, default: nil, doc: "a `Visualize.Theme` for the preview")
     attr(:store, :atom, default: nil, doc: "a `Visualize.Chart.Builder.Store` implementation")
     attr(:on_save, :any, default: :visualize_chart_saved, doc: "the tag of the save message")
+
+    attr(:styles, :boolean,
+      default: true,
+      doc: "render the stylesheet, `false` if the host ships it"
+    )
+
     attr(:class, :string, default: nil, doc: "appended to the builder's root class")
 
     @impl true
@@ -104,6 +113,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <div id={@id} class={class("vis-builder", @class)}>
+        <Styles.styles :if={@styles} />
         <div class="vis-builder-toolbar">
           <span class="vis-builder-layer-count">{length(@layers)}</span>
           <form :if={@store} class="vis-builder-library" phx-submit="add_layer" phx-target={@myself}>
@@ -122,32 +132,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </div>
         <p :if={@notice} class="vis-builder-notice">{@notice}</p>
         <div class="vis-builder-panels">
-          <Layers.panel
-            id={@id <> "-layers"}
-            layers={@layers}
-            selected={@selected}
-            disabled={@disabled}
-            target={@myself}
-          />
-          <nav class="vis-builder-nodes">
-            <button
-              :for={entry <- @nodes}
-              type="button"
-              class={class("vis-builder-node", open(entry, @entry))}
-              phx-click="select_node"
-              phx-value-node={entry.label}
-              phx-target={@myself}
-            >{entry.label}</button>
-          </nav>
-          <Editor.panel
-            kind={@entry.kind}
-            node={@editing}
-            path={@entry.path}
-            facet={@facet}
-            errors={@errors}
-            target={@myself}
-          />
-          <Preview.panel design={@design} sources={@sources} vars={@bindings} theme={@theme} />
+          <aside class="vis-builder-sidebar">
+            <h2 class="vis-builder-sidebar-title">Layers</h2>
+            <Layers.panel
+              id={@id <> "-layers"}
+              layers={@layers}
+              selected={@selected}
+              disabled={@disabled}
+              target={@myself}
+            />
+          </aside>
+          <main class="vis-builder-main">
+            <nav class="vis-builder-nodes">
+              <button
+                :for={entry <- @nodes}
+                type="button"
+                class={class("vis-builder-node", open(entry, @entry))}
+                phx-click="select_node"
+                phx-value-node={entry.label}
+                phx-target={@myself}
+              >{entry.label}</button>
+            </nav>
+            <div class="vis-builder-workspace">
+              <Editor.panel
+                kind={@entry.kind}
+                node={@editing}
+                path={@entry.path}
+                facet={@facet}
+                errors={@errors}
+                target={@myself}
+              />
+              <Preview.panel design={@design} sources={@sources} vars={@bindings} theme={@theme} />
+            </div>
+          </main>
+        </div>
+        <div class="vis-builder-tray">
           <Params.panel layers={@layers} vars={@bindings} target={@myself} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
           <Document.panel design={@design} target={@myself} />
@@ -155,6 +174,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
       </div>
       """
     end
+
+    @doc """
+    Returns the builder's stylesheet as a binary (spec/14 §18.13).
+
+    The builder renders this itself unless the host passes `styles={false}`;
+    `Visualize.Chart.Builder.Styles.install!/0` writes it beside the hooks for a host that
+    would rather own the file.
+    """
+    @spec css() :: binary()
+    defdelegate css(), to: Styles
+
+    @doc """
+    Renders the stylesheet in a `<style>` element (spec/14 §18.13).
+    """
+    defdelegate styles(assigns), to: Styles
 
     @impl true
     def handle_event("save", _params, socket) do

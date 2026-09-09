@@ -1373,6 +1373,7 @@ It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every
 | `id` | `:string` | required | the component id, as every LiveComponent takes |
 | `layers` | `:list` | `[]` | the fragments in precedence order, the higher later (§8.2) |
 | `sources` | `:map` | `%{}` | the pool of sample sources the preview binds the design's slots to, as `Visualize.Chart.apply/2` takes it (§7.3) |
+| `styles` | `:boolean` | `true` | render the stylesheet in a `<style>` element (§18.13); `false` when the host ships it |
 | `vars` | `:map` | `%{}` | the variable values the preview applies with; the parameters form edits a copy of this |
 | `theme` | `:any` | `nil` | the `Visualize.Theme` the preview draws with, `nil` for the default |
 | `store` | `:atom` | `nil` | a module implementing `Visualize.Chart.Builder.Store` (§18.3), or `nil` for no library |
@@ -1501,6 +1502,15 @@ Two properties bound what the stylesheet may do, and both are testable:
 
 - **Every rule is scoped under `.vis-builder`.** No bare element selector, no class of the host's, nothing at `:root`. The builder is a guest on somebody else's page and a stylesheet that restyled their headings would be a defect, not a theme.
 - **Every colour and metric is a custom property declared on `.vis-builder`** — `--vis-builder-bg`, `--vis-builder-line`, `--vis-builder-accent`, `--vis-builder-radius`, and the rest. A host restyles by setting properties on the root element, not by out-specifying rules it did not write. A dark page is a short block of overrides, and no rule in `css/0` needs to know that dark pages exist.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.css/0` | the stylesheet as a binary |
+| `Visualize.Chart.Builder.styles/1` | the `<style>` element carrying it |
+| `Visualize.Chart.Builder.Styles.css/0` | the stylesheet itself, as `Visualize.Hooks.js_code/0` is the hooks |
+| `Visualize.Chart.Builder.Styles.styles/1` | the `<style>` element, which the builder renders unless `styles={false}` |
+| `Visualize.Chart.Builder.Styles.default_path/0` | where a host with a pipeline installs it, beside the hooks |
+| `Visualize.Chart.Builder.Styles.install!/0` | writes it there, as `Visualize.Hooks.install!/0` writes the hooks |
 
 **The three regions.** The shell is a grid:
 

@@ -17,6 +17,7 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.BuilderFixture.{Library, Refusing}
   alias Visualize.Chart
   alias Visualize.Chart.Builder
+  alias Visualize.Chart.Builder.Editor
   alias Visualize.Chart.Builder.Preview
 
   for name <- ~w(preview preview_errors builder builder_store)a do
@@ -95,6 +96,104 @@ defmodule Visualize.Chart.BuilderTest do
       assert stored =~ ~s(<select name="name" class="vis-builder-store">)
       assert stored =~ ~s(<option value="baseline">baseline</option>)
       assert stored =~ ~s(class="vis-builder-put")
+    end
+
+    test "the three regions are rendered, the layers in the sidebar and the nodes as tabs" do
+      html = rendered(:builder)
+
+      assert html =~ ~s(<div class="vis-builder-panels">)
+      assert html =~ ~s(<aside class="vis-builder-sidebar">)
+      assert html =~ ~s(<main class="vis-builder-main">)
+      assert html =~ ~s(<div class="vis-builder-workspace">)
+      assert html =~ ~s(<div class="vis-builder-tray">)
+
+      # The stack is inside the sidebar and the node strip inside the main column, which is
+      # the whole of what the shell is: the panels themselves are unchanged.
+      [_, sidebar] = String.split(html, ~s(<aside class="vis-builder-sidebar">), parts: 2)
+      [sidebar, _] = String.split(sidebar, "</aside>", parts: 2)
+      assert sidebar =~ ~s(class="vis-builder-layers")
+
+      [_, main] = String.split(html, ~s(<main class="vis-builder-main">), parts: 2)
+      assert main =~ ~s(<nav class="vis-builder-nodes">)
+      assert main =~ ~s(class="vis-builder-editor")
+      assert main =~ ~s(class="vis-builder-preview")
+    end
+
+    test "the open node is the marked tab, and every node of the layer is one" do
+      html = rendered(:builder)
+      assert html =~ ~s(class="vis-builder-node vis-builder-node-open")
+
+      labels =
+        ~r{<button[^>]*class="vis-builder-node[^"]*"[^>]*>([^<]*)</button>}
+        |> Regex.scan(html)
+        |> Enum.map(&List.last/1)
+
+      nodes =
+        BuilderFixture.layers()
+        |> hd()
+        |> then(fn {_name, layer} -> layer end)
+        |> Editor.nodes()
+        |> Enum.map(& &1.label)
+
+      assert labels == nodes
+      assert "design" in labels
+    end
+  end
+
+  describe "the stylesheet (spec/14 §18.13, D-94)" do
+    test "every rule is scoped under .vis-builder" do
+      selectors =
+        Builder.css()
+        |> String.replace(~r{/\*.*?\*/}s, "")
+        |> String.split("}")
+        |> Enum.flat_map(fn block ->
+          case String.split(block, "{", parts: 2) do
+            [selector, _body] -> String.split(selector, ",")
+            _other -> []
+          end
+        end)
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "@")))
+
+      assert selectors != []
+
+      for selector <- selectors do
+        assert String.starts_with?(selector, ".vis-builder"),
+               "a rule escapes the component: " <> inspect(selector)
+      end
+    end
+
+    test "every property used is declared on .vis-builder" do
+      css = Builder.css()
+
+      declared =
+        ~r{--vis-builder-[a-z-]+(?=\s*:)}
+        |> Regex.scan(css)
+        |> Enum.map(&hd/1)
+        |> MapSet.new()
+
+      used =
+        ~r{var\((--vis-builder-[a-z-]+)}
+        |> Regex.scan(css)
+        |> Enum.map(&List.last/1)
+        |> MapSet.new()
+
+      assert MapSet.subset?(used, declared),
+             "used but never declared: " <> inspect(MapSet.difference(used, declared))
+
+      assert "--vis-builder-accent" in declared
+    end
+
+    test "the builder renders the stylesheet once, and not at all when the host ships it" do
+      html = render_component(Builder, %{id: "b", layers: BuilderFixture.layers()})
+      assert length(String.split(html, "<style")) == 2
+      assert html =~ "--vis-builder-accent"
+
+      without =
+        render_component(Builder, %{id: "b", layers: BuilderFixture.layers(), styles: false})
+
+      refute without =~ "<style"
+      assert without =~ ~s(<div id="b" class="vis-builder">)
     end
   end
 

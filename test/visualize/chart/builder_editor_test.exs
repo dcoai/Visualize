@@ -9,6 +9,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
   use ExUnit.Case, async: true
 
   doctest Visualize.Chart.Builder.Editor
+  doctest Visualize.Chart.Builder.Styles
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
