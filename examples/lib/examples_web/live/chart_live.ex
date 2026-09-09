@@ -1,6 +1,7 @@
 defmodule ExamplesWeb.ChartLive do
   use Phoenix.LiveView
 
+  alias Examples.Charts.Design
   alias Examples.ColorPalettes
   alias Visualize.Backend.CanvasBinary
 
@@ -527,22 +528,32 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
+  # A chart written as a design renders its own document (`Examples.Charts.Design`); an
+  # imperative one returns the element tree the gallery names and serialises.
   defp render_chart_svg(module, palette, tick, animating, slug, hex_radius) do
     opts = build_chart_opts(palette, tick, animating, slug, hex_radius)
 
-    module.render(opts)
-    |> Examples.Accessible.name(module.title(), module.description())
-    |> Visualize.SVG.Renderer.render_to_string()
+    case module.render(opts) do
+      svg when is_binary(svg) ->
+        svg
+
+      element ->
+        element
+        |> Examples.Accessible.name(module.title(), module.description())
+        |> Visualize.SVG.Renderer.render_to_string()
+    end
   end
 
   defp render_chart_canvas(module, palette, tick, animating, slug, hex_radius) do
     opts = build_chart_opts(palette, tick, animating, slug, hex_radius)
 
-    element = module.render(opts)
-
-    case CanvasBinary.encode_element(element) do
-      {:ok, binary} -> Base.encode64(binary)
-      {:error, _} -> ""
+    if Design.design?(module) do
+      Design.canvas(module, opts)
+    else
+      case CanvasBinary.encode_element(module.render(opts)) do
+        {:ok, binary} -> Base.encode64(binary)
+        {:error, _} -> ""
+      end
     end
   end
 

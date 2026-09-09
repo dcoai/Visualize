@@ -1,5 +1,13 @@
 defmodule Examples.Charts.GroupedBarChart do
-  @moduledoc "Grouped bar chart with multiple series"
+  @moduledoc """
+  Grouped bar chart with multiple series — **left imperative** (#125).
+
+  A grouped bar is two band scales, the inner one ranged over the outer one's bandwidth, and
+  a mark reads exactly one scale per channel family: there is no offset within a band.
+  Filed as #132 with this chart as the evidence. The three workarounds — one band over the
+  pairs, a `:facet` frame, or the pixel x precomputed into the rows — each produce a
+  different chart or put the layout back in the caller, so none of them is a conversion.
+  """
 
   alias Visualize.Scale
   alias Visualize.SVG.Element

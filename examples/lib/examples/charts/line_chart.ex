@@ -1,111 +1,81 @@
 defmodule Examples.Charts.LineChart do
-  @moduledoc "Line chart example"
+  @moduledoc """
+  Line chart as a design (#125): one `:line` mark over a cartesian frame.
 
-  alias Visualize.{Scale, Axis, Shape}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  The fifteen lines of scale wiring this module opened with are the frame's now — the `x`
+  and `y` domains are inferred from the mark's channels (spec/14 §4.3), the axes are the
+  frame's furniture, and the curve is a style key rather than a call on a generator.
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 20, right: 20, bottom: 30, left: 50}
 
   @data (for i <- 0..50 do
-    y = :math.sin(i / 5) * 40 + :math.sin(i / 3) * 15 + 50
-    %{x: i, y: y}
-  end)
+           %{x: i, y: :math.sin(i / 5) * 40 + :math.sin(i / 3) * 15 + 50}
+         end)
 
   def title, do: "Line Chart"
   def description, do: "Composite sine wave"
 
-  def render(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
-    margin = %{top: 20, right: 20, bottom: 30, left: 50}
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:points, [:x, :y]),
+        style(:wave, stroke_width: 2, curve: :monotone_x),
+        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        linear_scale(:x),
+        linear_scale(:y, nice: true),
+        axis(:x, :bottom, ticks: 10),
+        axis(:y, :left, ticks: 5),
+        line(:points, %{x: :x, y: :y}, style: :wave)
+      ])
 
-    inner_width = width - margin.left - margin.right
-    inner_height = height - margin.top - margin.bottom
-
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
-
-    # Generate animated or static data
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      generate_animated_wave(animation_tick)
-    else
-      opts[:data] || @data
-    end
-
-    # Create scales
-    {min_x, max_x} = Enum.min_max_by(data, & &1.x) |> then(fn {a, b} -> {a.x, b.x} end)
-    {min_y, max_y} = Enum.min_max_by(data, & &1.y) |> then(fn {a, b} -> {a.y, b.y} end)
-
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([min_x, max_x])
-      |> Scale.Linear.range([0, inner_width])
-
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([min_y - 10, max_y + 10])
-      |> Scale.Linear.range([inner_height, 0])
-      |> Scale.Linear.nice()
-
-    # Create line generator
-    line = Shape.Line.new()
-      |> Shape.Line.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
-      |> Shape.Line.y(fn d -> Scale.Linear.apply(y_scale, d.y) end)
-      |> Shape.Line.curve(:monotone_x)
-
-    path_data = Shape.Line.generate(line, data)
-
-    # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(10)
-    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(5)
-
-    # Build chart
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(
-        Element.path(%{
-          d: path_data,
-          fill: "none",
-          stroke: hd(colors),
-          stroke_width: 2
-        })
-      )
-      |> Element.append(
-        Element.g(%{transform: "translate(0,#{inner_height})"})
-        |> Element.append(Axis.generate(x_axis))
-      )
-      |> Element.append(Axis.generate(y_axis))
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{points: rows(opts)}}
   end
 
-  # Animation: create a moving sine wave
-  defp generate_animated_wave(tick) do
-    phase = tick * 0.15  # Wave moves over time
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  defp rows(opts) do
+    case opts[:animation_tick] do
+      nil -> opts[:data] || @data
+      tick -> animated(tick)
+    end
+  end
+
+  # Animation: create a moving sine wave.
+  defp animated(tick) do
+    phase = tick * 0.15
+
     for i <- 0..50 do
-      # Main wave with secondary harmonic
-      y = :math.sin((i / 5) + phase) * 40 +
-          :math.sin((i / 3) + phase * 1.5) * 15 +
-          50
+      y = :math.sin(i / 5 + phase) * 40 + :math.sin(i / 3 + phase * 1.5) * 15 + 50
       %{x: i, y: y}
     end
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.{Scale, Shape}
+    import Visualize.Chart.Build
 
-    line = Shape.Line.new()
-      |> Shape.Line.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
-      |> Shape.Line.y(fn d -> Scale.Linear.apply(y_scale, d.y) end)
-      |> Shape.Line.curve(:monotone_x)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Line Chart"}),
+        source(:points, [:x, :y]),
+        style(:wave, stroke_width: 2, curve: :monotone_x),
+        cartesian(600, 400, margin: %{top: 20, right: 20, bottom: 30, left: 50}),
+        linear_scale(:x),
+        linear_scale(:y, nice: true),
+        axis(:x, :bottom, ticks: 10),
+        axis(:y, :left, ticks: 5),
+        line(:points, %{x: :x, y: :y}, style: :wave)
+      ])
 
-    path_data = Shape.Line.generate(line, data)
-
-    Element.path(%{
-      d: path_data,
-      fill: "none",
-      stroke: "steelblue",
-      stroke_width: 2
-    })
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{points: data})
+    Visualize.Chart.render(applied)
     """
   end
 end

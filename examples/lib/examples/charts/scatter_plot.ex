@@ -1,132 +1,109 @@
 defmodule Examples.Charts.ScatterPlot do
-  @moduledoc "Scatter plot example"
+  @moduledoc """
+  Scatter plot as a design (#125): one `:circle` mark, coloured by category.
 
-  alias Visualize.{Scale, Axis}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  A `:circle`'s `value` channel is its radius in user units and names no scale (spec/14
+  §5.2), so the radius is a column of the rows; the colour is a `{:field, :category}` on the
+  style's `fill`, which is read per element and passed through the frame's `color` scale
+  (§3.2), and the legend explains that same scale.
 
-  # Generate random data points with categories
-  @data (for _ <- 1..100 do
-    category = Enum.random(["A", "B", "C"])
-    %{
-      x: :rand.uniform() * 100,
-      y: :rand.uniform() * 100,
-      size: :rand.uniform() * 20 + 5,
-      category: category
-    }
-  end)
+  The legend draws inside the plot area (#136) and prints the category values under a title,
+  where the hand-laid one wrote "Category A" per entry.
+  """
 
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 20, right: 20, bottom: 40, left: 50}
   @categories ["A", "B", "C"]
+
+  @data (for _ <- 1..100 do
+           %{
+             x: :rand.uniform() * 100,
+             y: :rand.uniform() * 100,
+             size: :rand.uniform() * 20 + 5,
+             category: Enum.random(["A", "B", "C"])
+           }
+         end)
 
   def title, do: "Scatter Plot"
   def description, do: "Random data points with categories"
 
-  def render(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
-    margin = %{top: 20, right: 20, bottom: 40, left: 50}
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:points, [:x, :y, :r, :category]),
+        style(:point, fill: {:field, :category}, opacity: 0.7),
+        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        linear_scale(:x, domain: [0, 100]),
+        linear_scale(:y, domain: [0, 100]),
+        ordinal_scale(:color, domain: @categories),
+        axis(:x, :bottom, ticks: 10),
+        axis(:y, :left, ticks: 10),
+        legend(:color, position: :top_right, title: ["Category"]),
+        circle(:points, %{x: :x, y: :y, value: :r}, style: :point)
+      ])
 
-    inner_width = width - margin.left - margin.right
-    inner_height = height - margin.top - margin.bottom
-
-    base_data = opts[:data] || @data
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
-    color_map = @categories |> Enum.with_index() |> Enum.map(fn {cat, i} -> {cat, Enum.at(colors, i)} end) |> Map.new()
-
-    # Apply animation if tick is provided
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      animate_data(base_data, animation_tick)
-    else
-      base_data
-    end
-
-    # Create scales
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, 100])
-      |> Scale.Linear.range([0, inner_width])
-
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, 100])
-      |> Scale.Linear.range([inner_height, 0])
-
-    # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(10)
-    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(10)
-
-    # Generate circles
-    circles = Enum.map(data, fn d ->
-      Element.circle(%{
-        cx: Scale.Linear.apply(x_scale, d.x),
-        cy: Scale.Linear.apply(y_scale, d.y),
-        r: d.size / 5 + 3,
-        fill: Map.get(color_map, d.category, "#999"),
-        opacity: 0.7
-      })
-    end)
-
-    # Legend
-    legend = color_map
-      |> Enum.with_index()
-      |> Enum.map(fn {{cat, color}, i} ->
-        Element.g(%{transform: "translate(#{inner_width - 60},#{i * 22})"})
-        |> Element.append(Element.circle(%{cx: 6, cy: 6, r: 6, fill: color}))
-        |> Element.append(
-          Element.text(%{x: 18, y: 10, font_size: 12, fill: ColorPalettes.text_color(palette)})
-          |> Element.content("Category #{cat}")
-        )
-      end)
-
-    # Build chart
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(circles)
-      |> Element.append(legend)
-      |> Element.append(
-        Element.g(%{transform: "translate(0,#{inner_height})"})
-        |> Element.append(Axis.generate(x_axis))
-      )
-      |> Element.append(Axis.generate(y_axis))
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{points: rows(opts)}}
   end
 
-  # Animation: points drift in circular patterns
-  defp animate_data(data, tick) do
-    data
-    |> Enum.with_index()
-    |> Enum.map(fn {item, i} ->
-      # Each point orbits in a small circle at its own speed
-      speed = 0.05 + (rem(i, 5) * 0.02)
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  # The radius is a column, because a `:circle`'s `value` is user units and names no scale.
+  defp rows(opts) do
+    data = opts[:data] || @data
+
+    data =
+      case opts[:animation_tick] do
+        nil -> data
+        tick -> animated(data, tick)
+      end
+
+    Enum.map(data, &Map.put(&1, :r, &1.size / 5 + 3))
+  end
+
+  # Animation: each point orbits in a small circle at its own speed.
+  defp animated(data, tick) do
+    Enum.with_index(data, fn item, i ->
+      angle = tick * (0.05 + rem(i, 5) * 0.02) + i * 0.5
       radius = 5 + rem(i, 3) * 3
-      angle = tick * speed + i * 0.5
 
-      new_x = item.x + radius * :math.cos(angle)
-      new_y = item.y + radius * :math.sin(angle)
-
-      # Keep within bounds
-      new_x = max(5, min(95, new_x))
-      new_y = max(5, min(95, new_y))
-
-      %{item | x: new_x, y: new_y}
+      %{
+        item
+        | x: max(5, min(95, item.x + radius * :math.cos(angle))),
+          y: max(5, min(95, item.y + radius * :math.sin(angle)))
+      }
     end)
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.{Scale, Axis}
-    alias Visualize.SVG.Element
+    import Visualize.Chart.Build
 
-    circles = Enum.map(data, fn d ->
-      Element.circle(%{
-        cx: Scale.Linear.apply(x_scale, d.x),
-        cy: Scale.Linear.apply(y_scale, d.y),
-        r: d.size,
-        fill: color,
-        opacity: 0.7
-      })
-    end)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Scatter Plot"}),
+        source(:points, [:x, :y, :r, :category]),
+
+        # A {:field, f} on a colour key goes through the `color` scale, per element.
+        style(:point, fill: {:field, :category}, opacity: 0.7),
+        cartesian(600, 400, margin: %{top: 20, right: 20, bottom: 40, left: 50}),
+        linear_scale(:x, domain: [0, 100]),
+        linear_scale(:y, domain: [0, 100]),
+        ordinal_scale(:color, domain: ["A", "B", "C"]),
+        axis(:x, :bottom, ticks: 10),
+        axis(:y, :left, ticks: 10),
+        legend(:color, position: :top_right, title: ["Category"]),
+
+        # `value` on a :circle is its radius in user units and names no scale.
+        circle(:points, %{x: :x, y: :y, value: :r}, style: :point)
+      ])
+
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{points: data})
+    Visualize.Chart.render(applied)
     """
   end
 end
