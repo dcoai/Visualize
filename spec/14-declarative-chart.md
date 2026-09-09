@@ -1614,3 +1614,20 @@ The parse is total and forgiving, because a store the host populated before this
 An empty sub-category and the literal `none` are the same thing, so a person who types nothing and a form that submits `none` agree. A name with more than three parts keeps the remainder in the leaf — `a:b:c:d` is `d` under `c` under… no: the split is on the **first two** separators, so the leaf may contain a colon and a fragment can be called `2:1 aspect`. That asymmetry is deliberate: the category and sub-category are chosen from a short list, and the name is free text.
 
 Sub-categories sort by name with the unnamed group first, because a fragment sitting directly under its category is the general case and the sub-categories are refinements of it.
+
+### 18.17 Dropping a fragment into the stack
+
+A fragment is **dragged out of the library and dropped into the layer pane at a position**, so precedence is chosen in the gesture rather than fixed and corrected afterwards. `Visualize.Hooks.Builder` carries both drags and tells them apart by what was picked up: an element with `data-builder-layer` is a **move** within the stack, and one with `data-builder-fragment` is an **insert** from the library. The stack marks itself `data-builder-stack`, and only an element so marked accepts a drop — the library is a source and not a destination.
+
+The dragged name travels in `dataTransfer` under `application/x-visualize-fragment`, which is what lets the library's hook instance and the stack's hear about each other without either knowing the other exists.
+
+| Event | Payload | Meaning |
+|---|---|---|
+| `reorder` | `%{"from" => integer, "to" => integer}` | a layer moved within the stack (§18.10) |
+| `insert` | `%{"name" => string, "at" => integer}` | a library fragment dropped at a position |
+
+**Where it lands.** A drop over a layer inserts *before* it when the pointer is in its upper half and *after* it when in its lower half, so both sides of every layer are reachable; a drop in the stack's empty space appends. The position is clamped to the stack, because a hook is a client and a client's number is not to be trusted.
+
+**What follows the insert.** The selected layer and the disabled set are *positions*, so both shift by one where they sit at or below the insertion — the same rule a move already follows (§18.8). A name the store does not hold is a notice and changes no layer, exactly as adding one is.
+
+Inserting does not consult the fragment: the stack is a list and a fragment is an element of it, so an insert is `List.insert_at/3` and the design is recomputed from the result. There is nothing to validate at insertion time that applying the design does not already say better (§18.4).
