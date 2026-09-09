@@ -1362,6 +1362,8 @@ A design is data, and §16 makes one writable in Elixir; nothing above it lets a
 
 The division is the whole of the contract. The **host** owns the route, the layers it starts the builder with, the pool of sample sources, and what happens when a design is saved — storing it, applying it, sending it somewhere. The **builder** owns the editing state: which layer is selected, which layers are disabled, which panel is open, what the parameters are set to. It reads its host's assigns on every parent render and never writes to them, and the one thing that leaves it is the message of §18.2.
 
+One assign is not like the others. `layers` is the thing the builder *edits* — reordering, disabling, adding from the library, writing a value into a node and importing a document all rewrite it — so a component that adopted the host's list on every parent render would discard the edit that render was caused by. `layers` is therefore **seeded, not controlled**: the builder keeps the list the host last gave it, and on each render adopts the incoming one only when the host's list has actually changed. A host that deliberately replaces the stack still replaces it; a host that re-renders for its own reasons no longer erases the editing session (D-95). `sources`, `vars`, `theme`, `store` and `on_save` are controlled in the ordinary way, because the builder never writes to them.
+
 It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every module of the builder is wrapped in `if Code.ensure_loaded?(Phoenix.Component)`, `phoenix_live_view` stays an optional dependency of this library, and `scripts/consumer_check.exs` asserts that `Visualize.Chart.Builder` is absent from a consumer that does not have LiveView, beside the assertions it already makes for the components. An application that renders predefined charts never compiles a line of it.
 
 ### 18.2 Assigns and the message
@@ -1371,7 +1373,7 @@ It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every
 | Assign | Type | Default | Meaning |
 |---|---|---|---|
 | `id` | `:string` | required | the component id, as every LiveComponent takes |
-| `layers` | `:list` | `[]` | the fragments in precedence order, the higher later (§8.2) |
+| `layers` | `:list` | `[]` | the fragments in precedence order, the higher later (§8.2); **seeded, not controlled** — the builder owns the stack once given it, and adopts a new one only when the host's list changes (§18.1, D-95) |
 | `sources` | `:map` | `%{}` | the pool of sample sources the preview binds the design's slots to, as `Visualize.Chart.apply/2` takes it (§7.3) |
 | `styles` | `:boolean` | `true` | render the stylesheet in a `<style>` element (§18.13); `false` when the host ships it |
 | `vars` | `:map` | `%{}` | the variable values the preview applies with; the parameters form edits a copy of this |
