@@ -4,11 +4,18 @@ defmodule Visualize.SVG do
 
   ## Examples
 
+  `render/1` returns iodata, which a template writes as it is; flattened, it is the
+  markup:
+
       iex> alias Visualize.SVG
       iex> SVG.new(width: 400, height: 300)
       ...> |> SVG.append(:rect, x: 10, y: 10, width: 100, height: 50, fill: "blue")
       ...> |> SVG.append(:circle, cx: 200, cy: 150, r: 40, fill: "red")
       ...> |> SVG.render()
+      ...> |> IO.iodata_to_binary()
+      ~s(<svg height="300" width="400" xmlns="http://www.w3.org/2000/svg">) <>
+        ~s(<rect fill="blue" height="50" width="100" x="10" y="10"/>) <>
+        ~s(<circle cx="200" cy="150" fill="red" r="40"/></svg>)
 
   """
 

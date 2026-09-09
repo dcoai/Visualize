@@ -10,6 +10,8 @@ defmodule Visualize.ChartTest do
   alias Visualize.Chart.{Migration, Schema, Validator, Var}
   alias Visualize.ChartGen
 
+  doctest Var
+
   @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :frame, :marks, :labels]
 
   describe "from_map/1 and to_map/1" do

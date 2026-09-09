@@ -7,6 +7,8 @@ defmodule Visualize.Chart.SchemaTest do
   alias Visualize.Shape.{Curve, Symbol}
   alias Visualize.Theme
 
+  doctest Schema
+
   @facets [:binding, :channel, :geometry, :style, :content]
   @merges [:concat, :union, :override]
 

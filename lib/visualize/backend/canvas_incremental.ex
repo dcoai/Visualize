@@ -58,11 +58,16 @@ defmodule Visualize.Backend.CanvasIncremental do
 
   ## Examples
 
-      iex> copy_beneficial?({50, 0}, {800, 600})
+      iex> alias Visualize.Backend.CanvasIncremental
+      iex> CanvasIncremental.copy_beneficial?({50, 0}, {800, 600})
       true
 
-      iex> copy_beneficial?({500, 0}, {800, 600})
-      false  # 500 > 400 (50% of 800)
+  A 500px scroll exceeds 400px, half of the 800px width, so a full redraw is cheaper:
+
+      iex> alias Visualize.Backend.CanvasIncremental
+      iex> CanvasIncremental.copy_beneficial?({500, 0}, {800, 600})
+      false
+
   """
   @spec copy_beneficial?(scroll_offset(), canvas_size()) :: boolean()
   def copy_beneficial?({dx, dy}, {width, height}) do
@@ -106,17 +111,24 @@ defmodule Visualize.Backend.CanvasIncremental do
 
   ## Examples
 
-      # Scroll right by 20px on 800x600 canvas
-      iex> exposed_regions({20, 0}, {800, 600})
-      [{780.0, 0.0, 20.0, 600.0}]  # Right edge exposed
+  Scrolling right by 20px on an 800 x 600 canvas exposes the right edge:
 
-      # Scroll left by 20px
-      iex> exposed_regions({-20, 0}, {800, 600})
-      [{0.0, 0.0, 20.0, 600.0}]  # Left edge exposed
+      iex> alias Visualize.Backend.CanvasIncremental
+      iex> CanvasIncremental.exposed_regions({20, 0}, {800, 600})
+      [{780.0, 0.0, 20.0, 600.0}]
 
-      # Diagonal scroll
-      iex> exposed_regions({20, 30}, {800, 600})
-      [{780.0, 0.0, 20.0, 600.0}, {0.0, 570.0, 780.0, 30.0}]  # L-shape
+  Scrolling left by 20px exposes the left edge:
+
+      iex> alias Visualize.Backend.CanvasIncremental
+      iex> CanvasIncremental.exposed_regions({-20, 0}, {800, 600})
+      [{0.0, 0.0, 20.0, 600.0}]
+
+  A diagonal scroll exposes an L of two strips, the second shortened by the first:
+
+      iex> alias Visualize.Backend.CanvasIncremental
+      iex> CanvasIncremental.exposed_regions({20, 30}, {800, 600})
+      [{780.0, 0.0, 20.0, 600.0}, {0.0, 570.0, 780.0, 30.0}]
+
   """
   @spec exposed_regions(scroll_offset(), canvas_size()) :: [bounds()]
   def exposed_regions({dx, dy}, {width, height}) do

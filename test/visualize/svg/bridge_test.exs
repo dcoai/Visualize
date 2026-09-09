@@ -11,6 +11,11 @@ defmodule Visualize.SVG.BridgeTest do
   alias Visualize.Render
   alias Visualize.SVG
 
+  doctest Visualize.SVG
+  doctest Visualize.SVG.Element
+  doctest Visualize.SVG.Path
+  doctest Visualize.SVG.Renderer
+
   defp scene do
     curve =
       Path.new()

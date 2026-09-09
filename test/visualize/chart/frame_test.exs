@@ -10,6 +10,8 @@ defmodule Visualize.Chart.FrameTest do
 
   alias Visualize.{Axis, Chart, Render, Scale, Theme}
   alias Visualize.Chart.Frame
+
+  doctest Frame
   alias Visualize.IR.{Element, Transform}
 
   @t0 ~U[2024-01-01 00:00:00Z]
