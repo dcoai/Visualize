@@ -98,12 +98,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @impl true
     def update(assigns, socket) do
-      socket = Enum.reduce(defaults(), assign(socket, assigns), &default/2)
+      socket =
+        socket
+        |> assign(Map.drop(assigns, [:layers]))
+        |> seed(assigns)
+        |> then(&Enum.reduce(defaults(), &1, fn pair, acc -> default(pair, acc) end))
 
       # The parameters form edits the builder's own copy of the bindings: the host gives the
       # values the builder starts with and never hears of a change (spec/14 §18.11, D-88).
       {:ok, assign_new(socket, :bindings, fn -> socket.assigns.vars end)}
     end
+
+    # `layers` is seeded and not controlled, because it is the assign the builder writes to:
+    # adopting the host's list on every parent render would discard the edit that render was
+    # caused by. A list that differs from the one the host last gave is a host deliberately
+    # replacing the stack and is taken; an equal one is a host re-rendering for its own
+    # reasons and leaves the editing session alone (spec/14 §18.1, D-95).
+    defp seed(socket, %{layers: layers}) do
+      if Map.get(socket.assigns, :host_layers, :unseeded) == layers,
+        do: socket,
+        else: assign(socket, layers: layers, host_layers: layers)
+    end
+
+    defp seed(socket, _assigns), do: socket
 
     defp default({key, value}, socket), do: assign_new(socket, key, fn -> value end)
 

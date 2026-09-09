@@ -140,6 +140,66 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "the stack is seeded and not controlled (spec/14 §18.1, D-95)" do
+    setup do
+      host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+      %{host: host, socket: socket}
+    end
+
+    test "a reorder survives the next host render", %{host: host, socket: socket} do
+      {:noreply, socket} = Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, socket)
+      assert names(socket) == [:panel, :house, :shared]
+
+      {:ok, socket} = Builder.update(host, socket)
+      assert names(socket) == [:panel, :house, :shared]
+    end
+
+    test "a move, an added layer and a node edit all survive it", %{host: host, socket: socket} do
+      {:noreply, moved} =
+        Builder.handle_event("move_layer", %{"index" => "0", "to" => "2"}, socket)
+
+      {:ok, moved} = Builder.update(host, moved)
+      assert names(moved) == [:shared, :panel, :house]
+
+      stored = Map.put(host, :store, Library)
+      {:ok, socket} = Builder.update(stored, socket)
+      {:noreply, added} = Builder.handle_event("add_layer", %{"name" => "baseline"}, socket)
+      {:ok, added} = Builder.update(stored, added)
+      assert length(added.assigns.layers) == length(host.layers) + 1
+
+      {:noreply, edited} =
+        Builder.handle_event("edit", %{"_target" => ["version"], "version" => "2"}, socket)
+
+      {:ok, edited} = Builder.update(host, edited)
+      assert {_name, %{version: 2}} = hd(edited.assigns.layers)
+    end
+
+    test "a host that changes its list replaces the stack", %{socket: socket} do
+      {:noreply, socket} = Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, socket)
+      assert names(socket) == [:panel, :house, :shared]
+
+      replaced = %{id: "b", layers: [{:only, %{version: 1}}], sources: %{}}
+      {:ok, socket} = Builder.update(replaced, socket)
+      assert names(socket) == [:only]
+    end
+
+    test "an imported document is not overwritten by the host's stack", %{
+      host: host,
+      socket: socket
+    } do
+      {:ok, document} =
+        BuilderFixture.layers() |> Chart.stack() |> Chart.from_map!() |> Chart.to_json()
+
+      {:noreply, socket} = Builder.handle_event("import", %{"document" => document}, socket)
+      assert names(socket) == [:imported]
+
+      {:ok, socket} = Builder.update(host, socket)
+      assert names(socket) == [:imported]
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =
@@ -324,6 +384,8 @@ defmodule Visualize.Chart.BuilderTest do
 
   defp rendered(name),
     do: BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), name))
+
+  defp names(socket), do: Enum.map(socket.assigns.layers, fn {name, _layer} -> name end)
 
   defp socket(layers, opts \\ []) do
     assigns =
