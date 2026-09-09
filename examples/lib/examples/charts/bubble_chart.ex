@@ -1,9 +1,25 @@
 defmodule Examples.Charts.BubbleChart do
-  @moduledoc "Bubble chart with three dimensions"
+  @moduledoc """
+  Bubble chart as a design (#125): three dimensions on one `:circle` mark, with a second,
+  filtered mark carrying the names.
 
-  alias Visualize.Scale
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  The pipeline does the work the caller used to: `:sort` draws the largest bubbles first,
+  and a `:filter` on the radius is what makes only the big ones carry a name — a condition
+  on a *label* is a condition on the rows the labelling mark reads. That second mark's
+  `value` is the constant `0`, so it draws nothing itself; the layer has no `:text` mark
+  (#134).
+
+  The bubble's radius is a column, because a `:circle`'s `value` is user units and names no
+  scale (spec/14 §5.2). The hand-drawn ticks are real axes now, and the units the ticks
+  carried (`$…T`) are in the axis titles (#135); the legend is inside the plot area (#136).
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 30, right: 120, bottom: 50, left: 70}
+  @regions ["Americas", "Asia", "Europe", "Oceania"]
 
   @data [
     %{name: "US", gdp: 21.4, population: 331, region: "Americas"},
@@ -23,209 +39,118 @@ defmodule Examples.Charts.BubbleChart do
     %{name: "Indonesia", gdp: 1.1, population: 274, region: "Asia"}
   ]
 
-  @regions ["Americas", "Asia", "Europe", "Oceania"]
-
   def title, do: "Bubble Chart"
   def description, do: "GDP vs Population (bubble = GDP per capita)"
 
-  def render(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
-    margin = %{top: 30, right: 120, bottom: 50, left: 70}
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
+    largest_first = sort(from(:countries), :r, order: :descending)
+    named = filter(largest_first, :r, test: :gt, value: 15)
 
-    chart_width = width - margin.left - margin.right
-    chart_height = height - margin.top - margin.bottom
-
-    base_data = opts[:data] || @data
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
-
-    # Apply animation if tick is provided
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      animate_data(base_data, animation_tick)
-    else
-      base_data
-    end
-
-    # Create scales
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, 1500])
-      |> Scale.Linear.range([0, chart_width])
-
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, 25])
-      |> Scale.Linear.range([chart_height, 0])
-
-    # Bubble size based on GDP per capita
-    max_gdp_pc = data
-      |> Enum.map(fn d -> d.gdp * 1000 / d.population end)
-      |> Enum.max()
-
-    size_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_gdp_pc])
-      |> Scale.Linear.range([5, 40])
-
-    # Draw bubbles
-    bubbles = data
-      |> Enum.sort_by(fn d -> -d.gdp * 1000 / d.population end)  # Draw larger first
-      |> Enum.map(fn d ->
-        x = Scale.Linear.apply(x_scale, d.population)
-        y = Scale.Linear.apply(y_scale, d.gdp)
-        gdp_per_capita = d.gdp * 1000 / d.population
-        r = Scale.Linear.apply(size_scale, gdp_per_capita)
-
-        region_idx = Enum.find_index(@regions, &(&1 == d.region)) || 0
-        color = Enum.at(colors, rem(region_idx, length(colors)))
-
-        group = Element.g(%{})
-          |> Element.append(
-            Element.circle(%{
-              cx: x,
-              cy: y,
-              r: r,
-              fill: color,
-              fill_opacity: 0.7,
-              stroke: color,
-              stroke_width: 1
-            })
-          )
-
-        # Add label for larger bubbles
-        if r > 15 do
-          Element.append(group,
-            Element.text(%{
-              x: x,
-              y: y + 4,
-              text_anchor: "middle",
-              font_size: 9,
-              fill: ColorPalettes.text_color(palette),
-              font_weight: "bold"
-            })
-            |> Element.content(d.name)
-          )
-        else
-          group
-        end
-      end)
-
-    # X-axis
-    x_ticks = [0, 300, 600, 900, 1200, 1500]
-    x_axis = Enum.map(x_ticks, fn tick ->
-      x = Scale.Linear.apply(x_scale, tick)
-
-      Element.g(%{})
-      |> Element.append(
-        Element.line(%{x1: x, x2: x, y1: chart_height, y2: chart_height + 5, stroke: ColorPalettes.axis_color(palette)})
-      )
-      |> Element.append(
-        Element.text(%{x: x, y: chart_height + 20, text_anchor: "middle", font_size: 10, fill: ColorPalettes.axis_color(palette)})
-        |> Element.content("#{tick}")
-      )
-    end)
-
-    x_label = Element.text(%{
-      x: chart_width / 2,
-      y: chart_height + 40,
-      text_anchor: "middle",
-      font_size: 11,
-      fill: ColorPalettes.text_color(palette)
-    })
-    |> Element.content("Population (millions)")
-
-    # Y-axis
-    y_ticks = [0, 5, 10, 15, 20, 25]
-    y_axis = Enum.map(y_ticks, fn tick ->
-      y = Scale.Linear.apply(y_scale, tick)
-
-      Element.g(%{})
-      |> Element.append(
-        Element.line(%{x1: -5, x2: chart_width, y1: y, y2: y, stroke: "#eee"})
-      )
-      |> Element.append(
-        Element.text(%{x: -10, y: y + 4, text_anchor: "end", font_size: 10, fill: ColorPalettes.axis_color(palette)})
-        |> Element.content("$#{tick}T")
-      )
-    end)
-
-    y_label = Element.text(%{
-      x: -chart_height / 2,
-      y: -50,
-      text_anchor: "middle",
-      font_size: 11,
-      fill: ColorPalettes.text_color(palette),
-      transform: "rotate(-90)"
-    })
-    |> Element.content("GDP (trillions USD)")
-
-    # Legend
-    legend = @regions
-      |> Enum.with_index()
-      |> Enum.map(fn {region, i} ->
-        Element.g(%{transform: "translate(#{chart_width + 20},#{i * 25 + 20})"})
-        |> Element.append(
-          Element.circle(%{cx: 8, cy: 8, r: 8, fill: Enum.at(colors, rem(i, length(colors))), fill_opacity: 0.7})
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:countries, [:name, :gdp, :population, :region, :r]),
+        style(:bubble,
+          fill: {:field, :region},
+          fill_opacity: 0.7,
+          stroke: {:field, :region},
+          stroke_width: 1
+        ),
+        style(:name, fill: :none, font_size: 9, font_weight: :bold),
+        style(:caption, extends: :label, font_size: 9, fill: :axis),
+        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        linear_scale(:x, domain: [0, 1500]),
+        linear_scale(:y, domain: [0, 25]),
+        ordinal_scale(:color, domain: @regions),
+        axis(:x, :bottom, ticks: [0, 300, 600, 900, 1200, 1500]),
+        axis(:y, :left, ticks: [0, 5, 10, 15, 20, 25], grid: true),
+        label({:axis, :x}, ["Population (millions)"]),
+        label({:axis, :y}, ["GDP (trillions USD)"]),
+        label({:frame, :bottom_right}, ["Size = GDP/capita"], style: :caption),
+        legend(:color, position: :top_right),
+        circle(largest_first, %{x: :population, y: :gdp, value: :r}, style: :bubble),
+        circle(named, %{x: :population, y: :gdp, value: 0},
+          label: %{text: [{:field, :name}], anchor: :middle, style: :name},
+          style: :name
         )
-        |> Element.append(
-          Element.text(%{x: 22, y: 12, font_size: 10, fill: ColorPalettes.text_color(palette)})
-          |> Element.content(region)
-        )
-      end)
+      ])
 
-    # Size legend
-    size_legend = Element.g(%{transform: "translate(#{chart_width + 20},#{length(@regions) * 25 + 50})"})
-      |> Element.append(
-        Element.text(%{font_size: 9, fill: ColorPalettes.axis_color(palette)})
-        |> Element.content("Size = GDP/capita")
-      )
-
-    # Compose SVG
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(y_axis)
-      |> Element.append(x_axis)
-      |> Element.append(bubbles)
-      |> Element.append(x_label)
-      |> Element.append(y_label)
-      |> Element.append(legend)
-      |> Element.append(size_legend)
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{countries: rows(opts)}}
   end
 
-  # Animation: bubbles gently float and pulse
-  defp animate_data(data, tick) do
-    data
-    |> Enum.with_index()
-    |> Enum.map(fn {item, i} ->
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  # The radius is a column: GDP per capita over the data's own maximum, 5 to 40 user units.
+  defp rows(opts) do
+    data = opts[:data] || @data
+
+    data =
+      case opts[:animation_tick] do
+        nil -> data
+        tick -> animated(data, tick)
+      end
+
+    per_capita = Enum.map(data, &(&1.gdp * 1000 / &1.population))
+    max = Enum.max(per_capita)
+
+    Enum.zip_with(data, per_capita, fn row, value ->
+      Map.put(row, :r, 5 + 35 * value / max)
+    end)
+  end
+
+  # Animation: bubbles gently float and pulse.
+  defp animated(data, tick) do
+    Enum.with_index(data, fn item, i ->
       phase = i * 0.7
-      # Vary GDP slightly (economic fluctuation)
-      gdp_mult = 1.0 + 0.15 * :math.sin(tick * 0.08 + phase)
-      # Population stays mostly stable with tiny drift
-      pop_mult = 1.0 + 0.03 * :math.sin(tick * 0.05 + phase + 2)
-      %{item |
-        gdp: item.gdp * gdp_mult,
-        population: item.population * pop_mult
+
+      %{
+        item
+        | gdp: item.gdp * (1.0 + 0.15 * :math.sin(tick * 0.08 + phase)),
+          population: item.population * (1.0 + 0.03 * :math.sin(tick * 0.05 + phase + 2))
       }
     end)
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Scale
+    import Visualize.Chart.Build
 
-    # Three scales for three dimensions
-    x_scale = Scale.Linear.new()  # Position X (e.g., population)
-    y_scale = Scale.Linear.new()  # Position Y (e.g., GDP)
-    size_scale = Scale.Linear.new()  # Bubble radius (e.g., per capita)
+    # The pipeline does the work: largest first, and only the big ones are named.
+    largest_first = sort(from(:countries), :r, order: :descending)
+    named = filter(largest_first, :r, test: :gt, value: 15)
 
-    # Draw bubbles
-    Element.circle(%{
-      cx: Scale.Linear.apply(x_scale, d.x),
-      cy: Scale.Linear.apply(y_scale, d.y),
-      r: Scale.Linear.apply(size_scale, d.size),
-      fill: color
-    })
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Bubble Chart"}),
+        source(:countries, [:name, :gdp, :population, :region, :r]),
+        style(:bubble,
+          fill: {:field, :region},
+          fill_opacity: 0.7,
+          stroke: {:field, :region},
+          stroke_width: 1
+        ),
+        style(:name, fill: :none, font_size: 9, font_weight: :bold),
+        cartesian(600, 400, margin: %{top: 30, right: 120, bottom: 50, left: 70}),
+        linear_scale(:x, domain: [0, 1500]),
+        linear_scale(:y, domain: [0, 25]),
+        ordinal_scale(:color, domain: ["Americas", "Asia", "Europe", "Oceania"]),
+        axis(:x, :bottom, ticks: [0, 300, 600, 900, 1200, 1500]),
+        axis(:y, :left, ticks: [0, 5, 10, 15, 20, 25], grid: true),
+        label({:axis, :x}, ["Population (millions)"]),
+        label({:axis, :y}, ["GDP (trillions USD)"]),
+        legend(:color, position: :top_right),
+        circle(largest_first, %{x: :population, y: :gdp, value: :r}, style: :bubble),
+
+        # The carrier for the names: `value: 0` is a zero-radius circle (#134).
+        circle(named, %{x: :population, y: :gdp, value: 0},
+          label: %{text: [{:field, :name}], anchor: :middle, style: :name},
+          style: :name
+        )
+      ])
+
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{countries: data})
+    Visualize.Chart.render(applied)
     """
   end
 end

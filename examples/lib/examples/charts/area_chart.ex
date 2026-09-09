@@ -1,5 +1,13 @@
 defmodule Examples.Charts.AreaChart do
-  @moduledoc "Area chart example"
+  @moduledoc """
+  Area chart example — **left imperative** (#125).
+
+  This chart's area is filled with a vertical linear gradient, and the style grammar has no
+  paint server: `fill` is a colour, and a design has no node that emits the
+  `<defs><linearGradient>` a reference would point at. Filed as #133 with this chart as the
+  evidence; converting it would mean dropping the gradient, which is weakening the example
+  rather than expressing it.
+  """
 
   alias Visualize.{Scale, Axis, Shape}
   alias Visualize.SVG.Element

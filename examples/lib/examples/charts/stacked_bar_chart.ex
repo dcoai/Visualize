@@ -1,10 +1,23 @@
 defmodule Examples.Charts.StackedBarChart do
-  @moduledoc "Stacked bar chart using Stack layout"
+  @moduledoc """
+  Stacked bar chart as a design (#125): a `:stack` transform under one `:rect` mark.
 
-  alias Visualize.Scale
-  alias Visualize.Shape.Stack
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  The same transform the stacked area uses (spec/14 §5.4.1), read by a rectangle instead of
+  an area: `x0` and `x1` on the year are the band, `y0` and `y1` are the segment's baseline
+  and top, and the `key` column reaches the `color` scale through the mark's style, which is
+  what the legend explains.
+
+  The hand-drawn tick lines are a real y axis with `grid: true` now; the `%` those ticks
+  carried is in the axis title, because a format specifier has no unit (#135). The legend
+  draws inside the plot area (#136).
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 30, right: 100, bottom: 50, left: 50}
+  @keys [:desktop, :mobile, :tablet, :other]
 
   @data [
     %{year: "2019", desktop: 45, mobile: 35, tablet: 15, other: 5},
@@ -14,165 +27,86 @@ defmodule Examples.Charts.StackedBarChart do
     %{year: "2023", desktop: 28, mobile: 55, tablet: 11, other: 6}
   ]
 
-  @keys [:desktop, :mobile, :tablet, :other]
-
   def title, do: "Stacked Bar Chart"
   def description, do: "Device usage trends"
 
-  def render(opts \\ []) do
-    width = opts[:width] || 500
-    height = opts[:height] || 350
-    margin = %{top: 30, right: 100, bottom: 50, left: 50}
-
-    chart_width = width - margin.left - margin.right
-    chart_height = height - margin.top - margin.bottom
-
-    base_data = opts[:data] || @data
-    keys = @keys
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
-
-    # Apply animation if tick is provided
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      animate_data(base_data, animation_tick)
-    else
-      base_data
-    end
-
-    # Create stack
-    stack = Stack.new()
-      |> Stack.keys(keys)
-
-    series = Stack.generate(stack, data)
-
-    # Create scales
-    years = Enum.map(data, & &1.year)
-
-    x_scale = Scale.Band.new()
-      |> Scale.Band.domain(years)
-      |> Scale.Band.range([0, chart_width])
-      |> Scale.Band.padding(0.2)
-
-    # Find max stacked value
-    max_value = series
-      |> Enum.flat_map(fn s -> Enum.map(s.points, & &1.y1) end)
-      |> Enum.max()
-
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_value])
-      |> Scale.Linear.range([chart_height, 0])
-
-    # Draw stacked bars
-    bar_elements = series
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {s, series_idx} ->
-        color = Enum.at(colors, rem(series_idx, length(colors)))
-
-        Enum.map(s.points, fn point ->
-          x = Scale.Band.apply(x_scale, point.data.year)
-          y0 = Scale.Linear.apply(y_scale, point.y0)
-          y1 = Scale.Linear.apply(y_scale, point.y1)
-
-          Element.rect(%{
-            x: x,
-            y: y1,
-            width: Scale.Band.bandwidth(x_scale),
-            height: y0 - y1,
-            fill: color
-          })
-        end)
-      end)
-
-    # X-axis labels
-    x_labels = Enum.map(data, fn d ->
-      x = Scale.Band.apply(x_scale, d.year) + Scale.Band.bandwidth(x_scale) / 2
-
-      Element.text(%{
-        x: x,
-        y: chart_height + 20,
-        text_anchor: "middle",
-        font_size: 11,
-        fill: ColorPalettes.text_color(palette)
-      })
-      |> Element.content(d.year)
-    end)
-
-    # Y-axis
-    y_ticks = for i <- 0..5, do: max_value * i / 5
-
-    y_axis = Enum.map(y_ticks, fn tick ->
-      y = Scale.Linear.apply(y_scale, tick)
-
-      Element.g(%{})
-      |> Element.append(
-        Element.line(%{x1: 0, x2: chart_width, y1: y, y2: y, stroke: "#eee", stroke_width: 1})
-      )
-      |> Element.append(
-        Element.text(%{x: -10, y: y + 4, text_anchor: "end", font_size: 10, fill: ColorPalettes.axis_color(palette)})
-        |> Element.content("#{trunc(tick)}%")
-      )
-    end)
-
-    # Legend
-    legend = keys
-      |> Enum.with_index()
-      |> Enum.map(fn {key, i} ->
-        Element.g(%{transform: "translate(#{chart_width + 15},#{i * 20})"})
-        |> Element.append(
-          Element.rect(%{width: 15, height: 15, fill: Enum.at(colors, rem(i, length(colors)))})
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:devices, [:year | @keys]),
+        style(:segment, fill: {:field, :key}),
+        cartesian(opts[:width] || 500, opts[:height] || 350, margin: @margin),
+        band_scale(:x, padding: 0.2),
+        linear_scale(:y, domain: [0, :auto]),
+        ordinal_scale(:color, domain: @keys),
+        axis(:x, :bottom),
+        axis(:y, :left, ticks: 5, grid: true),
+        label({:axis, :y}, ["share (%)"]),
+        legend(:color, position: :top_right),
+        rect(stack(from(:devices), @keys), %{x0: :year, x1: :year, y0: :y0, y1: :y1},
+          style: :segment
         )
-        |> Element.append(
-          Element.text(%{x: 20, y: 12, font_size: 10, fill: ColorPalettes.text_color(palette)})
-          |> Element.content(Atom.to_string(key) |> String.capitalize())
-        )
-      end)
+      ])
 
-    # Compose SVG
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(y_axis)
-      |> Element.append(bar_elements)
-      |> Element.append(x_labels)
-      |> Element.append(legend)
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{devices: rows(opts)}}
   end
 
-  # Animation: device usage shifts over time
-  defp animate_data(data, tick) do
-    data
-    |> Enum.with_index()
-    |> Enum.map(fn {item, i} ->
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  defp rows(opts) do
+    data = opts[:data] || @data
+
+    case opts[:animation_tick] do
+      nil -> data
+      tick -> animated(data, tick)
+    end
+  end
+
+  # Animation: device usage shifts over time, each category at its own phase.
+  defp animated(data, tick) do
+    Enum.with_index(data, fn item, i ->
       phase = i * 0.6
-      # Each device category shifts with different phases
+
       %{
-        item |
-        desktop: item.desktop * (1.0 + 0.25 * :math.sin(tick * 0.08 + phase)),
-        mobile: item.mobile * (1.0 + 0.2 * :math.sin(tick * 0.08 + phase + 1.5)),
-        tablet: item.tablet * (1.0 + 0.3 * :math.sin(tick * 0.08 + phase + 3)),
-        other: item.other * (1.0 + 0.35 * :math.sin(tick * 0.08 + phase + 4.5))
+        item
+        | desktop: item.desktop * (1.0 + 0.25 * :math.sin(tick * 0.08 + phase)),
+          mobile: item.mobile * (1.0 + 0.2 * :math.sin(tick * 0.08 + phase + 1.5)),
+          tablet: item.tablet * (1.0 + 0.3 * :math.sin(tick * 0.08 + phase + 3)),
+          other: item.other * (1.0 + 0.35 * :math.sin(tick * 0.08 + phase + 4.5))
       }
     end)
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Shape.Stack
+    import Visualize.Chart.Build
 
-    stack = Stack.new()
-      |> Stack.keys([:apples, :oranges, :bananas])
+    keys = [:desktop, :mobile, :tablet, :other]
 
-    series = Stack.generate(stack, data)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Stacked Bar Chart"}),
+        source(:devices, [:year | keys]),
 
-    # Each series has points with y0 (baseline) and y1 (top)
-    Enum.each(series, fn s ->
-      Enum.each(s.points, fn point ->
-        # point.y0 = baseline
-        # point.y1 = top of stack
-        # point.data = original datum
-      end)
-    end)
+        # A {:field, f} on a colour key is read per element, through the `color` scale.
+        style(:segment, fill: {:field, :key}),
+        cartesian(500, 350, margin: %{top: 30, right: 100, bottom: 50, left: 50}),
+        band_scale(:x, padding: 0.2),
+        linear_scale(:y, domain: [0, :auto]),
+        ordinal_scale(:color, domain: keys),
+        axis(:x, :bottom),
+        axis(:y, :left, ticks: 5, grid: true),
+        label({:axis, :y}, ["share (%)"]),
+        legend(:color, position: :top_right),
+        rect(stack(from(:devices), keys), %{x0: :year, x1: :year, y0: :y0, y1: :y1},
+          style: :segment
+        )
+      ])
+
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{devices: data})
+    Visualize.Chart.render(applied)
     """
   end
 end

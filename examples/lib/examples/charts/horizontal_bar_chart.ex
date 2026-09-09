@@ -1,9 +1,27 @@
 defmodule Examples.Charts.HorizontalBarChart do
-  @moduledoc "Horizontal bar chart example"
+  @moduledoc """
+  Horizontal bar chart as a design (#125): a `:sort` transform under one `:rect` mark, with
+  the band scale on `y`.
 
-  alias Visualize.{Scale, Axis}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  Two things the layer decides differently from the imperative chart, both filed:
+
+  - **The value at the end of each bar needs a carrier mark.** A `:rect`'s inline label
+    anchors at the rectangle's *centre* (spec/14 §5.5), and there is no `:text` mark, so the
+    text is carried by a second mark — a `:circle` whose `value` channel is the constant `0`,
+    which draws `<circle r="0">` and nothing else (#134).
+  - **The x axis lost its `M`.** A `Visualize.Format` specifier has no unit suffix (#135), so
+    the millions are named in the axis title instead of on every tick. The bar labels keep
+    theirs, because a label's text is a list and a literal is one of its parts.
+
+  The `y` range is written out because `:auto` runs upward and the categories read downward,
+  as `Visualize.Chart.Presets.horizontal_bar_chart/1` does.
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 20, right: 30, bottom: 40, left: 100}
 
   @data [
     %{country: "China", population: 1412},
@@ -19,127 +37,91 @@ defmodule Examples.Charts.HorizontalBarChart do
   def title, do: "Horizontal Bar Chart"
   def description, do: "World population by country (millions)"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 600
     height = opts[:height] || 400
-    margin = %{top: 20, right: 30, bottom: 40, left: 100}
+    {_plot_width, plot_height} = Design.plot(width, height, @margin)
 
-    inner_width = width - margin.left - margin.right
-    inner_height = height - margin.top - margin.bottom
+    # Both marks read the same pipeline, so the band's domain is the sorted order once.
+    data = sort(from(:countries), :population, order: :descending)
 
-    base_data = opts[:data] || @data
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:countries, [:country, :population]),
+        style(:value, fill: :none),
+        cartesian(width, height, margin: @margin),
+        linear_scale(:x, domain: [0, :auto], nice: true),
+        band_scale(:y, padding: 0.2, range: [0, plot_height]),
+        ordinal_scale(:color),
+        axis(:x, :bottom, ticks: 5),
+        axis(:y, :left),
+        label({:axis, :x}, ["population (millions)"]),
+        rect(data, %{x0: 0, x1: :population, y0: :country, y1: :country, value: :country},
+          options: %{corner_radius: 2}
+        ),
+        circle(data, %{x: :population, y: :country, value: 0},
+          label: %{text: [{:field, :population}, "M"], anchor: :right},
+          style: :value
+        )
+      ])
 
-    # Apply animation if tick is provided
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      animate_data(base_data, animation_tick)
-    else
-      base_data
+    {design, %{countries: rows(opts)}}
+  end
+
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  defp rows(opts) do
+    data = opts[:data] || @data
+
+    case opts[:animation_tick] do
+      nil -> data
+      tick -> animated(data, tick)
     end
-
-    # Sort data by population descending
-    sorted_data = Enum.sort_by(data, & &1.population, :desc)
-
-    # Create scales
-    y_scale = Scale.Band.new()
-      |> Scale.Band.domain(Enum.map(sorted_data, & &1.country))
-      |> Scale.Band.range([0, inner_height])
-      |> Scale.Band.padding(0.2)
-
-    max_pop = sorted_data |> Enum.map(& &1.population) |> Enum.max()
-
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_pop])
-      |> Scale.Linear.range([0, inner_width])
-      |> Scale.Linear.nice()
-
-    # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette))
-      |> Axis.ticks(5)
-      |> Axis.tick_format(&format_population/1)
-
-    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette))
-
-    # Build bars
-    bars = sorted_data
-      |> Enum.with_index()
-      |> Enum.map(fn {d, i} ->
-        y = Scale.Band.apply(y_scale, d.country)
-        bar_width = Scale.Linear.apply(x_scale, d.population)
-        color = Enum.at(colors, rem(i, length(colors)))
-
-        Element.g(%{})
-          |> Element.append(
-            Element.rect(%{
-              x: 0,
-              y: y,
-              width: bar_width,
-              height: Scale.Band.bandwidth(y_scale),
-              fill: color,
-              rx: 2
-            })
-          )
-          |> Element.append(
-            Element.text(%{
-              x: bar_width + 5,
-              y: y + Scale.Band.bandwidth(y_scale) / 2 + 4,
-              font_size: 11,
-              fill: ColorPalettes.text_color(palette)
-            })
-            |> Element.content("#{d.population}M")
-          )
-      end)
-
-    # Build chart
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(bars)
-      |> Element.append(
-        Element.g(%{transform: "translate(0,#{inner_height})"})
-        |> Element.append(Axis.generate(x_axis))
-      )
-      |> Element.append(Axis.generate(y_axis))
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
   end
 
-  defp format_population(value) do
-    "#{trunc(value)}M"
-  end
-
-  # Animation: bars grow and shrink with different phases
-  defp animate_data(data, tick) do
-    data
-    |> Enum.with_index()
-    |> Enum.map(fn {item, i} ->
-      phase = i * 0.4
-      # Vary between 70% and 130% of original value
-      multiplier = 1.0 + 0.3 * :math.sin(tick * 0.1 + phase)
-      %{item | population: item.population * multiplier}
+  # Animation: bars grow and shrink with different phases.
+  defp animated(data, tick) do
+    Enum.with_index(data, fn item, i ->
+      %{item | population: item.population * (1.0 + 0.3 * :math.sin(tick * 0.1 + i * 0.4))}
     end)
   end
 
   def sample_code do
     ~S"""
-    # Horizontal bar uses Band scale on Y axis
-    y_scale = Scale.Band.new()
-      |> Scale.Band.domain(categories)
-      |> Scale.Band.range([0, inner_height])
-      |> Scale.Band.padding(0.2)
+    import Visualize.Chart.Build
 
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_value])
-      |> Scale.Linear.range([0, inner_width])
+    # One pipeline read by both marks, so the band's domain is the sorted order once.
+    data = sort(from(:countries), :population, order: :descending)
 
-    # Bars are drawn with width from x_scale
-    Element.rect(%{
-      x: 0,
-      y: y_scale(category),
-      width: x_scale(value),
-      height: bandwidth
-    })
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Horizontal Bar Chart"}),
+        source(:countries, [:country, :population]),
+        style(:value, fill: :none),
+        cartesian(600, 400, margin: %{top: 20, right: 30, bottom: 40, left: 100}),
+        linear_scale(:x, domain: [0, :auto], nice: true),
+
+        # `:auto` on a band runs upward; the categories read downward, so the range is given.
+        band_scale(:y, padding: 0.2, range: [0, 340]),
+        ordinal_scale(:color),
+        axis(:x, :bottom, ticks: 5),
+        axis(:y, :left),
+        label({:axis, :x}, ["population (millions)"]),
+        rect(data, %{x0: 0, x1: :population, y0: :country, y1: :country, value: :country},
+          options: %{corner_radius: 2}
+        ),
+
+        # The carrier for the value text: `value: 0` is a zero-radius circle (#134).
+        circle(data, %{x: :population, y: :country, value: 0},
+          label: %{text: [{:field, :population}, "M"], anchor: :right},
+          style: :value
+        )
+      ])
+
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{countries: data})
+    Visualize.Chart.render(applied)
     """
   end
 end

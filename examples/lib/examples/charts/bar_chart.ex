@@ -1,9 +1,19 @@
 defmodule Examples.Charts.BarChart do
-  @moduledoc "Simple bar chart example"
+  @moduledoc """
+  Bar chart as a design (#125): one `:rect` mark over a band scale.
 
-  alias Visualize.{Scale, Axis, SVG}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  A bar is `x0` and `x1` on the same field: through a `:band` scale `x0` is the band's start
+  and `x1` its end, so the rectangle is the band (spec/14 §5.2). `value` on a `:rect` reaches
+  the `color` scale, which is how each letter takes its own colour without a `rem/2` over a
+  palette, and the axis prints its percentages through `Visualize.Format`'s `.1%` rather than
+  through a formatting function a design could not hold.
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 20, right: 20, bottom: 30, left: 40}
 
   @data [
     %{letter: "A", frequency: 0.08167},
@@ -37,123 +47,66 @@ defmodule Examples.Charts.BarChart do
   def title, do: "Bar Chart"
   def description, do: "Letter frequency in English text"
 
-  def render(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
-    margin = %{top: 20, right: 20, bottom: 30, left: 40}
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:letters, [:letter, :frequency]),
+        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        band_scale(:x, padding: 0.1),
+        linear_scale(:y, domain: [0, :auto], nice: true),
+        ordinal_scale(:color),
+        axis(:x, :bottom),
+        axis(:y, :left, ticks: 10, format: ".1%"),
+        rect(:letters, %{x0: :letter, x1: :letter, y0: 0, y1: :frequency, value: :letter})
+      ])
 
-    inner_width = width - margin.left - margin.right
-    inner_height = height - margin.top - margin.bottom
+    {design, %{letters: rows(opts)}}
+  end
 
-    base_data = opts[:data] || @data
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-    # Apply animation if tick is provided
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      animate_data(base_data, animation_tick)
-    else
-      base_data
+  defp rows(opts) do
+    data = opts[:data] || @data
+
+    case opts[:animation_tick] do
+      nil -> data
+      tick -> animated(data, tick)
     end
-
-    # Create scales
-    x_scale = Scale.Band.new()
-      |> Scale.Band.domain(Enum.map(data, & &1.letter))
-      |> Scale.Band.range([0, inner_width])
-      |> Scale.Band.padding(0.1)
-
-    max_freq = data |> Enum.map(& &1.frequency) |> Enum.max()
-
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_freq])
-      |> Scale.Linear.range([inner_height, 0])
-      |> Scale.Linear.nice()
-
-    # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette))
-    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette))
-      |> Axis.ticks(10)
-      |> Axis.tick_format(&format_percent/1)
-
-    # Build bars
-    bars = data
-      |> Enum.with_index()
-      |> Enum.map(fn {d, i} ->
-        x = Scale.Band.apply(x_scale, d.letter)
-        y = Scale.Linear.apply(y_scale, d.frequency)
-        bar_height = inner_height - y
-        color = Enum.at(colors, rem(i, length(colors)))
-
-        Element.rect(%{
-          x: x,
-          y: y,
-          width: Scale.Band.bandwidth(x_scale),
-          height: bar_height,
-          fill: color
-        })
-      end)
-
-    # Create chart group
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(bars)
-      |> Element.append(
-        Element.g(%{transform: "translate(0,#{inner_height})"})
-        |> Element.append(Axis.generate(x_axis))
-      )
-      |> Element.append(Axis.generate(y_axis))
-
-    # Build SVG
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
   end
 
-  defp format_percent(value) do
-    "#{Float.round(value * 100, 1)}%"
-  end
-
-  # Animation: smoothly vary frequencies using sine waves
-  defp animate_data(data, tick) do
-    data
-    |> Enum.with_index()
-    |> Enum.map(fn {item, i} ->
-      # Each bar oscillates at a different phase
-      phase = i * 0.3
-      # Vary between 50% and 150% of original value
-      multiplier = 1.0 + 0.5 * :math.sin(tick * 0.1 + phase)
-      %{item | frequency: item.frequency * multiplier}
+  # Animation: smoothly vary frequencies using sine waves, each bar at its own phase.
+  defp animated(data, tick) do
+    Enum.with_index(data, fn item, i ->
+      %{item | frequency: item.frequency * (1.0 + 0.5 * :math.sin(tick * 0.1 + i * 0.3))}
     end)
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.{Scale, Axis, SVG}
-    alias Visualize.SVG.Element
+    import Visualize.Chart.Build
 
-    data = [
-      %{letter: "A", frequency: 0.08167},
-      %{letter: "B", frequency: 0.01492},
-      # ...
-    ]
+    data = [%{letter: "A", frequency: 0.08167}, %{letter: "B", frequency: 0.01492}, ...]
 
-    x_scale = Scale.Band.new()
-      |> Scale.Band.domain(Enum.map(data, & &1.letter))
-      |> Scale.Band.range([0, inner_width])
-      |> Scale.Band.padding(0.1)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Bar Chart"}),
+        source(:letters, [:letter, :frequency]),
+        cartesian(600, 400, margin: %{top: 20, right: 20, bottom: 30, left: 40}),
+        band_scale(:x, padding: 0.1),
+        linear_scale(:y, domain: [0, :auto], nice: true),
+        ordinal_scale(:color),
+        axis(:x, :bottom),
+        axis(:y, :left, ticks: 10, format: ".1%"),
 
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_freq])
-      |> Scale.Linear.range([inner_height, 0])
+        # x0 and x1 on the same field are the band's start and end: the bar is the band.
+        # `value` on a :rect reaches the colour scale.
+        rect(:letters, %{x0: :letter, x1: :letter, y0: 0, y1: :frequency, value: :letter})
+      ])
 
-    bars = Enum.map(data, fn d ->
-      Element.rect(%{
-        x: Scale.Band.apply(x_scale, d.letter),
-        y: Scale.Linear.apply(y_scale, d.frequency),
-        width: Scale.Band.bandwidth(x_scale),
-        height: inner_height - Scale.Linear.apply(y_scale, d.frequency),
-        fill: "steelblue"
-      })
-    end)
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{letters: data})
+    Visualize.Chart.render(applied)
     """
   end
 end

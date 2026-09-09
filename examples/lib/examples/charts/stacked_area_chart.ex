@@ -1,150 +1,107 @@
 defmodule Examples.Charts.StackedAreaChart do
-  @moduledoc "Stacked area chart example"
+  @moduledoc """
+  Stacked area chart as a design (#125): a `:stack` transform under one `:area` mark.
 
-  alias Visualize.{Scale, Axis, Shape}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  `Visualize.Shape.Stack` is a step of the mark's data pipeline rather than a call the
+  caller makes (spec/14 §5.4.1): the transform yields one row per series per datum carrying
+  `key`, `y0` and `y1`, the mark reads `y0` and `y1` as its baseline and top, and `key` as
+  its `series` channel — which both splits the paths and colours them from the `color`
+  scale the legend explains.
+
+  The legend draws inside the plot area (#136).
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 20, right: 100, bottom: 30, left: 50}
+  @keys [:apples, :oranges, :bananas, :grapes, :pears]
 
   @data (for i <- 0..20 do
-    %{
-      x: i,
-      apples: :rand.uniform(30) + 10,
-      oranges: :rand.uniform(25) + 15,
-      bananas: :rand.uniform(20) + 5,
-      grapes: :rand.uniform(15) + 10,
-      pears: :rand.uniform(10) + 5
-    }
-  end)
+           %{
+             x: i,
+             apples: :rand.uniform(30) + 10,
+             oranges: :rand.uniform(25) + 15,
+             bananas: :rand.uniform(20) + 5,
+             grapes: :rand.uniform(15) + 10,
+             pears: :rand.uniform(10) + 5
+           }
+         end)
 
   def title, do: "Stacked Area Chart"
   def description, do: "Fruit production over time"
 
-  def render(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
-    margin = %{top: 20, right: 100, bottom: 30, left: 50}
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:fruit, [:x | @keys]),
+        style(:layer, opacity: 0.8, curve: :monotone_x),
+        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        linear_scale(:x),
+        linear_scale(:y, domain: [0, :auto], nice: true),
+        ordinal_scale(:color, domain: @keys),
+        axis(:x, :bottom, ticks: 10),
+        axis(:y, :left, ticks: 5),
+        legend(:color, position: :top_right),
+        area(stack(from(:fruit), @keys), %{x: :x, y: :y1, y0: :y0, series: :key}, style: :layer)
+      ])
 
-    inner_width = width - margin.left - margin.right
-    inner_height = height - margin.top - margin.bottom
-
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
-    keys = [:apples, :oranges, :bananas, :grapes, :pears]
-
-    # Generate animated or static data
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      generate_animated_data(animation_tick)
-    else
-      opts[:data] || @data
-    end
-
-    # Create stack generator
-    stack = Shape.Stack.new()
-      |> Shape.Stack.keys(keys)
-
-    series = Shape.Stack.generate(stack, data)
-
-    # Find max y value across all series
-    max_y = series
-      |> Enum.flat_map(fn s -> Enum.map(s.points, & &1.y1) end)
-      |> Enum.max()
-
-    # Create scales
-    {min_x, max_x} = {0, length(data) - 1}
-
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([min_x, max_x])
-      |> Scale.Linear.range([0, inner_width])
-
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_y])
-      |> Scale.Linear.range([inner_height, 0])
-      |> Scale.Linear.nice()
-
-    # Generate stacked areas
-    areas = series
-      |> Enum.with_index()
-      |> Enum.map(fn {s, i} ->
-        color = Enum.at(colors, rem(i, length(colors)))
-
-        # Create area generator for this series
-        area = Shape.Area.new()
-          |> Shape.Area.x(fn p -> Scale.Linear.apply(x_scale, p.index) end)
-          |> Shape.Area.y0(fn p -> Scale.Linear.apply(y_scale, p.y0) end)
-          |> Shape.Area.y1(fn p -> Scale.Linear.apply(y_scale, p.y1) end)
-          |> Shape.Area.curve(:monotone_x)
-
-        path_data = Shape.Area.generate(area, s.points)
-
-        Element.path(%{d: path_data, fill: color, opacity: 0.8})
-      end)
-
-    # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(10)
-    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(5)
-
-    # Legend
-    legend = keys
-      |> Enum.with_index()
-      |> Enum.map(fn {key, i} ->
-        color = Enum.at(colors, rem(i, length(colors)))
-        y_pos = i * 22
-
-        Element.g(%{transform: "translate(#{inner_width + 15},#{y_pos})"})
-        |> Element.append(Element.rect(%{width: 16, height: 16, fill: color, rx: 2}))
-        |> Element.append(
-          Element.text(%{x: 22, y: 12, font_size: 12, fill: ColorPalettes.text_color(palette)})
-          |> Element.content(Atom.to_string(key) |> String.capitalize())
-        )
-      end)
-
-    # Build chart
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(areas)
-      |> Element.append(legend)
-      |> Element.append(
-        Element.g(%{transform: "translate(0,#{inner_height})"})
-        |> Element.append(Axis.generate(x_axis))
-      )
-      |> Element.append(Axis.generate(y_axis))
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{fruit: rows(opts)}}
   end
 
-  # Animation: flowing waves for each fruit category
-  defp generate_animated_data(tick) do
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  defp rows(opts) do
+    case opts[:animation_tick] do
+      nil -> opts[:data] || @data
+      tick -> animated(tick)
+    end
+  end
+
+  # Animation: flowing waves for each fruit category.
+  defp animated(tick) do
     phase = tick * 0.1
+
     for i <- 0..20 do
       %{
         x: i,
-        apples: 20 + 15 * :math.sin((i / 4) + phase) |> max(5),
-        oranges: 25 + 12 * :math.sin((i / 5) + phase * 1.2 + 1) |> max(5),
-        bananas: 15 + 10 * :math.sin((i / 3) + phase * 0.8 + 2) |> max(5),
-        grapes: 18 + 8 * :math.sin((i / 6) + phase * 1.5 + 3) |> max(5),
-        pears: 12 + 6 * :math.sin((i / 4) + phase * 0.9 + 4) |> max(5)
+        apples: max(20 + 15 * :math.sin(i / 4 + phase), 5),
+        oranges: max(25 + 12 * :math.sin(i / 5 + phase * 1.2 + 1), 5),
+        bananas: max(15 + 10 * :math.sin(i / 3 + phase * 0.8 + 2), 5),
+        grapes: max(18 + 8 * :math.sin(i / 6 + phase * 1.5 + 3), 5),
+        pears: max(12 + 6 * :math.sin(i / 4 + phase * 0.9 + 4), 5)
       }
     end
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Shape
+    import Visualize.Chart.Build
 
-    stack = Shape.Stack.new()
-      |> Shape.Stack.keys([:apples, :oranges, :bananas])
+    keys = [:apples, :oranges, :bananas, :grapes, :pears]
 
-    series = Shape.Stack.generate(stack, data)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Stacked Area Chart"}),
+        source(:fruit, [:x | keys]),
+        style(:layer, opacity: 0.8, curve: :monotone_x),
+        cartesian(600, 400, margin: %{top: 20, right: 100, bottom: 30, left: 50}),
+        linear_scale(:x),
+        linear_scale(:y, domain: [0, :auto], nice: true),
+        ordinal_scale(:color, domain: keys),
+        axis(:x, :bottom, ticks: 10),
+        axis(:y, :left, ticks: 5),
+        legend(:color, position: :top_right),
 
-    # Each series has .points with y0 (baseline) and y1 (top)
-    Enum.map(series, fn s ->
-      area = Shape.Area.new()
-        |> Shape.Area.y0(fn p -> y_scale(p.y0) end)
-        |> Shape.Area.y1(fn p -> y_scale(p.y1) end)
+        # The stack is a step of the mark's pipeline; it yields key, y0 and y1 per row.
+        area(stack(from(:fruit), keys), %{x: :x, y: :y1, y0: :y0, series: :key}, style: :layer)
+      ])
 
-      Shape.Area.generate(area, s.points)
-    end)
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{fruit: data})
+    Visualize.Chart.render(applied)
     """
   end
 end

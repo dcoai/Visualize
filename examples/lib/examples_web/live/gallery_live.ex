@@ -89,9 +89,17 @@ defmodule ExamplesWeb.GalleryLive do
     """
   end
 
+  # A chart written as a design renders its own document (`Examples.Charts.Design`); an
+  # imperative one returns the element tree the gallery names and serialises.
   defp render_preview(module) do
-    module.render(width: 320, height: 220)
-    |> Examples.Accessible.name(module.title(), module.description())
-    |> Visualize.SVG.Renderer.render_to_string()
+    case module.render(width: 320, height: 220) do
+      svg when is_binary(svg) ->
+        svg
+
+      element ->
+        element
+        |> Examples.Accessible.name(module.title(), module.description())
+        |> Visualize.SVG.Renderer.render_to_string()
+    end
   end
 end
