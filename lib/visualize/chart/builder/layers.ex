@@ -40,6 +40,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         class={class(@class)}
         phx-hook="BuilderHook"
         data-builder-target={@target}
+        data-builder-stack="true"
       >
         <li
           :for={entry <- @entries}

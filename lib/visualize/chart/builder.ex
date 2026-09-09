@@ -291,6 +291,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, moved(socket, position(from), position(to))}
     end
 
+    # A fragment dragged out of the library lands at the position it was dropped at, so
+    # precedence is chosen in the gesture rather than fixed afterwards (spec/14 §18.17).
+    def handle_event("insert", %{"name" => submitted, "at" => at}, socket) do
+      %{store: store} = socket.assigns
+
+      case store && Enum.find(store.list(), &(to_string(&1) == submitted)) do
+        nil ->
+          {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+
+        name ->
+          {:noreply, inserted(socket, name, store.get(name), position(at))}
+      end
+    end
+
     def handle_event("inspect", %{"path" => path, "layer" => layer}, socket) do
       {:noreply, socket |> select(position(layer)) |> opened(path)}
     end
@@ -632,6 +646,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:error, errors} -> errors
       end
     end
+
+    # The selection and the disabled set are positions, so both follow an insert below them.
+    defp inserted(socket, name, {:ok, fragment}, at) do
+      %{layers: layers, selected: selected, disabled: disabled} = socket.assigns
+      at = at |> max(0) |> min(length(layers))
+
+      socket
+      |> assign(:layers, List.insert_at(layers, at, {name, fragment}))
+      |> assign(:selected, if(selected >= at, do: selected + 1, else: selected))
+      |> assign(:disabled, MapSet.new(disabled, &if(&1 >= at, do: &1 + 1, else: &1)))
+      |> assign(:added, to_string(name))
+      |> assign(:notice, nil)
+    end
+
+    defp inserted(socket, name, :error, _at),
+      do: assign(socket, :notice, "no fragment is stored under #{name}")
 
     defp added(socket, name, {:ok, fragment}) do
       socket

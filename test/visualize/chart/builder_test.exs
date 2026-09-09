@@ -379,6 +379,81 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "dropping a fragment into the stack (spec/14 §18.17)" do
+    setup do
+      host = %{
+        id: "b",
+        layers: BuilderFixture.layers(),
+        sources: BuilderFixture.sources(),
+        store: Library
+      }
+
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+      %{host: host, socket: socket}
+    end
+
+    test "the stack is the drop target and the library is not" do
+      html = rendered(:builder_store)
+      assert html =~ ~s(phx-hook="BuilderHook" data-builder-target="-1" data-builder-stack="true")
+
+      [_, library] = String.split(html, ~s(class="vis-builder-library-pane"), parts: 2)
+      [library, _] = String.split(library, "</aside>", parts: 2)
+      refute library =~ "data-builder-stack"
+      assert library =~ ~s(data-builder-fragment="baseline")
+    end
+
+    test "a fragment lands at the position it was dropped at", %{socket: s} do
+      {:noreply, at_top} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 0}, s)
+      assert names(at_top) == [:baseline, :house, :shared, :panel]
+
+      {:noreply, midway} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 2}, s)
+      assert names(midway) == [:house, :shared, :baseline, :panel]
+
+      {:noreply, at_end} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 3}, s)
+      assert names(at_end) == [:house, :shared, :panel, :baseline]
+    end
+
+    test "a position outside the stack is clamped, because a client's number is not trusted",
+         %{socket: s} do
+      {:noreply, under} = Builder.handle_event("insert", %{"name" => "baseline", "at" => -5}, s)
+      assert names(under) == [:baseline, :house, :shared, :panel]
+
+      {:noreply, over} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 99}, s)
+      assert names(over) == [:house, :shared, :panel, :baseline]
+    end
+
+    test "the selection and the disabled set follow the insert", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      {:noreply, s} = Builder.handle_event("toggle_layer", %{"index" => "1"}, s)
+      assert s.assigns.selected == 2
+      assert s.assigns.disabled == MapSet.new([1])
+
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 0}, s)
+      assert names(s) == [:baseline, :house, :shared, :panel]
+      assert s.assigns.selected == 3
+      assert s.assigns.disabled == MapSet.new([2])
+    end
+
+    test "an insert below the selection leaves it where it is", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 2}, s)
+      assert s.assigns.selected == 0
+    end
+
+    test "a name the store does not hold is a notice and changes no layer", %{socket: s} do
+      {:noreply, missed} = Builder.handle_event("insert", %{"name" => "nope", "at" => 0}, s)
+      assert missed.assigns.notice == "no fragment is stored under nope"
+      assert missed.assigns.layers == s.assigns.layers
+    end
+
+    test "an insert survives the next host render", %{host: host, socket: s} do
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 1}, s)
+      {:ok, s} = Builder.update(host, s)
+      assert names(s) == [:house, :baseline, :shared, :panel]
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =

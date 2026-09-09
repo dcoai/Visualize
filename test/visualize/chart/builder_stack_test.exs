@@ -58,7 +58,10 @@ defmodule Visualize.Chart.Builder.StackTest do
 
     test "the list is the hook element and every layer is draggable at its position" do
       html = rendered(:layers)
-      assert html =~ ~s(<ol id="b-layers" class="vis-builder-layers" phx-hook="BuilderHook">)
+
+      assert html =~
+               ~s(<ol id="b-layers" class="vis-builder-layers" phx-hook="BuilderHook" data-builder-stack="true">)
+
       assert length(Regex.scan(~r/draggable="true"/, html)) == 3
 
       targeted =
