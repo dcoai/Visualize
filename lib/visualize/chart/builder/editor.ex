@@ -276,12 +276,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- the form (spec/14 §18.7) ---------------------------------------------------------
 
+    @doc """
+    The facets a node kind has, in the order of spec/14 §1.3 (spec/14 §18.15).
+
+    The editor renders these as its own strip; the builder renders them beside a node's
+    children in one strip, and asks here rather than keeping a second copy of the rule.
+
+        iex> Visualize.Chart.Builder.Editor.facets(:style)
+        [:style]
+
+        iex> :binding in Visualize.Chart.Builder.Editor.facets(:mark)
+        true
+    """
+    @spec facets(atom()) :: [Schema.facet()]
+    def facets(kind) do
+      specs = Schema.describe(kind)
+      Enum.filter(@facets, fn facet -> Enum.any?(specs, &(&1.facet == facet)) end)
+    end
+
     attr(:kind, :atom, required: true, doc: "the node kind being edited")
     attr(:node, :map, required: true, doc: "the node's current value")
     attr(:path, :list, default: [], doc: "where the node sits, for its keys' errors")
     attr(:facet, :atom, default: nil, doc: "the open tab, `nil` for the kind's first facet")
     attr(:errors, :list, default: [], doc: "the `{path, reason}` pairs of spec/14 §10.1")
     attr(:refs, :map, default: %{}, doc: "the names a `{:ref, kind}` may take, by kind")
+
+    attr(:strip, :boolean,
+      default: true,
+      doc: "render the facet strip; `false` where the caller does"
+    )
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the editor's class")
 
@@ -295,7 +319,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     def panel(assigns) do
       specs = Schema.describe(assigns.kind)
-      facets = Enum.filter(@facets, fn facet -> Enum.any?(specs, &(&1.facet == facet)) end)
+      facets = facets(assigns.kind)
       open = if assigns.facet in facets, do: assigns.facet, else: List.first(facets)
 
       assigns =
@@ -306,7 +330,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <div class={class(@class)}>
-        <nav class="vis-builder-tabs">
+        <nav :if={@strip} class="vis-builder-tabs">
           <button
             :for={facet <- @facets}
             type="button"

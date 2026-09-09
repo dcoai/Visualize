@@ -118,6 +118,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       margin-left: auto;
     }
 
+    .vis-builder-control-label {
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
     .vis-builder button,
     .vis-builder select,
     .vis-builder input[type="text"],
@@ -372,8 +381,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-weight: 600;
     }
 
-    /* The second row: the nodes under the open root, labelled by what they add to it. */
-    .vis-builder-subnodes {
+    /* The second row: one strip of one kind of chip — the open root's children, then the
+       open node's facets, divided rather than stacked in a second row. */
+    .vis-builder-chips {
       display: flex;
       gap: 2px;
       padding: 6px 8px;
@@ -383,7 +393,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       scrollbar-width: thin;
     }
 
-    .vis-builder .vis-builder-subnode {
+    .vis-builder .vis-builder-chip {
       flex: 0 0 auto;
       padding: 3px 9px;
       border-color: transparent;
@@ -394,16 +404,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-size: 11px;
     }
 
-    .vis-builder .vis-builder-subnode:hover {
+    .vis-builder .vis-builder-chip:hover {
       border-color: var(--vis-builder-line);
       color: var(--vis-builder-ink);
     }
 
-    .vis-builder .vis-builder-subnode-open {
+    .vis-builder .vis-builder-chip-open {
       border-color: var(--vis-builder-line);
       background: var(--vis-builder-panel);
       color: var(--vis-builder-ink);
       font-weight: 600;
+    }
+
+    /* Where children are followed by facets, a rule says so without a second row. */
+    .vis-builder .vis-builder-chip-divided {
+      margin-left: 9px;
+      border-left: 1px solid var(--vis-builder-line);
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+      padding-left: 12px;
     }
 
     /* ── the editor and its facet chips ──────────────────────────────────────── */

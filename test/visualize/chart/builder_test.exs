@@ -94,7 +94,11 @@ defmodule Visualize.Chart.BuilderTest do
       plain = rendered(:builder)
       stored = rendered(:builder_store)
       refute plain =~ "vis-builder-store"
-      assert stored =~ ~s(<select name="name" class="vis-builder-store">)
+      assert stored =~ ~s(class="vis-builder-store">)
+
+      assert stored =~
+               ~s(<label class="vis-builder-control-label" for="builder-store">Library</label>)
+
       assert stored =~ ~s(<option value="baseline">baseline</option>)
       assert stored =~ ~s(class="vis-builder-put")
     end
@@ -143,18 +147,50 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-value-node="styles.series" phx-target="-1">styles</button>)
     end
 
-    test "the open root's children are the second row, labelled by what they add" do
-      refute rendered(:builder) =~ "vis-builder-subnodes"
-
+    test "the open root's children and the node's facets are one strip" do
       html = at_node("frame")
-      assert html =~ ~s(<nav class="vis-builder-subnodes">)
-      assert tabs(html, "vis-builder-subnode") == ["size", "margin"]
+      assert html =~ ~s(<nav class="vis-builder-chips">)
+
+      # Children first, then the facets, in one row of one kind of control.
+      chips = tabs(html, "vis-builder-chip")
+      assert Enum.take(chips, 2) == ["size", "margin"]
+      assert Enum.drop(chips, 2) == Enum.map(Editor.facets(:frame), &to_string/1)
 
       # The root stays marked while a child is open, so the strip says where you are.
       open = at_node("frame.size")
       assert open =~ ~s(class="vis-builder-node vis-builder-node-open")
-      assert open =~ ~s(class="vis-builder-subnode vis-builder-subnode-open")
-      assert open =~ ~s(phx-value-node="frame.size" phx-target="-1">size</button>)
+      assert open =~ ~s(class="vis-builder-chip vis-builder-chip-open")
+      assert open =~ ~s(phx-value-node="frame.size")
+    end
+
+    test "a lone facet is not a chip, because it is not a choice" do
+      # A style has one facet, so the strip over `styles.series` is the declared styles and
+      # nothing else; the `style` chip it used to carry was a control that did nothing.
+      assert Editor.facets(:style) == [:style]
+
+      html = at_node("styles.series")
+      assert tabs(html, "vis-builder-chip") == ["series"]
+      refute html =~ ~s(phx-value-facet="style")
+    end
+
+    test "a node with one facet and no children has no strip at all" do
+      html =
+        render_component(Builder, %{
+          id: "b",
+          layers: [{:only, %{meta: %{name: "Uptime"}}}],
+          styles: false,
+          node_label: "meta"
+        })
+
+      assert Editor.facets(:meta) == [:content]
+      assert html =~ ~s(phx-value-node="meta")
+      refute html =~ "vis-builder-chips"
+    end
+
+    test "a facet chip carries its facet and a node chip carries its node" do
+      html = at_node("frame")
+      assert html =~ ~s(phx-click="select_node" phx-value-node="frame.size")
+      assert html =~ ~s(phx-click="facet" phx-value-facet="geometry")
     end
   end
 

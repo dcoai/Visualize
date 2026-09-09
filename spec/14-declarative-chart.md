@@ -1556,3 +1556,15 @@ The palette is a view of the **stacked** design, because the stack is what a mar
 **Selecting** one opens the node that owns it, in the layer that declares it — the highest such layer, which is the one whose value the stack takes, the same rule the inspector follows (§18.9). This is why the palette can be a view of the stack and still get a person to an editable node.
 
 **A reference becomes a choice.** `Visualize.Chart.Builder.Editor.panel/1` takes a `refs` assign — the names a `{:ref, kind}` may take, by kind — and renders a select over them instead of a text box wherever it has them. `Visualize.Chart.Builder.Editor.widget/1` is unchanged and stays a function of the type alone, which is the property that makes it total over the schema (§18.6); the panel is what narrows a reference when it happens to know the names. A kind the caller knows no names for is still a text box, so the editor remains renderable over any node with no palette at all.
+
+### 18.15 One strip, of one kind of control
+
+The nodes of §18.13 are the top row. Beneath them was a second row of the open node's *children* and, below that, the editor's own row of the open node's *facets* (§18.7) — two rows of chips that looked different, sat at different sizes, and did different things: one changed which node is open, the other which keys of it are shown. A style node has exactly one facet, so it carried a lone `style` chip that was a control offering no choice.
+
+There is now **one strip**: the children of the open root, then the facets of the open node, in one row, of one appearance, with a rule between the two groups rather than a line break. `Visualize.Chart.Builder.Editor.panel/1` takes a `strip` assign so the caller that renders the row can suppress the editor's own; the editor still renders it by default, because it must stay usable on its own.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Editor.facets/1` | the facets a node kind has, in the order of §1.3 |
+
+**A group with nothing to choose is not rendered.** One facet is not a choice, so a lone facet chip never appears; a node whose root has no other children and whose kind has one facet has no strip at all. This is the same rule the top row already follows in spirit — a control that cannot change anything is not a control — and it is what makes the strip mean "here is what you may pick".

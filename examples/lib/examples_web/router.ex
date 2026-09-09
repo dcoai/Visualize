@@ -11,6 +11,15 @@ defmodule ExamplesWeb.Router do
     plug :put_secure_browser_headers
   end
 
+  # The hooks module is a static asset, and `protect_from_forgery` raises on any GET that
+  # returns a JavaScript content type — the guard against cross-origin script inclusion,
+  # which fires on a same-origin request because it inspects the response and not the
+  # origin. Served through the browser pipeline the route answered 403 and the layout's
+  # `import` failed silently, so every hook the library ships was inert.
+  pipeline :asset do
+    plug :accepts, ["js"]
+  end
+
   scope "/", ExamplesWeb do
     pipe_through :browser
 
@@ -22,6 +31,11 @@ defmodule ExamplesWeb.Router do
     live "/incremental", IncrementalLive, :index
     live "/interaction", InteractionLive, :index
     live "/builder", BuilderLive, :index
+  end
+
+  scope "/", ExamplesWeb do
+    pipe_through :asset
+
     get "/hooks/visualize_hooks.js", HooksController, :show
   end
 end

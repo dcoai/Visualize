@@ -38,12 +38,12 @@
       <nav class="vis-builder-nodes">
         <button type="button" class="vis-builder-node vis-builder-node-open" phx-click="select_node" phx-value-node="design" phx-target="-1">design</button><button type="button" class="vis-builder-node" phx-click="select_node" phx-value-node="styles.series" phx-target="-1">styles</button><button type="button" class="vis-builder-node" phx-click="select_node" phx-value-node="frame" phx-target="-1">frame</button>
       </nav>
-      
+      <nav class="vis-builder-chips">
+        <button type="button" class="vis-builder-chip vis-builder-chip-open" phx-click="facet" phx-value-facet="binding" phx-target="-1">binding</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="channel" phx-target="-1">channel</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="geometry" phx-target="-1">geometry</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="style" phx-target="-1">style</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="content" phx-target="-1">content</button>
+      </nav>
       <div class="vis-builder-workspace">
         <div class="vis-builder-editor">
-  <nav class="vis-builder-tabs">
-    <button type="button" class="vis-builder-tab vis-builder-tab-open" phx-click="facet" phx-value-facet="binding" phx-target="-1">binding</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="channel" phx-target="-1">channel</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="geometry" phx-target="-1">geometry</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="style" phx-target="-1">style</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="content" phx-target="-1">content</button>
-  </nav>
+  
   <form class="vis-builder-form" phx-change="edit" phx-target="-1">
     <label class="vis-builder-field">
       <span class="vis-builder-key">sources</span>

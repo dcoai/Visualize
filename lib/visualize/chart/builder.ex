@@ -145,13 +145,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <div class="vis-builder-toolbar">
           <span class="vis-builder-layer-count">{length(@layers)}</span>
           <form :if={@store} class="vis-builder-library" phx-submit="add_layer" phx-target={@myself}>
-            <select name="name" class="vis-builder-store">
+            <label class="vis-builder-control-label" for={@id <> "-store"}>Library</label>
+            <select id={@id <> "-store"} name="name" class="vis-builder-store">
               <option :for={name <- stored(@store)} value={name}>{name}</option>
             </select>
-            <button type="submit" class="vis-builder-add">Add layer</button>
+            <button type="submit" class="vis-builder-add">Add as layer</button>
           </form>
           <form :if={@store} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
-            <input type="text" name="name" class="vis-builder-name" value="" />
+            <label class="vis-builder-control-label" for={@id <> "-keep"}>Save the stack as</label>
+            <input
+              id={@id <> "-keep"}
+              type="text"
+              name="name"
+              class="vis-builder-name"
+              value=""
+              placeholder="a fragment name"
+            />
             <button type="submit" class="vis-builder-put">Save to library</button>
           </form>
           <button type="button" class="vis-builder-save" phx-click="save" phx-target={@myself}>
@@ -181,15 +190,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-target={@myself}
               >{tab.label}</button>
             </nav>
-            <nav :if={@subtabs != []} class="vis-builder-subnodes">
+            <nav :if={@chips != []} class="vis-builder-chips">
               <button
-                :for={tab <- @subtabs}
+                :for={chip <- @chips}
                 type="button"
-                class={class("vis-builder-subnode", if(tab.open, do: "vis-builder-subnode-open"))}
-                phx-click="select_node"
-                phx-value-node={tab.node}
+                class={chip.class}
+                phx-click={chip.event}
+                phx-value-node={chip.node}
+                phx-value-facet={chip.facet}
                 phx-target={@myself}
-              >{tab.label}</button>
+              >{chip.label}</button>
             </nav>
             <div class="vis-builder-workspace">
               <Editor.panel
@@ -199,6 +209,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 facet={@facet}
                 errors={@errors}
                 refs={%{style: Palette.names(@design)}}
+                strip={false}
                 target={@myself}
               />
               <Preview.panel design={@design} sources={@sources} vars={@bindings} theme={@theme} />
@@ -456,14 +467,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       entry = Enum.find(nodes, &(&1.label == assigns.node_label)) || hd(nodes)
       design = design(assigns)
 
-      {tabs, subtabs} = strip(nodes, entry)
+      {tabs, children} = strip(nodes, entry)
 
       %{
         design: design,
         nodes: nodes,
         entry: entry,
         tabs: tabs,
-        subtabs: subtabs,
+        chips: chips(children, entry, assigns.facet),
         open_style: open_style(entry),
         editing: at(layer, entry.path),
         errors: faults(design, assigns)
@@ -489,12 +500,57 @@ if Code.ensure_loaded?(Phoenix.Component) do
           %{label: root, node: own.label, open: root == open_root}
         end)
 
-      subtabs =
+      children =
         for node <- nodes, root(node.label) == open_root, node.label != open_root do
           %{label: leaf(node.label, open_root), node: node.label, open: node.label == entry.label}
         end
 
-      {tabs, subtabs}
+      {tabs, children}
+    end
+
+    # The second row is one strip of one kind of control: the children of the open root, then
+    # the facets of the open node, which are two things to choose between and were two rows
+    # that looked and behaved differently. A node with one facet and no children has nothing
+    # to choose, so no strip is rendered rather than a lone chip that appears to do nothing
+    # (spec/14 §18.15).
+    defp chips(children, entry, facet) do
+      facets = Editor.facets(entry.kind)
+      open = if facet in facets, do: facet, else: List.first(facets)
+
+      nodes =
+        for child <- children do
+          %{
+            label: child.label,
+            node: child.node,
+            facet: nil,
+            event: "select_node",
+            class: chip(child.open, nil)
+          }
+        end
+
+      case facets do
+        [_single] ->
+          nodes
+
+        many ->
+          nodes ++
+            for {one, index} <- Enum.with_index(many) do
+              %{
+                label: to_string(one),
+                node: nil,
+                facet: one,
+                event: "facet",
+                class: chip(one == open, index == 0 and nodes != [])
+              }
+            end
+      end
+    end
+
+    defp chip(open?, first_facet?) do
+      ["vis-builder-chip"]
+      |> then(&if open?, do: &1 ++ ["vis-builder-chip-open"], else: &1)
+      |> then(&if first_facet?, do: &1 ++ ["vis-builder-chip-divided"], else: &1)
+      |> Enum.join(" ")
     end
 
     defp open_style(%{path: [:styles, name]}), do: name
