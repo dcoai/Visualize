@@ -50,11 +50,13 @@ defmodule Visualize.Hooks.Builder do
         this.onDragOver = this.handleDragOver.bind(this);
         this.onDrop = this.handleDrop.bind(this);
         this.onDragEnd = this.handleDragEnd.bind(this);
+        this.onDragLeave = this.handleDragLeave.bind(this);
         this.onClick = this.handleClick.bind(this);
         this.el.addEventListener('dragstart', this.onDragStart);
         this.el.addEventListener('dragover', this.onDragOver);
         this.el.addEventListener('drop', this.onDrop);
         this.el.addEventListener('dragend', this.onDragEnd);
+        this.el.addEventListener('dragleave', this.onDragLeave);
         this.el.addEventListener('click', this.onClick);
       },
 
@@ -120,7 +122,16 @@ defmodule Visualize.Hooks.Builder do
       handleDragOver(e) {
         if (!this.accepts(e)) return;
         e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = this.from === null ? 'copy' : 'move';
         this.markPoint(this.insertionPoint(e));
+      },
+
+      // A drag that leaves the stack leaves no mark behind. dragend fires on the source,
+      // which for a library drag is in another element entirely, so the stack must clear
+      // its own.
+      handleDragLeave(e) {
+        if (e.relatedTarget && this.el.contains(e.relatedTarget)) return;
+        this.clearOver();
       },
 
       accepts(e) {
@@ -220,6 +231,7 @@ defmodule Visualize.Hooks.Builder do
         this.el.removeEventListener('dragover', this.onDragOver);
         this.el.removeEventListener('drop', this.onDrop);
         this.el.removeEventListener('dragend', this.onDragEnd);
+        this.el.removeEventListener('dragleave', this.onDragLeave);
         this.el.removeEventListener('click', this.onClick);
       }
     };

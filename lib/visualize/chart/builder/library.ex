@@ -172,16 +172,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 class={item_class(item.stored == @open)}
                 draggable="true"
                 data-builder-fragment={item.stored}
-                title={item.stored}
+                title={"Drag " <> item.stored <> " into the layers, or click to add it on top"}
+                role="button"
+                tabindex="0"
+                phx-click="add_layer"
+                phx-value-name={item.stored}
+                phx-target={@target}
               >
-                <button
-                  type="button"
-                  draggable="true"
-                  class="vis-builder-fragment"
-                  phx-click="add_layer"
-                  phx-value-name={item.stored}
-                  phx-target={@target}
-                >{item.name}</button>
+                <span class="vis-builder-fragment">{item.name}</span>
               </li>
             </ul>
           </div>

@@ -258,37 +258,42 @@ if Code.ensure_loaded?(Phoenix.Component) do
       list-style: none;
     }
 
+    /* The row is the control here too: click adds the fragment on top, drag puts it where
+       it is dropped. */
     .vis-builder-item {
       display: flex;
+      margin: 0 6px;
+      border: 1px solid transparent;
+      border-radius: 4px;
       cursor: grab;
     }
 
-    .vis-builder .vis-builder-fragment {
+    .vis-builder-item:hover {
+      border-color: var(--vis-builder-line);
+      background: var(--vis-builder-bg);
+    }
+
+    .vis-builder-item:focus-visible {
+      outline: 2px solid var(--vis-builder-accent);
+      outline-offset: 1px;
+    }
+
+    .vis-builder-fragment {
       flex: 1 1 auto;
       min-width: 0;
-      margin: 0 6px;
       padding: 3px 8px 3px 20px;
-      border-color: transparent;
-      border-radius: 4px;
-      background: transparent;
       overflow: hidden;
-      text-align: left;
       text-overflow: ellipsis;
       white-space: nowrap;
       font-size: 12px;
     }
 
-    .vis-builder .vis-builder-fragment::before {
+    .vis-builder-fragment::before {
       content: "⠿ ";
       color: var(--vis-builder-muted);
     }
 
-    .vis-builder .vis-builder-fragment:hover {
-      border-color: var(--vis-builder-line);
-      background: var(--vis-builder-bg);
-    }
-
-    .vis-builder-item-open .vis-builder-fragment {
+    .vis-builder-item-open {
       background: var(--vis-builder-bg);
       box-shadow: inset 3px 0 0 var(--vis-builder-accent);
     }

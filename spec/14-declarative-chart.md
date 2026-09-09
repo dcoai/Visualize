@@ -1632,7 +1632,12 @@ That last part is the substance. An earlier rule required the drop to land on a 
 
 A **move** is the same gap, adjusted: `at` is a gap in the list as it stands, and once the dragged layer is lifted out every gap after it shifts down by one, so the position sent is `at - 1` where `at` is beyond the layer's own position. The position is clamped server-side regardless, because a hook is a client and a client's number is not to be trusted.
 
-**A drag must be able to start.** A browser will not begin a drag from a form control however draggable its ancestor is, so a row whose visible surface is a button says `draggable` on the button as well as on the row. A library item is such a row: the button is the whole of it.
+**A drag must be able to start, and a click must still land.** Both panels learned the same lesson the same way: **the row is the control.** A `<button>` spanning a draggable row defeats both gestures at once — a browser treats a form control as a special drag source and often will not start a drag from one, and a mousedown on a control inside a draggable row becomes a drag on the first pixel of movement, so its own click never fires. A layer row and a library row therefore carry `phx-click` and `draggable` themselves, with plain text inside; the one control that remains beside a layer's name, its toggle, says `draggable="false"` to stop the browser's search for a drag source at itself.
+
+**A drop needs an operation, not just permission.** `preventDefault` on `dragover` says the drop is allowed; a `dropEffect` says what it *is*. Without one the browser has no operation to perform and refuses the drop anyway. The stack sets `copy` for a fragment arriving from the library and `move` for a layer changing places, matching the `effectAllowed` each drag declared.
+
+**A drag that leaves takes its marks with it.** `dragend` fires on the drag's *source*, which for a library drag is in another element entirely, so the stack clears its own indicator on `dragleave` rather than waiting for an event that will never reach it.
+
 
 
 **What follows the insert.** The selected layer and the disabled set are *positions*, so both shift by one where they sit at or below the insertion — the same rule a move already follows (§18.8). A name the store does not hold is a notice and changes no layer, exactly as adding one is.
