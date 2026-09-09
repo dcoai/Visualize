@@ -1340,3 +1340,62 @@ A use's `expects` is the schema's type at that path (§1.4) — `:colour` for a 
 The walk is `Visualize.Chart.apply/2`'s own (§7.3), which is the point of the function: it descends into nodes, name-keyed declarations, lists and text parts and stops where resolution stops, so `free_vars/1` lists exactly the variables `apply/2` will demand and no others. A variable the schema's walk does not reach — inside an `:extent`, inside a value another variable is bound to — is not listed, because resolution does not reach it either; the validator is what reports those (§7.1).
 
 A variable is *free* whether or not it has a default: `required` is what separates the two, since a default is a value the caller may still override. A stack in which a higher layer writes a literal over a lower layer's variable has one use fewer, and a higher layer that writes a variable over a lower layer's literal has one more — a variable and a literal override each other in a stack like any other value (§8.2), and that is the whole of the interaction between variables and the cascade.
+
+## 18. The builder component
+
+A design is data, and §16 makes one writable in Elixir; nothing above it lets a person build one without writing Elixir. `Visualize.Chart.Builder` is that: an embeddable editor for a *stack* of fragments, whose panels are views of the functions the layer already has — the schema (§14.2) generates its forms, `Visualize.Chart.stack/1` (§8.2) is what it edits, `Visualize.Chart.explain/1` (§17.1) is its inspector and `Visualize.Chart.free_vars/1` (§17.2) is its parameters form. Nothing in it keeps a list of node kinds, keys or widgets of its own.
+
+### 18.1 What it is, and what the host owns
+
+**Implemented** (work item 1 of #54, D-85). `Visualize.Chart.Builder` is a `Phoenix.LiveComponent`, not a `Phoenix.LiveView`: a LiveView owns a route and a session, and a component embeds in whatever page the host already has.
+
+```heex
+<.live_component module={Visualize.Chart.Builder} id="builder"
+                 layers={@layers} sources={@sources} on_save={:design_saved} />
+```
+
+The division is the whole of the contract. The **host** owns the route, the layers it starts the builder with, the pool of sample sources, and what happens when a design is saved — storing it, applying it, sending it somewhere. The **builder** owns the editing state: which layer is selected, which layers are disabled, which panel is open, what the parameters are set to. It reads its host's assigns on every parent render and never writes to them, and the one thing that leaves it is the message of §18.2.
+
+It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every module of the builder is wrapped in `if Code.ensure_loaded?(Phoenix.Component)`, `phoenix_live_view` stays an optional dependency of this library, and `scripts/consumer_check.exs` asserts that `Visualize.Chart.Builder` is absent from a consumer that does not have LiveView, beside the assertions it already makes for the components. An application that renders predefined charts never compiles a line of it.
+
+### 18.2 Assigns and the message
+
+**Implemented.** Every assign the host gives is declared with `attr/3`, so a misspelt one is a compile-time warning in the caller (spec/10 §1.2). The `layers` assign is the list `Visualize.Chart.stack/1` takes, in precedence order with the higher layer later, so a layer may be a design map, a `%Visualize.Chart{}` or a `{name, layer}` pair whose name the builder shows and `Visualize.Chart.explain/1` reports.
+
+| Assign | Type | Default | Meaning |
+|---|---|---|---|
+| `id` | `:string` | required | the component id, as every LiveComponent takes |
+| `layers` | `:list` | `[]` | the fragments in precedence order, the higher later (§8.2) |
+| `sources` | `:map` | `%{}` | the pool of sample sources the preview binds the design's slots to, as `Visualize.Chart.apply/2` takes it (§7.3) |
+| `vars` | `:map` | `%{}` | the variable values the preview applies with; the parameters form edits a copy of this |
+| `theme` | `:any` | `nil` | the `Visualize.Theme` the preview draws with, `nil` for the default |
+| `store` | `:atom` | `nil` | a module implementing `Visualize.Chart.Builder.Store` (§18.3), or `nil` for no library |
+| `on_save` | `:any` | `:visualize_chart_saved` | the tag of the message of the next paragraph |
+| `class` | `:string` | `nil` | placed on the builder's root element |
+
+Saving sends `{on_save, id, design}` to the host LiveView process — `send(self(), …)` from the component's own callback, which runs in that process — where `design` is `Visualize.Chart.stack/1` of the enabled layers, the same map the preview drew. The `id` is the component's, so a page with two builders tells them apart. That message is the entire output of the component: it pushes no event, patches no URL and touches no store the host did not give it. The host handles it in `handle_info/2` and decides what a saved design means.
+
+The editing state is initialised once, in the component's `mount/1`, and is not reset by a parent re-render: a host that re-renders with the same `layers` finds the same layer selected and the same layers disabled. A host that gives a *different* `layers` list replaces the layers and keeps the panel it was on, since the panel is the person's place in the tool and the layers are the document.
+
+### 18.3 The store
+
+**Implemented.** A host that wants to offer a library of saved fragments gives `store`, a module implementing the `Visualize.Chart.Builder.Store` behaviour. The library is the host's — the builder neither knows where a fragment is kept nor when it is written — and the behaviour is three callbacks:
+
+| Callback | Contract |
+|---|---|
+| `list/0` | Every stored fragment's name, in the order the picker offers them. A name is any term the host chooses; the builder prints it with `to_string/1` and hands it back unchanged. |
+| `get/1` | `get(name)`: `{:ok, fragment}` for a stored fragment — a design map, as a layer is — or `:error` when the name is not stored. |
+| `put/2` | `put(name, fragment)`: `:ok` when the fragment is stored under the name, replacing what was there, or `{:error, reason}`, whose reason the builder shows and does not interpret. |
+
+Nothing in the behaviour validates: a fragment is a fragment (§8), and a store that hands back a map the design cannot use fails where every other bad fragment fails — in the preview, by path (§18.4). `store` left `nil` is a builder with no library, which is the default and the whole of what changes.
+
+### 18.4 The preview
+
+**Implemented.** `Visualize.Chart.Builder.Preview.panel/1` is the pane that draws what the stack currently says, and it is the only place the builder renders a chart. It takes the stacked design, the pool and the variables, and shows one of two things:
+
+- `Visualize.Chart.render/2` of `Visualize.Chart.apply/2` of the design over `sources:`, `vars:` and `theme:` — the chart, as any consumer would draw it; or
+- the faults, when application returns them: one line per error, `Visualize.Chart.Validator.format/1` of it, ordered by path as the validator orders them (§10.1). An incomplete design — a fragment with no `frame`, a mark naming a scale no layer declares — is the normal state of a design being built, so the error list is a panel of the tool and not an error page.
+
+A fault the *frame* raises rather than reports — a value a scale cannot take, a theme name nothing resolves — raises here as it does anywhere else (§7.3): those are faults of the data or of the host's pool, not of the design being edited, and hiding them in a panel would be hiding a bug in the host.
+
+The preview draws the **enabled** layers stacked, so disabling a layer is how a person asks what the design looks like without it, and it draws through the ordinary path — `Visualize.Chart.apply/2` then `Visualize.Chart.render/2` — so what the preview shows and what the host gets from the saved design cannot differ.

@@ -2,14 +2,18 @@
 # nothing else actually builds. A throwaway Mix project is generated under the system temp
 # directory with `{:visualize, path: <this checkout>}` as its only dependency, compiled in
 # `MIX_ENV=prod`, and asked what it can load. Phoenix and Nx are optional dependencies of
-# visualize, so neither may arrive; the audit, the models and the golden renderer compile
-# from directories a consumer never sees (`elixirc_paths/1` in mix.exs).
+# visualize, so neither may arrive: neither the components nor the chart builder (spec/14
+# §18, D-85) may be loadable, since both compile only under the `Phoenix.Component` guard.
+# The audit, the models and the golden renderer compile from directories a consumer never
+# sees (`elixirc_paths/1` in mix.exs).
 #
 # Run from the repository root: `elixir scripts/consumer_check.exs`. Exits non-zero, with
 # the failing assertion, when the consumer build carries anything it should not.
 defmodule Visualize.ConsumerCheck do
   @absent ~w(Phoenix.Component Phoenix.HTML.Safe Nx Jason Visualize.Components
-             Visualize.Components.Tree Visualize.Audit TLA.Spec Surfex.Golden)
+             Visualize.Components.Tree Visualize.Chart.Builder
+             Visualize.Chart.Builder.Store Visualize.Chart.Builder.Preview
+             Visualize.Audit TLA.Spec Surfex.Golden)
   @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Backend.CanvasBinary)
 
   def run do

@@ -22,8 +22,11 @@ Visualize reaches the browser through Phoenix LiveView in three ways: HEEx funct
 | `Visualize.Hooks.Tooltip` | always | `TooltipHook` JS: a tooltip from the datum attributes of an element, with no round trip |
 | `Visualize.Hooks.Crosshair` | always | `CrosshairHook` JS and the server-side `attrs/3`: a rule and markers snapped to the data over SVG or canvas |
 | `Visualize.Hooks.Legend` | always | `LegendHook` JS: a legend entry hides and shows the series it names |
+| `Visualize.Chart.Builder` | `Phoenix.Component` is loaded (the host has `phoenix_live_view`) | The embeddable builder for a stack of design fragments (spec/14 §18) |
+| `Visualize.Chart.Builder.Store` | `Phoenix.Component` is loaded | The behaviour a host's library of saved fragments implements |
+| `Visualize.Chart.Builder.Preview` | `Phoenix.Component` is loaded | The builder's preview pane: the stacked design drawn, or its faults |
 
-Both component modules are wrapped in `if Code.ensure_loaded?(Phoenix.Component)`. For that guard to be true in a host, `phoenix_live_view` MUST be a declared dependency of this library: Mix prunes the code path to a dependency's own declared deps while compiling it, so a guard over an undeclared module is always false in a host, whatever the host itself depends on. It is therefore declared `optional: true` (D-45): a host that has LiveView compiles the components, one that does not never fetches Phoenix, and `scripts/consumer_check.exs` proves the second claim on every pipeline ([12-testing-and-conformance](12-testing-and-conformance.md) §4). The library's own builds carry the optional dependency, so the components compile, are documented and are rendered under test here.
+Both component modules, and every module of the builder ([14-declarative-chart](14-declarative-chart.md) §18), are wrapped in `if Code.ensure_loaded?(Phoenix.Component)`. For that guard to be true in a host, `phoenix_live_view` MUST be a declared dependency of this library: Mix prunes the code path to a dependency's own declared deps while compiling it, so a guard over an undeclared module is always false in a host, whatever the host itself depends on. It is therefore declared `optional: true` (D-45): a host that has LiveView compiles the components, one that does not never fetches Phoenix, and `scripts/consumer_check.exs` proves the second claim on every pipeline ([12-testing-and-conformance](12-testing-and-conformance.md) §4). The library's own builds carry the optional dependency, so the components compile, are documented and are rendered under test here.
 
 ### 1.2 Conventions shared by every component
 
@@ -521,3 +524,29 @@ The two strings coincide when the legend explains the `color` scale the series c
 ### 14.3 `LegendHook` behaviour
 
 Attach with `phx-hook="LegendHook"` and an `id` on the `<svg>`, or on any ancestor holding both the legend and the marks. On `mounted()` the hook gives every `.legend-item[data-series]` under the element `cursor: pointer` and binds one `click` listener on the element, bound once and kept (D-47); the hidden set starts empty. A click whose target is inside a `.legend-item[data-series]` toggles that series: when it becomes hidden, every element matching `.mark [data-series="<value>"]` under the hook element gets `display="none"` and the entry's group gets `class` `legend-item legend-item-hidden` and `opacity="0.35"`; when it becomes shown again, the `display` attribute is removed from those elements and the entry's class and opacity are restored. `display` is an SVG presentation attribute and applies in the SVG namespace, which the HTML `hidden` attribute does not (D-77). `updated()` re-applies the hidden set after a LiveView patch — the server re-renders the chart without knowing what the client hid, and the patch would otherwise show every series again — and re-sets the cursor on entries the patch replaced. When `data-legend-event` is set, every toggle pushes `pushEvent(event, {series, hidden})`, arriving as `handle_event("legend_toggle", %{"series" => "west", "hidden" => true}, socket)`; unset, nothing is pushed. `destroyed()` removes the click listener with the kept reference; the attributes it set stay on elements the DOM will discard with the hook's element. `test/visualize/hooks/legend_test.exs` holds the source to this shape.
+
+## 15. Visualize.Chart.Builder
+
+The embeddable builder for a stack of design fragments. What it is, what its host owns and what each panel shows is [14-declarative-chart](14-declarative-chart.md) §18; this section is its LiveView surface — the functions, the assigns and the markup contract the panels' goldens hold.
+
+### 15.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Preview.panel/1` | Renders the preview pane (spec/14 §18.4): `Visualize.Chart.render/2` of `Visualize.Chart.apply/2` of the `design` assign over `sources`, `vars` and `theme`, or the faults of application, each line `Visualize.Chart.Validator.format/1` of one error. |
+
+`Visualize.Chart.Builder` itself exports no function: it is a `Phoenix.LiveComponent`, and `mount/1`, `update/2`, `handle_event/3` and `render/1` are its callbacks, called by LiveView and by nothing else. `Visualize.Chart.Builder.Store` exports none either — it is a behaviour, and its three callbacks are spec/14 §18.3.
+
+### 15.2 Assigns
+
+The component's assigns are spec/14 §18.2, each declared with `attr/3` as every component's are (§1.2), and `id` is required as it is for any LiveComponent. The panels are function components of their own and take only what they draw, so each is rendered alone under `Phoenix.LiveViewTest.render_component/2`:
+
+| Panel | Assigns |
+|---|---|
+| `Visualize.Chart.Builder.Preview.panel/1` | `design` (`:map`, required), `sources` (`:map`, `%{}`), `vars` (`:map`, `%{}`), `theme` (`:any`, `nil`), `class` (`:string`, `nil`) |
+
+### 15.3 The markup
+
+Every element the builder renders carries a class beginning `vis-builder`, and it ships no stylesheet: a host styles the tool as it styles the rest of its page, and a class is the contract a stylesheet holds. The root is a `<div class="vis-builder">`, with the `class` assign appended when it is given; its toolbar is `<div class="vis-builder-toolbar">` and holds the save button, `<button type="button" phx-click="save" phx-target={@myself} class="vis-builder-save">`.
+
+The preview pane is `<div class="vis-builder-preview">`. When the design applies it holds `<svg class="vis-builder-chart" width height role="img" viewBox="0 0 width height">` at the realised frame's own size, with the frame's group inside it: `Visualize.Chart.Frame.render/2` draws a group and the `<svg>` shell is the pane's, exactly as it is a component's (§1.2), and the markup is a string emitted through `Phoenix.HTML.raw/1` as §11.2 requires. Otherwise it holds `<ul class="vis-builder-errors">` with one `<li class="vis-builder-error">` per fault, in the validator's order. Exactly one of the two is present, so a test that asks whether the design applied asks for `vis-builder-errors`.
