@@ -40,10 +40,11 @@ defmodule ExamplesWeb.BuilderLive do
       # with `frame.axes[2].scale: scale :y is not declared` — which reads as doing nothing.
       # An axis is identified by its `{scale, side}`, so naming `:value` merges with the left
       # axis the shared layer already declares rather than adding a third.
+      # Names carry their place in the tree: <category>:<sub-category>:<name> (spec/14 §18.16).
       :persistent_term.get(@key, %{
-        "dark" => %{theme: :dark},
-        "no grid" => %{frame: %{axes: [%{scale: :value, side: :left, grid: false}]}},
-        "dense ticks" => %{
+        "Theme::dark" => %{theme: :dark},
+        "Frame:axes:no grid" => %{frame: %{axes: [%{scale: :value, side: :left, grid: false}]}},
+        "Frame:axes:dense ticks" => %{
           frame: %{
             axes: [
               %{scale: :hour, side: :bottom, ticks: 12},
@@ -51,7 +52,12 @@ defmodule ExamplesWeb.BuilderLive do
             ]
           }
         },
-        "thick line" => %{styles: %{series: %{stroke_width: 5}}}
+        "Frame:size:wide" => %{frame: %{size: %{width: 900, height: 320}}},
+        "Frame:margin:roomy" => %{
+          frame: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}
+        },
+        "Styles::thick line" => %{styles: %{series: %{stroke_width: 5}}},
+        "Styles::stepped" => %{styles: %{series: %{curve: :step}}}
       })
     end
   end
