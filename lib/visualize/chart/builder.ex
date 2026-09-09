@@ -162,13 +162,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <main class="vis-builder-main">
             <nav class="vis-builder-nodes">
               <button
-                :for={entry <- @nodes}
+                :for={tab <- @tabs}
                 type="button"
-                class={class("vis-builder-node", open(entry, @entry))}
+                class={class("vis-builder-node", if(tab.open, do: "vis-builder-node-open"))}
                 phx-click="select_node"
-                phx-value-node={entry.label}
+                phx-value-node={tab.node}
                 phx-target={@myself}
-              >{entry.label}</button>
+              >{tab.label}</button>
+            </nav>
+            <nav :if={@subtabs != []} class="vis-builder-subnodes">
+              <button
+                :for={tab <- @subtabs}
+                type="button"
+                class={class("vis-builder-subnode", if(tab.open, do: "vis-builder-subnode-open"))}
+                phx-click="select_node"
+                phx-value-node={tab.node}
+                phx-target={@myself}
+              >{tab.label}</button>
             </nav>
             <div class="vis-builder-workspace">
               <Editor.panel
@@ -398,13 +408,52 @@ if Code.ensure_loaded?(Phoenix.Component) do
       entry = Enum.find(nodes, &(&1.label == assigns.node_label)) || hd(nodes)
       design = design(assigns)
 
+      {tabs, subtabs} = strip(nodes, entry)
+
       %{
         design: design,
         nodes: nodes,
         entry: entry,
+        tabs: tabs,
+        subtabs: subtabs,
         editing: at(layer, entry.path),
         errors: faults(design, assigns)
       }
+    end
+
+    # A fragment is a tree and its labels say so — `frame`, `frame.size`, `frame.margin` —
+    # so the strip is two rows rather than one long line of dotted paths (spec/14 §18.13).
+    # The top row is one tab per root segment, in the order the walk reached it; the second
+    # is the nodes under whichever root the open node sits in, labelled by what they add to
+    # it. A root that is not itself a node — `styles`, which exists only as the map its
+    # members live in — opens its first member instead.
+    defp strip(nodes, entry) do
+      open_root = root(entry.label)
+
+      tabs =
+        nodes
+        |> Enum.map(&root(&1.label))
+        |> Enum.uniq()
+        |> Enum.map(fn root ->
+          members = Enum.filter(nodes, &(root(&1.label) == root))
+          own = Enum.find(members, &(&1.label == root)) || hd(members)
+          %{label: root, node: own.label, open: root == open_root}
+        end)
+
+      subtabs =
+        for node <- nodes, root(node.label) == open_root, node.label != open_root do
+          %{label: leaf(node.label, open_root), node: node.label, open: node.label == entry.label}
+        end
+
+      {tabs, subtabs}
+    end
+
+    # The first segment of a label: `frame.scales.x` is under `frame`, `marks[0]` under
+    # `marks`, and `design` is its own root.
+    defp root(label), do: label |> String.split(~r/[.\[]/, parts: 2) |> hd()
+
+    defp leaf(label, root) do
+      label |> String.replace_prefix(root, "") |> String.replace_prefix(".", "")
     end
 
     defp fragment({_name, layer}), do: fragment(layer)
@@ -452,9 +501,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:error, errors} -> errors
       end
     end
-
-    defp open(entry, entry), do: "vis-builder-node-open"
-    defp open(_entry, _open), do: nil
 
     defp added(socket, name, {:ok, fragment}) do
       socket

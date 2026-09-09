@@ -119,24 +119,41 @@ defmodule Visualize.Chart.BuilderTest do
       assert main =~ ~s(class="vis-builder-preview")
     end
 
-    test "the open node is the marked tab, and every node of the layer is one" do
+    test "the top row is one tab per root, in the order the walk reaches it" do
       html = rendered(:builder)
       assert html =~ ~s(class="vis-builder-node vis-builder-node-open")
 
-      labels =
-        ~r{<button[^>]*class="vis-builder-node[^"]*"[^>]*>([^<]*)</button>}
-        |> Regex.scan(html)
-        |> Enum.map(&List.last/1)
-
-      nodes =
+      roots =
         BuilderFixture.layers()
         |> hd()
         |> then(fn {_name, layer} -> layer end)
         |> Editor.nodes()
-        |> Enum.map(& &1.label)
+        |> Enum.map(&(&1.label |> String.split(~r/[.\[]/, parts: 2) |> hd()))
+        |> Enum.uniq()
 
-      assert labels == nodes
-      assert "design" in labels
+      assert tabs(html, "vis-builder-node") == roots
+      assert roots == ["design", "styles", "frame"]
+    end
+
+    test "a root that is not itself a node opens its first member" do
+      # `styles` exists only as the map its members live in, so its tab opens `styles.series`
+      # rather than a node the fragment does not have.
+      html = rendered(:builder)
+      assert html =~ ~s(phx-value-node="styles.series" phx-target="-1">styles</button>)
+    end
+
+    test "the open root's children are the second row, labelled by what they add" do
+      refute rendered(:builder) =~ "vis-builder-subnodes"
+
+      html = at_node("frame")
+      assert html =~ ~s(<nav class="vis-builder-subnodes">)
+      assert tabs(html, "vis-builder-subnode") == ["size", "margin"]
+
+      # The root stays marked while a child is open, so the strip says where you are.
+      open = at_node("frame.size")
+      assert open =~ ~s(class="vis-builder-node vis-builder-node-open")
+      assert open =~ ~s(class="vis-builder-subnode vis-builder-subnode-open")
+      assert open =~ ~s(phx-value-node="frame.size" phx-target="-1">size</button>)
     end
   end
 
@@ -411,13 +428,32 @@ defmodule Visualize.Chart.BuilderTest do
     test "the editor is rendered over the selected layer, with the design's faults" do
       html = rendered(:builder)
       assert html =~ ~s(<div class="vis-builder-editor">)
-      assert html =~ ~s(phx-value-node="frame.size")
+      # `frame.size` is reachable through the `frame` root now that the strip is grouped;
+      # the second row is asserted with the rest of the grouping above.
+      assert html =~ ~s(phx-value-node="frame" phx-target="-1">frame</button>)
       refute html =~ "vis-builder-key-errors"
     end
   end
 
   defp rendered(name),
     do: BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), name))
+
+  defp tabs(html, class) do
+    ~r{<button[^>]*class="#{class}(?: [^"]*)?"[^>]*>([^<]*)</button>}
+    |> Regex.scan(html)
+    |> Enum.map(&List.last/1)
+  end
+
+  # The builder rendered with a given node open, which is what selecting a tab does.
+  defp at_node(label) do
+    render_component(Builder, %{
+      id: "b",
+      layers: BuilderFixture.layers(),
+      sources: BuilderFixture.sources(),
+      styles: false,
+      node_label: label
+    })
+  end
 
   defp names(socket), do: Enum.map(socket.assigns.layers, fn {name, _layer} -> name end)
 

@@ -372,6 +372,40 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-weight: 600;
     }
 
+    /* The second row: the nodes under the open root, labelled by what they add to it. */
+    .vis-builder-subnodes {
+      display: flex;
+      gap: 2px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--vis-builder-line);
+      background: var(--vis-builder-bg);
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+
+    .vis-builder .vis-builder-subnode {
+      flex: 0 0 auto;
+      padding: 3px 9px;
+      border-color: transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--vis-builder-muted);
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+    }
+
+    .vis-builder .vis-builder-subnode:hover {
+      border-color: var(--vis-builder-line);
+      color: var(--vis-builder-ink);
+    }
+
+    .vis-builder .vis-builder-subnode-open {
+      border-color: var(--vis-builder-line);
+      background: var(--vis-builder-panel);
+      color: var(--vis-builder-ink);
+      font-weight: 600;
+    }
+
     /* ── the editor and its facet chips ──────────────────────────────────────── */
 
     .vis-builder-workspace {
