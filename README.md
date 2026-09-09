@@ -62,6 +62,9 @@ does not never fetches Phoenix.
   which one to pin.
 - `dev_docs/liveview_plotting_strategies.md` is the research essay behind the
   performance design; it describes strategies, not all of which are built.
-- `examples/` is a Phoenix gallery of every chart type: `cd examples && ./run.sh`.
+- `examples/` is a Phoenix gallery of every chart type: `cd examples && ./run.sh`, which
+  serves <http://127.0.0.1:4080>. `./run.sh <ip>:<port>` binds elsewhere;
+  `./run.sh 0.0.0.0:4020` reaches it from another machine, at the cost of exposing an
+  unauthenticated development server to whatever can route to it.
 
 Run `mix docs` for ExDoc output with the specification as extras.
