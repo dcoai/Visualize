@@ -30,6 +30,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `store` - a module implementing `Visualize.Chart.Builder.Store`, or `nil` for no
       library (default `nil`)
     * `on_save` - the tag of the message saving sends (default `:visualize_chart_saved`)
+    * `styles` - render the stylesheet in a `<style>` element (default `true`); `false` when
+      the host ships `Visualize.Chart.Builder.css/0` through its own asset pipeline
     * `class` - appended to the builder's root class
 
     ## Handling the message
@@ -47,7 +49,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     use Phoenix.LiveComponent
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{Document, Editor, Inspector, Layers, Params, Preview}
+
+    alias Visualize.Chart.Builder.{
+      Document,
+      Editor,
+      Inspector,
+      Layers,
+      Library,
+      Palette,
+      Params,
+      Preview,
+      Styles
+    }
+
     alias Visualize.Chart.Schema
 
     @doc false
@@ -62,6 +76,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         theme: nil,
         store: nil,
         on_save: :visualize_chart_saved,
+        styles: true,
         class: nil
       ]
     end
@@ -73,6 +88,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:theme, :any, default: nil, doc: "a `Visualize.Theme` for the preview")
     attr(:store, :atom, default: nil, doc: "a `Visualize.Chart.Builder.Store` implementation")
     attr(:on_save, :any, default: :visualize_chart_saved, doc: "the tag of the save message")
+
+    attr(:styles, :boolean,
+      default: true,
+      doc: "render the stylesheet, `false` if the host ships it"
+    )
+
     attr(:class, :string, default: nil, doc: "appended to the builder's root class")
 
     @impl true
@@ -83,18 +104,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
          selected: 0,
          notice: nil,
          facet: nil,
+         added: nil,
          node_label: "design"
        )}
     end
 
     @impl true
     def update(assigns, socket) do
-      socket = Enum.reduce(defaults(), assign(socket, assigns), &default/2)
+      socket =
+        socket
+        |> assign(Map.drop(assigns, [:layers]))
+        |> seed(assigns)
+        |> then(&Enum.reduce(defaults(), &1, fn pair, acc -> default(pair, acc) end))
 
       # The parameters form edits the builder's own copy of the bindings: the host gives the
       # values the builder starts with and never hears of a change (spec/14 §18.11, D-88).
       {:ok, assign_new(socket, :bindings, fn -> socket.assigns.vars end)}
     end
+
+    # `layers` is seeded and not controlled, because it is the assign the builder writes to:
+    # adopting the host's list on every parent render would discard the edit that render was
+    # caused by. A list that differs from the one the host last gave is a host deliberately
+    # replacing the stack and is taken; an equal one is a host re-rendering for its own
+    # reasons and leaves the editing session alone (spec/14 §18.1, D-95).
+    defp seed(socket, %{layers: layers}) do
+      if Map.get(socket.assigns, :host_layers, :unseeded) == layers,
+        do: socket,
+        else: assign(socket, layers: layers, host_layers: layers)
+    end
+
+    defp seed(socket, _assigns), do: socket
 
     defp default({key, value}, socket), do: assign_new(socket, key, fn -> value end)
 
@@ -104,16 +143,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <div id={@id} class={class("vis-builder", @class)}>
+        <Styles.styles :if={@styles} />
         <div class="vis-builder-toolbar">
           <span class="vis-builder-layer-count">{length(@layers)}</span>
-          <form :if={@store} class="vis-builder-library" phx-submit="add_layer" phx-target={@myself}>
-            <select name="name" class="vis-builder-store">
-              <option :for={name <- stored(@store)} value={name}>{name}</option>
-            </select>
-            <button type="submit" class="vis-builder-add">Add layer</button>
-          </form>
           <form :if={@store} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
-            <input type="text" name="name" class="vis-builder-name" value="" />
+            <label class="vis-builder-control-label" for={@id <> "-keep"}>Save the stack as</label>
+            <input
+              id={@id <> "-keep"}
+              type="text"
+              name="name"
+              class="vis-builder-name"
+              value=""
+              placeholder="Category:sub-category:name"
+            />
             <button type="submit" class="vis-builder-put">Save to library</button>
           </form>
           <button type="button" class="vis-builder-save" phx-click="save" phx-target={@myself}>
@@ -121,33 +163,67 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </button>
         </div>
         <p :if={@notice} class="vis-builder-notice">{@notice}</p>
-        <div class="vis-builder-panels">
-          <Layers.panel
-            id={@id <> "-layers"}
-            layers={@layers}
-            selected={@selected}
-            disabled={@disabled}
+        <div class={class("vis-builder-panels", if(@store, do: "vis-builder-panels-library"))}>
+          <Library.panel
+            :if={@store}
+            id={@id <> "-library"}
+            names={stored(@store)}
+            open={@added}
             target={@myself}
           />
-          <nav class="vis-builder-nodes">
-            <button
-              :for={entry <- @nodes}
-              type="button"
-              class={class("vis-builder-node", open(entry, @entry))}
-              phx-click="select_node"
-              phx-value-node={entry.label}
-              phx-target={@myself}
-            >{entry.label}</button>
-          </nav>
-          <Editor.panel
-            kind={@entry.kind}
-            node={@editing}
-            path={@entry.path}
-            facet={@facet}
-            errors={@errors}
-            target={@myself}
-          />
-          <Preview.panel design={@design} sources={@sources} vars={@bindings} theme={@theme} />
+          <aside class="vis-builder-sidebar">
+            <h2 class="vis-builder-sidebar-title">Layers</h2>
+            <Layers.panel
+              id={@id <> "-layers"}
+              layers={@layers}
+              selected={@selected}
+              disabled={@disabled}
+              target={@myself}
+            />
+          </aside>
+          <main class="vis-builder-main">
+            <nav class="vis-builder-nodes">
+              <button
+                :for={tab <- @tabs}
+                type="button"
+                class={class("vis-builder-node", if(tab.open, do: "vis-builder-node-open"))}
+                phx-click="select_node"
+                phx-value-node={tab.node}
+                phx-target={@myself}
+              >{tab.label}</button>
+            </nav>
+            <nav :if={@chips != []} class="vis-builder-chips">
+              <button
+                :for={chip <- @chips}
+                type="button"
+                class={chip.class}
+                phx-click={chip.event}
+                phx-value-node={chip.node}
+                phx-value-facet={chip.facet}
+                phx-target={@myself}
+              >{chip.label}</button>
+            </nav>
+            <div class="vis-builder-workspace">
+              <Editor.panel
+                kind={@entry.kind}
+                node={@editing}
+                path={@entry.path}
+                facet={@facet}
+                errors={@errors}
+                refs={%{style: Palette.names(@design)}}
+                strip={false}
+                target={@myself}
+              />
+              <Preview.panel design={@design} sources={@sources} vars={@bindings} theme={@theme} />
+            </div>
+          </main>
+          <aside class="vis-builder-context">
+            <h2 class="vis-builder-sidebar-title">Context</h2>
+            <p class="vis-builder-context-empty">Focus a field to see its control.</p>
+          </aside>
+        </div>
+        <div class="vis-builder-tray">
+          <Palette.panel design={@design} open={@open_style} target={@myself} />
           <Params.panel layers={@layers} vars={@bindings} target={@myself} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
           <Document.panel design={@design} target={@myself} />
@@ -155,6 +231,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
       </div>
       """
     end
+
+    @doc """
+    Returns the builder's stylesheet as a binary (spec/14 §18.13).
+
+    The builder renders this itself unless the host passes `styles={false}`;
+    `Visualize.Chart.Builder.Styles.install!/0` writes it beside the hooks for a host that
+    would rather own the file.
+    """
+    @spec css() :: binary()
+    defdelegate css(), to: Styles
+
+    @doc """
+    Renders the stylesheet in a `<style>` element (spec/14 §18.13).
+    """
+    defdelegate styles(assigns), to: Styles
 
     @impl true
     def handle_event("save", _params, socket) do
@@ -192,12 +283,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, update(socket, :disabled, &toggle(&1, position(index)))}
     end
 
-    def handle_event("move_layer", %{"index" => from, "to" => to}, socket) do
+    def handle_event("reorder", %{"from" => from, "to" => to}, socket) do
       {:noreply, moved(socket, position(from), position(to))}
     end
 
-    def handle_event("reorder", %{"from" => from, "to" => to}, socket) do
-      {:noreply, moved(socket, position(from), position(to))}
+    # A fragment dragged out of the library lands at the position it was dropped at, so
+    # precedence is chosen in the gesture rather than fixed afterwards (spec/14 §18.17).
+    def handle_event("insert", %{"name" => submitted, "at" => at}, socket) do
+      %{store: store} = socket.assigns
+
+      case store && Enum.find(store.list(), &(to_string(&1) == submitted)) do
+        nil ->
+          {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+
+        name ->
+          {:noreply, inserted(socket, name, store.get(name), position(at))}
+      end
     end
 
     def handle_event("inspect", %{"path" => path, "layer" => layer}, socket) do
@@ -213,6 +314,35 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case Chart.from_json(document) do
         {:ok, chart} -> {:noreply, imported(socket, Chart.to_map(chart))}
         {:error, reason} -> {:noreply, assign(socket, :notice, notice(reason))}
+      end
+    end
+
+    # A style is created in the selected layer, because that is where every edit goes, and
+    # the editor opens on it: creating a style and not being taken to it would be half a
+    # gesture (spec/14 §18.14).
+    def handle_event("add_style", %{"name" => submitted}, socket) do
+      case Editor.parse({:ref, :style}, String.trim(submitted)) do
+        {:ok, name} ->
+          socket
+          |> update_layer([:styles], name, {:ok, %{}})
+          |> opened("styles." <> to_string(name))
+          |> assign(:notice, nil)
+          |> then(&{:noreply, &1})
+
+        :error ->
+          {:noreply, assign(socket, :notice, "a style needs a name")}
+      end
+    end
+
+    # The palette is a view of the stack, so the style a person picks may be declared by a
+    # layer other than the selected one; the highest that declares it is the one that owns
+    # the value, which is the same rule the inspector follows (§18.9).
+    def handle_event("select_style", %{"name" => submitted}, socket) do
+      path = "styles." <> submitted
+
+      case declaring(socket.assigns.layers, submitted) do
+        nil -> {:noreply, socket}
+        index -> {:noreply, socket |> select(index) |> opened(path)}
       end
     end
 
@@ -331,7 +461,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp write(fragment, path, key, :error),
       do: update_node(fragment, path, &Map.delete(&1, key))
 
+    defp update_node(nil, [], fun), do: fun.(%{})
     defp update_node(container, [], fun), do: fun.(container)
+
+    # A fragment need not already carry the key a node is being added under: `styles` is
+    # absent until the first style is declared, and adding one is adding the key (§18.5).
+    defp update_node(nil, [key | _rest] = path, fun) when is_atom(key),
+      do: update_node(%{}, path, fun)
 
     defp update_node(list, [index | rest], fun) when is_list(list) and is_integer(index),
       do: List.update_at(list, index, &update_node(&1, rest, fun))
@@ -347,13 +483,101 @@ if Code.ensure_loaded?(Phoenix.Component) do
       entry = Enum.find(nodes, &(&1.label == assigns.node_label)) || hd(nodes)
       design = design(assigns)
 
+      {tabs, children} = strip(nodes, entry)
+
       %{
         design: design,
         nodes: nodes,
         entry: entry,
+        tabs: tabs,
+        chips: chips(children, entry, assigns.facet),
+        open_style: open_style(entry),
         editing: at(layer, entry.path),
         errors: faults(design, assigns)
       }
+    end
+
+    # A fragment is a tree and its labels say so — `frame`, `frame.size`, `frame.margin` —
+    # so the strip is two rows rather than one long line of dotted paths (spec/14 §18.13).
+    # The top row is one tab per root segment, in the order the walk reached it; the second
+    # is the nodes under whichever root the open node sits in, labelled by what they add to
+    # it. A root that is not itself a node — `styles`, which exists only as the map its
+    # members live in — opens its first member instead.
+    defp strip(nodes, entry) do
+      open_root = root(entry.label)
+
+      tabs =
+        nodes
+        |> Enum.map(&root(&1.label))
+        |> Enum.uniq()
+        |> Enum.map(fn root ->
+          members = Enum.filter(nodes, &(root(&1.label) == root))
+          own = Enum.find(members, &(&1.label == root)) || hd(members)
+          %{label: root, node: own.label, open: root == open_root}
+        end)
+
+      children =
+        for node <- nodes, root(node.label) == open_root, node.label != open_root do
+          %{label: leaf(node.label, open_root), node: node.label, open: node.label == entry.label}
+        end
+
+      {tabs, children}
+    end
+
+    # The second row is one strip of one kind of control: the children of the open root, then
+    # the facets of the open node, which are two things to choose between and were two rows
+    # that looked and behaved differently. A node with one facet and no children has nothing
+    # to choose, so no strip is rendered rather than a lone chip that appears to do nothing
+    # (spec/14 §18.15).
+    defp chips(children, entry, facet) do
+      facets = Editor.facets(entry.kind)
+      open = if facet in facets, do: facet, else: List.first(facets)
+
+      nodes =
+        for child <- children do
+          %{
+            label: child.label,
+            node: child.node,
+            facet: nil,
+            event: "select_node",
+            class: chip(child.open, nil)
+          }
+        end
+
+      case facets do
+        [_single] ->
+          nodes
+
+        many ->
+          nodes ++
+            for {one, index} <- Enum.with_index(many) do
+              %{
+                label: to_string(one),
+                node: nil,
+                facet: one,
+                event: "facet",
+                class: chip(one == open, index == 0 and nodes != [])
+              }
+            end
+      end
+    end
+
+    defp chip(open?, first_facet?) do
+      ["vis-builder-chip"]
+      |> then(&if open?, do: &1 ++ ["vis-builder-chip-open"], else: &1)
+      |> then(&if first_facet?, do: &1 ++ ["vis-builder-chip-divided"], else: &1)
+      |> Enum.join(" ")
+    end
+
+    defp open_style(%{path: [:styles, name]}), do: name
+    defp open_style(_entry), do: nil
+
+    # The first segment of a label: `frame.scales.x` is under `frame`, `marks[0]` under
+    # `marks`, and `design` is its own root.
+    defp root(label), do: label |> String.split(~r/[.\[]/, parts: 2) |> hd()
+
+    defp leaf(label, root) do
+      label |> String.replace_prefix(root, "") |> String.replace_prefix(".", "")
     end
 
     defp fragment({_name, layer}), do: fragment(layer)
@@ -393,6 +617,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
       )
     end
 
+    # The highest layer whose fragment declares a style of that name, or `nil`.
+    defp declaring(layers, name) do
+      layers
+      |> Enum.with_index()
+      |> Enum.filter(fn {layer, _index} ->
+        layer
+        |> fragment()
+        |> Map.get(:styles)
+        |> then(&(is_map(&1) and Enum.any?(Map.keys(&1), fn key -> to_string(key) == name end)))
+      end)
+      |> List.last()
+      |> case do
+        {_layer, index} -> index
+        nil -> nil
+      end
+    end
+
     defp notice(reason), do: Enum.join(Document.faults(reason), "; ")
 
     defp faults(design, %{sources: sources, bindings: vars, theme: theme}) do
@@ -402,12 +643,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    defp open(entry, entry), do: "vis-builder-node-open"
-    defp open(_entry, _open), do: nil
+    # The selection and the disabled set are positions, so both follow an insert below them.
+    defp inserted(socket, name, {:ok, fragment}, at) do
+      %{layers: layers, selected: selected, disabled: disabled} = socket.assigns
+      at = at |> max(0) |> min(length(layers))
+
+      socket
+      |> assign(:layers, List.insert_at(layers, at, {name, fragment}))
+      |> assign(:selected, if(selected >= at, do: selected + 1, else: selected))
+      |> assign(:disabled, MapSet.new(disabled, &if(&1 >= at, do: &1 + 1, else: &1)))
+      |> assign(:added, to_string(name))
+      |> assign(:notice, nil)
+    end
+
+    defp inserted(socket, name, :error, _at),
+      do: assign(socket, :notice, "no fragment is stored under #{name}")
 
     defp added(socket, name, {:ok, fragment}) do
       socket
       |> assign(:layers, socket.assigns.layers ++ [{name, fragment}])
+      |> assign(:added, to_string(name))
       |> assign(:notice, nil)
     end
 

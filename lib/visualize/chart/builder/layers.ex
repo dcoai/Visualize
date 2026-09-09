@@ -5,13 +5,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     The layers are listed in the order `Visualize.Chart.stack/1` reads them — the higher
     layer last — because that is the order the cascade is defined in, and a panel that
-    reversed it would teach the opposite of the specification. Each layer offers four
-    things: select it, move it up or down, disable it, and drag it into place through
-    `Visualize.Hooks.Builder`.
+    reversed it would teach the opposite of the specification. Each layer offers three
+    things: select it, disable it, and drag it into place through `Visualize.Hooks.Builder`.
+
+    **The row is the control.** Clicking anywhere on it selects the layer and dragging it
+    reorders it, because a row that can only be selected through a 22px icon reads as a row
+    that cannot be selected at all. The one button left is the toggle, and it says
+    `draggable="false"`: a control inside a draggable row is itself a drag source unless it
+    says otherwise, and a mousedown that moves a pixel becomes a drag whose click never
+    fires.
 
     Disabling is not deleting: a disabled layer stays in the list and is dropped from the
     stack, so "what does this look like without the house theme" is one click and one click
     back (D-87).
+
+    Moving is dragging and nothing else. The panel carried up and down buttons beside every
+    layer, which is two more controls per row to say what one gesture already says, and a
+    stack of any depth is not reordered a step at a time. `Visualize.Hooks.Builder` is the
+    one way a layer moves (§18.10, §18.17).
 
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
@@ -40,44 +51,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
         class={class(@class)}
         phx-hook="BuilderHook"
         data-builder-target={@target}
+        data-builder-stack="true"
       >
         <li
           :for={entry <- @entries}
           class={entry.class}
           data-builder-layer={entry.index}
           draggable="true"
+          title={"Click to edit " <> entry.name <> ", drag to reorder it"}
+          phx-click="select_layer"
+          phx-value-index={entry.index}
+          phx-target={@target}
         >
           <span class="vis-builder-layer-name">{entry.name}</span>
           <button
             type="button"
-            class="vis-builder-layer-select"
-            phx-click="select_layer"
-            phx-value-index={entry.index}
-            phx-target={@target}
-          >Edit</button>
-          <button
-            type="button"
-            class="vis-builder-layer-up"
-            phx-click="move_layer"
-            phx-value-index={entry.index}
-            phx-value-to={entry.index - 1}
-            phx-target={@target}
-          >Up</button>
-          <button
-            type="button"
-            class="vis-builder-layer-down"
-            phx-click="move_layer"
-            phx-value-index={entry.index}
-            phx-value-to={entry.index + 1}
-            phx-target={@target}
-          >Down</button>
-          <button
-            type="button"
+            draggable="false"
             class="vis-builder-layer-toggle"
+            title={entry.toggle <> " " <> entry.name}
+            aria-label={entry.toggle <> " " <> entry.name}
             phx-click="toggle_layer"
             phx-value-index={entry.index}
             phx-target={@target}
-          >{entry.toggle}</button>
+          ><span class="vis-builder-action-label">{entry.toggle}</span></button>
         </li>
       </ol>
       """

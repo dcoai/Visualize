@@ -197,6 +197,33 @@ Derivation is *within* a style; composition (§8) is *between* fragments, and th
 
 A cycle — a style that reaches itself through `extends`, directly or through a chain — is `:cycle` at the style's path (`[:styles, :series]`), reported by the validator for every style that reaches itself, and a design with one does not validate. `extends` reaches neither the element nor the mark's generator: the lookup consumes it, so a flattened style node never carries it and `Visualize.Chart.Style.resolve/3` never sees it.
 
+### 3.6 Composition at a site: the style stack
+
+Derivation (§3.5) is a chain *within* a style. A **stack** is composition *at the site that uses one*. Five keys refer to a style — `mark.style`, `label.style`, `mark_label.style`, `axis.style` and `legend.style` — and each takes either a reference, a style node written inline, or a **list** of those:
+
+```elixir
+[
+  style: :series,
+  # one reference, as it always was
+  style: [:series, :emphasis],
+  # two, the later winning
+  style: [:series, %{stroke_width: 5}]
+  # a shared style and a local one
+]
+```
+
+A list cascades **left to right, the later winning**, which is `Visualize.Chart.stack/1`'s rule (§8.2) applied at a point rather than across a document. Each entry is resolved through its own `extends` chain *first*, and the resolved nodes then merge key by key. The two mechanisms are orthogonal and both remain: `extends` is a statement about a style, a stack is a statement about this mark.
+
+A bare reference is a stack of one. That is not a compatibility shim but the definition — `:series` and `[:series]` resolve to the same node by the same path — so every design written before this section means exactly what it meant.
+
+The private `node/2` of `Visualize.Chart.Style` is where this happens, and it is the only place a reference becomes a node; its eight callers are unchanged.
+
+**The local style.** The last entry of a stack MAY be an inline style node, and that is where an edit made at the site lands. Editing the stroke width of a mark that references `:series` must not restyle every other mark that references the same name, so an edit writes to the site's own node and never to the shared one. A local style is **created on first edit** — a site with no local edit carries references and nothing else, because a document should not carry structure nobody asked for.
+
+It is **anonymous in the document**: an inline node is not a key of `design.styles`, so nothing can refer to it. `Visualize.Chart.explain/1` needs a name for attribution and synthesises one from where it sits — `marks[0].style.local`, `axes[1].style.local` — which is unique by construction, one local per site and one site per position. That name is a **display name and not a reference**: writing `style: :"marks[0].style.local"` names a style nothing declares, exactly as any other undeclared name does. Sharing a local style means promoting it to a declared one.
+
+**What does not change.** A reference to a style nothing declares is the error it already is, at the entry's own path. A cycle through `extends` is `:cycle` as before, and a stack cannot introduce one, because a stack is not a chain: an entry may not name the stack it sits in.
+
 ## 4. The frame
 
 ### 4.1 Keys
@@ -1362,6 +1389,8 @@ A design is data, and §16 makes one writable in Elixir; nothing above it lets a
 
 The division is the whole of the contract. The **host** owns the route, the layers it starts the builder with, the pool of sample sources, and what happens when a design is saved — storing it, applying it, sending it somewhere. The **builder** owns the editing state: which layer is selected, which layers are disabled, which panel is open, what the parameters are set to. It reads its host's assigns on every parent render and never writes to them, and the one thing that leaves it is the message of §18.2.
 
+One assign is not like the others. `layers` is the thing the builder *edits* — reordering, disabling, adding from the library, writing a value into a node and importing a document all rewrite it — so a component that adopted the host's list on every parent render would discard the edit that render was caused by. `layers` is therefore **seeded, not controlled**: the builder keeps the list the host last gave it, and on each render adopts the incoming one only when the host's list has actually changed. A host that deliberately replaces the stack still replaces it; a host that re-renders for its own reasons no longer erases the editing session (D-95). `sources`, `vars`, `theme`, `store` and `on_save` are controlled in the ordinary way, because the builder never writes to them.
+
 It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every module of the builder is wrapped in `if Code.ensure_loaded?(Phoenix.Component)`, `phoenix_live_view` stays an optional dependency of this library, and `scripts/consumer_check.exs` asserts that `Visualize.Chart.Builder` is absent from a consumer that does not have LiveView, beside the assertions it already makes for the components. An application that renders predefined charts never compiles a line of it.
 
 ### 18.2 Assigns and the message
@@ -1371,8 +1400,9 @@ It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every
 | Assign | Type | Default | Meaning |
 |---|---|---|---|
 | `id` | `:string` | required | the component id, as every LiveComponent takes |
-| `layers` | `:list` | `[]` | the fragments in precedence order, the higher later (§8.2) |
+| `layers` | `:list` | `[]` | the fragments in precedence order, the higher later (§8.2); **seeded, not controlled** — the builder owns the stack once given it, and adopts a new one only when the host's list changes (§18.1, D-95) |
 | `sources` | `:map` | `%{}` | the pool of sample sources the preview binds the design's slots to, as `Visualize.Chart.apply/2` takes it (§7.3) |
+| `styles` | `:boolean` | `true` | render the stylesheet in a `<style>` element (§18.13); `false` when the host ships it |
 | `vars` | `:map` | `%{}` | the variable values the preview applies with; the parameters form edits a copy of this |
 | `theme` | `:any` | `nil` | the `Visualize.Theme` the preview draws with, `nil` for the default |
 | `store` | `:atom` | `nil` | a module implementing `Visualize.Chart.Builder.Store` (§18.3), or `nil` for no library |
@@ -1455,7 +1485,7 @@ Editing a control writes the parsed value into the selected layer at the node's 
 
 **Implemented** (work item 3 of #54, D-87). `Visualize.Chart.Builder.Layers.panel/1` is the list of layers, in the order `Visualize.Chart.stack/1` reads them — the higher layer last — because that is the order the cascade is defined in and a panel that reversed it would be teaching a person the opposite of the specification. A layer's name is the one the `{name, layer}` pair carries, and its zero-based position where it has none, exactly as `Visualize.Chart.explain/1` names it (§17.1).
 
-Each layer offers four things and no more: **select** it, so the editor edits it; **move** it up or down, which is what changes precedence; **disable** it; and drag it to a position, which is the same move by another gesture (§18.10). Disabling is not deleting: a disabled layer stays in the list and is dropped from the stack, so "what does this look like without the house theme" is one click and one click back. The builder's design — what the preview draws and what saving sends (§18.2) — is `Visualize.Chart.stack/1` of the enabled layers, which is where disabling has its whole effect.
+Each layer offers three things and no more: **select** it, so the editor edits it; **disable** it; and **drag** it to a position, which is what changes precedence (§18.10, §18.17). Moving is dragging and nothing else — the panel carried up and down buttons beside every layer, which is two more controls per row to say what one gesture already says, and a stack of any depth is not reordered a step at a time. The `reorder` event is unchanged; only the second way of raising it is gone. Disabling is not deleting: a disabled layer stays in the list and is dropped from the stack, so "what does this look like without the house theme" is one click and one click back. The builder's design — what the preview draws and what saving sends (§18.2) — is `Visualize.Chart.stack/1` of the enabled layers, which is where disabling has its whole effect.
 
 Nothing here validates or copies a fragment: reordering a stack is reordering a list, and the design is recomputed from it.
 
@@ -1490,3 +1520,153 @@ A blank control removes the binding rather than setting it to nothing, so a vari
 **Import** is `Visualize.Chart.from_json/1` of a pasted document, and a document that reads becomes the builder's **single layer**, named `imported`: a document is a whole design, not a layer of somebody else's stack, and dropping it on top of the layers already there would silently mix two designs. A document that does not parse is `{:json, message}` at the design's path and a document that parses but does not validate is the validator's errors, both shown in the panel.
 
 Both are behind the optional `Jason` dependency (§11.1): without it each returns `{:missing_dependency, :jason}`, which the panel shows as its one error rather than as a crash, because a consumer without Jason has a builder that edits and previews and cannot import or export — which is exactly what the optional dependency means.
+
+### 18.13 The shell and its stylesheet
+
+Every section above describes a panel by what it *is a view of*, and none of them says where it sits or what it looks like. That silence was itself a decision, and the wrong one: a component whose panels are eight full-width blocks in source order is a component nobody reads, however honest each block is. The builder therefore has a shell, and it ships the stylesheet that draws it (D-94).
+
+**The builder ships its CSS the way it ships its JavaScript.** `Visualize.Chart.Builder.css/0` returns the stylesheet as a binary, exactly as `Visualize.Hooks.js_code/0` returns the hook source (spec/10 §14), and `Visualize.Chart.Builder.styles/1` is the function component that renders it in a `<style>` element. The builder renders it at its own root, so a host with no asset pipeline at all — the examples application, a Livebook, a page assembled by hand — has a legible builder from the `<.live_component>` call and nothing else. A host that *has* a pipeline writes `css/0` to disk and drops the `<style>` by passing `styles={false}`, which is the same choice the hooks offer.
+
+Two properties bound what the stylesheet may do, and both are testable:
+
+- **Every rule is scoped under `.vis-builder`.** No bare element selector, no class of the host's, nothing at `:root`. The builder is a guest on somebody else's page and a stylesheet that restyled their headings would be a defect, not a theme.
+- **Every colour and metric is a custom property declared on `.vis-builder`** — `--vis-builder-bg`, `--vis-builder-line`, `--vis-builder-accent`, `--vis-builder-radius`, and the rest. A host restyles by setting properties on the root element, not by out-specifying rules it did not write. A dark page is a short block of overrides, and no rule in `css/0` needs to know that dark pages exist.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.css/0` | the stylesheet as a binary |
+| `Visualize.Chart.Builder.styles/1` | the `<style>` element carrying it |
+| `Visualize.Chart.Builder.Styles.css/0` | the stylesheet itself, as `Visualize.Hooks.js_code/0` is the hooks |
+| `Visualize.Chart.Builder.Styles.styles/1` | the `<style>` element, which the builder renders unless `styles={false}` |
+| `Visualize.Chart.Builder.Styles.default_path/0` | where a host with a pipeline installs it, beside the hooks |
+| `Visualize.Chart.Builder.Styles.install!/0` | writes it there, as `Visualize.Hooks.install!/0` writes the hooks |
+
+**The three regions.** The shell is a grid:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ toolbar                                        [ Save ]  │
+├────────────┬─────────────────────────────────────────────┤
+│  LAYERS    │  design │ frame │ frame.scales.x │ marks[0] │
+│            ├─────────────────────────────────────────────┤
+│  ⠿ house   │  binding · channel · geometry · style       │
+│  ⠿ shared  │                                             │
+│  ⠿ panel   │  the form for the open node                 │
+│            ├─────────────────────────────────────────────┤
+│            │  preview                                    │
+└────────────┴─────────────────────────────────────────────┘
+```
+
+The **sidebar** is the stack panel of §18.8, unchanged in order, contents and events: the layers in the order `Visualize.Chart.stack/1` reads them, the higher last. What the shell adds is that it *looks* like what it is — a fixed-width column of rows, each with a drag handle, a selected state and a dimmed disabled state. Dragging a layer already reordered the stack (§18.10); a bulleted list simply never said so.
+
+The **main column** is the selected layer, and its nodes (§18.5) are a tab strip across the top. A fragment is a tree and the labels say so — `frame`, `frame.size`, `frame.margin` — so the strip is two rows rather than one long line of dotted paths. The **top row** is one tab per root segment, in the order the walk reached it; the **second row** is the nodes under whichever root the open node sits in, each labelled by what it adds to the root rather than by its whole path, so `frame.size` reads as `size` under `frame`. A root that is not itself a node — `styles`, which exists only as the map its members live in — opens its first member, because a tab that opened nothing would be a tab for a node the fragment does not have. The root stays marked while a child is open, so the strip says where you are. Both rows scroll horizontally rather than wrapping, because a wrapped strip changes height as a person clicks through it. The facets of the open node (§18.7) are a row of chips beneath the strip, and the form fills the rest. The preview sits below the form in the same column, so an edit and its effect are on screen together.
+
+The tab strip is a view of `Visualize.Chart.Builder.Editor.nodes/1` and of nothing else, which is the same discipline every other panel is held to: a node kind added to the schema becomes a tab with no edit here.
+
+**Nothing in the shell is a capability.** No event, assign, message or panel signature changes because a shell exists; every panel remains independently renderable, which is what keeps the tests that assert on one panel's markup meaningful. The shell is where the panels are placed, and `css/0` is how they are drawn.
+
+### 18.14 The style palette, and a reference as a choice
+
+**A design's `styles` is a map of name to style node (§3), and a mark refers to one by name** — and until this section there was no way to *add* a name. §18.5 says "adding a node is adding the key, which is the same edit as any other", but no control added one, so a style could be edited only where some layer had already declared it. A mark's `style` fared no better: its type is `{:ref, :style}`, whose widget is `:text` (§18.6), so a person spelled a name into a box and learned from the error list whether it was one that existed.
+
+`Visualize.Chart.Builder.Palette.panel/1` is the answer to both.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Palette.panel/1` | the palette: the declared styles, and the form that adds one |
+| `Visualize.Chart.Builder.Palette.names/1` | the style names a design declares, in name order |
+
+The palette is a view of the **stacked** design, because the stack is what a mark's reference resolves against: a style the house layer declares is available to a mark in the panel layer, and a palette that showed only the selected layer's styles would be lying about what a mark may name. Each row is the name, what the style declares, and a swatch — shown only where the style names a colour outright, since a stroke given as a theme slot such as `:series_1` has no colour until the theme resolves it, and a guessed swatch is worse than none.
+
+**Creating** a style writes `styles.<name>` into the **selected** layer, because that is where every other edit goes, and the editor opens on the new node: creating a style and not being taken to it is half a gesture. The name is read with `Visualize.Chart.Builder.Editor.parse/2` at `{:ref, :style}`, so a name becomes an atom exactly as a typed reference already did (§18.6) and no second spelling of that rule exists. A blank name is a notice, not a style called `:""`.
+
+**Selecting** one opens the node that owns it, in the layer that declares it — the highest such layer, which is the one whose value the stack takes, the same rule the inspector follows (§18.9). This is why the palette can be a view of the stack and still get a person to an editable node.
+
+**A reference becomes a choice.** `Visualize.Chart.Builder.Editor.panel/1` takes a `refs` assign — the names a `{:ref, kind}` may take, by kind — and renders a select over them instead of a text box wherever it has them. `Visualize.Chart.Builder.Editor.widget/1` is unchanged and stays a function of the type alone, which is the property that makes it total over the schema (§18.6); the panel is what narrows a reference when it happens to know the names. A kind the caller knows no names for is still a text box, so the editor remains renderable over any node with no palette at all.
+
+### 18.15 One strip, of one kind of control
+
+The nodes of §18.13 are the top row. Beneath them was a second row of the open node's *children* and, below that, the editor's own row of the open node's *facets* (§18.7) — two rows of chips that looked different, sat at different sizes, and did different things: one changed which node is open, the other which keys of it are shown. A style node has exactly one facet, so it carried a lone `style` chip that was a control offering no choice.
+
+There is now **one strip**: the children of the open root, then the facets of the open node, in one row, of one appearance, with a rule between the two groups rather than a line break. `Visualize.Chart.Builder.Editor.panel/1` takes a `strip` assign so the caller that renders the row can suppress the editor's own; the editor still renders it by default, because it must stay usable on its own.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Editor.facets/1` | the facets a node kind has, in the order of §1.3 |
+
+**A group with nothing to choose is not rendered.** One facet is not a choice, so a lone facet chip never appears; a node whose root has no other children and whose kind has one facet has no strip at all. This is the same rule the top row already follows in spirit — a control that cannot change anything is not a control — and it is what makes the strip mean "here is what you may pick".
+
+### 18.16 The workspace, and the library as a tree
+
+The shell of §18.13 put the stack beside one editing column. The workspace is four regions across:
+
+```
+┌───────────┬───────────┬──────────────────────────────┬─────────────┐
+│ LIBRARY   │ LAYERS    │ Category  Sub-category  Name │ CONTEXT     │
+│ a tree of │ the stack │ the save-fragment form       │ the control │
+│ the store │ and the   ├──────────────────────────────┤ for the     │
+│ full      │ drop      │ node tabs, chips, form       │ field with  │
+│ height,   │ target    ├──────────────────────────────┤ focus       │
+│ scrolling │           │ preview                      │             │
+└───────────┴───────────┴──────────────────────────────┴─────────────┘
+```
+
+The **library** is the left-most column, at the height of the viewport and scrolling on its own, so browsing a large library never moves the chart. The **layers** sit beside it, because a fragment travels from one to the other and a gesture across two adjacent columns is a gesture. The **context panel** is the right-most column (§18.18). The middle is the editor of §18.13, with the save-fragment form (§18.17) as its header.
+
+**A library item's name carries its place in the tree.**
+
+    <category>:<sub-category>:<fragment name>
+
+`Frame:axes:dense ticks` is the fragment `dense ticks`, under `axes`, under `Frame`. The tree is that name parsed and nothing else: no classification is stored, computed from a fragment's keys, or kept in a list here. A category exists because some item names it, which is what lets a person invent one.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Library.parse/1` | a stored name as `{category, sub_category, name}` |
+| `Visualize.Chart.Builder.Library.tree/1` | stored names as categories, each with its sub-categories and their items |
+| `Visualize.Chart.Builder.Library.name/3` | a category, sub-category and name as the stored name |
+| `Visualize.Chart.Builder.Library.categories/1` | the categories a set of stored names names, in name order |
+| `Visualize.Chart.Builder.Library.sub_categories/2` | the sub-categories one category has, without the unnamed group |
+| `Visualize.Chart.Builder.Library.panel/1` | the tree, rendered |
+
+The parse is total and forgiving, because a store the host populated before this section existed must keep working:
+
+| Stored name | Category | Sub-category | Name |
+|---|---|---|---|
+| `Frame:axes:dense ticks` | `Frame` | `axes` | `dense ticks` |
+| `Styles::thick line` | `Styles` | none | `thick line` |
+| `Theme:none:dark` | `Theme` | none | `dark` |
+| `Frame:dense ticks` | `Frame` | none | `dense ticks` |
+| `dark` | `Uncategorised` | none | `dark` |
+
+An empty sub-category and the literal `none` are the same thing, so a person who types nothing and a form that submits `none` agree. A name with more than three parts keeps the remainder in the leaf — `a:b:c:d` is `d` under `c` under… no: the split is on the **first two** separators, so the leaf may contain a colon and a fragment can be called `2:1 aspect`. That asymmetry is deliberate: the category and sub-category are chosen from a short list, and the name is free text.
+
+Sub-categories sort by name with the unnamed group first, because a fragment sitting directly under its category is the general case and the sub-categories are refinements of it.
+
+### 18.17 Dropping a fragment into the stack
+
+A fragment is **dragged out of the library and dropped into the layer pane at a position**, so precedence is chosen in the gesture rather than fixed and corrected afterwards. `Visualize.Hooks.Builder` carries both drags and tells them apart by what was picked up: an element with `data-builder-layer` is a **move** within the stack, and one with `data-builder-fragment` is an **insert** from the library. The stack marks itself `data-builder-stack`, and only an element so marked accepts a drop — the library is a source and not a destination.
+
+The dragged name travels in `dataTransfer` under `application/x-visualize-fragment`, which is what lets the library's hook instance and the stack's hear about each other without either knowing the other exists.
+
+| Event | Payload | Meaning |
+|---|---|---|
+| `reorder` | `%{"from" => integer, "to" => integer}` | a layer moved within the stack (§18.10) |
+| `insert` | `%{"name" => string, "at" => integer}` | a library fragment dropped at a position |
+
+**Where it lands** is one rule for both drags, and the rule is a **gap**, not a row. The pointer's position is compared with each row's midpoint: the result is the first row whose midpoint is below the pointer, and the end of the stack when none is. A gap is therefore always named — including the gap above the first row and the gap below the last — and the pointer never has to be inside a row at all.
+
+That last part is the substance. An earlier rule required the drop to land on a row and computed a side from it, which left both ends of the stack unreachable: the space above the first layer and below the last belongs to the container, not to any row, so a drop there was simply discarded. The stack accepts a drop anywhere within itself, and reserves some empty space below the last row for exactly this.
+
+A **move** is the same gap, adjusted: `at` is a gap in the list as it stands, and once the dragged layer is lifted out every gap after it shifts down by one, so the position sent is `at - 1` where `at` is beyond the layer's own position. The position is clamped server-side regardless, because a hook is a client and a client's number is not to be trusted.
+
+**A drag must be able to start, and a click must still land.** Both panels learned the same lesson the same way: **the row is the control.** A `<button>` spanning a draggable row defeats both gestures at once — a browser treats a form control as a special drag source and often will not start a drag from one, and a mousedown on a control inside a draggable row becomes a drag on the first pixel of movement, so its own click never fires. A layer row and a library row therefore carry `phx-click` and `draggable` themselves, with plain text inside; the one control that remains beside a layer's name, its toggle, says `draggable="false"` to stop the browser's search for a drag source at itself.
+
+**A drop needs an operation, not just permission.** `preventDefault` on `dragover` says the drop is allowed; a `dropEffect` says what it *is*. Without one the browser has no operation to perform and refuses the drop anyway. The stack sets `copy` for a fragment arriving from the library and `move` for a layer changing places, matching the `effectAllowed` each drag declared.
+
+**A drag that leaves takes its marks with it.** `dragend` fires on the drag's *source*, which for a library drag is in another element entirely, so the stack clears its own indicator on `dragleave` rather than waiting for an event that will never reach it.
+
+
+
+**What follows the insert.** The selected layer and the disabled set are *positions*, so both shift by one where they sit at or below the insertion — the same rule a move already follows (§18.8). A name the store does not hold is a notice and changes no layer, exactly as adding one is.
+
+Inserting does not consult the fragment: the stack is a list and a fragment is an element of it, so an insert is `List.insert_at/3` and the design is recomputed from the result. There is nothing to validate at insertion time that applying the design does not already say better (§18.4).

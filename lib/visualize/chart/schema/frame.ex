@@ -82,7 +82,13 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:format, :string, :content),
       spec(:grid, :boolean, :geometry, default: false),
       spec(:offset, :number, :geometry, default: 0),
-      spec(:style, {:ref, :style}, :style, default: :axis)
+      spec(
+        :style,
+        {:one_of,
+         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        :style,
+        default: :axis
+      )
     ]
   end
 
@@ -101,7 +107,13 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:scale, {:ref, :scale}, :geometry, required: true),
       spec(:position, {:enum, @positions}, :geometry, default: :top_right),
       spec(:title, :text, :content, default: []),
-      spec(:style, {:ref, :style}, :style, default: :label)
+      spec(
+        :style,
+        {:one_of,
+         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        :style,
+        default: :label
+      )
     ]
   end
 

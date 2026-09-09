@@ -16,11 +16,15 @@ defmodule Visualize.Chart.ApplyTest do
 
   @spec_path Path.expand("../../../spec/14-declarative-chart.md", __DIR__)
 
-  # The worked example of spec/14 §13, read from the document itself.
+  # The worked example of spec/14 §13, read from the document itself. Taken from that
+  # section rather than from the head of the file: the first `elixir` block in the document
+  # is not necessarily §13's, and was not the moment one was added to an earlier section.
   defp example do
-    [_, rest] = @spec_path |> File.read!() |> String.split("```elixir\n", parts: 2)
-    [block | _] = String.split(rest, "\n```", parts: 2)
-    {design, _} = Code.eval_string(block)
+    [_, below] =
+      @spec_path |> File.read!() |> String.split("\n## 13. Worked example", parts: 2)
+
+    [_, block | _] = String.split(below, "```elixir\n")
+    {design, _} = block |> String.split("\n```", parts: 2) |> hd() |> Code.eval_string()
     design
   end
 

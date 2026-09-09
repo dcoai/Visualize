@@ -52,13 +52,16 @@ defmodule Visualize.Chart.Builder.StackTest do
       assert html =~
                ~s(class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="2")
 
-      assert html =~ ~s(phx-value-index="0">Enable</button>)
-      assert html =~ ~s(phx-value-index="2">Disable</button>)
+      assert html =~ ~s(phx-value-index="0"><span class="vis-builder-action-label">Enable</span>)
+      assert html =~ ~s(phx-value-index="2"><span class="vis-builder-action-label">Disable</span>)
     end
 
     test "the list is the hook element and every layer is draggable at its position" do
       html = rendered(:layers)
-      assert html =~ ~s(<ol id="b-layers" class="vis-builder-layers" phx-hook="BuilderHook">)
+
+      assert html =~
+               ~s(<ol id="b-layers" class="vis-builder-layers" phx-hook="BuilderHook" data-builder-stack="true">)
+
       assert length(Regex.scan(~r/draggable="true"/, html)) == 3
 
       targeted =
@@ -122,7 +125,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       socket = socket(selected: 2, disabled: MapSet.new([0]))
 
       {:noreply, moved} =
-        Builder.handle_event("move_layer", %{"index" => "2", "to" => "0"}, socket)
+        Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, socket)
 
       [house, shared, panel] = BuilderFixture.layers()
       assert moved.assigns.layers == [panel, house, shared]
@@ -132,13 +135,13 @@ defmodule Visualize.Chart.Builder.StackTest do
 
     test "a move off either end changes nothing" do
       socket = socket()
-      {:noreply, up} = Builder.handle_event("move_layer", %{"index" => "0", "to" => "-1"}, socket)
+      {:noreply, up} = Builder.handle_event("reorder", %{"from" => 0, "to" => -1}, socket)
 
       {:noreply, down} =
-        Builder.handle_event("move_layer", %{"index" => "2", "to" => "3"}, socket)
+        Builder.handle_event("reorder", %{"from" => 2, "to" => 3}, socket)
 
       {:noreply, same} =
-        Builder.handle_event("move_layer", %{"index" => "1", "to" => "1"}, socket)
+        Builder.handle_event("reorder", %{"from" => 1, "to" => 1}, socket)
 
       for unchanged <- [up, down, same] do
         assert unchanged.assigns.layers == BuilderFixture.layers()

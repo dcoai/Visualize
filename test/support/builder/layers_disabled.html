@@ -1,21 +1,12 @@
-<ol id="b-layers" class="vis-builder-layers" phx-hook="BuilderHook">
-  <li class="vis-builder-layer vis-builder-layer-disabled" data-builder-layer="0" draggable="true">
+<ol id="b-layers" class="vis-builder-layers" phx-hook="BuilderHook" data-builder-stack="true">
+  <li class="vis-builder-layer vis-builder-layer-disabled" data-builder-layer="0" draggable="true" title="Click to edit house, drag to reorder it" phx-click="select_layer" phx-value-index="0">
     <span class="vis-builder-layer-name">house</span>
-    <button type="button" class="vis-builder-layer-select" phx-click="select_layer" phx-value-index="0">Edit</button>
-    <button type="button" class="vis-builder-layer-up" phx-click="move_layer" phx-value-index="0" phx-value-to="-1">Up</button>
-    <button type="button" class="vis-builder-layer-down" phx-click="move_layer" phx-value-index="0" phx-value-to="1">Down</button>
-    <button type="button" class="vis-builder-layer-toggle" phx-click="toggle_layer" phx-value-index="0">Enable</button>
-  </li><li class="vis-builder-layer" data-builder-layer="1" draggable="true">
+    <button type="button" draggable="false" class="vis-builder-layer-toggle" title="Enable house" aria-label="Enable house" phx-click="toggle_layer" phx-value-index="0"><span class="vis-builder-action-label">Enable</span></button>
+  </li><li class="vis-builder-layer" data-builder-layer="1" draggable="true" title="Click to edit shared, drag to reorder it" phx-click="select_layer" phx-value-index="1">
     <span class="vis-builder-layer-name">shared</span>
-    <button type="button" class="vis-builder-layer-select" phx-click="select_layer" phx-value-index="1">Edit</button>
-    <button type="button" class="vis-builder-layer-up" phx-click="move_layer" phx-value-index="1" phx-value-to="0">Up</button>
-    <button type="button" class="vis-builder-layer-down" phx-click="move_layer" phx-value-index="1" phx-value-to="2">Down</button>
-    <button type="button" class="vis-builder-layer-toggle" phx-click="toggle_layer" phx-value-index="1">Disable</button>
-  </li><li class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="2" draggable="true">
+    <button type="button" draggable="false" class="vis-builder-layer-toggle" title="Disable shared" aria-label="Disable shared" phx-click="toggle_layer" phx-value-index="1"><span class="vis-builder-action-label">Disable</span></button>
+  </li><li class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="2" draggable="true" title="Click to edit panel, drag to reorder it" phx-click="select_layer" phx-value-index="2">
     <span class="vis-builder-layer-name">panel</span>
-    <button type="button" class="vis-builder-layer-select" phx-click="select_layer" phx-value-index="2">Edit</button>
-    <button type="button" class="vis-builder-layer-up" phx-click="move_layer" phx-value-index="2" phx-value-to="1">Up</button>
-    <button type="button" class="vis-builder-layer-down" phx-click="move_layer" phx-value-index="2" phx-value-to="3">Down</button>
-    <button type="button" class="vis-builder-layer-toggle" phx-click="toggle_layer" phx-value-index="2">Disable</button>
+    <button type="button" draggable="false" class="vis-builder-layer-toggle" title="Disable panel" aria-label="Disable panel" phx-click="toggle_layer" phx-value-index="2"><span class="vis-builder-action-label">Disable</span></button>
   </li>
 </ol>

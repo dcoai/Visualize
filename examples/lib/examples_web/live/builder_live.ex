@@ -35,9 +35,29 @@ defmodule ExamplesWeb.BuilderLive do
     end
 
     defp fragments do
+      # Each fragment must name things this page's stack actually declares: `grid` used to
+      # reference a scale `:y`, which nothing here declares, so adding it replaced the chart
+      # with `frame.axes[2].scale: scale :y is not declared` — which reads as doing nothing.
+      # An axis is identified by its `{scale, side}`, so naming `:value` merges with the left
+      # axis the shared layer already declares rather than adding a third.
+      # Names carry their place in the tree: <category>:<sub-category>:<name> (spec/14 §18.16).
       :persistent_term.get(@key, %{
-        "dark" => %{theme: :dark},
-        "grid" => %{frame: %{axes: [%{scale: :y, side: :left, grid: true}]}}
+        "Theme::dark" => %{theme: :dark},
+        "Frame:axes:no grid" => %{frame: %{axes: [%{scale: :value, side: :left, grid: false}]}},
+        "Frame:axes:dense ticks" => %{
+          frame: %{
+            axes: [
+              %{scale: :hour, side: :bottom, ticks: 12},
+              %{scale: :value, side: :left, ticks: 10}
+            ]
+          }
+        },
+        "Frame:size:wide" => %{frame: %{size: %{width: 900, height: 320}}},
+        "Frame:margin:roomy" => %{
+          frame: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}
+        },
+        "Styles::thick line" => %{styles: %{series: %{stroke_width: 5}}},
+        "Styles::stepped" => %{styles: %{series: %{curve: :step}}}
       })
     end
   end
@@ -102,8 +122,11 @@ defmodule ExamplesWeb.BuilderLive do
   def handle_info({:design_saved, _id, design}, socket) do
     result =
       case Chart.apply(design, sources: socket.assigns.sources) do
-        {:ok, _applied} -> "saved: the design applies"
-        {:error, errors} -> "not saved: " <> Enum.map_join(errors, "; ", &Chart.Validator.format/1)
+        {:ok, _applied} ->
+          "saved: the design applies"
+
+        {:error, errors} ->
+          "not saved: " <> Enum.map_join(errors, "; ", &Chart.Validator.format/1)
       end
 
     {:noreply, assign(socket, :saved, result)}
@@ -120,6 +143,58 @@ defmodule ExamplesWeb.BuilderLive do
       </p>
       <p :if={@saved} class="builder-saved">{@saved}</p>
       <p><a href="/">← back to the gallery</a></p>
+      <!--
+        Drag diagnostics. Drag and drop is four steps and any one of them failing looks the
+        same from outside: the module loads, the hook registers, the browser fires the
+        events, and the server changes the order. This says which step you got to.
+      -->
+      <div id="drag-diagnostics" class="builder-diagnostics" phx-update="ignore">
+        <strong>drag diagnostics</strong>
+        <span id="diag-module">module: …</span>
+        <span id="diag-mounted">hook mounted: …</span>
+        <span id="diag-events">events: none yet</span>
+      </div>
+      <script>
+        (() => {
+          const seen = [];
+          const show = () => {
+            const el = document.getElementById("diag-events");
+            if (el) el.textContent = "events: " + (seen.length ? seen.join(" → ") : "none yet");
+          };
+
+          // The browser's own events, watched in the capture phase so nothing can stop them
+          // reaching here. If `drop` never appears, the problem is before the hook.
+          for (const name of ["click", "dragstart", "dragover", "drop", "dragend"]) {
+            document.addEventListener(name, (e) => {
+              const at = e.target.closest && e.target.closest("[data-builder-layer], [data-builder-fragment]");
+              let what = "(gap)";
+              if (at && at.hasAttribute("data-builder-fragment")) what = "(library)";
+              else if (at) what = "(layer " + at.getAttribute("data-builder-layer") + ")";
+              const tag = name + what;
+              if (seen[seen.length - 1] !== tag) { seen.push(tag); if (seen.length > 10) seen.shift(); show(); }
+            }, true);
+          }
+
+          const report = () => {
+            const hooks = window.VisualizeHooks || {};
+            const names = Object.keys(hooks);
+            const module = document.getElementById("diag-module");
+            if (module) {
+              module.textContent = names.length
+                ? "module: " + names.length + " hooks, BuilderHook " + (hooks.BuilderHook ? "present" : "MISSING")
+                : "module: DID NOT LOAD";
+            }
+
+            const all = document.querySelectorAll("[phx-hook='BuilderHook']");
+            const up = document.querySelectorAll("[phx-hook='BuilderHook'][data-builder-mounted]");
+            const mounted = document.getElementById("diag-mounted");
+            if (mounted) mounted.textContent = "hook mounted: " + up.length + " of " + all.length;
+          };
+
+          window.addEventListener("DOMContentLoaded", () => setTimeout(report, 400));
+          setTimeout(report, 1500);
+        })();
+      </script>
     </header>
     <main>
       <.live_component

@@ -121,9 +121,19 @@ defmodule Visualize.BuilderFixture do
     [
       preview: {&Preview.panel/1, %{design: Chart.stack(layers()), sources: sources()}},
       preview_errors: {&Preview.panel/1, %{design: Chart.stack(incomplete()), sources: %{}}},
-      builder: {Builder, %{id: "builder", layers: layers(), sources: sources()}},
+      # The golden is a record of the builder's *markup*, so the fixture renders it without
+      # the stylesheet: the stylesheet is six hundred lines that would swamp the file and
+      # churn it on every rule, and it has its own assertions (spec/14 §18.13, D-94).
+      builder: {Builder, %{id: "builder", layers: layers(), sources: sources(), styles: false}},
       builder_store:
-        {Builder, %{id: "builder", layers: layers(), sources: sources(), store: Library}},
+        {Builder,
+         %{
+           id: "builder",
+           layers: layers(),
+           sources: sources(),
+           store: Library,
+           styles: false
+         }},
       editor_design: {&Editor.panel/1, %{kind: :design, node: layer(:house), path: []}},
       layers: {&Layers.panel/1, %{id: "b-layers", layers: layers()}},
       layers_disabled:

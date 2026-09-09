@@ -151,4 +151,81 @@ defmodule Visualize.Chart.StyleTest do
       assert_raise ArgumentError, ~r/style :a extends itself/, fn -> Style.node(styles, :a) end
     end
   end
+
+  describe "a stack at a site (spec/14 §3.6, D-98)" do
+    test "a bare reference and a one-element stack are the same node" do
+      styles = %{series: %{stroke: "#111", stroke_width: 2}}
+
+      assert Style.node(styles, :series) == Style.node(styles, [:series])
+      assert Style.node(styles, :series) == %{stroke: "#111", stroke_width: 2}
+    end
+
+    test "entries cascade left to right, the later winning" do
+      styles = %{
+        series: %{stroke: "#111", stroke_width: 2},
+        emphasis: %{stroke_width: 5}
+      }
+
+      assert Style.node(styles, [:series, :emphasis]) == %{stroke: "#111", stroke_width: 5}
+      assert Style.node(styles, [:emphasis, :series]) == %{stroke: "#111", stroke_width: 2}
+    end
+
+    test "an inline node is an entry like any other, and is where a local edit sits" do
+      styles = %{series: %{stroke: "#111", stroke_width: 2}}
+
+      assert Style.node(styles, [:series, %{stroke_width: 5}]) ==
+               %{stroke: "#111", stroke_width: 5}
+
+      # The shared style is untouched by the local one: that is the whole point of it.
+      assert Style.node(styles, :series) == %{stroke: "#111", stroke_width: 2}
+    end
+
+    test "each entry is flattened through its own extends before the entries cascade" do
+      styles = %{
+        base: %{stroke: "#111", stroke_width: 1, opacity: 0.5},
+        series: %{extends: :base, stroke_width: 2},
+        emphasis: %{stroke_width: 5}
+      }
+
+      # `series` resolves to base's keys with its own over them, and only then does
+      # `emphasis` win the width. Nothing carries `extends` out.
+      assert Style.node(styles, [:series, :emphasis]) ==
+               %{stroke: "#111", stroke_width: 5, opacity: 0.5}
+    end
+
+    test "an inline entry may extend a declared style" do
+      styles = %{base: %{stroke: "#111", stroke_width: 1}}
+
+      assert Style.node(styles, [%{extends: :base, stroke_width: 4}]) ==
+               %{stroke: "#111", stroke_width: 4}
+    end
+
+    test "an empty stack, and a stack naming nothing, are the empty node" do
+      assert Style.node(%{}, []) == %{}
+      assert Style.node(%{}, [:nothing, :also_nothing]) == %{}
+    end
+
+    test "the same style twice is harmless" do
+      styles = %{series: %{stroke_width: 2}}
+      assert Style.node(styles, [:series, :series]) == Style.node(styles, :series)
+    end
+
+    test "a cycle through extends still raises, from inside a stack" do
+      styles = %{a: %{extends: :b}, b: %{extends: :a}}
+
+      assert_raise ArgumentError, ~r/style :a extends itself/, fn ->
+        Style.node(styles, [:a])
+      end
+    end
+
+    test "the built-in four are reachable from a stack" do
+      # `node/2` looks up whatever map it is given; the frame gives it `all/1`, which is the
+      # declared styles over the built-in four (spec/14 §3.3).
+      styles = Style.all(%{})
+
+      assert Style.node(styles, [:axis]) == Style.builtin(:axis)
+      assert Style.node(styles, [:grid, %{stroke_width: 3}]).stroke_width == 3
+      assert Style.node(styles, [:grid, %{stroke_width: 3}]).stroke == Style.builtin(:grid).stroke
+    end
+  end
 end
