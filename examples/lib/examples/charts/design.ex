@@ -37,9 +37,16 @@ defmodule Examples.Charts.Design do
     design
   end
 
-  @doc "True when `module` is a chart written as a design rather than an imperative one."
+  @doc """
+  True when `module` is a chart written as a design rather than an imperative one.
+
+  The module is loaded first: `function_exported?/3` answers for a module that is not yet
+  loaded with `false`, and in a release-less app nothing has loaded it before the first call.
+  """
   @spec design?(module()) :: boolean()
-  def design?(module), do: function_exported?(module, :design, 1)
+  def design?(module) do
+    Code.ensure_loaded?(module) and function_exported?(module, :design, 1)
+  end
 
   @doc "The module's design applied over its rows, with the `palette` option as the theme."
   @spec applied(module(), keyword()) :: Chart.Applied.t()

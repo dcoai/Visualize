@@ -17,8 +17,9 @@ defmodule Examples.ChartsTest do
   alias Examples.Charts.Design
   alias Visualize.Chart
 
-  # Work item 1 of #124: the ten cartesian charts, in the proposal's order.
-  @cartesian [
+  # The families of #124 that have been through the layer, in the proposal's order:
+  # work item 1 (#125, cartesian basics) and work item 2 (#126, angular and radial).
+  @families [
     Examples.Charts.LineChart,
     Examples.Charts.MultiLineChart,
     Examples.Charts.AreaChart,
@@ -28,7 +29,12 @@ defmodule Examples.ChartsTest do
     Examples.Charts.HorizontalBarChart,
     Examples.Charts.StackedBarChart,
     Examples.Charts.ScatterPlot,
-    Examples.Charts.BubbleChart
+    Examples.Charts.BubbleChart,
+    Examples.Charts.PieChart,
+    Examples.Charts.DonutChart,
+    Examples.Charts.RadialBarChart,
+    Examples.Charts.SunburstChart,
+    Examples.Charts.ChordDiagram
   ]
 
   # Converted and deterministic: these hold the golden.
@@ -38,7 +44,10 @@ defmodule Examples.ChartsTest do
     Examples.Charts.BarChart,
     Examples.Charts.HorizontalBarChart,
     Examples.Charts.StackedBarChart,
-    Examples.Charts.BubbleChart
+    Examples.Charts.BubbleChart,
+    Examples.Charts.PieChart,
+    Examples.Charts.DonutChart,
+    Examples.Charts.SunburstChart
   ]
 
   # Converted, but seeded at compile time: asserted on, never recorded.
@@ -50,7 +59,9 @@ defmodule Examples.ChartsTest do
   # Left imperative, each with a filed gap named in its `@moduledoc`.
   @filed [
     {Examples.Charts.AreaChart, "#133"},
-    {Examples.Charts.GroupedBarChart, "#132"}
+    {Examples.Charts.GroupedBarChart, "#132"},
+    {Examples.Charts.RadialBarChart, "#137"},
+    {Examples.Charts.ChordDiagram, "#137"}
   ]
 
   @golden "test/support/charts_golden.txt"
@@ -61,8 +72,8 @@ defmodule Examples.ChartsTest do
 
   def write!, do: File.write!(@golden, render())
 
-  test "every cartesian chart is a design, or is left imperative with its gap filed" do
-    assert Enum.sort(Enum.filter(@cartesian, &Design.design?/1)) == Enum.sort(charts())
+  test "every chart of a converted family is a design, or is left imperative with its gap filed" do
+    assert Enum.sort(Enum.filter(@families, &Design.design?/1)) == Enum.sort(charts())
 
     for {module, issue} <- @filed do
       refute Design.design?(module), "#{inspect(module)} is a design now: drop it from @filed"
@@ -70,7 +81,7 @@ defmodule Examples.ChartsTest do
       assert doc =~ issue, "#{inspect(module)} must name the gap that keeps it imperative"
     end
 
-    assert Enum.sort(Enum.reject(@cartesian, &Design.design?/1)) ==
+    assert Enum.sort(Enum.reject(@families, &Design.design?/1)) ==
              Enum.sort(Enum.map(@filed, &elem(&1, 0)))
   end
 
@@ -119,12 +130,19 @@ defmodule Examples.ChartsTest do
     end
   end
 
-  test "the width and height options reach the frame" do
+  test "the width and height options reach the frame, and the frame's size is the document's" do
     for module <- charts() do
+      {design, _sources} = module.design(width: 320, height: 220)
+      %{size: %{width: width, height: height}} = design.frame
       svg = module.render(width: 320, height: 220)
-      assert svg =~ ~s(width="320")
-      assert svg =~ ~s(height="220")
-      assert svg =~ ~s(viewBox="0 0 320 220")
+
+      # A chart may widen its own frame to reserve a margin — the donut does, for its
+      # legend — but never below the size it was asked for.
+      assert width >= 320
+      assert height == 220
+      assert svg =~ ~s(width="#{width}")
+      assert svg =~ ~s(height="#{height}")
+      assert svg =~ ~s(viewBox="0 0 #{width} #{height}")
     end
   end
 

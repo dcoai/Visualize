@@ -1,5 +1,13 @@
 defmodule Examples.Charts.ChordDiagram do
-  @moduledoc "Chord diagram showing relationships between groups"
+  @moduledoc """
+  Chord diagram showing relationships between groups — **left imperative** (#126).
+
+  The diagram is a `:chord` transform under two `:path` marks — the transform the layer grew
+  for exactly this figure, yielding the group arcs and the ribbons as ready paths. What stops
+  the conversion is the ring of region names outside the group arcs, each rotated to its own
+  spoke: a mark label has no radial offset and no rotation. Filed as #137 with this chart as
+  the evidence; an unnamed chord diagram does not say which region is which.
+  """
 
   alias Visualize.Layout.Chord
   alias Visualize.SVG.Element

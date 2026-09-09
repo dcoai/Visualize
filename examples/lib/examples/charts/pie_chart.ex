@@ -1,9 +1,23 @@
 defmodule Examples.Charts.PieChart do
-  @moduledoc "Pie chart example"
+  @moduledoc """
+  Pie chart as a design (#126): one `:arc` mark over a polar frame.
 
-  alias Visualize.Shape
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  `Visualize.Shape.Pie` is not called: an `:arc` whose `value` channel is a share runs the
+  pie itself over the mark's rows, in row order, with the radii and the pad angle as options
+  (spec/14 §5.6). The slices read largest first because the rows do, and each takes its
+  colour from an ordinal `color` scale through a `{:field, :index}` on the style's `fill`.
+
+  The white slice separator is the theme's `background` rather than the literal `"white"`,
+  so it follows a palette instead of fighting it. The slice's label sits at the arc's
+  centroid, which is halfway out rather than the 0.6 of the radius the hand-built version
+  used; a mark label has no radial offset (#137).
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
 
   @data [
     %{name: "Chrome", value: 64.5},
@@ -17,103 +31,85 @@ defmodule Examples.Charts.PieChart do
   def title, do: "Pie Chart"
   def description, do: "Browser market share"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 400
     height = opts[:height] || 400
-    radius = min(width, height) / 2 - 40
 
-    base_data = opts[:data] || @data
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:slices, [:name, :value, :index]),
+        style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 2),
+        style(:slice_label,
+          extends: :label,
+          fill: :background,
+          font_size: 12,
+          font_weight: :bold
+        ),
+        polar(width, height, margin: @zero_margin),
+        ordinal_scale(:color),
+        arc(:slices, %{value: :value},
+          options: %{inner_radius: 0, outer_radius: min(width, height) / 2 - 40},
+          label: %{text: [{:field, :name}], anchor: :middle, style: :slice_label},
+          style: :slice
+        )
+      ])
 
-    # Apply animation if tick is provided
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      animate_data(base_data, animation_tick)
-    else
-      base_data
-    end
-
-    # Create pie layout
-    pie = Shape.Pie.new()
-      |> Shape.Pie.value(fn d -> d.value end)
-      |> Shape.Pie.sort_values(fn a, b -> a > b end)
-
-    arcs_data = Shape.Pie.generate(pie, data)
-
-    # Create arc generator
-    arc = Shape.Arc.new()
-      |> Shape.Arc.inner_radius(0)
-      |> Shape.Arc.outer_radius(radius)
-
-    label_arc = Shape.Arc.new()
-      |> Shape.Arc.inner_radius(radius * 0.6)
-      |> Shape.Arc.outer_radius(radius * 0.6)
-
-    # Generate slices
-    slices = arcs_data
-      |> Enum.with_index()
-      |> Enum.map(fn {arc_data, i} ->
-        color = Enum.at(colors, rem(i, length(colors)))
-        path_data = Shape.Arc.generate(arc, arc_data)
-        {label_x, label_y} = Shape.Arc.centroid(label_arc, arc_data)
-
-        slice_group = Element.g(%{})
-          |> Element.append(
-            Element.path(%{d: path_data, fill: color, stroke: "white", stroke_width: 2})
-          )
-          |> Element.append(
-            Element.text(%{
-              x: label_x,
-              y: label_y,
-              text_anchor: "middle",
-              fill: "white",
-              font_size: 12,
-              font_weight: "bold"
-            })
-            |> Element.content("#{arc_data.data.name}")
-          )
-
-        slice_group
-      end)
-
-    # Build SVG
-    chart_group = Element.g(%{transform: "translate(#{width / 2},#{height / 2})"})
-      |> Element.append(slices)
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{slices: rows(opts)}}
   end
 
-  # Animation: vary slice sizes with different phases
-  defp animate_data(data, tick) do
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  # The pie draws its rows in order and the colour follows the row's index, so the sort is
+  # the assign mapping's: largest slice first, coloured first.
+  defp rows(opts) do
+    data = opts[:data] || @data
+
+    data =
+      case opts[:animation_tick] do
+        nil -> data
+        tick -> animated(data, tick)
+      end
+
     data
-    |> Enum.with_index()
-    |> Enum.map(fn {item, i} ->
-      phase = i * 0.8
-      # Vary between 60% and 140% of original value
-      multiplier = 1.0 + 0.4 * :math.sin(tick * 0.12 + phase)
-      %{item | value: item.value * multiplier}
+    |> Enum.sort_by(& &1.value, :desc)
+    |> Enum.with_index(fn row, i -> Map.put(row, :index, i) end)
+  end
+
+  # Animation: vary slice sizes with different phases.
+  defp animated(data, tick) do
+    Enum.with_index(data, fn item, i ->
+      %{item | value: item.value * (1.0 + 0.4 * :math.sin(tick * 0.12 + i * 0.8))}
     end)
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Shape
+    import Visualize.Chart.Build
 
-    pie = Shape.Pie.new()
-      |> Shape.Pie.value(fn d -> d.value end)
+    # Rows largest first, each carrying its index: the pie draws them in order.
+    rows = [%{name: "Chrome", value: 64.5, index: 0}, %{name: "Safari", value: 18.8, index: 1}]
 
-    arcs_data = Shape.Pie.generate(pie, data)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Pie Chart"}),
+        source(:slices, [:name, :value, :index]),
+        style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 2),
+        style(:slice_label, extends: :label, fill: :background, font_size: 12, font_weight: :bold),
+        polar(400, 400, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        ordinal_scale(:color),
 
-    arc = Shape.Arc.new()
-      |> Shape.Arc.inner_radius(0)
-      |> Shape.Arc.outer_radius(radius)
+        # An :arc whose `value` is a share runs Visualize.Shape.Pie itself.
+        arc(:slices, %{value: :value},
+          options: %{inner_radius: 0, outer_radius: 160},
+          label: %{text: [{:field, :name}], anchor: :middle, style: :slice_label},
+          style: :slice
+        )
+      ])
 
-    Enum.map(arcs_data, fn arc_data ->
-      path_data = Shape.Arc.generate(arc, arc_data)
-      Element.path(%{d: path_data, fill: color})
-    end)
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{slices: rows})
+    Visualize.Chart.render(applied)
     """
   end
 end
