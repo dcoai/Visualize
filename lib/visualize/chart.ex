@@ -45,6 +45,7 @@ defmodule Visualize.Chart do
     Compose,
     Frame,
     Migration,
+    Schema,
     Stack,
     Template,
     Validator,
@@ -92,6 +93,21 @@ defmodule Visualize.Chart do
           value: term(),
           layer: term(),
           overrode: [term()]
+        }
+
+  @typedoc """
+  One variable a design still demands, and where it stands (spec/14 §17.2).
+
+  `default` is the declaration's from the stacked `vars` node, `nil` where no layer
+  declares one, and `required` is `true` exactly then. A use's `expects` is the schema's
+  type at that path (`t:Visualize.Chart.Schema.type/0`) and its `layer` is named as
+  `explain/1` names one.
+  """
+  @type free_var :: %{
+          name: atom(),
+          default: term(),
+          required: boolean(),
+          uses: [%{path: Validator.path(), expects: Schema.type(), layer: term()}]
         }
 
   @doc """
@@ -349,6 +365,48 @@ defmodule Visualize.Chart do
 
   defp tag({{name, layer}, _index}), do: {name, layer(layer)}
   defp tag({layer, index}), do: {index, layer(layer)}
+
+  @doc """
+  The variables a design still demands (spec/14 §17.2).
+
+  Takes a fragment, a chart or the layers of a stack — the list `stack/1` takes, stacked
+  first — and returns one `t:free_var/0` per variable still in the result, ordered by
+  name: its `default` from the stacked `vars` node, `required` where no layer declares
+  one, and one `uses` entry per path it stands at with the schema's expectation there
+  (§1.4) and the layer that set the leaf it stands in. A fragment is a one-layer stack,
+  so its uses are reported as layer `0`.
+
+  The walk is `apply/2`'s own, so this lists exactly the variables application will
+  demand: a variable resolution does not reach — inside an extent, inside a value another
+  variable is bound to — is not listed, because it is not resolved either.
+
+  ## Examples
+
+      iex> house = %{vars: %{accent: %{default: :series_1}}, styles: %{s: %{stroke: Visualize.Chart.var(:accent)}}}
+      iex> panel = %{labels: [%{anchor: :title, text: ["Uptime in ", Visualize.Chart.var(:unit)]}]}
+      iex> Visualize.Chart.free_vars([{:house, house}, {:panel, panel}])
+      [
+        %{
+          name: :accent,
+          default: :series_1,
+          required: false,
+          uses: [%{path: [:styles, :s, :stroke], expects: :colour, layer: :house}]
+        },
+        %{
+          name: :unit,
+          default: nil,
+          required: true,
+          uses: [%{path: [:labels, 0, :text, 1], expects: :text, layer: :panel}]
+        }
+      ]
+
+  """
+  @spec free_vars(t() | map() | [layer()]) :: [free_var()]
+  def free_vars(layers) when is_list(layers) do
+    layers |> Enum.with_index() |> Enum.map(&tag/1) |> Stack.free_vars()
+  end
+
+  def free_vars(design) when is_map(design), do: free_vars([design])
 
   @doc """
   The design compiled for rendering per tick (spec/14 §12): the split into static and

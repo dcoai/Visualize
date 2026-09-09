@@ -13,7 +13,7 @@ defmodule Visualize.Chart.Stack do
   # it. `cascade/2` drops the second; `explain/1` folds the layers and keeps it, so what
   # provenance reports and what the cascade produces cannot drift.
 
-  alias Visualize.Chart.Schema
+  alias Visualize.Chart.{Schema, Var}
 
   @doc false
   @spec cascade(map(), map()) :: map()
@@ -22,11 +22,7 @@ defmodule Visualize.Chart.Stack do
   @doc false
   @spec explain([{term(), map()}]) :: [map()]
   def explain(layers) when is_list(layers) do
-    {stacked, provenance} =
-      Enum.reduce(layers, {%{}, %{}}, fn {id, fragment}, {acc, provenance} ->
-        {merged, set} = node(:design, acc, fragment, [])
-        {merged, Enum.reduce(set, provenance, &record(&1, id, &2))}
-      end)
+    {stacked, provenance} = fold(layers)
 
     {:node, :design}
     |> leaves(stacked, [])
@@ -35,6 +31,59 @@ defmodule Visualize.Chart.Stack do
       {layer, overrode} = Map.fetch!(provenance, path)
       %{path: path, value: at(stacked, path), layer: layer, overrode: overrode}
     end)
+  end
+
+  @doc false
+  @spec free_vars([{term(), map()}]) :: [map()]
+  def free_vars(layers) when is_list(layers) do
+    {stacked, provenance} = fold(layers)
+    declared = declared_vars(stacked)
+
+    {:node, :design}
+    |> variables(stacked, [])
+    |> Enum.group_by(fn {_path, _type, name} -> name end)
+    |> Enum.map(fn {name, uses} -> free_var(name, uses, declared, provenance) end)
+    |> Enum.sort_by(& &1.name)
+  end
+
+  defp fold(layers) do
+    Enum.reduce(layers, {%{}, %{}}, fn {id, fragment}, {acc, provenance} ->
+      {merged, set} = node(:design, acc, fragment, [])
+      {merged, Enum.reduce(set, provenance, &record(&1, id, &2))}
+    end)
+  end
+
+  defp free_var(name, uses, declared, provenance) do
+    default = Map.get(declared, name)
+
+    %{
+      name: name,
+      default: default,
+      required: default == nil,
+      uses:
+        uses
+        |> Enum.sort()
+        |> Enum.map(fn {path, type, _name} ->
+          %{path: path, expects: type, layer: layer_of(provenance, path)}
+        end)
+    }
+  end
+
+  # A declared default of `nil` is no default, as application reads it (spec/14 §2.4).
+  defp declared_vars(%{vars: vars}) when is_map(vars) and not is_struct(vars) do
+    for {name, %{default: default}} <- vars, default != nil, into: %{}, do: {name, default}
+  end
+
+  defp declared_vars(_stacked), do: %{}
+
+  # The layer of the leaf a variable stands in: its own path when it is one, else the
+  # enclosing leaf's — a variable inside a text is a part of one (spec/14 §17.2).
+  defp layer_of(provenance, path) do
+    case {Map.fetch(provenance, path), path} do
+      {{:ok, {layer, _overrode}}, _path} -> layer
+      {:error, []} -> nil
+      {:error, path} -> layer_of(provenance, Enum.drop(path, -1))
+    end
   end
 
   # The identity of one element of a `:concat` key (spec/14 §8.2): a mark's and a label's
@@ -153,6 +202,40 @@ defmodule Visualize.Chart.Stack do
       index -> List.replace_at(acc, index, element)
     end
   end
+
+  # -- variables -------------------------------------------------------------------------
+
+  # Every `%Var{}` the resolution of spec/14 §7.3 would reach, with the schema's type at
+  # its path: the walk descends where `Visualize.Chart.Template.resolve/2` descends and
+  # stops where it stops, so `free_vars/1` lists what application will demand and no more.
+  defp variables(type, %Var{name: name}, path), do: [{path, type, name}]
+
+  defp variables({:node, kind}, v, path) when is_map(v) and not is_struct(v) do
+    Enum.flat_map(v, fn {k, e} -> variables(type(kind, k), e, path ++ [k]) end)
+  end
+
+  defp variables({:map, t}, v, path) when is_map(v) and not is_struct(v) do
+    Enum.flat_map(v, fn {k, e} -> variables(t, e, path ++ [k]) end)
+  end
+
+  defp variables({:list, t}, v, path) when is_list(v) do
+    v |> Enum.with_index() |> Enum.flat_map(fn {e, i} -> variables(t, e, path ++ [i]) end)
+  end
+
+  defp variables({:one_of, types} = t, v, path) do
+    case Schema.select(types, v) do
+      nil -> []
+      ^t -> []
+      chosen -> variables(chosen, v, path)
+    end
+  end
+
+  # A part of a text stands where a text part goes, and that is what it expects (§17.2).
+  defp variables(:text, parts, path) when is_list(parts) do
+    for {%Var{name: name}, i} <- Enum.with_index(parts), do: {path ++ [i], :text, name}
+  end
+
+  defp variables(_type, _v, _path), do: []
 
   # -- leaves ----------------------------------------------------------------------------
 
