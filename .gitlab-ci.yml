@@ -68,7 +68,7 @@ test:
   extends: .elixir
   stage: check
   script:
-    - mix test --cover
+    - mix test --warnings-as-errors --cover
   coverage: '/\|\s+(\d+\.\d+)%\s+\|\s+Total\s+\|/'
   artifacts:
     when: on_failure
