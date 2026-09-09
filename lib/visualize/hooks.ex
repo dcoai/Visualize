@@ -2,7 +2,7 @@ defmodule Visualize.Hooks do
   @moduledoc """
   Phoenix LiveView JavaScript hooks for interactive visualizations.
 
-  This module bundles nine hooks:
+  This module bundles ten hooks:
   - `ZoomHook` — zoom and pan interactions (`Visualize.Hooks.Zoom`)
   - `BrushHook` — brush selection (`Visualize.Hooks.Brush`)
   - `CanvasChart` — replays Canvas commands or a script (`Visualize.Hooks.Canvas`)
@@ -16,6 +16,8 @@ defmodule Visualize.Hooks do
     (`Visualize.Hooks.Crosshair`)
   - `LegendHook` — a legend entry hides and shows the series it names
     (`Visualize.Hooks.Legend`)
+  - `BuilderHook` — a layer of the chart builder dragged into place, an inspector row
+    clicked (`Visualize.Hooks.Builder`)
 
   ## Installation
 
@@ -113,10 +115,20 @@ defmodule Visualize.Hooks do
   A click on an entry hides the series it names with `display="none"` and shows it again
   on the next; the event is optional. See `Visualize.Hooks.Legend`.
 
+  ### Builder
+
+      <ol id="layers" phx-hook="BuilderHook" data-builder-target={@myself}>
+        <li data-builder-layer="0" draggable="true">…</li>
+      </ol>
+
+  The chart builder's two browser gestures: a layer dragged onto another pushes `reorder`,
+  and a click on an inspector row pushes `inspect`. See `Visualize.Hooks.Builder`.
+
   """
 
   alias Visualize.Hooks.{
     Brush,
+    Builder,
     Canvas,
     CanvasBinary,
     CanvasIncremental,
@@ -157,8 +169,10 @@ defmodule Visualize.Hooks do
 
     #{Legend.js_hook()}
 
+    #{Builder.js_hook()}
+
     // Default export for convenience
-    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook, CrosshairHook, LegendHook };
+    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook, CrosshairHook, LegendHook, BuilderHook };
     """
   end
 

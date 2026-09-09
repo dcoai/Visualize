@@ -1,0 +1,21 @@
+<ol id="b-layers" class="vis-builder-layers" phx-hook="BuilderHook">
+  <li class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="0" draggable="true">
+    <span class="vis-builder-layer-name">house</span>
+    <button type="button" class="vis-builder-layer-select" phx-click="select_layer" phx-value-index="0">Edit</button>
+    <button type="button" class="vis-builder-layer-up" phx-click="move_layer" phx-value-index="0" phx-value-to="-1">Up</button>
+    <button type="button" class="vis-builder-layer-down" phx-click="move_layer" phx-value-index="0" phx-value-to="1">Down</button>
+    <button type="button" class="vis-builder-layer-toggle" phx-click="toggle_layer" phx-value-index="0">Disable</button>
+  </li><li class="vis-builder-layer" data-builder-layer="1" draggable="true">
+    <span class="vis-builder-layer-name">shared</span>
+    <button type="button" class="vis-builder-layer-select" phx-click="select_layer" phx-value-index="1">Edit</button>
+    <button type="button" class="vis-builder-layer-up" phx-click="move_layer" phx-value-index="1" phx-value-to="0">Up</button>
+    <button type="button" class="vis-builder-layer-down" phx-click="move_layer" phx-value-index="1" phx-value-to="2">Down</button>
+    <button type="button" class="vis-builder-layer-toggle" phx-click="toggle_layer" phx-value-index="1">Disable</button>
+  </li><li class="vis-builder-layer" data-builder-layer="2" draggable="true">
+    <span class="vis-builder-layer-name">panel</span>
+    <button type="button" class="vis-builder-layer-select" phx-click="select_layer" phx-value-index="2">Edit</button>
+    <button type="button" class="vis-builder-layer-up" phx-click="move_layer" phx-value-index="2" phx-value-to="1">Up</button>
+    <button type="button" class="vis-builder-layer-down" phx-click="move_layer" phx-value-index="2" phx-value-to="3">Down</button>
+    <button type="button" class="vis-builder-layer-toggle" phx-click="toggle_layer" phx-value-index="2">Disable</button>
+  </li>
+</ol>

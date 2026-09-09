@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>`, `Visualize.Hooks.Resize` reports a container's size so the server can re-render at it, `Visualize.Hooks.Tooltip` shows a datum's fields under the pointer from attributes the server wrote, `Visualize.Hooks.Crosshair` snaps a rule and markers to the nearest x of an array the server wrote once, and `Visualize.Hooks.Legend` hides a series from its legend entry — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
+Visualize reaches the browser through Phoenix LiveView in three ways: HEEx function components (`Visualize.Components`, `Visualize.Components.Tree`) that build a complete chart from assigns; JavaScript hooks — `Visualize.Hooks.Zoom` and `Visualize.Hooks.Brush` add zoom/pan and brush selection to any SVG and report back to the LiveView as events, and `Visualize.Hooks.Canvas`, `Visualize.Hooks.CanvasBinary` and `Visualize.Hooks.CanvasIncremental` replay the Canvas outputs of spec/09 on a `<canvas>`, `Visualize.Hooks.Resize` reports a container's size so the server can re-render at it, `Visualize.Hooks.Tooltip` shows a datum's fields under the pointer from attributes the server wrote, `Visualize.Hooks.Crosshair` snaps a rule and markers to the nearest x of an array the server wrote once, `Visualize.Hooks.Legend` hides a series from its legend entry, and `Visualize.Hooks.Builder` drags a layer of the chart builder into place and takes a click on an inspector row — with `Visualize.Hooks` bundling them into one installable file and re-exporting the server-side helpers; and the `Phoenix.HTML.Safe` implementations that let element structs be interpolated into a template directly. This document is the contract for each: every assign a component reads, every data attribute and event a hook uses, and the maths of the helpers.
 
 ## 1. Scope
 
@@ -22,10 +22,13 @@ Visualize reaches the browser through Phoenix LiveView in three ways: HEEx funct
 | `Visualize.Hooks.Tooltip` | always | `TooltipHook` JS: a tooltip from the datum attributes of an element, with no round trip |
 | `Visualize.Hooks.Crosshair` | always | `CrosshairHook` JS and the server-side `attrs/3`: a rule and markers snapped to the data over SVG or canvas |
 | `Visualize.Hooks.Legend` | always | `LegendHook` JS: a legend entry hides and shows the series it names |
+| `Visualize.Hooks.Builder` | always | `BuilderHook` JS: a layer dragged into place, an inspector row clicked |
 | `Visualize.Chart.Builder` | `Phoenix.Component` is loaded (the host has `phoenix_live_view`) | The embeddable builder for a stack of design fragments (spec/14 §18) |
 | `Visualize.Chart.Builder.Store` | `Phoenix.Component` is loaded | The behaviour a host's library of saved fragments implements |
 | `Visualize.Chart.Builder.Preview` | `Phoenix.Component` is loaded | The builder's preview pane: the stacked design drawn, or its faults |
 | `Visualize.Chart.Builder.Editor` | `Phoenix.Component` is loaded | The fragment editor: the nodes of a fragment, the widget of a type, and one form per node |
+| `Visualize.Chart.Builder.Layers` | `Phoenix.Component` is loaded | The stack panel: the layers in precedence order, with select, move, disable and drag |
+| `Visualize.Chart.Builder.Inspector` | `Phoenix.Component` is loaded | The inspector: `Visualize.Chart.explain/1` as a row per leaf path of the stack |
 
 Both component modules, and every module of the builder ([14-declarative-chart](14-declarative-chart.md) §18), are wrapped in `if Code.ensure_loaded?(Phoenix.Component)`. For that guard to be true in a host, `phoenix_live_view` MUST be a declared dependency of this library: Mix prunes the code path to a dependency's own declared deps while compiling it, so a guard over an undeclared module is always false in a host, whatever the host itself depends on. It is therefore declared `optional: true` (D-45): a host that has LiveView compiles the components, one that does not never fetches Phoenix, and `scripts/consumer_check.exs` proves the second claim on every pipeline ([12-testing-and-conformance](12-testing-and-conformance.md) §4). The library's own builds carry the optional dependency, so the components compile, are documented and are rendered under test here.
 
@@ -245,7 +248,7 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, then one `export default { … }` object listing the nine hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, then one `export default { … }` object listing the ten hooks — each name is exported exactly once (D-40, D-48). |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
 | `Visualize.Hooks.transform_point/2` | Delegates to `Visualize.Hooks.Zoom.transform_point/2`. |
@@ -539,6 +542,8 @@ The embeddable builder for a stack of design fragments. What it is, what its hos
 | `Visualize.Chart.Builder.Editor.widget/1` | The control a `t:Visualize.Chart.Schema.type/0` gets (spec/14 §18.6): `:checkbox`, `:number`, `:text`, `:textarea` or `{:select, allowed}`. |
 | `Visualize.Chart.Builder.Editor.parse/2` | `parse(type, string)`: `{:ok, value}` for a submitted string read back as a value of the type (spec/14 §18.6), `:error` for a blank string and for anything the type cannot take. |
 | `Visualize.Chart.Builder.Editor.panel/1` | Renders one form for one node (spec/14 §18.7): the facets of the node's keys as tabs, the keys of the open tab in table order, each with its control and its errors. |
+| `Visualize.Chart.Builder.Layers.panel/1` | Renders the stack panel (spec/14 §18.8): the layers in precedence order, each with its name, a select, a move up and down, a disable and a drag handle. |
+| `Visualize.Chart.Builder.Inspector.panel/1` | Renders the inspector (spec/14 §18.9): one row per entry of `Visualize.Chart.explain/1` of the layers, with the path, the value, the layer that set it and the layers it overrode. |
 
 `Visualize.Chart.Builder` itself exports no function: it is a `Phoenix.LiveComponent`, and `mount/1`, `update/2`, `handle_event/3` and `render/1` are its callbacks, called by LiveView and by nothing else. `Visualize.Chart.Builder.Store` exports none either — it is a behaviour, and its three callbacks are spec/14 §18.3.
 
@@ -550,6 +555,8 @@ The component's assigns are spec/14 §18.2, each declared with `attr/3` as every
 |---|---|
 | `Visualize.Chart.Builder.Preview.panel/1` | `design` (`:map`, required), `sources` (`:map`, `%{}`), `vars` (`:map`, `%{}`), `theme` (`:any`, `nil`), `class` (`:string`, `nil`) |
 | `Visualize.Chart.Builder.Editor.panel/1` | `kind` (`:atom`, required), `node` (`:map`, required), `path` (`:list`, `[]`), `facet` (`:atom`, `nil` — the first facet the node carries), `errors` (`:list`, `[]` — the `{path, reason}` pairs of spec/14 §10.1), `target` (`:any`, `nil` — the `phx-target` of the form's events), `class` (`:string`, `nil`) |
+| `Visualize.Chart.Builder.Layers.panel/1` | `id` (`:string`, required — the hook element's), `layers` (`:list`, required), `selected` (`:integer`, `0`), `disabled` (`:any`, an empty `MapSet` — the positions dropped from the stack), `target` (`:any`, `nil`), `class` (`:string`, `nil`) |
+| `Visualize.Chart.Builder.Inspector.panel/1` | `id` (`:string`, required — the hook element's), `layers` (`:list`, required), `target` (`:any`, `nil`), `class` (`:string`, `nil`) |
 
 ### 15.3 The markup
 
@@ -559,4 +566,38 @@ Below the toolbar the panels sit in `<div class="vis-builder-panels">`, which op
 
 The editor is `<div class="vis-builder-editor">`, holding `<nav class="vis-builder-tabs">` with one `<button class="vis-builder-tab">` per facet the node carries — the open one also `vis-builder-tab-open` — and `<form class="vis-builder-form" phx-change="edit">`. Each key is a `<label class="vis-builder-field">` holding `<span class="vis-builder-key">` with the key's name, one control whose `name` is the key, and, where the key has faults, `<ul class="vis-builder-key-errors">` with one `<li class="vis-builder-error">` each. The control is `<input type="checkbox">`, `<input type="number">`, `<input type="text">`, `<select>` or `<textarea>` as `Visualize.Chart.Builder.Editor.widget/1` says, carrying the node's value and, where the node does not carry the key, the schema's default as its `placeholder`. The form changes as a whole, so LiveView's `_target` names the key that moved.
 
+The stack panel is `<ol class="vis-builder-layers" id phx-hook="BuilderHook" data-builder-target>` holding one `<li class="vis-builder-layer" data-builder-layer="<position>" draggable="true">` per layer, in the order `Visualize.Chart.stack/1` reads them; the selected layer's element also carries `vis-builder-layer-selected` and a disabled one `vis-builder-layer-disabled`. Each holds `<span class="vis-builder-layer-name">` with the layer's name and four `<button type="button">`s, `vis-builder-layer-select`, `vis-builder-layer-up`, `vis-builder-layer-down` and `vis-builder-layer-toggle`, pushing `select_layer`, `move_layer` (with `phx-value-to`), `move_layer` and `toggle_layer`, each with the layer's position as `phx-value-index`.
+
+The inspector is `<table class="vis-builder-inspector" id phx-hook="BuilderHook" data-builder-target>` whose body holds one `<tr class="vis-builder-entry" data-builder-path data-builder-layer>` per entry of `Visualize.Chart.explain/1`, in its order, with four cells: `vis-builder-entry-path`, `vis-builder-entry-value` (the value as `inspect/1` writes it), `vis-builder-entry-layer` and `vis-builder-entry-overrode` (the overridden layers, lowest first, comma-separated, empty where none).
+
 The preview pane is `<div class="vis-builder-preview">`. When the design applies it holds `<svg class="vis-builder-chart" width height role="img" viewBox="0 0 width height">` at the realised frame's own size, with the frame's group inside it: `Visualize.Chart.Frame.render/2` draws a group and the `<svg>` shell is the pane's, exactly as it is a component's (§1.2), and the markup is a string emitted through `Phoenix.HTML.raw/1` as §11.2 requires. Otherwise it holds `<ul class="vis-builder-errors">` with one `<li class="vis-builder-error">` per fault, in the validator's order. Exactly one of the two is present, so a test that asks whether the design applied asks for `vis-builder-errors`.
+
+## 16. Visualize.Hooks.Builder
+
+### 16.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.Builder.js_hook/0` | Returns the source of `export const BuilderHook = {…}` (16.3). |
+
+### 16.2 The attributes
+
+`BuilderHook` serves the chart builder's two browser gestures ([14-declarative-chart](14-declarative-chart.md) §18.10) and is attached to two elements, the stack panel's list and the inspector's table. Everything it needs is on the element or on the elements under it:
+
+| Attribute | On | Value |
+|---|---|---|
+| `data-builder-target` | the hook element | the `phx-target` the hook pushes to — a LiveComponent's `@myself` printed — so the events reach the builder and not its host; absent, the hook pushes to the LiveView |
+| `data-builder-layer` | a layer of the stack panel, and a row of the inspector | the layer's zero-based position in the `layers` list |
+| `data-builder-path` | a row of the inspector | the entry's path, spelled as `Visualize.Chart.Validator.format/1` spells one (`frame.axes[0].scale`) |
+
+A `draggable="true"` element carrying `data-builder-layer` is a layer that can be dragged; a row carrying `data-builder-path` is one that can be clicked. An element carrying neither takes part in neither gesture, which is how one hook serves two panels without knowing which it is on.
+
+### 16.3 `BuilderHook` behaviour
+
+Attach with `phx-hook="BuilderHook"` and an `id`. On `mounted()` the hook binds `dragstart`, `dragover`, `drop`, `dragend` and `click` on its element, each handler bound once and kept on the hook (D-47), and reads `data-builder-target` once.
+
+A `dragstart` on an element whose nearest `[data-builder-layer]` ancestor-or-self is inside the hook element records that position and gives the element the class `vis-builder-layer-dragging`. A `dragover` calls `preventDefault()`, which is what makes a drop possible, and marks the layer under the pointer `vis-builder-layer-over`. A `drop` reads the position under the pointer and pushes `reorder` with `{from, to}`, both integers, when the two differ and nothing when they do not; `dragend` clears both classes whether or not a drop happened. The hook moves nothing itself: the server owns the list, and the next render is the move.
+
+A `click` whose target's nearest `[data-builder-path]` ancestor-or-self is inside the hook element pushes `inspect` with `{path, layer}`, the two attributes as strings, and marks that row `vis-builder-entry-open`, removing the class from every other row under the element — the highlight is the browser's because it needs no server round trip, and the selection is the server's because it changes what the editor edits. A click on anything else pushes nothing.
+
+Both pushes go through `pushEventTo(target, …)` when `data-builder-target` is set and through `pushEvent(…)` when it is not. `destroyed()` removes the five listeners with the kept references. `test/visualize/hooks/builder_test.exs` holds the source to this shape.

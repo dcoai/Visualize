@@ -15,7 +15,7 @@ defmodule Visualize.BuilderFixture do
 
   alias Visualize.Chart
   alias Visualize.Chart.Builder
-  alias Visualize.Chart.Builder.{Editor, Preview}
+  alias Visualize.Chart.Builder.{Editor, Inspector, Layers, Preview}
 
   @dir "test/support/builder"
 
@@ -125,6 +125,12 @@ defmodule Visualize.BuilderFixture do
       builder_store:
         {Builder, %{id: "builder", layers: layers(), sources: sources(), store: Library}},
       editor_design: {&Editor.panel/1, %{kind: :design, node: layer(:house), path: []}},
+      layers: {&Layers.panel/1, %{id: "b-layers", layers: layers()}},
+      layers_disabled:
+        {&Layers.panel/1,
+         %{id: "b-layers", layers: layers(), selected: 2, disabled: MapSet.new([0])}},
+      inspector: {&Inspector.panel/1, %{id: "b-inspector", layers: layers()}},
+      inspector_overrides: {&Inspector.panel/1, %{id: "b-inspector", layers: overriding()}},
       editor_mark:
         {&Editor.panel/1,
          %{
@@ -146,6 +152,20 @@ defmodule Visualize.BuilderFixture do
            ]
          }}
     ]
+  end
+
+  @doc false
+  # The three layers with a fourth over them that overrides two values the lower layers set,
+  # so the inspector has something in its `overrode` column.
+  def overriding do
+    layers() ++
+      [
+        {:override,
+         %{
+           frame: %{size: %{width: 640}},
+           styles: %{series: %{stroke: :series_2, stroke_width: 3}}
+         }}
+      ]
   end
 
   @doc false

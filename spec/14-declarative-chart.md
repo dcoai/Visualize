@@ -1444,3 +1444,23 @@ Each key is a `<label>` holding its name, the control `Visualize.Chart.Builder.E
 The errors are the *stacked* design's, the ones the preview lists (§18.4), and a layer's node sits at the same path in the stack as in the layer unless a higher layer replaced it — which is the one case where a fault shown against a key belongs to another layer's value at that path. Recomputing them per layer would mean validating a fragment, and a fragment is not a design: it is the stack that is validated, which is exactly what §8 says.
 
 Editing a control writes the parsed value into the selected layer at the node's path, and a control blanked removes the key. Nothing else happens: the layer is a fragment, the stack is recomputed, the preview redraws, and no validation runs until application does it (§8).
+
+### 18.8 The stack panel
+
+**Implemented** (work item 3 of #54, D-87). `Visualize.Chart.Builder.Layers.panel/1` is the list of layers, in the order `Visualize.Chart.stack/1` reads them — the higher layer last — because that is the order the cascade is defined in and a panel that reversed it would be teaching a person the opposite of the specification. A layer's name is the one the `{name, layer}` pair carries, and its zero-based position where it has none, exactly as `Visualize.Chart.explain/1` names it (§17.1).
+
+Each layer offers four things and no more: **select** it, so the editor edits it; **move** it up or down, which is what changes precedence; **disable** it; and drag it to a position, which is the same move by another gesture (§18.10). Disabling is not deleting: a disabled layer stays in the list and is dropped from the stack, so "what does this look like without the house theme" is one click and one click back. The builder's design — what the preview draws and what saving sends (§18.2) — is `Visualize.Chart.stack/1` of the enabled layers, which is where disabling has its whole effect.
+
+Nothing here validates or copies a fragment: reordering a stack is reordering a list, and the design is recomputed from it.
+
+### 18.9 The inspector
+
+**Implemented.** `Visualize.Chart.Builder.Inspector.panel/1` is `Visualize.Chart.explain/1` rendered: one row per leaf path of the stack, ordered by path, with the value, the layer that set it and the layers it overrode (§17.1). It is the answer to the question a four-layer template makes unanswerable by eye — *which layer said this, and what did it replace* — and it is a view of one function, so what it shows and what `Visualize.Chart.stack/1` produces cannot drift.
+
+A row carries its path and the position of the layer that set it, so clicking one selects that layer and opens the node that owns the path: the inspector is how a person gets from a value they can see to the layer they must edit. The node opened is the deepest node of that layer whose path is a prefix of the value's, which is the node whose form carries the key; a path no node of the layer owns opens the layer's root.
+
+The two limits are `Visualize.Chart.explain/1`'s own and are shown rather than worked around: a value a higher layer discarded whole — a redeclared `:union` name, a replaced identified element — has no path in the result and so no row, and `overrode` names only the layers that wrote a value at the *same* path (§17.1).
+
+### 18.10 The hook
+
+**Implemented.** Two gestures need the browser, and they ship as one hook, `Visualize.Hooks.Builder`, which joins `Visualize.Hooks.js_code/0` under the export-uniqueness rule like every other hook (spec/10 §16, D-48). Dragging a layer onto another reorders the list and pushes the move; clicking an inspector row pushes the path and the layer it names. Everything else the panels do is a `phx-click`, because everything else is a server decision: a hook exists where the browser knows something the server does not — a drop position, a click on a row — and nowhere else.
