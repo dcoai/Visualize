@@ -197,6 +197,28 @@ Derivation is *within* a style; composition (§8) is *between* fragments, and th
 
 A cycle — a style that reaches itself through `extends`, directly or through a chain — is `:cycle` at the style's path (`[:styles, :series]`), reported by the validator for every style that reaches itself, and a design with one does not validate. `extends` reaches neither the element nor the mark's generator: the lookup consumes it, so a flattened style node never carries it and `Visualize.Chart.Style.resolve/3` never sees it.
 
+### 3.6 Composition at a site: the style stack
+
+Derivation (§3.5) is a chain *within* a style. A **stack** is composition *at the site that uses one*. Five keys refer to a style — `mark.style`, `label.style`, `mark_label.style`, `axis.style` and `legend.style` — and each takes either a reference, a style node written inline, or a **list** of those:
+
+```elixir
+style: :series                              # one reference, as it always was
+style: [:series, :emphasis]                 # two, the later winning
+style: [:series, %{stroke_width: 5}]        # a shared style and a local one
+```
+
+A list cascades **left to right, the later winning**, which is `Visualize.Chart.stack/1`'s rule (§8.2) applied at a point rather than across a document. Each entry is resolved through its own `extends` chain *first*, and the resolved nodes then merge key by key. The two mechanisms are orthogonal and both remain: `extends` is a statement about a style, a stack is a statement about this mark.
+
+A bare reference is a stack of one. That is not a compatibility shim but the definition — `:series` and `[:series]` resolve to the same node by the same path — so every design written before this section means exactly what it meant.
+
+`Visualize.Chart.Style.node/2` is where this happens, and it is the only place a reference becomes a node; its eight callers are unchanged.
+
+**The local style.** The last entry of a stack MAY be an inline style node, and that is where an edit made at the site lands. Editing the stroke width of a mark that references `:series` must not restyle every other mark that references the same name, so an edit writes to the site's own node and never to the shared one. A local style is **created on first edit** — a site with no local edit carries references and nothing else, because a document should not carry structure nobody asked for.
+
+It is **anonymous in the document**: an inline node is not a key of `design.styles`, so nothing can refer to it. `Visualize.Chart.explain/1` needs a name for attribution and synthesises one from where it sits — `marks[0].style.local`, `axes[1].style.local` — which is unique by construction, one local per site and one site per position. That name is a **display name and not a reference**: writing `style: :"marks[0].style.local"` names a style nothing declares, exactly as any other undeclared name does. Sharing a local style means promoting it to a declared one.
+
+**What does not change.** A reference to a style nothing declares is the error it already is, at the entry's own path. A cycle through `extends` is `:cycle` as before, and a stack cannot introduce one, because a stack is not a chain: an entry may not name the stack it sits in.
+
 ## 4. The frame
 
 ### 4.1 Keys
