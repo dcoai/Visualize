@@ -14,7 +14,8 @@ defmodule Visualize.ConsumerCheck do
              Visualize.Components.Tree Visualize.Chart.Builder
              Visualize.Chart.Builder.Store Visualize.Chart.Builder.Preview
              Visualize.Chart.Builder.Editor Visualize.Chart.Builder.Layers
-             Visualize.Chart.Builder.Inspector
+             Visualize.Chart.Builder.Inspector Visualize.Chart.Builder.Params
+             Visualize.Chart.Builder.Document
              Visualize.Audit TLA.Spec Surfex.Golden)
   @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Hooks.Builder
               Visualize.Backend.CanvasBinary)

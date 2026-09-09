@@ -15,7 +15,7 @@ defmodule Visualize.BuilderFixture do
 
   alias Visualize.Chart
   alias Visualize.Chart.Builder
-  alias Visualize.Chart.Builder.{Editor, Inspector, Layers, Preview}
+  alias Visualize.Chart.Builder.{Document, Editor, Inspector, Layers, Params, Preview}
 
   @dir "test/support/builder"
 
@@ -131,6 +131,11 @@ defmodule Visualize.BuilderFixture do
          %{id: "b-layers", layers: layers(), selected: 2, disabled: MapSet.new([0])}},
       inspector: {&Inspector.panel/1, %{id: "b-inspector", layers: layers()}},
       inspector_overrides: {&Inspector.panel/1, %{id: "b-inspector", layers: overriding()}},
+      params: {&Params.panel/1, %{layers: parameterised()}},
+      params_bound:
+        {&Params.panel/1, %{layers: parameterised(), vars: %{unit: "mg/hr", ticks: 6}}},
+      document: {&Document.panel/1, %{design: Chart.stack(layers())}},
+      document_errors: {&Document.panel/1, %{design: %{marks: [%{type: :line}]}}},
       editor_mark:
         {&Editor.panel/1,
          %{
@@ -164,6 +169,31 @@ defmodule Visualize.BuilderFixture do
          %{
            frame: %{size: %{width: 640}},
            styles: %{series: %{stroke: :series_2, stroke_width: 3}}
+         }}
+      ]
+  end
+
+  @doc false
+  # The three layers with a fourth that opens two more variables of different expectations:
+  # a `{:ref, :style}` where a mark's style stands and an `:integer` where an axis's tick
+  # count does, so the parameters form has three widgets to choose between.
+  def parameterised do
+    layers() ++
+      [
+        {:params,
+         %{
+           vars: %{accent: %{}, ticks: %{default: 3}},
+           styles: %{series: %{stroke: :series_1, stroke_width: 2}},
+           frame: %{axes: [%{scale: :x, side: :bottom, ticks: Chart.var(:ticks)}]},
+           marks: [
+             %{
+               id: :series,
+               type: :line,
+               data: :primary,
+               channels: %{x: :t, y: :v},
+               style: Chart.var(:accent)
+             }
+           ]
          }}
       ]
   end

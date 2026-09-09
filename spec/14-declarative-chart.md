@@ -1464,3 +1464,23 @@ The two limits are `Visualize.Chart.explain/1`'s own and are shown rather than w
 ### 18.10 The hook
 
 **Implemented.** Two gestures need the browser, and they ship as one hook, `Visualize.Hooks.Builder`, which joins `Visualize.Hooks.js_code/0` under the export-uniqueness rule like every other hook (spec/10 §16, D-48). Dragging a layer onto another reorders the list and pushes the move; clicking an inspector row pushes the path and the layer it names. Everything else the panels do is a `phx-click`, because everything else is a server decision: a hook exists where the browser knows something the server does not — a drop position, a click on a row — and nowhere else.
+
+### 18.11 The parameters form
+
+**Implemented** (work item 4 of #54, D-88). `Visualize.Chart.Builder.Params.panel/1` is `Visualize.Chart.free_vars/1` rendered: one control per variable the stack still demands, ordered by name, with its default, whether it is required, and the paths it stands at (§17.2). It is the second inspector — `Visualize.Chart.explain/1` says where a value came from and `free_vars/1` says what is still open — and, like the first, it is a view of one function, so what it offers and what `Visualize.Chart.apply/2` will demand are the same set by construction.
+
+The control is `Visualize.Chart.Builder.Editor.widget/1` of the **first use's `expects`** — the schema's type at the path the variable stands at (§17.2) — read back by `Visualize.Chart.Builder.Editor.parse/2` of that same type, so the parameters form and the fragment editor choose their controls from one table and a schema addition reaches both with no edit. A variable used at two paths of different types takes the first use's, in path order, and every path is listed beside the control so a person can see what they are setting.
+
+What the form edits is the builder's own copy of the `vars` assign, not the assign: the host gives the values the builder *starts* with, and the parameters form is a person exploring a template, not the host changing its mind. The preview applies with that copy (§18.4), so the chart on the screen is the parameterised chart; the design saving sends is the design, which carries the variables and not the values, because a template's parameters are supplied at application and are not part of what is stored (§7.3).
+
+A blank control removes the binding rather than setting it to nothing, so a variable falls back to its declared default, and a variable with no default is `required` and is what `Visualize.Chart.apply/2` will report as `{:unresolved, :var, name}` until something supplies it.
+
+### 18.12 Import and export
+
+**Implemented.** `Visualize.Chart.Builder.Document.panel/1` is the design's JSON form (§11), in and out.
+
+**Export** is `Visualize.Chart.to_json/1` of the stacked design, and it therefore demands a *design*: the stack goes through `Visualize.Chart.from_map/1` first, and a fragment that does not validate is its errors, listed by path exactly as the preview lists them (§18.4). That is the honest failure — a half-built fragment has no JSON form because it has no version, no frame, or a reference to something nothing declares — and it is the same message a person is already reading in the preview.
+
+**Import** is `Visualize.Chart.from_json/1` of a pasted document, and a document that reads becomes the builder's **single layer**, named `imported`: a document is a whole design, not a layer of somebody else's stack, and dropping it on top of the layers already there would silently mix two designs. A document that does not parse is `{:json, message}` at the design's path and a document that parses but does not validate is the validator's errors, both shown in the panel.
+
+Both are behind the optional `Jason` dependency (§11.1): without it each returns `{:missing_dependency, :jason}`, which the panel shows as its one error rather than as a crash, because a consumer without Jason has a builder that edits and previews and cannot import or export — which is exactly what the optional dependency means.
