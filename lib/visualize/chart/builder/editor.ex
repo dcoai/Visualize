@@ -281,6 +281,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:path, :list, default: [], doc: "where the node sits, for its keys' errors")
     attr(:facet, :atom, default: nil, doc: "the open tab, `nil` for the kind's first facet")
     attr(:errors, :list, default: [], doc: "the `{path, reason}` pairs of spec/14 §10.1")
+    attr(:refs, :map, default: %{}, doc: "the names a `{:ref, kind}` may take, by kind")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the editor's class")
 
@@ -368,9 +369,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp tab(_facet, _open), do: "vis-builder-tab"
 
     # One field per key of the open tab: the control, what it shows, and the key's errors.
-    defp fields(specs, open, %{node: node, path: path, errors: errors}) do
+    defp fields(specs, open, %{node: node, path: path, errors: errors} = assigns) do
+      refs = Map.get(assigns, :refs) || %{}
+
       for spec <- specs, spec.facet == open do
-        widget = widget(spec.type)
+        widget = referenced(spec.type, refs)
 
         %{
           key: spec.key,
@@ -383,6 +386,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
         }
       end
     end
+
+    # A reference is a choice among the names something declares, so where the caller knows
+    # them it is a select rather than a box to spell a name into (spec/14 §18.14). `widget/1`
+    # itself stays a function of the type alone, which is what makes it total over the schema.
+    defp referenced({:ref, kind} = type, refs) do
+      case Map.get(refs, kind) do
+        [_ | _] = names -> {:select, names}
+        _none -> widget(type)
+      end
+    end
+
+    defp referenced(type, _refs), do: widget(type)
 
     defp shape({:select, _allowed}), do: :select
     defp shape(widget), do: widget

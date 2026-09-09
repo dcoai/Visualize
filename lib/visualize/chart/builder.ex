@@ -49,7 +49,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     use Phoenix.LiveComponent
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{Document, Editor, Inspector, Layers, Params, Preview, Styles}
+
+    alias Visualize.Chart.Builder.{
+      Document,
+      Editor,
+      Inspector,
+      Layers,
+      Palette,
+      Params,
+      Preview,
+      Styles
+    }
+
     alias Visualize.Chart.Schema
 
     @doc false
@@ -187,6 +198,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 path={@entry.path}
                 facet={@facet}
                 errors={@errors}
+                refs={%{style: Palette.names(@design)}}
                 target={@myself}
               />
               <Preview.panel design={@design} sources={@sources} vars={@bindings} theme={@theme} />
@@ -194,6 +206,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </main>
         </div>
         <div class="vis-builder-tray">
+          <Palette.panel design={@design} open={@open_style} target={@myself} />
           <Params.panel layers={@layers} vars={@bindings} target={@myself} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
           <Document.panel design={@design} target={@myself} />
@@ -274,6 +287,35 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case Chart.from_json(document) do
         {:ok, chart} -> {:noreply, imported(socket, Chart.to_map(chart))}
         {:error, reason} -> {:noreply, assign(socket, :notice, notice(reason))}
+      end
+    end
+
+    # A style is created in the selected layer, because that is where every edit goes, and
+    # the editor opens on it: creating a style and not being taken to it would be half a
+    # gesture (spec/14 §18.14).
+    def handle_event("add_style", %{"name" => submitted}, socket) do
+      case Editor.parse({:ref, :style}, String.trim(submitted)) do
+        {:ok, name} ->
+          socket
+          |> update_layer([:styles], name, {:ok, %{}})
+          |> opened("styles." <> to_string(name))
+          |> assign(:notice, nil)
+          |> then(&{:noreply, &1})
+
+        :error ->
+          {:noreply, assign(socket, :notice, "a style needs a name")}
+      end
+    end
+
+    # The palette is a view of the stack, so the style a person picks may be declared by a
+    # layer other than the selected one; the highest that declares it is the one that owns
+    # the value, which is the same rule the inspector follows (§18.9).
+    def handle_event("select_style", %{"name" => submitted}, socket) do
+      path = "styles." <> submitted
+
+      case declaring(socket.assigns.layers, submitted) do
+        nil -> {:noreply, socket}
+        index -> {:noreply, socket |> select(index) |> opened(path)}
       end
     end
 
@@ -392,7 +434,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp write(fragment, path, key, :error),
       do: update_node(fragment, path, &Map.delete(&1, key))
 
+    defp update_node(nil, [], fun), do: fun.(%{})
     defp update_node(container, [], fun), do: fun.(container)
+
+    # A fragment need not already carry the key a node is being added under: `styles` is
+    # absent until the first style is declared, and adding one is adding the key (§18.5).
+    defp update_node(nil, [key | _rest] = path, fun) when is_atom(key),
+      do: update_node(%{}, path, fun)
 
     defp update_node(list, [index | rest], fun) when is_list(list) and is_integer(index),
       do: List.update_at(list, index, &update_node(&1, rest, fun))
@@ -416,6 +464,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         entry: entry,
         tabs: tabs,
         subtabs: subtabs,
+        open_style: open_style(entry),
         editing: at(layer, entry.path),
         errors: faults(design, assigns)
       }
@@ -447,6 +496,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       {tabs, subtabs}
     end
+
+    defp open_style(%{path: [:styles, name]}), do: name
+    defp open_style(_entry), do: nil
 
     # The first segment of a label: `frame.scales.x` is under `frame`, `marks[0]` under
     # `marks`, and `design` is its own root.
@@ -491,6 +543,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
         facet: nil,
         notice: nil
       )
+    end
+
+    # The highest layer whose fragment declares a style of that name, or `nil`.
+    defp declaring(layers, name) do
+      layers
+      |> Enum.with_index()
+      |> Enum.filter(fn {layer, _index} ->
+        layer
+        |> fragment()
+        |> Map.get(:styles)
+        |> then(&(is_map(&1) and Enum.any?(Map.keys(&1), fn key -> to_string(key) == name end)))
+      end)
+      |> List.last()
+      |> case do
+        {_layer, index} -> index
+        nil -> nil
+      end
     end
 
     defp notice(reason), do: Enum.join(Document.faults(reason), "; ")

@@ -18,6 +18,7 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.Chart
   alias Visualize.Chart.Builder
   alias Visualize.Chart.Builder.Editor
+  alias Visualize.Chart.Builder.Palette
   alias Visualize.Chart.Builder.Preview
 
   for name <- ~w(preview preview_errors builder builder_store)a do
@@ -248,6 +249,96 @@ defmodule Visualize.Chart.BuilderTest do
       end
 
       assert Builder.css() =~ ".vis-builder .vis-builder-layer-up"
+    end
+  end
+
+  describe "the style palette (spec/14 §18.14, D-96)" do
+    setup do
+      host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+      %{host: host, socket: socket}
+    end
+
+    test "the palette lists what the stack declares, not what the selected layer does" do
+      html = rendered(:builder)
+      assert html =~ ~s(<div class="vis-builder-palette">)
+      assert html =~ ~s(<span class="vis-builder-palette-name">series</span>)
+
+      # The list is read from the stacked design, so it is exactly Palette.names/1 of it.
+      assert Palette.names(Chart.stack(BuilderFixture.layers())) == [:series]
+    end
+
+    test "a style is created in the selected layer and the editor opens on it", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_style", %{"name" => "callout"}, s)
+
+      {_name, layer} = hd(s.assigns.layers)
+      assert %{} = layer.styles.callout
+      assert s.assigns.node_label == "styles.callout"
+      assert s.assigns.notice == nil
+    end
+
+    test "a style may be added to a layer that carries no styles at all", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      {_name, shared} = Enum.at(s.assigns.layers, 1)
+      refute Map.has_key?(shared, :styles)
+
+      {:noreply, s} = Builder.handle_event("add_style", %{"name" => "callout"}, s)
+      {_name, shared} = Enum.at(s.assigns.layers, 1)
+      assert shared.styles.callout == %{}
+    end
+
+    test "a blank name is a notice and declares nothing", %{socket: s} do
+      {:noreply, after_blank} = Builder.handle_event("add_style", %{"name" => "   "}, s)
+      assert after_blank.assigns.notice == "a style needs a name"
+      assert after_blank.assigns.layers == s.assigns.layers
+    end
+
+    test "selecting a style opens the layer that declares it", %{socket: s} do
+      # `series` is the house layer's, which is 0; move off it first so the move is visible.
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      assert s.assigns.selected == 2
+
+      {:noreply, s} = Builder.handle_event("select_style", %{"name" => "series"}, s)
+      assert s.assigns.selected == 0
+      assert s.assigns.node_label == "styles.series"
+    end
+
+    test "a style nothing declares changes nothing", %{socket: s} do
+      {:noreply, after_miss} = Builder.handle_event("select_style", %{"name" => "nope"}, s)
+      assert after_miss.assigns.selected == s.assigns.selected
+      assert after_miss.assigns.node_label == s.assigns.node_label
+    end
+
+    test "a mark's style is a select over the declared names, not a box" do
+      html =
+        render_component(Builder, %{
+          id: "b",
+          layers: BuilderFixture.layers(),
+          sources: BuilderFixture.sources(),
+          styles: false,
+          selected: 2,
+          node_label: "marks[0]",
+          facet: :style
+        })
+
+      assert html =~ ~s(<select name="style">)
+      assert html =~ ~s(<option value="series" selected>series</option>)
+      refute html =~ ~s(<input type="text" name="style")
+    end
+
+    test "a reference with no names offered stays a text box" do
+      # `Editor.panel/1` is renderable with no palette at all, which is what keeps it usable
+      # over any node (spec/14 §18.14).
+      html =
+        Phoenix.LiveViewTest.render_component(&Editor.panel/1, %{
+          kind: :mark,
+          node: BuilderFixture.mark(),
+          path: [:marks, 0],
+          facet: :style
+        })
+
+      assert html =~ ~s(<input type="text" name="style")
     end
   end
 

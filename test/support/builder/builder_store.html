@@ -80,6 +80,23 @@
     </main>
   </div>
   <div class="vis-builder-tray">
+    <div class="vis-builder-palette">
+  <h2 class="vis-builder-tray-title">Styles</h2>
+  <ul class="vis-builder-palette-list">
+    <li class="vis-builder-palette-entry">
+      <button type="button" class="vis-builder-palette-style" phx-click="select_style" phx-value-name="series" phx-target="-1">
+        <span class="vis-builder-swatch" style=""></span>
+        <span class="vis-builder-palette-name">series</span>
+        <span class="vis-builder-palette-summary">stroke, stroke_width</span>
+      </button>
+    </li>
+  </ul>
+  
+  <form class="vis-builder-palette-new" phx-submit="add_style" phx-target="-1">
+    <input type="text" name="name" value="" class="vis-builder-palette-input" placeholder="new style">
+    <button type="submit" class="vis-builder-palette-add">Add style</button>
+  </form>
+</div>
     <form class="vis-builder-params" phx-change="set_var" phx-target="-1">
   <label class="vis-builder-param">
     <span class="vis-builder-param-name">unit</span>

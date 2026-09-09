@@ -520,6 +520,90 @@ if Code.ensure_loaded?(Phoenix.Component) do
       overflow: auto;
     }
 
+    .vis-builder-palette {
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: var(--vis-builder-panel);
+      overflow: auto;
+    }
+
+    .vis-builder-palette-list {
+      margin: 0 0 8px;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .vis-builder .vis-builder-palette-style {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 4px 6px;
+      border-color: transparent;
+      border-radius: 4px;
+      background: transparent;
+      text-align: left;
+    }
+
+    .vis-builder .vis-builder-palette-style:hover {
+      border-color: var(--vis-builder-line);
+      background: var(--vis-builder-bg);
+    }
+
+    .vis-builder-palette-entry-open .vis-builder-palette-style {
+      background: var(--vis-builder-bg);
+      box-shadow: inset 3px 0 0 var(--vis-builder-accent);
+    }
+
+    .vis-builder-swatch {
+      flex: 0 0 auto;
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: 3px;
+      background: repeating-conic-gradient(
+        var(--vis-builder-line) 0% 25%,
+        var(--vis-builder-panel) 0% 50%
+      ) 0 0 / 8px 8px;
+    }
+
+    .vis-builder-palette-name {
+      flex: 0 0 auto;
+      font-family: var(--vis-builder-mono);
+      font-weight: 600;
+    }
+
+    .vis-builder-palette-summary {
+      flex: 1 1 auto;
+      overflow: hidden;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      text-align: right;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .vis-builder-palette-empty {
+      margin: 0 0 8px;
+      color: var(--vis-builder-muted);
+      font-size: 12px;
+    }
+
+    .vis-builder-palette-new {
+      display: flex;
+      gap: 6px;
+    }
+
+    .vis-builder .vis-builder-palette-input {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
     .vis-builder-param {
       display: flex;
       flex-wrap: wrap;
