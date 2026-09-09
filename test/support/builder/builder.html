@@ -3,13 +3,13 @@
   <div class="vis-builder-toolbar">
     <span class="vis-builder-layer-count">3</span>
     
-    
     <button type="button" class="vis-builder-save" phx-click="save" phx-target="-1">
       Save
     </button>
   </div>
   
   <div class="vis-builder-panels">
+    
     <aside class="vis-builder-sidebar">
       <h2 class="vis-builder-sidebar-title">Layers</h2>
       <ol id="builder-layers" class="vis-builder-layers" phx-hook="BuilderHook" data-builder-target="-1">
@@ -70,6 +70,10 @@
 </div>
       </div>
     </main>
+    <aside class="vis-builder-context">
+      <h2 class="vis-builder-sidebar-title">Context</h2>
+      <p class="vis-builder-context-empty">Focus a field to see its control.</p>
+    </aside>
   </div>
   <div class="vis-builder-tray">
     <div class="vis-builder-palette">

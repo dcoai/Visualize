@@ -55,6 +55,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Editor,
       Inspector,
       Layers,
+      Library,
       Palette,
       Params,
       Preview,
@@ -103,6 +104,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          selected: 0,
          notice: nil,
          facet: nil,
+         added: nil,
          node_label: "design"
        )}
     end
@@ -144,13 +146,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <Styles.styles :if={@styles} />
         <div class="vis-builder-toolbar">
           <span class="vis-builder-layer-count">{length(@layers)}</span>
-          <form :if={@store} class="vis-builder-library" phx-submit="add_layer" phx-target={@myself}>
-            <label class="vis-builder-control-label" for={@id <> "-store"}>Library</label>
-            <select id={@id <> "-store"} name="name" class="vis-builder-store">
-              <option :for={name <- stored(@store)} value={name}>{name}</option>
-            </select>
-            <button type="submit" class="vis-builder-add">Add as layer</button>
-          </form>
           <form :if={@store} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
             <label class="vis-builder-control-label" for={@id <> "-keep"}>Save the stack as</label>
             <input
@@ -159,7 +154,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               name="name"
               class="vis-builder-name"
               value=""
-              placeholder="a fragment name"
+              placeholder="Category:sub-category:name"
             />
             <button type="submit" class="vis-builder-put">Save to library</button>
           </form>
@@ -168,7 +163,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </button>
         </div>
         <p :if={@notice} class="vis-builder-notice">{@notice}</p>
-        <div class="vis-builder-panels">
+        <div class={class("vis-builder-panels", if(@store, do: "vis-builder-panels-library"))}>
+          <Library.panel
+            :if={@store}
+            id={@id <> "-library"}
+            names={stored(@store)}
+            open={@added}
+            target={@myself}
+          />
           <aside class="vis-builder-sidebar">
             <h2 class="vis-builder-sidebar-title">Layers</h2>
             <Layers.panel
@@ -215,6 +217,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <Preview.panel design={@design} sources={@sources} vars={@bindings} theme={@theme} />
             </div>
           </main>
+          <aside class="vis-builder-context">
+            <h2 class="vis-builder-sidebar-title">Context</h2>
+            <p class="vis-builder-context-empty">Focus a field to see its control.</p>
+          </aside>
         </div>
         <div class="vis-builder-tray">
           <Palette.panel design={@design} open={@open_style} target={@myself} />
@@ -630,6 +636,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp added(socket, name, {:ok, fragment}) do
       socket
       |> assign(:layers, socket.assigns.layers ++ [{name, fragment}])
+      |> assign(:added, to_string(name))
       |> assign(:notice, nil)
     end
 

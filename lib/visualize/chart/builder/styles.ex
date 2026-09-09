@@ -48,7 +48,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       --vis-builder-warn-bg: #fef3f2;
       --vis-builder-radius: 6px;
       --vis-builder-gap: 12px;
-      --vis-builder-sidebar: 232px;
+      --vis-builder-sidebar: 208px;
+      --vis-builder-library: 216px;
+      --vis-builder-context: 240px;
+      --vis-builder-height: 100vh;
       --vis-builder-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", roboto, sans-serif;
       --vis-builder-mono: ui-monospace, sfmono-regular, "SF Mono", menlo, monospace;
 
@@ -181,24 +184,125 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     /* ── the three regions ───────────────────────────────────────────────────── */
 
+    /* Four regions across: library, layers, editor, context. Each column scrolls on its own
+       rather than with the page, so browsing a long library never moves the chart. */
     .vis-builder-panels {
       display: grid;
-      grid-template-columns: var(--vis-builder-sidebar) minmax(0, 1fr);
+      grid-template-columns: var(--vis-builder-sidebar) minmax(0, 1fr) var(--vis-builder-context);
       gap: var(--vis-builder-gap);
-      align-items: start;
+      align-items: stretch;
       min-height: 0;
+      height: var(--vis-builder-height);
     }
 
+    .vis-builder-panels-library {
+      grid-template-columns:
+        var(--vis-builder-library) var(--vis-builder-sidebar)
+        minmax(0, 1fr) var(--vis-builder-context);
+    }
+
+    .vis-builder-library-pane,
     .vis-builder-sidebar,
-    .vis-builder-main {
+    .vis-builder-main,
+    .vis-builder-context {
       min-width: 0;
+      min-height: 0;
       border: 1px solid var(--vis-builder-line);
       border-radius: var(--vis-builder-radius);
       background: var(--vis-builder-panel);
+      overflow-y: auto;
+      scrollbar-width: thin;
     }
 
-    .vis-builder-sidebar {
+    .vis-builder-main {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .vis-builder-library-pane > .vis-builder-sidebar-title,
+    .vis-builder-context > .vis-builder-sidebar-title,
+    .vis-builder-sidebar > .vis-builder-sidebar-title {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--vis-builder-panel);
+    }
+
+    /* ── the library tree ────────────────────────────────────────────────────── */
+
+    .vis-builder-category {
+      padding: 4px 0;
+    }
+
+    .vis-builder-category-name {
+      margin: 0;
+      padding: 6px 10px 2px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .vis-builder-group-name {
+      margin: 0;
+      padding: 4px 10px 2px 18px;
+      color: var(--vis-builder-muted);
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .vis-builder-group-items {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .vis-builder-item {
+      display: flex;
+      cursor: grab;
+    }
+
+    .vis-builder .vis-builder-fragment {
+      flex: 1 1 auto;
+      min-width: 0;
+      margin: 0 6px;
+      padding: 3px 8px 3px 20px;
+      border-color: transparent;
+      border-radius: 4px;
+      background: transparent;
       overflow: hidden;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .vis-builder .vis-builder-fragment::before {
+      content: "⠿ ";
+      color: var(--vis-builder-muted);
+    }
+
+    .vis-builder .vis-builder-fragment:hover {
+      border-color: var(--vis-builder-line);
+      background: var(--vis-builder-bg);
+    }
+
+    .vis-builder-item-open .vis-builder-fragment {
+      background: var(--vis-builder-bg);
+      box-shadow: inset 3px 0 0 var(--vis-builder-accent);
+    }
+
+    .vis-builder-item-dragging {
+      opacity: 0.4;
+    }
+
+    .vis-builder-library-empty,
+    .vis-builder-context-empty {
+      margin: 0;
+      padding: 10px;
+      color: var(--vis-builder-muted);
+      font-size: 12px;
     }
 
     .vis-builder-sidebar-title,
@@ -712,9 +816,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       background: var(--vis-builder-bg);
     }
 
-    @media (max-width: 720px) {
-      .vis-builder-panels {
+    /* Narrow enough and four columns is one column, each pane at its natural height. */
+    @media (max-width: 900px) {
+      .vis-builder-panels,
+      .vis-builder-panels-library {
         grid-template-columns: minmax(0, 1fr);
+        height: auto;
       }
     }
     """

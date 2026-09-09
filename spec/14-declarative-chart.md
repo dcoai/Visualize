@@ -1597,6 +1597,8 @@ The **library** is the left-most column, at the height of the viewport and scrol
 | `Visualize.Chart.Builder.Library.parse/1` | a stored name as `{category, sub_category, name}` |
 | `Visualize.Chart.Builder.Library.tree/1` | stored names as categories, each with its sub-categories and their items |
 | `Visualize.Chart.Builder.Library.name/3` | a category, sub-category and name as the stored name |
+| `Visualize.Chart.Builder.Library.categories/1` | the categories a set of stored names names, in name order |
+| `Visualize.Chart.Builder.Library.sub_categories/2` | the sub-categories one category has, without the unnamed group |
 | `Visualize.Chart.Builder.Library.panel/1` | the tree, rendered |
 
 The parse is total and forgiving, because a store the host populated before this section existed must keep working:

@@ -90,16 +90,17 @@ defmodule Visualize.Chart.BuilderTest do
       refute html =~ "vis-builder-store"
     end
 
-    test "the library is offered only when a store is given" do
+    test "the library is a region of its own, and only when a store is given" do
       plain = rendered(:builder)
       stored = rendered(:builder_store)
-      refute plain =~ "vis-builder-store"
-      assert stored =~ ~s(class="vis-builder-store">)
 
-      assert stored =~
-               ~s(<label class="vis-builder-control-label" for="builder-store">Library</label>)
+      refute plain =~ "vis-builder-library-pane"
+      refute plain =~ "vis-builder-panels-library"
 
-      assert stored =~ ~s(<option value="baseline">baseline</option>)
+      assert stored =~ ~s(<div class="vis-builder-panels vis-builder-panels-library">)
+      assert stored =~ ~s(class="vis-builder-library-pane")
+      assert stored =~ ~s(<h3 class="vis-builder-category-name">Uncategorised</h3>)
+      assert stored =~ ~s(data-builder-fragment="baseline")
       assert stored =~ ~s(class="vis-builder-put")
     end
 
