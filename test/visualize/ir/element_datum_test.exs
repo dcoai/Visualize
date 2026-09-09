@@ -5,7 +5,7 @@ defmodule Visualize.IR.ElementDatumTest do
   alias Visualize.IR.Element
   alias Visualize.Render
 
-  doctest Element, except: [:moduledoc]
+  doctest Element
 
   test "a keyword list writes the fields in its order, a map in sorted order" do
     keyword = Element.rect(0, 0, 1, 1) |> Element.datum(v: 4, t: 1)

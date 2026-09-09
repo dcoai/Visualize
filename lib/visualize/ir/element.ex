@@ -14,10 +14,15 @@ defmodule Visualize.IR.Element do
 
   ## Examples
 
-      iex> alias Visualize.IR.{Element, Path, Transform}
+      iex> alias Visualize.IR.{Element, Path}
       iex> path = Path.new() |> Path.move_to(0, 0) |> Path.line_to(100, 100)
-      iex> Element.path(path, %{stroke: "blue", fill: :none})
-      %Visualize.IR.Element{type: :path, path: path, style: %{stroke: "blue", fill: :none}, ...}
+      iex> element = Element.path(path, %{stroke: "blue", fill: :none})
+      iex> element.type
+      :path
+      iex> element.style
+      %{stroke: "blue", fill: :none}
+      iex> element.path
+      %Visualize.IR.Path{commands: [{:M, 0, 0}, {:L, 100, 100}]}
 
   """
 
