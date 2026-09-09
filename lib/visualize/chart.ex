@@ -261,12 +261,15 @@ defmodule Visualize.Chart do
   @doc """
   The higher fragment cascaded over the lower by the merge rule of every key (spec/14 §8.2).
 
-  For every key the higher layer wins. Lists of nodes append; a name-keyed declaration
-  both layers carry is the higher layer's entry *whole*, where `compose/2` reports
-  `:conflict` — derivation within a style is `extends` (spec/14 §3.5), never the cascade;
-  and a node both layers give as a map cascades key by key, so a panel's frame adds its
-  scales to a shared frame's and takes precedence on the frame's scalars. Nothing is
-  validated or defaulted: the result is a fragment too, and a layer of another stack.
+  For every key the higher layer wins. Lists of nodes append, except that a higher element
+  whose *identity* equals a lower element's replaces it in place — a mark's and a label's
+  `id`, an axis's `{scale, side}` — which is what lets a layer restyle the shared frame's
+  x-axis rather than draw a second one; a name-keyed declaration both layers carry is the
+  higher layer's entry *whole*, where `compose/2` reports `:conflict`, since derivation
+  within a style is `extends` (spec/14 §3.5) and never the cascade; and a node both layers
+  give as a map cascades key by key, so a panel's frame adds its scales to a shared
+  frame's and takes precedence on the frame's scalars. Nothing is validated or defaulted:
+  the result is a fragment too, and a layer of another stack.
 
   `compose/2` is the other operation over fragments and is unchanged: it assembles parts
   that are meant to be disjoint and reports a name declared twice. Where two fragments

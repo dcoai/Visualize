@@ -269,6 +269,8 @@ Each axis is a `Visualize.Axis` on the realised scale, oriented by `side`, with 
 
 `grid: true` draws a line at each tick position across the plot area — the height for a `:top` or `:bottom` axis, the width for a `:left` or `:right` one — in the `:grid` style, behind every axis, in one group `class="grid"` that is `aria-hidden` like the axes (D-56). The axis's line, ticks and labels draw in its `style`; tick sizes stay geometry. A `style` other than `:axis` restyles the generated axis: `stroke`, `stroke_width`, `stroke_dasharray`, `stroke_linecap`, `stroke_linejoin` and `stroke_opacity` reach the domain line and the tick lines, `fill` and the font keys reach the tick labels, `opacity` and `class` the axis group.
 
+An axis has no `id`: its identity in a stack is `{scale, side}` (§8.2), so a layer that wants the shared frame's bottom x-axis with six ticks writes an axis for that scale and side and replaces it, and two axes drawing one scale on one side can never both be drawn. Nothing in the axis node is required to make that identity — `scale` and `side` are both required keys already.
+
 ### 4.5 Legend
 
 **Implemented.** A `:legend` node explains one scale, normally the colour scale.
@@ -338,8 +340,11 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 | `label` | `{:node, :mark_label}` | `:content` | `nil` | `:override` |
 | `render` | `{:enum, [:auto, :svg, :canvas, :binary]}` | `:geometry` | `:auto` | `:override` |
 | `tooltip` | `{:node, :tooltip}` | `:content` | `nil` | `:override` |
+| `id` | `:name` | `:content` | `nil` | `:override` |
 
 `scales` is the mark's word on which scale a channel family reads through (§4.3). A `:mark_scales` node's keys are the scale names of the frame kinds' tables — `x`, `y`, `angle`, `r` and `color` — each `{:ref, :scale}`, `:channel`, `nil` by default, `:override`; a key the frame's kind does not use names nothing. `scales: %{x: :count}` sends the mark's `x`, `x0` and `x1` through the declared scale `count`, and every channel not renamed reads the scale of the kind's table as before. The name must be one the frame declares (`{:undeclared, :scale, name}` otherwise), so a mark still references scales by name and never by nesting (§1.2).
+
+`id` is the mark's identity in a stack (§8.2): a higher layer's mark with the same `id` replaces this one in place rather than drawing a second mark beside it. It is optional, is not required to be unique, and nothing renders from it — a mark without one appends, as every mark did before identity existed.
 
 ### 5.2 Types and channels
 
@@ -513,8 +518,11 @@ The group is returned untranslated. `Visualize.Chart.Frame.generate/2` places ev
 | `style` | `{:ref, :style}` | `:style` | `:label` (`:title` for the `:title` anchor) | `:override` |
 | `dx` | `:number` | `:geometry` | `0` | `:override` |
 | `dy` | `:number` | `:geometry` | `0` | `:override` |
+| `id` | `:name` | `:content` | `nil` | `:override` |
 
 `{:axis, s}` anchors the label as the title of the axis drawn for scale `s`; `s` is a scale reference and is checked as one. `{:frame, c}` anchors it at a corner of the plot area and `{:data, [x, y]}` at a point of the data (§6.3).
+
+`id` is the label's identity in a stack (§8.2), read exactly as a mark's is: a higher layer's label with the same `id` replaces this one in place. A label without one appends. Nothing renders from it.
 
 ### 6.2 Text
 
@@ -585,9 +593,26 @@ The cascade cannot fail — there is no disagreement for it to report, since a d
 
 For each key present in either layer, by the key's spec in the node kind being merged:
 
-- `:concat` — the higher layer's elements after the lower's, as `compose/2` appends them.
+- `:concat` — a higher element whose *identity* equals a lower element's replaces it in place, keeping the lower's position; every other higher element follows the lower's, as `compose/2` appends them. Identity is what lets a layer restyle the shared frame's x-axis rather than draw a second one, and it is defined below.
 - `:union` — the union of the two name-keyed maps; a name both layers declare is the **higher layer's entry**, where `compose/2` reports `:conflict`. The entry is taken *whole*: a style the higher layer redeclares replaces the lower's rather than merging into it, so the result is a style some layer actually wrote. Derivation within a style is `extends` (§3.5), which is the key-by-key operation on styles and is unrelated to the cascade.
 - `:override` — the higher layer's value, except that a key whose type is a node — `{:node, kind}`, or a `{:one_of, …}` that admits one — given as a map by **both** layers cascades key by key under that kind's rules, exactly as `compose/2` recurses: a panel fragment's frame adds its own scales and axes to the shared frame's and takes precedence on the frame's scalars. A node either layer gives as anything else — a name, a variable — is the higher layer's value whole. A key the schema does not know is `:override`.
+
+**Element identity** (#98, D-82) is what a `:concat` key's elements are matched by:
+
+| Element | Identity |
+|---|---|
+| a mark (§5.1) | its `id`, when it declares one |
+| a label (§6.1) | its `id`, when it declares one |
+| an axis (§4.4) | `{scale, side}`, always: two axes drawing one scale on one side *are* one axis |
+| a transform (§5.4) | none: a data pipeline is a sequence, and a step of it is not a thing a layer names |
+
+An element with no identity appends, so a stack of layers that name nothing behaves exactly as the append of §8.1 and the identity rule costs a design that does not use it nothing. Identity matches only *within one key* — a mark and a label with the same `id` are different elements — and nothing renders from an `id` or from an axis's identity: they are the algebra's names for elements, and the SVG carries neither (D-77 is what names a series in the document).
+
+The schema does not require an `id` to be unique — a fragment is not a whole design, and uniqueness is only meaningful once the layers are known — so where the cascade merges two lists it reads the lower's elements and the higher's as one sequence and collapses duplicates in both: each identity keeps its first position and its last value. A key only one layer carries is passed through untouched, as every rule of the cascade passes such a key through, so a fragment that is never stacked is never rewritten.
+
+A matched element is replaced **whole**, not merged key by key, for the reason the `:union` rule is: a mark's meaning is its whole node, and a higher `%{id: :series, type: :area}` merged over a lower `:line` would keep the line's channels under the area's type and draw something no layer wrote. A layer that wants to change one key of a mark writes the mark.
+
+The result of that is that the stacked list is ordered by each identity's *first* appearance across the layers and carries its *last* value, whichever way the layers are grouped, which is why the cascade stays associative over `:concat` keys.
 
 A key present in one layer alone is taken as it is. `:concat`, `:union` and `:override` keys all cascade associatively, so a stack is a list of layers in precedence order and the fold over it may be built in parts: a house sheet stacked with a frame is a layer of the panel's stack.
 
@@ -1231,6 +1256,8 @@ label({:axis, :y}, ["unit: ", var(:unit)])
 ```
 
 A channel the type does not read, and an option key the type does not read, raise `ArgumentError` at the call — the two lists are `Visualize.Chart.Schema.channels/1` and `Visualize.Chart.Schema.options/1`, so the builder accepts exactly what §5.2 and §5.3 declare. What it does *not* check is that the required channels are present: an `:arc` is required to carry `value` only when it carries neither `start` nor `end` (D-69), and a rule with that much context belongs to the validator, which sees the whole node (§10.2). The builder rejects what can never be right; the validator decides what is right here.
+
+`id:` is an option of `mark/4`, of every generated mark function and of `label/3` and `title/2`, because it is a key of those nodes (§16.1) — `line(:primary, %{x: :t, y: :v}, id: :series, style: :series)` is the mark a higher layer replaces by declaring `id: :series` again (§8.2).
 
 ### 16.5 Data nodes and transforms
 

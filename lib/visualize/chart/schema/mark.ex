@@ -127,7 +127,8 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:style, {:ref, :style}, :style),
       spec(:label, {:node, :mark_label}, :content),
       spec(:render, {:enum, [:auto, :svg, :canvas, :binary]}, :geometry, default: :auto),
-      spec(:tooltip, {:node, :tooltip}, :content)
+      spec(:tooltip, {:node, :tooltip}, :content),
+      spec(:id, :name, :content)
     ]
   end
 

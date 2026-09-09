@@ -145,6 +145,171 @@ defmodule Visualize.Chart.StackTest do
     end
   end
 
+  describe "element identity" do
+    test "a higher mark with the same id replaces in place, keeping the lower's position" do
+      lower = %{
+        marks: [
+          %{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}},
+          %{type: :rule, data: :d, channels: %{x: :at}}
+        ]
+      }
+
+      higher = %{marks: [%{id: :series, type: :area, data: :p, channels: %{x: :t, y: :v}}]}
+
+      assert Chart.stack(lower, higher).marks == [
+               %{id: :series, type: :area, data: :p, channels: %{x: :t, y: :v}},
+               %{type: :rule, data: :d, channels: %{x: :at}}
+             ]
+    end
+
+    test "a mark with no identity appends" do
+      lower = %{marks: [%{type: :line, data: :p, channels: %{}}]}
+      higher = %{marks: [%{type: :area, data: :p, channels: %{}}]}
+
+      assert Chart.stack(lower, higher).marks == lower.marks ++ higher.marks
+    end
+
+    test "an id one layer alone uses appends rather than replacing anything" do
+      lower = %{marks: [%{id: :a, type: :line, data: :p, channels: %{}}]}
+      higher = %{marks: [%{id: :b, type: :area, data: :p, channels: %{}}]}
+
+      assert Chart.stack(lower, higher).marks == lower.marks ++ higher.marks
+    end
+
+    test "a label with the same id replaces; compose keeps both" do
+      lower = %{labels: [%{id: :title, anchor: :title, text: ["House"]}]}
+      higher = %{labels: [%{id: :title, anchor: :title, text: ["Panel"]}]}
+
+      assert Chart.stack(lower, higher).labels == higher.labels
+      assert {:ok, composed} = Chart.compose(lower, higher)
+      assert composed.labels == lower.labels ++ higher.labels
+    end
+
+    test "two axes for the same scale and side collapse to the higher layer's" do
+      lower = %{
+        frame: %{axes: [%{scale: :x, side: :bottom, ticks: 6}, %{scale: :y, side: :left}]}
+      }
+
+      higher = %{frame: %{axes: [%{scale: :x, side: :bottom, grid: true, style: :heavy}]}}
+
+      assert Chart.stack(lower, higher).frame.axes == [
+               %{scale: :x, side: :bottom, grid: true, style: :heavy},
+               %{scale: :y, side: :left}
+             ]
+    end
+
+    test "an axis on another side is another axis" do
+      lower = %{frame: %{axes: [%{scale: :x, side: :bottom}]}}
+      higher = %{frame: %{axes: [%{scale: :x, side: :top}]}}
+
+      assert length(Chart.stack(lower, higher).frame.axes) == 2
+    end
+
+    test "identity matches within one key: a mark and a label may share an id" do
+      lower = %{marks: [%{id: :a, type: :line, data: :p, channels: %{}}]}
+      higher = %{labels: [%{id: :a, anchor: :title, text: ["T"]}]}
+
+      stacked = Chart.stack(lower, higher)
+      assert stacked.marks == lower.marks
+      assert stacked.labels == higher.labels
+    end
+
+    test "transforms have no identity: a data pipeline is a sequence" do
+      step = %{op: :filter, field: :v, test: :gt, value: 0}
+      lower = %{marks: [%{type: :rect, data: %{source: :p, transforms: [step]}, channels: %{}}]}
+
+      assert Chart.stack(lower, lower).marks == lower.marks ++ lower.marks
+    end
+
+    test "merging two lists collapses a duplicate identity in either of them" do
+      dup = %{
+        marks: [
+          %{id: :a, type: :line, data: :p, channels: %{}},
+          %{id: :a, type: :area, data: :p, channels: %{}}
+        ]
+      }
+
+      assert Chart.stack(dup, %{marks: []}).marks == [
+               %{id: :a, type: :area, data: :p, channels: %{}}
+             ]
+
+      assert Chart.stack(%{marks: []}, dup).marks == [
+               %{id: :a, type: :area, data: :p, channels: %{}}
+             ]
+    end
+
+    test "a key only one layer carries is passed through untouched" do
+      dup = %{
+        marks: [
+          %{id: :a, type: :line, data: :p, channels: %{}},
+          %{id: :a, type: :area, data: :p, channels: %{}}
+        ]
+      }
+
+      assert Chart.stack(%{}, dup) == dup
+      assert Chart.stack([dup]) == dup
+    end
+
+    test "a design carrying id round-trips through the map and the JSON forms" do
+      design = %{
+        version: 1,
+        sources: %{p: %{fields: [:t, :v]}},
+        frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}},
+        marks: [%{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}}],
+        labels: [%{id: :head, anchor: :title, text: ["Uptime"]}]
+      }
+
+      assert {:ok, chart} = Chart.from_map(design)
+
+      assert Chart.to_map(chart) |> Map.take([:marks, :labels]) ==
+               Map.take(design, [:marks, :labels])
+
+      assert {:ok, json} = Chart.to_json(chart)
+      assert {:ok, ^chart} = Chart.from_json(json)
+    end
+
+    test "the builder takes id: on a mark and a label" do
+      import Visualize.Chart.Build
+
+      assert line(:p, %{x: :t, y: :v}, id: :series) ==
+               %{marks: [%{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}}]}
+
+      assert title(["T"], id: :head) == %{labels: [%{id: :head, anchor: :title, text: ["T"]}]}
+
+      assert_raise ArgumentError, fn -> axis(:x, :bottom, id: :x_axis) end
+    end
+
+    test "a higher layer restyles the shared frame's x-axis rather than drawing a second" do
+      frame = %{
+        version: 1,
+        sources: %{p: %{fields: [:t, :v]}},
+        frame: %{
+          kind: :cartesian,
+          size: %{width: 400, height: 200},
+          scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
+          axes: [%{scale: :x, side: :bottom, ticks: 3}, %{scale: :y, side: :left}]
+        },
+        marks: [%{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}}]
+      }
+
+      panel = %{
+        styles: %{heavy: %{stroke_width: 3}},
+        frame: %{axes: [%{scale: :x, side: :bottom, ticks: 3, grid: true, style: :heavy}]},
+        marks: [%{id: :series, type: :area, data: :p, channels: %{x: :t, y: :v}}]
+      }
+
+      design = Chart.stack([frame, panel])
+      assert length(design.frame.axes) == 2
+      assert Enum.map(design.marks, & &1.type) == [:area]
+
+      assert {:ok, applied} = Chart.apply(design, sources: %{p: %{t: [1, 2], v: [3, 9]}})
+      svg = Chart.render(applied)
+      assert svg =~ "mark mark-area"
+      refute svg =~ "mark mark-line"
+      assert length(String.split(svg, "axis-bottom")) == 2
+    end
+  end
+
   # -- properties over generated fragments ------------------------------------------
 
   @style_names [:series, :muted, :accent]
@@ -156,13 +321,19 @@ defmodule Visualize.Chart.StackTest do
   defp names(pool, gen),
     do: map(list_of(tuple({member_of(pool), gen}), max_length: 3), &Map.new/1)
 
-  defp mark,
-    do:
-      fixed_map(%{
-        type: member_of([:line, :area]),
-        data: constant(:p),
-        channels: constant(%{x: :t, y: :v})
-      })
+  defp label do
+    gen all(anchor <- member_of([:title, :caption]), id <- member_of([nil, :head, :foot])) do
+      base = %{anchor: anchor, text: ["t"]}
+      if id, do: Map.put(base, :id, id), else: base
+    end
+  end
+
+  defp mark do
+    gen all(type <- member_of([:line, :area]), id <- member_of([nil, :a, :b])) do
+      base = %{type: type, data: :p, channels: %{x: :t, y: :v}}
+      if id, do: Map.put(base, :id, id), else: base
+    end
+  end
 
   defp frame do
     optional_map(%{
@@ -184,7 +355,7 @@ defmodule Visualize.Chart.StackTest do
       vars: names([:unit, :n], fixed_map(%{default: integer()})),
       frame: frame(),
       marks: list_of(mark(), max_length: 3),
-      labels: list_of(fixed_map(%{anchor: member_of([:title, :caption])}), max_length: 3)
+      labels: list_of(label(), max_length: 3)
     })
   end
 
@@ -203,18 +374,57 @@ defmodule Visualize.Chart.StackTest do
     end
   end
 
-  property "collections append and scalars are the higher layer's" do
+  property "collections append where no identity is declared by both layers" do
     check all(a <- fragment(), b <- fragment()) do
       stacked = Chart.stack(a, b)
 
-      assert Map.get(stacked, :marks) == concat(a, b, :marks)
-      assert Map.get(stacked, :labels) == concat(a, b, :labels)
+      for key <- [:marks, :labels],
+          shared_ids(a, b, key) == [],
+          unique_ids?(a, key),
+          unique_ids?(b, key) do
+        assert Map.get(stacked, key) == concat(a, b, key)
+      end
+
       assert Map.get(stacked, :theme) == higher(a, b, :theme)
 
       for key <- [:styles, :vars], Map.has_key?(a, key) or Map.has_key?(b, key) do
         assert Map.get(stacked, key) ==
                  Map.merge(Map.get(a, key, %{}), Map.get(b, key, %{}))
       end
+    end
+  end
+
+  property "an identity both layers declare carries the higher layer's element, once" do
+    check all(a <- fragment(), b <- fragment()) do
+      stacked = Chart.stack(a, b)
+
+      for key <- [:marks, :labels], unique_ids?(a, key), unique_ids?(b, key) do
+        elements = Map.get(stacked, key, [])
+        assert ids(elements) == Enum.uniq(ids(elements))
+
+        for id <- shared_ids(a, b, key) do
+          assert Enum.find(elements, &(&1[:id] == id)) ==
+                   Enum.find(Map.fetch!(b, key), &(&1[:id] == id))
+
+          assert Enum.find_index(elements, &(&1[:id] == id)) ==
+                   Enum.find_index(Map.fetch!(a, key), &(&1[:id] == id))
+        end
+      end
+    end
+  end
+
+  defp ids(elements), do: for(e <- elements, id = e[:id], do: id)
+
+  defp unique_ids?(fragment, key) do
+    declared = ids(Map.get(fragment, key, []))
+    declared == Enum.uniq(declared)
+  end
+
+  defp shared_ids(a, b, key) do
+    if Map.has_key?(a, key) and Map.has_key?(b, key) do
+      a |> Map.fetch!(key) |> ids() |> Enum.filter(&(&1 in ids(Map.fetch!(b, key))))
+    else
+      []
     end
   end
 
@@ -228,9 +438,13 @@ defmodule Visualize.Chart.StackTest do
   end
 
   defp disjoint?(a, b) do
-    Enum.all?([:styles, :vars, :theme, :version, :frame], fn key ->
-      not (Map.has_key?(a, key) and Map.has_key?(b, key))
-    end)
+    Enum.all?(
+      [:marks, :labels],
+      &(shared_ids(a, b, &1) == [] and unique_ids?(a, &1) and unique_ids?(b, &1))
+    ) and
+      Enum.all?([:styles, :vars, :theme, :version, :frame], fn key ->
+        not (Map.has_key?(a, key) and Map.has_key?(b, key))
+      end)
   end
 
   defp concat(a, b, key) do
