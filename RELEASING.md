@@ -86,10 +86,25 @@ why `mix.exs` here declares `@version` at the top of the module.
 | *(work)* | Work items merge to `main` as usual | MR + green pipeline |
 | `release.exs` | Dry run: the version it would cut and every gate. Acts on nothing. | — |
 | `--prepare` | Writes the version into `mix.exs`, closes `[Unreleased]` → `[X.Y.Z] — date`, points the link reference at the tag, commits | MR |
+| *(by hand, in `--prepare`'s MR)* | Bumps the tag in `README.md`'s Installation snippet to the version being cut | same MR |
 | `--tag` | Annotated tag on the merged commit, pushes it, creates the GitLab release | direct |
 | `--post-bump` | `mix.exs` → `X.Y.(Z+1)-dev`, reopens `[Unreleased]` | MR |
 
-### 3.1. Why `--prepare` and `--tag` are separate
+### 3.1. The README's pinned tag is a step, not a memory
+
+`README.md`'s Installation snippet names a tag (`tag: "v0.1.0"`), because the README ships in
+`files:` and renders as the docs front page — it is the first thing a consumer copies, and a
+snippet saying `branch: "main"` hands them a dependency that takes whatever `main` happens to
+be. A placeholder like `tag: "vX.Y.Z"` was rejected for the same reason: what is written is
+what gets copied.
+
+A number in prose drifts, so a step owns it. `release.exs` does not touch the README and
+should not — it is project-agnostic, and no other project it serves has that snippet. The bump
+therefore rides in `--prepare`'s merge request, beside the `mix.exs` version and the closed
+changelog section, where a reviewer sees the three move together. Nothing enforces it
+mechanically; the table above is the record that it is a step.
+
+### 3.2. Why `--prepare` and `--tag` are separate
 
 This looks like ceremony and is not. The tag must point at a commit that **carries** the
 version: a tag on a tree still reading `-dev` is worse than no tag, because the artefact then
@@ -97,7 +112,7 @@ disagrees with the ref that names it. But `main` is protected behind the merge g
 version commit cannot be pushed to it directly. Hence: commit → merge → tag the merge commit.
 One tool invocation cannot span a merge request, so it is two.
 
-### 3.2. Tag the commit whose own pipeline is green
+### 3.3. Tag the commit whose own pipeline is green
 
 The `--tag` gate asks the GitLab API for the newest pipeline on `HEAD`'s **sha**, not on a ref.
 Under a squash-and-merge the run that proved the work sits on a branch ref that
