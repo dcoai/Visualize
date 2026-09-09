@@ -1,17 +1,41 @@
 defmodule Visualize.Chart.Stack do
   @moduledoc false
-  # The cascade of one fragment over another (spec/14 §8.2, D-81, D-82): for every key
-  # the higher layer wins. `:override` keys recurse into a node both layers give as a
-  # map, exactly as `Visualize.Chart.Compose` does; `:union` keys take the higher layer's
-  # entry whole for a name both declare, where composition reports `:conflict`; `:concat`
-  # keys append, except that a higher element whose identity equals a lower element's
-  # replaces it in place. Nothing can fail, so the result is the fragment itself.
+  # The cascade of one fragment over another (spec/14 §8.2, D-81, D-82) and the
+  # provenance of a stack (§17.1, D-83), which are one walk with two results.
+  #
+  # For every key the higher layer wins: `:override` keys recurse into a node both layers
+  # give as a map, exactly as `Visualize.Chart.Compose` does; `:union` keys take the
+  # higher layer's entry whole for a name both declare, where composition reports
+  # `:conflict`; `:concat` keys read both lists as one sequence, each identity keeping its
+  # first position and its last value. Nothing can fail.
+  #
+  # `node/4` returns the merged node and the leaf paths the higher layer contributed to
+  # it. `cascade/2` drops the second; `explain/1` folds the layers and keeps it, so what
+  # provenance reports and what the cascade produces cannot drift.
 
   alias Visualize.Chart.Schema
 
   @doc false
   @spec cascade(map(), map()) :: map()
-  def cascade(a, b) when is_map(a) and is_map(b), do: node(:design, a, b)
+  def cascade(a, b) when is_map(a) and is_map(b), do: :design |> node(a, b, []) |> elem(0)
+
+  @doc false
+  @spec explain([{term(), map()}]) :: [map()]
+  def explain(layers) when is_list(layers) do
+    {stacked, provenance} =
+      Enum.reduce(layers, {%{}, %{}}, fn {id, fragment}, {acc, provenance} ->
+        {merged, set} = node(:design, acc, fragment, [])
+        {merged, Enum.reduce(set, provenance, &record(&1, id, &2))}
+      end)
+
+    {:node, :design}
+    |> leaves(stacked, [])
+    |> Enum.sort()
+    |> Enum.map(fn path ->
+      {layer, overrode} = Map.fetch!(provenance, path)
+      %{path: path, value: at(stacked, path), layer: layer, overrode: overrode}
+    end)
+  end
 
   # The identity of one element of a `:concat` key (spec/14 §8.2): a mark's and a label's
   # declared `id`, an axis's `{scale, side}`, and nothing for anything else — a transform
@@ -31,67 +55,149 @@ defmodule Visualize.Chart.Stack do
   defp axis_identity(%{scale: scale, side: side}), do: {scale, side}
   defp axis_identity(_axis), do: nil
 
-  defp node(kind, a, b) do
+  # The layer takes the path; the layer that held it before becomes the last of the
+  # layers it overrode, so the list reads lowest first (spec/14 §17.1).
+  defp record(path, id, provenance) do
+    Map.update(provenance, path, {id, []}, fn {previous, overrode} ->
+      {id, overrode ++ [previous]}
+    end)
+  end
+
+  # -- the walk --------------------------------------------------------------------------
+
+  defp node(kind, a, b, path) do
     (Map.keys(a) ++ Map.keys(b))
     |> Enum.uniq()
-    |> Map.new(fn k ->
+    |> Enum.reduce({%{}, []}, fn k, {acc, set} ->
       case {Map.fetch(a, k), Map.fetch(b, k)} do
-        {{:ok, va}, {:ok, vb}} -> {k, key(kind, k, va, vb)}
-        {{:ok, va}, :error} -> {k, va}
-        {:error, {:ok, vb}} -> {k, vb}
+        {{:ok, va}, {:ok, vb}} ->
+          {v, s} = key(kind, k, va, vb, path ++ [k])
+          {Map.put(acc, k, v), set ++ s}
+
+        {{:ok, va}, :error} ->
+          {Map.put(acc, k, va), set}
+
+        {:error, {:ok, vb}} ->
+          {Map.put(acc, k, vb), set ++ leaves(type(kind, k), vb, path ++ [k])}
       end
     end)
   end
 
-  # A key the schema does not know is `:override`.
-  defp key(kind, k, va, vb) do
+  # A key the schema does not know is `:override` and is a leaf.
+  defp key(kind, k, va, vb, path) do
     case Schema.key(kind, k) do
-      nil -> vb
-      spec -> rule(spec.merge, spec.type, va, vb)
+      nil -> {vb, [path]}
+      spec -> rule(spec.merge, spec.type, va, vb, path)
     end
   end
 
-  defp rule(:concat, type, va, vb) when is_list(va) and is_list(vb) do
-    concat(node_kind(type), va, vb)
+  defp rule(:concat, type, va, vb, path) when is_list(va) and is_list(vb) do
+    concat(node_kind(type), element_type(type), va, vb, path)
   end
 
   # The higher layer's entry replaces the lower's whole: derivation within a style is
   # `extends` (spec/14 §3.5), never the cascade.
-  defp rule(:union, _type, va, vb) when is_map(va) and is_map(vb) do
-    if node_map?(va) and node_map?(vb), do: Map.merge(va, vb), else: vb
+  defp rule(:union, type, va, vb, path) when is_map(va) and is_map(vb) do
+    if node_map?(va) and node_map?(vb) do
+      union(element_type(type), va, vb, path)
+    else
+      {vb, leaves(type, vb, path)}
+    end
   end
 
-  defp rule(_merge, type, va, vb) do
-    if node_map?(va) and node_map?(vb) do
-      case node_kind(type) do
-        nil -> vb
-        kind -> node(kind, va, vb)
-      end
+  defp rule(_merge, type, va, vb, path) do
+    with true <- node_map?(va) and node_map?(vb),
+         kind when kind != nil <- node_kind(type) do
+      node(kind, va, vb, path)
     else
-      vb
+      _other -> {vb, leaves(type, vb, path)}
     end
+  end
+
+  defp union(entry_type, va, vb, path) do
+    (Map.keys(va) ++ Map.keys(vb))
+    |> Enum.uniq()
+    |> Enum.reduce({%{}, []}, fn name, {acc, set} ->
+      case Map.fetch(vb, name) do
+        {:ok, v} -> {Map.put(acc, name, v), set ++ leaves(entry_type, v, path ++ [name])}
+        :error -> {Map.put(acc, name, Map.fetch!(va, name)), set}
+      end
+    end)
   end
 
   # The lower's elements and the higher's read as one sequence, each identity keeping its
   # first position and its last value (spec/14 §8.2): that is what makes the cascade
   # associative over `:concat` keys, and it collapses a duplicate identity in either list.
-  defp concat(kind, lower, higher) do
-    Enum.reduce(lower ++ higher, [], fn element, acc ->
-      case identity(kind, element) do
-        nil -> acc ++ [element]
-        id -> place(kind, acc, id, element)
-      end
-    end)
+  defp concat(kind, element_type, lower, higher, path) do
+    merged =
+      Enum.reduce(tag(lower, :lower) ++ tag(higher, :higher), [], fn {element, _} = e, acc ->
+        case identity(kind, element) do
+          nil -> acc ++ [e]
+          id -> place(kind, acc, id, e)
+        end
+      end)
+
+    set =
+      for {{element, :higher}, index} <- Enum.with_index(merged),
+          leaf <- leaves(element_type, element, path ++ [index]),
+          do: leaf
+
+    {Enum.map(merged, &elem(&1, 0)), set}
   end
 
+  defp tag(elements, origin), do: Enum.map(elements, &{&1, origin})
+
   defp place(kind, acc, id, element) do
-    case Enum.find_index(acc, &(identity(kind, &1) == id)) do
+    case Enum.find_index(acc, fn {e, _} -> identity(kind, e) == id end) do
       nil -> acc ++ [element]
       index -> List.replace_at(acc, index, element)
     end
   end
 
+  # -- leaves ----------------------------------------------------------------------------
+
+  # Every path the walk does not descend into: it descends through a node, a name-keyed
+  # declaration and a collection of nodes, and stops everywhere else (spec/14 §17.1).
+  defp leaves({:node, kind}, v, path) when is_map(v) and not is_struct(v) do
+    Enum.flat_map(v, fn {k, e} -> leaves(type(kind, k), e, path ++ [k]) end)
+  end
+
+  defp leaves({:map, t}, v, path) when is_map(v) and not is_struct(v) do
+    Enum.flat_map(v, fn {k, e} -> leaves(t, e, path ++ [k]) end)
+  end
+
+  defp leaves({:list, {:node, _} = t}, v, path) when is_list(v) do
+    v |> Enum.with_index() |> Enum.flat_map(fn {e, i} -> leaves(t, e, path ++ [i]) end)
+  end
+
+  defp leaves({:one_of, types} = t, v, path) do
+    case Schema.select(types, v) do
+      nil -> [path]
+      ^t -> [path]
+      chosen -> leaves(chosen, v, path)
+    end
+  end
+
+  defp leaves(_type, _v, path), do: [path]
+
+  defp at(value, []), do: value
+  defp at(value, [k | rest]) when is_list(value), do: at(Enum.at(value, k), rest)
+  defp at(value, [k | rest]) when is_map(value), do: at(Map.fetch!(value, k), rest)
+
+  # -- the schema's word -------------------------------------------------------------------
+
+  defp type(kind, key) do
+    case Schema.key(kind, key) do
+      nil -> :term
+      spec -> spec.type
+    end
+  end
+
   defp node_map?(v), do: is_map(v) and not is_struct(v)
+
+  defp element_type({:list, t}), do: t
+  defp element_type({:map, t}), do: t
+  defp element_type(type), do: type
 
   defp node_kind({:node, kind}), do: kind
   defp node_kind({:list, t}), do: node_kind(t)

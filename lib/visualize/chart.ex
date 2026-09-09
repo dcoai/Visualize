@@ -75,6 +75,25 @@ defmodule Visualize.Chart do
           labels: [map()]
         }
 
+  @typedoc """
+  A layer of a stack (spec/14 §8.2): a fragment, a chart, or a `{name, layer}` pair whose
+  name `stack/1` ignores and `explain/1` reports.
+  """
+  @type layer :: t() | map() | {term(), t() | map()}
+
+  @typedoc """
+  One leaf of a stack, with the layer that set it and the layers it overrode (spec/14 §17.1).
+
+  `layer` is a layer's name, or its zero-based position in the list when it was given
+  without one; `overrode` reads lowest first and is `[]` where nothing was overridden.
+  """
+  @type provenance :: %{
+          path: Validator.path(),
+          value: term(),
+          layer: term(),
+          overrode: [term()]
+        }
+
   @doc """
   The chart of a design map, or every fault in it.
 
@@ -255,7 +274,7 @@ defmodule Visualize.Chart do
       {:dark, :cartesian, %{width: 600, height: 300}}
 
   """
-  @spec stack([t() | map()]) :: map()
+  @spec stack([layer()]) :: map()
   def stack(layers) when is_list(layers), do: Enum.reduce(layers, %{}, &stack(&2, &1))
 
   @doc """
@@ -288,11 +307,48 @@ defmodule Visualize.Chart do
       {:error, [{[:styles, :series], :conflict}]}
 
   """
-  @spec stack(t() | map(), t() | map()) :: map()
-  def stack(lower, higher), do: Stack.cascade(fragment(lower), fragment(higher))
+  @spec stack(layer(), layer()) :: map()
+  def stack(lower, higher), do: Stack.cascade(layer(lower), layer(higher))
 
   defp fragment(%__MODULE__{} = chart), do: to_map(chart)
   defp fragment(map) when is_map(map), do: map
+
+  defp layer({_name, l}), do: fragment(l)
+  defp layer(l), do: fragment(l)
+
+  @doc """
+  Where every value of a stack came from (spec/14 §17.1).
+
+  Takes the *layers* — the same list `stack/1` takes, each a fragment, a chart or a
+  `{name, layer}` pair — and returns one `t:provenance/0` per leaf path of `stack/1` of
+  those layers, ordered by path: the value, the layer that set it, and the layers it
+  overrode, lowest first. A layer without a name is reported by its zero-based position.
+
+  A leaf is a value the cascade does not descend into: the walk descends through every
+  node, every name-keyed declaration and every element of a collection, and stops at a
+  scalar, a name, a text, an extent or a variable. The stack itself carries no tags — a
+  tagged fragment would not validate and could not be a layer of another stack — so this
+  recomputes the cascade of spec/14 §8.2, which is why the two cannot disagree.
+
+  ## Examples
+
+      iex> house = %{theme: :dark, frame: %{size: %{width: 800, height: 400}}}
+      iex> panel = %{frame: %{size: %{width: 600}}}
+      iex> Visualize.Chart.explain([{:house, house}, {:panel, panel}])
+      [
+        %{path: [:frame, :size, :height], value: 400, layer: :house, overrode: []},
+        %{path: [:frame, :size, :width], value: 600, layer: :panel, overrode: [:house]},
+        %{path: [:theme], value: :dark, layer: :house, overrode: []}
+      ]
+
+  """
+  @spec explain([layer()]) :: [provenance()]
+  def explain(layers) when is_list(layers) do
+    layers |> Enum.with_index() |> Enum.map(&tag/1) |> Stack.explain()
+  end
+
+  defp tag({{name, layer}, _index}), do: {name, layer(layer)}
+  defp tag({layer, index}), do: {index, layer(layer)}
 
   @doc """
   The design compiled for rendering per tick (spec/14 §12): the split into static and
