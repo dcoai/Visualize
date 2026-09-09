@@ -4,6 +4,10 @@ defmodule Visualize.Chart.Codec do
   # `encode/1` turns a validated design map into a term Jason writes; `decode/1` turns
   # the term Jason read into a design map for the validator, never failing on a wrong
   # shape — a value the schema cannot place is passed through for the validator to name.
+  #
+  # A struct is a leaf in both directions (spec/14 §1.4, D-92): a `%Var{}` is written as
+  # its tagged term and read back as itself, and no map clause on either side descends
+  # into one, so the walk cannot rebuild a struct as a plain map or a map as a struct.
 
   alias Visualize.Chart.{Schema, Var}
   alias Visualize.Theme
@@ -79,7 +83,7 @@ defmodule Visualize.Chart.Codec do
   # -- decode ---------------------------------------------------------------------------
 
   @doc false
-  def decode(map) when is_map(map), do: read_node(:design, map)
+  def decode(map) when is_map(map) and not is_struct(map), do: read_node(:design, map)
   @doc false
   def decode(other), do: other
 
@@ -103,10 +107,10 @@ defmodule Visualize.Chart.Codec do
   defp read(_type, %{"$field" => f} = v) when map_size(v) == 1 and is_binary(f),
     do: {:field, String.to_atom(f)}
 
-  defp read({:node, kind}, v) when is_map(v), do: read_node(kind, v)
+  defp read({:node, kind}, v) when is_map(v) and not is_struct(v), do: read_node(kind, v)
   defp read({:list, t}, v) when is_list(v), do: Enum.map(v, &read(t, &1))
 
-  defp read({:map, t}, v) when is_map(v) do
+  defp read({:map, t}, v) when is_map(v) and not is_struct(v) do
     Map.new(v, fn {k, e} -> {atom(k), read(t, e)} end)
   end
 
@@ -174,12 +178,15 @@ defmodule Visualize.Chart.Codec do
   end
 
   defp read_term(v) when is_list(v), do: Enum.map(v, &read_term/1)
-  defp read_term(v) when is_map(v), do: Map.new(v, fn {k, e} -> {atom(k), read_term(e)} end)
+
+  defp read_term(v) when is_map(v) and not is_struct(v),
+    do: Map.new(v, fn {k, e} -> {atom(k), read_term(e)} end)
+
   defp read_term(v), do: v
 
   # The JSON shape of each alternative of a `{:one_of, types}`: strings stand for atoms.
-  defp json_shape?({:node, _}, v), do: is_map(v)
-  defp json_shape?({:map, _}, v), do: is_map(v)
+  defp json_shape?({:node, _}, v), do: is_map(v) and not is_struct(v)
+  defp json_shape?({:map, _}, v), do: is_map(v) and not is_struct(v)
   defp json_shape?({:list, _}, v), do: is_list(v)
   defp json_shape?(:text, v), do: is_list(v)
   defp json_shape?(:extent, v), do: v == "auto" or is_list(v)

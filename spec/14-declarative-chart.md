@@ -72,7 +72,11 @@ A container's facet is the facet of what it holds: `marks` is `:channel` because
 | `:slot` | a slot of the design's theme: `:series_k`, `{:series, i}`, `:axis`, `:grid`, `:text`, `:background`, `:font_family`, `:font_size`, `:label_size`, `:title_size` ([08-utilities](08-utilities.md) §7.1) |
 | `:term` | any JSON-representable term: a number, string, boolean, `nil`, atom or `DateTime`, or a list or name-keyed map of those |
 
-A `%Visualize.Chart.Var{}` (§7.1) is accepted wherever a value of any type is expected, including in place of a whole node; its value is typed at application. A field name is an atom in the map form even for a source whose columns are strings: `Visualize.Data.Table.get/2` reads either spelling (D-52), so `:v` reaches a column named `"v"` and the map never carries a string where a name belongs (D-57).
+A `%Visualize.Chart.Var{}` (§7.1) is accepted wherever a value of any type is expected, including in place of a whole node; its value is typed at application.
+
+**A struct is a leaf of every walk** (D-92). A variable stands *for* a value rather than being one, so no walk over the design map — composition and the cascade (§8), resolution (§7.3), validation (§10), the JSON codec (§11), the provenance and free-variable walks (§17) and the builder's node list (§18.5) — descends into a struct or merges one as a map, whatever type the schema gives the key it sits at. That a struct is also a map in Elixir is an implementation fact and never a licence to treat it as one: a walk MUST exclude it explicitly. Exactly two structs may appear in a design map — a `%Visualize.Chart.Var{}` and a `DateTime` — and both are values.
+
+A field name is an atom in the map form even for a source whose columns are strings: `Visualize.Data.Table.get/2` reads either spelling (D-52), so `:v` reaches a column named `"v"` and the map never carries a string where a name belongs (D-57).
 
 ### 1.5 Merge rules
 
@@ -81,7 +85,7 @@ A `%Visualize.Chart.Var{}` (§7.1) is accepted wherever a value of any type is e
 | Rule | Keys | Effect |
 |---|---|---|
 | `:concat` | every list of nodes: `marks`, `labels`, `axes`, `transforms` | the later fragment's elements follow the earlier's; the elements are never merged with each other |
-| `:union` | every name-keyed declaration: `sources`, `vars`, `styles`, `scales` | the union of the two maps; a name declared with equal values in both is taken once, and declared differently in both is `:conflict` at the name's path |
+| `:union` | every name-keyed declaration: `sources`, `vars`, `styles`, `scales` | the union of the two maps; a name declared with equal values in both is taken once, and declared differently in both is `:conflict` at the name's path. A key either fragment gives as a struct — a whole-node variable — is not a map of names and is not united: equal in both it is taken once, different it is `:conflict` at the *key's* path (§8.1) |
 | `:override` | every scalar and every other node: `version`, `theme`, `size`, `kind`, `type`, `text`, … | the later fragment's value replaces the earlier's. A node given as a map by both fragments composes key by key under its own kind's rules, so a frame fragment adds its scales and axes to another's (§8); given as anything else by either — a name, a variable — it is replaced whole |
 
 ## 2. The design node
@@ -579,8 +583,8 @@ The result is a `%Visualize.Chart.Applied{}` (§14.10): `chart`, the concrete `%
 
 For each key present in either fragment, by the key's spec in the node kind being merged:
 
-- `:concat` — the later fragment's elements after the earlier's: `marks`, `labels`, `axes`, `transforms`. Elements are never merged with each other.
-- `:union` — the union of the two name-keyed maps: `sources`, `vars`, `styles`, `scales`. A name in both with equal values is taken once; with different values it is `:conflict` at the name's path (`[:styles, :series]`, `[:frame, :scales, :x]`), every conflict reported. A house style sheet composes with a chart's own styles and disagrees loudly, never silently.
+- `:concat` — the later fragment's elements after the earlier's: `marks`, `labels`, `axes`, `transforms`. Elements are never merged with each other. A key either fragment gives as a struct is not a list, so there is nothing to append and the later fragment's value is taken whole (§1.4); a variable at a `:concat` key is not a disagreement, because a collection has no names for two fragments to claim.
+- `:union` — the union of the two name-keyed maps: `sources`, `vars`, `styles`, `scales`. A name in both with equal values is taken once; with different values it is `:conflict` at the name's path (`[:styles, :series]`, `[:frame, :scales, :x]`), every conflict reported. A house style sheet composes with a chart's own styles and disagrees loudly, never silently. A key either fragment gives as a **struct** — `styles: var(:sheet)`, the documented way to leave a whole node to application (§1.4, §7.1) — carries no names to unite, so it is read as one value: equal in both fragments it is taken once, and different it is `:conflict` at the key's own path (`[:styles]`, `[:frame, :scales]`) with the later fragment's value in the result. A variable at a `:union` key says *this whole declaration is somebody else's*, and a fragment that also declares part of it is the disagreement `compose/2` exists to report (D-92).
 - `:override` — the later fragment's value, except that a key whose type is a node — `{:node, kind}`, or a `{:one_of, …}` that admits one, such as `theme` — given as a map by both fragments composes key by key under that kind's rules: `frame` merges, its `scales` union, its `axes` concatenate, its `size` is the later's; `meta` merges likewise. A key the schema does not know is `:override`.
 
 A key present in one fragment alone is taken as it is. Over a list, `:concat` and `:union` keys compose associatively and `:override` keys last-wins, so the order of the fragments is the order of their marks and labels and the precedence of their scalars: a standard label set, a house style sheet and a chart-specific fragment compose in that order into one design.
@@ -594,7 +598,7 @@ The cascade cannot fail — there is no disagreement for it to report, since a d
 For each key present in either layer, by the key's spec in the node kind being merged:
 
 - `:concat` — a higher element whose *identity* equals a lower element's replaces it in place, keeping the lower's position; every other higher element follows the lower's, as `compose/2` appends them. Identity is what lets a layer restyle the shared frame's x-axis rather than draw a second one, and it is defined below.
-- `:union` — the union of the two name-keyed maps; a name both layers declare is the **higher layer's entry**, where `compose/2` reports `:conflict`. The entry is taken *whole*: a style the higher layer redeclares replaces the lower's rather than merging into it, so the result is a style some layer actually wrote. Derivation within a style is `extends` (§3.5), which is the key-by-key operation on styles and is unrelated to the cascade.
+- `:union` — the union of the two name-keyed maps; a name both layers declare is the **higher layer's entry**, where `compose/2` reports `:conflict`. The entry is taken *whole*: a style the higher layer redeclares replaces the lower's rather than merging into it, so the result is a style some layer actually wrote. Derivation within a style is `extends` (§3.5), which is the key-by-key operation on styles and is unrelated to the cascade. A key either layer gives as a **struct** carries no names to unite (§1.4), so it is the higher layer's value whole, exactly as the `:override` rule below reads it — the cascade resolves the disagreement `compose/2` reports (D-92).
 - `:override` — the higher layer's value, except that a key whose type is a node — `{:node, kind}`, or a `{:one_of, …}` that admits one — given as a map by **both** layers cascades key by key under that kind's rules, exactly as `compose/2` recurses: a panel fragment's frame adds its own scales and axes to the shared frame's and takes precedence on the frame's scalars. A node either layer gives as anything else — a name, a variable — is the higher layer's value whole. A key the schema does not know is `:override`.
 
 **Element identity** (#98, D-82) is what a `:concat` key's elements are matched by:
@@ -614,7 +618,9 @@ A matched element is replaced **whole**, not merged key by key, for the reason t
 
 The result of that is that the stacked list is ordered by each identity's *first* appearance across the layers and carries its *last* value, whichever way the layers are grouped, which is why the cascade stays associative over `:concat` keys.
 
-A key present in one layer alone is taken as it is. `:concat`, `:union` and `:override` keys all cascade associatively, so a stack is a list of layers in precedence order and the fold over it may be built in parts: a house sheet stacked with a frame is a layer of the panel's stack.
+A key present in one layer alone is taken as it is. `:concat`, `:union` and `:override` keys all cascade associatively **where every layer gives a mergeable key as a map** — a `:union` key as a name map, a node key as a node — which is every layer that declares anything at them. So a stack is a list of layers in precedence order and the fold over it may be built in parts: a house sheet stacked with a frame is a layer of the panel's stack.
+
+The exception is a layer that gives a mergeable key as a **struct** — a whole-node variable (§1.4). That layer is *replacing* the declaration rather than merging into it, and a replacement in the middle of a stack is not recoverable by regrouping: `stack([a, b, c])` is the left fold, which is what `Visualize.Chart.stack/1` computes and what `Visualize.Chart.explain/1` reports, while `stack(a, stack(b, c))` may differ where `b` replaces a key `a` declares and `c` declares it again. Carrying the erasure through the regrouping would mean an intermediate result that is not a fragment, which §8.2 exists to rule out. This is the price of admitting a whole-node value at a key whose rule is to merge, and it is the second reason `compose/2` reports the same pair as a `:conflict` (§8.1) instead of resolving it (D-92).
 
 ### 8.3 Why there are two operations
 

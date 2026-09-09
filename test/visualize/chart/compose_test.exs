@@ -4,6 +4,12 @@ defmodule Visualize.Chart.ComposeTest do
   collections concatenate associatively, declarations unite with a conflict at a name
   declared differently, scalars are the later's, and a node both fragments give as a
   map merges key by key.
+
+  A struct is a leaf of the walk (§1.4, D-92): a `:union` key given as a whole-node
+  variable carries no names to unite, so it is one value — taken once where the two
+  fragments agree and `:conflict` at the key's own path where they do not. The fragment
+  generator offers that alternative at every `:union` key, so the properties exercise the
+  class rather than only the examples below.
   """
   use ExUnit.Case, async: true
   use ExUnitProperties
@@ -89,6 +95,47 @@ defmodule Visualize.Chart.ComposeTest do
                {:ok, %{theme: %{name: :b, axis: "#000"}}}
     end
 
+    test "a whole-node variable at a union key is one value, never merged as a name map" do
+      sheet = Chart.var(:sheet)
+      styles = %{series: %{stroke_width: 2}}
+
+      assert Chart.compose(%{styles: sheet}, %{styles: styles}) ==
+               {:error, [{[:styles], :conflict}]}
+
+      assert Chart.compose(%{styles: styles}, %{styles: sheet}) ==
+               {:error, [{[:styles], :conflict}]}
+
+      assert Chart.compose(%{styles: sheet}, %{styles: Chart.var(:other)}) ==
+               {:error, [{[:styles], :conflict}]}
+
+      assert Chart.compose(%{styles: sheet}, %{styles: sheet}) == {:ok, %{styles: sheet}}
+      assert Chart.compose(%{styles: sheet}, %{version: 1}) == {:ok, %{styles: sheet, version: 1}}
+    end
+
+    test "every union key reads a whole-node variable the same way, at its own path" do
+      v = Chart.var(:v)
+
+      for {declared, variable, path} <- [
+            {%{sources: %{p: %{fields: [:t]}}}, %{sources: v}, [:sources]},
+            {%{vars: %{unit: %{default: "%"}}}, %{vars: v}, [:vars]},
+            {%{styles: %{series: %{stroke_width: 2}}}, %{styles: v}, [:styles]},
+            {%{frame: %{scales: %{x: %{kind: :time}}}}, %{frame: %{scales: v}}, [:frame, :scales]}
+          ] do
+        assert Chart.compose(variable, declared) == {:error, [{path, :conflict}]}
+        assert Chart.compose(declared, variable) == {:error, [{path, :conflict}]}
+        assert Chart.compose(variable, variable) == {:ok, variable}
+      end
+    end
+
+    test "a concat key given as a variable is the later's whole, and is not a conflict" do
+      v = Chart.var(:m)
+
+      assert Chart.compose(%{marks: [%{type: :line}]}, %{marks: v}) == {:ok, %{marks: v}}
+
+      assert Chart.compose(%{marks: v}, %{marks: [%{type: :line}]}) ==
+               {:ok, %{marks: [%{type: :line}]}}
+    end
+
     test "a key the schema does not know is the later's" do
       assert Chart.compose(%{extra: 1, marks: [1]}, %{extra: 2, marks: [2]}) ==
                {:ok, %{extra: 2, marks: [1, 2]}}
@@ -124,6 +171,12 @@ defmodule Visualize.Chart.ComposeTest do
   defp names(pool, gen),
     do: map(list_of(tuple({member_of(pool), gen}), max_length: 3), &Map.new/1)
 
+  # A `:union` key may be given as a whole-node variable instead of a name map (spec/14
+  # §1.4, §8.1, D-92) — the class the merge rules used to `Map.merge/2` into a malformed
+  # struct. One in five, so the name-map branches stay the common case.
+  defp declaration(pool, gen),
+    do: frequency([{4, names(pool, gen)}, {1, map(member_of([:sheet, :other]), &Chart.var/1)}])
+
   defp mark,
     do:
       fixed_map(%{
@@ -143,7 +196,7 @@ defmodule Visualize.Chart.ComposeTest do
     optional_map(%{
       kind: member_of([:cartesian, :polar]),
       size: fixed_map(%{width: integer(100..900), height: integer(100..900)}),
-      scales: names(@scale_names, scale()),
+      scales: declaration(@scale_names, scale()),
       axes:
         list_of(fixed_map(%{scale: member_of(@scale_names), side: member_of([:top, :left])}),
           max_length: 2
@@ -155,8 +208,9 @@ defmodule Visualize.Chart.ComposeTest do
     optional_map(%{
       version: constant(1),
       theme: member_of([:default, :dark]),
-      styles: names(@style_names, style()),
-      vars: names([:unit, :n], fixed_map(%{default: integer()})),
+      sources: declaration([:primary, :other], fixed_map(%{fields: constant([:t, :v])})),
+      styles: declaration(@style_names, style()),
+      vars: declaration([:unit, :n], fixed_map(%{default: integer()})),
       frame: frame(),
       marks: list_of(mark(), max_length: 3),
       labels: list_of(label(), max_length: 3)
@@ -167,6 +221,7 @@ defmodule Visualize.Chart.ComposeTest do
     check all(a <- fragment(), b <- fragment()) do
       case Chart.compose(a, b) do
         {:ok, merged} ->
+          assert foreign_structs(merged) == []
           assert Map.get(merged, :marks) == concat(a, b, :marks)
           assert Map.get(merged, :labels) == concat(a, b, :labels)
           assert Map.get(merged, :theme) == later(a, b, :theme)
@@ -222,6 +277,18 @@ defmodule Visualize.Chart.ComposeTest do
   end
 
   defp later(a, b, key), do: Map.get(b, key, Map.get(a, key))
+
+  # The acceptance of D-92: no walk may produce a struct carrying keys its own definition
+  # does not declare — the shape `Map.merge/2` over a `%Var{}` and a name map produced.
+  defp foreign_structs(v) when is_struct(v) do
+    if Map.keys(v) == Map.keys(struct(v.__struct__)), do: [], else: [v]
+  end
+
+  defp foreign_structs(v) when is_map(v),
+    do: Enum.flat_map(v, fn {_k, e} -> foreign_structs(e) end)
+
+  defp foreign_structs(v) when is_list(v), do: Enum.flat_map(v, &foreign_structs/1)
+  defp foreign_structs(_v), do: []
 
   defp conflicting?(a, b, path) do
     x = get_in(a, Enum.map(path, &Access.key(&1, nil)))
