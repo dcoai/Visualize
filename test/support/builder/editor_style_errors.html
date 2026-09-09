@@ -1,0 +1,179 @@
+<div class="vis-builder-editor">
+  <nav class="vis-builder-tabs">
+    <button type="button" class="vis-builder-tab vis-builder-tab-open" phx-click="facet" phx-value-facet="style">style</button>
+  </nav>
+  <form class="vis-builder-form" phx-change="edit">
+    <label class="vis-builder-field">
+      <span class="vis-builder-key">extends</span>
+      
+      
+      <input type="text" name="extends">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">fill</span>
+      
+      
+      <input type="text" name="fill">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">stroke</span>
+      
+      
+      <input type="text" name="stroke" value="series_1">
+      
+      
+      <ul class="vis-builder-key-errors">
+        <li class="vis-builder-error">styles.series.stroke: slot :series_1 is not a slot of the theme</li>
+      </ul>
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">stroke_width</span>
+      
+      
+      <input type="text" name="stroke_width" value="2">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">stroke_dasharray</span>
+      
+      
+      <input type="text" name="stroke_dasharray">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">stroke_linecap</span>
+      
+      
+      
+      <select name="stroke_linecap">
+        <option value=""></option>
+        <option value="butt">butt</option><option value="round">round</option><option value="square">square</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">stroke_linejoin</span>
+      
+      
+      
+      <select name="stroke_linejoin">
+        <option value=""></option>
+        <option value="miter">miter</option><option value="round">round</option><option value="bevel">bevel</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">opacity</span>
+      
+      
+      <input type="text" name="opacity">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">fill_opacity</span>
+      
+      
+      <input type="text" name="fill_opacity">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">stroke_opacity</span>
+      
+      
+      <input type="text" name="stroke_opacity">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">font_family</span>
+      
+      
+      <input type="text" name="font_family">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">font_size</span>
+      
+      
+      <input type="text" name="font_size">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">font_weight</span>
+      
+      <input type="number" name="font_weight">
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">text_anchor</span>
+      
+      
+      
+      <select name="text_anchor">
+        <option value=""></option>
+        <option value="start">start</option><option value="middle">middle</option><option value="end">end</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">class</span>
+      
+      
+      <input type="text" name="class">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">curve</span>
+      
+      
+      
+      <select name="curve">
+        <option value=""></option>
+        <option value="linear">linear</option><option value="step">step</option><option value="step_before">step_before</option><option value="step_after">step_after</option><option value="basis">basis</option><option value="cardinal">cardinal</option><option value="catmull_rom">catmull_rom</option><option value="monotone_x">monotone_x</option><option value="monotone_y">monotone_y</option><option value="natural">natural</option>
+      </select>
+      
+      <ul class="vis-builder-key-errors">
+        <li class="vis-builder-error">styles.series.curve: must be one of :linear, :step</li>
+      </ul>
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">curve_opts</span>
+      
+      
+      
+      
+      <textarea name="curve_opts"></textarea>
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">symbol</span>
+      
+      
+      
+      <select name="symbol">
+        <option value=""></option>
+        <option value="circle">circle</option><option value="cross">cross</option><option value="diamond">diamond</option><option value="square">square</option><option value="star">star</option><option value="triangle">triangle</option><option value="wye">wye</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">symbol_size</span>
+      
+      
+      <input type="text" name="symbol_size">
+      
+      
+      
+    </label>
+  </form>
+</div>

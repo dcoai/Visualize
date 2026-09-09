@@ -1,0 +1,405 @@
+if Code.ensure_loaded?(Phoenix.Component) do
+  defmodule Visualize.Chart.Builder.Editor do
+    @moduledoc """
+    The builder's fragment editor, generated from the schema (spec/14 §18.5-§18.7).
+
+    Nothing here is written by hand. `nodes/1` walks a fragment by the *type* of every key
+    it carries, so which nodes a person may open is a query over
+    `Visualize.Chart.Schema.describe/1` and not a list; `widget/1` maps a
+    `t:Visualize.Chart.Schema.type/0` to a control and `parse/2` reads a submitted string
+    back as a value of that type, so a key added to the schema gets its control and a node
+    kind added becomes openable, with no edit here (D-86).
+
+    A composite value — a text, an extent, a whole node — is a textarea holding what
+    `inspect/1` writes, read back by `parse/2` as a *literal*: the string is parsed with
+    `Code.string_to_quoted/1`, never evaluated, and only the vocabulary a design may
+    contain is accepted (spec/14 §1.4). A design map therefore cannot acquire a function or
+    a term the JSON codec has no form for.
+
+    This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
+    """
+
+    use Phoenix.Component
+
+    alias Visualize.Chart.{Schema, Validator, Var}
+
+    @typedoc "The control a key's type gets (spec/14 §18.6)."
+    @type widget :: :checkbox | :number | :text | :textarea | {:select, [atom()]}
+
+    @typedoc "One editable node of a fragment (spec/14 §18.5)."
+    @type node_entry :: %{path: Validator.path(), kind: Schema.kind(), label: String.t()}
+
+    # The facets in the order of spec/14 §1.3, which is the order of the editor's tabs.
+    @facets [:binding, :channel, :geometry, :style, :content]
+
+    # Every type that reads as a plain atom naming something the design declares.
+    @atom_types [:name, :field, :slot]
+
+    # Every type whose control is a single-line text field (spec/14 §18.6).
+    @text_types [:string, :name, :field, :colour, :size, :font, :slot]
+
+    # -- the nodes of a fragment (spec/14 §18.5) -------------------------------------------
+
+    @doc """
+    The editable nodes of a fragment: one entry per node the schema's walk reaches.
+
+    The root is first and carries the path `[]`; a `{:map, {:node, kind}}` contributes one
+    node per declared name in name order, a `{:list, {:node, kind}}` one per element at its
+    index, and a `{:one_of, …}` that admits a node kind contributes that node when the
+    value is a map. The walk stops at values: a text, an extent, a channel and a reference
+    are edited on the node that carries them.
+
+    ## Examples
+
+        iex> fragment = %{version: 1, frame: %{kind: :cartesian, size: %{width: 400}}}
+        iex> Enum.map(Visualize.Chart.Builder.Editor.nodes(fragment), & &1.label)
+        ["design", "frame", "frame.size"]
+        iex> Enum.map(Visualize.Chart.Builder.Editor.nodes(fragment), & &1.kind)
+        [:design, :frame, :size]
+
+    """
+    @spec nodes(map()) :: [node_entry(), ...]
+    def nodes(fragment) when is_map(fragment), do: walk(fragment, :design, [])
+
+    defp walk(node, kind, path) do
+      [%{path: path, kind: kind, label: label(path)} | children(node, kind, path)]
+    end
+
+    defp children(node, kind, path) do
+      Enum.flat_map(Schema.describe(kind), fn spec ->
+        case Map.fetch(node, spec.key) do
+          {:ok, value} -> descend(spec.type, value, path ++ [spec.key])
+          :error -> []
+        end
+      end)
+    end
+
+    defp descend({:node, kind}, value, path) when is_map(value) and not is_struct(value),
+      do: walk(value, kind, path)
+
+    defp descend({:map, {:node, _} = inner}, value, path)
+         when is_map(value) and not is_struct(value) do
+      value
+      |> Enum.sort_by(fn {name, _node} -> to_string(name) end)
+      |> Enum.flat_map(fn {name, node} -> descend(inner, node, path ++ [name]) end)
+    end
+
+    defp descend({:list, {:node, _} = inner}, value, path) when is_list(value) do
+      value
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {node, index} -> descend(inner, node, path ++ [index]) end)
+    end
+
+    defp descend({:one_of, types}, value, path) when is_map(value) and not is_struct(value) do
+      case Enum.find(types, &match?({:node, _}, &1)) do
+        nil -> []
+        inner -> descend(inner, value, path)
+      end
+    end
+
+    defp descend(_type, _value, _path), do: []
+
+    # The path as `Visualize.Chart.Validator.format/1` spells it.
+    defp label([]), do: "design"
+
+    defp label(path) do
+      Enum.reduce(path, "", fn
+        index, acc when is_integer(index) -> "#{acc}[#{index}]"
+        key, "" -> "#{key}"
+        key, acc -> "#{acc}.#{key}"
+      end)
+    end
+
+    # -- widgets and values (spec/14 §18.6) -----------------------------------------------
+
+    @doc """
+    The control a type gets (spec/14 §18.6).
+
+    ## Examples
+
+        iex> Visualize.Chart.Builder.Editor.widget(:boolean)
+        :checkbox
+        iex> Visualize.Chart.Builder.Editor.widget({:enum, [:top, :bottom]})
+        {:select, [:top, :bottom]}
+        iex> Visualize.Chart.Builder.Editor.widget({:ref, :style})
+        :text
+        iex> Visualize.Chart.Builder.Editor.widget({:node, :size})
+        :textarea
+
+    """
+    @spec widget(Schema.type()) :: widget()
+    def widget(:boolean), do: :checkbox
+    def widget(type) when type in [:integer, :number], do: :number
+    def widget({:enum, allowed}), do: {:select, allowed}
+    def widget(type) when type in @text_types, do: :text
+    def widget({:ref, _kind}), do: :text
+    def widget({:one_of, [first | _rest]}), do: widget(first)
+    def widget(_type), do: :textarea
+
+    @doc """
+    A submitted string read back as a value of a type (spec/14 §18.6).
+
+    A blank string is `:error` for every type: blanking a control removes the key rather
+    than setting it to nothing. A composite value is read as a literal — parsed with
+    `Code.string_to_quoted/1` and never evaluated — and only a number, a string, an atom, a
+    boolean, `nil`, a list, a tuple, a map, a `Visualize.Chart.Var` or a `~U` sigil is
+    accepted.
+
+    ## Examples
+
+        iex> Visualize.Chart.Builder.Editor.parse(:integer, "42")
+        {:ok, 42}
+        iex> Visualize.Chart.Builder.Editor.parse({:ref, :style}, "series")
+        {:ok, :series}
+        iex> Visualize.Chart.Builder.Editor.parse(:colour, "#3b6fa8")
+        {:ok, "#3b6fa8"}
+        iex> Visualize.Chart.Builder.Editor.parse(:extent, "[0, 100]")
+        {:ok, [0, 100]}
+        iex> Visualize.Chart.Builder.Editor.parse(:term, "System.halt()")
+        :error
+
+    """
+    @spec parse(Schema.type(), String.t()) :: {:ok, term()} | :error
+    def parse(type, string) when is_binary(string) do
+      case String.trim(string) do
+        "" -> :error
+        trimmed -> read(type, trimmed)
+      end
+    end
+
+    defp read(:boolean, string) when string in ["true", "on"], do: {:ok, true}
+    defp read(:boolean, string) when string in ["false", "off"], do: {:ok, false}
+    defp read(:boolean, _string), do: :error
+    defp read(:integer, string), do: integer(string)
+    defp read(:number, string), do: number(string)
+    defp read(:string, string), do: {:ok, string}
+    defp read(type, string) when type in @atom_types, do: {:ok, atom(string)}
+    defp read({:ref, _kind}, string), do: {:ok, atom(string)}
+    defp read(type, string) when type in [:colour, :size, :font], do: {:ok, loose(string)}
+
+    defp read({:enum, allowed}, string) do
+      case Enum.find(allowed, &(to_string(&1) == string)) do
+        nil -> :error
+        value -> {:ok, value}
+      end
+    end
+
+    defp read({:one_of, [first | _rest]}, string), do: read(first, string)
+    defp read(_type, string), do: literal(string)
+
+    defp integer(string) do
+      case Integer.parse(string) do
+        {value, ""} -> {:ok, value}
+        _other -> :error
+      end
+    end
+
+    defp number(string) do
+      with :error <- integer(string) do
+        case Float.parse(string) do
+          {value, ""} -> {:ok, value}
+          _other -> :error
+        end
+      end
+    end
+
+    defp atom(":" <> rest), do: String.to_atom(rest)
+    defp atom(string), do: String.to_atom(string)
+
+    # What a person means by a bare word in a colour, a size or a font: a leading `:` is an
+    # atom, a numeral is a number, and everything else is the string itself.
+    defp loose(":" <> rest), do: String.to_atom(rest)
+
+    defp loose(string) do
+      case number(string) do
+        {:ok, value} -> value
+        :error -> string
+      end
+    end
+
+    # -- the literal reader (spec/14 §18.6, D-86) -----------------------------------------
+
+    defp literal(string) do
+      case Code.string_to_quoted(string) do
+        {:ok, quoted} -> term(quoted)
+        {:error, _reason} -> :error
+      end
+    end
+
+    defp term(value) when is_number(value) or is_binary(value) or is_atom(value), do: {:ok, value}
+    defp term(list) when is_list(list), do: collect(list)
+
+    defp term({:-, _meta, [value]}) when is_number(value), do: {:ok, -value}
+
+    defp term({:{}, _meta, elements}) do
+      with {:ok, values} <- collect(elements), do: {:ok, List.to_tuple(values)}
+    end
+
+    defp term({:%{}, _meta, pairs}) do
+      with {:ok, values} <- collect(pairs), do: {:ok, Map.new(values)}
+    end
+
+    defp term({:%, _meta, [{:__aliases__, _, [:Visualize, :Chart, :Var]}, {:%{}, _, pairs}]}) do
+      with {:ok, fields} <- collect(pairs), do: var(fields)
+    end
+
+    defp term({:sigil_U, _meta, [{:<<>>, _, [text]}, _modifiers]}) when is_binary(text) do
+      case DateTime.from_iso8601(text) do
+        {:ok, at, _offset} -> {:ok, at}
+        {:error, _reason} -> :error
+      end
+    end
+
+    defp term({left, right}) do
+      with {:ok, first} <- term(left), {:ok, second} <- term(right), do: {:ok, {first, second}}
+    end
+
+    defp term(_other), do: :error
+
+    # `Visualize.Chart.Var` carries one field and it is required, so a literal that gives
+    # anything else is an error rather than a raise.
+    defp var(name: name) when is_atom(name), do: {:ok, %Var{name: name}}
+    defp var(_fields), do: :error
+
+    defp collect(list) do
+      Enum.reduce_while(list, {:ok, []}, fn element, {:ok, acc} ->
+        case term(element) do
+          {:ok, value} -> {:cont, {:ok, [value | acc]}}
+          :error -> {:halt, :error}
+        end
+      end)
+      |> case do
+        {:ok, values} -> {:ok, Enum.reverse(values)}
+        :error -> :error
+      end
+    end
+
+    # -- the form (spec/14 §18.7) ---------------------------------------------------------
+
+    attr(:kind, :atom, required: true, doc: "the node kind being edited")
+    attr(:node, :map, required: true, doc: "the node's current value")
+    attr(:path, :list, default: [], doc: "where the node sits, for its keys' errors")
+    attr(:facet, :atom, default: nil, doc: "the open tab, `nil` for the kind's first facet")
+    attr(:errors, :list, default: [], doc: "the `{path, reason}` pairs of spec/14 §10.1")
+    attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
+    attr(:class, :string, default: nil, doc: "appended to the editor's class")
+
+    @doc """
+    Renders one form for one node (spec/10 §15.3).
+
+    The facets of the node kind's keys are the tabs, in the order of spec/14 §1.3; the keys
+    of the open tab follow the order `Visualize.Chart.Schema.describe/1` returns them in,
+    each with the control `widget/1` chose, the value the node carries or the schema's
+    default as a placeholder, and its own errors under it.
+    """
+    def panel(assigns) do
+      specs = Schema.describe(assigns.kind)
+      facets = Enum.filter(@facets, fn facet -> Enum.any?(specs, &(&1.facet == facet)) end)
+      open = if assigns.facet in facets, do: assigns.facet, else: List.first(facets)
+
+      assigns =
+        assigns
+        |> assign(:facets, facets)
+        |> assign(:open, open)
+        |> assign(:fields, fields(specs, open, assigns))
+
+      ~H"""
+      <div class={class(@class)}>
+        <nav class="vis-builder-tabs">
+          <button
+            :for={facet <- @facets}
+            type="button"
+            class={tab(facet, @open)}
+            phx-click="facet"
+            phx-value-facet={facet}
+            phx-target={@target}
+          >{facet}</button>
+        </nav>
+        <form class="vis-builder-form" phx-change="edit" phx-target={@target}>
+          <label :for={field <- @fields} class="vis-builder-field">
+            <span class="vis-builder-key">{field.key}</span>
+            <input
+              :if={field.widget == :checkbox}
+              type="checkbox"
+              name={field.key}
+              value="true"
+              checked={field.checked}
+            />
+            <input
+              :if={field.widget == :number}
+              type="number"
+              name={field.key}
+              value={field.value}
+              placeholder={field.placeholder}
+            />
+            <input
+              :if={field.widget == :text}
+              type="text"
+              name={field.key}
+              value={field.value}
+              placeholder={field.placeholder}
+            />
+            <select :if={field.widget == :select} name={field.key}>
+              <option value=""></option>
+              <option
+                :for={allowed <- field.options}
+                value={allowed}
+                selected={field.value == to_string(allowed)}
+              >{allowed}</option>
+            </select>
+            <textarea
+              :if={field.widget == :textarea}
+              name={field.key}
+              placeholder={field.placeholder}
+            >{field.value}</textarea>
+            <ul :if={field.errors != []} class="vis-builder-key-errors">
+              <li :for={line <- field.errors} class="vis-builder-error">{line}</li>
+            </ul>
+          </label>
+        </form>
+      </div>
+      """
+    end
+
+    defp class(nil), do: "vis-builder-editor"
+    defp class(extra), do: "vis-builder-editor " <> extra
+
+    defp tab(facet, facet), do: "vis-builder-tab vis-builder-tab-open"
+    defp tab(_facet, _open), do: "vis-builder-tab"
+
+    # One field per key of the open tab: the control, what it shows, and the key's errors.
+    defp fields(specs, open, %{node: node, path: path, errors: errors}) do
+      for spec <- specs, spec.facet == open do
+        widget = widget(spec.type)
+
+        %{
+          key: spec.key,
+          widget: shape(widget),
+          options: options(widget),
+          checked: Map.get(node, spec.key) == true,
+          value: shown(widget, Map.fetch(node, spec.key)),
+          placeholder: shown(widget, default(spec)),
+          errors: key_errors(errors, path ++ [spec.key])
+        }
+      end
+    end
+
+    defp shape({:select, _allowed}), do: :select
+    defp shape(widget), do: widget
+
+    defp options({:select, allowed}), do: allowed
+    defp options(_widget), do: []
+
+    defp default(%{required: true}), do: :error
+    defp default(%{default: nil}), do: :error
+    defp default(%{default: value}), do: {:ok, value}
+
+    defp shown(_widget, :error), do: nil
+    defp shown(:textarea, {:ok, value}), do: inspect(value)
+    defp shown(_widget, {:ok, value}), do: to_string(value)
+
+    defp key_errors(errors, path) do
+      for {at, _reason} = error <- errors, at == path, do: Validator.format(error)
+    end
+  end
+end

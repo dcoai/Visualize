@@ -1,0 +1,35 @@
+<div class="vis-builder-editor">
+  <nav class="vis-builder-tabs">
+    <button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="binding">binding</button><button type="button" class="vis-builder-tab vis-builder-tab-open" phx-click="facet" phx-value-facet="channel">channel</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="geometry">geometry</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="style">style</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="content">content</button>
+  </nav>
+  <form class="vis-builder-form" phx-change="edit">
+    <label class="vis-builder-field">
+      <span class="vis-builder-key">type</span>
+      
+      
+      
+      <select name="type">
+        <option value=""></option>
+        <option value="line" selected>line</option><option value="area">area</option><option value="band">band</option><option value="rule">rule</option><option value="x_band">x_band</option><option value="percentile_band">percentile_band</option><option value="rose">rose</option><option value="symbol">symbol</option><option value="arc">arc</option><option value="path">path</option><option value="rect">rect</option><option value="circle">circle</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">channels</span>
+      
+      
+      
+      
+      <textarea name="channels" placeholder="%{}">%{x: :t, y: :v}</textarea>
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">scales</span>
+      
+      
+      
+      
+      <textarea name="scales" placeholder="%{}"></textarea>
+      
+    </label>
+  </form>
+</div>
