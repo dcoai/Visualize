@@ -1568,3 +1568,47 @@ There is now **one strip**: the children of the open root, then the facets of th
 | `Visualize.Chart.Builder.Editor.facets/1` | the facets a node kind has, in the order of §1.3 |
 
 **A group with nothing to choose is not rendered.** One facet is not a choice, so a lone facet chip never appears; a node whose root has no other children and whose kind has one facet has no strip at all. This is the same rule the top row already follows in spirit — a control that cannot change anything is not a control — and it is what makes the strip mean "here is what you may pick".
+
+### 18.16 The workspace, and the library as a tree
+
+The shell of §18.13 put the stack beside one editing column. The workspace is four regions across:
+
+```
+┌───────────┬───────────┬──────────────────────────────┬─────────────┐
+│ LIBRARY   │ LAYERS    │ Category  Sub-category  Name │ CONTEXT     │
+│ a tree of │ the stack │ the save-fragment form       │ the control │
+│ the store │ and the   ├──────────────────────────────┤ for the     │
+│ full      │ drop      │ node tabs, chips, form       │ field with  │
+│ height,   │ target    ├──────────────────────────────┤ focus       │
+│ scrolling │           │ preview                      │             │
+└───────────┴───────────┴──────────────────────────────┴─────────────┘
+```
+
+The **library** is the left-most column, at the height of the viewport and scrolling on its own, so browsing a large library never moves the chart. The **layers** sit beside it, because a fragment travels from one to the other and a gesture across two adjacent columns is a gesture. The **context panel** is the right-most column (§18.18). The middle is the editor of §18.13, with the save-fragment form (§18.17) as its header.
+
+**A library item's name carries its place in the tree.**
+
+    <category>:<sub-category>:<fragment name>
+
+`Frame:axes:dense ticks` is the fragment `dense ticks`, under `axes`, under `Frame`. The tree is that name parsed and nothing else: no classification is stored, computed from a fragment's keys, or kept in a list here. A category exists because some item names it, which is what lets a person invent one.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Library.parse/1` | a stored name as `{category, sub_category, name}` |
+| `Visualize.Chart.Builder.Library.tree/1` | stored names as categories, each with its sub-categories and their items |
+| `Visualize.Chart.Builder.Library.name/3` | a category, sub-category and name as the stored name |
+| `Visualize.Chart.Builder.Library.panel/1` | the tree, rendered |
+
+The parse is total and forgiving, because a store the host populated before this section existed must keep working:
+
+| Stored name | Category | Sub-category | Name |
+|---|---|---|---|
+| `Frame:axes:dense ticks` | `Frame` | `axes` | `dense ticks` |
+| `Styles::thick line` | `Styles` | none | `thick line` |
+| `Theme:none:dark` | `Theme` | none | `dark` |
+| `Frame:dense ticks` | `Frame` | none | `dense ticks` |
+| `dark` | `Uncategorised` | none | `dark` |
+
+An empty sub-category and the literal `none` are the same thing, so a person who types nothing and a form that submits `none` agree. A name with more than three parts keeps the remainder in the leaf — `a:b:c:d` is `d` under `c` under… no: the split is on the **first two** separators, so the leaf may contain a colon and a fragment can be called `2:1 aspect`. That asymmetry is deliberate: the category and sub-category are chosen from a short list, and the name is free text.
+
+Sub-categories sort by name with the unnamed group first, because a fragment sitting directly under its category is the general case and the sub-categories are refinements of it.
