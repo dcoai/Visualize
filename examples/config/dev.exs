@@ -39,6 +39,10 @@ config :examples, ExamplesWeb.Endpoint,
   http: [ip: bind_ip, port: bind_port],
   check_origin: false,
   code_reloader: true,
+  # No reloadable_apps for the library: Phoenix's code reloader compiles with dependency
+  # checking off, so a path dependency is never rebuilt however it is listed. Verified —
+  # an edit under ../lib/visualize produced no recompilation and no change in the response.
+  # An edit to the library therefore needs the server restarting.
   debug_errors: true,
   secret_key_base: "development_secret_key_base_that_is_at_least_64_bytes_long_for_examples",
   watchers: []
