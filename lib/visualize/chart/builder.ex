@@ -47,7 +47,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     use Phoenix.LiveComponent
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{Editor, Preview}
+    alias Visualize.Chart.Builder.{Editor, Inspector, Layers, Preview}
     alias Visualize.Chart.Schema
 
     @doc false
@@ -118,6 +118,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </div>
         <p :if={@notice} class="vis-builder-notice">{@notice}</p>
         <div class="vis-builder-panels">
+          <Layers.panel
+            id={@id <> "-layers"}
+            layers={@layers}
+            selected={@selected}
+            disabled={@disabled}
+            target={@myself}
+          />
           <nav class="vis-builder-nodes">
             <button
               :for={entry <- @nodes}
@@ -137,6 +144,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             target={@myself}
           />
           <Preview.panel design={@design} sources={@sources} vars={@vars} theme={@theme} />
+          <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
         </div>
       </div>
       """
@@ -170,6 +178,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, assign(socket, node_label: label, facet: nil)}
     end
 
+    def handle_event("select_layer", %{"index" => index}, socket) do
+      {:noreply, select(socket, position(index))}
+    end
+
+    def handle_event("toggle_layer", %{"index" => index}, socket) do
+      {:noreply, update(socket, :disabled, &toggle(&1, position(index)))}
+    end
+
+    def handle_event("move_layer", %{"index" => from, "to" => to}, socket) do
+      {:noreply, moved(socket, position(from), position(to))}
+    end
+
+    def handle_event("reorder", %{"from" => from, "to" => to}, socket) do
+      {:noreply, moved(socket, position(from), position(to))}
+    end
+
+    def handle_event("inspect", %{"path" => path, "layer" => layer}, socket) do
+      {:noreply, socket |> select(position(layer)) |> opened(path)}
+    end
+
     def handle_event("facet", %{"facet" => facet}, socket) do
       %{entry: entry} = editing(socket.assigns)
       facets = Enum.map(Schema.describe(entry.kind), & &1.facet)
@@ -179,6 +207,73 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event("edit", %{"_target" => [submitted]} = params, socket) do
       %{entry: entry} = editing(socket.assigns)
       {:noreply, edited(socket, entry, spec(entry.kind, submitted), params)}
+    end
+
+    # A position arrives as a string from a `phx-value-index` and as a number from the hook.
+    defp position(index) when is_integer(index), do: index
+
+    defp position(index) when is_binary(index) do
+      case Integer.parse(index) do
+        {value, ""} -> value
+        _other -> -1
+      end
+    end
+
+    defp position(_index), do: -1
+
+    defp select(socket, index) do
+      if index in positions(socket),
+        do: assign(socket, selected: index, node_label: "design", facet: nil),
+        else: socket
+    end
+
+    defp toggle(disabled, index) do
+      if index in disabled, do: MapSet.delete(disabled, index), else: MapSet.put(disabled, index)
+    end
+
+    defp positions(socket), do: 0..(length(socket.assigns.layers) - 1)//1
+
+    # A move is list surgery, and the selection and the disabled set follow their layers:
+    # both are positions, and every position after the move is a different layer.
+    defp moved(socket, from, to) do
+      if from != to and from in positions(socket) and to in positions(socket) do
+        order = socket |> positions() |> Enum.to_list() |> shift(from, to)
+        moved = Map.new(Enum.with_index(order))
+
+        socket
+        |> assign(:layers, Enum.map(order, &Enum.at(socket.assigns.layers, &1)))
+        |> assign(:selected, Map.get(moved, socket.assigns.selected, socket.assigns.selected))
+        |> assign(:disabled, MapSet.new(socket.assigns.disabled, &Map.get(moved, &1, &1)))
+      else
+        socket
+      end
+    end
+
+    defp shift(list, from, to) do
+      {value, rest} = List.pop_at(list, from)
+      List.insert_at(rest, to, value)
+    end
+
+    # The node of the selected layer that owns a path: the deepest whose label is a prefix
+    # of it, and the layer's root where none is (spec/14 §18.9).
+    defp opened(socket, path) do
+      layer = fragment(Enum.at(socket.assigns.layers, socket.assigns.selected) || %{})
+
+      label =
+        layer
+        |> Editor.nodes()
+        |> Enum.filter(&owns?(&1.label, path))
+        |> Enum.max_by(&String.length(&1.label), fn -> %{label: "design"} end)
+        |> Map.fetch!(:label)
+
+      assign(socket, node_label: label, facet: nil)
+    end
+
+    defp owns?("design", _path), do: false
+
+    defp owns?(label, path) do
+      path == label or String.starts_with?(path, label <> ".") or
+        String.starts_with?(path, label <> "[")
     end
 
     # A key the node kind does not carry changes nothing: a submitted name is a string, and

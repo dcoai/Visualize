@@ -13,8 +13,11 @@ defmodule Visualize.ConsumerCheck do
   @absent ~w(Phoenix.Component Phoenix.HTML.Safe Nx Jason Visualize.Components
              Visualize.Components.Tree Visualize.Chart.Builder
              Visualize.Chart.Builder.Store Visualize.Chart.Builder.Preview
+             Visualize.Chart.Builder.Editor Visualize.Chart.Builder.Layers
+             Visualize.Chart.Builder.Inspector
              Visualize.Audit TLA.Spec Surfex.Golden)
-  @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Backend.CanvasBinary)
+  @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Hooks.Builder
+              Visualize.Backend.CanvasBinary)
 
   def run do
     root = File.cwd!()

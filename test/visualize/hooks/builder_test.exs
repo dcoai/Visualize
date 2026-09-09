@@ -1,0 +1,62 @@
+defmodule Visualize.Hooks.BuilderTest do
+  @moduledoc """
+  `BuilderHook`, the chart builder's two browser gestures (spec/10 §16, D-87).
+
+  The source is held to the shape §16.3 declares: the five listeners bound once and removed
+  on `destroyed()`, the drop that pushes a move without making one, and the click that
+  highlights locally and selects on the server.
+  """
+  use ExUnit.Case, async: true
+
+  alias Visualize.Hooks
+
+  @listeners ~w(dragstart dragover drop dragend click)
+
+  test "the hook is one export and joins the bundle once (D-48)" do
+    js = Hooks.js_code()
+    assert length(String.split(js, "export const BuilderHook = {")) == 2
+    assert js =~ ~r/export default \{[^}]*\bBuilderHook\b/
+  end
+
+  test "every listener is bound once, kept, and removed on destroyed (D-47)" do
+    js = Hooks.Builder.js_hook()
+
+    for event <- @listeners do
+      assert js =~ "this.el.addEventListener('#{event}', this.on"
+      assert js =~ "this.el.removeEventListener('#{event}', this.on"
+    end
+
+    assert js =~ "bind(this)"
+  end
+
+  test "a drop pushes the move and makes none: the server owns the list" do
+    js = Hooks.Builder.js_hook()
+    assert js =~ "this.push('reorder', { from: this.from, to: to })"
+    assert js =~ "if (to !== this.from)"
+    assert js =~ "e.preventDefault()"
+    refute js =~ "insertBefore"
+    refute js =~ "appendChild"
+  end
+
+  test "a click highlights in the browser and pushes the path and the layer" do
+    js = Hooks.Builder.js_hook()
+    assert js =~ "closest('[data-builder-path]')"
+    assert js =~ "row.classList.add('vis-builder-entry-open')"
+    assert js =~ "path: row.getAttribute('data-builder-path')"
+    assert js =~ "layer: row.getAttribute('data-builder-layer')"
+  end
+
+  test "the pushes reach the component when data-builder-target names one" do
+    js = Hooks.Builder.js_hook()
+    assert js =~ "this.target = this.el.dataset.builderTarget || null"
+    assert js =~ "if (this.target) this.pushEventTo(this.target, event, payload)"
+    assert js =~ "else this.pushEvent(event, payload)"
+  end
+
+  test "nothing is logged and no element outside the hook takes part" do
+    js = Hooks.Builder.js_hook()
+    refute js =~ "console.log"
+    assert js =~ "this.el.contains(layer)"
+    assert js =~ "this.el.contains(row)"
+  end
+end
