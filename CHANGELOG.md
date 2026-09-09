@@ -9,7 +9,7 @@ All notable changes to Visualize are recorded here, following
 > module by module, lives in [`spec/`](spec/README.md), which is the source of truth for
 > that and is not restated here.
 
-## [Unreleased]
+## [0.1.0] — 2026-09-09
 
 `0.1.0` is the first tag. Until it, the only way to depend on this library was
 `branch: "main"`, so everything below has already reached anyone tracking that branch — the
@@ -284,4 +284,4 @@ the meaning of a patch.
   discipline — tagged ticks, restart keeps the state, alpha is clamped — under an ExTLA
   model that is checked in CI (D-14).
 
-[Unreleased]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/commits/main
+[0.1.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.1.0
