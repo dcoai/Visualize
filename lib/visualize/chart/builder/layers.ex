@@ -51,33 +51,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <button
             type="button"
             class="vis-builder-layer-select"
+            title={"Edit " <> entry.name}
+            aria-label={"Edit " <> entry.name}
             phx-click="select_layer"
             phx-value-index={entry.index}
             phx-target={@target}
-          >Edit</button>
+          ><span class="vis-builder-action-label">Edit</span></button>
           <button
             type="button"
             class="vis-builder-layer-up"
+            title={"Move " <> entry.name <> " up"}
+            aria-label={"Move " <> entry.name <> " up"}
             phx-click="move_layer"
             phx-value-index={entry.index}
             phx-value-to={entry.index - 1}
             phx-target={@target}
-          >Up</button>
+          ><span class="vis-builder-action-label">Up</span></button>
           <button
             type="button"
             class="vis-builder-layer-down"
+            title={"Move " <> entry.name <> " down"}
+            aria-label={"Move " <> entry.name <> " down"}
             phx-click="move_layer"
             phx-value-index={entry.index}
             phx-value-to={entry.index + 1}
             phx-target={@target}
-          >Down</button>
+          ><span class="vis-builder-action-label">Down</span></button>
           <button
             type="button"
             class="vis-builder-layer-toggle"
+            title={entry.toggle <> " " <> entry.name}
+            aria-label={entry.toggle <> " " <> entry.name}
             phx-click="toggle_layer"
             phx-value-index={entry.index}
             phx-target={@target}
-          >{entry.toggle}</button>
+          ><span class="vis-builder-action-label">{entry.toggle}</span></button>
         </li>
       </ol>
       """

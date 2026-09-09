@@ -268,50 +268,71 @@ if Code.ensure_loaded?(Phoenix.Component) do
       border-top: 2px solid var(--vis-builder-accent);
     }
 
-    /* The four actions are icons in the row and words to a screen reader: the label stays in
-       the DOM, which is what the panel's tests assert on, and is clipped rather than hidden. */
-    .vis-builder-layer-select,
-    .vis-builder-layer-up,
-    .vis-builder-layer-down,
-    .vis-builder-layer-toggle {
+    /* The four actions are icons in the row and words to a screen reader. Each selector
+       carries the component class as well as the action's own, because `.vis-builder button`
+       is (0,1,1) and would otherwise out-specify a bare `.vis-builder-layer-up` at (0,1,0)
+       and restore the label, the padding and the border. */
+    .vis-builder .vis-builder-layer-select,
+    .vis-builder .vis-builder-layer-up,
+    .vis-builder .vis-builder-layer-down,
+    .vis-builder .vis-builder-layer-toggle {
       position: relative;
+      flex: 0 0 auto;
       width: 22px;
       height: 22px;
       padding: 0;
       border-color: transparent;
       background: transparent;
-      color: transparent;
-      overflow: hidden;
+      color: var(--vis-builder-muted);
+      font-size: 13px;
+      line-height: 1;
     }
 
-    .vis-builder-layer-select::before,
-    .vis-builder-layer-up::before,
-    .vis-builder-layer-down::before,
-    .vis-builder-layer-toggle::before {
+    /* The word stays in the DOM — it is the button's text, and the tests read it — and is
+       clipped to a pixel rather than hidden, so it is still announced where the title is
+       not. The icon is the ::before, which no assertion depends on. */
+    .vis-builder .vis-builder-action-label {
       position: absolute;
-      inset: 0;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .vis-builder .vis-builder-layer-select::before,
+    .vis-builder .vis-builder-layer-up::before,
+    .vis-builder .vis-builder-layer-down::before,
+    .vis-builder .vis-builder-layer-toggle::before {
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--vis-builder-muted);
-      font-size: 12px;
+      width: 100%;
+      height: 100%;
     }
 
-    .vis-builder-layer-select::before { content: "✎"; }
-    .vis-builder-layer-up::before { content: "↑"; }
-    .vis-builder-layer-down::before { content: "↓"; }
-    .vis-builder-layer-toggle::before { content: "●"; }
+    .vis-builder .vis-builder-layer-select::before { content: "✎"; }
+    .vis-builder .vis-builder-layer-up::before { content: "↑"; }
+    .vis-builder .vis-builder-layer-down::before { content: "↓"; }
+    .vis-builder .vis-builder-layer-toggle::before { content: "◉"; }
 
-    .vis-builder-layer-disabled .vis-builder-layer-toggle::before { content: "○"; }
+    .vis-builder .vis-builder-layer-disabled .vis-builder-layer-toggle::before {
+      content: "○";
+    }
 
-    .vis-builder-layer-select:hover::before,
-    .vis-builder-layer-up:hover::before,
-    .vis-builder-layer-down:hover::before,
-    .vis-builder-layer-toggle:hover::before {
+    .vis-builder .vis-builder-layer-select:hover,
+    .vis-builder .vis-builder-layer-up:hover,
+    .vis-builder .vis-builder-layer-down:hover,
+    .vis-builder .vis-builder-layer-toggle:hover {
+      border-color: var(--vis-builder-line);
+      background: var(--vis-builder-panel);
       color: var(--vis-builder-ink);
     }
 
-    .vis-builder-layer-selected .vis-builder-layer-select::before {
+    .vis-builder .vis-builder-layer-selected .vis-builder-layer-select {
       color: var(--vis-builder-accent);
     }
 

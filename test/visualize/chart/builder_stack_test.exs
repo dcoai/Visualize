@@ -52,8 +52,8 @@ defmodule Visualize.Chart.Builder.StackTest do
       assert html =~
                ~s(class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="2")
 
-      assert html =~ ~s(phx-value-index="0">Enable</button>)
-      assert html =~ ~s(phx-value-index="2">Disable</button>)
+      assert html =~ ~s(phx-value-index="0"><span class="vis-builder-action-label">Enable</span>)
+      assert html =~ ~s(phx-value-index="2"><span class="vis-builder-action-label">Disable</span>)
     end
 
     test "the list is the hook element and every layer is draggable at its position" do

@@ -200,6 +200,40 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "the row actions (spec/14 §18.8)" do
+    test "every action carries an accessible name and hides its word" do
+      html = BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), :layers))
+
+      for {class, label} <- [
+            {"vis-builder-layer-select", "Edit house"},
+            {"vis-builder-layer-up", "Move house up"},
+            {"vis-builder-layer-down", "Move house down"},
+            {"vis-builder-layer-toggle", "Disable house"}
+          ] do
+        assert html =~ ~s(class="#{class}")
+        assert html =~ ~s(title="#{label}")
+        assert html =~ ~s(aria-label="#{label}")
+      end
+
+      assert html =~ ~s(<span class="vis-builder-action-label">Edit</span>)
+      assert html =~ ~s(<span class="vis-builder-action-label">Disable</span>)
+    end
+
+    test "no action rule is out-specified by the generic control rule" do
+      # `.vis-builder button` is (0,1,1). A rule written as a bare `.vis-builder-layer-up` is
+      # (0,1,0) and loses to it, which is how the icons were defeated the first time; every
+      # action rule must therefore be compound.
+      for class <- ~w(layer-select layer-up layer-down layer-toggle action-label) do
+        bare = ~r/(^|,)\s*\.vis-builder-#{class}\b[^,{]*\{/m
+
+        refute Regex.match?(bare, Builder.css()),
+               "a bare .vis-builder-#{class} rule loses to `.vis-builder button`"
+      end
+
+      assert Builder.css() =~ ".vis-builder .vis-builder-layer-up"
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =
