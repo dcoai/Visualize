@@ -45,8 +45,11 @@ defmodule Visualize.Chart.Template do
     end)
   end
 
+  # Resolution is single level (spec/14 §7.1): a value that is itself a variable is
+  # reported at every path the variable stood at, never substituted.
   defp value(_type, %Var{name: name}, path, values) do
     case Map.fetch(values, name) do
+      {:ok, %Var{}} -> {%Var{name: name}, [{path, {:var_binding, name}}]}
       {:ok, v} -> {v, []}
       :error -> {%Var{name: name}, [{path, {:unresolved, :var, name}}]}
     end

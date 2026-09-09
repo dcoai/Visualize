@@ -36,6 +36,7 @@ defmodule Visualize.Chart.Validator do
           | {:json, String.t()}
           | {:missing_dependency, :jason}
           | {:unresolved, :var, atom()}
+          | {:var_binding, atom()}
           | {:unbound, :source, atom()}
           | {:missing_field, atom()}
           | :conflict
@@ -462,6 +463,10 @@ defmodule Visualize.Chart.Validator do
 
   defp words({:unresolved, :var, name}) do
     "variable #{inspect(name)} has no value at application and no default"
+  end
+
+  defp words({:var_binding, name}) do
+    "variable #{inspect(name)} is bound to another variable; resolution is single level"
   end
 
   defp words({:unbound, :source, name}) do
