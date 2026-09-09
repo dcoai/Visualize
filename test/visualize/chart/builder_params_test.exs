@@ -1,0 +1,205 @@
+defmodule Visualize.Chart.Builder.ParamsTest do
+  @moduledoc """
+  The parameters form and the design's JSON form (spec/14 §18.11-§18.12, spec/10 §15, D-88).
+
+  The form is `Visualize.Chart.free_vars/1` rendered, so the tests are about what the stack
+  leaves open rather than about a list of controls: a variable a higher layer writes over
+  disappears, one a higher layer opens appears, and each takes the widget its first use's
+  type asks for.
+  """
+  use ExUnit.Case, async: true
+
+  import Phoenix.LiveViewTest, only: [render_component: 2]
+
+  alias Phoenix.LiveView.Socket
+  alias Visualize.BuilderFixture
+  alias Visualize.Chart
+  alias Visualize.Chart.Builder
+  alias Visualize.Chart.Builder.{Document, Params}
+
+  for name <- ~w(params params_bound document document_errors)a do
+    test "#{name} renders as recorded" do
+      c = Keyword.fetch!(BuilderFixture.cases(), unquote(name))
+      assert BuilderFixture.golden(unquote(name)) == BuilderFixture.render_case(c)
+    end
+  end
+
+  describe "the parameters form (spec/14 §18.11)" do
+    test "one control per free variable, ordered by name, with its uses beside it" do
+      html = rendered(:params)
+
+      names =
+        ~r|<span class="vis-builder-param-name">(\w+)</span>|
+        |> Regex.scan(html)
+        |> Enum.map(fn [_, name] -> name end)
+
+      assert names == ~w(accent ticks unit)
+
+      assert names ==
+               Enum.map(Chart.free_vars(BuilderFixture.parameterised()), &to_string(&1.name))
+
+      assert html =~ ~s(<span class="vis-builder-param-uses">frame.axes[0].ticks</span>)
+    end
+
+    test "the widget is the one the first use's expectation asks for" do
+      html = rendered(:params)
+      assert html =~ ~s(<input type="text" name="accent">)
+      assert html =~ ~s(<input type="number" name="ticks")
+      assert html =~ ~s(<textarea name="unit")
+    end
+
+    test "a variable with no default is required, and its default is the placeholder" do
+      html = rendered(:params)
+      assert html =~ ~s(<label class="vis-builder-param vis-builder-param-required">)
+      assert html =~ ~s(placeholder="3")
+      assert rendered(:params_bound) =~ ~s(<input type="number" name="ticks" value="6")
+    end
+
+    test "a variable a higher layer writes over disappears, and one it opens appears" do
+      base = %{version: 1, frame: %{kind: :cartesian}}
+
+      titled = %{
+        vars: %{unit: %{}},
+        labels: [%{id: :title, anchor: :title, text: [Chart.var(:unit)]}]
+      }
+
+      literal = %{labels: [%{id: :title, anchor: :title, text: ["Uptime"]}]}
+      widened = %{vars: %{wide: %{}}, frame: %{size: %{width: Chart.var(:wide)}}}
+
+      open = render_component(&Params.panel/1, %{layers: [base, titled]})
+      closed = render_component(&Params.panel/1, %{layers: [base, titled, literal]})
+      opened = render_component(&Params.panel/1, %{layers: [base, titled, widened]})
+
+      assert open =~ ">unit</span>"
+      refute closed =~ "vis-builder-param-name"
+      assert opened =~ ">wide</span>"
+    end
+
+    test "a stack with no free variable renders an empty form" do
+      html = render_component(&Params.panel/1, %{layers: [%{version: 1}]})
+      assert html =~ ~s(<form class="vis-builder-params" phx-change="set_var">)
+      refute html =~ "vis-builder-param-name"
+    end
+  end
+
+  describe "binding a parameter (spec/14 §18.11)" do
+    test "a value is parsed with the type its control was chosen from, and reaches the preview" do
+      socket = socket()
+      params = %{"_target" => ["ticks"], "ticks" => "6"}
+      {:noreply, bound} = Builder.handle_event("set_var", params, socket)
+
+      assert bound.assigns.bindings == %{ticks: 6}
+      refute bound.assigns.bindings == %{ticks: "6"}
+    end
+
+    test "a blank control removes the binding and the declared default returns" do
+      {:noreply, bound} =
+        Builder.handle_event("set_var", %{"_target" => ["ticks"], "ticks" => "6"}, socket())
+
+      {:noreply, blank} =
+        Builder.handle_event("set_var", %{"_target" => ["ticks"], "ticks" => ""}, bound)
+
+      assert blank.assigns.bindings == %{}
+    end
+
+    test "a name no variable carries changes nothing" do
+      params = %{"_target" => ["nonsense"], "nonsense" => "1"}
+      {:noreply, unchanged} = Builder.handle_event("set_var", params, socket())
+      assert unchanged.assigns.bindings == %{}
+    end
+
+    test "the bindings are the builder's own copy of the vars assign" do
+      html =
+        render_component(Builder, %{
+          id: "b",
+          layers: BuilderFixture.layers(),
+          sources: BuilderFixture.sources(),
+          vars: %{unit: "mg/hr"}
+        })
+
+      assert html =~ "Uptime — mg/hr"
+    end
+  end
+
+  describe "import and export (spec/14 §18.12)" do
+    test "the exported document reads back as the same design" do
+      design = Chart.stack(BuilderFixture.layers())
+      html = rendered(:document)
+
+      [_, encoded] =
+        Regex.run(~r|<textarea class="vis-builder-export" readonly>(.*?)</textarea>|s, html)
+
+      {:ok, chart} = html_unescape(encoded) |> Chart.from_json()
+      {:ok, expected} = Chart.from_map(design)
+      assert chart == expected
+    end
+
+    test "a design that does not encode is its faults, and no document" do
+      html = rendered(:document_errors)
+      assert html =~ ~s(<li class="vis-builder-error">version: is required</li>)
+      refute html =~ "vis-builder-export"
+    end
+
+    test "an imported document replaces the stack, named imported" do
+      {:ok, chart} = Chart.from_map(Chart.stack(BuilderFixture.layers()))
+      {:ok, json} = Chart.to_json(chart)
+      {:noreply, opened} = Builder.handle_event("import", %{"document" => json}, socket())
+
+      assert opened.assigns.layers == [{:imported, Chart.to_map(chart)}]
+      assert opened.assigns.selected == 0
+      assert opened.assigns.disabled == MapSet.new()
+      assert opened.assigns.bindings == %{}
+      assert opened.assigns.notice == nil
+    end
+
+    test "a document that does not parse or does not validate is a notice, and no layer moves" do
+      broken = Builder.handle_event("import", %{"document" => "{"}, socket())
+      invalid = Builder.handle_event("import", %{"document" => "{\"marks\": []}"}, socket())
+
+      assert {:noreply, %{assigns: %{notice: "design: " <> _}}} = broken
+      assert {:noreply, %{assigns: %{notice: "version: is required"}}} = invalid
+      assert elem(broken, 1).assigns.layers == BuilderFixture.parameterised()
+    end
+
+    test "without Jason the panel says so rather than raising" do
+      assert Document.faults({:missing_dependency, :jason}) == [
+               "design: the JSON codec needs Jason"
+             ]
+    end
+  end
+
+  defp rendered(name),
+    do: BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), name))
+
+  defp html_unescape(text) do
+    text
+    |> String.replace("&quot;", "\"")
+    |> String.replace("&#39;", "'")
+    |> String.replace("&lt;", "<")
+    |> String.replace("&gt;", ">")
+    |> String.replace("&amp;", "&")
+  end
+
+  defp socket(opts \\ []) do
+    assigns =
+      [
+        id: "b",
+        layers: BuilderFixture.parameterised(),
+        disabled: MapSet.new(),
+        notice: nil,
+        store: nil,
+        on_save: :visualize_chart_saved,
+        selected: 0,
+        facet: nil,
+        node_label: "design",
+        sources: BuilderFixture.sources(),
+        vars: %{},
+        bindings: %{},
+        theme: nil
+      ]
+      |> Keyword.merge(opts)
+      |> Map.new()
+
+    Phoenix.Component.assign(%Socket{}, assigns)
+  end
+end

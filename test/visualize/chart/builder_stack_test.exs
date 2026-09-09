@@ -203,6 +203,7 @@ defmodule Visualize.Chart.Builder.StackTest do
         node_label: "design",
         sources: BuilderFixture.sources(),
         vars: %{},
+        bindings: %{},
         theme: nil
       ]
       |> Keyword.merge(opts)

@@ -240,6 +240,7 @@ defmodule Visualize.Chart.BuilderTest do
         node_label: "design",
         sources: BuilderFixture.sources(),
         vars: %{},
+        bindings: %{},
         theme: nil
       ]
       |> Keyword.merge(opts)

@@ -1,0 +1,27 @@
+<form class="vis-builder-params" phx-change="set_var">
+  <label class="vis-builder-param vis-builder-param-required">
+    <span class="vis-builder-param-name">accent</span>
+    
+    
+    <input type="text" name="accent">
+    
+    
+    <span class="vis-builder-param-uses">marks[0].style</span>
+  </label><label class="vis-builder-param">
+    <span class="vis-builder-param-name">ticks</span>
+    
+    <input type="number" name="ticks" placeholder="3">
+    
+    
+    
+    <span class="vis-builder-param-uses">frame.axes[0].ticks</span>
+  </label><label class="vis-builder-param">
+    <span class="vis-builder-param-name">unit</span>
+    
+    
+    
+    
+    <textarea name="unit" placeholder="&quot;%&quot;"></textarea>
+    <span class="vis-builder-param-uses">labels[0].text[1]</span>
+  </label>
+</form>

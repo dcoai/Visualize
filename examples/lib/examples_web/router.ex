@@ -21,6 +21,7 @@ defmodule ExamplesWeb.Router do
     live "/high-performance", HighPerformanceLive, :index
     live "/incremental", IncrementalLive, :index
     live "/interaction", InteractionLive, :index
+    live "/builder", BuilderLive, :index
     get "/hooks/visualize_hooks.js", HooksController, :show
   end
 end

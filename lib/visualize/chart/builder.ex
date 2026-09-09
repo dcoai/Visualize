@@ -47,7 +47,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     use Phoenix.LiveComponent
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{Editor, Inspector, Layers, Preview}
+    alias Visualize.Chart.Builder.{Document, Editor, Inspector, Layers, Params, Preview}
     alias Visualize.Chart.Schema
 
     @doc false
@@ -89,7 +89,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @impl true
     def update(assigns, socket) do
-      {:ok, Enum.reduce(defaults(), assign(socket, assigns), &default/2)}
+      socket = Enum.reduce(defaults(), assign(socket, assigns), &default/2)
+
+      # The parameters form edits the builder's own copy of the bindings: the host gives the
+      # values the builder starts with and never hears of a change (spec/14 §18.11, D-88).
+      {:ok, assign_new(socket, :bindings, fn -> socket.assigns.vars end)}
     end
 
     defp default({key, value}, socket), do: assign_new(socket, key, fn -> value end)
@@ -143,8 +147,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
             errors={@errors}
             target={@myself}
           />
-          <Preview.panel design={@design} sources={@sources} vars={@vars} theme={@theme} />
+          <Preview.panel design={@design} sources={@sources} vars={@bindings} theme={@theme} />
+          <Params.panel layers={@layers} vars={@bindings} target={@myself} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
+          <Document.panel design={@design} target={@myself} />
         </div>
       </div>
       """
@@ -196,6 +202,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("inspect", %{"path" => path, "layer" => layer}, socket) do
       {:noreply, socket |> select(position(layer)) |> opened(path)}
+    end
+
+    def handle_event("set_var", %{"_target" => [name]} = params, socket) do
+      free = Enum.find(Chart.free_vars(socket.assigns.layers), &(to_string(&1.name) == name))
+      {:noreply, bound(socket, free, params[name])}
+    end
+
+    def handle_event("import", %{"document" => document}, socket) do
+      case Chart.from_json(document) do
+        {:ok, chart} -> {:noreply, imported(socket, Chart.to_map(chart))}
+        {:error, reason} -> {:noreply, assign(socket, :notice, notice(reason))}
+      end
     end
 
     def handle_event("facet", %{"facet" => facet}, socket) do
@@ -349,7 +367,35 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp at(map, [key | rest]) when is_map(map), do: at(Map.get(map, key), rest)
 
-    defp faults(design, %{sources: sources, vars: vars, theme: theme}) do
+    # A variable takes the type of its first use, as its control was chosen from it
+    # (spec/14 §18.11); a blank control removes the binding and the default returns.
+    defp bound(socket, nil, _value), do: socket
+
+    defp bound(socket, free, value) do
+      type = Params.expects(free)
+
+      case read(Editor.widget(type), type, value) do
+        {:ok, parsed} -> update(socket, :bindings, &Map.put(&1, free.name, parsed))
+        :error -> update(socket, :bindings, &Map.delete(&1, free.name))
+      end
+    end
+
+    # A document is a whole design, so it replaces the stack rather than joining it (D-88).
+    defp imported(socket, design) do
+      assign(socket,
+        layers: [{:imported, design}],
+        selected: 0,
+        disabled: MapSet.new(),
+        bindings: %{},
+        node_label: "design",
+        facet: nil,
+        notice: nil
+      )
+    end
+
+    defp notice(reason), do: Enum.join(Document.faults(reason), "; ")
+
+    defp faults(design, %{sources: sources, bindings: vars, theme: theme}) do
       case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
         {:ok, _applied} -> []
         {:error, errors} -> errors
