@@ -277,7 +277,8 @@ defmodule Visualize.Chart.Schema do
       spec(:text, :text, :content, required: true),
       spec(:style, {:ref, :style}, :style, default: :label),
       spec(:dx, :number, :geometry, default: 0),
-      spec(:dy, :number, :geometry, default: 0)
+      spec(:dy, :number, :geometry, default: 0),
+      spec(:id, :name, :content)
     ]
   end
 end
