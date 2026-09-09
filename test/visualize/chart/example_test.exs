@@ -14,11 +14,15 @@ defmodule Visualize.Chart.ExampleTest do
 
   @spec_path Path.expand("../../../spec/14-declarative-chart.md", __DIR__)
 
-  # The `elixir` blocks of the document, in order: §13's literal design first, its `Build`
-  # pipeline second (§16), then the builder's own fragments, which are not whole designs.
-  defp blocks do
-    [_ | rest] = @spec_path |> File.read!() |> String.split("```elixir\n")
-    for block <- rest, do: block |> String.split("\n```", parts: 2) |> hd()
+  # The `elixir` blocks of one section, in order. §13 holds both — the literal design and
+  # the `Build` pipeline beside it — and says so in its own prose. They were taken by
+  # position in the whole file until a block added to an earlier section silently became
+  # "the example"; a section is what each is about, so a section is what they come from.
+  defp blocks_under(heading) do
+    [_, below] = @spec_path |> File.read!() |> String.split("\n" <> heading, parts: 2)
+    [section | _] = String.split(below, "\n## ", parts: 2)
+    [_ | blocks] = String.split(section, "```elixir\n")
+    for block <- blocks, do: block |> String.split("\n```", parts: 2) |> hd()
   end
 
   defp eval(block) do
@@ -26,8 +30,9 @@ defmodule Visualize.Chart.ExampleTest do
     value
   end
 
-  defp example, do: blocks() |> Enum.at(0) |> eval()
-  defp pipeline, do: blocks() |> Enum.at(1) |> eval()
+  defp worked, do: blocks_under("## 13. Worked example")
+  defp example, do: worked() |> Enum.at(0) |> eval()
+  defp pipeline, do: worked() |> Enum.at(1) |> eval()
 
   defp at(h), do: DateTime.add(~U[2026-09-08 00:00:00Z], h * 3600, :second)
 

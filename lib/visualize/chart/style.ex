@@ -121,12 +121,30 @@ defmodule Visualize.Chart.Style do
   end
 
   @doc false
-  # The style node of a name with its `extends` chain flattened — the parent's keys first,
-  # the child's over them (spec/14 §3.5) — or the empty node when nothing declares it.
-  @spec node(%{atom() => map()}, atom() | nil) :: map()
+  # The style node of a **stack** with every entry's `extends` chain flattened — the parent's
+  # keys first, the child's over them (spec/14 §3.5) — and the entries then cascaded left to
+  # right, the later winning (§3.6). A bare reference is a stack of one by definition, and an
+  # inline node is an entry like any other. The empty node when nothing declares it.
+  @spec node(%{atom() => map()}, entry | [entry] | nil) :: map() when entry: atom() | map()
   def node(_styles, nil), do: %{}
   def node(_styles, %Var{name: name}), do: unresolved!(name)
+
+  def node(styles, stack) when is_list(stack) do
+    Enum.reduce(stack, %{}, fn entry, resolved -> Map.merge(resolved, node(styles, entry)) end)
+  end
+
+  # An inline node is already the style: only its own `extends` needs flattening, and it is
+  # looked up under no name, so nothing can reach it and no cycle can start here.
+  def node(styles, inline) when is_map(inline), do: inline_node(styles, inline)
+
   def node(styles, name), do: flatten(styles, name, [])
+
+  defp inline_node(styles, inline) do
+    case Map.fetch(inline, :extends) do
+      :error -> inline
+      {:ok, parent} -> Map.merge(flatten(styles, parent, []), Map.delete(inline, :extends))
+    end
+  end
 
   defp flatten(_styles, %Var{name: name}, _seen), do: unresolved!(name)
 

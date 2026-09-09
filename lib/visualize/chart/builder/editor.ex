@@ -421,7 +421,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # A key whose type merely *admits* a reference — a style site takes a reference, an
+    # inline node or a list of them (spec/14 §3.6) — is still a choice among declared names
+    # wherever the caller knows them.
+    defp referenced({:one_of, alts} = type, refs) do
+      case Enum.find_value(alts, fn alt -> match?({:ref, _}, alt) and alt end) do
+        {:ref, _kind} = ref -> narrowed(referenced(ref, refs), type)
+        nil -> widget(type)
+      end
+    end
+
     defp referenced(type, _refs), do: widget(type)
+
+    defp narrowed({:select, names}, _type), do: {:select, names}
+    defp narrowed(_other, type), do: widget(type)
 
     defp shape({:select, _allowed}), do: :select
     defp shape(widget), do: widget

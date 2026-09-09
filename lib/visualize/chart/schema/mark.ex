@@ -124,7 +124,12 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:channels, {:node, :channels}, :channel, default: %{}),
       spec(:scales, {:node, :mark_scales}, :channel, default: %{}),
       spec(:options, {:node, :options}, :geometry, default: %{}),
-      spec(:style, {:ref, :style}, :style),
+      spec(
+        :style,
+        {:one_of,
+         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        :style
+      ),
       spec(:label, {:node, :mark_label}, :content),
       spec(:render, {:enum, [:auto, :svg, :canvas, :binary]}, :geometry, default: :auto),
       spec(:tooltip, {:node, :tooltip}, :content),
@@ -188,7 +193,13 @@ defmodule Visualize.Chart.Schema.Mark do
     [
       spec(:text, :text, :content, required: true),
       spec(:anchor, {:enum, @anchors}, :geometry, default: :top),
-      spec(:style, {:ref, :style}, :style, default: :label),
+      spec(
+        :style,
+        {:one_of,
+         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        :style,
+        default: :label
+      ),
       spec(:dx, :number, :geometry, default: 0),
       spec(:dy, :number, :geometry, default: 0)
     ]

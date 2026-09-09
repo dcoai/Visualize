@@ -275,7 +275,13 @@ defmodule Visualize.Chart.Schema do
     [
       spec(:anchor, :anchor, :content, required: true),
       spec(:text, :text, :content, required: true),
-      spec(:style, {:ref, :style}, :style, default: :label),
+      spec(
+        :style,
+        {:one_of,
+         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        :style,
+        default: :label
+      ),
       spec(:dx, :number, :geometry, default: 0),
       spec(:dy, :number, :geometry, default: 0),
       spec(:id, :name, :content)

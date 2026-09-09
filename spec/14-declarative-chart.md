@@ -202,16 +202,21 @@ A cycle — a style that reaches itself through `extends`, directly or through a
 Derivation (§3.5) is a chain *within* a style. A **stack** is composition *at the site that uses one*. Five keys refer to a style — `mark.style`, `label.style`, `mark_label.style`, `axis.style` and `legend.style` — and each takes either a reference, a style node written inline, or a **list** of those:
 
 ```elixir
-style: :series                              # one reference, as it always was
-style: [:series, :emphasis]                 # two, the later winning
-style: [:series, %{stroke_width: 5}]        # a shared style and a local one
+[
+  style: :series,
+  # one reference, as it always was
+  style: [:series, :emphasis],
+  # two, the later winning
+  style: [:series, %{stroke_width: 5}]
+  # a shared style and a local one
+]
 ```
 
 A list cascades **left to right, the later winning**, which is `Visualize.Chart.stack/1`'s rule (§8.2) applied at a point rather than across a document. Each entry is resolved through its own `extends` chain *first*, and the resolved nodes then merge key by key. The two mechanisms are orthogonal and both remain: `extends` is a statement about a style, a stack is a statement about this mark.
 
 A bare reference is a stack of one. That is not a compatibility shim but the definition — `:series` and `[:series]` resolve to the same node by the same path — so every design written before this section means exactly what it meant.
 
-`Visualize.Chart.Style.node/2` is where this happens, and it is the only place a reference becomes a node; its eight callers are unchanged.
+The private `node/2` of `Visualize.Chart.Style` is where this happens, and it is the only place a reference becomes a node; its eight callers are unchanged.
 
 **The local style.** The last entry of a stack MAY be an inline style node, and that is where an edit made at the site lands. Editing the stroke width of a mark that references `:series` must not restyle every other mark that references the same name, so an edit writes to the site's own node and never to the shared one. A local style is **created on first edit** — a site with no local edit carries references and nothing else, because a document should not carry structure nobody asked for.
 
