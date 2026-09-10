@@ -1670,3 +1670,54 @@ A **move** is the same gap, adjusted: `at` is a gap in the list as it stands, an
 **What follows the insert.** The selected layer and the disabled set are *positions*, so both shift by one where they sit at or below the insertion — the same rule a move already follows (§18.8). A name the store does not hold is a notice and changes no layer, exactly as adding one is.
 
 Inserting does not consult the fragment: the stack is a list and a fragment is an element of it, so an insert is `List.insert_at/3` and the design is recomputed from the result. There is nothing to validate at insertion time that applying the design does not already say better (§18.4).
+
+### 18.18 The style stack at a site
+
+§3.6 gives every style site a stack; this is the control over it. `Visualize.Chart.Builder.StyleStack.panel/1` renders the stack of the open node's `style` key: one row per entry, in resolution order — the first applied first, the last winning — because that is the order the cascade is defined in and a panel that reversed it would teach the opposite of §3.6.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.StyleStack.panel/1` | the stack at a site: its entries, and the controls that change them |
+| `Visualize.Chart.Builder.StyleStack.entries/2` | a `style` value as the rows to draw, whatever shape it takes |
+| `Visualize.Chart.Schema.style_stack/0` | the type a style site takes, written once |
+| `Visualize.Chart.Builder.StyleStack.choices/1` | the names an entry may take: what the design declares, and the built-in four |
+
+**A row per entry, whatever the value's shape.** `entries/2` is total over §3.6's three shapes: a bare reference is one row, an inline node is one row, a list is a row each. A site with no `style` key at all is the empty stack, and the schema's default for that site — `:axis` for an axis, `:label` for a label and a legend — is shown as the row it will resolve as, marked as a default rather than as something the design says.
+
+Each row offers what a layer row offers and for the same reasons: **select** it, which opens it in the context panel; **remove** it; and **drag** it to a position, which is what changes precedence. A row is the control, carrying the click and the drag itself, because a control inside a draggable row defeats both (§18.17).
+
+**The local row.** An inline entry is drawn as `local` and is the row an edit lands in. There is at most one, it is the last entry, and it is **created on first edit** (D-98) — so a site that has never been edited directly shows references only, and the local row appears when it is needed rather than sitting empty in every document.
+
+**Adding.** A control offers the style names the stacked design declares (§18.14) and the four built-in names, and appends the chosen one. Appending rather than inserting is the useful default — a style added to a site is nearly always meant to win — and dragging moves it if it was not.
+
+**One hook, many stacks.** `Visualize.Hooks.Builder` already reorders a list by dragging (§18.10, §18.17), and a style stack is a list. The hook's queries are scoped to its own element, so a second stack on the page is a second instance with no knowledge of the first; what the component needs is to know *which* stack a `reorder` came from. The hook therefore reads `data-builder-scope` from its element and returns it in the payload, absent for the layer stack and `"style"` for a style stack. This is why the layer stack needed no change: an absent scope means what it always meant.
+
+### 18.19 The context panel over a style
+
+Beneath the stack of §18.18 sits the style the site actually renders as: the entries cascaded, every key of the `:style` kind, with the control §18.6 chooses from its type. It is `Visualize.Chart.Builder.Editor.panel/1` at kind `:style` over the resolved node, which is why it needs no list of style keys of its own — a key added to the schema appears here with no edit.
+
+**Every edit lands in the local style.** A field changed here writes into the site's inline entry, creating it when there is none (D-98). It never writes into a named entry: editing a mark that references `:series` must not restyle every other mark that references the same name, and a panel that wrote to the resolved node would do exactly that. This is the whole reason the local style exists, and it is why the panel edits through its own event rather than the editor's.
+
+**Every field says where its value came from.** A resolved style is a cascade, so a value is one entry's and the entries below it are overridden. Each field carries the name of the entry that supplied its current value — `series`, `axis`, `local`, or the site's default — which is `Visualize.Chart.explain/1`'s question asked at a site: *which style said this, and what did it replace*. A key no entry sets shows the schema's default as a placeholder and names nothing, because nothing said it.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.StyleStack.resolved/2` | the site's stack cascaded, as the panel shows it |
+| `Visualize.Chart.Builder.StyleStack.origins/2` | which entry supplied each key of the resolved style |
+
+The panel is shown when an entry of the stack is selected, and hidden otherwise: a site's resolved style is a question about the site, and asking it costs a click so that the column is not a wall of nineteen controls for every node that happens to have a style.
+
+### 18.20 Dropping a style fragment onto a site
+
+A library fragment whose kind is `:style` (§18.16) may be dropped **onto the stack of a site**, and that is the answer to the question §18.14 could not ask: *which style did you mean*. The fragment does not have to know the name its target uses, because the drop said where it goes.
+
+**One gesture, two writes.** Dropping `Styles::thick line` — `%{styles: %{"thick line" => %{stroke_width: 5}}}` — onto a mark's stack:
+
+1. **merges the fragment into the design** as a layer, exactly as dropping it into the layer pane does (§18.17), so the style stays declared once and reusable; and
+2. **inserts a reference to it** into the site's stack at the position it was dropped at.
+
+The name stays shared, the placement is explicit, and nothing is copied: a second site referring to the same name gets the same style, which is the whole point of naming one.
+
+**Only a style fragment.** A fragment of any other kind dropped on a stack is refused with a notice naming its kind, rather than merged into the design and left with nothing referring to it — a silent half-effect is worse than a refusal. A fragment that declares more than one style is refused for the same reason: which of them the site meant is exactly the question the gesture is supposed to answer.
+
+**The stack is the drop target.** `data-builder-stack` already marks what accepts a drop and `data-builder-scope` says which stack it is (§18.18), so the hook needs nothing new: the `insert` event of §18.17 carries the scope, and a scoped insert is this.

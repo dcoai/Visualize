@@ -631,6 +631,142 @@ if Code.ensure_loaded?(Phoenix.Component) do
       background: var(--vis-builder-panel);
     }
 
+    /* ── the style stack at a site ───────────────────────────────────────────── */
+
+    .vis-builder-style-stack {
+      padding: 8px;
+    }
+
+    .vis-builder-style-title {
+      margin: 0 0 6px;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .vis-builder-style-entries {
+      margin: 0 0 8px;
+      padding: 0 0 12px;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-height: 40px;
+    }
+
+    .vis-builder-style-entry {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 6px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: var(--vis-builder-bg);
+      cursor: pointer;
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+    }
+
+    .vis-builder-style-entry:hover {
+      border-color: var(--vis-builder-line);
+    }
+
+    .vis-builder-style-entry::before {
+      content: "⠿";
+      color: var(--vis-builder-muted);
+      line-height: 1;
+    }
+
+    .vis-builder-style-name {
+      flex: 1 1 auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .vis-builder-style-entry-open {
+      border-color: var(--vis-builder-accent);
+      box-shadow: inset 3px 0 0 var(--vis-builder-accent);
+    }
+
+    /* The local style is the one an edit lands in, and says so. */
+    .vis-builder-style-entry-local .vis-builder-style-name {
+      color: var(--vis-builder-accent);
+      font-style: italic;
+    }
+
+    /* A default is what the site resolves as, not something the design states. */
+    .vis-builder-style-entry-default {
+      border-style: dashed;
+      border-color: var(--vis-builder-line);
+      background: transparent;
+      cursor: default;
+      opacity: 0.75;
+    }
+
+    .vis-builder-style-entry-default::before {
+      content: "·";
+    }
+
+    .vis-builder .vis-builder-style-remove {
+      position: relative;
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      border-color: transparent;
+      background: transparent;
+      color: var(--vis-builder-muted);
+    }
+
+    .vis-builder .vis-builder-style-remove::before {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      content: "×";
+      font-size: 13px;
+    }
+
+    .vis-builder .vis-builder-style-remove:hover {
+      border-color: var(--vis-builder-line);
+      color: var(--vis-builder-warn);
+    }
+
+    /* The resolved style, and where each value came from. */
+    .vis-builder-style-panel {
+      border-top: 1px solid var(--vis-builder-line);
+      padding: 8px;
+    }
+
+    .vis-builder-style-panel .vis-builder-form {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+    }
+
+    .vis-builder-origin {
+      float: right;
+      padding: 0 4px;
+      border-radius: 3px;
+      background: var(--vis-builder-bg);
+      color: var(--vis-builder-accent);
+      font-size: 10px;
+      font-style: italic;
+    }
+
+    .vis-builder-style-add {
+      display: flex;
+      gap: 6px;
+    }
+
+    .vis-builder .vis-builder-style-choice {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
     /* ── the tray ────────────────────────────────────────────────────────────── */
 
     .vis-builder-tray {

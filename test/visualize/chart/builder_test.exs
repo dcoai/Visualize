@@ -20,6 +20,7 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.Chart.Builder.Editor
   alias Visualize.Chart.Builder.Palette
   alias Visualize.Chart.Builder.Preview
+  alias Visualize.Chart.Builder.StyleStack
 
   for name <- ~w(preview preview_errors builder builder_store)a do
     test "#{name} renders as recorded" do
@@ -458,6 +459,297 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "the style stack at a site (spec/14 §18.18, D-98)" do
+    setup do
+      host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+
+      # The panel layer's mark is the style site: it references `:series`.
+      {:noreply, socket} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
+      {:noreply, socket} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, socket)
+      %{host: host, socket: socket}
+    end
+
+    test "the site's stack is rendered in the context panel" do
+      html = at_node("marks[0]", selected: 2)
+
+      assert html =~ ~s(<ol id="b-style-stack")
+      assert html =~ ~s(data-builder-scope="style")
+      assert html =~ ~s(<span class="vis-builder-style-name">series</span>)
+    end
+
+    test "a node with no style key has no stack" do
+      refute at_node("frame.size") =~ "vis-builder-style-stack"
+      assert at_node("frame.size") =~ "vis-builder-context-empty"
+    end
+
+    test "adding appends, and a bare reference stays bare until it is not one", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, s)
+      assert style_at(s) == [:series, :axis]
+
+      # One entry naming a style is written back as a bare reference, so an edit elsewhere
+      # does not rewrite a document's shape.
+      {:noreply, s} = Builder.handle_event("remove_style_entry", %{"index" => "1"}, s)
+      assert style_at(s) == :series
+    end
+
+    test "a site carrying nothing keeps what it resolved as when something is added" do
+      # An axis carries no `style`, and resolves as `:axis` by the schema's default.
+      {:ok, socket} = Builder.mount(%Socket{})
+
+      {:ok, socket} =
+        Builder.update(
+          %{id: "b", layers: [{:only, %{frame: %{axes: [%{scale: :x, side: :bottom}]}}}]},
+          socket
+        )
+
+      {:noreply, socket} =
+        Builder.handle_event("select_node", %{"node" => "frame.axes[0]"}, socket)
+
+      {:noreply, socket} = Builder.handle_event("add_style_entry", %{"name" => "grid"}, socket)
+
+      {_name, layer} = hd(socket.assigns.layers)
+      assert hd(layer.frame.axes).style == [:axis, :grid]
+    end
+
+    test "reordering at scope style moves an entry and leaves the layers alone", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, s)
+      assert style_at(s) == [:series, :axis]
+
+      before = Enum.map(s.assigns.layers, &elem(&1, 0))
+
+      {:noreply, s} =
+        Builder.handle_event("reorder", %{"scope" => "style", "from" => 1, "to" => 0}, s)
+
+      assert style_at(s) == [:axis, :series]
+      assert Enum.map(s.assigns.layers, &elem(&1, 0)) == before
+    end
+
+    test "a reorder with no scope is still the layer stack", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, s)
+      assert names(s) == [:panel, :house, :shared]
+    end
+
+    test "selecting an entry marks it, and changing the stack clears the mark", %{socket: s} do
+      {:noreply, chosen} = Builder.handle_event("select_style_entry", %{"index" => "0"}, s)
+      assert chosen.assigns.style_entry == 0
+
+      {:noreply, added} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, chosen)
+      assert added.assigns.style_entry == nil
+    end
+
+    test "an entry with no name is a notice and changes nothing", %{socket: s} do
+      {:noreply, blank} = Builder.handle_event("add_style_entry", %{"name" => "  "}, s)
+      assert blank.assigns.notice == "a style entry needs a name"
+      assert style_at(blank) == style_at(s)
+    end
+  end
+
+  describe "the context panel over a style (spec/14 §18.19, D-98)" do
+    setup do
+      host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+      {:noreply, socket} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
+      {:noreply, socket} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, socket)
+      {:noreply, socket} = Builder.handle_event("select_style_entry", %{"index" => "0"}, socket)
+      %{socket: socket}
+    end
+
+    test "an edit lands in the local style and leaves the named one alone", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          s
+        )
+
+      assert style_at(s) == [:series, %{stroke_width: 7}]
+
+      # The shared style is untouched, which is the whole reason the local one exists.
+      {_name, house} = hd(s.assigns.layers)
+      assert house.styles.series.stroke_width == 2
+    end
+
+    test "a second edit reuses the local style rather than making another", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          s
+        )
+
+      {:noreply, s} =
+        Builder.handle_event("edit_style", %{"_target" => ["opacity"], "opacity" => "0.5"}, s)
+
+      assert style_at(s) == [:series, %{stroke_width: 7, opacity: 0.5}]
+    end
+
+    test "blanking the last local key removes the local entry", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          s
+        )
+
+      assert style_at(s) == [:series, %{stroke_width: 7}]
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke_width"], "stroke_width" => ""},
+          s
+        )
+
+      # An empty local is not worth keeping, and one entry naming a style is a bare reference.
+      assert style_at(s) == :series
+    end
+
+    test "a key the style kind does not declare changes nothing", %{socket: s} do
+      {:noreply, other} =
+        Builder.handle_event("edit_style", %{"_target" => ["nonsense"], "nonsense" => "1"}, s)
+
+      assert style_at(other) == style_at(s)
+    end
+
+    test "the panel is shown only when an entry is selected" do
+      chosen = at_node("marks[0]", selected: 2, style_entry: 0)
+      assert chosen =~ ~s(class="vis-builder-editor vis-builder-style-panel")
+      assert chosen =~ ~s(phx-change="edit_style")
+
+      refute at_node("marks[0]", selected: 2) =~ "vis-builder-style-panel"
+    end
+
+    test "every field names the entry its value came from" do
+      design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
+
+      assert StyleStack.origins(design, [:series, %{stroke_width: 5}]) ==
+               %{stroke: "series", stroke_width: "local"}
+
+      # A key nothing sets is named by nothing.
+      refute Map.has_key?(StyleStack.origins(design, [:series]), :opacity)
+    end
+
+    test "the resolved style is the cascade, and the panel is a view of it" do
+      design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
+
+      assert StyleStack.resolved(design, [:series, %{stroke_width: 5}]) ==
+               %{stroke: "#111", stroke_width: 5}
+    end
+  end
+
+  describe "dropping a style fragment onto a site (spec/14 §18.20)" do
+    defmodule Styles do
+      @moduledoc false
+      @behaviour Visualize.Chart.Builder.Store
+
+      @impl true
+      def list, do: ["Styles::thick", "Styles::two", "Frame::wide"]
+
+      @impl true
+      def get("Styles::thick"), do: {:ok, %{styles: %{thick: %{stroke_width: 5}}}}
+      def get("Styles::two"), do: {:ok, %{styles: %{a: %{opacity: 1}, b: %{opacity: 0}}}}
+      def get("Frame::wide"), do: {:ok, %{frame: %{size: %{width: 900}}}}
+      def get(_name), do: :error
+
+      @impl true
+      def put(_name, _fragment), do: :ok
+    end
+
+    setup do
+      host = %{
+        id: "b",
+        layers: BuilderFixture.layers(),
+        sources: BuilderFixture.sources(),
+        store: Styles
+      }
+
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+      {:noreply, socket} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
+      {:noreply, socket} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, socket)
+      %{socket: socket}
+    end
+
+    test "one gesture makes two writes: the layer, and the reference", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Styles::thick", "at" => 1},
+          s
+        )
+
+      # The fragment joins the stack, so the style stays declared once and reusable.
+      assert List.last(s.assigns.layers) ==
+               {"Styles::thick", %{styles: %{thick: %{stroke_width: 5}}}}
+
+      # And the site refers to it, at the position it was dropped at.
+      assert style_at(s) == [:series, :thick]
+    end
+
+    test "the drop position is honoured and clamped", %{socket: s} do
+      {:noreply, top} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Styles::thick", "at" => 0},
+          s
+        )
+
+      assert style_at(top) == [:thick, :series]
+
+      {:noreply, over} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Styles::thick", "at" => 99},
+          s
+        )
+
+      assert style_at(over) == [:series, :thick]
+    end
+
+    test "a fragment declaring no style is refused, and nothing is written", %{socket: s} do
+      {:noreply, refused} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Frame::wide", "at" => 0},
+          s
+        )
+
+      assert refused.assigns.notice == "Frame::wide declares no style"
+      assert style_at(refused) == style_at(s)
+      assert length(refused.assigns.layers) == length(s.assigns.layers)
+    end
+
+    test "a fragment declaring two styles is refused, because that is the question", %{socket: s} do
+      {:noreply, refused} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Styles::two", "at" => 0},
+          s
+        )
+
+      assert refused.assigns.notice =~ "declares 2 styles"
+      assert refused.assigns.notice =~ "a, b"
+      assert style_at(refused) == style_at(s)
+      assert length(refused.assigns.layers) == length(s.assigns.layers)
+    end
+
+    test "a name the store does not hold is refused", %{socket: s} do
+      {:noreply, refused} =
+        Builder.handle_event("insert", %{"scope" => "style", "name" => "nope", "at" => 0}, s)
+
+      assert refused.assigns.notice == "no fragment is stored under nope"
+      assert length(refused.assigns.layers) == length(s.assigns.layers)
+    end
+
+    test "an insert with no scope is still the layer stack", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "Frame::wide", "at" => 0}, s)
+      assert Enum.map(s.assigns.layers, &elem(&1, 0)) == ["Frame::wide", :house, :shared, :panel]
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =
@@ -652,14 +944,23 @@ defmodule Visualize.Chart.BuilderTest do
   end
 
   # The builder rendered with a given node open, which is what selecting a tab does.
-  defp at_node(label) do
-    render_component(Builder, %{
-      id: "b",
-      layers: BuilderFixture.layers(),
-      sources: BuilderFixture.sources(),
-      styles: false,
-      node_label: label
-    })
+  defp at_node(label, opts \\ []) do
+    render_component(
+      Builder,
+      Enum.into(opts, %{
+        id: "b",
+        layers: BuilderFixture.layers(),
+        sources: BuilderFixture.sources(),
+        styles: false,
+        node_label: label
+      })
+    )
+  end
+
+  # The `style` value of the open node's layer, whatever shape it is in.
+  defp style_at(socket) do
+    {_name, layer} = Enum.at(socket.assigns.layers, socket.assigns.selected)
+    layer |> Map.fetch!(:marks) |> hd() |> Map.get(:style)
   end
 
   defp names(socket), do: Enum.map(socket.assigns.layers, fn {name, _layer} -> name end)

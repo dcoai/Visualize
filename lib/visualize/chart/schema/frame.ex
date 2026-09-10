@@ -2,7 +2,7 @@ defmodule Visualize.Chart.Schema.Frame do
   @moduledoc false
   # The frame's node kinds (spec/14 §4): reached through `Visualize.Chart.Schema`.
 
-  import Visualize.Chart.Schema, only: [spec: 3, spec: 4]
+  import Visualize.Chart.Schema, only: [spec: 3, spec: 4, style_stack: 0]
 
   @frame_kinds [:cartesian, :polar, :geo, :facet]
   @scale_kinds [
@@ -84,8 +84,7 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:offset, :number, :geometry, default: 0),
       spec(
         :style,
-        {:one_of,
-         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        style_stack(),
         :style,
         default: :axis
       )
@@ -109,8 +108,7 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:title, :text, :content, default: []),
       spec(
         :style,
-        {:one_of,
-         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        style_stack(),
         :style,
         default: :label
       )

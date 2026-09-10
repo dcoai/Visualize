@@ -149,6 +149,23 @@ defmodule Visualize.Chart.Schema do
   @spec scale_kinds() :: [atom(), ...]
   def scale_kinds, do: Frame.scale_kinds()
 
+  @doc """
+  The type a style site takes (spec/14 §3.6): a reference, an inline node, or a list of
+  either.
+
+  Written once because five keys share it — `mark.style`, `label.style`, `mark_label.style`,
+  `axis.style` and `legend.style` — and a sixth would otherwise be a sixth copy.
+
+      iex> {:one_of, alts} = Visualize.Chart.Schema.style_stack()
+      iex> {:ref, :style} in alts
+      true
+  """
+  @spec style_stack() :: type()
+  def style_stack do
+    {:one_of,
+     [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]}
+  end
+
   @doc "The style names every design declares (spec/14 §3.3)."
   @spec builtin_styles() :: [atom(), ...]
   def builtin_styles, do: @builtin_styles
@@ -277,8 +294,7 @@ defmodule Visualize.Chart.Schema do
       spec(:text, :text, :content, required: true),
       spec(
         :style,
-        {:one_of,
-         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        style_stack(),
         :style,
         default: :label
       ),

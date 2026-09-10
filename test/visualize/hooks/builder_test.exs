@@ -49,8 +49,8 @@ defmodule Visualize.Hooks.BuilderTest do
   test "the pushes reach the component when data-builder-target names one" do
     js = Hooks.Builder.js_hook()
     assert js =~ "this.target = this.el.dataset.builderTarget || null"
-    assert js =~ "if (this.target) this.pushEventTo(this.target, event, payload)"
-    assert js =~ "else this.pushEvent(event, payload)"
+    assert js =~ "if (this.target) this.pushEventTo(this.target, event, carried)"
+    assert js =~ "else this.pushEvent(event, carried)"
   end
 
   test "nothing is logged and no element outside the hook takes part" do

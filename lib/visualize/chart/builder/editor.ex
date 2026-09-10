@@ -306,6 +306,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "render the facet strip; `false` where the caller does"
     )
 
+    attr(:event, :string, default: "edit", doc: "the `phx-change` the form pushes")
+    attr(:origins, :map, default: %{}, doc: "what supplied each key's value, by key")
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the editor's class")
 
@@ -340,9 +343,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-target={@target}
           >{facet}</button>
         </nav>
-        <form class="vis-builder-form" phx-change="edit" phx-target={@target}>
+        <form class="vis-builder-form" phx-change={@event} phx-target={@target}>
           <label :for={field <- @fields} class="vis-builder-field">
-            <span class="vis-builder-key">{field.key}</span>
+            <span class="vis-builder-key">
+              {field.key}<span
+                :if={@origins[field.key]}
+                class="vis-builder-origin"
+              >{@origins[field.key]}</span>
+            </span>
             <input
               :if={field.widget == :checkbox}
               type="checkbox"

@@ -59,7 +59,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Palette,
       Params,
       Preview,
-      Styles
+      Styles,
+      StyleStack
     }
 
     alias Visualize.Chart.Schema
@@ -105,6 +106,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          notice: nil,
          facet: nil,
          added: nil,
+         style_entry: nil,
          node_label: "design"
        )}
     end
@@ -219,7 +221,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </main>
           <aside class="vis-builder-context">
             <h2 class="vis-builder-sidebar-title">Context</h2>
-            <p class="vis-builder-context-empty">Focus a field to see its control.</p>
+            <StyleStack.panel
+              :if={@style_site}
+              id={@id <> "-style-stack"}
+              value={@style_site.value}
+              fallback={@style_site.fallback}
+              design={@design}
+              open={@style_entry}
+              target={@myself}
+            />
+            <Editor.panel
+              :if={@style_site && @style_entry}
+              class="vis-builder-style-panel"
+              kind={:style}
+              node={StyleStack.resolved(@design, @style_site.stack)}
+              origins={StyleStack.origins(@design, @style_site.stack)}
+              strip={false}
+              event="edit_style"
+              refs={%{style: Palette.names(@design)}}
+              target={@myself}
+            />
+            <p :if={!@style_site} class="vis-builder-context-empty">
+              Open a node with a style to see its stack.
+            </p>
           </aside>
         </div>
         <div class="vis-builder-tray">
@@ -283,8 +307,53 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, update(socket, :disabled, &toggle(&1, position(index)))}
     end
 
+    def handle_event("reorder", %{"scope" => "style", "from" => from, "to" => to}, socket) do
+      {:noreply, restacked(socket, &shift(&1, position(from), position(to)))}
+    end
+
     def handle_event("reorder", %{"from" => from, "to" => to}, socket) do
       {:noreply, moved(socket, position(from), position(to))}
+    end
+
+    def handle_event("add_style_entry", %{"name" => submitted}, socket) do
+      case Editor.parse({:ref, :style}, String.trim(submitted)) do
+        {:ok, name} -> {:noreply, restacked(socket, &(&1 ++ [name]))}
+        :error -> {:noreply, assign(socket, :notice, "a style entry needs a name")}
+      end
+    end
+
+    def handle_event("remove_style_entry", %{"index" => index}, socket) do
+      at = position(index)
+      {:noreply, restacked(socket, &List.delete_at(&1, at))}
+    end
+
+    def handle_event("select_style_entry", %{"index" => index}, socket) do
+      {:noreply, assign(socket, :style_entry, position(index))}
+    end
+
+    # Every edit at a site lands in its local style, never in a named entry: editing a mark
+    # that references `:series` must not restyle every other mark that references the same
+    # name (spec/14 §18.19, D-98). The local entry is created when there is none.
+    def handle_event("edit_style", %{"_target" => [submitted]} = params, socket) do
+      {:noreply, styled(socket, spec(:style, submitted), params)}
+    end
+
+    # A style fragment dropped on a site's stack is the answer to "which style did you
+    # mean": the drop said where it goes, so no name has to be bound (spec/14 §18.20).
+    def handle_event("insert", %{"scope" => "style", "name" => submitted, "at" => at}, socket) do
+      %{store: store} = socket.assigns
+
+      with name when not is_nil(name) <-
+             store && Enum.find(store.list(), &(to_string(&1) == submitted)),
+           {:ok, fragment} <- store.get(name),
+           [style] <- declared_styles(fragment) do
+        {:noreply, dropped(socket, name, fragment, style, position(at))}
+      else
+        nil -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+        :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+        [] -> {:noreply, assign(socket, :notice, "#{submitted} declares no style")}
+        many -> {:noreply, assign(socket, :notice, refusal(submitted, many))}
+      end
     end
 
     # A fragment dragged out of the library lands at the position it was dropped at, so
@@ -491,6 +560,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         entry: entry,
         tabs: tabs,
         chips: chips(children, entry, assigns.facet),
+        style_site: style_site(entry, at(layer, entry.path)),
         open_style: open_style(entry),
         editing: at(layer, entry.path),
         errors: faults(design, assigns)
@@ -569,8 +639,72 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.join(" ")
     end
 
+    # A node whose kind declares a `style` key is a style site (spec/14 §3.6), and the panel
+    # needs the value it carries and the default it resolves as when it carries none.
+    defp style_site(entry, node) do
+      case Schema.key(entry.kind, :style) do
+        nil ->
+          nil
+
+        %{default: fallback} ->
+          value = is_map(node) && Map.get(node, :style)
+          %{value: value, fallback: fallback, stack: current_stack(value || nil, fallback)}
+      end
+    end
+
     defp open_style(%{path: [:styles, name]}), do: name
     defp open_style(_entry), do: nil
+
+    defp styled(socket, nil, _params), do: socket
+
+    defp styled(socket, spec, params) do
+      parsed = read(Editor.widget(spec.type), spec.type, params[to_string(spec.key)])
+      restacked(socket, &local(&1, spec.key, parsed))
+    end
+
+    # The local entry is the last one when it is inline, and a new one otherwise.
+    defp local(stack, key, parsed) do
+      case List.last(stack) do
+        node when is_map(node) -> List.replace_at(stack, -1, write_key(node, key, parsed))
+        _none -> stack ++ [write_key(%{}, key, parsed)]
+      end
+    end
+
+    defp write_key(node, key, {:ok, value}), do: Map.put(node, key, value)
+    defp write_key(node, key, :error), do: Map.delete(node, key)
+
+    # A change to the open node's stack, written back in whatever shape it came in: a stack
+    # of one that names a style stays a bare reference, so an edit elsewhere does not rewrite
+    # a document's shape (spec/14 §3.6).
+    defp restacked(socket, change) do
+      %{entry: entry, editing: node} = editing(socket.assigns)
+
+      case Schema.key(entry.kind, :style) do
+        nil ->
+          socket
+
+        %{default: fallback} ->
+          current = current_stack(is_map(node) && Map.get(node, :style), fallback)
+
+          socket
+          |> update_layer(entry.path, :style, {:ok, shaped(change.(current))})
+          |> assign(:style_entry, nil)
+      end
+    end
+
+    # The stack a value stands for: a site carrying nothing stands for its default, so
+    # adding to it keeps what it already resolved as rather than silently dropping it.
+    defp current_stack(nil, nil), do: []
+    defp current_stack(nil, fallback), do: [fallback]
+    defp current_stack(value, _fallback) when is_list(value), do: value
+    defp current_stack(value, _fallback), do: [value]
+
+    defp shaped(stack) do
+      case Enum.reject(stack, &(is_map(&1) and map_size(&1) == 0)) do
+        [only] when not is_map(only) -> only
+        pruned -> pruned
+      end
+    end
 
     # The first segment of a label: `frame.scales.x` is under `frame`, `marks[0]` under
     # `marks`, and `design` is its own root.
@@ -616,6 +750,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
         notice: nil
       )
     end
+
+    # The style names a fragment declares, in name order.
+    defp declared_styles(fragment) do
+      case Map.get(fragment, :styles) do
+        map when is_map(map) -> map |> Map.keys() |> Enum.sort()
+        _absent -> []
+      end
+    end
+
+    defp refusal(submitted, many) do
+      "#{submitted} declares #{length(many)} styles — #{Enum.map_join(many, ", ", &to_string/1)}" <>
+        " — so which one this site means is the question the drop was meant to answer"
+    end
+
+    # The two writes of one gesture: the fragment joins the stack as a layer, so the style
+    # stays declared once and reusable, and a reference to it goes into the site's stack at
+    # the position it was dropped at (spec/14 §18.20).
+    defp dropped(socket, name, fragment, style, at) do
+      socket
+      |> assign(:layers, socket.assigns.layers ++ [{name, fragment}])
+      |> assign(:added, to_string(name))
+      |> restacked(fn stack -> List.insert_at(stack, clamp(at, stack), style) end)
+      |> assign(:notice, nil)
+    end
+
+    defp clamp(at, stack), do: at |> max(0) |> min(length(stack))
 
     # The highest layer whose fragment declares a style of that name, or `nil`.
     defp declaring(layers, name) do
