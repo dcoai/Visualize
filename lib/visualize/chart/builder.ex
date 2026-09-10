@@ -59,7 +59,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Palette,
       Params,
       Preview,
-      Styles
+      Styles,
+      StyleStack
     }
 
     alias Visualize.Chart.Schema
@@ -105,6 +106,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          notice: nil,
          facet: nil,
          added: nil,
+         style_entry: nil,
          node_label: "design"
        )}
     end
@@ -219,7 +221,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </main>
           <aside class="vis-builder-context">
             <h2 class="vis-builder-sidebar-title">Context</h2>
-            <p class="vis-builder-context-empty">Focus a field to see its control.</p>
+            <StyleStack.panel
+              :if={@style_site}
+              id={@id <> "-style-stack"}
+              value={@style_site.value}
+              fallback={@style_site.fallback}
+              design={@design}
+              open={@style_entry}
+              target={@myself}
+            />
+            <p :if={!@style_site} class="vis-builder-context-empty">
+              Open a node with a style to see its stack.
+            </p>
           </aside>
         </div>
         <div class="vis-builder-tray">
@@ -283,8 +296,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, update(socket, :disabled, &toggle(&1, position(index)))}
     end
 
+    def handle_event("reorder", %{"scope" => "style", "from" => from, "to" => to}, socket) do
+      {:noreply, restacked(socket, &shift(&1, position(from), position(to)))}
+    end
+
     def handle_event("reorder", %{"from" => from, "to" => to}, socket) do
       {:noreply, moved(socket, position(from), position(to))}
+    end
+
+    def handle_event("add_style_entry", %{"name" => submitted}, socket) do
+      case Editor.parse({:ref, :style}, String.trim(submitted)) do
+        {:ok, name} -> {:noreply, restacked(socket, &(&1 ++ [name]))}
+        :error -> {:noreply, assign(socket, :notice, "a style entry needs a name")}
+      end
+    end
+
+    def handle_event("remove_style_entry", %{"index" => index}, socket) do
+      at = position(index)
+      {:noreply, restacked(socket, &List.delete_at(&1, at))}
+    end
+
+    def handle_event("select_style_entry", %{"index" => index}, socket) do
+      {:noreply, assign(socket, :style_entry, position(index))}
     end
 
     # A fragment dragged out of the library lands at the position it was dropped at, so
@@ -491,6 +524,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         entry: entry,
         tabs: tabs,
         chips: chips(children, entry, assigns.facet),
+        style_site: style_site(entry, at(layer, entry.path)),
         open_style: open_style(entry),
         editing: at(layer, entry.path),
         errors: faults(design, assigns)
@@ -569,8 +603,49 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.join(" ")
     end
 
+    # A node whose kind declares a `style` key is a style site (spec/14 §3.6), and the panel
+    # needs the value it carries and the default it resolves as when it carries none.
+    defp style_site(entry, node) do
+      case Schema.key(entry.kind, :style) do
+        nil ->
+          nil
+
+        %{default: fallback} ->
+          %{value: is_map(node) && Map.get(node, :style), fallback: fallback}
+      end
+    end
+
     defp open_style(%{path: [:styles, name]}), do: name
     defp open_style(_entry), do: nil
+
+    # A change to the open node's stack, written back in whatever shape it came in: a stack
+    # of one that names a style stays a bare reference, so an edit elsewhere does not rewrite
+    # a document's shape (spec/14 §3.6).
+    defp restacked(socket, change) do
+      %{entry: entry, editing: node} = editing(socket.assigns)
+
+      case Schema.key(entry.kind, :style) do
+        nil ->
+          socket
+
+        %{default: fallback} ->
+          current = current_stack(is_map(node) && Map.get(node, :style), fallback)
+
+          socket
+          |> update_layer(entry.path, :style, {:ok, shaped(change.(current))})
+          |> assign(:style_entry, nil)
+      end
+    end
+
+    # The stack a value stands for: a site carrying nothing stands for its default, so
+    # adding to it keeps what it already resolved as rather than silently dropping it.
+    defp current_stack(nil, nil), do: []
+    defp current_stack(nil, fallback), do: [fallback]
+    defp current_stack(value, _fallback) when is_list(value), do: value
+    defp current_stack(value, _fallback), do: [value]
+
+    defp shaped([only]) when not is_map(only), do: only
+    defp shaped(stack), do: stack
 
     # The first segment of a label: `frame.scales.x` is under `frame`, `marks[0]` under
     # `marks`, and `design` is its own root.

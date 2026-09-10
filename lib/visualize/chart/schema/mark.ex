@@ -2,7 +2,7 @@ defmodule Visualize.Chart.Schema.Mark do
   @moduledoc false
   # The marks' node kinds (spec/14 §5): reached through `Visualize.Chart.Schema`.
 
-  import Visualize.Chart.Schema, only: [spec: 3, spec: 4]
+  import Visualize.Chart.Schema, only: [spec: 3, spec: 4, style_stack: 0]
 
   # Type, required channels, optional channels, option keys (spec/14 §5.2-5.3).
   @marks [
@@ -126,8 +126,7 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:options, {:node, :options}, :geometry, default: %{}),
       spec(
         :style,
-        {:one_of,
-         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        style_stack(),
         :style
       ),
       spec(:label, {:node, :mark_label}, :content),
@@ -195,8 +194,7 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:anchor, {:enum, @anchors}, :geometry, default: :top),
       spec(
         :style,
-        {:one_of,
-         [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]},
+        style_stack(),
         :style,
         default: :label
       ),

@@ -458,6 +458,93 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "the style stack at a site (spec/14 §18.18, D-98)" do
+    setup do
+      host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+
+      # The panel layer's mark is the style site: it references `:series`.
+      {:noreply, socket} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
+      {:noreply, socket} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, socket)
+      %{host: host, socket: socket}
+    end
+
+    test "the site's stack is rendered in the context panel" do
+      html = at_node("marks[0]", selected: 2)
+
+      assert html =~ ~s(<ol id="b-style-stack")
+      assert html =~ ~s(data-builder-scope="style")
+      assert html =~ ~s(<span class="vis-builder-style-name">series</span>)
+    end
+
+    test "a node with no style key has no stack" do
+      refute at_node("frame.size") =~ "vis-builder-style-stack"
+      assert at_node("frame.size") =~ "vis-builder-context-empty"
+    end
+
+    test "adding appends, and a bare reference stays bare until it is not one", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, s)
+      assert style_at(s) == [:series, :axis]
+
+      # One entry naming a style is written back as a bare reference, so an edit elsewhere
+      # does not rewrite a document's shape.
+      {:noreply, s} = Builder.handle_event("remove_style_entry", %{"index" => "1"}, s)
+      assert style_at(s) == :series
+    end
+
+    test "a site carrying nothing keeps what it resolved as when something is added" do
+      # An axis carries no `style`, and resolves as `:axis` by the schema's default.
+      {:ok, socket} = Builder.mount(%Socket{})
+
+      {:ok, socket} =
+        Builder.update(
+          %{id: "b", layers: [{:only, %{frame: %{axes: [%{scale: :x, side: :bottom}]}}}]},
+          socket
+        )
+
+      {:noreply, socket} =
+        Builder.handle_event("select_node", %{"node" => "frame.axes[0]"}, socket)
+
+      {:noreply, socket} = Builder.handle_event("add_style_entry", %{"name" => "grid"}, socket)
+
+      {_name, layer} = hd(socket.assigns.layers)
+      assert hd(layer.frame.axes).style == [:axis, :grid]
+    end
+
+    test "reordering at scope style moves an entry and leaves the layers alone", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, s)
+      assert style_at(s) == [:series, :axis]
+
+      before = Enum.map(s.assigns.layers, &elem(&1, 0))
+
+      {:noreply, s} =
+        Builder.handle_event("reorder", %{"scope" => "style", "from" => 1, "to" => 0}, s)
+
+      assert style_at(s) == [:axis, :series]
+      assert Enum.map(s.assigns.layers, &elem(&1, 0)) == before
+    end
+
+    test "a reorder with no scope is still the layer stack", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, s)
+      assert names(s) == [:panel, :house, :shared]
+    end
+
+    test "selecting an entry marks it, and changing the stack clears the mark", %{socket: s} do
+      {:noreply, chosen} = Builder.handle_event("select_style_entry", %{"index" => "0"}, s)
+      assert chosen.assigns.style_entry == 0
+
+      {:noreply, added} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, chosen)
+      assert added.assigns.style_entry == nil
+    end
+
+    test "an entry with no name is a notice and changes nothing", %{socket: s} do
+      {:noreply, blank} = Builder.handle_event("add_style_entry", %{"name" => "  "}, s)
+      assert blank.assigns.notice == "a style entry needs a name"
+      assert style_at(blank) == style_at(s)
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =
@@ -652,14 +739,23 @@ defmodule Visualize.Chart.BuilderTest do
   end
 
   # The builder rendered with a given node open, which is what selecting a tab does.
-  defp at_node(label) do
-    render_component(Builder, %{
-      id: "b",
-      layers: BuilderFixture.layers(),
-      sources: BuilderFixture.sources(),
-      styles: false,
-      node_label: label
-    })
+  defp at_node(label, opts \\ []) do
+    render_component(
+      Builder,
+      Enum.into(opts, %{
+        id: "b",
+        layers: BuilderFixture.layers(),
+        sources: BuilderFixture.sources(),
+        styles: false,
+        node_label: label
+      })
+    )
+  end
+
+  # The `style` value of the open node's layer, whatever shape it is in.
+  defp style_at(socket) do
+    {_name, layer} = Enum.at(socket.assigns.layers, socket.assigns.selected)
+    layer |> Map.fetch!(:marks) |> hd() |> Map.get(:style)
   end
 
   defp names(socket), do: Enum.map(socket.assigns.layers, fn {name, _layer} -> name end)

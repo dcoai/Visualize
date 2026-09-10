@@ -12,6 +12,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
   doctest Visualize.Chart.Builder.Styles
   doctest Visualize.Chart.Builder.Palette
   doctest Visualize.Chart.Builder.Library
+  doctest Visualize.Chart.Builder.StyleStack
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 

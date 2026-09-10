@@ -45,6 +45,10 @@ defmodule Visualize.Hooks.Builder do
         // never loaded and a hook that loaded but does nothing look identical from outside.
         this.el.setAttribute('data-builder-mounted', 'true');
         this.target = this.el.dataset.builderTarget || null;
+        // Which list this instance is. The queries below are already scoped to this element,
+        // so two stacks on a page never see each other; the component needs only to know
+        // which one a reorder came from. Absent means the layer stack (spec/14 §18.18).
+        this.scope = this.el.dataset.builderScope || null;
         this.from = null;
         this.onDragStart = this.handleDragStart.bind(this);
         this.onDragOver = this.handleDragOver.bind(this);
@@ -72,8 +76,9 @@ defmodule Visualize.Hooks.Builder do
       },
 
       push(event, payload) {
-        if (this.target) this.pushEventTo(this.target, event, payload);
-        else this.pushEvent(event, payload);
+        const carried = this.scope ? { ...payload, scope: this.scope } : payload;
+        if (this.target) this.pushEventTo(this.target, event, carried);
+        else this.pushEvent(event, carried);
       },
 
       // A drag carries what was picked up, so a drop anywhere can tell a move of a layer
