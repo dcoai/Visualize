@@ -338,6 +338,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, styled(socket, spec(:style, submitted), params)}
     end
 
+    # A style fragment dropped on a site's stack is the answer to "which style did you
+    # mean": the drop said where it goes, so no name has to be bound (spec/14 §18.20).
+    def handle_event("insert", %{"scope" => "style", "name" => submitted, "at" => at}, socket) do
+      %{store: store} = socket.assigns
+
+      with name when not is_nil(name) <-
+             store && Enum.find(store.list(), &(to_string(&1) == submitted)),
+           {:ok, fragment} <- store.get(name),
+           [style] <- declared_styles(fragment) do
+        {:noreply, dropped(socket, name, fragment, style, position(at))}
+      else
+        nil -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+        :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+        [] -> {:noreply, assign(socket, :notice, "#{submitted} declares no style")}
+        many -> {:noreply, assign(socket, :notice, refusal(submitted, many))}
+      end
+    end
+
     # A fragment dragged out of the library lands at the position it was dropped at, so
     # precedence is chosen in the gesture rather than fixed afterwards (spec/14 §18.17).
     def handle_event("insert", %{"name" => submitted, "at" => at}, socket) do
@@ -732,6 +750,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
         notice: nil
       )
     end
+
+    # The style names a fragment declares, in name order.
+    defp declared_styles(fragment) do
+      case Map.get(fragment, :styles) do
+        map when is_map(map) -> map |> Map.keys() |> Enum.sort()
+        _absent -> []
+      end
+    end
+
+    defp refusal(submitted, many) do
+      "#{submitted} declares #{length(many)} styles — #{Enum.map_join(many, ", ", &to_string/1)}" <>
+        " — so which one this site means is the question the drop was meant to answer"
+    end
+
+    # The two writes of one gesture: the fragment joins the stack as a layer, so the style
+    # stays declared once and reusable, and a reference to it goes into the site's stack at
+    # the position it was dropped at (spec/14 §18.20).
+    defp dropped(socket, name, fragment, style, at) do
+      socket
+      |> assign(:layers, socket.assigns.layers ++ [{name, fragment}])
+      |> assign(:added, to_string(name))
+      |> restacked(fn stack -> List.insert_at(stack, clamp(at, stack), style) end)
+      |> assign(:notice, nil)
+    end
+
+    defp clamp(at, stack), do: at |> max(0) |> min(length(stack))
 
     # The highest layer whose fragment declares a style of that name, or `nil`.
     defp declaring(layers, name) do

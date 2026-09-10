@@ -640,6 +640,116 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "dropping a style fragment onto a site (spec/14 §18.20)" do
+    defmodule Styles do
+      @moduledoc false
+      @behaviour Visualize.Chart.Builder.Store
+
+      @impl true
+      def list, do: ["Styles::thick", "Styles::two", "Frame::wide"]
+
+      @impl true
+      def get("Styles::thick"), do: {:ok, %{styles: %{thick: %{stroke_width: 5}}}}
+      def get("Styles::two"), do: {:ok, %{styles: %{a: %{opacity: 1}, b: %{opacity: 0}}}}
+      def get("Frame::wide"), do: {:ok, %{frame: %{size: %{width: 900}}}}
+      def get(_name), do: :error
+
+      @impl true
+      def put(_name, _fragment), do: :ok
+    end
+
+    setup do
+      host = %{
+        id: "b",
+        layers: BuilderFixture.layers(),
+        sources: BuilderFixture.sources(),
+        store: Styles
+      }
+
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+      {:noreply, socket} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
+      {:noreply, socket} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, socket)
+      %{socket: socket}
+    end
+
+    test "one gesture makes two writes: the layer, and the reference", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Styles::thick", "at" => 1},
+          s
+        )
+
+      # The fragment joins the stack, so the style stays declared once and reusable.
+      assert List.last(s.assigns.layers) ==
+               {"Styles::thick", %{styles: %{thick: %{stroke_width: 5}}}}
+
+      # And the site refers to it, at the position it was dropped at.
+      assert style_at(s) == [:series, :thick]
+    end
+
+    test "the drop position is honoured and clamped", %{socket: s} do
+      {:noreply, top} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Styles::thick", "at" => 0},
+          s
+        )
+
+      assert style_at(top) == [:thick, :series]
+
+      {:noreply, over} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Styles::thick", "at" => 99},
+          s
+        )
+
+      assert style_at(over) == [:series, :thick]
+    end
+
+    test "a fragment declaring no style is refused, and nothing is written", %{socket: s} do
+      {:noreply, refused} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Frame::wide", "at" => 0},
+          s
+        )
+
+      assert refused.assigns.notice == "Frame::wide declares no style"
+      assert style_at(refused) == style_at(s)
+      assert length(refused.assigns.layers) == length(s.assigns.layers)
+    end
+
+    test "a fragment declaring two styles is refused, because that is the question", %{socket: s} do
+      {:noreply, refused} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "style", "name" => "Styles::two", "at" => 0},
+          s
+        )
+
+      assert refused.assigns.notice =~ "declares 2 styles"
+      assert refused.assigns.notice =~ "a, b"
+      assert style_at(refused) == style_at(s)
+      assert length(refused.assigns.layers) == length(s.assigns.layers)
+    end
+
+    test "a name the store does not hold is refused", %{socket: s} do
+      {:noreply, refused} =
+        Builder.handle_event("insert", %{"scope" => "style", "name" => "nope", "at" => 0}, s)
+
+      assert refused.assigns.notice == "no fragment is stored under nope"
+      assert length(refused.assigns.layers) == length(s.assigns.layers)
+    end
+
+    test "an insert with no scope is still the layer stack", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "Frame::wide", "at" => 0}, s)
+      assert Enum.map(s.assigns.layers, &elem(&1, 0)) == ["Frame::wide", :house, :shared, :panel]
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =
