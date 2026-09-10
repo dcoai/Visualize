@@ -1670,3 +1670,23 @@ A **move** is the same gap, adjusted: `at` is a gap in the list as it stands, an
 **What follows the insert.** The selected layer and the disabled set are *positions*, so both shift by one where they sit at or below the insertion — the same rule a move already follows (§18.8). A name the store does not hold is a notice and changes no layer, exactly as adding one is.
 
 Inserting does not consult the fragment: the stack is a list and a fragment is an element of it, so an insert is `List.insert_at/3` and the design is recomputed from the result. There is nothing to validate at insertion time that applying the design does not already say better (§18.4).
+
+### 18.19 The style stack at a site
+
+§3.6 gives every style site a stack; this is the control over it. `Visualize.Chart.Builder.StyleStack.panel/1` renders the stack of the open node's `style` key: one row per entry, in resolution order — the first applied first, the last winning — because that is the order the cascade is defined in and a panel that reversed it would teach the opposite of §3.6.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.StyleStack.panel/1` | the stack at a site: its entries, and the controls that change them |
+| `Visualize.Chart.Builder.StyleStack.entries/2` | a `style` value as the rows to draw, whatever shape it takes |
+| `Visualize.Chart.Schema.style_stack/0` | the type a style site takes, written once |
+
+**A row per entry, whatever the value's shape.** `entries/2` is total over §3.6's three shapes: a bare reference is one row, an inline node is one row, a list is a row each. A site with no `style` key at all is the empty stack, and the schema's default for that site — `:axis` for an axis, `:label` for a label and a legend — is shown as the row it will resolve as, marked as a default rather than as something the design says.
+
+Each row offers what a layer row offers and for the same reasons: **select** it, which opens it in the context panel (§18.18); **remove** it; and **drag** it to a position, which is what changes precedence. A row is the control, carrying the click and the drag itself, because a control inside a draggable row defeats both (§18.17).
+
+**The local row.** An inline entry is drawn as `local` and is the row an edit lands in. There is at most one, it is the last entry, and it is **created on first edit** (D-98) — so a site that has never been edited directly shows references only, and the local row appears when it is needed rather than sitting empty in every document.
+
+**Adding.** A control offers the style names the stacked design declares (§18.14) and the four built-in names, and appends the chosen one. Appending rather than inserting is the useful default — a style added to a site is nearly always meant to win — and dragging moves it if it was not.
+
+**One hook, many stacks.** `Visualize.Hooks.Builder` already reorders a list by dragging (§18.10, §18.17), and a style stack is a list. The hook's queries are scoped to its own element, so a second stack on the page is a second instance with no knowledge of the first; what the component needs is to know *which* stack a `reorder` came from. The hook therefore reads `data-builder-scope` from its element and returns it in the payload, absent for the layer stack and `"style"` for a style stack. This is why the layer stack needed no change: an absent scope means what it always meant.
