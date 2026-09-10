@@ -1691,3 +1691,18 @@ Each row offers what a layer row offers and for the same reasons: **select** it,
 **Adding.** A control offers the style names the stacked design declares (§18.14) and the four built-in names, and appends the chosen one. Appending rather than inserting is the useful default — a style added to a site is nearly always meant to win — and dragging moves it if it was not.
 
 **One hook, many stacks.** `Visualize.Hooks.Builder` already reorders a list by dragging (§18.10, §18.17), and a style stack is a list. The hook's queries are scoped to its own element, so a second stack on the page is a second instance with no knowledge of the first; what the component needs is to know *which* stack a `reorder` came from. The hook therefore reads `data-builder-scope` from its element and returns it in the payload, absent for the layer stack and `"style"` for a style stack. This is why the layer stack needed no change: an absent scope means what it always meant.
+
+### 18.19 The context panel over a style
+
+Beneath the stack of §18.18 sits the style the site actually renders as: the entries cascaded, every key of the `:style` kind, with the control §18.6 chooses from its type. It is `Visualize.Chart.Builder.Editor.panel/1` at kind `:style` over the resolved node, which is why it needs no list of style keys of its own — a key added to the schema appears here with no edit.
+
+**Every edit lands in the local style.** A field changed here writes into the site's inline entry, creating it when there is none (D-98). It never writes into a named entry: editing a mark that references `:series` must not restyle every other mark that references the same name, and a panel that wrote to the resolved node would do exactly that. This is the whole reason the local style exists, and it is why the panel edits through its own event rather than the editor's.
+
+**Every field says where its value came from.** A resolved style is a cascade, so a value is one entry's and the entries below it are overridden. Each field carries the name of the entry that supplied its current value — `series`, `axis`, `local`, or the site's default — which is `Visualize.Chart.explain/1`'s question asked at a site: *which style said this, and what did it replace*. A key no entry sets shows the schema's default as a placeholder and names nothing, because nothing said it.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.StyleStack.resolved/2` | the site's stack cascaded, as the panel shows it |
+| `Visualize.Chart.Builder.StyleStack.origins/2` | which entry supplied each key of the resolved style |
+
+The panel is shown when an entry of the stack is selected, and hidden otherwise: a site's resolved style is a question about the site, and asking it costs a click so that the column is not a wall of nineteen controls for every node that happens to have a style.
