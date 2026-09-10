@@ -126,27 +126,24 @@ defmodule Visualize.Chart.BuilderTest do
       assert main =~ ~s(class="vis-builder-preview")
     end
 
-    test "the top row is one tab per root, in the order the walk reaches it" do
+    test "the top row is every root the design has, in the schema's order" do
       html = rendered(:builder)
       assert html =~ ~s(class="vis-builder-node vis-builder-node-open")
 
-      roots =
-        BuilderFixture.layers()
-        |> hd()
-        |> then(fn {_name, layer} -> layer end)
-        |> Editor.nodes()
-        |> Enum.map(&(&1.label |> String.split(~r/[.\[]/, parts: 2) |> hd()))
-        |> Enum.uniq()
-
-      assert tabs(html, "vis-builder-node") == roots
-      assert roots == ["design", "styles", "frame"]
+      # The selected layer is `house`, which declares three of them; the strip shows all
+      # seven, because a person asks where the marks are, not which fragment holds them.
+      assert tabs(html, "vis-builder-node") ==
+               ~w(design sources vars styles frame marks labels)
     end
 
-    test "a root that is not itself a node opens its first member" do
-      # `styles` exists only as the map its members live in, so its tab opens `styles.series`
-      # rather than a node the fragment does not have.
+    test "a root the selected layer does not declare is marked elsewhere" do
       html = rendered(:builder)
-      assert html =~ ~s(phx-value-node="styles.series" phx-target="-1">styles</button>)
+
+      assert html =~
+               ~s(class="vis-builder-node vis-builder-node-elsewhere" title="marks — this layer declares none; opens the layer that does")
+
+      # And one it does declare is not.
+      assert html =~ ~s(class="vis-builder-node" title="frame of this layer")
     end
 
     test "the open root's children and the node's facets are one strip" do
@@ -185,7 +182,7 @@ defmodule Visualize.Chart.BuilderTest do
         })
 
       assert Editor.facets(:meta) == [:content]
-      assert html =~ ~s(phx-value-node="meta")
+      assert html =~ ~s(phx-value-root="meta")
       refute html =~ "vis-builder-chips"
     end
 
@@ -750,6 +747,53 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "reaching a root the selected layer does not declare (spec/14 §18.13)" do
+    setup do
+      host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+      %{socket: socket}
+    end
+
+    test "clicking it selects the layer that declares it, and opens it", %{socket: s} do
+      # `house` is selected and declares no marks; `panel` does.
+      assert s.assigns.selected == 0
+
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "marks"}, s)
+
+      assert s.assigns.selected == 2
+      assert s.assigns.node_label == "marks[0]"
+    end
+
+    test "a root the selected layer does declare opens there, with no move", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
+
+      assert s.assigns.selected == 0
+      assert s.assigns.node_label == "frame"
+    end
+
+    test "the highest layer wins when more than one declares it", %{socket: s} do
+      # Both `house` and `shared` declare a frame; the higher is `shared`.
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
+
+      assert s.assigns.selected == 1
+      assert s.assigns.node_label == "frame"
+    end
+
+    test "a root that is not itself a node opens its first member", %{socket: s} do
+      # `styles` exists only as the map its members live in.
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "styles"}, s)
+      assert s.assigns.node_label == "styles.series"
+    end
+
+    test "a root nothing declares changes nothing", %{socket: s} do
+      {:noreply, missed} = Builder.handle_event("select_root", %{"root" => "nothing"}, s)
+      assert missed.assigns.selected == s.assigns.selected
+      assert missed.assigns.node_label == s.assigns.node_label
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =
@@ -929,7 +973,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<div class="vis-builder-editor">)
       # `frame.size` is reachable through the `frame` root now that the strip is grouped;
       # the second row is asserted with the rest of the grouping above.
-      assert html =~ ~s(phx-value-node="frame" phx-target="-1">frame</button>)
+      assert html =~ ~s(phx-value-root="frame" phx-target="-1">frame</button>)
       refute html =~ "vis-builder-key-errors"
     end
   end

@@ -188,9 +188,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <button
                 :for={tab <- @tabs}
                 type="button"
-                class={class("vis-builder-node", if(tab.open, do: "vis-builder-node-open"))}
-                phx-click="select_node"
-                phx-value-node={tab.node}
+                class={tab.class}
+                title={tab.title}
+                phx-click="select_root"
+                phx-value-root={tab.label}
                 phx-target={@myself}
               >{tab.label}</button>
             </nav>
@@ -297,6 +298,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("select_node", %{"node" => label}, socket) do
       {:noreply, assign(socket, node_label: label, facet: nil)}
+    end
+
+    # A root the selected layer declares opens there; one it does not takes the person to
+    # the highest layer that declares it, which is what the inspector and the palette
+    # already do (spec/14 §18.13, §18.9, §18.14).
+    def handle_event("select_root", %{"root" => root}, socket) do
+      %{layers: layers, selected: selected} = socket.assigns
+
+      case first_under(Enum.at(layers, selected), root) do
+        nil ->
+          case Enum.find(Enum.reverse(Enum.with_index(layers)), fn {layer, _index} ->
+                 first_under(layer, root)
+               end) do
+            nil ->
+              {:noreply, socket}
+
+            {layer, index} ->
+              {:noreply, socket |> select(index) |> opened(first_under(layer, root))}
+          end
+
+        label ->
+          {:noreply, assign(socket, node_label: label, facet: nil)}
+      end
     end
 
     def handle_event("select_layer", %{"index" => index}, socket) do
@@ -552,7 +576,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       entry = Enum.find(nodes, &(&1.label == assigns.node_label)) || hd(nodes)
       design = design(assigns)
 
-      {tabs, children} = strip(nodes, entry)
+      {tabs, children} = strip(nodes, entry, design)
 
       %{
         design: design,
@@ -573,18 +597,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # is the nodes under whichever root the open node sits in, labelled by what they add to
     # it. A root that is not itself a node — `styles`, which exists only as the map its
     # members live in — opens its first member instead.
-    defp strip(nodes, entry) do
+    defp strip(nodes, entry, design) do
       open_root = root(entry.label)
+      here = nodes |> Enum.map(&root(&1.label)) |> Enum.uniq()
 
+      # Every root the *stacked design* declares, in the schema's order, so the whole
+      # vocabulary of the chart is on screen whatever layer is selected (spec/14 §18.13).
       tabs =
-        nodes
-        |> Enum.map(&root(&1.label))
-        |> Enum.uniq()
-        |> Enum.map(fn root ->
-          members = Enum.filter(nodes, &(root(&1.label) == root))
-          own = Enum.find(members, &(&1.label == root)) || hd(members)
-          %{label: root, node: own.label, open: root == open_root}
-        end)
+        for root <- roots(design, here) do
+          %{
+            label: root,
+            open: root == open_root,
+            elsewhere: root not in here,
+            class: tab_class(root == open_root, root in here),
+            title: tab_title(root, root in here)
+          }
+        end
 
       children =
         for node <- nodes, root(node.label) == open_root, node.label != open_root do
@@ -593,6 +621,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       {tabs, children}
     end
+
+    # The design's roots in the schema's order, with any the selected layer has and the
+    # design somehow does not — a layer the host gave that the stack drops — kept at the end
+    # rather than made unreachable.
+    defp roots(design, here) do
+      declared = design |> Editor.nodes() |> Enum.map(&root(&1.label)) |> Enum.uniq()
+      declared ++ Enum.reject(here, &(&1 in declared))
+    end
+
+    defp tab_class(open?, here?) do
+      ["vis-builder-node"]
+      |> then(&if open?, do: &1 ++ ["vis-builder-node-open"], else: &1)
+      |> then(&if here?, do: &1, else: &1 ++ ["vis-builder-node-elsewhere"])
+      |> Enum.join(" ")
+    end
+
+    defp tab_title(root, true), do: "#{root} of this layer"
+
+    defp tab_title(root, false),
+      do: "#{root} — this layer declares none; opens the layer that does"
 
     # The second row is one strip of one kind of control: the children of the open root, then
     # the facets of the open node, which are two things to choose between and were two rows
@@ -749,6 +797,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
         facet: nil,
         notice: nil
       )
+    end
+
+    # The label of the first node of a layer under a root, or `nil`.
+    defp first_under(nil, _root), do: nil
+
+    defp first_under(layer, root) do
+      layer
+      |> fragment()
+      |> Editor.nodes()
+      |> Enum.find(&(root(&1.label) == root))
+      |> case do
+        nil -> nil
+        node -> node.label
+      end
     end
 
     # The style names a fragment declares, in name order.

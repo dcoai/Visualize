@@ -485,6 +485,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color: var(--vis-builder-ink);
     }
 
+    /* A root the selected layer does not declare: reachable, and honest about being
+       somewhere else (spec/14 §18.13). */
+    .vis-builder .vis-builder-node-elsewhere {
+      color: var(--vis-builder-muted);
+      opacity: 0.65;
+      font-style: italic;
+    }
+
+    .vis-builder .vis-builder-node-elsewhere:hover {
+      opacity: 1;
+    }
+
     .vis-builder-node-open {
       border-color: var(--vis-builder-line);
       border-bottom-color: var(--vis-builder-panel);
