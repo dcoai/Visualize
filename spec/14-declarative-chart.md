@@ -1706,3 +1706,18 @@ Beneath the stack of §18.18 sits the style the site actually renders as: the en
 | `Visualize.Chart.Builder.StyleStack.origins/2` | which entry supplied each key of the resolved style |
 
 The panel is shown when an entry of the stack is selected, and hidden otherwise: a site's resolved style is a question about the site, and asking it costs a click so that the column is not a wall of nineteen controls for every node that happens to have a style.
+
+### 18.20 Dropping a style fragment onto a site
+
+A library fragment whose kind is `:style` (§18.16) may be dropped **onto the stack of a site**, and that is the answer to the question §18.14 could not ask: *which style did you mean*. The fragment does not have to know the name its target uses, because the drop said where it goes.
+
+**One gesture, two writes.** Dropping `Styles::thick line` — `%{styles: %{"thick line" => %{stroke_width: 5}}}` — onto a mark's stack:
+
+1. **merges the fragment into the design** as a layer, exactly as dropping it into the layer pane does (§18.17), so the style stays declared once and reusable; and
+2. **inserts a reference to it** into the site's stack at the position it was dropped at.
+
+The name stays shared, the placement is explicit, and nothing is copied: a second site referring to the same name gets the same style, which is the whole point of naming one.
+
+**Only a style fragment.** A fragment of any other kind dropped on a stack is refused with a notice naming its kind, rather than merged into the design and left with nothing referring to it — a silent half-effect is worse than a refusal. A fragment that declares more than one style is refused for the same reason: which of them the site meant is exactly the question the gesture is supposed to answer.
+
+**The stack is the drop target.** `data-builder-stack` already marks what accepts a drop and `data-builder-scope` says which stack it is (§18.18), so the hook needs nothing new: the `insert` event of §18.17 carries the scope, and a scoped insert is this.
