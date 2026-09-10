@@ -736,6 +736,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color: var(--vis-builder-warn);
     }
 
+    /* The resolved style, and where each value came from. */
+    .vis-builder-style-panel {
+      border-top: 1px solid var(--vis-builder-line);
+      padding: 8px;
+    }
+
+    .vis-builder-style-panel .vis-builder-form {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+    }
+
+    .vis-builder-origin {
+      float: right;
+      padding: 0 4px;
+      border-radius: 3px;
+      background: var(--vis-builder-bg);
+      color: var(--vis-builder-accent);
+      font-size: 10px;
+      font-style: italic;
+    }
+
     .vis-builder-style-add {
       display: flex;
       gap: 6px;

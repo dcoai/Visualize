@@ -20,6 +20,7 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.Chart.Builder.Editor
   alias Visualize.Chart.Builder.Palette
   alias Visualize.Chart.Builder.Preview
+  alias Visualize.Chart.Builder.StyleStack
 
   for name <- ~w(preview preview_errors builder builder_store)a do
     test "#{name} renders as recorded" do
@@ -542,6 +543,100 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, blank} = Builder.handle_event("add_style_entry", %{"name" => "  "}, s)
       assert blank.assigns.notice == "a style entry needs a name"
       assert style_at(blank) == style_at(s)
+    end
+  end
+
+  describe "the context panel over a style (spec/14 §18.19, D-98)" do
+    setup do
+      host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+      {:noreply, socket} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
+      {:noreply, socket} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, socket)
+      {:noreply, socket} = Builder.handle_event("select_style_entry", %{"index" => "0"}, socket)
+      %{socket: socket}
+    end
+
+    test "an edit lands in the local style and leaves the named one alone", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          s
+        )
+
+      assert style_at(s) == [:series, %{stroke_width: 7}]
+
+      # The shared style is untouched, which is the whole reason the local one exists.
+      {_name, house} = hd(s.assigns.layers)
+      assert house.styles.series.stroke_width == 2
+    end
+
+    test "a second edit reuses the local style rather than making another", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          s
+        )
+
+      {:noreply, s} =
+        Builder.handle_event("edit_style", %{"_target" => ["opacity"], "opacity" => "0.5"}, s)
+
+      assert style_at(s) == [:series, %{stroke_width: 7, opacity: 0.5}]
+    end
+
+    test "blanking the last local key removes the local entry", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          s
+        )
+
+      assert style_at(s) == [:series, %{stroke_width: 7}]
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke_width"], "stroke_width" => ""},
+          s
+        )
+
+      # An empty local is not worth keeping, and one entry naming a style is a bare reference.
+      assert style_at(s) == :series
+    end
+
+    test "a key the style kind does not declare changes nothing", %{socket: s} do
+      {:noreply, other} =
+        Builder.handle_event("edit_style", %{"_target" => ["nonsense"], "nonsense" => "1"}, s)
+
+      assert style_at(other) == style_at(s)
+    end
+
+    test "the panel is shown only when an entry is selected" do
+      chosen = at_node("marks[0]", selected: 2, style_entry: 0)
+      assert chosen =~ ~s(class="vis-builder-editor vis-builder-style-panel")
+      assert chosen =~ ~s(phx-change="edit_style")
+
+      refute at_node("marks[0]", selected: 2) =~ "vis-builder-style-panel"
+    end
+
+    test "every field names the entry its value came from" do
+      design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
+
+      assert StyleStack.origins(design, [:series, %{stroke_width: 5}]) ==
+               %{stroke: "series", stroke_width: "local"}
+
+      # A key nothing sets is named by nothing.
+      refute Map.has_key?(StyleStack.origins(design, [:series]), :opacity)
+    end
+
+    test "the resolved style is the cascade, and the panel is a view of it" do
+      design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
+
+      assert StyleStack.resolved(design, [:series, %{stroke_width: 5}]) ==
+               %{stroke: "#111", stroke_width: 5}
     end
   end
 

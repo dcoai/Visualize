@@ -230,6 +230,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
               open={@style_entry}
               target={@myself}
             />
+            <Editor.panel
+              :if={@style_site && @style_entry}
+              class="vis-builder-style-panel"
+              kind={:style}
+              node={StyleStack.resolved(@design, @style_site.stack)}
+              origins={StyleStack.origins(@design, @style_site.stack)}
+              strip={false}
+              event="edit_style"
+              refs={%{style: Palette.names(@design)}}
+              target={@myself}
+            />
             <p :if={!@style_site} class="vis-builder-context-empty">
               Open a node with a style to see its stack.
             </p>
@@ -318,6 +329,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("select_style_entry", %{"index" => index}, socket) do
       {:noreply, assign(socket, :style_entry, position(index))}
+    end
+
+    # Every edit at a site lands in its local style, never in a named entry: editing a mark
+    # that references `:series` must not restyle every other mark that references the same
+    # name (spec/14 §18.19, D-98). The local entry is created when there is none.
+    def handle_event("edit_style", %{"_target" => [submitted]} = params, socket) do
+      {:noreply, styled(socket, spec(:style, submitted), params)}
     end
 
     # A fragment dragged out of the library lands at the position it was dropped at, so
@@ -611,12 +629,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
           nil
 
         %{default: fallback} ->
-          %{value: is_map(node) && Map.get(node, :style), fallback: fallback}
+          value = is_map(node) && Map.get(node, :style)
+          %{value: value, fallback: fallback, stack: current_stack(value || nil, fallback)}
       end
     end
 
     defp open_style(%{path: [:styles, name]}), do: name
     defp open_style(_entry), do: nil
+
+    defp styled(socket, nil, _params), do: socket
+
+    defp styled(socket, spec, params) do
+      parsed = read(Editor.widget(spec.type), spec.type, params[to_string(spec.key)])
+      restacked(socket, &local(&1, spec.key, parsed))
+    end
+
+    # The local entry is the last one when it is inline, and a new one otherwise.
+    defp local(stack, key, parsed) do
+      case List.last(stack) do
+        node when is_map(node) -> List.replace_at(stack, -1, write_key(node, key, parsed))
+        _none -> stack ++ [write_key(%{}, key, parsed)]
+      end
+    end
+
+    defp write_key(node, key, {:ok, value}), do: Map.put(node, key, value)
+    defp write_key(node, key, :error), do: Map.delete(node, key)
 
     # A change to the open node's stack, written back in whatever shape it came in: a stack
     # of one that names a style stays a bare reference, so an edit elsewhere does not rewrite
@@ -644,8 +681,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp current_stack(value, _fallback) when is_list(value), do: value
     defp current_stack(value, _fallback), do: [value]
 
-    defp shaped([only]) when not is_map(only), do: only
-    defp shaped(stack), do: stack
+    defp shaped(stack) do
+      case Enum.reject(stack, &(is_map(&1) and map_size(&1) == 0)) do
+        [only] when not is_map(only) -> only
+        pruned -> pruned
+      end
+    end
 
     # The first segment of a label: `frame.scales.x` is under `frame`, `marks[0]` under
     # `marks`, and `design` is its own root.

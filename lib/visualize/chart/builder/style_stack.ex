@@ -21,7 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Schema
+    alias Visualize.Chart.{Schema, Style}
 
     @typedoc "One row of the stack: what it is, what to call it, and where it sits."
     @type entry :: %{
@@ -87,6 +87,48 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       (declared ++ Schema.builtin_styles()) |> Enum.uniq() |> Enum.sort()
+    end
+
+    @doc """
+    The site's stack cascaded, as the panel shows it (spec/14 §18.19).
+
+    The design's declared styles over the built-in four, then the entries resolved left to
+    right by §3.6 — which is `Visualize.Chart.Style`'s own rule, asked here for one site.
+
+        iex> design = %{styles: %{series: %{stroke_width: 2}}}
+        iex> Visualize.Chart.Builder.StyleStack.resolved(design, [:series, %{stroke_width: 5}])
+        %{stroke_width: 5}
+    """
+    @spec resolved(map(), term()) :: map()
+    def resolved(design, value) do
+      design |> Map.get(:styles, %{}) |> Style.all() |> Style.node(value)
+    end
+
+    @doc """
+    Which entry supplied each key of the resolved style (spec/14 §18.19).
+
+    A resolved style is a cascade, so a value belongs to the last entry that set it. This is
+    `Visualize.Chart.explain/1`'s question asked at a site: which style said this.
+
+        iex> design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
+        iex> Visualize.Chart.Builder.StyleStack.origins(design, [:series, %{stroke_width: 5}])
+        %{stroke: "series", stroke_width: "local"}
+    """
+    @spec origins(map(), term()) :: %{atom() => String.t()}
+    def origins(design, value) do
+      styles = design |> Map.get(:styles, %{}) |> Style.all()
+
+      value
+      |> List.wrap()
+      |> Enum.with_index()
+      |> Enum.reduce(%{}, fn {one, index}, origins ->
+        name = one |> row(index, false) |> Map.fetch!(:name)
+
+        styles
+        |> Style.node(one)
+        |> Map.keys()
+        |> Enum.reduce(origins, &Map.put(&2, &1, name))
+      end)
     end
 
     attr(:id, :string, required: true, doc: "the hook element's id")

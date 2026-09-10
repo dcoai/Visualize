@@ -206,8 +206,10 @@ defmodule Visualize.Chart.Builder.EditorTest do
           facet: :geometry
         })
 
+      # The key span carries an optional origin child now (spec/14 §18.19), so the key is
+      # its leading text rather than the whole of it.
       keys =
-        ~r/<span class="vis-builder-key">(\w+)<\/span>/
+        ~r/<span class="vis-builder-key">\s*(\w+)/
         |> Regex.scan(html)
         |> Enum.map(fn [_, key] -> key end)
 
