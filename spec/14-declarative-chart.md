@@ -1915,7 +1915,7 @@ Switching to *variable* writes `var(:key)` — the key's own name, until a perso
 
 ### 19.10 Variables, and the context panel
 
-**The Variables tab** is `Visualize.Chart.Builder.Params.panel/1` (§18.11) moved from the tray into the strip and extended. On a fragment it lists the fragment's free variables, each typed by what the schema expects at the path it stands at, with a default. On a composite it lists the composite's own variables, then each placed fragment's free variables **grouped by site**, and a row may be assigned to a literal or **to one of the composite's variables** — which is §19.4's rename, and the surface that writes `Use.vars`. A row's state reads as one of three: *flows up as `:color`*, `= "blue"`, `= var(:color_1)`.
+**The Variables tab** is `Visualize.Chart.Builder.Params.panel/1` (§18.11) moved from the tray into the strip, as its last root — the one root that is the builder's own rather than a fragment's — and extended. On a fragment it lists the fragment's free variables, each typed by what the schema expects at the path it stands at, with a default. On a composite it lists the composite's own variables, then each placed fragment's free variables **grouped by site**, and a row may be assigned to a literal or **to one of the composite's variables** — which is §19.4's rename, and the surface that writes `Use.vars`. A row's state reads as one of three: *flows up as `:color`*, `= "blue"`, `= var(:color_1)`. The per-site rows arrive with the composer of §19.9, since a site is what they are grouped by.
 
 **The context panel is one dispatch.** The selection chooses the type; the type chooses the control; every control offers *assign to another variable*.
 

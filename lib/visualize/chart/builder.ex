@@ -202,7 +202,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-target={@myself}
               >{tab.label}</button>
             </nav>
-            <nav :if={@chips != []} class="vis-builder-chips">
+            <nav :if={@chips != [] and @node_label != "variables"} class="vis-builder-chips">
               <button
                 :for={chip <- @chips}
                 type="button"
@@ -214,7 +214,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
               >{chip.label}</button>
             </nav>
             <div class="vis-builder-workspace">
+              <Params.panel
+                :if={@node_label == "variables"}
+                layers={@layers}
+                vars={@bindings}
+                target={@myself}
+              />
               <Editor.panel
+                :if={@node_label != "variables"}
                 id={@id <> "-editor"}
                 kind={@entry.kind}
                 node={@editing}
@@ -260,7 +267,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </div>
         <div class="vis-builder-tray">
           <Palette.panel design={@design} open={@open_style} target={@myself} />
-          <Params.panel layers={@layers} vars={@bindings} target={@myself} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
           <Document.panel design={@design} target={@myself} />
         </div>
@@ -314,6 +320,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A root the selected layer declares opens there; one it does not takes the person to
     # the highest layer that declares it, which is what the inspector and the palette
     # already do (spec/14 §18.13, §18.9, §18.14).
+    def handle_event("select_root", %{"root" => "variables"}, socket) do
+      {:noreply, assign(socket, node_label: "variables", facet: nil)}
+    end
+
     def handle_event("select_root", %{"root" => root}, socket) do
       %{layers: layers, selected: selected} = socket.assigns
 
@@ -561,7 +571,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp editing(assigns) do
       layer = fragment(Enum.at(assigns.layers, assigns.selected) || %{})
       nodes = Editor.nodes(layer)
-      entry = Enum.find(nodes, &(&1.label == assigns.node_label)) || hd(nodes)
+
+      entry =
+        case assigns.node_label do
+          "variables" -> %{label: "variables", kind: :design, path: []}
+          label -> Enum.find(nodes, &(&1.label == label)) || hd(nodes)
+        end
+
       design = design(assigns)
 
       {tabs, children} = strip(nodes, entry, design)
@@ -602,6 +618,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
             title: tab_title(root, root in here)
           }
         end
+
+      variables = %{
+        label: "variables",
+        open: entry.label == "variables",
+        elsewhere: false,
+        class: tab_class(entry.label == "variables", true),
+        title: "the variables the stack still needs, and what they are bound to"
+      }
+
+      tabs = tabs ++ [variables]
 
       children =
         for node <- nodes, root(node.label) == open_root, node.label != open_root do

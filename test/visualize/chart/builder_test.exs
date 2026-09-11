@@ -132,8 +132,10 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The selected layer is `house`, which declares three of them; the strip shows all
       # seven, because a person asks where the marks are, not which fragment holds them.
+      # The strip ends with the Variables tab, which is a root of the builder's own
+      # (spec/14 §19.10).
       assert tabs(html, "vis-builder-node") ==
-               ~w(design sources vars styles frame marks labels)
+               ~w(design sources vars styles frame marks labels variables)
     end
 
     test "a root the selected layer does not declare is marked elsewhere" do
@@ -924,6 +926,34 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       assert style_at(s) == [:series, %{opacity: Chart.var(:opacity)}]
+    end
+  end
+
+  describe "the Variables tab (spec/14 §19.10)" do
+    test "is the last tab, and opening it shows the parameters form in the workspace" do
+      html = at_node("variables")
+
+      assert html =~
+               ~s(class="vis-builder-node vis-builder-node-open" title="the variables the stack still needs, and what they are bound to")
+
+      assert html =~ ~s(class="vis-builder-params")
+      refute html =~ ~s(class="vis-builder-editor")
+      refute html =~ ~s(class="vis-builder-chips")
+
+      # And it is no longer in the tray.
+      [_, tray] = String.split(html, ~s(<div class="vis-builder-tray">), parts: 2)
+      refute tray =~ "vis-builder-params"
+    end
+
+    test "select_root opens it like any other root" do
+      {:ok, s} = Builder.mount(%Socket{})
+      {:ok, s} = Builder.update(%{id: "b", layers: BuilderFixture.layers()}, s)
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "variables"}, s)
+      assert s.assigns.node_label == "variables"
+
+      # And a node root takes you back.
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
+      assert s.assigns.node_label == "frame"
     end
   end
 
