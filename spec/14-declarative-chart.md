@@ -1907,6 +1907,7 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Use.over/2` | a use over a body already in hand — everything `resolve/2` does after the fetch |
 | `Visualize.Chart.Composite.composite?/1` | whether a fragment is one key, `composite`, holding uses |
 | `Visualize.Chart.Composite.flatten/2` | a composite through a fetch, recursively, every site placed by its kind (§19.6): `{:ok, design, %{missing: …, keyless: …}}` or `{:error, {:cycle, chain}}` |
+| `Visualize.Chart.Composite.place/2` | one site's contribution as the layer that declares it where the design keeps its kind — a name-keyed one under the site's `key` — or `:keyless` |
 | `Visualize.Chart.bind/2` | `Use.bind/2` on the design's own module |
 | `Visualize.Chart.mask/2` | `Use.mask/2` likewise |
 | `Visualize.Chart.resolve/2` | `Use.resolve/2` likewise |
