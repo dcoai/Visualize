@@ -2,11 +2,19 @@
   <nav class="vis-builder-tabs">
     <button type="button" class="vis-builder-tab vis-builder-tab-open" phx-click="facet" phx-value-facet="style">style</button>
   </nav>
+  <datalist id="vis-builder-editor-variables">
+    
+  </datalist>
   <form class="vis-builder-form" phx-change="edit">
     <label class="vis-builder-field">
       <span class="vis-builder-key">
         extends
       </span>
+      <select name="extends.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="extends">
@@ -17,6 +25,11 @@
       <span class="vis-builder-key">
         fill
       </span>
+      <select name="fill.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="fill">
@@ -27,6 +40,11 @@
       <span class="vis-builder-key">
         stroke
       </span>
+      <select name="stroke.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="stroke" value="series_1">
@@ -39,6 +57,11 @@
       <span class="vis-builder-key">
         stroke_width
       </span>
+      <select name="stroke_width.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="stroke_width" value="2">
@@ -49,6 +72,11 @@
       <span class="vis-builder-key">
         stroke_dasharray
       </span>
+      <select name="stroke_dasharray.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="stroke_dasharray">
@@ -59,6 +87,11 @@
       <span class="vis-builder-key">
         stroke_linecap
       </span>
+      <select name="stroke_linecap.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       
@@ -72,6 +105,11 @@
       <span class="vis-builder-key">
         stroke_linejoin
       </span>
+      <select name="stroke_linejoin.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       
@@ -85,6 +123,11 @@
       <span class="vis-builder-key">
         opacity
       </span>
+      <select name="opacity.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="opacity">
@@ -95,6 +138,11 @@
       <span class="vis-builder-key">
         fill_opacity
       </span>
+      <select name="fill_opacity.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="fill_opacity">
@@ -105,6 +153,11 @@
       <span class="vis-builder-key">
         stroke_opacity
       </span>
+      <select name="stroke_opacity.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="stroke_opacity">
@@ -115,6 +168,11 @@
       <span class="vis-builder-key">
         font_family
       </span>
+      <select name="font_family.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="font_family">
@@ -125,6 +183,11 @@
       <span class="vis-builder-key">
         font_size
       </span>
+      <select name="font_size.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="font_size">
@@ -135,6 +198,11 @@
       <span class="vis-builder-key">
         font_weight
       </span>
+      <select name="font_weight.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       <input type="number" name="font_weight">
       
@@ -145,6 +213,11 @@
       <span class="vis-builder-key">
         text_anchor
       </span>
+      <select name="text_anchor.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       
@@ -158,6 +231,11 @@
       <span class="vis-builder-key">
         class
       </span>
+      <select name="class.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="class">
@@ -168,6 +246,11 @@
       <span class="vis-builder-key">
         curve
       </span>
+      <select name="curve.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       
@@ -183,6 +266,11 @@
       <span class="vis-builder-key">
         curve_opts
       </span>
+      <select name="curve_opts.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       
@@ -193,6 +281,11 @@
       <span class="vis-builder-key">
         symbol
       </span>
+      <select name="symbol.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       
@@ -206,6 +299,11 @@
       <span class="vis-builder-key">
         symbol_size
       </span>
+      <select name="symbol_size.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       <input type="text" name="symbol_size">

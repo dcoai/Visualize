@@ -1904,7 +1904,14 @@ Every fragment has two faces, and the editor is one component whose shape is the
 
 **Compose** is the stack, constrained to the kind (§19.6). Opened on a composite the constraint is none, and the node tabs (§18.13) and the preview (§18.4) appear beneath the stack, because now there is a chart to look at. The layer stack is therefore not a region of the workspace but the composite's compose face; §18.16's four regions are three.
 
-A field in any form shows a **variable as a variable**: a switch between *literal* — the control §18.6 chooses from the type — and *variable* — pick an existing name or type a new one — and a variable renders as `var(:color)`, never as a struct's text in a textarea.
+A field in any form shows a **variable as a variable**: a switch between *literal* — the control §18.6 chooses from the type — and *variable* — pick an existing name or type a new one — and a variable renders as `var(:color)`, never as a struct's text in a textarea. A form therefore has three controls per key — `key`, `key.mode`, `key.var` — and one function says what a change to any of them means:
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Editor.change/2` | what a change to a form means: the key, and `{:ok, value}` or `:error` for a removal; `nil` for a key the kind lacks |
+| `Visualize.Chart.Builder.Editor.submitted/2` | a control's value read as a type, with the checkbox rule `parse/2` cannot know |
+
+Switching to *variable* writes `var(:key)` — the key's own name, until a person types another — so a field is a variable from that moment. Switching to *literal* removes the key, so the typed control is empty and waiting rather than holding a value nobody chose. A blank name is a removal. The names on offer are those the stack declares under `vars` and those any layer already uses, so what exists is offered before a new one is typed.
 
 ### 19.10 Variables, and the context panel
 

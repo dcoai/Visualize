@@ -603,6 +603,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
       width: 100%;
     }
 
+    /* The literal/variable switch sits under the key, small; a variable's name reads as one. */
+    .vis-builder .vis-builder-mode {
+      width: auto;
+      align-self: flex-start;
+      padding: 1px 6px;
+      color: var(--vis-builder-muted);
+      font-size: 10px;
+    }
+
+    .vis-builder .vis-builder-var {
+      color: var(--vis-builder-accent);
+      font-family: var(--vis-builder-mono);
+      font-style: italic;
+    }
+
+    .vis-builder .vis-builder-var::before {
+      content: "var(:";
+    }
+
     .vis-builder-field input[type="checkbox"] {
       width: auto;
       justify-self: start;

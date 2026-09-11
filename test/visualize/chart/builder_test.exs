@@ -814,6 +814,119 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "a field shows a variable as a variable (spec/14 §19.9)" do
+    setup do
+      house = %{
+        version: 1,
+        styles: %{series: %{stroke: Chart.var(:color), stroke_width: 2}},
+        frame: %{kind: :cartesian, size: %{width: 400, height: 200}},
+        vars: %{color: %{default: :series_1}}
+      }
+
+      host = %{id: "b", layers: [{:house, house}], sources: %{}}
+      {:ok, socket} = Builder.mount(%Socket{})
+      {:ok, socket} = Builder.update(host, socket)
+
+      {:noreply, socket} =
+        Builder.handle_event("select_node", %{"node" => "styles.series"}, socket)
+
+      %{socket: socket, house: house}
+    end
+
+    test "a variable renders as a variable, with the switch on and its name in the box", %{
+      house: house
+    } do
+      html =
+        render_component(Builder, %{
+          id: "b",
+          layers: [{:house, house}],
+          styles: false,
+          node_label: "styles.series"
+        })
+
+      # stroke is a variable: the switch says so and the name box shows it; no text box.
+      assert html =~ ~s(<option value="variable" selected>variable</option>)
+      assert html =~ ~s(name="stroke.var" value="color")
+      refute html =~ ~s(type="text" name="stroke" )
+
+      # stroke_width is a literal: the switch says so and the number box is there.
+      assert html =~ ~s(type="text" name="stroke_width" value="2")
+
+      # The datalist offers the names that exist.
+      assert html =~ ~s(<datalist id="b-editor-variables">)
+      assert html =~ ~s(<option value="color"></option>)
+    end
+
+    test "switching a literal to a variable writes var(:key)", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["stroke_width.mode"], "stroke_width.mode" => "variable"},
+          s
+        )
+
+      {_name, house} = hd(s.assigns.layers)
+      assert house.styles.series.stroke_width == Chart.var(:stroke_width)
+    end
+
+    test "naming the variable renames it", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["stroke.var"], "stroke.var" => "hue"}, s)
+
+      {_name, house} = hd(s.assigns.layers)
+      assert house.styles.series.stroke == Chart.var(:hue)
+    end
+
+    test "switching a variable to a literal removes the key, so the typed control waits", %{
+      socket: s
+    } do
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["stroke.mode"], "stroke.mode" => "literal"},
+          s
+        )
+
+      {_name, house} = hd(s.assigns.layers)
+      refute Map.has_key?(house.styles.series, :stroke)
+    end
+
+    test "a blank name is a removal, and a key the kind lacks changes nothing", %{socket: s} do
+      {:noreply, blank} =
+        Builder.handle_event("edit", %{"_target" => ["stroke.var"], "stroke.var" => "  "}, s)
+
+      {_name, house} = hd(blank.assigns.layers)
+      refute Map.has_key?(house.styles.series, :stroke)
+
+      {:noreply, same} =
+        Builder.handle_event("edit", %{"_target" => ["zzz.mode"], "zzz.mode" => "variable"}, s)
+
+      assert same.assigns.layers == s.assigns.layers
+    end
+
+    test "the style context panel takes the same switch, into the local style", %{socket: s} do
+      # Open the mark that references :series, then its entry, then flip a key to a variable.
+      layers = [
+        {:house, %{styles: %{series: %{stroke_width: 2}}}},
+        {:panel, %{marks: [%{id: :m, type: :line, style: :series}]}}
+      ]
+
+      {:ok, s} = Builder.update(%{id: "b", layers: layers, sources: %{}}, s)
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
+      {:noreply, s} = Builder.handle_event("select_style_entry", %{"index" => "0"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["opacity.mode"], "opacity.mode" => "variable"},
+          s
+        )
+
+      assert style_at(s) == [:series, %{opacity: Chart.var(:opacity)}]
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =
