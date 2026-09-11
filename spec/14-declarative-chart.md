@@ -1890,7 +1890,11 @@ A library item has two independent axes, and the library is browsed by either.
 
 **Group and sub-group are stored, subjective, and orthogonal** — the person's own filing, free to gather dissimilar kinds under one heading. They remain in the entry's name as `<group>:<sub-group>:<name>` (§18.16, D-97), which is now an attribute of the entry and not a key anything references.
 
-Two views over one store: by kind, or by group. **Empty kinds are shown** — a `Scale` heading with nothing under it says the library holds no scale yet, which is information, where an absent heading is indistinguishable from a bug. **Group is the default view**, kind a click away.
+Two views over one store: by kind, or by group. **Empty kinds are shown** — a `Scale` heading with nothing under it says the library holds no scale yet, which is information, where an absent heading is indistinguishable from a bug. The kinds a library item is usually one of — composite, design, theme, style, frame, scale, axis, source, var, mark, label — are always shown, empty or not; any other kind appears when an entry has it. **Group is the default view**, kind a click away.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Library.by_kind/1` | entries as the kind tree: every usual kind, empty or not, then any other present; items by name, each with its group as a second line |
 
 **Click opens; drag composes.** Clicking an item opens it in the editor. Dragging is the only gesture that puts a fragment into something else — a composer's stack, or a style site. **New fragment of a kind** starts from an empty, valid one of that kind, so a style cannot be half a frame by accident; **per-kind validity** is the validator restricted to a kind and refuses a fragment that drifted. **Save** writes back under the entry's kind and group, and names the entry — never the body.
 
