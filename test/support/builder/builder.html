@@ -46,7 +46,7 @@
   <datalist id="builder-editor-variables">
     <option value="unit"></option>
   </datalist>
-  <form class="vis-builder-form" phx-change="edit" phx-target="-1">
+  <form id="builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" phx-target="-1" data-builder-target="-1" data-builder-scope="ref">
     <label class="vis-builder-field">
       <span class="vis-builder-key">
         sources

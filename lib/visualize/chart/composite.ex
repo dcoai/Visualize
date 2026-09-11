@@ -25,7 +25,7 @@ defmodule Visualize.Chart.Composite do
   """
 
   alias Visualize.Chart
-  alias Visualize.Chart.{Fragment, Use}
+  alias Visualize.Chart.{Fragment, Refs, Use}
 
   # The kinds a document keys by name (§19.3).
   @named [:style, :scale, :source, :var]
@@ -34,10 +34,14 @@ defmodule Visualize.Chart.Composite do
   @version 1
 
   @typedoc """
-  What `flatten/2` reports beside the design: every ref no store could find, and every
-  name-keyed site this composite holds that has no key to be declared under.
+  What `flatten/2` reports beside the design: every ref no store could find — a site's,
+  by the site's id, or a reference inside the design, by its path — and every name-keyed
+  site this composite holds that has no key to be declared under.
   """
-  @type report :: %{missing: [{Use.id(), Fragment.id()}], keyless: [Use.id()]}
+  @type report :: %{
+          missing: [{Use.id() | [atom() | non_neg_integer()], Fragment.id()}],
+          keyless: [Use.id()]
+        }
 
   @doc "Whether a fragment is a composite: one key, `composite`, holding uses."
   @spec composite?(term()) :: boolean()
@@ -56,7 +60,18 @@ defmodule Visualize.Chart.Composite do
   """
   @spec flatten(map(), (Fragment.id() -> {:ok, map()} | :error)) ::
           {:ok, map(), report()} | {:error, {:cycle, [Fragment.id()]}}
-  def flatten(fragment, fetch), do: flatten(fragment, fetch, [])
+  def flatten(fragment, fetch) do
+    case flatten(fragment, fetch, []) do
+      {:ok, flat, report} ->
+        # The one rule for ids at reference sites (§19.6): what leaves here carries none.
+        {resolved, unresolved} = Refs.resolve(flat, fetch)
+        missing = report.missing ++ Enum.map(unresolved, fn {path, id} -> {path, id} end)
+        {:ok, resolved, %{report | missing: missing}}
+
+      {:error, _} = error ->
+        error
+    end
+  end
 
   defp flatten(%{composite: %{uses: uses} = composite}, fetch, trail) when is_list(uses) do
     # The composite's own vars are the lowest layer — when it has any, so a composite

@@ -1189,6 +1189,146 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "resolution is one rule (spec/14 §19.6, §19.10)" do
+    defmodule Refs do
+      @moduledoc false
+      @behaviour Visualize.Chart.Builder.Store
+
+      @entries %{
+        {:style, 1} => %{name: "Styles::thick", fragment: %{style: %{stroke_width: 5}}},
+        {:scale, 4} => %{
+          name: "Scales::hour",
+          fragment: %{scale: %{kind: :linear, domain: :auto}}
+        },
+        {:source, 2} => %{name: "Sources::alt", fragment: %{source: %{fields: [:t, :v]}}}
+      }
+
+      @impl true
+      def list(_context) do
+        for {{kind, _} = id, entry} <- @entries, do: %{id: id, name: entry.name, kind: kind}
+      end
+
+      @impl true
+      def get({kind, _} = id, _context) do
+        case Map.fetch(@entries, id) do
+          {:ok, entry} -> {:ok, Map.merge(entry, %{id: id, kind: kind})}
+          :error -> :error
+        end
+      end
+
+      @impl true
+      def put(_entry, _context), do: {:ok, {:composite, 9}}
+
+      @impl true
+      def delete(_id, _context), do: :ok
+
+      @impl true
+      def import(bundle, context),
+        do: Visualize.Chart.Builder.Store.relocate(bundle, context, &put/2)
+    end
+
+    setup do
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: Refs, on_deploy: :deployed)
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
+      %{socket: s}
+    end
+
+    test "preview and deploy resolve every id the same way, and nothing survives as an id", %{
+      socket: s
+    } do
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"scope" => "style", "name" => "style:1", "at" => 1}, s)
+
+      # The shared layer's x axis refers to a scale; the drop lands on its `scale` field.
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "frame.axes[0]"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "ref", "field" => "scale", "name" => "scale:4"},
+          s
+        )
+
+      # The site holds the id; the design holds the body under a synthesised key.
+      assert get_in(Enum.at(s.assigns.uses, 1).local, [:frame, :axes, Access.at(0), :scale]) ==
+               {:scale, 4}
+
+      design = BuilderFixture.design(s)
+      assert hd(design.frame.axes).scale == :"scale:4"
+      assert design.frame.scales[:"scale:4"] == %{kind: :linear, domain: :auto}
+      assert hd(design.marks).style == [:series, %{stroke_width: 5}]
+      refute inspect(design) =~ "{:style, 1}"
+      refute inspect(design) =~ "{:scale, 4}"
+
+      {:noreply, _} = Builder.handle_event("deploy", %{}, s)
+      assert_received {:deployed, "b", deployed}
+      assert deployed == design
+
+      # And it draws with the library's style.
+      assert {:ok, applied} = Chart.apply(deployed, sources: BuilderFixture.sources())
+
+      assert Chart.Style.node(Chart.to_map(applied.chart).styles, hd(deployed.marks).style).stroke_width ==
+               5
+    end
+
+    test "a wrong kind on a field is refused by name; a field that is not a reference too", %{
+      socket: s
+    } do
+      {:noreply, axis} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      {:noreply, axis} = Builder.handle_event("select_node", %{"node" => "frame.axes[0]"}, axis)
+
+      {:noreply, refused} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "ref", "field" => "scale", "name" => "style:1"},
+          axis
+        )
+
+      assert refused.assigns.notice == "a scale field takes a scale; Styles::thick is a style"
+
+      {:noreply, refused} =
+        Builder.handle_event(
+          "insert",
+          %{"scope" => "ref", "field" => "type", "name" => "scale:4"},
+          s
+        )
+
+      assert refused.assigns.notice == "type is not a reference field"
+    end
+
+    test "the select offers the library's ids for scale and source, and the field is a drop target",
+         %{socket: s} do
+      {:noreply, axis} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      {:noreply, axis} = Builder.handle_event("select_node", %{"node" => "frame.axes[0]"}, axis)
+      html = BuilderFixture.render(axis)
+      assert html =~ ~s(<option value="scale:4">scale:4</option>)
+      assert html =~ ~s(data-builder-ref="scale")
+      assert html =~ ~s(class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook")
+
+      {:noreply, s} = Builder.handle_event("facet", %{"facet" => "binding"}, s)
+      assert BuilderFixture.render(s) =~ ~s(<option value="source:2">source:2</option>)
+    end
+
+    test "a missing id is a mask at the site, and reported", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "frame.axes[0]"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["scale"], "scale" => "scale:9"}, s)
+
+      assert get_in(Enum.at(s.assigns.uses, 1).local, [:frame, :axes, Access.at(0), :scale]) ==
+               {:scale, 9}
+
+      design = BuilderFixture.design(s)
+      refute Map.has_key?(hd(design.frame.axes), :scale)
+
+      {:noreply, deployed} = Builder.handle_event("deploy", %{}, s)
+      assert deployed.assigns.notice == "deployed with 1 reference(s) showing through: scale:9"
+    end
+  end
+
   describe "a host seeds a reference as a layer (spec/14 §19.9)" do
     test "an id becomes a use referring to it, labelled by the host or its position" do
       s =

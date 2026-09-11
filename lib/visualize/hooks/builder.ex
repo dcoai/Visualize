@@ -130,7 +130,23 @@ defmodule Visualize.Hooks.Builder do
       // Without preventDefault the browser refuses the drop. The whole stack accepts, not
       // just its rows: the space above the first layer and below the last is how the ends
       // are reached, and requiring the pointer to be over a row made them unreachable.
+      // A reference field takes a library entry of its kind: the drop is the field's write
+      // (spec/14 §19.10). The builder refuses a wrong kind by name.
+      fieldAt(e) {
+        if (this.scope !== 'ref' || this.from !== null) return null;
+        if (!e.target || !e.target.closest) return null;
+        const field = e.target.closest('[data-builder-ref]');
+        return field && this.el.contains(field) ? field : null;
+      },
+
       handleDragOver(e) {
+        const field = this.fieldAt(e);
+        if (field) {
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+          field.classList.add('vis-builder-field-over');
+          return;
+        }
         if (!this.accepts(e)) return;
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = this.from === null ? 'copy' : 'move';
@@ -143,6 +159,9 @@ defmodule Visualize.Hooks.Builder do
       handleDragLeave(e) {
         if (e.relatedTarget && this.el.contains(e.relatedTarget)) return;
         this.clearOver();
+        this.el.querySelectorAll('.vis-builder-field-over').forEach((node) => {
+          node.classList.remove('vis-builder-field-over');
+        });
       },
 
       accepts(e) {
@@ -169,6 +188,16 @@ defmodule Visualize.Hooks.Builder do
       },
 
       handleDrop(e) {
+        const field = this.fieldAt(e);
+        if (field) {
+          e.preventDefault();
+          field.classList.remove('vis-builder-field-over');
+          const stored = this.dragged(e);
+          if (stored !== null) {
+            this.push('insert', { field: field.getAttribute('data-builder-ref'), name: stored });
+          }
+          return;
+        }
         if (!this.accepts(e)) return;
         e.preventDefault();
         this.clearOver();

@@ -13,6 +13,7 @@ defmodule Visualize.Chart.UseTest do
 
   doctest Visualize.Chart.Use
   doctest Visualize.Chart.Composite
+  doctest Visualize.Chart.Refs
 
   # A store as a function of an id, which is all resolution needs.
   @library %{

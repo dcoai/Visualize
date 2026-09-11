@@ -171,8 +171,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     The design the stack stands for: the enabled uses as a composite over the stack's own
-    vars, flattened through the store, with every `{:style, n}` inlined so the frame can
-    draw it (spec/14 §19.6).
+    vars, flattened through the store, every id at a reference site resolved, so the frame
+    can draw it (spec/14 §19.6).
     """
     @spec design([Use.t()], map(), (Fragment.id() -> {:ok, map()} | :error)) ::
             {:ok, map(), Composite.report()} | {:error, term()}
@@ -180,48 +180,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       composite = structure(Enum.filter(uses, &enabled?/1), vars)
 
       case Composite.flatten(composite, fetch) do
-        {:ok, design, report} -> {:ok, inline_styles(design, fetch), report}
+        {:ok, design, report} -> {:ok, design, report}
         {:error, _} = error -> error
       end
     end
-
-    # A `{:style, n}` at a style site stands for the body the store holds under it. The
-    # frame resolves a stack of names and inline nodes (§3.6); an id becomes the inline node
-    # here, so nothing below the builder needs a store.
-    defp inline_styles(design, fetch) do
-      walk(design, fn
-        {:style, n} = id when is_integer(n) ->
-          case fetch.(id) do
-            {:ok, body} -> style_body(body)
-            :error -> %{}
-          end
-
-        other ->
-          other
-      end)
-    end
-
-    defp style_body(%{style: body}) when is_map(body), do: body
-
-    defp style_body(%{styles: styles}) when is_map(styles) do
-      case Map.values(styles) do
-        [only] -> only
-        _several -> %{}
-      end
-    end
-
-    defp style_body(_other), do: %{}
-
-    defp walk(%_{} = struct, _fun), do: struct
-    defp walk(map, fun) when is_map(map), do: Map.new(map, fn {k, v} -> {k, walk(v, fun)} end)
-    defp walk(list, fun) when is_list(list), do: Enum.map(list, &walk(&1, fun))
-
-    defp walk({:style, n} = id, fun) when is_integer(n), do: fun.(id)
-
-    defp walk(tuple, fun) when is_tuple(tuple),
-      do: tuple |> Tuple.to_list() |> Enum.map(&walk(&1, fun)) |> List.to_tuple()
-
-    defp walk(leaf, fun), do: fun.(leaf)
 
     @doc """
     Each site that carries variables: the free variables of its fragment *before* the
