@@ -27,12 +27,13 @@
     </aside>
     <main class="vis-builder-main">
       <nav class="vis-builder-nodes">
-        <button type="button" class="vis-builder-node vis-builder-node-open" title="design of this layer" phx-click="select_root" phx-value-root="design" phx-target="-1">design</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="sources — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="sources" phx-target="-1">sources</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="vars — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="vars" phx-target="-1">vars</button><button type="button" class="vis-builder-node" title="styles of this layer" phx-click="select_root" phx-value-root="styles" phx-target="-1">styles</button><button type="button" class="vis-builder-node" title="frame of this layer" phx-click="select_root" phx-value-root="frame" phx-target="-1">frame</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="marks — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="marks" phx-target="-1">marks</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="labels — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="labels" phx-target="-1">labels</button>
+        <button type="button" class="vis-builder-node vis-builder-node-open" title="design of this layer" phx-click="select_root" phx-value-root="design" phx-target="-1">design</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="sources — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="sources" phx-target="-1">sources</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="vars — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="vars" phx-target="-1">vars</button><button type="button" class="vis-builder-node" title="styles of this layer" phx-click="select_root" phx-value-root="styles" phx-target="-1">styles</button><button type="button" class="vis-builder-node" title="frame of this layer" phx-click="select_root" phx-value-root="frame" phx-target="-1">frame</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="marks — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="marks" phx-target="-1">marks</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="labels — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="labels" phx-target="-1">labels</button><button type="button" class="vis-builder-node" title="the variables the stack still needs, and what they are bound to" phx-click="select_root" phx-value-root="variables" phx-target="-1">variables</button>
       </nav>
       <nav class="vis-builder-chips">
         <button type="button" class="vis-builder-chip vis-builder-chip-open" phx-click="facet" phx-value-facet="binding" phx-target="-1">binding</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="channel" phx-target="-1">channel</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="geometry" phx-target="-1">geometry</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="style" phx-target="-1">style</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="content" phx-target="-1">content</button>
       </nav>
       <div class="vis-builder-workspace">
+        
         <div class="vis-builder-editor">
   
   <datalist id="builder-editor-variables">
@@ -105,17 +106,6 @@
     <button type="submit" class="vis-builder-palette-add">Add style</button>
   </form>
 </div>
-    <form class="vis-builder-params" phx-change="set_var" phx-target="-1">
-  <label class="vis-builder-param">
-    <span class="vis-builder-param-name">unit</span>
-    
-    
-    
-    
-    <textarea name="unit" placeholder="&quot;%&quot;"></textarea>
-    <span class="vis-builder-param-uses">labels[0].text[1]</span>
-  </label>
-</form>
     <table id="builder-inspector" class="vis-builder-inspector" phx-hook="BuilderHook" data-builder-target="-1">
   <tbody>
     <tr class="vis-builder-entry" data-builder-path="frame.axes[0].scale" data-builder-layer="1">
