@@ -101,7 +101,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert stored =~ ~s(<div class="vis-builder-panels vis-builder-panels-library">)
       assert stored =~ ~s(class="vis-builder-library-pane")
       assert stored =~ ~s(<h3 class="vis-builder-category-name">Uncategorised</h3>)
-      assert stored =~ ~s(data-builder-fragment="baseline")
+      assert stored =~ ~s(data-builder-fragment="design:1")
       assert stored =~ ~s(class="vis-builder-put")
     end
 
@@ -218,7 +218,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       stored = Map.put(host, :store, Library)
       {:ok, socket} = Builder.update(stored, socket)
-      {:noreply, added} = Builder.handle_event("add_layer", %{"name" => "baseline"}, socket)
+      {:noreply, added} = Builder.handle_event("add_layer", %{"name" => "design:1"}, socket)
       {:ok, added} = Builder.update(stored, added)
       assert length(added.assigns.layers) == length(host.layers) + 1
 
@@ -402,27 +402,27 @@ defmodule Visualize.Chart.BuilderTest do
       [_, library] = String.split(html, ~s(class="vis-builder-library-pane"), parts: 2)
       [library, _] = String.split(library, "</aside>", parts: 2)
       refute library =~ "data-builder-stack"
-      assert library =~ ~s(data-builder-fragment="baseline")
+      assert library =~ ~s(data-builder-fragment="design:1")
     end
 
     test "a fragment lands at the position it was dropped at", %{socket: s} do
-      {:noreply, at_top} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 0}, s)
-      assert names(at_top) == [:baseline, :house, :shared, :panel]
+      {:noreply, at_top} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 0}, s)
+      assert names(at_top) == ["baseline", :house, :shared, :panel]
 
-      {:noreply, midway} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 2}, s)
-      assert names(midway) == [:house, :shared, :baseline, :panel]
+      {:noreply, midway} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 2}, s)
+      assert names(midway) == [:house, :shared, "baseline", :panel]
 
-      {:noreply, at_end} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 3}, s)
-      assert names(at_end) == [:house, :shared, :panel, :baseline]
+      {:noreply, at_end} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 3}, s)
+      assert names(at_end) == [:house, :shared, :panel, "baseline"]
     end
 
     test "a position outside the stack is clamped, because a client's number is not trusted",
          %{socket: s} do
-      {:noreply, under} = Builder.handle_event("insert", %{"name" => "baseline", "at" => -5}, s)
-      assert names(under) == [:baseline, :house, :shared, :panel]
+      {:noreply, under} = Builder.handle_event("insert", %{"name" => "design:1", "at" => -5}, s)
+      assert names(under) == ["baseline", :house, :shared, :panel]
 
-      {:noreply, over} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 99}, s)
-      assert names(over) == [:house, :shared, :panel, :baseline]
+      {:noreply, over} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 99}, s)
+      assert names(over) == [:house, :shared, :panel, "baseline"]
     end
 
     test "the selection and the disabled set follow the insert", %{socket: s} do
@@ -431,15 +431,15 @@ defmodule Visualize.Chart.BuilderTest do
       assert s.assigns.selected == 2
       assert s.assigns.disabled == MapSet.new([1])
 
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 0}, s)
-      assert names(s) == [:baseline, :house, :shared, :panel]
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 0}, s)
+      assert names(s) == ["baseline", :house, :shared, :panel]
       assert s.assigns.selected == 3
       assert s.assigns.disabled == MapSet.new([2])
     end
 
     test "an insert below the selection leaves it where it is", %{socket: s} do
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 2}, s)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 2}, s)
       assert s.assigns.selected == 0
     end
 
@@ -450,9 +450,9 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "an insert survives the next host render", %{host: host, socket: s} do
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "baseline", "at" => 1}, s)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 1}, s)
       {:ok, s} = Builder.update(host, s)
-      assert names(s) == [:house, :baseline, :shared, :panel]
+      assert names(s) == [:house, "baseline", :shared, :panel]
     end
   end
 
@@ -642,17 +642,37 @@ defmodule Visualize.Chart.BuilderTest do
       @moduledoc false
       @behaviour Visualize.Chart.Builder.Store
 
-      @impl true
-      def list, do: ["Styles::thick", "Styles::two", "Frame::wide"]
+      @entries %{
+        {:style, 1} => %{name: "Styles::thick", fragment: %{styles: %{thick: %{stroke_width: 5}}}},
+        {:style, 2} => %{
+          name: "Styles::two",
+          fragment: %{styles: %{a: %{opacity: 1}, b: %{opacity: 0}}}
+        },
+        {:size, 1} => %{name: "Frame::wide", fragment: %{frame: %{size: %{width: 900}}}}
+      }
 
       @impl true
-      def get("Styles::thick"), do: {:ok, %{styles: %{thick: %{stroke_width: 5}}}}
-      def get("Styles::two"), do: {:ok, %{styles: %{a: %{opacity: 1}, b: %{opacity: 0}}}}
-      def get("Frame::wide"), do: {:ok, %{frame: %{size: %{width: 900}}}}
-      def get(_name), do: :error
+      def list(_context) do
+        for {{kind, _} = id, entry} <- @entries, do: %{id: id, name: entry.name, kind: kind}
+      end
 
       @impl true
-      def put(_name, _fragment), do: :ok
+      def get({kind, _} = id, _context) do
+        case Map.fetch(@entries, id) do
+          {:ok, entry} -> {:ok, Map.merge(entry, %{id: id, kind: kind})}
+          :error -> :error
+        end
+      end
+
+      @impl true
+      def put(_entry, _context), do: {:ok, {:design, 9}}
+
+      @impl true
+      def delete(_id, _context), do: :ok
+
+      @impl true
+      def import(bundle, context),
+        do: Visualize.Chart.Builder.Store.relocate(bundle, context, &put/2)
     end
 
     setup do
@@ -674,7 +694,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event(
           "insert",
-          %{"scope" => "style", "name" => "Styles::thick", "at" => 1},
+          %{"scope" => "style", "name" => "style:1", "at" => 1},
           s
         )
 
@@ -690,7 +710,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, top} =
         Builder.handle_event(
           "insert",
-          %{"scope" => "style", "name" => "Styles::thick", "at" => 0},
+          %{"scope" => "style", "name" => "style:1", "at" => 0},
           s
         )
 
@@ -699,7 +719,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, over} =
         Builder.handle_event(
           "insert",
-          %{"scope" => "style", "name" => "Styles::thick", "at" => 99},
+          %{"scope" => "style", "name" => "style:1", "at" => 99},
           s
         )
 
@@ -710,7 +730,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, refused} =
         Builder.handle_event(
           "insert",
-          %{"scope" => "style", "name" => "Frame::wide", "at" => 0},
+          %{"scope" => "style", "name" => "size:1", "at" => 0},
           s
         )
 
@@ -723,7 +743,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, refused} =
         Builder.handle_event(
           "insert",
-          %{"scope" => "style", "name" => "Styles::two", "at" => 0},
+          %{"scope" => "style", "name" => "style:2", "at" => 0},
           s
         )
 
@@ -742,7 +762,7 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "an insert with no scope is still the layer stack", %{socket: s} do
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "Frame::wide", "at" => 0}, s)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "size:1", "at" => 0}, s)
       assert Enum.map(s.assigns.layers, &elem(&1, 0)) == ["Frame::wide", :house, :shared, :panel]
     end
   end
@@ -880,10 +900,10 @@ defmodule Visualize.Chart.BuilderTest do
     test "a stored fragment is added as the highest layer" do
       layers = BuilderFixture.layers()
       socket = socket(layers, store: Library)
-      {:noreply, socket} = Builder.handle_event("add_layer", %{"name" => "baseline"}, socket)
+      {:noreply, socket} = Builder.handle_event("add_layer", %{"name" => "design:1"}, socket)
 
       assert socket.assigns.layers ==
-               layers ++ [{:baseline, %{version: 1, frame: %{kind: :cartesian}}}]
+               layers ++ [{"baseline", %{version: 1, frame: %{kind: :cartesian}}}]
 
       assert socket.assigns.notice == nil
     end
@@ -891,11 +911,11 @@ defmodule Visualize.Chart.BuilderTest do
     test "a name the store does not hold is a notice and changes no layer" do
       layers = BuilderFixture.layers()
       socket = socket(layers, store: Library)
-      {:noreply, missing} = Builder.handle_event("add_layer", %{"name" => "missing"}, socket)
+      {:noreply, missing} = Builder.handle_event("add_layer", %{"name" => "design:2"}, socket)
       {:noreply, absent} = Builder.handle_event("add_layer", %{"name" => "nope"}, socket)
 
       assert missing.assigns.layers == layers
-      assert missing.assigns.notice == "no fragment is stored under missing"
+      assert missing.assigns.notice == "no fragment is stored under design:2"
       assert absent.assigns.notice == "no fragment is stored under nope"
     end
 

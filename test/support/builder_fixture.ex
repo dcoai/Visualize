@@ -84,20 +84,49 @@ defmodule Visualize.BuilderFixture do
     ]
   end
 
-  # A store with two names, one of which holds nothing: the builder's library under test.
+  # A store with two entries listed, one of which the store no longer holds — the mask of
+  # spec/14 §19.2 — so the builder's library under test has both a hit and a miss.
   defmodule Library do
     @moduledoc false
     @behaviour Visualize.Chart.Builder.Store
 
-    @impl true
-    def list, do: [:baseline, :missing]
+    @baseline {:design, 1}
+    @missing {:design, 2}
+
+    def baseline_id, do: @baseline
+    def missing_id, do: @missing
 
     @impl true
-    def get(:baseline), do: {:ok, %{version: 1, frame: %{kind: :cartesian}}}
-    def get(_name), do: :error
+    def list(_context) do
+      [
+        %{id: @baseline, name: "baseline", kind: :design},
+        %{id: @missing, name: "missing", kind: :design}
+      ]
+    end
 
     @impl true
-    def put(_name, _fragment), do: :ok
+    def get(@baseline, _context) do
+      {:ok,
+       %{
+         id: @baseline,
+         name: "baseline",
+         kind: :design,
+         fragment: %{version: 1, frame: %{kind: :cartesian}}
+       }}
+    end
+
+    def get(_id, _context), do: :error
+
+    @impl true
+    def put(%{id: nil}, _context), do: {:ok, {:design, 3}}
+    def put(%{id: id}, _context), do: {:ok, id}
+
+    @impl true
+    def delete(_id, _context), do: :ok
+
+    @impl true
+    def import(bundle, context),
+      do: Visualize.Chart.Builder.Store.relocate(bundle, context, &put/2)
   end
 
   # A store that refuses every write, so the notice path has a subject.
@@ -106,13 +135,19 @@ defmodule Visualize.BuilderFixture do
     @behaviour Visualize.Chart.Builder.Store
 
     @impl true
-    def list, do: []
+    def list(_context), do: []
 
     @impl true
-    def get(_name), do: :error
+    def get(_id, _context), do: :error
 
     @impl true
-    def put(_name, _fragment), do: {:error, :read_only}
+    def put(_entry, _context), do: {:error, :read_only}
+
+    @impl true
+    def delete(_id, _context), do: {:error, :read_only}
+
+    @impl true
+    def import(_bundle, _context), do: {:error, :read_only}
   end
 
   @doc false

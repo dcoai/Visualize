@@ -27,7 +27,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       `Visualize.Chart.apply/2` takes it (default `%{}`)
     * `vars` - the values the preview applies the design's variables with (default `%{}`)
     * `theme` - a `Visualize.Theme` for the preview, `nil` for the design's own
-    * `store` - a module implementing `Visualize.Chart.Builder.Store`, or `nil` for no
+    * `store` - a module implementing `Visualize.Chart.Builder.Store`, or `{module, context}`
+      with what the host wants every callback told (spec/14 §19.7), or `nil` for no
       library (default `nil`)
     * `on_save` - the tag of the message saving sends (default `:visualize_chart_saved`)
     * `styles` - render the stylesheet in a `<style>` element (default `true`); `false` when
@@ -59,11 +60,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Palette,
       Params,
       Preview,
+      Store,
       Styles,
       StyleStack
     }
 
-    alias Visualize.Chart.Schema
+    alias Visualize.Chart.{Fragment, Schema}
 
     @doc false
     # The assigns a host may leave out, and their defaults (spec/14 §18.2). `attr/3` applies
@@ -87,7 +89,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:sources, :map, default: %{}, doc: "the pool the preview binds the design's slots to")
     attr(:vars, :map, default: %{}, doc: "the values the preview applies the variables with")
     attr(:theme, :any, default: nil, doc: "a `Visualize.Theme` for the preview")
-    attr(:store, :atom, default: nil, doc: "a `Visualize.Chart.Builder.Store` implementation")
+
+    attr(:store, :any,
+      default: nil,
+      doc: "a `Visualize.Chart.Builder.Store`, or `{module, context}`"
+    )
+
     attr(:on_save, :any, default: :visualize_chart_saved, doc: "the tag of the save message")
 
     attr(:styles, :boolean,
@@ -169,7 +176,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <Library.panel
             :if={@store}
             id={@id <> "-library"}
-            names={stored(@store)}
+            entries={Store.list(@store)}
             open={@added}
             target={@myself}
           />
@@ -280,20 +287,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def handle_event("add_layer", %{"name" => submitted}, socket) do
-      %{store: store} = socket.assigns
-
-      case store && Enum.find(store.list(), &(to_string(&1) == submitted)) do
-        nil ->
-          {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
-
-        name ->
-          {:noreply, added(socket, name, store.get(name))}
+      case fetch(socket.assigns.store, submitted) do
+        {:ok, entry} -> {:noreply, added(socket, entry.name, entry.fragment)}
+        :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
       end
     end
 
+    # Saving names the entry, never the body: the stack's result is stored under a fresh id
+    # (spec/14 §19.7). Until #178 the body is still the stacked design; structure comes there.
     def handle_event("put_design", %{"name" => name}, socket) do
       %{store: store} = socket.assigns
-      {:noreply, assign(socket, :notice, kept(store && store.put(name, design(socket.assigns))))}
+      fragment = design(socket.assigns)
+
+      entry = %{id: nil, name: name, kind: Fragment.kind(fragment), fragment: fragment}
+      {:noreply, assign(socket, :notice, kept(store && Store.put(store, entry)))}
     end
 
     def handle_event("select_node", %{"node" => label}, socket) do
@@ -365,32 +372,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A style fragment dropped on a site's stack is the answer to "which style did you
     # mean": the drop said where it goes, so no name has to be bound (spec/14 §18.20).
     def handle_event("insert", %{"scope" => "style", "name" => submitted, "at" => at}, socket) do
-      %{store: store} = socket.assigns
-
-      with name when not is_nil(name) <-
-             store && Enum.find(store.list(), &(to_string(&1) == submitted)),
-           {:ok, fragment} <- store.get(name),
-           [style] <- declared_styles(fragment) do
-        {:noreply, dropped(socket, name, fragment, style, position(at))}
+      with {:ok, entry} <- fetch(socket.assigns.store, submitted),
+           [style] <- declared_styles(entry.fragment) do
+        {:noreply, dropped(socket, entry.name, entry.fragment, style, position(at))}
       else
-        nil -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
         :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
-        [] -> {:noreply, assign(socket, :notice, "#{submitted} declares no style")}
-        many -> {:noreply, assign(socket, :notice, refusal(submitted, many))}
+        [] -> {:noreply, assign(socket, :notice, "#{named(socket, submitted)} declares no style")}
+        many -> {:noreply, assign(socket, :notice, refusal(named(socket, submitted), many))}
       end
     end
 
     # A fragment dragged out of the library lands at the position it was dropped at, so
     # precedence is chosen in the gesture rather than fixed afterwards (spec/14 §18.17).
     def handle_event("insert", %{"name" => submitted, "at" => at}, socket) do
-      %{store: store} = socket.assigns
+      case fetch(socket.assigns.store, submitted) do
+        {:ok, entry} ->
+          {:noreply, inserted(socket, entry.name, entry.fragment, position(at))}
 
-      case store && Enum.find(store.list(), &(to_string(&1) == submitted)) do
-        nil ->
+        :error ->
           {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
-
-        name ->
-          {:noreply, inserted(socket, name, store.get(name), position(at))}
       end
     end
 
@@ -866,7 +866,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # The selection and the disabled set are positions, so both follow an insert below them.
-    defp inserted(socket, name, {:ok, fragment}, at) do
+    defp inserted(socket, name, fragment, at) do
       %{layers: layers, selected: selected, disabled: disabled} = socket.assigns
       at = at |> max(0) |> min(length(layers))
 
@@ -878,24 +878,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> assign(:notice, nil)
     end
 
-    defp inserted(socket, name, :error, _at),
-      do: assign(socket, :notice, "no fragment is stored under #{name}")
-
-    defp added(socket, name, {:ok, fragment}) do
+    defp added(socket, name, fragment) do
       socket
       |> assign(:layers, socket.assigns.layers ++ [{name, fragment}])
       |> assign(:added, to_string(name))
       |> assign(:notice, nil)
     end
 
-    defp added(socket, name, :error),
-      do: assign(socket, :notice, "no fragment is stored under #{name}")
-
-    defp kept(:ok), do: nil
+    defp kept({:ok, _id}), do: nil
     defp kept({:error, reason}), do: "the store refused the design: #{inspect(reason)}"
     defp kept(nil), do: "no store is configured"
 
-    defp stored(store), do: Enum.map(store.list(), &to_string/1)
+    # The name a notice calls an entry by: the entry's own, or the id string when the
+    # store no longer holds it.
+    defp named(socket, submitted) do
+      case fetch(socket.assigns.store, submitted) do
+        {:ok, entry} -> entry.name
+        :error -> submitted
+      end
+    end
+
+    # An entry by the id a client sent as a string; no store means no entry, as does a
+    # string that is not an id, so no atom is created from a client's string.
+    defp fetch(nil, _submitted), do: :error
+
+    defp fetch(store, submitted) do
+      case Store.decode_id(submitted) do
+        {:ok, id} -> Store.get(store, id)
+        :error -> :error
+      end
+    end
 
     # A `nil` class assign leaves the element's own class alone, with no trailing space.
     defp class(base, nil), do: base

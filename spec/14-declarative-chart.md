@@ -1851,7 +1851,19 @@ The **context** is whatever the host passes as the second element of a `{module,
 
 **Export takes the closure.** Exporting a composite exports every fragment it references, transitively, with their ids, so an import cannot dangle by construction. A **bundle** is that set plus provenance — the source store's identity and each fragment's original id — so re-importing the same collection is detectable as a duplicate rather than minting a second copy. A reference to an id outside a bundle is only possible in a hand-edited file; it imports as a mask and is **reported** — *n references point outside this collection* — never a failure, never silent.
 
-The functions this section names — a constructor for a use site with a fresh id; `bind` over a fragment and a map; `mask` over a fragment and a list of paths; `resolve` of one use site through a store; `flatten` of a composite through a store; and the export of an id's closure as a bundle — are declared, in the surface's table grammar, by the work items that implement them (#172, items 1 and 2), so that the surface gate holds each one to being both specified and built rather than one without the other (D-89).
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Store.split/1` | a store assign as `{module, context}`; a bare module has a `nil` context |
+| `Visualize.Chart.Builder.Store.encode_id/1` | an id as the one string the DOM and the wire carry |
+| `Visualize.Chart.Builder.Store.decode_id/1` | that string back to an id, refusing a kind that is not one so no atom is made from a client's string |
+| `Visualize.Chart.Builder.Store.relocate/3` | the reference `import/2`: issue, then rewrite through the table, through a store's own `put/2` |
+| `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id through a store, dependencies first, with provenance |
+| `Visualize.Chart.Fragment.kinds/0` | every kind a fragment can be, and so every kind an id can carry |
+| `Visualize.Chart.Fragment.kind/1` | the kind of a fragment, derived (§19.8) |
+| `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each |
+| `Visualize.Chart.Fragment.relocate/2` | a fragment with its ids rewritten through a table, and the ids the table did not carry |
+
+The remaining functions this section names — a constructor for a use site, `bind`, `mask`, `resolve` and `flatten` on `Visualize.Chart` — are declared by work item 2 of #172, which builds them, so that the surface gate holds each to being both specified and built (D-89).
 
 ### 19.8 The library: kind derived, group stored, two views
 
