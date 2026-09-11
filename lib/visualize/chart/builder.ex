@@ -892,10 +892,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       layer = target_fragment(assigns)
       nodes = Editor.nodes(layer)
 
+      # The design root itself is not a place to edit: its keys are Deploy's (`version`)
+      # or sites of their own (§19.8), so a layer opens on its first real node.
       entry =
         case assigns.node_label do
           "variables" -> %{label: "variables", kind: :design, path: []}
-          label -> Enum.find(nodes, &(&1.label == label)) || hd(nodes)
+          "design" -> first_node(nodes)
+          label -> Enum.find(nodes, &(&1.label == label)) || first_node(nodes)
         end
 
       {tabs, children} = strip(nodes, entry, design)
@@ -1036,9 +1039,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {tabs ++ [variables], children}
     end
 
+    # Every root but the design's own: design is the deployed tier, not a node to edit.
     defp roots(design, here) do
       declared = design |> Editor.nodes() |> Enum.map(&root(&1.label)) |> Enum.uniq()
-      declared ++ Enum.reject(here, &(&1 in declared))
+      Enum.reject(declared ++ Enum.reject(here, &(&1 in declared)), &(&1 == "design"))
+    end
+
+    defp first_node(nodes) do
+      Enum.find(nodes, &(&1.label != "design")) || hd(nodes)
     end
 
     defp tab_class(open?, here?) do

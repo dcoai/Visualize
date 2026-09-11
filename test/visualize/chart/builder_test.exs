@@ -137,8 +137,9 @@ defmodule Visualize.Chart.BuilderTest do
       # seven, because a person asks where the marks are, not which fragment holds them.
       # The strip ends with the Variables tab, which is a root of the builder's own
       # (spec/14 §19.10).
+      # The design's own root is not a tab (§18.13): nothing at it is a person's to edit.
       assert tabs(html, "vis-builder-node") ==
-               ~w(design sources vars styles frame marks labels variables)
+               ~w(sources vars styles frame marks labels variables)
     end
 
     test "a root the selected layer does not declare is marked elsewhere" do
@@ -230,11 +231,16 @@ defmodule Visualize.Chart.BuilderTest do
       {:ok, added} = Builder.update(stored, added)
       assert length(BuilderFixture.layers(added)) == length(host.layers) + 1
 
+      # The house opens on its first real node, `styles.series` (§18.13): an edit lands there.
       {:noreply, edited} =
-        Builder.handle_event("edit", %{"_target" => ["version"], "version" => "2"}, socket)
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          socket
+        )
 
       {:ok, edited} = Builder.update(host, edited)
-      assert {_name, %{version: 2}} = hd(BuilderFixture.layers(edited))
+      assert {_name, %{styles: %{series: %{stroke_width: 7}}}} = hd(BuilderFixture.layers(edited))
     end
 
     test "a host that changes its list replaces the stack", %{socket: socket} do
