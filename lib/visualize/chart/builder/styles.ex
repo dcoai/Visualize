@@ -204,6 +204,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       filter: brightness(1.08);
     }
 
+    /* Deploy is the other verb (spec/14 §19.6): beside Save, and not dressed as it. */
+    .vis-builder-deploy {
+      border-color: var(--vis-builder-accent);
+      color: var(--vis-builder-accent);
+      font-weight: 600;
+    }
+
     .vis-builder-notice {
       margin: 0;
       padding: 8px 10px;

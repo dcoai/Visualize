@@ -1407,6 +1407,7 @@ It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every
 | `theme` | `:any` | `nil` | the `Visualize.Theme` the preview draws with, `nil` for the default |
 | `store` | `:atom` | `nil` | a module implementing `Visualize.Chart.Builder.Store` (§18.3), or `nil` for no library |
 | `on_save` | `:any` | `:visualize_chart_saved` | the tag of the message of the next paragraph |
+| `on_deploy` | `:any` | `:visualize_chart_deployed` | the tag of the deploy message (§19.6): the flat design, where save's carries structure |
 | `class` | `:string` | `nil` | placed on the builder's root element |
 
 Saving sends `{on_save, id, design}` to the host LiveView process — `send(self(), …)` from the component's own callback, which runs in that process — where `design` is `Visualize.Chart.stack/1` of the enabled layers, the same map the preview drew. The `id` is the component's, so a page with two builders tells them apart. That message is the entire output of the component: it pushes no event, patches no URL and touches no store the host did not give it. The host handles it in `handle_info/2` and decides what a saved design means.
@@ -1827,7 +1828,9 @@ A composite is a fragment whose content is a list of use sites and its own `vars
 
 **Save writes structure.** The store holds the uses, never `stack/1`'s result, so a composite reopens as what was built — references intact, masks and bindings where they were left — and references keep their point: edit `{:style, 11}` and every composite using it follows. The save message of §18.2 carries structure.
 
-**Flatten is a deployment verb.** `flatten/2` on `Visualize.Chart` resolves every use recursively — `ref → local → mask → bind` — through a store, and stacks the result: a flat design in §13's shape, with no ids and no uses, which `apply/2` and `render/2` consume as they always have. A host calls it in its own pipeline. The builder's preview resolves the structure to draw it, and the builder *may* offer flatten as a separately-labelled action; the two verbs are different, and offering the second never loses the first.
+**Flatten is a deployment verb.** `flatten/2` on `Visualize.Chart` resolves every use recursively — `ref → local → mask → bind` — through a store, and stacks the result: a flat design in §13's shape, with no ids and no uses, which `apply/2` and `render/2` consume as they always have. A host calls it in its own pipeline. The builder's preview resolves the structure to draw it, and the builder offers flatten as its own, separately-labelled action, **Deploy**: on the workspace or an open composite it flattens the structure through the store and sends the host `{on_deploy, id, design}` — the flat design, where *Save* sends structure — with a notice naming any reference that showed through; a stack that reaches itself is refused and nothing is sent. The two verbs are different, and offering the second never loses the first. Deploy is not offered while a non-composite kind is open, since there is no chart to deploy.
+
+**A design is the deployed tier, not a starting one.** *New fragment of a kind* (§19.8) does not offer `design`: a composite does everything a design does and deploys to one, so an empty design typed into forms would be the one path with no library behind it. The kind still exists — the library may hold one, and an imported document is one (§18.12) — and asking for it by name is refused with a notice that says to start a composite.
 
 **Composites nest**, because a composite is a fragment and a use may reference one. Resolution is recursive. A composite that reaches itself through any chain of uses is refused, as an `extends` cycle is (§3.5), at the site that closed the loop.
 
@@ -1928,7 +1931,7 @@ Every fragment has two faces, and the editor is one component whose shape is the
 | `Visualize.Chart.Builder.Stack.write/4` | a write into a use's `local` at a path: `{:ok, value}` sets, `:error` removes (§18.5) |
 | `Visualize.Chart.Builder.Stack.write_at/4` | the same write into any fragment — an opened entry's body |
 | `Visualize.Chart.Builder.Stack.move/3` | a move: list surgery, nothing to remap |
-| `Visualize.Chart.Builder.Stack.kinds/0` | the kinds *new fragment of a kind* offers, the composite first (§19.8) |
+| `Visualize.Chart.Builder.Stack.kinds/0` | the kinds *new fragment of a kind* offers, the composite first and never a design (§19.6, §19.8) |
 | `Visualize.Chart.Builder.Stack.empty/1` | the empty, valid fragment of a kind |
 
 | `Visualize.Chart.Builder.Stack.open/2` | an entry as the stack: a composite's sites labelled by the store's names, with its vars; any other body as one inline site named for the entry |

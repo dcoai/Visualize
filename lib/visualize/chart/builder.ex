@@ -85,6 +85,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         theme: nil,
         store: nil,
         on_save: :visualize_chart_saved,
+        on_deploy: :visualize_chart_deployed,
         styles: true,
         class: nil
       ]
@@ -107,6 +108,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     )
 
     attr(:on_save, :any, default: :visualize_chart_saved, doc: "the tag of the save message")
+
+    attr(:on_deploy, :any,
+      default: :visualize_chart_deployed,
+      doc: "the tag of the deploy message: the flat design, where save's carries structure"
+    )
 
     attr(:styles, :boolean,
       default: true,
@@ -218,6 +224,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </form>
           <button type="button" class="vis-builder-save" phx-click="save" phx-target={@myself}>
             Save
+          </button>
+          <button
+            :if={@preview?}
+            type="button"
+            class="vis-builder-deploy"
+            phx-click="deploy"
+            phx-target={@myself}
+            title="flatten the stack through the library and hand the host the design"
+          >
+            Deploy
           </button>
         </div>
         <p :if={@notice} class="vis-builder-notice">{@notice}</p>
@@ -377,7 +393,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # A new fragment of a kind starts empty and valid (spec/14 §19.8).
+    # Deploy is the other verb: the structure flattened through the store, and the flat
+    # design sent — never while a non-composite kind is open (spec/14 §19.6, D-103).
+    def handle_event("deploy", _params, socket) do
+      %{on_deploy: tag, id: id, store: store, open: open} = socket.assigns
+
+      if open != nil and open.kind not in [:composite, :design] do
+        {:noreply, assign(socket, :notice, "deploy a composite; a #{open.kind} is not a chart")}
+      else
+        case Chart.flatten(structure(socket.assigns), Stack.fetch(store)) do
+          {:ok, design, %{missing: missing}} ->
+            send(self(), {tag, id, design})
+            {:noreply, assign(socket, :notice, showed_through(missing))}
+
+          {:error, {:cycle, chain}} ->
+            {:noreply,
+             assign(
+               socket,
+               :notice,
+               "not deployed: the stack refers to itself through #{inspect(chain)}"
+             )}
+        end
+      end
+    end
+
+    # A new fragment of a kind starts empty and valid (spec/14 §19.8); a design is the
+    # deployed tier and is not one to start (§19.6).
+    def handle_event("new_fragment", %{"kind" => "design"}, socket) do
+      {:noreply,
+       assign(socket, :notice, "a design is what Deploy makes; start a composite instead")}
+    end
+
     def handle_event("new_fragment", %{"kind" => submitted}, socket) do
       case Enum.find(Stack.kinds(), &(to_string(&1) == submitted)) do
         nil ->
@@ -682,6 +728,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp faults_notice(errors), do: Enum.map_join(errors, "; ", &Validator.format/1)
+
+    defp showed_through([]), do: nil
+
+    defp showed_through(missing) do
+      refs = Enum.map_join(missing, ", ", fn {_site, ref} -> Store.encode_id(ref) end)
+      "deployed with #{length(missing)} reference(s) showing through: #{refs}"
+    end
 
     defp control(target) do
       case String.split(target, ".", parts: 2) do
