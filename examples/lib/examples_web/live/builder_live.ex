@@ -6,8 +6,13 @@ defmodule ExamplesWeb.BuilderLive do
   The page is the host of the contract: it owns the route, the layers the builder starts
   with, the pool of sample sources the preview binds to, and the library — a tiny in-memory
   `Visualize.Chart.Builder.Store` — and it handles the one message the builder sends,
-  `{:design_saved, id, design}`, by applying the design it is handed. Nothing else crosses
-  the boundary.
+  `{:design_saved, id, structure}` and `{:design_deployed, id, design}` — keeping the one
+  and applying the other. Nothing else crosses the boundary.
+
+  The page starts the builder over three entries of its own library — a house design, a
+  shared frame and a panel — as uses referring to them, so every row names something the
+  library holds (spec/14 §19.9). A host may still seed bare fragments (§18.1, D-95); this
+  one has a library, so it uses it.
   """
   use Phoenix.LiveView
 
@@ -97,8 +102,60 @@ defmodule ExamplesWeb.BuilderLive do
       end
     end
 
+    @doc "The id of the entry with a name, for a page that starts from its own library."
+    def id_of(name) do
+      Enum.find_value(list(nil), fn entry -> entry.name == name and entry.id end)
+    end
+
+    defp house,
+      do: %{
+        version: 1,
+        meta: %{name: "Uptime"},
+        theme: :default,
+        styles: %{series: %{stroke: :series_1, stroke_width: 2, curve: :monotone_x}},
+        frame: %{
+          kind: :cartesian,
+          size: %{width: 640, height: 320},
+          margin: %{top: 24, right: 24, bottom: 32, left: 48}
+        }
+      }
+
+    defp shared,
+      do: %{
+        sources: %{primary: %{fields: [:hour, :value]}},
+        frame: %{
+          scales: %{
+            hour: %{kind: :linear, domain: :auto},
+            value: %{kind: :linear, domain: [0, :auto], nice: true}
+          },
+          axes: [
+            %{scale: :hour, side: :bottom, ticks: 6},
+            %{scale: :value, side: :left, ticks: 5, grid: true}
+          ]
+        }
+      }
+
+    defp panel,
+      do: %{
+        vars: %{unit: %{default: "%"}},
+        marks: [
+          %{
+            id: :series,
+            type: :line,
+            data: :primary,
+            channels: %{x: :hour, y: :value},
+            scales: %{x: :hour, y: :value},
+            style: :series
+          }
+        ],
+        labels: [%{id: :title, anchor: :title, text: ["Uptime — ", Chart.var(:unit)]}]
+      }
+
     defp seeds do
       [
+        {"Uptime::house", house()},
+        {"Uptime::shared", shared()},
+        {"Uptime::panel", panel()},
         {"Theme::dark", %{theme: :dark}},
         {"Frame:axes:no grid", %{frame: %{axes: [%{scale: :value, side: :left, grid: false}]}}},
         {"Frame:axes:dense ticks",
@@ -118,47 +175,6 @@ defmodule ExamplesWeb.BuilderLive do
     end
   end
 
-  @house %{
-    version: 1,
-    meta: %{name: "Uptime"},
-    theme: :default,
-    styles: %{series: %{stroke: :series_1, stroke_width: 2, curve: :monotone_x}},
-    frame: %{
-      kind: :cartesian,
-      size: %{width: 640, height: 320},
-      margin: %{top: 24, right: 24, bottom: 32, left: 48}
-    }
-  }
-
-  @shared %{
-    sources: %{primary: %{fields: [:hour, :value]}},
-    frame: %{
-      scales: %{
-        hour: %{kind: :linear, domain: :auto},
-        value: %{kind: :linear, domain: [0, :auto], nice: true}
-      },
-      axes: [
-        %{scale: :hour, side: :bottom, ticks: 6},
-        %{scale: :value, side: :left, ticks: 5, grid: true}
-      ]
-    }
-  }
-
-  @panel %{
-    vars: %{unit: %{default: "%"}},
-    marks: [
-      %{
-        id: :series,
-        type: :line,
-        data: :primary,
-        channels: %{x: :hour, y: :value},
-        scales: %{x: :hour, y: :value},
-        style: :series
-      }
-    ],
-    labels: [%{id: :title, anchor: :title, text: ["Uptime — ", Chart.var(:unit)]}]
-  }
-
   defp rows do
     for hour <- 0..23,
         do: %{hour: hour, value: Float.round(92 + 6 * :math.sin(hour / 3.5), 2)}
@@ -167,40 +183,31 @@ defmodule ExamplesWeb.BuilderLive do
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
-       layers: [{:house, @house}, {:shared, @shared}, {:panel, @panel}],
+       layers: Enum.map(~w(Uptime::house Uptime::shared Uptime::panel), &{&1, Library.id_of(&1)}),
        sources: %{primary: rows()},
        saved: nil
      )}
   end
 
-  # The builder's one output: the design it produced. The host decides what saving means —
-  # here, applying it and reporting whether it drew.
-  # What the builder sends is the structure — the stack of sites — and the deployment
-  # phase is where it becomes a design: flattened through the library (spec/14 §19.6).
-  def handle_info({:design_saved, _id, structure}, socket) do
+  # The builder's two outputs (spec/14 §19.6). Save sends the structure — the stack of
+  # sites — which a host keeps as what was built; this page only says how many sites it
+  # holds. Deploy sends the flat design, and the host decides what deploying means — here,
+  # applying it and reporting whether it drew.
+  def handle_info({:design_saved, _id, %{composite: %{uses: uses}}}, socket) do
+    {:noreply, assign(socket, :saved, "saved: a structure of #{length(uses)} site(s)")}
+  end
+
+  def handle_info({:design_deployed, _id, design}, socket) do
     result =
-      with {:ok, design, %{missing: missing}} <- Chart.flatten(structure, &fetch/1),
-           {:ok, _applied} <- Chart.apply(design, sources: socket.assigns.sources) do
-        case missing do
-          [] -> "saved: the design applies"
-          _ -> "saved: the design applies, with #{length(missing)} reference(s) showing through"
-        end
-      else
-        {:error, {:cycle, chain}} ->
-          "not saved: the stack refers to itself through #{inspect(chain)}"
+      case Chart.apply(design, sources: socket.assigns.sources) do
+        {:ok, _applied} ->
+          "deployed: the design applies"
 
         {:error, errors} ->
-          "not saved: " <> Enum.map_join(errors, "; ", &Chart.Validator.format/1)
+          "not deployed: " <> Enum.map_join(errors, "; ", &Chart.Validator.format/1)
       end
 
     {:noreply, assign(socket, :saved, result)}
-  end
-
-  defp fetch(id) do
-    case Library.get(id, %{}) do
-      {:ok, entry} -> {:ok, entry.fragment}
-      :error -> :error
-    end
   end
 
   def render(assigns) do
@@ -209,63 +216,13 @@ defmodule ExamplesWeb.BuilderLive do
       <h1>Chart builder</h1>
       <p>
         <code>Visualize.Chart.Builder</code>
-        over three fragments: a house layer, a shared frame and a panel. Edit a node, reorder
-        or disable a layer, set the parameters, and press Save.
+        over three entries of this page's library — a house design, a shared frame and a
+        panel. Click an entry to open it, drag one into the stack, edit a node, bind a
+        variable, mask a key; <em>Save</em> keeps the structure and <em>Deploy</em> hands the
+        page the flat design.
       </p>
       <p :if={@saved} class="builder-saved">{@saved}</p>
       <p><a href="/">← back to the gallery</a></p>
-      <!--
-        Drag diagnostics. Drag and drop is four steps and any one of them failing looks the
-        same from outside: the module loads, the hook registers, the browser fires the
-        events, and the server changes the order. This says which step you got to.
-      -->
-      <div id="drag-diagnostics" class="builder-diagnostics" phx-update="ignore">
-        <strong>drag diagnostics</strong>
-        <span id="diag-module">module: …</span>
-        <span id="diag-mounted">hook mounted: …</span>
-        <span id="diag-events">events: none yet</span>
-      </div>
-      <script>
-        (() => {
-          const seen = [];
-          const show = () => {
-            const el = document.getElementById("diag-events");
-            if (el) el.textContent = "events: " + (seen.length ? seen.join(" → ") : "none yet");
-          };
-
-          // The browser's own events, watched in the capture phase so nothing can stop them
-          // reaching here. If `drop` never appears, the problem is before the hook.
-          for (const name of ["click", "dragstart", "dragover", "drop", "dragend"]) {
-            document.addEventListener(name, (e) => {
-              const at = e.target.closest && e.target.closest("[data-builder-layer], [data-builder-fragment]");
-              let what = "(gap)";
-              if (at && at.hasAttribute("data-builder-fragment")) what = "(library)";
-              else if (at) what = "(layer " + at.getAttribute("data-builder-layer") + ")";
-              const tag = name + what;
-              if (seen[seen.length - 1] !== tag) { seen.push(tag); if (seen.length > 10) seen.shift(); show(); }
-            }, true);
-          }
-
-          const report = () => {
-            const hooks = window.VisualizeHooks || {};
-            const names = Object.keys(hooks);
-            const module = document.getElementById("diag-module");
-            if (module) {
-              module.textContent = names.length
-                ? "module: " + names.length + " hooks, BuilderHook " + (hooks.BuilderHook ? "present" : "MISSING")
-                : "module: DID NOT LOAD";
-            }
-
-            const all = document.querySelectorAll("[phx-hook='BuilderHook']");
-            const up = document.querySelectorAll("[phx-hook='BuilderHook'][data-builder-mounted]");
-            const mounted = document.getElementById("diag-mounted");
-            if (mounted) mounted.textContent = "hook mounted: " + up.length + " of " + all.length;
-          };
-
-          window.addEventListener("DOMContentLoaded", () => setTimeout(report, 400));
-          setTimeout(report, 1500);
-        })();
-      </script>
     </header>
     <main>
       <.live_component
@@ -275,6 +232,7 @@ defmodule ExamplesWeb.BuilderLive do
         sources={@sources}
         store={Library}
         on_save={:design_saved}
+        on_deploy={:design_deployed}
       />
     </main>
     """

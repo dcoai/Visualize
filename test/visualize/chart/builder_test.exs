@@ -1139,6 +1139,24 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "a host seeds a reference as a layer (spec/14 §19.9)" do
+    test "an id becomes a use referring to it, labelled by the host or its position" do
+      s =
+        BuilderFixture.socket([{"House", Library.baseline_id()}, Library.baseline_id()],
+          store: Library
+        )
+
+      assert BuilderFixture.names(s) == ["House", "1"]
+      assert Enum.map(s.assigns.uses, & &1.ref) == [Library.baseline_id(), Library.baseline_id()]
+
+      assert BuilderFixture.layers(s) ==
+               [
+                 {"House", %{version: 1, frame: %{kind: :cartesian}}},
+                 {"1", %{version: 1, frame: %{kind: :cartesian}}}
+               ]
+    end
+  end
+
   describe "reaching a root the selected layer does not declare (spec/14 §18.13)" do
     setup do
       host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
