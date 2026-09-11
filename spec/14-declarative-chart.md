@@ -1788,7 +1788,7 @@ Each part is edited from exactly one surface, so there is never a question of wh
 
 **A site has its own id** because a site was its position, and position is the wrong identity: the selection and the disabled set had to be remapped on every insert and move, a local style was named by an index that a reorder changed, and a drop target was a number a client could not be trusted with. With `Use.id` a site is the same site wherever it sits, and `Visualize.Chart.explain/1` attributes to it by id with a display name.
 
-**Disabling a layer is a mask of everything** (D-87 restated). A ref whose id no longer exists is the same mask (§19.2).
+**Disabling a layer is a mask of everything** (D-87 restated), and a mask of everything removes the *whole* site — its local node included, since a site the host seeded is nothing but its local — so the design is what it would be without that layer. A ref whose id no longer exists masks what the ref would have given (§19.2); the site's local still stands, which is what *showing through* means.
 
 ### 19.4 Bindings are substitution before the cascade
 
@@ -1907,6 +1907,28 @@ Every fragment has two faces, and the editor is one component whose shape is the
 **Edit** is a form shaped by the kind: the nineteen keys of a style, the keys of a theme, the schema's own walk for the rest (§18.5). A composite's edit face is empty — its content is its layers.
 
 **Compose** is the stack, constrained to the kind (§19.6). Opened on a composite the constraint is none, and the node tabs (§18.13) and the preview (§18.4) appear beneath the stack, because now there is a chart to look at. The layer stack is therefore not a region of the workspace but the composite's compose face; §18.16's four regions are three.
+
+**The stack is a list of sites.** The builder's state is its uses — `%Visualize.Chart.Use{}` in stack order — and everything a panel reads is derived from them, by one pure module:
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Stack.seed/1` | a host's layers as inline-only uses (`ref: nil`, the fragment as `local`) with their labels, so §18.2's contract is unchanged |
+| `Visualize.Chart.Builder.Stack.label/2` | the name a person sees for a use: its label, or its id |
+| `Visualize.Chart.Builder.Stack.enabled?/1` | whether a use contributes: anything but a mask of everything |
+| `Visualize.Chart.Builder.Stack.toggle/1` | a use disabled or re-enabled: `mask: :all`, or not (§19.3) |
+| `Visualize.Chart.Builder.Stack.fetch/1` | a store as the function resolution takes: an id to `{:ok, fragment}` or `:error` |
+| `Visualize.Chart.Builder.Stack.resolve/3` | every use as the `{label, fragment}` the panels read, and the refs no store holds; a disabled use resolves as it would enabled, since the panels edit it either way |
+| `Visualize.Chart.Builder.Stack.design/2` | the enabled uses as a composite, flattened through the store (§19.6), with every `{:style, n}` at a site inlined so the frame needs no store |
+| `Visualize.Chart.Builder.Stack.index_of/2` | a use's position, or `nil` |
+| `Visualize.Chart.Builder.Stack.get/2` | the use with an id, or `nil` |
+| `Visualize.Chart.Builder.Stack.update/3` | one use replaced by a function of it |
+| `Visualize.Chart.Builder.Stack.write/4` | a write into a use's `local` at a path: `{:ok, value}` sets, `:error` removes (§18.5) |
+| `Visualize.Chart.Builder.Stack.write_at/4` | the same write into any fragment — an opened entry's body |
+| `Visualize.Chart.Builder.Stack.move/3` | a move: list surgery, nothing to remap |
+| `Visualize.Chart.Builder.Stack.kinds/0` | the kinds *new fragment of a kind* offers, the composite first (§19.8) |
+| `Visualize.Chart.Builder.Stack.empty/1` | the empty, valid fragment of a kind |
+
+Selection is a use's id, and a host that seeds one (`selected`) is honoured when the stack has it; disabling is the mask of everything, and its whole effect is in `design/2`. Clicking a library entry opens it — `open` is the entry and the field forms write to its fragment — and dragging it into the stack composes it, as a use referring to its id whose label is the entry's name. Saving sends the structure — `%{composite: %{uses, vars}}` — and never a flattened design; a host that wants the design asks `Visualize.Chart.flatten/2` with the store's fetch.
 
 A field in any form shows a **variable as a variable**: a switch between *literal* — the control §18.6 chooses from the type — and *variable* — pick an existing name or type a new one — and a variable renders as `var(:color)`, never as a struct's text in a textarea. A form therefore has three controls per key — `key`, `key.mode`, `key.var` — and one function says what a change to any of them means:
 

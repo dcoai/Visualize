@@ -45,10 +45,16 @@ defmodule Visualize.Chart.Composite do
   def flatten(fragment, fetch), do: flatten(fragment, fetch, [])
 
   defp flatten(%{composite: %{uses: uses} = composite}, fetch, trail) when is_list(uses) do
-    base = %{vars: Map.get(composite, :vars, %{})}
+    # The composite's own vars are the lowest layer — when it has any, so a composite
+    # declaring none flattens to exactly what its sites give.
+    base =
+      case Map.get(composite, :vars, %{}) do
+        vars when map_size(vars) == 0 -> []
+        vars -> [%{vars: vars}]
+      end
 
     uses
-    |> Enum.reduce_while({:ok, [base], []}, fn use, {:ok, layers, missing} ->
+    |> Enum.reduce_while({:ok, base, []}, fn use, {:ok, layers, missing} ->
       case layer(use, fetch, trail) do
         {:ok, resolved, more} -> {:cont, {:ok, [resolved | layers], missing ++ more}}
         {:error, _} = error -> {:halt, error}

@@ -205,10 +205,10 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "a reorder survives the next host render", %{host: host, socket: socket} do
       {:noreply, socket} = Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, socket)
-      assert names(socket) == [:panel, :house, :shared]
+      assert BuilderFixture.names(socket) == [:panel, :house, :shared]
 
       {:ok, socket} = Builder.update(host, socket)
-      assert names(socket) == [:panel, :house, :shared]
+      assert BuilderFixture.names(socket) == [:panel, :house, :shared]
     end
 
     test "a move, an added layer and a node edit all survive it", %{host: host, socket: socket} do
@@ -216,28 +216,31 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("reorder", %{"from" => 0, "to" => 2}, socket)
 
       {:ok, moved} = Builder.update(host, moved)
-      assert names(moved) == [:shared, :panel, :house]
+      assert BuilderFixture.names(moved) == [:shared, :panel, :house]
 
       stored = Map.put(host, :store, Library)
       {:ok, socket} = Builder.update(stored, socket)
-      {:noreply, added} = Builder.handle_event("add_layer", %{"name" => "design:1"}, socket)
+
+      {:noreply, added} =
+        Builder.handle_event("insert", %{"name" => "design:1", "at" => 3}, socket)
+
       {:ok, added} = Builder.update(stored, added)
-      assert length(added.assigns.layers) == length(host.layers) + 1
+      assert length(BuilderFixture.layers(added)) == length(host.layers) + 1
 
       {:noreply, edited} =
         Builder.handle_event("edit", %{"_target" => ["version"], "version" => "2"}, socket)
 
       {:ok, edited} = Builder.update(host, edited)
-      assert {_name, %{version: 2}} = hd(edited.assigns.layers)
+      assert {_name, %{version: 2}} = hd(BuilderFixture.layers(edited))
     end
 
     test "a host that changes its list replaces the stack", %{socket: socket} do
       {:noreply, socket} = Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, socket)
-      assert names(socket) == [:panel, :house, :shared]
+      assert BuilderFixture.names(socket) == [:panel, :house, :shared]
 
       replaced = %{id: "b", layers: [{:only, %{version: 1}}], sources: %{}}
       {:ok, socket} = Builder.update(replaced, socket)
-      assert names(socket) == [:only]
+      assert BuilderFixture.names(socket) == [:only]
     end
 
     test "an imported document is not overwritten by the host's stack", %{
@@ -248,10 +251,10 @@ defmodule Visualize.Chart.BuilderTest do
         BuilderFixture.layers() |> Chart.stack() |> Chart.from_map!() |> Chart.to_json()
 
       {:noreply, socket} = Builder.handle_event("import", %{"document" => document}, socket)
-      assert names(socket) == [:imported]
+      assert BuilderFixture.names(socket) == [:imported]
 
       {:ok, socket} = Builder.update(host, socket)
-      assert names(socket) == [:imported]
+      assert BuilderFixture.names(socket) == [:imported]
     end
   end
 
@@ -313,7 +316,7 @@ defmodule Visualize.Chart.BuilderTest do
     test "a style is created in the selected layer and the editor opens on it", %{socket: s} do
       {:noreply, s} = Builder.handle_event("add_style", %{"name" => "callout"}, s)
 
-      {_name, layer} = hd(s.assigns.layers)
+      {_name, layer} = hd(BuilderFixture.layers(s))
       assert %{} = layer.styles.callout
       assert s.assigns.node_label == "styles.callout"
       assert s.assigns.notice == nil
@@ -321,33 +324,33 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "a style may be added to a layer that carries no styles at all", %{socket: s} do
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
-      {_name, shared} = Enum.at(s.assigns.layers, 1)
+      {_name, shared} = Enum.at(BuilderFixture.layers(s), 1)
       refute Map.has_key?(shared, :styles)
 
       {:noreply, s} = Builder.handle_event("add_style", %{"name" => "callout"}, s)
-      {_name, shared} = Enum.at(s.assigns.layers, 1)
+      {_name, shared} = Enum.at(BuilderFixture.layers(s), 1)
       assert shared.styles.callout == %{}
     end
 
     test "a blank name is a notice and declares nothing", %{socket: s} do
       {:noreply, after_blank} = Builder.handle_event("add_style", %{"name" => "   "}, s)
       assert after_blank.assigns.notice == "a style needs a name"
-      assert after_blank.assigns.layers == s.assigns.layers
+      assert BuilderFixture.layers(after_blank) == BuilderFixture.layers(s)
     end
 
     test "selecting a style opens the layer that declares it", %{socket: s} do
       # `series` is the house layer's, which is 0; move off it first so the move is visible.
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
-      assert s.assigns.selected == 2
+      assert BuilderFixture.selected(s) == 2
 
       {:noreply, s} = Builder.handle_event("select_style", %{"name" => "series"}, s)
-      assert s.assigns.selected == 0
+      assert BuilderFixture.selected(s) == 0
       assert s.assigns.node_label == "styles.series"
     end
 
     test "a style nothing declares changes nothing", %{socket: s} do
       {:noreply, after_miss} = Builder.handle_event("select_style", %{"name" => "nope"}, s)
-      assert after_miss.assigns.selected == s.assigns.selected
+      assert BuilderFixture.selected(after_miss) == BuilderFixture.selected(s)
       assert after_miss.assigns.node_label == s.assigns.node_label
     end
 
@@ -358,7 +361,7 @@ defmodule Visualize.Chart.BuilderTest do
           layers: BuilderFixture.layers(),
           sources: BuilderFixture.sources(),
           styles: false,
-          selected: 2,
+          selected: {:use, 3},
           node_label: "marks[0]",
           facet: :style
         })
@@ -409,52 +412,52 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "a fragment lands at the position it was dropped at", %{socket: s} do
       {:noreply, at_top} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 0}, s)
-      assert names(at_top) == ["baseline", :house, :shared, :panel]
+      assert BuilderFixture.names(at_top) == ["baseline", :house, :shared, :panel]
 
       {:noreply, midway} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 2}, s)
-      assert names(midway) == [:house, :shared, "baseline", :panel]
+      assert BuilderFixture.names(midway) == [:house, :shared, "baseline", :panel]
 
       {:noreply, at_end} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 3}, s)
-      assert names(at_end) == [:house, :shared, :panel, "baseline"]
+      assert BuilderFixture.names(at_end) == [:house, :shared, :panel, "baseline"]
     end
 
     test "a position outside the stack is clamped, because a client's number is not trusted",
          %{socket: s} do
       {:noreply, under} = Builder.handle_event("insert", %{"name" => "design:1", "at" => -5}, s)
-      assert names(under) == ["baseline", :house, :shared, :panel]
+      assert BuilderFixture.names(under) == ["baseline", :house, :shared, :panel]
 
       {:noreply, over} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 99}, s)
-      assert names(over) == [:house, :shared, :panel, "baseline"]
+      assert BuilderFixture.names(over) == [:house, :shared, :panel, "baseline"]
     end
 
     test "the selection and the disabled set follow the insert", %{socket: s} do
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
       {:noreply, s} = Builder.handle_event("toggle_layer", %{"index" => "1"}, s)
-      assert s.assigns.selected == 2
-      assert s.assigns.disabled == MapSet.new([1])
+      assert BuilderFixture.selected(s) == 2
+      assert BuilderFixture.disabled(s) == MapSet.new([1])
 
       {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 0}, s)
-      assert names(s) == ["baseline", :house, :shared, :panel]
-      assert s.assigns.selected == 3
-      assert s.assigns.disabled == MapSet.new([2])
+      assert BuilderFixture.names(s) == ["baseline", :house, :shared, :panel]
+      assert BuilderFixture.selected(s) == 3
+      assert BuilderFixture.disabled(s) == MapSet.new([2])
     end
 
     test "an insert below the selection leaves it where it is", %{socket: s} do
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
       {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 2}, s)
-      assert s.assigns.selected == 0
+      assert BuilderFixture.selected(s) == 0
     end
 
     test "a name the store does not hold is a notice and changes no layer", %{socket: s} do
       {:noreply, missed} = Builder.handle_event("insert", %{"name" => "nope", "at" => 0}, s)
       assert missed.assigns.notice == "no fragment is stored under nope"
-      assert missed.assigns.layers == s.assigns.layers
+      assert BuilderFixture.layers(missed) == BuilderFixture.layers(s)
     end
 
     test "an insert survives the next host render", %{host: host, socket: s} do
       {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 1}, s)
       {:ok, s} = Builder.update(host, s)
-      assert names(s) == [:house, "baseline", :shared, :panel]
+      assert BuilderFixture.names(s) == [:house, "baseline", :shared, :panel]
     end
   end
 
@@ -485,12 +488,12 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "adding appends, and a bare reference stays bare until it is not one", %{socket: s} do
       {:noreply, s} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, s)
-      assert style_at(s) == [:series, :axis]
+      assert BuilderFixture.style_at(s) == [:series, :axis]
 
       # One entry naming a style is written back as a bare reference, so an edit elsewhere
       # does not rewrite a document's shape.
       {:noreply, s} = Builder.handle_event("remove_style_entry", %{"index" => "1"}, s)
-      assert style_at(s) == :series
+      assert BuilderFixture.style_at(s) == :series
     end
 
     test "a site carrying nothing keeps what it resolved as when something is added" do
@@ -508,26 +511,26 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, socket} = Builder.handle_event("add_style_entry", %{"name" => "grid"}, socket)
 
-      {_name, layer} = hd(socket.assigns.layers)
+      {_name, layer} = hd(BuilderFixture.layers(socket))
       assert hd(layer.frame.axes).style == [:axis, :grid]
     end
 
     test "reordering at scope style moves an entry and leaves the layers alone", %{socket: s} do
       {:noreply, s} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, s)
-      assert style_at(s) == [:series, :axis]
+      assert BuilderFixture.style_at(s) == [:series, :axis]
 
-      before = Enum.map(s.assigns.layers, &elem(&1, 0))
+      before = Enum.map(BuilderFixture.layers(s), &elem(&1, 0))
 
       {:noreply, s} =
         Builder.handle_event("reorder", %{"scope" => "style", "from" => 1, "to" => 0}, s)
 
-      assert style_at(s) == [:axis, :series]
-      assert Enum.map(s.assigns.layers, &elem(&1, 0)) == before
+      assert BuilderFixture.style_at(s) == [:axis, :series]
+      assert Enum.map(BuilderFixture.layers(s), &elem(&1, 0)) == before
     end
 
     test "a reorder with no scope is still the layer stack", %{socket: s} do
       {:noreply, s} = Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, s)
-      assert names(s) == [:panel, :house, :shared]
+      assert BuilderFixture.names(s) == [:panel, :house, :shared]
     end
 
     test "selecting an entry marks it, and changing the stack clears the mark", %{socket: s} do
@@ -541,7 +544,7 @@ defmodule Visualize.Chart.BuilderTest do
     test "an entry with no name is a notice and changes nothing", %{socket: s} do
       {:noreply, blank} = Builder.handle_event("add_style_entry", %{"name" => "  "}, s)
       assert blank.assigns.notice == "a style entry needs a name"
-      assert style_at(blank) == style_at(s)
+      assert BuilderFixture.style_at(blank) == BuilderFixture.style_at(s)
     end
   end
 
@@ -564,10 +567,10 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert style_at(s) == [:series, %{stroke_width: 7}]
+      assert BuilderFixture.style_at(s) == [:series, %{stroke_width: 7}]
 
       # The shared style is untouched, which is the whole reason the local one exists.
-      {_name, house} = hd(s.assigns.layers)
+      {_name, house} = hd(BuilderFixture.layers(s))
       assert house.styles.series.stroke_width == 2
     end
 
@@ -582,7 +585,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event("edit_style", %{"_target" => ["opacity"], "opacity" => "0.5"}, s)
 
-      assert style_at(s) == [:series, %{stroke_width: 7, opacity: 0.5}]
+      assert BuilderFixture.style_at(s) == [:series, %{stroke_width: 7, opacity: 0.5}]
     end
 
     test "blanking the last local key removes the local entry", %{socket: s} do
@@ -593,7 +596,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert style_at(s) == [:series, %{stroke_width: 7}]
+      assert BuilderFixture.style_at(s) == [:series, %{stroke_width: 7}]
 
       {:noreply, s} =
         Builder.handle_event(
@@ -603,14 +606,14 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       # An empty local is not worth keeping, and one entry naming a style is a bare reference.
-      assert style_at(s) == :series
+      assert BuilderFixture.style_at(s) == :series
     end
 
     test "a key the style kind does not declare changes nothing", %{socket: s} do
       {:noreply, other} =
         Builder.handle_event("edit_style", %{"_target" => ["nonsense"], "nonsense" => "1"}, s)
 
-      assert style_at(other) == style_at(s)
+      assert BuilderFixture.style_at(other) == BuilderFixture.style_at(s)
     end
 
     test "the panel is shown only when an entry is selected" do
@@ -639,18 +642,14 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
-  describe "dropping a style fragment onto a site (spec/14 §18.20)" do
+  describe "dropping a style fragment onto a site (spec/14 §18.20, §19.6)" do
     defmodule Styles do
       @moduledoc false
       @behaviour Visualize.Chart.Builder.Store
 
       @entries %{
-        {:style, 1} => %{name: "Styles::thick", fragment: %{styles: %{thick: %{stroke_width: 5}}}},
-        {:style, 2} => %{
-          name: "Styles::two",
-          fragment: %{styles: %{a: %{opacity: 1}, b: %{opacity: 0}}}
-        },
-        {:size, 1} => %{name: "Frame::wide", fragment: %{frame: %{size: %{width: 900}}}}
+        {:style, 1} => %{name: "Styles::thick", fragment: %{style: %{stroke_width: 5}}},
+        {:frame, 1} => %{name: "Frame::wide", fragment: %{frame: %{size: %{width: 900}}}}
       }
 
       @impl true
@@ -692,7 +691,7 @@ defmodule Visualize.Chart.BuilderTest do
       %{socket: socket}
     end
 
-    test "one gesture makes two writes: the layer, and the reference", %{socket: s} do
+    test "one gesture makes one write: the site refers to the entry by id", %{socket: s} do
       {:noreply, s} =
         Builder.handle_event(
           "insert",
@@ -700,12 +699,13 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      # The fragment joins the stack, so the style stays declared once and reusable.
-      assert List.last(s.assigns.layers) ==
-               {"Styles::thick", %{styles: %{thick: %{stroke_width: 5}}}}
+      # Nothing joins the layer stack: the entry stays where it is, declared once.
+      assert length(BuilderFixture.layers(s)) == 3
+      assert BuilderFixture.style_at(s) == [:series, {:style, 1}]
 
-      # And the site refers to it, at the position it was dropped at.
-      assert style_at(s) == [:series, :thick]
+      # The design the frame draws carries the entry's body where its id sat.
+      design = BuilderFixture.design(s)
+      assert hd(design.marks).style == [:series, %{stroke_width: 5}]
     end
 
     test "the drop position is honoured and clamped", %{socket: s} do
@@ -716,7 +716,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert style_at(top) == [:thick, :series]
+      assert BuilderFixture.style_at(top) == [{:style, 1}, :series]
 
       {:noreply, over} =
         Builder.handle_event(
@@ -725,34 +725,20 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert style_at(over) == [:series, :thick]
+      assert BuilderFixture.style_at(over) == [:series, {:style, 1}]
     end
 
-    test "a fragment declaring no style is refused, and nothing is written", %{socket: s} do
+    test "an entry of another kind is refused, and nothing is written", %{socket: s} do
       {:noreply, refused} =
         Builder.handle_event(
           "insert",
-          %{"scope" => "style", "name" => "size:1", "at" => 0},
+          %{"scope" => "style", "name" => "frame:1", "at" => 0},
           s
         )
 
-      assert refused.assigns.notice == "Frame::wide declares no style"
-      assert style_at(refused) == style_at(s)
-      assert length(refused.assigns.layers) == length(s.assigns.layers)
-    end
-
-    test "a fragment declaring two styles is refused, because that is the question", %{socket: s} do
-      {:noreply, refused} =
-        Builder.handle_event(
-          "insert",
-          %{"scope" => "style", "name" => "style:2", "at" => 0},
-          s
-        )
-
-      assert refused.assigns.notice =~ "declares 2 styles"
-      assert refused.assigns.notice =~ "a, b"
-      assert style_at(refused) == style_at(s)
-      assert length(refused.assigns.layers) == length(s.assigns.layers)
+      assert refused.assigns.notice == "Frame::wide is a frame, and a style site takes a style"
+      assert BuilderFixture.style_at(refused) == BuilderFixture.style_at(s)
+      assert length(BuilderFixture.layers(refused)) == length(BuilderFixture.layers(s))
     end
 
     test "a name the store does not hold is refused", %{socket: s} do
@@ -760,12 +746,18 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("insert", %{"scope" => "style", "name" => "nope", "at" => 0}, s)
 
       assert refused.assigns.notice == "no fragment is stored under nope"
-      assert length(refused.assigns.layers) == length(s.assigns.layers)
+      assert length(BuilderFixture.layers(refused)) == length(BuilderFixture.layers(s))
     end
 
     test "an insert with no scope is still the layer stack", %{socket: s} do
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "size:1", "at" => 0}, s)
-      assert Enum.map(s.assigns.layers, &elem(&1, 0)) == ["Frame::wide", :house, :shared, :panel]
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "frame:1", "at" => 0}, s)
+
+      assert Enum.map(BuilderFixture.layers(s), &elem(&1, 0)) == [
+               "Frame::wide",
+               :house,
+               :shared,
+               :panel
+             ]
     end
   end
 
@@ -779,18 +771,18 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "clicking it selects the layer that declares it, and opens it", %{socket: s} do
       # `house` is selected and declares no marks; `panel` does.
-      assert s.assigns.selected == 0
+      assert BuilderFixture.selected(s) == 0
 
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "marks"}, s)
 
-      assert s.assigns.selected == 2
+      assert BuilderFixture.selected(s) == 2
       assert s.assigns.node_label == "marks[0]"
     end
 
     test "a root the selected layer does declare opens there, with no move", %{socket: s} do
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
 
-      assert s.assigns.selected == 0
+      assert BuilderFixture.selected(s) == 0
       assert s.assigns.node_label == "frame"
     end
 
@@ -799,7 +791,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
 
-      assert s.assigns.selected == 1
+      assert BuilderFixture.selected(s) == 1
       assert s.assigns.node_label == "frame"
     end
 
@@ -811,7 +803,7 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "a root nothing declares changes nothing", %{socket: s} do
       {:noreply, missed} = Builder.handle_event("select_root", %{"root" => "nothing"}, s)
-      assert missed.assigns.selected == s.assigns.selected
+      assert BuilderFixture.selected(missed) == BuilderFixture.selected(s)
       assert missed.assigns.node_label == s.assigns.node_label
     end
   end
@@ -867,7 +859,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      {_name, house} = hd(s.assigns.layers)
+      {_name, house} = hd(BuilderFixture.layers(s))
       assert house.styles.series.stroke_width == Chart.var(:stroke_width)
     end
 
@@ -875,7 +867,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event("edit", %{"_target" => ["stroke.var"], "stroke.var" => "hue"}, s)
 
-      {_name, house} = hd(s.assigns.layers)
+      {_name, house} = hd(BuilderFixture.layers(s))
       assert house.styles.series.stroke == Chart.var(:hue)
     end
 
@@ -889,7 +881,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      {_name, house} = hd(s.assigns.layers)
+      {_name, house} = hd(BuilderFixture.layers(s))
       refute Map.has_key?(house.styles.series, :stroke)
     end
 
@@ -897,13 +889,13 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, blank} =
         Builder.handle_event("edit", %{"_target" => ["stroke.var"], "stroke.var" => "  "}, s)
 
-      {_name, house} = hd(blank.assigns.layers)
+      {_name, house} = hd(BuilderFixture.layers(blank))
       refute Map.has_key?(house.styles.series, :stroke)
 
       {:noreply, same} =
         Builder.handle_event("edit", %{"_target" => ["zzz.mode"], "zzz.mode" => "variable"}, s)
 
-      assert same.assigns.layers == s.assigns.layers
+      assert BuilderFixture.layers(same) == BuilderFixture.layers(s)
     end
 
     test "the style context panel takes the same switch, into the local style", %{socket: s} do
@@ -925,7 +917,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert style_at(s) == [:series, %{opacity: Chart.var(:opacity)}]
+      assert BuilderFixture.style_at(s) == [:series, %{opacity: Chart.var(:opacity)}]
     end
   end
 
@@ -1062,58 +1054,75 @@ defmodule Visualize.Chart.BuilderTest do
   describe "saving (spec/14 §18.2)" do
     test "sends exactly the stack of the layers, under the tag and the id given" do
       layers = BuilderFixture.layers()
-      {:noreply, _socket} = Builder.handle_event("save", %{}, socket(layers, on_save: :kept))
 
-      assert_received {:kept, "b", design}
+      {:noreply, _socket} =
+        Builder.handle_event("save", %{}, BuilderFixture.socket(layers, on_save: :kept))
+
+      assert_received {:kept, "b", structure}
+      assert %{composite: %{uses: [_, _, _]}} = structure
+      {:ok, design, _missing} = Chart.flatten(structure, fn _id -> :error end)
       assert design == Chart.stack(layers)
     end
 
     test "the default tag is the documented one" do
-      {:noreply, _socket} = Builder.handle_event("save", %{}, socket(BuilderFixture.layers()))
+      {:noreply, _socket} =
+        Builder.handle_event("save", %{}, BuilderFixture.socket(BuilderFixture.layers()))
+
       assert_received {:visualize_chart_saved, "b", _design}
     end
 
     test "a disabled layer is not in the design that is sent" do
       layers = BuilderFixture.layers()
-      socket = socket(layers, disabled: MapSet.new([2]))
+      socket = BuilderFixture.socket(layers, disabled: MapSet.new([2]))
       {:noreply, _socket} = Builder.handle_event("save", %{}, socket)
 
-      assert_received {:visualize_chart_saved, "b", design}
+      assert_received {:visualize_chart_saved, "b", structure}
+      {:ok, design, _missing} = Chart.flatten(structure, fn _id -> :error end)
       assert design == Chart.stack(Enum.take(layers, 2))
       refute Map.has_key?(design, :marks)
     end
   end
 
   describe "the store (spec/14 §18.3)" do
-    test "a stored fragment is added as the highest layer" do
+    test "clicking a stored fragment opens it; dragging it in adds it as the highest layer" do
       layers = BuilderFixture.layers()
-      socket = socket(layers, store: Library)
-      {:noreply, socket} = Builder.handle_event("add_layer", %{"name" => "design:1"}, socket)
+      socket = BuilderFixture.socket(layers, store: Library)
 
-      assert socket.assigns.layers ==
+      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "design:1"}, socket)
+      assert opened.assigns.open.id == Library.baseline_id()
+      assert BuilderFixture.layers(opened) == layers
+
+      {:noreply, added} =
+        Builder.handle_event("insert", %{"name" => "design:1", "at" => 3}, socket)
+
+      assert BuilderFixture.layers(added) ==
                layers ++ [{"baseline", %{version: 1, frame: %{kind: :cartesian}}}]
 
-      assert socket.assigns.notice == nil
+      assert added.assigns.notice == nil
     end
 
     test "a name the store does not hold is a notice and changes no layer" do
       layers = BuilderFixture.layers()
-      socket = socket(layers, store: Library)
+      socket = BuilderFixture.socket(layers, store: Library)
       {:noreply, missing} = Builder.handle_event("add_layer", %{"name" => "design:2"}, socket)
       {:noreply, absent} = Builder.handle_event("add_layer", %{"name" => "nope"}, socket)
 
-      assert missing.assigns.layers == layers
+      assert BuilderFixture.layers(missing) == layers
       assert missing.assigns.notice == "no fragment is stored under design:2"
       assert absent.assigns.notice == "no fragment is stored under nope"
     end
 
     test "put/2 keeps the stacked design, and its refusal is shown and not interpreted" do
       layers = BuilderFixture.layers()
-      library = socket(layers, store: Library)
+      library = BuilderFixture.socket(layers, store: Library)
       {:noreply, kept} = Builder.handle_event("put_design", %{"name" => "x"}, library)
 
       {:noreply, refused} =
-        Builder.handle_event("put_design", %{"name" => "x"}, socket(layers, store: Refusing))
+        Builder.handle_event(
+          "put_design",
+          %{"name" => "x"},
+          BuilderFixture.socket(layers, store: Refusing)
+        )
 
       assert kept.assigns.notice == nil
       assert refused.assigns.notice == "the store refused the design: :read_only"
@@ -1122,7 +1131,7 @@ defmodule Visualize.Chart.BuilderTest do
 
   describe "editing (spec/14 §18.7)" do
     test "the open node and the open tab are the component's own state" do
-      socket = socket(BuilderFixture.layers())
+      socket = BuilderFixture.socket(BuilderFixture.layers())
       {:noreply, moved} = Builder.handle_event("select_node", %{"node" => "frame.size"}, socket)
       {:noreply, tabbed} = Builder.handle_event("facet", %{"facet" => "style"}, socket)
       {:noreply, unknown} = Builder.handle_event("facet", %{"facet" => "nonsense"}, socket)
@@ -1134,43 +1143,45 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "a parsed value is written into the selected layer at the node's path" do
-      socket = socket(BuilderFixture.layers(), node_label: "frame.size")
+      socket = BuilderFixture.socket(BuilderFixture.layers(), node_label: "frame.size")
       params = %{"_target" => ["width"], "width" => "640", "height" => "200"}
       {:noreply, edited} = Builder.handle_event("edit", params, socket)
 
-      assert {:house, house} = hd(edited.assigns.layers)
+      assert {:house, house} = hd(BuilderFixture.layers(edited))
       assert house.frame.size == %{width: 640, height: 200}
-      assert Enum.drop(edited.assigns.layers, 1) == Enum.drop(BuilderFixture.layers(), 1)
+      assert Enum.drop(BuilderFixture.layers(edited), 1) == Enum.drop(BuilderFixture.layers(), 1)
     end
 
     test "a blank control removes the key, and an unchecked checkbox writes false" do
-      socket = socket(BuilderFixture.layers(), selected: 1, node_label: "frame.axes[0]")
+      socket =
+        BuilderFixture.socket(BuilderFixture.layers(), selected: 1, node_label: "frame.axes[0]")
+
       blank = %{"_target" => ["ticks"], "ticks" => ""}
       {:noreply, removed} = Builder.handle_event("edit", blank, socket)
 
-      assert {:shared, shared} = Enum.at(removed.assigns.layers, 1)
+      assert {:shared, shared} = Enum.at(BuilderFixture.layers(removed), 1)
       assert hd(shared.frame.axes) == %{scale: :x, side: :bottom}
 
       {:noreply, unchecked} = Builder.handle_event("edit", %{"_target" => ["grid"]}, socket)
-      assert {:shared, off} = Enum.at(unchecked.assigns.layers, 1)
+      assert {:shared, off} = Enum.at(BuilderFixture.layers(unchecked), 1)
       assert hd(off.frame.axes).grid == false
     end
 
     test "a key the node kind does not declare changes nothing" do
-      socket = socket(BuilderFixture.layers())
+      socket = BuilderFixture.socket(BuilderFixture.layers())
       params = %{"_target" => ["stoke_width"], "stoke_width" => "3"}
       {:noreply, edited} = Builder.handle_event("edit", params, socket)
 
-      assert edited.assigns.layers == BuilderFixture.layers()
+      assert BuilderFixture.layers(edited) == BuilderFixture.layers()
     end
 
     test "a chart layer becomes the map it is, which is the same design" do
       {:ok, chart} = Chart.from_map(Chart.stack(BuilderFixture.layers()))
-      socket = socket([chart], node_label: "frame.size")
+      socket = BuilderFixture.socket([chart], node_label: "frame.size")
       params = %{"_target" => ["width"], "width" => "640"}
       {:noreply, edited} = Builder.handle_event("edit", params, socket)
 
-      [layer] = edited.assigns.layers
+      [{_name, layer}] = BuilderFixture.layers(edited)
       assert is_map(layer) and not is_struct(layer)
       assert layer.frame.size.width == 640
       assert Map.delete(layer.frame, :size) == Map.delete(Chart.to_map(chart).frame, :size)
@@ -1196,7 +1207,14 @@ defmodule Visualize.Chart.BuilderTest do
   end
 
   # The builder rendered with a given node open, which is what selecting a tab does.
+  # A selected position becomes the seeded use's id, which is one-based (spec/14 §19.3).
   defp at_node(label, opts \\ []) do
+    opts =
+      case Keyword.pop(opts, :selected) do
+        {nil, rest} -> rest
+        {index, rest} -> Keyword.put(rest, :selected, {:use, index + 1})
+      end
+
     render_component(
       Builder,
       Enum.into(opts, %{
@@ -1207,36 +1225,5 @@ defmodule Visualize.Chart.BuilderTest do
         node_label: label
       })
     )
-  end
-
-  # The `style` value of the open node's layer, whatever shape it is in.
-  defp style_at(socket) do
-    {_name, layer} = Enum.at(socket.assigns.layers, socket.assigns.selected)
-    layer |> Map.fetch!(:marks) |> hd() |> Map.get(:style)
-  end
-
-  defp names(socket), do: Enum.map(socket.assigns.layers, fn {name, _layer} -> name end)
-
-  defp socket(layers, opts \\ []) do
-    assigns =
-      [
-        id: "b",
-        layers: layers,
-        disabled: MapSet.new(),
-        notice: nil,
-        store: nil,
-        on_save: :visualize_chart_saved,
-        selected: 0,
-        facet: nil,
-        node_label: "design",
-        sources: BuilderFixture.sources(),
-        vars: %{},
-        bindings: %{},
-        theme: nil
-      ]
-      |> Keyword.merge(opts)
-      |> Map.new()
-
-    Phoenix.Component.assign(%Socket{}, assigns)
   end
 end

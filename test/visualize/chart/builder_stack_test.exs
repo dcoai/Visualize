@@ -10,7 +10,6 @@ defmodule Visualize.Chart.Builder.StackTest do
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
-  alias Phoenix.LiveView.Socket
   alias Visualize.BuilderFixture
   alias Visualize.Chart
   alias Visualize.Chart.Builder
@@ -101,40 +100,41 @@ defmodule Visualize.Chart.Builder.StackTest do
 
   describe "the events (spec/14 §18.8, §18.10)" do
     test "selecting a layer opens its root node" do
-      socket = socket(node_label: "frame.size")
+      socket = BuilderFixture.socket(BuilderFixture.layers(), node_label: "frame.size")
       {:noreply, chosen} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
       {:noreply, absent} = Builder.handle_event("select_layer", %{"index" => "9"}, socket)
 
-      assert chosen.assigns.selected == 2
+      assert BuilderFixture.selected(chosen) == 2
       assert chosen.assigns.node_label == "design"
-      assert absent.assigns.selected == 0
+      assert BuilderFixture.selected(absent) == 0
     end
 
     test "disabling drops the layer from the design and keeps it in the list" do
-      socket = socket()
+      socket = BuilderFixture.socket(BuilderFixture.layers())
       {:noreply, off} = Builder.handle_event("toggle_layer", %{"index" => "0"}, socket)
       {:noreply, on} = Builder.handle_event("toggle_layer", %{"index" => "0"}, off)
 
-      assert off.assigns.layers == BuilderFixture.layers()
-      assert off.assigns.disabled == MapSet.new([0])
-      assert design(off) == Chart.stack(Enum.drop(BuilderFixture.layers(), 1))
-      assert on.assigns.disabled == MapSet.new()
+      assert BuilderFixture.layers(off) == BuilderFixture.layers()
+      assert BuilderFixture.disabled(off) == MapSet.new([0])
+      assert BuilderFixture.design(off) == Chart.stack(Enum.drop(BuilderFixture.layers(), 1))
+      assert BuilderFixture.disabled(on) == MapSet.new()
     end
 
     test "a move changes precedence, and the selection and the disabled set follow their layers" do
-      socket = socket(selected: 2, disabled: MapSet.new([0]))
+      socket =
+        BuilderFixture.socket(BuilderFixture.layers(), selected: 2, disabled: MapSet.new([0]))
 
       {:noreply, moved} =
         Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, socket)
 
       [house, shared, panel] = BuilderFixture.layers()
-      assert moved.assigns.layers == [panel, house, shared]
-      assert moved.assigns.selected == 0
-      assert moved.assigns.disabled == MapSet.new([1])
+      assert BuilderFixture.layers(moved) == [panel, house, shared]
+      assert BuilderFixture.selected(moved) == 0
+      assert BuilderFixture.disabled(moved) == MapSet.new([1])
     end
 
     test "a move off either end changes nothing" do
-      socket = socket()
+      socket = BuilderFixture.socket(BuilderFixture.layers())
       {:noreply, up} = Builder.handle_event("reorder", %{"from" => 0, "to" => -1}, socket)
 
       {:noreply, down} =
@@ -144,20 +144,20 @@ defmodule Visualize.Chart.Builder.StackTest do
         Builder.handle_event("reorder", %{"from" => 1, "to" => 1}, socket)
 
       for unchanged <- [up, down, same] do
-        assert unchanged.assigns.layers == BuilderFixture.layers()
+        assert BuilderFixture.layers(unchanged) == BuilderFixture.layers()
       end
     end
 
     test "the hook's reorder is the same move, with the integers it pushes" do
-      socket = socket()
+      socket = BuilderFixture.socket(BuilderFixture.layers())
       {:noreply, dropped} = Builder.handle_event("reorder", %{"from" => 0, "to" => 2}, socket)
 
       [house, shared, panel] = BuilderFixture.layers()
-      assert dropped.assigns.layers == [shared, panel, house]
+      assert BuilderFixture.layers(dropped) == [shared, panel, house]
     end
 
     test "inspecting selects the layer and opens the deepest node that owns the path" do
-      socket = socket()
+      socket = BuilderFixture.socket(BuilderFixture.layers())
 
       {:noreply, deep} =
         Builder.handle_event(
@@ -169,9 +169,9 @@ defmodule Visualize.Chart.Builder.StackTest do
       {:noreply, shallow} =
         Builder.handle_event("inspect", %{"path" => "theme", "layer" => "0"}, socket)
 
-      assert deep.assigns.selected == 2
+      assert BuilderFixture.selected(deep) == 2
       assert deep.assigns.node_label == "marks[0].channels"
-      assert shallow.assigns.selected == 0
+      assert BuilderFixture.selected(shallow) == 0
       assert shallow.assigns.node_label == "design"
     end
 
@@ -185,33 +185,4 @@ defmodule Visualize.Chart.Builder.StackTest do
 
   defp rendered(name),
     do: BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), name))
-
-  defp design(socket) do
-    {:noreply, _socket} = Builder.handle_event("save", %{}, socket)
-    assert_received {:visualize_chart_saved, "b", design}
-    design
-  end
-
-  defp socket(opts \\ []) do
-    assigns =
-      [
-        id: "b",
-        layers: BuilderFixture.layers(),
-        disabled: MapSet.new(),
-        notice: nil,
-        store: nil,
-        on_save: :visualize_chart_saved,
-        selected: 0,
-        facet: nil,
-        node_label: "design",
-        sources: BuilderFixture.sources(),
-        vars: %{},
-        bindings: %{},
-        theme: nil
-      ]
-      |> Keyword.merge(opts)
-      |> Map.new()
-
-    Phoenix.Component.assign(%Socket{}, assigns)
-  end
 end

@@ -11,7 +11,6 @@ defmodule Visualize.Chart.Builder.ParamsTest do
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
-  alias Phoenix.LiveView.Socket
   alias Visualize.BuilderFixture
   alias Visualize.Chart
   alias Visualize.Chart.Builder
@@ -145,9 +144,9 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       {:ok, json} = Chart.to_json(chart)
       {:noreply, opened} = Builder.handle_event("import", %{"document" => json}, socket())
 
-      assert opened.assigns.layers == [{:imported, Chart.to_map(chart)}]
-      assert opened.assigns.selected == 0
-      assert opened.assigns.disabled == MapSet.new()
+      assert BuilderFixture.layers(opened) == [{:imported, Chart.to_map(chart)}]
+      assert BuilderFixture.selected(opened) == 0
+      assert BuilderFixture.disabled(opened) == MapSet.new()
       assert opened.assigns.bindings == %{}
       assert opened.assigns.notice == nil
     end
@@ -158,7 +157,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
 
       assert {:noreply, %{assigns: %{notice: "design: " <> _}}} = broken
       assert {:noreply, %{assigns: %{notice: "version: is required"}}} = invalid
-      assert elem(broken, 1).assigns.layers == BuilderFixture.parameterised()
+      assert BuilderFixture.layers(elem(broken, 1)) == BuilderFixture.parameterised()
     end
 
     test "without Jason the panel says so rather than raising" do
@@ -181,25 +180,9 @@ defmodule Visualize.Chart.Builder.ParamsTest do
   end
 
   defp socket(opts \\ []) do
-    assigns =
-      [
-        id: "b",
-        layers: BuilderFixture.parameterised(),
-        disabled: MapSet.new(),
-        notice: nil,
-        store: nil,
-        on_save: :visualize_chart_saved,
-        selected: 0,
-        facet: nil,
-        node_label: "design",
-        sources: BuilderFixture.sources(),
-        vars: %{},
-        bindings: %{},
-        theme: nil
-      ]
-      |> Keyword.merge(opts)
-      |> Map.new()
-
-    Phoenix.Component.assign(%Socket{}, assigns)
+    BuilderFixture.socket(
+      BuilderFixture.parameterised(),
+      Keyword.merge([on_save: :visualize_chart_saved, vars: %{}, theme: nil], opts)
+    )
   end
 end

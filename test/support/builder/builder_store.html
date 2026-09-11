@@ -2,9 +2,19 @@
   
   <div class="vis-builder-toolbar">
     <span class="vis-builder-layer-count">3</span>
+    <form class="vis-builder-new" phx-submit="new_fragment" phx-target="-1">
+      <label class="vis-builder-control-label" for="builder-new-kind">New</label>
+      <select id="builder-new-kind" name="kind" class="vis-builder-new-kind">
+        <option value="composite">composite</option><option value="design">design</option><option value="theme">theme</option><option value="style">style</option><option value="frame">frame</option><option value="scale">scale</option><option value="axis">axis</option><option value="source">source</option><option value="var">var</option><option value="mark">mark</option><option value="label">label</option>
+      </select>
+      <button type="submit" class="vis-builder-new-submit">fragment</button>
+    </form>
+    
     <form class="vis-builder-keep" phx-submit="put_design" phx-target="-1">
-      <label class="vis-builder-control-label" for="builder-keep">Save the stack as</label>
-      <input id="builder-keep" type="text" name="name" class="vis-builder-name" value="" placeholder="Category:sub-category:name">
+      <label class="vis-builder-control-label" for="builder-keep">
+        Save the stack as
+      </label>
+      <input id="builder-keep" type="text" name="name" class="vis-builder-name" value="" placeholder="Group:sub-group:name">
       <button type="submit" class="vis-builder-put">Save to library</button>
     </form>
     <button type="button" class="vis-builder-save" phx-click="save" phx-target="-1">
@@ -49,6 +59,7 @@
     <button type="button" draggable="false" class="vis-builder-layer-toggle" title="Disable panel" aria-label="Disable panel" phx-click="toggle_layer" phx-value-index="2" phx-target="-1"><span class="vis-builder-action-label">Disable</span></button>
   </li>
 </ol>
+      
     </aside>
     <main class="vis-builder-main">
       <nav class="vis-builder-nodes">

@@ -159,6 +159,10 @@ defmodule Visualize.Chart.Use do
   cascaded over the result — everything `resolve/2` does after the fetch (spec/14 §19.3).
   """
   @spec over(t(), map()) :: map()
+  # A mask of everything is the whole site removed, local included: that is what disabling
+  # a layer means, and an inline-only site is nothing but its local (spec/14 §19.3).
+  def over(%__MODULE__{mask: :all}, _fragment), do: %{}
+
   def over(%__MODULE__{mask: mask, vars: vars, local: local}, fragment) do
     fragment
     |> mask(mask)

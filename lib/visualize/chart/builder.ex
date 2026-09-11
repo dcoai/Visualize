@@ -1,7 +1,7 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Chart.Builder do
     @moduledoc """
-    An embeddable editor for a stack of design fragments (spec/14 §18).
+    An embeddable editor of typed fragments (spec/14 §18, §19).
 
     A `Phoenix.LiveComponent`, not a `Phoenix.LiveView`: a LiveView owns a route and a
     session, and this embeds in whatever page a host already has.
@@ -11,18 +11,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     The host owns the route, the layers the builder starts with, the pool of sample sources
     the preview binds to, the library of saved fragments (`Visualize.Chart.Builder.Store`)
-    and what saving means. The builder owns the editing state alone — which layers are
-    disabled, which is selected, what the toolbar last reported — and the one thing that
-    leaves it is a message: saving sends `{on_save, id, design}` to the host LiveView
-    process, where `design` is `Visualize.Chart.stack/1` of the enabled layers, the same map
-    the preview drew. It pushes no event and patches no URL (D-85).
+    and what saving means. The builder owns the editing state alone: a **stack of use
+    sites** (§19.3) — each a fragment used at a position, with what is masked, bound and
+    added there — and, when a library entry is opened, that entry's fragment. The one thing
+    that leaves it is a message: saving sends `{on_save, id, structure}` to the host
+    LiveView process, where `structure` is the stack as a composite (§19.6); a host that
+    wants a flat design flattens it with `Visualize.Chart.flatten/2`. It pushes no event
+    and patches no URL (D-85).
 
     ## Assigns
 
     * `id` - the component id (required)
-    * `layers` - the fragments in precedence order, the higher later, exactly as
-      `Visualize.Chart.stack/1` reads them: a design map, a `Visualize.Chart` or a
-      `{name, layer}` pair (default `[]`)
+    * `layers` - the fragments the stack starts with, in precedence order, the higher
+      later: a design map, a `Visualize.Chart` or a `{name, layer}` pair (default `[]`).
+      Each is seeded as an inline-only use site (§19.9).
     * `sources` - the pool of sample sources the preview binds the design's slots to, as
       `Visualize.Chart.apply/2` takes it (default `%{}`)
     * `vars` - the values the preview applies the design's variables with (default `%{}`)
@@ -37,7 +39,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     ## Handling the message
 
-        def handle_info({:design_saved, "builder", design}, socket) do
+        def handle_info({:design_saved, "builder", structure}, socket) do
+          {:ok, design, _missing} = Visualize.Chart.flatten(structure, &MyStore.fetch/1)
           {:noreply, assign(socket, design: design)}
         end
 
@@ -60,12 +63,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Palette,
       Params,
       Preview,
+      Stack,
       Store,
       Styles,
       StyleStack
     }
 
-    alias Visualize.Chart.{Fragment, Schema}
+    alias Visualize.Chart.{Fragment, Schema, Use}
 
     @doc false
     # The assigns a host may leave out, and their defaults (spec/14 §18.2). `attr/3` applies
@@ -85,7 +89,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     attr(:id, :string, required: true, doc: "the component id")
-    attr(:layers, :list, default: [], doc: "the fragments in precedence order, the higher later")
+
+    attr(:layers, :list,
+      default: [],
+      doc: "the fragments the stack starts with, the higher later"
+    )
+
     attr(:sources, :map, default: %{}, doc: "the pool the preview binds the design's slots to")
     attr(:vars, :map, default: %{}, doc: "the values the preview applies the variables with")
     attr(:theme, :any, default: nil, doc: "a `Visualize.Theme` for the preview")
@@ -108,8 +117,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def mount(socket) do
       {:ok,
        assign(socket,
-         disabled: MapSet.new(),
-         selected: 0,
+         uses: [],
+         labels: %{},
+         selected: nil,
+         open: nil,
          notice: nil,
          facet: nil,
          added: nil,
@@ -132,18 +143,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:ok, assign_new(socket, :bindings, fn -> socket.assigns.vars end)}
     end
 
-    # `layers` is seeded and not controlled, because it is the assign the builder writes to:
-    # adopting the host's list on every parent render would discard the edit that render was
-    # caused by. A list that differs from the one the host last gave is a host deliberately
-    # replacing the stack and is taken; an equal one is a host re-rendering for its own
-    # reasons and leaves the editing session alone (spec/14 §18.1, D-95).
+    # `layers` is seeded and not controlled, because the stack is what the builder writes
+    # to: adopting the host's list on every parent render would discard the edit that render
+    # was caused by. A list that differs from the one the host last gave is a host
+    # deliberately replacing the stack and is taken; an equal one leaves the editing session
+    # alone (spec/14 §18.1, D-95). Each fragment becomes an inline-only use (§19.9).
     defp seed(socket, %{layers: layers}) do
-      if Map.get(socket.assigns, :host_layers, :unseeded) == layers,
-        do: socket,
-        else: assign(socket, layers: layers, host_layers: layers)
+      if Map.get(socket.assigns, :host_layers, :unseeded) == layers do
+        socket
+      else
+        {uses, labels} = Stack.seed(layers)
+
+        assign(socket,
+          uses: uses,
+          labels: labels,
+          selected: selection(socket.assigns.selected, uses),
+          host_layers: layers
+        )
+      end
     end
 
     defp seed(socket, _assigns), do: socket
+
+    # A selection that names a use the seeded stack has is kept — a host may seed one, and
+    # the person's place survives a replaced list of the same shape — else the first use.
+    defp selection(selected, uses) do
+      case Stack.get(uses, selected) do
+        nil -> uses |> List.first() |> then(&(&1 && &1.id))
+        use -> use.id
+      end
+    end
 
     defp default({key, value}, socket), do: assign_new(socket, key, fn -> value end)
 
@@ -155,16 +184,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
       <div id={@id} class={class("vis-builder", @class)}>
         <Styles.styles :if={@styles} />
         <div class="vis-builder-toolbar">
-          <span class="vis-builder-layer-count">{length(@layers)}</span>
+          <span class="vis-builder-layer-count">{length(@uses)}</span>
+          <form :if={@store} class="vis-builder-new" phx-submit="new_fragment" phx-target={@myself}>
+            <label class="vis-builder-control-label" for={@id <> "-new-kind"}>New</label>
+            <select id={@id <> "-new-kind"} name="kind" class="vis-builder-new-kind">
+              <option :for={kind <- Stack.kinds()} value={kind}>{kind}</option>
+            </select>
+            <button type="submit" class="vis-builder-new-submit">fragment</button>
+          </form>
+          <span :if={@open} class="vis-builder-opened">
+            editing <strong>{@open.name || "a new #{@open.kind}"}</strong>
+            <button type="button" class="vis-builder-close" phx-click="close" phx-target={@myself}>
+              back to the stack
+            </button>
+          </span>
           <form :if={@store} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
-            <label class="vis-builder-control-label" for={@id <> "-keep"}>Save the stack as</label>
+            <label class="vis-builder-control-label" for={@id <> "-keep"}>
+              {if @open, do: "Save as", else: "Save the stack as"}
+            </label>
             <input
               id={@id <> "-keep"}
               type="text"
               name="name"
               class="vis-builder-name"
-              value=""
-              placeholder="Category:sub-category:name"
+              value={(@open && @open.name) || ""}
+              placeholder="Group:sub-group:name"
             />
             <button type="submit" class="vis-builder-put">Save to library</button>
           </form>
@@ -179,7 +223,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             id={@id <> "-library"}
             entries={Store.list(@store)}
             view={@library_view}
-            open={@added}
+            open={(@open && @open.id) || @added}
             target={@myself}
           />
           <aside class="vis-builder-sidebar">
@@ -187,10 +231,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <Layers.panel
               id={@id <> "-layers"}
               layers={@layers}
-              selected={@selected}
+              selected={@selected_index}
               disabled={@disabled}
               target={@myself}
             />
+            <p :if={@missing != []} class="vis-builder-missing">
+              {length(@missing)} {if length(@missing) == 1, do: "reference", else: "references"} no longer exist — showing through
+            </p>
           </aside>
           <main class="vis-builder-main">
             <nav class="vis-builder-nodes">
@@ -291,37 +338,76 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     defdelegate styles(assigns), to: Styles
 
+    # -- the message, and the library ----------------------------------------------------
+
+    # Save sends structure, never the flattened result (spec/14 §19.6, D-103).
     @impl true
     def handle_event("save", _params, socket) do
       %{on_save: tag, id: id} = socket.assigns
-      send(self(), {tag, id, design(socket.assigns)})
+      send(self(), {tag, id, structure(socket.assigns)})
       {:noreply, assign(socket, :notice, nil)}
     end
 
+    # Click opens; only drag composes (spec/14 §19.8).
     def handle_event("add_layer", %{"name" => submitted}, socket) do
       case fetch(socket.assigns.store, submitted) do
-        {:ok, entry} -> {:noreply, added(socket, entry.name, entry.fragment)}
+        {:ok, entry} -> {:noreply, opened_entry(socket, entry)}
         :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
       end
     end
 
-    # Saving names the entry, never the body: the stack's result is stored under a fresh id
-    # (spec/14 §19.7). Until #178 the body is still the stacked design; structure comes there.
-    def handle_event("put_design", %{"name" => name}, socket) do
-      %{store: store} = socket.assigns
-      fragment = design(socket.assigns)
+    # A new fragment of a kind starts empty and valid (spec/14 §19.8).
+    def handle_event("new_fragment", %{"kind" => submitted}, socket) do
+      case Enum.find(Stack.kinds(), &(to_string(&1) == submitted)) do
+        nil ->
+          {:noreply, assign(socket, :notice, "#{submitted} is not a kind of fragment")}
 
-      entry = %{id: nil, name: name, kind: Fragment.kind(fragment), fragment: fragment}
-      {:noreply, assign(socket, :notice, kept(store && Store.put(store, entry)))}
+        kind ->
+          entry = %{id: nil, name: nil, kind: kind, fragment: Stack.empty(kind)}
+          {:noreply, opened_entry(socket, entry)}
+      end
     end
+
+    def handle_event("close", _params, socket) do
+      {:noreply, assign(socket, open: nil, node_label: "design", facet: nil, style_entry: nil)}
+    end
+
+    # Saving names the entry, never the body; a composite is saved as its structure; and a
+    # fragment opened as one kind is refused if it drifted into another (spec/14 §19.6, §19.8).
+    def handle_event("put_design", %{"name" => name}, socket) do
+      %{store: store, open: open} = socket.assigns
+      trimmed = String.trim(name)
+
+      cond do
+        is_nil(store) ->
+          {:noreply, assign(socket, :notice, "no store is configured")}
+
+        trimmed == "" ->
+          {:noreply, assign(socket, :notice, "a saved fragment needs a name")}
+
+        open != nil and Fragment.kind(open.fragment) != open.kind ->
+          {:noreply, assign(socket, :notice, drifted(open))}
+
+        open != nil ->
+          entry = %{id: open.id, name: trimmed, kind: open.kind, fragment: open.fragment}
+
+          {:noreply,
+           saved(socket, Store.put(store, entry), fn s, id ->
+             assign(s, :open, %{open | id: id, name: trimmed})
+           end)}
+
+        true ->
+          entry = %{id: nil, name: trimmed, kind: :composite, fragment: structure(socket.assigns)}
+          {:noreply, saved(socket, Store.put(store, entry), fn s, _id -> s end)}
+      end
+    end
+
+    # -- the strip -----------------------------------------------------------------------
 
     def handle_event("select_node", %{"node" => label}, socket) do
       {:noreply, assign(socket, node_label: label, facet: nil)}
     end
 
-    # A root the selected layer declares opens there; one it does not takes the person to
-    # the highest layer that declares it, which is what the inspector and the palette
-    # already do (spec/14 §18.13, §18.9, §18.14).
     # Two views over one store; group is the default because it is the one a person
     # authored deliberately (spec/14 §19.8).
     def handle_event("library_view", %{"view" => "kind"}, socket),
@@ -334,19 +420,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, assign(socket, node_label: "variables", facet: nil)}
     end
 
+    # A root the editing target declares opens there; one it does not takes the person to
+    # the highest layer that declares it — what the inspector and the palette already do
+    # (spec/14 §18.13, §18.9, §18.14).
     def handle_event("select_root", %{"root" => root}, socket) do
-      %{layers: layers, selected: selected} = socket.assigns
-
-      case first_under(Enum.at(layers, selected), root) do
+      case first_under(target_fragment(socket.assigns), root) do
         nil ->
-          case Enum.find(Enum.reverse(Enum.with_index(layers)), fn {layer, _index} ->
-                 first_under(layer, root)
-               end) do
+          %{layers: layers} = editing(socket.assigns)
+
+          layers
+          |> Enum.with_index()
+          |> Enum.reverse()
+          |> Enum.find(fn {{_label, fragment}, _index} -> first_under(fragment, root) end)
+          |> case do
             nil ->
               {:noreply, socket}
 
-            {layer, index} ->
-              {:noreply, socket |> select(index) |> opened(first_under(layer, root))}
+            {{_label, fragment}, index} ->
+              {:noreply, socket |> select(index) |> opened(first_under(fragment, root))}
           end
 
         label ->
@@ -354,12 +445,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    def handle_event("facet", %{"facet" => facet}, socket) do
+      %{entry: entry} = editing(socket.assigns)
+      facets = Enum.map(Schema.describe(entry.kind), & &1.facet)
+      {:noreply, assign(socket, :facet, Enum.find(facets, &(to_string(&1) == facet)))}
+    end
+
+    # -- the stack -----------------------------------------------------------------------
+
     def handle_event("select_layer", %{"index" => index}, socket) do
       {:noreply, select(socket, position(index))}
     end
 
     def handle_event("toggle_layer", %{"index" => index}, socket) do
-      {:noreply, update(socket, :disabled, &toggle(&1, position(index)))}
+      case Enum.at(socket.assigns.uses, position(index)) do
+        nil ->
+          {:noreply, socket}
+
+        use ->
+          {:noreply,
+           update(socket, :uses, &Stack.update(&1, use.id, fn u -> Stack.toggle(u) end))}
+      end
     end
 
     def handle_event("reorder", %{"scope" => "style", "from" => from, "to" => to}, socket) do
@@ -367,8 +473,48 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def handle_event("reorder", %{"from" => from, "to" => to}, socket) do
-      {:noreply, moved(socket, position(from), position(to))}
+      {:noreply, update(socket, :uses, &Stack.move(&1, position(from), position(to)))}
     end
+
+    # A style fragment dropped on a site's stack: its id goes into the stack where it was
+    # dropped, and nothing is merged or copied (spec/14 §18.20, §19.6).
+    def handle_event("insert", %{"scope" => "style", "name" => submitted, "at" => at}, socket) do
+      case fetch(socket.assigns.store, submitted) do
+        {:ok, %{kind: :style} = entry} ->
+          {:noreply,
+           socket
+           |> restacked(fn stack ->
+             List.insert_at(stack, clamp(position(at), stack), entry.id)
+           end)
+           |> assign(added: entry.id, notice: nil)}
+
+        {:ok, entry} ->
+          {:noreply,
+           assign(
+             socket,
+             :notice,
+             "#{entry.name} is a #{entry.kind}, and a style site takes a style"
+           )}
+
+        :error ->
+          {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+      end
+    end
+
+    # A fragment dragged out of the library lands at the position it was dropped at, as a
+    # use referring to it (spec/14 §18.17, §19.3).
+    def handle_event("insert", %{"name" => submitted, "at" => at}, socket) do
+      case fetch(socket.assigns.store, submitted) do
+        {:ok, entry} -> {:noreply, inserted(socket, entry, position(at))}
+        :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+      end
+    end
+
+    def handle_event("inspect", %{"path" => path, "layer" => layer}, socket) do
+      {:noreply, socket |> select(position(layer)) |> opened(path)}
+    end
+
+    # -- style stacks and the palette ----------------------------------------------------
 
     def handle_event("add_style_entry", %{"name" => submitted}, socket) do
       case Editor.parse({:ref, :style}, String.trim(submitted)) do
@@ -386,57 +532,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, assign(socket, :style_entry, position(index))}
     end
 
-    # Every edit at a site lands in its local style, never in a named entry: editing a mark
-    # that references `:series` must not restyle every other mark that references the same
-    # name (spec/14 §18.19, D-98). The local entry is created when there is none.
+    # Every edit at a site lands in its local style, never in a named entry (§18.19, D-98).
     def handle_event("edit_style", params, socket) do
       {:noreply, styled(socket, Editor.change(:style, params))}
     end
 
-    # A style fragment dropped on a site's stack is the answer to "which style did you
-    # mean": the drop said where it goes, so no name has to be bound (spec/14 §18.20).
-    def handle_event("insert", %{"scope" => "style", "name" => submitted, "at" => at}, socket) do
-      with {:ok, entry} <- fetch(socket.assigns.store, submitted),
-           [style] <- declared_styles(entry.fragment) do
-        {:noreply, dropped(socket, entry.name, entry.fragment, style, position(at))}
-      else
-        :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
-        [] -> {:noreply, assign(socket, :notice, "#{named(socket, submitted)} declares no style")}
-        many -> {:noreply, assign(socket, :notice, refusal(named(socket, submitted), many))}
-      end
-    end
-
-    # A fragment dragged out of the library lands at the position it was dropped at, so
-    # precedence is chosen in the gesture rather than fixed afterwards (spec/14 §18.17).
-    def handle_event("insert", %{"name" => submitted, "at" => at}, socket) do
-      case fetch(socket.assigns.store, submitted) do
-        {:ok, entry} ->
-          {:noreply, inserted(socket, entry.name, entry.fragment, position(at))}
-
-        :error ->
-          {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
-      end
-    end
-
-    def handle_event("inspect", %{"path" => path, "layer" => layer}, socket) do
-      {:noreply, socket |> select(position(layer)) |> opened(path)}
-    end
-
-    def handle_event("set_var", %{"_target" => [name]} = params, socket) do
-      free = Enum.find(Chart.free_vars(socket.assigns.layers), &(to_string(&1.name) == name))
-      {:noreply, bound(socket, free, params[name])}
-    end
-
-    def handle_event("import", %{"document" => document}, socket) do
-      case Chart.from_json(document) do
-        {:ok, chart} -> {:noreply, imported(socket, Chart.to_map(chart))}
-        {:error, reason} -> {:noreply, assign(socket, :notice, notice(reason))}
-      end
-    end
-
-    # A style is created in the selected layer, because that is where every edit goes, and
-    # the editor opens on it: creating a style and not being taken to it would be half a
-    # gesture (spec/14 §18.14).
     def handle_event("add_style", %{"name" => submitted}, socket) do
       case Editor.parse({:ref, :style}, String.trim(submitted)) do
         {:ok, name} ->
@@ -451,135 +551,64 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The palette is a view of the stack, so the style a person picks may be declared by a
-    # layer other than the selected one; the highest that declares it is the one that owns
-    # the value, which is the same rule the inspector follows (§18.9).
     def handle_event("select_style", %{"name" => submitted}, socket) do
-      path = "styles." <> submitted
+      %{layers: layers} = editing(socket.assigns)
 
-      case declaring(socket.assigns.layers, submitted) do
+      case declaring(layers, submitted) do
         nil -> {:noreply, socket}
-        index -> {:noreply, socket |> select(index) |> opened(path)}
+        index -> {:noreply, socket |> select(index) |> opened("styles." <> submitted)}
       end
     end
 
-    def handle_event("facet", %{"facet" => facet}, socket) do
-      %{entry: entry} = editing(socket.assigns)
-      facets = Enum.map(Schema.describe(entry.kind), & &1.facet)
-      {:noreply, assign(socket, :facet, Enum.find(facets, &(to_string(&1) == facet)))}
-    end
+    # -- the form, the parameters, the document ------------------------------------------
 
     def handle_event("edit", params, socket) do
       %{entry: entry} = editing(socket.assigns)
       {:noreply, edited(socket, entry, Editor.change(entry.kind, params))}
     end
 
-    # A position arrives as a string from a `phx-value-index` and as a number from the hook.
-    defp position(index) when is_integer(index), do: index
+    def handle_event("set_var", %{"_target" => [name]} = params, socket) do
+      %{layers: layers} = editing(socket.assigns)
+      free = Enum.find(Chart.free_vars(layers), &(to_string(&1.name) == name))
+      {:noreply, bound(socket, free, params[name])}
+    end
 
-    defp position(index) when is_binary(index) do
-      case Integer.parse(index) do
-        {value, ""} -> value
-        _other -> -1
+    def handle_event("import", %{"document" => document}, socket) do
+      case Chart.from_json(document) do
+        {:ok, chart} -> {:noreply, imported(socket, Chart.to_map(chart))}
+        {:error, reason} -> {:noreply, assign(socket, :notice, notice(reason))}
       end
     end
 
-    defp position(_index), do: -1
+    # -- what is being edited ------------------------------------------------------------
 
-    defp select(socket, index) do
-      if index in positions(socket),
-        do: assign(socket, selected: index, node_label: "design", facet: nil),
-        else: socket
-    end
+    # The editing target: an opened entry's fragment, or the selected use resolved.
+    defp target_fragment(%{open: %{fragment: fragment}}), do: fragment
 
-    defp toggle(disabled, index) do
-      if index in disabled, do: MapSet.delete(disabled, index), else: MapSet.put(disabled, index)
-    end
+    defp target_fragment(%{uses: uses, labels: labels, selected: selected, store: store}) do
+      case Stack.get(uses, selected) do
+        nil ->
+          %{}
 
-    defp positions(socket), do: 0..(length(socket.assigns.layers) - 1)//1
-
-    # A move is list surgery, and the selection and the disabled set follow their layers:
-    # both are positions, and every position after the move is a different layer.
-    defp moved(socket, from, to) do
-      if from != to and from in positions(socket) and to in positions(socket) do
-        order = socket |> positions() |> Enum.to_list() |> shift(from, to)
-        moved = Map.new(Enum.with_index(order))
-
-        socket
-        |> assign(:layers, Enum.map(order, &Enum.at(socket.assigns.layers, &1)))
-        |> assign(:selected, Map.get(moved, socket.assigns.selected, socket.assigns.selected))
-        |> assign(:disabled, MapSet.new(socket.assigns.disabled, &Map.get(moved, &1, &1)))
-      else
-        socket
+        use ->
+          {[{_label, fragment}], _missing} = Stack.resolve([use], labels, Stack.fetch(store))
+          fragment
       end
     end
 
-    defp shift(list, from, to) do
-      {value, rest} = List.pop_at(list, from)
-      List.insert_at(rest, to, value)
-    end
-
-    # The node of the selected layer that owns a path: the deepest whose label is a prefix
-    # of it, and the layer's root where none is (spec/14 §18.9).
-    defp opened(socket, path) do
-      layer = fragment(Enum.at(socket.assigns.layers, socket.assigns.selected) || %{})
-
-      label =
-        layer
-        |> Editor.nodes()
-        |> Enum.filter(&owns?(&1.label, path))
-        |> Enum.max_by(&String.length(&1.label), fn -> %{label: "design"} end)
-        |> Map.fetch!(:label)
-
-      assign(socket, node_label: label, facet: nil)
-    end
-
-    defp owns?("design", _path), do: false
-
-    defp owns?(label, path) do
-      path == label or String.starts_with?(path, label <> ".") or
-        String.starts_with?(path, label <> "[")
-    end
-
-    defp edited(socket, _entry, nil), do: socket
-    defp edited(socket, entry, {key, parsed}), do: update_layer(socket, entry.path, key, parsed)
-
-    defp update_layer(socket, path, key, parsed) do
-      %{layers: layers, selected: selected} = socket.assigns
-
-      assign(socket, :layers, List.update_at(layers, selected, &write(&1, path, key, parsed)))
-    end
-
-    # A layer keeps its name; a chart layer becomes the map it is, which is the same design.
-    defp write({name, layer}, path, key, parsed), do: {name, write(layer, path, key, parsed)}
-
-    defp write(%Chart{} = chart, path, key, parsed),
-      do: write(Chart.to_map(chart), path, key, parsed)
-
-    defp write(fragment, path, key, {:ok, value}),
-      do: update_node(fragment, path, &Map.put(&1, key, value))
-
-    defp write(fragment, path, key, :error),
-      do: update_node(fragment, path, &Map.delete(&1, key))
-
-    defp update_node(nil, [], fun), do: fun.(%{})
-    defp update_node(container, [], fun), do: fun.(container)
-
-    # A fragment need not already carry the key a node is being added under: `styles` is
-    # absent until the first style is declared, and adding one is adding the key (§18.5).
-    defp update_node(nil, [key | _rest] = path, fun) when is_atom(key),
-      do: update_node(%{}, path, fun)
-
-    defp update_node(list, [index | rest], fun) when is_list(list) and is_integer(index),
-      do: List.update_at(list, index, &update_node(&1, rest, fun))
-
-    defp update_node(map, [key | rest], fun) when is_map(map),
-      do: Map.put(map, key, update_node(Map.get(map, key), rest, fun))
-
-    # What the editor is looking at: the selected layer, its nodes, the open one and its
-    # value, the stacked design and the faults application reports of it (spec/14 §18.7).
+    # What the editor is looking at: the resolved layers, the design they stand for, the
+    # target's nodes, the open one and its value, and the faults application reports.
     defp editing(assigns) do
-      layer = fragment(Enum.at(assigns.layers, assigns.selected) || %{})
+      fetch = Stack.fetch(assigns.store)
+      {layers, missing} = Stack.resolve(assigns.uses, assigns.labels, fetch)
+
+      {design, cycle} =
+        case Stack.design(assigns.uses, fetch) do
+          {:ok, design, _missing} -> {design, nil}
+          {:error, {:cycle, chain}} -> {%{}, chain}
+        end
+
+      layer = target_fragment(assigns)
       nodes = Editor.nodes(layer)
 
       entry =
@@ -588,11 +617,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
           label -> Enum.find(nodes, &(&1.label == label)) || hd(nodes)
         end
 
-      design = design(assigns)
-
       {tabs, children} = strip(nodes, entry, design)
 
       %{
+        layers: layers,
+        missing: missing,
         design: design,
         nodes: nodes,
         entry: entry,
@@ -600,24 +629,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
         chips: chips(children, entry, assigns.facet),
         style_site: style_site(entry, at(layer, entry.path)),
         open_style: open_style(entry),
-        variables: variables(assigns.layers, design),
+        variables: variables(layers, design),
         editing: at(layer, entry.path),
-        errors: faults(design, assigns)
+        errors: faults(design, assigns, cycle),
+        selected_index: Stack.index_of(assigns.uses, assigns.selected),
+        disabled: disabled(assigns.uses)
       }
     end
 
-    # A fragment is a tree and its labels say so — `frame`, `frame.size`, `frame.margin` —
-    # so the strip is two rows rather than one long line of dotted paths (spec/14 §18.13).
-    # The top row is one tab per root segment, in the order the walk reached it; the second
-    # is the nodes under whichever root the open node sits in, labelled by what they add to
-    # it. A root that is not itself a node — `styles`, which exists only as the map its
-    # members live in — opens its first member instead.
+    defp disabled(uses) do
+      uses
+      |> Enum.with_index()
+      |> Enum.reject(fn {use, _index} -> Stack.enabled?(use) end)
+      |> MapSet.new(fn {_use, index} -> index end)
+    end
+
+    defp faults(_design, _assigns, [_ | _] = chain), do: [{[], {:cycle, chain}}]
+
+    defp faults(design, %{sources: sources, bindings: vars, theme: theme}, nil) do
+      case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
+        {:ok, _applied} -> []
+        {:error, errors} -> errors
+      end
+    end
+
+    # The strip: every root the stacked design declares, in the schema's order, then the
+    # Variables tab; the open root's children and the node's facets as one row of chips.
     defp strip(nodes, entry, design) do
       open_root = root(entry.label)
       here = nodes |> Enum.map(&root(&1.label)) |> Enum.uniq()
 
-      # Every root the *stacked design* declares, in the schema's order, so the whole
-      # vocabulary of the chart is on screen whatever layer is selected (spec/14 §18.13).
       tabs =
         for root <- roots(design, here) do
           %{
@@ -637,19 +678,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
         title: "the variables the stack still needs, and what they are bound to"
       }
 
-      tabs = tabs ++ [variables]
-
       children =
         for node <- nodes, root(node.label) == open_root, node.label != open_root do
           %{label: leaf(node.label, open_root), node: node.label, open: node.label == entry.label}
         end
 
-      {tabs, children}
+      {tabs ++ [variables], children}
     end
 
-    # The design's roots in the schema's order, with any the selected layer has and the
-    # design somehow does not — a layer the host gave that the stack drops — kept at the end
-    # rather than made unreachable.
     defp roots(design, here) do
       declared = design |> Editor.nodes() |> Enum.map(&root(&1.label)) |> Enum.uniq()
       declared ++ Enum.reject(here, &(&1 in declared))
@@ -667,11 +703,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp tab_title(root, false),
       do: "#{root} — this layer declares none; opens the layer that does"
 
-    # The second row is one strip of one kind of control: the children of the open root, then
-    # the facets of the open node, which are two things to choose between and were two rows
-    # that looked and behaved differently. A node with one facet and no children has nothing
-    # to choose, so no strip is rendered rather than a lone chip that appears to do nothing
-    # (spec/14 §18.15).
     defp chips(children, entry, facet) do
       facets = Editor.facets(entry.kind)
       open = if facet in facets, do: facet, else: List.first(facets)
@@ -712,8 +743,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.join(" ")
     end
 
-    # A node whose kind declares a `style` key is a style site (spec/14 §3.6), and the panel
-    # needs the value it carries and the default it resolves as when it carries none.
     defp style_site(entry, node) do
       case Schema.key(entry.kind, :style) do
         nil ->
@@ -725,8 +754,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The names a variable may take here: those the stack declares under `vars`, and those
-    # any layer already uses, so the datalist offers what exists before a new one is typed.
     defp variables(layers, design) do
       declared = design |> Map.get(:vars, %{}) |> Map.keys()
       used = layers |> Chart.free_vars() |> Enum.map(& &1.name)
@@ -736,10 +763,123 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp open_style(%{path: [:styles, name]}), do: name
     defp open_style(_entry), do: nil
 
+    defp root(label), do: label |> String.split(~r/[.\[]/, parts: 2) |> hd()
+
+    defp leaf(label, root) do
+      label |> String.replace_prefix(root, "") |> String.replace_prefix(".", "")
+    end
+
+    defp at(container, []), do: container
+
+    defp at(list, [index | rest]) when is_list(list) and is_integer(index),
+      do: at(Enum.at(list, index), rest)
+
+    defp at(map, [key | rest]) when is_map(map), do: at(Map.get(map, key), rest)
+    defp at(_other, _path), do: nil
+
+    defp first_under(fragment, root) when is_map(fragment) do
+      fragment
+      |> Editor.nodes()
+      |> Enum.find(&(root(&1.label) == root))
+      |> case do
+        nil -> nil
+        node -> node.label
+      end
+    end
+
+    defp first_under(_other, _root), do: nil
+
+    # -- writes --------------------------------------------------------------------------
+
+    # A position arrives as a string from a `phx-value-index` and as a number from the hook.
+    defp position(index) when is_integer(index), do: index
+
+    defp position(index) when is_binary(index) do
+      case Integer.parse(index) do
+        {value, ""} -> value
+        _other -> -1
+      end
+    end
+
+    defp position(_index), do: -1
+
+    # Selecting a layer closes an opened entry: the two are one editing target.
+    defp select(socket, index) do
+      case Enum.at(socket.assigns.uses, index) do
+        nil ->
+          socket
+
+        use ->
+          assign(socket,
+            selected: use.id,
+            open: nil,
+            node_label: "design",
+            facet: nil,
+            style_entry: nil
+          )
+      end
+    end
+
+    defp shift(list, from, to) do
+      {value, rest} = List.pop_at(list, from)
+      List.insert_at(rest, to, value)
+    end
+
+    # The node of the target that owns a path: the deepest whose label is a prefix of it,
+    # and the root where none is (spec/14 §18.9).
+    defp opened(socket, path) do
+      label =
+        socket.assigns
+        |> target_fragment()
+        |> Editor.nodes()
+        |> Enum.filter(&owns?(&1.label, path))
+        |> Enum.max_by(&String.length(&1.label), fn -> %{label: "design"} end)
+        |> Map.fetch!(:label)
+
+      assign(socket, node_label: label, facet: nil)
+    end
+
+    defp owns?("design", _path), do: false
+
+    defp owns?(label, path) do
+      path == label or String.starts_with?(path, label <> ".") or
+        String.starts_with?(path, label <> "[")
+    end
+
+    defp opened_entry(socket, entry) do
+      assign(socket, open: entry, node_label: "design", facet: nil, style_entry: nil, notice: nil)
+    end
+
+    defp drifted(open) do
+      "this was opened as a #{open.kind} and is now a #{Fragment.kind(open.fragment)}; " <>
+        "a saved #{open.kind} must still be one"
+    end
+
+    defp edited(socket, _entry, nil), do: socket
+    defp edited(socket, entry, {key, parsed}), do: update_layer(socket, entry.path, key, parsed)
+
+    # A write goes to the opened entry's fragment, or to the selected use's local — the
+    # one surface that writes `Use.local` (spec/14 §19.3).
+    defp update_layer(%{assigns: %{open: %{} = open}} = socket, path, key, parsed) do
+      fragment = Stack.write_at(open.fragment, path, key, parsed)
+      assign(socket, :open, %{open | fragment: fragment})
+    end
+
+    defp update_layer(socket, path, key, parsed) do
+      %{uses: uses, selected: selected} = socket.assigns
+
+      case Stack.get(uses, selected) do
+        nil ->
+          socket
+
+        _use ->
+          assign(socket, :uses, Stack.update(uses, selected, &Stack.write(&1, path, key, parsed)))
+      end
+    end
+
     defp styled(socket, nil), do: socket
     defp styled(socket, {key, parsed}), do: restacked(socket, &local(&1, key, parsed))
 
-    # The local entry is the last one when it is inline, and a new one otherwise.
     defp local(stack, key, parsed) do
       case List.last(stack) do
         node when is_map(node) -> List.replace_at(stack, -1, write_key(node, key, parsed))
@@ -751,8 +891,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp write_key(node, key, :error), do: Map.delete(node, key)
 
     # A change to the open node's stack, written back in whatever shape it came in: a stack
-    # of one that names a style stays a bare reference, so an edit elsewhere does not rewrite
-    # a document's shape (spec/14 §3.6).
+    # of one that names a style stays a bare reference (spec/14 §3.6).
     defp restacked(socket, change) do
       %{entry: entry, editing: node} = editing(socket.assigns)
 
@@ -769,10 +908,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The stack a value stands for: a site carrying nothing stands for its default, so
-    # adding to it keeps what it already resolved as rather than silently dropping it.
     defp current_stack(nil, nil), do: []
     defp current_stack(nil, fallback), do: [fallback]
+    defp current_stack(false, fallback), do: current_stack(nil, fallback)
     defp current_stack(value, _fallback) when is_list(value), do: value
     defp current_stack(value, _fallback), do: [value]
 
@@ -783,33 +921,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The first segment of a label: `frame.scales.x` is under `frame`, `marks[0]` under
-    # `marks`, and `design` is its own root.
-    defp root(label), do: label |> String.split(~r/[.\[]/, parts: 2) |> hd()
+    defp clamp(at, list), do: at |> max(0) |> min(length(list))
 
-    defp leaf(label, root) do
-      label |> String.replace_prefix(root, "") |> String.replace_prefix(".", "")
-    end
-
-    defp fragment({_name, layer}), do: fragment(layer)
-    defp fragment(%Chart{} = chart), do: Chart.to_map(chart)
-    defp fragment(layer) when is_map(layer), do: layer
-
-    defp at(container, []), do: container
-
-    defp at(list, [index | rest]) when is_list(list) and is_integer(index),
-      do: at(Enum.at(list, index), rest)
-
-    defp at(map, [key | rest]) when is_map(map), do: at(Map.get(map, key), rest)
-
-    # A variable takes the type of its first use, as its control was chosen from it
-    # (spec/14 §18.11); a blank control removes the binding and the default returns.
+    # A variable takes the type of its first use (spec/14 §18.11); a blank control removes
+    # the binding and the default returns.
     defp bound(socket, nil, _value), do: socket
 
     defp bound(socket, free, value) do
-      type = Params.expects(free)
-
-      case Editor.submitted(type, value) do
+      case Editor.submitted(Params.expects(free), value) do
         {:ok, parsed} -> update(socket, :bindings, &Map.put(&1, free.name, parsed))
         :error -> update(socket, :bindings, &Map.delete(&1, free.name))
       end
@@ -817,10 +936,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A document is a whole design, so it replaces the stack rather than joining it (D-88).
     defp imported(socket, design) do
+      {uses, labels} = Stack.seed([{:imported, design}])
+
       assign(socket,
-        layers: [{:imported, design}],
-        selected: 0,
-        disabled: MapSet.new(),
+        uses: uses,
+        labels: labels,
+        selected: hd(uses).id,
+        open: nil,
         bindings: %{},
         node_label: "design",
         facet: nil,
@@ -828,53 +950,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
       )
     end
 
-    # The label of the first node of a layer under a root, or `nil`.
-    defp first_under(nil, _root), do: nil
+    # A use referring to the entry, at the position it was dropped at; the label is the
+    # entry's name (spec/14 §19.3).
+    defp inserted(socket, entry, at) do
+      %{uses: uses, labels: labels} = socket.assigns
+      use = Use.new(entry.id, uses)
 
-    defp first_under(layer, root) do
-      layer
-      |> fragment()
-      |> Editor.nodes()
-      |> Enum.find(&(root(&1.label) == root))
-      |> case do
-        nil -> nil
-        node -> node.label
-      end
+      assign(socket,
+        uses: List.insert_at(uses, clamp(at, uses), use),
+        labels: Map.put(labels, use.id, entry.name),
+        selected: socket.assigns.selected || use.id,
+        added: entry.id,
+        notice: nil
+      )
     end
-
-    # The style names a fragment declares, in name order.
-    defp declared_styles(fragment) do
-      case Map.get(fragment, :styles) do
-        map when is_map(map) -> map |> Map.keys() |> Enum.sort()
-        _absent -> []
-      end
-    end
-
-    defp refusal(submitted, many) do
-      "#{submitted} declares #{length(many)} styles — #{Enum.map_join(many, ", ", &to_string/1)}" <>
-        " — so which one this site means is the question the drop was meant to answer"
-    end
-
-    # The two writes of one gesture: the fragment joins the stack as a layer, so the style
-    # stays declared once and reusable, and a reference to it goes into the site's stack at
-    # the position it was dropped at (spec/14 §18.20).
-    defp dropped(socket, name, fragment, style, at) do
-      socket
-      |> assign(:layers, socket.assigns.layers ++ [{name, fragment}])
-      |> assign(:added, to_string(name))
-      |> restacked(fn stack -> List.insert_at(stack, clamp(at, stack), style) end)
-      |> assign(:notice, nil)
-    end
-
-    defp clamp(at, stack), do: at |> max(0) |> min(length(stack))
 
     # The highest layer whose fragment declares a style of that name, or `nil`.
     defp declaring(layers, name) do
       layers
       |> Enum.with_index()
-      |> Enum.filter(fn {layer, _index} ->
-        layer
-        |> fragment()
+      |> Enum.filter(fn {{_label, fragment}, _index} ->
+        fragment
         |> Map.get(:styles)
         |> then(&(is_map(&1) and Enum.any?(Map.keys(&1), fn key -> to_string(key) == name end)))
       end)
@@ -887,48 +983,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp notice(reason), do: Enum.join(Document.faults(reason), "; ")
 
-    defp faults(design, %{sources: sources, bindings: vars, theme: theme}) do
-      case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
-        {:ok, _applied} -> []
-        {:error, errors} -> errors
-      end
-    end
+    defp saved(socket, {:ok, id}, then), do: socket |> assign(:notice, nil) |> then.(id)
 
-    # The selection and the disabled set are positions, so both follow an insert below them.
-    defp inserted(socket, name, fragment, at) do
-      %{layers: layers, selected: selected, disabled: disabled} = socket.assigns
-      at = at |> max(0) |> min(length(layers))
+    defp saved(socket, {:error, reason}, _then),
+      do: assign(socket, :notice, "the store refused the design: #{inspect(reason)}")
 
-      socket
-      |> assign(:layers, List.insert_at(layers, at, {name, fragment}))
-      |> assign(:selected, if(selected >= at, do: selected + 1, else: selected))
-      |> assign(:disabled, MapSet.new(disabled, &if(&1 >= at, do: &1 + 1, else: &1)))
-      |> assign(:added, to_string(name))
-      |> assign(:notice, nil)
-    end
-
-    defp added(socket, name, fragment) do
-      socket
-      |> assign(:layers, socket.assigns.layers ++ [{name, fragment}])
-      |> assign(:added, to_string(name))
-      |> assign(:notice, nil)
-    end
-
-    defp kept({:ok, _id}), do: nil
-    defp kept({:error, reason}), do: "the store refused the design: #{inspect(reason)}"
-    defp kept(nil), do: "no store is configured"
-
-    # The name a notice calls an entry by: the entry's own, or the id string when the
-    # store no longer holds it.
-    defp named(socket, submitted) do
-      case fetch(socket.assigns.store, submitted) do
-        {:ok, entry} -> entry.name
-        :error -> submitted
-      end
-    end
-
-    # An entry by the id a client sent as a string; no store means no entry, as does a
-    # string that is not an id, so no atom is created from a client's string.
     defp fetch(nil, _submitted), do: :error
 
     defp fetch(store, submitted) do
@@ -938,17 +997,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # A `nil` class assign leaves the element's own class alone, with no trailing space.
     defp class(base, nil), do: base
     defp class(base, extra), do: base <> " " <> extra
 
-    # The design the preview draws and saving sends: the enabled layers cascaded (§8.2).
-    defp design(%{layers: layers, disabled: disabled}) do
-      layers
-      |> Enum.with_index()
-      |> Enum.reject(fn {_layer, index} -> index in disabled end)
-      |> Enum.map(fn {layer, _index} -> layer end)
-      |> Chart.stack()
-    end
+    # The stack as a composite: what saving sends and stores (spec/14 §19.6).
+    defp structure(%{uses: uses}), do: %{composite: %{uses: uses, vars: %{}}}
   end
 end
