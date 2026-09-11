@@ -56,6 +56,8 @@
       
       
       
+      
+      
       <textarea name="sources" placeholder="%{}"></textarea>
       
     </label><label class="vis-builder-field">
@@ -66,6 +68,8 @@
         <option value="literal" selected>literal</option>
         <option value="variable">variable</option>
       </select>
+      
+      
       
       
       
@@ -86,9 +90,39 @@
       <h2 class="vis-builder-sidebar-title">Context</h2>
       
       
-      <p class="vis-builder-context-empty">
-        Open a node with a style to see its stack.
-      </p>
+      <div id="builder-masks" class="vis-builder-layer-context">
+  <h3 class="vis-builder-context-title">house</h3>
+  
+  
+  <form class="vis-builder-masks" phx-change="mask" phx-target="-1">
+    <label class="vis-builder-mask" title="mask frame">
+      <input type="checkbox" name="frame" value="true">
+      <span class="vis-builder-mask-path">frame</span>
+    </label><label class="vis-builder-mask" title="mask frame.kind">
+      <input type="checkbox" name="frame.kind" value="true">
+      <span class="vis-builder-mask-path">frame.kind</span>
+    </label><label class="vis-builder-mask" title="mask frame.margin">
+      <input type="checkbox" name="frame.margin" value="true">
+      <span class="vis-builder-mask-path">frame.margin</span>
+    </label><label class="vis-builder-mask" title="mask frame.size">
+      <input type="checkbox" name="frame.size" value="true">
+      <span class="vis-builder-mask-path">frame.size</span>
+    </label><label class="vis-builder-mask" title="mask styles">
+      <input type="checkbox" name="styles" value="true">
+      <span class="vis-builder-mask-path">styles</span>
+    </label><label class="vis-builder-mask" title="mask styles.series">
+      <input type="checkbox" name="styles.series" value="true">
+      <span class="vis-builder-mask-path">styles.series</span>
+    </label><label class="vis-builder-mask" title="mask theme">
+      <input type="checkbox" name="theme" value="true">
+      <span class="vis-builder-mask-path">theme</span>
+    </label><label class="vis-builder-mask" title="mask version">
+      <input type="checkbox" name="version" value="true">
+      <span class="vis-builder-mask-path">version</span>
+    </label>
+  </form>
+  
+</div>
     </aside>
   </div>
   <div class="vis-builder-tray">

@@ -226,6 +226,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end)
     end
 
+    @doc """
+    What a site contributes before its mask — the referenced body, or nothing, under its
+    local — so the context panel can offer every key the mask could remove (spec/14 §19.5).
+    """
+    @spec unmasked(Use.t(), (Fragment.id() -> {:ok, map()} | :error)) :: map()
+    def unmasked(%Use{} = use, fetch) do
+      case Use.resolve(%{use | mask: [], vars: %{}}, fetch) do
+        {:ok, fragment} -> fragment
+        {:missing, _ref, fragment} -> fragment
+      end
+    end
+
     defp unbound(use, fetch) do
       case Use.resolve(%{shown(use) | vars: %{}}, fetch) do
         {:ok, fragment} -> {:ok, fragment}

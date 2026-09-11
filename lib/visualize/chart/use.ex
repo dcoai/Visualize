@@ -4,9 +4,10 @@ defmodule Visualize.Chart.Use do
 
   A layer in a composite and an entry in a style stack are the same thing: a *use* of a
   fragment at a site. The site has four parts, each written by exactly one surface, and
-  they are applied in one order — `ref → mask → local → bind → stack` — so a masked key
-  can be re-set locally, and a bound variable is renamed before the cascade sees it
-  wherever at the site it stands, the local node included.
+  they are applied in one order — `ref → local → mask → bind → stack` — so a mask removes
+  what the site would otherwise say whichever part said it, and a bound variable is
+  renamed before the cascade sees it wherever at the site it stands. A site the host
+  seeded is nothing but its local, and is masked and bound like any other.
 
       %Visualize.Chart.Use{
         id:    {:use, 7},                # this site's own identity (§19.3)
@@ -156,20 +157,20 @@ defmodule Visualize.Chart.Use do
   end
 
   @doc """
-  A use over a body it has already been given: the mask, the local node cascaded over
-  the result, and the bindings over all of it — everything `resolve/2` does after the
-  fetch (spec/14 §19.3). Bind runs last so a site's bindings speak for everything the site
-  contributes: an inline-only site is nothing but its local, and is bound like any other.
-  A mask of everything is the whole site removed, local included — that is what disabling
+  A use over a body it has already been given: the local node cascaded over it, the mask
+  over the result, and the bindings over all of it — everything `resolve/2` does after the
+  fetch (spec/14 §19.3). Mask and bind run after local so they speak for everything the
+  site contributes: an inline-only site is nothing but its local, and is masked and bound
+  like any other. A mask of everything is the whole site removed — that is what disabling
   a layer means.
   """
   @spec over(t(), map()) :: map()
   def over(%__MODULE__{mask: :all}, _fragment), do: %{}
 
   def over(%__MODULE__{mask: mask, vars: vars, local: local}, fragment) do
-    fragment
+    [fragment, local]
+    |> Chart.stack()
     |> mask(mask)
-    |> then(&Chart.stack([&1, local]))
     |> bind(vars)
   end
 end

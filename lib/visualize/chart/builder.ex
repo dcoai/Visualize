@@ -60,6 +60,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Inspector,
       Layers,
       Library,
+      Masks,
       Palette,
       Params,
       Preview,
@@ -70,6 +71,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     alias Visualize.Chart.{Composite, Fragment, Schema, Use, Validator}
+    alias Visualize.Theme
 
     @doc false
     # The assigns a host may leave out, and their defaults (spec/14 §18.2). `attr/3` applies
@@ -282,7 +284,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 path={@entry.path}
                 facet={@facet}
                 errors={@errors}
-                refs={%{style: Palette.names(@design)}}
+                refs={@refs}
+                slots={@slots}
                 variables={@variables}
                 strip={false}
                 target={@myself}
@@ -316,13 +319,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
               origins={StyleStack.origins(@design, @style_site.stack)}
               strip={false}
               event="edit_style"
-              refs={%{style: Palette.names(@design)}}
+              refs={@refs}
+              slots={@slots}
               variables={@variables}
               target={@myself}
             />
-            <p :if={!@style_site} class="vis-builder-context-empty">
-              Open a node with a style to see its stack.
-            </p>
+            <Masks.panel
+              :if={@site}
+              id={@id <> "-masks"}
+              use={@site.use}
+              label={@site.label}
+              fragment={@site.fragment}
+              free={@site.free}
+              target={@myself}
+            />
           </aside>
         </div>
         <div class="vis-builder-tray">
@@ -581,6 +591,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, bound(socket, free, params[name])}
     end
 
+    # A mask checkbox: the path joins or leaves the selected site's mask (spec/14 §19.5).
+    # An unchecked box submits nothing, which is the path leaving.
+    def handle_event("mask", %{"_target" => [name]} = params, socket) do
+      %{uses: uses, selected: selected} = socket.assigns
+
+      case Stack.get(uses, selected) do
+        nil ->
+          {:noreply, socket}
+
+        _use ->
+          checked = Map.get(params, name) == "true"
+
+          {:noreply,
+           update(
+             socket,
+             :uses,
+             &Stack.update(&1, selected, fn u -> Masks.toggle(u, name, checked) end)
+           )}
+      end
+    end
+
     # A site's binding, from its row in the Variables tab (spec/14 §19.4, §19.10): a value,
     # one of the stack's own variables, or — blank — nothing, so the name flows up. This is
     # the one surface that writes `Use.vars`.
@@ -720,6 +751,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         open_style: open_style(entry),
         variables: variables(layers, design),
         sites: Stack.sites(assigns.uses, assigns.labels, fetch),
+        site: site(assigns, fetch),
+        refs: refs(design, assigns.store),
+        slots: slots(design),
         editing: at(layer, entry.path),
         errors: faults(kind, design, assigns, cycle),
         kind: kind,
@@ -729,6 +763,53 @@ if Code.ensure_loaded?(Phoenix.Component) do
         disabled: disabled(assigns.uses)
       }
     end
+
+    # The selected site for its context: what it contributes before its mask, and what it
+    # still needs (spec/14 §19.10).
+    defp site(%{uses: uses, labels: labels, selected: selected}, fetch) do
+      case Stack.get(uses, selected) do
+        nil ->
+          nil
+
+        use ->
+          free =
+            case Stack.sites([use], labels, fetch) do
+              [%{free: free}] -> free
+              [] -> []
+            end
+
+          %{
+            use: use,
+            label: Stack.label(labels, use),
+            fragment: Stack.unmasked(use, fetch),
+            free: free
+          }
+      end
+    end
+
+    # A reference may be a local name or a library id of the kind (spec/14 §19.10).
+    defp refs(design, store) do
+      ids =
+        case store do
+          nil -> []
+          store -> for %{kind: :style, id: id} <- Store.list(store), do: id
+        end
+
+      %{style: Palette.names(design) ++ ids}
+    end
+
+    # The colour slots of the theme the design names, for a colour's slot face (§19.10).
+    defp slots(design) do
+      design
+      |> Map.get(:theme, :default)
+      |> theme()
+      |> Theme.colour_slots()
+      |> Enum.map(&to_string/1)
+    end
+
+    defp theme(:dark), do: Theme.dark()
+    defp theme(map) when is_map(map) and not is_struct(map), do: Theme.new(map)
+    defp theme(_other), do: Theme.default()
 
     defp stack_title(kind) when kind in [:composite, :design], do: "Layers"
     defp stack_title(kind), do: "#{kind} stack"

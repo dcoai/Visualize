@@ -37,7 +37,7 @@ defmodule Visualize.Chart.UseTest do
   defp fetch(id), do: Map.fetch(@library, id)
 
   describe "the order of operations (spec/14 §19.3, D-101)" do
-    test "ref, then mask, then local, then bind, in that order" do
+    test "ref, then local, then mask, then bind, in that order" do
       use = %Use{
         id: {:use, 1},
         ref: {:style, 1},
@@ -52,9 +52,19 @@ defmodule Visualize.Chart.UseTest do
       assert resolved == %{stroke_width: 1, fill: var(:color_1), opacity: 0.8}
     end
 
-    test "mask runs before local, so a masked key can be re-set locally" do
+    test "mask runs after local, so it removes what the site says whichever part said it" do
       use = %Use{id: {:use, 1}, ref: {:style, 1}, mask: [:stroke], local: %{stroke: "#f00"}}
-      assert {:ok, %{stroke: "#f00"}} = Chart.resolve(use, &fetch/1)
+      assert {:ok, resolved} = Chart.resolve(use, &fetch/1)
+      refute Map.has_key?(resolved, :stroke)
+
+      inline = %Use{
+        id: {:use, 1},
+        ref: nil,
+        mask: [:stroke],
+        local: %{stroke: "#f00", opacity: 1}
+      }
+
+      assert Chart.resolve(inline, &fetch/1) == {:ok, %{opacity: 1}}
     end
 
     test "a nil ref is an inline-only site: its local node alone, bound like any other" do

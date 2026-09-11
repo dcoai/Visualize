@@ -194,7 +194,7 @@ defmodule Visualize.Chart do
   defdelegate mask(fragment, paths), to: Use
 
   @doc """
-  One use site resolved through a fetch — `ref → mask → local → bind` (spec/14 §19.3).
+  One use site resolved through a fetch — `ref → local → mask → bind` (spec/14 §19.3).
   See `Visualize.Chart.Use.resolve/2`.
   """
   @spec resolve(Use.t(), (Fragment.id() -> {:ok, map()} | :error)) ::

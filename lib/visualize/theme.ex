@@ -109,6 +109,12 @@ defmodule Visualize.Theme do
     Enum.map(1..length(series)//1, &series_atom/1) ++ @fixed_slots
   end
 
+  @doc "The theme's colour slots — the series, then axis, grid, text and background (spec/08 §7.1)."
+  @spec colour_slots(t()) :: [atom(), ...]
+  def colour_slots(%__MODULE__{series: series}) do
+    Enum.map(1..length(series)//1, &series_atom/1) ++ @colour_slots
+  end
+
   @doc "The `:series_k` slot the positive index `i` cycles to over the theme's series."
   @spec series_slot(t(), pos_integer()) :: atom()
   def series_slot(%__MODULE__{series: series}, i) when is_integer(i) and i >= 1 do

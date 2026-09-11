@@ -21,7 +21,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
   alias Visualize.Chart.Builder.Editor
   alias Visualize.Chart.{Schema, Var}
 
-  @widgets [:checkbox, :number, :text, :textarea]
+  @widgets [:checkbox, :number, :text, :textarea, :colour]
 
   for name <- ~w(editor_design editor_mark editor_style_errors)a do
     test "#{name} renders as recorded" do
