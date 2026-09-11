@@ -1727,3 +1727,190 @@ The name stays shared, the placement is explicit, and nothing is copied: a secon
 **Only a style fragment.** A fragment of any other kind dropped on a stack is refused with a notice naming its kind, rather than merged into the design and left with nothing referring to it — a silent half-effect is worse than a refusal. A fragment that declares more than one style is refused for the same reason: which of them the site meant is exactly the question the gesture is supposed to answer.
 
 **The stack is the drop target.** `data-builder-stack` already marks what accepts a drop and `data-builder-scope` says which stack it is (§18.18), so the hook needs nothing new: the `insert` event of §18.17 carries the scope, and a scoped insert is this.
+
+## 19. Typed fragments: identity, use sites, and one composer at every level
+
+§18 built a component that edits one stack of fragments, and doing so found the model underneath it. A fragment there is a map with the author's names inside it; a layer is its position in a list; saving a stack collapses it; and a library entry is a name that composites point at by spelling it. Every one of those was a source of friction the moment two fragments had to agree on something, and this section replaces them with one rule: **identity lives in the library, a reference is an id, and a declaration in place is only values.** The rest of the section is what follows from that rule. Where it conflicts with §18, this section governs and the earlier text is marked.
+
+### 19.1 Three tiers of identity
+
+A thing sits in the lowest tier that serves it, and moves up only when sharing widens.
+
+| Tier | Declared | Referenced by | What a rename costs | Example |
+|---|---|---|---|---|
+| **inline** | at the site, as values | nothing — it *is* the value | — | the local style of a stack (§3.6, D-98) |
+| **local key** | once in a document | a key, within that document | one walk of one document | `frame.scales.hour`; `styles.series` in a hand-written design |
+| **library entry** | once in the store | an id, from any fragment in the store | nothing — a name is an attribute | `{:style, 11}` |
+
+**Promotion is a gesture, one tier at a time.** A style at one site is inline. A second site in the same document needs it: it becomes a local key. A second document needs it: it becomes a library entry. Each step is reversible by copying the value back in. The tool never forces anything upward, and nothing has to begin in the library.
+
+The hand-authored design of §13 lives entirely in the middle tier, and that stays exactly as legal as it is: within one document a key is local, renaming it is one walk of one term, and there is no second fragment to disagree. The builder writes ids; a person writing a design by hand may still write words. These are two rungs of one ladder, not two systems.
+
+### 19.2 Ids
+
+An id is **tagged with its kind** — `{:style, 11}`, `{:theme, 32}`, `{:scale, 4}`, `{:composite, 5}` — and is **issued by the store** from a per-kind sequence that never repeats.
+
+| Property | Consequence |
+|---|---|
+| tagged | readable in the raw data and in a JSON export (`{"style": 11}`); the validator refuses `{:scale, 4}` where `{:ref, :style}` was expected *before* resolution, so a wrong-kind reference is an error at the cheapest moment |
+| store-issued, never reused | a stale id can never resolve to something new; a small integer stays readable; ids sort by creation |
+| unique within a store | one store per builder; a collection crossing into another store is relocated (§19.7) |
+| **transparent when missing** | a deleted entry leaves every site that referenced it as a mask of everything — lower entries show through, or the site's default applies. Rendering never fails. The builder shows the site as *no longer exists — showing through*, so degradation is visible and never silent |
+
+The `{:ref, kind}` type (§1.4) admits three forms: a local key (an atom naming a declaration in this document), an id `{kind, n}`, or — where the site takes a stack — an inline node. A name that this document does not declare, and an id the store does not hold, are both faults at the site's path; the first is the error it already was (§10.1), the second renders as a mask and is reported by the builder.
+
+**A name is never an identity.** A library entry's name and group are attributes of the entry, free to change; nothing references them. Inside a fragment's body there is no name at all: a style fragment is `%{style: %{stroke_width: 5, …}}` — a singular wrapper naming the kind, and values. The wrapper is what keeps a body's kind derivable (§19.8) without the store having to say it.
+
+### 19.3 The use site
+
+A layer in a composite and an entry in a style stack are the same thing: a fragment **used at a position**. The site is a struct, so it is a leaf of every walk (D-92) and `Visualize.Chart.stack/1` never descends into it.
+
+```elixir
+%Visualize.Chart.Use{
+  id:    {:use, 7},             # this site's own identity, so it is the same site wherever it sits
+  ref:   {:style, 11},          # which fragment; or a local key; or nil for an inline-only site
+  mask:  [:stroke],             # keys removed here, so a lower layer shows through
+  vars:  %{color: var(:color_1)}, # what the fragment's variables mean here
+  local: %{opacity: 0.8}        # what is added or overridden here
+}
+```
+
+| Part | Means | Written by |
+|---|---|---|
+| `ref` | which fragment | the library click |
+| `mask` | keys removed at this site | checkboxes in the context panel (§19.10) |
+| `vars` | what the fragment's variables mean at this site | the Variables tab (§19.10) |
+| `local` | what is added or overridden at this site | the field forms |
+
+Each part is edited from exactly one surface, so there is never a question of where an edit went.
+
+**Order of operations, stated once:** `ref → mask → bind → local → stack`. The referenced fragment is fetched; masked keys are removed; variables are substituted (§19.4); the local node is merged over it; and the result cascades with the sites around it by §8.2. Mask runs before local, so a masked key can be re-set locally.
+
+**A site has its own id** because a site was its position, and position is the wrong identity: the selection and the disabled set had to be remapped on every insert and move, a local style was named by an index that a reorder changed, and a drop target was a number a client could not be trusted with. With `Use.id` a site is the same site wherever it sits, and `Visualize.Chart.explain/1` attributes to it by id with a display name.
+
+**Disabling a layer is a mask of everything** (D-87 restated). A ref whose id no longer exists is the same mask (§19.2).
+
+### 19.4 Bindings are substitution before the cascade
+
+A fragment that carries `var(:color)` may be placed at several sites, and each site may want something different of it:
+
+| Case | `Use.vars` at the site | `free_vars/1` of the composite reports |
+|---|---|---|
+| **shared** — one `:color` for every site | nothing | `:color` |
+| **set** — a literal at this site | `%{color: "blue"}` | nothing from this site |
+| **renamed** — this site's colour is the composite's own | `%{color: var(:color_1)}` | `:color_1` |
+
+`Visualize.Chart.bind/2` is a pure substitution: every `%Var{name: k}` in the fragment becomes the map's value for `k`, a literal or another `var/1`, and the result is a fragment with fewer, or differently named, variables in it. It runs at the site, before the cascade. The renamed case is legal here and refused at `apply/2` — the var-to-var error of §7 stays — because by the time application binds anything, substitution has already rewritten one name into the other. A composite placed inside a larger composite is rebound again, so bindings nest like function application.
+
+Nothing in `stack/1`, `apply/2`, `free_vars/1` or the validator changes: each sees a fragment those rules already accept.
+
+### 19.5 Masks
+
+`Use.mask` is a list of paths dropped from the referenced fragment at this site, before it is stacked. It is the dual of `local`, which adds; without it the only way to let a lower layer's key through is to copy the lower value into `local`, which is the drift `extends` exists to prevent (D-80), or to fork the fragment, which bloats the library.
+
+Because the key is genuinely absent by the time the cascade runs, `explain/1` attributes the value to the layer it now comes from — which is simply true — and names the mask at the site it was applied. Keys of nodes first; a path may later name an identified list element.
+
+### 19.6 Composites: stored as structure, flattened at deployment
+
+A composite is a fragment whose content is a list of use sites and its own `vars`:
+
+```elixir
+%{composite: %{
+  uses: [
+    %Use{id: {:use, 1}, ref: {:theme, 32}},
+    %Use{id: {:use, 2}, ref: {:frame, 2},  mask: [:margin]},
+    %Use{id: {:use, 3}, ref: {:style, 11}, vars: %{color: var(:color_1)}, local: %{opacity: 0.8}}
+  ],
+  vars: %{color_1: %{default: :series_1}}
+}}
+```
+
+**Save writes structure.** The store holds the uses, never `stack/1`'s result, so a composite reopens as what was built — references intact, masks and bindings where they were left — and references keep their point: edit `{:style, 11}` and every composite using it follows. The save message of §18.2 carries structure.
+
+**Flatten is a deployment verb.** `Visualize.Chart.flatten/2` resolves every use recursively — `ref → mask → bind → local` — through a store, and stacks the result: a flat design in §13's shape, with no ids and no uses, which `apply/2` and `render/2` consume as they always have. A host calls it in its own pipeline. The builder's preview resolves the structure to draw it, and the builder *may* offer flatten as a separately-labelled action; the two verbs are different, and offering the second never loses the first.
+
+**Composites nest**, because a composite is a fragment and a use may reference one. Resolution is recursive. A composite that reaches itself through any chain of uses is refused, as an `extends` cycle is (§3.5), at the site that closed the loop.
+
+**Within a kind, the same operation.** A composer opened on a style accepts only style fragments and its result is a style; opened on a composite it accepts anything and its result is a design. Both are `stack/1`; only what the stack may take differs, and the kind derivation (§19.8) says which was made. The style stack at a site (§3.6) is the same operation by reference at the point of use.
+
+### 19.7 The store, revised: ids, a context, and import as relocation
+
+`Visualize.Chart.Builder.Store` (§18.3) gains three things in one revision, so a consumer migrates once.
+
+| Callback | Was | Is |
+|---|---|---|
+| `list/1` | `list/0` → names | `list(context)` → `[%{id, name, group, kind}]` |
+| `get/2` | `get(name)` | `get(id, context)` → `{:ok, fragment}` or `:error` |
+| `put/3` | `put(name, fragment)` | `put(entry, context)` → `{:ok, id}`; an entry without an id is new and is issued one, with one is replaced |
+| `delete/2` | — | `delete(id, context)`; a later reference to the id is a mask (§19.2) |
+| `import/2` | — | `import(bundle, context)` → `{:ok, %{old_id => new_id}}`, committed whole or not at all |
+
+The **context** is whatever the host passes as the second element of a `{module, context}` store assign — who is saving, from where — and a bare module is `{module, nil}`. It answers the need metresis raised (#148): a library entry nobody can trace is an entry nobody trusts, and the process dictionary is not a signature.
+
+**Import is a relocation**, and it has every property that ruled out renaming by name: it is bounded to a known set, it happens once at the boundary between stores rather than during editing, and it is one call with one outcome. The importer allocates a new id for each arriving fragment, builds one table `old → new`, rewrites the references inside the collection through it, and commits.
+
+**Export takes the closure.** Exporting a composite exports every fragment it references, transitively, with their ids, so an import cannot dangle by construction. A **bundle** is that set plus provenance — the source store's identity and each fragment's original id — so re-importing the same collection is detectable as a duplicate rather than minting a second copy. A reference to an id outside a bundle is only possible in a hand-edited file; it imports as a mask and is **reported** — *n references point outside this collection* — never a failure, never silent.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Use.new/1` | a use site with a fresh id over a ref, and the three empty parts |
+| `Visualize.Chart.bind/2` | a fragment with its variables substituted by a map — literals or other variables |
+| `Visualize.Chart.mask/2` | a fragment with a list of paths removed |
+| `Visualize.Chart.resolve/2` | one use site resolved through a store: `ref → mask → bind → local` |
+| `Visualize.Chart.flatten/2` | a composite resolved recursively through a store and stacked: a flat design |
+| `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id, with provenance |
+
+### 19.8 The library: kind derived, group stored, two views
+
+A library item has two independent axes, and the library is browsed by either.
+
+**Kind is derived, never stored.** Walk down while the fragment sets exactly one key, and the kind is the last thing reached: `%{style: %{…}}` is `:style`, `%{theme: %{…}}` is `:theme`, `%{frame: %{size: …, margin: …}}` is `:frame`, `%{composite: %{uses: …}}` is `:composite`. A fragment about more than one thing at its shallowest branching point is `:design`, which is what a hand-written whole design is. The singular wrapper of §19.2 is what makes a bare body's kind readable without the store holding it.
+
+**Group and sub-group are stored, subjective, and orthogonal** — the person's own filing, free to gather dissimilar kinds under one heading. They remain in the entry's name as `<group>:<sub-group>:<name>` (§18.16, D-97), which is now an attribute of the entry and not a key anything references.
+
+Two views over one store: by kind, or by group. **Empty kinds are shown** — a `Scale` heading with nothing under it says the library holds no scale yet, which is information, where an absent heading is indistinguishable from a bug. **Group is the default view**, kind a click away.
+
+**Click opens; drag composes.** Clicking an item opens it in the editor. Dragging is the only gesture that puts a fragment into something else — a composer's stack, or a style site. **New fragment of a kind** starts from an empty, valid one of that kind, so a style cannot be half a frame by accident; **per-kind validity** is the validator restricted to a kind and refuses a fragment that drifted. **Save** writes back under the entry's kind and group, and names the entry — never the body.
+
+This supersedes §18.3's flat store and the dropdown of §18.2, and it completes §18.16.
+
+### 19.9 The editor: two faces, one composer
+
+Every fragment has two faces, and the editor is one component whose shape is the open fragment's kind.
+
+**Edit** is a form shaped by the kind: the nineteen keys of a style, the keys of a theme, the schema's own walk for the rest (§18.5). A composite's edit face is empty — its content is its layers.
+
+**Compose** is the stack, constrained to the kind (§19.6). Opened on a composite the constraint is none, and the node tabs (§18.13) and the preview (§18.4) appear beneath the stack, because now there is a chart to look at. The layer stack is therefore not a region of the workspace but the composite's compose face; §18.16's four regions are three.
+
+A field in any form shows a **variable as a variable**: a switch between *literal* — the control §18.6 chooses from the type — and *variable* — pick an existing name or type a new one — and a variable renders as `var(:color)`, never as a struct's text in a textarea.
+
+### 19.10 Variables, and the context panel
+
+**The Variables tab** is `Visualize.Chart.Builder.Params.panel/1` (§18.11) moved from the tray into the strip and extended. On a fragment it lists the fragment's free variables, each typed by what the schema expects at the path it stands at, with a default. On a composite it lists the composite's own variables, then each placed fragment's free variables **grouped by site**, and a row may be assigned to a literal or **to one of the composite's variables** — which is §19.4's rename, and the surface that writes `Use.vars`. A row's state reads as one of three: *flows up as `:color`*, `= "blue"`, `= var(:color_1)`.
+
+**The context panel is one dispatch.** The selection chooses the type; the type chooses the control; every control offers *assign to another variable*.
+
+| Selected | The panel shows |
+|---|---|
+| a colour field or variable | theme slots as swatches, a picker, a variable name — three faces, because a colour is three things (§3.4) |
+| a size or number | a number, or a variable |
+| an enum | the allowed values |
+| a reference | what this document declares locally, and what the library holds, by id |
+| a layer in a stack | its keys with mask checkboxes; its free variables |
+| an entry in a style stack | the resolved style, each field naming the entry it came from (§18.19) |
+
+A bare `<input type="color">` would drop the theme slot, and the theme slot is how the built-in styles work; the control has to offer all three faces.
+
+### 19.11 What §18 said that this section replaces
+
+| §18 | Now |
+|---|---|
+| §18.2 — the toolbar's library dropdown; the save message carries `stack/1` of the layers | the library is a region (§19.8); the message carries structure (§19.6) |
+| §18.3 — `list/0`, `get/1`, `put/2` over names | §19.7 |
+| §18.8 — a layer is its position; four things per row | a layer is a `Use` with its own id (§19.3); select, disable-as-mask, drag |
+| §18.11 — the parameters form in the tray | the Variables tab (§19.10) |
+| §18.14 — a style palette that creates named styles in the selected layer | a declaration in place is values; a name is the library's (§19.1, §19.2) |
+| §18.16 — four regions, a store of names | three regions (§19.9); a store of ids (§19.7) |
+| §18.20 — a dropped style fragment merges its `styles` declaration into the design | a dropped fragment is a `Use` with its id as `ref`; nothing is merged, and nothing is copied |
+
+The rule underneath all of it: **the thing a person renames is never the thing a reference uses.** A name is an attribute of a library entry; a reference is an id; a declaration in place has neither. Nothing in the model ever has to hunt for a word.
