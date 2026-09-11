@@ -15,7 +15,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Use
+    alias Visualize.Chart.{Fragment, Use}
 
     attr(:id, :string, required: true, doc: "the panel's id")
     attr(:use, :any, required: true, doc: "the selected site, a `Visualize.Chart.Use`")
@@ -27,6 +27,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     )
 
     attr(:free, :list, default: [], doc: "the site's free variables, as `free_vars/1` gives them")
+
+    attr(:keyless, :boolean,
+      default: false,
+      doc: "whether the site was left out for want of a key"
+    )
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
 
     @doc """
@@ -37,12 +43,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns =
         assign(assigns,
           rows: rows(assigns.fragment, assigns.use),
-          disabled?: assigns.use.mask == :all
+          disabled?: assigns.use.mask == :all,
+          keyed?: keyed?(assigns.fragment)
         )
 
       ~H"""
       <div id={@id} class="vis-builder-layer-context">
         <h3 class="vis-builder-context-title">{@label}</h3>
+        <form :if={@keyed?} class="vis-builder-declared-as" phx-change="set_key" phx-target={@target}>
+          <label class="vis-builder-control-label" for={@id <> "-key"}>declared as</label>
+          <input
+            id={@id <> "-key"}
+            type="text"
+            name="key"
+            class="vis-builder-declared-name"
+            value={@use.key && to_string(@use.key)}
+            placeholder="a name"
+          />
+        </form>
+        <p :if={@keyless} class="vis-builder-context-fault">
+          not placed: a {kind_word(@fragment)} needs a name to be declared under
+        </p>
         <p :if={@disabled?} class="vis-builder-context-note">
           disabled — every key is masked, so the layers below show through
         </p>
@@ -60,6 +81,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </p>
       </div>
       """
+    end
+
+    @doc """
+    Whether a contribution is of a kind the document keys by name — style, scale, source,
+    var — so the site needs a `key` to be declared under (spec/14 §19.3).
+
+        iex> Visualize.Chart.Builder.Masks.keyed?(%{style: %{stroke: "#111"}})
+        true
+
+        iex> Visualize.Chart.Builder.Masks.keyed?(%{frame: %{}})
+        false
+    """
+    @spec keyed?(map()) :: boolean()
+    def keyed?(fragment) do
+      case Fragment.wrapped(fragment) do
+        {kind, _body} -> kind in [:style, :scale, :source, :var]
+        nil -> false
+      end
+    end
+
+    defp kind_word(fragment) do
+      case Fragment.wrapped(fragment) do
+        {kind, _body} -> kind
+        nil -> "site"
+      end
     end
 
     @doc """

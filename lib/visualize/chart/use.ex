@@ -36,7 +36,7 @@ defmodule Visualize.Chart.Use do
   alias Visualize.Chart.Var
 
   @enforce_keys [:id, :ref]
-  defstruct id: nil, ref: nil, mask: [], vars: %{}, local: %{}
+  defstruct id: nil, ref: nil, mask: [], vars: %{}, local: %{}, key: nil
 
   @typedoc "A site's own identity: unique within the composite that holds it."
   @type id :: {:use, pos_integer()}
@@ -49,7 +49,8 @@ defmodule Visualize.Chart.Use do
           ref: Chart.Fragment.id() | nil,
           mask: [path() | atom()],
           vars: %{atom() => term()},
-          local: map()
+          local: map(),
+          key: atom() | nil
         }
 
   @doc """

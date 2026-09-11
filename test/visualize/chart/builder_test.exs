@@ -1141,6 +1141,43 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "a site's key (spec/14 §19.3, §19.6)" do
+    test "a keyless style site is a fault at the row, the panel offers the key, and setting it places it" do
+      store = Visualize.Chart.BuilderTest.Styles
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: store)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "style:1", "at" => 3}, s)
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "3"}, s)
+
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(class="vis-builder-declared-as" phx-change="set_key")
+      assert html =~ "not placed: a style needs a name to be declared under"
+      assert html =~ "not placed: Styles::thick"
+
+      refute Map.has_key?(BuilderFixture.design(s), :styles) and
+               Map.has_key?(BuilderFixture.design(s).styles, :thick)
+
+      {:noreply, deploy} = Builder.handle_event("deploy", %{}, s)
+
+      assert deploy.assigns.notice ==
+               "not deployed: Styles::thick need a key to be declared under"
+
+      refute_received {:visualize_chart_deployed, _, _}
+
+      {:noreply, keyed} = Builder.handle_event("set_key", %{"key" => "thick"}, s)
+      assert Enum.at(keyed.assigns.uses, 3).key == :thick
+      assert BuilderFixture.design(keyed).styles.thick == %{stroke_width: 5}
+      refute BuilderFixture.render(keyed) =~ "not placed"
+
+      {:noreply, blank} = Builder.handle_event("set_key", %{"key" => " "}, keyed)
+      assert Enum.at(blank.assigns.uses, 3).key == nil
+    end
+
+    test "a frame site offers no key" do
+      s = BuilderFixture.socket(BuilderFixture.layers())
+      refute BuilderFixture.render(s) =~ ~s(class="vis-builder-declared-as")
+    end
+  end
+
   describe "a host seeds a reference as a layer (spec/14 §19.9)" do
     test "an id becomes a use referring to it, labelled by the host or its position" do
       s =

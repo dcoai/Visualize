@@ -1783,7 +1783,8 @@ A layer in a composite and an entry in a style stack are the same thing: a fragm
   ref:   {:style, 11},          # which fragment; or a local key; or nil for an inline-only site
   mask:  [:stroke],             # keys removed here, so a lower layer shows through
   vars:  %{color: var(:color_1)}, # what the fragment's variables mean here
-  local: %{opacity: 0.8}        # what is added or overridden here
+  local: %{opacity: 0.8},       # what is added or overridden here
+  key:   :series                # the name a name-keyed kind is declared under, here
 }
 ```
 
@@ -1793,8 +1794,11 @@ A layer in a composite and an entry in a style stack are the same thing: a fragm
 | `mask` | keys removed at this site | checkboxes in the context panel (§19.10) |
 | `vars` | what the fragment's variables mean at this site | the Variables tab (§19.10) |
 | `local` | what is added or overridden at this site | the field forms |
+| `key` | the name this site's body is declared under, for a kind the document keys by name | the key control in the context panel (§19.10) |
 
 Each part is edited from exactly one surface, so there is never a question of where an edit went.
+
+**`key` is the composite's word, never the fragment's.** Four kinds live under a name in a document — `styles.<k>`, `frame.scales.<k>`, `sources.<k>`, `vars.<k>` — and a body has no name (§19.2), so the *site* says where it goes: the same `Styles::thick` is `series` in one composite and `line` in another, and no fragment ever hard-codes the name a reference will use. Every other kind has one place it can land, and `key` is `nil`. A name-keyed site with no key is a fault the builder shows at the row and Deploy refuses; it is not a silent nothing.
 
 **Order of operations, stated once:** `ref → local → mask → bind → stack`. The referenced fragment is fetched; the local node is merged over it; masked keys are removed; variables are substituted (§19.4); and the result cascades with the sites around it by §8.2. Mask and bind run after local, so both speak for everything the site contributes, whichever part said it — a site the host seeded is nothing but its local, and its keys are masked and its variables bound at the site like any other's. (Mask-before-local, so a masked key could be re-set locally, was considered and dropped: the local cascades over the reference anyway, so re-setting never needed the mask, and a mask that could not reach a seeded layer's own keys would have left the checkbox of §19.10 doing nothing on the layers a host starts with.)
 
@@ -1843,6 +1847,19 @@ A composite is a fragment whose content is a list of use sites and its own `vars
 
 **A design is the deployed tier, not a starting one.** *New fragment of a kind* (§19.8) does not offer `design`: a composite does everything a design does and deploys to one, so an empty design typed into forms would be the one path with no library behind it. The kind still exists — the library may hold one, and an imported document is one (§18.12) — and asking for it by name is refused with a notice that says to start a composite.
 
+**Flatten places every site by its kind.** A site's contribution — its body after `ref → local → mask → bind` — is placed in the design by the kind it derives to (§19.8):
+
+| The site's kind | Lands at | Identity |
+|---|---|---|
+| `theme`, `meta` | the design key of that name | the position |
+| `frame` | cascades into `frame` (§8.2) | the position |
+| `mark`, `label`, `axis` | appended under `marks`, `labels`, `frame.axes` | its own — `id`, `id`, `{scale, side}` — as the cascade already merges them |
+| `style`, `scale`, `source`, `var` | `styles[key]`, `frame.scales[key]`, `sources[key]`, `vars[key]` | the site's `key` (§19.3) |
+| `composite` | flattened first, then each of *its* sites as above | — |
+| more than one root (a host-seeded layer, an imported document) | cascades as a layer of the stack, as §18 always did | — |
+
+A name-keyed site with no key is reported — `keyless: [use id]` beside `missing` — and its body is not placed. The report is what the builder shows and what Deploy refuses on.
+
 **Composites nest**, because a composite is a fragment and a use may reference one. Resolution is recursive. A composite that reaches itself through any chain of uses is refused, as an `extends` cycle is (§3.5), at the site that closed the loop.
 
 **Within a kind, the same operation.** A composer opened on a style accepts only style fragments and its result is a style; opened on a composite it accepts anything and its result is a design. Both are `stack/1`; only what the stack may take differs, and the kind derivation (§19.8) says which was made. The style stack at a site (§3.6) is the same operation by reference at the point of use.
@@ -1889,7 +1906,8 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Use.resolve/2` | one use through a fetch: `ref → local → mask → bind`; a ref the fetch cannot find is `{:missing, id, local}` |
 | `Visualize.Chart.Use.over/2` | a use over a body already in hand — everything `resolve/2` does after the fetch |
 | `Visualize.Chart.Composite.composite?/1` | whether a fragment is one key, `composite`, holding uses |
-| `Visualize.Chart.Composite.flatten/2` | a composite through a fetch, recursively, stacked: `{:ok, design, %{missing: …}}` or `{:error, {:cycle, chain}}` |
+| `Visualize.Chart.Composite.flatten/2` | a composite through a fetch, recursively, every site placed by its kind (§19.6): `{:ok, design, %{missing: …, keyless: …}}` or `{:error, {:cycle, chain}}` |
+| `Visualize.Chart.Composite.place/2` | one site's contribution as the layer that declares it where the design keeps its kind — a name-keyed one under the site's `key` — or `:keyless` |
 | `Visualize.Chart.bind/2` | `Use.bind/2` on the design's own module |
 | `Visualize.Chart.mask/2` | `Use.mask/2` likewise |
 | `Visualize.Chart.resolve/2` | `Use.resolve/2` likewise |
@@ -1985,7 +2003,7 @@ Switching to *variable* writes `var(:key)` — the key's own name, until a perso
 | a size or number | a number, or a variable |
 | an enum | the allowed values |
 | a reference | what this document declares locally, and what the library holds, by id |
-| a layer in a stack | its keys with mask checkboxes; its free variables |
+| a layer in a stack | its keys with mask checkboxes; its free variables; for a name-keyed kind, the key it is declared under (§19.3) |
 | an entry in a style stack | the resolved style, each field naming the entry it came from (§18.19) |
 
 A bare `<input type="color">` would drop the theme slot, and the theme slot is how the built-in styles work; the control has to offer all three faces.
@@ -1997,6 +2015,7 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Masks.panel/1` | the selected layer's context: mask checkboxes over its paths, and its free variables |
 | `Visualize.Chart.Builder.Masks.paths/1` | the paths a contribution can mask: top-level keys and each node's keys, sorted |
 | `Visualize.Chart.Builder.Masks.toggle/3` | a use with a path added to or removed from its mask, as its checkbox says; a site masked as a whole is left alone |
+| `Visualize.Chart.Builder.Masks.keyed?/1` | whether a contribution is of a kind the document keys by name, so the panel offers the key control |
 | `Visualize.Chart.Builder.Stack.unmasked/2` | what a site contributes before its mask and bindings |
 
 **The typed controls in place.** A field's control is chosen from its type (§18.6), and three types now carry more than a box:

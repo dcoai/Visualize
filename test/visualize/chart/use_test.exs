@@ -186,12 +186,113 @@ defmodule Visualize.Chart.UseTest do
 
     test "a design that is not a composite flattens to itself" do
       design = %{version: 1, frame: %{}}
-      assert Chart.flatten(design, &fetch/1) == {:ok, design, %{missing: []}}
+      assert Chart.flatten(design, &fetch/1) == {:ok, design, %{missing: [], keyless: []}}
     end
 
     test "composite? tells the two apart" do
       assert Composite.composite?(@library[{:composite, 1}])
       refute Composite.composite?(%{version: 1})
+    end
+  end
+
+  describe "placement by kind (spec/14 §19.6)" do
+    @placed %{
+      {:theme, 1} => %{theme: :dark},
+      {:style, 1} => %{style: %{stroke_width: 5}},
+      {:scale, 1} => %{scale: %{kind: :linear, domain: :auto}},
+      {:source, 1} => %{source: %{fields: [:hour, :value]}},
+      {:mark, 1} => %{
+        mark: %{id: :m, type: :line, data: :primary, channels: %{x: :hour, y: :value}}
+      },
+      {:frame, 1} => %{frame: %{kind: :cartesian, size: %{width: 640, height: 320}}},
+      {:style, 2} => %{
+        composite: %{
+          uses: [
+            Use.new({:style, 1}),
+            %Use{id: {:use, 2}, ref: nil, local: %{style: %{opacity: 0.5}}}
+          ],
+          vars: %{}
+        }
+      }
+    }
+
+    defp placed(id), do: Map.fetch(@placed, id)
+
+    test "every site lands where the design keeps its kind, a name-keyed one under its key" do
+      composite = %{
+        composite: %{
+          uses: [
+            Use.new({:theme, 1}),
+            %Use{id: {:use, 2}, ref: {:frame, 1}},
+            %Use{id: {:use, 3}, ref: {:style, 1}, key: :series},
+            %Use{id: {:use, 4}, ref: {:scale, 1}, key: :hour},
+            %Use{id: {:use, 5}, ref: {:source, 1}, key: :primary},
+            %Use{id: {:use, 6}, ref: {:mark, 1}}
+          ],
+          vars: %{}
+        }
+      }
+
+      assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(composite, &placed/1)
+      assert flat.theme == :dark
+      assert flat.frame.kind == :cartesian
+      assert flat.styles == %{series: %{stroke_width: 5}}
+      assert flat.frame.scales == %{hour: %{kind: :linear, domain: :auto}}
+      assert flat.sources == %{primary: %{fields: [:hour, :value]}}
+      assert [%{id: :m}] = flat.marks
+    end
+
+    test "the same body is series in one composite and line in another" do
+      at = fn key ->
+        {:ok, flat, _} =
+          Chart.flatten(
+            %{
+              composite: %{
+                uses: [%Use{id: {:use, 1}, ref: {:style, 1}, key: key}, Use.new({:theme, 1})],
+                vars: %{}
+              }
+            },
+            &placed/1
+          )
+
+        Map.keys(flat.styles)
+      end
+
+      assert at.(:series) == [:series]
+      assert at.(:line) == [:line]
+    end
+
+    test "a name-keyed site with no key is reported and not placed" do
+      composite = %{
+        composite: %{
+          uses: [Use.new({:theme, 1}), %Use{id: {:use, 2}, ref: {:style, 1}}],
+          vars: %{}
+        }
+      }
+
+      assert {:ok, flat, %{keyless: [{:use, 2}]}} = Chart.flatten(composite, &placed/1)
+      refute Map.has_key?(flat, :styles)
+      refute Map.has_key?(flat, :style)
+    end
+
+    test "a composer of one kind stacks bodies, and its result is placed by the outer key" do
+      # {:style, 2} is a composite of two keyless style sites: a style, not a design.
+      assert {:ok, %{style: %{stroke_width: 5, opacity: 0.5}}, %{keyless: []}} =
+               Chart.flatten(@placed[{:style, 2}], &placed/1)
+
+      outer = %{
+        composite: %{uses: [%Use{id: {:use, 1}, ref: {:style, 2}, key: :series}], vars: %{}}
+      }
+
+      assert {:ok, %{styles: %{series: %{stroke_width: 5, opacity: 0.5}}}, _} =
+               Chart.flatten(outer, &placed/1)
+    end
+
+    test "key round-trips through the codec" do
+      use = %Use{id: {:use, 1}, ref: {:style, 1}, key: :series}
+      encoded = Chart.Codec.encode(%{composite: %{uses: [use], vars: %{}}})
+      assert %{"$use" => %{"key" => "series"}} = hd(encoded["composite"]["uses"])
+      assert Chart.Codec.decode(encoded) == %{composite: %{uses: [use], vars: %{}}}
     end
   end
 

@@ -258,6 +258,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <p :if={@missing != []} class="vis-builder-missing">
               {length(@missing)} {if length(@missing) == 1, do: "reference", else: "references"} no longer exist — showing through
             </p>
+            <p :if={@unplaced != []} class="vis-builder-missing">
+              not placed: {Enum.join(@unplaced, ", ")} — a style, scale, source or var needs a name to be declared under
+            </p>
           </aside>
           <main class="vis-builder-main">
             <nav class="vis-builder-nodes">
@@ -347,6 +350,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               label={@site.label}
               fragment={@site.fragment}
               free={@site.free}
+              keyless={@site.use.id in @keyless}
               target={@myself}
             />
           </aside>
@@ -402,6 +406,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:noreply, assign(socket, :notice, "deploy a composite; a #{open.kind} is not a chart")}
       else
         case Chart.flatten(structure(socket.assigns), Stack.fetch(store)) do
+          {:ok, _design, %{keyless: [_ | _] = keyless}} ->
+            names =
+              Enum.map_join(
+                keyless,
+                ", ",
+                &Stack.label(socket.assigns.labels, Stack.get(socket.assigns.uses, &1))
+              )
+
+            {:noreply,
+             assign(socket, :notice, "not deployed: #{names} need a key to be declared under")}
+
           {:ok, design, %{missing: missing}} ->
             send(self(), {tag, id, design})
             {:noreply, assign(socket, :notice, showed_through(missing))}
@@ -673,6 +688,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, bound(socket, free, params[name])}
     end
 
+    # The key a name-keyed site is declared under, from the context panel (spec/14 §19.3):
+    # the one surface that writes `Use.key`; blank removes it.
+    def handle_event("set_key", %{"key" => submitted}, socket) do
+      %{selected: selected} = socket.assigns
+
+      key =
+        case Editor.parse(:name, submitted) do
+          {:ok, name} -> name
+          :error -> nil
+        end
+
+      {:noreply, update(socket, :uses, &Stack.update(&1, selected, fn u -> %{u | key: key} end))}
+    end
+
     # A mask checkbox: the path joins or leaves the selected site's mask (spec/14 §19.5).
     # An unchecked box submits nothing, which is the path leaving.
     def handle_event("mask", %{"_target" => [name]} = params, socket) do
@@ -816,10 +845,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       fetch = Stack.fetch(assigns.store)
       {layers, missing} = Stack.resolve(assigns.uses, assigns.labels, fetch)
 
-      {design, cycle} =
+      {design, cycle, keyless} =
         case Stack.design(assigns.uses, assigns.stack_vars, fetch) do
-          {:ok, design, _missing} -> {design, nil}
-          {:error, {:cycle, chain}} -> {%{}, chain}
+          {:ok, design, %{keyless: keyless}} -> {design, nil, keyless}
+          {:error, {:cycle, chain}} -> {%{}, chain, []}
         end
 
       kind = (assigns.open && assigns.open.kind) || :composite
@@ -851,6 +880,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         slots: slots(design),
         editing: at(layer, entry.path),
         errors: faults(kind, design, assigns, cycle),
+        keyless: keyless,
+        unplaced: Enum.map(keyless, &Stack.label(assigns.labels, Stack.get(assigns.uses, &1))),
         kind: kind,
         preview?: kind in [:composite, :design],
         stack_title: stack_title(kind),
