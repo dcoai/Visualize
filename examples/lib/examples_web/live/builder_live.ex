@@ -16,49 +16,105 @@ defmodule ExamplesWeb.BuilderLive do
   defmodule Library do
     @moduledoc """
     A `Visualize.Chart.Builder.Store` over `:persistent_term`, so the page can offer a
-    library without a database. A real host keeps its fragments wherever it keeps anything.
+    library without a database (spec/14 §19.7). A real host keeps its entries wherever it
+    keeps anything; this one keeps a map of id to entry and one counter per kind, and
+    ignores the context because a demo page has nobody to attribute a save to.
+
+    Ids are `{kind, n}`, issued here and never reused (§19.2, D-100): the counter only ever
+    goes up, so a deleted entry's id stays vacant and a reference to it is a mask.
     """
     @behaviour Visualize.Chart.Builder.Store
 
-    @key {__MODULE__, :fragments}
+    alias Visualize.Chart.Builder.Store
+    alias Visualize.Chart.Fragment
+
+    @key {__MODULE__, :library}
 
     @impl true
-    def list, do: fragments() |> Map.keys() |> Enum.sort()
+    def list(_context) do
+      for {id, entry} <- entries(), do: %{id: id, name: entry.name, kind: entry.kind}
+    end
 
     @impl true
-    def get(name), do: Map.fetch(fragments(), name)
+    def get(id, _context) do
+      case Map.fetch(entries(), id) do
+        {:ok, entry} -> {:ok, Map.put(entry, :id, id)}
+        :error -> :error
+      end
+    end
 
     @impl true
-    def put(name, fragment) do
-      :persistent_term.put(@key, Map.put(fragments(), name, fragment))
+    def put(%{id: nil} = entry, context) do
+      kind = Fragment.kind(entry.fragment)
+      id = {kind, next(kind)}
+      put(%{entry | id: id, kind: kind}, context)
+    end
+
+    def put(%{id: id} = entry, _context) do
+      %{entries: entries, counters: counters} = state()
+
+      stored = %{name: entry.name, kind: Fragment.kind(entry.fragment), fragment: entry.fragment}
+      :persistent_term.put(@key, %{entries: Map.put(entries, id, stored), counters: counters})
+      {:ok, id}
+    end
+
+    @impl true
+    def delete(id, _context) do
+      %{entries: entries, counters: counters} = state()
+      :persistent_term.put(@key, %{entries: Map.delete(entries, id), counters: counters})
       :ok
     end
 
-    defp fragments do
-      # Each fragment must name things this page's stack actually declares: `grid` used to
-      # reference a scale `:y`, which nothing here declares, so adding it replaced the chart
-      # with `frame.axes[2].scale: scale :y is not declared` — which reads as doing nothing.
-      # An axis is identified by its `{scale, side}`, so naming `:value` merges with the left
-      # axis the shared layer already declares rather than adding a third.
-      # Names carry their place in the tree: <category>:<sub-category>:<name> (spec/14 §18.16).
-      :persistent_term.get(@key, %{
-        "Theme::dark" => %{theme: :dark},
-        "Frame:axes:no grid" => %{frame: %{axes: [%{scale: :value, side: :left, grid: false}]}},
-        "Frame:axes:dense ticks" => %{
-          frame: %{
-            axes: [
-              %{scale: :hour, side: :bottom, ticks: 12},
-              %{scale: :value, side: :left, ticks: 10}
-            ]
-          }
-        },
-        "Frame:size:wide" => %{frame: %{size: %{width: 900, height: 320}}},
-        "Frame:margin:roomy" => %{
-          frame: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}
-        },
-        "Styles::thick line" => %{styles: %{series: %{stroke_width: 5}}},
-        "Styles::stepped" => %{styles: %{series: %{curve: :step}}}
-      })
+    @impl true
+    def import(bundle, context), do: Store.relocate(bundle, context, &put/2)
+
+    # A per-kind sequence that only goes up.
+    defp next(kind) do
+      %{entries: entries, counters: counters} = state()
+      n = Map.get(counters, kind, 0) + 1
+      :persistent_term.put(@key, %{entries: entries, counters: Map.put(counters, kind, n)})
+      n
+    end
+
+    defp entries, do: state().entries
+
+    # The seeded library on first use. Names carry their place in the tree
+    # (spec/14 §18.16); every fragment names what this page's stack declares, so adding
+    # any of them changes something visible.
+    defp state do
+      case :persistent_term.get(@key, nil) do
+        nil ->
+          :persistent_term.put(@key, %{entries: %{}, counters: %{}})
+
+          Enum.each(seeds(), fn {name, fragment} ->
+            put(%{id: nil, name: name, kind: nil, fragment: fragment}, nil)
+          end)
+
+          :persistent_term.get(@key)
+
+        state ->
+          state
+      end
+    end
+
+    defp seeds do
+      [
+        {"Theme::dark", %{theme: :dark}},
+        {"Frame:axes:no grid", %{frame: %{axes: [%{scale: :value, side: :left, grid: false}]}}},
+        {"Frame:axes:dense ticks",
+         %{
+           frame: %{
+             axes: [
+               %{scale: :hour, side: :bottom, ticks: 12},
+               %{scale: :value, side: :left, ticks: 10}
+             ]
+           }
+         }},
+        {"Frame:size:wide", %{frame: %{size: %{width: 900, height: 320}}}},
+        {"Frame:margin:roomy", %{frame: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}}},
+        {"Styles::thick line", %{styles: %{series: %{stroke_width: 5}}}},
+        {"Styles::stepped", %{styles: %{series: %{curve: :step}}}}
+      ]
     end
   end
 

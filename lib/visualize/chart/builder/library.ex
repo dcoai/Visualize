@@ -23,6 +23,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
+    alias Visualize.Chart.Builder.Store
+
     @separator ":"
     @uncategorised "Uncategorised"
 
@@ -92,22 +94,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
     group first and the rest in name order, because a fragment sitting directly under its
     category is the general case and the sub-categories refine it.
 
-        iex> Visualize.Chart.Builder.Library.tree(["Theme::dark", "Frame:axes:dense", "Frame::wide"])
+        iex> entries = [
+        ...>   %{id: {:theme, 32}, name: "Theme::dark", kind: :theme},
+        ...>   %{id: {:axis, 2}, name: "Frame:axes:dense", kind: :axis},
+        ...>   %{id: {:size, 1}, name: "Frame::wide", kind: :size}
+        ...> ]
+        iex> Visualize.Chart.Builder.Library.tree(entries)
         [
           %{category: "Frame", groups: [
-            %{sub_category: nil, items: [%{stored: "Frame::wide", name: "wide"}]},
-            %{sub_category: "axes", items: [%{stored: "Frame:axes:dense", name: "dense"}]}
+            %{sub_category: nil, items: [%{id: {:size, 1}, stored: "Frame::wide", name: "wide", kind: :size}]},
+            %{sub_category: "axes", items: [%{id: {:axis, 2}, stored: "Frame:axes:dense", name: "dense", kind: :axis}]}
           ]},
           %{category: "Theme", groups: [
-            %{sub_category: nil, items: [%{stored: "Theme::dark", name: "dark"}]}
+            %{sub_category: nil, items: [%{id: {:theme, 32}, stored: "Theme::dark", name: "dark", kind: :theme}]}
           ]}
         ]
     """
-    @spec tree([String.t() | atom()]) :: [map()]
-    def tree(stored_names) do
-      stored_names
-      |> Enum.map(fn stored -> {to_string(stored), parse(stored)} end)
-      |> Enum.group_by(fn {_stored, {category, _sub, _name}} -> category end)
+    @spec tree([map()]) :: [map()]
+    def tree(entries) do
+      entries
+      |> Enum.map(fn entry -> {entry, parse(entry.name)} end)
+      |> Enum.group_by(fn {_entry, {category, _sub, _name}} -> category end)
       |> Enum.sort_by(fn {category, _entries} -> category end)
       |> Enum.map(fn {category, entries} -> %{category: category, groups: groups(entries)} end)
     end
@@ -119,9 +126,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         ["Frame", "Theme"]
     """
     @spec categories([String.t() | atom()]) :: [String.t()]
-    def categories(stored_names) do
-      stored_names
-      |> Enum.map(fn stored -> stored |> parse() |> elem(0) end)
+    def categories(stored) do
+      stored
+      |> Enum.map(fn entry -> entry |> stored_name() |> parse() |> elem(0) end)
       |> Enum.uniq()
       |> Enum.sort()
     end
@@ -134,17 +141,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
         ["axes"]
     """
     @spec sub_categories([String.t() | atom()], String.t()) :: [String.t()]
-    def sub_categories(stored_names, category) do
-      stored_names
-      |> Enum.map(&parse/1)
+    def sub_categories(stored, category) do
+      stored
+      |> Enum.map(&(&1 |> stored_name() |> parse()))
       |> Enum.filter(fn {named, sub, _name} -> named == category and is_binary(sub) end)
       |> Enum.map(fn {_category, sub, _name} -> sub end)
       |> Enum.uniq()
       |> Enum.sort()
     end
 
-    attr(:names, :list, required: true, doc: "the store's names, as `Store.list/0` returns them")
-    attr(:open, :string, default: nil, doc: "the stored name last acted on, marked in the tree")
+    attr(:entries, :list,
+      required: true,
+      doc: "the store's entries, as `Store.list/1` returns them"
+    )
+
+    attr(:open, :any, default: nil, doc: "the id last acted on, marked in the tree")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the library's events")
     attr(:id, :string, required: true, doc: "the hook element's id")
     attr(:class, :string, default: nil, doc: "appended to the library's class")
@@ -156,7 +167,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     one list per sub-category, each item draggable by its stored name.
     """
     def panel(assigns) do
-      assigns = assign(assigns, :tree, tree(assigns.names))
+      assigns = assign(assigns, :tree, tree(assigns.entries))
 
       ~H"""
       <aside id={@id} class={class(@class)} phx-hook="BuilderHook" data-builder-target={@target}>
@@ -169,14 +180,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <ul class="vis-builder-group-items">
               <li
                 :for={item <- group.items}
-                class={item_class(item.stored == @open)}
+                class={item_class(item.id == @open)}
                 draggable="true"
-                data-builder-fragment={item.stored}
-                title={"Drag " <> item.stored <> " into the layers, or click to add it on top"}
+                data-builder-fragment={Store.encode_id(item.id)}
+                title={"#{item.stored} · #{Store.encode_id(item.id)} — drag into the layers, or click to add on top"}
                 role="button"
                 tabindex="0"
                 phx-click="add_layer"
-                phx-value-name={item.stored}
+                phx-value-name={Store.encode_id(item.id)}
                 phx-target={@target}
               >
                 <span class="vis-builder-fragment">{item.name}</span>
@@ -197,18 +208,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The sub-categories of one category's entries: the unnamed group first, the rest by name.
     defp groups(entries) do
       entries
-      |> Enum.group_by(fn {_stored, {_category, sub, _name}} -> sub end)
+      |> Enum.group_by(fn {_entry, {_category, sub, _name}} -> sub end)
       |> Enum.sort_by(fn {sub, _entries} -> {sub != nil, sub} end)
       |> Enum.map(fn {sub, group} ->
         %{
           sub_category: sub,
           items:
             group
-            |> Enum.map(fn {stored, {_category, _sub, name}} -> %{stored: stored, name: name} end)
+            |> Enum.map(fn {entry, {_category, _sub, name}} ->
+              %{id: entry.id, stored: entry.name, name: name, kind: entry.kind}
+            end)
             |> Enum.sort_by(& &1.name)
         }
       end)
     end
+
+    # A bare name, or an entry carrying one.
+    defp stored_name(%{name: name}), do: name
+    defp stored_name(name), do: name
 
     defp blank("", fallback), do: fallback
     defp blank(value, _fallback), do: value
