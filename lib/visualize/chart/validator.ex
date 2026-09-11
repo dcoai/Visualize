@@ -60,6 +60,72 @@ defmodule Visualize.Chart.Validator do
 
   def validate(_), do: {:error, [{[], {:type, {:node, :design}}}]}
 
+  @doc """
+  `:ok`, or every fault of a fragment read as a kind — **per-kind validity** (spec/14 §19.8).
+
+  A design is validated whole. A composite must be `%{composite: %{uses, vars}}` and nothing
+  else, its uses sites. Any other kind is the singular body under its key — `%{style: %{…}}`,
+  `%{frame: %{…}}` — walked with that kind's schema and no design around it, so a reference
+  to a scale, style, source, variable or field the fragment does not declare is not a fault:
+  a fragment is a piece, and what it refers to is bound where it is composed. A fragment
+  whose one key is not the kind's is refused as `{:type, {:node, kind}}`.
+  """
+  @spec validate(term(), atom()) :: :ok | {:error, [error(), ...]}
+  def validate(map, :design), do: validate(map)
+
+  def validate(%{composite: %{uses: uses, vars: vars}} = map, :composite)
+      when is_list(uses) and is_map(vars) and map_size(map) == 1 do
+    uses
+    |> Enum.with_index()
+    |> Enum.reject(fn {use, _index} -> is_struct(use, Visualize.Chart.Use) end)
+    |> Enum.map(fn {_use, index} -> {[:composite, :uses, index], {:type, :use}} end)
+    |> case do
+      [] -> :ok
+      errors -> {:error, errors}
+    end
+  end
+
+  def validate(_map, :composite), do: {:error, [{[], {:type, {:node, :composite}}}]}
+
+  def validate(map, kind) when is_map(map) and not is_struct(map) and is_atom(kind) do
+    case Map.to_list(map) do
+      [{^kind, body}] ->
+        case as_kind(kind, body) do
+          [] -> :ok
+          errors -> {:error, Enum.sort_by(errors, &elem(&1, 0))}
+        end
+
+      _other ->
+        {:error, [{[], {:type, {:node, kind}}}]}
+    end
+  end
+
+  def validate(_map, kind), do: {:error, [{[], {:type, {:node, kind}}}]}
+
+  # A design key is checked as the design would check it — a theme may be a name — and any
+  # other kind is a node of that kind, with nothing to look references up in. A fragment is
+  # partial by nature — a frame that says only its width is the point of one — so no key is
+  # required of it; required-ness is a property of the design it is flattened into.
+  defp as_kind(kind, body) do
+    case Schema.key(:design, kind) do
+      nil when is_map(body) and not is_struct(body) -> node(kind, body, [kind], open_context())
+      nil -> [{[kind], {:type, {:node, kind}}}]
+      spec -> check_key(:design, spec, body, [kind], open_context())
+    end
+  end
+
+  defp open_context do
+    %{
+      context(%{})
+      | scales: :unknown,
+        styles: :unknown,
+        sources: :unknown,
+        vars: :unknown,
+        slots: :unknown,
+        partial?: true
+    }
+  end
+
   @doc "One error as `path: reason` in words; the path in `marks[1].channels.y` form."
   @spec format(error()) :: String.t()
   def format({path, reason}), do: "#{format_path(path)}: #{words(reason)}"
@@ -110,7 +176,8 @@ defmodule Visualize.Chart.Validator do
       op: nil,
       fields: :unknown,
       datum?: false,
-      channel_keys: []
+      channel_keys: [],
+      partial?: false
     }
   end
 
@@ -165,7 +232,10 @@ defmodule Visualize.Chart.Validator do
       for k <- Map.keys(map), k not in known, do: {path ++ [k], unknown_reason(kind, k, ctx)}
 
     missing =
-      for s <- specs, s.required, not Map.has_key?(map, s.key), do: {path ++ [s.key], :required}
+      for s <- specs,
+          s.required and not ctx.partial?,
+          not Map.has_key?(map, s.key),
+          do: {path ++ [s.key], :required}
 
     present =
       for s <- specs, Map.has_key?(map, s.key) do

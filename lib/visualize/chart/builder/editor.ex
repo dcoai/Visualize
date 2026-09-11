@@ -21,7 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.{Schema, Validator, Var}
+    alias Visualize.Chart.{Fragment, Schema, Validator, Var}
 
     @typedoc "The control a key's type gets (spec/14 §18.6)."
     @type widget :: :checkbox | :number | :text | :textarea | {:select, [atom()]}
@@ -59,7 +59,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     """
     @spec nodes(map()) :: [node_entry(), ...]
-    def nodes(fragment) when is_map(fragment), do: walk(fragment, :design, [])
+    def nodes(fragment) when is_map(fragment) do
+      case Fragment.wrapped(fragment) do
+        {kind, body} -> walk(body, kind, [kind])
+        nil -> walk(fragment, :design, [])
+      end
+    end
 
     defp walk(node, kind, path) do
       [%{path: path, kind: kind, label: label(path)} | children(node, kind, path)]
@@ -339,10 +344,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp mode("variable", key), do: {:ok, %Var{name: key}}
     defp mode(_literal, _key), do: :error
 
-    # A variable's name becomes an atom exactly as a typed reference does (§18.6).
-    defp variable(nil), do: :error
+    @doc """
+    A typed variable name as the variable it names, or `:error` for a blank — a removal.
+    The name becomes an atom exactly as a typed reference does (spec/14 §18.6, §19.9).
 
-    defp variable(string) when is_binary(string) do
+        iex> Visualize.Chart.Builder.Editor.variable(":color_1")
+        {:ok, %Visualize.Chart.Var{name: :color_1}}
+
+        iex> Visualize.Chart.Builder.Editor.variable("  ")
+        :error
+    """
+    @spec variable(String.t() | nil) :: {:ok, Var.t()} | :error
+    def variable(nil), do: :error
+
+    def variable(string) when is_binary(string) do
       case String.trim(string) do
         "" -> :error
         name -> {:ok, %Var{name: atom(name)}}

@@ -9,7 +9,7 @@ defmodule Visualize.Chart.Composite do
       }}
 
   **Save writes structure**: this is what the store holds. **Flatten is a deployment
-  verb**: `flatten/2` resolves every use through a store — `ref → mask → bind → local`
+  verb**: `flatten/2` resolves every use through a store — `ref → mask → local → bind`
   — recursively where a use refers to another composite, and stacks the result into a flat
   design in §13's shape, with no ids and no uses. A composite that reaches itself through
   any chain of uses is refused as an `extends` cycle is (§3.5).

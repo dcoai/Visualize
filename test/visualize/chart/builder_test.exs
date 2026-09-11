@@ -21,6 +21,7 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.Chart.Builder.Palette
   alias Visualize.Chart.Builder.Preview
   alias Visualize.Chart.Builder.StyleStack
+  alias Visualize.Chart.Use
 
   for name <- ~w(preview preview_errors builder builder_store)a do
     test "#{name} renders as recorded" do
@@ -761,6 +762,188 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "the composer constrained by kind (spec/14 §19.6, §19.9)" do
+    defmodule Recording do
+      @moduledoc false
+      @behaviour Visualize.Chart.Builder.Store
+
+      # Entries live in the calling process — the test — so what `put` wrote can be read.
+      def seed(entries), do: Process.put(:entries, entries)
+      defp entries, do: Process.get(:entries, %{})
+
+      @impl true
+      def list(_context) do
+        for {{kind, _} = id, entry} <- entries(), do: %{id: id, name: entry.name, kind: kind}
+      end
+
+      @impl true
+      def get({kind, _} = id, _context) do
+        case Map.fetch(entries(), id) do
+          {:ok, entry} -> {:ok, Map.merge(entry, %{id: id, kind: kind})}
+          :error -> :error
+        end
+      end
+
+      @impl true
+      def put(%{kind: kind} = entry, _context) do
+        id = entry.id || {kind, 100 + map_size(entries())}
+        Process.put(:entries, Map.put(entries(), id, Map.take(entry, [:name, :fragment])))
+        {:ok, id}
+      end
+
+      @impl true
+      def delete(_id, _context), do: :ok
+
+      @impl true
+      def import(bundle, context),
+        do: Visualize.Chart.Builder.Store.relocate(bundle, context, &put/2)
+    end
+
+    setup do
+      Recording.seed(%{
+        {:style, 1} => %{name: "Styles::thick", fragment: %{style: %{stroke_width: 5}}},
+        {:style, 2} => %{name: "Styles::faint", fragment: %{style: %{opacity: 0.4}}},
+        {:style, 3} => %{name: "Styles::lie", fragment: %{frame: %{kind: :polar}}},
+        {:style, 4} => %{name: "Styles::odd", fragment: %{style: %{nonsense: 1}}},
+        {:frame, 1} => %{name: "Frame::wide", fragment: %{frame: %{size: %{width: 900}}}},
+        {:composite, 1} => %{
+          name: "Charts::pair",
+          fragment: %{
+            composite: %{
+              uses: [Use.new({:frame, 1}), %Use{id: {:use, 2}, ref: nil, local: %{version: 1}}],
+              vars: %{unit: %{default: "%"}}
+            }
+          }
+        }
+      })
+
+      %{socket: BuilderFixture.socket(BuilderFixture.layers(), store: Recording)}
+    end
+
+    test "opening a style makes it the stack: one inline site, its form, no preview", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
+
+      assert s.assigns.open == %{id: {:style, 1}, name: "Styles::thick", kind: :style}
+      assert BuilderFixture.layers(s) == [{"Styles::thick", %{style: %{stroke_width: 5}}}]
+
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(phx-value-root="style")
+      assert html =~ "style stack"
+      assert html =~ ~s(class="vis-builder-opened")
+      refute html =~ ~s(class="vis-builder-preview")
+    end
+
+    test "an edit writes to the site, and closing brings the stack back", %{socket: s} do
+      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
+
+      {:noreply, edited} =
+        Builder.handle_event("edit", %{"_target" => ["opacity"], "opacity" => "0.5"}, opened)
+
+      assert BuilderFixture.layers(edited) ==
+               [{"Styles::thick", %{style: %{stroke_width: 5, opacity: 0.5}}}]
+
+      {:noreply, closed} = Builder.handle_event("close", %{}, edited)
+      assert closed.assigns.open == nil
+      assert BuilderFixture.layers(closed) == BuilderFixture.layers(s)
+      assert BuilderFixture.selected(closed) == BuilderFixture.selected(s)
+    end
+
+    test "the composer takes only its kind; the workspace takes anything", %{socket: s} do
+      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
+
+      {:noreply, refused} =
+        Builder.handle_event("insert", %{"name" => "frame:1", "at" => 0}, opened)
+
+      assert refused.assigns.notice == "a style composer takes a style; Frame::wide is a frame"
+      assert BuilderFixture.layers(refused) == BuilderFixture.layers(opened)
+
+      {:noreply, stacked} =
+        Builder.handle_event("insert", %{"name" => "style:2", "at" => 0}, opened)
+
+      assert BuilderFixture.names(stacked) == ["Styles::faint", "Styles::thick"]
+      assert BuilderFixture.design(stacked) == %{style: %{opacity: 0.4, stroke_width: 5}}
+
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "frame:1", "at" => 0}, s)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "style:1", "at" => 0}, s)
+      assert length(BuilderFixture.layers(s)) == 5
+    end
+
+    test "saving one bare site writes the body; saving a stack writes structure", %{socket: s} do
+      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
+
+      {:noreply, edited} =
+        Builder.handle_event("edit", %{"_target" => ["opacity"], "opacity" => "0.5"}, opened)
+
+      {:noreply, saved} =
+        Builder.handle_event("put_design", %{"name" => "Styles::thicker"}, edited)
+
+      assert saved.assigns.notice == nil
+      assert saved.assigns.open == %{id: {:style, 1}, name: "Styles::thicker", kind: :style}
+
+      assert {:ok, %{fragment: %{style: %{stroke_width: 5, opacity: 0.5}}}} =
+               Recording.get({:style, 1}, %{})
+
+      {:noreply, stacked} =
+        Builder.handle_event("insert", %{"name" => "style:2", "at" => 0}, opened)
+
+      {:noreply, _saved} =
+        Builder.handle_event("put_design", %{"name" => "Styles::both"}, stacked)
+
+      assert {:ok, %{name: "Styles::both", fragment: %{composite: %{uses: uses}}}} =
+               Recording.get({:style, 1}, %{})
+
+      assert [%Use{ref: {:style, 2}}, %Use{ref: nil, local: %{style: %{stroke_width: 5}}}] = uses
+    end
+
+    test "a new fragment of a kind starts empty and valid, and is saved under a new id", %{
+      socket: s
+    } do
+      {:noreply, new} = Builder.handle_event("new_fragment", %{"kind" => "scale"}, s)
+      assert new.assigns.open == %{id: nil, name: nil, kind: :scale}
+      assert BuilderFixture.layers(new) == [{"new scale", %{scale: %{}}}]
+      refute BuilderFixture.render(new) =~ "vis-builder-error"
+
+      {:noreply, saved} = Builder.handle_event("put_design", %{"name" => "Scales::hour"}, new)
+      assert %{id: {:scale, _}, name: "Scales::hour", kind: :scale} = saved.assigns.open
+      assert {:ok, %{fragment: %{scale: %{}}}} = Recording.get(saved.assigns.open.id, %{})
+    end
+
+    test "a composite entry opens as its sites, labelled by the store, with its vars", %{
+      socket: s
+    } do
+      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "composite:1"}, s)
+
+      assert BuilderFixture.names(opened) == ["Frame::wide", "local"]
+      assert opened.assigns.stack_vars == %{unit: %{default: "%"}}
+
+      assert BuilderFixture.design(opened) ==
+               %{version: 1, frame: %{size: %{width: 900}}, vars: %{unit: %{default: "%"}}}
+
+      html = BuilderFixture.render(opened)
+      assert html =~ "Layers"
+      assert html =~ ~s(class="vis-builder-preview")
+
+      {:noreply, saved} = Builder.handle_event("put_design", %{"name" => "Charts::pair"}, opened)
+      assert saved.assigns.notice == nil
+
+      assert {:ok, %{fragment: %{composite: %{vars: %{unit: %{default: "%"}}}}}} =
+               Recording.get({:composite, 1}, %{})
+    end
+
+    test "what does not flatten to its kind, or is not valid as one, is refused", %{socket: s} do
+      {:noreply, lie} = Builder.handle_event("add_layer", %{"name" => "style:3"}, s)
+      {:noreply, refused} = Builder.handle_event("put_design", %{"name" => "x"}, lie)
+
+      assert refused.assigns.notice ==
+               "this was opened as a style and is now a frame; a saved style must still be one"
+
+      {:noreply, odd} = Builder.handle_event("add_layer", %{"name" => "style:4"}, s)
+      {:noreply, refused} = Builder.handle_event("put_design", %{"name" => "x"}, odd)
+      assert refused.assigns.notice =~ "not a valid style"
+      assert BuilderFixture.render(odd) =~ "vis-builder-error"
+    end
+  end
+
   describe "reaching a root the selected layer does not declare (spec/14 §18.13)" do
     setup do
       host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
@@ -947,6 +1130,65 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
       assert s.assigns.node_label == "frame"
     end
+
+    test "each site that carries variables has rows, reading as one of three states" do
+      s = BuilderFixture.socket(BuilderFixture.parameterised(), node_label: "variables")
+      html = BuilderFixture.render(s)
+
+      # The params layer carries `ticks` and `accent`; the others carry none.
+      assert html =~ ~s(<h3 class="vis-builder-site-name">params</h3>)
+      refute html =~ ~s(<h3 class="vis-builder-site-name">house</h3>)
+      assert html =~ "flows up as :ticks"
+      assert html =~ ~s(<input type="hidden" name="site" value="3">)
+
+      {:noreply, set} =
+        Builder.handle_event(
+          "bind_site",
+          %{"site" => "3", "_target" => ["ticks"], "ticks" => "6"},
+          s
+        )
+
+      assert Enum.at(set.assigns.uses, 3).vars == %{ticks: 6}
+      assert BuilderFixture.render(set) =~ "= 6"
+
+      {:noreply, renamed} =
+        Builder.handle_event(
+          "bind_site",
+          %{"site" => "3", "_target" => ["accent.var"], "accent.var" => "accent_1"},
+          set
+        )
+
+      assert Enum.at(renamed.assigns.uses, 3).vars == %{ticks: 6, accent: Chart.var(:accent_1)}
+      assert BuilderFixture.render(renamed) =~ "= var(:accent_1)"
+
+      # The rename shows in what the stack still needs: `accent_1`, never `accent`.
+      names = renamed |> BuilderFixture.layers() |> Chart.free_vars() |> Enum.map(& &1.name)
+      assert :accent_1 in names
+      refute :accent in names
+
+      # A blank is a removal, and the name flows up again.
+      {:noreply, up} =
+        Builder.handle_event(
+          "bind_site",
+          %{"site" => "3", "_target" => ["ticks"], "ticks" => ""},
+          renamed
+        )
+
+      assert Enum.at(up.assigns.uses, 3).vars == %{accent: Chart.var(:accent_1)}
+    end
+
+    test "a site, a name or a control that does not exist changes nothing" do
+      s = BuilderFixture.socket(BuilderFixture.parameterised())
+
+      for params <- [
+            %{"site" => "9", "_target" => ["ticks"], "ticks" => "6"},
+            %{"site" => "3", "_target" => ["nope"], "nope" => "6"},
+            %{"site" => "3", "_target" => ["ticks.mode"], "ticks.mode" => "x"}
+          ] do
+        {:noreply, same} = Builder.handle_event("bind_site", params, s)
+        assert same.assigns.uses == s.assigns.uses
+      end
+    end
   end
 
   describe "the library's two views (spec/14 §19.8)" do
@@ -1084,13 +1326,16 @@ defmodule Visualize.Chart.BuilderTest do
   end
 
   describe "the store (spec/14 §18.3)" do
-    test "clicking a stored fragment opens it; dragging it in adds it as the highest layer" do
+    test "clicking a stored fragment opens it as the stack; dragging it in adds it as the highest layer" do
       layers = BuilderFixture.layers()
       socket = BuilderFixture.socket(layers, store: Library)
 
       {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "design:1"}, socket)
       assert opened.assigns.open.id == Library.baseline_id()
-      assert BuilderFixture.layers(opened) == layers
+
+      assert BuilderFixture.layers(opened) == [
+               {"baseline", %{version: 1, frame: %{kind: :cartesian}}}
+             ]
 
       {:noreply, added} =
         Builder.handle_event("insert", %{"name" => "design:1", "at" => 3}, socket)

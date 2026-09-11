@@ -1784,7 +1784,7 @@ A layer in a composite and an entry in a style stack are the same thing: a fragm
 
 Each part is edited from exactly one surface, so there is never a question of where an edit went.
 
-**Order of operations, stated once:** `ref → mask → bind → local → stack`. The referenced fragment is fetched; masked keys are removed; variables are substituted (§19.4); the local node is merged over it; and the result cascades with the sites around it by §8.2. Mask runs before local, so a masked key can be re-set locally.
+**Order of operations, stated once:** `ref → mask → local → bind → stack`. The referenced fragment is fetched; masked keys are removed; the local node is merged over it; variables are substituted (§19.4); and the result cascades with the sites around it by §8.2. Mask runs before local, so a masked key can be re-set locally. Bind runs after local, so a site's bindings speak for everything the site contributes — a site the host seeded is nothing but its local, and its variables are bound at the site like any other's.
 
 **A site has its own id** because a site was its position, and position is the wrong identity: the selection and the disabled set had to be remapped on every insert and move, a local style was named by an index that a reorder changed, and a drop target was a number a client could not be trusted with. With `Use.id` a site is the same site wherever it sits, and `Visualize.Chart.explain/1` attributes to it by id with a display name.
 
@@ -1827,7 +1827,7 @@ A composite is a fragment whose content is a list of use sites and its own `vars
 
 **Save writes structure.** The store holds the uses, never `stack/1`'s result, so a composite reopens as what was built — references intact, masks and bindings where they were left — and references keep their point: edit `{:style, 11}` and every composite using it follows. The save message of §18.2 carries structure.
 
-**Flatten is a deployment verb.** `flatten/2` on `Visualize.Chart` resolves every use recursively — `ref → mask → bind → local` — through a store, and stacks the result: a flat design in §13's shape, with no ids and no uses, which `apply/2` and `render/2` consume as they always have. A host calls it in its own pipeline. The builder's preview resolves the structure to draw it, and the builder *may* offer flatten as a separately-labelled action; the two verbs are different, and offering the second never loses the first.
+**Flatten is a deployment verb.** `flatten/2` on `Visualize.Chart` resolves every use recursively — `ref → mask → local → bind` — through a store, and stacks the result: a flat design in §13's shape, with no ids and no uses, which `apply/2` and `render/2` consume as they always have. A host calls it in its own pipeline. The builder's preview resolves the structure to draw it, and the builder *may* offer flatten as a separately-labelled action; the two verbs are different, and offering the second never loses the first.
 
 **Composites nest**, because a composite is a fragment and a use may reference one. Resolution is recursive. A composite that reaches itself through any chain of uses is refused, as an `extends` cycle is (§3.5), at the site that closed the loop.
 
@@ -1860,6 +1860,9 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id through a store, dependencies first, with provenance |
 | `Visualize.Chart.Fragment.kinds/0` | every kind a fragment can be, and so every kind an id can carry |
 | `Visualize.Chart.Fragment.kind/1` | the kind of a fragment, derived (§19.8) |
+| `Visualize.Chart.Fragment.singular/1` | the kind a singular wrapper key names — `:style` for `style:` — or `nil`; `composite` is not one |
+| `Visualize.Chart.Fragment.wrapped/1` | a singular-wrapper fragment as `{kind, body}`, or `nil` |
+| `Visualize.Chart.Validator.validate/2` | per-kind validity (§19.8): a fragment read as a kind — a design whole, a composite as sites, any other kind as the body under its key with that kind's schema, no key required and no reference looked up, since a fragment is a piece |
 | `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each, sorted — the order a map is walked is the runtime's, not a promise |
 | `Visualize.Chart.Fragment.relocate/2` | a fragment with its ids rewritten through a table, and the ids the table did not carry |
 
@@ -1869,7 +1872,7 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Use.new/2` | a use of a fragment with a fresh id — one more than the highest it sits beside — and the three empty parts |
 | `Visualize.Chart.Use.bind/2` | a fragment with its variables substituted: a literal sets, another `var/1` renames (§19.4) |
 | `Visualize.Chart.Use.mask/2` | a fragment with paths removed; `:all` removes everything (§19.5) |
-| `Visualize.Chart.Use.resolve/2` | one use through a fetch: `ref → mask → bind → local`; a ref the fetch cannot find is `{:missing, id, local}` |
+| `Visualize.Chart.Use.resolve/2` | one use through a fetch: `ref → mask → local → bind`; a ref the fetch cannot find is `{:missing, id, local}` |
 | `Visualize.Chart.Use.over/2` | a use over a body already in hand — everything `resolve/2` does after the fetch |
 | `Visualize.Chart.Composite.composite?/1` | whether a fragment is one key, `composite`, holding uses |
 | `Visualize.Chart.Composite.flatten/2` | a composite through a fetch, recursively, stacked: `{:ok, design, %{missing: …}}` or `{:error, {:cycle, chain}}` |
@@ -1918,7 +1921,7 @@ Every fragment has two faces, and the editor is one component whose shape is the
 | `Visualize.Chart.Builder.Stack.toggle/1` | a use disabled or re-enabled: `mask: :all`, or not (§19.3) |
 | `Visualize.Chart.Builder.Stack.fetch/1` | a store as the function resolution takes: an id to `{:ok, fragment}` or `:error` |
 | `Visualize.Chart.Builder.Stack.resolve/3` | every use as the `{label, fragment}` the panels read, and the refs no store holds; a disabled use resolves as it would enabled, since the panels edit it either way |
-| `Visualize.Chart.Builder.Stack.design/2` | the enabled uses as a composite, flattened through the store (§19.6), with every `{:style, n}` at a site inlined so the frame needs no store |
+| `Visualize.Chart.Builder.Stack.design/3` | the enabled uses as a composite over the stack's own vars, flattened through the store (§19.6), with every `{:style, n}` at a site inlined so the frame needs no store |
 | `Visualize.Chart.Builder.Stack.index_of/2` | a use's position, or `nil` |
 | `Visualize.Chart.Builder.Stack.get/2` | the use with an id, or `nil` |
 | `Visualize.Chart.Builder.Stack.update/3` | one use replaced by a function of it |
@@ -1928,7 +1931,18 @@ Every fragment has two faces, and the editor is one component whose shape is the
 | `Visualize.Chart.Builder.Stack.kinds/0` | the kinds *new fragment of a kind* offers, the composite first (§19.8) |
 | `Visualize.Chart.Builder.Stack.empty/1` | the empty, valid fragment of a kind |
 
-Selection is a use's id, and a host that seeds one (`selected`) is honoured when the stack has it; disabling is the mask of everything, and its whole effect is in `design/2`. Clicking a library entry opens it — `open` is the entry and the field forms write to its fragment — and dragging it into the stack composes it, as a use referring to its id whose label is the entry's name. Saving sends the structure — `%{composite: %{uses, vars}}` — and never a flattened design; a host that wants the design asks `Visualize.Chart.flatten/2` with the store's fetch.
+| `Visualize.Chart.Builder.Stack.open/2` | an entry as the stack: a composite's sites labelled by the store's names, with its vars; any other body as one inline site named for the entry |
+| `Visualize.Chart.Builder.Stack.structure/2` | the stack as a composite over its vars: what saving sends, and what a composite stores |
+| `Visualize.Chart.Builder.Stack.body/2` | the lowest tier that holds the stack (D-99): one bare inline site is its body, anything more is structure |
+| `Visualize.Chart.Builder.Stack.sites/3` | each site that carries variables — its fragment's free variables *before* the site's bindings, and what the site binds them to — for the per-site rows (§19.10) |
+
+Selection is a use's id, and a host that seeds one (`selected`) is honoured when the stack has it; disabling is the mask of everything, and its whole effect is in `design/3`. Saving sends the structure — `%{composite: %{uses, vars}}` — and never a flattened design; a host that wants the design asks `Visualize.Chart.flatten/2` with the store's fetch.
+
+**Opening is the stack.** There is always exactly one thing open, and the stack is its compose face. Nothing open is the workspace: the composite the host seeded, which takes anything. Clicking a library entry opens it *as* the stack — a composite's sites, labelled by the store's names, or any other body as one inline site named for the entry — and the field forms write to the selected site's local, which for an opened style is the style's own body. The stack it was opened over is stashed once and comes back on *close*; opening another entry while one is open replaces it, as opening a second file does. Dragging an entry into the stack composes it, as a use referring to its id whose label is the entry's name, and the composer **admits only the open kind**: opened on a style it refuses a frame by name — *a style composer takes a style; Frame::wide is a frame* — while the workspace, a composite and a design take anything. The sidebar's title says which: *Layers*, or *style stack*.
+
+**What an open kind shows.** A composite or a design has the node tabs, the preview and the design's faults from `apply/2`; any other kind has its own form as the one root — a wrapper body's nodes are its kind's, so `%{style: %{…}}` opens on a `style` tab — no preview, since there is no chart to look at, and the faults of per-kind validity in their place. The document panel exports the fragment itself in the JSON form, valid as its kind.
+
+**Save writes the lowest tier.** The workspace and a composite are saved as structure. Any other kind is saved as `body/2` gives it — one bare inline site is its body, values and nothing else, so a style stays a style; a stack of sites is structure under the kind's id — and is refused when what it flattens to is no longer that kind (*opened as a style and is now a frame*) or is not valid as one. A singular wrapper cascades as a node of its kind, so two style fragments stack key by key as two styles would (§8.2), and a stored structure of kind `style` flattens to a style wherever it is used.
 
 A field in any form shows a **variable as a variable**: a switch between *literal* — the control §18.6 chooses from the type — and *variable* — pick an existing name or type a new one — and a variable renders as `var(:color)`, never as a struct's text in a textarea. A form therefore has three controls per key — `key`, `key.mode`, `key.var` — and one function says what a change to any of them means:
 
@@ -1941,7 +1955,13 @@ Switching to *variable* writes `var(:key)` — the key's own name, until a perso
 
 ### 19.10 Variables, and the context panel
 
-**The Variables tab** is `Visualize.Chart.Builder.Params.panel/1` (§18.11) moved from the tray into the strip, as its last root — the one root that is the builder's own rather than a fragment's — and extended. On a fragment it lists the fragment's free variables, each typed by what the schema expects at the path it stands at, with a default. On a composite it lists the composite's own variables, then each placed fragment's free variables **grouped by site**, and a row may be assigned to a literal or **to one of the composite's variables** — which is §19.4's rename, and the surface that writes `Use.vars`. A row's state reads as one of three: *flows up as `:color`*, `= "blue"`, `= var(:color_1)`. The per-site rows arrive with the composer of §19.9, since a site is what they are grouped by.
+**The Variables tab** is `Visualize.Chart.Builder.Params.panel/1` (§18.11) moved from the tray into the strip, as its last root — the one root that is the builder's own rather than a fragment's — and extended. On a fragment it lists the fragment's free variables, each typed by what the schema expects at the path it stands at, with a default. On a composite it lists the composite's own variables, then each placed fragment's free variables **grouped by site**, and a row may be assigned to a literal or **to one of the composite's variables** — which is §19.4's rename, and the surface that writes `Use.vars`. A row's state reads as one of three: *flows up as `:color`*, `= "blue"`, `= var(:color_1)`.
+
+**The per-site rows** are one `<form class="vis-builder-site">` per site whose fragment carries a variable — the fragment's own names, before the site's bindings, from `Visualize.Chart.Builder.Stack.sites/3` — with a row per variable: its name, how it reads, and two controls, a value and a variable name offered from the stack's names. Whichever was last changed is what the site says; a blank in either is a removal, and the name flows up again. The `bind_site` event carries the site's position and the control that changed, parses a value with the type the variable's first use expects (§18.11) and a name with `Visualize.Chart.Builder.Editor.variable/1`, and writes `Use.vars` and nothing else. A site, a name or a control that does not exist changes nothing.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Editor.variable/1` | a typed variable name as the variable it names; a blank is `:error`, a removal |
 
 **The context panel is one dispatch.** The selection chooses the type; the type chooses the control; every control offers *assign to another variable*.
 

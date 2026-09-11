@@ -64,6 +64,46 @@ defmodule Visualize.Chart.Fragment do
   @type id :: {atom(), pos_integer()}
 
   @doc """
+  The kind a singular wrapper key names — `:style` for `style:` — or `nil` for any other
+  key, `composite` included (spec/14 §19.2).
+
+      iex> Visualize.Chart.Fragment.singular(:scale)
+      :scale
+
+      iex> Visualize.Chart.Fragment.singular(:styles)
+      nil
+
+  """
+  @spec singular(term()) :: atom() | nil
+  def singular(:composite), do: nil
+  def singular(key), do: Map.get(@singular, key)
+
+  @doc """
+  A singular-wrapper body as `{kind, body}` — `%{style: %{…}}` is `{:style, %{…}}` — or `nil`
+  for anything else, a composite included (spec/14 §19.2).
+
+      iex> Visualize.Chart.Fragment.wrapped(%{style: %{stroke_width: 5}})
+      {:style, %{stroke_width: 5}}
+
+      iex> Visualize.Chart.Fragment.wrapped(%{styles: %{series: %{}}})
+      nil
+
+  """
+  @spec wrapped(map()) :: {atom(), map()} | nil
+  def wrapped(fragment) when is_map(fragment) and not is_struct(fragment) do
+    case Map.to_list(fragment) do
+      [{key, body}] when is_map(body) and not is_struct(body) ->
+        case singular(key) do
+          nil -> nil
+          kind -> {kind, body}
+        end
+
+      _other ->
+        nil
+    end
+  end
+
+  @doc """
   Every kind a fragment can be, and so every kind an id can carry: the schema's node kinds
   and `:composite` (§19.6).
   """

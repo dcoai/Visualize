@@ -332,6 +332,17 @@ defmodule Visualize.BuilderFixture do
   @doc "The selected layer's position, or `nil`."
   def selected(%Socket{assigns: assigns}), do: Stack.index_of(assigns.uses, assigns.selected)
 
+  @doc """
+  The builder rendered in a socket's state: `render_component/2` over its assigns, with the
+  host's layers already seeded so the state — an opened entry, a moved layer — is what draws.
+  """
+  def render(%Socket{assigns: assigns}) do
+    assigns
+    |> Map.drop([:__changed__, :flash, :myself])
+    |> Map.merge(%{styles: false, layers: Map.get(assigns, :host_layers, [])})
+    |> then(&render_component(Builder, &1))
+  end
+
   @doc "The disabled positions, as a set."
   def disabled(%Socket{assigns: assigns}) do
     assigns.uses
@@ -342,7 +353,9 @@ defmodule Visualize.BuilderFixture do
 
   @doc "The design the stack stands for: what saving sends, flattened."
   def design(%Socket{assigns: assigns}) do
-    {:ok, design, _missing} = Stack.design(assigns.uses, Stack.fetch(assigns.store))
+    {:ok, design, _missing} =
+      Stack.design(assigns.uses, assigns.stack_vars, Stack.fetch(assigns.store))
+
     design
   end
 

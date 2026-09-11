@@ -23,6 +23,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart.Validator
 
     attr(:design, :map, required: true, doc: "the stacked design to encode")
+    attr(:kind, :atom, default: :design, doc: "what the stack is of: a design, or one kind")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the panel's class")
 
@@ -32,7 +33,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The exported document, or the faults that stop it, and a form that reads one back.
     """
     def panel(assigns) do
-      assigns = assign(assigns, encoded(assigns.design))
+      assigns = assign(assigns, encoded(assigns.design, assigns.kind))
 
       ~H"""
       <div class={class(@class)}>
@@ -58,12 +59,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def faults({:missing_dependency, :jason}), do: ["design: the JSON codec needs Jason"]
     def faults(errors) when is_list(errors), do: Enum.map(errors, &Validator.format/1)
 
-    defp encoded(design) do
+    # A design is the document a chart reads back; any other kind is the fragment itself,
+    # valid as that kind (spec/14 §19.8), in the same JSON form.
+    defp encoded(design, kind) when kind in [:design, :composite] do
       with {:ok, chart} <- Chart.from_map(design),
            {:ok, json} <- Chart.to_json(chart) do
         %{document: json, errors: []}
       else
         {:error, reason} -> %{document: nil, errors: faults(reason)}
+      end
+    end
+
+    defp encoded(fragment, kind) do
+      with :ok <- Validator.validate(fragment, kind),
+           {:ok, json} <- fragment_json(fragment) do
+        %{document: json, errors: []}
+      else
+        {:error, reason} -> %{document: nil, errors: faults(reason)}
+      end
+    end
+
+    defp fragment_json(fragment) do
+      if Code.ensure_loaded?(Jason) do
+        {:ok, fragment |> Chart.Codec.encode() |> Jason.encode!()}
+      else
+        {:error, {:missing_dependency, :jason}}
       end
     end
   end
