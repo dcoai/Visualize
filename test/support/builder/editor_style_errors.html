@@ -5,8 +5,8 @@
   <datalist id="vis-builder-editor-variables">
     
   </datalist>
-  <form class="vis-builder-form" phx-change="edit">
-    <label class="vis-builder-field">
+  <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref">
+    <label class="vis-builder-field" data-builder-ref="extends">
       <span class="vis-builder-key">
         extends
       </span>

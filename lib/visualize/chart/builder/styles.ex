@@ -674,6 +674,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-size: 11px;
     }
 
+    /* A reference field under a dragged entry of its kind (spec/14 §19.10). */
+    .vis-builder-field-over {
+      outline: 2px dashed var(--vis-builder-accent);
+      outline-offset: 2px;
+    }
+
     .vis-builder-field input,
     .vis-builder-field select,
     .vis-builder-field textarea {

@@ -465,8 +465,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <datalist id={@id <> "-variables"}>
           <option :for={name <- @variables} value={name}></option>
         </datalist>
-        <form class="vis-builder-form" phx-change={@event} phx-target={@target}>
-          <label :for={field <- @fields} class="vis-builder-field">
+        <form
+          id={@id <> "-form"}
+          class="vis-builder-form"
+          phx-change={@event}
+          phx-hook="BuilderHook"
+          phx-target={@target}
+          data-builder-target={@target}
+          data-builder-scope="ref"
+        >
+          <label
+            :for={field <- @fields}
+            class="vis-builder-field"
+            data-builder-ref={field.ref && to_string(field.key)}
+          >
             <span class="vis-builder-key">
               {field.key}<span
                 :if={@origins[field.key]}
@@ -561,6 +573,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         %{
           key: spec.key,
+          ref: ref_field(spec.type),
           widget: shape(widget),
           options: options(widget),
           checked: Map.get(node, spec.key) == true,
@@ -605,6 +618,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp shape({:select, _allowed}), do: :select
     defp shape(widget), do: widget
+
+    # A reference field is a drop target for a library entry of its kind (§19.10).
+    defp ref_field({:ref, kind}), do: to_string(kind)
+    defp ref_field({:one_of, alts}), do: Enum.find_value(alts, &ref_field/1)
+    defp ref_field(_type), do: nil
 
     # An option is what the control submits and what a person reads: an id is spelt as the
     # DOM carries one, and read back through the same table (§19.2).

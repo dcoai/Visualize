@@ -610,6 +610,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # A library entry dropped on a reference field writes its id there — the same write the
+    # field's select makes — and an entry of another kind is refused by name (spec/14
+    # §19.10). A style field is a stack, so a style goes onto it as a drop on the stack does.
+    def handle_event("insert", %{"scope" => "ref", "field" => field, "name" => submitted}, socket) do
+      %{entry: entry} = editing(socket.assigns)
+
+      with {:ok, stored} <- fetch(socket.assigns.store, submitted),
+           %{key: key, type: type} <-
+             Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
+           kind when kind != nil <- ref_kind(type) do
+        cond do
+          stored.kind != kind ->
+            {:noreply,
+             assign(
+               socket,
+               :notice,
+               "a #{kind} field takes a #{kind}; #{stored.name} is a #{stored.kind}"
+             )}
+
+          kind == :style ->
+            handle_event("insert", %{"scope" => "style", "name" => submitted, "at" => 99}, socket)
+
+          true ->
+            {:noreply,
+             socket |> update_layer(entry.path, key, {:ok, stored.id}) |> assign(:notice, nil)}
+        end
+      else
+        :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+        _other -> {:noreply, assign(socket, :notice, "#{field} is not a reference field")}
+      end
+    end
+
     # A fragment dragged out of the library lands at the position it was dropped at, as a
     # use referring to it (spec/14 §18.17, §19.3).
     def handle_event("insert", %{"name" => submitted, "at" => at}, socket) do
@@ -807,6 +839,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> push_event("vis:focus", %{id: "#{socket.assigns.id}-layers-row-#{to}"})
     end
 
+    # The kind a field refers to, when it is a reference field at all.
+    defp ref_kind({:ref, kind}), do: kind
+    defp ref_kind({:one_of, alts}), do: Enum.find_value(alts, &ref_kind/1)
+    defp ref_kind(_type), do: nil
+
     defp control(target) do
       case String.split(target, ".", parts: 2) do
         [name, "var"] -> {name, :variable}
@@ -915,13 +952,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A reference may be a local name or a library id of the kind (spec/14 §19.10).
     defp refs(design, store) do
-      ids =
-        case store do
-          nil -> []
-          store -> for %{kind: :style, id: id} <- Store.list(store), do: id
-        end
+      entries = if store, do: Store.list(store), else: []
+      ids = fn kind -> for %{kind: ^kind, id: id} <- entries, do: id end
 
-      %{style: Palette.names(design) ++ ids}
+      %{
+        style: Palette.names(design) ++ ids.(:style),
+        scale: Map.keys(get_in(design, [:frame, :scales]) || %{}) ++ ids.(:scale),
+        source: Map.keys(Map.get(design, :sources, %{})) ++ ids.(:source)
+      }
     end
 
     # The colour slots of the theme the design names, for a colour's slot face (§19.10).
