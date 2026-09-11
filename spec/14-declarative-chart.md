@@ -1800,7 +1800,7 @@ A fragment that carries `var(:color)` may be placed at several sites, and each s
 | **set** — a literal at this site | `%{color: "blue"}` | nothing from this site |
 | **renamed** — this site's colour is the composite's own | `%{color: var(:color_1)}` | `:color_1` |
 
-`Visualize.Chart.bind/2` is a pure substitution: every `%Var{name: k}` in the fragment becomes the map's value for `k`, a literal or another `var/1`, and the result is a fragment with fewer, or differently named, variables in it. It runs at the site, before the cascade. The renamed case is legal here and refused at `apply/2` — the var-to-var error of §7 stays — because by the time application binds anything, substitution has already rewritten one name into the other. A composite placed inside a larger composite is rebound again, so bindings nest like function application.
+`bind/2` on `Visualize.Chart` is a pure substitution: every `%Var{name: k}` in the fragment becomes the map's value for `k`, a literal or another `var/1`, and the result is a fragment with fewer, or differently named, variables in it. It runs at the site, before the cascade. The renamed case is legal here and refused at `apply/2` — the var-to-var error of §7 stays — because by the time application binds anything, substitution has already rewritten one name into the other. A composite placed inside a larger composite is rebound again, so bindings nest like function application.
 
 Nothing in `stack/1`, `apply/2`, `free_vars/1` or the validator changes: each sees a fragment those rules already accept.
 
@@ -1827,7 +1827,7 @@ A composite is a fragment whose content is a list of use sites and its own `vars
 
 **Save writes structure.** The store holds the uses, never `stack/1`'s result, so a composite reopens as what was built — references intact, masks and bindings where they were left — and references keep their point: edit `{:style, 11}` and every composite using it follows. The save message of §18.2 carries structure.
 
-**Flatten is a deployment verb.** `Visualize.Chart.flatten/2` resolves every use recursively — `ref → mask → bind → local` — through a store, and stacks the result: a flat design in §13's shape, with no ids and no uses, which `apply/2` and `render/2` consume as they always have. A host calls it in its own pipeline. The builder's preview resolves the structure to draw it, and the builder *may* offer flatten as a separately-labelled action; the two verbs are different, and offering the second never loses the first.
+**Flatten is a deployment verb.** `flatten/2` on `Visualize.Chart` resolves every use recursively — `ref → mask → bind → local` — through a store, and stacks the result: a flat design in §13's shape, with no ids and no uses, which `apply/2` and `render/2` consume as they always have. A host calls it in its own pipeline. The builder's preview resolves the structure to draw it, and the builder *may* offer flatten as a separately-labelled action; the two verbs are different, and offering the second never loses the first.
 
 **Composites nest**, because a composite is a fragment and a use may reference one. Resolution is recursive. A composite that reaches itself through any chain of uses is refused, as an `extends` cycle is (§3.5), at the site that closed the loop.
 
@@ -1851,14 +1851,7 @@ The **context** is whatever the host passes as the second element of a `{module,
 
 **Export takes the closure.** Exporting a composite exports every fragment it references, transitively, with their ids, so an import cannot dangle by construction. A **bundle** is that set plus provenance — the source store's identity and each fragment's original id — so re-importing the same collection is detectable as a duplicate rather than minting a second copy. A reference to an id outside a bundle is only possible in a hand-edited file; it imports as a mask and is **reported** — *n references point outside this collection* — never a failure, never silent.
 
-| Function | Contract |
-|---|---|
-| `Visualize.Chart.Use.new/1` | a use site with a fresh id over a ref, and the three empty parts |
-| `Visualize.Chart.bind/2` | a fragment with its variables substituted by a map — literals or other variables |
-| `Visualize.Chart.mask/2` | a fragment with a list of paths removed |
-| `Visualize.Chart.resolve/2` | one use site resolved through a store: `ref → mask → bind → local` |
-| `Visualize.Chart.flatten/2` | a composite resolved recursively through a store and stacked: a flat design |
-| `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id, with provenance |
+The functions this section names — a constructor for a use site with a fresh id; `bind` over a fragment and a map; `mask` over a fragment and a list of paths; `resolve` of one use site through a store; `flatten` of a composite through a store; and the export of an id's closure as a bundle — are declared, in the surface's table grammar, by the work items that implement them (#172, items 1 and 2), so that the surface gate holds each one to being both specified and built rather than one without the other (D-89).
 
 ### 19.8 The library: kind derived, group stored, two views
 
