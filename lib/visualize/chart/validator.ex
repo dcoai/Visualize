@@ -31,6 +31,7 @@ defmodule Visualize.Chart.Validator do
           | {:type, Schema.type()}
           | {:enum, [atom()]}
           | {:undeclared, :scale | :style | :source | :var | :field | :slot, term()}
+          | {:ref_kind, atom(), atom()}
           | {:invalid_for, atom()}
           | {:unsupported_version, term()}
           | {:json, String.t()}
@@ -308,6 +309,14 @@ defmodule Visualize.Chart.Validator do
     if name?(v), do: ref(kind, v, path, ctx), else: [{path, {:type, {:ref, kind}}}]
   end
 
+  # An id is accepted by its tag alone (spec/14 §19.2, D-100): whether the store holds it is
+  # resolution's question, and a missing one is a mask there, not an error here. A tag of
+  # the wrong kind is refused now, before anything tries to resolve it.
+  defp check({:ref, kind}, {kind, n}, _path, _ctx) when is_integer(n) and n > 0, do: []
+
+  defp check({:ref, kind}, {other, n}, path, _ctx) when is_atom(other) and is_integer(n),
+    do: [{path, {:ref_kind, kind, other}}]
+
   defp check(:field, v, path, ctx) when is_atom(v) do
     if name?(v), do: ref(:field, v, path, ctx), else: [{path, {:type, :field}}]
   end
@@ -444,6 +453,10 @@ defmodule Visualize.Chart.Validator do
   defp words(:required), do: "is required"
   defp words(:unknown_key), do: "is not a key of this node"
   defp words({:type, type}), do: "must be #{type_words(type)}"
+
+  defp words({:ref_kind, wanted, given}),
+    do: "is a #{given} id where a #{wanted} was expected"
+
   defp words({:enum, allowed}), do: "must be one of #{list(allowed)}"
 
   defp words({:undeclared, :field, name}) do
@@ -503,7 +516,7 @@ defmodule Visualize.Chart.Validator do
   defp type_words({:list, t}), do: "a list of #{type_words(t)}"
   defp type_words({:map, t}), do: "a map from names to #{type_words(t)}"
   defp type_words({:node, kind}), do: "a #{kind} node"
-  defp type_words({:ref, kind}), do: "a declared #{kind} name"
+  defp type_words({:ref, kind}), do: "a declared #{kind} name, or a #{kind} id"
   defp type_words({:one_of, types}), do: Enum.map_join(types, " or ", &type_words/1)
 
   defp list(atoms), do: Enum.map_join(atoms, ", ", &inspect/1)

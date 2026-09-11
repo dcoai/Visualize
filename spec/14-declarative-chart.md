@@ -1860,10 +1860,27 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id through a store, dependencies first, with provenance |
 | `Visualize.Chart.Fragment.kinds/0` | every kind a fragment can be, and so every kind an id can carry |
 | `Visualize.Chart.Fragment.kind/1` | the kind of a fragment, derived (§19.8) |
-| `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each |
+| `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each, sorted — the order a map is walked is the runtime's, not a promise |
 | `Visualize.Chart.Fragment.relocate/2` | a fragment with its ids rewritten through a table, and the ids the table did not carry |
 
-The remaining functions this section names — a constructor for a use site, `bind`, `mask`, `resolve` and `flatten` on `Visualize.Chart` — are declared by work item 2 of #172, which builds them, so that the surface gate holds each to being both specified and built (D-89).
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Use.new/1` | a use of a fragment with id `{:use, 1}` and the three empty parts |
+| `Visualize.Chart.Use.new/2` | a use of a fragment with a fresh id — one more than the highest it sits beside — and the three empty parts |
+| `Visualize.Chart.Use.bind/2` | a fragment with its variables substituted: a literal sets, another `var/1` renames (§19.4) |
+| `Visualize.Chart.Use.mask/2` | a fragment with paths removed; `:all` removes everything (§19.5) |
+| `Visualize.Chart.Use.resolve/2` | one use through a fetch: `ref → mask → bind → local`; a ref the fetch cannot find is `{:missing, id, local}` |
+| `Visualize.Chart.Use.over/2` | a use over a body already in hand — everything `resolve/2` does after the fetch |
+| `Visualize.Chart.Composite.composite?/1` | whether a fragment is one key, `composite`, holding uses |
+| `Visualize.Chart.Composite.flatten/2` | a composite through a fetch, recursively, stacked: `{:ok, design, %{missing: …}}` or `{:error, {:cycle, chain}}` |
+| `Visualize.Chart.bind/2` | `Use.bind/2` on the design's own module |
+| `Visualize.Chart.mask/2` | `Use.mask/2` likewise |
+| `Visualize.Chart.resolve/2` | `Use.resolve/2` likewise |
+| `Visualize.Chart.flatten/2` | `Composite.flatten/2` likewise; a design that is not a composite flattens to itself |
+
+**The JSON form** (§11.2) gains two tagged terms: an id is `{"$id": ["style", 11]}` and a use is `{"$use": {"id": 7, "ref": …, "mask": [...], "vars": {...}, "local": {...}}}`, with `"mask": "all"` for everything. An id whose kind is not one a fragment can have is left as it was read, never made into an atom.
+
+**The validator** (§10.1) accepts an id at a `{:ref, kind}` site by its tag alone — whether the store holds it is resolution's question — and refuses a tag of the wrong kind as `{:ref_kind, wanted, given}` before anything tries to resolve it.
 
 ### 19.8 The library: kind derived, group stored, two views
 

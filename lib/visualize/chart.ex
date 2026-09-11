@@ -43,11 +43,14 @@ defmodule Visualize.Chart do
     Codec,
     Compiled,
     Compose,
+    Composite,
+    Fragment,
     Frame,
     Migration,
     Schema,
     Stack,
     Template,
+    Use,
     Validator,
     Var
   }
@@ -174,6 +177,37 @@ defmodule Visualize.Chart do
   @doc "A variable term for the name (spec/14 §7.1)."
   @spec var(atom()) :: Var.t()
   def var(name) when is_atom(name), do: %Var{name: name}
+
+  # -- use sites and composites (spec/14 §19) --------------------------------------------
+
+  @doc """
+  A fragment with its variables substituted at a use site (spec/14 §19.4, D-102): a
+  literal sets, another `var/1` renames. See `Visualize.Chart.Use.bind/2`.
+  """
+  @spec bind(term(), %{atom() => term()}) :: term()
+  defdelegate bind(fragment, vars), to: Use
+
+  @doc """
+  A fragment with paths removed at a use site (spec/14 §19.5). See `Visualize.Chart.Use.mask/2`.
+  """
+  @spec mask(map(), [Use.path() | atom()] | :all) :: map()
+  defdelegate mask(fragment, paths), to: Use
+
+  @doc """
+  One use site resolved through a fetch — `ref → mask → bind → local` (spec/14 §19.3).
+  See `Visualize.Chart.Use.resolve/2`.
+  """
+  @spec resolve(Use.t(), (Fragment.id() -> {:ok, map()} | :error)) ::
+          {:ok, map()} | {:missing, Fragment.id(), map()}
+  defdelegate resolve(use, fetch), to: Use
+
+  @doc """
+  A composite resolved through a fetch and stacked: a flat design (spec/14 §19.6, D-103).
+  A design that is not a composite flattens to itself. See `Visualize.Chart.Composite.flatten/2`.
+  """
+  @spec flatten(map(), (Fragment.id() -> {:ok, map()} | :error)) ::
+          {:ok, map(), Composite.report()} | {:error, {:cycle, [Fragment.id()]}}
+  defdelegate flatten(fragment, fetch), to: Composite
 
   @doc """
   The design applied to its data (spec/14 §7.3): variables resolved, slots bound, the

@@ -9,7 +9,7 @@ defmodule Visualize.Chart.Codec do
   # its tagged term and read back as itself, and no map clause on either side descends
   # into one, so the walk cannot rebuild a struct as a plain map or a map as a struct.
 
-  alias Visualize.Chart.{Schema, Var}
+  alias Visualize.Chart.{Fragment, Schema, Use, Var}
   alias Visualize.Theme
 
   @fixed_slots Theme.default() |> Theme.slots() |> Enum.reject(&(&1 in [:series_1]))
@@ -53,6 +53,7 @@ defmodule Visualize.Chart.Codec do
 
   defp value({:enum, _}, v) when is_atom(v), do: Atom.to_string(v)
   defp value({:ref, _}, v) when is_atom(v), do: Atom.to_string(v)
+  defp value({:ref, _}, {kind, n} = id) when is_atom(kind) and is_integer(n), do: term(id)
   defp value(:slot, v) when is_atom(v), do: Atom.to_string(v)
   defp value(:slot, {:series, i}), do: %{"$series" => i}
   defp value(type, v) when type in [:size, :channel] and is_atom(v), do: Atom.to_string(v)
@@ -70,6 +71,23 @@ defmodule Visualize.Chart.Codec do
   defp category(v), do: term(v)
 
   defp term(%Var{name: name}), do: %{"$var" => Atom.to_string(name)}
+
+  defp term(%Use{id: {:use, n}, ref: ref, mask: mask, vars: vars, local: local}) do
+    %{
+      "$use" => %{
+        "id" => n,
+        "ref" => if(ref, do: term(ref)),
+        "mask" => if(mask == :all, do: "all", else: Enum.map(mask, &term/1)),
+        "vars" => term(vars),
+        "local" => term(local)
+      }
+    }
+  end
+
+  defp term({kind, n} = id) when is_atom(kind) and is_integer(n) and n > 0 do
+    if kind in Fragment.kinds(), do: %{"$id" => [Atom.to_string(kind), n]}, else: id
+  end
+
   defp term({:field, f}) when is_atom(f), do: %{"$field" => Atom.to_string(f)}
   defp term(%DateTime{} = dt), do: %{"$time" => DateTime.to_iso8601(dt)}
   defp term(v) when is_number(v) or is_binary(v) or is_boolean(v) or is_nil(v), do: v
@@ -126,6 +144,7 @@ defmodule Visualize.Chart.Codec do
 
   defp read({:enum, _}, v) when is_binary(v), do: String.to_atom(v)
   defp read({:ref, _}, v) when is_binary(v), do: String.to_atom(v)
+  defp read({:ref, _}, %{"$id" => _} = v), do: read_term(v)
   defp read(:slot, v) when is_binary(v), do: String.to_atom(v)
 
   defp read(type, %{"$series" => i} = v)
@@ -164,6 +183,25 @@ defmodule Visualize.Chart.Codec do
   defp read_term(%{"$var" => name} = v) when map_size(v) == 1 and is_binary(name),
     do: %Var{name: String.to_atom(name)}
 
+  # An id's kind must be one a fragment can have, so no atom is created from a document.
+  defp read_term(%{"$id" => [kind, n]} = v) when map_size(v) == 1 and is_binary(kind) do
+    case Enum.find(Fragment.kinds(), &(Atom.to_string(&1) == kind)) do
+      nil -> v
+      found when is_integer(n) and n > 0 -> {found, n}
+      _found -> v
+    end
+  end
+
+  defp read_term(%{"$use" => %{"id" => n} = use} = v) when map_size(v) == 1 and is_integer(n) do
+    %Use{
+      id: {:use, n},
+      ref: use |> Map.get("ref") |> read_ref(),
+      mask: use |> Map.get("mask", []) |> read_mask(),
+      vars: use |> Map.get("vars", %{}) |> read_term(),
+      local: use |> Map.get("local", %{}) |> read_term()
+    }
+  end
+
   defp read_term(%{"$field" => f} = v) when map_size(v) == 1 and is_binary(f),
     do: {:field, String.to_atom(f)}
 
@@ -183,6 +221,12 @@ defmodule Visualize.Chart.Codec do
     do: Map.new(v, fn {k, e} -> {atom(k), read_term(e)} end)
 
   defp read_term(v), do: v
+
+  defp read_ref(nil), do: nil
+  defp read_ref(v), do: read_term(v)
+
+  defp read_mask("all"), do: :all
+  defp read_mask(paths) when is_list(paths), do: Enum.map(paths, &read_term/1)
 
   # The JSON shape of each alternative of a `{:one_of, types}`: strings stand for atoms.
   defp json_shape?({:node, _}, v), do: is_map(v) and not is_struct(v)
