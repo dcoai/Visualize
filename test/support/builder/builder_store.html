@@ -67,10 +67,10 @@
     </aside>
     <main class="vis-builder-main">
       <nav class="vis-builder-nodes">
-        <button type="button" class="vis-builder-node vis-builder-node-open" title="design of this layer" phx-click="select_root" phx-value-root="design" phx-target="-1">design</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="sources — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="sources" phx-target="-1">sources</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="vars — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="vars" phx-target="-1">vars</button><button type="button" class="vis-builder-node" title="styles of this layer" phx-click="select_root" phx-value-root="styles" phx-target="-1">styles</button><button type="button" class="vis-builder-node" title="frame of this layer" phx-click="select_root" phx-value-root="frame" phx-target="-1">frame</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="marks — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="marks" phx-target="-1">marks</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="labels — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="labels" phx-target="-1">labels</button><button type="button" class="vis-builder-node" title="the variables the stack still needs, and what they are bound to" phx-click="select_root" phx-value-root="variables" phx-target="-1">variables</button>
+        <button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="sources — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="sources" phx-target="-1">sources</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="vars — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="vars" phx-target="-1">vars</button><button type="button" class="vis-builder-node vis-builder-node-open" title="styles of this layer" phx-click="select_root" phx-value-root="styles" phx-target="-1">styles</button><button type="button" class="vis-builder-node" title="frame of this layer" phx-click="select_root" phx-value-root="frame" phx-target="-1">frame</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="marks — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="marks" phx-target="-1">marks</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="labels — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="labels" phx-target="-1">labels</button><button type="button" class="vis-builder-node" title="the variables the stack still needs, and what they are bound to" phx-click="select_root" phx-value-root="variables" phx-target="-1">variables</button>
       </nav>
       <nav class="vis-builder-chips">
-        <button type="button" class="vis-builder-chip vis-builder-chip-open" phx-click="facet" phx-value-facet="binding" phx-target="-1">binding</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="channel" phx-target="-1">channel</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="geometry" phx-target="-1">geometry</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="style" phx-target="-1">style</button><button type="button" class="vis-builder-chip" phx-click="facet" phx-value-facet="content" phx-target="-1">content</button>
+        <button type="button" class="vis-builder-chip vis-builder-chip-open" phx-click="select_node" phx-value-node="styles.series" phx-target="-1">series</button>
       </nav>
       <div class="vis-builder-workspace">
         
@@ -80,11 +80,11 @@
     <option value="unit"></option>
   </datalist>
   <form id="builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" phx-target="-1" data-builder-target="-1" data-builder-scope="ref">
-    <label class="vis-builder-field">
+    <label class="vis-builder-field" data-builder-ref="extends">
       <span class="vis-builder-key">
-        sources
+        extends
       </span>
-      <select name="sources.mode" class="vis-builder-mode" title="literal, or a variable">
+      <select name="extends.mode" class="vis-builder-mode" title="literal, or a variable">
         <option value="literal" selected>literal</option>
         <option value="variable">variable</option>
       </select>
@@ -94,14 +94,290 @@
       
       
       
+      <select name="extends">
+        <option value=""></option>
+        <option value="series">series</option>
+      </select>
       
-      <textarea name="sources" placeholder="%{}"></textarea>
       
     </label><label class="vis-builder-field">
       <span class="vis-builder-key">
-        vars
+        fill
       </span>
-      <select name="vars.mode" class="vis-builder-mode" title="literal, or a variable">
+      <select name="fill.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      
+      <select name="fill.slot" class="vis-builder-slot" title="a theme slot">
+        <option value="">slot…</option>
+        <option value="series_1">series_1</option><option value="series_2">series_2</option><option value="series_3">series_3</option><option value="series_4">series_4</option><option value="series_5">series_5</option><option value="series_6">series_6</option><option value="series_7">series_7</option><option value="series_8">series_8</option><option value="series_9">series_9</option><option value="series_10">series_10</option><option value="axis">axis</option><option value="grid">grid</option><option value="text">text</option><option value="background">background</option>
+      </select>
+      <input type="color" name="fill" class="vis-builder-colour" title="a colour">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        stroke
+      </span>
+      <select name="stroke.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      
+      <select name="stroke.slot" class="vis-builder-slot" title="a theme slot">
+        <option value="">slot…</option>
+        <option value="series_1" selected>series_1</option><option value="series_2">series_2</option><option value="series_3">series_3</option><option value="series_4">series_4</option><option value="series_5">series_5</option><option value="series_6">series_6</option><option value="series_7">series_7</option><option value="series_8">series_8</option><option value="series_9">series_9</option><option value="series_10">series_10</option><option value="axis">axis</option><option value="grid">grid</option><option value="text">text</option><option value="background">background</option>
+      </select>
+      <input type="color" name="stroke" class="vis-builder-colour" title="a colour">
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        stroke_width
+      </span>
+      <select name="stroke_width.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      <input type="text" name="stroke_width" value="2">
+      
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        stroke_dasharray
+      </span>
+      <select name="stroke_dasharray.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      <input type="text" name="stroke_dasharray">
+      
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        stroke_linecap
+      </span>
+      <select name="stroke_linecap.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      
+      
+      
+      <select name="stroke_linecap">
+        <option value=""></option>
+        <option value="butt">butt</option><option value="round">round</option><option value="square">square</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        stroke_linejoin
+      </span>
+      <select name="stroke_linejoin.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      
+      
+      
+      <select name="stroke_linejoin">
+        <option value=""></option>
+        <option value="miter">miter</option><option value="round">round</option><option value="bevel">bevel</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        opacity
+      </span>
+      <select name="opacity.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      <input type="text" name="opacity">
+      
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        fill_opacity
+      </span>
+      <select name="fill_opacity.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      <input type="text" name="fill_opacity">
+      
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        stroke_opacity
+      </span>
+      <select name="stroke_opacity.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      <input type="text" name="stroke_opacity">
+      
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        font_family
+      </span>
+      <select name="font_family.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      <input type="text" name="font_family">
+      
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        font_size
+      </span>
+      <select name="font_size.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      <input type="text" name="font_size">
+      
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        font_weight
+      </span>
+      <select name="font_weight.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      <input type="number" name="font_weight">
+      
+      
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        text_anchor
+      </span>
+      <select name="text_anchor.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      
+      
+      
+      <select name="text_anchor">
+        <option value=""></option>
+        <option value="start">start</option><option value="middle">middle</option><option value="end">end</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        class
+      </span>
+      <select name="class.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      <input type="text" name="class">
+      
+      
+      
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        curve
+      </span>
+      <select name="curve.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      
+      
+      
+      <select name="curve">
+        <option value=""></option>
+        <option value="linear">linear</option><option value="step">step</option><option value="step_before">step_before</option><option value="step_after">step_after</option><option value="basis">basis</option><option value="cardinal">cardinal</option><option value="catmull_rom">catmull_rom</option><option value="monotone_x">monotone_x</option><option value="monotone_y">monotone_y</option><option value="natural">natural</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        curve_opts
+      </span>
+      <select name="curve_opts.mode" class="vis-builder-mode" title="literal, or a variable">
         <option value="literal" selected>literal</option>
         <option value="variable">variable</option>
       </select>
@@ -112,7 +388,44 @@
       
       
       
-      <textarea name="vars" placeholder="%{}"></textarea>
+      <textarea name="curve_opts"></textarea>
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        symbol
+      </span>
+      <select name="symbol.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      
+      
+      
+      <select name="symbol">
+        <option value=""></option>
+        <option value="circle">circle</option><option value="cross">cross</option><option value="diamond">diamond</option><option value="square">square</option><option value="star">star</option><option value="triangle">triangle</option><option value="wye">wye</option>
+      </select>
+      
+      
+    </label><label class="vis-builder-field">
+      <span class="vis-builder-key">
+        symbol_size
+      </span>
+      <select name="symbol_size.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
+      
+      
+      <input type="text" name="symbol_size">
+      
+      
+      
+      
       
     </label>
   </form>
@@ -168,7 +481,7 @@
     <div class="vis-builder-palette">
   <h2 class="vis-builder-tray-title">Styles</h2>
   <ul class="vis-builder-palette-list">
-    <li class="vis-builder-palette-entry">
+    <li class="vis-builder-palette-entry vis-builder-palette-entry-open">
       <button type="button" class="vis-builder-palette-style" phx-click="select_style" phx-value-name="series" phx-target="-1">
         <span class="vis-builder-swatch" style=""></span>
         <span class="vis-builder-palette-name">series</span>
