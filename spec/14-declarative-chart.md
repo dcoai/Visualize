@@ -1918,7 +1918,7 @@ Every fragment has two faces, and the editor is one component whose shape is the
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.Builder.Stack.seed/1` | a host's layers as inline-only uses (`ref: nil`, the fragment as `local`) with their labels, so §18.2's contract is unchanged |
+| `Visualize.Chart.Builder.Stack.seed/1` | a host's layers as uses with their labels: a fragment as an inline-only use (`ref: nil`, the fragment as `local`), so §18.2's contract is unchanged; an id `{kind, n}` as a use referring to it, so a host may start the builder over its own library |
 | `Visualize.Chart.Builder.Stack.label/2` | the name a person sees for a use: its label, or its id |
 | `Visualize.Chart.Builder.Stack.enabled?/1` | whether a use contributes: anything but a mask of everything |
 | `Visualize.Chart.Builder.Stack.toggle/1` | a use disabled or re-enabled: `mask: :all`, or not (§19.3) |
