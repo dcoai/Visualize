@@ -536,8 +536,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     /* ── the node tabs ───────────────────────────────────────────────────────── */
 
+    /* The strips never give up height to the workspace below them. `.vis-builder-main` is
+       a flex column, and a flex item that scrolls sideways has a minimum height of zero,
+       so a tall form — a style's nineteen keys — squeezed both rows to a sliver. */
     .vis-builder-nodes {
       display: flex;
+      flex: 0 0 auto;
       gap: 2px;
       padding: 6px 6px 0;
       border-bottom: 1px solid var(--vis-builder-line);
@@ -586,6 +590,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
        open node's facets, divided rather than stacked in a second row. */
     .vis-builder-chips {
       display: flex;
+      flex: 0 0 auto;
       gap: 2px;
       padding: 6px 8px;
       border-bottom: 1px solid var(--vis-builder-line);
@@ -628,11 +633,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     /* ── the editor and its facet chips ──────────────────────────────────────── */
 
+    /* The workspace is what scrolls when the column runs out of room. */
     .vis-builder-workspace {
       display: flex;
+      flex: 1 1 auto;
       flex-direction: column;
       gap: var(--vis-builder-gap);
       padding: var(--vis-builder-gap);
+      min-height: 0;
+      overflow-y: auto;
     }
 
     .vis-builder-tabs {

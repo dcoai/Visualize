@@ -1752,6 +1752,20 @@ defmodule Visualize.Chart.BuilderTest do
       assert "--vis-builder-accent" in declared
     end
 
+    test "the strips never give up height to the workspace" do
+      css = Visualize.Chart.Builder.css()
+      [nodes] = Regex.run(~r/\.vis-builder-nodes \{[^}]*\}/, css)
+      [chips] = Regex.run(~r/\.vis-builder-chips \{[^}]*\}/, css)
+      [workspace] = Regex.run(~r/\.vis-builder-workspace \{[^}]*\}/, css)
+
+      # A flex item that scrolls sideways has a minimum height of zero, so a tall form once
+      # squeezed both rows to a sliver; the workspace is what scrolls instead.
+      assert nodes =~ "flex: 0 0 auto"
+      assert chips =~ "flex: 0 0 auto"
+      assert workspace =~ "overflow-y: auto"
+      assert workspace =~ "flex: 1 1 auto"
+    end
+
     test "the builder renders the stylesheet once, and not at all when the host ships it" do
       html = render_component(Builder, %{id: "b", layers: BuilderFixture.layers()})
       assert length(String.split(html, "<style")) == 2
