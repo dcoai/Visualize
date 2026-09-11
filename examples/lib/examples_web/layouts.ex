@@ -103,19 +103,6 @@ defmodule ExamplesWeb.Layouts do
             margin-top: 1.5rem;
           }
           code { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; }
-          .builder-diagnostics {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            margin: 0.75rem 0;
-            padding: 0.5rem 0.75rem;
-            border: 1px dashed #b45309;
-            border-radius: 6px;
-            background: #fffbeb;
-            color: #7c2d12;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 0.78rem;
-          }
         </style>
         <script defer src="https://unpkg.com/phoenix_html@4.2.0/priv/static/phoenix_html.js"></script>
         <script defer src="https://unpkg.com/phoenix@1.7.21/priv/static/phoenix.min.js"></script>

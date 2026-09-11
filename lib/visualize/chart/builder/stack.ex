@@ -33,25 +33,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc """
     A host's layers as use sites, with their labels (spec/14 §19.9).
 
-    A `{name, fragment}` pair keeps its name; a bare fragment is named by its position; a
-    `%Visualize.Chart{}` is the map it is. Each becomes an inline-only use.
+    A `{name, layer}` pair keeps its name; a bare layer is named by its position. A
+    fragment — a map, or a `%Visualize.Chart{}` as the map it is — becomes an inline-only
+    use; an id `{kind, n}` becomes a use referring to it, so a host may start the builder
+    over entries of its own library.
     """
     @spec seed([term()]) :: {[Use.t()], labels()}
     def seed(host_layers) do
       host_layers
       |> Enum.with_index()
       |> Enum.reduce({[], %{}}, fn {layer, index}, {uses, labels} ->
-        {name, fragment} = named(layer, index)
-        use = %Use{id: {:use, index + 1}, ref: nil, local: fragment}
+        {name, site} = named(layer, index)
+        use = struct!(Use, Map.put(site, :id, {:use, index + 1}))
         {uses ++ [use], Map.put(labels, use.id, name)}
       end)
     end
 
-    defp named({name, layer}, _index), do: {to_string(name), fragment(layer)}
-    defp named(layer, index), do: {to_string(index), fragment(layer)}
+    # An id is a pair too; it is told from a `{name, layer}` pair by its integer.
+    defp named({kind, n}, index) when is_atom(kind) and is_integer(n),
+      do: {to_string(index), site({kind, n})}
 
-    defp fragment(%Chart{} = chart), do: Chart.to_map(chart)
-    defp fragment(map) when is_map(map), do: map
+    defp named({name, layer}, _index), do: {to_string(name), site(layer)}
+    defp named(layer, index), do: {to_string(index), site(layer)}
+
+    defp site({kind, n}) when is_atom(kind) and is_integer(n), do: %{ref: {kind, n}}
+    defp site(%Chart{} = chart), do: %{ref: nil, local: Chart.to_map(chart)}
+    defp site(map) when is_map(map), do: %{ref: nil, local: map}
 
     @doc """
     An entry as a stack (spec/14 §19.9): a composite's sites, labelled by the store's

@@ -200,7 +200,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <select id={@id <> "-new-kind"} name="kind" class="vis-builder-new-kind">
               <option :for={kind <- Stack.kinds()} value={kind}>{kind}</option>
             </select>
-            <button type="submit" class="vis-builder-new-submit">fragment</button>
+            <button type="submit" class="vis-builder-new-submit">New</button>
           </form>
           <span :if={@open} class="vis-builder-opened">
             editing {@open.kind} <strong>{@open.name || "(unsaved)"}</strong>
