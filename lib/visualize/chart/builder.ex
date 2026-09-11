@@ -515,6 +515,42 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, select(socket, position(index))}
     end
 
+    # The keyboard has every gesture the pointer has (spec/14 §18.17): Enter and Space
+    # select, the arrows move and focus follows the row to where the layer went.
+    def handle_event("layer_key", %{"key" => key, "index" => index}, socket) do
+      at = position(index)
+      count = length(socket.assigns.uses)
+
+      case key do
+        enter when enter in ["Enter", " "] ->
+          {:noreply, select(socket, at)}
+
+        "ArrowUp" when at > 0 ->
+          {:noreply, moved_by_key(socket, at, at - 1)}
+
+        "ArrowDown" when at < count - 1 ->
+          {:noreply, moved_by_key(socket, at, at + 1)}
+
+        _other ->
+          {:noreply, socket}
+      end
+    end
+
+    # A library item from the keyboard: Enter opens, Insert adds above the selected layer.
+    def handle_event("fragment_key", %{"key" => key, "name" => name}, socket) do
+      case key do
+        enter when enter in ["Enter", " "] ->
+          handle_event("add_layer", %{"name" => name}, socket)
+
+        insert when insert in ["Insert", "i"] ->
+          above = (Stack.index_of(socket.assigns.uses, socket.assigns.selected) || -1) + 1
+          handle_event("insert", %{"name" => name, "at" => above}, socket)
+
+        _other ->
+          {:noreply, socket}
+      end
+    end
+
     def handle_event("toggle_layer", %{"index" => index}, socket) do
       case Enum.at(socket.assigns.uses, position(index)) do
         nil ->
@@ -734,6 +770,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp showed_through(missing) do
       refs = Enum.map_join(missing, ", ", fn {_site, ref} -> Store.encode_id(ref) end)
       "deployed with #{length(missing)} reference(s) showing through: #{refs}"
+    end
+
+    defp moved_by_key(socket, from, to) do
+      socket
+      |> update(:uses, &Stack.move(&1, from, to))
+      |> push_event("vis:focus", %{id: "#{socket.assigns.id}-layers-row-#{to}"})
     end
 
     defp control(target) do

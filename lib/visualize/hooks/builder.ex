@@ -62,6 +62,12 @@ defmodule Visualize.Hooks.Builder do
         this.el.addEventListener('dragend', this.onDragEnd);
         this.el.addEventListener('dragleave', this.onDragLeave);
         this.el.addEventListener('click', this.onClick);
+        // Focus follows a layer moved from the keyboard: the rows are re-rendered by
+        // position, so the builder says which row to land on (spec/14 §18.17).
+        this.handleEvent('vis:focus', ({ id }) => {
+          const row = document.getElementById(id);
+          if (row && this.el.contains(row)) row.focus();
+        });
       },
 
       // The element under the pointer that carries a layer position, or null.

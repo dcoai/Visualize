@@ -266,8 +266,10 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), :layers))
 
       # The row is the control: clicking it selects, dragging it reorders.
-      assert html =~ ~s(phx-click="select_layer" phx-value-index="0")
-      assert html =~ ~s(title="Click to edit house, drag to reorder it")
+      assert html =~ ~s(phx-click="select_layer" phx-keydown="layer_key" phx-value-index="0")
+
+      assert html =~
+               ~s(title="house, layer 1 of 3, selected: Enter to edit, arrows to move, drag to reorder")
 
       # The one button left names itself, and is not a drag source: a control inside a
       # draggable row swallows its own click otherwise (spec/14 §18.8).
@@ -1154,6 +1156,68 @@ defmodule Visualize.Chart.BuilderTest do
                  {"House", %{version: 1, frame: %{kind: :cartesian}}},
                  {"1", %{version: 1, frame: %{kind: :cartesian}}}
                ]
+    end
+  end
+
+  describe "the keyboard has every gesture the pointer has (spec/14 §18.17)" do
+    setup do
+      %{socket: BuilderFixture.socket(BuilderFixture.layers(), store: Library)}
+    end
+
+    test "a layer row is reachable and says what it is and what its keys do", %{socket: s} do
+      html = BuilderFixture.render(s)
+
+      assert html =~
+               ~s(id="b-layers-row-0" class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="0" draggable="true" role="button" tabindex="0")
+
+      assert html =~
+               ~s(aria-label="house, layer 1 of 3, selected: Enter to edit, arrows to move, drag to reorder")
+
+      assert html =~ ~s(phx-keydown="layer_key")
+    end
+
+    test "Enter selects; the arrows move, and focus follows the row", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("layer_key", %{"key" => "Enter", "index" => "2"}, s)
+      assert BuilderFixture.selected(s) == 2
+
+      {:noreply, up} = Builder.handle_event("layer_key", %{"key" => "ArrowUp", "index" => "2"}, s)
+      assert BuilderFixture.names(up) == [:house, :panel, :shared]
+      assert BuilderFixture.selected(up) == 1
+
+      assert [["vis:focus", %{id: "b-layers-row-1"}]] = up.private.live_temp[:push_events]
+
+      {:noreply, down} =
+        Builder.handle_event("layer_key", %{"key" => "ArrowDown", "index" => "1"}, up)
+
+      assert BuilderFixture.names(down) == [:house, :shared, :panel]
+
+      # The ends are the ends, and a key that means nothing here changes nothing.
+      {:noreply, top} =
+        Builder.handle_event("layer_key", %{"key" => "ArrowUp", "index" => "0"}, s)
+
+      assert BuilderFixture.names(top) == BuilderFixture.names(s)
+      {:noreply, same} = Builder.handle_event("layer_key", %{"key" => "x", "index" => "0"}, s)
+      assert same.assigns.uses == s.assigns.uses
+    end
+
+    test "a library item: Enter opens, Insert adds above the selected layer", %{socket: s} do
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(phx-keydown="fragment_key")
+
+      assert html =~
+               ~s(: Enter to open, Insert to add above the selected layer, drag into the stack")
+
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+
+      {:noreply, added} =
+        Builder.handle_event("fragment_key", %{"key" => "Insert", "name" => "design:1"}, s)
+
+      assert BuilderFixture.names(added) == [:house, :shared, "baseline", :panel]
+
+      {:noreply, opened} =
+        Builder.handle_event("fragment_key", %{"key" => "Enter", "name" => "design:1"}, s)
+
+      assert opened.assigns.open.id == Library.baseline_id()
     end
   end
 

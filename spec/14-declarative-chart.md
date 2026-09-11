@@ -1678,6 +1678,17 @@ A **move** is the same gap, adjusted: `at` is a gap in the list as it stands, an
 
 Inserting does not consult the fragment: the stack is a list and a fragment is an element of it, so an insert is `List.insert_at/3` and the design is recomputed from the result. There is nothing to validate at insertion time that applying the design does not already say better (§18.4).
 
+**The keyboard has every gesture the pointer has.** Making the row the control took the `<button>` away, and with it Enter and Space; a row is reachable — `role="button"`, `tabindex="0"` — only if it is also operable. Every row therefore carries `phx-keydown`, and the builder reads the key:
+
+| Row | Key | Does |
+|---|---|---|
+| a layer | Enter, Space | selects it, as clicking does |
+| a layer | ArrowUp, ArrowDown | moves it one position — the same `reorder` a drop raises — and focus follows the row to where it went |
+| a library item | Enter, Space | opens it, as clicking does (§19.8) |
+| a library item | Insert, `i` | inserts it directly above the selected layer — the same `insert` a drop raises — with no drag to make |
+
+Focus follows a moved layer because the rows are re-rendered by position: the builder pushes `vis:focus` with the id of the row at the layer's new position, and `Visualize.Hooks.Builder` focuses it after the patch. A row's accessible name says what it is and what activating it does — *house, layer 1 of 3, selected: Enter to edit, arrows to move* — so what is announced is what the keys do, and the `title` that pointer users hover is the same sentence.
+
 ### 18.18 The style stack at a site
 
 §3.6 gives every style site a stack; this is the control over it. `Visualize.Chart.Builder.StyleStack.panel/1` renders the stack of the open node's `style` key: one row per entry, in resolution order — the first applied first, the last winning — because that is the order the cascade is defined in and a panel that reversed it would teach the opposite of §3.6.

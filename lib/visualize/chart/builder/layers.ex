@@ -55,11 +55,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
       >
         <li
           :for={entry <- @entries}
+          id={@id <> "-row-" <> to_string(entry.index)}
           class={entry.class}
           data-builder-layer={entry.index}
           draggable="true"
-          title={"Click to edit " <> entry.name <> ", drag to reorder it"}
+          role="button"
+          tabindex="0"
+          title={entry.says}
+          aria-label={entry.says}
           phx-click="select_layer"
+          phx-keydown="layer_key"
           phx-value-index={entry.index}
           phx-target={@target}
         >
@@ -87,14 +92,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp entries(%{layers: layers, selected: selected, disabled: disabled}) do
       off = disabled || MapSet.new()
 
+      count = length(layers)
+
       for {layer, index} <- Enum.with_index(layers) do
+        name = name(layer, index)
+
         %{
           index: index,
-          name: name(layer, index),
+          name: name,
           class: classes(index == selected, index in off),
-          toggle: if(index in off, do: "Enable", else: "Disable")
+          toggle: if(index in off, do: "Enable", else: "Disable"),
+          says: says(name, index, count, index == selected, index in off)
         }
       end
+    end
+
+    # What the row is and what its keys do, for hover and for what is announced (§18.17).
+    defp says(name, index, count, selected?, disabled?) do
+      state =
+        [selected? && "selected", disabled? && "disabled"]
+        |> Enum.filter(& &1)
+        |> Enum.join(", ")
+
+      "#{name}, layer #{index + 1} of #{count}" <>
+        if(state == "", do: "", else: ", " <> state) <>
+        ": Enter to edit, arrows to move, drag to reorder"
     end
 
     defp name({name, _layer}, _index), do: to_string(name)
