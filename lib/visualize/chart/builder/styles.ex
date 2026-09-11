@@ -995,6 +995,51 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color: var(--vis-builder-warn);
     }
 
+    /* The layer's context (spec/14 §19.10): its paths as mask checkboxes. */
+    .vis-builder-context-title {
+      margin: 0 0 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .vis-builder-context-note,
+    .vis-builder-context-vars {
+      margin: 6px 0;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+    }
+
+    .vis-builder-masks {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .vis-builder-mask {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 0;
+      font-family: var(--vis-builder-mono);
+      font-size: 12px;
+    }
+
+    .vis-builder-mask-on .vis-builder-mask-path {
+      color: var(--vis-builder-muted);
+      text-decoration: line-through;
+    }
+
+    /* A colour's three faces sit in one row: the slot, the picker, the switch. */
+    .vis-builder .vis-builder-slot {
+      max-width: 9em;
+    }
+
+    .vis-builder .vis-builder-colour {
+      width: 2.4em;
+      height: 1.8em;
+      padding: 1px;
+    }
+
     /* The per-site rows (spec/14 §19.10): a site's variables under its name, each reading
        as one of three states, with the two ways of saying otherwise beside it. */
     .vis-builder-site {

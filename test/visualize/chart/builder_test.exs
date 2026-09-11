@@ -23,6 +23,8 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.Chart.Builder.StyleStack
   alias Visualize.Chart.Use
 
+  doctest Visualize.Chart.Builder.Masks
+
   for name <- ~w(preview preview_errors builder builder_store)a do
     test "#{name} renders as recorded" do
       c = Keyword.fetch!(BuilderFixture.cases(), unquote(name))
@@ -482,9 +484,9 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<span class="vis-builder-style-name">series</span>)
     end
 
-    test "a node with no style key has no stack" do
+    test "a node with no style key has no stack; the layer's context is there instead" do
       refute at_node("frame.size") =~ "vis-builder-style-stack"
-      assert at_node("frame.size") =~ "vis-builder-context-empty"
+      assert at_node("frame.size") =~ ~s(class="vis-builder-layer-context")
     end
 
     test "adding appends, and a bare reference stays bare until it is not one", %{socket: s} do
@@ -941,6 +943,97 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, refused} = Builder.handle_event("put_design", %{"name" => "x"}, odd)
       assert refused.assigns.notice =~ "not a valid style"
       assert BuilderFixture.render(odd) =~ "vis-builder-error"
+    end
+  end
+
+  describe "the context panel over a layer, and the typed controls (spec/14 §19.5, §19.10)" do
+    setup do
+      %{socket: BuilderFixture.socket(BuilderFixture.layers(), store: Library)}
+    end
+
+    test "the selected layer's keys are mask checkboxes, checked where the mask holds them", %{
+      socket: s
+    } do
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(<h3 class="vis-builder-context-title">house</h3>)
+      assert html =~ ~s(<form class="vis-builder-masks" phx-change="mask")
+      assert html =~ ~s(name="frame.margin" value="true">)
+      refute html =~ ~s(name="frame.margin" value="true" checked>)
+
+      {:noreply, masked} =
+        Builder.handle_event(
+          "mask",
+          %{"_target" => ["frame.margin"], "frame.margin" => "true"},
+          s
+        )
+
+      assert hd(masked.assigns.uses).mask == [[:frame, :margin]]
+      assert BuilderFixture.render(masked) =~ ~s(name="frame.margin" value="true" checked>)
+
+      # The house's contribution no longer carries the margin, so the layers below show through.
+      {_house, house} = hd(BuilderFixture.layers(masked))
+      refute Map.has_key?(house.frame, :margin)
+      assert Map.has_key?(house.frame, :size)
+
+      # An unchecked box submits nothing, which is the path leaving.
+      {:noreply, back} = Builder.handle_event("mask", %{"_target" => ["frame.margin"]}, masked)
+      assert hd(back.assigns.uses).mask == []
+    end
+
+    test "a disabled layer is said to be, not drawn as every box checked", %{socket: s} do
+      {:noreply, off} = Builder.handle_event("toggle_layer", %{"index" => "0"}, s)
+      html = BuilderFixture.render(off)
+      assert html =~ "disabled — every key is masked"
+      refute html =~ ~s(class="vis-builder-masks")
+
+      # And a mask event on it changes nothing.
+      {:noreply, same} =
+        Builder.handle_event("mask", %{"_target" => ["theme"], "theme" => "true"}, off)
+
+      assert hd(same.assigns.uses).mask == :all
+    end
+
+    test "the layer's free variables are named, pointing at the Variables tab" do
+      s = BuilderFixture.socket(BuilderFixture.parameterised(), selected: 3)
+      assert BuilderFixture.render(s) =~ "needs var(:accent), var(:ticks)"
+    end
+
+    test "a colour has three faces: a slot, a picker, and a variable" do
+      html = at_node("styles.series", selected: 0)
+      assert html =~ ~s(<select name="stroke.slot" class="vis-builder-slot")
+      assert html =~ ~s(<option value="series_1" selected>series_1</option>)
+      assert html =~ ~s(<input type="color" name="stroke" class="vis-builder-colour")
+      assert html =~ ~s(<select name="stroke.mode" class="vis-builder-mode")
+
+      # A slot chosen is the atom; the picker's hex is the string; blank removes.
+      assert Editor.change(:style, %{"_target" => ["fill.slot"], "fill.slot" => "axis"}) ==
+               {:fill, {:ok, :axis}}
+
+      assert Editor.change(:style, %{"_target" => ["fill"], "fill" => "#3b6fa8"}) ==
+               {:fill, {:ok, "#3b6fa8"}}
+
+      assert Editor.change(:style, %{"_target" => ["fill.slot"], "fill.slot" => ""}) ==
+               {:fill, :error}
+    end
+
+    test "a reference offers what the document declares and what the library holds, by id" do
+      store = Visualize.Chart.BuilderTest.Styles
+
+      s =
+        BuilderFixture.socket(BuilderFixture.layers(),
+          store: store,
+          selected: 2,
+          node_label: "marks[0]",
+          facet: :style
+        )
+
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(<option value="series" selected>series</option>)
+      assert html =~ ~s(<option value="style:1">style:1</option>)
+
+      # And the id reads back as an id, never as an atom.
+      assert Editor.parse({:ref, :style}, "style:1") == {:ok, {:style, 1}}
+      assert Editor.parse({:ref, :style}, "frame:1") == {:ok, :"frame:1"}
     end
   end
 

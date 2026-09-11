@@ -21,6 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
+    alias Visualize.Chart.Builder.Store
     alias Visualize.Chart.{Fragment, Schema, Validator, Var}
 
     @typedoc "The control a key's type gets (spec/14 §18.6)."
@@ -36,7 +37,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @atom_types [:name, :field, :slot]
 
     # Every type whose control is a single-line text field (spec/14 §18.6).
-    @text_types [:string, :name, :field, :colour, :size, :font, :slot]
+    @text_types [:string, :name, :field, :size, :font, :slot]
 
     # -- the nodes of a fragment (spec/14 §18.5) -------------------------------------------
 
@@ -136,6 +137,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def widget(:boolean), do: :checkbox
     def widget(type) when type in [:integer, :number], do: :number
     def widget({:enum, allowed}), do: {:select, allowed}
+    def widget(:colour), do: :colour
     def widget(type) when type in @text_types, do: :text
     def widget({:ref, _kind}), do: :text
     def widget({:one_of, [first | _rest]}), do: widget(first)
@@ -179,7 +181,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp read(:number, string), do: number(string)
     defp read(:string, string), do: {:ok, string}
     defp read(type, string) when type in @atom_types, do: {:ok, atom(string)}
-    defp read({:ref, _kind}, string), do: {:ok, atom(string)}
+    # A reference is a local name, or a library id spelt as the DOM carries one (§19.2).
+    defp read({:ref, kind}, string) do
+      case Store.decode_id(string) do
+        {:ok, {^kind, _n} = id} -> {:ok, id}
+        _other -> {:ok, atom(string)}
+      end
+    end
+
     defp read(type, string) when type in [:colour, :size, :font], do: {:ok, loose(string)}
 
     defp read({:enum, allowed}, string) do
@@ -313,6 +322,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case String.split(target, ".", parts: 2) do
         [key, "mode"] -> with %{key: k} <- key_spec(kind, key), do: {k, mode(params[target], k)}
         [key, "var"] -> with %{key: k} <- key_spec(kind, key), do: {k, variable(params[target])}
+        [key, "slot"] -> with %{key: k} <- key_spec(kind, key), do: {k, slot_face(params[target])}
         [key] -> with spec <- key_spec(kind, key), do: typed(spec, params[key])
       end
     end
@@ -340,6 +350,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec submitted(Schema.type(), String.t() | nil) :: {:ok, term()} | :error
     def submitted(type, nil), do: if(widget(type) == :checkbox, do: {:ok, false}, else: :error)
     def submitted(type, string), do: parse(type, string)
+
+    # A colour's slot face: a theme slot chosen by name, or — blank — the key removed.
+    defp slot_face(nil), do: :error
+    defp slot_face(string) when is_binary(string), do: parse(:slot, string)
 
     defp mode("variable", key), do: {:ok, %Var{name: key}}
     defp mode(_literal, _key), do: :error
@@ -390,7 +404,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:path, :list, default: [], doc: "where the node sits, for its keys' errors")
     attr(:facet, :atom, default: nil, doc: "the open tab, `nil` for the kind's first facet")
     attr(:errors, :list, default: [], doc: "the `{path, reason}` pairs of spec/14 §10.1")
-    attr(:refs, :map, default: %{}, doc: "the names a `{:ref, kind}` may take, by kind")
+
+    attr(:refs, :map,
+      default: %{},
+      doc: "the names and ids a `{:ref, kind}` may take, by kind — ids as `{kind, n}`"
+    )
+
+    attr(:slots, :list,
+      default: [],
+      doc: "the theme's colour slots, as strings, for a colour's slot face (spec/14 §19.10)"
+    )
 
     attr(:strip, :boolean,
       default: true,
@@ -484,13 +507,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
               value={field.value}
               placeholder={field.placeholder}
             />
+            <select
+              :if={is_nil(field.variable) and field.widget == :colour}
+              name={"#{field.key}.slot"}
+              class="vis-builder-slot"
+              title="a theme slot"
+            >
+              <option value="">slot…</option>
+              <option :for={slot <- @slots} value={slot} selected={field.slot == slot}>{slot}</option>
+            </select>
+            <input
+              :if={is_nil(field.variable) and field.widget == :colour}
+              type="color"
+              name={field.key}
+              class="vis-builder-colour"
+              value={field.value}
+              title={field.value || "a colour"}
+            />
             <select :if={is_nil(field.variable) and field.widget == :select} name={field.key}>
               <option value=""></option>
               <option
-                :for={allowed <- field.options}
-                value={allowed}
-                selected={field.value == to_string(allowed)}
-              >{allowed}</option>
+                :for={{value, label} <- field.options}
+                value={value}
+                selected={field.value == value}
+              >{label}</option>
             </select>
             <textarea
               :if={is_nil(field.variable) and field.widget == :textarea}
@@ -525,6 +565,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           options: options(widget),
           checked: Map.get(node, spec.key) == true,
           value: shown(widget, Map.fetch(node, spec.key)),
+          slot: slot_name(widget, Map.get(node, spec.key)),
           variable: variable_name(Map.get(node, spec.key)),
           placeholder: shown(widget, default(spec)),
           errors: key_errors(errors, path ++ [spec.key])
@@ -565,8 +606,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shape({:select, _allowed}), do: :select
     defp shape(widget), do: widget
 
-    defp options({:select, allowed}), do: allowed
+    # An option is what the control submits and what a person reads: an id is spelt as the
+    # DOM carries one, and read back through the same table (§19.2).
+    defp options({:select, allowed}), do: Enum.map(allowed, &{option(&1), option(&1)})
     defp options(_widget), do: []
+
+    defp option({kind, n}) when is_atom(kind) and is_integer(n), do: Store.encode_id({kind, n})
+    defp option(value), do: to_string(value)
+
+    # A colour is three things (§3.4): the slot face shows a slot, the picker a literal.
+    defp slot_name(:colour, slot) when is_atom(slot) and not is_nil(slot), do: to_string(slot)
+    defp slot_name(_widget, _value), do: nil
 
     defp default(%{required: true}), do: :error
     defp default(%{default: nil}), do: :error
@@ -575,7 +625,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(_widget, :error), do: nil
     # A variable is shown by the name box, not the typed control (spec/14 §19.9).
     defp shown(_widget, {:ok, %Var{}}), do: nil
+    # A slot is the select's, not the picker's; a picker shows only a hex it can.
+    defp shown(:colour, {:ok, "#" <> _ = hex}), do: hex
+    defp shown(:colour, {:ok, _other}), do: nil
     defp shown(:textarea, {:ok, value}), do: inspect(value)
+    defp shown({:select, _}, {:ok, value}), do: option(value)
+    defp shown(:select, {:ok, value}), do: option(value)
     defp shown(_widget, {:ok, value}), do: to_string(value)
 
     defp key_errors(errors, path) do
