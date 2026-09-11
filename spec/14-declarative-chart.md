@@ -1860,7 +1860,7 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id through a store, dependencies first, with provenance |
 | `Visualize.Chart.Fragment.kinds/0` | every kind a fragment can be, and so every kind an id can carry |
 | `Visualize.Chart.Fragment.kind/1` | the kind of a fragment, derived (§19.8) |
-| `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each |
+| `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each, sorted — the order a map is walked is the runtime's, not a promise |
 | `Visualize.Chart.Fragment.relocate/2` | a fragment with its ids rewritten through a table, and the ids the table did not carry |
 
 | Function | Contract |

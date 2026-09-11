@@ -190,7 +190,7 @@ defmodule Visualize.Chart.Builder.StoreTest do
   end
 
   describe "refs and relocate (spec/14 §19.7)" do
-    test "an id is found wherever it sits, and a look-alike tuple is not" do
+    test "an id is found wherever it sits, sorted, and a look-alike tuple is not" do
       fragment = %{
         style: [{:style, 3}, %{fill: {:style, 11}}],
         anchor: {:axis, :y},

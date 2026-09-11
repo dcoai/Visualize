@@ -39,7 +39,7 @@ defmodule Visualize.Chart.Fragment do
       iex> Visualize.Chart.Fragment.kind(%{version: 1, theme: :dark, frame: %{}})
       :design
 
-      iex> Visualize.Chart.Fragment.refs(%{style: [{:style, 3}, %{fill: {:style, 11}}]})
+      iex> Visualize.Chart.Fragment.refs(%{style: [{:style, 11}, %{fill: {:style, 3}}]})
       [{:style, 3}, {:style, 11}]
 
   """
@@ -127,7 +127,8 @@ defmodule Visualize.Chart.Fragment do
   defp descend(kind, _type, _value), do: kind
 
   @doc """
-  Every id a fragment refers to, in the order they are met, once each (§19.7).
+  Every id a fragment refers to, once each, sorted (§19.7). Sorted rather than in the order
+  met, because the order a map is walked in is the runtime's and not a promise.
 
   An id is a `{kind, n}` tuple whose kind is one of `kinds/0` and whose `n` is a positive
   integer. A tuple of any other shape — an anchor `{:axis, :y}`, a `{:field, :t}` — is a
@@ -135,7 +136,7 @@ defmodule Visualize.Chart.Fragment do
   """
   @spec refs(term()) :: [id()]
   def refs(fragment) do
-    fragment |> collect([]) |> Enum.reverse() |> Enum.uniq()
+    fragment |> collect([]) |> Enum.uniq() |> Enum.sort()
   end
 
   defp collect({kind, n} = id, acc) when is_atom(kind) and is_integer(n) and n > 0 do
@@ -152,8 +153,8 @@ defmodule Visualize.Chart.Fragment do
   defp collect(_leaf, acc), do: acc
 
   @doc """
-  A fragment with every id rewritten through a table, and the ids the table did not carry
-  (§19.7). An id that is not in the table is left as it is — it resolves as a mask (§19.2)
+  A fragment with every id rewritten through a table, and the ids the table did not carry,
+  sorted (§19.7). An id that is not in the table is left as it is — it resolves as a mask (§19.2)
   — and is returned so an import can report it.
 
       iex> table = %{{:style, 11} => {:style, 1}}
@@ -163,7 +164,7 @@ defmodule Visualize.Chart.Fragment do
   @spec relocate(term(), %{id() => id()}) :: {term(), [id()]}
   def relocate(fragment, table) do
     {rewritten, missed} = rewrite(fragment, table, [])
-    {rewritten, missed |> Enum.reverse() |> Enum.uniq()}
+    {rewritten, missed |> Enum.uniq() |> Enum.sort()}
   end
 
   defp rewrite({kind, n} = id, table, missed) when is_atom(kind) and is_integer(n) and n > 0 do
