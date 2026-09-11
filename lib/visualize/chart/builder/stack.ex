@@ -138,7 +138,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           ) :: {[resolved()], [{Use.id(), Fragment.id()}]}
     def resolve(uses, labels, fetch) do
       Enum.reduce(uses, {[], []}, fn use, {layers, missing} ->
-        case Use.resolve(shown(use), fetch) do
+        case Use.resolve(shown(use), flattening(fetch)) do
           {:ok, fragment} ->
             {layers ++ [{label(labels, use), fragment}], missing}
 
@@ -150,6 +150,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp shown(%Use{mask: :all} = use), do: %{use | mask: []}
     defp shown(use), do: use
+
+    # The panels read a site that refers to a composite as what the composite flattens to
+    # (§19.9): its sites are its own affair. One that reaches itself is a mask here, as a
+    # missing entry is; the design's fault names the cycle.
+    defp flattening(fetch) do
+      fn id ->
+        case fetch.(id) do
+          {:ok, %{composite: _} = composite} ->
+            case Composite.flatten(composite, fetch) do
+              {:ok, flat, _report} -> {:ok, flat}
+              {:error, _cycle} -> :error
+            end
+
+          other ->
+            other
+        end
+      end
+    end
 
     @doc """
     The design the stack stands for: the enabled uses as a composite over the stack's own
@@ -239,14 +257,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec unmasked(Use.t(), (Fragment.id() -> {:ok, map()} | :error)) :: map()
     def unmasked(%Use{} = use, fetch) do
-      case Use.resolve(%{use | mask: [], vars: %{}}, fetch) do
+      case Use.resolve(%{use | mask: [], vars: %{}}, flattening(fetch)) do
         {:ok, fragment} -> fragment
         {:missing, _ref, fragment} -> fragment
       end
     end
 
     defp unbound(use, fetch) do
-      case Use.resolve(%{shown(use) | vars: %{}}, fetch) do
+      case Use.resolve(%{shown(use) | vars: %{}}, flattening(fetch)) do
         {:ok, fragment} -> {:ok, fragment}
         {:missing, _ref, fragment} -> {:missing, fragment}
       end
@@ -333,7 +351,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc "The empty, valid fragment of a kind, for *new fragment of a kind* (spec/14 §19.8)."
     @spec empty(atom()) :: map()
     def empty(:composite), do: %{composite: %{uses: [], vars: %{}}}
-    def empty(:design), do: %{version: 1, frame: %{kind: :cartesian}}
     def empty(:theme), do: %{theme: %{}}
     def empty(:frame), do: %{frame: %{}}
 

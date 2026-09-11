@@ -116,7 +116,10 @@ defmodule Visualize.Chart.Builder.StackTest do
 
       assert BuilderFixture.layers(off) == BuilderFixture.layers()
       assert BuilderFixture.disabled(off) == MapSet.new([0])
-      assert BuilderFixture.design(off) == Chart.stack(Enum.drop(BuilderFixture.layers(), 1))
+      # Flatten writes the version a deployed design carries (§19.8); the house wrote it before.
+      assert BuilderFixture.design(off) ==
+               Map.put(Chart.stack(Enum.drop(BuilderFixture.layers(), 1)), :version, 1)
+
       assert BuilderFixture.disabled(on) == MapSet.new()
     end
 

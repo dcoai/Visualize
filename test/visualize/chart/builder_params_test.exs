@@ -139,12 +139,29 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       refute html =~ "vis-builder-export"
     end
 
-    test "an imported document replaces the stack, named imported" do
+    test "an imported document replaces the stack with its sites, one kind each" do
       {:ok, chart} = Chart.from_map(Chart.stack(BuilderFixture.layers()))
       {:ok, json} = Chart.to_json(chart)
       {:noreply, opened} = Builder.handle_event("import", %{"document" => json}, socket())
 
-      assert BuilderFixture.layers(opened) == [{:imported, Chart.to_map(chart)}]
+      # Every row is one kind, keyed where the document keyed it, and the stack flattens
+      # back to the document.
+      assert BuilderFixture.names(opened) == [
+               "theme",
+               "meta",
+               "frame",
+               "style series",
+               "scale x",
+               "scale y",
+               "source primary",
+               "var unit",
+               "axis x bottom",
+               "axis y left",
+               "mark series",
+               "label 1"
+             ]
+
+      assert BuilderFixture.design(opened) == Chart.to_map(chart)
       assert BuilderFixture.selected(opened) == 0
       assert BuilderFixture.disabled(opened) == MapSet.new()
       assert opened.assigns.bindings == %{}

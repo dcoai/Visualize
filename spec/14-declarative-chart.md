@@ -1518,7 +1518,7 @@ A blank control removes the binding rather than setting it to nothing, so a vari
 
 **Export** is `Visualize.Chart.to_json/1` of the stacked design, and it therefore demands a *design*: the stack goes through `Visualize.Chart.from_map/1` first, and a fragment that does not validate is its errors, listed by path exactly as the preview lists them (§18.4). That is the honest failure — a half-built fragment has no JSON form because it has no version, no frame, or a reference to something nothing declares — and it is the same message a person is already reading in the preview.
 
-**Import** is `Visualize.Chart.from_json/1` of a pasted document, and a document that reads becomes the builder's **single layer**, named `imported`: a document is a whole design, not a layer of somebody else's stack, and dropping it on top of the layers already there would silently mix two designs. A document that does not parse is `{:json, message}` at the design's path and a document that parses but does not validate is the validator's errors, both shown in the panel.
+**Import** is `Visualize.Chart.from_json/1` of a pasted document, and a document that reads **replaces the stack with its sites**: `Visualize.Chart.Composite.decompose/1` turns the flat document into one site per root — its theme, its meta, its frame without the scales and axes, then one keyed site per style, scale, source and var, one site per mark, per label, per axis — in the order the document is read, so every row is one kind and `flatten/2` of what the import made is the document again (`version` aside, which Deploy writes). A document is a whole design, not a layer of somebody else's stack, so what was in the stack is replaced, not joined. A document that does not parse is `{:json, message}` at the design's path and a document that parses but does not validate is the validator's errors, both shown in the panel.
 
 Both are behind the optional `Jason` dependency (§11.1): without it each returns `{:missing_dependency, :jason}`, which the panel shows as its one error rather than as a crash, because a consumer without Jason has a builder that edits and previews and cannot import or export — which is exactly what the optional dependency means.
 
@@ -1890,7 +1890,7 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Builder.Store.relocate/3` | the reference `import/2`: issue, then rewrite through the table, through a store's own `put/2` |
 | `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id through a store, dependencies first, with provenance |
 | `Visualize.Chart.Fragment.kinds/0` | every kind a fragment can be, and so every kind an id can carry |
-| `Visualize.Chart.Fragment.kind/1` | the kind of a fragment, derived (§19.8) |
+| `Visualize.Chart.Fragment.kind/1` | the kind of a fragment, derived (§19.8); `nil` for a map that is many things, which is no kind of fragment |
 | `Visualize.Chart.Fragment.singular/1` | the kind a singular wrapper key names — `:style` for `style:` — or `nil`; `composite` is not one |
 | `Visualize.Chart.Fragment.wrapped/1` | a singular-wrapper fragment as `{kind, body}`, or `nil` |
 | `Visualize.Chart.Validator.validate/2` | per-kind validity (§19.8): a fragment read as a kind — a design whole, a composite as sites, any other kind as the body under its key with that kind's schema, no key required and no reference looked up, since a fragment is a piece |
@@ -1908,6 +1908,7 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Composite.composite?/1` | whether a fragment is one key, `composite`, holding uses |
 | `Visualize.Chart.Composite.flatten/2` | a composite through a fetch, recursively, every site placed by its kind (§19.6): `{:ok, design, %{missing: …, keyless: …}}` or `{:error, {:cycle, chain}}` |
 | `Visualize.Chart.Composite.place/2` | one site's contribution as the layer that declares it where the design keeps its kind — a name-keyed one under the site's `key` — or `:keyless` |
+| `Visualize.Chart.Composite.decompose/1` | a flat document as sites, one kind each, keyed where the document keyed them, with a label for each (§18.12); `flatten/2` of the result is the document again |
 | `Visualize.Chart.bind/2` | `Use.bind/2` on the design's own module |
 | `Visualize.Chart.mask/2` | `Use.mask/2` likewise |
 | `Visualize.Chart.resolve/2` | `Use.resolve/2` likewise |
@@ -1921,7 +1922,9 @@ The **context** is whatever the host passes as the second element of a `{module,
 
 A library item has two independent axes, and the library is browsed by either.
 
-**Kind is derived, never stored.** Walk down while the fragment sets exactly one key, and the kind is the last thing reached: `%{style: %{…}}` is `:style`, `%{theme: %{…}}` is `:theme`, `%{frame: %{size: …, margin: …}}` is `:frame`, `%{composite: %{uses: …}}` is `:composite`. A fragment about more than one thing at its shallowest branching point is `:design`, which is what a hand-written whole design is. The singular wrapper of §19.2 is what makes a bare body's kind readable without the store holding it.
+**Kind is derived, never stored.** Walk down while the fragment sets exactly one key, and the kind is the last thing reached: `%{style: %{…}}` is `:style`, `%{theme: %{…}}` is `:theme`, `%{frame: %{size: …, margin: …}}` is `:frame`, `%{composite: %{uses: …}}` is `:composite`. The singular wrapper of §19.2 is what makes a bare body's kind readable without the store holding it.
+
+**A fragment about more than one thing is not a kind of fragment.** A map that branches at the top — `theme` and `styles` and `frame` — derives to no kind: `Visualize.Chart.Fragment.kind/1` gives `nil`, `Visualize.Chart.Validator.validate/2` refuses it as a fragment, and the library refuses to store it. The thing that is many kinds is a *composite*, whose sites are each one kind (§19.6), and a person who has such a map — a hand-written document of §13, an import — has it decomposed into sites (§18.12). **Design is therefore not a kind**: it is the deployed tier and nothing else — Deploy's output (§19.6), complete, validated by `validate/1`, never a heading in the library and never an id. A composite need not be complete: a theme-and-frame composite is a "house look", a library entry, and a layer for another composite; flattening it gives a partial map that is not a design, which is what makes it a fragment.
 
 **Group and sub-group are stored, subjective, and orthogonal** — the person's own filing, free to gather dissimilar kinds under one heading. They remain in the entry's name as `<group>:<sub-group>:<name>` (§18.16, D-97), which is now an attribute of the entry and not a key anything references.
 
@@ -2035,5 +2038,7 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | §18.14 — a style palette that creates named styles in the selected layer | a declaration in place is values; a name is the library's (§19.1, §19.2) |
 | §18.16 — four regions, a store of names | three regions (§19.9); a store of ids (§19.7) |
 | §18.20 — a dropped style fragment merges its `styles` declaration into the design | a dropped fragment is a `Use` with its id as `ref`; nothing is merged, and nothing is copied |
+| §18.12 — an imported document is the builder's single layer | it is decomposed into sites, one kind each (§18.12) |
+| §19.8 — a multi-root fragment is of kind `design` | it is no kind of fragment; the thing that is many kinds is a composite, and design is only what Deploy makes |
 
 The rule underneath all of it: **the thing a person renames is never the thing a reference uses.** A name is an attribute of a library entry; a reference is an id; a declaration in place has neither. Nothing in the model ever has to hunt for a word.

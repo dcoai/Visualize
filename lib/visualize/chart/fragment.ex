@@ -37,7 +37,7 @@ defmodule Visualize.Chart.Fragment do
       :composite
 
       iex> Visualize.Chart.Fragment.kind(%{version: 1, theme: :dark, frame: %{}})
-      :design
+      nil
 
       iex> Visualize.Chart.Fragment.refs(%{style: [{:style, 11}, %{fill: {:style, 3}}]})
       [{:style, 3}, {:style, 11}]
@@ -105,28 +105,34 @@ defmodule Visualize.Chart.Fragment do
 
   @doc """
   Every kind a fragment can be, and so every kind an id can carry: the schema's node kinds
-  and `:composite` (§19.6).
+  but the design, and `:composite` (§19.6, §19.8). A design is the deployed tier, not a
+  kind of fragment.
   """
   @spec kinds() :: [atom(), ...]
-  def kinds, do: Enum.uniq(Schema.kinds() ++ Map.values(@singular))
+  def kinds, do: Enum.uniq((Schema.kinds() -- [:design]) ++ Map.values(@singular))
 
   @doc """
   The kind of a fragment (§19.8): the last node kind reached walking down while exactly one
-  key is set. `:design` when the fragment branches at the top.
+  key is set. `nil` when the fragment is many things — it branches at the top, or its one
+  key is a design scalar such as `version` — which is no kind of fragment: the thing that
+  is many kinds is a composite, whose sites are each one.
   """
-  @spec kind(map()) :: atom()
+  @spec kind(map()) :: atom() | nil
   def kind(fragment) when is_map(fragment) and not is_struct(fragment) do
     case Map.to_list(fragment) do
       [{key, value}] ->
         case Schema.key(:design, key) do
-          nil -> Map.get(@singular, key, :design)
-          spec -> descend(:design, spec.type, value)
+          nil -> Map.get(@singular, key)
+          spec -> none(descend(:design, spec.type, value))
         end
 
       _several ->
-        :design
+        nil
     end
   end
+
+  defp none(:design), do: nil
+  defp none(kind), do: kind
 
   defp walk(kind, node) when is_map(node) and not is_struct(node) do
     case Map.to_list(node) do

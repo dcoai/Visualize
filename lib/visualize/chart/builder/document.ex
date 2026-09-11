@@ -23,7 +23,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart.Validator
 
     attr(:design, :map, required: true, doc: "the stacked design to encode")
-    attr(:kind, :atom, default: :design, doc: "what the stack is of: a design, or one kind")
+    attr(:kind, :atom, default: :composite, doc: "what the stack is of: a composite, or one kind")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the panel's class")
 
@@ -61,7 +61,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A design is the document a chart reads back; any other kind is the fragment itself,
     # valid as that kind (spec/14 §19.8), in the same JSON form.
-    defp encoded(design, kind) when kind in [:design, :composite] do
+    defp encoded(design, :composite) do
       with {:ok, chart} <- Chart.from_map(design),
            {:ok, json} <- Chart.to_json(chart) do
         %{document: json, errors: []}

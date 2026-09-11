@@ -90,8 +90,9 @@ defmodule Visualize.BuilderFixture do
     @moduledoc false
     @behaviour Visualize.Chart.Builder.Store
 
-    @baseline {:design, 1}
-    @missing {:design, 2}
+    # A baseline chart is a composite of one frame site: design is not a kind (§19.8).
+    @baseline {:composite, 1}
+    @missing {:composite, 2}
 
     def baseline_id, do: @baseline
     def missing_id, do: @missing
@@ -99,8 +100,8 @@ defmodule Visualize.BuilderFixture do
     @impl true
     def list(_context) do
       [
-        %{id: @baseline, name: "baseline", kind: :design},
-        %{id: @missing, name: "missing", kind: :design}
+        %{id: @baseline, name: "baseline", kind: :composite},
+        %{id: @missing, name: "missing", kind: :composite}
       ]
     end
 
@@ -110,15 +111,22 @@ defmodule Visualize.BuilderFixture do
        %{
          id: @baseline,
          name: "baseline",
-         kind: :design,
-         fragment: %{version: 1, frame: %{kind: :cartesian}}
+         kind: :composite,
+         fragment: %{
+           composite: %{
+             uses: [
+               %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frame: %{kind: :cartesian}}}
+             ],
+             vars: %{}
+           }
+         }
        }}
     end
 
     def get(_id, _context), do: :error
 
     @impl true
-    def put(%{id: nil}, _context), do: {:ok, {:design, 3}}
+    def put(%{id: nil}, _context), do: {:ok, {:composite, 3}}
     def put(%{id: id}, _context), do: {:ok, id}
 
     @impl true

@@ -30,6 +30,9 @@ defmodule Visualize.Chart.Composite do
   # The kinds a document keys by name (§19.3).
   @named [:style, :scale, :source, :var]
 
+  # The document version flatten writes: a design is the deployed tier (§19.8).
+  @version 1
+
   @typedoc """
   What `flatten/2` reports beside the design: every ref no store could find, and every
   name-keyed site this composite holds that has no key to be declared under.
@@ -106,7 +109,9 @@ defmodule Visualize.Chart.Composite do
         {Enum.map(resolved, fn {_use, c} -> c end), []}
 
       _mixed ->
-        Enum.reduce(resolved, {[], []}, &place_one/2)
+        # A design-level composite: version is the deployed tier's, written here (§19.8).
+        {layers, keyless} = Enum.reduce(resolved, {[], []}, &place_one/2)
+        {[%{version: @version} | layers], keyless}
     end
   end
 
@@ -119,6 +124,80 @@ defmodule Visualize.Chart.Composite do
       :keyless -> {layers, keyless ++ [use.id]}
     end
   end
+
+  @doc """
+  A flat document as sites, one kind each (spec/14 §18.12): its theme, its meta, its frame
+  without the scales and axes, then one keyed site per style, scale, source and var, one
+  site per mark, per label and per axis, in the order the document is read. `flatten/2` of
+  the result is the document again, `version` aside, which flatten writes. Each site comes
+  with a label a person reads.
+
+      iex> document = %{version: 1, theme: :dark, styles: %{series: %{stroke: "#111"}},
+      ...>   frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}}, axes: [%{scale: :x, side: :bottom}]},
+      ...>   marks: [%{id: :m, type: :line}]}
+      iex> {uses, labels} = Visualize.Chart.Composite.decompose(document)
+      iex> Enum.map(uses, &{&1.id, Map.keys(&1.local), &1.key})
+      [{{:use, 1}, [:theme], nil}, {{:use, 2}, [:frame], nil}, {{:use, 3}, [:style], :series}, {{:use, 4}, [:scale], :x}, {{:use, 5}, [:axis], nil}, {{:use, 6}, [:mark], nil}]
+      iex> labels[{:use, 3}]
+      "style series"
+  """
+  @spec decompose(map()) :: {[Use.t()], %{Use.id() => String.t()}}
+  def decompose(document) when is_map(document) and not is_struct(document) do
+    frame = Map.get(document, :frame, %{})
+
+    sites =
+      one(:theme, document) ++
+        one(:meta, document) ++
+        frame_site(Map.drop(frame, [:scales, :axes])) ++
+        keyed(:style, Map.get(document, :styles, %{})) ++
+        keyed(:scale, Map.get(frame, :scales, %{})) ++
+        keyed(:source, Map.get(document, :sources, %{})) ++
+        keyed(:var, Map.get(document, :vars, %{})) ++
+        each(:axis, Map.get(frame, :axes, [])) ++
+        each(:mark, Map.get(document, :marks, [])) ++
+        each(:label, Map.get(document, :labels, []))
+
+    sites
+    |> Enum.with_index(1)
+    |> Enum.reduce({[], %{}}, fn {{label, site}, n}, {uses, labels} ->
+      use = struct!(Use, Map.put(site, :id, {:use, n}))
+      {uses ++ [use], Map.put(labels, use.id, label)}
+    end)
+  end
+
+  defp one(key, document) do
+    case Map.fetch(document, key) do
+      {:ok, value} -> [{to_string(key), %{ref: nil, local: %{key => value}}}]
+      :error -> []
+    end
+  end
+
+  defp frame_site(frame) when map_size(frame) == 0, do: []
+  defp frame_site(frame), do: [{"frame", %{ref: nil, local: %{frame: frame}}}]
+
+  defp keyed(kind, declared) when is_map(declared) do
+    declared
+    |> Enum.sort_by(fn {name, _body} -> to_string(name) end)
+    |> Enum.map(fn {name, body} ->
+      {"#{kind} #{name}", %{ref: nil, local: %{kind => body}, key: name}}
+    end)
+  end
+
+  defp keyed(_kind, _other), do: []
+
+  defp each(kind, elements) when is_list(elements) do
+    elements
+    |> Enum.with_index(1)
+    |> Enum.map(fn {element, n} ->
+      {"#{kind} #{identity(element, n)}", %{ref: nil, local: %{kind => element}}}
+    end)
+  end
+
+  defp each(_kind, _other), do: []
+
+  defp identity(%{id: id}, _n), do: to_string(id)
+  defp identity(%{scale: scale, side: side}, _n), do: "#{scale} #{side}"
+  defp identity(_element, n), do: to_string(n)
 
   @doc """
   A site's contribution placed in the design by its kind (spec/14 §19.6): a wrapper body
