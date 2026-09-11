@@ -111,6 +111,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     .vis-builder-library,
+    .vis-builder-new,
+    .vis-builder-opened,
     .vis-builder-keep {
       display: flex;
       align-items: center;
@@ -119,6 +121,35 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     .vis-builder-keep {
       margin-left: auto;
+    }
+
+    /* What is open is said in the toolbar, because the field forms write to it and not to
+       the stack, and the way back is beside the name (spec/14 §19.8). */
+    .vis-builder-opened {
+      padding: 2px 8px;
+      border: 1px solid var(--vis-builder-accent);
+      border-radius: var(--vis-builder-radius);
+      color: var(--vis-builder-muted);
+      font-size: 12px;
+    }
+
+    .vis-builder-opened strong {
+      color: var(--vis-builder-ink);
+    }
+
+    .vis-builder-close {
+      padding: 2px 6px;
+      font-size: 11px;
+    }
+
+    /* A reference the store no longer holds is visible degradation, never silent (D-100). */
+    .vis-builder-missing {
+      margin: 6px 0 0;
+      padding: 6px 8px;
+      border: 1px dashed var(--vis-builder-warn);
+      border-radius: var(--vis-builder-radius);
+      color: var(--vis-builder-warn);
+      font-size: 11px;
     }
 
     .vis-builder-control-label {

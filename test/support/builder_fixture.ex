@@ -268,4 +268,95 @@ defmodule Visualize.BuilderFixture do
       File.write!(Path.join(@dir, "#{name}.html"), render_case(c))
     end)
   end
+
+  # -- the builder's state, in the shapes the tests have always read it in ---------------
+  #
+  # The builder's state is a stack of use sites (spec/14 §19.3); the panels read resolved
+  # layers, an index and a set derived from it. These read the same things the same way,
+  # so a test says what it means — "the second layer is disabled" — and not how it is kept.
+
+  alias Phoenix.LiveView.Socket
+  alias Visualize.Chart.Builder
+  alias Visualize.Chart.Builder.{Stack, Store}
+
+  @doc "A builder socket over host layers, seeded as the component seeds them, with options."
+  def socket(layers, opts \\ []) do
+    {host, state} = Keyword.split(opts, [:store, :sources, :vars, :theme, :on_save])
+
+    host =
+      host
+      |> Keyword.put_new(:sources, sources())
+      |> Keyword.put(:id, "b")
+      |> Keyword.put(:layers, layers)
+      |> Map.new()
+
+    {:ok, socket} = Builder.mount(%Socket{})
+    {:ok, socket} = Builder.update(host, socket)
+
+    Enum.reduce(state, socket, fn
+      {:selected, index}, socket ->
+        case Enum.at(socket.assigns.uses, index) do
+          nil -> socket
+          use -> Phoenix.Component.assign(socket, :selected, use.id)
+        end
+
+      {:disabled, indexes}, socket ->
+        uses =
+          socket.assigns.uses
+          |> Enum.with_index()
+          |> Enum.map(fn {use, i} -> if i in indexes, do: %{use | mask: :all}, else: use end)
+
+        Phoenix.Component.assign(socket, :uses, uses)
+
+      {:bindings, bindings}, socket ->
+        Phoenix.Component.assign(socket, :bindings, bindings)
+
+      {key, value}, socket ->
+        Phoenix.Component.assign(socket, key, value)
+    end)
+  end
+
+  @doc "The resolved layers as `{name, fragment}`, the name an atom where one exists."
+  def layers(%Socket{assigns: assigns}) do
+    {resolved, _missing} = Stack.resolve(assigns.uses, assigns.labels, Stack.fetch(assigns.store))
+    for {label, fragment} <- resolved, do: {atomised(label), fragment}
+  end
+
+  # The fixture's own layers are named by atoms; a label that is one of them reads back as
+  # the atom, so a test compares against `layers/0` unchanged. Any other label is its string.
+  @named ~w(house shared panel imported only params)a
+  defp atomised(label) do
+    Enum.find(@named, label, &(Atom.to_string(&1) == label))
+  end
+
+  @doc "The selected layer's position, or `nil`."
+  def selected(%Socket{assigns: assigns}), do: Stack.index_of(assigns.uses, assigns.selected)
+
+  @doc "The disabled positions, as a set."
+  def disabled(%Socket{assigns: assigns}) do
+    assigns.uses
+    |> Enum.with_index()
+    |> Enum.reject(fn {use, _i} -> Stack.enabled?(use) end)
+    |> MapSet.new(fn {_use, i} -> i end)
+  end
+
+  @doc "The design the stack stands for: what saving sends, flattened."
+  def design(%Socket{assigns: assigns}) do
+    {:ok, design, _missing} = Stack.design(assigns.uses, Stack.fetch(assigns.store))
+    design
+  end
+
+  @doc "The layer names, as strings, in stack order."
+  def names(%Socket{assigns: assigns}) do
+    Enum.map(assigns.uses, &atomised(Stack.label(assigns.labels, &1)))
+  end
+
+  @doc "The `style` value at the selected layer's first mark."
+  def style_at(socket) do
+    {_name, fragment} = socket |> layers() |> Enum.at(selected(socket))
+    fragment |> Map.fetch!(:marks) |> hd() |> Map.get(:style)
+  end
+
+  @doc "A fragment's id under the fixture Library, for tests that click or drop it."
+  def encoded(id), do: Store.encode_id(id)
 end

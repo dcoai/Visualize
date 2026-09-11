@@ -175,17 +175,32 @@ defmodule ExamplesWeb.BuilderLive do
 
   # The builder's one output: the design it produced. The host decides what saving means —
   # here, applying it and reporting whether it drew.
-  def handle_info({:design_saved, _id, design}, socket) do
+  # What the builder sends is the structure — the stack of sites — and the deployment
+  # phase is where it becomes a design: flattened through the library (spec/14 §19.6).
+  def handle_info({:design_saved, _id, structure}, socket) do
     result =
-      case Chart.apply(design, sources: socket.assigns.sources) do
-        {:ok, _applied} ->
-          "saved: the design applies"
+      with {:ok, design, %{missing: missing}} <- Chart.flatten(structure, &fetch/1),
+           {:ok, _applied} <- Chart.apply(design, sources: socket.assigns.sources) do
+        case missing do
+          [] -> "saved: the design applies"
+          _ -> "saved: the design applies, with #{length(missing)} reference(s) showing through"
+        end
+      else
+        {:error, {:cycle, chain}} ->
+          "not saved: the stack refers to itself through #{inspect(chain)}"
 
         {:error, errors} ->
           "not saved: " <> Enum.map_join(errors, "; ", &Chart.Validator.format/1)
       end
 
     {:noreply, assign(socket, :saved, result)}
+  end
+
+  defp fetch(id) do
+    case Library.get(id, %{}) do
+      {:ok, entry} -> {:ok, entry.fragment}
+      :error -> :error
+    end
   end
 
   def render(assigns) do
