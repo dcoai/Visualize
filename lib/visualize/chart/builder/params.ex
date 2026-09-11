@@ -27,19 +27,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
     )
 
     attr(:vars, :map, default: %{}, doc: "the values now bound")
+    attr(:id, :string, default: "vis-builder-params", doc: "the panel's id, for its datalist")
+
+    attr(:sites, :list,
+      default: [],
+      doc: "each site's own free variables and what it binds them to (spec/14 §19.10)"
+    )
+
+    attr(:names, :list, default: [], doc: "the variable names a site may bind to")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the form's class")
 
     @doc """
-    Renders the parameters form (spec/10 §15.3).
+    Renders the parameters form (spec/10 §15.3), and the per-site rows (spec/14 §19.10).
 
     A `<form class="vis-builder-params">` with one `<label class="vis-builder-param">` per
-    free variable, each carrying the control its first use's type asks for.
+    free variable, each carrying the control its first use's type asks for; then one
+    `<form class="vis-builder-site">` per site that carries variables, with a row per
+    variable reading as one of three states — *flows up*, `= literal`, `= var(:name)`.
     """
     def panel(assigns) do
-      assigns = assign(assigns, :params, params(assigns))
+      assigns = assign(assigns, params: params(assigns), rows: rows(assigns.sites))
 
       ~H"""
+      <div class="vis-builder-variables">
       <form class={class(@class)} phx-change="set_var" phx-target={@target}>
         <label :for={param <- @params} class={param.class}>
           <span class="vis-builder-param-name">{param.name}</span>
@@ -80,8 +91,71 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <span class="vis-builder-param-uses">{param.uses}</span>
         </label>
       </form>
+      <form
+        :for={site <- @rows}
+        class="vis-builder-site"
+        phx-change="bind_site"
+        phx-target={@target}
+      >
+        <h3 class="vis-builder-site-name">{site.label}</h3>
+        <input type="hidden" name="site" value={site.index} />
+        <div :for={row <- site.rows} class={"vis-builder-site-var vis-builder-site-var-" <> to_string(row.state)}>
+          <span class="vis-builder-param-name">{row.name}</span>
+          <span class="vis-builder-site-state">{row.reads}</span>
+          <input
+            type="text"
+            name={row.name}
+            class="vis-builder-site-literal"
+            value={row.literal}
+            placeholder="a value"
+            aria-label={"#{row.name} as a value"}
+          />
+          <input
+            type="text"
+            name={row.name <> ".var"}
+            class="vis-builder-site-variable"
+            value={row.variable}
+            placeholder="or a variable"
+            list={@id <> "-names"}
+            aria-label={"#{row.name} as a variable"}
+          />
+        </div>
+      </form>
+      <datalist id={@id <> "-names"}>
+        <option :for={name <- @names} value={name}></option>
+      </datalist>
+      </div>
       """
     end
+
+    # A site's rows: what its fragment asks for, and what the site says of each (§19.4).
+    defp rows(sites) do
+      for site <- sites do
+        rows =
+          for free <- site.free do
+            {state, literal, variable} = bound_as(Map.get(site.vars, free.name))
+
+            %{
+              name: to_string(free.name),
+              state: state,
+              reads: reads(state, free.name, literal, variable),
+              literal: literal,
+              variable: variable
+            }
+          end
+
+        %{index: site.index, label: site.label, rows: rows}
+      end
+    end
+
+    defp bound_as(nil), do: {:up, nil, nil}
+    defp bound_as(%Chart.Var{name: name}), do: {:variable, nil, to_string(name)}
+    defp bound_as(value) when is_binary(value), do: {:literal, value, nil}
+    defp bound_as(value), do: {:literal, inspect(value), nil}
+
+    defp reads(:up, name, _literal, _variable), do: "flows up as :#{name}"
+    defp reads(:literal, _name, literal, _variable), do: "= #{literal}"
+    defp reads(:variable, _name, _literal, variable), do: "= var(:#{variable})"
 
     defp class(nil), do: "vis-builder-params"
     defp class(extra), do: "vis-builder-params " <> extra

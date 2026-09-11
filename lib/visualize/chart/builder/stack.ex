@@ -53,6 +53,44 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp fragment(%Chart{} = chart), do: Chart.to_map(chart)
     defp fragment(map) when is_map(map), do: map
 
+    @doc """
+    An entry as a stack (spec/14 §19.9): a composite's sites, labelled by the store's
+    names, with its vars; any other body as one inline site named for the entry.
+    """
+    @spec open(%{kind: atom(), name: String.t() | nil, fragment: map()}, (Fragment.id() ->
+                                                                            String.t() | nil)) ::
+            {[Use.t()], labels(), map()}
+    def open(%{fragment: %{composite: %{uses: uses} = composite}}, name_of) when is_list(uses) do
+      labels =
+        Map.new(uses, fn
+          %Use{id: id, ref: nil} -> {id, "local"}
+          %Use{id: id, ref: ref} -> {id, name_of.(ref) || "#{elem(ref, 0)} #{elem(ref, 1)}"}
+        end)
+
+      {uses, labels, Map.get(composite, :vars, %{})}
+    end
+
+    def open(%{kind: kind, name: name, fragment: fragment}, _name_of) do
+      use = %Use{id: {:use, 1}, ref: nil, local: fragment}
+      {[use], %{use.id => name || "new #{kind}"}, %{}}
+    end
+
+    @doc "The stack as a composite: what saving sends and a composite stores (spec/14 §19.6)."
+    @spec structure([Use.t()], map()) :: map()
+    def structure(uses, vars), do: %{composite: %{uses: uses, vars: vars}}
+
+    @doc """
+    The lowest tier that holds the stack (D-99): one bare inline site is its body, values
+    and nothing else; anything more — a ref, a mask, a binding, a second site, a var — is
+    structure.
+    """
+    @spec body([Use.t()], map()) :: map()
+    def body([%Use{ref: nil, mask: [], vars: vars, local: local}], stack_vars)
+        when map_size(vars) == 0 and map_size(stack_vars) == 0,
+        do: local
+
+    def body(uses, vars), do: structure(uses, vars)
+
     @doc "The name a person sees for a use: its label, or its id when it has none."
     @spec label(labels(), Use.t()) :: String.t()
     def label(labels, %Use{id: {:use, n} = id}), do: Map.get(labels, id, "use #{n}")
@@ -107,13 +145,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(use), do: use
 
     @doc """
-    The design the stack stands for: the enabled uses as a composite, flattened through
-    the store, with every `{:style, n}` inlined so the frame can draw it (spec/14 §19.6).
+    The design the stack stands for: the enabled uses as a composite over the stack's own
+    vars, flattened through the store, with every `{:style, n}` inlined so the frame can
+    draw it (spec/14 §19.6).
     """
-    @spec design([Use.t()], (Fragment.id() -> {:ok, map()} | :error)) ::
+    @spec design([Use.t()], map(), (Fragment.id() -> {:ok, map()} | :error)) ::
             {:ok, map(), [{Use.id(), Fragment.id()}]} | {:error, term()}
-    def design(uses, fetch) do
-      composite = %{composite: %{uses: Enum.filter(uses, &enabled?/1), vars: %{}}}
+    def design(uses, vars, fetch) do
+      composite = structure(Enum.filter(uses, &enabled?/1), vars)
 
       case Composite.flatten(composite, fetch) do
         {:ok, design, %{missing: missing}} -> {:ok, inline_styles(design, fetch), missing}
@@ -158,6 +197,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
       do: tuple |> Tuple.to_list() |> Enum.map(&walk(&1, fun)) |> List.to_tuple()
 
     defp walk(leaf, fun), do: fun.(leaf)
+
+    @doc """
+    Each site that carries variables: the free variables of its fragment *before* the
+    site's bindings — the names the fragment itself uses — and what the site binds them
+    to, for the Variables tab's per-site rows (spec/14 §19.4, §19.10).
+    """
+    @spec sites([Use.t()], labels(), (Fragment.id() -> {:ok, map()} | :error)) :: [
+            %{
+              index: non_neg_integer(),
+              id: Use.id(),
+              label: String.t(),
+              free: [Chart.free_var()],
+              vars: map()
+            }
+          ]
+    def sites(uses, labels, fetch) do
+      uses
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {use, index} ->
+        label = label(labels, use)
+        {_status, fragment} = unbound(use, fetch)
+
+        case Chart.free_vars([{label, fragment}]) do
+          [] -> []
+          free -> [%{index: index, id: use.id, label: label, free: free, vars: use.vars}]
+        end
+      end)
+    end
+
+    defp unbound(use, fetch) do
+      case Use.resolve(%{shown(use) | vars: %{}}, fetch) do
+        {:ok, fragment} -> {:ok, fragment}
+        {:missing, _ref, fragment} -> {:missing, fragment}
+      end
+    end
 
     @doc "The position of a use in the stack, or `nil`."
     @spec index_of([Use.t()], Use.id() | nil) :: non_neg_integer() | nil

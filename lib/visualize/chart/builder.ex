@@ -69,7 +69,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       StyleStack
     }
 
-    alias Visualize.Chart.{Fragment, Schema, Use}
+    alias Visualize.Chart.{Composite, Fragment, Schema, Use, Validator}
 
     @doc false
     # The assigns a host may leave out, and their defaults (spec/14 §18.2). `attr/3` applies
@@ -121,6 +121,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
          labels: %{},
          selected: nil,
          open: nil,
+         stash: nil,
+         stack_vars: %{},
          notice: nil,
          facet: nil,
          added: nil,
@@ -193,7 +195,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <button type="submit" class="vis-builder-new-submit">fragment</button>
           </form>
           <span :if={@open} class="vis-builder-opened">
-            editing <strong>{@open.name || "a new #{@open.kind}"}</strong>
+            editing {@open.kind} <strong>{@open.name || "(unsaved)"}</strong>
             <button type="button" class="vis-builder-close" phx-click="close" phx-target={@myself}>
               back to the stack
             </button>
@@ -227,7 +229,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             target={@myself}
           />
           <aside class="vis-builder-sidebar">
-            <h2 class="vis-builder-sidebar-title">Layers</h2>
+            <h2 class="vis-builder-sidebar-title">{@stack_title}</h2>
             <Layers.panel
               id={@id <> "-layers"}
               layers={@layers}
@@ -265,8 +267,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <div class="vis-builder-workspace">
               <Params.panel
                 :if={@node_label == "variables"}
+                id={@id <> "-params"}
                 layers={@layers}
                 vars={@bindings}
+                sites={@sites}
+                names={@variables}
                 target={@myself}
               />
               <Editor.panel
@@ -282,7 +287,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 strip={false}
                 target={@myself}
               />
-              <Preview.panel design={@design} sources={@sources} vars={@bindings} theme={@theme} />
+              <Preview.panel
+                :if={@preview?}
+                design={@design}
+                sources={@sources}
+                vars={@bindings}
+                theme={@theme}
+              />
             </div>
           </main>
           <aside class="vis-builder-context">
@@ -317,7 +328,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <div class="vis-builder-tray">
           <Palette.panel design={@design} open={@open_style} target={@myself} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
-          <Document.panel design={@design} target={@myself} />
+          <Document.panel design={@design} kind={@kind} target={@myself} />
         </div>
       </div>
       """
@@ -368,14 +379,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # Closing an entry is the way back to the stack it was opened over (spec/14 §19.9).
     def handle_event("close", _params, socket) do
-      {:noreply, assign(socket, open: nil, node_label: "design", facet: nil, style_entry: nil)}
+      {:noreply, closed(socket)}
     end
 
-    # Saving names the entry, never the body; a composite is saved as its structure; and a
-    # fragment opened as one kind is refused if it drifted into another (spec/14 §19.6, §19.8).
+    # Saving names the entry, never the body. The workspace and a composite are saved as
+    # structure; any other kind is saved as the lowest tier that holds it — one bare inline
+    # site is its body, anything more is structure — and is refused if what it flattens to
+    # is no longer that kind, or is not valid as one (spec/14 §19.6, §19.8).
     def handle_event("put_design", %{"name" => name}, socket) do
-      %{store: store, open: open} = socket.assigns
+      %{store: store} = socket.assigns
       trimmed = String.trim(name)
 
       cond do
@@ -385,20 +399,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         trimmed == "" ->
           {:noreply, assign(socket, :notice, "a saved fragment needs a name")}
 
-        open != nil and Fragment.kind(open.fragment) != open.kind ->
-          {:noreply, assign(socket, :notice, drifted(open))}
-
-        open != nil ->
-          entry = %{id: open.id, name: trimmed, kind: open.kind, fragment: open.fragment}
-
-          {:noreply,
-           saved(socket, Store.put(store, entry), fn s, id ->
-             assign(s, :open, %{open | id: id, name: trimmed})
-           end)}
-
         true ->
-          entry = %{id: nil, name: trimmed, kind: :composite, fragment: structure(socket.assigns)}
-          {:noreply, saved(socket, Store.put(store, entry), fn s, _id -> s end)}
+          {:noreply, put(socket, kept(socket.assigns), trimmed)}
       end
     end
 
@@ -505,8 +507,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # use referring to it (spec/14 §18.17, §19.3).
     def handle_event("insert", %{"name" => submitted, "at" => at}, socket) do
       case fetch(socket.assigns.store, submitted) do
-        {:ok, entry} -> {:noreply, inserted(socket, entry, position(at))}
-        :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+        {:ok, entry} ->
+          case admits(socket.assigns.open, entry) do
+            :ok -> {:noreply, inserted(socket, entry, position(at))}
+            {:refused, notice} -> {:noreply, assign(socket, :notice, notice)}
+          end
+
+        :error ->
+          {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
       end
     end
 
@@ -573,6 +581,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, bound(socket, free, params[name])}
     end
 
+    # A site's binding, from its row in the Variables tab (spec/14 §19.4, §19.10): a value,
+    # one of the stack's own variables, or — blank — nothing, so the name flows up. This is
+    # the one surface that writes `Use.vars`.
+    def handle_event("bind_site", %{"site" => site, "_target" => [target]} = params, socket) do
+      %{uses: uses, labels: labels, store: store} = socket.assigns
+      index = position(site)
+
+      with %Use{} = use <- Enum.at(uses, index),
+           {name, control} <- control(target),
+           %{free: free} <- Enum.find(Stack.sites([use], labels, Stack.fetch(store)), & &1),
+           %{} = var <- Enum.find(free, &(to_string(&1.name) == name)) do
+        bound =
+          case {control, Editor.submitted(Params.expects(var), params[target])} do
+            {:variable, _typed} -> Editor.variable(params[target])
+            {:literal, typed} -> typed
+          end
+
+        {:noreply,
+         update(socket, :uses, &Stack.update(&1, use.id, fn u -> rebound(u, var.name, bound) end))}
+      else
+        _other -> {:noreply, socket}
+      end
+    end
+
     def handle_event("import", %{"document" => document}, socket) do
       case Chart.from_json(document) do
         {:ok, chart} -> {:noreply, imported(socket, Chart.to_map(chart))}
@@ -582,9 +614,65 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- what is being edited ------------------------------------------------------------
 
-    # The editing target: an opened entry's fragment, or the selected use resolved.
-    defp target_fragment(%{open: %{fragment: fragment}}), do: fragment
+    defp kept(%{open: open, uses: uses, stack_vars: vars})
+         when open == nil or open.kind == :composite,
+         do: {:ok, :composite, Stack.structure(uses, vars)}
 
+    defp kept(%{open: %{kind: kind}, uses: uses, stack_vars: vars, store: store}) do
+      fragment = Stack.body(uses, vars)
+
+      case Composite.flatten(fragment, Stack.fetch(store)) do
+        {:error, {:cycle, _chain}} ->
+          {:error, "the stack refers to itself, and cannot be saved until it does not"}
+
+        {:ok, flat, _report} ->
+          case {Fragment.kind(flat), Validator.validate(flat, kind)} do
+            {^kind, :ok} ->
+              {:ok, kind, fragment}
+
+            {^kind, {:error, errors}} ->
+              {:error, "not a valid #{kind}: " <> faults_notice(errors)}
+
+            {other, _} ->
+              {:error, drifted(kind, other)}
+          end
+      end
+    end
+
+    defp put(socket, {:error, notice}, _name), do: assign(socket, :notice, notice)
+
+    defp put(socket, {:ok, kind, fragment}, name) do
+      %{store: store, open: open} = socket.assigns
+      entry = %{id: open && open.id, name: name, kind: kind, fragment: fragment}
+
+      saved(socket, Store.put(store, entry), fn s, id ->
+        if open, do: assign(s, :open, %{open | id: id, name: name}), else: s
+      end)
+    end
+
+    defp faults_notice(errors), do: Enum.map_join(errors, "; ", &Validator.format/1)
+
+    defp control(target) do
+      case String.split(target, ".", parts: 2) do
+        [name, "var"] -> {name, :variable}
+        [name] -> {name, :literal}
+        _other -> nil
+      end
+    end
+
+    defp rebound(use, name, {:ok, value}), do: %{use | vars: Map.put(use.vars, name, value)}
+    defp rebound(use, name, :error), do: %{use | vars: Map.delete(use.vars, name)}
+
+    # A composer opened on a kind takes only that kind; the workspace, a composite and a
+    # design take anything (spec/14 §19.6).
+    defp admits(nil, _entry), do: :ok
+    defp admits(%{kind: kind}, _entry) when kind in [:composite, :design], do: :ok
+    defp admits(%{kind: kind}, %{kind: kind}), do: :ok
+
+    defp admits(%{kind: kind}, entry),
+      do: {:refused, "a #{kind} composer takes a #{kind}; #{entry.name} is a #{entry.kind}"}
+
+    # The editing target: the selected use, resolved.
     defp target_fragment(%{uses: uses, labels: labels, selected: selected, store: store}) do
       case Stack.get(uses, selected) do
         nil ->
@@ -603,11 +691,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {layers, missing} = Stack.resolve(assigns.uses, assigns.labels, fetch)
 
       {design, cycle} =
-        case Stack.design(assigns.uses, fetch) do
+        case Stack.design(assigns.uses, assigns.stack_vars, fetch) do
           {:ok, design, _missing} -> {design, nil}
           {:error, {:cycle, chain}} -> {%{}, chain}
         end
 
+      kind = (assigns.open && assigns.open.kind) || :composite
       layer = target_fragment(assigns)
       nodes = Editor.nodes(layer)
 
@@ -630,12 +719,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
         style_site: style_site(entry, at(layer, entry.path)),
         open_style: open_style(entry),
         variables: variables(layers, design),
+        sites: Stack.sites(assigns.uses, assigns.labels, fetch),
         editing: at(layer, entry.path),
-        errors: faults(design, assigns, cycle),
+        errors: faults(kind, design, assigns, cycle),
+        kind: kind,
+        preview?: kind in [:composite, :design],
+        stack_title: stack_title(kind),
         selected_index: Stack.index_of(assigns.uses, assigns.selected),
         disabled: disabled(assigns.uses)
       }
     end
+
+    defp stack_title(kind) when kind in [:composite, :design], do: "Layers"
+    defp stack_title(kind), do: "#{kind} stack"
 
     defp disabled(uses) do
       uses
@@ -644,11 +740,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> MapSet.new(fn {_use, index} -> index end)
     end
 
-    defp faults(_design, _assigns, [_ | _] = chain), do: [{[], {:cycle, chain}}]
+    # A composite or a design is applied, so its faults are the design's; any other kind is
+    # validated as that kind — per-kind validity (spec/14 §19.8).
+    defp faults(_kind, _design, _assigns, [_ | _] = chain), do: [{[], {:cycle, chain}}]
 
-    defp faults(design, %{sources: sources, bindings: vars, theme: theme}, nil) do
+    defp faults(kind, design, %{sources: sources, bindings: vars, theme: theme}, nil)
+         when kind in [:composite, :design] do
       case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
         {:ok, _applied} -> []
+        {:error, errors} -> errors
+      end
+    end
+
+    defp faults(kind, design, _assigns, nil) do
+      case Validator.validate(design, kind) do
+        :ok -> []
         {:error, errors} -> errors
       end
     end
@@ -812,7 +918,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         use ->
           assign(socket,
             selected: use.id,
-            open: nil,
             node_label: "design",
             facet: nil,
             style_entry: nil
@@ -846,25 +951,63 @@ if Code.ensure_loaded?(Phoenix.Component) do
         String.starts_with?(path, label <> "[")
     end
 
+    # Opening an entry makes it the stack — a composite's sites, or the body as one inline
+    # site — and the field forms then write to a site in it. The stack it was opened over
+    # is stashed once and comes back on close (spec/14 §19.9).
     defp opened_entry(socket, entry) do
-      assign(socket, open: entry, node_label: "design", facet: nil, style_entry: nil, notice: nil)
+      {uses, labels, vars} = Stack.open(entry, names(socket.assigns.store))
+
+      socket
+      |> stashed()
+      |> assign(
+        open: %{id: entry.id, name: entry.name, kind: entry.kind},
+        uses: uses,
+        labels: labels,
+        stack_vars: vars,
+        selected: uses |> List.first() |> then(&(&1 && &1.id)),
+        node_label: "design",
+        facet: nil,
+        style_entry: nil,
+        added: nil,
+        notice: nil
+      )
     end
 
-    defp drifted(open) do
-      "this was opened as a #{open.kind} and is now a #{Fragment.kind(open.fragment)}; " <>
-        "a saved #{open.kind} must still be one"
+    defp stashed(%{assigns: %{open: nil} = assigns} = socket) do
+      assign(socket, :stash, Map.take(assigns, [:uses, :labels, :stack_vars, :selected]))
+    end
+
+    defp stashed(socket), do: socket
+
+    defp closed(%{assigns: %{stash: nil}} = socket), do: assign(socket, :open, nil)
+
+    defp closed(%{assigns: %{stash: stash}} = socket) do
+      socket
+      |> assign(stash)
+      |> assign(open: nil, stash: nil, node_label: "design", facet: nil, style_entry: nil)
+    end
+
+    # The store's names, for the labels of an opened composite's sites.
+    defp names(nil), do: fn _id -> nil end
+
+    defp names(store) do
+      fn id ->
+        case Store.get(store, id) do
+          {:ok, entry} -> entry.name
+          :error -> nil
+        end
+      end
+    end
+
+    defp drifted(kind, other) do
+      "this was opened as a #{kind} and is now a #{other}; a saved #{kind} must still be one"
     end
 
     defp edited(socket, _entry, nil), do: socket
     defp edited(socket, entry, {key, parsed}), do: update_layer(socket, entry.path, key, parsed)
 
-    # A write goes to the opened entry's fragment, or to the selected use's local — the
-    # one surface that writes `Use.local` (spec/14 §19.3).
-    defp update_layer(%{assigns: %{open: %{} = open}} = socket, path, key, parsed) do
-      fragment = Stack.write_at(open.fragment, path, key, parsed)
-      assign(socket, :open, %{open | fragment: fragment})
-    end
-
+    # A write goes to the selected use's local — the one surface that writes `Use.local`
+    # (spec/14 §19.3).
     defp update_layer(socket, path, key, parsed) do
       %{uses: uses, selected: selected} = socket.assigns
 
@@ -943,6 +1086,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         labels: labels,
         selected: hd(uses).id,
         open: nil,
+        stash: nil,
+        stack_vars: %{},
         bindings: %{},
         node_label: "design",
         facet: nil,
@@ -1000,7 +1145,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp class(base, nil), do: base
     defp class(base, extra), do: base <> " " <> extra
 
-    # The stack as a composite: what saving sends and stores (spec/14 §19.6).
-    defp structure(%{uses: uses}), do: %{composite: %{uses: uses, vars: %{}}}
+    # The stack as a composite: what saving sends (spec/14 §19.6).
+    defp structure(%{uses: uses, stack_vars: vars}), do: Stack.structure(uses, vars)
   end
 end

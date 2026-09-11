@@ -995,6 +995,50 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color: var(--vis-builder-warn);
     }
 
+    /* The per-site rows (spec/14 §19.10): a site's variables under its name, each reading
+       as one of three states, with the two ways of saying otherwise beside it. */
+    .vis-builder-site {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--vis-builder-line);
+    }
+
+    .vis-builder-site-name {
+      margin: 0 0 4px;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .vis-builder-site-var {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+    }
+
+    .vis-builder-site-state {
+      color: var(--vis-builder-muted);
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .vis-builder-site-var-literal .vis-builder-site-state,
+    .vis-builder-site-var-variable .vis-builder-site-state {
+      color: var(--vis-builder-ink);
+    }
+
+    .vis-builder .vis-builder-site-literal,
+    .vis-builder .vis-builder-site-variable {
+      min-width: 0;
+    }
+
     .vis-builder-entry {
       display: grid;
       grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;

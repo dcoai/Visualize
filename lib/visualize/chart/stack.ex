@@ -13,7 +13,7 @@ defmodule Visualize.Chart.Stack do
   # it. `cascade/2` drops the second; `explain/1` folds the layers and keeps it, so what
   # provenance reports and what the cascade produces cannot drift.
 
-  alias Visualize.Chart.{Schema, Var}
+  alias Visualize.Chart.{Fragment, Schema, Var}
 
   @doc false
   @spec cascade(map(), map()) :: map()
@@ -132,11 +132,26 @@ defmodule Visualize.Chart.Stack do
     end)
   end
 
-  # A key the schema does not know is `:override` and is a leaf.
+  # A key the schema does not know is `:override` and is a leaf — except a singular wrapper
+  # at the top, `%{style: %{…}}`, which is a node of its kind (spec/14 §19.2), so two style
+  # fragments cascade key by key as two styles would.
   defp key(kind, k, va, vb, path) do
-    case Schema.key(kind, k) do
+    case spec(kind, k) do
       nil -> {vb, [path]}
       spec -> rule(spec.merge, spec.type, va, vb, path)
+    end
+  end
+
+  defp spec(kind, k) do
+    case {Schema.key(kind, k), kind} do
+      {nil, :design} ->
+        case Fragment.singular(k) do
+          nil -> nil
+          inner -> %{merge: :override, type: {:node, inner}}
+        end
+
+      {spec, _kind} ->
+        spec
     end
   end
 
@@ -270,7 +285,7 @@ defmodule Visualize.Chart.Stack do
   # -- the schema's word -------------------------------------------------------------------
 
   defp type(kind, key) do
-    case Schema.key(kind, key) do
+    case spec(kind, key) do
       nil -> :term
       spec -> spec.type
     end

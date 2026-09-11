@@ -37,7 +37,7 @@ defmodule Visualize.Chart.UseTest do
   defp fetch(id), do: Map.fetch(@library, id)
 
   describe "the order of operations (spec/14 §19.3, D-101)" do
-    test "ref, then mask, then bind, then local, in that order" do
+    test "ref, then mask, then local, then bind, in that order" do
       use = %Use{
         id: {:use, 1},
         ref: {:style, 1},
@@ -57,9 +57,12 @@ defmodule Visualize.Chart.UseTest do
       assert {:ok, %{stroke: "#f00"}} = Chart.resolve(use, &fetch/1)
     end
 
-    test "a nil ref is an inline-only site: its local node alone" do
+    test "a nil ref is an inline-only site: its local node alone, bound like any other" do
       use = %Use{id: {:use, 1}, ref: nil, local: %{opacity: 0.8}}
       assert Chart.resolve(use, &fetch/1) == {:ok, %{opacity: 0.8}}
+
+      inline = %Use{id: {:use, 1}, ref: nil, local: %{fill: var(:color)}, vars: %{color: "red"}}
+      assert Chart.resolve(inline, &fetch/1) == {:ok, %{fill: "red"}}
     end
 
     test "a ref the fetch cannot find is a mask of everything, and is named" do
