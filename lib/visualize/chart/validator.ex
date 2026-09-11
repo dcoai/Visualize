@@ -43,6 +43,7 @@ defmodule Visualize.Chart.Validator do
           | :conflict
           | :cycle
           | {:cycle, [term()]}
+          | :many_kinds
 
   @type error :: {path(), reason()}
 
@@ -87,6 +88,8 @@ defmodule Visualize.Chart.Validator do
   end
 
   def validate(_map, :composite), do: {:error, [{[], {:type, {:node, :composite}}}]}
+
+  def validate(_map, nil), do: {:error, [{[], :many_kinds}]}
 
   def validate(map, kind) when is_map(map) and not is_struct(map) and is_atom(kind) do
     case Map.to_list(map) do
@@ -564,6 +567,10 @@ defmodule Visualize.Chart.Validator do
 
   # A fault of a composite rather than of a node (spec/14 §19.6): the stack reaching itself.
   defp words({:cycle, chain}), do: "the stack refers to itself through #{inspect(chain)}"
+
+  # A map that is many things is no kind of fragment (spec/14 §19.8).
+  defp words(:many_kinds),
+    do: "is many things at once, which is no kind of fragment; make it a composite of sites"
 
   defp type_words(:integer), do: "an integer"
   defp type_words(:number), do: "a number"

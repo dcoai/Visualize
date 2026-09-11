@@ -402,7 +402,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event("deploy", _params, socket) do
       %{on_deploy: tag, id: id, store: store, open: open} = socket.assigns
 
-      if open != nil and open.kind not in [:composite, :design] do
+      if open != nil and open.kind != :composite do
         {:noreply, assign(socket, :notice, "deploy a composite; a #{open.kind} is not a chart")}
       else
         case Chart.flatten(structure(socket.assigns), Stack.fetch(store)) do
@@ -821,7 +821,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A composer opened on a kind takes only that kind; the workspace, a composite and a
     # design take anything (spec/14 §19.6).
     defp admits(nil, _entry), do: :ok
-    defp admits(%{kind: kind}, _entry) when kind in [:composite, :design], do: :ok
+    defp admits(%{kind: :composite}, _entry), do: :ok
     defp admits(%{kind: kind}, %{kind: kind}), do: :ok
 
     defp admits(%{kind: kind}, entry),
@@ -883,7 +883,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         keyless: keyless,
         unplaced: Enum.map(keyless, &Stack.label(assigns.labels, Stack.get(assigns.uses, &1))),
         kind: kind,
-        preview?: kind in [:composite, :design],
+        preview?: kind == :composite,
         stack_title: stack_title(kind),
         selected_index: Stack.index_of(assigns.uses, assigns.selected),
         disabled: disabled(assigns.uses)
@@ -937,7 +937,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp theme(map) when is_map(map) and not is_struct(map), do: Theme.new(map)
     defp theme(_other), do: Theme.default()
 
-    defp stack_title(kind) when kind in [:composite, :design], do: "Layers"
+    defp stack_title(:composite), do: "Layers"
     defp stack_title(kind), do: "#{kind} stack"
 
     defp disabled(uses) do
@@ -951,8 +951,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # validated as that kind — per-kind validity (spec/14 §19.8).
     defp faults(_kind, _design, _assigns, [_ | _] = chain), do: [{[], {:cycle, chain}}]
 
-    defp faults(kind, design, %{sources: sources, bindings: vars, theme: theme}, nil)
-         when kind in [:composite, :design] do
+    defp faults(:composite, design, %{sources: sources, bindings: vars, theme: theme}, nil) do
       case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
         {:ok, _applied} -> []
         {:error, errors} -> errors
@@ -1206,6 +1205,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    defp drifted(kind, nil) do
+      "this was opened as a #{kind} and is now many things at once; a saved #{kind} must still be one"
+    end
+
     defp drifted(kind, other) do
       "this was opened as a #{kind} and is now a #{other}; a saved #{kind} must still be one"
     end
@@ -1284,14 +1287,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # A document is a whole design, so it replaces the stack rather than joining it (D-88).
+    # A document is a whole design, so it replaces the stack rather than joining it (D-88),
+    # as its sites: one kind each, keyed where the document keyed them (spec/14 §18.12).
     defp imported(socket, design) do
-      {uses, labels} = Stack.seed([{:imported, design}])
+      {uses, labels} = Composite.decompose(design)
 
       assign(socket,
         uses: uses,
         labels: labels,
-        selected: hd(uses).id,
+        selected: uses |> List.first() |> then(&(&1 && &1.id)),
         open: nil,
         stash: nil,
         stack_vars: %{},

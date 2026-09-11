@@ -9,7 +9,7 @@ defmodule Visualize.Chart.UseTest do
   import Visualize.Chart, only: [var: 1]
 
   alias Visualize.Chart
-  alias Visualize.Chart.{Composite, Use, Validator}
+  alias Visualize.Chart.{Composite, Fragment, Use, Validator}
 
   doctest Visualize.Chart.Use
   doctest Visualize.Chart.Composite
@@ -286,6 +286,63 @@ defmodule Visualize.Chart.UseTest do
 
       assert {:ok, %{styles: %{series: %{stroke_width: 5, opacity: 0.5}}}, _} =
                Chart.flatten(outer, &placed/1)
+    end
+
+    test "a document decomposes into sites, one kind each, and flattens back to itself" do
+      document = %{
+        version: 1,
+        theme: :dark,
+        meta: %{name: "Uptime"},
+        styles: %{series: %{stroke: "#111"}, faint: %{opacity: 0.4}},
+        sources: %{primary: %{fields: [:t, :v]}},
+        vars: %{unit: %{default: "%"}},
+        frame: %{
+          kind: :cartesian,
+          size: %{width: 640, height: 320},
+          scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
+          axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
+        },
+        marks: [%{id: :m, type: :line, data: :primary, channels: %{x: :t, y: :v}}],
+        labels: [%{id: :title, anchor: :title, text: ["Uptime"]}]
+      }
+
+      {uses, labels} = Composite.decompose(document)
+
+      assert Enum.map(uses, &Fragment.kind(&1.local)) ==
+               [
+                 :theme,
+                 :meta,
+                 :frame,
+                 :style,
+                 :style,
+                 :scale,
+                 :scale,
+                 :source,
+                 :var,
+                 :axis,
+                 :axis,
+                 :mark,
+                 :label
+               ]
+
+      assert Enum.map(uses, & &1.key) ==
+               [nil, nil, nil, :faint, :series, :x, :y, :primary, :unit, nil, nil, nil, nil]
+
+      assert labels[{:use, 12}] == "mark m"
+      assert labels[{:use, 10}] == "axis x bottom"
+
+      composite = %{composite: %{uses: uses, vars: %{}}}
+      assert {:ok, ^document, %{missing: [], keyless: []}} = Chart.flatten(composite, &placed/1)
+    end
+
+    test "a map that is many things is no kind of fragment" do
+      assert Fragment.kind(%{theme: :dark, frame: %{}}) == nil
+      assert Fragment.kind(%{version: 1}) == nil
+      refute :design in Fragment.kinds()
+
+      assert {:error, [{[], :many_kinds}]} = Validator.validate(%{theme: :dark, frame: %{}}, nil)
+
+      assert Validator.format({[], :many_kinds}) =~ "no kind of fragment"
     end
 
     test "key round-trips through the codec" do

@@ -104,7 +104,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert stored =~ ~s(<div class="vis-builder-panels vis-builder-panels-library">)
       assert stored =~ ~s(class="vis-builder-library-pane")
       assert stored =~ ~s(<h3 class="vis-builder-category-name">Uncategorised</h3>)
-      assert stored =~ ~s(data-builder-fragment="design:1")
+      assert stored =~ ~s(data-builder-fragment="composite:1")
       assert stored =~ ~s(class="vis-builder-put")
     end
 
@@ -225,7 +225,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:ok, socket} = Builder.update(stored, socket)
 
       {:noreply, added} =
-        Builder.handle_event("insert", %{"name" => "design:1", "at" => 3}, socket)
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, socket)
 
       {:ok, added} = Builder.update(stored, added)
       assert length(BuilderFixture.layers(added)) == length(host.layers) + 1
@@ -254,10 +254,11 @@ defmodule Visualize.Chart.BuilderTest do
         BuilderFixture.layers() |> Chart.stack() |> Chart.from_map!() |> Chart.to_json()
 
       {:noreply, socket} = Builder.handle_event("import", %{"document" => document}, socket)
-      assert BuilderFixture.names(socket) == [:imported]
+      assert hd(BuilderFixture.names(socket)) == "theme"
+      assert length(BuilderFixture.names(socket)) == 12
 
       {:ok, socket} = Builder.update(host, socket)
-      assert BuilderFixture.names(socket) == [:imported]
+      assert length(BuilderFixture.names(socket)) == 12
     end
   end
 
@@ -412,26 +413,34 @@ defmodule Visualize.Chart.BuilderTest do
       [_, library] = String.split(html, ~s(class="vis-builder-library-pane"), parts: 2)
       [library, _] = String.split(library, "</aside>", parts: 2)
       refute library =~ "data-builder-stack"
-      assert library =~ ~s(data-builder-fragment="design:1")
+      assert library =~ ~s(data-builder-fragment="composite:1")
     end
 
     test "a fragment lands at the position it was dropped at", %{socket: s} do
-      {:noreply, at_top} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 0}, s)
+      {:noreply, at_top} =
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
+
       assert BuilderFixture.names(at_top) == ["baseline", :house, :shared, :panel]
 
-      {:noreply, midway} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 2}, s)
+      {:noreply, midway} =
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 2}, s)
+
       assert BuilderFixture.names(midway) == [:house, :shared, "baseline", :panel]
 
-      {:noreply, at_end} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 3}, s)
+      {:noreply, at_end} =
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, s)
+
       assert BuilderFixture.names(at_end) == [:house, :shared, :panel, "baseline"]
     end
 
     test "a position outside the stack is clamped, because a client's number is not trusted",
          %{socket: s} do
-      {:noreply, under} = Builder.handle_event("insert", %{"name" => "design:1", "at" => -5}, s)
+      {:noreply, under} =
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => -5}, s)
+
       assert BuilderFixture.names(under) == ["baseline", :house, :shared, :panel]
 
-      {:noreply, over} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 99}, s)
+      {:noreply, over} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 99}, s)
       assert BuilderFixture.names(over) == [:house, :shared, :panel, "baseline"]
     end
 
@@ -441,7 +450,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.selected(s) == 2
       assert BuilderFixture.disabled(s) == MapSet.new([1])
 
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 0}, s)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
       assert BuilderFixture.names(s) == ["baseline", :house, :shared, :panel]
       assert BuilderFixture.selected(s) == 3
       assert BuilderFixture.disabled(s) == MapSet.new([2])
@@ -449,7 +458,7 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "an insert below the selection leaves it where it is", %{socket: s} do
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 2}, s)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 2}, s)
       assert BuilderFixture.selected(s) == 0
     end
 
@@ -460,7 +469,7 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "an insert survives the next host render", %{host: host, socket: s} do
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 1}, s)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 1}, s)
       {:ok, s} = Builder.update(host, s)
       assert BuilderFixture.names(s) == [:house, "baseline", :shared, :panel]
     end
@@ -1087,7 +1096,7 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "the flat design is sent, and never a composite", %{socket: s} do
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 0}, s)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
       {:noreply, deployed} = Builder.handle_event("deploy", %{}, s)
 
       assert_received {:deployed, "b", design}
@@ -1108,7 +1117,9 @@ defmodule Visualize.Chart.BuilderTest do
       s = Phoenix.Component.assign(s, :uses, uses ++ [Use.new(Library.missing_id(), uses)])
       {:noreply, deployed} = Builder.handle_event("deploy", %{}, s)
       assert_received {:deployed, "b", _design}
-      assert deployed.assigns.notice == "deployed with 1 reference(s) showing through: design:2"
+
+      assert deployed.assigns.notice ==
+               "deployed with 1 reference(s) showing through: composite:2"
     end
 
     test "a stack that reaches itself is refused, and nothing is sent" do
@@ -1247,12 +1258,12 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
 
       {:noreply, added} =
-        Builder.handle_event("fragment_key", %{"key" => "Insert", "name" => "design:1"}, s)
+        Builder.handle_event("fragment_key", %{"key" => "Insert", "name" => "composite:1"}, s)
 
       assert BuilderFixture.names(added) == [:house, :shared, "baseline", :panel]
 
       {:noreply, opened} =
-        Builder.handle_event("fragment_key", %{"key" => "Enter", "name" => "design:1"}, s)
+        Builder.handle_event("fragment_key", %{"key" => "Enter", "name" => "composite:1"}, s)
 
       assert opened.assigns.open.id == Library.baseline_id()
     end
@@ -1532,9 +1543,10 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert html =~ ~s(<p class="vis-builder-kind-empty">none yet</p>)
 
-      # The fixture's entries are designs.
-      assert html =~ ~s(<h3 class="vis-builder-category-name">design</h3>)
-      assert html =~ ~s(data-builder-fragment="design:1")
+      # The fixture's entries are composites; design is not a kind (§19.8).
+      refute html =~ ~s(>design</h3>)
+      assert html =~ ~s(<h3 class="vis-builder-category-name">composite</h3>)
+      assert html =~ ~s(data-builder-fragment="composite:1")
     end
 
     test "the switch changes the view" do
@@ -1644,15 +1656,14 @@ defmodule Visualize.Chart.BuilderTest do
       layers = BuilderFixture.layers()
       socket = BuilderFixture.socket(layers, store: Library)
 
-      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "design:1"}, socket)
+      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "composite:1"}, socket)
       assert opened.assigns.open.id == Library.baseline_id()
 
-      assert BuilderFixture.layers(opened) == [
-               {"baseline", %{version: 1, frame: %{kind: :cartesian}}}
-             ]
+      # A composite entry opens as its sites: the baseline is one inline frame site.
+      assert BuilderFixture.layers(opened) == [{"local", %{frame: %{kind: :cartesian}}}]
 
       {:noreply, added} =
-        Builder.handle_event("insert", %{"name" => "design:1", "at" => 3}, socket)
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, socket)
 
       assert BuilderFixture.layers(added) ==
                layers ++ [{"baseline", %{version: 1, frame: %{kind: :cartesian}}}]
@@ -1663,11 +1674,11 @@ defmodule Visualize.Chart.BuilderTest do
     test "a name the store does not hold is a notice and changes no layer" do
       layers = BuilderFixture.layers()
       socket = BuilderFixture.socket(layers, store: Library)
-      {:noreply, missing} = Builder.handle_event("add_layer", %{"name" => "design:2"}, socket)
+      {:noreply, missing} = Builder.handle_event("add_layer", %{"name" => "composite:2"}, socket)
       {:noreply, absent} = Builder.handle_event("add_layer", %{"name" => "nope"}, socket)
 
       assert BuilderFixture.layers(missing) == layers
-      assert missing.assigns.notice == "no fragment is stored under design:2"
+      assert missing.assigns.notice == "no fragment is stored under composite:2"
       assert absent.assigns.notice == "no fragment is stored under nope"
     end
 

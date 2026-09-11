@@ -48,19 +48,27 @@ defmodule ExamplesWeb.BuilderLive do
       end
     end
 
+    # A map that is many things is no kind of fragment and is refused (spec/14 §19.8): the
+    # thing that is many kinds is a composite, and the page seeds its own that way.
     @impl true
     def put(%{id: nil} = entry, context) do
-      kind = Fragment.kind(entry.fragment)
-      id = {kind, next(kind)}
-      put(%{entry | id: id, kind: kind}, context)
+      case Fragment.kind(entry.fragment) do
+        nil -> {:error, :many_kinds}
+        kind -> put(%{entry | id: {kind, next(kind)}, kind: kind}, context)
+      end
     end
 
     def put(%{id: id} = entry, _context) do
-      %{entries: entries, counters: counters} = state()
+      case Fragment.kind(entry.fragment) do
+        nil ->
+          {:error, :many_kinds}
 
-      stored = %{name: entry.name, kind: Fragment.kind(entry.fragment), fragment: entry.fragment}
-      :persistent_term.put(@key, %{entries: Map.put(entries, id, stored), counters: counters})
-      {:ok, id}
+        kind ->
+          %{entries: entries, counters: counters} = state()
+          stored = %{name: entry.name, kind: kind, fragment: entry.fragment}
+          :persistent_term.put(@key, %{entries: Map.put(entries, id, stored), counters: counters})
+          {:ok, id}
+      end
     end
 
     @impl true
@@ -107,6 +115,11 @@ defmodule ExamplesWeb.BuilderLive do
       Enum.find_value(list(nil), fn entry -> entry.name == name and entry.id end)
     end
 
+    defp composite(document) do
+      {uses, _labels} = Visualize.Chart.Composite.decompose(document)
+      %{composite: %{uses: uses, vars: %{}}}
+    end
+
     defp house,
       do: %{
         version: 1,
@@ -151,11 +164,13 @@ defmodule ExamplesWeb.BuilderLive do
         labels: [%{id: :title, anchor: :title, text: ["Uptime — ", Chart.var(:unit)]}]
       }
 
+    # The three hand-written maps are decomposed into composites of sites, one kind each
+    # (spec/14 §18.12, §19.8): a map that is many things is not a fragment.
     defp seeds do
       [
-        {"Uptime::house", house()},
-        {"Uptime::shared", shared()},
-        {"Uptime::panel", panel()},
+        {"Uptime::house", composite(house())},
+        {"Uptime::shared", composite(shared())},
+        {"Uptime::panel", composite(panel())},
         {"Theme::dark", %{theme: :dark}},
         {"Frame:axes:no grid", %{frame: %{axes: [%{scale: :value, side: :left, grid: false}]}}},
         {"Frame:axes:dense ticks",
@@ -169,8 +184,10 @@ defmodule ExamplesWeb.BuilderLive do
          }},
         {"Frame:size:wide", %{frame: %{size: %{width: 900, height: 320}}}},
         {"Frame:margin:roomy", %{frame: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}}},
-        {"Styles::thick line", %{styles: %{series: %{stroke_width: 5}}}},
-        {"Styles::stepped", %{styles: %{series: %{curve: :step}}}}
+        # Bodies, not declarations: the composite says the name a style is declared under
+        # (spec/14 §19.3), so a body serves any chart, whatever it calls its style.
+        {"Styles::thick line", %{style: %{stroke_width: 5}}},
+        {"Styles::stepped", %{style: %{curve: :step}}}
       ]
     end
   end
