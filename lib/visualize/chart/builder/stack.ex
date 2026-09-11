@@ -157,12 +157,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     draw it (spec/14 §19.6).
     """
     @spec design([Use.t()], map(), (Fragment.id() -> {:ok, map()} | :error)) ::
-            {:ok, map(), [{Use.id(), Fragment.id()}]} | {:error, term()}
+            {:ok, map(), Composite.report()} | {:error, term()}
     def design(uses, vars, fetch) do
       composite = structure(Enum.filter(uses, &enabled?/1), vars)
 
       case Composite.flatten(composite, fetch) do
-        {:ok, design, %{missing: missing}} -> {:ok, inline_styles(design, fetch), missing}
+        {:ok, design, report} -> {:ok, inline_styles(design, fetch), report}
         {:error, _} = error -> error
       end
     end

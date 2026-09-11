@@ -42,6 +42,7 @@ defmodule Visualize.Chart.Validator do
           | {:missing_field, atom()}
           | :conflict
           | :cycle
+          | {:cycle, [term()]}
 
   @type error :: {path(), reason()}
 
@@ -560,6 +561,9 @@ defmodule Visualize.Chart.Validator do
   defp words(:conflict), do: "is declared differently by two fragments"
 
   defp words(:cycle), do: "extends itself, directly or through a chain of `extends`"
+
+  # A fault of a composite rather than of a node (spec/14 §19.6): the stack reaching itself.
+  defp words({:cycle, chain}), do: "the stack refers to itself through #{inspect(chain)}"
 
   defp type_words(:integer), do: "an integer"
   defp type_words(:number), do: "a number"

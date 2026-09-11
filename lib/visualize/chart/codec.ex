@@ -72,14 +72,15 @@ defmodule Visualize.Chart.Codec do
 
   defp term(%Var{name: name}), do: %{"$var" => Atom.to_string(name)}
 
-  defp term(%Use{id: {:use, n}, ref: ref, mask: mask, vars: vars, local: local}) do
+  defp term(%Use{id: {:use, n}, ref: ref, mask: mask, vars: vars, local: local, key: key}) do
     %{
       "$use" => %{
         "id" => n,
         "ref" => if(ref, do: term(ref)),
         "mask" => if(mask == :all, do: "all", else: Enum.map(mask, &term/1)),
         "vars" => term(vars),
-        "local" => term(local)
+        "local" => term(local),
+        "key" => if(key, do: Atom.to_string(key))
       }
     }
   end
@@ -198,7 +199,8 @@ defmodule Visualize.Chart.Codec do
       ref: use |> Map.get("ref") |> read_ref(),
       mask: use |> Map.get("mask", []) |> read_mask(),
       vars: use |> Map.get("vars", %{}) |> read_term(),
-      local: use |> Map.get("local", %{}) |> read_term()
+      local: use |> Map.get("local", %{}) |> read_term(),
+      key: use |> Map.get("key") |> read_key()
     }
   end
 
@@ -224,6 +226,9 @@ defmodule Visualize.Chart.Codec do
 
   defp read_ref(nil), do: nil
   defp read_ref(v), do: read_term(v)
+
+  defp read_key(nil), do: nil
+  defp read_key(key) when is_binary(key), do: String.to_atom(key)
 
   defp read_mask("all"), do: :all
   defp read_mask(paths) when is_list(paths), do: Enum.map(paths, &read_term/1)

@@ -17,13 +17,24 @@ defmodule Visualize.Chart.Composite do
   A ref the store no longer holds is a **mask of everything** at that site (§19.2); the
   design still flattens, and the missing ids are returned so a host that wants strictness
   has them.
+
+  **Every site is placed by its kind** (§19.6): a positional kind writes its key, a frame
+  cascades into `frame`, a list kind appends by its own identity, and a name-keyed kind —
+  style, scale, source, var — lands under the site's `key`. A name-keyed site with no key
+  is not placed, and is reported as `keyless` beside `missing`.
   """
 
   alias Visualize.Chart
   alias Visualize.Chart.{Fragment, Use}
 
-  @typedoc "What `flatten/2` reports beside the design: every ref no store could find."
-  @type report :: %{missing: [{Use.id(), Fragment.id()}]}
+  # The kinds a document keys by name (§19.3).
+  @named [:style, :scale, :source, :var]
+
+  @typedoc """
+  What `flatten/2` reports beside the design: every ref no store could find, and every
+  name-keyed site this composite holds that has no key to be declared under.
+  """
+  @type report :: %{missing: [{Use.id(), Fragment.id()}], keyless: [Use.id()]}
 
   @doc "Whether a fragment is a composite: one key, `composite`, holding uses."
   @spec composite?(term()) :: boolean()
@@ -54,15 +65,19 @@ defmodule Visualize.Chart.Composite do
       end
 
     uses
-    |> Enum.reduce_while({:ok, base, []}, fn use, {:ok, layers, missing} ->
+    |> Enum.reduce_while({:ok, [], []}, fn use, {:ok, resolved, missing} ->
       case layer(use, fetch, trail) do
-        {:ok, resolved, more} -> {:cont, {:ok, [resolved | layers], missing ++ more}}
-        {:error, _} = error -> {:halt, error}
+        {:ok, contribution, more} ->
+          {:cont, {:ok, [{use, contribution} | resolved], missing ++ more}}
+
+        {:error, _} = error ->
+          {:halt, error}
       end
     end)
     |> case do
-      {:ok, layers, missing} ->
-        {:ok, layers |> Enum.reverse() |> Chart.stack(), %{missing: missing}}
+      {:ok, resolved, missing} ->
+        {layers, keyless} = resolved |> Enum.reverse() |> placed()
+        {:ok, Chart.stack(base ++ layers), %{missing: missing, keyless: keyless}}
 
       {:error, _} = error ->
         error
@@ -71,7 +86,88 @@ defmodule Visualize.Chart.Composite do
 
   # A fragment that is not a composite flattens to itself: a design is already flat.
   defp flatten(fragment, _fetch, _trail) when is_map(fragment),
-    do: {:ok, fragment, %{missing: []}}
+    do: {:ok, fragment, %{missing: [], keyless: []}}
+
+  # A composer of one name-keyed kind — every site a style, say, and none of them keyed —
+  # stacks its bodies as bodies, and its result is a style for the site that holds it to
+  # place (§19.6, "within a kind, the same operation"). Anything else is a design-level
+  # composite: every site is placed by its kind, and a name-keyed one with no key is
+  # reported and left out.
+  defp placed(resolved) do
+    kinds =
+      resolved
+      |> Enum.map(fn {_use, c} -> c |> Fragment.wrapped() |> kind_of() end)
+      |> Enum.uniq()
+
+    keyed? = Enum.any?(resolved, fn {use, _c} -> use.key != nil end)
+
+    case kinds do
+      [kind] when kind in @named and not keyed? ->
+        {Enum.map(resolved, fn {_use, c} -> c end), []}
+
+      _mixed ->
+        Enum.reduce(resolved, {[], []}, &place_one/2)
+    end
+  end
+
+  defp kind_of({kind, _body}), do: kind
+  defp kind_of(nil), do: nil
+
+  defp place_one({use, contribution}, {layers, keyless}) do
+    case place(contribution, use) do
+      {:ok, layer} -> {layers ++ [layer], keyless}
+      :keyless -> {layers, keyless ++ [use.id]}
+    end
+  end
+
+  @doc """
+  A site's contribution placed in the design by its kind (spec/14 §19.6): a wrapper body
+  becomes the layer that declares it where the design keeps that kind — a name-keyed one
+  under the site's `key` — and anything else cascades as it is.
+
+      iex> Visualize.Chart.Composite.place(%{style: %{stroke_width: 5}}, %Visualize.Chart.Use{id: {:use, 1}, ref: nil, key: :series})
+      {:ok, %{styles: %{series: %{stroke_width: 5}}}}
+
+      iex> Visualize.Chart.Composite.place(%{mark: %{id: :m, type: :line}}, %Visualize.Chart.Use{id: {:use, 1}, ref: nil})
+      {:ok, %{marks: [%{id: :m, type: :line}]}}
+
+      iex> Visualize.Chart.Composite.place(%{scale: %{kind: :linear}}, %Visualize.Chart.Use{id: {:use, 1}, ref: nil})
+      :keyless
+
+      iex> Visualize.Chart.Composite.place(%{theme: :dark, frame: %{}}, %Visualize.Chart.Use{id: {:use, 1}, ref: nil})
+      {:ok, %{theme: :dark, frame: %{}}}
+  """
+  @spec place(map(), Use.t()) :: {:ok, map()} | :keyless
+  def place(contribution, %Use{key: key}) do
+    case Fragment.wrapped(contribution) do
+      {kind, _body} when kind in @named and is_nil(key) ->
+        :keyless
+
+      {:style, body} ->
+        {:ok, %{styles: %{key => body}}}
+
+      {:scale, body} ->
+        {:ok, %{frame: %{scales: %{key => body}}}}
+
+      {:source, body} ->
+        {:ok, %{sources: %{key => body}}}
+
+      {:var, body} ->
+        {:ok, %{vars: %{key => body}}}
+
+      {:mark, body} ->
+        {:ok, %{marks: [body]}}
+
+      {:label, body} ->
+        {:ok, %{labels: [body]}}
+
+      {:axis, body} ->
+        {:ok, %{frame: %{axes: [body]}}}
+
+      _other ->
+        {:ok, contribution}
+    end
+  end
 
   # One use as a layer. Its referenced body may itself be a composite, in which case it is
   # flattened first — through the trail, so a chain that returns to an id is a cycle. A
@@ -88,6 +184,8 @@ defmodule Visualize.Chart.Composite do
           {:ok, Use.over(use, %{}), [{use.id, ref}]}
 
         {:ok, body} ->
+          # A nested composite's keyless sites are its own affair: its result is placed
+          # here, by this site's key, whatever its sites were called inside.
           case flatten(body, fetch, [ref | trail]) do
             {:ok, flat, %{missing: nested}} -> {:ok, Use.over(use, flat), nested}
             {:error, _} = error -> error

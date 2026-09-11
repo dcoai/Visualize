@@ -1016,6 +1016,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-size: 11px;
     }
 
+    .vis-builder-declared-as {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .vis-builder .vis-builder-declared-name {
+      min-width: 0;
+      flex: 1 1 auto;
+      font-family: var(--vis-builder-mono);
+    }
+
+    .vis-builder-context-fault {
+      margin: 6px 0;
+      color: var(--vis-builder-warn);
+      font-size: 11px;
+    }
+
     .vis-builder-masks {
       display: flex;
       flex-direction: column;
