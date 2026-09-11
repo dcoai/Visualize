@@ -304,12 +304,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def move(uses, _from, _to), do: uses
 
-    @doc "The kinds *new fragment of a kind* offers, the composite first (spec/14 §19.8)."
+    @doc """
+    The kinds *new fragment of a kind* offers, the composite first and never a design: a
+    design is the deployed tier, and a composite deploys to one (spec/14 §19.6, §19.8).
+    """
     @spec kinds() :: [atom(), ...]
     def kinds,
       do: [
         :composite,
-        :design,
         :theme,
         :style,
         :frame,

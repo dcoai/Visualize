@@ -764,6 +764,45 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  defmodule Cyclic do
+    @moduledoc false
+    @behaviour Visualize.Chart.Builder.Store
+
+    @entries %{
+      {:composite, 1} => %{
+        name: "Loops::a",
+        fragment: %{composite: %{uses: [Visualize.Chart.Use.new({:composite, 2})], vars: %{}}}
+      },
+      {:composite, 2} => %{
+        name: "Loops::b",
+        fragment: %{composite: %{uses: [Visualize.Chart.Use.new({:composite, 1})], vars: %{}}}
+      }
+    }
+
+    @impl true
+    def list(_context) do
+      for {{kind, _} = id, entry} <- @entries, do: %{id: id, name: entry.name, kind: kind}
+    end
+
+    @impl true
+    def get({kind, _} = id, _context) do
+      case Map.fetch(@entries, id) do
+        {:ok, entry} -> {:ok, Map.merge(entry, %{id: id, kind: kind})}
+        :error -> :error
+      end
+    end
+
+    @impl true
+    def put(_entry, _context), do: {:ok, {:composite, 9}}
+
+    @impl true
+    def delete(_id, _context), do: :ok
+
+    @impl true
+    def import(bundle, context),
+      do: Visualize.Chart.Builder.Store.relocate(bundle, context, &put/2)
+  end
+
   describe "the composer constrained by kind (spec/14 §19.6, §19.9)" do
     defmodule Recording do
       @moduledoc false
@@ -1034,6 +1073,69 @@ defmodule Visualize.Chart.BuilderTest do
       # And the id reads back as an id, never as an atom.
       assert Editor.parse({:ref, :style}, "style:1") == {:ok, {:style, 1}}
       assert Editor.parse({:ref, :style}, "frame:1") == {:ok, :"frame:1"}
+    end
+  end
+
+  describe "deploy is the other verb (spec/14 §19.6, D-103)" do
+    setup do
+      %{
+        socket:
+          BuilderFixture.socket(BuilderFixture.layers(), store: Library, on_deploy: :deployed)
+      }
+    end
+
+    test "the flat design is sent, and never a composite", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "design:1", "at" => 0}, s)
+      {:noreply, deployed} = Builder.handle_event("deploy", %{}, s)
+
+      assert_received {:deployed, "b", design}
+      refute Map.has_key?(design, :composite)
+      assert design.frame.kind == :cartesian
+      assert {:ok, _applied} = Chart.apply(design, sources: BuilderFixture.sources())
+      assert deployed.assigns.notice == nil
+
+      # Save still carries the structure: the two verbs are different.
+      {:noreply, _} = Builder.handle_event("save", %{}, s)
+      assert_received {:visualize_chart_saved, "b", %{composite: _}}
+    end
+
+    test "a reference that showed through is named", %{socket: s} do
+      # A site whose entry the store no longer holds (D-100): the library lists design:2
+      # but cannot get it.
+      uses = s.assigns.uses
+      s = Phoenix.Component.assign(s, :uses, uses ++ [Use.new(Library.missing_id(), uses)])
+      {:noreply, deployed} = Builder.handle_event("deploy", %{}, s)
+      assert_received {:deployed, "b", _design}
+      assert deployed.assigns.notice == "deployed with 1 reference(s) showing through: design:2"
+    end
+
+    test "a stack that reaches itself is refused, and nothing is sent" do
+      store = Visualize.Chart.BuilderTest.Cyclic
+      s = BuilderFixture.socket([], store: store, on_deploy: :deployed)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
+      {:noreply, refused} = Builder.handle_event("deploy", %{}, s)
+      refute_received {:deployed, _, _}
+      assert refused.assigns.notice =~ "refers to itself"
+    end
+
+    test "not while a style is open: there is no chart to deploy" do
+      store = Visualize.Chart.BuilderTest.Styles
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: store, on_deploy: :deployed)
+      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
+      refute BuilderFixture.render(opened) =~ "vis-builder-deploy"
+
+      {:noreply, refused} = Builder.handle_event("deploy", %{}, opened)
+      refute_received {:deployed, _, _}
+      assert refused.assigns.notice == "deploy a composite; a style is not a chart"
+    end
+
+    test "a design is not a kind to start", %{socket: s} do
+      refute :design in Visualize.Chart.Builder.Stack.kinds()
+      refute BuilderFixture.render(s) =~ ~s(<option value="design">)
+
+      {:noreply, refused} = Builder.handle_event("new_fragment", %{"kind" => "design"}, s)
+      assert refused.assigns.open == nil
+      assert refused.assigns.notice == "a design is what Deploy makes; start a composite instead"
     end
   end
 

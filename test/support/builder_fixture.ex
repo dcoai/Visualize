@@ -281,7 +281,7 @@ defmodule Visualize.BuilderFixture do
 
   @doc "A builder socket over host layers, seeded as the component seeds them, with options."
   def socket(layers, opts \\ []) do
-    {host, state} = Keyword.split(opts, [:store, :sources, :vars, :theme, :on_save])
+    {host, state} = Keyword.split(opts, [:store, :sources, :vars, :theme, :on_save, :on_deploy])
 
     host =
       host
