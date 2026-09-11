@@ -261,10 +261,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
               class={item_class(item.id == @open)}
               draggable="true"
               data-builder-fragment={Store.encode_id(item.id)}
-              title={"#{item.stored} · #{Store.encode_id(item.id)} — drag into the layers, or click to add on top"}
+              title={says(item)}
+              aria-label={says(item)}
               role="button"
               tabindex="0"
               phx-click="add_layer"
+              phx-keydown="fragment_key"
               phx-value-name={Store.encode_id(item.id)}
               phx-target={@target}
             >
@@ -283,10 +285,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 class={item_class(item.id == @open)}
                 draggable="true"
                 data-builder-fragment={Store.encode_id(item.id)}
-                title={"#{item.stored} · #{Store.encode_id(item.id)} — drag into the layers, or click to add on top"}
+                title={says(item)}
+                aria-label={says(item)}
                 role="button"
                 tabindex="0"
                 phx-click="add_layer"
+                phx-keydown="fragment_key"
                 phx-value-name={Store.encode_id(item.id)}
                 phx-target={@target}
               >
@@ -307,6 +311,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp view_class(true), do: "vis-builder-view vis-builder-view-on"
     defp view_class(false), do: "vis-builder-view"
+
+    # What the item is and what its keys do, for hover and for what is announced (§18.17).
+    defp says(item) do
+      "#{item.stored} · #{Store.encode_id(item.id)}: Enter to open, Insert to add above the " <>
+        "selected layer, drag into the stack"
+    end
 
     defp kind_class(true), do: "vis-builder-category-name vis-builder-category-empty"
     defp kind_class(false), do: "vis-builder-category-name"
