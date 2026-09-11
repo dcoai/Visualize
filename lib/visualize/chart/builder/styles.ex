@@ -230,6 +230,45 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     /* ── the library tree ────────────────────────────────────────────────────── */
 
+    .vis-builder-views {
+      display: flex;
+      gap: 4px;
+      padding: 6px 10px 2px;
+    }
+
+    .vis-builder .vis-builder-view {
+      padding: 2px 10px;
+      border-radius: 999px;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+    }
+
+    .vis-builder .vis-builder-view-on {
+      border-color: var(--vis-builder-ink);
+      background: var(--vis-builder-ink);
+      color: var(--vis-builder-panel);
+    }
+
+    .vis-builder-category-empty {
+      opacity: 0.45;
+    }
+
+    .vis-builder-kind-empty {
+      margin: 0;
+      padding: 0 10px 4px 20px;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      font-style: italic;
+    }
+
+    .vis-builder-fragment-where {
+      flex: 0 0 auto;
+      padding-right: 8px;
+      color: var(--vis-builder-muted);
+      font-size: 10px;
+      align-self: center;
+    }
+
     .vis-builder-category {
       padding: 4px 0;
     }

@@ -957,6 +957,51 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "the library's two views (spec/14 §19.8)" do
+    test "group is the default, and the switch is there" do
+      html = rendered(:builder_store)
+
+      assert html =~
+               ~s(class="vis-builder-view vis-builder-view-on" phx-click="library_view" phx-value-view="group")
+
+      assert html =~ ~s(class="vis-builder-view" phx-click="library_view" phx-value-view="kind")
+      assert html =~ ~s(<h3 class="vis-builder-category-name">Uncategorised</h3>)
+    end
+
+    test "by kind shows every usual kind, empty or not, and the entry under its own" do
+      html =
+        render_component(Builder, %{
+          id: "b",
+          layers: BuilderFixture.layers(),
+          store: Library,
+          styles: false,
+          library_view: :kind
+        })
+
+      # An empty kind is a heading that says so: information, not a bug.
+      assert html =~
+               ~s(<h3 class="vis-builder-category-name vis-builder-category-empty">style</h3>)
+
+      assert html =~ ~s(<p class="vis-builder-kind-empty">none yet</p>)
+
+      # The fixture's entries are designs.
+      assert html =~ ~s(<h3 class="vis-builder-category-name">design</h3>)
+      assert html =~ ~s(data-builder-fragment="design:1")
+    end
+
+    test "the switch changes the view" do
+      {:ok, s} = Builder.mount(%Socket{})
+      {:ok, s} = Builder.update(%{id: "b", layers: [], store: Library}, s)
+      assert s.assigns.library_view == :group
+
+      {:noreply, s} = Builder.handle_event("library_view", %{"view" => "kind"}, s)
+      assert s.assigns.library_view == :kind
+
+      {:noreply, s} = Builder.handle_event("library_view", %{"view" => "group"}, s)
+      assert s.assigns.library_view == :group
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =

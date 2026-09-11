@@ -15,6 +15,11 @@
   <div class="vis-builder-panels vis-builder-panels-library">
     <aside id="builder-library" class="vis-builder-library-pane" phx-hook="BuilderHook" data-builder-target="-1">
   <h2 class="vis-builder-sidebar-title">Library</h2>
+  <nav class="vis-builder-views">
+    <button type="button" class="vis-builder-view vis-builder-view-on" phx-click="library_view" phx-value-view="group" phx-target="-1">group</button>
+    <button type="button" class="vis-builder-view" phx-click="library_view" phx-value-view="kind" phx-target="-1">kind</button>
+  </nav>
+  
   
   <section class="vis-builder-category">
     <h3 class="vis-builder-category-name">Uncategorised</h3>

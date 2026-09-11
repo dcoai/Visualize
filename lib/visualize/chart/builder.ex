@@ -113,6 +113,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          notice: nil,
          facet: nil,
          added: nil,
+         library_view: :group,
          style_entry: nil,
          node_label: "design"
        )}
@@ -177,6 +178,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             :if={@store}
             id={@id <> "-library"}
             entries={Store.list(@store)}
+            view={@library_view}
             open={@added}
             target={@myself}
           />
@@ -320,6 +322,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A root the selected layer declares opens there; one it does not takes the person to
     # the highest layer that declares it, which is what the inspector and the palette
     # already do (spec/14 §18.13, §18.9, §18.14).
+    # Two views over one store; group is the default because it is the one a person
+    # authored deliberately (spec/14 §19.8).
+    def handle_event("library_view", %{"view" => "kind"}, socket),
+      do: {:noreply, assign(socket, :library_view, :kind)}
+
+    def handle_event("library_view", %{"view" => _group}, socket),
+      do: {:noreply, assign(socket, :library_view, :group)}
+
     def handle_event("select_root", %{"root" => "variables"}, socket) do
       {:noreply, assign(socket, node_label: "variables", facet: nil)}
     end

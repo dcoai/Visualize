@@ -150,10 +150,68 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.sort()
     end
 
+    # The kinds always shown by kind, empty or not: a `Scale` heading with nothing under it
+    # says the library holds no scale yet, where an absent heading is indistinguishable
+    # from a bug (spec/14 §19.8). Any other kind appears only when an entry has it.
+    @shown_kinds [
+      :composite,
+      :design,
+      :theme,
+      :style,
+      :frame,
+      :scale,
+      :axis,
+      :source,
+      :var,
+      :mark,
+      :label
+    ]
+
+    @doc """
+    Entries as the kind tree (spec/14 §19.8): one group per kind, the kinds a library item
+    is usually one of always present, empty or not, and any other kind when an entry has
+    it. Items within a kind sort by name; each carries its group as a second line.
+
+        iex> entries = [
+        ...>   %{id: {:style, 1}, name: "Styles::thick", kind: :style},
+        ...>   %{id: {:size, 1}, name: "Frame:size:wide", kind: :size}
+        ...> ]
+        iex> tree = Visualize.Chart.Builder.Library.by_kind(entries)
+        iex> Enum.map(tree, &{&1.kind, length(&1.items)})
+        [composite: 0, design: 0, theme: 0, style: 1, frame: 0, scale: 0, axis: 0, source: 0, var: 0, mark: 0, label: 0, size: 1]
+    """
+    @spec by_kind([map()]) :: [%{kind: atom(), items: [map()]}]
+    def by_kind(entries) do
+      present = entries |> Enum.map(& &1.kind) |> Enum.uniq()
+      kinds = @shown_kinds ++ Enum.sort(present -- @shown_kinds)
+
+      for kind <- kinds do
+        items =
+          entries
+          |> Enum.filter(&(&1.kind == kind))
+          |> Enum.map(fn entry ->
+            {category, sub, name} = parse(entry.name)
+
+            %{
+              id: entry.id,
+              stored: entry.name,
+              name: name,
+              kind: entry.kind,
+              where: Enum.join(Enum.reject([category, sub], &is_nil/1), " / ")
+            }
+          end)
+          |> Enum.sort_by(& &1.name)
+
+        %{kind: kind, items: items}
+      end
+    end
+
     attr(:entries, :list,
       required: true,
       doc: "the store's entries, as `Store.list/1` returns them"
     )
+
+    attr(:view, :atom, default: :group, doc: "`:group`, the default, or `:kind` (spec/14 §19.8)")
 
     attr(:open, :any, default: nil, doc: "the id last acted on, marked in the tree")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the library's events")
@@ -167,13 +225,55 @@ if Code.ensure_loaded?(Phoenix.Component) do
     one list per sub-category, each item draggable by its stored name.
     """
     def panel(assigns) do
-      assigns = assign(assigns, :tree, tree(assigns.entries))
+      assigns =
+        assigns
+        |> assign(:tree, tree(assigns.entries))
+        |> assign(:kinds, by_kind(assigns.entries))
 
       ~H"""
       <aside id={@id} class={class(@class)} phx-hook="BuilderHook" data-builder-target={@target}>
         <h2 class="vis-builder-sidebar-title">Library</h2>
-        <p :if={@tree == []} class="vis-builder-library-empty">The store holds nothing yet.</p>
-        <section :for={category <- @tree} class="vis-builder-category">
+        <nav class="vis-builder-views">
+          <button
+            type="button"
+            class={view_class(@view == :group)}
+            phx-click="library_view"
+            phx-value-view="group"
+            phx-target={@target}
+          >group</button>
+          <button
+            type="button"
+            class={view_class(@view == :kind)}
+            phx-click="library_view"
+            phx-value-view="kind"
+            phx-target={@target}
+          >kind</button>
+        </nav>
+        <p :if={@tree == [] and @view == :group} class="vis-builder-library-empty">
+          The store holds nothing yet.
+        </p>
+        <section :for={group <- @kinds} :if={@view == :kind} class="vis-builder-category">
+          <h3 class={kind_class(group.items == [])}>{group.kind}</h3>
+          <p :if={group.items == []} class="vis-builder-kind-empty">none yet</p>
+          <ul :if={group.items != []} class="vis-builder-group-items">
+            <li
+              :for={item <- group.items}
+              class={item_class(item.id == @open)}
+              draggable="true"
+              data-builder-fragment={Store.encode_id(item.id)}
+              title={"#{item.stored} · #{Store.encode_id(item.id)} — drag into the layers, or click to add on top"}
+              role="button"
+              tabindex="0"
+              phx-click="add_layer"
+              phx-value-name={Store.encode_id(item.id)}
+              phx-target={@target}
+            >
+              <span class="vis-builder-fragment">{item.name}</span>
+              <span :if={item.where != ""} class="vis-builder-fragment-where">{item.where}</span>
+            </li>
+          </ul>
+        </section>
+        <section :for={category <- @tree} :if={@view == :group} class="vis-builder-category">
           <h3 class="vis-builder-category-name">{category.category}</h3>
           <div :for={group <- category.groups} class="vis-builder-group">
             <h4 :if={group.sub_category} class="vis-builder-group-name">{group.sub_category}</h4>
@@ -204,6 +304,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp item_class(true), do: "vis-builder-item vis-builder-item-open"
     defp item_class(false), do: "vis-builder-item"
+
+    defp view_class(true), do: "vis-builder-view vis-builder-view-on"
+    defp view_class(false), do: "vis-builder-view"
+
+    defp kind_class(true), do: "vis-builder-category-name vis-builder-category-empty"
+    defp kind_class(false), do: "vis-builder-category-name"
 
     # The sub-categories of one category's entries: the unnamed group first, the rest by name.
     defp groups(entries) do
