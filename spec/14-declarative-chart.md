@@ -1784,7 +1784,7 @@ A layer in a composite and an entry in a style stack are the same thing: a fragm
 
 Each part is edited from exactly one surface, so there is never a question of where an edit went.
 
-**Order of operations, stated once:** `ref → mask → local → bind → stack`. The referenced fragment is fetched; masked keys are removed; the local node is merged over it; variables are substituted (§19.4); and the result cascades with the sites around it by §8.2. Mask runs before local, so a masked key can be re-set locally. Bind runs after local, so a site's bindings speak for everything the site contributes — a site the host seeded is nothing but its local, and its variables are bound at the site like any other's.
+**Order of operations, stated once:** `ref → local → mask → bind → stack`. The referenced fragment is fetched; the local node is merged over it; masked keys are removed; variables are substituted (§19.4); and the result cascades with the sites around it by §8.2. Mask and bind run after local, so both speak for everything the site contributes, whichever part said it — a site the host seeded is nothing but its local, and its keys are masked and its variables bound at the site like any other's. (Mask-before-local, so a masked key could be re-set locally, was considered and dropped: the local cascades over the reference anyway, so re-setting never needed the mask, and a mask that could not reach a seeded layer's own keys would have left the checkbox of §19.10 doing nothing on the layers a host starts with.)
 
 **A site has its own id** because a site was its position, and position is the wrong identity: the selection and the disabled set had to be remapped on every insert and move, a local style was named by an index that a reorder changed, and a drop target was a number a client could not be trusted with. With `Use.id` a site is the same site wherever it sits, and `Visualize.Chart.explain/1` attributes to it by id with a display name.
 
@@ -1827,7 +1827,7 @@ A composite is a fragment whose content is a list of use sites and its own `vars
 
 **Save writes structure.** The store holds the uses, never `stack/1`'s result, so a composite reopens as what was built — references intact, masks and bindings where they were left — and references keep their point: edit `{:style, 11}` and every composite using it follows. The save message of §18.2 carries structure.
 
-**Flatten is a deployment verb.** `flatten/2` on `Visualize.Chart` resolves every use recursively — `ref → mask → local → bind` — through a store, and stacks the result: a flat design in §13's shape, with no ids and no uses, which `apply/2` and `render/2` consume as they always have. A host calls it in its own pipeline. The builder's preview resolves the structure to draw it, and the builder *may* offer flatten as a separately-labelled action; the two verbs are different, and offering the second never loses the first.
+**Flatten is a deployment verb.** `flatten/2` on `Visualize.Chart` resolves every use recursively — `ref → local → mask → bind` — through a store, and stacks the result: a flat design in §13's shape, with no ids and no uses, which `apply/2` and `render/2` consume as they always have. A host calls it in its own pipeline. The builder's preview resolves the structure to draw it, and the builder *may* offer flatten as a separately-labelled action; the two verbs are different, and offering the second never loses the first.
 
 **Composites nest**, because a composite is a fragment and a use may reference one. Resolution is recursive. A composite that reaches itself through any chain of uses is refused, as an `extends` cycle is (§3.5), at the site that closed the loop.
 
@@ -1872,7 +1872,7 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Use.new/2` | a use of a fragment with a fresh id — one more than the highest it sits beside — and the three empty parts |
 | `Visualize.Chart.Use.bind/2` | a fragment with its variables substituted: a literal sets, another `var/1` renames (§19.4) |
 | `Visualize.Chart.Use.mask/2` | a fragment with paths removed; `:all` removes everything (§19.5) |
-| `Visualize.Chart.Use.resolve/2` | one use through a fetch: `ref → mask → local → bind`; a ref the fetch cannot find is `{:missing, id, local}` |
+| `Visualize.Chart.Use.resolve/2` | one use through a fetch: `ref → local → mask → bind`; a ref the fetch cannot find is `{:missing, id, local}` |
 | `Visualize.Chart.Use.over/2` | a use over a body already in hand — everything `resolve/2` does after the fetch |
 | `Visualize.Chart.Composite.composite?/1` | whether a fragment is one key, `composite`, holding uses |
 | `Visualize.Chart.Composite.flatten/2` | a composite through a fetch, recursively, stacked: `{:ok, design, %{missing: …}}` or `{:error, {:cycle, chain}}` |
@@ -1975,6 +1975,21 @@ Switching to *variable* writes `var(:key)` — the key's own name, until a perso
 | an entry in a style stack | the resolved style, each field naming the entry it came from (§18.19) |
 
 A bare `<input type="color">` would drop the theme slot, and the theme slot is how the built-in styles work; the control has to offer all three faces.
+
+**The layer's context** is `Visualize.Chart.Builder.Masks.panel/1`, shown for the selected site whenever no style entry is chosen: the site's name; one checkbox per path its contribution carries — every top-level key, and the keys of each node under one, which are the paths `Use.mask/2` takes (§19.5) — checked where the mask holds it; and the variables the site still needs, pointing at the Variables tab. The contribution is what the site would say before its mask, `Visualize.Chart.Builder.Stack.unmasked/2`, so a key the mask has removed is still offered to un-mask. A site masked as a whole is disabled (§19.3) and is said so rather than drawn as every box checked. The `mask` event carries the checkbox that changed; an unchecked box submits nothing, which is the path leaving.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Masks.panel/1` | the selected layer's context: mask checkboxes over its paths, and its free variables |
+| `Visualize.Chart.Builder.Masks.paths/1` | the paths a contribution can mask: top-level keys and each node's keys, sorted |
+| `Visualize.Chart.Builder.Masks.toggle/3` | a use with a path added to or removed from its mask, as its checkbox says; a site masked as a whole is left alone |
+| `Visualize.Chart.Builder.Stack.unmasked/2` | what a site contributes before its mask and bindings |
+
+**The typed controls in place.** A field's control is chosen from its type (§18.6), and three types now carry more than a box:
+
+- **a colour** (`Visualize.Chart.Builder.Editor.widget/1` gives `:colour`) has its three faces in the form: a select of the theme's colour slots (`Visualize.Theme.colour_slots/1` of the theme the design names) as `key.slot`, a picker as `key` for a literal hex, and the literal/variable switch of §19.9. A slot chosen writes the atom; the picker writes the string; a blank slot removes the key. The picker shows a hex it can and nothing for a slot, since a slot is the select's to show.
+- **a reference** offers what the document declares locally and what the library holds by id, in one select: an id is spelt as the DOM carries one — `style:11` — and read back through `Visualize.Chart.Builder.Store.decode_id/1`, so `Editor.parse/2` of `{:ref, :style}` gives `{:style, 11}` for the id and an atom for anything else, and no client string of the wrong kind becomes an id.
+- **an enum** is the allowed values, as it was.
 
 ### 19.11 What §18 said that this section replaces
 

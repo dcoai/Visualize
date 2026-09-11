@@ -470,6 +470,7 @@ A theme MUST hold, by `Visualize.Color.contrast/2` against its own `background`:
 | `Visualize.Theme.new/1` | `default/0` with the given keyword fields replaced (7.2). |
 | `Visualize.Theme.merge/2` | The theme with the given keyword fields replaced (7.2). |
 | `Visualize.Theme.slots/1` | The theme's slot names in the order of 7.1. |
+| `Visualize.Theme.colour_slots/1` | The theme's colour slots alone — the series, then axis, grid, text and background — for a control that offers a colour as a slot (spec/14 §19.10). |
 | `Visualize.Theme.series_slot/2` | `series_slot(theme, i)`: the `:series_k` atom the positive index `i` cycles to (7.1). |
 | `Visualize.Theme.resolve/3` | The slot's value as a literal or as a CSS reference with the literal fallback (7.3). |
 | `Visualize.Theme.css_name/1` | The custom-property name of a slot atom (7.3). |
