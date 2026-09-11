@@ -2,11 +2,19 @@
   <nav class="vis-builder-tabs">
     <button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="binding">binding</button><button type="button" class="vis-builder-tab vis-builder-tab-open" phx-click="facet" phx-value-facet="channel">channel</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="geometry">geometry</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="style">style</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="content">content</button>
   </nav>
+  <datalist id="vis-builder-editor-variables">
+    
+  </datalist>
   <form class="vis-builder-form" phx-change="edit">
     <label class="vis-builder-field">
       <span class="vis-builder-key">
         type
       </span>
+      <select name="type.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       
@@ -20,6 +28,11 @@
       <span class="vis-builder-key">
         channels
       </span>
+      <select name="channels.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       
@@ -30,6 +43,11 @@
       <span class="vis-builder-key">
         scales
       </span>
+      <select name="scales.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       

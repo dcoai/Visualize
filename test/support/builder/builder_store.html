@@ -55,11 +55,19 @@
       <div class="vis-builder-workspace">
         <div class="vis-builder-editor">
   
+  <datalist id="builder-editor-variables">
+    <option value="unit"></option>
+  </datalist>
   <form class="vis-builder-form" phx-change="edit" phx-target="-1">
     <label class="vis-builder-field">
       <span class="vis-builder-key">
         sources
       </span>
+      <select name="sources.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       
@@ -70,6 +78,11 @@
       <span class="vis-builder-key">
         vars
       </span>
+      <select name="vars.mode" class="vis-builder-mode" title="literal, or a variable">
+        <option value="literal" selected>literal</option>
+        <option value="variable">variable</option>
+      </select>
+      
       
       
       

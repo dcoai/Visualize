@@ -215,12 +215,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </nav>
             <div class="vis-builder-workspace">
               <Editor.panel
+                id={@id <> "-editor"}
                 kind={@entry.kind}
                 node={@editing}
                 path={@entry.path}
                 facet={@facet}
                 errors={@errors}
                 refs={%{style: Palette.names(@design)}}
+                variables={@variables}
                 strip={false}
                 target={@myself}
               />
@@ -240,6 +242,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             />
             <Editor.panel
               :if={@style_site && @style_entry}
+              id={@id <> "-style-editor"}
               class="vis-builder-style-panel"
               kind={:style}
               node={StyleStack.resolved(@design, @style_site.stack)}
@@ -247,6 +250,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               strip={false}
               event="edit_style"
               refs={%{style: Palette.names(@design)}}
+              variables={@variables}
               target={@myself}
             />
             <p :if={!@style_site} class="vis-builder-context-empty">
@@ -365,8 +369,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # Every edit at a site lands in its local style, never in a named entry: editing a mark
     # that references `:series` must not restyle every other mark that references the same
     # name (spec/14 §18.19, D-98). The local entry is created when there is none.
-    def handle_event("edit_style", %{"_target" => [submitted]} = params, socket) do
-      {:noreply, styled(socket, spec(:style, submitted), params)}
+    def handle_event("edit_style", params, socket) do
+      {:noreply, styled(socket, Editor.change(:style, params))}
     end
 
     # A style fragment dropped on a site's stack is the answer to "which style did you
@@ -445,9 +449,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, assign(socket, :facet, Enum.find(facets, &(to_string(&1) == facet)))}
     end
 
-    def handle_event("edit", %{"_target" => [submitted]} = params, socket) do
+    def handle_event("edit", params, socket) do
       %{entry: entry} = editing(socket.assigns)
-      {:noreply, edited(socket, entry, spec(entry.kind, submitted), params)}
+      {:noreply, edited(socket, entry, Editor.change(entry.kind, params))}
     end
 
     # A position arrives as a string from a `phx-value-index` and as a number from the hook.
@@ -517,24 +521,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         String.starts_with?(path, label <> "[")
     end
 
-    # A key the node kind does not carry changes nothing: a submitted name is a string, and
-    # only a key the schema already declares is looked up by it — no atom is created here.
-    defp spec(kind, submitted) do
-      Enum.find(Schema.describe(kind), &(to_string(&1.key) == submitted))
-    end
-
-    defp edited(socket, _entry, nil, _params), do: socket
-
-    defp edited(socket, entry, spec, params) do
-      value = params[to_string(spec.key)]
-      update_layer(socket, entry.path, spec.key, read(Editor.widget(spec.type), spec.type, value))
-    end
-
-    # An unchecked checkbox submits nothing, which is `false` and not a removal; every other
-    # control's blank string removes the key (spec/14 §18.6).
-    defp read(:checkbox, _type, nil), do: {:ok, false}
-    defp read(_widget, _type, nil), do: :error
-    defp read(_widget, type, string), do: Editor.parse(type, string)
+    defp edited(socket, _entry, nil), do: socket
+    defp edited(socket, entry, {key, parsed}), do: update_layer(socket, entry.path, key, parsed)
 
     defp update_layer(socket, path, key, parsed) do
       %{layers: layers, selected: selected} = socket.assigns
@@ -586,6 +574,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         chips: chips(children, entry, assigns.facet),
         style_site: style_site(entry, at(layer, entry.path)),
         open_style: open_style(entry),
+        variables: variables(assigns.layers, design),
         editing: at(layer, entry.path),
         errors: faults(design, assigns)
       }
@@ -700,15 +689,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # The names a variable may take here: those the stack declares under `vars`, and those
+    # any layer already uses, so the datalist offers what exists before a new one is typed.
+    defp variables(layers, design) do
+      declared = design |> Map.get(:vars, %{}) |> Map.keys()
+      used = layers |> Chart.free_vars() |> Enum.map(& &1.name)
+      (declared ++ used) |> Enum.uniq() |> Enum.sort() |> Enum.map(&to_string/1)
+    end
+
     defp open_style(%{path: [:styles, name]}), do: name
     defp open_style(_entry), do: nil
 
-    defp styled(socket, nil, _params), do: socket
-
-    defp styled(socket, spec, params) do
-      parsed = read(Editor.widget(spec.type), spec.type, params[to_string(spec.key)])
-      restacked(socket, &local(&1, spec.key, parsed))
-    end
+    defp styled(socket, nil), do: socket
+    defp styled(socket, {key, parsed}), do: restacked(socket, &local(&1, key, parsed))
 
     # The local entry is the last one when it is inline, and a new one otherwise.
     defp local(stack, key, parsed) do
@@ -780,7 +773,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp bound(socket, free, value) do
       type = Params.expects(free)
 
-      case read(Editor.widget(type), type, value) do
+      case Editor.submitted(type, value) do
         {:ok, parsed} -> update(socket, :bindings, &Map.put(&1, free.name, parsed))
         :error -> update(socket, :bindings, &Map.delete(&1, free.name))
       end

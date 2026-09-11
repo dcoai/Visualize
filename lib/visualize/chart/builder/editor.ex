@@ -274,6 +274,81 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # -- what a change means (spec/14 §18.6, §19.9) --------------------------------------
+
+    @doc """
+    What a change to the form means: the key it is about, and what to write there —
+    `{:ok, value}` or `:error` for a removal — or `nil` for a key the kind does not declare
+    (spec/14 §18.6, §19.9).
+
+    A form has three controls per key. `key` is the typed control and reads by `parse/2`;
+    an unchecked checkbox submits nothing, which is `false` and not a removal, and every
+    other control's blank removes the key. `key.mode` is the literal/variable switch:
+    *variable* writes `var(:key)` so the field is a variable from that moment, *literal*
+    removes the key so the typed control is empty and waiting. `key.var` is the variable's
+    name, and a blank one is a removal too.
+
+        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["stroke_width"], "stroke_width" => "5"})
+        {:stroke_width, {:ok, 5}}
+
+        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["fill.mode"], "fill.mode" => "variable"})
+        {:fill, {:ok, %Visualize.Chart.Var{name: :fill}}}
+
+        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["fill.var"], "fill.var" => "color"})
+        {:fill, {:ok, %Visualize.Chart.Var{name: :color}}}
+
+        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["fill.mode"], "fill.mode" => "literal"})
+        {:fill, :error}
+
+        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["nonsense"], "nonsense" => "1"})
+        nil
+    """
+    @spec change(atom(), map()) :: {atom(), {:ok, term()} | :error} | nil
+    def change(kind, %{"_target" => [target]} = params) do
+      case String.split(target, ".", parts: 2) do
+        [key, "mode"] -> with %{key: k} <- key_spec(kind, key), do: {k, mode(params[target], k)}
+        [key, "var"] -> with %{key: k} <- key_spec(kind, key), do: {k, variable(params[target])}
+        [key] -> with spec <- key_spec(kind, key), do: typed(spec, params[key])
+      end
+    end
+
+    def change(_kind, _params), do: nil
+
+    defp key_spec(kind, submitted) do
+      Enum.find(Schema.describe(kind), &(to_string(&1.key) == submitted))
+    end
+
+    defp typed(nil, _value), do: nil
+    defp typed(spec, value), do: {spec.key, submitted(spec.type, value)}
+
+    @doc """
+    A submitted control's value read as a type, with the one rule `parse/2` cannot know: an
+    unchecked checkbox submits nothing, which is `false` and not a removal, while every other
+    control's absence or blank is a removal (spec/14 §18.6).
+
+        iex> Visualize.Chart.Builder.Editor.submitted(:boolean, nil)
+        {:ok, false}
+
+        iex> Visualize.Chart.Builder.Editor.submitted(:integer, nil)
+        :error
+    """
+    @spec submitted(Schema.type(), String.t() | nil) :: {:ok, term()} | :error
+    def submitted(type, nil), do: if(widget(type) == :checkbox, do: {:ok, false}, else: :error)
+    def submitted(type, string), do: parse(type, string)
+
+    defp mode("variable", key), do: {:ok, %Var{name: key}}
+    defp mode(_literal, _key), do: :error
+
+    # A variable's name becomes an atom exactly as a typed reference does (§18.6).
+    defp variable(nil), do: :error
+
+    defp variable(string) when is_binary(string) do
+      case String.trim(string) do
+        "" -> :error
+        name -> {:ok, %Var{name: atom(name)}}
+      end
+    end
+
     # -- the form (spec/14 §18.7) ---------------------------------------------------------
 
     @doc """
@@ -294,6 +369,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Enum.filter(@facets, fn facet -> Enum.any?(specs, &(&1.facet == facet)) end)
     end
 
+    attr(:id, :string, default: "vis-builder-editor", doc: "the panel's id, for its datalist")
     attr(:kind, :atom, required: true, doc: "the node kind being edited")
     attr(:node, :map, required: true, doc: "the node's current value")
     attr(:path, :list, default: [], doc: "where the node sits, for its keys' errors")
@@ -308,6 +384,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:event, :string, default: "edit", doc: "the `phx-change` the form pushes")
     attr(:origins, :map, default: %{}, doc: "what supplied each key's value, by key")
+
+    attr(:variables, :list,
+      default: [],
+      doc: "the variable names on offer, for the name's datalist"
+    )
 
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the editor's class")
@@ -343,6 +424,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-target={@target}
           >{facet}</button>
         </nav>
+        <datalist id={@id <> "-variables"}>
+          <option :for={name <- @variables} value={name}></option>
+        </datalist>
         <form class="vis-builder-form" phx-change={@event} phx-target={@target}>
           <label :for={field <- @fields} class="vis-builder-field">
             <span class="vis-builder-key">
@@ -351,28 +435,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 class="vis-builder-origin"
               >{@origins[field.key]}</span>
             </span>
+            <select name={"#{field.key}.mode"} class="vis-builder-mode" title="literal, or a variable">
+              <option value="literal" selected={is_nil(field.variable)}>literal</option>
+              <option value="variable" selected={not is_nil(field.variable)}>variable</option>
+            </select>
             <input
-              :if={field.widget == :checkbox}
+              :if={field.variable}
+              type="text"
+              name={"#{field.key}.var"}
+              value={field.variable}
+              list={@id <> "-variables"}
+              class="vis-builder-var"
+              title={"var(:" <> field.variable <> ")"}
+            />
+            <input
+              :if={is_nil(field.variable) and field.widget == :checkbox}
               type="checkbox"
               name={field.key}
               value="true"
               checked={field.checked}
             />
             <input
-              :if={field.widget == :number}
+              :if={is_nil(field.variable) and field.widget == :number}
               type="number"
               name={field.key}
               value={field.value}
               placeholder={field.placeholder}
             />
             <input
-              :if={field.widget == :text}
+              :if={is_nil(field.variable) and field.widget == :text}
               type="text"
               name={field.key}
               value={field.value}
               placeholder={field.placeholder}
             />
-            <select :if={field.widget == :select} name={field.key}>
+            <select :if={is_nil(field.variable) and field.widget == :select} name={field.key}>
               <option value=""></option>
               <option
                 :for={allowed <- field.options}
@@ -381,7 +478,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               >{allowed}</option>
             </select>
             <textarea
-              :if={field.widget == :textarea}
+              :if={is_nil(field.variable) and field.widget == :textarea}
               name={field.key}
               placeholder={field.placeholder}
             >{field.value}</textarea>
@@ -413,6 +510,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           options: options(widget),
           checked: Map.get(node, spec.key) == true,
           value: shown(widget, Map.fetch(node, spec.key)),
+          variable: variable_name(Map.get(node, spec.key)),
           placeholder: shown(widget, default(spec)),
           errors: key_errors(errors, path ++ [spec.key])
         }
@@ -444,6 +542,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp narrowed({:select, names}, _type), do: {:select, names}
     defp narrowed(_other, type), do: widget(type)
 
+    # A field whose value is a variable is shown as one (spec/14 §19.9), never as the
+    # struct's text in a textarea.
+    defp variable_name(%Var{name: name}), do: to_string(name)
+    defp variable_name(_value), do: nil
+
     defp shape({:select, _allowed}), do: :select
     defp shape(widget), do: widget
 
@@ -455,6 +558,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp default(%{default: value}), do: {:ok, value}
 
     defp shown(_widget, :error), do: nil
+    # A variable is shown by the name box, not the typed control (spec/14 §19.9).
+    defp shown(_widget, {:ok, %Var{}}), do: nil
     defp shown(:textarea, {:ok, value}), do: inspect(value)
     defp shown(_widget, {:ok, value}), do: to_string(value)
 
