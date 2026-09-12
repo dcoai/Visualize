@@ -1525,6 +1525,108 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "a list of scalars is a list of items (spec/14 §18.6, §19.9)" do
+    setup do
+      # The shared layer declares the source; its fields are the list.
+      s =
+        BuilderFixture.socket(BuilderFixture.layers(), selected: 1, node_label: "sources.primary")
+
+      %{socket: s}
+    end
+
+    test "each field is a row with an ×, and a + box adds one read by the element's type", %{
+      socket: s
+    } do
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(class="vis-builder-items")
+      assert html =~ ~s(<span class="vis-builder-item-text">t</span>)
+      assert html =~ ~s(phx-click="list_remove" phx-value-field="fields" phx-value-index="0")
+      assert html =~ ~s(name="fields.add" class="vis-builder-item-box" placeholder="+ add")
+      refute html =~ ~s(<textarea name="fields">)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "list_add",
+          %{"field" => "fields", "fields.add" => "w", "key" => "Enter"},
+          s
+        )
+
+      {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
+      assert shared.sources.primary.fields == [:t, :v, :w]
+
+      {:noreply, s} =
+        Builder.handle_event("list_remove", %{"field" => "fields", "index" => "0"}, s)
+
+      {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
+      assert shared.sources.primary.fields == [:v, :w]
+
+      # A blank adds nothing; a field the node lacks changes nothing.
+      {:noreply, same} =
+        Builder.handle_event("list_add", %{"field" => "fields", "fields.add" => " "}, s)
+
+      assert same.assigns.uses == s.assigns.uses
+
+      {:noreply, same} =
+        Builder.handle_event("list_add", %{"field" => "nope", "nope.add" => "x"}, s)
+
+      assert same.assigns.uses == s.assigns.uses
+    end
+
+    test "a chip dropped on a field list adds the variable as an item, and a field is a channel",
+         %{socket: s} do
+      # `ycol` typed by a mark's channel fits a field list.
+      house = %{
+        version: 1,
+        vars: %{ycol: %{}},
+        marks: [%{id: :m, type: :line, data: :primary, channels: %{x: :t, y: Chart.var(:ycol)}}]
+      }
+
+      s =
+        BuilderFixture.socket(
+          [{:house, house}, {:shared, elem(Enum.at(BuilderFixture.layers(), 1), 1)}],
+          selected: 1,
+          node_label: "sources.primary"
+        )
+
+      {:noreply, s} =
+        Builder.handle_event("bind_field", %{"field" => "fields", "name" => "ycol"}, s)
+
+      {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
+      assert shared.sources.primary.fields == [:t, :v, Chart.var(:ycol)]
+
+      html = BuilderFixture.render(s)
+
+      assert html =~
+               ~s|<span class="vis-builder-var-chip vis-builder-var-chip-bound">var(:ycol)</span>|
+
+      # It applies once the variable names a column.
+      design = BuilderFixture.design(s)
+
+      assert {:ok, _} =
+               Chart.apply(Map.put(design, :frame, Map.merge(design.frame, %{kind: :cartesian})),
+                 sources: BuilderFixture.sources(),
+                 vars: %{ycol: :v}
+               )
+
+      # A variable typed as something else is refused by name.
+      {:noreply, s} =
+        Builder.handle_event("create_variable", %{"name" => "w", "default" => "5"}, s)
+
+      # (create put the var site at the bottom, so the house is now the second row)
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
+      {:noreply, s} = Builder.handle_event("bind_field", %{"field" => "type", "name" => "w"}, s)
+      assert s.assigns.notice == nil
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "sources.primary"}, s)
+
+      {:noreply, refused} =
+        Builder.handle_event("bind_field", %{"field" => "fields", "name" => "w"}, s)
+
+      assert refused.assigns.notice =~ "w is a choice; fields takes a :field"
+    end
+  end
+
   describe "the + on the Layers title (spec/14 §18.8)" do
     test "opens a menu of the single kinds, and adds an empty site below the selection" do
       s = BuilderFixture.socket(BuilderFixture.layers())

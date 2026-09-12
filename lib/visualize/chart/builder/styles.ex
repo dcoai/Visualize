@@ -1079,6 +1079,45 @@ if Code.ensure_loaded?(Phoenix.Component) do
       text-decoration: line-through;
     }
 
+    /* A list of scalars as items: each with an ×, and a + box to add one (spec/14 §18.6). */
+    .vis-builder-items {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .vis-builder-item-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 1px 2px 1px 8px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: 999px;
+      background: var(--vis-builder-bg);
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+    }
+
+    .vis-builder .vis-builder-item-remove {
+      padding: 0 5px;
+      border: 0;
+      background: none;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .vis-builder-item-add {
+      display: inline-flex;
+    }
+
+    .vis-builder .vis-builder-item-box {
+      width: 7em;
+      padding: 2px 6px;
+      font-size: 11px;
+    }
+
     /* What the design still needs, marked where it is (spec/14 §18.13, §18.7). */
     .vis-builder .vis-builder-node-needs {
       border-color: var(--vis-builder-needs);

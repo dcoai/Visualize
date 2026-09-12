@@ -23,6 +23,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
   alias Visualize.Chart.Schema
 
   @widgets [:checkbox, :number, :text, :textarea, :colour]
+  @shaped [:select, :items]
 
   for name <- ~w(editor_design editor_mark editor_style_errors)a do
     test "#{name} renders as recorded" do
@@ -219,7 +220,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
       for kind <- Schema.kinds(), spec <- Schema.describe(kind) do
         widget = Editor.widget(spec.type)
 
-        assert widget in @widgets or match?({:select, [_ | _]}, widget),
+        assert widget in @widgets or (is_tuple(widget) and elem(widget, 0) in @shaped),
                "#{kind}.#{spec.key} (#{inspect(spec.type)}) has no widget: #{inspect(widget)}"
       end
     end
@@ -243,6 +244,8 @@ defmodule Visualize.Chart.Builder.EditorTest do
         shown =
           case Editor.widget(spec.type) do
             :textarea -> inspect(spec.default)
+            # A list of items has no one control to read back from: its default is its rows.
+            {:items, _} -> inspect(spec.default)
             _other -> to_string(spec.default)
           end
 

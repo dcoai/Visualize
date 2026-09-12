@@ -811,6 +811,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, update(socket, :uses, &Stack.update(&1, selected, fn u -> %{u | key: key} end))}
     end
 
+    # A list of scalars as items (spec/14 §18.6): Enter in the + box appends one read by the
+    # element's type; × removes by index. Both write the whole list, as the schema says.
+    def handle_event("list_add", %{"field" => field} = params, socket) do
+      %{entry: entry, editing: node} = editing(socket.assigns)
+      typed = Map.get(params, "value") || Map.get(params, "#{field}.add") || ""
+
+      with %{key: key, type: {:list, scalar}} <-
+             Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
+           {:ok, item} <- Editor.parse(scalar, typed) do
+        list = if(is_map(node), do: Map.get(node, key, []), else: []) ++ [item]
+        {:noreply, socket |> update_layer(entry.path, key, {:ok, list}) |> assign(:notice, nil)}
+      else
+        _other -> {:noreply, socket}
+      end
+    end
+
+    def handle_event("list_remove", %{"field" => field, "index" => index}, socket) do
+      %{entry: entry, editing: node} = editing(socket.assigns)
+
+      with %{key: key, type: {:list, _}} <-
+             Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
+           list when is_list(list) <- is_map(node) && Map.get(node, key) do
+        rest = List.delete_at(list, position(index))
+        write = if rest == [], do: :error, else: {:ok, rest}
+        {:noreply, update_layer(socket, entry.path, key, write)}
+      else
+        _other -> {:noreply, socket}
+      end
+    end
+
     # The + on the Layers title: a menu of the single kinds, and an empty inline site of the
     # chosen one directly below the selected layer, selected and opened (spec/14 §18.8).
     def handle_event("adding", _params, socket) do
@@ -868,8 +898,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       with %{key: key, type: type} when type != :text <-
              Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
            {:ok, var} <- Editor.variable(name),
-           :ok <- fits(Variables.list(layers, design), var.name, type, key) do
-        {:noreply, socket |> update_layer(entry.path, key, {:ok, var}) |> assign(:notice, nil)}
+           :ok <- fits(Variables.list(layers, design), var.name, element(type), key) do
+        case type do
+          {:list, _scalar} ->
+            # A list of scalars takes the variable as an item (§19.9): fields: [:t, var(:y)].
+            %{editing: node} = editing(socket.assigns)
+            list = if(is_map(node), do: Map.get(node, key, []), else: []) ++ [var]
+
+            {:noreply,
+             socket |> update_layer(entry.path, key, {:ok, list}) |> assign(:notice, nil)}
+
+          _single ->
+            {:noreply,
+             socket |> update_layer(entry.path, key, {:ok, var}) |> assign(:notice, nil)}
+        end
       else
         %{type: :text} ->
           # A text takes a variable as text among text, at the caret, by the hook (§7.1).
@@ -1069,16 +1111,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The kind a field refers to, when it is a reference field at all.
     defp ref_kind({:ref, kind}), do: kind
-    defp ref_kind({:one_of, alts}), do: Enum.find_value(alts, &ref_kind/1)
     defp ref_kind(_type), do: nil
 
     # Whether a variable fits a key's type: untyped fits anything; a typed one must match.
+    # A list of scalars takes items of its element's type.
+    defp element({:list, scalar}), do: scalar
+    defp element(type), do: type
+
+    # Whether a variable fits a key's type: untyped fits anything; a typed one must match —
+    # and a field is a channel (a channel is a field or a constant), so a variable typed by
+    # a mark's channel fits a source's field list and the other way round (§19.9).
     defp fits(vars, name, type, key) do
       case Enum.find(vars, &(&1.name == name)) do
         nil ->
           :ok
 
         %{type: nil} ->
+          :ok
+
+        %{type: other} when other in [:field, :channel] and type in [:field, :channel] ->
           :ok
 
         %{type: ^type} ->
