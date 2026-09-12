@@ -1520,6 +1520,8 @@ Each layer offers three things and no more: **select** it, so the editor edits i
 
 Nothing here validates or copies a fragment: reordering a stack is reordering a list, and the design is recomputed from it.
 
+**A + on the Layers title adds an empty site.** At the right of the stack's title is a **+**; it opens a menu of the single kinds a site can be — theme, style, frame, scale, axis, source, var, mark, label; never composite, which comes from the library, and never design, which is Deploy's — and choosing one (`add_site`) inserts an empty inline site of that kind (`Visualize.Chart.Builder.Stack.empty/1`, `ref: nil`) directly below the selected layer, or at the end with nothing selected, selects it and opens its form. Its label reads *new style*, *new mark*, and so on until it is keyed or saved under a name. A name-keyed kind arrives keyless, so its row reads *not placed* until a name is given in the layer's context (§19.3): the honest state, since it has nowhere to be declared under yet.
+
 ### 18.9 The inspector
 
 **Implemented.** `Visualize.Chart.Builder.Inspector.panel/1` is `Visualize.Chart.explain/1` rendered: one row per leaf path of the stack, ordered by path, with the value, the layer that set it and the layers it overrode (§17.1). It is the answer to the question a four-layer template makes unanswerable by eye — *which layer said this, and what did it replace* — and it is a view of one function, so what it shows and what `Visualize.Chart.stack/1` produces cannot drift.
