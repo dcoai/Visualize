@@ -144,13 +144,14 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 ### 3.1 Keys
 
-**Implemented.** A `:style` node has twenty keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema. The keys are read as a drawing tool shows a style — in **groups**: what a style derives from first, then its *fill*, its *stroke*, its *font*, the *position* of its text, its *effects*, and last the keys that belong to no group. A key's group is data on its spec (`group`, §14.2), and the table below is in group order, which is the order the form shows them in (§18.7).
+**Implemented.** A `:style` node has twenty-one keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema. The keys are read as a drawing tool shows a style — in **groups**: what a style derives from first, then its *fill*, its *stroke*, its *font*, the *position* of its text, its *effects*, and last the keys that belong to no group. A key's group is data on its spec (`group`, §14.2), and the table below is in group order, which is the order the form shows them in (§18.7).
 
 | Key | Type | Group | Notes |
 |---|---|---|---|
 | `extends` | `{:ref, :style}` | — | the style this one derives from (§3.5) |
 | `fill` | `:colour` | `:fill` | |
 | `fill_opacity` | `:size` | `:fill` | |
+| `stroke_style` | `{:enum, [:single, :double, :inside, :outside]}` | `:stroke` | how the stroke sits on the edge (§5.6); `:single` when absent |
 | `stroke_width` | `:size` | `:stroke` | user units |
 | `stroke` | `:colour` | `:stroke` | |
 | `stroke_opacity` | `:size` | `:stroke` | |
@@ -522,6 +523,17 @@ The elements are the generators' own, so a mark is byte for byte the direct call
 | `:circle` | one `circle` per datum at `(x, y)` with `r` the `value` or `radius` |
 
 A mark's *paint* is the colour its elements are drawn in: the style's `fill` for a filled type (`area`, `band`, `x_band`, `rose`, `symbol`, `arc`, `path`, `rect`, `circle`, the bands of a `percentile_band`) and its `stroke` for a stroked one (`line`, `rule`, the median of a `percentile_band`). When the style gives no value for that key, the paint is the theme's `{:series, i}` for the mark's one-based position among the design's marks (§3.3), set on the group as that key, and a `:line` also takes `fill: :none`. The generators of a `:rule` and an `:x_band` draw in `current_color` and the brush's fill, which a group's style does not reach, so the stroke keys of the resolved style and the paint are set on the rule's line and the fill keys and the paint on the x-band's rectangle. With a `series` channel each series' element takes the frame's `color` scale's value for its series value when the frame declares one — a slot atom resolved through `Visualize.Theme.resolve/3`, exactly as the legend does — and `{:series, j}` for its position among the series otherwise. A `:rect`'s `value` reaches the colour scale the same way, as the element's `fill`. A `{:field, f}` on any style key is bound per element (§3.4). Every slot resolves in the `:resolve` mode, so the SVG carries `var(--vis-series-1, #3b6fa8)` and a canvas the literal; on a canvas the same tree renders through `Visualize.Backend.Canvas` with literal paints, an inline label as `fillText`, and nothing for a text on the binary stream (spec/09 §4).
+
+**The stroke style** (`stroke_style`, §3.1) says how a mark's stroke sits on its edge, and the mark draws it — it is not an element key, so `Visualize.Chart.Style.resolve/3` drops it and `Visualize.Chart.Mark.Strokes.apply/2` reads it from the style node:
+
+| `stroke_style` | Drawn as |
+|---|---|
+| `:single` (the default) | the element as it is: the stroke centred on the edge, half in and half out, as SVG draws every stroke |
+| `:inside` | the element at **twice** its `stroke_width`, clipped to its own shape (`Visualize.IR.Element.clip/3` with `:inside`), so exactly one width lies inside the edge and none outside; the fill is unchanged |
+| `:outside` | two elements: the fill alone (`stroke: :none`), then the outline alone (`fill: :none`) at twice the width, clipped to everything *but* its shape (`:outside`), so one width lies outside the edge and none inside |
+| `:double` | two elements: the element as it is, then its outline alone at a **third** of the width in the mark's fill colour — the paint when the paint is the fill, else the theme's `background` — which reads as two lines with a gap between |
+
+Inside and outside belong to a **closed** mark — `area`, `band`, `x_band`, `rose`, `symbol`, `arc`, `path`, `rect`, `circle` — where "in" and "out" of the edge mean something; on an open mark (`line`, `rule`, `percentile_band`) they draw as `:single`, and the validator says nothing, since a style stacks onto marks of any type through a name. `:double` draws on every type. The width is the style's `stroke_width`, `1` when it gives none; the second element of an outside or a double stroke carries the same datum attributes as the first, so a tooltip reads either. How a clip reaches each backend is spec/02 §2.1 and spec/09 §2.3, §3.3.
 
 The group is returned untranslated. `Visualize.Chart.Frame.generate/2` places every mark of the design after the grid, inside the group the margins translate — inside the centred group of a `:polar` frame, inside each panel of a `:facet` frame from the rows whose `by` is the panel's value — when it is given `sources:`, and draws the furniture alone without them (§4.7). A `:rose` and an `:arc` mark are about the plot centre in every kind, so `generate/3` translates their group there in a frame that is not polar. A `%Visualize.Chart.Var{}` reached while drawing raises `ArgumentError` naming it, as the frame does.
 
@@ -1485,6 +1497,7 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 
 | Key | Drawn as |
 |---|---|
+| `stroke_style` | a square's edge stroked single, double, inside or outside |
 | `stroke_linejoin` | a corner joined miter, round or bevel |
 | `stroke_linecap` | a stroke's end butt, round or square |
 | `curve` | the interpolation of one short polyline, by `Visualize.Shape.Line` itself |
