@@ -184,14 +184,23 @@ defmodule Visualize.Chart.Builder.EditorTest do
           facet: :style
         })
 
+      # The slider lies over its box, in one span, the box first (§18.6).
       assert html =~
-               ~s(<input type="range" name="opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0.4")
-
-      assert html =~ ~s(<input type="text" name="opacity" value="0.4">)
+               ~r|<span class="vis-builder-ranged">\s*<input type="text" name="opacity" value="0.4">\s*<input type="range" name="opacity.range" class="vis-builder-range vis-builder-scrubber" min="0" max="1" step="0.05" value="0.4"|
 
       # A slot word has no place on a slider: it stands at the floor; the box shows the word.
       assert html =~
-               ~s(name="stroke_width.range" class="vis-builder-range" min="0" max="20" step="0.5" value="0")
+               ~s(name="stroke_width.range" class="vis-builder-range vis-builder-scrubber" min="0" max="20" step="0.5" value="0")
+
+      # The stylesheet lays it over the box: full height, mostly transparent, a dot that
+      # alone takes the pointer.
+      css = Visualize.Chart.Builder.Styles.css()
+
+      assert css =~
+               ~r/\.vis-builder-scrubber \{[^}]*position: absolute;[^}]*opacity: 0\.3;[^}]*pointer-events: none;/s
+
+      assert css =~
+               ~r/\.vis-builder-scrubber::-webkit-slider-thumb \{[^}]*border-radius: 50%;[^}]*pointer-events: auto;/s
 
       assert html =~ ~s(<input type="text" name="stroke_width" value="label_size">)
 
@@ -383,8 +392,21 @@ defmodule Visualize.Chart.Builder.EditorTest do
         |> Regex.scan(html)
         |> Enum.map(fn [_, key] -> key end)
 
+      # The fill block opens with the fill style, in a row of its own (§18.6).
+      assert html =~
+               ~r|<legend class="vis-builder-block-name">fill</legend>\s*<label class="vis-builder-field vis-builder-field-fill-style">\s*<span class="vis-builder-key">style</span>|
+
+      fill_row =
+        html
+        |> String.split(~s(phx-value-field="fill"))
+        |> Enum.at(1)
+        |> String.split("</label>")
+        |> hd()
+
+      refute fill_row =~ ~s(name="fill_style")
+
       assert keys ==
-               ~w(extends fill fill_opacity stroke_style stroke_width stroke stroke_opacity
+               ~w(extends style fill fill_opacity stroke_style stroke_width stroke stroke_opacity
                   stroke_dasharray stroke_linejoin stroke_linecap font_family font_size
                   font_weight line_height text_anchor vertical_align margin_x margin_y
                   text_angle opacity blend effect effect_radius class curve curve_opts symbol

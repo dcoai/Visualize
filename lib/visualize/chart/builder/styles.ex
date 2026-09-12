@@ -1552,12 +1552,79 @@ if Code.ensure_loaded?(Phoenix.Component) do
       margin: 8px 0;
     }
 
-    /* A ranged number: the slider before its box, the dash pattern after (spec/14 §18.6). */
+    /* A ranged number (spec/14 §18.6): the slider lies over its box, full height, mostly
+       transparent, no track, a small dot as its thumb centred on the value. The slider
+       passes the pointer through and only the dot takes it, so the number is clicked to
+       type and the dot dragged to scrub. */
     .vis-builder .vis-builder-range {
       width: 100%;
       margin: 2px 0;
       padding: 0;
       accent-color: var(--vis-builder-accent);
+    }
+
+    .vis-builder-ranged {
+      position: relative;
+      display: block;
+      min-width: 0;
+    }
+
+    .vis-builder-ranged > input[type="number"],
+    .vis-builder-ranged > input[type="text"] {
+      width: 100%;
+      height: 26px;
+      box-sizing: border-box;
+    }
+
+    .vis-builder .vis-builder-scrubber {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      opacity: 0.3;
+      background: transparent;
+      appearance: none;
+      -webkit-appearance: none;
+      pointer-events: none;
+    }
+
+    .vis-builder .vis-builder-scrubber::-webkit-slider-runnable-track {
+      height: 26px;
+      background: transparent;
+    }
+
+    .vis-builder .vis-builder-scrubber::-moz-range-track {
+      height: 100%;
+      background: transparent;
+    }
+
+    .vis-builder .vis-builder-scrubber::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      margin-top: 7px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--vis-builder-accent);
+      pointer-events: auto;
+      cursor: ew-resize;
+    }
+
+    .vis-builder .vis-builder-scrubber::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--vis-builder-accent);
+      pointer-events: auto;
+      cursor: ew-resize;
+    }
+
+    .vis-builder .vis-builder-scrubber:focus-visible {
+      opacity: 0.6;
+      outline: none;
     }
 
     .vis-builder-dash {

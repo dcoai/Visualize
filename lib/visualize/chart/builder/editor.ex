@@ -571,6 +571,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <%= for {group, fields} <- @blocks do %>
             <fieldset :if={group} class="vis-builder-block">
               <legend class="vis-builder-block-name">{group}</legend>
+              <label :if={fill = fill_style(group, fields)} class="vis-builder-field vis-builder-field-fill-style">
+                <span class="vis-builder-key">style</span>
+                <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
+                  <label
+                    :for={{style, svg} <- fill.glyphs}
+                    class={"vis-builder-glyph" <> if(fill.style == style, do: " vis-builder-glyph-on", else: "")}
+                    title={style}
+                  >
+                    <input type="radio" name="fill_style" value={style} checked={fill.style == style} aria-label={style} />
+                    {Phoenix.HTML.raw(svg)}
+                  </label>
+                </span>
+              </label>
               <.field
                 :for={field <- fields}
                 field={field}
@@ -681,19 +694,34 @@ if Code.ensure_loaded?(Phoenix.Component) do
           value="true"
           checked={@field.checked}
         />
+        <span :if={is_nil(@field.variable) and ranged?(@field)} class="vis-builder-ranged">
+          <input
+            :if={@field.widget == :number}
+            type="number"
+            name={@field.key}
+            value={@field.value}
+            placeholder={@field.placeholder}
+          />
+          <input
+            :if={@field.widget == :text}
+            type="text"
+            name={@field.key}
+            value={@field.value}
+            placeholder={@field.placeholder}
+          />
+          <input
+            type="range"
+            name={"#{@field.key}.range"}
+            class="vis-builder-range vis-builder-scrubber"
+            min={@field.range.min}
+            max={@field.range.max}
+            step={@field.range.step}
+            value={@field.slider}
+            aria-label={"#{@field.key}, dragged"}
+          />
+        </span>
         <input
-          :if={is_nil(@field.variable) and @field.range != nil and @field.widget in [:number, :text]}
-          type="range"
-          name={"#{@field.key}.range"}
-          class="vis-builder-range"
-          min={@field.range.min}
-          max={@field.range.max}
-          step={@field.range.step}
-          value={@field.slider}
-          aria-label={"#{@field.key}, dragged"}
-        />
-        <input
-          :if={is_nil(@field.variable) and @field.widget == :number}
+          :if={is_nil(@field.variable) and @field.widget == :number and not ranged?(@field)}
           type="number"
           name={@field.key}
           value={@field.value}
@@ -715,7 +743,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </label>
         </span>
         <input
-          :if={is_nil(@field.variable) and @field.widget == :text}
+          :if={is_nil(@field.variable) and @field.widget == :text and not ranged?(@field)}
           type="text"
           name={@field.key}
           value={@field.value}
@@ -741,21 +769,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
             stroke-dasharray={@field.dash}
           />
         </svg>
-        <span
-          :if={is_nil(@field.variable) and @field.fill}
-          class="vis-builder-glyphs"
-          role="radiogroup"
-          aria-label="fill style"
-        >
-          <label
-            :for={{style, svg} <- @field.fill.glyphs}
-            class={"vis-builder-glyph" <> if(@field.fill.style == style, do: " vis-builder-glyph-on", else: "")}
-            title={style}
-          >
-            <input type="radio" name="fill_style" value={style} checked={@field.fill.style == style} aria-label={style} />
-            {Phoenix.HTML.raw(svg)}
-          </label>
-        </span>
         <span
           :if={is_nil(@field.variable) and @field.widget == :colour}
           class={well_class(@field.well)}
@@ -836,6 +849,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
       </label>
       """
     end
+
+    # A ranged number's box and slider share one span, the slider over the box (§18.6).
+    defp ranged?(field), do: field.range != nil and field.widget in [:number, :text]
+
+    # The fill block opens with the fill style (§18.6): the fill field's view, when it has one.
+    defp fill_style(:fill, fields) do
+      case Enum.find(fields, &(&1.key == :fill)) do
+        %{variable: nil, fill: fill} -> fill
+        _other -> nil
+      end
+    end
+
+    defp fill_style(_group, _fields), do: nil
 
     # The open tab's fields as runs of one group (spec/14 §18.7): a run with a group is a
     # block under its heading; a run with none is fields on their own.
