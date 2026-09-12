@@ -46,13 +46,13 @@ defmodule Visualize.Chart.Schema.Frame do
 
   def describe(:size) do
     [
-      spec(:width, :number, :geometry, required: true),
-      spec(:height, :number, :geometry, required: true)
+      spec(:width, :number, :geometry, required: true, range: {100, 2000, 10}),
+      spec(:height, :number, :geometry, required: true, range: {100, 2000, 10})
     ]
   end
 
   def describe(:margin) do
-    for side <- @sides, do: spec(side, :number, :geometry, default: 0)
+    for side <- @sides, do: spec(side, :number, :geometry, default: 0, range: {0, 200, 1})
   end
 
   def describe(:scale) do

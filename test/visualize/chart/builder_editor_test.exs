@@ -163,6 +163,57 @@ defmodule Visualize.Chart.Builder.EditorTest do
     end
   end
 
+  describe "a ranged number is a slider beside its box (spec/14 §14.2, §18.6)" do
+    test "every range in the schema is a sensible span" do
+      for kind <- Schema.kinds(), %{range: range} = spec <- Schema.describe(kind), range != nil do
+        assert {min, max, step} = range
+        assert min < max, "#{kind}.#{spec.key} has min >= max"
+        assert step > 0
+        assert spec.type in [:number, :integer, :size], "#{kind}.#{spec.key} is not numeric"
+      end
+    end
+
+    test "the slider stands at the value, and its write is the box's write" do
+      html =
+        render_component(&Editor.panel/1, %{
+          kind: :style,
+          node: %{opacity: 0.4, stroke_width: :label_size},
+          path: [:styles, :series],
+          facet: :style
+        })
+
+      assert html =~
+               ~s(<input type="range" name="opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0.4")
+
+      assert html =~ ~s(<input type="text" name="opacity" value="0.4">)
+
+      # A slot word has no place on a slider: it stands at the floor; the box shows the word.
+      assert html =~
+               ~s(name="stroke_width.range" class="vis-builder-range" min="0" max="20" step="0.5" value="0")
+
+      assert html =~ ~s(<input type="text" name="stroke_width" value="label_size">)
+
+      assert Editor.change(:style, %{"_target" => ["opacity.range"], "opacity.range" => "0.75"}) ==
+               {:opacity, {:ok, 0.75}}
+
+      # A key with no range has no slider.
+      refute html =~ ~s(name="stroke.range")
+    end
+
+    test "a dash pattern is drawn beside its box" do
+      html =
+        render_component(&Editor.panel/1, %{
+          kind: :style,
+          node: %{stroke_dasharray: [4, 2]},
+          path: [:styles, :series],
+          facet: :style
+        })
+
+      assert html =~ ~s(class="vis-builder-dash")
+      assert html =~ ~s(stroke-dasharray="4 2")
+    end
+  end
+
   describe "widget/1 (spec/14 §18.6)" do
     test "every key of every node kind has a control" do
       for kind <- Schema.kinds(), spec <- Schema.describe(kind) do
