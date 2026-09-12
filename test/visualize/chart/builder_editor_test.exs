@@ -383,9 +383,9 @@ defmodule Visualize.Chart.Builder.EditorTest do
         |> Enum.map(fn [_, key] -> key end)
 
       assert keys ==
-               ~w(extends fill fill_opacity stroke_width stroke stroke_opacity stroke_dasharray
-                  stroke_linejoin stroke_linecap font_family font_size font_weight text_anchor
-                  opacity class curve curve_opts symbol symbol_size)
+               ~w(extends fill fill_opacity stroke_style stroke_width stroke stroke_opacity
+                  stroke_dasharray stroke_linejoin stroke_linecap font_family font_size
+                  font_weight text_anchor opacity class curve curve_opts symbol symbol_size)
 
       {extends, _} = :binary.match(html, ~s(phx-value-field="extends"))
       {first, _} = :binary.match(html, "<fieldset")

@@ -19,6 +19,7 @@ defmodule Visualize.SVG.Renderer do
     pattern_units: "patternUnits",
     pattern_transform: "patternTransform",
     clip_path_units: "clipPathUnits",
+    mask_units: "maskUnits",
     marker_width: "markerWidth",
     marker_height: "markerHeight",
     marker_units: "markerUnits",

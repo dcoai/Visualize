@@ -149,7 +149,39 @@
     
       <fieldset class="vis-builder-block">
         <legend class="vis-builder-block-name">stroke</legend>
-        <label class="vis-builder-field" data-builder-bind="stroke_width" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_width" phx-target="-1">
+        <label class="vis-builder-field" data-builder-bind="stroke_style" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_style" phx-target="-1">
+  <span class="vis-builder-key">
+    stroke_style
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke_style">
+    <label class="vis-builder-glyph" title="single">
+      <input type="radio" name="stroke_style" value="single" aria-label="single">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="6" y="6" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+    </label><label class="vis-builder-glyph" title="double">
+      <input type="radio" name="stroke_style" value="double" aria-label="double">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8.5" y="8.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+    </label><label class="vis-builder-glyph" title="inside">
+      <input type="radio" name="stroke_style" value="inside" aria-label="inside">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="7.5" y="7.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+    </label><label class="vis-builder-glyph" title="outside">
+      <input type="radio" name="stroke_style" value="outside" aria-label="outside">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="4.5" y="4.5" width="15" height="15" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+    </label>
+  </span>
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="stroke_width" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_width" phx-target="-1">
   <span class="vis-builder-key">
     stroke_width
     <span class="vis-builder-field-handle" draggable="true" data-builder-promote="stroke_width" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>

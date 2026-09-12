@@ -158,6 +158,24 @@ defmodule Visualize.Backend.Canvas do
   # Element to Commands Conversion
   # ============================================================
 
+  # A clipped element (spec/02 §2.1, spec/09 §3.3): the shape's geometry as the clip —
+  # alone for inside, under a rectangle of everything with the even-odd rule for
+  # outside — around the element's own commands, inside a save/restore pair.
+  defp element_to_commands(%Element{clip: %{shape: shape, keep: keep}} = element) do
+    region =
+      case keep do
+        :inside ->
+          geometry(shape) ++ [{:clip, []}]
+
+        :outside ->
+          [{:rect, [-100_000, -100_000, 200_000, 200_000]}] ++
+            geometry(shape) ++ [{:clip, ["evenodd"]}]
+      end
+
+    [{:save, []}, {:beginPath, []}] ++
+      region ++ element_to_commands(%{element | clip: nil}) ++ [{:restore, []}]
+  end
+
   defp element_to_commands(%Element{type: :path, path: path, style: style, transform: transform}) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     path_cmds = path_data(path)
@@ -312,6 +330,29 @@ defmodule Visualize.Backend.Canvas do
     setup = transform_commands(transform)
     %{href: href, x: x, y: y, width: w, height: h} = attrs
     setup ++ [{:drawImage, [href, x, y, w, h]}]
+  end
+
+  # A shape's geometry alone, for a clip region: no style, no transform.
+  defp geometry(%Element{type: :path, path: path}), do: path_data(path)
+
+  defp geometry(%Element{type: :rect, attrs: %{x: x, y: y, width: w, height: h}}),
+    do: [{:rect, [x, y, w, h]}]
+
+  defp geometry(%Element{type: :circle, attrs: %{cx: cx, cy: cy, r: r}}),
+    do: [{:arc, [cx, cy, r, 0, 2 * :math.pi()]}]
+
+  defp geometry(%Element{type: :ellipse, attrs: %{cx: cx, cy: cy, rx: rx, ry: ry}}),
+    do: [{:ellipse, [cx, cy, rx, ry, 0, 0, 2 * :math.pi()]}]
+
+  defp geometry(%Element{type: :polygon, attrs: attrs}) do
+    case attrs[:points] || [] do
+      [{x, y} | rest] ->
+        [{:moveTo, [x, y]}] ++
+          Enum.map(rest, fn {px, py} -> {:lineTo, [px, py]} end) ++ [{:closePath, []}]
+
+      _ ->
+        []
+    end
   end
 
   # ============================================================
@@ -552,6 +593,8 @@ defmodule Visualize.Backend.Canvas do
   defp command_to_js_line({:fill, []}), do: "ctx.fill();"
   defp command_to_js_line({:stroke, []}), do: "ctx.stroke();"
   defp command_to_js_line({:save, []}), do: "ctx.save();"
+  defp command_to_js_line({:clip, []}), do: "ctx.clip();"
+  defp command_to_js_line({:clip, [rule]}), do: ["ctx.clip('", rule, "');"]
   defp command_to_js_line({:restore, []}), do: "ctx.restore();"
 
   defp command_to_js_line({:translate, [x, y]}),

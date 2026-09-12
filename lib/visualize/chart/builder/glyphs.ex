@@ -18,6 +18,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Shape.{Line, Symbol}
 
     @drawn [
+      :stroke_style,
       :stroke_linejoin,
       :stroke_linecap,
       :curve,
@@ -64,6 +65,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # -- the pictures ---------------------------------------------------------------------
+
+    # A square's edge with the stroke where the style puts it: on it, twice, within, without.
+    defp picture(:stroke_style, style) when style in [:single, :double, :inside, :outside] do
+      fill = ~s|<rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/>|
+
+      stroke =
+        case style do
+          :single ->
+            ~s|<rect x="6" y="6" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"/>|
+
+          :double ->
+            ~s|<rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8.5" y="8.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.5"/>|
+
+          :inside ->
+            ~s|<rect x="7.5" y="7.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="3"/>|
+
+          :outside ->
+            ~s|<rect x="4.5" y="4.5" width="15" height="15" fill="none" stroke="currentColor" stroke-width="3"/>|
+        end
+
+      fill <> stroke
+    end
 
     defp picture(:stroke_linejoin, join) when join in [:miter, :round, :bevel],
       do:

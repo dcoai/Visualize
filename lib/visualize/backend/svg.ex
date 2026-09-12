@@ -99,6 +99,37 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:g, attrs, child_content, nil)
   end
 
+  # A clipped element (spec/02 §2.1, spec/09 §2.3): its definition — a clipPath holding
+  # the shape, or a mask of everything but it — then the element referring to it.
+  defp do_render_element(%Element{clip: %{shape: shape, keep: keep}} = element) do
+    id =
+      "vis-#{if(keep == :inside, do: "clip", else: "mask")}-#{Integer.to_string(:erlang.phash2(shape), 36) |> String.downcase()}"
+
+    bare = %{element | clip: nil}
+
+    case keep do
+      :inside ->
+        [
+          render_svg_tag(:clipPath, %{id: id}, [do_render_element(shape)], nil),
+          do_render_element(Element.set_attrs(bare, %{clip_path: "url(##{id})"}))
+        ]
+
+      :outside ->
+        extent = %{x: -100_000, y: -100_000, width: 200_000, height: 200_000}
+        white = Element.rect(extent.x, extent.y, extent.width, extent.height, %{fill: "white"})
+
+        [
+          render_svg_tag(
+            :mask,
+            Map.merge(%{id: id, mask_units: "userSpaceOnUse"}, extent),
+            [do_render_element(white), do_render_element(%{shape | style: %{fill: "black"}})],
+            nil
+          ),
+          do_render_element(Element.set_attrs(bare, %{mask: "url(##{id})"}))
+        ]
+    end
+  end
+
   # A title or desc is its content, escaped, under its attrs (the id); no style (D-56).
   defp do_render_element(%Element{type: type, attrs: attrs, content: content})
        when type in [:title, :desc] do

@@ -301,6 +301,7 @@ defmodule Visualize.Chart.Schema do
       spec(:extends, {:ref, :style}, :style),
       spec(:fill, :colour, :style, group: :fill),
       spec(:fill_opacity, :size, :style, range: {0, 1, 0.05}, group: :fill),
+      spec(:stroke_style, {:enum, [:single, :double, :inside, :outside]}, :style, group: :stroke),
       spec(:stroke_width, :size, :style, range: {0, 20, 0.5}, group: :stroke),
       spec(:stroke, :colour, :style, group: :stroke),
       spec(:stroke_opacity, :size, :style, range: {0, 1, 0.05}, group: :stroke),

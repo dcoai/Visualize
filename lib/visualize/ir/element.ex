@@ -35,7 +35,8 @@ defmodule Visualize.IR.Element do
     transform: nil,
     children: [],
     content: nil,
-    path: nil
+    path: nil,
+    clip: nil
   ]
 
   @type element_type ::
@@ -77,6 +78,12 @@ defmodule Visualize.IR.Element do
           optional(:class) => String.t()
         }
 
+  @typedoc """
+  Where an element is drawn (spec/02 §2.1): only where the shape is, or only where it is
+  not — how a stroke is kept inside or outside an edge (spec/14 §5.6).
+  """
+  @type clip :: %{shape: t(), keep: :inside | :outside}
+
   @type t :: %__MODULE__{
           type: element_type(),
           attrs: map(),
@@ -84,7 +91,8 @@ defmodule Visualize.IR.Element do
           transform: Transform.t() | nil,
           children: [t()],
           content: String.t() | nil,
-          path: Path.t() | nil
+          path: Path.t() | nil,
+          clip: clip() | nil
         }
 
   @doc """
@@ -387,6 +395,28 @@ defmodule Visualize.IR.Element do
 
   def translate(%__MODULE__{transform: t} = element, x, y) do
     %{element | transform: Transform.translate(t, x, y)}
+  end
+
+  @doc """
+  The element drawn only where `shape` is (`:inside`) or only where it is not
+  (`:outside`) (spec/02 §2.1). The shape's style is ignored by every backend.
+
+      iex> square = Visualize.IR.Element.rect(0, 0, 10, 10)
+      iex> Visualize.IR.Element.clip(square, square, :inside).clip.keep
+      :inside
+  """
+  @spec clip(t(), t(), :inside | :outside) :: t()
+  def clip(%__MODULE__{} = element, %__MODULE__{} = shape, keep)
+      when keep in [:inside, :outside] do
+    # The shape is geometry alone: its style, its own clip and its data attributes go.
+    geometry = %{
+      shape
+      | style: %{},
+        clip: nil,
+        attrs: Map.filter(shape.attrs, fn {k, _} -> is_atom(k) end)
+    }
+
+    %{element | clip: %{shape: geometry, keep: keep}}
   end
 
   @doc """
