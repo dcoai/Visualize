@@ -18,6 +18,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Shape.{Line, Symbol}
 
     @drawn [
+      :fill_style,
+      :effect,
       :stroke_style,
       :stroke_linejoin,
       :stroke_linecap,
@@ -65,6 +67,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # -- the pictures ---------------------------------------------------------------------
+
+    # An effect (§3.1): a plain square, one with a shadow, one blurred.
+    defp picture(:effect, effect) when effect in [:none, :shadow, :blur] do
+      case effect do
+        :none ->
+          ~s|<rect x="6" y="6" width="12" height="12" fill="currentColor"/>|
+
+        :shadow ->
+          ~s|<rect x="8" y="8" width="12" height="12" fill="currentColor" opacity="0.35"/><rect x="5" y="5" width="12" height="12" fill="currentColor"/>|
+
+        :blur ->
+          ~s|<defs><filter id="vis-glyph-blur"><feGaussianBlur stdDeviation="1.5"/></filter></defs><rect x="6" y="6" width="12" height="12" fill="currentColor" filter="url(#vis-glyph-blur)"/>|
+      end
+    end
+
+    # A fill style (§18.6): no paint, a solid, a gradient down the square, one out from
+    # its centre. The gradient ids repeat across glyphs and are identical, which SVG allows.
+    defp picture(:fill_style, style) when style in [:none, :solid, :linear, :radial] do
+      case style do
+        :none ->
+          ~s|<rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 19 L19 5" stroke="currentColor" stroke-width="1.5"/>|
+
+        :solid ->
+          ~s|<rect x="5" y="5" width="14" height="14" fill="currentColor"/>|
+
+        :linear ->
+          ~s|<defs><linearGradient id="vis-glyph-linear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></linearGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-linear)" stroke="currentColor" stroke-width="1"/>|
+
+        :radial ->
+          ~s|<defs><radialGradient id="vis-glyph-radial"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></radialGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-radial)" stroke="currentColor" stroke-width="1"/>|
+      end
+    end
 
     # A square's edge with the stroke where the style puts it: on it, twice, within, without.
     defp picture(:stroke_style, style) when style in [:single, :double, :inside, :outside] do

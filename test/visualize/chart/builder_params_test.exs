@@ -162,7 +162,8 @@ defmodule Visualize.Chart.Builder.ParamsTest do
                "label 1"
              ]
 
-      assert BuilderFixture.design(opened) == Chart.to_map(chart)
+      # An empty `defs` declares no paint and so has no site (§2.7).
+      assert BuilderFixture.design(opened) == Map.delete(Chart.to_map(chart), :defs)
       assert BuilderFixture.selected(opened) == 0
       assert BuilderFixture.disabled(opened) == MapSet.new()
       assert opened.assigns.bindings == %{}

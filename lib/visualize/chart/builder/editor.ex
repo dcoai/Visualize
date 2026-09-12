@@ -21,7 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Glyphs, Store}
+    alias Visualize.Chart.Builder.{Fills, Glyphs, Store}
     alias Visualize.Chart.{Fragment, Schema, Text, Validator, Var}
     alias Visualize.Theme
 
@@ -511,6 +511,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
         "the `%Visualize.Theme{}` the design names, for what a colour well shows (spec/14 §19.10)"
     )
 
+    attr(:defs, :map,
+      default: %{},
+      doc: "the design's paints, for a fill's style and its gradient's controls (spec/14 §18.6)"
+    )
+
     attr(:strip, :boolean,
       default: true,
       doc: "render the facet strip; `false` where the caller does"
@@ -634,6 +639,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
             title="unbind"
           >×</button>
         </span>
+        <div :if={is_nil(@field.variable) and @field.fill && @field.fill.gradient} class="vis-builder-gradient">
+          <span :for={stop <- @field.fill.stops} class="vis-builder-stop">
+            <span
+              class={well_class(stop.well)}
+              style={"--vis-builder-swatch: #{stop.well.colour || "transparent"}"}
+              title={stop.well.word || "no colour set"}
+              role="img"
+              aria-label={"stop #{stop.index}: #{stop.well.word || "not set"}"}
+              data-builder-well={"fill.stop.#{stop.index}"}
+              phx-click="select_field"
+              phx-value-field={"fill.stop.#{stop.index}"}
+              phx-target={@target}
+            ></span>
+            <input
+              type="range"
+              name={"fill.stop.#{stop.index}.opacity"}
+              class="vis-builder-range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={stop.opacity}
+              aria-label={"stop #{stop.index} opacity"}
+            />
+          </span>
+          <label :if={@field.fill.style == :linear} class="vis-builder-picker-row">
+            <span class="vis-builder-control-label">angle</span>
+            <input type="range" name="fill.angle" class="vis-builder-range" min="0" max="360" step="15" value={@field.fill.angle} aria-label="angle" />
+            <span class="vis-builder-item-text">{@field.fill.angle}°</span>
+          </label>
+          <span :if={@field.fill.style == :radial} class="vis-builder-picker-row">
+            <span class="vis-builder-control-label">centre</span>
+            <input type="number" name="fill.centre.x" min="0" max="1" step="0.05" value={Enum.at(@field.fill.centre, 0)} aria-label="centre x" />
+            <input type="number" name="fill.centre.y" min="0" max="1" step="0.05" value={Enum.at(@field.fill.centre, 1)} aria-label="centre y" />
+          </span>
+        </div>
         <input
           :if={is_nil(@field.variable) and @field.widget == :checkbox}
           type="checkbox"
@@ -698,6 +738,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
             stroke-dasharray={@field.dash}
           />
         </svg>
+        <span
+          :if={is_nil(@field.variable) and @field.fill}
+          class="vis-builder-glyphs"
+          role="radiogroup"
+          aria-label="fill style"
+        >
+          <label
+            :for={{style, svg} <- @field.fill.glyphs}
+            class={"vis-builder-glyph" <> if(@field.fill.style == style, do: " vis-builder-glyph-on", else: "")}
+            title={style}
+          >
+            <input type="radio" name="fill_style" value={style} checked={@field.fill.style == style} aria-label={style} />
+            {Phoenix.HTML.raw(svg)}
+          </label>
+        </span>
         <span
           :if={is_nil(@field.variable) and @field.widget == :colour}
           class={well_class(@field.well)}
@@ -814,7 +869,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           options: options(widget),
           checked: Map.get(node, spec.key) == true,
           value: shown(widget, as_text(spec, Map.fetch(node, spec.key))),
-          well: well(widget, Map.get(node, spec.key), Map.get(assigns, :theme)),
+          well:
+            well(
+              widget,
+              Map.get(node, spec.key),
+              Map.get(assigns, :theme),
+              Map.get(assigns, :defs) || %{}
+            ),
+          fill: fill_view(assigns.kind, spec.key, Map.get(node, spec.key), assigns),
           variable: if(spec.type == :text, do: nil, else: variable_name(Map.get(node, spec.key))),
           placeholder: shown(widget, default(spec)),
           errors: key_errors(errors, path ++ [spec.key])
@@ -949,8 +1011,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp as_text(_spec, value), do: value
 
-    defp well(:colour, value, theme), do: well(value, theme)
-    defp well(_widget, _value, _theme), do: %{colour: nil, none?: false, word: nil}
+    # A paint's well shows its gradient's first stop, under the paint's name (§18.6).
+    defp well(:colour, {:paint, name}, theme, defs) do
+      case Map.get(defs, name) do
+        %{stops: [%{colour: colour} | _]} -> %{well(colour, theme) | word: to_string(name)}
+        _other -> %{colour: nil, none?: false, word: to_string(name)}
+      end
+    end
+
+    defp well(:colour, value, theme, _defs), do: well(value, theme)
+    defp well(_widget, _value, _theme, _defs), do: %{colour: nil, none?: false, word: nil}
+
+    # A style's fill is a fill style (§18.6); any other colour is a well alone.
+    defp fill_view(:style, :fill, value, assigns) when not is_struct(value, Var) do
+      defs = Map.get(assigns, :defs) || %{}
+      view = Fills.view(value, defs, Fills.name(assigns.path))
+      theme = Map.get(assigns, :theme)
+
+      %{view | stops: Enum.map(view.stops, &Map.put(&1, :well, well(&1.colour, theme)))}
+      |> Map.put(:glyphs, Enum.map(Fills.styles(), &{&1, Glyphs.glyph(:fill_style, &1)}))
+    end
+
+    defp fill_view(_kind, _key, _value, _assigns), do: nil
 
     defp well_class(%{none?: true}), do: "vis-builder-well vis-builder-well-none"
     defp well_class(%{colour: nil}), do: "vis-builder-well vis-builder-well-empty"

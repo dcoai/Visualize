@@ -322,7 +322,18 @@ defmodule Visualize.Backend.Canvas do
 
   # Skip defs, gradients, clip paths and the accessible name and description: none draws
   defp element_to_commands(%Element{type: type})
-       when type in [:defs, :clip_path, :linear_gradient, :radial_gradient, :stop, :title, :desc] do
+       when type in [
+              :defs,
+              :clip_path,
+              :linear_gradient,
+              :radial_gradient,
+              :stop,
+              :filter,
+              :fe_drop_shadow,
+              :fe_gaussian_blur,
+              :title,
+              :desc
+            ] do
     []
   end
 
@@ -424,6 +435,34 @@ defmodule Visualize.Backend.Canvas do
         do: cmds ++ [{:set_lineWidth, [style[:stroke_width]]}],
         else: cmds
 
+    # A blend is the compositing operation; an effect the context's shadow or its filter
+    # (spec/09 §3.3.3).
+    cmds =
+      case style[:blend] do
+        blend when blend in [nil, :normal] -> cmds
+        blend -> cmds ++ [{:set_globalCompositeOperation, [to_string(blend)]}]
+      end
+
+    radius = style[:effect_radius] || 3
+
+    cmds =
+      case style[:effect] do
+        :shadow ->
+          cmds ++
+            [
+              {:set_shadowColor, ["rgba(0,0,0,0.35)"]},
+              {:set_shadowBlur, [radius]},
+              {:set_shadowOffsetX, [radius / 2]},
+              {:set_shadowOffsetY, [radius / 2]}
+            ]
+
+        :blur ->
+          cmds ++ [{:set_filter, ["blur(#{radius}px)"]}]
+
+        _none ->
+          cmds
+      end
+
     cmds =
       case style[:stroke_linecap] do
         nil -> cmds
@@ -523,6 +562,20 @@ defmodule Visualize.Backend.Canvas do
   defp command_to_js_line({:set_lineCap, [cap]}), do: ["ctx.lineCap = '", cap, "';"]
   defp command_to_js_line({:set_lineJoin, [join]}), do: ["ctx.lineJoin = '", join, "';"]
   defp command_to_js_line({:set_globalAlpha, [a]}), do: ["ctx.globalAlpha = ", format_num(a), ";"]
+
+  defp command_to_js_line({:set_globalCompositeOperation, [op]}),
+    do: ["ctx.globalCompositeOperation = '", op, "';"]
+
+  defp command_to_js_line({:set_shadowColor, [c]}), do: ["ctx.shadowColor = '", c, "';"]
+  defp command_to_js_line({:set_shadowBlur, [r]}), do: ["ctx.shadowBlur = ", format_num(r), ";"]
+
+  defp command_to_js_line({:set_shadowOffsetX, [x]}),
+    do: ["ctx.shadowOffsetX = ", format_num(x), ";"]
+
+  defp command_to_js_line({:set_shadowOffsetY, [y]}),
+    do: ["ctx.shadowOffsetY = ", format_num(y), ";"]
+
+  defp command_to_js_line({:set_filter, [f]}), do: ["ctx.filter = '", f, "';"]
   defp command_to_js_line({:set_font, [font]}), do: ["ctx.font = '", font, "';"]
   defp command_to_js_line({:set_textAlign, [align]}), do: ["ctx.textAlign = '", align, "';"]
   defp command_to_js_line({:beginPath, []}), do: "ctx.beginPath();"

@@ -52,7 +52,18 @@ defmodule Visualize.Chart.Schema do
   @typedoc "The heading a style key is shown under in a form (spec/14 §3.1, §14.2)."
   @type group :: :fill | :stroke | :font | :position | :effects
 
-  @design_kinds [:design, :meta, :source, :var, :theme, :style, :curve_opts, :label]
+  @design_kinds [
+    :design,
+    :meta,
+    :source,
+    :var,
+    :theme,
+    :style,
+    :curve_opts,
+    :label,
+    :gradient,
+    :stop
+  ]
   @frame_kinds [
     :frame,
     :size,
@@ -90,6 +101,7 @@ defmodule Visualize.Chart.Schema do
   ]
   @symbol_types [:circle, :cross, :diamond, :square, :star, :triangle, :wye]
   @weights [:light, :normal, :medium, :bold]
+  @blends [:normal, :multiply, :screen, :overlay, :darken, :lighten]
   @builtin_styles [:axis, :grid, :label, :title]
 
   @doc "Every node kind of spec/14 §1.2, the design first."
@@ -257,6 +269,7 @@ defmodule Visualize.Chart.Schema do
       spec(:vars, {:map, {:node, :var}}, :binding, default: %{}, merge: :union),
       spec(:theme, {:one_of, [:name, {:node, :theme}]}, :style, default: :default),
       spec(:styles, {:map, {:node, :style}}, :style, default: %{}, merge: :union),
+      spec(:defs, {:map, {:node, :gradient}}, :style, default: %{}, merge: :union),
       spec(:frame, {:node, :frame}, :geometry, required: true),
       spec(:marks, {:list, {:node, :mark}}, :channel, default: [], merge: :concat),
       spec(:labels, {:list, {:node, :label}}, :content, default: [], merge: :concat)
@@ -278,6 +291,25 @@ defmodule Visualize.Chart.Schema do
   end
 
   defp design_node(:var), do: [spec(:default, :term, :binding)]
+
+  # A paint (spec/14 §2.7): a gradient in the words a person uses; the geometry is derived.
+  defp design_node(:gradient) do
+    [
+      spec(:kind, {:enum, [:linear, :radial]}, :style, required: true),
+      spec(:stops, {:list, {:node, :stop}}, :style, required: true),
+      spec(:angle, :number, :geometry, default: 180, range: {0, 360, 15}),
+      spec(:centre, {:list, :number}, :geometry, default: [0.5, 0.5]),
+      spec(:radius, :number, :geometry, default: 0.5, range: {0, 1, 0.05})
+    ]
+  end
+
+  defp design_node(:stop) do
+    [
+      spec(:offset, :number, :style, required: true, range: {0, 1, 0.05}),
+      spec(:colour, :colour, :style, required: true),
+      spec(:opacity, :size, :style, default: 1, range: {0, 1, 0.05})
+    ]
+  end
 
   defp design_node(:theme) do
     theme = Theme.default()
@@ -314,6 +346,9 @@ defmodule Visualize.Chart.Schema do
       spec(:font_style, {:enum, [:normal, :italic]}, :style, group: :font),
       spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style, group: :position),
       spec(:opacity, :size, :style, range: {0, 1, 0.05}, group: :effects),
+      spec(:blend, {:enum, @blends}, :style, group: :effects),
+      spec(:effect, {:enum, [:none, :shadow, :blur]}, :style, group: :effects),
+      spec(:effect_radius, :size, :style, range: {0, 20, 0.5}, group: :effects),
       spec(:class, :string, :style),
       spec(:curve, {:enum, @curve_types}, :style),
       spec(:curve_opts, {:node, :curve_opts}, :style),

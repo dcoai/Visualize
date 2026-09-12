@@ -41,6 +41,7 @@ defmodule Examples.ChartsTest do
   @golden_charts [
     Examples.Charts.LineChart,
     Examples.Charts.MultiLineChart,
+    Examples.Charts.AreaChart,
     Examples.Charts.BarChart,
     Examples.Charts.HorizontalBarChart,
     Examples.Charts.StackedBarChart,
@@ -58,7 +59,6 @@ defmodule Examples.ChartsTest do
 
   # Left imperative, each with a filed gap named in its `@moduledoc`.
   @filed [
-    {Examples.Charts.AreaChart, "#133"},
     {Examples.Charts.GroupedBarChart, "#132"},
     {Examples.Charts.RadialBarChart, "#137"},
     {Examples.Charts.ChordDiagram, "#137"}

@@ -40,7 +40,7 @@ defmodule Visualize.Chart.Frame do
   """
 
   alias Visualize.{Chart, Theme}
-  alias Visualize.Chart.Frame.{Furniture, Labels, Legend, Scales}
+  alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Scales}
   alias Visualize.Chart.{Mark, Schema, Style, Var}
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
@@ -59,7 +59,8 @@ defmodule Visualize.Chart.Frame do
             marks: [],
             theme: nil,
             styles: %{},
-            design_styles: %{}
+            design_styles: %{},
+            defs: %{}
 
   @typedoc "A frame kind of spec/14 §4.1."
   @type kind :: :cartesian | :polar | :geo | :facet
@@ -79,7 +80,8 @@ defmodule Visualize.Chart.Frame do
           marks: [map()],
           theme: Theme.t(),
           styles: %{atom() => map()},
-          design_styles: %{atom() => map()}
+          design_styles: %{atom() => map()},
+          defs: %{atom() => map()}
         }
 
   @doc """
@@ -131,7 +133,8 @@ defmodule Visualize.Chart.Frame do
       marks: chart.marks,
       theme: theme,
       styles: styles,
-      design_styles: chart.styles
+      design_styles: chart.styles,
+      defs: chart.defs
     }
   end
 
@@ -182,10 +185,15 @@ defmodule Visualize.Chart.Frame do
       furniture(frame, mode, sources) ++
         Legend.generate(frame, mode) ++ Labels.generate(frame, mode)
 
-    Element.group(children,
-      style: %{class: "frame"},
-      transform: Transform.translate(frame.margin.left, frame.margin.top)
-    )
+    group =
+      Element.group(children,
+        style: %{class: "frame"},
+        transform: Transform.translate(frame.margin.left, frame.margin.top)
+      )
+      |> Defs.resolve(frame, mode)
+
+    # The defs come first (spec/14 §2.7): the paints declared, the filters the tree uses.
+    %{group | children: Defs.defs(frame, mode, group) ++ group.children}
   end
 
   @doc "As `render/2` with `[]` options."

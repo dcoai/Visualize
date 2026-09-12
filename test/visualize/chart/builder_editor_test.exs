@@ -9,6 +9,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
   use ExUnit.Case, async: true
 
   doctest Visualize.Chart.Builder.Editor
+  doctest Visualize.Chart.Builder.Fills
   doctest Visualize.Chart.Builder.Styles
   doctest Visualize.Chart.Builder.Palette
   doctest Visualize.Chart.Builder.Library
@@ -385,7 +386,8 @@ defmodule Visualize.Chart.Builder.EditorTest do
       assert keys ==
                ~w(extends fill fill_opacity stroke_style stroke_width stroke stroke_opacity
                   stroke_dasharray stroke_linejoin stroke_linecap font_family font_size
-                  font_weight text_anchor opacity class curve curve_opts symbol symbol_size)
+                  font_weight text_anchor opacity blend effect effect_radius class curve
+                  curve_opts symbol symbol_size)
 
       {extends, _} = :binary.match(html, ~s(phx-value-field="extends"))
       {first, _} = :binary.match(html, "<fieldset")

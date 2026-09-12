@@ -12,7 +12,7 @@ defmodule Visualize.ChartTest do
 
   doctest Var
 
-  @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :frame, :marks, :labels]
+  @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :defs, :frame, :marks, :labels]
 
   describe "from_map/1 and to_map/1" do
     property "every generated design validates and round-trips exactly" do

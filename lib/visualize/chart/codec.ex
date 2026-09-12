@@ -34,6 +34,7 @@ defmodule Visualize.Chart.Codec do
 
   defp value(_type, %Var{name: name}), do: %{"$var" => Atom.to_string(name)}
   defp value(_type, {:field, f}) when is_atom(f), do: %{"$field" => Atom.to_string(f)}
+  defp value(:colour, {:paint, name}) when is_atom(name), do: %{"$paint" => Atom.to_string(name)}
   defp value({:node, kind}, v) when is_map(v) and not is_struct(v), do: node(kind, v)
   defp value({:list, t}, v) when is_list(v), do: Enum.map(v, &value(t, &1))
 
@@ -126,6 +127,9 @@ defmodule Visualize.Chart.Codec do
 
   defp read(_type, %{"$field" => f} = v) when map_size(v) == 1 and is_binary(f),
     do: {:field, String.to_atom(f)}
+
+  defp read(:colour, %{"$paint" => name} = v) when map_size(v) == 1 and is_binary(name),
+    do: {:paint, String.to_atom(name)}
 
   defp read({:node, kind}, v) when is_map(v) and not is_struct(v), do: read_node(kind, v)
   defp read({:list, t}, v) when is_list(v), do: Enum.map(v, &read(t, &1))

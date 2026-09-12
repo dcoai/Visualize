@@ -26,8 +26,8 @@ The three nouns of the design are the *theme* (visual constants as named slots, 
 | Level | Nodes | Node kinds (§14.2) |
 |---|---|---|
 | 1 | the design | `:design` |
-| 2 | meta, sources, vars, theme, styles, frame, marks, labels | `:meta`, `:source`, `:var`, `:theme`, `:style`, `:frame`, `:mark`, `:label` |
-| 3 | size, margin, scales, axes, legend, projection, facet, viewport; a mark's data, channels, scales, options, inline label and tooltip; a style's curve options | `:size`, `:margin`, `:scale`, `:axis`, `:legend`, `:projection`, `:facet`, `:viewport`, `:data`, `:channels`, `:mark_scales`, `:options`, `:mark_label`, `:tooltip`, `:curve_opts` |
+| 2 | meta, sources, vars, theme, styles, defs, frame, marks, labels | `:meta`, `:source`, `:var`, `:theme`, `:style`, `:gradient`, `:frame`, `:mark`, `:label` |
+| 3 | size, margin, scales, axes, legend, projection, facet, viewport; a mark's data, channels, scales, options, inline label and tooltip; a style's curve options; a gradient's stops | `:size`, `:margin`, `:scale`, `:axis`, `:legend`, `:projection`, `:facet`, `:viewport`, `:data`, `:channels`, `:mark_scales`, `:options`, `:mark_label`, `:tooltip`, `:curve_opts`, `:stop` |
 | 4 | tick specs; transforms; text parts | `:ticks`, `:transform`, and the `text` type of §1.4 |
 
 Collections are lists (`marks`, `axes`, `labels`, `transforms`); named declarations are maps keyed by name (`sources`, `vars`, `styles`, `scales`). A name is an atom. Marks reference scales, styles and sources by name, never by nesting: that is what makes fragments composable (§8) and the map diffable.
@@ -102,6 +102,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `vars` | `{:map, {:node, :var}}` | `:binding` | `%{}` | `:union` |
 | `theme` | `{:one_of, [:name, {:node, :theme}]}` | `:style` | `:default` | `:override` |
 | `styles` | `{:map, {:node, :style}}` | `:style` | `%{}` | `:union` |
+| `defs` | `{:map, {:node, :gradient}}` | `:style` | `%{}` | `:union` |
 | `frame` | `{:node, :frame}` | `:geometry` | required | `:override` |
 | `marks` | `{:list, {:node, :mark}}` | `:channel` | `[]` | `:concat` |
 | `labels` | `{:list, {:node, :label}}` | `:content` | `[]` | `:concat` |
@@ -140,11 +141,27 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 **Implemented.** `styles` declares named style nodes (§3). A mark, axis, legend or label references one by name through its `style` key; no other node carries a colour, a font or a curve.
 
+### 2.7 Defs
+
+**Implemented** (#133). `defs` declares the design's **paints**: named `:gradient` nodes a `:colour` key refers to as `{:paint, name}` (§3.2). A gradient is written once in the words a person uses — a kind, its stops, an angle or a centre — and the SVG geometry is derived; `:union` merge, like `styles`, so a house sheet of gradients composes.
+
+| Key | Type | Facet | Default | Notes |
+|---|---|---|---|---|
+| `kind` | `{:enum, [:linear, :radial]}` | `:style` | required | |
+| `stops` | `{:list, {:node, :stop}}` | `:style` | required | at least two, in offset order |
+| `angle` | `:number` | `:geometry` | `180` | linear: degrees clockwise from *up*, as CSS has it — `0` runs bottom to top, `90` left to right, `180` top to bottom; range `{0, 360, 15}` |
+| `centre` | `{:list, :number}` | `:geometry` | `[0.5, 0.5]` | radial: `[cx, cy]` as fractions of the shape's box |
+| `radius` | `:number` | `:geometry` | `0.5` | radial: as a fraction of the box; range `{0, 1, 0.05}` |
+
+A `:stop` node is `offset` (`:number`, required, `0` to `1`), `colour` (`:colour`, required — a literal, a slot or a variable, resolved as any colour is), and `opacity` (`:size`, default `1`, range `{0, 1, 0.05}`); every key `:style` and `:override`.
+
+A gradient's units are the shape's bounding box (`objectBoundingBox`), so one gradient fits any mark. From the angle θ a linear gradient's line runs from `(½ − ½ sin θ, ½ + ½ cos θ)` to `(½ + ½ sin θ, ½ − ½ cos θ)`; a radial one is centred at `centre` with `radius`, its focus at the centre. `Visualize.Chart.Frame.generate/2` emits one `defs` element **first** in the frame's group, before the grid, holding every gradient of the design as a `Visualize.IR.Element.linear_gradient/2` or `radial_gradient/2` with its stops, each under the id `vis-paint-<h>-<name>` where `<h>` is the lower-case base-36 `:erlang.phash2/1` of the design's `defs`, so two charts on one page collide only when their paints are the same; a design with no paints emits no `defs`. The same `defs` holds one **filter** per `{effect, radius}` pair any style in the tree uses (§3.1): `<filter id="vis-effect-shadow-3">` with a `feDropShadow` of `dx`, `dy` and `stdDeviation` the radius (`flood-opacity` 0.35), or `<filter id="vis-effect-blur-3">` with a `feGaussianBlur` of `stdDeviation` the radius; a design whose styles use no effect declares none. The defs are static furniture (§12.2): they never change with the data.
+
 ## 3. The style grammar
 
 ### 3.1 Keys
 
-**Implemented.** A `:style` node has twenty-one keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema. The keys are read as a drawing tool shows a style — in **groups**: what a style derives from first, then its *fill*, its *stroke*, its *font*, the *position* of its text, its *effects*, and last the keys that belong to no group. A key's group is data on its spec (`group`, §14.2), and the table below is in group order, which is the order the form shows them in (§18.7).
+**Implemented.** A `:style` node has twenty-four keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema. The keys are read as a drawing tool shows a style — in **groups**: what a style derives from first, then its *fill*, its *stroke*, its *font*, the *position* of its text, its *effects*, and last the keys that belong to no group. A key's group is data on its spec (`group`, §14.2), and the table below is in group order, which is the order the form shows them in (§18.7).
 
 | Key | Type | Group | Notes |
 |---|---|---|---|
@@ -164,6 +181,9 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `font_style` | `{:enum, [:normal, :italic]}` | `:font` | |
 | `text_anchor` | `{:enum, [:start, :middle, :end]}` | `:position` | |
 | `opacity` | `:size` | `:effects` | `0` to `1` |
+| `blend` | `{:enum, [:normal, :multiply, :screen, :overlay, :darken, :lighten]}` | `:effects` | how the mark composites with what is under it; `:normal` when absent |
+| `effect` | `{:enum, [:none, :shadow, :blur]}` | `:effects` | `:none` when absent |
+| `effect_radius` | `:size` | `:effects` | the shadow's or the blur's radius, `3` when absent; range `{0, 20, 0.5}` |
 | `class` | `:string` | — | a CSS class added to the mark's element |
 | `curve` | `{:enum, curve types}` | — | the types of [04-shapes-and-curves](04-shapes-and-curves.md) §5.1 |
 | `curve_opts` | `{:node, :curve_opts}` | — | `tension` and `alpha`, both `:number`, `:style`, `:override` |
@@ -172,14 +192,15 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 ### 3.2 Values
 
-**Implemented.** A style value is one of four things, and which of them a key accepts follows from its type:
+**Implemented.** A style value is one of five things, and which of them a key accepts follows from its type:
 
 - a **literal** of the key's type — `"#3b6fa8"`, `2`, `:step_after`;
 - a **theme slot** (`:slot`) for the `:colour`, `:size` and `:font` keys — `:series_1`, `{:series, 3}`, `:axis`, `:font_size` — resolved through `Visualize.Theme.resolve/3` in the mode of the render target, so the SVG output carries `var(--vis-axis, #666666)` and a canvas the literal (D-55);
 - a **variable** (§7.1) for any key;
+- a **paint** `{:paint, name}` for a `:colour` key: a gradient the design declares under `defs` (§2.7). `Visualize.Chart.Style.resolve/3` passes it through untouched, as it does a binding, and the **frame** resolves it once its elements are drawn — `Visualize.Chart.Frame.generate/2` replaces every `{:paint, name}` in the tree's styles with `url(#vis-paint-<h>-<name>)` in `:css` and with the gradient's **first stop's colour**, resolved as a colour, in `:literal`, since a canvas gradient is a different object and the first stop keeps a canvas chart drawable and honest. The validator reports `{:undeclared, :paint, name}` for a name `defs` lacks.
 - a **channel binding** `{:field, f}` for any key, which is how `Visualize.Shape.Band`'s per-datum fill is expressed: the value is read from the datum at render — per element for a mark that draws one element per datum, from the series' first datum for a mark that draws one path per series (§5.6) — and, for a `:colour` key, passed through the scale named `color` when the frame declares one (§3.4).
 
-Fourteen keys reach the element the mark draws; four more — `curve`, `curve_opts`, `symbol` and `symbol_size` — reach the mark's generator (§5.6) and never an element; and `extends` reaches neither, being consumed by the lookup that flattens it (§3.5).
+Seventeen keys reach the element the mark draws — the fifteen of §3.4 and, as one, `effect` with `effect_radius`, and `blend`; four more — `curve`, `curve_opts`, `symbol` and `symbol_size` — reach the mark's generator (§5.6) and never an element; and `extends` reaches neither, being consumed by the lookup that flattens it (§3.5).
 
 For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font` key an atom is a slot, and `:none` is the literal "no paint". The validator checks a slot against the theme's `Visualize.Theme.slots/1` when the theme is built-in or inline (§2.5) and reports `{:undeclared, :slot, name}` otherwise.
 
@@ -189,7 +210,7 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 
 ### 3.4 Resolution: one node, two outputs
 
-**Implemented.** A style node resolves to the style map of a `Visualize.IR.Element` through `Visualize.Chart.Style.resolve/3` in the mode of the render target, and the mode is what makes one node serve two backends (D-63): in `:css` the SVG output carries classes and CSS custom-property references — `class="mark mark-line series"`, `stroke="var(--vis-series-1, #3b6fa8)"` — that a stylesheet overrides; in `:literal` a canvas gets the plain colour, width and font it needs, which `Visualize.Backend.Canvas` reads as they are (spec/09 §3). `resolve/3` keeps the fifteen element keys, resolves every slot through `Visualize.Theme.resolve/3`, joins a dash-array list with spaces, writes a `font_weight` of `:light` as `300` and `:medium` as `500` (`:normal` and `:bold` are CSS's own words and pass as they are) and passes a literal through; a canvas reads `font_style` and `font_weight` into its font shorthand — `italic 300 12px sans-serif` — beside the size and the family (spec/09 §3); a `{:field, f}` survives it unchanged, and `Visualize.Chart.Style.bind/4` then reads it from a datum through `Visualize.Data.Table.get/2` — a `:colour` key's reading through the frame's `color` scale when the frame declares one, the scale's output resolved as a slot when it is one — and drops the key when the reading is `nil`. A variable in either raises `ArgumentError` naming it: variables resolve at application (§7.3).
+**Implemented.** A style node resolves to the style map of a `Visualize.IR.Element` through `Visualize.Chart.Style.resolve/3` in the mode of the render target, and the mode is what makes one node serve two backends (D-63): in `:css` the SVG output carries classes and CSS custom-property references — `class="mark mark-line series"`, `stroke="var(--vis-series-1, #3b6fa8)"` — that a stylesheet overrides; in `:literal` a canvas gets the plain colour, width and font it needs, which `Visualize.Backend.Canvas` reads as they are (spec/09 §3). `resolve/3` keeps the seventeen element keys — `blend`, `effect` and `effect_radius` among them, which the backends read as spec/09 §2.5 and §3.3.3 say: `blend` is `mix-blend-mode` in an inline `style` attribute (it is a CSS property, not a presentation attribute every browser honours) and `globalCompositeOperation` on a canvas; `effect` with its radius is `filter="url(#vis-effect-<effect>-<radius>)"`, the filter itself declared once per chart per pair in the frame's `defs` (§2.7) as a `feDropShadow` or a `feGaussianBlur`, and on a canvas the context's shadow properties or its `filter` — resolves every slot through `Visualize.Theme.resolve/3`, joins a dash-array list with spaces, writes a `font_weight` of `:light` as `300` and `:medium` as `500` (`:normal` and `:bold` are CSS's own words and pass as they are) and passes a literal through; a canvas reads `font_style` and `font_weight` into its font shorthand — `italic 300 12px sans-serif` — beside the size and the family (spec/09 §3); a `{:field, f}` survives it unchanged, and `Visualize.Chart.Style.bind/4` then reads it from a datum through `Visualize.Data.Table.get/2` — a `:colour` key's reading through the frame's `color` scale when the frame declares one, the scale's output resolved as a slot when it is one — and drops the key when the reading is `nil`. A variable in either raises `ArgumentError` naming it: variables resolve at application (§7.3).
 
 ### 3.5 Derivation: `extends`
 
@@ -728,6 +749,7 @@ The last four are reported by `Visualize.Chart.apply/2` and `Visualize.Chart.com
 | `%Visualize.Chart.Var{name: :unit}` | `{"$var": "unit"}` |
 | `{:field, :sha}` | `{"$field": "sha"}` |
 | `{:series, 3}` | `{"$series": 3}` |
+| `{:paint, :area}` (a colour, §3.2) | `{"$paint": "area"}` |
 | `{:axis, :y}` | `{"$axis": "y"}` |
 | `{:frame, :top_left}` | `{"$frame": "top_left"}` |
 | `{:data, [x, y]}` | `{"$data": [x, y]}`, the two values as terms |
@@ -1014,7 +1036,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.Style.resolve/3` | `resolve(node, theme, mode)`: the element style map of a style node — the fifteen element keys, every slot resolved through `Visualize.Theme.resolve/3` in `mode`, a dash-array list joined, a `{:field, f}` kept for `bind/4`. Raises `ArgumentError` for a variable. |
+| `Visualize.Chart.Style.resolve/3` | `resolve(node, theme, mode)`: the element style map of a style node — the seventeen element keys, every slot resolved through `Visualize.Theme.resolve/3` in `mode`, a dash-array list joined, a `{:field, f}` kept for `bind/4` and a `{:paint, name}` kept for the frame (§3.2). Raises `ArgumentError` for a variable. |
 | `Visualize.Chart.Style.bind/4` | `bind(style, datum, frame, mode)`: the map of `resolve/3` with every `{:field, f}` read from the datum; a colour key's reading passes through the frame's `color` scale when it declares one and resolves as a slot when it is one; a `nil` reading drops the key. |
 
 A style is looked up by name among the declared styles and the built-in four (§3.3) with its `extends` chain flattened first (§3.5), so neither function ever sees that key; a cycle reached at resolution raises `ArgumentError`, the validator having reported it by path (§10.1).
@@ -1073,6 +1095,9 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Build.var/3` | `var(name, default, opts)`: `%{vars: %{name => %{default: default}}}`, the *declaration* of a variable (§2.4). `Visualize.Chart.var/1` builds the term that *uses* one; the two are different functions of different modules and different arities (§16.2). |
 | `Visualize.Chart.Build.style/2` | As `style/3` with `[]`. |
 | `Visualize.Chart.Build.style/3` | `style(name, keys, opts)`: `%{styles: %{name => node}}` with the node the style keys of §3.1 — `keys` as a map or a keyword list, `opts` merged over it, every key checked. |
+| `Visualize.Chart.Build.gradient/2` | As `gradient/3` with `[]`. |
+| `Visualize.Chart.Build.gradient/3` | `gradient(name, kind, opts)`: `%{defs: %{name => node}}`, a `:gradient` node of §2.7 — `kind` `:linear` or `:radial`, `opts` its remaining keys (`stops:` as a list of `%{offset, colour, opacity}` maps or `{offset, colour}` / `{offset, colour, opacity}` tuples, `angle:`, `centre:`, `radius:`), every key checked. |
+| `Visualize.Chart.Build.paint/1` | `paint(name)`: `{:paint, name}`, the value a `:colour` key takes to refer to a gradient (§3.2). |
 | `Visualize.Chart.Build.theme/1` | `theme(theme)`: `%{theme: theme}`, a theme name or an inline `:theme` node (§2.5). |
 | `Visualize.Chart.Build.cartesian/2` | As `cartesian/3` with `[]`. |
 | `Visualize.Chart.Build.cartesian/3` | `cartesian(width, height, opts)`: `%{frame: %{kind: :cartesian, size: %{width: width, height: height}}}`; `opts` are the frame's remaining keys (§4.1). |
@@ -1498,6 +1523,7 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 | Key | Drawn as |
 |---|---|
 | `stroke_style` | a square's edge stroked single, double, inside or outside |
+| `effect` | a square plain, with a shadow, or blurred |
 | `stroke_linejoin` | a corner joined miter, round or bevel |
 | `stroke_linecap` | a stroke's end butt, round or square |
 | `curve` | the interpolation of one short polyline, by `Visualize.Shape.Line` itself |
@@ -1512,6 +1538,17 @@ Every other enum stays a select of its words; `Glyphs.glyph/2` is total over the
 **A text field is a text field.** A `:text` (§7.1) is a box holding the string with its holes — `Uptime for #{var(:host)}` — whichever form the layer holds it in, and `parse/2` keeps what was typed: a hole that does not read is the validator's fault under the field, not a refusal at the box. A variable reaches a text as text among text: a chip dropped on the box is inserted at the caret as `#{var(:name)}` by `Visualize.Hooks.Builder` — the browser is the only party that knows the caret — and the box's own change writes the string; `bind_field` on a text key does nothing, since a text is never bound whole. `meta.name` is a `:text`, so a title can carry a variable in its middle.
 
 **A list of scalars is a list of items.** A `{:list, scalar}` key — a source's `fields`, a theme's `series` colours — renders as rows, one per item with its text and an **×** that removes it (`list_remove`, by index), and a **+** box whose Enter adds one item read by the element's type through `parse/2` (`list_add`); a blank adds nothing. Both write the whole list, as the schema says a list is one value; removing the last item removes the key. A variable in the list renders as its chip, and a chip dropped on the list adds the variable as an item — `fields: [:t, var(:ycol)]` — which is how a source declares the column a variable chooses, matching the mark whose channel is the same variable (§19.9). Lists of nodes — `marks`, `axes` — are not this: they are nodes, each with a form, and the strip walks them.
+
+**A fill is a fill style.** A style's `fill` (§3.1) is written by a person as *none*, *solid*, a *linear gradient* or a *radial gradient*, and the form shows the fill group opening with that choice as four glyphs named `fill_style`, above the fill's well:
+
+| `fill_style` | Writes | Then shows |
+|---|---|---|
+| `none` | `fill: :none` | the hatched well |
+| `solid` | `fill:` the well's colour — the paint's first stop when the fill was a gradient, else the theme's `:series_1` when it was none or unset | the well |
+| `linear` | a gradient declared under `defs` (§2.7) as `kind: :linear` and `fill: {:paint, name}` | two wells for the first and last stop's colours (`fill.stop.0`, `fill.stop.1`), an opacity slider for each (`fill.stop.0.opacity`), and an **angle** slider (`fill.angle`) |
+| `radial` | the same with `kind: :radial` | the two stop wells and their opacities, and a **centre** as two boxes (`fill.centre.x`, `fill.centre.y`) |
+
+The gradient is **named for the style** it fills — `<style name>_fill`, `marks[0].style` becoming `marks_0_style_fill` — and is declared in the same layer, under `defs`, when the style is picked; picking it again keeps the declaration and its colours, and the first stops are the well's colour at opacity `0.8` fading to `0.1`, the area chart's convention. Picking *solid* or *none* leaves the declaration where it is — a `defs` entry no fill refers to is harmless and a person may come back to it. `fill_style` and the `fill.…` controls are read by the builder, not `Visualize.Chart.Builder.Editor.changes/2`, since they write a second node: `fill_style` declares and writes the fill, `fill.stop.<i>` and `fill.stop.<i>.slot` write a stop's colour as a well's would (a chooser on a selected stop well writes the same names, §19.10, and a patch drops onto a stop well as onto any well), `fill.stop.<i>.opacity`, `fill.angle`, `fill.centre.x` and `fill.centre.y` write those keys of the gradient. A `fill` that is a variable or a binding shows its chip as any field does and no fill style. A well whose value is a paint shows the paint's first stop's colour with the paint's name as its title.
 
 **A face is one control over two keys.** A style's `font_weight` and `font_style` (§3.1) are two CSS axes, and a person names their product — *Regular, Italic, Light, Light Italic, Medium, Medium Italic, Bold, Bold Italic*. The form shows the two keys as one **face list** in the `font_weight` field's place — eight radios named `font_face`, each drawn in its own weight and slant — and `font_style` has no row of its own. `Visualize.Chart.Builder.Editor.changes/2` reads a `font_face` as two writes, the weight word and the style word (`light_italic` is `font_weight: :light, font_style: :italic`; `regular` is `:normal, :normal`), where `change/2` reads every other control as one; the builder applies each write as it would the control's own. The face a node shows is `Visualize.Chart.Builder.Editor.face/2` of its two values — an integer weight is shown as the nearest of 300, 400, 500 and 700 and is left as written until a face is picked, and a missing key reads as `:normal`. The font panel (§19.10) shows the same list under the same name.
 
@@ -2075,7 +2112,7 @@ The names on offer are those the stack declares under `vars` and those any layer
 
 A bare `<input type="color">` would drop the theme slot, and the theme slot is how the built-in styles work; the well shows whichever face the value has, and the chooser offers every face.
 
-**A colour field is a well.** Every `:colour` key in a form — `fill`, `stroke`, a theme's `axis` — renders as one square showing the colour the value resolves to: a slot through the theme the design names (`Visualize.Theme.resolve/3` in `:literal`), a literal as itself, `:none` as a hatched square, an unset key as an empty one; the slot's or literal's word is the well's `title`, and a bound variable shows as its chip in the well's place (§19.9). There is no select of slot names and no picker in the form: a name where the only thing wanted is the colour, and a picker under every colour key, were clutter, and both wrote the key the chooser writes. Clicking the well selects the field and opens the chooser in the context (`select_field`, above). A well is also a **drop target** (`data-builder-well`): every patch in the chooser — a slot, a hue, a colour the chart uses — is draggable (`data-builder-colour`, carried as `application/x-visualize-colour`), and a patch dropped on a well writes that well's key whether or not the field is selected, so one colour is carried to several fields without selecting each. `drop_colour` carries the field and the colour: a word writes the slot as the atom, a `#rrggbb` writes the literal, both through the same `edit` the chooser uses (`key.slot`, `key`), and a key that is not a colour refuses by name. A well in the style panel of the layer context (§18.19) takes a drop the same way, through `edit_style`.
+**A colour field is a well.** Every `:colour` key in a form — `fill`, `stroke`, a theme's `axis` — renders as one square showing the colour the value resolves to: a slot through the theme the design names (`Visualize.Theme.resolve/3` in `:literal`), a literal as itself, a paint as its gradient's first stop (§18.6), `:none` as a hatched square, an unset key as an empty one; the slot's or literal's word is the well's `title`, and a bound variable shows as its chip in the well's place (§19.9). There is no select of slot names and no picker in the form: a name where the only thing wanted is the colour, and a picker under every colour key, were clutter, and both wrote the key the chooser writes. Clicking the well selects the field and opens the chooser in the context (`select_field`, above). A well is also a **drop target** (`data-builder-well`): every patch in the chooser — a slot, a hue, a colour the chart uses — is draggable (`data-builder-colour`, carried as `application/x-visualize-colour`), and a patch dropped on a well writes that well's key whether or not the field is selected, so one colour is carried to several fields without selecting each. `drop_colour` carries the field and the colour: a word writes the slot as the atom, a `#rrggbb` writes the literal, both through the same `edit` the chooser uses (`key.slot`, `key`), and a key that is not a colour refuses by name. A well in the style panel of the layer context (§18.19) takes a drop the same way, through `edit_style`.
 
 | Function | Contract |
 |---|---|
@@ -2083,6 +2120,12 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Editor.well/2` | what a colour well shows for a value and a theme: the resolved colour, `:none`, or nothing |
 | `Visualize.Chart.Builder.Picker.face/1` | which picker a field would get from its key and type: colour, font, glyphs, enum, reference, range or plain |
 | `Visualize.Chart.Builder.Fonts.panel/1` | the font panel over the node being edited: families, size, the face list, anchor, through `edit` |
+| `Visualize.Chart.Builder.Fills.control?/1` | whether a control of the form belongs to the fill group — `fill_style`, `fill.stop.<i>[.slot\|.opacity]`, `fill.angle`, `fill.centre.x\|y` — rather than to a key |
+| `Visualize.Chart.Builder.Fills.name/1` | the gradient named for a style at a path: `:series_fill` for `styles.series`, the path with underscores and `_fill` otherwise |
+| `Visualize.Chart.Builder.Fills.style_of/2` | the fill style a fill value shows as, given the design's `defs`: none, solid, linear or radial |
+| `Visualize.Chart.Builder.Fills.styles/0` | the four fill styles in order |
+| `Visualize.Chart.Builder.Fills.writes/6` | what a fill-group control writes: `{:fill, parsed}`, `{:declare, name, gradient}`, `{:gradient, name, fun}` |
+| `Visualize.Chart.Builder.Fills.view/3` | what the form shows for a fill: its style, its paint's name, and for a gradient its stops, angle and centre |
 | `Visualize.Chart.Builder.Editor.changes/2` | every write a change to the form means — one for most controls, two for a `font_face` — as `{key, {:ok, value} \| :error}` pairs |
 | `Visualize.Chart.Builder.Editor.face/2` | the face a weight and a style show as: one of the eight words, an integer weight rounded to the nearest of the four |
 | `Visualize.Chart.Builder.Editor.faces/0` | the eight faces in order, each with the weight and style it writes |

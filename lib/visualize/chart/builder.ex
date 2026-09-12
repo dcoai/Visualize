@@ -57,6 +57,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart.Builder.{
       Document,
       Editor,
+      Fills,
       Fonts,
       Inspector,
       Layers,
@@ -334,6 +335,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 errors={@errors}
                 refs={@refs}
                 theme={@colour.theme}
+                defs={@defs}
                 strip={false}
                 target={@myself}
               />
@@ -380,6 +382,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               event="edit_style"
               refs={@refs}
               theme={@colour.theme}
+              defs={@defs}
               target={@myself}
             />
             <Picker.panel
@@ -757,9 +760,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # Every edit at a site lands in its local style, never in a named entry (§18.19, D-98).
-    def handle_event("edit_style", params, socket) do
-      {:noreply, Enum.reduce(Editor.changes(:style, params), socket, &styled(&2, &1))}
+    def handle_event("edit_style", %{"_target" => [target]} = params, socket) do
+      if Fills.control?(target) do
+        {:noreply, filled(socket, target, params[target], &styled(&1, &2))}
+      else
+        {:noreply, Enum.reduce(Editor.changes(:style, params), socket, &styled(&2, &1))}
+      end
     end
+
+    def handle_event("edit_style", _params, socket), do: {:noreply, socket}
 
     def handle_event("add_style", %{"name" => submitted}, socket) do
       case Editor.parse({:ref, :style}, String.trim(submitted)) do
@@ -786,11 +795,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- the form, the parameters, the document ------------------------------------------
 
-    def handle_event("edit", params, socket) do
+    def handle_event("edit", %{"_target" => [target]} = params, socket) do
       %{entry: entry} = editing(socket.assigns)
 
-      {:noreply, Enum.reduce(Editor.changes(entry.kind, params), socket, &edited(&2, entry, &1))}
+      if Fills.control?(target) do
+        {:noreply, filled(socket, target, params[target], &edited(&1, entry, &2))}
+      else
+        {:noreply,
+         Enum.reduce(Editor.changes(entry.kind, params), socket, &edited(&2, entry, &1))}
+      end
     end
+
+    def handle_event("edit", _params, socket), do: {:noreply, socket}
 
     def handle_event("set_var", %{"_target" => [name]} = params, socket) do
       %{layers: layers} = editing(socket.assigns)
@@ -956,8 +972,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       edit = if Map.get(params, "edit") == "edit_style", do: "edit_style", else: "edit"
       kind = if edit == "edit_style", do: :style, else: editing(socket.assigns).entry.kind
 
+      stop? = String.starts_with?(field, "fill.stop.")
+
       case Enum.find(Schema.describe(kind), &(to_string(&1.key) == field)) do
         %{type: :colour} ->
+          control = if String.starts_with?(colour, "#"), do: field, else: field <> ".slot"
+          handle_event(edit, %{"_target" => [control], control => colour}, socket)
+
+        nil when stop? ->
           control = if String.starts_with?(colour, "#"), do: field, else: field <> ".slot"
           handle_event(edit, %{"_target" => [control], control => colour}, socket)
 
@@ -1298,6 +1320,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         site: site(assigns, fetch),
         refs: refs(design, assigns.store),
         colour: colour(assigns, entry, at(layer, entry.path), design),
+        defs: Map.get(design, :defs, %{}),
         editing: at(layer, entry.path),
         errors: errors,
         keyless: keyless,
@@ -1358,11 +1381,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
             &(to_string(&1.key) == field and &1.type == :colour)
           )
 
+      # A stop well of a fill's gradient (§18.6): the chooser writes `fill.stop.<i>`.
+      stop = field && stop_colour(field, node, design)
+
       %{
         theme: theme,
-        key: spec && spec.key,
+        key: (spec && spec.key) || (stop && field),
         spec: spec || %{type: :colour, range: nil},
-        value: if(spec && is_map(node), do: Map.get(node, spec.key)),
+        value: if(spec && is_map(node), do: Map.get(node, spec.key), else: stop && stop.colour),
         swatches:
           Enum.map(
             Theme.colour_slots(theme),
@@ -1372,12 +1398,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
       }
     end
 
+    # The colour of a gradient stop the selected field names, from the fill of the node
+    # being edited (§18.6); nil when the field is not a stop well.
+    defp stop_colour("fill.stop." <> i, node, design) do
+      with {index, ""} <- Integer.parse(i),
+           {:paint, name} <- is_map(node) && Map.get(node, :fill),
+           %{stops: stops} when is_list(stops) <- get_in(design, [:defs, name]),
+           %{colour: colour} <- Enum.at(stops, index) do
+        %{colour: colour}
+      else
+        _other -> nil
+      end
+    end
+
+    defp stop_colour(_field, _node, _design), do: nil
+
     # A colour field opens the colour panel and a font key the font panel; any other field
     # leaves the panel where it is.
     defp context_for(socket, key) do
       %{entry: entry} = editing(socket.assigns)
 
+      stop? = is_binary(key) and String.starts_with?(key, "fill.stop.")
+
       case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == key)) do
+        nil when stop? ->
+          :colour
+
         %{type: :colour} ->
           :colour
 
@@ -1742,6 +1788,86 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp drifted(kind, other) do
       "this was opened as a #{kind} and is now a #{other}; a saved #{kind} must still be one"
     end
+
+    # The fill group's controls (spec/14 §18.6): `fill_style` writes the fill and may declare
+    # the gradient named for the style; the `fill.…` controls edit that gradient where it is
+    # declared. `write` is how this form writes the fill itself — the node's or the panel's.
+    defp filled(socket, target, submitted, write) do
+      %{entry: entry, editing: node, design: design} = editing(socket.assigns)
+      value = if(is_map(node), do: Map.get(node, :fill))
+      defs = Map.get(design, :defs, %{})
+      name = Fills.name(entry.path)
+
+      target
+      |> Fills.writes(submitted, value, defs, name, nil)
+      |> Enum.reduce(socket, fn
+        {:fill, parsed}, acc -> write.(acc, {:fill, parsed})
+        {:declare, name, gradient}, acc -> declare_gradient(acc, name, gradient)
+        {:gradient, name, fun}, acc -> update_gradient(acc, name, fun)
+      end)
+      |> assign(:notice, nil)
+    end
+
+    # A gradient is declared where the selected site can hold it: under the site's own
+    # `defs` when the site is a design-level layer, else as a gradient site of its own,
+    # keyed by name, just below (spec/14 §18.6, §19.3).
+    defp declare_gradient(socket, name, gradient) do
+      %{uses: uses, labels: labels, selected: selected} = socket.assigns
+
+      case Stack.get(uses, selected) do
+        nil ->
+          socket
+
+        %Use{local: local} = use ->
+          cond do
+            declares_gradient?(use, name) ->
+              update_gradient(socket, name, fn _old -> gradient end)
+
+            is_map(local) and Fragment.wrapped(local) == nil ->
+              update_layer(socket, [:defs], name, {:ok, gradient})
+
+            true ->
+              site = %{Use.new(nil, uses) | ref: nil, local: %{gradient: gradient}, key: name}
+              at = (Stack.index_of(uses, selected) || length(uses) - 1) + 1
+
+              assign(socket,
+                uses: List.insert_at(uses, at, site),
+                labels: Map.put(labels, site.id, "gradient #{name}")
+              )
+          end
+      end
+    end
+
+    # The gradient is edited in the site that declares it — as a keyed gradient site, or
+    # under a layer's `defs`; one declared only through a library reference is left alone.
+    defp update_gradient(socket, name, fun) do
+      %{uses: uses} = socket.assigns
+
+      case Enum.find(uses, &declares_gradient?(&1, name)) do
+        nil ->
+          assign(socket, :notice, "gradient #{name} is not declared in this stack")
+
+        %Use{id: id, local: %{gradient: body}} ->
+          assign(socket, :uses, Stack.update(uses, id, &%{&1 | local: %{gradient: fun.(body)}}))
+
+        %Use{id: id} ->
+          assign(
+            socket,
+            :uses,
+            Stack.update(uses, id, fn use ->
+              Stack.write(use, [:defs], name, {:ok, fun.(get_in(use.local, [:defs, name]))})
+            end)
+          )
+      end
+    end
+
+    defp declares_gradient?(%Use{local: %{gradient: body}, key: key}, name) when is_map(body),
+      do: key == name
+
+    defp declares_gradient?(%Use{local: local}, name) when is_map(local),
+      do: is_map(local[:defs]) and Map.has_key?(local[:defs], name)
+
+    defp declares_gradient?(_use, _name), do: false
 
     defp edited(socket, _entry, nil), do: socket
     defp edited(socket, entry, {key, parsed}), do: update_layer(socket, entry.path, key, parsed)

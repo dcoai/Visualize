@@ -28,7 +28,8 @@ defmodule Visualize.ChartGen do
           theme <- theme(),
           sources <- sources(),
           vars <- vars(),
-          styles <- styles(theme, vars),
+          defs <- defs(theme, vars),
+          styles <- styles(theme, vars, defs),
           frame <- frame(vars),
           marks <- marks(sources, vars, styles, frame),
           labels <- labels(vars, styles, frame),
@@ -41,6 +42,7 @@ defmodule Visualize.ChartGen do
         vars: vars,
         theme: theme,
         styles: styles,
+        defs: defs,
         frame: frame,
         marks: marks,
         labels: labels
@@ -122,14 +124,48 @@ defmodule Visualize.ChartGen do
     optional_map(%{unit: declaration, accent: declaration, n: declaration})
   end
 
-  defp styles(theme, vars) do
-    style = style(theme, vars)
+  defp styles(theme, vars, defs) do
+    style = style(theme, vars, defs)
     optional_map(%{series: style, muted: style, axis: style})
   end
 
-  defp style(theme, vars) do
+  # The paints (spec/14 §2.7): a gradient in the words a person uses, its stops' colours
+  # any colour a style takes but a paint.
+  defp defs(theme, vars) do
+    stop =
+      fixed_map(%{
+        offset: float(min: 0.0, max: 1.0),
+        colour: with_var([member_of(@colours), slot(theme)], vars)
+      })
+      |> bind(fn stop ->
+        optional_map(%{opacity: float(min: 0.0, max: 1.0)}) |> map(&Map.merge(stop, &1))
+      end)
+
+    gradient =
+      fixed_map(%{
+        kind: member_of([:linear, :radial]),
+        stops: list_of(stop, min_length: 2, max_length: 3)
+      })
+      |> bind(fn g ->
+        optional_map(%{
+          angle: integer(0..360),
+          centre: list_of(float(min: 0.0, max: 1.0), length: 2),
+          radius: float(min: 0.0, max: 1.0)
+        })
+        |> map(&Map.merge(g, &1))
+      end)
+
+    optional_map(%{fade: gradient, glow: gradient})
+  end
+
+  defp style(theme, vars, defs) do
+    paints = if map_size(defs) == 0, do: [], else: [map(member_of(Map.keys(defs)), &{:paint, &1})]
+
     colour =
-      with_var([member_of(@colours), constant(:none), slot(theme), field_ref(@fields)], vars)
+      with_var(
+        [member_of(@colours), constant(:none), slot(theme), field_ref(@fields)] ++ paints,
+        vars
+      )
 
     size = with_var([number(), slot(theme), field_ref(@fields)], vars)
     font = with_var([member_of(@fonts), slot(theme)], vars)
@@ -148,6 +184,9 @@ defmodule Visualize.ChartGen do
       font_size: size,
       font_weight: one_of([integer(100..900), member_of([:normal, :bold])]),
       text_anchor: member_of([:start, :middle, :end]),
+      blend: member_of([:normal, :multiply, :screen, :overlay, :darken, :lighten]),
+      effect: member_of([:none, :shadow, :blur]),
+      effect_radius: size,
       class: text_string(),
       curve: member_of(Schema.curve_types()),
       curve_opts: optional_map(%{tension: number(), alpha: number()}),

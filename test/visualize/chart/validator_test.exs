@@ -37,7 +37,15 @@ defmodule Visualize.Chart.ValidatorTest do
         curve_opts: %{alpha: 0.5},
         fill: {:field, :sha}
       },
-      muted: %{stroke: :axis, opacity: 0.6, font_family: :font_family, symbol: :star}
+      muted: %{stroke: :axis, opacity: 0.6, font_family: :font_family, symbol: :star},
+      wash: %{fill: {:paint, :fade}}
+    },
+    defs: %{
+      fade: %{
+        kind: :linear,
+        stops: [%{offset: 0, colour: :series_1, opacity: 0.8}, %{offset: 1, colour: "#fff"}],
+        angle: 180
+      }
     },
     frame: %{
       kind: :cartesian,
@@ -90,6 +98,8 @@ defmodule Visualize.Chart.ValidatorTest do
     var: [:vars, :unit],
     theme: [:theme],
     style: [:styles, :series],
+    gradient: [:defs, :fade],
+    stop: [:defs, :fade, :stops, 0],
     curve_opts: [:styles, :series, :curve_opts],
     label: [:labels, 0],
     frame: [:frame],
@@ -408,7 +418,7 @@ defmodule Visualize.Chart.ValidatorTest do
                "marks[0].options.radius: is not read by :line"
 
       assert Validator.format({[:styles, :s, :fill], {:type, :colour}}) ==
-               "styles.s.fill: must be a colour string, :none or a theme slot"
+               "styles.s.fill: must be a colour string, :none, a theme slot or a paint"
     end
   end
 

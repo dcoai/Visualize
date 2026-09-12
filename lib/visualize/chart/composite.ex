@@ -28,7 +28,7 @@ defmodule Visualize.Chart.Composite do
   alias Visualize.Chart.{Fragment, Refs, Use}
 
   # The kinds a document keys by name (§19.3).
-  @named [:style, :scale, :source, :var]
+  @named [:style, :scale, :source, :var, :gradient]
 
   # The document version flatten writes: a design is the deployed tier (§19.8).
   @version 1
@@ -168,6 +168,7 @@ defmodule Visualize.Chart.Composite do
         keyed(:scale, Map.get(frame, :scales, %{})) ++
         keyed(:source, Map.get(document, :sources, %{})) ++
         keyed(:var, Map.get(document, :vars, %{})) ++
+        keyed(:gradient, Map.get(document, :defs, %{})) ++
         each(:axis, Map.get(frame, :axes, [])) ++
         each(:mark, Map.get(document, :marks, [])) ++
         each(:label, Map.get(document, :labels, []))
@@ -248,6 +249,9 @@ defmodule Visualize.Chart.Composite do
 
       {:var, body} ->
         {:ok, %{vars: %{key => body}}}
+
+      {:gradient, body} ->
+        {:ok, %{defs: %{key => body}}}
 
       {:mark, body} ->
         {:ok, %{marks: [body]}}

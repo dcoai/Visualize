@@ -72,10 +72,12 @@ Each `IR.Element` type maps to exactly one tag. "attrs" is `element.attrs`, "sty
 | `:linear_gradient` | `linearGradient` | attrs verbatim | children |
 | `:radial_gradient` | `radialGradient` | attrs verbatim | children |
 | `:stop` | `stop` | attrs, style | none |
+| `:filter` | `filter` | attrs verbatim | children |
+| `:fe_drop_shadow`, `:fe_gaussian_blur` | `feDropShadow`, `feGaussianBlur` | attrs (`std_deviation` as `stdDeviation`, `flood_opacity` as `flood-opacity`) | none |
 
 An element with a `clip` (spec/02 §2.1) renders as its definition followed by the element: for `:inside` a `<clipPath id="vis-clip-<h>">` holding the shape (rendered as any element, its style dropped) and `clip-path="url(#vis-clip-<h>)"` on the element; for `:outside` a `<mask id="vis-mask-<h>" maskUnits="userSpaceOnUse" x="-100000" y="-100000" width="200000" height="200000">` holding a white rectangle of that extent and the shape in black, and `mask="url(#vis-mask-<h>)"` on the element. `<h>` is the lower-case base-36 `:erlang.phash2/1` of the shape, so equal shapes share a definition and different ones never collide; the definition stands beside the element, which SVG allows anywhere, so no `defs` need be threaded up the tree.
 
-A path's attrs are the data attributes of spec/10 §12.2 and §14.2 — the datum a per-series path carries and its `data-series` (D-75, D-77); before those a path had no attrs to print. Any other type raises `FunctionClauseError`. Tags in `circle ellipse line path polygon polyline rect image use stop` are emitted self-closing (`<rect …/>`) when they have neither children nor content; all other tags are emitted as `<tag …>content children</tag>`.
+A path's attrs are the data attributes of spec/10 §12.2 and §14.2 — the datum a per-series path carries and its `data-series` (D-75, D-77); before those a path had no attrs to print. Any other type raises `FunctionClauseError`. Tags in `circle ellipse line path polygon polyline rect image use stop feDropShadow feGaussianBlur` are emitted self-closing (`<rect …/>`) when they have neither children nor content; all other tags are emitted as `<tag …>content children</tag>`.
 
 ### 2.4 Attribute serialisation
 
@@ -98,6 +100,9 @@ Tags, attributes and text are rendered by the functions of `Visualize.SVG.Render
 | `:text_anchor` | `:start`, `:middle`, `:end` | `"start"`, `"middle"`, `"end"` |
 | `:stroke_linecap`, `:stroke_linejoin` | any atom | `Atom.to_string/1` |
 | `:dominant_baseline` | any atom | `Atom.to_string/1` |
+
+| `:blend` | any atom | dropped for `:normal`; else `style="mix-blend-mode: <word>"` — an inline `style` attribute, since `mix-blend-mode` is a CSS property and not a presentation attribute every browser honours |
+| `:effect` with `:effect_radius` | `:shadow`, `:blur` | `filter="url(#vis-effect-<effect>-<radius>)"`, the radius `3` when absent; `:none` and `:effect_radius` alone are dropped |
 
 Every other `{key, value}` pair passes through unchanged and is serialised per 2.4, so `stroke_width: 2` becomes `stroke-width="2"` and `font_size: 12` becomes `font-size="12"`.
 
@@ -202,6 +207,8 @@ Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outp
 | `:stroke_linecap` | `{:set_lineCap, [to_string(v)]}` | |
 | `:stroke_linejoin` | `{:set_lineJoin, [to_string(v)]}` | |
 | `:opacity` | `{:set_globalAlpha, [o]}` | |
+| `:blend` | `{:set_globalCompositeOperation, [to_string(v)]}` | omitted for `:normal` |
+| `:effect` | `:shadow`: `{:set_shadowColor, ["rgba(0,0,0,0.35)"]}`, `{:set_shadowBlur, [r]}`, `{:set_shadowOffsetX, [r / 2]}`, `{:set_shadowOffsetY, [r / 2]}`; `:blur`: `{:set_filter, ["blur(<r>px)"]}`; `r` the `:effect_radius`, `3` when absent | omitted for `:none` |
 
 `style_apply_commands/1` emits `{:fill, []}` when `:fill` is present and not `:none`, then `{:stroke, []}` when `:stroke` is present and not `:none`.
 
@@ -409,7 +416,7 @@ The path `M x0,y0` followed by `count` absolute cubic curves `C x1,y1 x2,y2 x,y`
 | `:root` | each child's records, nothing else |
 | any other type | nothing (zero bytes) |
 
-An element's `clip` (spec/02 §2.1) has no record: the element is encoded as it is, unclipped, so an inside or outside stroke (spec/14 §5.6) draws single on the binary stream. Elements of type `:ellipse`, `:line`, `:polyline`, `:polygon`, `:text`, `:title`, `:desc`, `:image`, `:defs`, `:clip_path`, gradients and `:stop` are silently dropped from the binary stream. Text has no binary representation by design; the other geometric types SHOULD be encoded as `path_cubic` records.
+An element's `clip` (spec/02 §2.1) has no record: the element is encoded as it is, unclipped, so an inside or outside stroke (spec/14 §5.6) draws single on the binary stream. Elements of type `:ellipse`, `:line`, `:polyline`, `:polygon`, `:text`, `:title`, `:desc`, `:image`, `:defs`, `:clip_path`, gradients, filters and `:stop` are silently dropped from the binary stream, and a `:blend` or an `:effect` in a style has no record. Text has no binary representation by design; the other geometric types SHOULD be encoded as `path_cubic` records.
 
 ### 4.5 Path form selection
 

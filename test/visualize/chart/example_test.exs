@@ -49,8 +49,9 @@ defmodule Visualize.Chart.ExampleTest do
     design = example()
     assert Validator.validate(design) == :ok
     chart = Chart.from_map!(design)
-    # A text is written as the string it is (§7.1), whatever form the design gave it.
-    assert Chart.to_map(chart) == Visualize.Chart.Migration.canonical(design)
+    # A text is written as the string it is (§7.1), whatever form the design gave it; the
+    # example declares no paints, and `to_map/1` writes the schema's default for them.
+    assert Chart.to_map(chart) == Map.put(Visualize.Chart.Migration.canonical(design), :defs, %{})
     {:ok, json} = Chart.to_json(chart)
     assert Chart.from_json(json) == {:ok, chart}
     # A text travels as its string, with its holes spelt as they are written (§7.1, §11).

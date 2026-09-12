@@ -270,6 +270,17 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:radialGradient, attrs, child_content, nil)
   end
 
+  defp do_render_element(%Element{type: :filter, attrs: attrs, children: children}) do
+    child_content = Enum.map(children, &do_render_element/1)
+    render_svg_tag(:filter, attrs, child_content, nil)
+  end
+
+  defp do_render_element(%Element{type: :fe_drop_shadow, attrs: attrs}),
+    do: render_svg_tag(:feDropShadow, attrs, [], nil)
+
+  defp do_render_element(%Element{type: :fe_gaussian_blur, attrs: attrs}),
+    do: render_svg_tag(:feGaussianBlur, attrs, [], nil)
+
   defp do_render_element(%Element{type: :stop, attrs: attrs, style: style}) do
     all_attrs = Map.merge(attrs, style_to_attrs(style))
     render_svg_tag(:stop, all_attrs, [], nil)
@@ -316,6 +327,7 @@ defmodule Visualize.Backend.SVG do
 
   defp style_to_attrs(style) do
     style
+    |> effects()
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
     |> Enum.map(fn
       {:fill, :none} -> {:fill, "none"}
@@ -332,6 +344,30 @@ defmodule Visualize.Backend.SVG do
     end)
     |> Map.new()
   end
+
+  # A blend is an inline style (spec/09 §2.5), an effect a filter reference to the filter
+  # the frame declared for its pair (spec/14 §2.7); the radius alone says nothing.
+  defp effects(style) do
+    {blend, style} = Map.pop(style, :blend)
+    {effect, style} = Map.pop(style, :effect)
+    {radius, style} = Map.pop(style, :effect_radius)
+
+    style
+    |> then(
+      &if(blend in [nil, :normal], do: &1, else: Map.put(&1, :style, "mix-blend-mode: #{blend}"))
+    )
+    |> then(
+      &if(effect in [nil, :none],
+        do: &1,
+        else: Map.put(&1, :filter, "url(##{effect_id(effect, radius)})")
+      )
+    )
+  end
+
+  @doc false
+  # The id of the filter an effect and a radius share (spec/14 §2.7).
+  @spec effect_id(atom(), number() | nil) :: String.t()
+  def effect_id(effect, radius), do: "vis-effect-#{effect}-#{radius || 3}"
 
   defp maybe_add_transform(attrs, nil), do: attrs
   defp maybe_add_transform(attrs, %Transform{operations: []}), do: attrs

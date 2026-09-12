@@ -5,7 +5,7 @@
     <form class="vis-builder-new" phx-submit="new_fragment" phx-target="-1">
       <label class="vis-builder-control-label" for="builder-new-kind">New</label>
       <select id="builder-new-kind" name="kind" class="vis-builder-new-kind">
-        <option value="composite">composite</option><option value="theme">theme</option><option value="style">style</option><option value="frame">frame</option><option value="scale">scale</option><option value="axis">axis</option><option value="source">source</option><option value="var">var</option><option value="mark">mark</option><option value="label">label</option>
+        <option value="composite">composite</option><option value="theme">theme</option><option value="style">style</option><option value="frame">frame</option><option value="scale">scale</option><option value="axis">axis</option><option value="source">source</option><option value="var">var</option><option value="gradient">gradient</option><option value="mark">mark</option><option value="label">label</option>
       </select>
       <button type="submit" class="vis-builder-new-submit">New</button>
     </form>
@@ -95,6 +95,8 @@
   
   
   
+  
+  
   <select name="extends">
     <option value=""></option>
     <option value="series">series</option>
@@ -119,6 +121,22 @@
   
   
   
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
+    <label class="vis-builder-glyph" title="none">
+      <input type="radio" name="fill_style" value="none" aria-label="none">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 19 L19 5" stroke="currentColor" stroke-width="1.5"/></svg>
+    </label><label class="vis-builder-glyph vis-builder-glyph-on" title="solid">
+      <input type="radio" name="fill_style" value="solid" checked aria-label="solid">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="linear">
+      <input type="radio" name="fill_style" value="linear" aria-label="linear">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><linearGradient id="vis-glyph-linear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></linearGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-linear)" stroke="currentColor" stroke-width="1"/></svg>
+    </label><label class="vis-builder-glyph" title="radial">
+      <input type="radio" name="fill_style" value="radial" aria-label="radial">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><radialGradient id="vis-glyph-radial"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></radialGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-radial)" stroke="currentColor" stroke-width="1"/></svg>
+    </label>
+  </span>
   <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="no colour set" role="img" aria-label="fill: not set" data-builder-well="fill"></span>
   
   
@@ -132,10 +150,12 @@
   </span>
   
   
+  
   <input type="range" name="fill_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
   
   
   <input type="text" name="fill_opacity">
+  
   
   
   
@@ -154,6 +174,8 @@
     stroke_style
     
   </span>
+  
+  
   
   
   
@@ -188,10 +210,12 @@
   </span>
   
   
+  
   <input type="range" name="stroke_width.range" class="vis-builder-range" min="0" max="20" step="0.5" value="2" aria-label="stroke_width, dragged">
   
   
   <input type="text" name="stroke_width" value="2">
+  
   
   
   
@@ -204,6 +228,8 @@
     stroke
     
   </span>
+  
+  
   
   
   
@@ -224,10 +250,12 @@
   </span>
   
   
+  
   <input type="range" name="stroke_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="stroke_opacity, dragged">
   
   
   <input type="text" name="stroke_opacity">
+  
   
   
   
@@ -245,7 +273,9 @@
   
   
   
+  
   <input type="text" name="stroke_dasharray">
+  
   
   
   
@@ -258,6 +288,8 @@
     stroke_linejoin
     
   </span>
+  
+  
   
   
   
@@ -287,6 +319,8 @@
     stroke_linecap
     
   </span>
+  
+  
   
   
   
@@ -327,7 +361,9 @@
   
   
   
+  
   <input type="text" name="font_family">
+  
   
   
   
@@ -342,10 +378,12 @@
   </span>
   
   
+  
   <input type="range" name="font_size.range" class="vis-builder-range" min="6" max="72" step="1" value="6" aria-label="font_size, dragged">
   
   
   <input type="text" name="font_size">
+  
   
   
   
@@ -358,6 +396,7 @@
     font_weight
     
   </span>
+  
   
   
   
@@ -397,6 +436,7 @@
   
   
   
+  
 </label>
       </fieldset>
       
@@ -408,6 +448,8 @@
     text_anchor
     
   </span>
+  
+  
   
   
   
@@ -445,10 +487,86 @@
   </span>
   
   
+  
   <input type="range" name="opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="opacity, dragged">
   
   
   <input type="text" name="opacity">
+  
+  
+  
+  
+  
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="blend" phx-click="select_field" phx-keyup="select_field" phx-value-field="blend" phx-target="-1">
+  <span class="vis-builder-key">
+    blend
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="blend">
+    <option value=""></option>
+    <option value="normal">normal</option><option value="multiply">multiply</option><option value="screen">screen</option><option value="overlay">overlay</option><option value="darken">darken</option><option value="lighten">lighten</option>
+  </select>
+  
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="effect" phx-click="select_field" phx-keyup="select_field" phx-value-field="effect" phx-target="-1">
+  <span class="vis-builder-key">
+    effect
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="effect">
+    <label class="vis-builder-glyph" title="none">
+      <input type="radio" name="effect" value="none" aria-label="none">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="shadow">
+      <input type="radio" name="effect" value="shadow" aria-label="shadow">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" fill="currentColor" opacity="0.35"/><rect x="5" y="5" width="12" height="12" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="blur">
+      <input type="radio" name="effect" value="blur" aria-label="blur">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><filter id="vis-glyph-blur"><feGaussianBlur stdDeviation="1.5"/></filter></defs><rect x="6" y="6" width="12" height="12" fill="currentColor" filter="url(#vis-glyph-blur)"/></svg>
+    </label>
+  </span>
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="effect_radius" phx-click="select_field" phx-keyup="select_field" phx-value-field="effect_radius" phx-target="-1">
+  <span class="vis-builder-key">
+    effect_radius
+    
+  </span>
+  
+  
+  
+  <input type="range" name="effect_radius.range" class="vis-builder-range" min="0" max="20" step="0.5" value="0" aria-label="effect_radius, dragged">
+  
+  
+  <input type="text" name="effect_radius">
+  
   
   
   
@@ -471,7 +589,9 @@
   
   
   
+  
   <input type="text" name="class">
+  
   
   
   
@@ -484,6 +604,8 @@
     curve
     
   </span>
+  
+  
   
   
   
@@ -545,6 +667,8 @@
   
   
   
+  
+  
   <textarea name="curve_opts"></textarea>
   
 </label><label class="vis-builder-field" data-builder-bind="symbol" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol" phx-target="-1">
@@ -552,6 +676,8 @@
     symbol
     
   </span>
+  
+  
   
   
   
@@ -598,7 +724,9 @@
   
   
   
+  
   <input type="text" name="symbol_size">
+  
   
   
   
@@ -841,7 +969,7 @@
   </tbody>
 </table>
     <div class="vis-builder-document">
-  <textarea class="vis-builder-export" readonly>{&quot;frame&quot;:{&quot;axes&quot;:[{&quot;scale&quot;:&quot;x&quot;,&quot;side&quot;:&quot;bottom&quot;,&quot;ticks&quot;:3},{&quot;scale&quot;:&quot;y&quot;,&quot;side&quot;:&quot;left&quot;,&quot;ticks&quot;:3}],&quot;kind&quot;:&quot;cartesian&quot;,&quot;margin&quot;:{&quot;bottom&quot;:30,&quot;left&quot;:40,&quot;right&quot;:20,&quot;top&quot;:20},&quot;scales&quot;:{&quot;x&quot;:{&quot;domain&quot;:&quot;auto&quot;,&quot;kind&quot;:&quot;linear&quot;},&quot;y&quot;:{&quot;domain&quot;:[0,&quot;auto&quot;],&quot;kind&quot;:&quot;linear&quot;}},&quot;size&quot;:{&quot;height&quot;:200,&quot;width&quot;:400}},&quot;labels&quot;:[{&quot;anchor&quot;:&quot;title&quot;,&quot;text&quot;:&quot;Uptime — #{var(:unit)}&quot;}],&quot;marks&quot;:[{&quot;channels&quot;:{&quot;x&quot;:&quot;t&quot;,&quot;y&quot;:&quot;v&quot;},&quot;data&quot;:&quot;primary&quot;,&quot;id&quot;:&quot;series&quot;,&quot;style&quot;:&quot;series&quot;,&quot;type&quot;:&quot;line&quot;}],&quot;meta&quot;:{},&quot;sources&quot;:{&quot;primary&quot;:{&quot;fields&quot;:[&quot;t&quot;,&quot;v&quot;]}},&quot;styles&quot;:{&quot;series&quot;:{&quot;stroke&quot;:&quot;series_1&quot;,&quot;stroke_width&quot;:2}},&quot;theme&quot;:&quot;default&quot;,&quot;vars&quot;:{&quot;unit&quot;:{&quot;default&quot;:&quot;%&quot;}},&quot;version&quot;:1}</textarea>
+  <textarea class="vis-builder-export" readonly>{&quot;defs&quot;:{},&quot;frame&quot;:{&quot;axes&quot;:[{&quot;scale&quot;:&quot;x&quot;,&quot;side&quot;:&quot;bottom&quot;,&quot;ticks&quot;:3},{&quot;scale&quot;:&quot;y&quot;,&quot;side&quot;:&quot;left&quot;,&quot;ticks&quot;:3}],&quot;kind&quot;:&quot;cartesian&quot;,&quot;margin&quot;:{&quot;bottom&quot;:30,&quot;left&quot;:40,&quot;right&quot;:20,&quot;top&quot;:20},&quot;scales&quot;:{&quot;x&quot;:{&quot;domain&quot;:&quot;auto&quot;,&quot;kind&quot;:&quot;linear&quot;},&quot;y&quot;:{&quot;domain&quot;:[0,&quot;auto&quot;],&quot;kind&quot;:&quot;linear&quot;}},&quot;size&quot;:{&quot;height&quot;:200,&quot;width&quot;:400}},&quot;labels&quot;:[{&quot;anchor&quot;:&quot;title&quot;,&quot;text&quot;:&quot;Uptime — #{var(:unit)}&quot;}],&quot;marks&quot;:[{&quot;channels&quot;:{&quot;x&quot;:&quot;t&quot;,&quot;y&quot;:&quot;v&quot;},&quot;data&quot;:&quot;primary&quot;,&quot;id&quot;:&quot;series&quot;,&quot;style&quot;:&quot;series&quot;,&quot;type&quot;:&quot;line&quot;}],&quot;meta&quot;:{},&quot;sources&quot;:{&quot;primary&quot;:{&quot;fields&quot;:[&quot;t&quot;,&quot;v&quot;]}},&quot;styles&quot;:{&quot;series&quot;:{&quot;stroke&quot;:&quot;series_1&quot;,&quot;stroke_width&quot;:2}},&quot;theme&quot;:&quot;default&quot;,&quot;vars&quot;:{&quot;unit&quot;:{&quot;default&quot;:&quot;%&quot;}},&quot;version&quot;:1}</textarea>
   
   <form class="vis-builder-import" phx-submit="import" phx-target="-1">
     <textarea name="document"></textarea>
