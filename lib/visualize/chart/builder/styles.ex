@@ -1077,6 +1077,58 @@ if Code.ensure_loaded?(Phoenix.Component) do
       text-decoration: line-through;
     }
 
+    /* A drawn enum: one glyph per value, the chosen one framed (spec/14 §18.6). */
+    .vis-builder-glyphs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .vis-builder-glyph {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: var(--vis-builder-panel);
+      color: var(--vis-builder-ink);
+      cursor: pointer;
+    }
+
+    .vis-builder-glyph:hover {
+      border-color: var(--vis-builder-muted);
+    }
+
+    .vis-builder-glyph-on {
+      border-color: var(--vis-builder-accent);
+      box-shadow: inset 0 0 0 1px var(--vis-builder-accent);
+      color: var(--vis-builder-accent);
+    }
+
+    .vis-builder-glyph input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .vis-builder-glyph:focus-within {
+      outline: 2px solid var(--vis-builder-accent);
+      outline-offset: 1px;
+    }
+
+    .vis-builder-glyph-svg {
+      display: block;
+    }
+
     /* A colour's three faces sit in one row: the slot, the picker, the switch. */
     .vis-builder .vis-builder-slot {
       max-width: 9em;

@@ -1466,6 +1466,21 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 
 `Visualize.Chart.Builder.Editor.parse/2` reads a `{:one_of, …}` as its first alternative too, the one whose widget the control is, so what a person can type and what the reader accepts are the same thing.
 
+**A drawn enum is chosen by its picture.** Some enums name a *look* — the join of a stroke, the shape of a curve, a symbol, a side — and choosing a look by reading its name is the opposite of what a drawing tool does. Where `Visualize.Chart.Builder.Glyphs.drawn?/1` says a key's values have a picture, the form draws the `{:select, allowed}` as a **radio group of glyphs**: one `<label class="vis-builder-glyph">` per allowed value holding the SVG `Visualize.Chart.Builder.Glyphs.glyph/2` draws for it, the word as the option's title and accessible name, the chosen one checked. The widget and the reader are unchanged — a radio submits the word the select would, and `parse/2` reads it the same — so this is a face of the control, not a new type; it is decided by the *key* and not the type because one enum type (`top`, `bottom`, `left`, `right`) is a side on an axis and an anchor on a label, and the pictures differ.
+
+| Key | Drawn as |
+|---|---|
+| `stroke_linejoin` | a corner joined miter, round or bevel |
+| `stroke_linecap` | a stroke's end butt, round or square |
+| `curve` | the interpolation of one short polyline, by `Visualize.Shape.Line` itself |
+| `symbol` | the symbol, by `Visualize.Shape.Symbol` itself |
+| `side` | a plot with that edge marked |
+| `anchor`, `position`, `text_anchor` | a box with the place marked |
+| `orientation` | bars standing, or lying |
+| `kind` of a frame | cartesian axes, a polar ring, a globe, a facet grid |
+
+Every other enum stays a select of its words; `Glyphs.glyph/2` is total over the drawn keys' values, which a test walks.
+
 A `:textarea` holds the value as `inspect/1` writes it and `parse/2` reads it back as a **literal**: the string is parsed with `Code.string_to_quoted/1` — parsed, never evaluated — and the quoted form is accepted only where it is a number, a string, an atom, `true`, `false`, `nil`, a list, a tuple, a map, a `%Visualize.Chart.Var{}` or a `~U` sigil, which is the whole vocabulary a design may contain (§1.4). Anything else — a call, an operator, a variable, any other struct — is `:error`, so a design map cannot acquire a function or a term the codec has no form for (§11). That the reader is one walk over the literal grammar rather than a rule per type is what keeps it total: a type added to the schema needs no case here.
 
 The other widgets read what their control can produce: a checkbox is `true` or `false`, a number is an integer for `:integer` and an integer or a float for `:number`, a select is the listed atom the string names, a `:text` control is the string itself for `:string`, the atom of the string for a name, a field, a slot or a reference, and otherwise the loose reading a person expects — a leading `:` is an atom, a numeral is a number, and everything else is the string, which is how `#3b6fa8` reaches a `:colour` and `:series_1` reaches the same key as a theme slot. A blank string is `:error` for every type, and blanking a control is how a key is removed rather than set to nothing.
@@ -2021,6 +2036,8 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Masks.panel/1` | the selected layer's context: mask checkboxes over its paths, and its free variables |
 | `Visualize.Chart.Builder.Masks.paths/1` | the paths a contribution can mask: top-level keys and each node's keys, sorted |
 | `Visualize.Chart.Builder.Masks.toggle/3` | a use with a path added to or removed from its mask, as its checkbox says; a site masked as a whole is left alone |
+| `Visualize.Chart.Builder.Glyphs.drawn?/1` | whether a key's enum is chosen by its picture (§18.6) |
+| `Visualize.Chart.Builder.Glyphs.glyph/2` | the inline SVG for one value of a drawn key, or `nil` |
 | `Visualize.Chart.Builder.Masks.keyed?/1` | whether a contribution is of a kind the document keys by name, so the panel offers the key control |
 | `Visualize.Chart.Builder.Stack.unmasked/2` | what a site contributes before its mask and bindings |
 

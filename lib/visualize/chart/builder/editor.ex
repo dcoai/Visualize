@@ -21,7 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.Store
+    alias Visualize.Chart.Builder.{Glyphs, Store}
     alias Visualize.Chart.{Fragment, Schema, Validator, Var}
 
     @typedoc "The control a key's type gets (spec/14 §18.6)."
@@ -536,7 +536,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
               value={field.value}
               title={field.value || "a colour"}
             />
-            <select :if={is_nil(field.variable) and field.widget == :select} name={field.key}>
+            <select
+              :if={is_nil(field.variable) and field.widget == :select and field.glyphs == []}
+              name={field.key}
+            >
               <option value=""></option>
               <option
                 :for={{value, label} <- field.options}
@@ -544,6 +547,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 selected={field.value == value}
               >{label}</option>
             </select>
+            <span
+              :if={is_nil(field.variable) and field.widget == :select and field.glyphs != []}
+              class="vis-builder-glyphs"
+              role="radiogroup"
+              aria-label={to_string(field.key)}
+            >
+              <label
+                :for={{value, svg} <- field.glyphs}
+                class={"vis-builder-glyph" <> if(field.value == value, do: " vis-builder-glyph-on", else: "")}
+                title={value}
+              >
+                <input
+                  type="radio"
+                  name={field.key}
+                  value={value}
+                  checked={field.value == value}
+                  aria-label={value}
+                />
+                {Phoenix.HTML.raw(svg)}
+              </label>
+            </span>
             <textarea
               :if={is_nil(field.variable) and field.widget == :textarea}
               name={field.key}
@@ -575,6 +599,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           key: spec.key,
           ref: ref_field(spec.type),
           widget: shape(widget),
+          glyphs: glyphs(spec.key, widget),
           options: options(widget),
           checked: Map.get(node, spec.key) == true,
           value: shown(widget, Map.fetch(node, spec.key)),
@@ -618,6 +643,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp shape({:select, _allowed}), do: :select
     defp shape(widget), do: widget
+
+    # A drawn enum is chosen by its picture (§18.6): one glyph per allowed value, where the
+    # key is drawn and every value has one — `kind` is drawn for a frame and not a scale.
+    defp glyphs(key, {:select, allowed}) do
+      if Glyphs.drawn?(key) do
+        pictures = Enum.map(allowed, &{option(&1), Glyphs.glyph(key, &1)})
+        if Enum.all?(pictures, fn {_v, svg} -> svg != nil end), do: pictures, else: []
+      else
+        []
+      end
+    end
+
+    defp glyphs(_key, _widget), do: []
 
     # A reference field is a drop target for a library entry of its kind (§19.10).
     defp ref_field({:ref, kind}), do: to_string(kind)

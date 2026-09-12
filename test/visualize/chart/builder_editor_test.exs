@@ -12,6 +12,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
   doctest Visualize.Chart.Builder.Styles
   doctest Visualize.Chart.Builder.Palette
   doctest Visualize.Chart.Builder.Library
+  doctest Visualize.Chart.Builder.Glyphs
   doctest Visualize.Chart.Builder.StyleStack
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
@@ -74,6 +75,91 @@ defmodule Visualize.Chart.Builder.EditorTest do
       named = Enum.map(Editor.nodes(%{theme: :dark}), & &1.label)
       assert inline == ["design", "theme"]
       assert named == ["design"]
+    end
+  end
+
+  describe "a drawn enum is chosen by its picture (spec/14 §18.6)" do
+    alias Visualize.Chart.Builder.Glyphs
+
+    test "every value of every drawn key has a picture, and an undrawn key has none" do
+      drawn = [
+        stroke_linejoin: [:miter, :round, :bevel],
+        stroke_linecap: [:butt, :round, :square],
+        curve: Schema.curve_types(),
+        symbol: Schema.symbol_types(),
+        side: [:top, :right, :bottom, :left],
+        anchor: [:top, :bottom, :left, :right, :start, :middle, :end],
+        position: [
+          :top_left,
+          :top_right,
+          :bottom_left,
+          :bottom_right,
+          :top,
+          :bottom,
+          :left,
+          :right
+        ],
+        text_anchor: [:start, :middle, :end],
+        orientation: [:vertical, :horizontal],
+        kind: [:cartesian, :polar, :geo, :facet]
+      ]
+
+      for {key, values} <- drawn, value <- values do
+        assert Glyphs.drawn?(key)
+        svg = Glyphs.glyph(key, value)
+        assert is_binary(svg) and svg =~ "<svg", "#{key} #{value} has no picture"
+      end
+
+      refute Glyphs.drawn?(:op)
+      assert Glyphs.glyph(:op, :sum) == nil
+      # A scale's kind is not a frame's: the values decide, and a scale kind has none.
+      assert Glyphs.glyph(:kind, :linear) == nil
+    end
+
+    test "the form draws a radio per value, the chosen one checked, the word as the name" do
+      html =
+        render_component(&Editor.panel/1, %{
+          kind: :style,
+          node: %{stroke_linejoin: :round, curve: :step},
+          path: [:styles, :series],
+          facet: :style
+        })
+
+      assert html =~
+               ~s(<span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke_linejoin">)
+
+      assert html =~ ~s(<label class="vis-builder-glyph vis-builder-glyph-on" title="round">)
+
+      assert html =~
+               ~s(<input type="radio" name="stroke_linejoin" value="round" checked aria-label="round">)
+
+      assert html =~
+               ~s(<input type="radio" name="stroke_linejoin" value="miter" aria-label="miter">)
+
+      assert html =~ ~s(stroke-linejoin="bevel")
+      refute html =~ ~s(<select name="stroke_linejoin">)
+
+      # A curve is drawn by the library's own line generator.
+      assert html =~
+               ~s(<input type="radio" name="curve" value="monotone_x" aria-label="monotone_x">)
+
+      assert length(Regex.scan(~r/name="curve" value=/, html)) == length(Schema.curve_types())
+
+      # And it submits the word the select would.
+      assert Editor.change(:style, %{"_target" => ["curve"], "curve" => "natural"}) ==
+               {:curve, {:ok, :natural}}
+    end
+
+    test "a scale's kind stays a select: its values have no picture" do
+      html =
+        render_component(&Editor.panel/1, %{
+          kind: :scale,
+          node: %{kind: :linear},
+          path: [:frame, :scales, :x]
+        })
+
+      assert html =~ ~s(<select name="kind">)
+      refute html =~ "vis-builder-glyphs"
     end
   end
 
@@ -215,7 +301,10 @@ defmodule Visualize.Chart.Builder.EditorTest do
 
       assert keys == ~w(scale side ticks grid offset)
       assert html =~ ~s(<input type="text" name="scale" value="x">)
-      assert html =~ ~s(<option value="bottom" selected>bottom</option>)
+      # A side is a drawn enum (§18.6): the chosen one is the checked glyph.
+      assert html =~
+               ~s(<input type="radio" name="side" value="bottom" checked aria-label="bottom">)
+
       assert html =~ ~s(<input type="checkbox" name="grid" value="true">)
     end
 
