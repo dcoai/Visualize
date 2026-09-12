@@ -21,10 +21,12 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.Chart.Builder.Palette
   alias Visualize.Chart.Builder.Preview
   alias Visualize.Chart.Builder.StyleStack
+  alias Visualize.Chart.Builder.Variables
   alias Visualize.Chart.Use
 
   doctest Visualize.Chart.Builder.Masks
   doctest Visualize.Chart.Builder.Picker
+  doctest Visualize.Chart.Builder.Variables
 
   for name <- ~w(preview preview_errors builder builder_store)a do
     test "#{name} renders as recorded" do
@@ -125,7 +127,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert sidebar =~ ~s(class="vis-builder-layers")
 
       [_, main] = String.split(html, ~s(<main class="vis-builder-main">), parts: 2)
-      assert main =~ ~s(<nav class="vis-builder-nodes">)
+      assert main =~ ~s(class="vis-builder-nodes")
       assert main =~ ~s(class="vis-builder-editor")
       assert main =~ ~s(class="vis-builder-preview")
     end
@@ -136,11 +138,9 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The selected layer is `house`, which declares three of them; the strip shows all
       # seven, because a person asks where the marks are, not which fragment holds them.
-      # The strip ends with the Variables tab, which is a root of the builder's own
-      # (spec/14 §19.10).
-      # The design's own root is not a tab (§18.13): nothing at it is a person's to edit.
-      assert tabs(html, "vis-builder-node") ==
-               ~w(sources vars styles frame marks labels variables)
+      # The design's own root is not a tab (§18.13), and variables are chips in the
+      # context, not a tab (§19.10).
+      assert tabs(html, "vis-builder-node") == ~w(sources vars styles frame marks labels)
     end
 
     test "a root the selected layer does not declare is marked elsewhere" do
@@ -190,7 +190,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert Editor.facets(:meta) == [:content]
       assert html =~ ~s(phx-value-root="meta")
-      refute html =~ "vis-builder-chips"
+      refute html =~ ~s(class="vis-builder-chips")
     end
 
     test "a facet chip carries its facet and a node chip carries its node" do
@@ -1060,7 +1060,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<select name="stroke.slot" class="vis-builder-slot")
       assert html =~ ~s(<option value="series_1" selected>series_1</option>)
       assert html =~ ~s(<input type="color" name="stroke" class="vis-builder-colour")
-      assert html =~ ~s(<select name="stroke.mode" class="vis-builder-mode")
+      refute html =~ "stroke.mode"
 
       # A slot chosen is the atom; the picker's hex is the string; blank removes.
       assert Editor.change(:style, %{"_target" => ["fill.slot"], "fill.slot" => "axis"}) ==
@@ -1557,13 +1557,14 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
-  describe "a field shows a variable as a variable (spec/14 §19.9)" do
+  describe "a variable is a chip (spec/14 §19.9)" do
     setup do
       house = %{
         version: 1,
         styles: %{series: %{stroke: Chart.var(:color), stroke_width: 2}},
         frame: %{kind: :cartesian, size: %{width: 400, height: 200}},
-        vars: %{color: %{default: :series_1}}
+        vars: %{color: %{default: :series_1}, unit: %{default: "%"}},
+        labels: [%{id: :t, anchor: :title, text: ["u ", Chart.var(:unit)]}]
       }
 
       host = %{id: "b", layers: [{:house, house}], sources: %{}}
@@ -1573,187 +1574,183 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, socket} =
         Builder.handle_event("select_node", %{"node" => "styles.series"}, socket)
 
-      %{socket: socket, house: house}
+      %{socket: socket}
     end
 
-    test "a variable renders as a variable, with the switch on and its name in the box", %{
-      house: house
-    } do
-      html =
-        render_component(Builder, %{
-          id: "b",
-          layers: [{:house, house}],
-          styles: false,
-          node_label: "styles.series"
-        })
-
-      # stroke is a variable: the switch says so and the name box shows it; no text box.
-      assert html =~ ~s(<option value="variable" selected>variable</option>)
-      assert html =~ ~s(name="stroke.var" value="color")
-      refute html =~ ~s(type="text" name="stroke" )
-
-      # stroke_width is a literal: the switch says so and the number box is there.
-      assert html =~ ~s(type="text" name="stroke_width" value="2")
-
-      # The datalist offers the names that exist.
-      assert html =~ ~s(<datalist id="b-editor-variables">)
-      assert html =~ ~s(<option value="color"></option>)
-    end
-
-    test "switching a literal to a variable writes var(:key)", %{socket: s} do
-      {:noreply, s} =
-        Builder.handle_event(
-          "edit",
-          %{"_target" => ["stroke_width.mode"], "stroke_width.mode" => "variable"},
-          s
-        )
-
-      {_name, house} = hd(BuilderFixture.layers(s))
-      assert house.styles.series.stroke_width == Chart.var(:stroke_width)
-    end
-
-    test "naming the variable renames it", %{socket: s} do
-      {:noreply, s} =
-        Builder.handle_event("edit", %{"_target" => ["stroke.var"], "stroke.var" => "hue"}, s)
-
-      {_name, house} = hd(BuilderFixture.layers(s))
-      assert house.styles.series.stroke == Chart.var(:hue)
-    end
-
-    test "switching a variable to a literal removes the key, so the typed control waits", %{
+    test "a bound field renders the chip in place of its control, with an × that unbinds", %{
       socket: s
     } do
-      {:noreply, s} =
-        Builder.handle_event(
-          "edit",
-          %{"_target" => ["stroke.mode"], "stroke.mode" => "literal"},
-          s
-        )
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(class="vis-builder-var-chip vis-builder-var-chip-bound")
+      assert html =~ "var(:color)"
+      assert html =~ ~s(phx-click="unbind_field" phx-value-field="stroke")
+      refute html =~ ~s(name="stroke.slot")
+      refute html =~ "stroke.mode"
+      refute html =~ "stroke.var"
 
-      {_name, house} = hd(BuilderFixture.layers(s))
+      {:noreply, unbound} = Builder.handle_event("unbind_field", %{"field" => "stroke"}, s)
+      {_, house} = hd(BuilderFixture.layers(unbound))
       refute Map.has_key?(house.styles.series, :stroke)
+      assert BuilderFixture.render(unbound) =~ ~s(name="stroke.slot")
     end
 
-    test "a blank name is a removal, and a key the kind lacks changes nothing", %{socket: s} do
-      {:noreply, blank} =
-        Builder.handle_event("edit", %{"_target" => ["stroke.var"], "stroke.var" => "  "}, s)
+    test "a chip dropped on a field binds it; a mismatch is refused by name; untyped takes the type",
+         %{
+           socket: s
+         } do
+      # `color` is a colour by its use at stroke; fill takes it.
+      {:noreply, s} =
+        Builder.handle_event("bind_field", %{"field" => "fill", "name" => "color"}, s)
 
-      {_name, house} = hd(BuilderFixture.layers(blank))
-      refute Map.has_key?(house.styles.series, :stroke)
+      {_, house} = hd(BuilderFixture.layers(s))
+      assert house.styles.series.fill == Chart.var(:color)
 
-      {:noreply, same} =
-        Builder.handle_event("edit", %{"_target" => ["zzz.mode"], "zzz.mode" => "variable"}, s)
+      # `unit` is text by its use in a label; a colour field refuses it by name.
+      {:noreply, refused} =
+        Builder.handle_event("bind_field", %{"field" => "opacity", "name" => "unit"}, s)
 
-      assert BuilderFixture.layers(same) == BuilderFixture.layers(s)
-    end
+      assert refused.assigns.notice =~ "unit is a :text; opacity takes a :size"
+      {_, house} = hd(BuilderFixture.layers(refused))
+      refute Map.has_key?(house.styles.series, :opacity)
 
-    test "the style context panel takes the same switch, into the local style", %{socket: s} do
-      # Open the mark that references :series, then its entry, then flip a key to a variable.
-      layers = [
-        {:house, %{styles: %{series: %{stroke_width: 2}}}},
-        {:panel, %{marks: [%{id: :m, type: :line, style: :series}]}}
-      ]
-
-      {:ok, s} = Builder.update(%{id: "b", layers: layers, sources: %{}}, s)
-      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
-      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
-      {:noreply, s} = Builder.handle_event("select_style_entry", %{"index" => "0"}, s)
+      # A variable used nowhere takes the control's type by landing there.
+      {:noreply, s} =
+        Builder.handle_event("create_variable", %{"name" => "fresh", "default" => ""}, s)
 
       {:noreply, s} =
-        Builder.handle_event(
-          "edit_style",
-          %{"_target" => ["opacity.mode"], "opacity.mode" => "variable"},
-          s
+        Builder.handle_event("bind_field", %{"field" => "opacity", "name" => "fresh"}, s)
+
+      [fresh] =
+        Enum.filter(
+          Variables.list(BuilderFixture.layers(s), BuilderFixture.design(s)),
+          &(&1.name == :fresh)
         )
 
-      assert BuilderFixture.style_at(s) == [:series, %{opacity: Chart.var(:opacity)}]
+      assert fresh.type == :size
+
+      # And the field row carries every key as a drop target, in the field's markup.
+      assert BuilderFixture.render(s) =~ ~s(data-builder-bind="stroke_width")
+    end
+
+    test "a chip dropped on a strip tab binds the first key of that root it fits", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("bind_root", %{"root" => "frame", "name" => "unit"}, s)
+      # The frame's first text-typed key... there is none: refused, nothing written.
+      assert s.assigns.notice == "nothing under frame takes unit"
+
+      {:noreply, s} =
+        Builder.handle_event("create_variable", %{"name" => "w", "default" => "500"}, s)
+
+      {:noreply, s} = Builder.handle_event("bind_root", %{"root" => "frame", "name" => "w"}, s)
+      {_, house} = hd(Enum.filter(BuilderFixture.layers(s), fn {l, _} -> l == :house end))
+
+      assert house.frame.kind == Chart.var(:w) or
+               Enum.any?(Map.values(house.frame), &(&1 == Chart.var(:w)))
+
+      assert BuilderFixture.render(s) =~ ~s(data-builder-bind-root="frame")
+    end
+
+    test "a field's value is promoted to a variable named for its key, and the field bound", %{
+      socket: s
+    } do
+      {:noreply, s} = Builder.handle_event("promote", %{"field" => "stroke_width"}, s)
+      assert hd(BuilderFixture.names(s)) == "var stroke_width"
+      {_, house} = List.last(BuilderFixture.layers(s))
+      assert house.styles.series.stroke_width == Chart.var(:stroke_width)
+      assert BuilderFixture.design(s).vars.stroke_width == %{default: 2}
+
+      # A second promotion of the same key takes the next free name.
+      {:noreply, s} = Builder.handle_event("unbind_field", %{"field" => "stroke_width"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["stroke_width"], "stroke_width" => "4"}, s)
+
+      {:noreply, s} = Builder.handle_event("promote", %{"field" => "stroke_width"}, s)
+      assert hd(BuilderFixture.names(s)) == "var stroke_width_2"
+
+      # A field with no value has nothing to promote.
+      {:noreply, none} = Builder.handle_event("promote", %{"field" => "opacity"}, s)
+      assert none.assigns.notice == "opacity has no value to promote"
     end
   end
 
-  describe "the Variables tab (spec/14 §19.10)" do
-    test "is the last tab, and opening it shows the parameters form in the workspace" do
-      html = at_node("variables")
-
-      assert html =~
-               ~s(class="vis-builder-node vis-builder-node-open" title="the variables the stack still needs, and what they are bound to")
-
-      assert html =~ ~s(class="vis-builder-params")
-      refute html =~ ~s(class="vis-builder-editor")
-      refute html =~ ~s(class="vis-builder-chips")
-
-      # And it is no longer in the tray.
-      [_, tray] = String.split(html, ~s(<div class="vis-builder-tray">), parts: 2)
-      refute tray =~ "vis-builder-params"
-    end
-
-    test "select_root opens it like any other root" do
-      {:ok, s} = Builder.mount(%Socket{})
-      {:ok, s} = Builder.update(%{id: "b", layers: BuilderFixture.layers()}, s)
-      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "variables"}, s)
-      assert s.assigns.node_label == "variables"
-
-      # And a node root takes you back.
-      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
-      assert s.assigns.node_label == "frame"
-    end
-
-    test "each site that carries variables has rows, reading as one of three states" do
-      s = BuilderFixture.socket(BuilderFixture.parameterised(), node_label: "variables")
+  describe "the variable panel (spec/14 §19.10)" do
+    test "lists the composition's variables alphabetically, typed by first use, with their uses as links" do
+      s = BuilderFixture.socket(BuilderFixture.parameterised())
       html = BuilderFixture.render(s)
 
-      # The params layer carries `ticks` and `accent`; the others carry none.
-      assert html =~ ~s(<h3 class="vis-builder-site-name">params</h3>)
-      refute html =~ ~s(<h3 class="vis-builder-site-name">house</h3>)
-      assert html =~ "flows up as :ticks"
-      assert html =~ ~s(<input type="hidden" name="site" value="3">)
+      # No tab: variables live in the context.
+      refute html =~ ~s(phx-value-root="variables")
+      [_, context] = String.split(html, ~s(<aside class="vis-builder-context">), parts: 2)
+      assert context =~ ~s(class="vis-builder-variables")
 
-      {:noreply, set} =
-        Builder.handle_event(
-          "bind_site",
-          %{"site" => "3", "_target" => ["ticks"], "ticks" => "6"},
-          s
-        )
+      chips = Regex.scan(~r/data-builder-variable="(\w+)"/, context) |> Enum.map(&List.last/1)
+      assert chips == ~w(accent ticks unit)
 
-      assert Enum.at(set.assigns.uses, 3).vars == %{ticks: 6}
-      assert BuilderFixture.render(set) =~ "= 6"
+      vars = Variables.list(BuilderFixture.layers(s), BuilderFixture.design(s))
 
-      {:noreply, renamed} =
-        Builder.handle_event(
-          "bind_site",
-          %{"site" => "3", "_target" => ["accent.var"], "accent.var" => "accent_1"},
-          set
-        )
+      # The type is the schema's at the first use, whole: a style site's one_of, an axis's ticks'.
+      assert Enum.map(vars, & &1.name) == [:accent, :ticks, :unit]
+      assert Enum.find(vars, &(&1.name == :unit)).type == :text
+      assert match?({:one_of, [{:ref, :style} | _]}, Enum.find(vars, &(&1.name == :accent)).type)
 
-      assert Enum.at(renamed.assigns.uses, 3).vars == %{ticks: 6, accent: Chart.var(:accent_1)}
-      assert BuilderFixture.render(renamed) =~ "= var(:accent_1)"
+      assert Enum.find(vars, &(&1.name == :unit)).default == "%"
 
-      # The rename shows in what the stack still needs: `accent_1`, never `accent`.
-      names = renamed |> BuilderFixture.layers() |> Chart.free_vars() |> Enum.map(& &1.name)
-      assert :accent_1 in names
-      refute :accent in names
+      {:noreply, s} = Builder.handle_event("expand_variable", %{"name" => "ticks"}, s)
+      html = BuilderFixture.render(s)
 
-      # A blank is a removal, and the name flows up again.
-      {:noreply, up} =
-        Builder.handle_event(
-          "bind_site",
-          %{"site" => "3", "_target" => ["ticks"], "ticks" => ""},
-          renamed
-        )
+      assert html =~
+               ~s(phx-click="inspect" phx-value-path="frame.axes[0].ticks" phx-value-layer="3")
 
-      assert Enum.at(up.assigns.uses, 3).vars == %{accent: Chart.var(:accent_1)}
+      assert html =~ ~s(<h4 class="vis-builder-site-name">params</h4>)
+
+      {:noreply, s} = Builder.handle_event("expand_variable", %{"name" => "ticks"}, s)
+      refute BuilderFixture.render(s) =~ ~s(phx-value-path="frame.axes[0].ticks")
     end
 
-    test "a site, a name or a control that does not exist changes nothing" do
+    test "find filters the list and highlights the fields bound to the name" do
+      s =
+        BuilderFixture.socket(BuilderFixture.parameterised(),
+          selected: 3,
+          node_label: "marks[0]",
+          facet: :style
+        )
+
+      {:noreply, s} = Builder.handle_event("find_variable", %{"find" => "acc"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(data-builder-variable="accent")
+      refute html =~ ~s(data-builder-variable="unit")
+
+      {:noreply, s} = Builder.handle_event("find_variable", %{"find" => "accent"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(class="vis-builder-var-chip vis-builder-var-chip-found")
+      assert html =~ "vis-builder-field-found"
+    end
+
+    test "create declares a var site keyed by the name, with the default", %{} do
+      s = BuilderFixture.socket(BuilderFixture.layers())
+
+      {:noreply, s} =
+        Builder.handle_event("create_variable", %{"name" => "gap", "default" => "12"}, s)
+
+      assert hd(BuilderFixture.names(s)) == "var gap"
+      assert hd(s.assigns.uses).key == :gap
+      assert BuilderFixture.design(s).vars.gap == %{default: 12}
+
+      {:noreply, blank} =
+        Builder.handle_event("create_variable", %{"name" => " ", "default" => ""}, s)
+
+      assert blank.assigns.notice == "a variable needs a name"
+    end
+
+    test "the value the preview binds is set from the expanded chip" do
       s = BuilderFixture.socket(BuilderFixture.parameterised())
 
-      for params <- [
-            %{"site" => "9", "_target" => ["ticks"], "ticks" => "6"},
-            %{"site" => "3", "_target" => ["nope"], "nope" => "6"},
-            %{"site" => "3", "_target" => ["ticks.mode"], "ticks.mode" => "x"}
-          ] do
-        {:noreply, same} = Builder.handle_event("bind_site", params, s)
-        assert same.assigns.uses == s.assigns.uses
-      end
+      {:noreply, s} =
+        Builder.handle_event("set_var", %{"_target" => ["ticks"], "ticks" => "6"}, s)
+
+      assert s.assigns.bindings == %{ticks: 6}
+      {:noreply, s} = Builder.handle_event("expand_variable", %{"name" => "ticks"}, s)
+      assert BuilderFixture.render(s) =~ ~s(<input type="text" name="ticks" value="6")
     end
   end
 

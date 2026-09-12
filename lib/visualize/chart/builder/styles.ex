@@ -1078,6 +1078,128 @@ if Code.ensure_loaded?(Phoenix.Component) do
       text-decoration: line-through;
     }
 
+    /* Variables as chips (spec/14 §19.9, §19.10): dragged onto a field, × to unbind. */
+    .vis-builder-var-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border: 1px solid var(--vis-builder-accent);
+      border-radius: 999px;
+      background: var(--vis-builder-bg);
+      color: var(--vis-builder-accent);
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+      cursor: grab;
+      white-space: nowrap;
+    }
+
+    .vis-builder-var-chip-found {
+      box-shadow: 0 0 0 2px var(--vis-builder-accent);
+    }
+
+    .vis-builder .vis-builder-var-unbind {
+      padding: 0 4px;
+      border: 0;
+      background: none;
+      color: inherit;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .vis-builder-field-handle {
+      float: right;
+      color: var(--vis-builder-muted);
+      cursor: grab;
+      user-select: none;
+    }
+
+    .vis-builder-field-found {
+      border-radius: var(--vis-builder-radius);
+      box-shadow: 0 0 0 2px var(--vis-builder-warn);
+    }
+
+    .vis-builder-variables {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .vis-builder-find input {
+      width: 100%;
+    }
+
+    .vis-builder-chips-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .vis-builder-variable-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+    }
+
+    .vis-builder-variable-type {
+      flex: 1 1 auto;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+    }
+
+    .vis-builder .vis-builder-variable-expand {
+      padding: 0 6px;
+      border: 0;
+      background: none;
+      cursor: pointer;
+    }
+
+    .vis-builder-variable-details {
+      margin: 2px 0 6px 8px;
+      padding-left: 8px;
+      border-left: 2px solid var(--vis-builder-line);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .vis-builder-variable-uses {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .vis-builder .vis-builder-variable-use {
+      padding: 1px 4px;
+      border: 0;
+      background: none;
+      color: var(--vis-builder-accent);
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .vis-builder-create {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px;
+      border: 1px dashed var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+    }
+
+    .vis-builder-create input {
+      flex: 1 1 40%;
+      min-width: 0;
+    }
+
+    .vis-builder-create p {
+      flex: 1 1 100%;
+    }
+
     /* The context panel as the picker for the selected field (spec/14 §19.10). */
     .vis-builder-field-selected {
       border-radius: var(--vis-builder-radius);

@@ -68,7 +68,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Stack,
       Store,
       Styles,
-      StyleStack
+      StyleStack,
+      Variables
     }
 
     alias Visualize.Chart.{Composite, Fragment, Schema, Use, Validator}
@@ -138,6 +139,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
          library_view: :group,
          style_entry: nil,
          field: nil,
+         expanded: MapSet.new(),
+         find: "",
          node_label: "design"
        )}
     end
@@ -265,18 +268,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </p>
           </aside>
           <main class="vis-builder-main">
-            <nav class="vis-builder-nodes">
+            <nav
+              id={@id <> "-nodes"}
+              class="vis-builder-nodes"
+              phx-hook="BuilderHook"
+              data-builder-target={@myself}
+              data-builder-scope="root"
+            >
               <button
                 :for={tab <- @tabs}
                 type="button"
                 class={tab.class}
                 title={tab.title}
+                data-builder-bind-root={tab.label}
                 phx-click="select_root"
                 phx-value-root={tab.label}
                 phx-target={@myself}
               >{tab.label}</button>
             </nav>
-            <nav :if={@chips != [] and @node_label != "variables"} class="vis-builder-chips">
+            <nav :if={@chips != []} class="vis-builder-chips">
               <button
                 :for={chip <- @chips}
                 type="button"
@@ -288,27 +298,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
               >{chip.label}</button>
             </nav>
             <div class="vis-builder-workspace">
-              <Params.panel
-                :if={@node_label == "variables"}
-                id={@id <> "-params"}
-                layers={@layers}
-                vars={@bindings}
-                sites={@sites}
-                names={@variables}
-                target={@myself}
-              />
               <Editor.panel
-                :if={@node_label != "variables"}
                 id={@id <> "-editor"}
                 kind={@entry.kind}
                 selected={@field}
+                found={@find_hit}
                 node={@editing}
                 path={@entry.path}
                 facet={@facet}
                 errors={@errors}
                 refs={@refs}
                 slots={@slots}
-                variables={@variables}
                 strip={false}
                 target={@myself}
               />
@@ -343,7 +343,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
               event="edit_style"
               refs={@refs}
               slots={@slots}
-              variables={@variables}
               target={@myself}
             />
             <Picker.panel
@@ -356,7 +355,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
               recent={@picker.recent}
               refs={@refs}
               entries={@picker.entries}
-              variables={@variables}
               target={@myself}
             />
             <Masks.panel
@@ -367,6 +365,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
               fragment={@site.fragment}
               free={@site.free}
               keyless={@site.use.id in @keyless}
+              target={@myself}
+            />
+            <h2 class="vis-builder-sidebar-title">Variables</h2>
+            <Variables.panel
+              id={@id <> "-variables"}
+              layers={@layers}
+              design={@design}
+              bindings={@bindings}
+              sites={@sites}
+              expanded={@expanded}
+              find={@find}
               target={@myself}
             />
           </aside>
@@ -510,10 +519,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("library_view", %{"view" => _group}, socket),
       do: {:noreply, assign(socket, :library_view, :group)}
-
-    def handle_event("select_root", %{"root" => "variables"}, socket) do
-      {:noreply, assign(socket, node_label: "variables", facet: nil)}
-    end
 
     # A root the editing target declares opens there; one it does not takes the person to
     # the highest layer that declares it — what the inspector and the palette already do
@@ -756,6 +761,90 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, update(socket, :uses, &Stack.update(&1, selected, fn u -> %{u | key: key} end))}
     end
 
+    # -- variables as chips (spec/14 §19.9, §19.10) --------------------------------------
+
+    def handle_event("find_variable", %{"find" => find}, socket) do
+      {:noreply, assign(socket, :find, find)}
+    end
+
+    def handle_event("expand_variable", %{"name" => name}, socket) do
+      expanded = socket.assigns.expanded
+
+      expanded =
+        if MapSet.member?(expanded, name),
+          do: MapSet.delete(expanded, name),
+          else: MapSet.put(expanded, name)
+
+      {:noreply, assign(socket, :expanded, expanded)}
+    end
+
+    # A chip dropped on a field binds it: the field's key takes var(:name). A variable
+    # already typed by a use of another type is refused by name; one used nowhere takes
+    # the control's type by being used here (spec/14 §19.9).
+    def handle_event("bind_field", %{"field" => field, "name" => name}, socket) do
+      %{entry: entry, layers: layers, design: design} = editing(socket.assigns)
+
+      with %{key: key, type: type} <-
+             Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
+           {:ok, var} <- Editor.variable(name),
+           :ok <- fits(Variables.list(layers, design), var.name, type, key) do
+        {:noreply, socket |> update_layer(entry.path, key, {:ok, var}) |> assign(:notice, nil)}
+      else
+        {:refused, notice} -> {:noreply, assign(socket, :notice, notice)}
+        _other -> {:noreply, assign(socket, :notice, "#{field} is not a field here")}
+      end
+    end
+
+    # A chip dropped on a strip tab binds the first key of that root the variable fits.
+    def handle_event("bind_root", %{"root" => root, "name" => name}, socket) do
+      %{layers: layers, design: design} = editing(socket.assigns)
+
+      with {:ok, var} <- Editor.variable(name),
+           {:noreply, socket} <- handle_event("select_root", %{"root" => root}, socket),
+           %{entry: entry} <- editing(socket.assigns),
+           %{key: key} <- first_fit(entry.kind, Variables.list(layers, design), var.name) do
+        {:noreply, socket |> update_layer(entry.path, key, {:ok, var}) |> assign(:notice, nil)}
+      else
+        _other -> {:noreply, assign(socket, :notice, "nothing under #{root} takes #{name}")}
+      end
+    end
+
+    def handle_event("unbind_field", %{"field" => field}, socket) do
+      %{entry: entry} = editing(socket.assigns)
+
+      case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)) do
+        nil -> {:noreply, socket}
+        %{key: key} -> {:noreply, update_layer(socket, entry.path, key, :error)}
+      end
+    end
+
+    # A new variable is a var site of the stack, keyed by its name, with its default.
+    def handle_event("create_variable", %{"name" => name} = params, socket) do
+      case Editor.variable(name) do
+        {:ok, var} -> {:noreply, declared(socket, var.name, Map.get(params, "default", ""))}
+        :error -> {:noreply, assign(socket, :notice, "a variable needs a name")}
+      end
+    end
+
+    # A field's value promoted: a variable named for the key, its literal as the default,
+    # and the field bound to it.
+    def handle_event("promote", %{"field" => field}, socket) do
+      %{entry: entry, editing: node, layers: layers, design: design} = editing(socket.assigns)
+
+      case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)) do
+        %{key: key} when is_map(node) and is_map_key(node, key) ->
+          name = fresh_name(key, Variables.list(layers, design))
+
+          {:noreply,
+           socket
+           |> declared(name, Map.fetch!(node, key))
+           |> update_layer(entry.path, key, {:ok, %Visualize.Chart.Var{name: name}})}
+
+        _other ->
+          {:noreply, assign(socket, :notice, "#{field} has no value to promote")}
+      end
+    end
+
     # A mask checkbox: the path joins or leaves the selected site's mask (spec/14 §19.5).
     # An unchecked box submits nothing, which is the path leaving.
     def handle_event("mask", %{"_target" => [name]} = params, socket) do
@@ -866,6 +955,67 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp ref_kind({:one_of, alts}), do: Enum.find_value(alts, &ref_kind/1)
     defp ref_kind(_type), do: nil
 
+    # Whether a variable fits a key's type: untyped fits anything; a typed one must match.
+    defp fits(vars, name, type, key) do
+      case Enum.find(vars, &(&1.name == name)) do
+        nil ->
+          :ok
+
+        %{type: nil} ->
+          :ok
+
+        %{type: ^type} ->
+          :ok
+
+        %{type: other} ->
+          {:refused, "#{name} is #{type_word(other)}; #{key} takes #{type_word(type)}"}
+      end
+    end
+
+    defp first_fit(kind, vars, name) do
+      typed = Enum.find(vars, &(&1.name == name))
+
+      Enum.find(Schema.describe(kind), fn spec ->
+        typed == nil or typed.type == nil or typed.type == spec.type
+      end)
+    end
+
+    defp type_word({:enum, _}), do: "a choice"
+    defp type_word({:ref, kind}), do: "a #{kind}"
+    defp type_word({:one_of, [first | _]}), do: type_word(first)
+    defp type_word(type), do: "a #{inspect(type)}"
+
+    # A var site at the bottom of the stack, keyed by the name, with the default.
+    defp declared(socket, name, default) do
+      %{uses: uses, labels: labels} = socket.assigns
+      default = if is_binary(default), do: parsed_default(default), else: default
+      body = if default == nil, do: %{}, else: %{default: default}
+      use = %{Use.new(nil, uses) | ref: nil, local: %{var: body}, key: name}
+
+      assign(socket,
+        uses: [use | uses],
+        labels: Map.put(labels, use.id, "var #{name}"),
+        notice: nil
+      )
+    end
+
+    defp parsed_default(string) do
+      case Editor.parse(:term, string) do
+        {:ok, value} -> value
+        :error -> nil
+      end
+    end
+
+    defp fresh_name(key, vars) do
+      taken = Enum.map(vars, & &1.name)
+
+      Stream.iterate(1, &(&1 + 1))
+      |> Enum.find_value(fn
+        1 -> if key in taken, do: nil, else: key
+        n -> if :"#{key}_#{n}" in taken, do: nil, else: :"#{key}_#{n}"
+      end)
+    end
+
     defp control(target) do
       case String.split(target, ".", parts: 2) do
         [name, "var"] -> {name, :variable}
@@ -918,7 +1068,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       # or sites of their own (§19.8), so a layer opens on its first real node.
       entry =
         case assigns.node_label do
-          "variables" -> %{label: "variables", kind: :design, path: []}
           "design" -> first_node(nodes)
           label -> Enum.find(nodes, &(&1.label == label)) || first_node(nodes)
         end
@@ -937,6 +1086,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         open_style: open_style(entry),
         variables: variables(layers, design),
         sites: Stack.sites(assigns.uses, assigns.labels, fetch),
+        find_hit: find_hit(assigns.find),
         site: site(assigns, fetch),
         refs: refs(design, assigns.store),
         slots: slots(design),
@@ -1039,6 +1189,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp theme(map) when is_map(map) and not is_struct(map), do: Theme.new(map)
     defp theme(_other), do: Theme.default()
 
+    # The find box names a variable exactly to highlight its fields; a partial match
+    # filters the list only.
+    defp find_hit(find) do
+      case String.trim(find || "") do
+        "" -> nil
+        name -> name
+      end
+    end
+
     defp stack_title(:composite), do: "Layers"
     defp stack_title(kind), do: "#{kind} stack"
 
@@ -1084,20 +1243,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
           }
         end
 
-      variables = %{
-        label: "variables",
-        open: entry.label == "variables",
-        elsewhere: false,
-        class: tab_class(entry.label == "variables", true),
-        title: "the variables the stack still needs, and what they are bound to"
-      }
-
       children =
         for node <- nodes, root(node.label) == open_root, node.label != open_root do
           %{label: leaf(node.label, open_root), node: node.label, open: node.label == entry.label}
         end
 
-      {tabs ++ [variables], children}
+      {tabs, children}
     end
 
     # Every root but the design's own: design is the deployed tier, not a node to edit.

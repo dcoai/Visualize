@@ -90,7 +90,46 @@ defmodule Visualize.Hooks.Builder do
       // A drag carries what was picked up, so a drop anywhere can tell a move of a layer
       // from an insert of a library fragment. dataTransfer is how the two hook instances —
       // the library's and the stack's — hear about each other.
+      // A variable chip, or a field's promote handle, carries its name the same way a
+      // library fragment does (spec/14 §19.9).
+      carried(e, selector) {
+        if (!e.target || !e.target.closest) return null;
+        const el = e.target.closest(selector);
+        return el && this.el.contains(el) ? el : null;
+      },
+
+      dragType(e) {
+        const types = e.dataTransfer ? Array.from(e.dataTransfer.types || []) : [];
+        if (types.includes('application/x-visualize-variable')) return 'variable';
+        if (types.includes('application/x-visualize-promote')) return 'promote';
+        if (types.includes('application/x-visualize-fragment')) return 'fragment';
+        return null;
+      },
+
       handleDragStart(e) {
+        const chip = this.carried(e, '[data-builder-variable]');
+        if (chip) {
+          this.from = null;
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('application/x-visualize-variable', chip.getAttribute('data-builder-variable'));
+            e.dataTransfer.setData('text/plain', 'var(:' + chip.getAttribute('data-builder-variable') + ')');
+          }
+          return;
+        }
+
+        const handle = this.carried(e, '[data-builder-promote]');
+        if (handle) {
+          this.from = null;
+          e.stopPropagation();
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('application/x-visualize-promote', handle.getAttribute('data-builder-promote'));
+            e.dataTransfer.setData('text/plain', handle.getAttribute('data-builder-promote'));
+          }
+          return;
+        }
+
         const fragment = this.fragmentAt(e);
         if (fragment) {
           const stored = fragment.getAttribute('data-builder-fragment');
@@ -133,13 +172,32 @@ defmodule Visualize.Hooks.Builder do
       // A reference field takes a library entry of its kind: the drop is the field's write
       // (spec/14 §19.10). The builder refuses a wrong kind by name.
       fieldAt(e) {
-        if (this.scope !== 'ref' || this.from !== null) return null;
+        if (this.scope !== 'ref' || this.from !== null || this.dragType(e) !== 'fragment') return null;
         if (!e.target || !e.target.closest) return null;
         const field = e.target.closest('[data-builder-ref]');
         return field && this.el.contains(field) ? field : null;
       },
 
+      // Where a chip may land: a field row (bind it), a strip tab (bind the first key of
+      // that root), the create area (promote a field's value). Marked while over.
+      chipTarget(e) {
+        const kind = this.dragType(e);
+        if (kind === 'variable') {
+          return this.carried(e, '[data-builder-bind]') || this.carried(e, '[data-builder-bind-root]');
+        }
+        if (kind === 'promote') return this.carried(e, '[data-builder-promote-target]');
+        return null;
+      },
+
       handleDragOver(e) {
+        const chipTarget = this.chipTarget(e);
+        if (chipTarget) {
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+          chipTarget.classList.add('vis-builder-field-over');
+          return;
+        }
+
         const field = this.fieldAt(e);
         if (field) {
           e.preventDefault();
@@ -188,6 +246,24 @@ defmodule Visualize.Hooks.Builder do
       },
 
       handleDrop(e) {
+        const chipTarget = this.chipTarget(e);
+        if (chipTarget) {
+          e.preventDefault();
+          chipTarget.classList.remove('vis-builder-field-over');
+          const kind = this.dragType(e);
+          if (kind === 'variable') {
+            const name = e.dataTransfer.getData('application/x-visualize-variable');
+            if (chipTarget.hasAttribute('data-builder-bind')) {
+              this.push('bind_field', { field: chipTarget.getAttribute('data-builder-bind'), name: name });
+            } else {
+              this.push('bind_root', { root: chipTarget.getAttribute('data-builder-bind-root'), name: name });
+            }
+          } else if (kind === 'promote') {
+            this.push('promote', { field: e.dataTransfer.getData('application/x-visualize-promote') });
+          }
+          return;
+        }
+
         const field = this.fieldAt(e);
         if (field) {
           e.preventDefault();
