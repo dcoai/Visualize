@@ -569,29 +569,78 @@ if Code.ensure_loaded?(Phoenix.Component) do
           data-builder-edit={@event}
         >
           <%= for {group, fields} <- @blocks do %>
-            <fieldset :if={group} class="vis-builder-block">
+            <fieldset :if={group} class={"vis-builder-block" <> if(fill_style(group, fields), do: " vis-builder-block-fill", else: "")}>
               <legend class="vis-builder-block-name">{group}</legend>
-              <label :if={fill = fill_style(group, fields)} class="vis-builder-field vis-builder-field-fill-style">
-                <span class="vis-builder-key">style</span>
-                <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
-                  <label
-                    :for={{style, svg} <- fill.glyphs}
-                    class={"vis-builder-glyph" <> if(fill.style == style, do: " vis-builder-glyph-on", else: "")}
-                    title={style}
-                  >
-                    <input type="radio" name="fill_style" value={style} checked={fill.style == style} aria-label={style} />
-                    {Phoenix.HTML.raw(svg)}
+              <%= if fill = fill_style(group, fields) do %>
+                <label class="vis-builder-field vis-builder-field-fill-style">
+                  <span class="vis-builder-key">style</span>
+                  <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
+                    <label
+                      :for={{style, svg} <- fill.glyphs}
+                      class={"vis-builder-glyph" <> if(fill.style == style, do: " vis-builder-glyph-on", else: "")}
+                      title={style}
+                    >
+                      <input type="radio" name="fill_style" value={style} checked={fill.style == style} aria-label={style} />
+                      {Phoenix.HTML.raw(svg)}
+                    </label>
+                  </span>
+                </label>
+                <div class="vis-builder-fill-colours">
+                  <.field
+                    :for={field <- fields}
+                    :if={field.key == :fill}
+                    field={field}
+                    selected={@selected}
+                    found={@found}
+                    origins={@origins}
+                    target={@target}
+                  />
+                </div>
+                <div class="vis-builder-fill-numbers">
+                  <.field
+                    :for={field <- fields}
+                    :if={field.key != :fill}
+                    field={field}
+                    selected={@selected}
+                    found={@found}
+                    origins={@origins}
+                    target={@target}
+                  />
+                  <label :if={fill.style == :linear} class="vis-builder-field">
+                    <span class="vis-builder-key">angle</span>
+                    <span class="vis-builder-ranged">
+                      <input type="text" name="fill.angle" value={fill.angle} aria-label="angle" />
+                      <input
+                        type="range"
+                        name="fill.angle.range"
+                        class="vis-builder-range vis-builder-scrubber"
+                        style={scrub(fill.angle, 0, 360)}
+                        min="0"
+                        max="360"
+                        step="5"
+                        value={fill.angle}
+                        aria-label="angle, dragged"
+                      />
+                    </span>
                   </label>
-                </span>
-              </label>
-              <.field
-                :for={field <- fields}
-                field={field}
-                selected={@selected}
-                found={@found}
-                origins={@origins}
-                target={@target}
-              />
+                  <label :if={fill.style == :radial} class="vis-builder-field">
+                    <span class="vis-builder-key">centre</span>
+                    <span class="vis-builder-pair">
+                      <input type="number" name="fill.centre.x" min="0" max="1" step="0.05" value={Enum.at(fill.centre, 0)} aria-label="centre x" />
+                      <input type="number" name="fill.centre.y" min="0" max="1" step="0.05" value={Enum.at(fill.centre, 1)} aria-label="centre y" />
+                    </span>
+                  </label>
+                </div>
+              <% else %>
+                <.field
+                  :for={field <- fields}
+                  field={field}
+                  selected={@selected}
+                  found={@found}
+                  origins={@origins}
+                  target={@target}
+                />
+              <% end %>
             </fieldset>
             <.field
               :for={field <- fields}
@@ -652,41 +701,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
             title="unbind"
           >×</button>
         </span>
-        <div :if={is_nil(@field.variable) and @field.fill && @field.fill.gradient} class="vis-builder-gradient">
-          <span :for={stop <- @field.fill.stops} class="vis-builder-stop">
-            <span
-              class={well_class(stop.well)}
-              style={"--vis-builder-swatch: #{stop.well.colour || "transparent"}"}
-              title={stop.well.word || "no colour set"}
-              role="img"
-              aria-label={"stop #{stop.index}: #{stop.well.word || "not set"}"}
-              data-builder-well={"fill.stop.#{stop.index}"}
-              phx-click="select_field"
-              phx-value-field={"fill.stop.#{stop.index}"}
-              phx-target={@target}
-            ></span>
-            <input
-              type="range"
-              name={"fill.stop.#{stop.index}.opacity"}
-              class="vis-builder-range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={stop.opacity}
-              aria-label={"stop #{stop.index} opacity"}
-            />
-          </span>
-          <label :if={@field.fill.style == :linear} class="vis-builder-picker-row">
-            <span class="vis-builder-control-label">angle</span>
-            <input type="range" name="fill.angle" class="vis-builder-range" min="0" max="360" step="15" value={@field.fill.angle} aria-label="angle" />
-            <span class="vis-builder-item-text">{@field.fill.angle}°</span>
-          </label>
-          <span :if={@field.fill.style == :radial} class="vis-builder-picker-row">
-            <span class="vis-builder-control-label">centre</span>
-            <input type="number" name="fill.centre.x" min="0" max="1" step="0.05" value={Enum.at(@field.fill.centre, 0)} aria-label="centre x" />
-            <input type="number" name="fill.centre.y" min="0" max="1" step="0.05" value={Enum.at(@field.fill.centre, 1)} aria-label="centre y" />
-          </span>
-        </div>
+        <span
+          :for={stop <- gradient_stops(@field)}
+          class={well_class(stop.well) <> " vis-builder-well-stop"}
+          style={"--vis-builder-swatch: #{stop.well.colour || "transparent"}"}
+          title={stop.well.word || "no colour set"}
+          role="img"
+          aria-label={"stop #{stop.index}: #{stop.well.word || "not set"}"}
+          data-builder-well={"fill.stop.#{stop.index}"}
+        ></span>
         <input
           :if={is_nil(@field.variable) and @field.widget == :checkbox}
           type="checkbox"
@@ -713,6 +736,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             type="range"
             name={"#{@field.key}.range"}
             class="vis-builder-range vis-builder-scrubber"
+            style={scrub(@field.slider, @field.range.min, @field.range.max)}
             min={@field.range.min}
             max={@field.range.max}
             step={@field.range.step}
@@ -770,7 +794,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           />
         </svg>
         <span
-          :if={is_nil(@field.variable) and @field.widget == :colour}
+          :if={is_nil(@field.variable) and @field.widget == :colour and gradient_stops(@field) == []}
           class={well_class(@field.well)}
           style={"--vis-builder-swatch: #{@field.well.colour || "transparent"}"}
           title={@field.well.word || "no colour set"}
@@ -849,6 +873,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
       </label>
       """
     end
+
+    # The scrubber's bar (§18.6): the value's fraction of its range, as a custom property.
+    defp scrub(value, min, max)
+         when is_number(value) and is_number(min) and is_number(max) and max > min do
+      fraction = (value - min) / (max - min)
+      "--vis-builder-scrub: #{Float.round(min(max(fraction, 0), 1) * 100 * 1.0, 1)}%"
+    end
+
+    defp scrub(_value, _min, _max), do: "--vis-builder-scrub: 0%"
+
+    # A gradient fill's wells are its first and last stops (§18.6); nothing otherwise.
+    defp gradient_stops(%{variable: nil, fill: %{gradient: gradient, stops: [_ | _] = stops}})
+         when is_map(gradient) do
+      case stops do
+        [one] -> [one]
+        many -> [List.first(many), List.last(many)]
+      end
+    end
+
+    defp gradient_stops(_field), do: []
 
     # A ranged number's box and slider share one span, the slider over the box (§18.6).
     defp ranged?(field), do: field.range != nil and field.widget in [:number, :text]

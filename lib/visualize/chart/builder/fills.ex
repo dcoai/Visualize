@@ -41,6 +41,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def control?("fill_style"), do: true
     def control?("fill.stop." <> _rest), do: true
     def control?("fill.angle"), do: true
+    def control?("fill.angle.range"), do: true
     def control?("fill.centre." <> _rest), do: true
     def control?(_other), do: false
 
@@ -100,6 +101,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc """
     What a control of the fill group writes (spec/14 §18.6), given the fill's current value,
     the design's `defs`, the gradient's name for this style, and the colour the well shows.
+    `fill.angle.range` is the angle's scrubber and writes as `fill.angle` does.
 
         iex> Visualize.Chart.Builder.Fills.writes("fill_style", "none", "#abc", %{}, :s_fill, "#abc")
         [fill: {:ok, :none}]
@@ -153,8 +155,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    def writes("fill.angle", submitted, _value, _defs, name, _well),
-      do: key(name, :angle, Editor.submitted(:number, submitted))
+    def writes(angle, submitted, _value, _defs, name, _well)
+        when angle in ["fill.angle", "fill.angle.range"],
+        do: key(name, :angle, Editor.submitted(:number, submitted))
 
     def writes("fill.centre." <> axis, submitted, _value, _defs, name, _well)
         when axis in ["x", "y"] do

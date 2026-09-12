@@ -1411,12 +1411,40 @@ defmodule Visualize.Chart.BuilderTest do
 
       html = BuilderFixture.render(s)
       assert html =~ ~s(name="fill_style" value="linear" checked)
-      # The fill's well shows the first stop under the paint's name.
-      assert html =~ ~s(--vis-builder-swatch: #abcdef" title="series_fill")
-      assert html =~ ~s(data-builder-well="fill.stop.0")
+      # The fill's wells are the first and last stops — no third swatch — in the colours
+      # column; the numbers column holds the opacity then the angle as a ranged box.
+      refute html =~ ~s(data-builder-well="fill")
+
+      assert html =~
+               ~s(--vis-builder-swatch: #abcdef" title="#abcdef" role="img" aria-label="stop 0: #abcdef" data-builder-well="fill.stop.0")
+
       assert html =~ ~s(data-builder-well="fill.stop.1")
-      assert html =~ ~s(name="fill.stop.1.opacity")
-      assert html =~ ~s(name="fill.angle")
+      refute html =~ ~s(name="fill.stop.1.opacity")
+
+      colours =
+        html
+        |> String.split(~s(class="vis-builder-fill-colours"))
+        |> Enum.at(1)
+        |> String.split("vis-builder-fill-numbers")
+        |> hd()
+
+      assert colours =~ ~s(fill.stop.0) and colours =~ ~s(fill.stop.1)
+
+      numbers =
+        html
+        |> String.split(~s(class="vis-builder-fill-numbers"))
+        |> Enum.at(1)
+        |> String.split("</fieldset>")
+        |> hd()
+
+      {opacity_at, _} = :binary.match(numbers, ~s(name="fill_opacity"))
+      {angle_at, _} = :binary.match(numbers, ~s(name="fill.angle"))
+      assert opacity_at < angle_at
+      assert numbers =~ ~s(<input type="text" name="fill.angle" value="180")
+
+      assert numbers =~
+               ~s(name="fill.angle.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 50.0%")
+
       refute html =~ ~s(name="fill.centre.x")
       # And the preview carries the gradient.
       assert html =~ "<linearGradient"
@@ -1436,18 +1464,15 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event(
           "edit",
-          %{"_target" => ["fill.stop.0.opacity"], "fill.stop.0.opacity" => "0.5"},
+          %{"_target" => ["fill.angle.range"], "fill.angle.range" => "90"},
           s
         )
-
-      {:noreply, s} =
-        Builder.handle_event("edit", %{"_target" => ["fill.angle"], "fill.angle" => "90"}, s)
 
       gradient = defs_of(s).series_fill
       assert gradient.angle == 90
 
       assert gradient.stops == [
-               %{offset: 0, colour: "#123456", opacity: 0.5},
+               %{offset: 0, colour: "#123456", opacity: 0.8},
                %{offset: 1, colour: :axis, opacity: 0.1}
              ]
 

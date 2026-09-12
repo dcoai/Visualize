@@ -53,6 +53,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       --vis-builder-context: 240px;
       --vis-builder-height: 100vh;
       --vis-builder-swatch: transparent;
+      --vis-builder-scrub: 0%;
       --vis-builder-needs: #d97706;
       --vis-builder-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", roboto, sans-serif;
       --vis-builder-mono: ui-monospace, sfmono-regular, "SF Mono", menlo, monospace;
@@ -1589,14 +1590,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
       pointer-events: none;
     }
 
+    /* The bar to the value: the accent to the dot, clear after it. */
     .vis-builder .vis-builder-scrubber::-webkit-slider-runnable-track {
       height: 26px;
-      background: transparent;
+      background: linear-gradient(
+        to right,
+        var(--vis-builder-accent) 0 var(--vis-builder-scrub, 0%),
+        transparent var(--vis-builder-scrub, 0%)
+      );
     }
 
     .vis-builder .vis-builder-scrubber::-moz-range-track {
       height: 100%;
-      background: transparent;
+      background: linear-gradient(
+        to right,
+        var(--vis-builder-accent) 0 var(--vis-builder-scrub, 0%),
+        transparent var(--vis-builder-scrub, 0%)
+      );
     }
 
     .vis-builder .vis-builder-scrubber::-webkit-slider-thumb {
@@ -1713,20 +1723,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
       box-shadow: 0 0 0 2px var(--vis-builder-panel), 0 0 0 4px var(--vis-builder-accent);
     }
 
-    /* A gradient fill's controls (spec/14 §18.6): its stops as wells with their opacity,
-       then the angle or the centre. */
-    .vis-builder-gradient {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding-left: 4px;
-      border-left: 2px solid var(--vis-builder-line);
+    /* The fill block (spec/14 §18.6): the style row across, the colours left, the numbers
+       right; a gradient's stop wells stack in the colours column. */
+    .vis-builder-block-fill {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
 
-    .vis-builder-stop {
+    .vis-builder-block-fill > .vis-builder-field-fill-style {
+      grid-column: 1 / -1;
+    }
+
+    .vis-builder-fill-colours,
+    .vis-builder-fill-numbers {
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .vis-builder-well-stop + .vis-builder-well-stop {
+      margin-top: 4px;
+    }
+
+    .vis-builder-pair {
+      display: flex;
       gap: 6px;
+    }
+
+    .vis-builder-pair > input {
+      width: 50%;
+      min-width: 0;
     }
 
     /* The chooser's own picker, for any colour a patch does not offer. */
