@@ -253,7 +253,12 @@ defmodule Visualize.Hooks.Builder do
           const kind = this.dragType(e);
           if (kind === 'variable') {
             const name = e.dataTransfer.getData('application/x-visualize-variable');
-            if (chipTarget.hasAttribute('data-builder-bind')) {
+            const box = chipTarget.querySelector('[data-builder-text]');
+            if (box) {
+              // A text field takes the variable as text among text (spec/14 §7.1): the hole
+              // goes in at the caret, and the field's own change event writes the string.
+              this.insertAtCaret(box, '\#{var(:' + name + ')}');
+            } else if (chipTarget.hasAttribute('data-builder-bind')) {
               this.push('bind_field', { field: chipTarget.getAttribute('data-builder-bind'), name: name });
             } else {
               this.push('bind_root', { root: chipTarget.getAttribute('data-builder-bind-root'), name: name });
@@ -291,6 +296,16 @@ defmodule Visualize.Hooks.Builder do
         const stored = this.dragged(e);
         if (stored === null) return;
         this.push('insert', { name: stored, at: at });
+      },
+
+      insertAtCaret(box, text) {
+        const start = box.selectionStart == null ? box.value.length : box.selectionStart;
+        const end = box.selectionEnd == null ? start : box.selectionEnd;
+        box.value = box.value.slice(0, start) + text + box.value.slice(end);
+        const at = start + text.length;
+        box.focus();
+        if (box.setSelectionRange) box.setSelectionRange(at, at);
+        box.dispatchEvent(new Event('input', { bubbles: true }));
       },
 
       // The gap the drop would land in, drawn on the row below it, or under the last row

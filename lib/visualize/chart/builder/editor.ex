@@ -22,7 +22,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     use Phoenix.Component
 
     alias Visualize.Chart.Builder.{Glyphs, Store}
-    alias Visualize.Chart.{Fragment, Schema, Validator, Var}
+    alias Visualize.Chart.{Fragment, Schema, Text, Validator, Var}
 
     @typedoc "The control a key's type gets (spec/14 §18.6)."
     @type widget :: :checkbox | :number | :text | :textarea | {:select, [atom()]}
@@ -37,7 +37,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @atom_types [:name, :field, :slot]
 
     # Every type whose control is a single-line text field (spec/14 §18.6).
-    @text_types [:string, :name, :field, :size, :font, :slot]
+    @text_types [:string, :name, :field, :size, :font, :slot, :text]
 
     # -- the nodes of a fragment (spec/14 §18.5) -------------------------------------------
 
@@ -188,6 +188,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp read(:integer, string), do: integer(string)
     defp read(:number, string), do: number(string)
     defp read(:string, string), do: {:ok, string}
+    # A text is a string with interpolation (§7.1): kept as typed, and read by the
+    # validator, so a hole that does not read is a fault under the field, not a refusal.
+    defp read(:text, string), do: {:ok, string}
     defp read(type, string) when type in @atom_types, do: {:ok, atom(string)}
     # A reference is a local name, or a library id spelt as the DOM carries one (§19.2).
     defp read({:ref, kind}, string) do
@@ -537,6 +540,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               name={field.key}
               value={field.value}
               placeholder={field.placeholder}
+              data-builder-text={field.text? && "true"}
             />
             <svg
               :if={is_nil(field.variable) and field.dash != nil}
@@ -633,6 +637,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         %{
           key: spec.key,
           ref: ref_field(spec.type),
+          text?: spec.type == :text,
           widget: shape(widget),
           glyphs: glyphs(spec.key, widget),
           range: range(spec.range),
@@ -640,9 +645,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           dash: dash(spec.key, Map.get(node, spec.key)),
           options: options(widget),
           checked: Map.get(node, spec.key) == true,
-          value: shown(widget, Map.fetch(node, spec.key)),
+          value: shown(widget, as_text(spec, Map.fetch(node, spec.key))),
           slot: slot_name(widget, Map.get(node, spec.key)),
-          variable: variable_name(Map.get(node, spec.key)),
+          variable: if(spec.type == :text, do: nil, else: variable_name(Map.get(node, spec.key))),
           placeholder: shown(widget, default(spec)),
           errors: key_errors(errors, path ++ [spec.key])
         }
@@ -735,6 +740,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp option({kind, n}) when is_atom(kind) and is_integer(n), do: Store.encode_id({kind, n})
     defp option(value), do: to_string(value)
+
+    # A text shows as its string whichever form holds it (§7.1): a list of parts, or a
+    # whole variable, is written as the string with its holes.
+    defp as_text(%{type: :text}, {:ok, value}) when is_list(value) or is_struct(value, Var),
+      do: {:ok, Text.unparse(List.wrap(value))}
+
+    defp as_text(_spec, value), do: value
 
     # A colour is three things (§3.4): the slot face shows a slot, the picker a literal.
     defp slot_name(:colour, slot) when is_atom(slot) and not is_nil(slot), do: to_string(slot)

@@ -44,7 +44,8 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       html = rendered(:params)
       assert html =~ ~s(<input type="text" name="accent">)
       assert html =~ ~s(<input type="number" name="ticks")
-      assert html =~ ~s(<textarea name="unit")
+      # A text is a text field (§7.1, §18.6).
+      assert html =~ ~s(<input type="text" name="unit")
     end
 
     test "a variable with no default is required, and its default is the placeholder" do

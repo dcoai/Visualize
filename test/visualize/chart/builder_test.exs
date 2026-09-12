@@ -1684,6 +1684,82 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "a text field is a text field (spec/14 §7.1, §18.6, §19.9)" do
+    test "a label's text renders as a box holding the string, whichever form the layer holds" do
+      # The panel layer carries the label, as a list of parts, under its content facet.
+      s =
+        BuilderFixture.socket(BuilderFixture.parameterised(),
+          selected: 2,
+          node_label: "labels[0]",
+          facet: :content
+        )
+
+      html = BuilderFixture.render(s)
+
+      # The fixture's label is a list of parts; the box shows the string with its hole.
+      assert html =~
+               ~S|<input type="text" name="text" value="Uptime — #{var(:unit)}" data-builder-text="true">|
+
+      refute html =~ ~s(<textarea name="text")
+      refute html =~ "unbind_field"
+
+      # A change writes the string, and the design reads it as one text.
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["text"], "text" => ~S|Up #{var(:unit)} now|},
+          s
+        )
+
+      {_, panel} = Enum.at(BuilderFixture.layers(s), 2)
+      assert hd(panel.labels).text == ~S|Up #{var(:unit)} now|
+
+      assert Enum.map(Chart.free_vars(BuilderFixture.layers(s)), & &1.name) == [
+               :accent,
+               :ticks,
+               :unit
+             ]
+    end
+
+    test "a chip dropped on a text field is not a binding: the hook inserts at the caret", %{} do
+      # The panel layer carries the label, as a list of parts, under its content facet.
+      s =
+        BuilderFixture.socket(BuilderFixture.parameterised(),
+          selected: 2,
+          node_label: "labels[0]",
+          facet: :content
+        )
+
+      {:noreply, same} =
+        Builder.handle_event("bind_field", %{"field" => "text", "name" => "ticks"}, s)
+
+      assert same.assigns.uses == s.assigns.uses
+      assert same.assigns.notice == nil
+
+      js = Visualize.Hooks.Builder.js_hook()
+      assert js =~ "insertAtCaret"
+      assert js =~ "[data-builder-text]"
+      assert js =~ ~S|'\#{var(:' + name + ')}'| or js =~ ~S|'#{var(:' + name + ')}'|
+    end
+
+    test "meta.name is a text: a title can carry a variable in its middle" do
+      s =
+        BuilderFixture.socket([
+          {:only,
+           %{meta: %{name: ~S|Uptime for #{var(:host)}|}, vars: %{host: %{default: "db1"}}}}
+        ])
+
+      assert Enum.map(Chart.free_vars(BuilderFixture.layers(s)), & &1.name) == [:host]
+
+      assert {:ok, applied} =
+               Chart.apply(Map.merge(BuilderFixture.design(s), %{frame: %{kind: :cartesian}}),
+                 vars: %{host: "db2"}
+               )
+
+      assert applied.chart.meta.name == "Uptime for db2"
+    end
+  end
+
   describe "the variable panel (spec/14 §19.10)" do
     test "lists the composition's variables alphabetically, typed by first use, with their uses as links" do
       s = BuilderFixture.socket(BuilderFixture.parameterised(), context: :variables)
