@@ -53,6 +53,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       --vis-builder-context: 240px;
       --vis-builder-height: 100vh;
       --vis-builder-swatch: transparent;
+      --vis-builder-needs: #d97706;
       --vis-builder-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", roboto, sans-serif;
       --vis-builder-mono: ui-monospace, sfmono-regular, "SF Mono", menlo, monospace;
 
@@ -1076,6 +1077,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
     .vis-builder-mask-on .vis-builder-mask-path {
       color: var(--vis-builder-muted);
       text-decoration: line-through;
+    }
+
+    /* What the design still needs, marked where it is (spec/14 §18.13, §18.7). */
+    .vis-builder .vis-builder-node-needs {
+      border-color: var(--vis-builder-needs);
+      color: var(--vis-builder-needs);
+      box-shadow: inset 0 -2px 0 var(--vis-builder-needs);
+    }
+
+    .vis-builder .vis-builder-chip-needs {
+      border-color: var(--vis-builder-needs);
+      color: var(--vis-builder-needs);
+    }
+
+    .vis-builder-field-needs {
+      border-radius: var(--vis-builder-radius);
+      box-shadow: 0 0 0 2px var(--vis-builder-needs);
+    }
+
+    .vis-builder-field-needs .vis-builder-key {
+      color: var(--vis-builder-needs);
     }
 
     /* The + on the Layers title, and its menu of kinds (spec/14 §18.8). */

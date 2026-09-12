@@ -1209,7 +1209,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
           label -> Enum.find(nodes, &(&1.label == label)) || first_node(nodes)
         end
 
-      {tabs, children} = strip(nodes, entry, design)
+      errors = faults(kind, design, assigns, cycle)
+      {tabs, children} = strip(nodes, entry, design, errors)
 
       %{
         layers: layers,
@@ -1219,6 +1220,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         entry: entry,
         tabs: tabs,
         chips: chips(children, entry, assigns.facet),
+        needs: needs(errors),
         style_site: style_site(entry, at(layer, entry.path)),
         open_style: open_style(entry),
         variables: variables(layers, design),
@@ -1229,7 +1231,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         slots: slots(design),
         colour: colour(assigns, entry, at(layer, entry.path), design),
         editing: at(layer, entry.path),
-        errors: faults(kind, design, assigns, cycle),
+        errors: errors,
         keyless: keyless,
         unplaced: Enum.map(keyless, &Stack.label(assigns.labels, Stack.get(assigns.uses, &1))),
         kind: kind,
@@ -1391,27 +1393,54 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The strip: every root the stacked design declares, in the schema's order, then the
     # Variables tab; the open root's children and the node's facets as one row of chips.
-    defp strip(nodes, entry, design) do
+    defp strip(nodes, entry, design, errors) do
       open_root = root(entry.label)
       here = nodes |> Enum.map(&root(&1.label)) |> Enum.uniq()
+      needs = needs(errors)
 
       tabs =
         for root <- roots(design, here) do
+          count = Map.get(needs, root, 0)
+
           %{
             label: root,
             open: root == open_root,
             elsewhere: root not in here,
-            class: tab_class(root == open_root, root in here),
-            title: tab_title(root, root in here)
+            class: tab_class(root == open_root, root in here, count),
+            title: tab_title(root, root in here, count)
           }
         end
 
       children =
         for node <- nodes, root(node.label) == open_root, node.label != open_root do
-          %{label: leaf(node.label, open_root), node: node.label, open: node.label == entry.label}
+          %{
+            label: leaf(node.label, open_root),
+            node: node.label,
+            open: node.label == entry.label,
+            needs: Map.get(needs, node.label, 0)
+          }
         end
 
       {tabs, children}
+    end
+
+    # What the design still needs, by the node that holds it (spec/14 §18.13): every fault
+    # counted under its root and under each node on its path, so a tab and a chip can say
+    # how many things under them are still needed.
+    defp needs(errors) do
+      errors
+      |> Enum.flat_map(fn {path, _reason} -> owners(path) end)
+      |> Enum.frequencies()
+    end
+
+    # The labels of every node above a fault's path: `marks[0].channels.x` is owed by
+    # `marks`, `marks[0]` and `marks[0].channels`.
+    defp owners(path) do
+      path
+      |> Enum.scan([], fn key, acc -> acc ++ [key] end)
+      |> Enum.map(&Editor.label/1)
+      |> Enum.uniq()
+      |> Enum.reject(&(&1 == "design"))
     end
 
     # Every root but the design's own: design is the deployed tier, not a node to edit.
@@ -1426,17 +1455,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Enum.find(nodes, &(&1.label != "design")) || hd(nodes)
     end
 
-    defp tab_class(open?, here?) do
+    defp tab_class(open?, here?, count) do
       ["vis-builder-node"]
       |> then(&if open?, do: &1 ++ ["vis-builder-node-open"], else: &1)
       |> then(&if here?, do: &1, else: &1 ++ ["vis-builder-node-elsewhere"])
+      |> then(&if count > 0, do: &1 ++ ["vis-builder-node-needs"], else: &1)
       |> Enum.join(" ")
     end
 
-    defp tab_title(root, true), do: "#{root} of this layer"
+    defp tab_title(root, here?, count) do
+      base =
+        if here?,
+          do: "#{root} of this layer",
+          else: "#{root} — this layer declares none; opens the layer that does"
 
-    defp tab_title(root, false),
-      do: "#{root} — this layer declares none; opens the layer that does"
+      case count do
+        0 -> base
+        1 -> base <> " — 1 thing still needed"
+        n -> base <> " — #{n} things still needed"
+      end
+    end
 
     defp chips(children, entry, facet) do
       facets = Editor.facets(entry.kind)
@@ -1449,7 +1487,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             node: child.node,
             facet: nil,
             event: "select_node",
-            class: chip(child.open, nil)
+            class:
+              chip(child.open, nil) <>
+                if(child.needs > 0, do: " vis-builder-chip-needs", else: "")
           }
         end
 
