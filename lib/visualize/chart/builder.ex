@@ -140,6 +140,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          library_view: :group,
          style_entry: nil,
          field: nil,
+         adding: false,
          context: :layer,
          expanded: MapSet.new(),
          find: "",
@@ -254,7 +255,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
             target={@myself}
           />
           <aside class="vis-builder-sidebar">
-            <h2 class="vis-builder-sidebar-title">{@stack_title}</h2>
+            <h2 class="vis-builder-sidebar-title vis-builder-sidebar-title-row">
+              {@stack_title}
+              <button
+                type="button"
+                class="vis-builder-add"
+                title="add an empty site below the selected layer"
+                aria-label="add a site"
+                aria-expanded={to_string(@adding)}
+                phx-click="adding"
+                phx-target={@myself}
+              >+</button>
+            </h2>
+            <div :if={@adding} class="vis-builder-add-menu" role="menu" aria-label="a kind to add">
+              <button
+                :for={kind <- Stack.kinds() -- [:composite]}
+                type="button"
+                class="vis-builder-add-kind"
+                role="menuitem"
+                phx-click="add_site"
+                phx-value-kind={kind}
+                phx-target={@myself}
+              >{kind}</button>
+            </div>
             <Layers.panel
               id={@id <> "-layers"}
               layers={@layers}
@@ -786,6 +809,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       {:noreply, update(socket, :uses, &Stack.update(&1, selected, fn u -> %{u | key: key} end))}
+    end
+
+    # The + on the Layers title: a menu of the single kinds, and an empty inline site of the
+    # chosen one directly below the selected layer, selected and opened (spec/14 §18.8).
+    def handle_event("adding", _params, socket) do
+      {:noreply, update(socket, :adding, &(not &1))}
+    end
+
+    def handle_event("add_site", %{"kind" => submitted}, socket) do
+      case Enum.find(Stack.kinds() -- [:composite], &(to_string(&1) == submitted)) do
+        nil ->
+          {:noreply,
+           assign(socket, notice: "#{submitted} is not a kind a site can be", adding: false)}
+
+        kind ->
+          %{uses: uses, labels: labels, selected: selected} = socket.assigns
+          use = %{Use.new(nil, uses) | ref: nil, local: Stack.empty(kind)}
+          at = (Stack.index_of(uses, selected) || length(uses) - 1) + 1
+
+          {:noreply,
+           assign(socket,
+             uses: List.insert_at(uses, at, use),
+             labels: Map.put(labels, use.id, "new #{kind}"),
+             selected: use.id,
+             node_label: "design",
+             facet: nil,
+             field: nil,
+             adding: false,
+             notice: nil
+           )}
+      end
     end
 
     # -- variables as chips (spec/14 §19.9, §19.10) --------------------------------------

@@ -1078,6 +1078,34 @@ if Code.ensure_loaded?(Phoenix.Component) do
       text-decoration: line-through;
     }
 
+    /* The + on the Layers title, and its menu of kinds (spec/14 §18.8). */
+    .vis-builder-sidebar-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .vis-builder .vis-builder-add {
+      width: 24px;
+      height: 22px;
+      padding: 0;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .vis-builder-add-menu {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--vis-builder-line);
+    }
+
+    .vis-builder .vis-builder-add-kind {
+      padding: 2px 8px;
+      font-size: 11px;
+    }
+
     /* The context's icon row: layer, colour, font, variables (spec/14 §19.10). */
     .vis-builder-context-icons {
       position: sticky;
