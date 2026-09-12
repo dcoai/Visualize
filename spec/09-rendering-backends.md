@@ -202,7 +202,7 @@ Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outp
 
 `style_apply_commands/1` emits `{:fill, []}` when `:fill` is present and not `:none`, then `{:stroke, []}` when `:stroke` is present and not `:none`.
 
-Text style (`:text` elements only) emits `{:set_font, ["#{size}px #{family}"]}` when either `:font_size` (default `10`) or `:font_family` (default `"sans-serif"`) is set; `{:set_textAlign, ["left" | "center" | "right"]}` for `:text_anchor` `:start | :middle | :end`; and `set_fillStyle` under the fill rules above. No other style keys affect Canvas output.
+Text style (`:text` elements only) emits `{:set_font, [font]}` when any of `:font_size` (default `10`), `:font_family` (default `"sans-serif"`), `:font_weight` or `:font_style` is set, `font` being the CSS shorthand `[style] [weight] size family` — `12px serif`, `italic 300 12px sans-serif`, `bold 12px serif` — with the style and the weight present only when set; `{:set_textAlign, ["left" | "center" | "right"]}` for `:text_anchor` `:start | :middle | :end`; and `set_fillStyle` under the fill rules above. No other style keys affect Canvas output.
 
 #### 3.3.4 Transform commands
 
