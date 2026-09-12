@@ -106,9 +106,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp descend(_type, _value, _path), do: []
 
     # The path as `Visualize.Chart.Validator.format/1` spells it.
-    defp label([]), do: "design"
+    @doc """
+    A path as a person reads it — `design` for the root, else `frame.scales.x`,
+    `marks[0].channels` — the spelling `Visualize.Chart.Validator.format/1` uses (§18.5).
 
-    defp label(path) do
+        iex> Visualize.Chart.Builder.Editor.label([:marks, 0, :style])
+        "marks[0].style"
+    """
+    @spec label([atom() | non_neg_integer()]) :: String.t()
+    def label([]), do: "design"
+
+    def label(path) do
       Enum.reduce(path, "", fn
         index, acc when is_integer(index) -> "#{acc}[#{index}]"
         key, "" -> "#{key}"
@@ -295,23 +303,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `{:ok, value}` or `:error` for a removal — or `nil` for a key the kind does not declare
     (spec/14 §18.6, §19.9).
 
-    A form has three controls per key. `key` is the typed control and reads by `parse/2`;
-    an unchecked checkbox submits nothing, which is `false` and not a removal, and every
-    other control's blank removes the key. `key.mode` is the literal/variable switch:
-    *variable* writes `var(:key)` so the field is a variable from that moment, *literal*
-    removes the key so the typed control is empty and waiting. `key.var` is the variable's
-    name, and a blank one is a removal too.
+    `key` is the typed control and reads by `parse/2`; an unchecked checkbox submits
+    nothing, which is `false` and not a removal, and every other control's blank removes
+    the key. `key.slot` is a colour's slot face and `key.range` a number's slider, both
+    read as the key. A variable reaches a field as a chip dropped on it (§19.9), never as
+    a control of the form, so there is no `key.mode` or `key.var`.
 
         iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["stroke_width"], "stroke_width" => "5"})
         {:stroke_width, {:ok, 5}}
 
-        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["fill.mode"], "fill.mode" => "variable"})
-        {:fill, {:ok, %Visualize.Chart.Var{name: :fill}}}
-
-        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["fill.var"], "fill.var" => "color"})
-        {:fill, {:ok, %Visualize.Chart.Var{name: :color}}}
-
-        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["fill.mode"], "fill.mode" => "literal"})
+        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["fill.slot"], "fill.slot" => ""})
         {:fill, :error}
 
         iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["nonsense"], "nonsense" => "1"})
@@ -320,8 +321,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec change(atom(), map()) :: {atom(), {:ok, term()} | :error} | nil
     def change(kind, %{"_target" => [target]} = params) do
       case String.split(target, ".", parts: 2) do
-        [key, "mode"] -> with %{key: k} <- key_spec(kind, key), do: {k, mode(params[target], k)}
-        [key, "var"] -> with %{key: k} <- key_spec(kind, key), do: {k, variable(params[target])}
         [key, "slot"] -> with %{key: k} <- key_spec(kind, key), do: {k, slot_face(params[target])}
         [key, "range"] -> with spec <- key_spec(kind, key), do: typed(spec, params[target])
         [key] -> with spec <- key_spec(kind, key), do: typed(spec, params[key])
@@ -355,9 +354,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A colour's slot face: a theme slot chosen by name, or — blank — the key removed.
     defp slot_face(nil), do: :error
     defp slot_face(string) when is_binary(string), do: parse(:slot, string)
-
-    defp mode("variable", key), do: {:ok, %Var{name: key}}
-    defp mode(_literal, _key), do: :error
 
     @doc """
     A typed variable name as the variable it names, or `:error` for a blank — a removal.
@@ -399,7 +395,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Enum.filter(@facets, fn facet -> Enum.any?(specs, &(&1.facet == facet)) end)
     end
 
-    attr(:id, :string, default: "vis-builder-editor", doc: "the panel's id, for its datalist")
+    attr(:id, :string, default: "vis-builder-editor", doc: "the panel's id")
     attr(:kind, :atom, required: true, doc: "the node kind being edited")
     attr(:node, :map, required: true, doc: "the node's current value")
     attr(:path, :list, default: [], doc: "where the node sits, for its keys' errors")
@@ -413,6 +409,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:selected, :string, default: nil, doc: "the key of the selected field, if any (§19.10)")
 
+    attr(:found, :string,
+      default: nil,
+      doc: "a variable name whose fields are highlighted (§19.10)"
+    )
+
     attr(:slots, :list,
       default: [],
       doc: "the theme's colour slots, as strings, for a colour's slot face (spec/14 §19.10)"
@@ -425,11 +426,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:event, :string, default: "edit", doc: "the `phx-change` the form pushes")
     attr(:origins, :map, default: %{}, doc: "what supplied each key's value, by key")
-
-    attr(:variables, :list,
-      default: [],
-      doc: "the variable names on offer, for the name's datalist"
-    )
 
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the editor's class")
@@ -465,9 +461,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-target={@target}
           >{facet}</button>
         </nav>
-        <datalist id={@id <> "-variables"}>
-          <option :for={name <- @variables} value={name}></option>
-        </datalist>
         <form
           id={@id <> "-form"}
           class="vis-builder-form"
@@ -479,8 +472,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         >
           <label
             :for={field <- @fields}
-            class={"vis-builder-field" <> if(@selected == to_string(field.key), do: " vis-builder-field-selected", else: "")}
+            class={field_class(field, @selected, @found)}
             data-builder-ref={field.ref && to_string(field.key)}
+            data-builder-bind={field.key}
             phx-click="select_field"
             phx-keyup="select_field"
             phx-value-field={field.key}
@@ -491,20 +485,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 :if={@origins[field.key]}
                 class="vis-builder-origin"
               >{@origins[field.key]}</span>
+              <span
+                :if={is_nil(field.variable) and field.value != nil}
+                class="vis-builder-field-handle"
+                draggable="true"
+                data-builder-promote={field.key}
+                title="drag to the variables panel to make a variable of this value"
+                aria-hidden="true"
+              >⠿</span>
             </span>
-            <select name={"#{field.key}.mode"} class="vis-builder-mode" title="literal, or a variable">
-              <option value="literal" selected={is_nil(field.variable)}>literal</option>
-              <option value="variable" selected={not is_nil(field.variable)}>variable</option>
-            </select>
-            <input
-              :if={field.variable}
-              type="text"
-              name={"#{field.key}.var"}
-              value={field.variable}
-              list={@id <> "-variables"}
-              class="vis-builder-var"
-              title={"var(:" <> field.variable <> ")"}
-            />
+            <span :if={field.variable} class="vis-builder-var-chip vis-builder-var-chip-bound">
+              var(:{field.variable})
+              <button
+                type="button"
+                class="vis-builder-var-unbind"
+                phx-click="unbind_field"
+                phx-value-field={field.key}
+                phx-target={@target}
+                aria-label={"unbind #{field.key} from #{field.variable}"}
+                title="unbind"
+              >×</button>
+            </span>
             <input
               :if={is_nil(field.variable) and field.widget == :checkbox}
               type="checkbox"
@@ -680,6 +681,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp shape({:select, _allowed}), do: :select
     defp shape(widget), do: widget
+
+    defp field_class(field, selected, found) do
+      ["vis-builder-field"]
+      |> then(
+        &if selected == to_string(field.key), do: &1 ++ ["vis-builder-field-selected"], else: &1
+      )
+      |> then(
+        &if found != nil and field.variable == found,
+          do: &1 ++ ["vis-builder-field-found"],
+          else: &1
+      )
+      |> Enum.join(" ")
+    end
 
     defp range(nil), do: nil
     defp range({min, max, step}), do: %{min: min, max: max, step: step}

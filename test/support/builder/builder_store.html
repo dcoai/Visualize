@@ -66,28 +66,21 @@
       
     </aside>
     <main class="vis-builder-main">
-      <nav class="vis-builder-nodes">
-        <button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="sources — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="sources" phx-target="-1">sources</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="vars — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="vars" phx-target="-1">vars</button><button type="button" class="vis-builder-node vis-builder-node-open" title="styles of this layer" phx-click="select_root" phx-value-root="styles" phx-target="-1">styles</button><button type="button" class="vis-builder-node" title="frame of this layer" phx-click="select_root" phx-value-root="frame" phx-target="-1">frame</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="marks — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="marks" phx-target="-1">marks</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="labels — this layer declares none; opens the layer that does" phx-click="select_root" phx-value-root="labels" phx-target="-1">labels</button><button type="button" class="vis-builder-node" title="the variables the stack still needs, and what they are bound to" phx-click="select_root" phx-value-root="variables" phx-target="-1">variables</button>
+      <nav id="builder-nodes" class="vis-builder-nodes" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="root">
+        <button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="sources — this layer declares none; opens the layer that does" data-builder-bind-root="sources" phx-click="select_root" phx-value-root="sources" phx-target="-1">sources</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="vars — this layer declares none; opens the layer that does" data-builder-bind-root="vars" phx-click="select_root" phx-value-root="vars" phx-target="-1">vars</button><button type="button" class="vis-builder-node vis-builder-node-open" title="styles of this layer" data-builder-bind-root="styles" phx-click="select_root" phx-value-root="styles" phx-target="-1">styles</button><button type="button" class="vis-builder-node" title="frame of this layer" data-builder-bind-root="frame" phx-click="select_root" phx-value-root="frame" phx-target="-1">frame</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="marks — this layer declares none; opens the layer that does" data-builder-bind-root="marks" phx-click="select_root" phx-value-root="marks" phx-target="-1">marks</button><button type="button" class="vis-builder-node vis-builder-node-elsewhere" title="labels — this layer declares none; opens the layer that does" data-builder-bind-root="labels" phx-click="select_root" phx-value-root="labels" phx-target="-1">labels</button>
       </nav>
       <nav class="vis-builder-chips">
         <button type="button" class="vis-builder-chip vis-builder-chip-open" phx-click="select_node" phx-value-node="styles.series" phx-target="-1">series</button>
       </nav>
       <div class="vis-builder-workspace">
-        
         <div class="vis-builder-editor">
   
-  <datalist id="builder-editor-variables">
-    <option value="unit"></option>
-  </datalist>
   <form id="builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" phx-target="-1" data-builder-target="-1" data-builder-scope="ref">
-    <label class="vis-builder-field" data-builder-ref="extends" phx-click="select_field" phx-keyup="select_field" phx-value-field="extends" phx-target="-1">
+    <label class="vis-builder-field" data-builder-ref="extends" data-builder-bind="extends" phx-click="select_field" phx-keyup="select_field" phx-value-field="extends" phx-target="-1">
       <span class="vis-builder-key">
         extends
+        
       </span>
-      <select name="extends.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -103,14 +96,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="fill" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill" phx-target="-1">
       <span class="vis-builder-key">
         fill
+        
       </span>
-      <select name="fill.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -126,14 +116,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="stroke" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke" phx-target="-1">
       <span class="vis-builder-key">
         stroke
+        
       </span>
-      <select name="stroke.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -149,14 +136,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_width" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_width" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_width" phx-target="-1">
       <span class="vis-builder-key">
         stroke_width
+        <span class="vis-builder-field-handle" draggable="true" data-builder-promote="stroke_width" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
       </span>
-      <select name="stroke_width.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="stroke_width.range" class="vis-builder-range" min="0" max="20" step="0.5" value="2" aria-label="stroke_width, dragged">
@@ -169,14 +153,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_dasharray" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_dasharray" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_dasharray" phx-target="-1">
       <span class="vis-builder-key">
         stroke_dasharray
+        
       </span>
-      <select name="stroke_dasharray.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -189,14 +170,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linecap" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_linecap" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linecap" phx-target="-1">
       <span class="vis-builder-key">
         stroke_linecap
+        
       </span>
-      <select name="stroke_linecap.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -220,14 +198,11 @@
       </span>
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linejoin" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_linejoin" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linejoin" phx-target="-1">
       <span class="vis-builder-key">
         stroke_linejoin
+        
       </span>
-      <select name="stroke_linejoin.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -251,14 +226,11 @@
       </span>
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="opacity" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="opacity" phx-target="-1">
       <span class="vis-builder-key">
         opacity
+        
       </span>
-      <select name="opacity.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="opacity, dragged">
@@ -271,14 +243,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill_opacity" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="fill_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill_opacity" phx-target="-1">
       <span class="vis-builder-key">
         fill_opacity
+        
       </span>
-      <select name="fill_opacity.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="fill_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
@@ -291,14 +260,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_opacity" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_opacity" phx-target="-1">
       <span class="vis-builder-key">
         stroke_opacity
+        
       </span>
-      <select name="stroke_opacity.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="stroke_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="stroke_opacity, dragged">
@@ -311,14 +277,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_family" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="font_family" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_family" phx-target="-1">
       <span class="vis-builder-key">
         font_family
+        
       </span>
-      <select name="font_family.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -331,14 +294,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_size" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="font_size" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_size" phx-target="-1">
       <span class="vis-builder-key">
         font_size
+        
       </span>
-      <select name="font_size.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="font_size.range" class="vis-builder-range" min="6" max="72" step="1" value="6" aria-label="font_size, dragged">
@@ -351,14 +311,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_weight" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="font_weight" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_weight" phx-target="-1">
       <span class="vis-builder-key">
         font_weight
+        
       </span>
-      <select name="font_weight.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -371,14 +328,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_anchor" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="text_anchor" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_anchor" phx-target="-1">
       <span class="vis-builder-key">
         text_anchor
+        
       </span>
-      <select name="text_anchor.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -402,14 +356,11 @@
       </span>
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="class" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="class" phx-click="select_field" phx-keyup="select_field" phx-value-field="class" phx-target="-1">
       <span class="vis-builder-key">
         class
+        
       </span>
-      <select name="class.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -422,14 +373,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="curve" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve" phx-target="-1">
       <span class="vis-builder-key">
         curve
+        
       </span>
-      <select name="curve.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -474,14 +422,11 @@
       </span>
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve_opts" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="curve_opts" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve_opts" phx-target="-1">
       <span class="vis-builder-key">
         curve_opts
+        
       </span>
-      <select name="curve_opts.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -494,14 +439,11 @@
       
       <textarea name="curve_opts"></textarea>
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="symbol" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol" phx-target="-1">
       <span class="vis-builder-key">
         symbol
+        
       </span>
-      <select name="symbol.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -537,14 +479,11 @@
       </span>
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol_size" phx-target="-1">
+    </label><label class="vis-builder-field" data-builder-bind="symbol_size" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol_size" phx-target="-1">
       <span class="vis-builder-key">
         symbol_size
+        
       </span>
-      <select name="symbol_size.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -605,6 +544,29 @@
     </label>
   </form>
   
+</div>
+      <h2 class="vis-builder-sidebar-title">Variables</h2>
+      <div id="builder-variables" class="vis-builder-variables" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="variables">
+  <form class="vis-builder-find" phx-change="find_variable" phx-target="-1">
+    <input type="search" name="find" value="" placeholder="find a variable" aria-label="find a variable" phx-debounce="150">
+  </form>
+  <ul class="vis-builder-chips-list">
+    <li class="vis-builder-variable">
+      <div class="vis-builder-variable-row">
+        <span class="vis-builder-var-chip" draggable="true" data-builder-variable="unit" title="var(:unit) — drag onto a field to bind it">var(:unit)</span>
+        <span class="vis-builder-variable-type">a text</span>
+        <button type="button" class="vis-builder-variable-expand" phx-click="expand_variable" phx-value-name="unit" phx-target="-1" aria-expanded="false" aria-label="details of unit">▸</button>
+      </div>
+      
+    </li>
+  </ul>
+  
+  <form class="vis-builder-create" phx-submit="create_variable" phx-target="-1" data-builder-promote-target="true">
+    <input type="text" name="name" placeholder="new variable" aria-label="new variable's name">
+    <input type="text" name="default" placeholder="default" aria-label="its default">
+    <button type="submit">Create</button>
+    <p class="vis-builder-context-note">or drop a field's handle here to make a variable of its value</p>
+  </form>
 </div>
     </aside>
   </div>

@@ -2,18 +2,12 @@
   <nav class="vis-builder-tabs">
     <button type="button" class="vis-builder-tab vis-builder-tab-open" phx-click="facet" phx-value-facet="style">style</button>
   </nav>
-  <datalist id="vis-builder-editor-variables">
-    
-  </datalist>
   <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref">
-    <label class="vis-builder-field" data-builder-ref="extends" phx-click="select_field" phx-keyup="select_field" phx-value-field="extends">
+    <label class="vis-builder-field" data-builder-ref="extends" data-builder-bind="extends" phx-click="select_field" phx-keyup="select_field" phx-value-field="extends">
       <span class="vis-builder-key">
         extends
+        
       </span>
-      <select name="extends.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -26,14 +20,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill">
+    </label><label class="vis-builder-field" data-builder-bind="fill" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill">
       <span class="vis-builder-key">
         fill
+        
       </span>
-      <select name="fill.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -49,14 +40,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke">
+    </label><label class="vis-builder-field" data-builder-bind="stroke" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke">
       <span class="vis-builder-key">
         stroke
+        
       </span>
-      <select name="stroke.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -74,14 +62,11 @@
       <ul class="vis-builder-key-errors">
         <li class="vis-builder-error">styles.series.stroke: slot :series_1 is not a slot of the theme</li>
       </ul>
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_width">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_width" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_width">
       <span class="vis-builder-key">
         stroke_width
+        <span class="vis-builder-field-handle" draggable="true" data-builder-promote="stroke_width" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
       </span>
-      <select name="stroke_width.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="stroke_width.range" class="vis-builder-range" min="0" max="20" step="0.5" value="2" aria-label="stroke_width, dragged">
@@ -94,14 +79,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_dasharray">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_dasharray" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_dasharray">
       <span class="vis-builder-key">
         stroke_dasharray
+        
       </span>
-      <select name="stroke_dasharray.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -114,14 +96,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linecap">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_linecap" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linecap">
       <span class="vis-builder-key">
         stroke_linecap
+        
       </span>
-      <select name="stroke_linecap.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -145,14 +124,11 @@
       </span>
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linejoin">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_linejoin" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linejoin">
       <span class="vis-builder-key">
         stroke_linejoin
+        
       </span>
-      <select name="stroke_linejoin.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -176,14 +152,11 @@
       </span>
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="opacity">
+    </label><label class="vis-builder-field" data-builder-bind="opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="opacity">
       <span class="vis-builder-key">
         opacity
+        
       </span>
-      <select name="opacity.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="opacity, dragged">
@@ -196,14 +169,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill_opacity">
+    </label><label class="vis-builder-field" data-builder-bind="fill_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill_opacity">
       <span class="vis-builder-key">
         fill_opacity
+        
       </span>
-      <select name="fill_opacity.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="fill_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
@@ -216,14 +186,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_opacity">
+    </label><label class="vis-builder-field" data-builder-bind="stroke_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_opacity">
       <span class="vis-builder-key">
         stroke_opacity
+        
       </span>
-      <select name="stroke_opacity.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="stroke_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="stroke_opacity, dragged">
@@ -236,14 +203,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_family">
+    </label><label class="vis-builder-field" data-builder-bind="font_family" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_family">
       <span class="vis-builder-key">
         font_family
+        
       </span>
-      <select name="font_family.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -256,14 +220,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_size">
+    </label><label class="vis-builder-field" data-builder-bind="font_size" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_size">
       <span class="vis-builder-key">
         font_size
+        
       </span>
-      <select name="font_size.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       <input type="range" name="font_size.range" class="vis-builder-range" min="6" max="72" step="1" value="6" aria-label="font_size, dragged">
@@ -276,14 +237,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_weight">
+    </label><label class="vis-builder-field" data-builder-bind="font_weight" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_weight">
       <span class="vis-builder-key">
         font_weight
+        
       </span>
-      <select name="font_weight.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -296,14 +254,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_anchor">
+    </label><label class="vis-builder-field" data-builder-bind="text_anchor" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_anchor">
       <span class="vis-builder-key">
         text_anchor
+        
       </span>
-      <select name="text_anchor.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -327,14 +282,11 @@
       </span>
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="class">
+    </label><label class="vis-builder-field" data-builder-bind="class" phx-click="select_field" phx-keyup="select_field" phx-value-field="class">
       <span class="vis-builder-key">
         class
+        
       </span>
-      <select name="class.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -347,14 +299,11 @@
       
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve">
+    </label><label class="vis-builder-field" data-builder-bind="curve" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve">
       <span class="vis-builder-key">
         curve
+        
       </span>
-      <select name="curve.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -401,14 +350,11 @@
       <ul class="vis-builder-key-errors">
         <li class="vis-builder-error">styles.series.curve: must be one of :linear, :step</li>
       </ul>
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve_opts">
+    </label><label class="vis-builder-field" data-builder-bind="curve_opts" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve_opts">
       <span class="vis-builder-key">
         curve_opts
+        
       </span>
-      <select name="curve_opts.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -421,14 +367,11 @@
       
       <textarea name="curve_opts"></textarea>
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol">
+    </label><label class="vis-builder-field" data-builder-bind="symbol" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol">
       <span class="vis-builder-key">
         symbol
+        
       </span>
-      <select name="symbol.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
@@ -464,14 +407,11 @@
       </span>
       
       
-    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol_size">
+    </label><label class="vis-builder-field" data-builder-bind="symbol_size" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol_size">
       <span class="vis-builder-key">
         symbol_size
+        
       </span>
-      <select name="symbol_size.mode" class="vis-builder-mode" title="literal, or a variable">
-        <option value="literal" selected>literal</option>
-        <option value="variable">variable</option>
-      </select>
       
       
       
