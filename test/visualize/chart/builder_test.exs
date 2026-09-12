@@ -24,6 +24,7 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.Chart.Use
 
   doctest Visualize.Chart.Builder.Masks
+  doctest Visualize.Chart.Builder.Picker
 
   for name <- ~w(preview preview_errors builder builder_store)a do
     test "#{name} renders as recorded" do
@@ -1332,6 +1333,100 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, deployed} = Builder.handle_event("deploy", %{}, s)
       assert deployed.assigns.notice == "deployed with 1 reference(s) showing through: scale:9"
+    end
+  end
+
+  describe "the context panel is the picker for the selected field (spec/14 §19.10)" do
+    setup do
+      store = Visualize.Chart.BuilderTest.Refs
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: store)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "styles.series"}, s)
+      %{socket: s}
+    end
+
+    test "a colour field: swatches for every slot, a picker, the chart's colours, a variable", %{
+      socket: s
+    } do
+      {:noreply, s} = Builder.handle_event("select_field", %{"field" => "stroke"}, s)
+      html = BuilderFixture.render(s)
+
+      assert html =~ ~s(<form id="b-picker" class="vis-builder-picker" phx-change="edit")
+      assert html =~ ~s(<h3 class="vis-builder-context-title">stroke</h3>)
+      assert html =~ "= :series_1"
+
+      for slot <- Visualize.Theme.colour_slots(Visualize.Theme.default()) do
+        assert html =~ ~s(name="stroke.slot" value="#{slot}")
+      end
+
+      assert html =~ ~s(class="vis-builder-swatch vis-builder-swatch-on" title="series_1")
+      assert html =~ ~s(<input type="color" name="stroke" class="vis-builder-colour")
+      assert html =~ ~s(name="stroke.var")
+      assert html =~ ~s(class="vis-builder-field vis-builder-field-selected")
+      refute html =~ ~s(class="vis-builder-layer-context")
+
+      # Choosing a swatch is the form's own write.
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["stroke.slot"], "stroke.slot" => "axis"}, s)
+
+      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke]) == :axis
+    end
+
+    test "a font field lists faces in their own face; an enum its glyphs; a number a slider", %{
+      socket: s
+    } do
+      {:noreply, font} = Builder.handle_event("select_field", %{"field" => "font_family"}, s)
+      html = BuilderFixture.render(font)
+      assert html =~ ~s(class="vis-builder-face" style="font-family: Georgia")
+
+      assert html =~
+               ~s(<input type="radio" name="font_family" value="Georgia" aria-label="Georgia">)
+
+      {:noreply, curve} = Builder.handle_event("select_field", %{"field" => "curve"}, s)
+
+      {:noreply, curve} =
+        Builder.handle_event("edit", %{"_target" => ["curve"], "curve" => "step"}, curve)
+
+      html = BuilderFixture.render(curve)
+      assert html =~ ~s(class="vis-builder-glyphs vis-builder-glyphs-large")
+      assert html =~ ~s(class="vis-builder-glyph vis-builder-glyph-on" title="step")
+      assert html =~ "= :step"
+
+      {:noreply, width} = Builder.handle_event("select_field", %{"field" => "stroke_width"}, s)
+      html = BuilderFixture.render(width)
+
+      assert html =~
+               ~s(name="stroke_width.range" class="vis-builder-range vis-builder-range-large")
+    end
+
+    test "a reference field lists local keys and the library's entries of the kind", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "frame.axes[0]"}, s)
+      {:noreply, s} = Builder.handle_event("select_field", %{"field" => "scale"}, s)
+      html = BuilderFixture.render(s)
+
+      assert html =~ ~s(class="vis-builder-choice vis-builder-choice-on")
+      assert html =~ ~s(<input type="radio" name="scale" value="x" checked>)
+      assert html =~ ~s(<input type="radio" name="scale" value="scale:4">)
+      assert html =~ ~s(<span class="vis-builder-choice-name">hour</span>)
+      assert html =~ ~s(<span class="vis-builder-choice-where">Scales</span>)
+    end
+
+    test "selecting a node or a layer clears the field, and the layer's context returns", %{
+      socket: s
+    } do
+      {:noreply, s} = Builder.handle_event("select_field", %{"field" => "stroke"}, s)
+      assert s.assigns.field == "stroke"
+
+      {:noreply, node} = Builder.handle_event("select_node", %{"node" => "frame"}, s)
+      assert node.assigns.field == nil
+      assert BuilderFixture.render(node) =~ ~s(class="vis-builder-layer-context")
+
+      {:noreply, layer} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      assert layer.assigns.field == nil
+
+      # A field the node does not have is no picker.
+      {:noreply, none} = Builder.handle_event("select_field", %{"field" => "nonsense"}, s)
+      refute BuilderFixture.render(none) =~ "vis-builder-picker"
     end
   end
 

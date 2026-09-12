@@ -52,6 +52,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       --vis-builder-library: 216px;
       --vis-builder-context: 240px;
       --vis-builder-height: 100vh;
+      --vis-builder-swatch: transparent;
       --vis-builder-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", roboto, sans-serif;
       --vis-builder-mono: ui-monospace, sfmono-regular, "SF Mono", menlo, monospace;
 
@@ -1075,6 +1076,131 @@ if Code.ensure_loaded?(Phoenix.Component) do
     .vis-builder-mask-on .vis-builder-mask-path {
       color: var(--vis-builder-muted);
       text-decoration: line-through;
+    }
+
+    /* The context panel as the picker for the selected field (spec/14 §19.10). */
+    .vis-builder-field-selected {
+      border-radius: var(--vis-builder-radius);
+      box-shadow: 0 0 0 2px var(--vis-builder-accent);
+    }
+
+    .vis-builder-picker {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .vis-builder-picker-reads {
+      margin: 0;
+      color: var(--vis-builder-muted);
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+    }
+
+    .vis-builder-picker-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .vis-builder-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .vis-builder-swatch {
+      position: relative;
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: var(--vis-builder-swatch);
+      cursor: pointer;
+    }
+
+    .vis-builder-swatch-on {
+      box-shadow: 0 0 0 2px var(--vis-builder-panel), 0 0 0 4px var(--vis-builder-accent);
+    }
+
+    .vis-builder-swatch input,
+    .vis-builder-face input,
+    .vis-builder-word input,
+    .vis-builder-choice input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .vis-builder-swatch:focus-within,
+    .vis-builder-face:focus-within,
+    .vis-builder-word:focus-within,
+    .vis-builder-choice:focus-within {
+      outline: 2px solid var(--vis-builder-accent);
+      outline-offset: 1px;
+    }
+
+    .vis-builder-faces,
+    .vis-builder-words,
+    .vis-builder-choices {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .vis-builder-face,
+    .vis-builder-word,
+    .vis-builder-choice {
+      position: relative;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 4px 8px;
+      border: 1px solid transparent;
+      border-radius: var(--vis-builder-radius);
+      cursor: pointer;
+    }
+
+    .vis-builder-face {
+      font-size: 15px;
+    }
+
+    .vis-builder-face:hover,
+    .vis-builder-word:hover,
+    .vis-builder-choice:hover {
+      border-color: var(--vis-builder-line);
+    }
+
+    .vis-builder-face-on,
+    .vis-builder-word-on,
+    .vis-builder-choice-on {
+      border-color: var(--vis-builder-accent);
+      background: var(--vis-builder-bg);
+    }
+
+    .vis-builder-choice-where {
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+    }
+
+    .vis-builder-glyphs-large .vis-builder-glyph {
+      width: 44px;
+      height: 44px;
+    }
+
+    .vis-builder-glyphs-large .vis-builder-glyph-svg {
+      width: 32px;
+      height: 32px;
+    }
+
+    .vis-builder .vis-builder-range-large {
+      margin: 8px 0;
     }
 
     /* A ranged number: the slider before its box, the dash pattern after (spec/14 §18.6). */
