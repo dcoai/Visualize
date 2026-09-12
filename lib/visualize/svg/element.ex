@@ -158,6 +158,7 @@ defmodule Visualize.SVG.Element do
   defp style_key_to_svg(:font_size), do: :"font-size"
   defp style_key_to_svg(:font_family), do: :"font-family"
   defp style_key_to_svg(:font_weight), do: :"font-weight"
+  defp style_key_to_svg(:font_style), do: :"font-style"
   defp style_key_to_svg(:text_anchor), do: :"text-anchor"
   defp style_key_to_svg(:dominant_baseline), do: :"dominant-baseline"
   defp style_key_to_svg(:stop_color), do: :"stop-color"
@@ -175,6 +176,8 @@ defmodule Visualize.SVG.Element do
   defp style_value_to_svg(:miter), do: "miter"
   defp style_value_to_svg(:bevel), do: "bevel"
   defp style_value_to_svg(:bold), do: "bold"
+  defp style_value_to_svg(:normal), do: "normal"
+  defp style_value_to_svg(:italic), do: "italic"
   defp style_value_to_svg(value), do: value
 
   @doc """

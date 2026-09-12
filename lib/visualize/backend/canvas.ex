@@ -429,10 +429,16 @@ defmodule Visualize.Backend.Canvas do
     cmds = []
 
     cmds =
-      if style[:font_size] || style[:font_family] do
+      if style[:font_size] || style[:font_family] || style[:font_weight] || style[:font_style] do
         size = style[:font_size] || 10
         family = style[:font_family] || "sans-serif"
-        cmds ++ [{:set_font, ["#{size}px #{family}"]}]
+        # The CSS shorthand: [style] [weight] size family (spec/09 §3).
+        font =
+          [style[:font_style], style[:font_weight], "#{size}px", family]
+          |> Enum.reject(&is_nil/1)
+          |> Enum.map_join(" ", &to_string/1)
+
+        cmds ++ [{:set_font, [font]}]
       else
         cmds
       end

@@ -1444,7 +1444,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert get_in(hd(refused.assigns.uses).local, [:styles, :series, :stroke_width]) == 2
     end
 
-    test "the font panel: faces in their face, size, weight, anchor — for a node with font keys",
+    test "the font panel: families in their face, size, the face list, anchor — for a node with font keys",
          %{
            socket: s
          } do
@@ -1454,8 +1454,29 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<form class="vis-builder-fonts" phx-change="edit")
       assert html =~ ~s(class="vis-builder-face" style="font-family: Georgia")
       assert html =~ ~s(name="font_size.range")
-      assert html =~ ~s(<input type="radio" name="font_weight" value="bold")
+      refute html =~ ~s(name="font_weight")
+      assert html =~ ~s(<input type="radio" name="font_face" value="bold_italic")
       assert html =~ ~s(<input type="radio" name="text_anchor" value="middle")
+
+      # The face list is one control over two keys (§18.6): a face writes both, and the
+      # node then shows that face; the form shows the same list in font_weight's place
+      # and no font_style row.
+      {:noreply, faced} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["font_face"], "font_face" => "light_italic"},
+          s
+        )
+
+      style = get_in(hd(faced.assigns.uses).local, [:styles, :series])
+      assert style.font_weight == :light and style.font_style == :italic
+      faced_html = BuilderFixture.render(faced)
+
+      assert faced_html =~
+               ~s(name="font_face" value="light_italic" checked aria-label="light italic")
+
+      refute faced_html =~ ~s(phx-value-field="font_style")
+      assert length(Regex.scan(~r/class="vis-builder-face-list/, faced_html)) == 2
 
       {:noreply, s} =
         Builder.handle_event(

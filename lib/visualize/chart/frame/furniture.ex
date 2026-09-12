@@ -18,7 +18,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     :stroke_opacity
   ]
   @text_keys [:fill, :fill_opacity, :text_anchor]
-  @group_keys [:opacity, :class, :font_family, :font_size, :font_weight]
+  @group_keys [:opacity, :class, :font_family, :font_size, :font_weight, :font_style]
 
   @doc false
   # The grid group when any axis asks for one, then the marks given, then one group per

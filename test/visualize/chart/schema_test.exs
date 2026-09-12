@@ -38,7 +38,7 @@ defmodule Visualize.Chart.SchemaTest do
     assert {:mark, :style} in style_keys
     assert {:axis, :style} in style_keys
     assert {:style, :fill} in style_keys
-    assert length(Schema.keys(:style, :style)) == 19
+    assert length(Schema.keys(:style, :style)) == 20
     assert {:style, :extends} in style_keys
     assert Schema.keys(:axis, :content) == [:format]
     assert Schema.keys(:label, :geometry) == [:dx, :dy]

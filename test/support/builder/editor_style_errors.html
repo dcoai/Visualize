@@ -14,6 +14,7 @@
   
   
   
+  
   <input type="text" name="extends">
   
   
@@ -37,6 +38,7 @@
   
   
   
+  
   <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="no colour set" role="img" aria-label="fill: not set" data-builder-well="fill"></span>
   
   
@@ -51,6 +53,7 @@
   
   
   <input type="range" name="fill_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
+  
   
   <input type="text" name="fill_opacity">
   
@@ -75,6 +78,7 @@
   
   <input type="range" name="stroke_width.range" class="vis-builder-range" min="0" max="20" step="0.5" value="2" aria-label="stroke_width, dragged">
   
+  
   <input type="text" name="stroke_width" value="2">
   
   
@@ -88,6 +92,7 @@
     stroke
     
   </span>
+  
   
   
   
@@ -111,6 +116,7 @@
   
   <input type="range" name="stroke_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="stroke_opacity, dragged">
   
+  
   <input type="text" name="stroke_opacity">
   
   
@@ -128,6 +134,7 @@
   
   
   
+  
   <input type="text" name="stroke_dasharray">
   
   
@@ -141,6 +148,7 @@
     stroke_linejoin
     
   </span>
+  
   
   
   
@@ -169,6 +177,7 @@
     stroke_linecap
     
   </span>
+  
   
   
   
@@ -207,6 +216,7 @@
   
   
   
+  
   <input type="text" name="font_family">
   
   
@@ -224,6 +234,7 @@
   
   <input type="range" name="font_size.range" class="vis-builder-range" min="6" max="72" step="1" value="6" aria-label="font_size, dragged">
   
+  
   <input type="text" name="font_size">
   
   
@@ -240,7 +251,34 @@
   
   
   
-  <input type="number" name="font_weight">
+  
+  <span class="vis-builder-face-list" role="radiogroup" aria-label="face">
+    <label class="vis-builder-face-row vis-builder-face-row-on" style="font-weight: 400; font-style: normal">
+      <input type="radio" name="font_face" value="regular" checked aria-label="regular">
+      regular
+    </label><label class="vis-builder-face-row" style="font-weight: 400; font-style: italic">
+      <input type="radio" name="font_face" value="italic" aria-label="italic">
+      italic
+    </label><label class="vis-builder-face-row" style="font-weight: 300; font-style: normal">
+      <input type="radio" name="font_face" value="light" aria-label="light">
+      light
+    </label><label class="vis-builder-face-row" style="font-weight: 300; font-style: italic">
+      <input type="radio" name="font_face" value="light_italic" aria-label="light italic">
+      light italic
+    </label><label class="vis-builder-face-row" style="font-weight: 500; font-style: normal">
+      <input type="radio" name="font_face" value="medium" aria-label="medium">
+      medium
+    </label><label class="vis-builder-face-row" style="font-weight: 500; font-style: italic">
+      <input type="radio" name="font_face" value="medium_italic" aria-label="medium italic">
+      medium italic
+    </label><label class="vis-builder-face-row" style="font-weight: 700; font-style: normal">
+      <input type="radio" name="font_face" value="bold" aria-label="bold">
+      bold
+    </label><label class="vis-builder-face-row" style="font-weight: 700; font-style: italic">
+      <input type="radio" name="font_face" value="bold_italic" aria-label="bold italic">
+      bold italic
+    </label>
+  </span>
   
   
   
@@ -260,6 +298,7 @@
     text_anchor
     
   </span>
+  
   
   
   
@@ -298,6 +337,7 @@
   
   <input type="range" name="opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="opacity, dragged">
   
+  
   <input type="text" name="opacity">
   
   
@@ -320,6 +360,7 @@
   
   
   
+  
   <input type="text" name="class">
   
   
@@ -333,6 +374,7 @@
     curve
     
   </span>
+  
   
   
   
@@ -394,6 +436,7 @@
   
   
   
+  
   <textarea name="curve_opts"></textarea>
   
 </label><label class="vis-builder-field" data-builder-bind="symbol" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol">
@@ -401,6 +444,7 @@
     symbol
     
   </span>
+  
   
   
   
@@ -441,6 +485,7 @@
     symbol_size
     
   </span>
+  
   
   
   

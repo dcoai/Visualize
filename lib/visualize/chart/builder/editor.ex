@@ -336,6 +336,90 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def change(_kind, _params), do: nil
 
+    @faces [
+      {:regular, :normal, :normal},
+      {:italic, :normal, :italic},
+      {:light, :light, :normal},
+      {:light_italic, :light, :italic},
+      {:medium, :medium, :normal},
+      {:medium_italic, :medium, :italic},
+      {:bold, :bold, :normal},
+      {:bold_italic, :bold, :italic}
+    ]
+
+    @doc """
+    Every write a change to the form means (spec/14 §18.6): one for most controls, as
+    `change/2` reads it, and two for a `font_face` — the weight word and the style word
+    of the face picked — since a face is one control over two keys.
+
+        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["font_face"], "font_face" => "light_italic"})
+        [font_weight: {:ok, :light}, font_style: {:ok, :italic}]
+
+        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["font_face"], "font_face" => "regular"})
+        [font_weight: {:ok, :normal}, font_style: {:ok, :normal}]
+
+        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["stroke_width"], "stroke_width" => "5"})
+        [stroke_width: {:ok, 5}]
+
+        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["nonsense"], "nonsense" => "1"})
+        []
+    """
+    @spec changes(atom(), map()) :: [{atom(), {:ok, term()} | :error}]
+    def changes(kind, %{"_target" => ["font_face"], "font_face" => picked} = _params) do
+      with true <- Schema.key(kind, :font_weight) != nil and Schema.key(kind, :font_style) != nil,
+           {_face, weight, style} <- Enum.find(@faces, &(to_string(elem(&1, 0)) == picked)) do
+        [font_weight: {:ok, weight}, font_style: {:ok, style}]
+      else
+        _other -> []
+      end
+    end
+
+    def changes(kind, params), do: List.wrap(change(kind, params))
+
+    @doc """
+    The eight faces in order, each with the weight and style it writes (spec/14 §18.6).
+
+        iex> hd(Visualize.Chart.Builder.Editor.faces())
+        {:regular, :normal, :normal}
+    """
+    @spec faces() :: [{atom(), atom(), atom()}]
+    def faces, do: @faces
+
+    @doc """
+    The face a weight and a style show as (spec/14 §18.6): one of the eight words. A
+    missing key reads as `:normal`; an integer weight is the nearest of 300, 400, 500
+    and 700.
+
+        iex> Visualize.Chart.Builder.Editor.face(:bold, :italic)
+        :bold_italic
+
+        iex> Visualize.Chart.Builder.Editor.face(nil, nil)
+        :regular
+
+        iex> Visualize.Chart.Builder.Editor.face(650, nil)
+        :bold
+
+        iex> Visualize.Chart.Builder.Editor.face(250, :italic)
+        :light_italic
+    """
+    @spec face(term(), term()) :: atom()
+    def face(weight, style) do
+      w = weight_word(weight)
+      st = if style == :italic, do: :italic, else: :normal
+      Enum.find_value(@faces, :regular, fn {face, fw, fs} -> fw == w and fs == st and face end)
+    end
+
+    defp weight_word(word) when word in [:light, :normal, :medium, :bold], do: word
+
+    defp weight_word(n) when is_number(n),
+      do:
+        Enum.min_by([{300, :light}, {400, :normal}, {500, :medium}, {700, :bold}], fn {w, _} ->
+          abs(w - n)
+        end)
+        |> elem(1)
+
+    defp weight_word(_other), do: :normal
+
     defp key_spec(kind, submitted) do
       Enum.find(Schema.describe(kind), &(to_string(&1.key) == submitted))
     end
@@ -575,6 +659,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
           value={@field.value}
           placeholder={@field.placeholder}
         />
+        <span
+          :if={is_nil(@field.variable) and @field.widget == :faces}
+          class="vis-builder-face-list"
+          role="radiogroup"
+          aria-label="face"
+        >
+          <label
+            :for={row <- @field.faces}
+            class={"vis-builder-face-row" <> if(row.on?, do: " vis-builder-face-row-on", else: "")}
+            style={row.css}
+          >
+            <input type="radio" name="font_face" value={row.face} checked={row.on?} aria-label={row.label} />
+            {row.label}
+          </label>
+        </span>
         <input
           :if={is_nil(@field.variable) and @field.widget == :text}
           type="text"
@@ -694,15 +793,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp fields(specs, open, %{node: node, path: path, errors: errors} = assigns) do
       refs = Map.get(assigns, :refs) || %{}
 
-      for spec <- specs, spec.facet == open do
+      faced? = Enum.any?(specs, &(&1.key == :font_style))
+
+      for spec <- specs, spec.facet == open, not (faced? and spec.key == :font_style) do
         widget = referenced(spec.type, refs)
 
         %{
           key: spec.key,
+          faces: if(faced? and spec.key == :font_weight, do: face_rows(node), else: []),
+          # The face list stands in for the weight's box (§18.6).
+          widget: if(faced? and spec.key == :font_weight, do: :faces, else: shape(widget)),
           group: spec.group,
           ref: ref_field(spec.type),
           text?: spec.type == :text,
-          widget: shape(widget),
           glyphs: glyphs(spec.key, widget),
           range: range(spec.range),
           slider: slider(Map.fetch(node, spec.key), spec),
@@ -807,6 +910,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp option({kind, n}) when is_atom(kind) and is_integer(n), do: Store.encode_id({kind, n})
     defp option(value), do: to_string(value)
+
+    # The face list's rows (§18.6): each face with its picture's weight and slant, the
+    # node's own face marked.
+    defp face_rows(node) do
+      shown = face(Map.get(node, :font_weight), Map.get(node, :font_style))
+
+      for {face, weight, style} <- @faces do
+        %{
+          face: face,
+          on?: face == shown,
+          css: "font-weight: #{css_weight(weight)}; font-style: #{style}",
+          label: face |> to_string() |> String.replace("_", " ")
+        }
+      end
+    end
+
+    defp css_weight(:light), do: 300
+    defp css_weight(:normal), do: 400
+    defp css_weight(:medium), do: 500
+    defp css_weight(:bold), do: 700
 
     # A list of scalars as its rows: a chip for a variable, the text for anything else.
     defp items({:items, _scalar}, list) when is_list(list) do

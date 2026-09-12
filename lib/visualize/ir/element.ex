@@ -70,7 +70,8 @@ defmodule Visualize.IR.Element do
           optional(:stroke_opacity) => number(),
           optional(:font_size) => number() | String.t(),
           optional(:font_family) => String.t(),
-          optional(:font_weight) => String.t() | number(),
+          optional(:font_weight) => String.t() | number() | :normal | :bold,
+          optional(:font_style) => :normal | :italic,
           optional(:text_anchor) => :start | :middle | :end,
           optional(:dominant_baseline) => atom(),
           optional(:class) => String.t()

@@ -53,6 +53,35 @@ defmodule Visualize.Chart.StyleTest do
            }
   end
 
+  test "a weight word CSS lacks is its number, and a slant passes through (spec/14 §3.1, §3.4)" do
+    node = %{font_weight: :light, font_style: :italic}
+    assert Style.resolve(node, @theme, :css) == %{font_weight: 300, font_style: :italic}
+    assert Style.resolve(%{font_weight: :medium}, @theme, :literal) == %{font_weight: 500}
+    assert Style.resolve(%{font_weight: :bold}, @theme, :literal) == %{font_weight: :bold}
+    assert Style.resolve(%{font_weight: 600}, @theme, :literal) == %{font_weight: 600}
+
+    svg =
+      Visualize.Backend.SVG.render_element(
+        Visualize.IR.Element.text("a", 0, 0, Style.resolve(node, @theme, :css))
+      )
+      |> IO.iodata_to_binary()
+
+    assert svg =~ ~s(font-weight="300")
+    assert svg =~ ~s(font-style="italic")
+
+    js =
+      Visualize.Backend.Canvas.render_element(
+        Visualize.IR.Element.text("a", 0, 0, %{
+          font_style: :italic,
+          font_weight: 300,
+          font_size: 12
+        })
+      )
+      |> IO.iodata_to_binary()
+
+    assert js =~ "ctx.font = 'italic 300 12px sans-serif';"
+  end
+
   test "the four generator keys never reach an element" do
     resolved = Style.resolve(@node, @theme, :css)
     refute Enum.any?([:curve, :curve_opts, :symbol, :symbol_size], &Map.has_key?(resolved, &1))
