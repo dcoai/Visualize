@@ -879,6 +879,35 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # The declaration's default, from the expanded chip (spec/14 §19.10): written where the
+    # stack declares the name — the highest site that does, a var site by its key or a
+    # layer under its `vars` — else declared by a new var site on top, so it is what wins.
+    def handle_event("set_default", %{"_target" => [name]} = params, socket) do
+      %{uses: uses} = socket.assigns
+
+      case Editor.variable(name) do
+        {:ok, var} ->
+          default = parsed_default(Map.get(params, name, ""))
+          write = if default == nil, do: :error, else: {:ok, default}
+
+          case declarer(uses, var.name) do
+            nil ->
+              {:noreply, declared(socket, var.name, default, :top)}
+
+            {site, path} ->
+              {:noreply,
+               update(
+                 socket,
+                 :uses,
+                 &Stack.update(&1, site.id, fn u -> Stack.write(u, path, :default, write) end)
+               )}
+          end
+
+        :error ->
+          {:noreply, socket}
+      end
+    end
+
     # A mask checkbox: the path joins or leaves the selected site's mask (spec/14 §19.5).
     # An unchecked box submits nothing, which is the path leaving.
     def handle_event("mask", %{"_target" => [name]} = params, socket) do
@@ -1020,17 +1049,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp type_word(type), do: "a #{inspect(type)}"
 
     # A var site at the bottom of the stack, keyed by the name, with the default.
-    defp declared(socket, name, default) do
+    defp declared(socket, name, default, where \\ :bottom) do
       %{uses: uses, labels: labels} = socket.assigns
       default = if is_binary(default), do: parsed_default(default), else: default
       body = if default == nil, do: %{}, else: %{default: default}
       use = %{Use.new(nil, uses) | ref: nil, local: %{var: body}, key: name}
 
       assign(socket,
-        uses: [use | uses],
+        uses: if(where == :top, do: uses ++ [use], else: [use | uses]),
         labels: Map.put(labels, use.id, "var #{name}"),
         notice: nil
       )
+    end
+
+    # The highest site declaring a variable, and the path of its declaration in that
+    # site's local: `[:var]` for a var site keyed by the name, `[:vars, name]` for a layer.
+    defp declarer(uses, name) do
+      uses
+      |> Enum.reverse()
+      |> Enum.find_value(fn use ->
+        cond do
+          use.key == name and match?({:var, _}, Fragment.wrapped(use.local)) ->
+            {use, [:var]}
+
+          is_map(use.local) and is_map(Map.get(use.local, :vars)) and
+              Map.has_key?(use.local.vars, name) ->
+            {use, [:vars, name]}
+
+          true ->
+            nil
+        end
+      end)
     end
 
     defp parsed_default(string) do
@@ -1314,7 +1363,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # Every root but the design's own: design is the deployed tier, not a node to edit.
     defp roots(design, here) do
       declared = design |> Editor.nodes() |> Enum.map(&root(&1.label)) |> Enum.uniq()
-      Enum.reject(declared ++ Enum.reject(here, &(&1 in declared)), &(&1 == "design"))
+      # Neither the design's own root nor `vars` is a tab: a declaration is the variable
+      # panel's (§19.10), where it is made, defaulted and bound in one place.
+      Enum.reject(declared ++ Enum.reject(here, &(&1 in declared)), &(&1 in ["design", "vars"]))
     end
 
     defp first_node(nodes) do

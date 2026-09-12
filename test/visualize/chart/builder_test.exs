@@ -139,9 +139,9 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The selected layer is `house`, which declares three of them; the strip shows all
       # seven, because a person asks where the marks are, not which fragment holds them.
-      # The design's own root is not a tab (§18.13), and variables are chips in the
-      # context, not a tab (§19.10).
-      assert tabs(html, "vis-builder-node") == ~w(sources vars styles frame marks labels)
+      # Neither the design's own root nor vars is a tab (§18.13): a declaration is the
+      # variable panel's, and variables are chips in the context (§19.10).
+      assert tabs(html, "vis-builder-node") == ~w(sources styles frame marks labels)
     end
 
     test "a root the selected layer does not declare is marked elsewhere" do
@@ -1828,6 +1828,42 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("create_variable", %{"name" => " ", "default" => ""}, s)
 
       assert blank.assigns.notice == "a variable needs a name"
+    end
+
+    test "the declaration's default is set from the expanded chip; an undeclared one gets a site" do
+      s = BuilderFixture.socket(BuilderFixture.parameterised(), context: :variables)
+      refute BuilderFixture.render(s) =~ ~s(phx-value-root="vars")
+
+      # `ticks` is declared by the params layer with default 3: its default follows.
+      {:noreply, s} = Builder.handle_event("expand_variable", %{"name" => "ticks"}, s)
+
+      assert BuilderFixture.render(s) =~
+               ~s(<form class="vis-builder-variable-default" phx-change="set_default")
+
+      # The params layer declares it under vars: the write lands there, no site is added.
+      {:noreply, s} =
+        Builder.handle_event("set_default", %{"_target" => ["ticks"], "ticks" => "8"}, s)
+
+      assert length(BuilderFixture.names(s)) == 4
+      assert BuilderFixture.design(s).vars.ticks == %{default: 8}
+
+      {:noreply, s} =
+        Builder.handle_event("set_default", %{"_target" => ["ticks"], "ticks" => ""}, s)
+
+      assert BuilderFixture.design(s).vars.ticks == %{}
+
+      # A variable nobody declares gets a var site on top, which is what wins.
+      {:noreply, s} =
+        Builder.handle_event("set_default", %{"_target" => ["fresh"], "fresh" => "1"}, s)
+
+      assert List.last(BuilderFixture.names(s)) == "var fresh"
+      assert BuilderFixture.design(s).vars.fresh == %{default: 1}
+
+      {:noreply, s} =
+        Builder.handle_event("set_default", %{"_target" => ["fresh"], "fresh" => "2"}, s)
+
+      assert length(BuilderFixture.names(s)) == 5
+      assert BuilderFixture.design(s).vars.fresh == %{default: 2}
     end
 
     test "the value the preview binds is set from the expanded chip" do

@@ -93,11 +93,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   >{use.label} → {use.path}</button>
                 </li>
               </ul>
+              <form class="vis-builder-variable-default" phx-change="set_default" phx-target={@target}>
+                <label class="vis-builder-picker-row">
+                  <span class="vis-builder-control-label">default</span>
+                  <input type="text" name={row.name} value={row.default} placeholder="none" phx-debounce="300" />
+                </label>
+              </form>
               <form class="vis-builder-variable-value" phx-change="set_var" phx-target={@target}>
                 <label class="vis-builder-picker-row">
-                  <span class="vis-builder-control-label">
-                    value{if row.default != nil, do: " (default #{row.default})", else: ""}
-                  </span>
+                  <span class="vis-builder-control-label">value in the preview</span>
                   <input type="text" name={row.name} value={row.value} placeholder={row.default} />
                 </label>
               </form>
