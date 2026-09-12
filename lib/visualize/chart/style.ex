@@ -46,6 +46,7 @@ defmodule Visualize.Chart.Style do
     :font_size,
     :font_weight,
     :font_style,
+    :line_height,
     :text_anchor,
     :class,
     :blend,

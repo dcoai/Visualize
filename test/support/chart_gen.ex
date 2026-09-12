@@ -184,6 +184,7 @@ defmodule Visualize.ChartGen do
       font_size: size,
       font_weight: one_of([integer(100..900), member_of([:normal, :bold])]),
       text_anchor: member_of([:start, :middle, :end]),
+      line_height: float(min: 0.8, max: 3.0),
       blend: member_of([:normal, :multiply, :screen, :overlay, :darken, :lighten]),
       effect: member_of([:none, :shadow, :blur]),
       effect_radius: size,

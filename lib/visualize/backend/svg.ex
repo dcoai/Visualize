@@ -228,14 +228,19 @@ defmodule Visualize.Backend.SVG do
          attrs: attrs,
          style: style,
          content: content,
+         children: children,
          transform: transform
        }) do
     all_attrs =
       Map.merge(attrs, style_to_attrs(style))
       |> maybe_add_transform(transform)
 
-    render_svg_tag(:text, all_attrs, [], content)
+    render_svg_tag(:text, all_attrs, Enum.map(children, &do_render_element/1), content)
   end
+
+  # A line of a text (spec/14 §7.1): its attrs and its content, no style of its own.
+  defp do_render_element(%Element{type: :tspan, attrs: attrs, content: content}),
+    do: render_svg_tag(:tspan, attrs, [], content || "")
 
   defp do_render_element(%Element{
          type: :image,
@@ -348,6 +353,8 @@ defmodule Visualize.Backend.SVG do
   # A blend is an inline style (spec/09 §2.5), an effect a filter reference to the filter
   # the frame declared for its pair (spec/14 §2.7); the radius alone says nothing.
   defp effects(style) do
+    # A line height is the frame's to apply (spec/14 §7.1), never an attribute.
+    style = Map.delete(style, :line_height)
     {blend, style} = Map.pop(style, :blend)
     {effect, style} = Map.pop(style, :effect)
     {radius, style} = Map.pop(style, :effect_radius)

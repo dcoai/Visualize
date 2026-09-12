@@ -344,6 +344,7 @@ defmodule Visualize.Chart.Schema do
       spec(:font_size, :size, :style, range: {6, 72, 1}, group: :font),
       spec(:font_weight, {:one_of, [:integer, {:enum, @weights}]}, :style, group: :font),
       spec(:font_style, {:enum, [:normal, :italic]}, :style, group: :font),
+      spec(:line_height, :number, :style, range: {0.8, 3, 0.1}, group: :font),
       spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style, group: :position),
       spec(:opacity, :size, :style, range: {0, 1, 0.05}, group: :effects),
       spec(:blend, {:enum, @blends}, :style, group: :effects),

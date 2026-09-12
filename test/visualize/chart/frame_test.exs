@@ -368,6 +368,67 @@ defmodule Visualize.Chart.FrameTest do
     end
   end
 
+  describe "a text has lines (spec/14 §7.1)" do
+    test "a newline breaks a label into tspans spaced by line_height; one line is left as it is" do
+      styles = %{wide: %{line_height: 2, font_size: 10}}
+
+      labels = [
+        %{anchor: :title, text: "Uptime\n24 h"},
+        %{anchor: :caption, text: "one line"},
+        %{anchor: :subtitle, text: "a\nb\nc", style: :wide}
+      ]
+
+      chart =
+        chart(%{scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}, %{
+          styles: styles,
+          labels: labels
+        })
+
+      tree = chart |> Frame.new() |> Frame.generate()
+      # The labels are drawn in the order they are declared.
+      [title, caption, subtitle] = Enum.filter(tree.children, &(&1.style[:class] == "label"))
+
+      assert title.content == nil
+      assert Enum.map(title.children, & &1.content) == ["Uptime", "24 h"]
+
+      assert Enum.map(title.children, & &1.attrs) == [
+               %{x: title.attrs.x},
+               %{x: title.attrs.x, dy: "1.2em"}
+             ]
+
+      assert caption.content == "one line" and caption.children == []
+      assert subtitle.children |> Enum.drop(1) |> Enum.map(& &1.attrs.dy) == ["2em", "2em"]
+
+      svg = Render.to_string(tree)
+      x = title.attrs.x
+
+      assert svg =~
+               ~s(<tspan x="#{x}">Uptime</tspan><tspan dy="1.2em" x="#{x}">24 h</tspan></text>)
+
+      refute svg =~ "line-height"
+
+      # A canvas draws the literal tree, one fillText per line.
+      js =
+        chart
+        |> Frame.new()
+        |> Frame.generate(resolve: :literal)
+        |> Visualize.Backend.Canvas.render_element()
+        |> IO.iodata_to_binary()
+
+      assert js =~ "ctx.fillText('Uptime', "
+      assert js =~ "ctx.fillText('24 h', "
+      # The wide style steps two font sizes per line: 20 px.
+      ys =
+        ~r/ctx\.fillText\('[abc]', [-\d.]+, ([-\d.]+)\);/
+        |> Regex.scan(js)
+        |> Enum.map(fn [_, y] -> y |> Float.parse() |> elem(0) end)
+
+      [y0, y1, y2] = ys
+      assert_in_delta y1 - y0, 20, 0.01
+      assert_in_delta y2 - y1, 20, 0.01
+    end
+  end
+
   describe "blend and effect (spec/14 §3.1, spec/09 §2.5, §3.3.3)" do
     test "a blend is an inline style and an effect a filter declared once per pair" do
       scales = %{x: %{kind: :linear}, y: %{kind: :linear}}
