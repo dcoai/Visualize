@@ -13,7 +13,7 @@ defmodule Visualize.Chart.Stack do
   # it. `cascade/2` drops the second; `explain/1` folds the layers and keeps it, so what
   # provenance reports and what the cascade produces cannot drift.
 
-  alias Visualize.Chart.{Fragment, Schema, Var}
+  alias Visualize.Chart.{Fragment, Schema, Text, Var}
 
   @doc false
   @spec cascade(map(), map()) :: map()
@@ -41,6 +41,7 @@ defmodule Visualize.Chart.Stack do
 
     {:node, :design}
     |> variables(stacked, [])
+    |> Enum.uniq()
     |> Enum.group_by(fn {_path, _type, name} -> name end)
     |> Enum.map(fn {name, uses} -> free_var(name, uses, declared, provenance) end)
     |> Enum.sort_by(& &1.name)
@@ -246,8 +247,16 @@ defmodule Visualize.Chart.Stack do
   end
 
   # A part of a text stands where a text part goes, and that is what it expects (§17.2).
+  # A text is one value whichever form it takes (§7.1): its variables stand at the key.
   defp variables(:text, parts, path) when is_list(parts) do
-    for {%Var{name: name}, i} <- Enum.with_index(parts), do: {path ++ [i], :text, name}
+    for %Var{name: name} <- parts, do: {path, :text, name}
+  end
+
+  defp variables(:text, string, path) when is_binary(string) do
+    case Text.parse(string) do
+      {:ok, parts} -> for %Var{name: name} <- parts, do: {path, :text, name}
+      {:error, _} -> []
+    end
   end
 
   defp variables(_type, _v, _path), do: []

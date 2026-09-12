@@ -18,7 +18,7 @@ defmodule Visualize.Chart.Validator do
 
   """
 
-  alias Visualize.Chart.{Migration, Schema, Var}
+  alias Visualize.Chart.{Migration, Schema, Text, Var}
   alias Visualize.Theme
 
   @typedoc "Keys and list indexes from the design to a value; `[]` is the design."
@@ -43,6 +43,7 @@ defmodule Visualize.Chart.Validator do
           | :conflict
           | :cycle
           | {:cycle, [term()]}
+          | {:template, :unterminated | {:hole, String.t()}}
           | :many_kinds
 
   @type error :: {path(), reason()}
@@ -413,6 +414,14 @@ defmodule Visualize.Chart.Validator do
     v |> Enum.with_index() |> Enum.flat_map(fn {part, i} -> text_part(part, path ++ [i], ctx) end)
   end
 
+  # The string form (§7.1): read into parts and checked as parts, at the key's path.
+  defp check(:text, v, path, ctx) when is_binary(v) do
+    case Text.parse(v) do
+      {:ok, parts} -> Enum.flat_map(parts, &text_part(&1, path, ctx))
+      {:error, reason} -> [{path, {:template, reason}}]
+    end
+  end
+
   defp check(:anchor, v, _path, _ctx) when v in @frame_anchors, do: []
 
   defp check(:anchor, {:axis, s}, path, ctx) when is_atom(s) do
@@ -565,6 +574,12 @@ defmodule Visualize.Chart.Validator do
 
   defp words(:cycle), do: "extends itself, directly or through a chain of `extends`"
 
+  # A text that does not read (spec/14 §7.1).
+  defp words({:template, :unterminated}), do: ~S|has a #{ with no closing }|
+
+  defp words({:template, {:hole, hole}}),
+    do: ~S|has #{| <> hole <> ~S|}, which names neither var(:name) nor field(:name)|
+
   # A fault of a composite rather than of a node (spec/14 §19.6): the stack reaching itself.
   defp words({:cycle, chain}), do: "the stack refers to itself through #{inspect(chain)}"
 
@@ -581,7 +596,7 @@ defmodule Visualize.Chart.Validator do
   defp type_words(:field_ref), do: "{:field, name}"
   defp type_words(:channel), do: "a field name, a number or {:field, name}"
   defp type_words(:extent), do: "an extent: :auto, [lo, hi] or a list of categories"
-  defp type_words(:text), do: "a list of strings, variables and field references"
+  defp type_words(:text), do: ~S|a string, with #{var(:name)} for a variable|
 
   defp type_words(:anchor) do
     "an anchor: :title, :subtitle, :caption, {:axis, scale}, {:frame, corner} or " <>

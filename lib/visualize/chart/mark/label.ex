@@ -4,6 +4,7 @@ defmodule Visualize.Chart.Mark.Label do
   # label's style, `{:field, f}` read from the datum.
 
   alias Visualize.Chart.{Schema, Style, Var}
+  alias Visualize.Chart.Text
   alias Visualize.Data.Table
   alias Visualize.IR.Element
 
@@ -13,8 +14,8 @@ defmodule Visualize.Chart.Mark.Label do
 
   @doc false
   # The text of the label's parts for a datum.
-  @spec text([term()], map()) :: String.t()
-  def text(parts, datum), do: Enum.map_join(parts, "", &part(&1, datum))
+  @spec text(String.t() | [term()], map()) :: String.t()
+  def text(text, datum), do: text |> Text.parse!() |> Enum.map_join("", &part(&1, datum))
 
   defp part(string, _datum) when is_binary(string), do: string
   defp part(%Var{name: name}, _datum), do: Style.unresolved!(name)

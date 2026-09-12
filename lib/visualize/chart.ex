@@ -245,7 +245,7 @@ defmodule Visualize.Chart do
       ...> }
       iex> {:ok, applied} = Visualize.Chart.apply(design, sources: %{uptime: %{t: [1, 2], v: [3, 9]}})
       iex> applied.chart.labels
-      [%{anchor: {:axis, :y}, text: ["unit: ", "%"]}]
+      [%{anchor: {:axis, :y}, text: "unit: %"}]
       iex> Visualize.Chart.Frame.scale(applied.frame, :y).domain
       [3, 9]
       iex> Visualize.Chart.apply(design, sources: %{primary: %{t: [1, 2]}}, vars: %{unit: "kg"})
@@ -430,7 +430,7 @@ defmodule Visualize.Chart do
           name: :unit,
           default: nil,
           required: true,
-          uses: [%{path: [:labels, 0, :text, 1], expects: :text, layer: :panel}]
+          uses: [%{path: [:labels, 0, :text], expects: :text, layer: :panel}]
         }
       ]
 

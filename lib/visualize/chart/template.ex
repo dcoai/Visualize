@@ -6,7 +6,7 @@ defmodule Visualize.Chart.Template do
   # slot's declared fields against the bound rows. Both report every fault by path.
 
   alias Visualize.Chart
-  alias Visualize.Chart.{Schema, Validator, Var}
+  alias Visualize.Chart.{Schema, Text, Validator, Var}
   alias Visualize.Data.Table
 
   @doc false
@@ -78,6 +78,28 @@ defmodule Visualize.Chart.Template do
   defp value(:text, parts, path, values) when is_list(parts) do
     {resolved, errors} = each(:term, parts, path, values)
     {Enum.map(resolved, &part/1), errors}
+  end
+
+  # The string form (§7.1): its variables take their values in place; a field stays for
+  # the datum. The result is written back as the string it is.
+  defp value(:text, string, path, values) when is_binary(string) do
+    case Text.parse(string) do
+      {:ok, parts} ->
+        {resolved, errors} =
+          Enum.reduce(parts, {[], []}, fn
+            %Var{} = var, {acc, errors} ->
+              {v, e} = value(:term, var, path, values)
+              {[part(v) | acc], errors ++ e}
+
+            other, {acc, errors} ->
+              {[other | acc], errors}
+          end)
+
+        {resolved |> Enum.reverse() |> Text.unparse(), errors}
+
+      {:error, _} ->
+        {string, []}
+    end
   end
 
   defp value(_type, v, _path, _values), do: {v, []}

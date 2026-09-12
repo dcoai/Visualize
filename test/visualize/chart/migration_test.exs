@@ -2,6 +2,8 @@ defmodule Visualize.Chart.MigrationTest do
   @moduledoc "Version handling of spec/14 §9."
   use ExUnit.Case, async: true
 
+  doctest Visualize.Chart.Migration
+
   alias Visualize.Chart.Migration
 
   test "the current version passes through unchanged" do

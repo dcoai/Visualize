@@ -64,7 +64,7 @@ A container's facet is the facet of what it holds: `marks` is `:channel` because
 | `:field_ref` | `{:field, f}` with `f` a `:field`; how a per-datum value reaches a style or a text |
 | `:channel` | a `:field`, a number (a constant channel) or a `:field_ref` |
 | `:extent` | `:auto`; a two-element list of numbers, `DateTime`s or `:auto`; or a list of categories (numbers, strings, atoms) |
-| `:text` | a list whose elements are strings, variables and `:field_ref`s — never a parsed string |
+| `:text` | a string with interpolation: `#{var(:name)}` stands for a variable and `#{field(:name)}` for a datum's field, a literal `#{` is `\#{` (§7.1); a list of parts — strings, variables and `:field_ref`s, the form an earlier draft wrote — is read and written back as the string (§9) |
 | `:anchor` | `:title`, `:subtitle`, `:caption`; `{:axis, s}` with `s` a `{:ref, :scale}`; `{:frame, c}` with `c` one of `:top_left`, `:top_right`, `:bottom_left`, `:bottom_right`; or `{:data, [x, y]}` with `x` and `y` values in the domains of the frame's position scales (§6.3) |
 | `:colour` | a colour string, `:none`, or a theme slot |
 | `:size` | a number or a theme slot |
@@ -113,7 +113,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
 | `name` | `:string` | `:content` | `nil` | `:override` |
-| `description` | `:text` | `:content` | `[]` | `:override` |
+| `description` | `:text` | `:content` | `""` | `:override` |
 
 ### 2.3 Sources
 
@@ -310,7 +310,7 @@ An axis has no `id`: its identity in a stack is `{scale, side}` (§8.2), so a la
 |---|---|---|---|---|
 | `scale` | `{:ref, :scale}` | `:geometry` | required | `:override` |
 | `position` | `{:enum, [:top_left, :top_right, :bottom_left, :bottom_right, :top, :bottom, :left, :right]}` | `:geometry` | `:top_right` | `:override` |
-| `title` | `:text` | `:content` | `[]` | `:override` |
+| `title` | `:text` | `:content` | `""` | `:override` |
 | `style` | `{:ref, :style}` | `:style` | `:label` | `:override` |
 
 The frame builds the legend from the realised scale: one entry per value of `Visualize.Scale.ticks/2` — the domain of a discrete scale, five ticks of a continuous one — each a 12 × 12 swatch and, 16 user units to its right, the value's label as an axis would print it (spec/05 §1.5). The swatch is filled with the scale's value for the entry when that is a colour — a string, or a theme slot resolved through `Visualize.Theme.resolve/3` (§4.3) — and with the theme's `{:series, i}` for the i-th entry of a scale that yields anything else. The labels and the title take the legend's `style`.
@@ -584,7 +584,16 @@ An axis title follows the side of the first axis that names its scale; with no a
 
 ### 7.1 Variables
 
-**Implemented.** `Visualize.Chart.var/1` builds `%Visualize.Chart.Var{name: name}`, a term allowed wherever a value can appear — a style value, a text part, a channel, a whole node (`style: var(:style)`, `margin: var(:margin)`). The term carries only the name; the default is declared once under `vars` (§2.4), so two fragments cannot disagree about it (D-59). The validator requires every variable used to be declared (`{:undeclared, :var, name}`) and does not type the value, which is unknown until application: the value is typed by the validator at the path where the variable stood, once `Visualize.Chart.apply/2` has put it there (§7.3). Resolution is **single level**: the value a variable takes at application MUST NOT itself be a variable, and one that is is `{:var_binding, name}` at every path where the variable stood (§7.3, §10.1). A variable *nested inside* a value another variable is bound to is not resolved either, and needs no rule of its own — the `vars` declarations are dropped before validation, so the validator finds it as `{:undeclared, :var, name}` at its path; only the direct case was silent.
+**Implemented.** `Visualize.Chart.var/1` builds `%Visualize.Chart.Var{name: name}`, a term allowed wherever a value can appear — a style value, a channel, a whole node (`style: var(:style)`, `margin: var(:margin)`) — and, inside a text, as `#{var(:name)}`. The term carries only the name; the default is declared once under `vars` (§2.4), so two fragments cannot disagree about it (D-59). The validator requires every variable used to be declared (`{:undeclared, :var, name}`) and does not type the value, which is unknown until application: the value is typed by the validator at the path where the variable stood, once `Visualize.Chart.apply/2` has put it there (§7.3). Resolution is **single level**: the value a variable takes at application MUST NOT itself be a variable, and one that is is `{:var_binding, name}` at every path where the variable stood (§7.3, §10.1). A variable *nested inside* a value another variable is bound to is not resolved either, and needs no rule of its own — the `vars` declarations are dropped before validation, so the validator finds it as `{:undeclared, :var, name}` at its path; only the direct case was silent.
+
+**A text interpolates.** A `:text` is one string — `"Uptime for #{var(:host)} over 24h"` — in which `#{var(:name)}` stands for a variable and `#{field(:name)}` for the datum's field a mark's label reads (§5.5); `\#{` is a literal `#{`. `Visualize.Chart.Text.parse/1` reads it into parts and `Visualize.Chart.Text.unparse/1` writes parts back, the two inverse, so a text is one value whichever form holds it: its variables stand *at the key* (`labels[0].text`, never `labels[0].text[1]`), each named once however many holes name it, and application writes the bound value into the string as `to_string/1` gives it. A hole that names neither `var` nor `field`, or a `#{` never closed, is `{:template, reason}` at the key. The list-of-parts form an earlier draft wrote is read wherever a text is read and is written back as the string (§9), so no document goes stale and no second form survives a round trip.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Text.parse/1` | a text as its parts — strings, variables, fields; a list is already parts; `{:error, :unterminated}` or `{:error, {:hole, text}}` for a string that does not read |
+| `Visualize.Chart.Text.parse!/1` | the same, raising — for a text already validated |
+| `Visualize.Chart.Text.unparse/1` | parts as the string: `#{var(:name)}`, `#{field(:name)}`, a literal `#{` escaped; a string as it is |
+| `Visualize.Chart.Text.template?/1` | whether a string carries a hole |
 
 ### 7.2 Sources as slots
 
@@ -659,7 +668,7 @@ They agree exactly where the fragments are disjoint. Over two fragments that dec
 
 ## 9. Version and migration
 
-**Implemented.** `version` is required and is the integer `Visualize.Chart.Migration.current/0`, which is `1`. `Visualize.Chart.from_map/1` calls `Visualize.Chart.Migration.migrate/1` before validation: a design at the current version passes through unchanged; one at an older version is stepped forward one version at a time through the migration registered for each step, so a stored design never goes stale; a version above the current one, or that is not an integer, is `{:error, [{[:version], reason}]}` with `{:unsupported_version, v}` or `:required`. No migration is registered yet — the hook exists so that the first schema change ships with its step, not with a breaking change. Every migration MUST be pure and MUST produce a map that validates at its target version.
+**Implemented.** `version` is required and is the integer `Visualize.Chart.Migration.current/0`, which is `1`. `Visualize.Chart.from_map/1` calls `Visualize.Chart.Migration.migrate/1` before validation: a design at the current version passes through unchanged; one at an older version is stepped forward one version at a time through the migration registered for each step, so a stored design never goes stale; a version above the current one, or that is not an integer, is `{:error, [{[:version], reason}]}` with `{:unsupported_version, v}` or `:required`. No migration is registered yet — the hook exists so that the first schema change ships with its step, not with a breaking change. Within a version, `migrate/1` also returns the design in the shape this library *writes* (`Visualize.Chart.Migration.canonical/1`): a `:text` given as a list of parts becomes its string form (§7.1), which is a canonicalisation and not a version step, since the two forms are one value and both read. Every migration MUST be pure and MUST produce a map that validates at its target version.
 
 ## 10. Validation
 
@@ -944,7 +953,8 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | Function | Contract |
 |---|---|
 | `Visualize.Chart.Migration.current/0` | The schema version this library writes: `1`. |
-| `Visualize.Chart.Migration.migrate/1` | `{:ok, map}` at the current version after stepping an older design forward, else `{:error, [{[:version], reason}]}` (§9). |
+| `Visualize.Chart.Migration.migrate/1` | `{:ok, map}` at the current version after stepping an older design forward, in the shape this library writes (`canonical/1`), else `{:error, [{[:version], reason}]}` (§9). |
+| `Visualize.Chart.Migration.canonical/1` | the design in the shape this library writes within the current version: a `:text` given as parts becomes its string (§7.1); everything else passes through. |
 
 ### 14.5 `Visualize.Chart.Frame`
 
