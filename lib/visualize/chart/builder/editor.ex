@@ -148,6 +148,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def widget(:colour), do: :colour
     def widget(type) when type in @text_types, do: :text
     def widget({:ref, _kind}), do: :text
+    # A list of scalars is a list of items, each with an ×, and a + to add one (§18.6).
+    def widget({:list, scalar}) when is_atom(scalar) and scalar != :term, do: {:items, scalar}
     def widget({:one_of, [first | _rest]}), do: widget(first)
     def widget(_type), do: :textarea
 
@@ -326,6 +328,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case String.split(target, ".", parts: 2) do
         [key, "slot"] -> with %{key: k} <- key_spec(kind, key), do: {k, slot_face(params[target])}
         [key, "range"] -> with spec <- key_spec(kind, key), do: typed(spec, params[target])
+        [_key, "add"] -> nil
         [key] -> with spec <- key_spec(kind, key), do: typed(spec, params[key])
       end
     end
@@ -607,6 +610,34 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 {Phoenix.HTML.raw(svg)}
               </label>
             </span>
+            <div :if={is_nil(field.variable) and field.widget == :items} class="vis-builder-items">
+              <span :for={{item, index} <- Enum.with_index(field.items)} class="vis-builder-item-row">
+                <span :if={item.chip} class="vis-builder-var-chip vis-builder-var-chip-bound">var(:{item.chip})</span>
+                <span :if={!item.chip} class="vis-builder-item-text">{item.text}</span>
+                <button
+                  type="button"
+                  class="vis-builder-item-remove"
+                  phx-click="list_remove"
+                  phx-value-field={field.key}
+                  phx-value-index={index}
+                  phx-target={@target}
+                  aria-label={"remove #{item.text || item.chip} from #{field.key}"}
+                >×</button>
+              </span>
+              <span class="vis-builder-item-add" data-builder-bind={field.key}>
+                <input
+                  type="text"
+                  name={"#{field.key}.add"}
+                  class="vis-builder-item-box"
+                  placeholder="+ add"
+                  aria-label={"add to #{field.key}"}
+                  phx-keydown="list_add"
+                  phx-key="Enter"
+                  phx-value-field={field.key}
+                  phx-target={@target}
+                />
+              </span>
+            </div>
             <textarea
               :if={is_nil(field.variable) and field.widget == :textarea}
               name={field.key}
@@ -643,6 +674,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           range: range(spec.range),
           slider: slider(Map.fetch(node, spec.key), spec),
           dash: dash(spec.key, Map.get(node, spec.key)),
+          items: items(widget, Map.get(node, spec.key)),
           options: options(widget),
           checked: Map.get(node, spec.key) == true,
           value: shown(widget, as_text(spec, Map.fetch(node, spec.key))),
@@ -685,6 +717,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp variable_name(_value), do: nil
 
     defp shape({:select, _allowed}), do: :select
+    defp shape({:items, _scalar}), do: :items
     defp shape(widget), do: widget
 
     defp field_class(field, selected, found) do
@@ -742,6 +775,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp option({kind, n}) when is_atom(kind) and is_integer(n), do: Store.encode_id({kind, n})
     defp option(value), do: to_string(value)
 
+    # A list of scalars as its rows: a chip for a variable, the text for anything else.
+    defp items({:items, _scalar}, list) when is_list(list) do
+      Enum.map(list, fn
+        %Var{name: name} -> %{chip: to_string(name), text: nil}
+        item when is_binary(item) -> %{chip: nil, text: item}
+        item -> %{chip: nil, text: to_string(item)}
+      end)
+    end
+
+    defp items(_widget, _value), do: []
+
     # A text shows as its string whichever form holds it (§7.1): a list of parts, or a
     # whole variable, is written as the string with its holes.
     defp as_text(%{type: :text}, {:ok, value}) when is_list(value) or is_struct(value, Var),
@@ -765,6 +809,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(:colour, {:ok, _other}), do: nil
     defp shown(:textarea, {:ok, value}), do: inspect(value)
     defp shown({:select, _}, {:ok, value}), do: option(value)
+    defp shown({:items, _}, {:ok, _value}), do: nil
+    defp shown(:items, {:ok, _value}), do: nil
     defp shown(:select, {:ok, value}), do: option(value)
     defp shown(_widget, {:ok, value}), do: to_string(value)
 
