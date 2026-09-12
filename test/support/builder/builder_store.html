@@ -49,7 +49,11 @@
   </section>
 </aside>
     <aside class="vis-builder-sidebar">
-      <h2 class="vis-builder-sidebar-title">Layers</h2>
+      <h2 class="vis-builder-sidebar-title vis-builder-sidebar-title-row">
+        Layers
+        <button type="button" class="vis-builder-add" title="add an empty site below the selected layer" aria-label="add a site" aria-expanded="false" phx-click="adding" phx-target="-1">+</button>
+      </h2>
+      
       <ol id="builder-layers" class="vis-builder-layers" phx-hook="BuilderHook" data-builder-target="-1" data-builder-stack="true">
   <li id="builder-layers-row-0" class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="0" draggable="true" role="button" tabindex="0" title="house, layer 1 of 3, selected: Enter to edit, arrows to move, drag to reorder" aria-label="house, layer 1 of 3, selected: Enter to edit, arrows to move, drag to reorder" phx-click="select_layer" phx-keydown="layer_key" phx-value-index="0" phx-target="-1">
     <span class="vis-builder-layer-name">house</span>

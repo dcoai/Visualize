@@ -1441,6 +1441,45 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "the + on the Layers title (spec/14 §18.8)" do
+    test "opens a menu of the single kinds, and adds an empty site below the selection" do
+      s = BuilderFixture.socket(BuilderFixture.layers())
+      html = BuilderFixture.render(s)
+
+      assert html =~
+               ~s(class="vis-builder-add" title="add an empty site below the selected layer")
+
+      refute html =~ "vis-builder-add-menu"
+
+      {:noreply, s} = Builder.handle_event("adding", %{}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(<div class="vis-builder-add-menu" role="menu")
+      assert html =~ ~s(phx-click="add_site" phx-value-kind="style")
+      refute html =~ ~s(phx-value-kind="composite")
+      refute html =~ ~s(phx-value-kind="design")
+
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+      assert BuilderFixture.names(s) == [:house, :shared, "new style", :panel]
+      assert BuilderFixture.selected(s) == 2
+      assert Enum.at(s.assigns.uses, 2).local == %{style: %{}}
+      assert s.assigns.adding == false
+
+      # Keyless, so not placed until named — the honest state (§19.3).
+      assert BuilderFixture.render(s) =~ "not placed: new style"
+
+      {:noreply, refused} = Builder.handle_event("add_site", %{"kind" => "composite"}, s)
+      assert refused.assigns.notice == "composite is not a kind a site can be"
+    end
+
+    test "with nothing selected the site is appended" do
+      s = BuilderFixture.socket([])
+      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "frame"}, s)
+      assert BuilderFixture.names(s) == ["new frame"]
+      assert BuilderFixture.selected(s) == 0
+    end
+  end
+
   describe "a host seeds a reference as a layer (spec/14 §19.9)" do
     test "an id becomes a use referring to it, labelled by the host or its position" do
       s =
