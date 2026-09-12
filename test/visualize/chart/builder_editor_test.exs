@@ -364,6 +364,47 @@ defmodule Visualize.Chart.Builder.EditorTest do
       assert html =~ ~s(<input type="checkbox" name="grid" value="true">)
     end
 
+    test "a style's keys are five blocks under their headings, the ungrouped on their own" do
+      html = render_component(&Editor.panel/1, %{kind: :style, node: %{}, facet: :style})
+
+      blocks =
+        ~r/<legend class="vis-builder-block-name">(\w+)<\/legend>/
+        |> Regex.scan(html)
+        |> Enum.map(fn [_, group] -> group end)
+
+      assert blocks == ~w(fill stroke font position effects)
+      assert blocks == Enum.map(Schema.groups(:style), &to_string/1)
+
+      # Each block holds its run of keys in table order; extends stands before the first
+      # block and class after the last.
+      keys =
+        ~r/<span class="vis-builder-key">\s*(\w+)/
+        |> Regex.scan(html)
+        |> Enum.map(fn [_, key] -> key end)
+
+      assert keys ==
+               ~w(extends fill fill_opacity stroke_width stroke stroke_opacity stroke_dasharray
+                  stroke_linejoin stroke_linecap font_family font_size font_weight text_anchor
+                  opacity class curve curve_opts symbol symbol_size)
+
+      {extends, _} = :binary.match(html, ~s(phx-value-field="extends"))
+      {first, _} = :binary.match(html, "<fieldset")
+      assert extends < first
+
+      stroke =
+        html
+        |> String.split(~s(<legend class="vis-builder-block-name">stroke</legend>))
+        |> Enum.at(1)
+        |> String.split("</fieldset>")
+        |> hd()
+
+      assert stroke =~ ~s(phx-value-field="stroke_linecap")
+      refute stroke =~ ~s(phx-value-field="font_family")
+
+      # A kind whose keys carry no group has no block.
+      refute render_component(&Editor.panel/1, %{kind: :axis, node: %{}}) =~ "<fieldset"
+    end
+
     test "a key's errors are under its control and nowhere else" do
       html =
         BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), :editor_style_errors))

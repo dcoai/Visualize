@@ -679,6 +679,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
       gap: 10px;
     }
 
+    /* A run of keys under one heading (spec/14 §18.7): a block spanning the form's
+       width, its fields in the same grid the form lays loose fields in. */
+    .vis-builder-block {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+      margin: 0;
+      padding: 8px 10px 10px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      min-width: 0;
+    }
+
+    .vis-builder-block-name {
+      padding: 0 4px;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
     .vis-builder-field {
       display: flex;
       flex-direction: column;
