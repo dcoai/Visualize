@@ -89,6 +89,7 @@ defmodule Visualize.Chart.Schema do
     :natural
   ]
   @symbol_types [:circle, :cross, :diamond, :square, :star, :triangle, :wye]
+  @weights [:light, :normal, :medium, :bold]
   @builtin_styles [:axis, :grid, :label, :title]
 
   @doc "Every node kind of spec/14 §1.2, the design first."
@@ -300,6 +301,7 @@ defmodule Visualize.Chart.Schema do
       spec(:extends, {:ref, :style}, :style),
       spec(:fill, :colour, :style, group: :fill),
       spec(:fill_opacity, :size, :style, range: {0, 1, 0.05}, group: :fill),
+      spec(:stroke_style, {:enum, [:single, :double, :inside, :outside]}, :style, group: :stroke),
       spec(:stroke_width, :size, :style, range: {0, 20, 0.5}, group: :stroke),
       spec(:stroke, :colour, :style, group: :stroke),
       spec(:stroke_opacity, :size, :style, range: {0, 1, 0.05}, group: :stroke),
@@ -308,7 +310,8 @@ defmodule Visualize.Chart.Schema do
       spec(:stroke_linecap, {:enum, [:butt, :round, :square]}, :style, group: :stroke),
       spec(:font_family, :font, :style, group: :font),
       spec(:font_size, :size, :style, range: {6, 72, 1}, group: :font),
-      spec(:font_weight, {:one_of, [:integer, {:enum, [:normal, :bold]}]}, :style, group: :font),
+      spec(:font_weight, {:one_of, [:integer, {:enum, @weights}]}, :style, group: :font),
+      spec(:font_style, {:enum, [:normal, :italic]}, :style, group: :font),
       spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style, group: :position),
       spec(:opacity, :size, :style, range: {0, 1, 0.05}, group: :effects),
       spec(:class, :string, :style),

@@ -484,6 +484,88 @@ defmodule Visualize.Chart.MarkTest do
     end
   end
 
+  describe "stroke style (spec/14 §5.6)" do
+    @styles %{s: %{stroke: "#000", stroke_width: 2, stroke_style: :inside}}
+
+    test "inside doubles the width and clips the element to its own shape" do
+      group =
+        generate(%{type: :circle, channels: %{x: :t, y: :v}, style: :s}, %{styles: @styles})
+
+      [first | _] = group.children
+      assert first.style.stroke_width == 4
+      assert first.clip.keep == :inside
+      assert first.clip.shape.type == :circle and first.clip.shape.attrs == first.attrs
+      assert first.clip.shape.style == %{}
+
+      svg = group |> SVG.render_element() |> IO.iodata_to_binary()
+
+      assert svg =~
+               ~r|<clipPath id="vis-clip-[a-z0-9]+"><circle [^>]*/></clipPath><circle [^>]*clip-path="url\(#vis-clip-[a-z0-9]+\)"|
+
+      assert length(group.children) == 4
+    end
+
+    test "outside is the fill alone then the outline clipped to everything but the shape" do
+      styles = %{s: %{@styles.s | stroke_style: :outside}}
+
+      group =
+        generate(%{type: :rect, channels: %{x0: :t, x1: :hi, y0: 0, y1: :v}, style: :s}, %{
+          styles: styles
+        })
+
+      [fill, outline | _] = group.children
+      assert fill.style.stroke == :none and fill.clip == nil
+      assert outline.style == %{fill: :none, stroke_width: 4}
+      assert outline.clip.keep == :outside
+      assert length(group.children) == 8
+
+      svg = group |> SVG.render_element() |> IO.iodata_to_binary()
+      assert svg =~ ~s(<mask height="200000" id="vis-mask-)
+      assert svg =~ ~s(maskUnits="userSpaceOnUse")
+      assert svg =~ ~r|<rect [^>]*fill="white"[^>]*/><rect [^>]*fill="black"|
+      assert svg =~ ~r|<rect [^>]*mask="url\(#vis-mask-[a-z0-9]+\)"|
+
+      # The canvas clips with the even-odd rule under a rectangle of everything.
+      js = group |> Visualize.Backend.Canvas.render_element() |> IO.iodata_to_binary()
+      assert js =~ "ctx.rect(-100000, -100000, 200000, 200000);"
+      assert js =~ "ctx.clip('evenodd');"
+    end
+
+    test "inside on a canvas clips to the shape; on the binary stream it draws single" do
+      group =
+        generate(%{type: :circle, channels: %{x: :t, y: :v}, style: :s}, %{styles: @styles})
+
+      js = group |> Visualize.Backend.Canvas.render_element() |> IO.iodata_to_binary()
+      assert js =~ ~r/ctx\.save\(\);\nctx\.beginPath\(\);\nctx\.arc\([^)]*\);\nctx\.clip\(\);/
+      assert is_binary(Visualize.Backend.Canvas.render_element(group, format: :binary))
+    end
+
+    test "double lays a third-width stroke in the fill colour over the first; on a line, the background" do
+      styles = %{s: %{fill: "#abc", stroke: "#000", stroke_width: 3, stroke_style: :double}}
+
+      group =
+        generate(%{type: :rect, channels: %{x0: :t, x1: :hi, y0: 0, y1: :v}, style: :s}, %{
+          styles: styles
+        })
+
+      [first, second | _] = group.children
+      assert first.clip == nil and second.clip == nil
+      assert second.style == %{fill: :none, stroke: "#abc", stroke_width: 1.0}
+      assert length(group.children) == 8
+
+      styles = %{s: %{stroke: "#000", stroke_width: 3, stroke_style: :double}}
+      group = generate(%{type: :line, channels: %{x: :t, y: :v}, style: :s}, %{styles: styles})
+      [_line, gap] = group.children
+      assert gap.style.stroke == "var(--vis-background, #ffffff)"
+    end
+
+    test "inside and outside on an open mark draw single" do
+      group = generate(%{type: :line, channels: %{x: :t, y: :v}, style: :s}, %{styles: @styles})
+      [line] = group.children
+      assert line.clip == nil and Map.get(line.style, :stroke_width) == nil
+    end
+  end
+
   describe "tooltip" do
     test "without a tooltip node no element carries a datum attribute" do
       group = generate(%{type: :circle, channels: %{x: :t, y: :v}})

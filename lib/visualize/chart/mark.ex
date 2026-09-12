@@ -43,7 +43,7 @@ defmodule Visualize.Chart.Mark do
 
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Scales
-  alias Visualize.Chart.Mark.{Generic, Label, Shapes}
+  alias Visualize.Chart.Mark.{Generic, Label, Shapes, Strokes}
   alias Visualize.Chart.{Style, Var}
   alias Visualize.Data.Table
   alias Visualize.IR.{Element, Transform}
@@ -117,7 +117,7 @@ defmodule Visualize.Chart.Mark do
     }
 
     children = if type in @shapes, do: Shapes.elements(ctx), else: Generic.elements(ctx)
-    elements = Enum.map(children, &bind(&1, ctx))
+    elements = children |> Enum.map(&bind(&1, ctx)) |> Strokes.apply(ctx)
 
     Element.group(elements ++ Label.elements(children, ctx),
       style: group_style(ctx),

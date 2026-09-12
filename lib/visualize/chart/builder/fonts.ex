@@ -1,12 +1,12 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Chart.Builder.Fonts do
     @moduledoc """
-    The font picker (spec/14 §19.10): family, size, weight and anchor of the node being
+    The font picker (spec/14 §19.10): family, size, face and anchor of the node being
     edited, together, the way a drawing tool keeps them beside the canvas.
 
     It acts on the node the form is editing when that node's kind carries the font keys —
     a style, a theme — and writes through the same `edit` the form does, under the same
-    names, so it is a bigger view of four fields and never a second form. On a node with
+    names, so it is a bigger view of the font fields and never a second form. On a node with
     no font keys it says which node to open.
 
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
@@ -14,7 +14,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.Glyphs
+    alias Visualize.Chart.Builder.{Editor, Glyphs}
     alias Visualize.Chart.{Schema, Var}
 
     @faces [
@@ -30,7 +30,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       "Courier New"
     ]
 
-    @keys [:font_family, :font_size, :font_weight, :text_anchor]
+    @keys [:font_family, :font_size, :font_weight, :font_style, :text_anchor]
 
     attr(:id, :string, required: true, doc: "the panel's id")
     attr(:kind, :atom, required: true, doc: "the kind of the node being edited")
@@ -80,14 +80,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
             />
             <input type="text" name="font_size" value={shown(Map.get(@node, :font_size))} placeholder="12" />
           </label>
-          <div :if={:font_weight in @keys} class="vis-builder-words" role="radiogroup" aria-label="font weight">
+          <div :if={:font_weight in @keys and :font_style in @keys} class="vis-builder-face-list vis-builder-face-list-large" role="radiogroup" aria-label="face">
             <label
-              :for={weight <- [:normal, :bold]}
-              class={"vis-builder-word" <> if(Map.get(@node, :font_weight) == weight, do: " vis-builder-word-on", else: "")}
-              style={"font-weight: #{weight}"}
+              :for={row <- face_rows(@node)}
+              class={"vis-builder-face-row" <> if(row.on?, do: " vis-builder-face-row-on", else: "")}
+              style={row.css}
             >
-              <input type="radio" name="font_weight" value={weight} checked={Map.get(@node, :font_weight) == weight} />
-              {weight}
+              <input type="radio" name="font_face" value={row.face} checked={row.on?} aria-label={row.label} />
+              {row.label}
             </label>
           </div>
           <div :if={:text_anchor in @keys} class="vis-builder-glyphs" role="radiogroup" aria-label="text anchor">
@@ -112,11 +112,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    The font keys a node kind carries, of `font_family`, `font_size`, `font_weight` and
-    `text_anchor`; `[]` for a kind with none.
+    The font keys a node kind carries, of `font_family`, `font_size`, `font_weight`,
+    `font_style` and `text_anchor`; `[]` for a kind with none.
 
         iex> Visualize.Chart.Builder.Fonts.keys(:style)
-        [:font_family, :font_size, :font_weight, :text_anchor]
+        [:font_family, :font_size, :font_weight, :font_style, :text_anchor]
 
         iex> Visualize.Chart.Builder.Fonts.keys(:frame)
         []
@@ -125,6 +125,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def keys(kind) do
       declared = Enum.map(Schema.describe(kind), & &1.key)
       Enum.filter(@keys, &(&1 in declared))
+    end
+
+    # The face list, as the form draws it (spec/14 §18.6): the same eight, the node's marked.
+    defp face_rows(node) do
+      shown = Editor.face(Map.get(node, :font_weight), Map.get(node, :font_style))
+
+      for {face, weight, style} <- Editor.faces() do
+        %{
+          face: face,
+          on?: face == shown,
+          css:
+            "font-weight: #{%{light: 300, normal: 400, medium: 500, bold: 700}[weight]}; font-style: #{style}",
+          label: face |> to_string() |> String.replace("_", " ")
+        }
+      end
     end
 
     defp faces(value) when is_binary(value) and value not in @faces, do: [value | @faces]

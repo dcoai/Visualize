@@ -758,7 +758,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # Every edit at a site lands in its local style, never in a named entry (§18.19, D-98).
     def handle_event("edit_style", params, socket) do
-      {:noreply, styled(socket, Editor.change(:style, params))}
+      {:noreply, Enum.reduce(Editor.changes(:style, params), socket, &styled(&2, &1))}
     end
 
     def handle_event("add_style", %{"name" => submitted}, socket) do
@@ -788,7 +788,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("edit", params, socket) do
       %{entry: entry} = editing(socket.assigns)
-      {:noreply, edited(socket, entry, Editor.change(entry.kind, params))}
+
+      {:noreply, Enum.reduce(Editor.changes(entry.kind, params), socket, &edited(&2, entry, &1))}
     end
 
     def handle_event("set_var", %{"_target" => [name]} = params, socket) do
@@ -1377,9 +1378,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{entry: entry} = editing(socket.assigns)
 
       case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == key)) do
-        %{type: :colour} -> :colour
-        %{key: k} when k in [:font_family, :font_size, :font_weight, :text_anchor] -> :font
-        _other -> socket.assigns.context
+        %{type: :colour} ->
+          :colour
+
+        %{key: k} when k in [:font_family, :font_size, :font_weight, :font_style, :text_anchor] ->
+          :font
+
+        _other ->
+          socket.assigns.context
       end
     end
 

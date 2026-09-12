@@ -144,13 +144,14 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 ### 3.1 Keys
 
-**Implemented.** A `:style` node has nineteen keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema. The keys are read as a drawing tool shows a style — in **groups**: what a style derives from first, then its *fill*, its *stroke*, its *font*, the *position* of its text, its *effects*, and last the keys that belong to no group. A key's group is data on its spec (`group`, §14.2), and the table below is in group order, which is the order the form shows them in (§18.7).
+**Implemented.** A `:style` node has twenty-one keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema. The keys are read as a drawing tool shows a style — in **groups**: what a style derives from first, then its *fill*, its *stroke*, its *font*, the *position* of its text, its *effects*, and last the keys that belong to no group. A key's group is data on its spec (`group`, §14.2), and the table below is in group order, which is the order the form shows them in (§18.7).
 
 | Key | Type | Group | Notes |
 |---|---|---|---|
 | `extends` | `{:ref, :style}` | — | the style this one derives from (§3.5) |
 | `fill` | `:colour` | `:fill` | |
 | `fill_opacity` | `:size` | `:fill` | |
+| `stroke_style` | `{:enum, [:single, :double, :inside, :outside]}` | `:stroke` | how the stroke sits on the edge (§5.6); `:single` when absent |
 | `stroke_width` | `:size` | `:stroke` | user units |
 | `stroke` | `:colour` | `:stroke` | |
 | `stroke_opacity` | `:size` | `:stroke` | |
@@ -159,7 +160,8 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `stroke_linecap` | `{:enum, [:butt, :round, :square]}` | `:stroke` | |
 | `font_family` | `:font` | `:font` | |
 | `font_size` | `:size` | `:font` | |
-| `font_weight` | `{:one_of, [:integer, {:enum, [:normal, :bold]}]}` | `:font` | |
+| `font_weight` | `{:one_of, [:integer, {:enum, [:light, :normal, :medium, :bold]}]}` | `:font` | a word is 300, 400, 500 or 700 |
+| `font_style` | `{:enum, [:normal, :italic]}` | `:font` | |
 | `text_anchor` | `{:enum, [:start, :middle, :end]}` | `:position` | |
 | `opacity` | `:size` | `:effects` | `0` to `1` |
 | `class` | `:string` | — | a CSS class added to the mark's element |
@@ -187,7 +189,7 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 
 ### 3.4 Resolution: one node, two outputs
 
-**Implemented.** A style node resolves to the style map of a `Visualize.IR.Element` through `Visualize.Chart.Style.resolve/3` in the mode of the render target, and the mode is what makes one node serve two backends (D-63): in `:css` the SVG output carries classes and CSS custom-property references — `class="mark mark-line series"`, `stroke="var(--vis-series-1, #3b6fa8)"` — that a stylesheet overrides; in `:literal` a canvas gets the plain colour, width and font it needs, which `Visualize.Backend.Canvas` reads as they are (spec/09 §3). `resolve/3` keeps the fourteen element keys, resolves every slot through `Visualize.Theme.resolve/3`, joins a dash-array list with spaces and passes a literal through; a `{:field, f}` survives it unchanged, and `Visualize.Chart.Style.bind/4` then reads it from a datum through `Visualize.Data.Table.get/2` — a `:colour` key's reading through the frame's `color` scale when the frame declares one, the scale's output resolved as a slot when it is one — and drops the key when the reading is `nil`. A variable in either raises `ArgumentError` naming it: variables resolve at application (§7.3).
+**Implemented.** A style node resolves to the style map of a `Visualize.IR.Element` through `Visualize.Chart.Style.resolve/3` in the mode of the render target, and the mode is what makes one node serve two backends (D-63): in `:css` the SVG output carries classes and CSS custom-property references — `class="mark mark-line series"`, `stroke="var(--vis-series-1, #3b6fa8)"` — that a stylesheet overrides; in `:literal` a canvas gets the plain colour, width and font it needs, which `Visualize.Backend.Canvas` reads as they are (spec/09 §3). `resolve/3` keeps the fifteen element keys, resolves every slot through `Visualize.Theme.resolve/3`, joins a dash-array list with spaces, writes a `font_weight` of `:light` as `300` and `:medium` as `500` (`:normal` and `:bold` are CSS's own words and pass as they are) and passes a literal through; a canvas reads `font_style` and `font_weight` into its font shorthand — `italic 300 12px sans-serif` — beside the size and the family (spec/09 §3); a `{:field, f}` survives it unchanged, and `Visualize.Chart.Style.bind/4` then reads it from a datum through `Visualize.Data.Table.get/2` — a `:colour` key's reading through the frame's `color` scale when the frame declares one, the scale's output resolved as a slot when it is one — and drops the key when the reading is `nil`. A variable in either raises `ArgumentError` naming it: variables resolve at application (§7.3).
 
 ### 3.5 Derivation: `extends`
 
@@ -521,6 +523,17 @@ The elements are the generators' own, so a mark is byte for byte the direct call
 | `:circle` | one `circle` per datum at `(x, y)` with `r` the `value` or `radius` |
 
 A mark's *paint* is the colour its elements are drawn in: the style's `fill` for a filled type (`area`, `band`, `x_band`, `rose`, `symbol`, `arc`, `path`, `rect`, `circle`, the bands of a `percentile_band`) and its `stroke` for a stroked one (`line`, `rule`, the median of a `percentile_band`). When the style gives no value for that key, the paint is the theme's `{:series, i}` for the mark's one-based position among the design's marks (§3.3), set on the group as that key, and a `:line` also takes `fill: :none`. The generators of a `:rule` and an `:x_band` draw in `current_color` and the brush's fill, which a group's style does not reach, so the stroke keys of the resolved style and the paint are set on the rule's line and the fill keys and the paint on the x-band's rectangle. With a `series` channel each series' element takes the frame's `color` scale's value for its series value when the frame declares one — a slot atom resolved through `Visualize.Theme.resolve/3`, exactly as the legend does — and `{:series, j}` for its position among the series otherwise. A `:rect`'s `value` reaches the colour scale the same way, as the element's `fill`. A `{:field, f}` on any style key is bound per element (§3.4). Every slot resolves in the `:resolve` mode, so the SVG carries `var(--vis-series-1, #3b6fa8)` and a canvas the literal; on a canvas the same tree renders through `Visualize.Backend.Canvas` with literal paints, an inline label as `fillText`, and nothing for a text on the binary stream (spec/09 §4).
+
+**The stroke style** (`stroke_style`, §3.1) says how a mark's stroke sits on its edge, and the mark draws it — it is not an element key, so `Visualize.Chart.Style.resolve/3` drops it and `Visualize.Chart.Mark.generate/3` reads it from the style node once its elements are bound:
+
+| `stroke_style` | Drawn as |
+|---|---|
+| `:single` (the default) | the element as it is: the stroke centred on the edge, half in and half out, as SVG draws every stroke |
+| `:inside` | the element at **twice** its `stroke_width`, clipped to its own shape (`Visualize.IR.Element.clip/3` with `:inside`), so exactly one width lies inside the edge and none outside; the fill is unchanged |
+| `:outside` | two elements: the fill alone (`stroke: :none`), then the outline alone (`fill: :none`) at twice the width, clipped to everything *but* its shape (`:outside`), so one width lies outside the edge and none inside |
+| `:double` | two elements: the element as it is, then its outline alone at a **third** of the width in the mark's fill colour — the paint when the paint is the fill, else the theme's `background` — which reads as two lines with a gap between |
+
+Inside and outside belong to a **closed** mark — `area`, `band`, `x_band`, `rose`, `symbol`, `arc`, `path`, `rect`, `circle` — where "in" and "out" of the edge mean something; on an open mark (`line`, `rule`, `percentile_band`) they draw as `:single`, and the validator says nothing, since a style stacks onto marks of any type through a name. `:double` draws on every type. The width is the style's `stroke_width`, `1` when it gives none; the second element of an outside or a double stroke carries the same datum attributes as the first, so a tooltip reads either. How a clip reaches each backend is spec/02 §2.1 and spec/09 §2.3, §3.3.
 
 The group is returned untranslated. `Visualize.Chart.Frame.generate/2` places every mark of the design after the grid, inside the group the margins translate — inside the centred group of a `:polar` frame, inside each panel of a `:facet` frame from the rows whose `by` is the panel's value — when it is given `sources:`, and draws the furniture alone without them (§4.7). A `:rose` and an `:arc` mark are about the plot centre in every kind, so `generate/3` translates their group there in a frame that is not polar. A `%Visualize.Chart.Var{}` reached while drawing raises `ArgumentError` naming it, as the frame does.
 
@@ -1001,7 +1014,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.Style.resolve/3` | `resolve(node, theme, mode)`: the element style map of a style node — the fourteen element keys, every slot resolved through `Visualize.Theme.resolve/3` in `mode`, a dash-array list joined, a `{:field, f}` kept for `bind/4`. Raises `ArgumentError` for a variable. |
+| `Visualize.Chart.Style.resolve/3` | `resolve(node, theme, mode)`: the element style map of a style node — the fifteen element keys, every slot resolved through `Visualize.Theme.resolve/3` in `mode`, a dash-array list joined, a `{:field, f}` kept for `bind/4`. Raises `ArgumentError` for a variable. |
 | `Visualize.Chart.Style.bind/4` | `bind(style, datum, frame, mode)`: the map of `resolve/3` with every `{:field, f}` read from the datum; a colour key's reading passes through the frame's `color` scale when it declares one and resolves as a slot when it is one; a `nil` reading drops the key. |
 
 A style is looked up by name among the declared styles and the built-in four (§3.3) with its `extends` chain flattened first (§3.5), so neither function ever sees that key; a cycle reached at resolution raises `ArgumentError`, the validator having reported it by path (§10.1).
@@ -1484,6 +1497,7 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 
 | Key | Drawn as |
 |---|---|
+| `stroke_style` | a square's edge stroked single, double, inside or outside |
 | `stroke_linejoin` | a corner joined miter, round or bevel |
 | `stroke_linecap` | a stroke's end butt, round or square |
 | `curve` | the interpolation of one short polyline, by `Visualize.Shape.Line` itself |
@@ -1498,6 +1512,8 @@ Every other enum stays a select of its words; `Glyphs.glyph/2` is total over the
 **A text field is a text field.** A `:text` (§7.1) is a box holding the string with its holes — `Uptime for #{var(:host)}` — whichever form the layer holds it in, and `parse/2` keeps what was typed: a hole that does not read is the validator's fault under the field, not a refusal at the box. A variable reaches a text as text among text: a chip dropped on the box is inserted at the caret as `#{var(:name)}` by `Visualize.Hooks.Builder` — the browser is the only party that knows the caret — and the box's own change writes the string; `bind_field` on a text key does nothing, since a text is never bound whole. `meta.name` is a `:text`, so a title can carry a variable in its middle.
 
 **A list of scalars is a list of items.** A `{:list, scalar}` key — a source's `fields`, a theme's `series` colours — renders as rows, one per item with its text and an **×** that removes it (`list_remove`, by index), and a **+** box whose Enter adds one item read by the element's type through `parse/2` (`list_add`); a blank adds nothing. Both write the whole list, as the schema says a list is one value; removing the last item removes the key. A variable in the list renders as its chip, and a chip dropped on the list adds the variable as an item — `fields: [:t, var(:ycol)]` — which is how a source declares the column a variable chooses, matching the mark whose channel is the same variable (§19.9). Lists of nodes — `marks`, `axes` — are not this: they are nodes, each with a form, and the strip walks them.
+
+**A face is one control over two keys.** A style's `font_weight` and `font_style` (§3.1) are two CSS axes, and a person names their product — *Regular, Italic, Light, Light Italic, Medium, Medium Italic, Bold, Bold Italic*. The form shows the two keys as one **face list** in the `font_weight` field's place — eight radios named `font_face`, each drawn in its own weight and slant — and `font_style` has no row of its own. `Visualize.Chart.Builder.Editor.changes/2` reads a `font_face` as two writes, the weight word and the style word (`light_italic` is `font_weight: :light, font_style: :italic`; `regular` is `:normal, :normal`), where `change/2` reads every other control as one; the builder applies each write as it would the control's own. The face a node shows is `Visualize.Chart.Builder.Editor.face/2` of its two values — an integer weight is shown as the nearest of 300, 400, 500 and 700 and is left as written until a face is picked, and a missing key reads as `:normal`. The font panel (§19.10) shows the same list under the same name.
 
 **A ranged number is a slider beside its box.** A key whose spec carries a `range` (§14.2) renders `<input type="range" name="key.range">` before its box, so a value can be dragged while the preview redraws; the box stays for typing, and for a `:size` key it still takes a slot word. `Visualize.Chart.Builder.Editor.change/2` reads `key.range` as the key itself, with the key's type, so a slider's write is the box's write. A value typed outside the range is kept, since the range is a control's span and not a rule. `stroke_dasharray` draws its pattern beside the box — a short line with the value as its `stroke-dasharray` — so a pattern is seen, not decoded.
 
@@ -2052,7 +2068,7 @@ The names on offer are those the stack declares under `vars` and those any layer
 |---|---|---|
 | **layer** (the default) | the selected site's keys as mask checkboxes, its key for a name-keyed kind, its free variables (§19.5, §19.3); at a style site, the site's stack and the chosen entry's resolved style (§18.18, §18.19) | masks, `key`, the style stack |
 | **colour** | `Visualize.Chart.Builder.Picker.panel/1`, the chooser, **patches above the picker**: the theme's colour slots as swatches in their colours and the colour literals the chart already uses first, then a grid of hues at three lightnesses and a picker for any colour; with a colour field selected they write it, with none they show only — and every patch is a colour a person can **drag onto any well** (below) | the selected colour field, through `edit`; any well, through `drop_colour` |
-| **font** | `Visualize.Chart.Builder.Fonts.panel/1`: the faces rendered in themselves, size as a slider, weight, text anchor — the four font keys of the node being edited, together; a node with none says which to open | `font_family`, `font_size`, `font_weight`, `text_anchor`, through `edit` |
+| **font** | `Visualize.Chart.Builder.Fonts.panel/1`: the families rendered in themselves, size as a slider, the face list of §18.6, text anchor — the font keys of the node being edited, together; a node with none says which to open | `font_family`, `font_size`, `font_weight` and `font_style` (as `font_face`), `text_anchor`, through `edit` |
 | **variables** | the variable panel, above | `Use.vars`, bindings, declarations |
 
 **Selecting a field opens its panel.** Clicking into a field (`select_field`, on click and on a key) marks it; a colour field opens the colour panel and a font key the font panel, and any other field leaves the panel where it is. Selecting a node, a facet or a layer clears the field. Every control in a picker writes the same `edit` the form does under the same names (`key`, `key.slot`, `key.range`), so a picker is a bigger view of the form's fields and never a second form; the per-field faces of an earlier draft — glyphs, words, references and sliders in the context — live in the form itself (§18.6) and have no second home.
@@ -2066,7 +2082,10 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Picker.panel/1` | the chooser: patches — slots and the chart's colours — above the hues and the picker, each patch draggable, writing the selected colour field through `edit` or showing with nothing to write |
 | `Visualize.Chart.Builder.Editor.well/2` | what a colour well shows for a value and a theme: the resolved colour, `:none`, or nothing |
 | `Visualize.Chart.Builder.Picker.face/1` | which picker a field would get from its key and type: colour, font, glyphs, enum, reference, range or plain |
-| `Visualize.Chart.Builder.Fonts.panel/1` | the font panel over the node being edited: faces, size, weight, anchor, through `edit` |
+| `Visualize.Chart.Builder.Fonts.panel/1` | the font panel over the node being edited: families, size, the face list, anchor, through `edit` |
+| `Visualize.Chart.Builder.Editor.changes/2` | every write a change to the form means — one for most controls, two for a `font_face` — as `{key, {:ok, value} \| :error}` pairs |
+| `Visualize.Chart.Builder.Editor.face/2` | the face a weight and a style show as: one of the eight words, an integer weight rounded to the nearest of the four |
+| `Visualize.Chart.Builder.Editor.faces/0` | the eight faces in order, each with the weight and style it writes |
 | `Visualize.Chart.Builder.Fonts.keys/1` | the font keys a node kind carries |
 
 **The layer's context** is `Visualize.Chart.Builder.Masks.panel/1`, shown for the selected site whenever no style entry is chosen: the site's name; one checkbox per path its contribution carries — every top-level key, and the keys of each node under one, which are the paths `Use.mask/2` takes (§19.5) — checked where the mask holds it; and the variables the site still needs, pointing at the Variables tab. The contribution is what the site would say before its mask, `Visualize.Chart.Builder.Stack.unmasked/2`, so a key the mask has removed is still offered to un-mask. A site masked as a whole is disabled (§19.3) and is said so rather than drawn as every box checked. The `mask` event carries the checkbox that changed; an unchecked box submits nothing, which is the path leaving.

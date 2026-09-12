@@ -45,6 +45,7 @@ defmodule Visualize.Chart.Style do
     :font_family,
     :font_size,
     :font_weight,
+    :font_style,
     :text_anchor,
     :class
   ]
@@ -172,6 +173,9 @@ defmodule Visualize.Chart.Style do
   @spec value(atom(), term(), Theme.t(), Theme.mode()) :: term()
   def value(_key, %Var{name: name}, _theme, _mode), do: unresolved!(name)
   def value(:stroke_dasharray, list, _theme, _mode) when is_list(list), do: Enum.join(list, " ")
+  # The weight words CSS lacks are their numbers; normal and bold are CSS's own (§3.4).
+  def value(:font_weight, :light, _theme, _mode), do: 300
+  def value(:font_weight, :medium, _theme, _mode), do: 500
   def value(key, value, theme, mode) when key in @colour_keys, do: slot_or(value, theme, mode)
   def value(key, value, theme, mode) when key in @size_keys, do: slot_or(value, theme, mode)
   def value(key, value, theme, mode) when key in @font_keys, do: slot_or(value, theme, mode)

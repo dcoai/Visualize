@@ -1487,6 +1487,57 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-size: 11px;
     }
 
+    /* The face list (spec/14 §18.6): eight faces, each drawn in itself — two columns in
+       the form, one in the font panel. */
+    .vis-builder-face-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 2px;
+    }
+
+    .vis-builder-face-list-large {
+      grid-template-columns: 1fr;
+    }
+
+    .vis-builder-face-row {
+      position: relative;
+      padding: 3px 8px;
+      border: 1px solid transparent;
+      border-radius: var(--vis-builder-radius);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .vis-builder-face-list-large .vis-builder-face-row {
+      font-size: 15px;
+    }
+
+    .vis-builder-face-row:hover {
+      border-color: var(--vis-builder-line);
+    }
+
+    .vis-builder-face-row-on {
+      border-color: var(--vis-builder-accent);
+      background: var(--vis-builder-bg);
+    }
+
+    .vis-builder-face-row input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .vis-builder-face-row:focus-within {
+      outline: 2px solid var(--vis-builder-accent);
+      outline-offset: 1px;
+    }
+
     .vis-builder-glyphs-large .vis-builder-glyph {
       width: 44px;
       height: 44px;
