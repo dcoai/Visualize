@@ -4,7 +4,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The context panel as the picker for the selected field (spec/14 §19.10).
 
     A field is selected by clicking into it, and the panel shows the control its *type*
-    deserves at a size the form cannot afford: a colour's swatches and picker, a font's
+    deserves at a size the form cannot afford: a colour's patches above its picker, each
+    patch draggable onto any colour well of the form (`drop_colour`), a font's
     faces in their own face, an enum's glyphs, a reference's local keys and library
     entries, a ranged number's slider. Every control here writes through the same `edit`
     the form does, under the same names — `key`, `key.slot`, `key.range`, `key.var` — so
@@ -66,10 +67,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <form id={@id} class="vis-builder-picker" phx-change="edit" phx-target={@target}>
+      <form
+        id={@id}
+        class="vis-builder-picker"
+        phx-change="edit"
+        phx-hook="BuilderHook"
+        phx-target={@target}
+        data-builder-target={@target}
+        data-builder-scope="colour"
+      >
         <h3 class="vis-builder-context-title">{@key || "colour"}</h3>
         <p :if={@off?} class="vis-builder-context-note">
-          click into a colour field to set it; these are the chart's colours
+          click a colour well to set it here, or drag a patch onto any well
         </p>
         <p :if={!@off?} class="vis-builder-picker-reads">{reads(@value)}</p>
 
@@ -81,6 +90,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 class={"vis-builder-swatch" <> if(@word == slot, do: " vis-builder-swatch-on", else: "")}
                 title={slot}
                 style={"--vis-builder-swatch: #{colour}"}
+                draggable="true"
+                data-builder-colour={slot}
               >
                 <input
                   type="radio"
@@ -92,12 +103,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 />
               </label>
             </div>
+            <div :if={@recent != []} class="vis-builder-swatches" role="radiogroup" aria-label="colours in this chart">
+              <label
+                :for={colour <- @recent}
+                class={"vis-builder-swatch" <> if(@value == colour, do: " vis-builder-swatch-on", else: "")}
+                title={colour}
+                style={"--vis-builder-swatch: #{colour}"}
+                draggable="true"
+                data-builder-colour={colour}
+              >
+                <input type="radio" name={@key} value={colour} checked={@value == colour} disabled={@off?} aria-label={colour} />
+              </label>
+            </div>
             <div class="vis-builder-hues" role="radiogroup" aria-label="hues">
               <label
                 :for={colour <- @hues}
                 class={"vis-builder-hue" <> if(@value == colour, do: " vis-builder-hue-on", else: "")}
                 title={colour}
                 style={"--vis-builder-swatch: #{colour}"}
+                draggable="true"
+                data-builder-colour={colour}
               >
                 <input type="radio" name={@key} value={colour} checked={@value == colour} disabled={@off?} aria-label={colour} />
               </label>
@@ -106,16 +131,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <span class="vis-builder-control-label">any colour</span>
               <input type="color" name={@key} class="vis-builder-colour" value={hex(@value)} disabled={@off?} />
             </label>
-            <div :if={@recent != []} class="vis-builder-swatches" role="radiogroup" aria-label="colours in this chart">
-              <label
-                :for={colour <- @recent}
-                class={"vis-builder-swatch" <> if(@value == colour, do: " vis-builder-swatch-on", else: "")}
-                title={colour}
-                style={"--vis-builder-swatch: #{colour}"}
-              >
-                <input type="radio" name={@key} value={colour} checked={@value == colour} disabled={@off?} aria-label={colour} />
-              </label>
-            </div>
           <% :font -> %>
             <div class="vis-builder-faces" role="radiogroup" aria-label="faces">
               <label

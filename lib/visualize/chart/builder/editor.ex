@@ -23,6 +23,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Chart.Builder.{Glyphs, Store}
     alias Visualize.Chart.{Fragment, Schema, Text, Validator, Var}
+    alias Visualize.Theme
 
     @typedoc "The control a key's type gets (spec/14 §18.6)."
     @type widget :: :checkbox | :number | :text | :textarea | {:select, [atom()]}
@@ -420,9 +421,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "a variable name whose fields are highlighted (§19.10)"
     )
 
-    attr(:slots, :list,
-      default: [],
-      doc: "the theme's colour slots, as strings, for a colour's slot face (spec/14 §19.10)"
+    attr(:theme, :any,
+      default: nil,
+      doc:
+        "the `%Visualize.Theme{}` the design names, for what a colour well shows (spec/14 §19.10)"
     )
 
     attr(:strip, :boolean,
@@ -475,6 +477,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           phx-target={@target}
           data-builder-target={@target}
           data-builder-scope="ref"
+          data-builder-edit={@event}
         >
           <label
             :for={field <- @fields}
@@ -561,23 +564,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 stroke-dasharray={field.dash}
               />
             </svg>
-            <select
+            <span
               :if={is_nil(field.variable) and field.widget == :colour}
-              name={"#{field.key}.slot"}
-              class="vis-builder-slot"
-              title="a theme slot"
-            >
-              <option value="">slot…</option>
-              <option :for={slot <- @slots} value={slot} selected={field.slot == slot}>{slot}</option>
-            </select>
-            <input
-              :if={is_nil(field.variable) and field.widget == :colour}
-              type="color"
-              name={field.key}
-              class="vis-builder-colour"
-              value={field.value}
-              title={field.value || "a colour"}
-            />
+              class={well_class(field.well)}
+              style={"--vis-builder-swatch: #{field.well.colour || "transparent"}"}
+              title={field.well.word || "no colour set"}
+              role="img"
+              aria-label={"#{field.key}: #{field.well.word || "not set"}"}
+              data-builder-well={field.key}
+            ></span>
             <select
               :if={is_nil(field.variable) and field.widget == :select and field.glyphs == []}
               name={field.key}
@@ -678,7 +673,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           options: options(widget),
           checked: Map.get(node, spec.key) == true,
           value: shown(widget, as_text(spec, Map.fetch(node, spec.key))),
-          slot: slot_name(widget, Map.get(node, spec.key)),
+          well: well(widget, Map.get(node, spec.key), Map.get(assigns, :theme)),
           variable: if(spec.type == :text, do: nil, else: variable_name(Map.get(node, spec.key))),
           placeholder: shown(widget, default(spec)),
           errors: key_errors(errors, path ++ [spec.key])
@@ -793,9 +788,53 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp as_text(_spec, value), do: value
 
-    # A colour is three things (§3.4): the slot face shows a slot, the picker a literal.
-    defp slot_name(:colour, slot) when is_atom(slot) and not is_nil(slot), do: to_string(slot)
-    defp slot_name(_widget, _value), do: nil
+    defp well(:colour, value, theme), do: well(value, theme)
+    defp well(_widget, _value, _theme), do: %{colour: nil, none?: false, word: nil}
+
+    defp well_class(%{none?: true}), do: "vis-builder-well vis-builder-well-none"
+    defp well_class(%{colour: nil}), do: "vis-builder-well vis-builder-well-empty"
+    defp well_class(_well), do: "vis-builder-well"
+
+    @doc """
+    What a colour well shows for a value (spec/14 §19.10): the colour it resolves to — a
+    slot through the theme, a literal as itself — with the value's word as the title;
+    `:none` as no paint; anything else, or no theme for a slot, as nothing.
+
+        iex> Visualize.Chart.Builder.Editor.well("#3b6fa8", Visualize.Theme.default())
+        %{colour: "#3b6fa8", none?: false, word: "#3b6fa8"}
+
+        iex> Visualize.Chart.Builder.Editor.well(:series_1, Visualize.Theme.default())
+        %{colour: "#3b6fa8", none?: false, word: "series_1"}
+
+        iex> Visualize.Chart.Builder.Editor.well(:none, nil)
+        %{colour: nil, none?: true, word: "none"}
+
+        iex> Visualize.Chart.Builder.Editor.well(nil, nil)
+        %{colour: nil, none?: false, word: nil}
+    """
+    @spec well(term(), Theme.t() | nil) :: %{
+            colour: String.t() | nil,
+            none?: boolean(),
+            word: String.t() | nil
+          }
+    def well(nil, _theme), do: %{colour: nil, none?: false, word: nil}
+    def well(:none, _theme), do: %{colour: nil, none?: true, word: "none"}
+    def well("#" <> _ = hex, _theme), do: %{colour: hex, none?: false, word: hex}
+
+    def well({:series, i}, %Theme{} = theme) when is_integer(i) and i >= 1,
+      do: well(Theme.series_slot(theme, i), theme)
+
+    def well(slot, %Theme{} = theme) when is_atom(slot) do
+      if slot in Theme.colour_slots(theme),
+        do: %{colour: Theme.resolve(theme, slot, :literal), none?: false, word: to_string(slot)},
+        else: %{colour: nil, none?: false, word: to_string(slot)}
+    end
+
+    def well(slot, _theme) when is_atom(slot),
+      do: %{colour: nil, none?: false, word: to_string(slot)}
+
+    def well(value, _theme) when is_binary(value), do: %{colour: value, none?: false, word: value}
+    def well(_value, _theme), do: %{colour: nil, none?: false, word: nil}
 
     defp default(%{required: true}), do: :error
     defp default(%{default: nil}), do: :error
@@ -804,9 +843,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(_widget, :error), do: nil
     # A variable is shown by the name box, not the typed control (spec/14 §19.9).
     defp shown(_widget, {:ok, %Var{}}), do: nil
-    # A slot is the select's, not the picker's; a picker shows only a hex it can.
-    defp shown(:colour, {:ok, "#" <> _ = hex}), do: hex
-    defp shown(:colour, {:ok, _other}), do: nil
+    # A colour is the well's to show, never a control's.
+    defp shown(:colour, {:ok, _value}), do: nil
     defp shown(:textarea, {:ok, value}), do: inspect(value)
     defp shown({:select, _}, {:ok, value}), do: option(value)
     defp shown({:items, _}, {:ok, _value}), do: nil

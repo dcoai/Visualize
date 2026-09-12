@@ -79,13 +79,12 @@
       <div class="vis-builder-workspace">
         <div class="vis-builder-editor">
   
-  <form id="builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" phx-target="-1" data-builder-target="-1" data-builder-scope="ref">
+  <form id="builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" phx-target="-1" data-builder-target="-1" data-builder-scope="ref" data-builder-edit="edit">
     <label class="vis-builder-field" data-builder-ref="extends" data-builder-bind="extends" phx-click="select_field" phx-keyup="select_field" phx-value-field="extends" phx-target="-1">
       <span class="vis-builder-key">
         extends
         
       </span>
-      
       
       
       
@@ -112,11 +111,7 @@
       
       
       
-      <select name="fill.slot" class="vis-builder-slot" title="a theme slot">
-        <option value="">slot…</option>
-        <option value="series_1">series_1</option><option value="series_2">series_2</option><option value="series_3">series_3</option><option value="series_4">series_4</option><option value="series_5">series_5</option><option value="series_6">series_6</option><option value="series_7">series_7</option><option value="series_8">series_8</option><option value="series_9">series_9</option><option value="series_10">series_10</option><option value="axis">axis</option><option value="grid">grid</option><option value="text">text</option><option value="background">background</option>
-      </select>
-      <input type="color" name="fill" class="vis-builder-colour" title="a colour">
+      <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="no colour set" role="img" aria-label="fill: not set" data-builder-well="fill"></span>
       
       
       
@@ -133,11 +128,7 @@
       
       
       
-      <select name="stroke.slot" class="vis-builder-slot" title="a theme slot">
-        <option value="">slot…</option>
-        <option value="series_1" selected>series_1</option><option value="series_2">series_2</option><option value="series_3">series_3</option><option value="series_4">series_4</option><option value="series_5">series_5</option><option value="series_6">series_6</option><option value="series_7">series_7</option><option value="series_8">series_8</option><option value="series_9">series_9</option><option value="series_10">series_10</option><option value="axis">axis</option><option value="grid">grid</option><option value="text">text</option><option value="background">background</option>
-      </select>
-      <input type="color" name="stroke" class="vis-builder-colour" title="a colour">
+      <span class="vis-builder-well" style="--vis-builder-swatch: #3b6fa8" title="series_1" role="img" aria-label="stroke: series_1" data-builder-well="stroke"></span>
       
       
       
@@ -153,7 +144,6 @@
       <input type="range" name="stroke_width.range" class="vis-builder-range" min="0" max="20" step="0.5" value="2" aria-label="stroke_width, dragged">
       
       <input type="text" name="stroke_width" value="2">
-      
       
       
       
@@ -178,13 +168,11 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="stroke_linecap" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linecap" phx-target="-1">
       <span class="vis-builder-key">
         stroke_linecap
         
       </span>
-      
       
       
       
@@ -213,7 +201,6 @@
         stroke_linejoin
         
       </span>
-      
       
       
       
@@ -254,7 +241,6 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="fill_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill_opacity" phx-target="-1">
       <span class="vis-builder-key">
         fill_opacity
@@ -265,7 +251,6 @@
       <input type="range" name="fill_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
       
       <input type="text" name="fill_opacity">
-      
       
       
       
@@ -290,7 +275,6 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="font_family" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_family" phx-target="-1">
       <span class="vis-builder-key">
         font_family
@@ -301,7 +285,6 @@
       
       
       <input type="text" name="font_family">
-      
       
       
       
@@ -326,7 +309,6 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="font_weight" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_weight" phx-target="-1">
       <span class="vis-builder-key">
         font_weight
@@ -344,13 +326,11 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="text_anchor" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_anchor" phx-target="-1">
       <span class="vis-builder-key">
         text_anchor
         
       </span>
-      
       
       
       
@@ -391,13 +371,11 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="curve" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve" phx-target="-1">
       <span class="vis-builder-key">
         curve
         
       </span>
-      
       
       
       
@@ -457,7 +435,6 @@
       
       
       
-      
       <textarea name="curve_opts"></textarea>
       
     </label><label class="vis-builder-field" data-builder-bind="symbol" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol" phx-target="-1">
@@ -465,7 +442,6 @@
         symbol
         
       </span>
-      
       
       
       
@@ -511,7 +487,6 @@
       
       
       <input type="text" name="symbol_size">
-      
       
       
       

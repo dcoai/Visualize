@@ -1544,11 +1544,35 @@ if Code.ensure_loaded?(Phoenix.Component) do
       display: block;
     }
 
-    /* A colour's three faces sit in one row: the slot, the picker, the switch. */
-    .vis-builder .vis-builder-slot {
-      max-width: 9em;
+    /* A colour field is a well (spec/14 §19.10): the colour itself, a drop target for a
+       patch of the chooser; no paint is hatched, and nothing set is an empty square. */
+    .vis-builder-well {
+      display: inline-block;
+      width: 2.4em;
+      height: 1.8em;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: var(--vis-builder-swatch);
+      cursor: pointer;
     }
 
+    .vis-builder-well-empty {
+      background: transparent;
+    }
+
+    .vis-builder-well-none {
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent 0 4px,
+        var(--vis-builder-line) 4px 5px
+      );
+    }
+
+    .vis-builder-well.vis-builder-field-over {
+      box-shadow: 0 0 0 2px var(--vis-builder-panel), 0 0 0 4px var(--vis-builder-accent);
+    }
+
+    /* The chooser's own picker, for any colour a patch does not offer. */
     .vis-builder .vis-builder-colour {
       width: 2.4em;
       height: 1.8em;
