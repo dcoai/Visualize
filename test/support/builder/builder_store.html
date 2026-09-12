@@ -500,6 +500,80 @@
   
   
   
+</label><label class="vis-builder-field" data-builder-bind="blend" phx-click="select_field" phx-keyup="select_field" phx-value-field="blend" phx-target="-1">
+  <span class="vis-builder-key">
+    blend
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="blend">
+    <option value=""></option>
+    <option value="normal">normal</option><option value="multiply">multiply</option><option value="screen">screen</option><option value="overlay">overlay</option><option value="darken">darken</option><option value="lighten">lighten</option>
+  </select>
+  
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="effect" phx-click="select_field" phx-keyup="select_field" phx-value-field="effect" phx-target="-1">
+  <span class="vis-builder-key">
+    effect
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="effect">
+    <label class="vis-builder-glyph" title="none">
+      <input type="radio" name="effect" value="none" aria-label="none">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="shadow">
+      <input type="radio" name="effect" value="shadow" aria-label="shadow">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" fill="currentColor" opacity="0.35"/><rect x="5" y="5" width="12" height="12" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="blur">
+      <input type="radio" name="effect" value="blur" aria-label="blur">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><filter id="vis-glyph-blur"><feGaussianBlur stdDeviation="1.5"/></filter></defs><rect x="6" y="6" width="12" height="12" fill="currentColor" filter="url(#vis-glyph-blur)"/></svg>
+    </label>
+  </span>
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="effect_radius" phx-click="select_field" phx-keyup="select_field" phx-value-field="effect_radius" phx-target="-1">
+  <span class="vis-builder-key">
+    effect_radius
+    
+  </span>
+  
+  
+  
+  <input type="range" name="effect_radius.range" class="vis-builder-range" min="0" max="20" step="0.5" value="0" aria-label="effect_radius, dragged">
+  
+  
+  <input type="text" name="effect_radius">
+  
+  
+  
+  
+  
+  
+  
+  
 </label>
       </fieldset>
       

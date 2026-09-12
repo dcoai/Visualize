@@ -1523,6 +1523,7 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 | Key | Drawn as |
 |---|---|
 | `stroke_style` | a square's edge stroked single, double, inside or outside |
+| `effect` | a square plain, with a shadow, or blurred |
 | `stroke_linejoin` | a corner joined miter, round or bevel |
 | `stroke_linecap` | a stroke's end butt, round or square |
 | `curve` | the interpolation of one short polyline, by `Visualize.Shape.Line` itself |

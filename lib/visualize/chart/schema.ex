@@ -101,6 +101,7 @@ defmodule Visualize.Chart.Schema do
   ]
   @symbol_types [:circle, :cross, :diamond, :square, :star, :triangle, :wye]
   @weights [:light, :normal, :medium, :bold]
+  @blends [:normal, :multiply, :screen, :overlay, :darken, :lighten]
   @builtin_styles [:axis, :grid, :label, :title]
 
   @doc "Every node kind of spec/14 §1.2, the design first."
@@ -345,6 +346,9 @@ defmodule Visualize.Chart.Schema do
       spec(:font_style, {:enum, [:normal, :italic]}, :style, group: :font),
       spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style, group: :position),
       spec(:opacity, :size, :style, range: {0, 1, 0.05}, group: :effects),
+      spec(:blend, {:enum, @blends}, :style, group: :effects),
+      spec(:effect, {:enum, [:none, :shadow, :blur]}, :style, group: :effects),
+      spec(:effect_radius, :size, :style, range: {0, 20, 0.5}, group: :effects),
       spec(:class, :string, :style),
       spec(:curve, {:enum, @curve_types}, :style),
       spec(:curve_opts, {:node, :curve_opts}, :style),

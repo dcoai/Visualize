@@ -306,7 +306,7 @@ A compatibility façade: every builder delegates to `Visualize.IR.Path` and oper
 
 ### 5.4 `Visualize.SVG.Renderer`
 
-Serialises an `SVG.Element` tree. Attributes with a `nil` value are omitted; the rest are emitted sorted by their SVG name from `attribute_name/1`, values escaped (`&`, `"`, `<`, `>`); text content is escaped (`&`, `<`, `>`); child-less, content-less `circle`, `ellipse`, `line`, `path`, `polygon`, `polyline`, `rect`, `image`, `use` and `stop` elements are self-closing. The iolist form is what `Phoenix.HTML.Safe` returns. `Visualize.Backend.SVG` renders its tags, attributes and text through the same functions, so the two serialisers cannot drift (D-34).
+Serialises an `SVG.Element` tree. Attributes with a `nil` value are omitted; the rest are emitted sorted by their SVG name from `attribute_name/1`, values escaped (`&`, `"`, `<`, `>`); text content is escaped (`&`, `<`, `>`); child-less, content-less `circle`, `ellipse`, `line`, `path`, `polygon`, `polyline`, `rect`, `image`, `use`, `stop`, `feDropShadow` and `feGaussianBlur` elements are self-closing. The iolist form is what `Phoenix.HTML.Safe` returns. `Visualize.Backend.SVG` renders its tags, attributes and text through the same functions, so the two serialisers cannot drift (D-34).
 
 | Function | Contract |
 |---|---|

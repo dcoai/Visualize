@@ -55,6 +55,9 @@ defmodule Visualize.IR.Element do
           | :linear_gradient
           | :radial_gradient
           | :stop
+          | :filter
+          | :fe_drop_shadow
+          | :fe_gaussian_blur
           | :root
           | :title
           | :desc
@@ -75,7 +78,10 @@ defmodule Visualize.IR.Element do
           optional(:font_style) => :normal | :italic,
           optional(:text_anchor) => :start | :middle | :end,
           optional(:dominant_baseline) => atom(),
-          optional(:class) => String.t()
+          optional(:class) => String.t(),
+          optional(:blend) => atom(),
+          optional(:effect) => :none | :shadow | :blur,
+          optional(:effect_radius) => number()
         }
 
   @typedoc """
@@ -268,6 +274,24 @@ defmodule Visualize.IR.Element do
     style = if opts[:opacity], do: Map.put(style, :stop_opacity, opts[:opacity]), else: style
     new(:stop, attrs: %{offset: offset}, style: style)
   end
+
+  @doc """
+  A filter (spec/02 §2.1): its id and its primitives, for an element's `effect`.
+  """
+  @spec filter(String.t(), [t()]) :: t()
+  def filter(id, children) when is_binary(id) and is_list(children) do
+    new(:filter, attrs: %{id: id}, children: children)
+  end
+
+  @doc "A drop shadow primitive of the offset and the blur radius, at 0.35 opacity."
+  @spec drop_shadow(number(), number(), number()) :: t()
+  def drop_shadow(dx, dy, radius) do
+    new(:fe_drop_shadow, attrs: %{dx: dx, dy: dy, std_deviation: radius, flood_opacity: 0.35})
+  end
+
+  @doc "A Gaussian blur primitive of the radius."
+  @spec gaussian_blur(number()) :: t()
+  def gaussian_blur(radius), do: new(:fe_gaussian_blur, attrs: %{std_deviation: radius})
 
   @doc """
   Creates a title element: the accessible name of the element it is the first child of.

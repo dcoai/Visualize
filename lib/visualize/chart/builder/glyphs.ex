@@ -19,6 +19,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @drawn [
       :fill_style,
+      :effect,
       :stroke_style,
       :stroke_linejoin,
       :stroke_linecap,
@@ -66,6 +67,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # -- the pictures ---------------------------------------------------------------------
+
+    # An effect (§3.1): a plain square, one with a shadow, one blurred.
+    defp picture(:effect, effect) when effect in [:none, :shadow, :blur] do
+      case effect do
+        :none ->
+          ~s|<rect x="6" y="6" width="12" height="12" fill="currentColor"/>|
+
+        :shadow ->
+          ~s|<rect x="8" y="8" width="12" height="12" fill="currentColor" opacity="0.35"/><rect x="5" y="5" width="12" height="12" fill="currentColor"/>|
+
+        :blur ->
+          ~s|<defs><filter id="vis-glyph-blur"><feGaussianBlur stdDeviation="1.5"/></filter></defs><rect x="6" y="6" width="12" height="12" fill="currentColor" filter="url(#vis-glyph-blur)"/>|
+      end
+    end
 
     # A fill style (§18.6): no paint, a solid, a gradient down the square, one out from
     # its centre. The gradient ids repeat across glyphs and are identical, which SVG allows.

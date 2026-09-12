@@ -1,18 +1,18 @@
-defmodule Visualize.Chart.Frame.Paints do
+defmodule Visualize.Chart.Frame.Defs do
   @moduledoc false
-  # The design's paints (spec/14 §2.7, §3.2): one `defs` element first in the frame's
-  # group holding every gradient, and every `{:paint, name}` in the tree's styles
-  # resolved — `url(#id)` for the SVG output, the first stop's colour for a canvas.
+  # The frame's `defs` (spec/14 §2.7, §3.2): one element first in the frame's group
+  # holding every gradient the design declares and one filter per effect the tree uses,
+  # and every `{:paint, name}` in the tree's styles resolved — `url(#id)` for the SVG
+  # output, the first stop's colour for a canvas.
 
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.IR.Element
 
   @doc false
-  # The `defs` element holding the design's gradients, or `[]` with none.
-  @spec defs(map(), atom()) :: [Element.t()]
-  def defs(%{defs: defs}, _mode) when map_size(defs) == 0, do: []
-
-  def defs(%{defs: defs, theme: theme}, mode) do
+  # The `defs` element holding the design's gradients and the filters the tree's effects
+  # need, or `[]` with neither.
+  @spec defs(map(), atom(), Element.t()) :: [Element.t()]
+  def defs(%{defs: defs, theme: theme}, mode, tree) do
     prefix = prefix(defs)
 
     gradients =
@@ -20,7 +20,34 @@ defmodule Visualize.Chart.Frame.Paints do
         gradient(id(prefix, name), node, theme, mode)
       end
 
-    [Element.defs(gradients)]
+    case gradients ++ filters(tree) do
+      [] -> []
+      children -> [Element.defs(children)]
+    end
+  end
+
+  # One filter per {effect, radius} pair any style in the tree carries (spec/14 §2.7).
+  defp filters(tree) do
+    tree
+    |> effects()
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.map(fn {effect, radius} ->
+      Element.filter(Visualize.Backend.SVG.effect_id(effect, radius), [primitive(effect, radius)])
+    end)
+  end
+
+  defp primitive(:shadow, radius), do: Element.drop_shadow(radius / 2, radius / 2, radius)
+  defp primitive(:blur, radius), do: Element.gaussian_blur(radius)
+
+  defp effects(%Element{style: style, children: children}) do
+    own =
+      case Map.get(style, :effect) do
+        effect when effect in [:shadow, :blur] -> [{effect, Map.get(style, :effect_radius) || 3}]
+        _none -> []
+      end
+
+    own ++ Enum.flat_map(children, &effects/1)
   end
 
   @doc false

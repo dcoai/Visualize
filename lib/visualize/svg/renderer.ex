@@ -7,7 +7,7 @@ defmodule Visualize.SVG.Renderer do
 
   alias Visualize.SVG.Element
 
-  @self_closing_tags ~w(circle ellipse line path polygon polyline rect image use stop)a
+  @self_closing_tags ~w(circle ellipse line path polygon polyline rect image use stop feDropShadow feGaussianBlur)a
 
   # SVG attribute names that are camel-cased rather than hyphenated (D-11). Every other
   # snake_case key is a presentation attribute and hyphenates.
@@ -20,6 +20,7 @@ defmodule Visualize.SVG.Renderer do
     pattern_transform: "patternTransform",
     clip_path_units: "clipPathUnits",
     mask_units: "maskUnits",
+    std_deviation: "stdDeviation",
     marker_width: "markerWidth",
     marker_height: "markerHeight",
     marker_units: "markerUnits",
