@@ -34,14 +34,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
     ]
 
     attr(:id, :string, required: true, doc: "the panel's id")
-    attr(:key, :atom, required: true, doc: "the selected field's key")
-    attr(:spec, :map, required: true, doc: "the key's spec, as `Schema.describe/1` gives it")
+
+    attr(:key, :atom,
+      default: nil,
+      doc: "the selected field's key; nil shows the picker with nothing to write"
+    )
+
+    attr(:spec, :map,
+      default: %{type: :colour, range: nil},
+      doc: "the key's spec, as `Schema.describe/1` gives it"
+    )
+
     attr(:value, :any, default: nil, doc: "the field's current value, or nil")
     attr(:swatches, :list, default: [], doc: "`{slot, colour}` for the theme's colour slots")
     attr(:recent, :list, default: [], doc: "the colour literals the design already uses")
     attr(:refs, :map, default: %{}, doc: "the names and ids a reference may take, by kind")
     attr(:entries, :list, default: [], doc: "the library's entries, for a reference's names")
-    attr(:variables, :list, default: [], doc: "the variable names on offer")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
 
     @doc """
@@ -49,12 +57,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     write the field through `edit`.
     """
     def panel(assigns) do
-      assigns = assign(assigns, face: face(assigns), word: word(assigns.value))
+      assigns =
+        assign(assigns,
+          face: face(assigns),
+          word: word(assigns.value),
+          hues: hues(),
+          off?: is_nil(assigns.key)
+        )
 
       ~H"""
       <form id={@id} class="vis-builder-picker" phx-change="edit" phx-target={@target}>
-        <h3 class="vis-builder-context-title">{@key}</h3>
-        <p class="vis-builder-picker-reads">{reads(@value)}</p>
+        <h3 class="vis-builder-context-title">{@key || "colour"}</h3>
+        <p :if={@off?} class="vis-builder-context-note">
+          click into a colour field to set it; these are the chart's colours
+        </p>
+        <p :if={!@off?} class="vis-builder-picker-reads">{reads(@value)}</p>
 
         <%= case @face do %>
           <% :colour -> %>
@@ -65,12 +82,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 title={slot}
                 style={"--vis-builder-swatch: #{colour}"}
               >
-                <input type="radio" name={"#{@key}.slot"} value={slot} checked={@word == slot} aria-label={slot} />
+                <input
+                  type="radio"
+                  name={"#{@key}.slot"}
+                  value={slot}
+                  checked={@word == slot}
+                  disabled={@off?}
+                  aria-label={slot}
+                />
+              </label>
+            </div>
+            <div class="vis-builder-hues" role="radiogroup" aria-label="hues">
+              <label
+                :for={colour <- @hues}
+                class={"vis-builder-hue" <> if(@value == colour, do: " vis-builder-hue-on", else: "")}
+                title={colour}
+                style={"--vis-builder-swatch: #{colour}"}
+              >
+                <input type="radio" name={@key} value={colour} checked={@value == colour} disabled={@off?} aria-label={colour} />
               </label>
             </div>
             <label class="vis-builder-picker-row">
-              <span class="vis-builder-control-label">a colour</span>
-              <input type="color" name={@key} class="vis-builder-colour" value={hex(@value)} />
+              <span class="vis-builder-control-label">any colour</span>
+              <input type="color" name={@key} class="vis-builder-colour" value={hex(@value)} disabled={@off?} />
             </label>
             <div :if={@recent != []} class="vis-builder-swatches" role="radiogroup" aria-label="colours in this chart">
               <label
@@ -79,7 +113,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 title={colour}
                 style={"--vis-builder-swatch: #{colour}"}
               >
-                <input type="radio" name={@key} value={colour} checked={@value == colour} aria-label={colour} />
+                <input type="radio" name={@key} value={colour} checked={@value == colour} disabled={@off?} aria-label={colour} />
               </label>
             </div>
           <% :font -> %>
@@ -135,19 +169,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <input type="text" name={@key} class="vis-builder-picker-box" value={shown(@value)} />
         <% end %>
 
-        <label class="vis-builder-picker-row vis-builder-picker-variable">
-          <span class="vis-builder-control-label">or a variable</span>
-          <input
-            type="text"
-            name={"#{@key}.var"}
-            value={variable_name(@value)}
-            list={@id <> "-variables"}
-            placeholder="var(:name)"
-          />
-        </label>
-        <datalist id={@id <> "-variables"}>
-          <option :for={name <- @variables} value={name}></option>
-        </datalist>
       </form>
       """
     end
@@ -244,6 +265,34 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp faces(value) when is_binary(value) and value not in @faces, do: [value | @faces]
     defp faces(_value), do: @faces
 
+    # Twelve hues at three lightnesses, as hex: a wheel laid flat, enough to pick a colour
+    # by eye and then tune it in the picker below.
+    defp hues do
+      for l <- [0.72, 0.5, 0.3], h <- Enum.map(0..11, &(&1 * 30)), do: hsl_hex(h, 0.65, l)
+    end
+
+    defp hsl_hex(h, s, l) do
+      c = (1 - abs(2 * l - 1)) * s
+      x = c * (1 - abs(:math.fmod(h / 60, 2) - 1))
+      m = l - c / 2
+
+      {r, g, b} =
+        cond do
+          h < 60 -> {c, x, 0}
+          h < 120 -> {x, c, 0}
+          h < 180 -> {0, c, x}
+          h < 240 -> {0, x, c}
+          h < 300 -> {x, 0, c}
+          true -> {c, 0, x}
+        end
+
+      [r, g, b]
+      |> Enum.map(fn v -> round((v + m) * 255) end)
+      |> Enum.map_join(&String.pad_leading(Integer.to_string(&1, 16), 2, "0"))
+      |> String.downcase()
+      |> then(&("#" <> &1))
+    end
+
     # An atom's word, for the controls that carry words: a slot, a glyph's value.
     defp word(value) when is_atom(value) and not is_nil(value), do: to_string(value)
     defp word(_value), do: nil
@@ -256,9 +305,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(value) when is_binary(value), do: value
     defp shown(value) when is_atom(value) or is_number(value), do: to_string(value)
     defp shown(value), do: inspect(value)
-
-    defp variable_name(%Var{name: name}), do: to_string(name)
-    defp variable_name(_value), do: nil
 
     defp reads(nil), do: "not set"
     defp reads(%Var{name: name}), do: "= var(:#{name})"

@@ -57,6 +57,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart.Builder.{
       Document,
       Editor,
+      Fonts,
       Inspector,
       Layers,
       Library,
@@ -139,6 +140,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          library_view: :group,
          style_entry: nil,
          field: nil,
+         context: :layer,
          expanded: MapSet.new(),
          find: "",
          node_label: "design"
@@ -322,9 +324,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </div>
           </main>
           <aside class="vis-builder-context">
-            <h2 class="vis-builder-sidebar-title">Context</h2>
+            <nav class="vis-builder-context-icons" aria-label="context panels">
+              <button
+                :for={{panel, icon, word} <- context_icons()}
+                type="button"
+                class={"vis-builder-context-icon" <> if(@context == panel, do: " vis-builder-context-icon-on", else: "")}
+                title={word}
+                aria-label={word}
+                aria-pressed={to_string(@context == panel)}
+                phx-click="context"
+                phx-value-panel={panel}
+                phx-target={@myself}
+              >{Phoenix.HTML.raw(icon)}</button>
+            </nav>
             <StyleStack.panel
-              :if={@style_site}
+              :if={@context == :layer and @style_site}
               id={@id <> "-style-stack"}
               value={@style_site.value}
               fallback={@style_site.fallback}
@@ -333,7 +347,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <Editor.panel
-              :if={@style_site && @style_entry}
+              :if={@context == :layer && @style_site && @style_entry}
               id={@id <> "-style-editor"}
               class="vis-builder-style-panel"
               kind={:style}
@@ -346,19 +360,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <Picker.panel
-              :if={@picker && !(@style_site && @style_entry)}
+              :if={@context == :colour}
               id={@id <> "-picker"}
-              key={@picker.key}
-              spec={@picker.spec}
-              value={@picker.value}
-              swatches={@picker.swatches}
-              recent={@picker.recent}
-              refs={@refs}
-              entries={@picker.entries}
+              key={@colour.key}
+              spec={@colour.spec}
+              value={@colour.value}
+              swatches={@colour.swatches}
+              recent={@colour.recent}
+              target={@myself}
+            />
+            <Fonts.panel
+              :if={@context == :font}
+              id={@id <> "-fonts"}
+              kind={@entry.kind}
+              node={@editing}
               target={@myself}
             />
             <Masks.panel
-              :if={@site && !@picker}
+              :if={@context == :layer && @site && !(@style_site && @style_entry)}
               id={@id <> "-masks"}
               use={@site.use}
               label={@site.label}
@@ -367,8 +386,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
               keyless={@site.use.id in @keyless}
               target={@myself}
             />
-            <h2 class="vis-builder-sidebar-title">Variables</h2>
             <Variables.panel
+              :if={@context == :variables}
               id={@id <> "-variables"}
               layers={@layers}
               design={@design}
@@ -509,7 +528,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # Clicking into a field selects it, and the context panel becomes its picker
     # (spec/14 §19.10); the same click on the field already selected leaves it.
     def handle_event("select_field", %{"field" => key}, socket) do
-      {:noreply, assign(socket, :field, key)}
+      {:noreply, assign(socket, field: key, context: context_for(socket, key))}
+    end
+
+    # The icon row: which of the context's panels is open (spec/14 §19.10).
+    def handle_event("context", %{"panel" => panel}, socket) do
+      case Enum.find(context_icons(), fn {p, _, _} -> to_string(p) == panel end) do
+        {p, _, _} -> {:noreply, assign(socket, :context, p)}
+        nil -> {:noreply, socket}
+      end
     end
 
     # Two views over one store; group is the default because it is the one a person
@@ -1090,7 +1117,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         site: site(assigns, fetch),
         refs: refs(design, assigns.store),
         slots: slots(design),
-        picker: picker(assigns, entry, at(layer, entry.path), design),
+        colour: colour(assigns, entry, at(layer, entry.path), design),
         editing: at(layer, entry.path),
         errors: faults(kind, design, assigns, cycle),
         keyless: keyless,
@@ -1147,32 +1174,58 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.map(&to_string/1)
     end
 
-    # The selected field as the context panel's picker (spec/14 §19.10): its spec on the
-    # node being edited, its value, and what its type can choose from — the theme's colour
-    # slots with their colours, the colour literals the design already uses.
-    defp picker(%{field: nil}, _entry, _node, _design), do: nil
+    # The colour panel (spec/14 §19.10): the selected colour field, if the selected field is
+    # one, with the theme's slots in their colours and the literals the design already uses.
+    defp colour(%{field: field}, entry, node, design) do
+      theme = design |> Map.get(:theme, :default) |> theme()
 
-    defp picker(%{field: key} = assigns, entry, node, design) do
+      spec =
+        field &&
+          Enum.find(
+            Schema.describe(entry.kind),
+            &(to_string(&1.key) == field and &1.type == :colour)
+          )
+
+      %{
+        key: spec && spec.key,
+        spec: spec || %{type: :colour, range: nil},
+        value: if(spec && is_map(node), do: Map.get(node, spec.key)),
+        swatches:
+          Enum.map(
+            Theme.colour_slots(theme),
+            &{to_string(&1), Theme.resolve(theme, &1, :literal)}
+          ),
+        recent: recent_colours(design)
+      }
+    end
+
+    # A colour field opens the colour panel and a font key the font panel; any other field
+    # leaves the panel where it is.
+    defp context_for(socket, key) do
+      %{entry: entry} = editing(socket.assigns)
+
       case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == key)) do
-        nil ->
-          nil
-
-        spec ->
-          theme = design |> Map.get(:theme, :default) |> theme()
-
-          %{
-            key: spec.key,
-            spec: spec,
-            value: if(is_map(node), do: Map.get(node, spec.key)),
-            swatches:
-              Enum.map(
-                Theme.colour_slots(theme),
-                &{to_string(&1), Theme.resolve(theme, &1, :literal)}
-              ),
-            recent: recent_colours(design),
-            entries: if(assigns.store, do: Store.list(assigns.store), else: [])
-          }
+        %{type: :colour} -> :colour
+        %{key: k} when k in [:font_family, :font_size, :font_weight, :text_anchor] -> :font
+        _other -> socket.assigns.context
       end
+    end
+
+    defp context_icons do
+      [
+        {:layer,
+         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8 L12 4 L20 8 L12 12 Z"/><path d="M4 12 L12 16 L20 12"/><path d="M4 16 L12 20 L20 16"/></svg>|,
+         "layer"},
+        {:colour,
+         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.5" fill="currentColor"/><circle cx="14" cy="8.5" r="1.5" fill="currentColor"/><circle cx="15.5" cy="13" r="1.5" fill="currentColor"/></svg>|,
+         "colour"},
+        {:font,
+         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 19 L12 4 L19 19"/><path d="M8 13 H16"/></svg>|,
+         "font"},
+        {:variables,
+         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6 C4 6 4 10 4 12 C4 14 4 18 6 18"/><path d="M18 6 C20 6 20 10 20 12 C20 14 20 18 18 18"/><path d="M9 9 L15 15 M15 9 L9 15"/></svg>|,
+         "variables"}
+      ]
     end
 
     # Every "#rrggbb" the design's styles carry, once each, in order of first use.
