@@ -811,14 +811,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event("bind_field", %{"field" => field, "name" => name}, socket) do
       %{entry: entry, layers: layers, design: design} = editing(socket.assigns)
 
-      with %{key: key, type: type} <-
+      with %{key: key, type: type} when type != :text <-
              Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
            {:ok, var} <- Editor.variable(name),
            :ok <- fits(Variables.list(layers, design), var.name, type, key) do
         {:noreply, socket |> update_layer(entry.path, key, {:ok, var}) |> assign(:notice, nil)}
       else
-        {:refused, notice} -> {:noreply, assign(socket, :notice, notice)}
-        _other -> {:noreply, assign(socket, :notice, "#{field} is not a field here")}
+        %{type: :text} ->
+          # A text takes a variable as text among text, at the caret, by the hook (§7.1).
+          {:noreply, socket}
+
+        {:refused, notice} ->
+          {:noreply, assign(socket, :notice, notice)}
+
+        _other ->
+          {:noreply, assign(socket, :notice, "#{field} is not a field here")}
       end
     end
 

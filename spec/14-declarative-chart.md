@@ -112,7 +112,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
-| `name` | `:string` | `:content` | `nil` | `:override` |
+| `name` | `:text` | `:content` | `nil` | `:override` |
 | `description` | `:text` | `:content` | `""` | `:override` |
 
 ### 2.3 Sources
@@ -1470,8 +1470,9 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 | `:boolean` | `:checkbox` |
 | `:integer`, `:number` | `:number` |
 | `{:enum, allowed}` | `{:select, allowed}` |
-| `:string`, `:name`, `:field`, `:colour`, `:size`, `:font`, `:slot`, `{:ref, _}` | `:text` |
-| every other type — `:channel`, `:field_ref`, `:extent`, `:anchor`, `:text`, `:term`, `{:list, _}`, `{:map, _}`, `{:node, _}` | `:textarea` |
+| `:string`, `:name`, `:field`, `:size`, `:font`, `:slot`, `:text`, `{:ref, _}` | `:text` |
+| `:colour` | `:colour` — the three faces of §19.10 |
+| every other type — `:channel`, `:field_ref`, `:extent`, `:anchor`, `:term`, `{:list, _}`, `{:map, _}`, `{:node, _}` | `:textarea` |
 | `{:one_of, [first | _rest]}` | the widget of `first` |
 
 `Visualize.Chart.Builder.Editor.parse/2` reads a `{:one_of, …}` as its first alternative too, the one whose widget the control is, so what a person can type and what the reader accepts are the same thing.
@@ -1490,6 +1491,8 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 | `kind` of a frame | cartesian axes, a polar ring, a globe, a facet grid |
 
 Every other enum stays a select of its words; `Glyphs.glyph/2` is total over the drawn keys' values, which a test walks.
+
+**A text field is a text field.** A `:text` (§7.1) is a box holding the string with its holes — `Uptime for #{var(:host)}` — whichever form the layer holds it in, and `parse/2` keeps what was typed: a hole that does not read is the validator's fault under the field, not a refusal at the box. A variable reaches a text as text among text: a chip dropped on the box is inserted at the caret as `#{var(:name)}` by `Visualize.Hooks.Builder` — the browser is the only party that knows the caret — and the box's own change writes the string; `bind_field` on a text key does nothing, since a text is never bound whole. `meta.name` is a `:text`, so a title can carry a variable in its middle.
 
 **A ranged number is a slider beside its box.** A key whose spec carries a `range` (§14.2) renders `<input type="range" name="key.range">` before its box, so a value can be dragged while the preview redraws; the box stays for typing, and for a `:size` key it still takes a slot word. `Visualize.Chart.Builder.Editor.change/2` reads `key.range` as the key itself, with the key's type, so a slider's write is the box's write. A value typed outside the range is kept, since the range is a control's span and not a rule. `stroke_dasharray` draws its pattern beside the box — a short line with the value as its `stroke-dasharray` — so a pattern is seen, not decoded.
 

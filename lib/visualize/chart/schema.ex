@@ -228,8 +228,8 @@ defmodule Visualize.Chart.Schema do
 
   defp design_node(:meta) do
     [
-      spec(:name, :string, :content),
-      spec(:description, :text, :content, default: [])
+      spec(:name, :text, :content),
+      spec(:description, :text, :content, default: "")
     ]
   end
 

@@ -105,7 +105,7 @@ defmodule Visualize.Chart.Schema.Frame do
     [
       spec(:scale, {:ref, :scale}, :geometry, required: true),
       spec(:position, {:enum, @positions}, :geometry, default: :top_right),
-      spec(:title, :text, :content, default: []),
+      spec(:title, :text, :content, default: ""),
       spec(
         :style,
         style_stack(),

@@ -20,7 +20,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
   alias Visualize.BuilderFixture
   alias Visualize.Chart
   alias Visualize.Chart.Builder.Editor
-  alias Visualize.Chart.{Schema, Var}
+  alias Visualize.Chart.Schema
 
   @widgets [:checkbox, :number, :text, :textarea, :colour]
 
@@ -233,10 +233,13 @@ defmodule Visualize.Chart.Builder.EditorTest do
 
   describe "parse/2 (spec/14 §18.6)" do
     test "every schema default reads back as itself from what the control shows" do
+      # An empty text's default is the empty string, which a blank control is — a removal
+      # and the default are one state (§7.1), so it is not read back as a value.
       for kind <- Schema.kinds(),
           spec <- Schema.describe(kind),
           not spec.required,
-          spec.default != nil do
+          spec.default != nil,
+          spec.default != "" do
         shown =
           case Editor.widget(spec.type) do
             :textarea -> inspect(spec.default)
@@ -282,7 +285,6 @@ defmodule Visualize.Chart.Builder.EditorTest do
         {:extent, [0, 100]},
         {:extent, :auto},
         {:extent, [-1, 1]},
-        {:text, ["Uptime — ", %Var{name: :unit}]},
         {:anchor, {:axis, :y}},
         {:channel, {:field, :sha}},
         {:term, %{a: 1, b: [true, false, nil]}},
