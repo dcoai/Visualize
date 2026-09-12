@@ -411,6 +411,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "the names and ids a `{:ref, kind}` may take, by kind — ids as `{kind, n}`"
     )
 
+    attr(:selected, :string, default: nil, doc: "the key of the selected field, if any (§19.10)")
+
     attr(:slots, :list,
       default: [],
       doc: "the theme's colour slots, as strings, for a colour's slot face (spec/14 §19.10)"
@@ -477,8 +479,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
         >
           <label
             :for={field <- @fields}
-            class="vis-builder-field"
+            class={"vis-builder-field" <> if(@selected == to_string(field.key), do: " vis-builder-field-selected", else: "")}
             data-builder-ref={field.ref && to_string(field.key)}
+            phx-click="select_field"
+            phx-keyup="select_field"
+            phx-value-field={field.key}
+            phx-target={@target}
           >
             <span class="vis-builder-key">
               {field.key}<span

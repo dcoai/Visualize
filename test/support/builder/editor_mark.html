@@ -6,7 +6,7 @@
     
   </datalist>
   <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref">
-    <label class="vis-builder-field">
+    <label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="type">
       <span class="vis-builder-key">
         type
       </span>
@@ -29,7 +29,7 @@
       
       
       
-    </label><label class="vis-builder-field">
+    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="channels">
       <span class="vis-builder-key">
         channels
       </span>
@@ -49,7 +49,7 @@
       
       <textarea name="channels" placeholder="%{}">%{x: :t, y: :v}</textarea>
       
-    </label><label class="vis-builder-field">
+    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="scales">
       <span class="vis-builder-key">
         scales
       </span>

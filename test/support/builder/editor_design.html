@@ -6,7 +6,7 @@
     
   </datalist>
   <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref">
-    <label class="vis-builder-field">
+    <label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="sources">
       <span class="vis-builder-key">
         sources
       </span>
@@ -26,7 +26,7 @@
       
       <textarea name="sources" placeholder="%{}"></textarea>
       
-    </label><label class="vis-builder-field">
+    </label><label class="vis-builder-field" phx-click="select_field" phx-keyup="select_field" phx-value-field="vars">
       <span class="vis-builder-key">
         vars
       </span>

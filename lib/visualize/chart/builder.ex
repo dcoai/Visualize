@@ -63,6 +63,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Masks,
       Palette,
       Params,
+      Picker,
       Preview,
       Stack,
       Store,
@@ -136,6 +137,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          added: nil,
          library_view: :group,
          style_entry: nil,
+         field: nil,
          node_label: "design"
        )}
     end
@@ -299,6 +301,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 :if={@node_label != "variables"}
                 id={@id <> "-editor"}
                 kind={@entry.kind}
+                selected={@field}
                 node={@editing}
                 path={@entry.path}
                 facet={@facet}
@@ -343,8 +346,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
               variables={@variables}
               target={@myself}
             />
+            <Picker.panel
+              :if={@picker && !(@style_site && @style_entry)}
+              id={@id <> "-picker"}
+              key={@picker.key}
+              spec={@picker.spec}
+              value={@picker.value}
+              swatches={@picker.swatches}
+              recent={@picker.recent}
+              refs={@refs}
+              entries={@picker.entries}
+              variables={@variables}
+              target={@myself}
+            />
             <Masks.panel
-              :if={@site}
+              :if={@site && !@picker}
               id={@id <> "-masks"}
               use={@site.use}
               label={@site.label}
@@ -478,7 +494,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # -- the strip -----------------------------------------------------------------------
 
     def handle_event("select_node", %{"node" => label}, socket) do
-      {:noreply, assign(socket, node_label: label, facet: nil)}
+      {:noreply, assign(socket, node_label: label, facet: nil, field: nil)}
+    end
+
+    # Clicking into a field selects it, and the context panel becomes its picker
+    # (spec/14 §19.10); the same click on the field already selected leaves it.
+    def handle_event("select_field", %{"field" => key}, socket) do
+      {:noreply, assign(socket, :field, key)}
     end
 
     # Two views over one store; group is the default because it is the one a person
@@ -521,7 +543,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event("facet", %{"facet" => facet}, socket) do
       %{entry: entry} = editing(socket.assigns)
       facets = Enum.map(Schema.describe(entry.kind), & &1.facet)
-      {:noreply, assign(socket, :facet, Enum.find(facets, &(to_string(&1) == facet)))}
+      {:noreply, assign(socket, facet: Enum.find(facets, &(to_string(&1) == facet)), field: nil)}
     end
 
     # -- the stack -----------------------------------------------------------------------
@@ -918,6 +940,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         site: site(assigns, fetch),
         refs: refs(design, assigns.store),
         slots: slots(design),
+        picker: picker(assigns, entry, at(layer, entry.path), design),
         editing: at(layer, entry.path),
         errors: faults(kind, design, assigns, cycle),
         keyless: keyless,
@@ -972,6 +995,44 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> theme()
       |> Theme.colour_slots()
       |> Enum.map(&to_string/1)
+    end
+
+    # The selected field as the context panel's picker (spec/14 §19.10): its spec on the
+    # node being edited, its value, and what its type can choose from — the theme's colour
+    # slots with their colours, the colour literals the design already uses.
+    defp picker(%{field: nil}, _entry, _node, _design), do: nil
+
+    defp picker(%{field: key} = assigns, entry, node, design) do
+      case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == key)) do
+        nil ->
+          nil
+
+        spec ->
+          theme = design |> Map.get(:theme, :default) |> theme()
+
+          %{
+            key: spec.key,
+            spec: spec,
+            value: if(is_map(node), do: Map.get(node, spec.key)),
+            swatches:
+              Enum.map(
+                Theme.colour_slots(theme),
+                &{to_string(&1), Theme.resolve(theme, &1, :literal)}
+              ),
+            recent: recent_colours(design),
+            entries: if(assigns.store, do: Store.list(assigns.store), else: [])
+          }
+      end
+    end
+
+    # Every "#rrggbb" the design's styles carry, once each, in order of first use.
+    defp recent_colours(design) do
+      design
+      |> Map.get(:styles, %{})
+      |> Map.values()
+      |> Enum.flat_map(fn style -> if is_map(style), do: Map.values(style), else: [] end)
+      |> Enum.filter(&(is_binary(&1) and String.starts_with?(&1, "#")))
+      |> Enum.uniq()
     end
 
     defp theme(:dark), do: Theme.dark()
@@ -1172,7 +1233,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             selected: use.id,
             node_label: "design",
             facet: nil,
-            style_entry: nil
+            style_entry: nil,
+            field: nil
           )
       end
     end
@@ -1193,7 +1255,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> Enum.max_by(&String.length(&1.label), fn -> %{label: "design"} end)
         |> Map.fetch!(:label)
 
-      assign(socket, node_label: label, facet: nil)
+      assign(socket, node_label: label, facet: nil, field: nil)
     end
 
     defp owns?("design", _path), do: false
