@@ -1078,6 +1078,70 @@ if Code.ensure_loaded?(Phoenix.Component) do
       text-decoration: line-through;
     }
 
+    /* The context's icon row: layer, colour, font, variables (spec/14 §19.10). */
+    .vis-builder-context-icons {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      gap: 4px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--vis-builder-line);
+      background: var(--vis-builder-panel);
+    }
+
+    .vis-builder .vis-builder-context-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 28px;
+      padding: 0;
+      color: var(--vis-builder-muted);
+    }
+
+    .vis-builder .vis-builder-context-icon-on {
+      border-color: var(--vis-builder-accent);
+      color: var(--vis-builder-accent);
+      background: var(--vis-builder-bg);
+    }
+
+    .vis-builder-hues {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 2px;
+    }
+
+    .vis-builder-hue {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 2px;
+      background: var(--vis-builder-swatch);
+      cursor: pointer;
+    }
+
+    .vis-builder-hue-on {
+      box-shadow: 0 0 0 2px var(--vis-builder-panel), 0 0 0 3px var(--vis-builder-accent);
+    }
+
+    .vis-builder-hue input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .vis-builder-fonts {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
     /* Variables as chips (spec/14 §19.9, §19.10): dragged onto a field, × to unbind. */
     .vis-builder-var-chip {
       display: inline-flex;

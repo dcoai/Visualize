@@ -506,7 +506,10 @@
       </div>
     </main>
     <aside class="vis-builder-context">
-      <h2 class="vis-builder-sidebar-title">Context</h2>
+      <nav class="vis-builder-context-icons" aria-label="context panels">
+        <button type="button" class="vis-builder-context-icon vis-builder-context-icon-on" title="layer" aria-label="layer" aria-pressed="true" phx-click="context" phx-value-panel="layer" phx-target="-1"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8 L12 4 L20 8 L12 12 Z"/><path d="M4 12 L12 16 L20 12"/><path d="M4 16 L12 20 L20 16"/></svg></button><button type="button" class="vis-builder-context-icon" title="colour" aria-label="colour" aria-pressed="false" phx-click="context" phx-value-panel="colour" phx-target="-1"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.5" fill="currentColor"/><circle cx="14" cy="8.5" r="1.5" fill="currentColor"/><circle cx="15.5" cy="13" r="1.5" fill="currentColor"/></svg></button><button type="button" class="vis-builder-context-icon" title="font" aria-label="font" aria-pressed="false" phx-click="context" phx-value-panel="font" phx-target="-1"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 19 L12 4 L19 19"/><path d="M8 13 H16"/></svg></button><button type="button" class="vis-builder-context-icon" title="variables" aria-label="variables" aria-pressed="false" phx-click="context" phx-value-panel="variables" phx-target="-1"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6 C4 6 4 10 4 12 C4 14 4 18 6 18"/><path d="M18 6 C20 6 20 10 20 12 C20 14 20 18 18 18"/><path d="M9 9 L15 15 M15 9 L9 15"/></svg></button>
+      </nav>
+      
       
       
       
@@ -545,29 +548,7 @@
   </form>
   
 </div>
-      <h2 class="vis-builder-sidebar-title">Variables</h2>
-      <div id="builder-variables" class="vis-builder-variables" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="variables">
-  <form class="vis-builder-find" phx-change="find_variable" phx-target="-1">
-    <input type="search" name="find" value="" placeholder="find a variable" aria-label="find a variable" phx-debounce="150">
-  </form>
-  <ul class="vis-builder-chips-list">
-    <li class="vis-builder-variable">
-      <div class="vis-builder-variable-row">
-        <span class="vis-builder-var-chip" draggable="true" data-builder-variable="unit" title="var(:unit) — drag onto a field to bind it">var(:unit)</span>
-        <span class="vis-builder-variable-type">a text</span>
-        <button type="button" class="vis-builder-variable-expand" phx-click="expand_variable" phx-value-name="unit" phx-target="-1" aria-expanded="false" aria-label="details of unit">▸</button>
-      </div>
       
-    </li>
-  </ul>
-  
-  <form class="vis-builder-create" phx-submit="create_variable" phx-target="-1" data-builder-promote-target="true">
-    <input type="text" name="name" placeholder="new variable" aria-label="new variable's name">
-    <input type="text" name="default" placeholder="default" aria-label="its default">
-    <button type="submit">Create</button>
-    <p class="vis-builder-context-note">or drop a field's handle here to make a variable of its value</p>
-  </form>
-</div>
     </aside>
   </div>
   <div class="vis-builder-tray">
