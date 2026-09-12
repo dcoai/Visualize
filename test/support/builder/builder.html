@@ -74,27 +74,29 @@
   
 </label>
     
-      <fieldset class="vis-builder-block">
+      <fieldset class="vis-builder-block vis-builder-block-fill">
         <legend class="vis-builder-block-name">fill</legend>
-        <label class="vis-builder-field vis-builder-field-fill-style">
-          <span class="vis-builder-key">style</span>
-          <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
-            <label class="vis-builder-glyph" title="none">
-              <input type="radio" name="fill_style" value="none" aria-label="none">
-              <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 19 L19 5" stroke="currentColor" stroke-width="1.5"/></svg>
-            </label><label class="vis-builder-glyph vis-builder-glyph-on" title="solid">
-              <input type="radio" name="fill_style" value="solid" checked aria-label="solid">
-              <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor"/></svg>
-            </label><label class="vis-builder-glyph" title="linear">
-              <input type="radio" name="fill_style" value="linear" aria-label="linear">
-              <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><linearGradient id="vis-glyph-linear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></linearGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-linear)" stroke="currentColor" stroke-width="1"/></svg>
-            </label><label class="vis-builder-glyph" title="radial">
-              <input type="radio" name="fill_style" value="radial" aria-label="radial">
-              <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><radialGradient id="vis-glyph-radial"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></radialGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-radial)" stroke="currentColor" stroke-width="1"/></svg>
-            </label>
-          </span>
-        </label>
-        <label class="vis-builder-field" data-builder-bind="fill" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill" phx-target="-1">
+        
+          <label class="vis-builder-field vis-builder-field-fill-style">
+            <span class="vis-builder-key">style</span>
+            <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
+              <label class="vis-builder-glyph" title="none">
+                <input type="radio" name="fill_style" value="none" aria-label="none">
+                <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 19 L19 5" stroke="currentColor" stroke-width="1.5"/></svg>
+              </label><label class="vis-builder-glyph vis-builder-glyph-on" title="solid">
+                <input type="radio" name="fill_style" value="solid" checked aria-label="solid">
+                <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor"/></svg>
+              </label><label class="vis-builder-glyph" title="linear">
+                <input type="radio" name="fill_style" value="linear" aria-label="linear">
+                <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><linearGradient id="vis-glyph-linear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></linearGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-linear)" stroke="currentColor" stroke-width="1"/></svg>
+              </label><label class="vis-builder-glyph" title="radial">
+                <input type="radio" name="fill_style" value="radial" aria-label="radial">
+                <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><radialGradient id="vis-glyph-radial"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></radialGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-radial)" stroke="currentColor" stroke-width="1"/></svg>
+              </label>
+            </span>
+          </label>
+          <div class="vis-builder-fill-colours">
+            <label class="vis-builder-field" data-builder-bind="fill" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill" phx-target="-1">
   <span class="vis-builder-key">
     fill
     
@@ -114,7 +116,10 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="fill_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill_opacity" phx-target="-1">
+</label>
+          </div>
+          <div class="vis-builder-fill-numbers">
+            <label class="vis-builder-field" data-builder-bind="fill_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill_opacity" phx-target="-1">
   <span class="vis-builder-key">
     fill_opacity
     
@@ -125,7 +130,7 @@
   <span class="vis-builder-ranged">
     
     <input type="text" name="fill_opacity">
-    <input type="range" name="fill_opacity.range" class="vis-builder-range vis-builder-scrubber" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
+    <input type="range" name="fill_opacity.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
   </span>
   
   
@@ -139,13 +144,17 @@
   
   
 </label>
+            
+            
+          </div>
+        
       </fieldset>
       
     
       <fieldset class="vis-builder-block">
         <legend class="vis-builder-block-name">stroke</legend>
         
-        <label class="vis-builder-field" data-builder-bind="stroke_style" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_style" phx-target="-1">
+          <label class="vis-builder-field" data-builder-bind="stroke_style" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_style" phx-target="-1">
   <span class="vis-builder-key">
     stroke_style
     
@@ -190,7 +199,7 @@
   <span class="vis-builder-ranged">
     
     <input type="text" name="stroke_width" value="2">
-    <input type="range" name="stroke_width.range" class="vis-builder-range vis-builder-scrubber" min="0" max="20" step="0.5" value="2" aria-label="stroke_width, dragged">
+    <input type="range" name="stroke_width.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 10.0%" min="0" max="20" step="0.5" value="2" aria-label="stroke_width, dragged">
   </span>
   
   
@@ -234,7 +243,7 @@
   <span class="vis-builder-ranged">
     
     <input type="text" name="stroke_opacity">
-    <input type="range" name="stroke_opacity.range" class="vis-builder-range vis-builder-scrubber" min="0" max="1" step="0.05" value="0" aria-label="stroke_opacity, dragged">
+    <input type="range" name="stroke_opacity.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="1" step="0.05" value="0" aria-label="stroke_opacity, dragged">
   </span>
   
   
@@ -330,13 +339,14 @@
   
   
 </label>
+        
       </fieldset>
       
     
       <fieldset class="vis-builder-block">
         <legend class="vis-builder-block-name">font</legend>
         
-        <label class="vis-builder-field" data-builder-bind="font_family" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_family" phx-target="-1">
+          <label class="vis-builder-field" data-builder-bind="font_family" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_family" phx-target="-1">
   <span class="vis-builder-key">
     font_family
     
@@ -367,7 +377,7 @@
   <span class="vis-builder-ranged">
     
     <input type="text" name="font_size">
-    <input type="range" name="font_size.range" class="vis-builder-range vis-builder-scrubber" min="6" max="72" step="1" value="6" aria-label="font_size, dragged">
+    <input type="range" name="font_size.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="6" max="72" step="1" value="6" aria-label="font_size, dragged">
   </span>
   
   
@@ -437,7 +447,7 @@
   <span class="vis-builder-ranged">
     <input type="number" name="line_height">
     
-    <input type="range" name="line_height.range" class="vis-builder-range vis-builder-scrubber" min="0.8" max="3" step="0.1" value="0.8" aria-label="line_height, dragged">
+    <input type="range" name="line_height.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0.8" max="3" step="0.1" value="0.8" aria-label="line_height, dragged">
   </span>
   
   
@@ -453,13 +463,14 @@
   
   
 </label>
+        
       </fieldset>
       
     
       <fieldset class="vis-builder-block">
         <legend class="vis-builder-block-name">position</legend>
         
-        <label class="vis-builder-field" data-builder-bind="text_anchor" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_anchor" phx-target="-1">
+          <label class="vis-builder-field" data-builder-bind="text_anchor" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_anchor" phx-target="-1">
   <span class="vis-builder-key">
     text_anchor
     
@@ -535,7 +546,7 @@
   <span class="vis-builder-ranged">
     <input type="number" name="margin_x">
     
-    <input type="range" name="margin_x.range" class="vis-builder-range vis-builder-scrubber" min="0" max="40" step="1" value="0" aria-label="margin_x, dragged">
+    <input type="range" name="margin_x.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="40" step="1" value="0" aria-label="margin_x, dragged">
   </span>
   
   
@@ -559,7 +570,7 @@
   <span class="vis-builder-ranged">
     <input type="number" name="margin_y">
     
-    <input type="range" name="margin_y.range" class="vis-builder-range vis-builder-scrubber" min="0" max="40" step="1" value="0" aria-label="margin_y, dragged">
+    <input type="range" name="margin_y.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="40" step="1" value="0" aria-label="margin_y, dragged">
   </span>
   
   
@@ -583,7 +594,7 @@
   <span class="vis-builder-ranged">
     <input type="number" name="text_angle">
     
-    <input type="range" name="text_angle.range" class="vis-builder-range vis-builder-scrubber" min="-180" max="180" step="5" value="-180" aria-label="text_angle, dragged">
+    <input type="range" name="text_angle.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="-180" max="180" step="5" value="-180" aria-label="text_angle, dragged">
   </span>
   
   
@@ -597,13 +608,14 @@
   
   
 </label>
+        
       </fieldset>
       
     
       <fieldset class="vis-builder-block">
         <legend class="vis-builder-block-name">effects</legend>
         
-        <label class="vis-builder-field" data-builder-bind="opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="opacity" phx-target="-1">
+          <label class="vis-builder-field" data-builder-bind="opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="opacity" phx-target="-1">
   <span class="vis-builder-key">
     opacity
     
@@ -614,7 +626,7 @@
   <span class="vis-builder-ranged">
     
     <input type="text" name="opacity">
-    <input type="range" name="opacity.range" class="vis-builder-range vis-builder-scrubber" min="0" max="1" step="0.05" value="0" aria-label="opacity, dragged">
+    <input type="range" name="opacity.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="1" step="0.05" value="0" aria-label="opacity, dragged">
   </span>
   
   
@@ -692,7 +704,7 @@
   <span class="vis-builder-ranged">
     
     <input type="text" name="effect_radius">
-    <input type="range" name="effect_radius.range" class="vis-builder-range vis-builder-scrubber" min="0" max="20" step="0.5" value="0" aria-label="effect_radius, dragged">
+    <input type="range" name="effect_radius.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="20" step="0.5" value="0" aria-label="effect_radius, dragged">
   </span>
   
   
@@ -706,6 +718,7 @@
   
   
 </label>
+        
       </fieldset>
       
     

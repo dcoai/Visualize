@@ -64,6 +64,10 @@ defmodule Visualize.Hooks.Builder do
         this.el.addEventListener('dragend', this.onDragEnd);
         this.el.addEventListener('dragleave', this.onDragLeave);
         this.el.addEventListener('click', this.onClick);
+        // The scrubber's bar follows the dot while it is dragged (spec/14 §18.6); the
+        // render sets it on every other change.
+        this.onInput = this.handleInput.bind(this);
+        this.el.addEventListener('input', this.onInput);
         // Focus follows a layer moved from the keyboard: the rows are re-rendered by
         // position, so the builder says which row to land on (spec/14 §18.17).
         this.handleEvent('vis:focus', ({ id }) => {
@@ -369,8 +373,27 @@ defmodule Visualize.Hooks.Builder do
 
       // The highlight is the browser's: it needs no round trip. The selection is the
       // server's: it changes what the editor edits.
+      handleInput(e) {
+        const slider = e.target;
+        if (!slider || !slider.classList || !slider.classList.contains('vis-builder-scrubber')) return;
+        const min = parseFloat(slider.min) || 0;
+        const max = parseFloat(slider.max);
+        const value = parseFloat(slider.value);
+        if (isNaN(max) || isNaN(value) || max <= min) return;
+        const fraction = Math.min(Math.max((value - min) / (max - min), 0), 1);
+        slider.style.setProperty('--vis-builder-scrub', (fraction * 100).toFixed(1) + '%');
+      },
+
       handleClick(e) {
         if (!e.target || !e.target.closest) return;
+        // A well selects its own field — a gradient's stop, not the fill under it — so the
+        // click stops here rather than reaching the row's own select (spec/14 §18.6).
+        const well = e.target.closest('[data-builder-well]');
+        if (well && this.el.contains(well)) {
+          e.stopPropagation();
+          this.push('select_field', { field: well.getAttribute('data-builder-well') });
+          return;
+        }
         const row = e.target.closest('[data-builder-path]');
         if (!row || !this.el.contains(row)) return;
         this.el.querySelectorAll('.vis-builder-entry-open').forEach((node) => {
@@ -384,6 +407,7 @@ defmodule Visualize.Hooks.Builder do
       },
 
       destroyed() {
+        this.el.removeEventListener('input', this.onInput);
         this.el.removeEventListener('dragstart', this.onDragStart);
         this.el.removeEventListener('dragover', this.onDragOver);
         this.el.removeEventListener('drop', this.onDrop);

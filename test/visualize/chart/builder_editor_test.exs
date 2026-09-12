@@ -186,11 +186,11 @@ defmodule Visualize.Chart.Builder.EditorTest do
 
       # The slider lies over its box, in one span, the box first (§18.6).
       assert html =~
-               ~r|<span class="vis-builder-ranged">\s*<input type="text" name="opacity" value="0.4">\s*<input type="range" name="opacity.range" class="vis-builder-range vis-builder-scrubber" min="0" max="1" step="0.05" value="0.4"|
+               ~r|<span class="vis-builder-ranged">\s*<input type="text" name="opacity" value="0.4">\s*<input type="range" name="opacity.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 40.0%" min="0" max="1" step="0.05" value="0.4"|
 
       # A slot word has no place on a slider: it stands at the floor; the box shows the word.
       assert html =~
-               ~s(name="stroke_width.range" class="vis-builder-range vis-builder-scrubber" min="0" max="20" step="0.5" value="0")
+               ~s(name="stroke_width.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="20" step="0.5" value="0")
 
       # The stylesheet lays it over the box: full height, mostly transparent, a dot that
       # alone takes the pointer.
