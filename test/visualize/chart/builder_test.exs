@@ -1572,8 +1572,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert same.assigns.uses == s.assigns.uses
     end
 
-    test "a chip dropped on a field list adds the variable as an item, and a field is a channel",
-         %{socket: s} do
+    test "a chip dropped on a field list adds the variable as an item, and a field is a channel" do
       # `ycol` typed by a mark's channel fits a field list.
       house = %{
         version: 1,
