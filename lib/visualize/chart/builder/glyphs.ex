@@ -20,6 +20,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @drawn [
       :fill_style,
       :effect,
+      :vertical_align,
       :stroke_style,
       :stroke_linejoin,
       :stroke_linecap,
@@ -67,6 +68,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # -- the pictures ---------------------------------------------------------------------
+
+    # A vertical alignment (§3.1): a bar of text against the point's line.
+    defp picture(:vertical_align, align) when align in [:top, :middle, :baseline, :bottom] do
+      y =
+        case align do
+          :top -> 6
+          :middle -> 9.5
+          :baseline -> 11
+          :bottom -> 13
+        end
+
+      ~s|<path d="M3 12 H21" stroke="currentColor" stroke-width="1" opacity="0.5"/><rect x="8" y="#{y}" width="8" height="5" fill="currentColor"/>|
+    end
 
     # An effect (§3.1): a plain square, one with a shadow, one blurred.
     defp picture(:effect, effect) when effect in [:none, :shadow, :blur] do

@@ -346,6 +346,12 @@ defmodule Visualize.Chart.Schema do
       spec(:font_style, {:enum, [:normal, :italic]}, :style, group: :font),
       spec(:line_height, :number, :style, range: {0.8, 3, 0.1}, group: :font),
       spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style, group: :position),
+      spec(:vertical_align, {:enum, [:top, :middle, :baseline, :bottom]}, :style,
+        group: :position
+      ),
+      spec(:margin_x, :number, :style, range: {0, 40, 1}, group: :position),
+      spec(:margin_y, :number, :style, range: {0, 40, 1}, group: :position),
+      spec(:text_angle, :number, :style, range: {-180, 180, 5}, group: :position),
       spec(:opacity, :size, :style, range: {0, 1, 0.05}, group: :effects),
       spec(:blend, {:enum, @blends}, :style, group: :effects),
       spec(:effect, {:enum, [:none, :shadow, :blur]}, :style, group: :effects),

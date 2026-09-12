@@ -3,6 +3,7 @@ defmodule Visualize.Chart.Mark.Label do
   # A mark's inline label (spec/14 §5.5): one text per element at its anchor point, in the
   # label's style, `{:field, f}` read from the datum.
 
+  alias Visualize.Chart.Frame.Position
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.Chart.Text
   alias Visualize.Data.Table
@@ -41,8 +42,12 @@ defmodule Visualize.Chart.Mark.Label do
   def elements(_children, %{label: nil}), do: []
   def elements(_children, %{type: type}) when type in @own_label, do: []
 
-  def elements(children, %{label: label} = ctx) do
+  def elements(children, %{label: label, frame: frame} = ctx) do
     style = style(ctx)
+
+    style_node =
+      Style.node(frame.styles, Map.get(label, :style, Schema.default(:mark_label, :style)))
+
     anchor = Map.get(label, :anchor, Schema.default(:mark_label, :anchor))
     dx = Map.get(label, :dx, 0)
     dy = Map.get(label, :dy, 0)
@@ -57,8 +62,18 @@ defmodule Visualize.Chart.Mark.Label do
         style: Map.merge(base, style),
         content: text(label.text, datum)
       )
+      |> Position.apply(style_node, outward(anchor))
     end
   end
+
+  # The outward direction of an anchor (spec/14 §5.5): the side the label sits on.
+  defp outward(:top), do: {0, -1}
+  defp outward(:bottom), do: {0, 1}
+  defp outward(:left), do: {-1, 0}
+  defp outward(:right), do: {1, 0}
+  defp outward(:start), do: {1, 0}
+  defp outward(:end), do: {-1, 0}
+  defp outward(_middle), do: nil
 
   defp place(:top, px, py), do: {px, py - @inset, nil, :middle}
   defp place(:bottom, px, py), do: {px, py + @inset, "0.71em", :middle}
