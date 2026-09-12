@@ -323,6 +323,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         [key, "mode"] -> with %{key: k} <- key_spec(kind, key), do: {k, mode(params[target], k)}
         [key, "var"] -> with %{key: k} <- key_spec(kind, key), do: {k, variable(params[target])}
         [key, "slot"] -> with %{key: k} <- key_spec(kind, key), do: {k, slot_face(params[target])}
+        [key, "range"] -> with spec <- key_spec(kind, key), do: typed(spec, params[target])
         [key] -> with spec <- key_spec(kind, key), do: typed(spec, params[key])
       end
     end
@@ -506,6 +507,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
               checked={field.checked}
             />
             <input
+              :if={is_nil(field.variable) and field.range != nil and field.widget in [:number, :text]}
+              type="range"
+              name={"#{field.key}.range"}
+              class="vis-builder-range"
+              min={field.range.min}
+              max={field.range.max}
+              step={field.range.step}
+              value={field.slider}
+              aria-label={"#{field.key}, dragged"}
+            />
+            <input
               :if={is_nil(field.variable) and field.widget == :number}
               type="number"
               name={field.key}
@@ -519,6 +531,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
               value={field.value}
               placeholder={field.placeholder}
             />
+            <svg
+              :if={is_nil(field.variable) and field.dash != nil}
+              class="vis-builder-dash"
+              viewBox="0 0 120 8"
+              width="120"
+              height="8"
+              aria-hidden="true"
+            >
+              <path
+                d="M2 4 H118"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-dasharray={field.dash}
+              />
+            </svg>
             <select
               :if={is_nil(field.variable) and field.widget == :colour}
               name={"#{field.key}.slot"}
@@ -600,6 +628,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           ref: ref_field(spec.type),
           widget: shape(widget),
           glyphs: glyphs(spec.key, widget),
+          range: range(spec.range),
+          slider: slider(Map.fetch(node, spec.key), spec),
+          dash: dash(spec.key, Map.get(node, spec.key)),
           options: options(widget),
           checked: Map.get(node, spec.key) == true,
           value: shown(widget, Map.fetch(node, spec.key)),
@@ -643,6 +674,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp shape({:select, _allowed}), do: :select
     defp shape(widget), do: widget
+
+    defp range(nil), do: nil
+    defp range({min, max, step}), do: %{min: min, max: max, step: step}
+
+    # The slider stands at the value when it is a number, else at the default or the
+    # range's floor: a slot word has no place on a slider, and the box still shows it.
+    defp slider(_value, %{range: nil}), do: nil
+    defp slider({:ok, n}, _spec) when is_number(n), do: n
+    defp slider(_other, %{default: d}) when is_number(d), do: d
+    defp slider(_other, %{range: {min, _max, _step}}), do: min
+
+    # A dash pattern is seen, not decoded: the value as the SVG attribute it becomes.
+    defp dash(:stroke_dasharray, value) when is_binary(value), do: value
+    defp dash(:stroke_dasharray, value) when is_list(value), do: Enum.join(value, " ")
+    defp dash(_key, _value), do: nil
 
     # A drawn enum is chosen by its picture (§18.6): one glyph per allowed value, where the
     # key is drawn and every value has one — `kind` is drawn for a frame and not a scale.

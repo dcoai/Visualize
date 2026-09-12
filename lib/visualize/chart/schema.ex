@@ -44,7 +44,8 @@ defmodule Visualize.Chart.Schema do
           facet: facet(),
           default: term(),
           required: boolean(),
-          merge: merge()
+          merge: merge(),
+          range: {number(), number(), number()} | nil
         }
 
   @design_kinds [:design, :meta, :source, :var, :theme, :style, :curve_opts, :label]
@@ -184,7 +185,8 @@ defmodule Visualize.Chart.Schema do
       facet: facet,
       default: Keyword.get(opts, :default),
       required: Keyword.get(opts, :required, false),
-      merge: Keyword.get(opts, :merge, :override)
+      merge: Keyword.get(opts, :merge, :override),
+      range: Keyword.get(opts, :range)
     }
   end
 
@@ -251,9 +253,9 @@ defmodule Visualize.Chart.Schema do
       spec(:text, :string, :style, default: theme.text),
       spec(:background, :string, :style, default: theme.background),
       spec(:font_family, :string, :style, default: theme.font_family),
-      spec(:font_size, :number, :style, default: theme.font_size),
-      spec(:label_size, :number, :style, default: theme.label_size),
-      spec(:title_size, :number, :style, default: theme.title_size)
+      spec(:font_size, :number, :style, default: theme.font_size, range: {6, 72, 1}),
+      spec(:label_size, :number, :style, default: theme.label_size, range: {6, 72, 1}),
+      spec(:title_size, :number, :style, default: theme.title_size, range: {6, 72, 1})
     ]
   end
 
@@ -262,15 +264,15 @@ defmodule Visualize.Chart.Schema do
       spec(:extends, {:ref, :style}, :style),
       spec(:fill, :colour, :style),
       spec(:stroke, :colour, :style),
-      spec(:stroke_width, :size, :style),
+      spec(:stroke_width, :size, :style, range: {0, 20, 0.5}),
       spec(:stroke_dasharray, {:one_of, [:string, {:list, :number}]}, :style),
       spec(:stroke_linecap, {:enum, [:butt, :round, :square]}, :style),
       spec(:stroke_linejoin, {:enum, [:miter, :round, :bevel]}, :style),
-      spec(:opacity, :size, :style),
-      spec(:fill_opacity, :size, :style),
-      spec(:stroke_opacity, :size, :style),
+      spec(:opacity, :size, :style, range: {0, 1, 0.05}),
+      spec(:fill_opacity, :size, :style, range: {0, 1, 0.05}),
+      spec(:stroke_opacity, :size, :style, range: {0, 1, 0.05}),
       spec(:font_family, :font, :style),
-      spec(:font_size, :size, :style),
+      spec(:font_size, :size, :style, range: {6, 72, 1}),
       spec(:font_weight, {:one_of, [:integer, {:enum, [:normal, :bold]}]}, :style),
       spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style),
       spec(:class, :string, :style),

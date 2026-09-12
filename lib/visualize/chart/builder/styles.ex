@@ -1077,6 +1077,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       text-decoration: line-through;
     }
 
+    /* A ranged number: the slider before its box, the dash pattern after (spec/14 §18.6). */
+    .vis-builder .vis-builder-range {
+      width: 100%;
+      margin: 2px 0;
+      padding: 0;
+      accent-color: var(--vis-builder-accent);
+    }
+
+    .vis-builder-dash {
+      display: block;
+      margin-top: 2px;
+      color: var(--vis-builder-ink);
+    }
+
     /* A drawn enum: one glyph per value, the chosen one framed (spec/14 §18.6). */
     .vis-builder-glyphs {
       display: flex;
