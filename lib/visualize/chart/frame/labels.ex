@@ -4,6 +4,7 @@ defmodule Visualize.Chart.Frame.Labels do
   # position, in its style, `dx` and `dy` added.
 
   alias Visualize.Chart.{Schema, Style, Var}
+  alias Visualize.Chart.Text
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
   alias Visualize.Scale
@@ -43,7 +44,7 @@ defmodule Visualize.Chart.Frame.Labels do
   defp put_unless_nil(map, _key, nil), do: map
   defp put_unless_nil(map, key, value), do: Map.put(map, key, value)
 
-  defp text(parts), do: Enum.map_join(parts, "", &part/1)
+  defp text(text), do: text |> Text.parse!() |> Enum.map_join("", &part/1)
 
   defp part(string) when is_binary(string), do: string
   defp part(%Var{name: name}), do: Style.unresolved!(name)

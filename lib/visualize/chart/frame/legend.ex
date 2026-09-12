@@ -5,7 +5,7 @@ defmodule Visualize.Chart.Frame.Legend do
   # the eight positions inside the plot area.
 
   alias Visualize.{Axis, Scale, Theme}
-  alias Visualize.Chart.{Schema, Style, Var}
+  alias Visualize.Chart.{Schema, Style, Text, Var}
   alias Visualize.IR.{Element, Transform}
 
   @swatch 12
@@ -47,8 +47,12 @@ defmodule Visualize.Chart.Frame.Legend do
     ]
   end
 
-  defp text([]), do: nil
-  defp text(parts), do: Enum.map_join(parts, "", &part/1)
+  defp text(text) do
+    case Text.parse!(text) do
+      [] -> nil
+      parts -> Enum.map_join(parts, "", &part/1)
+    end
+  end
 
   defp part(string) when is_binary(string), do: string
   defp part(%Var{name: name}), do: Style.unresolved!(name)

@@ -8,7 +8,7 @@ defmodule Visualize.Chart.Migration do
   that the first schema change ships with its step rather than with a breaking change.
   """
 
-  alias Visualize.Chart.Validator
+  alias Visualize.Chart.{Schema, Text, Validator}
 
   @current 1
 
@@ -24,7 +24,7 @@ defmodule Visualize.Chart.Migration do
   `[:version]`.
   """
   @spec migrate(term()) :: {:ok, map()} | {:error, [Validator.error(), ...]}
-  def migrate(%{version: @current} = map), do: {:ok, map}
+  def migrate(%{version: @current} = map), do: {:ok, canonical(map)}
 
   def migrate(%{version: v} = map) when is_integer(v) and v >= 1 and v < @current do
     migrate(step(map, v))
@@ -48,4 +48,39 @@ defmodule Visualize.Chart.Migration do
   defp step(map, from) do
     raise ArgumentError, "no migration from version #{from} for #{inspect(map)}"
   end
+
+  @doc ~S"""
+  The design in the shape this library writes, within the current version: a `:text`
+  given as a list of parts — the form an earlier draft wrote — becomes the string with
+  interpolation (spec/14 §7.1), walking the map by the schema so a text is known to be
+  one. Every other value passes through as it is.
+
+      iex> Visualize.Chart.Migration.canonical(%{version: 1, labels: [%{anchor: :title, text: ["u: ", Visualize.Chart.var(:unit)]}]})
+      %{version: 1, labels: [%{anchor: :title, text: "u: \#{var(:unit)}"}]}
+  """
+  @spec canonical(map()) :: map()
+  def canonical(map) when is_map(map), do: node(:design, map)
+
+  defp node(kind, map) when is_map(map) and not is_struct(map) do
+    Map.new(map, fn {k, v} ->
+      type = if spec = Schema.key(kind, k), do: spec.type, else: :term
+      {k, value(type, v)}
+    end)
+  end
+
+  defp value(:text, parts) when is_list(parts), do: Text.unparse(parts)
+  defp value({:node, kind}, v) when is_map(v) and not is_struct(v), do: node(kind, v)
+  defp value({:list, t}, v) when is_list(v), do: Enum.map(v, &value(t, &1))
+
+  defp value({:map, t}, v) when is_map(v) and not is_struct(v),
+    do: Map.new(v, fn {k, e} -> {k, value(t, e)} end)
+
+  defp value({:one_of, types}, v) do
+    case Schema.select(types, v) do
+      nil -> v
+      type -> value(type, v)
+    end
+  end
+
+  defp value(_type, v), do: v
 end

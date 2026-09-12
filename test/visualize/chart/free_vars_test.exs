@@ -86,9 +86,9 @@ defmodule Visualize.Chart.FreeVarsTest do
         labels: [%{anchor: :title, text: [Chart.var(:c), " and ", Chart.var(:c)]}]
       }
 
+      # A text is one use however many times it names the variable (§7.1).
       assert entry(design, :c).uses |> Enum.map(& &1.path) == [
-               [:labels, 0, :text, 0],
-               [:labels, 0, :text, 2],
+               [:labels, 0, :text],
                [:styles, :a, :stroke],
                [:styles, :b, :fill]
              ]
@@ -155,7 +155,7 @@ defmodule Visualize.Chart.FreeVarsTest do
       values = for v <- free(@design), into: %{}, do: {v.name, v.default || "%"}
 
       assert {:ok, applied} = Chart.apply(@design, sources: %{p: %{t: [1], v: [2]}}, vars: values)
-      assert applied.chart.labels == [%{anchor: :title, text: ["Uptime in ", "%"]}]
+      assert applied.chart.labels == [%{anchor: :title, text: "Uptime in %"}]
       assert Chart.free_vars(applied.chart) == []
     end
   end
@@ -175,8 +175,8 @@ defmodule Visualize.Chart.FreeVarsTest do
       assert Chart.apply(@design, vars: %{unit: Chart.var(:other), other: "%"}) ==
                {:error,
                 [
-                  {[:labels, 0, :text, 1], {:var_binding, :unit}},
-                  {[:labels, 1, :text, 0], {:var_binding, :unit}}
+                  {[:labels, 0, :text], {:var_binding, :unit}},
+                  {[:labels, 1, :text], {:var_binding, :unit}}
                 ]}
     end
 
@@ -189,8 +189,8 @@ defmodule Visualize.Chart.FreeVarsTest do
     end
 
     test "the error formats as a line a person reads" do
-      assert Visualize.Chart.Validator.format({[:labels, 0, :text, 1], {:var_binding, :unit}}) ==
-               "labels[0].text[1]: variable :unit is bound to another variable; " <>
+      assert Visualize.Chart.Validator.format({[:labels, 0, :text], {:var_binding, :unit}}) ==
+               "labels[0].text: variable :unit is bound to another variable; " <>
                  "resolution is single level"
     end
 
@@ -243,7 +243,12 @@ defmodule Visualize.Chart.FreeVarsTest do
       assert MapSet.new(names) == MapSet.new(occurrences(stacked))
 
       for v <- free, use <- v.uses do
-        assert at(stacked, use.path) == Chart.var(v.name)
+        # A text holds its variables among its parts; anything else is the variable itself.
+        case at(stacked, use.path) do
+          parts when is_list(parts) -> assert Chart.var(v.name) in parts
+          value -> assert value == Chart.var(v.name)
+        end
+
         assert v.required == (v.default == nil)
       end
     end

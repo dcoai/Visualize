@@ -306,7 +306,7 @@ defmodule Visualize.Chart.StackTest do
       assert {:ok, chart} = Chart.from_map(design)
 
       assert Chart.to_map(chart) |> Map.take([:marks, :labels]) ==
-               Map.take(design, [:marks, :labels])
+               design |> Visualize.Chart.Migration.canonical() |> Map.take([:marks, :labels])
 
       assert {:ok, json} = Chart.to_json(chart)
       assert {:ok, ^chart} = Chart.from_json(json)

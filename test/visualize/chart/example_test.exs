@@ -49,11 +49,13 @@ defmodule Visualize.Chart.ExampleTest do
     design = example()
     assert Validator.validate(design) == :ok
     chart = Chart.from_map!(design)
-    assert Chart.to_map(chart) == design
+    # A text is written as the string it is (§7.1), whatever form the design gave it.
+    assert Chart.to_map(chart) == Visualize.Chart.Migration.canonical(design)
     {:ok, json} = Chart.to_json(chart)
     assert Chart.from_json(json) == {:ok, chart}
-    assert json =~ ~s({"$field":"sha"})
-    assert json =~ ~s({"$var":"unit"})
+    # A text travels as its string, with its holes spelt as they are written (§7.1, §11).
+    assert json =~ ~S|#{field(:sha)}|
+    assert json =~ ~S|#{var(:unit)}|
     assert json =~ ~s({"$axis":"y"})
   end
 

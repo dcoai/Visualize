@@ -20,7 +20,8 @@ defmodule Visualize.ChartTest do
         assert Validator.validate(design) == :ok
         assert {:ok, chart} = Chart.from_map(design)
         assert Chart.from_map(Chart.to_map(chart)) == {:ok, chart}
-        assert Chart.to_map(chart) == design
+        # A text is written as its string whichever form the generator chose (§7.1).
+        assert Chart.to_map(chart) == Visualize.Chart.Migration.canonical(design)
       end
     end
 
@@ -99,8 +100,9 @@ defmodule Visualize.ChartTest do
 
       assert decoded["frame"]["scales"]["y"]["unknown"] == nil
 
+      # A text is its string, the hole spelt as it is written (§7.1): no tagged term.
       assert decoded["labels"] == [
-               %{"anchor" => %{"$axis" => "y"}, "text" => ["unit: ", %{"$var" => "unit"}]}
+               %{"anchor" => %{"$axis" => "y"}, "text" => ~S|unit: #{var(:unit)}|}
              ]
 
       assert Chart.from_json(json) == {:ok, chart}

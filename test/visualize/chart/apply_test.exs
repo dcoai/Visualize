@@ -11,6 +11,7 @@ defmodule Visualize.Chart.ApplyTest do
   alias Visualize.Chart.{Applied, Frame, Validator}
 
   doctest Chart
+  doctest Visualize.Chart.Text
 
   import Chart, only: [var: 1]
 
@@ -72,10 +73,10 @@ defmodule Visualize.Chart.ApplyTest do
       assert a.sources == %{primary: idle(), deploys: deploys()}
       assert b.sources.primary == other
 
-      assert Enum.at(a.chart.labels, 0).text == ["Uptime — ", "mg/hr"]
-      assert Enum.at(b.chart.labels, 0).text == ["Uptime — ", "%"]
+      assert Enum.at(a.chart.labels, 0).text == "Uptime — mg/hr"
+      assert Enum.at(b.chart.labels, 0).text == "Uptime — %"
       assert a.chart.styles.series.stroke == :series_1
-      assert a.chart.meta.description == ["Uptime in ", "mg/hr"]
+      assert a.chart.meta.description == "Uptime in mg/hr"
 
       svg_a = Chart.render(a)
       svg_b = Chart.render(b)
@@ -186,10 +187,10 @@ defmodule Visualize.Chart.ApplyTest do
   describe "variables" do
     test "a supplied value beats the default and a default fills an absent one" do
       {:ok, applied} = Chart.apply(design(), sources: %{uptime: @rows}, vars: %{unit: "kg"})
-      assert hd(applied.chart.labels).text == ["unit: ", "kg"]
+      assert hd(applied.chart.labels).text == "unit: kg"
 
       {:ok, applied} = Chart.apply(design(), sources: %{uptime: @rows})
-      assert hd(applied.chart.labels).text == ["unit: ", "%"]
+      assert hd(applied.chart.labels).text == "unit: %"
       assert applied.chart.vars == %{}
     end
 
@@ -206,19 +207,19 @@ defmodule Visualize.Chart.ApplyTest do
       assert Chart.apply(design) ==
                {:error,
                 [
-                  {[:labels, 0, :text, 1], {:unresolved, :var, :unit}},
-                  {[:labels, 1, :text, 0], {:unresolved, :var, :unit}}
+                  {[:labels, 0, :text], {:unresolved, :var, :unit}},
+                  {[:labels, 1, :text], {:unresolved, :var, :unit}}
                 ]}
 
-      assert Validator.format({[:labels, 1, :text, 0], {:unresolved, :var, :unit}}) ==
-               "labels[1].text[0]: variable :unit has no value at application and no default"
+      assert Validator.format({[:labels, 1, :text], {:unresolved, :var, :unit}}) ==
+               "labels[1].text: variable :unit has no value at application and no default"
     end
 
     test "a declared default of nil is no default" do
       design = design(%{vars: %{unit: %{default: nil}}})
 
       assert Chart.apply(design, sources: %{uptime: @rows}) ==
-               {:error, [{[:labels, 0, :text, 1], {:unresolved, :var, :unit}}]}
+               {:error, [{[:labels, 0, :text], {:unresolved, :var, :unit}}]}
 
       assert {:ok, _} = Chart.apply(design, sources: %{uptime: @rows}, vars: %{unit: "kg"})
     end
@@ -236,7 +237,7 @@ defmodule Visualize.Chart.ApplyTest do
         })
 
       {:ok, applied} = Chart.apply(design, sources: %{uptime: @rows})
-      assert hd(applied.chart.labels).text == ["n = ", "3", " ", "kg"]
+      assert hd(applied.chart.labels).text == "n = 3 kg"
       assert Chart.render(applied) =~ "n = 3 kg"
     end
 

@@ -60,6 +60,7 @@ defmodule Visualize.Chart.Codec do
   defp value(type, {:series, i}) when type in [:colour, :size, :font], do: %{"$series" => i}
   defp value(:extent, :auto), do: "auto"
   defp value(:extent, v) when is_list(v), do: Enum.map(v, &category/1)
+  defp value(:text, v) when is_binary(v), do: v
   defp value(:text, v) when is_list(v), do: Enum.map(v, &value(:term, &1))
   defp value(:anchor, v) when is_atom(v), do: Atom.to_string(v)
   defp value(:anchor, {:axis, s}) when is_atom(s), do: %{"$axis" => Atom.to_string(s)}
@@ -156,6 +157,7 @@ defmodule Visualize.Chart.Codec do
   defp read(type, v) when type in [:colour, :font, :size] and is_binary(v), do: slot_or_string(v)
   defp read(:extent, "auto"), do: :auto
   defp read(:extent, v) when is_list(v), do: Enum.map(v, &read_category/1)
+  defp read(:text, v) when is_binary(v), do: v
   defp read(:text, v) when is_list(v), do: Enum.map(v, &read_term/1)
   defp read(:anchor, v) when is_binary(v), do: String.to_atom(v)
 
@@ -237,7 +239,7 @@ defmodule Visualize.Chart.Codec do
   defp json_shape?({:node, _}, v), do: is_map(v) and not is_struct(v)
   defp json_shape?({:map, _}, v), do: is_map(v) and not is_struct(v)
   defp json_shape?({:list, _}, v), do: is_list(v)
-  defp json_shape?(:text, v), do: is_list(v)
+  defp json_shape?(:text, v), do: is_list(v) or is_binary(v)
   defp json_shape?(:extent, v), do: v == "auto" or is_list(v)
   defp json_shape?(:integer, v), do: is_integer(v)
   defp json_shape?(:number, v), do: is_number(v)
