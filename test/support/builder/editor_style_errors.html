@@ -2,7 +2,7 @@
   <nav class="vis-builder-tabs">
     <button type="button" class="vis-builder-tab vis-builder-tab-open" phx-click="facet" phx-value-facet="style">style</button>
   </nav>
-  <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref">
+  <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref" data-builder-edit="edit">
     <label class="vis-builder-field" data-builder-ref="extends" data-builder-bind="extends" phx-click="select_field" phx-keyup="select_field" phx-value-field="extends">
       <span class="vis-builder-key">
         extends
@@ -13,7 +13,6 @@
       
       
       <input type="text" name="extends">
-      
       
       
       
@@ -32,11 +31,7 @@
       
       
       
-      <select name="fill.slot" class="vis-builder-slot" title="a theme slot">
-        <option value="">slot…</option>
-        
-      </select>
-      <input type="color" name="fill" class="vis-builder-colour" title="a colour">
+      <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="no colour set" role="img" aria-label="fill: not set" data-builder-well="fill"></span>
       
       
       
@@ -53,11 +48,7 @@
       
       
       
-      <select name="stroke.slot" class="vis-builder-slot" title="a theme slot">
-        <option value="">slot…</option>
-        
-      </select>
-      <input type="color" name="stroke" class="vis-builder-colour" title="a colour">
+      <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="series_1" role="img" aria-label="stroke: series_1" data-builder-well="stroke"></span>
       
       
       
@@ -82,7 +73,6 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="stroke_dasharray" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_dasharray">
       <span class="vis-builder-key">
         stroke_dasharray
@@ -100,13 +90,11 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="stroke_linecap" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linecap">
       <span class="vis-builder-key">
         stroke_linecap
         
       </span>
-      
       
       
       
@@ -135,7 +123,6 @@
         stroke_linejoin
         
       </span>
-      
       
       
       
@@ -176,7 +163,6 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="fill_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill_opacity">
       <span class="vis-builder-key">
         fill_opacity
@@ -187,7 +173,6 @@
       <input type="range" name="fill_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
       
       <input type="text" name="fill_opacity">
-      
       
       
       
@@ -212,7 +197,6 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="font_family" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_family">
       <span class="vis-builder-key">
         font_family
@@ -223,7 +207,6 @@
       
       
       <input type="text" name="font_family">
-      
       
       
       
@@ -248,7 +231,6 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="font_weight" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_weight">
       <span class="vis-builder-key">
         font_weight
@@ -266,13 +248,11 @@
       
       
       
-      
     </label><label class="vis-builder-field" data-builder-bind="text_anchor" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_anchor">
       <span class="vis-builder-key">
         text_anchor
         
       </span>
-      
       
       
       
@@ -313,13 +293,11 @@
       
       
       
-      
     </label><label class="vis-builder-field vis-builder-field-needs" data-builder-bind="curve" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve">
       <span class="vis-builder-key">
         curve
         
       </span>
-      
       
       
       
@@ -381,7 +359,6 @@
       
       
       
-      
       <textarea name="curve_opts"></textarea>
       
     </label><label class="vis-builder-field" data-builder-bind="symbol" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol">
@@ -389,7 +366,6 @@
         symbol
         
       </span>
-      
       
       
       
@@ -435,7 +411,6 @@
       
       
       <input type="text" name="symbol_size">
-      
       
       
       

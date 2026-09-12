@@ -1471,7 +1471,7 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 | `:integer`, `:number` | `:number` |
 | `{:enum, allowed}` | `{:select, allowed}` |
 | `:string`, `:name`, `:field`, `:size`, `:font`, `:slot`, `:text`, `{:ref, _}` | `:text` |
-| `:colour` | `:colour` — the three faces of §19.10 |
+| `:colour` | `:colour` — a well showing the colour (§19.10) |
 | `{:list, scalar}` — a list of fields, names, strings or numbers | `{:items, scalar}` — a list of items (below) |
 | every other type — `:channel`, `:field_ref`, `:extent`, `:anchor`, `:term`, `{:list, :term}`, `{:map, _}`, `{:node, _}` | `:textarea` |
 | `{:one_of, [first | _rest]}` | the widget of `first` |
@@ -2047,17 +2047,20 @@ The names on offer are those the stack declares under `vars` and those any layer
 | Panel | Shows | Writes |
 |---|---|---|
 | **layer** (the default) | the selected site's keys as mask checkboxes, its key for a name-keyed kind, its free variables (§19.5, §19.3); at a style site, the site's stack and the chosen entry's resolved style (§18.18, §18.19) | masks, `key`, the style stack |
-| **colour** | `Visualize.Chart.Builder.Picker.panel/1`: the theme's colour slots as **swatches in their colours**, a grid of hues at three lightnesses, a picker for any colour, and the colour literals the chart already uses; with a colour field selected they write it, with none they show and write nothing | the selected colour field, through `edit` |
+| **colour** | `Visualize.Chart.Builder.Picker.panel/1`, the chooser, **patches above the picker**: the theme's colour slots as swatches in their colours and the colour literals the chart already uses first, then a grid of hues at three lightnesses and a picker for any colour; with a colour field selected they write it, with none they show only — and every patch is a colour a person can **drag onto any well** (below) | the selected colour field, through `edit`; any well, through `drop_colour` |
 | **font** | `Visualize.Chart.Builder.Fonts.panel/1`: the faces rendered in themselves, size as a slider, weight, text anchor — the four font keys of the node being edited, together; a node with none says which to open | `font_family`, `font_size`, `font_weight`, `text_anchor`, through `edit` |
 | **variables** | the variable panel, above | `Use.vars`, bindings, declarations |
 
 **Selecting a field opens its panel.** Clicking into a field (`select_field`, on click and on a key) marks it; a colour field opens the colour panel and a font key the font panel, and any other field leaves the panel where it is. Selecting a node, a facet or a layer clears the field. Every control in a picker writes the same `edit` the form does under the same names (`key`, `key.slot`, `key.range`), so a picker is a bigger view of the form's fields and never a second form; the per-field faces of an earlier draft — glyphs, words, references and sliders in the context — live in the form itself (§18.6) and have no second home.
 
-A bare `<input type="color">` would drop the theme slot, and the theme slot is how the built-in styles work; the control has to offer all three faces.
+A bare `<input type="color">` would drop the theme slot, and the theme slot is how the built-in styles work; the well shows whichever face the value has, and the chooser offers every face.
+
+**A colour field is a well.** Every `:colour` key in a form — `fill`, `stroke`, a theme's `axis` — renders as one square showing the colour the value resolves to: a slot through the theme the design names (`Visualize.Theme.resolve/3` in `:literal`), a literal as itself, `:none` as a hatched square, an unset key as an empty one; the slot's or literal's word is the well's `title`, and a bound variable shows as its chip in the well's place (§19.9). There is no select of slot names and no picker in the form: a name where the only thing wanted is the colour, and a picker under every colour key, were clutter, and both wrote the key the chooser writes. Clicking the well selects the field and opens the chooser in the context (`select_field`, above). A well is also a **drop target** (`data-builder-well`): every patch in the chooser — a slot, a hue, a colour the chart uses — is draggable (`data-builder-colour`, carried as `application/x-visualize-colour`), and a patch dropped on a well writes that well's key whether or not the field is selected, so one colour is carried to several fields without selecting each. `drop_colour` carries the field and the colour: a word writes the slot as the atom, a `#rrggbb` writes the literal, both through the same `edit` the chooser uses (`key.slot`, `key`), and a key that is not a colour refuses by name. A well in the style panel of the layer context (§18.19) takes a drop the same way, through `edit_style`.
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.Builder.Picker.panel/1` | the colour panel: slots as swatches, hues, a picker and the chart's colours, writing the selected colour field through `edit` or showing with nothing to write |
+| `Visualize.Chart.Builder.Picker.panel/1` | the chooser: patches — slots and the chart's colours — above the hues and the picker, each patch draggable, writing the selected colour field through `edit` or showing with nothing to write |
+| `Visualize.Chart.Builder.Editor.well/2` | what a colour well shows for a value and a theme: the resolved colour, `:none`, or nothing |
 | `Visualize.Chart.Builder.Picker.face/1` | which picker a field would get from its key and type: colour, font, glyphs, enum, reference, range or plain |
 | `Visualize.Chart.Builder.Fonts.panel/1` | the font panel over the node being edited: faces, size, weight, anchor, through `edit` |
 | `Visualize.Chart.Builder.Fonts.keys/1` | the font keys a node kind carries |
@@ -2076,7 +2079,7 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 
 **The typed controls in place.** A field's control is chosen from its type (§18.6), and three types now carry more than a box:
 
-- **a colour** (`Visualize.Chart.Builder.Editor.widget/1` gives `:colour`) has its three faces in the form: a select of the theme's colour slots (`Visualize.Theme.colour_slots/1` of the theme the design names) as `key.slot`, a picker as `key` for a literal hex, and the literal/variable switch of §19.9. A slot chosen writes the atom; the picker writes the string; a blank slot removes the key. The picker shows a hex it can and nothing for a slot, since a slot is the select's to show.
+- **a colour** (`Visualize.Chart.Builder.Editor.widget/1` gives `:colour`) is a well in the form, above: the colour itself, selected to open the chooser, dropped on to be written. The chooser's controls are the three faces — the slots as `key.slot`, a hue or the picker as `key` — and a slot chosen writes the atom, a hue or the picker the string.
 - **a reference** offers what the document declares locally and what the library holds by id, in one select — for styles, scales and sources alike: an id is spelt as the DOM carries one — `style:11` — and read back through `Visualize.Chart.Builder.Store.decode_id/1`, so `Editor.parse/2` of `{:ref, :style}` gives `{:style, 11}` for the id and an atom for anything else, and no client string of the wrong kind becomes an id. The field is also a **drop target**: the editor's form carries `Visualize.Hooks.Builder` in scope `ref`, each reference field names its key in `data-builder-ref`, and a library entry dropped on it raises `insert` with the field — the same write the select makes, refused by name when the entry is of another kind (*a scale field takes a scale; Styles::thick is a style*); a style dropped on a style field goes onto the site's stack (§18.20).
 - **an enum** is the allowed values, as it was.
 

@@ -2,13 +2,12 @@
   <nav class="vis-builder-tabs">
     <button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="binding">binding</button><button type="button" class="vis-builder-tab vis-builder-tab-open" phx-click="facet" phx-value-facet="channel">channel</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="geometry">geometry</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="style">style</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="content">content</button>
   </nav>
-  <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref">
+  <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref" data-builder-edit="edit">
     <label class="vis-builder-field" data-builder-bind="type" phx-click="select_field" phx-keyup="select_field" phx-value-field="type">
       <span class="vis-builder-key">
         type
         <span class="vis-builder-field-handle" draggable="true" data-builder-promote="type" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
       </span>
-      
       
       
       
@@ -39,7 +38,6 @@
       
       
       
-      
       <textarea name="channels" placeholder="%{}">%{x: :t, y: :v}</textarea>
       
     </label><label class="vis-builder-field" data-builder-bind="scales" phx-click="select_field" phx-keyup="select_field" phx-value-field="scales">
@@ -47,7 +45,6 @@
         scales
         
       </span>
-      
       
       
       

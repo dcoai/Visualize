@@ -1056,14 +1056,26 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.render(s) =~ "needs var(:accent), var(:ticks)"
     end
 
-    test "a colour has three faces: a slot, a picker, and a variable" do
+    test "a colour field is a well showing its colour, and no select or picker" do
       html = at_node("styles.series", selected: 0)
-      assert html =~ ~s(<select name="stroke.slot" class="vis-builder-slot")
-      assert html =~ ~s(<option value="series_1" selected>series_1</option>)
-      assert html =~ ~s(<input type="color" name="stroke" class="vis-builder-colour")
+
+      assert html =~
+               ~s(<span class="vis-builder-well" style="--vis-builder-swatch: #3b6fa8" title="series_1" role="img" aria-label="stroke: series_1" data-builder-well="stroke">)
+
+      refute html =~ ~s(name="stroke.slot")
+      refute html =~ ~s(<input type="color" name="stroke")
       refute html =~ "stroke.mode"
 
-      # A slot chosen is the atom; the picker's hex is the string; blank removes.
+      # A hex is itself, none is hatched, unset is empty, a slot the theme lacks has no colour.
+      theme = Visualize.Theme.default()
+      assert Editor.well("#123456", theme) == %{colour: "#123456", none?: false, word: "#123456"}
+      assert Editor.well(:none, theme) == %{colour: nil, none?: true, word: "none"}
+      assert Editor.well(nil, theme) == %{colour: nil, none?: false, word: nil}
+      assert Editor.well(:nonsense, theme) == %{colour: nil, none?: false, word: "nonsense"}
+      assert Editor.well({:series, 2}, theme).colour == Enum.at(theme.series, 1)
+
+      # The chooser's controls still write the same key: a slot is the atom, a hex the
+      # string, blank removes.
       assert Editor.change(:style, %{"_target" => ["fill.slot"], "fill.slot" => "axis"}) ==
                {:fill, {:ok, :axis}}
 
@@ -1368,7 +1380,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert same.assigns.context == :layer
     end
 
-    test "the colour panel: slots as swatches, a hue grid, the chart's colours, and it writes the selected colour field",
+    test "the chooser: patches above the picker, each draggable, writing the selected colour field",
          %{
            socket: s
          } do
@@ -1377,16 +1389,24 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render(s)
 
       assert html =~ ~s(<form id="b-picker" class="vis-builder-picker" phx-change="edit")
+      assert html =~ ~s(data-builder-scope="colour")
       assert html =~ ~s(<h3 class="vis-builder-context-title">stroke</h3>)
 
       for slot <- Visualize.Theme.colour_slots(Visualize.Theme.default()) do
         assert html =~ ~s(name="stroke.slot" value="#{slot}")
+        assert html =~ ~s(draggable="true" data-builder-colour="#{slot}")
       end
 
       assert html =~ ~s(class="vis-builder-swatch vis-builder-swatch-on" title="series_1")
       assert length(Regex.scan(~r/class="vis-builder-hue"/, html)) >= 35
       assert html =~ ~s(<input type="color" name="stroke" class="vis-builder-colour")
       refute html =~ "stroke.var"
+
+      # The patches come before the hues and the picker.
+      {swatches, _} = :binary.match(html, ~s(aria-label="theme slots"))
+      {hues, _} = :binary.match(html, ~s(aria-label="hues"))
+      {picker, _} = :binary.match(html, ~s(<input type="color" name="stroke"))
+      assert swatches < hues and hues < picker
 
       {:noreply, s} =
         Builder.handle_event("edit", %{"_target" => ["stroke.slot"], "stroke.slot" => "axis"}, s)
@@ -1397,8 +1417,31 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, off} = Builder.handle_event("select_field", %{"field" => "stroke_width"}, s)
       {:noreply, off} = Builder.handle_event("context", %{"panel" => "colour"}, off)
       html = BuilderFixture.render(off)
-      assert html =~ "click into a colour field to set it"
-      assert html =~ ~s(name="stroke_width.slot" value="axis" disabled) or html =~ ~s(disabled)
+      assert html =~ "click a colour well to set it here"
+      assert html =~ ~s(disabled)
+    end
+
+    test "a patch dropped on a well writes it, selected or not; a non-colour key refuses", %{
+      socket: s
+    } do
+      assert s.assigns.field == nil
+
+      {:noreply, s} =
+        Builder.handle_event("drop_colour", %{"field" => "fill", "colour" => "axis"}, s)
+
+      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :fill]) == :axis
+
+      {:noreply, s} =
+        Builder.handle_event("drop_colour", %{"field" => "fill", "colour" => "#abcdef"}, s)
+
+      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :fill]) == "#abcdef"
+      assert BuilderFixture.render(s) =~ ~s(--vis-builder-swatch: #abcdef" title="#abcdef")
+
+      {:noreply, refused} =
+        Builder.handle_event("drop_colour", %{"field" => "stroke_width", "colour" => "axis"}, s)
+
+      assert refused.assigns.notice == "stroke_width is not a colour"
+      assert get_in(hd(refused.assigns.uses).local, [:styles, :series, :stroke_width]) == 2
     end
 
     test "the font panel: faces in their face, size, weight, anchor — for a node with font keys",
@@ -1819,14 +1862,14 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(class="vis-builder-var-chip vis-builder-var-chip-bound")
       assert html =~ "var(:color)"
       assert html =~ ~s(phx-click="unbind_field" phx-value-field="stroke")
-      refute html =~ ~s(name="stroke.slot")
+      refute html =~ ~s(data-builder-well="stroke")
       refute html =~ "stroke.mode"
       refute html =~ "stroke.var"
 
       {:noreply, unbound} = Builder.handle_event("unbind_field", %{"field" => "stroke"}, s)
       {_, house} = hd(BuilderFixture.layers(unbound))
       refute Map.has_key?(house.styles.series, :stroke)
-      assert BuilderFixture.render(unbound) =~ ~s(name="stroke.slot")
+      assert BuilderFixture.render(unbound) =~ ~s(data-builder-well="stroke")
     end
 
     test "a chip dropped on a field binds it; a mismatch is refused by name; untyped takes the type",

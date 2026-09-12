@@ -333,7 +333,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 facet={@facet}
                 errors={@errors}
                 refs={@refs}
-                slots={@slots}
+                theme={@colour.theme}
                 strip={false}
                 target={@myself}
               />
@@ -379,7 +379,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               strip={false}
               event="edit_style"
               refs={@refs}
-              slots={@slots}
+              theme={@colour.theme}
               target={@myself}
             />
             <Picker.panel
@@ -948,6 +948,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # A patch dropped on a well writes that well's key, selected or not (spec/14 §19.10): a
+    # word is a slot, a `#rrggbb` a literal, each through the edit the chooser would make;
+    # the form the well sits in says which edit. A key that is not a colour refuses by name.
+    def handle_event("drop_colour", %{"field" => field, "colour" => colour} = params, socket) do
+      edit = if Map.get(params, "edit") == "edit_style", do: "edit_style", else: "edit"
+      kind = if edit == "edit_style", do: :style, else: editing(socket.assigns).entry.kind
+
+      case Enum.find(Schema.describe(kind), &(to_string(&1.key) == field)) do
+        %{type: :colour} ->
+          control = if String.starts_with?(colour, "#"), do: field, else: field <> ".slot"
+          handle_event(edit, %{"_target" => [control], control => colour}, socket)
+
+        _other ->
+          {:noreply, assign(socket, :notice, "#{field} is not a colour")}
+      end
+    end
+
     # A new variable is a var site of the stack, keyed by its name, with its default.
     def handle_event("create_variable", %{"name" => name} = params, socket) do
       case Editor.variable(name) do
@@ -1279,7 +1296,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         find_hit: find_hit(assigns.find),
         site: site(assigns, fetch),
         refs: refs(design, assigns.store),
-        slots: slots(design),
         colour: colour(assigns, entry, at(layer, entry.path), design),
         editing: at(layer, entry.path),
         errors: errors,
@@ -1328,17 +1344,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       }
     end
 
-    # The colour slots of the theme the design names, for a colour's slot face (§19.10).
-    defp slots(design) do
-      design
-      |> Map.get(:theme, :default)
-      |> theme()
-      |> Theme.colour_slots()
-      |> Enum.map(&to_string/1)
-    end
-
-    # The colour panel (spec/14 §19.10): the selected colour field, if the selected field is
-    # one, with the theme's slots in their colours and the literals the design already uses.
+    # The colour chooser (spec/14 §19.10): the selected colour field, if the selected field
+    # is one, with the theme's slots in their colours and the literals the design already
+    # uses; the theme itself is what every well shows its colour through.
     defp colour(%{field: field}, entry, node, design) do
       theme = design |> Map.get(:theme, :default) |> theme()
 
@@ -1350,6 +1358,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           )
 
       %{
+        theme: theme,
         key: spec && spec.key,
         spec: spec || %{type: :colour, range: nil},
         value: if(spec && is_map(node), do: Map.get(node, spec.key)),
