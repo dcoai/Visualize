@@ -261,6 +261,113 @@ defmodule Visualize.Chart.FrameTest do
     end
   end
 
+  describe "paints (spec/14 §2.7, §3.2)" do
+    @defs %{
+      fade: %{
+        kind: :linear,
+        stops: [
+          %{offset: 0, colour: :series_1, opacity: 0.8},
+          %{offset: 1, colour: "#fff", opacity: 0.1}
+        ]
+      },
+      glow: %{
+        kind: :radial,
+        stops: [%{offset: 0, colour: "#ff0"}, %{offset: 1, colour: "#f00"}],
+        centre: [0.3, 0.4],
+        radius: 0.6
+      }
+    }
+
+    defp painted(defs, fill \\ {:paint, :fade}) do
+      scales = %{x: %{kind: :linear}, y: %{kind: :linear}}
+      axes = [%{scale: :x, side: :bottom, grid: true}]
+      styles = %{wash: %{fill: fill}}
+      mark = %{type: :area, data: :primary, channels: %{x: :n, y: :v}, style: :wash}
+      chart(%{scales: scales, axes: axes}, %{defs: defs, styles: styles, marks: [mark]})
+    end
+
+    test "the defs come first, before the grid, with the gradients in the words' geometry" do
+      frame = Frame.new(painted(@defs), sources: %{primary: @rows})
+      %Element{children: [defs, grid | _]} = Frame.generate(frame, sources: %{primary: @rows})
+      assert defs.type == :defs and grid.style.class == "grid"
+      [fade, glow] = defs.children
+      prefix = Visualize.Chart.Frame.Paints.prefix(@defs)
+
+      # 180° runs top to bottom in the shape's box.
+      assert fade.type == :linear_gradient
+
+      assert fade.attrs == %{
+               id: "vis-paint-#{prefix}-fade",
+               x1: 0.5,
+               y1: 0.0,
+               x2: 0.5,
+               y2: 1.0,
+               gradient_units: "objectBoundingBox"
+             }
+
+      [s0, s1] = fade.children
+      assert s0.attrs == %{offset: "0%"}
+      assert s0.style == %{stop_color: "var(--vis-series-1, #3b6fa8)", stop_opacity: 0.8}
+      assert s1.style == %{stop_color: "#fff", stop_opacity: 0.1}
+
+      assert glow.type == :radial_gradient
+
+      assert glow.attrs == %{
+               id: "vis-paint-#{prefix}-glow",
+               cx: 0.3,
+               cy: 0.4,
+               r: 0.6,
+               fx: 0.3,
+               fy: 0.4,
+               gradient_units: "objectBoundingBox"
+             }
+
+      # A design with no paints emits no defs.
+      plain = Frame.new(painted(%{}, "#abc"))
+      %Element{children: [first | _]} = Frame.generate(plain)
+      assert first.type != :defs
+    end
+
+    test "a fill that is a paint is url(#id) in css and the first stop's colour in literal" do
+      frame = Frame.new(painted(@defs), sources: %{primary: @rows})
+      prefix = Visualize.Chart.Frame.Paints.prefix(@defs)
+
+      css = Frame.generate(frame, sources: %{primary: @rows})
+      mark = Enum.find(css.children, &(&1.style[:class] == "mark mark-area"))
+      assert mark.style.fill == "url(#vis-paint-#{prefix}-fade)"
+
+      literal = Frame.generate(frame, sources: %{primary: @rows}, resolve: :literal)
+      mark = Enum.find(literal.children, &(&1.style[:class] == "mark mark-area"))
+      assert mark.style.fill == "#3b6fa8"
+
+      # The SVG carries the reference and the definition; a canvas the plain colour.
+      svg = Render.to_string(css)
+
+      assert svg =~
+               ~s(<linearGradient gradientUnits="objectBoundingBox" id="vis-paint-#{prefix}-fade")
+
+      assert svg =~ ~s|fill="url(#vis-paint-#{prefix}-fade)"|
+      js = literal |> Visualize.Backend.Canvas.render_element() |> IO.iodata_to_binary()
+      assert js =~ "ctx.fillStyle = '#3b6fa8';"
+    end
+
+    test "two charts with different paints have different ids; an undeclared paint is refused" do
+      a = Visualize.Chart.Frame.Paints.prefix(@defs)
+      b = Visualize.Chart.Frame.Paints.prefix(Map.delete(@defs, :glow))
+      assert a != b
+
+      design = %{
+        version: 1,
+        defs: @defs,
+        styles: %{wash: %{fill: {:paint, :nope}}},
+        frame: %{kind: :cartesian}
+      }
+
+      assert Visualize.Chart.Validator.validate(design) ==
+               {:error, [{[:styles, :wash, :fill], {:undeclared, :paint, :nope}}]}
+    end
+  end
+
   describe "byte identity with hand-built furniture" do
     test "a cartesian frame with two axes and a legend is the hand-built axes and legend" do
       design = %{

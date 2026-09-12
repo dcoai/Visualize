@@ -306,6 +306,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         :axis,
         :source,
         :var,
+        :gradient,
         :mark,
         :label
       ]

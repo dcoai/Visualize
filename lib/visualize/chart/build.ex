@@ -121,6 +121,37 @@ defmodule Visualize.Chart.Build do
     %{styles: %{name => node(:style, %{}, Map.merge(Map.new(keys), Map.new(opts)))}}
   end
 
+  @doc "As `gradient/3` with no options."
+  @spec gradient(atom(), :linear | :radial) :: fragment()
+  def gradient(name, kind), do: gradient(name, kind, [])
+
+  @doc """
+  One named paint under `defs` (spec/14 §2.7): a gradient of the kind, `opts` its remaining
+  keys. `stops:` takes `%{offset, colour, opacity}` maps, or `{offset, colour}` and
+  `{offset, colour, opacity}` tuples, which read as the maps.
+
+      iex> Visualize.Chart.Build.gradient(:area, :linear, stops: [{0, :series_1, 0.8}, {1, :series_1, 0.1}])
+      %{defs: %{area: %{kind: :linear, stops: [%{offset: 0, colour: :series_1, opacity: 0.8}, %{offset: 1, colour: :series_1, opacity: 0.1}]}}}
+  """
+  @spec gradient(atom(), :linear | :radial, opts()) :: fragment()
+  def gradient(name, kind, opts) do
+    opts = opts |> Map.new() |> Map.update(:stops, [], fn stops -> Enum.map(stops, &stop/1) end)
+    %{defs: %{name => node(:gradient, %{kind: kind}, opts)}}
+  end
+
+  defp stop({offset, colour}), do: %{offset: offset, colour: colour}
+  defp stop({offset, colour, opacity}), do: %{offset: offset, colour: colour, opacity: opacity}
+  defp stop(%{} = stop), do: stop
+
+  @doc """
+  The value a `:colour` key takes to refer to a gradient of `defs` (spec/14 §3.2).
+
+      iex> Visualize.Chart.Build.paint(:area)
+      {:paint, :area}
+  """
+  @spec paint(atom()) :: {:paint, atom()}
+  def paint(name) when is_atom(name), do: {:paint, name}
+
   @doc "The design's theme: a name, or an inline `:theme` node (spec/14 §2.5)."
   @spec theme(atom() | map()) :: fragment()
   def theme(theme), do: %{theme: theme}

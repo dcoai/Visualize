@@ -1349,6 +1349,176 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "a fill is a fill style (spec/14 §18.6, §2.7)" do
+    setup do
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: Visualize.Chart.BuilderTest.Refs)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "styles.series"}, s)
+      %{socket: s}
+    end
+
+    defp fill_of(s), do: get_in(hd(s.assigns.uses).local, [:styles, :series, :fill])
+    defp defs_of(s), do: get_in(hd(s.assigns.uses).local, [:defs]) || %{}
+
+    test "the fill group opens with four glyphs, and none writes :none, solid a colour", %{
+      socket: s
+    } do
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(aria-label="fill style")
+
+      for style <- ~w(none solid linear radial) do
+        assert html =~ ~s(<input type="radio" name="fill_style" value="#{style}")
+      end
+
+      # Unset shows as solid; none hatches the well; solid on none is the first series.
+      assert html =~ ~s(name="fill_style" value="solid" checked)
+
+      {:noreply, none} =
+        Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "none"}, s)
+
+      assert fill_of(none) == :none
+      assert BuilderFixture.render(none) =~ ~s(class="vis-builder-well vis-builder-well-none")
+
+      {:noreply, solid} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["fill_style"], "fill_style" => "solid"},
+          none
+        )
+
+      assert fill_of(solid) == :series_1
+      refute BuilderFixture.render(solid) =~ "vis-builder-gradient"
+    end
+
+    test "linear declares the gradient named for the style under the layer's defs and shows its controls",
+         %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["fill"], "fill" => "#abcdef"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "linear"}, s)
+
+      assert fill_of(s) == {:paint, :series_fill}
+
+      assert defs_of(s) == %{
+               series_fill: %{
+                 kind: :linear,
+                 stops: [
+                   %{offset: 0, colour: "#abcdef", opacity: 0.8},
+                   %{offset: 1, colour: "#abcdef", opacity: 0.1}
+                 ]
+               }
+             }
+
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(name="fill_style" value="linear" checked)
+      # The fill's well shows the first stop under the paint's name.
+      assert html =~ ~s(--vis-builder-swatch: #abcdef" title="series_fill")
+      assert html =~ ~s(data-builder-well="fill.stop.0")
+      assert html =~ ~s(data-builder-well="fill.stop.1")
+      assert html =~ ~s(name="fill.stop.1.opacity")
+      assert html =~ ~s(name="fill.angle")
+      refute html =~ ~s(name="fill.centre.x")
+      # And the preview carries the gradient.
+      assert html =~ "<linearGradient"
+      assert html =~ ~s(-series_fill)
+
+      # The stop wells and the angle write the gradient where it is declared.
+      {:noreply, s} =
+        Builder.handle_event("drop_colour", %{"field" => "fill.stop.1", "colour" => "axis"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["fill.stop.0"], "fill.stop.0" => "#123456"},
+          s
+        )
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["fill.stop.0.opacity"], "fill.stop.0.opacity" => "0.5"},
+          s
+        )
+
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["fill.angle"], "fill.angle" => "90"}, s)
+
+      gradient = defs_of(s).series_fill
+      assert gradient.angle == 90
+
+      assert gradient.stops == [
+               %{offset: 0, colour: "#123456", opacity: 0.5},
+               %{offset: 1, colour: :axis, opacity: 0.1}
+             ]
+
+      # A stop well selected opens the chooser on that stop.
+      {:noreply, picked} = Builder.handle_event("select_field", %{"field" => "fill.stop.1"}, s)
+      assert picked.assigns.context == :colour
+      html = BuilderFixture.render(picked)
+      assert html =~ ~s(<h3 class="vis-builder-context-title">fill.stop.1</h3>)
+      assert html =~ ~s(name="fill.stop.1.slot" value="axis" checked)
+
+      # Radial keeps the stops and shows a centre; solid takes the first stop's colour.
+      {:noreply, radial} =
+        Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "radial"}, s)
+
+      assert defs_of(radial).series_fill.kind == :radial and
+               defs_of(radial).series_fill.stops == gradient.stops
+
+      {:noreply, radial} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["fill.centre.y"], "fill.centre.y" => "0.25"},
+          radial
+        )
+
+      assert defs_of(radial).series_fill.centre == [0.5, 0.25]
+      assert BuilderFixture.render(radial) =~ ~s(name="fill.centre.y")
+
+      {:noreply, solid} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["fill_style"], "fill_style" => "solid"},
+          radial
+        )
+
+      assert fill_of(solid) == "#123456"
+      assert Map.has_key?(defs_of(solid), :series_fill)
+    end
+
+    test "on a style site the gradient becomes a keyed gradient site just below it" do
+      site = %{
+        Visualize.Chart.Use.new(nil, [])
+        | ref: nil,
+          local: %{style: %{stroke: "#000"}},
+          key: :thick
+      }
+
+      s = BuilderFixture.socket([])
+
+      s =
+        Phoenix.Component.assign(s,
+          uses: [site],
+          labels: %{site.id => "style thick"},
+          selected: site.id
+        )
+
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "linear"}, s)
+
+      [style, gradient] = s.assigns.uses
+      assert style.local == %{style: %{stroke: "#000", fill: {:paint, :style_fill}}}
+      assert gradient.key == :style_fill
+      assert gradient.local.gradient.kind == :linear
+      assert s.assigns.labels[gradient.id] == "gradient style_fill"
+
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["fill.angle"], "fill.angle" => "45"}, s)
+
+      assert Enum.at(s.assigns.uses, 1).local.gradient.angle == 45
+    end
+  end
+
   describe "the context's icon row (spec/14 §19.10)" do
     setup do
       s = BuilderFixture.socket(BuilderFixture.layers(), store: Visualize.Chart.BuilderTest.Refs)

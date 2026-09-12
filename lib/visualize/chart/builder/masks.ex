@@ -96,7 +96,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec keyed?(map()) :: boolean()
     def keyed?(fragment) do
       case Fragment.wrapped(fragment) do
-        {kind, _body} -> kind in [:style, :scale, :source, :var]
+        {kind, _body} -> kind in [:style, :scale, :source, :var, :gradient]
         nil -> false
       end
     end

@@ -1646,6 +1646,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
       box-shadow: 0 0 0 2px var(--vis-builder-panel), 0 0 0 4px var(--vis-builder-accent);
     }
 
+    /* A gradient fill's controls (spec/14 §18.6): its stops as wells with their opacity,
+       then the angle or the centre. */
+    .vis-builder-gradient {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-left: 4px;
+      border-left: 2px solid var(--vis-builder-line);
+    }
+
+    .vis-builder-stop {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     /* The chooser's own picker, for any colour a patch does not offer. */
     .vis-builder .vis-builder-colour {
       width: 2.4em;

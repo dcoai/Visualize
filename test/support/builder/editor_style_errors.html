@@ -15,7 +15,9 @@
   
   
   
+  
   <input type="text" name="extends">
+  
   
   
   
@@ -39,6 +41,22 @@
   
   
   
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
+    <label class="vis-builder-glyph" title="none">
+      <input type="radio" name="fill_style" value="none" aria-label="none">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 19 L19 5" stroke="currentColor" stroke-width="1.5"/></svg>
+    </label><label class="vis-builder-glyph vis-builder-glyph-on" title="solid">
+      <input type="radio" name="fill_style" value="solid" checked aria-label="solid">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="linear">
+      <input type="radio" name="fill_style" value="linear" aria-label="linear">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><linearGradient id="vis-glyph-linear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></linearGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-linear)" stroke="currentColor" stroke-width="1"/></svg>
+    </label><label class="vis-builder-glyph" title="radial">
+      <input type="radio" name="fill_style" value="radial" aria-label="radial">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><radialGradient id="vis-glyph-radial"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></radialGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-radial)" stroke="currentColor" stroke-width="1"/></svg>
+    </label>
+  </span>
   <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="no colour set" role="img" aria-label="fill: not set" data-builder-well="fill"></span>
   
   
@@ -52,10 +70,12 @@
   </span>
   
   
+  
   <input type="range" name="fill_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
   
   
   <input type="text" name="fill_opacity">
+  
   
   
   
@@ -74,6 +94,8 @@
     stroke_style
     
   </span>
+  
+  
   
   
   
@@ -108,10 +130,12 @@
   </span>
   
   
+  
   <input type="range" name="stroke_width.range" class="vis-builder-range" min="0" max="20" step="0.5" value="2" aria-label="stroke_width, dragged">
   
   
   <input type="text" name="stroke_width" value="2">
+  
   
   
   
@@ -124,6 +148,8 @@
     stroke
     
   </span>
+  
+  
   
   
   
@@ -146,10 +172,12 @@
   </span>
   
   
+  
   <input type="range" name="stroke_opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="stroke_opacity, dragged">
   
   
   <input type="text" name="stroke_opacity">
+  
   
   
   
@@ -167,7 +195,9 @@
   
   
   
+  
   <input type="text" name="stroke_dasharray">
+  
   
   
   
@@ -180,6 +210,8 @@
     stroke_linejoin
     
   </span>
+  
+  
   
   
   
@@ -209,6 +241,8 @@
     stroke_linecap
     
   </span>
+  
+  
   
   
   
@@ -249,7 +283,9 @@
   
   
   
+  
   <input type="text" name="font_family">
+  
   
   
   
@@ -264,10 +300,12 @@
   </span>
   
   
+  
   <input type="range" name="font_size.range" class="vis-builder-range" min="6" max="72" step="1" value="6" aria-label="font_size, dragged">
   
   
   <input type="text" name="font_size">
+  
   
   
   
@@ -280,6 +318,7 @@
     font_weight
     
   </span>
+  
   
   
   
@@ -319,6 +358,7 @@
   
   
   
+  
 </label>
       </fieldset>
       
@@ -330,6 +370,8 @@
     text_anchor
     
   </span>
+  
+  
   
   
   
@@ -367,10 +409,12 @@
   </span>
   
   
+  
   <input type="range" name="opacity.range" class="vis-builder-range" min="0" max="1" step="0.05" value="0" aria-label="opacity, dragged">
   
   
   <input type="text" name="opacity">
+  
   
   
   
@@ -393,7 +437,9 @@
   
   
   
+  
   <input type="text" name="class">
+  
   
   
   
@@ -406,6 +452,8 @@
     curve
     
   </span>
+  
+  
   
   
   
@@ -469,6 +517,8 @@
   
   
   
+  
+  
   <textarea name="curve_opts"></textarea>
   
 </label><label class="vis-builder-field" data-builder-bind="symbol" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol">
@@ -476,6 +526,8 @@
     symbol
     
   </span>
+  
+  
   
   
   
@@ -522,7 +574,9 @@
   
   
   
+  
   <input type="text" name="symbol_size">
+  
   
   
   

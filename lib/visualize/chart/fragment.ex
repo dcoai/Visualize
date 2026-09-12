@@ -57,6 +57,7 @@ defmodule Visualize.Chart.Fragment do
     mark: :mark,
     label: :label,
     var: :var,
+    gradient: :gradient,
     composite: :composite
   }
 

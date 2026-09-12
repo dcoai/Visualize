@@ -83,6 +83,9 @@ defmodule Visualize.Chart.Style do
 
   defp put_reading(acc, _key, nil, _frame, _mode), do: acc
 
+  defp put_reading(acc, key, {:paint, _} = paint, _frame, _mode) when key in @colour_keys,
+    do: Map.put(acc, key, paint)
+
   defp put_reading(acc, key, reading, frame, mode) when key in @colour_keys do
     case Map.get(frame.scales, :color) do
       nil -> Map.put(acc, key, colour(reading, frame.theme, mode))
@@ -173,6 +176,8 @@ defmodule Visualize.Chart.Style do
   @spec value(atom(), term(), Theme.t(), Theme.mode()) :: term()
   def value(_key, %Var{name: name}, _theme, _mode), do: unresolved!(name)
   def value(:stroke_dasharray, list, _theme, _mode) when is_list(list), do: Enum.join(list, " ")
+  # A paint is the frame's to resolve, once it has its defs (spec/14 §3.2).
+  def value(key, {:paint, _name} = paint, _theme, _mode) when key in @colour_keys, do: paint
   # The weight words CSS lacks are their numbers; normal and bold are CSS's own (§3.4).
   def value(:font_weight, :light, _theme, _mode), do: 300
   def value(:font_weight, :medium, _theme, _mode), do: 500

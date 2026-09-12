@@ -30,7 +30,7 @@ defmodule Visualize.Chart.Validator do
           | :unknown_key
           | {:type, Schema.type()}
           | {:enum, [atom()]}
-          | {:undeclared, :scale | :style | :source | :var | :field | :slot, term()}
+          | {:undeclared, :scale | :style | :source | :var | :field | :slot | :paint, term()}
           | {:ref_kind, atom(), atom()}
           | {:invalid_for, atom()}
           | {:unsupported_version, term()}
@@ -124,6 +124,7 @@ defmodule Visualize.Chart.Validator do
       context(%{})
       | scales: :unknown,
         styles: :unknown,
+        paints: :unknown,
         sources: :unknown,
         vars: :unknown,
         slots: :unknown,
@@ -174,6 +175,7 @@ defmodule Visualize.Chart.Validator do
     %{
       scales: declared(nested(map, [:frame, :scales])),
       styles: union(declared(map[:styles]), Schema.builtin_styles()),
+      paints: declared(map[:defs] || %{}),
       sources: source_fields(map[:sources]),
       vars: declared(map[:vars]),
       slots: slots(Map.get(map, :theme, Schema.default(:design, :theme))),
@@ -435,6 +437,10 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp check(:colour, v, _path, _ctx) when is_binary(v) or v == :none, do: []
+  # A paint names a gradient of `defs` (spec/14 §2.7, §3.2).
+  defp check(:colour, {:paint, name}, path, ctx) when is_atom(name),
+    do: ref(:paint, name, path, ctx)
+
   defp check(:colour, v, path, ctx), do: slot_or(:colour, v, path, ctx)
   defp check(:size, v, _path, _ctx) when is_number(v), do: []
   defp check(:size, v, path, ctx), do: slot_or(:size, v, path, ctx)
@@ -516,6 +522,7 @@ defmodule Visualize.Chart.Validator do
 
   defp plural(:scale), do: :scales
   defp plural(:style), do: :styles
+  defp plural(:paint), do: :paints
   defp plural(:source), do: :sources
   defp plural(:var), do: :vars
   defp plural(:field), do: :fields
@@ -603,7 +610,7 @@ defmodule Visualize.Chart.Validator do
       "{:data, [x, y]}"
   end
 
-  defp type_words(:colour), do: "a colour string, :none or a theme slot"
+  defp type_words(:colour), do: "a colour string, :none, a theme slot or a paint"
   defp type_words(:size), do: "a number or a theme slot"
   defp type_words(:font), do: "a font string or a theme slot"
   defp type_words(:slot), do: "a theme slot"

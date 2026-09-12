@@ -55,7 +55,7 @@ defmodule Visualize.Chart do
     Var
   }
 
-  @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :frame, :marks, :labels]
+  @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :defs, :frame, :marks, :labels]
 
   defstruct version: 1,
             meta: %{},
@@ -63,6 +63,7 @@ defmodule Visualize.Chart do
             vars: %{},
             theme: :default,
             styles: %{},
+            defs: %{},
             frame: nil,
             marks: [],
             labels: []
@@ -74,6 +75,7 @@ defmodule Visualize.Chart do
           vars: %{atom() => map()},
           theme: atom() | map(),
           styles: %{atom() => map()},
+          defs: %{atom() => map()},
           frame: map() | nil,
           marks: [map()],
           labels: [map()]

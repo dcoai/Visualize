@@ -1092,6 +1092,7 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Build.var/3` | `var(name, default, opts)`: `%{vars: %{name => %{default: default}}}`, the *declaration* of a variable (§2.4). `Visualize.Chart.var/1` builds the term that *uses* one; the two are different functions of different modules and different arities (§16.2). |
 | `Visualize.Chart.Build.style/2` | As `style/3` with `[]`. |
 | `Visualize.Chart.Build.style/3` | `style(name, keys, opts)`: `%{styles: %{name => node}}` with the node the style keys of §3.1 — `keys` as a map or a keyword list, `opts` merged over it, every key checked. |
+| `Visualize.Chart.Build.gradient/2` | As `gradient/3` with `[]`. |
 | `Visualize.Chart.Build.gradient/3` | `gradient(name, kind, opts)`: `%{defs: %{name => node}}`, a `:gradient` node of §2.7 — `kind` `:linear` or `:radial`, `opts` its remaining keys (`stops:` as a list of `%{offset, colour, opacity}` maps or `{offset, colour}` / `{offset, colour, opacity}` tuples, `angle:`, `centre:`, `radius:`), every key checked. |
 | `Visualize.Chart.Build.paint/1` | `paint(name)`: `{:paint, name}`, the value a `:colour` key takes to refer to a gradient (§3.2). |
 | `Visualize.Chart.Build.theme/1` | `theme(theme)`: `%{theme: theme}`, a theme name or an inline `:theme` node (§2.5). |
@@ -2115,6 +2116,12 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Editor.well/2` | what a colour well shows for a value and a theme: the resolved colour, `:none`, or nothing |
 | `Visualize.Chart.Builder.Picker.face/1` | which picker a field would get from its key and type: colour, font, glyphs, enum, reference, range or plain |
 | `Visualize.Chart.Builder.Fonts.panel/1` | the font panel over the node being edited: families, size, the face list, anchor, through `edit` |
+| `Visualize.Chart.Builder.Fills.control?/1` | whether a control of the form belongs to the fill group — `fill_style`, `fill.stop.<i>[.slot\|.opacity]`, `fill.angle`, `fill.centre.x\|y` — rather than to a key |
+| `Visualize.Chart.Builder.Fills.name/1` | the gradient named for a style at a path: `:series_fill` for `styles.series`, the path with underscores and `_fill` otherwise |
+| `Visualize.Chart.Builder.Fills.style_of/2` | the fill style a fill value shows as, given the design's `defs`: none, solid, linear or radial |
+| `Visualize.Chart.Builder.Fills.styles/0` | the four fill styles in order |
+| `Visualize.Chart.Builder.Fills.writes/6` | what a fill-group control writes: `{:fill, parsed}`, `{:declare, name, gradient}`, `{:gradient, name, fun}` |
+| `Visualize.Chart.Builder.Fills.view/3` | what the form shows for a fill: its style, its paint's name, and for a gradient its stops, angle and centre |
 | `Visualize.Chart.Builder.Editor.changes/2` | every write a change to the form means — one for most controls, two for a `font_face` — as `{key, {:ok, value} \| :error}` pairs |
 | `Visualize.Chart.Builder.Editor.face/2` | the face a weight and a style show as: one of the eight words, an integer weight rounded to the nearest of the four |
 | `Visualize.Chart.Builder.Editor.faces/0` | the eight faces in order, each with the weight and style it writes |

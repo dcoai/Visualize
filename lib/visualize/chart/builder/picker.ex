@@ -36,7 +36,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:id, :string, required: true, doc: "the panel's id")
 
-    attr(:key, :atom,
+    attr(:key, :any,
       default: nil,
       doc: "the selected field's key; nil shows the picker with nothing to write"
     )
