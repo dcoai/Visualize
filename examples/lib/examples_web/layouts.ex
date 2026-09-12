@@ -25,7 +25,7 @@ defmodule ExamplesWeb.Layouts do
           }
           header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
           header p { opacity: 0.9; font-size: 1.1rem; }
-          main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+          body > main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
           .gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));

@@ -1766,6 +1766,14 @@ defmodule Visualize.Chart.BuilderTest do
       assert workspace =~ "flex: 1 1 auto"
     end
 
+    test "the main column fills its grid track whatever a host says about <main>" do
+      css = Visualize.Chart.Builder.css()
+      [main] = Regex.run(~r/\.vis-builder-main \{[^}]*\}/, css)
+      assert main =~ "width: 100%"
+      assert main =~ "max-width: none"
+      assert main =~ "margin: 0"
+    end
+
     test "the builder renders the stylesheet once, and not at all when the host ships it" do
       html = render_component(Builder, %{id: "b", layers: BuilderFixture.layers()})
       assert length(String.split(html, "<style")) == 2

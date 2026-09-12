@@ -252,9 +252,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
       scrollbar-width: thin;
     }
 
+    /* The column is a <main> element, and a host's own `main { max-width; margin: auto }`
+       — the commonest page rule there is — would centre it at content width between the
+       two sidebars. The builder's columns are the grid's, not the page's. */
     .vis-builder-main {
       display: flex;
       flex-direction: column;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 0;
     }
 
     .vis-builder-library-pane > .vis-builder-sidebar-title,
