@@ -161,7 +161,7 @@ A gradient's units are the shape's bounding box (`objectBoundingBox`), so one gr
 
 ### 3.1 Keys
 
-**Implemented.** A `:style` node has twenty-five keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema. The keys are read as a drawing tool shows a style — in **groups**: what a style derives from first, then its *fill*, its *stroke*, its *font*, the *position* of its text, its *effects*, and last the keys that belong to no group. A key's group is data on its spec (`group`, §14.2), and the table below is in group order, which is the order the form shows them in (§18.7).
+**Implemented.** A `:style` node has twenty-nine keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema. The keys are read as a drawing tool shows a style — in **groups**: what a style derives from first, then its *fill*, its *stroke*, its *font*, the *position* of its text, its *effects*, and last the keys that belong to no group. A key's group is data on its spec (`group`, §14.2), and the table below is in group order, which is the order the form shows them in (§18.7).
 
 | Key | Type | Group | Notes |
 |---|---|---|---|
@@ -180,7 +180,11 @@ A gradient's units are the shape's bounding box (`objectBoundingBox`), so one gr
 | `font_weight` | `{:one_of, [:integer, {:enum, [:light, :normal, :medium, :bold]}]}` | `:font` | a word is 300, 400, 500 or 700 |
 | `font_style` | `{:enum, [:normal, :italic]}` | `:font` | |
 | `line_height` | `:number` | `:font` | the space between a text's lines as a factor of the font size (§7.1), `1.2` when absent; range `{0.8, 3, 0.1}` |
-| `text_anchor` | `{:enum, [:start, :middle, :end]}` | `:position` | |
+| `text_anchor` | `{:enum, [:start, :middle, :end]}` | `:position` | the horizontal alignment |
+| `vertical_align` | `{:enum, [:top, :middle, :baseline, :bottom]}` | `:position` | where a text sits on its point (§6.3, §5.5); each placement's own when absent |
+| `margin_x` | `:number` | `:position` | a gap from the anchor point, along the anchor's outward direction (§6.3, §5.5); `0` when absent; range `{0, 40, 1}` |
+| `margin_y` | `:number` | `:position` | likewise, vertically |
+| `text_angle` | `:number` | `:position` | a rotation in degrees about the anchor point, clockwise; `0` when absent; range `{-180, 180, 5}` |
 | `opacity` | `:size` | `:effects` | `0` to `1` |
 | `blend` | `{:enum, [:normal, :multiply, :screen, :overlay, :darken, :lighten]}` | `:effects` | how the mark composites with what is under it; `:normal` when absent |
 | `effect` | `{:enum, [:none, :shadow, :blur]}` | `:effects` | `:none` when absent |
@@ -201,7 +205,7 @@ A gradient's units are the shape's bounding box (`objectBoundingBox`), so one gr
 - a **paint** `{:paint, name}` for a `:colour` key: a gradient the design declares under `defs` (§2.7). `Visualize.Chart.Style.resolve/3` passes it through untouched, as it does a binding, and the **frame** resolves it once its elements are drawn — `Visualize.Chart.Frame.generate/2` replaces every `{:paint, name}` in the tree's styles with `url(#vis-paint-<h>-<name>)` in `:css` and with the gradient's **first stop's colour**, resolved as a colour, in `:literal`, since a canvas gradient is a different object and the first stop keeps a canvas chart drawable and honest. The validator reports `{:undeclared, :paint, name}` for a name `defs` lacks.
 - a **channel binding** `{:field, f}` for any key, which is how `Visualize.Shape.Band`'s per-datum fill is expressed: the value is read from the datum at render — per element for a mark that draws one element per datum, from the series' first datum for a mark that draws one path per series (§5.6) — and, for a `:colour` key, passed through the scale named `color` when the frame declares one (§3.4).
 
-Eighteen keys reach the element the mark draws — the fifteen of §3.4, `line_height`, and, as one, `effect` with `effect_radius`, and `blend`; four more — `curve`, `curve_opts`, `symbol` and `symbol_size` — reach the mark's generator (§5.6) and never an element; and `extends` reaches neither, being consumed by the lookup that flattens it (§3.5).
+Eighteen keys reach the element the mark draws — the fifteen of §3.4, `line_height`, and, as one, `effect` with `effect_radius`, and `blend`; four more — `curve`, `curve_opts`, `symbol` and `symbol_size` — reach the mark's generator (§5.6) and never an element; five — `stroke_style` (§5.6), `vertical_align`, `margin_x`, `margin_y` and `text_angle` (§6.3) — are read by the placements from the style node and never reach an element as themselves; and `extends` reaches neither, being consumed by the lookup that flattens it (§3.5).
 
 For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font` key an atom is a slot, and `:none` is the literal "no paint". The validator checks a slot against the theme's `Visualize.Theme.slots/1` when the theme is built-in or inline (§2.5) and reports `{:undeclared, :slot, name}` otherwise.
 
@@ -612,6 +616,8 @@ The group is returned untranslated. `Visualize.Chart.Frame.generate/2` places ev
 | `{:frame, :bottom_left}` | `(4, h − 4)` | `:start` | `:label` |
 | `{:frame, :bottom_right}` | `(w − 4, h − 4)` | `:end` | `:label` |
 | `{:data, [x, y]}` | the point through the frame's position scales | `:start` | `:label` |
+
+**Position** (§3.1). Each placement above has a *baseline* — the `dy` in its row, or none — and an *outward direction*: away from the plot for a title, a subtitle (up), a caption and a bottom axis title (down), a top axis title (up), a left or a right axis title (further from the plot, which in the rotated frame is `−y`); into the plot for a corner, so `{:frame, :top_left}` runs `(+x, +y)` and `{:frame, :bottom_right}` `(−x, −y)`; none for a data anchor. The label's style says how the text sits on that point: `vertical_align` replaces the baseline — `:baseline` no `dy`, `:middle` `"0.32em"`, `:top` `"0.71em"` (the text hangs below its point), `:bottom` `"-0.25em"` — and leaves the placement's own when absent; `margin_x` and `margin_y` move the point along the outward direction, each by its sign, so a caption with `margin_y: 6` sits 6 further down and a corner label 6 further in; `text_angle` rotates the text about the point it sits on, a `rotate(angle, x, y)` added after any transform the placement has, so a left axis title turns about its own point in its rotated frame. A label's `dx` and `dy` are added as before, the signed one-off nudge; the margins are what a named style sets for every label it reaches. The same four keys reach a mark's inline label (§5.5) — outward is the label's `anchor`: `:top` up, `:bottom` down, `:left` left, `:right` right, `:start` right, `:end` left, `:middle` nowhere — and `text_angle` alone reaches an axis's tick labels through the axis's style (§4.4), each turned about its own anchor, which is how a category axis with long names angles them; a legend's entries take none of the four.
 
 An axis title follows the side of the first axis that names its scale; with no axis on the scale, `x` is taken as `:bottom`, `y` as `:left`, and any other name as `:bottom`. A data anchor maps `[x, y]` through the scales named `x` and `y` in a `:cartesian` or `:facet` frame (the first panel), through `angle` and `r` in a `:polar` frame — `(R sin a, −R cos a)` from the centre — and through the projection in a `:geo` frame, where the pair is `[longitude, latitude]` and a point the projection clips is not drawn. A `text_anchor` in the label's style replaces the anchor's own.
 
