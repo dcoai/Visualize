@@ -455,7 +455,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         assigns
         |> assign(:facets, facets)
         |> assign(:open, open)
-        |> assign(:fields, fields(specs, open, assigns))
+        |> assign(:blocks, blocks(fields(specs, open, assigns)))
 
       ~H"""
       <div class={class(@class)}>
@@ -479,173 +479,210 @@ if Code.ensure_loaded?(Phoenix.Component) do
           data-builder-scope="ref"
           data-builder-edit={@event}
         >
-          <label
-            :for={field <- @fields}
-            class={field_class(field, @selected, @found)}
-            data-builder-ref={field.ref && to_string(field.key)}
-            data-builder-bind={field.key}
-            phx-click="select_field"
-            phx-keyup="select_field"
-            phx-value-field={field.key}
-            phx-target={@target}
-          >
-            <span class="vis-builder-key">
-              {field.key}<span
-                :if={@origins[field.key]}
-                class="vis-builder-origin"
-              >{@origins[field.key]}</span>
-              <span
-                :if={is_nil(field.variable) and field.value != nil}
-                class="vis-builder-field-handle"
-                draggable="true"
-                data-builder-promote={field.key}
-                title="drag to the variables panel to make a variable of this value"
-                aria-hidden="true"
-              >⠿</span>
-            </span>
-            <span :if={field.variable} class="vis-builder-var-chip vis-builder-var-chip-bound">
-              var(:{field.variable})
-              <button
-                type="button"
-                class="vis-builder-var-unbind"
-                phx-click="unbind_field"
-                phx-value-field={field.key}
-                phx-target={@target}
-                aria-label={"unbind #{field.key} from #{field.variable}"}
-                title="unbind"
-              >×</button>
-            </span>
-            <input
-              :if={is_nil(field.variable) and field.widget == :checkbox}
-              type="checkbox"
-              name={field.key}
-              value="true"
-              checked={field.checked}
-            />
-            <input
-              :if={is_nil(field.variable) and field.range != nil and field.widget in [:number, :text]}
-              type="range"
-              name={"#{field.key}.range"}
-              class="vis-builder-range"
-              min={field.range.min}
-              max={field.range.max}
-              step={field.range.step}
-              value={field.slider}
-              aria-label={"#{field.key}, dragged"}
-            />
-            <input
-              :if={is_nil(field.variable) and field.widget == :number}
-              type="number"
-              name={field.key}
-              value={field.value}
-              placeholder={field.placeholder}
-            />
-            <input
-              :if={is_nil(field.variable) and field.widget == :text}
-              type="text"
-              name={field.key}
-              value={field.value}
-              placeholder={field.placeholder}
-              data-builder-text={field.text? && "true"}
-            />
-            <svg
-              :if={is_nil(field.variable) and field.dash != nil}
-              class="vis-builder-dash"
-              viewBox="0 0 120 8"
-              width="120"
-              height="8"
-              aria-hidden="true"
-            >
-              <path
-                d="M2 4 H118"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-dasharray={field.dash}
+          <%= for {group, fields} <- @blocks do %>
+            <fieldset :if={group} class="vis-builder-block">
+              <legend class="vis-builder-block-name">{group}</legend>
+              <.field
+                :for={field <- fields}
+                field={field}
+                selected={@selected}
+                found={@found}
+                origins={@origins}
+                target={@target}
               />
-            </svg>
-            <span
-              :if={is_nil(field.variable) and field.widget == :colour}
-              class={well_class(field.well)}
-              style={"--vis-builder-swatch: #{field.well.colour || "transparent"}"}
-              title={field.well.word || "no colour set"}
-              role="img"
-              aria-label={"#{field.key}: #{field.well.word || "not set"}"}
-              data-builder-well={field.key}
-            ></span>
-            <select
-              :if={is_nil(field.variable) and field.widget == :select and field.glyphs == []}
-              name={field.key}
-            >
-              <option value=""></option>
-              <option
-                :for={{value, label} <- field.options}
-                value={value}
-                selected={field.value == value}
-              >{label}</option>
-            </select>
-            <span
-              :if={is_nil(field.variable) and field.widget == :select and field.glyphs != []}
-              class="vis-builder-glyphs"
-              role="radiogroup"
-              aria-label={to_string(field.key)}
-            >
-              <label
-                :for={{value, svg} <- field.glyphs}
-                class={"vis-builder-glyph" <> if(field.value == value, do: " vis-builder-glyph-on", else: "")}
-                title={value}
-              >
-                <input
-                  type="radio"
-                  name={field.key}
-                  value={value}
-                  checked={field.value == value}
-                  aria-label={value}
-                />
-                {Phoenix.HTML.raw(svg)}
-              </label>
-            </span>
-            <div :if={is_nil(field.variable) and field.widget == :items} class="vis-builder-items">
-              <span :for={{item, index} <- Enum.with_index(field.items)} class="vis-builder-item-row">
-                <span :if={item.chip} class="vis-builder-var-chip vis-builder-var-chip-bound">var(:{item.chip})</span>
-                <span :if={!item.chip} class="vis-builder-item-text">{item.text}</span>
-                <button
-                  type="button"
-                  class="vis-builder-item-remove"
-                  phx-click="list_remove"
-                  phx-value-field={field.key}
-                  phx-value-index={index}
-                  phx-target={@target}
-                  aria-label={"remove #{item.text || item.chip} from #{field.key}"}
-                >×</button>
-              </span>
-              <span class="vis-builder-item-add" data-builder-bind={field.key}>
-                <input
-                  type="text"
-                  name={"#{field.key}.add"}
-                  class="vis-builder-item-box"
-                  placeholder="+ add"
-                  aria-label={"add to #{field.key}"}
-                  phx-keydown="list_add"
-                  phx-key="Enter"
-                  phx-value-field={field.key}
-                  phx-target={@target}
-                />
-              </span>
-            </div>
-            <textarea
-              :if={is_nil(field.variable) and field.widget == :textarea}
-              name={field.key}
-              placeholder={field.placeholder}
-            >{field.value}</textarea>
-            <ul :if={field.errors != []} class="vis-builder-key-errors">
-              <li :for={line <- field.errors} class="vis-builder-error">{line}</li>
-            </ul>
-          </label>
+            </fieldset>
+            <.field
+              :for={field <- fields}
+              :if={is_nil(group)}
+              field={field}
+              selected={@selected}
+              found={@found}
+              origins={@origins}
+              target={@target}
+            />
+          <% end %>
         </form>
       </div>
       """
     end
+
+    attr(:field, :map, required: true)
+    attr(:selected, :string, default: nil)
+    attr(:found, :string, default: nil)
+    attr(:origins, :map, default: %{})
+    attr(:target, :any, default: nil)
+
+    # One key of the form: its name, its control, its chip or its errors (spec/14 §18.7).
+    defp field(assigns) do
+      ~H"""
+      <label
+        class={field_class(@field, @selected, @found)}
+        data-builder-ref={@field.ref && to_string(@field.key)}
+        data-builder-bind={@field.key}
+        phx-click="select_field"
+        phx-keyup="select_field"
+        phx-value-field={@field.key}
+        phx-target={@target}
+      >
+        <span class="vis-builder-key">
+          {@field.key}<span
+            :if={@origins[@field.key]}
+            class="vis-builder-origin"
+          >{@origins[@field.key]}</span>
+          <span
+            :if={is_nil(@field.variable) and @field.value != nil}
+            class="vis-builder-field-handle"
+            draggable="true"
+            data-builder-promote={@field.key}
+            title="drag to the variables panel to make a variable of this value"
+            aria-hidden="true"
+          >⠿</span>
+        </span>
+        <span :if={@field.variable} class="vis-builder-var-chip vis-builder-var-chip-bound">
+          var(:{@field.variable})
+          <button
+            type="button"
+            class="vis-builder-var-unbind"
+            phx-click="unbind_field"
+            phx-value-field={@field.key}
+            phx-target={@target}
+            aria-label={"unbind #{@field.key} from #{@field.variable}"}
+            title="unbind"
+          >×</button>
+        </span>
+        <input
+          :if={is_nil(@field.variable) and @field.widget == :checkbox}
+          type="checkbox"
+          name={@field.key}
+          value="true"
+          checked={@field.checked}
+        />
+        <input
+          :if={is_nil(@field.variable) and @field.range != nil and @field.widget in [:number, :text]}
+          type="range"
+          name={"#{@field.key}.range"}
+          class="vis-builder-range"
+          min={@field.range.min}
+          max={@field.range.max}
+          step={@field.range.step}
+          value={@field.slider}
+          aria-label={"#{@field.key}, dragged"}
+        />
+        <input
+          :if={is_nil(@field.variable) and @field.widget == :number}
+          type="number"
+          name={@field.key}
+          value={@field.value}
+          placeholder={@field.placeholder}
+        />
+        <input
+          :if={is_nil(@field.variable) and @field.widget == :text}
+          type="text"
+          name={@field.key}
+          value={@field.value}
+          placeholder={@field.placeholder}
+          data-builder-text={@field.text? && "true"}
+        />
+        <svg
+          :if={is_nil(@field.variable) and @field.dash != nil}
+          class="vis-builder-dash"
+          viewBox="0 0 120 8"
+          width="120"
+          height="8"
+          aria-hidden="true"
+        >
+          <path
+            d="M2 4 H118"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-dasharray={@field.dash}
+          />
+        </svg>
+        <span
+          :if={is_nil(@field.variable) and @field.widget == :colour}
+          class={well_class(@field.well)}
+          style={"--vis-builder-swatch: #{@field.well.colour || "transparent"}"}
+          title={@field.well.word || "no colour set"}
+          role="img"
+          aria-label={"#{@field.key}: #{@field.well.word || "not set"}"}
+          data-builder-well={@field.key}
+        ></span>
+        <select
+          :if={is_nil(@field.variable) and @field.widget == :select and @field.glyphs == []}
+          name={@field.key}
+        >
+          <option value=""></option>
+          <option
+            :for={{value, label} <- @field.options}
+            value={value}
+            selected={@field.value == value}
+          >{label}</option>
+        </select>
+        <span
+          :if={is_nil(@field.variable) and @field.widget == :select and @field.glyphs != []}
+          class="vis-builder-glyphs"
+          role="radiogroup"
+          aria-label={to_string(@field.key)}
+        >
+          <label
+            :for={{value, svg} <- @field.glyphs}
+            class={"vis-builder-glyph" <> if(@field.value == value, do: " vis-builder-glyph-on", else: "")}
+            title={value}
+          >
+            <input
+              type="radio"
+              name={@field.key}
+              value={value}
+              checked={@field.value == value}
+              aria-label={value}
+            />
+            {Phoenix.HTML.raw(svg)}
+          </label>
+        </span>
+        <div :if={is_nil(@field.variable) and @field.widget == :items} class="vis-builder-items">
+          <span :for={{item, index} <- Enum.with_index(@field.items)} class="vis-builder-item-row">
+            <span :if={item.chip} class="vis-builder-var-chip vis-builder-var-chip-bound">var(:{item.chip})</span>
+            <span :if={!item.chip} class="vis-builder-item-text">{item.text}</span>
+            <button
+              type="button"
+              class="vis-builder-item-remove"
+              phx-click="list_remove"
+              phx-value-field={@field.key}
+              phx-value-index={index}
+              phx-target={@target}
+              aria-label={"remove #{item.text || item.chip} from #{@field.key}"}
+            >×</button>
+          </span>
+          <span class="vis-builder-item-add" data-builder-bind={@field.key}>
+            <input
+              type="text"
+              name={"#{@field.key}.add"}
+              class="vis-builder-item-box"
+              placeholder="+ add"
+              aria-label={"add to #{@field.key}"}
+              phx-keydown="list_add"
+              phx-key="Enter"
+              phx-value-field={@field.key}
+              phx-target={@target}
+            />
+          </span>
+        </div>
+        <textarea
+          :if={is_nil(@field.variable) and @field.widget == :textarea}
+          name={@field.key}
+          placeholder={@field.placeholder}
+        >{@field.value}</textarea>
+        <ul :if={@field.errors != []} class="vis-builder-key-errors">
+          <li :for={line <- @field.errors} class="vis-builder-error">{line}</li>
+        </ul>
+      </label>
+      """
+    end
+
+    # The open tab's fields as runs of one group (spec/14 §18.7): a run with a group is a
+    # block under its heading; a run with none is fields on their own.
+    defp blocks(fields), do: Enum.chunk_by(fields, & &1.group) |> Enum.map(&{hd(&1).group, &1})
 
     defp class(nil), do: "vis-builder-editor"
     defp class(extra), do: "vis-builder-editor " <> extra
@@ -662,6 +699,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         %{
           key: spec.key,
+          group: spec.group,
           ref: ref_field(spec.type),
           text?: spec.type == :text,
           widget: shape(widget),

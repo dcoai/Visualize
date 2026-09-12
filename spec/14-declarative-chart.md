@@ -144,29 +144,29 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 ### 3.1 Keys
 
-**Implemented.** A `:style` node has nineteen keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema.
+**Implemented.** A `:style` node has nineteen keys, every one `:style` and `:override`, every one optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema. The keys are read as a drawing tool shows a style — in **groups**: what a style derives from first, then its *fill*, its *stroke*, its *font*, the *position* of its text, its *effects*, and last the keys that belong to no group. A key's group is data on its spec (`group`, §14.2), and the table below is in group order, which is the order the form shows them in (§18.7).
 
-| Key | Type | Notes |
-|---|---|---|
-| `extends` | `{:ref, :style}` | the style this one derives from (§3.5) |
-| `fill` | `:colour` | |
-| `stroke` | `:colour` | |
-| `stroke_width` | `:size` | user units |
-| `stroke_dasharray` | `{:one_of, [:string, {:list, :number}]}` | |
-| `stroke_linecap` | `{:enum, [:butt, :round, :square]}` | |
-| `stroke_linejoin` | `{:enum, [:miter, :round, :bevel]}` | |
-| `opacity` | `:size` | `0` to `1` |
-| `fill_opacity` | `:size` | |
-| `stroke_opacity` | `:size` | |
-| `font_family` | `:font` | |
-| `font_size` | `:size` | |
-| `font_weight` | `{:one_of, [:integer, {:enum, [:normal, :bold]}]}` | |
-| `text_anchor` | `{:enum, [:start, :middle, :end]}` | |
-| `class` | `:string` | a CSS class added to the mark's element |
-| `curve` | `{:enum, curve types}` | the types of [04-shapes-and-curves](04-shapes-and-curves.md) §5.1 |
-| `curve_opts` | `{:node, :curve_opts}` | `tension` and `alpha`, both `:number`, `:style`, `:override` |
-| `symbol` | `{:enum, symbol types}` | the types of [04-shapes-and-curves](04-shapes-and-curves.md) §9.2 |
-| `symbol_size` | `:size` | area in square user units |
+| Key | Type | Group | Notes |
+|---|---|---|---|
+| `extends` | `{:ref, :style}` | — | the style this one derives from (§3.5) |
+| `fill` | `:colour` | `:fill` | |
+| `fill_opacity` | `:size` | `:fill` | |
+| `stroke_width` | `:size` | `:stroke` | user units |
+| `stroke` | `:colour` | `:stroke` | |
+| `stroke_opacity` | `:size` | `:stroke` | |
+| `stroke_dasharray` | `{:one_of, [:string, {:list, :number}]}` | `:stroke` | |
+| `stroke_linejoin` | `{:enum, [:miter, :round, :bevel]}` | `:stroke` | |
+| `stroke_linecap` | `{:enum, [:butt, :round, :square]}` | `:stroke` | |
+| `font_family` | `:font` | `:font` | |
+| `font_size` | `:size` | `:font` | |
+| `font_weight` | `{:one_of, [:integer, {:enum, [:normal, :bold]}]}` | `:font` | |
+| `text_anchor` | `{:enum, [:start, :middle, :end]}` | `:position` | |
+| `opacity` | `:size` | `:effects` | `0` to `1` |
+| `class` | `:string` | — | a CSS class added to the mark's element |
+| `curve` | `{:enum, curve types}` | — | the types of [04-shapes-and-curves](04-shapes-and-curves.md) §5.1 |
+| `curve_opts` | `{:node, :curve_opts}` | — | `tension` and `alpha`, both `:number`, `:style`, `:override` |
+| `symbol` | `{:enum, symbol types}` | — | the types of [04-shapes-and-curves](04-shapes-and-curves.md) §9.2 |
+| `symbol_size` | `:size` | — | area in square user units |
 
 ### 3.2 Values
 
@@ -919,7 +919,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 
 ### 14.2 `Visualize.Chart.Schema`
 
-**Implemented.** The schema as data. A key spec (`t:Visualize.Chart.Schema.key_spec/0`) is `%{key, type, facet, default, required, merge, range}`; `nil` as a default means "none". `range` is `{min, max, step}` for a numeric key that has a sensible span — an opacity is 0 to 1, a stroke width 0 to 20, a font size 6 to 72, a margin 0 to 200, a size 100 to 2000 — and `nil` for every other key. It is data about the key for a control to read (§18.6), never a bound the validator enforces: a value outside it is unusual, not wrong.
+**Implemented.** The schema as data. A key spec (`t:Visualize.Chart.Schema.key_spec/0`) is `%{key, type, facet, default, required, merge, range, group}`; `nil` as a default means "none". `range` is `{min, max, step}` for a numeric key that has a sensible span — an opacity is 0 to 1, a stroke width 0 to 20, a font size 6 to 72, a margin 0 to 200, a size 100 to 2000 — and `nil` for every other key. It is data about the key for a control to read (§18.6), never a bound the validator enforces: a value outside it is unusual, not wrong. `group` is one of `:fill`, `:stroke`, `:font`, `:position`, `:effects` for a style key that belongs with others under one heading (§3.1), and `nil` for every other key; like `range` it is data for the form (§18.7) and means nothing to the cascade or the validator.
 
 | Function | Contract |
 |---|---|
@@ -928,6 +928,8 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.Schema.key/2` | `key(kind, key)`: the key spec, or `nil` when the node has no such key. |
 | `Visualize.Chart.Schema.keys/1` | Every `{kind, key}` pair carrying the facet, over every node kind (§1.3). |
 | `Visualize.Chart.Schema.keys/2` | `keys(kind, facet)`: the keys of one node kind carrying the facet, in table order. |
+| `Visualize.Chart.Schema.group/2` | `group(kind, key)`: the group the key's spec carries, or `nil`. |
+| `Visualize.Chart.Schema.groups/1` | `groups(kind)`: the groups a node kind's keys carry, once each, in table order — `[:fill, :stroke, :font, :position, :effects]` for a style, `[]` for every other kind. |
 | `Visualize.Chart.Schema.default/2` | `default(kind, key)`: the key's default, `nil` when it has none or is required. |
 | `Visualize.Chart.Schema.mark_types/0` | The mark types of §5.2, in table order. |
 | `Visualize.Chart.Schema.channels/1` | `%{required: [...], optional: [...]}` for a mark type (§5.2). |
@@ -1508,6 +1510,8 @@ Reading an atom from a submitted string creates it, as `Visualize.Chart.from_jso
 ### 18.7 The form and its errors
 
 **Implemented.** `Visualize.Chart.Builder.Editor.panel/1` renders one form for one node: the *facets* of the node's keys as tabs, in the order of §1.3, and the keys of the open tab in the order of the node's table in this document — which is the order `Visualize.Chart.Schema.describe/1` returns them in, so the form reads as the specification does. A facet no key of the *node kind* carries has no tab — the tabs are the kind's, not the node's, so every key the kind declares is reachable and adding one is the same edit as changing one — and a kind whose keys are all one facet has one tab.
+
+**Keys that carry a group are shown under its heading.** Where the open tab's keys carry a `group` (§14.2) — a style's — the form is blocks: each run of keys with one group is a `<fieldset class="vis-builder-block">` with the group's word as its `<legend>`, in table order, and a key with no group stands on its own between or after them. A style form therefore reads *extends*, then **fill**, **stroke**, **font**, **position**, **effects**, then *class*, *curve* and the rest — five blocks a person can find a stroke's cap in without scanning past the font, rather than nineteen keys in one list. The blocks are a view of the table and change nothing about what a key writes; a kind whose keys carry no group renders as it did.
 
 Each key is a `<label>` holding its name, the control `Visualize.Chart.Builder.Editor.widget/1` chose, the value the node carries, and — where the node does not carry the key — the schema's default as the control's placeholder, so what a key would be if left alone is visible without being written into the design. The key's own errors are listed under its control: an error of the validator whose path is exactly this node's path followed by this key (§10.1), rendered by `Visualize.Chart.Validator.format/1`. An error at a path no key of the open tab owns is not shown twice — it belongs to the node that owns that path, and the tab that holds it.
 

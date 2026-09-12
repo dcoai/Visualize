@@ -3,40 +3,43 @@
     <button type="button" class="vis-builder-tab vis-builder-tab-open" phx-click="facet" phx-value-facet="binding">binding</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="channel">channel</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="geometry">geometry</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="style">style</button><button type="button" class="vis-builder-tab" phx-click="facet" phx-value-facet="content">content</button>
   </nav>
   <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref" data-builder-edit="edit">
-    <label class="vis-builder-field" data-builder-bind="sources" phx-click="select_field" phx-keyup="select_field" phx-value-field="sources">
-      <span class="vis-builder-key">
-        sources
-        
-      </span>
+    
       
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      <textarea name="sources" placeholder="%{}"></textarea>
-      
-    </label><label class="vis-builder-field" data-builder-bind="vars" phx-click="select_field" phx-keyup="select_field" phx-value-field="vars">
-      <span class="vis-builder-key">
-        vars
-        
-      </span>
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      <textarea name="vars" placeholder="%{}"></textarea>
-      
-    </label>
+      <label class="vis-builder-field" data-builder-bind="sources" phx-click="select_field" phx-keyup="select_field" phx-value-field="sources">
+  <span class="vis-builder-key">
+    sources
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <textarea name="sources" placeholder="%{}"></textarea>
+  
+</label><label class="vis-builder-field" data-builder-bind="vars" phx-click="select_field" phx-keyup="select_field" phx-value-field="vars">
+  <span class="vis-builder-key">
+    vars
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <textarea name="vars" placeholder="%{}"></textarea>
+  
+</label>
+    
   </form>
 </div>

@@ -45,8 +45,12 @@ defmodule Visualize.Chart.Schema do
           default: term(),
           required: boolean(),
           merge: merge(),
-          range: {number(), number(), number()} | nil
+          range: {number(), number(), number()} | nil,
+          group: group() | nil
         }
+
+  @typedoc "The heading a style key is shown under in a form (spec/14 §3.1, §14.2)."
+  @type group :: :fill | :stroke | :font | :position | :effects
 
   @design_kinds [:design, :meta, :source, :var, :theme, :style, :curve_opts, :label]
   @frame_kinds [
@@ -186,8 +190,40 @@ defmodule Visualize.Chart.Schema do
       default: Keyword.get(opts, :default),
       required: Keyword.get(opts, :required, false),
       merge: Keyword.get(opts, :merge, :override),
-      range: Keyword.get(opts, :range)
+      range: Keyword.get(opts, :range),
+      group: Keyword.get(opts, :group)
     }
+  end
+
+  @doc """
+  The group a key is shown under, or `nil` (spec/14 §14.2).
+
+      iex> Visualize.Chart.Schema.group(:style, :stroke_linecap)
+      :stroke
+
+      iex> Visualize.Chart.Schema.group(:style, :extends)
+      nil
+  """
+  @spec group(atom(), atom()) :: group() | nil
+  def group(kind, key) do
+    case key(kind, key) do
+      nil -> nil
+      spec -> spec.group
+    end
+  end
+
+  @doc """
+  The groups a node kind's keys carry, once each, in table order (spec/14 §14.2).
+
+      iex> Visualize.Chart.Schema.groups(:style)
+      [:fill, :stroke, :font, :position, :effects]
+
+      iex> Visualize.Chart.Schema.groups(:mark)
+      []
+  """
+  @spec groups(atom()) :: [group()]
+  def groups(kind) do
+    kind |> describe() |> Enum.map(& &1.group) |> Enum.reject(&is_nil/1) |> Enum.uniq()
   end
 
   # The alternative of a `{:one_of, types}` whose shape the value has, or `nil`. The
@@ -262,19 +298,19 @@ defmodule Visualize.Chart.Schema do
   defp design_node(:style) do
     [
       spec(:extends, {:ref, :style}, :style),
-      spec(:fill, :colour, :style),
-      spec(:stroke, :colour, :style),
-      spec(:stroke_width, :size, :style, range: {0, 20, 0.5}),
-      spec(:stroke_dasharray, {:one_of, [:string, {:list, :number}]}, :style),
-      spec(:stroke_linecap, {:enum, [:butt, :round, :square]}, :style),
-      spec(:stroke_linejoin, {:enum, [:miter, :round, :bevel]}, :style),
-      spec(:opacity, :size, :style, range: {0, 1, 0.05}),
-      spec(:fill_opacity, :size, :style, range: {0, 1, 0.05}),
-      spec(:stroke_opacity, :size, :style, range: {0, 1, 0.05}),
-      spec(:font_family, :font, :style),
-      spec(:font_size, :size, :style, range: {6, 72, 1}),
-      spec(:font_weight, {:one_of, [:integer, {:enum, [:normal, :bold]}]}, :style),
-      spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style),
+      spec(:fill, :colour, :style, group: :fill),
+      spec(:fill_opacity, :size, :style, range: {0, 1, 0.05}, group: :fill),
+      spec(:stroke_width, :size, :style, range: {0, 20, 0.5}, group: :stroke),
+      spec(:stroke, :colour, :style, group: :stroke),
+      spec(:stroke_opacity, :size, :style, range: {0, 1, 0.05}, group: :stroke),
+      spec(:stroke_dasharray, {:one_of, [:string, {:list, :number}]}, :style, group: :stroke),
+      spec(:stroke_linejoin, {:enum, [:miter, :round, :bevel]}, :style, group: :stroke),
+      spec(:stroke_linecap, {:enum, [:butt, :round, :square]}, :style, group: :stroke),
+      spec(:font_family, :font, :style, group: :font),
+      spec(:font_size, :size, :style, range: {6, 72, 1}, group: :font),
+      spec(:font_weight, {:one_of, [:integer, {:enum, [:normal, :bold]}]}, :style, group: :font),
+      spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style, group: :position),
+      spec(:opacity, :size, :style, range: {0, 1, 0.05}, group: :effects),
       spec(:class, :string, :style),
       spec(:curve, {:enum, @curve_types}, :style),
       spec(:curve_opts, {:node, :curve_opts}, :style),
