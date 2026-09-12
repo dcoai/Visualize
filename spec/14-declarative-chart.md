@@ -2022,26 +2022,25 @@ The names on offer are those the stack declares under `vars` and those any layer
 | `Visualize.Chart.Builder.Variables.type_of/1` | the type a variable took from its first use, or `nil` for none |
 | `Visualize.Chart.Builder.Editor.label/1` | a path as a person reads it — the spelling the validator uses for an error's path |
 
-**The context panel is one dispatch.** The selection chooses the type; the type chooses the control; every control offers *assign to another variable*. **A field is selected by clicking into it** — every field of the form raises `select_field` with its key on click and on a key — and the panel becomes that field's **picker**, `Visualize.Chart.Builder.Picker.panel/1`: a bigger view of one field, never a second form, since every control in it writes the same `edit` under the same names the form uses (`key`, `key.slot`, `key.range`, `key.var`). Selecting a node, a facet or a layer clears the field, and the layer's context returns.
+**The context panel opens with an icon row of four panels** — *layer*, *colour*, *font*, *variables* — one open at a time (`context`), each staying put while a person works, the way a drawing tool keeps its pickers beside the canvas:
 
-| Selected | The panel shows |
-|---|---|
-| a colour field | the theme's colour slots as **swatches** in their colours, a picker for a literal, the colour literals the chart already uses, and a variable name — the three faces of §3.4 at a size the form cannot afford |
-| a font field | the faces, each rendered in itself, the chart's own first |
-| a drawn enum | its glyphs, large (§18.6) |
-| any other enum | its words as a list |
-| a reference | what this document declares locally, and what the library holds by id — named, with its group |
-| a ranged number | a large slider and the box |
-| any other field | its box and a variable name |
-| a layer in a stack, nothing else selected | its keys with mask checkboxes; its free variables; for a name-keyed kind, the key it is declared under (§19.3) |
-| an entry in a style stack | the resolved style, each field naming the entry it came from (§18.19) |
+| Panel | Shows | Writes |
+|---|---|---|
+| **layer** (the default) | the selected site's keys as mask checkboxes, its key for a name-keyed kind, its free variables (§19.5, §19.3); at a style site, the site's stack and the chosen entry's resolved style (§18.18, §18.19) | masks, `key`, the style stack |
+| **colour** | `Visualize.Chart.Builder.Picker.panel/1`: the theme's colour slots as **swatches in their colours**, a grid of hues at three lightnesses, a picker for any colour, and the colour literals the chart already uses; with a colour field selected they write it, with none they show and write nothing | the selected colour field, through `edit` |
+| **font** | `Visualize.Chart.Builder.Fonts.panel/1`: the faces rendered in themselves, size as a slider, weight, text anchor — the four font keys of the node being edited, together; a node with none says which to open | `font_family`, `font_size`, `font_weight`, `text_anchor`, through `edit` |
+| **variables** | the variable panel, above | `Use.vars`, bindings, declarations |
+
+**Selecting a field opens its panel.** Clicking into a field (`select_field`, on click and on a key) marks it; a colour field opens the colour panel and a font key the font panel, and any other field leaves the panel where it is. Selecting a node, a facet or a layer clears the field. Every control in a picker writes the same `edit` the form does under the same names (`key`, `key.slot`, `key.range`), so a picker is a bigger view of the form's fields and never a second form; the per-field faces of an earlier draft — glyphs, words, references and sliders in the context — live in the form itself (§18.6) and have no second home.
 
 A bare `<input type="color">` would drop the theme slot, and the theme slot is how the built-in styles work; the control has to offer all three faces.
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.Builder.Picker.panel/1` | the picker for one selected field, writing through `edit` |
-| `Visualize.Chart.Builder.Picker.face/1` | which picker a field gets, from its key and type: colour, font, glyphs, enum, reference, range or plain |
+| `Visualize.Chart.Builder.Picker.panel/1` | the colour panel: slots as swatches, hues, a picker and the chart's colours, writing the selected colour field through `edit` or showing with nothing to write |
+| `Visualize.Chart.Builder.Picker.face/1` | which picker a field would get from its key and type: colour, font, glyphs, enum, reference, range or plain |
+| `Visualize.Chart.Builder.Fonts.panel/1` | the font panel over the node being edited: faces, size, weight, anchor, through `edit` |
+| `Visualize.Chart.Builder.Fonts.keys/1` | the font keys a node kind carries |
 
 **The layer's context** is `Visualize.Chart.Builder.Masks.panel/1`, shown for the selected site whenever no style entry is chosen: the site's name; one checkbox per path its contribution carries — every top-level key, and the keys of each node under one, which are the paths `Use.mask/2` takes (§19.5) — checked where the mask holds it; and the variables the site still needs, pointing at the Variables tab. The contribution is what the site would say before its mask, `Visualize.Chart.Builder.Stack.unmasked/2`, so a key the mask has removed is still offered to un-mask. A site masked as a whole is disabled (§19.3) and is said so rather than drawn as every box checked. The `mask` event carries the checkbox that changed; an unchecked box submits nothing, which is the path leaving.
 
