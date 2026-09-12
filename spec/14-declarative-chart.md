@@ -1472,7 +1472,8 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 | `{:enum, allowed}` | `{:select, allowed}` |
 | `:string`, `:name`, `:field`, `:size`, `:font`, `:slot`, `:text`, `{:ref, _}` | `:text` |
 | `:colour` | `:colour` — the three faces of §19.10 |
-| every other type — `:channel`, `:field_ref`, `:extent`, `:anchor`, `:term`, `{:list, _}`, `{:map, _}`, `{:node, _}` | `:textarea` |
+| `{:list, scalar}` — a list of fields, names, strings or numbers | `{:items, scalar}` — a list of items (below) |
+| every other type — `:channel`, `:field_ref`, `:extent`, `:anchor`, `:term`, `{:list, :term}`, `{:map, _}`, `{:node, _}` | `:textarea` |
 | `{:one_of, [first | _rest]}` | the widget of `first` |
 
 `Visualize.Chart.Builder.Editor.parse/2` reads a `{:one_of, …}` as its first alternative too, the one whose widget the control is, so what a person can type and what the reader accepts are the same thing.
@@ -1493,6 +1494,8 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 Every other enum stays a select of its words; `Glyphs.glyph/2` is total over the drawn keys' values, which a test walks.
 
 **A text field is a text field.** A `:text` (§7.1) is a box holding the string with its holes — `Uptime for #{var(:host)}` — whichever form the layer holds it in, and `parse/2` keeps what was typed: a hole that does not read is the validator's fault under the field, not a refusal at the box. A variable reaches a text as text among text: a chip dropped on the box is inserted at the caret as `#{var(:name)}` by `Visualize.Hooks.Builder` — the browser is the only party that knows the caret — and the box's own change writes the string; `bind_field` on a text key does nothing, since a text is never bound whole. `meta.name` is a `:text`, so a title can carry a variable in its middle.
+
+**A list of scalars is a list of items.** A `{:list, scalar}` key — a source's `fields`, a theme's `series` colours — renders as rows, one per item with its text and an **×** that removes it (`list_remove`, by index), and a **+** box whose Enter adds one item read by the element's type through `parse/2` (`list_add`); a blank adds nothing. Both write the whole list, as the schema says a list is one value; removing the last item removes the key. A variable in the list renders as its chip, and a chip dropped on the list adds the variable as an item — `fields: [:t, var(:ycol)]` — which is how a source declares the column a variable chooses, matching the mark whose channel is the same variable (§19.9). Lists of nodes — `marks`, `axes` — are not this: they are nodes, each with a form, and the strip walks them.
 
 **A ranged number is a slider beside its box.** A key whose spec carries a `range` (§14.2) renders `<input type="range" name="key.range">` before its box, so a value can be dragged while the preview redraws; the box stays for typing, and for a `:size` key it still takes a slot word. `Visualize.Chart.Builder.Editor.change/2` reads `key.range` as the key itself, with the key's type, so a slider's write is the box's write. A value typed outside the range is kept, since the range is a control's span and not a rule. `stroke_dasharray` draws its pattern beside the box — a short line with the value as its `stroke-dasharray` — so a pattern is seen, not decoded.
 
@@ -2018,7 +2021,7 @@ Selection is a use's id, and a host that seeds one (`selected`) is honoured when
 
 A field in any form shows a **variable as a variable** — as a **chip**, `var(:color)`, in the place of its control, never as a struct's text in a textarea. A variable reaches a field one way only: its chip, dragged from the variable panel (§19.10) and **dropped on the field**, which writes `var(:name)` at that key (`bind_field`); dropped on a **strip tab**, it binds the first key of that root the variable fits (`bind_root`). The chip carries an **×** that unbinds — the key is removed, and the typed control returns empty and waiting (`unbind_field`). A field's own value can go the other way: every literal field has a handle, and dropping it on the panel's create area **promotes** the value into a new variable named for the key, with the value as its default, and binds the field (`promote`); a second promotion of the same key takes the next free name. The form therefore has no literal/variable switch and no name box — the `key.mode` and `key.var` controls an earlier draft carried are gone — and a field is a control or a chip, nothing else.
 
-**A variable has the type of its first use** (§17.2). Dropping a chip on a field of another type is refused by name — *`unit` is a `:text`; `opacity` takes a `:size`* — and a variable used nowhere yet takes the type of the first control it lands on, by landing there. One function says what a change to the form means:
+**A variable has the type of its first use** (§17.2). Dropping a chip on a field of another type is refused by name — *`unit` is a `:text`; `opacity` takes a `:size`* — and a variable used nowhere yet takes the type of the first control it lands on, by landing there. A **field is a channel** for this rule — a channel is a field or a constant — so a variable typed by a mark's channel fits a source's field list and one typed by a field list fits a channel; and a list of scalars takes a chip as an item of its element's type. One function says what a change to the form means:
 
 | Function | Contract |
 |---|---|
