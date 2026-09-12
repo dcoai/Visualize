@@ -1,0 +1,177 @@
+if Code.ensure_loaded?(Phoenix.Component) do
+  defmodule Visualize.Chart.Builder.Glyphs do
+    @moduledoc """
+    The pictures a drawn enum is chosen by (spec/14 §18.6).
+
+    Some enums name a look — the join of a stroke, the shape of a curve, a symbol, a side —
+    and a person chooses a look by seeing it. `glyph/2` draws one allowed value of a drawn
+    key as a small inline SVG, in `currentColor` so it reads in either theme; `drawn?/1`
+    says which keys have pictures. A curve is drawn by `Visualize.Shape.Line` and a symbol
+    by `Visualize.Shape.Symbol`, so the picture is the library's own work and cannot lie.
+
+    This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
+    """
+
+    use Phoenix.Component
+
+    alias Visualize.Chart.Schema
+    alias Visualize.Shape.{Line, Symbol}
+
+    @drawn [
+      :stroke_linejoin,
+      :stroke_linecap,
+      :curve,
+      :symbol,
+      :side,
+      :anchor,
+      :position,
+      :text_anchor,
+      :orientation,
+      :kind
+    ]
+
+    @doc """
+    Whether a key's enum is chosen by its picture.
+
+        iex> Visualize.Chart.Builder.Glyphs.drawn?(:curve)
+        true
+
+        iex> Visualize.Chart.Builder.Glyphs.drawn?(:op)
+        false
+    """
+    @spec drawn?(atom()) :: boolean()
+    def drawn?(key), do: key in @drawn
+
+    @doc """
+    The inline SVG for one value of a drawn key, or `nil` for a key that is not drawn or a
+    value it does not know.
+
+        iex> Visualize.Chart.Builder.Glyphs.glyph(:stroke_linecap, :round) =~ ~s|stroke-linecap="round"|
+        true
+
+        iex> Visualize.Chart.Builder.Glyphs.glyph(:op, :sum)
+        nil
+    """
+    @spec glyph(atom(), atom()) :: String.t() | nil
+    def glyph(key, value) when is_atom(key) and is_atom(value) do
+      case picture(key, value) do
+        nil ->
+          nil
+
+        inner ->
+          ~s|<svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">#{inner}</svg>|
+      end
+    end
+
+    # -- the pictures ---------------------------------------------------------------------
+
+    defp picture(:stroke_linejoin, join) when join in [:miter, :round, :bevel],
+      do:
+        ~s|<path d="M4 20 L12 5 L20 20" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="#{join}" stroke-linecap="butt"/>|
+
+    defp picture(:stroke_linecap, cap) when cap in [:butt, :round, :square],
+      do:
+        ~s|<path d="M7 12 H17" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="#{cap}"/>|
+
+    defp picture(:curve, kind) do
+      if kind in Schema.curve_types() do
+        d = Line.new() |> Line.curve(kind) |> Line.generate([{2, 19}, {8, 6}, {15, 17}, {22, 5}])
+
+        ~s|<path d="#{d}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>|
+      end
+    end
+
+    defp picture(:symbol, type) do
+      if type in Symbol.types() do
+        d = Symbol.new() |> Symbol.type(type) |> Symbol.size(120) |> Symbol.generate()
+        ~s|<path d="#{d}" transform="translate(12 12)" fill="currentColor"/>|
+      end
+    end
+
+    defp picture(:side, side) when side in [:top, :right, :bottom, :left] do
+      edge =
+        case side do
+          :top -> ~s|<path d="M5 5 H19"/>|
+          :bottom -> ~s|<path d="M5 19 H19"/>|
+          :left -> ~s|<path d="M5 5 V19"/>|
+          :right -> ~s|<path d="M19 5 V19"/>|
+        end
+
+      ~s|<rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"/><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">#{edge}</g>|
+    end
+
+    defp picture(:anchor, anchor) do
+      dot(
+        case anchor do
+          :top -> {12, 5}
+          :bottom -> {12, 19}
+          :left -> {5, 12}
+          :right -> {19, 12}
+          :start -> {6, 12}
+          :middle -> {12, 12}
+          :end -> {18, 12}
+          _ -> nil
+        end
+      )
+    end
+
+    defp picture(:position, position) do
+      dot(
+        case position do
+          :top_left -> {6, 6}
+          :top_right -> {18, 6}
+          :bottom_left -> {6, 18}
+          :bottom_right -> {18, 18}
+          :top -> {12, 6}
+          :bottom -> {12, 18}
+          :left -> {6, 12}
+          :right -> {18, 12}
+          _ -> nil
+        end
+      )
+    end
+
+    defp picture(:text_anchor, anchor) when anchor in [:start, :middle, :end] do
+      {x1, x2, x3} =
+        case anchor do
+          :start -> {"M5 7 H19", "M5 12 H13", "M5 17 H16"}
+          :middle -> {"M5 7 H19", "M8 12 H16", "M6.5 17 H17.5"}
+          :end -> {"M5 7 H19", "M11 12 H19", "M8 17 H19"}
+        end
+
+      ~s|<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="#{x1}"/><path d="#{x2}"/><path d="#{x3}"/></g>|
+    end
+
+    defp picture(:orientation, :vertical),
+      do:
+        ~s|<g fill="currentColor"><rect x="5" y="9" width="4" height="10"/><rect x="10" y="5" width="4" height="14"/><rect x="15" y="12" width="4" height="7"/></g>|
+
+    defp picture(:orientation, :horizontal),
+      do:
+        ~s|<g fill="currentColor"><rect x="5" y="5" width="10" height="4"/><rect x="5" y="10" width="14" height="4"/><rect x="5" y="15" width="7" height="4"/></g>|
+
+    defp picture(:kind, :cartesian),
+      do:
+        ~s|<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4 V19 H20"/><path d="M8 15 L12 9 L16 12 L19 6" stroke-width="1.5"/></g>|
+
+    defp picture(:kind, :polar),
+      do:
+        ~s|<g fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4" stroke-width="1"/><path d="M12 12 L18 7" stroke-width="1.5"/></g>|
+
+    defp picture(:kind, :geo),
+      do:
+        ~s|<g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="8"/><ellipse cx="12" cy="12" rx="3.5" ry="8"/><path d="M4 12 H20 M5.5 8 H18.5 M5.5 16 H18.5"/></g>|
+
+    defp picture(:kind, :facet),
+      do:
+        ~s|<g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></g>|
+
+    defp picture(_key, _value), do: nil
+
+    defp dot(nil), do: nil
+
+    defp dot({x, y}),
+      do:
+        ~s|<rect x="4" y="4" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"/><circle cx="#{x}" cy="#{y}" r="3" fill="currentColor"/>|
+  end
+end

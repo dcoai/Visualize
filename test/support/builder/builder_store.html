@@ -100,6 +100,7 @@
       </select>
       
       
+      
     </label><label class="vis-builder-field">
       <span class="vis-builder-key">
         fill
@@ -117,6 +118,7 @@
         <option value="series_1">series_1</option><option value="series_2">series_2</option><option value="series_3">series_3</option><option value="series_4">series_4</option><option value="series_5">series_5</option><option value="series_6">series_6</option><option value="series_7">series_7</option><option value="series_8">series_8</option><option value="series_9">series_9</option><option value="series_10">series_10</option><option value="axis">axis</option><option value="grid">grid</option><option value="text">text</option><option value="background">background</option>
       </select>
       <input type="color" name="fill" class="vis-builder-colour" title="a colour">
+      
       
       
       
@@ -140,6 +142,7 @@
       
       
       
+      
     </label><label class="vis-builder-field">
       <span class="vis-builder-key">
         stroke_width
@@ -152,6 +155,7 @@
       
       
       <input type="text" name="stroke_width" value="2">
+      
       
       
       
@@ -174,6 +178,7 @@
       
       
       
+      
     </label><label class="vis-builder-field">
       <span class="vis-builder-key">
         stroke_linecap
@@ -188,10 +193,19 @@
       
       
       
-      <select name="stroke_linecap">
-        <option value=""></option>
-        <option value="butt">butt</option><option value="round">round</option><option value="square">square</option>
-      </select>
+      
+      <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke_linecap">
+        <label class="vis-builder-glyph" title="butt">
+          <input type="radio" name="stroke_linecap" value="butt" aria-label="butt">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 12 H17" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="butt"/></svg>
+        </label><label class="vis-builder-glyph" title="round">
+          <input type="radio" name="stroke_linecap" value="round" aria-label="round">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 12 H17" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="square">
+          <input type="radio" name="stroke_linecap" value="square" aria-label="square">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 12 H17" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="square"/></svg>
+        </label>
+      </span>
       
       
     </label><label class="vis-builder-field">
@@ -208,10 +222,19 @@
       
       
       
-      <select name="stroke_linejoin">
-        <option value=""></option>
-        <option value="miter">miter</option><option value="round">round</option><option value="bevel">bevel</option>
-      </select>
+      
+      <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke_linejoin">
+        <label class="vis-builder-glyph" title="miter">
+          <input type="radio" name="stroke_linejoin" value="miter" aria-label="miter">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20 L12 5 L20 20" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="miter" stroke-linecap="butt"/></svg>
+        </label><label class="vis-builder-glyph" title="round">
+          <input type="radio" name="stroke_linejoin" value="round" aria-label="round">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20 L12 5 L20 20" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round" stroke-linecap="butt"/></svg>
+        </label><label class="vis-builder-glyph" title="bevel">
+          <input type="radio" name="stroke_linejoin" value="bevel" aria-label="bevel">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20 L12 5 L20 20" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="bevel" stroke-linecap="butt"/></svg>
+        </label>
+      </span>
       
       
     </label><label class="vis-builder-field">
@@ -226,6 +249,7 @@
       
       
       <input type="text" name="opacity">
+      
       
       
       
@@ -248,6 +272,7 @@
       
       
       
+      
     </label><label class="vis-builder-field">
       <span class="vis-builder-key">
         stroke_opacity
@@ -260,6 +285,7 @@
       
       
       <input type="text" name="stroke_opacity">
+      
       
       
       
@@ -282,6 +308,7 @@
       
       
       
+      
     </label><label class="vis-builder-field">
       <span class="vis-builder-key">
         font_size
@@ -294,6 +321,7 @@
       
       
       <input type="text" name="font_size">
+      
       
       
       
@@ -316,6 +344,7 @@
       
       
       
+      
     </label><label class="vis-builder-field">
       <span class="vis-builder-key">
         text_anchor
@@ -330,10 +359,19 @@
       
       
       
-      <select name="text_anchor">
-        <option value=""></option>
-        <option value="start">start</option><option value="middle">middle</option><option value="end">end</option>
-      </select>
+      
+      <span class="vis-builder-glyphs" role="radiogroup" aria-label="text_anchor">
+        <label class="vis-builder-glyph" title="start">
+          <input type="radio" name="text_anchor" value="start" aria-label="start">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7 H19"/><path d="M5 12 H13"/><path d="M5 17 H16"/></g></svg>
+        </label><label class="vis-builder-glyph" title="middle">
+          <input type="radio" name="text_anchor" value="middle" aria-label="middle">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7 H19"/><path d="M8 12 H16"/><path d="M6.5 17 H17.5"/></g></svg>
+        </label><label class="vis-builder-glyph" title="end">
+          <input type="radio" name="text_anchor" value="end" aria-label="end">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7 H19"/><path d="M11 12 H19"/><path d="M8 17 H19"/></g></svg>
+        </label>
+      </span>
       
       
     </label><label class="vis-builder-field">
@@ -353,6 +391,7 @@
       
       
       
+      
     </label><label class="vis-builder-field">
       <span class="vis-builder-key">
         curve
@@ -367,10 +406,40 @@
       
       
       
-      <select name="curve">
-        <option value=""></option>
-        <option value="linear">linear</option><option value="step">step</option><option value="step_before">step_before</option><option value="step_after">step_after</option><option value="basis">basis</option><option value="cardinal">cardinal</option><option value="catmull_rom">catmull_rom</option><option value="monotone_x">monotone_x</option><option value="monotone_y">monotone_y</option><option value="natural">natural</option>
-      </select>
+      
+      <span class="vis-builder-glyphs" role="radiogroup" aria-label="curve">
+        <label class="vis-builder-glyph" title="linear">
+          <input type="radio" name="curve" value="linear" aria-label="linear">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19L8,6L15,17L22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="step">
+          <input type="radio" name="curve" value="step" aria-label="step">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19H5V6H11.5V17H18.5V5H22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="step_before">
+          <input type="radio" name="curve" value="step_before" aria-label="step_before">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19V6H8V17H15V5H22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="step_after">
+          <input type="radio" name="curve" value="step_after" aria-label="step_after">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19H8V6H15V17H22V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="basis">
+          <input type="radio" name="curve" value="basis" aria-label="basis">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19L3,16.8333C4,14.6667,6,10.3333,8.1667,10C10.3333,9.6667,12.6667,13.3333,15,13.1667C17.3333,13,19.6667,9,20.8333,7L22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="cardinal">
+          <input type="radio" name="curve" value="cardinal" aria-label="cardinal">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C3,16.8333,5.8333,6.3333,8,6C10.1667,5.6667,12.6667,17.1667,15,17C17.3333,16.8333,20.8333,7,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="catmull_rom">
+          <input type="radio" name="curve" value="catmull_rom" aria-label="catmull_rom">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C2.0053,18.9886,5.7722,6.1498,8,6C10.1259,5.857,12.7025,17.0444,15,17C17.3715,16.9542,21.9938,5.0107,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="monotone_x">
+          <input type="radio" name="curve" value="monotone_x" aria-label="monotone_x">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C4,14.6667,6,6,8,6C10.3333,6,12.6667,17,15,17C17.3333,17,19.6667,5,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="monotone_y">
+          <input type="radio" name="curve" value="monotone_y" aria-label="monotone_y">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C4,14.6667,8,10.3333,8,6C8,9.6667,15,13.3333,15,17C15,13,22,9,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label><label class="vis-builder-glyph" title="natural">
+          <input type="radio" name="curve" value="natural" aria-label="natural">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C3.9111,12.0222,5.8222,5.0444,8,6C10.1778,6.9556,12.6222,15.8444,15,17C17.3778,18.1556,19.6889,11.5778,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </label>
+      </span>
       
       
     </label><label class="vis-builder-field">
@@ -381,6 +450,7 @@
         <option value="literal" selected>literal</option>
         <option value="variable">variable</option>
       </select>
+      
       
       
       
@@ -404,10 +474,31 @@
       
       
       
-      <select name="symbol">
-        <option value=""></option>
-        <option value="circle">circle</option><option value="cross">cross</option><option value="diamond">diamond</option><option value="square">square</option><option value="star">star</option><option value="triangle">triangle</option><option value="wye">wye</option>
-      </select>
+      
+      <span class="vis-builder-glyphs" role="radiogroup" aria-label="symbol">
+        <label class="vis-builder-glyph" title="circle">
+          <input type="radio" name="symbol" value="circle" aria-label="circle">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6.1804,0A6.1804,6.1804,0,1,1,-6.1804,0A6.1804,6.1804,0,1,1,6.1804,0Z" transform="translate(12 12)" fill="currentColor"/></svg>
+        </label><label class="vis-builder-glyph" title="cross">
+          <input type="radio" name="symbol" value="cross" aria-label="cross">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M-7.3485,-2.4495L-7.3485,2.4495L-2.4495,2.4495L-2.4495,7.3485L2.4495,7.3485L2.4495,2.4495L7.3485,2.4495L7.3485,-2.4495L2.4495,-2.4495L2.4495,-7.3485L-2.4495,-7.3485L-2.4495,-2.4495Z" transform="translate(12 12)" fill="currentColor"/></svg>
+        </label><label class="vis-builder-glyph" title="diamond">
+          <input type="radio" name="symbol" value="diamond" aria-label="diamond">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-10.1943L5.8857,0L0,10.1943L-5.8857,0Z" transform="translate(12 12)" fill="currentColor"/></svg>
+        </label><label class="vis-builder-glyph" title="square">
+          <input type="radio" name="symbol" value="square" aria-label="square">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M-5.4772,-5.4772L5.4772,-5.4772L5.4772,5.4772L-5.4772,5.4772Z" transform="translate(12 12)" fill="currentColor"/></svg>
+        </label><label class="vis-builder-glyph" title="star">
+          <input type="radio" name="symbol" value="star" aria-label="star">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-8.4853L1.995,-2.7459L8.07,-2.6221L3.228,1.0488L4.9875,6.8647L0,3.3941L-4.9875,6.8647L-3.228,1.0488L-8.07,-2.6221L-1.995,-2.7459Z" transform="translate(12 12)" fill="currentColor"/></svg>
+        </label><label class="vis-builder-glyph" title="triangle">
+          <input type="radio" name="symbol" value="triangle" aria-label="triangle">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-5.5491L7.2084,2.7745L-7.2084,2.7745Z" transform="translate(12 12)" fill="currentColor"/></svg>
+        </label><label class="vis-builder-glyph" title="wye">
+          <input type="radio" name="symbol" value="wye" aria-label="wye">
+          <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-5.4772L2.7386,-4.7434L7.482,-4.7434L4.7434,0L7.482,4.7434L2.7386,4.7434L0,5.4772L-2.7386,4.7434L-7.482,4.7434L-4.7434,0L-7.482,-4.7434L-2.7386,-4.7434Z" transform="translate(12 12)" fill="currentColor"/></svg>
+        </label>
+      </span>
       
       
     </label><label class="vis-builder-field">
@@ -422,6 +513,7 @@
       
       
       <input type="text" name="symbol_size">
+      
       
       
       
