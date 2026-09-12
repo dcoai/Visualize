@@ -1441,6 +1441,90 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "what the design still needs is marked where it is (spec/14 §18.7, §18.13)" do
+    test "a tab with a fault under it is orange with the count, and so is the field" do
+      # A mark with no data: `marks[0].data` is required.
+      layers = [
+        {:house,
+         %{
+           version: 1,
+           sources: %{primary: %{fields: [:t, :v]}},
+           frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}
+         }},
+        {:panel,
+         %{marks: [%{id: :m, type: :line, channels: %{x: :t, y: :v}, scales: %{x: :x, y: :y}}]}}
+      ]
+
+      s = BuilderFixture.socket(layers, selected: 1, node_label: "marks[0]", facet: :binding)
+      html = BuilderFixture.render(s)
+
+      assert html =~ ~s(class="vis-builder-node vis-builder-node-open vis-builder-node-needs")
+      assert html =~ "marks of this layer — 1 thing still needed"
+      refute html =~ ~s(title="frame of this layer — )
+
+      # The field that must have a value and has none, and its words under the control.
+      assert html =~
+               ~s(class="vis-builder-field vis-builder-field-needs" data-builder-ref="data")
+
+      assert html =~ "data: is required"
+
+      # Supplying it clears both.
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["data"], "data" => "primary"}, s)
+
+      html = BuilderFixture.render(s)
+      refute html =~ ~s(vis-builder-field-needs" data-builder-ref="data")
+      refute html =~ "vis-builder-node-needs"
+    end
+
+    test "an elsewhere tab is marked too, since the need is the design's", %{} do
+      layers = [
+        {:house, %{version: 1, frame: %{kind: :cartesian}}},
+        {:panel, %{marks: [%{id: :m, type: :line}]}}
+      ]
+
+      s = BuilderFixture.socket(layers, selected: 0)
+      html = BuilderFixture.render(s)
+
+      assert html =~
+               ~s(class="vis-builder-node vis-builder-node-elsewhere vis-builder-node-needs")
+
+      assert html =~ "still needed"
+    end
+
+    test "a chip for a child node with a fault is marked; a settled stack marks nothing" do
+      s = BuilderFixture.socket(BuilderFixture.layers(), selected: 2, node_label: "marks[0]")
+      settled = BuilderFixture.render(s)
+      refute settled =~ "vis-builder-node-needs"
+      refute settled =~ "vis-builder-field-needs"
+
+      layers = [
+        {:only,
+         %{
+           version: 1,
+           frame: %{kind: :cartesian},
+           marks: [%{id: :m, type: :line, data: :p, channels: %{x: :a}}]
+         }}
+      ]
+
+      s = BuilderFixture.socket(layers, node_label: "marks[0]")
+      html = BuilderFixture.render(s)
+
+      assert html =~ "vis-builder-chip vis-builder-chip-open vis-builder-chip-needs" or
+               html =~ "vis-builder-chip vis-builder-chip-needs"
+    end
+
+    test "the stylesheet has the needs token and every marking rule uses it" do
+      css = Visualize.Chart.Builder.css()
+      assert css =~ "--vis-builder-needs:"
+
+      for rule <- ~w(.vis-builder-node-needs .vis-builder-chip-needs .vis-builder-field-needs) do
+        [block] = Regex.run(~r/#{Regex.escape(rule)} \{[^}]*\}/, css)
+        assert block =~ "var(--vis-builder-needs)"
+      end
+    end
+  end
+
   describe "the + on the Layers title (spec/14 §18.8)" do
     test "opens a menu of the single kinds, and adds an empty site below the selection" do
       s = BuilderFixture.socket(BuilderFixture.layers())

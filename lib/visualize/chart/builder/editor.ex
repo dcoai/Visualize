@@ -689,6 +689,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp field_class(field, selected, found) do
       ["vis-builder-field"]
+      |> then(&if field.errors != [], do: &1 ++ ["vis-builder-field-needs"], else: &1)
       |> then(
         &if selected == to_string(field.key), do: &1 ++ ["vis-builder-field-selected"], else: &1
       )
