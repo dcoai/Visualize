@@ -287,6 +287,30 @@ defmodule Visualize.Backend.Canvas do
     setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(style)
   end
 
+  # A text of several lines (spec/14 §7.1) is one fillText per tspan, each `dy` em below
+  # the last at the style's font size (spec/09 §3.3).
+  defp element_to_commands(%Element{
+         type: :text,
+         attrs: attrs,
+         style: style,
+         content: nil,
+         children: [_ | _] = lines,
+         transform: transform
+       }) do
+    setup = transform_commands(transform) ++ text_style_commands(style)
+    x = attrs[:x] || 0
+    y = attrs[:y] || 0
+    font_size = if is_number(style[:font_size]), do: style[:font_size], else: 10
+
+    {commands, _y} =
+      Enum.reduce(lines, {[], y}, fn %Element{attrs: line, content: content}, {acc, at} ->
+        at = at + em(line[:dy], font_size)
+        {acc ++ [{:fillText, [content || "", line[:x] || x, at]}], at}
+      end)
+
+    setup ++ commands
+  end
+
   defp element_to_commands(%Element{
          type: :text,
          attrs: attrs,
@@ -331,6 +355,7 @@ defmodule Visualize.Backend.Canvas do
               :filter,
               :fe_drop_shadow,
               :fe_gaussian_blur,
+              :tspan,
               :title,
               :desc
             ] do
@@ -341,6 +366,17 @@ defmodule Visualize.Backend.Canvas do
     setup = transform_commands(transform)
     %{href: href, x: x, y: y, width: w, height: h} = attrs
     setup ++ [{:drawImage, [href, x, y, w, h]}]
+  end
+
+  # A tspan's `dy`: a number as it is, an `em` measure at the font size.
+  defp em(nil, _font_size), do: 0
+  defp em(n, _font_size) when is_number(n), do: n
+
+  defp em(string, font_size) when is_binary(string) do
+    case Float.parse(String.trim_trailing(string, "em")) do
+      {n, ""} -> n * font_size
+      _other -> 0
+    end
   end
 
   # A shape's geometry alone, for a clip region: no style, no transform.

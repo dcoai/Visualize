@@ -58,6 +58,7 @@ defmodule Visualize.IR.Element do
           | :filter
           | :fe_drop_shadow
           | :fe_gaussian_blur
+          | :tspan
           | :root
           | :title
           | :desc
@@ -79,6 +80,7 @@ defmodule Visualize.IR.Element do
           optional(:text_anchor) => :start | :middle | :end,
           optional(:dominant_baseline) => atom(),
           optional(:class) => String.t(),
+          optional(:line_height) => number(),
           optional(:blend) => atom(),
           optional(:effect) => :none | :shadow | :blur,
           optional(:effect_radius) => number()
@@ -213,6 +215,16 @@ defmodule Visualize.IR.Element do
     style = Keyword.get(opts, :style, %{})
 
     new(:text, attrs: attrs, style: style, content: content)
+  end
+
+  @doc """
+  One line of a `:text` (spec/02 §2.1): a `:tspan` with its content and attrs, `x` and `dy`
+  among them. A `:text` whose children are tspans and whose content is `nil` is a text of
+  several lines (spec/14 §7.1).
+  """
+  @spec tspan(String.t(), map()) :: t()
+  def tspan(content, attrs) when is_binary(content) and is_map(attrs) do
+    new(:tspan, attrs: attrs, content: content)
   end
 
   @doc """

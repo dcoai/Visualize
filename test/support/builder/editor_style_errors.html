@@ -25,6 +25,7 @@
   
   
   
+  
 </label>
     
       <fieldset class="vis-builder-block">
@@ -34,6 +35,7 @@
     fill
     
   </span>
+  
   
   
   
@@ -83,6 +85,7 @@
   
   
   
+  
 </label>
       </fieldset>
       
@@ -94,6 +97,7 @@
     stroke_style
     
   </span>
+  
   
   
   
@@ -143,11 +147,13 @@
   
   
   
+  
 </label><label class="vis-builder-field vis-builder-field-needs" data-builder-bind="stroke" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke">
   <span class="vis-builder-key">
     stroke
     
   </span>
+  
   
   
   
@@ -185,6 +191,7 @@
   
   
   
+  
 </label><label class="vis-builder-field" data-builder-bind="stroke_dasharray" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_dasharray">
   <span class="vis-builder-key">
     stroke_dasharray
@@ -205,11 +212,13 @@
   
   
   
+  
 </label><label class="vis-builder-field" data-builder-bind="stroke_linejoin" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linejoin">
   <span class="vis-builder-key">
     stroke_linejoin
     
   </span>
+  
   
   
   
@@ -241,6 +250,7 @@
     stroke_linecap
     
   </span>
+  
   
   
   
@@ -293,6 +303,7 @@
   
   
   
+  
 </label><label class="vis-builder-field" data-builder-bind="font_size" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_size">
   <span class="vis-builder-key">
     font_size
@@ -305,6 +316,7 @@
   
   
   <input type="text" name="font_size">
+  
   
   
   
@@ -359,6 +371,30 @@
   
   
   
+  
+</label><label class="vis-builder-field" data-builder-bind="line_height" phx-click="select_field" phx-keyup="select_field" phx-value-field="line_height">
+  <span class="vis-builder-key">
+    line_height
+    
+  </span>
+  
+  
+  
+  <input type="range" name="line_height.range" class="vis-builder-range" min="0.8" max="3" step="0.1" value="0.8" aria-label="line_height, dragged">
+  <input type="number" name="line_height">
+  
+  
+  <span class="vis-builder-item-text">
+    2.4 pt between lines
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
 </label>
       </fieldset>
       
@@ -370,6 +406,7 @@
     text_anchor
     
   </span>
+  
   
   
   
@@ -393,6 +430,104 @@
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7 H19"/><path d="M11 12 H19"/><path d="M8 17 H19"/></g></svg>
     </label>
   </span>
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="vertical_align" phx-click="select_field" phx-keyup="select_field" phx-value-field="vertical_align">
+  <span class="vis-builder-key">
+    vertical_align
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="vertical_align">
+    <label class="vis-builder-glyph" title="top">
+      <input type="radio" name="vertical_align" value="top" aria-label="top">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 12 H21" stroke="currentColor" stroke-width="1" opacity="0.5"/><rect x="8" y="6" width="8" height="5" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="middle">
+      <input type="radio" name="vertical_align" value="middle" aria-label="middle">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 12 H21" stroke="currentColor" stroke-width="1" opacity="0.5"/><rect x="8" y="9.5" width="8" height="5" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="baseline">
+      <input type="radio" name="vertical_align" value="baseline" aria-label="baseline">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 12 H21" stroke="currentColor" stroke-width="1" opacity="0.5"/><rect x="8" y="11" width="8" height="5" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="bottom">
+      <input type="radio" name="vertical_align" value="bottom" aria-label="bottom">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 12 H21" stroke="currentColor" stroke-width="1" opacity="0.5"/><rect x="8" y="13" width="8" height="5" fill="currentColor"/></svg>
+    </label>
+  </span>
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="margin_x" phx-click="select_field" phx-keyup="select_field" phx-value-field="margin_x">
+  <span class="vis-builder-key">
+    margin_x
+    
+  </span>
+  
+  
+  
+  <input type="range" name="margin_x.range" class="vis-builder-range" min="0" max="40" step="1" value="0" aria-label="margin_x, dragged">
+  <input type="number" name="margin_x">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="margin_y" phx-click="select_field" phx-keyup="select_field" phx-value-field="margin_y">
+  <span class="vis-builder-key">
+    margin_y
+    
+  </span>
+  
+  
+  
+  <input type="range" name="margin_y.range" class="vis-builder-range" min="0" max="40" step="1" value="0" aria-label="margin_y, dragged">
+  <input type="number" name="margin_y">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label><label class="vis-builder-field" data-builder-bind="text_angle" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_angle">
+  <span class="vis-builder-key">
+    text_angle
+    
+  </span>
+  
+  
+  
+  <input type="range" name="text_angle.range" class="vis-builder-range" min="-180" max="180" step="5" value="-180" aria-label="text_angle, dragged">
+  <input type="number" name="text_angle">
+  
+  
+  
+  
+  
+  
+  
+  
   
   
   
@@ -422,11 +557,13 @@
   
   
   
+  
 </label><label class="vis-builder-field" data-builder-bind="blend" phx-click="select_field" phx-keyup="select_field" phx-value-field="blend">
   <span class="vis-builder-key">
     blend
     
   </span>
+  
   
   
   
@@ -450,6 +587,7 @@
     effect
     
   </span>
+  
   
   
   
@@ -496,6 +634,7 @@
   
   
   
+  
 </label>
       </fieldset>
       
@@ -521,11 +660,13 @@
   
   
   
+  
 </label><label class="vis-builder-field vis-builder-field-needs" data-builder-bind="curve" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve">
   <span class="vis-builder-key">
     curve
     
   </span>
+  
   
   
   
@@ -593,6 +734,7 @@
   
   
   
+  
   <textarea name="curve_opts"></textarea>
   
 </label><label class="vis-builder-field" data-builder-bind="symbol" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol">
@@ -600,6 +742,7 @@
     symbol
     
   </span>
+  
   
   
   
@@ -650,6 +793,7 @@
   
   
   <input type="text" name="symbol_size">
+  
   
   
   

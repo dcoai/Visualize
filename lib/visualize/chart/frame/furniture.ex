@@ -6,6 +6,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   # spokes drawn from the plot centre.
 
   alias Visualize.{Axis, Format, Scale}
+  alias Visualize.Chart.Frame.Position
   alias Visualize.Chart.{Schema, Style}
   alias Visualize.IR.{Element, Transform}
 
@@ -134,14 +135,19 @@ defmodule Visualize.Chart.Frame.Furniture do
   defp side_transform(:right, plot), do: Transform.translate(plot.width, 0)
   defp side_transform(_top_or_left, _plot), do: Transform.translate(0, 0)
 
-  # A style other than the built-in `:axis` reaches the axis's elements by kind.
+  # A style other than the built-in `:axis` reaches the axis's elements by kind, and its
+  # `text_angle` turns each tick label about its own point (spec/14 §6.3).
   defp restyle(element, frame, node, mode) do
     name = Map.get(node, :style, Schema.default(:axis, :style))
 
     if name == :axis and not Map.has_key?(frame.design_styles, :axis) do
       element
     else
-      apply_style(element, Style.resolve(style(frame, name), frame.theme, mode))
+      style_node = style(frame, name)
+
+      element
+      |> apply_style(Style.resolve(style_node, frame.theme, mode))
+      |> Position.rotate_ticks(style_node)
     end
   end
 

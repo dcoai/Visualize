@@ -40,7 +40,7 @@ defmodule Visualize.Chart.Frame do
   """
 
   alias Visualize.{Chart, Theme}
-  alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Scales}
+  alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Scales}
   alias Visualize.Chart.{Mark, Schema, Style, Var}
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
@@ -191,6 +191,7 @@ defmodule Visualize.Chart.Frame do
         transform: Transform.translate(frame.margin.left, frame.margin.top)
       )
       |> Defs.resolve(frame, mode)
+      |> Lines.split()
 
     # The defs come first (spec/14 §2.7): the paints declared, the filters the tree uses.
     %{group | children: Defs.defs(frame, mode, group) ++ group.children}

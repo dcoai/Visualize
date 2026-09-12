@@ -386,8 +386,9 @@ defmodule Visualize.Chart.Builder.EditorTest do
       assert keys ==
                ~w(extends fill fill_opacity stroke_style stroke_width stroke stroke_opacity
                   stroke_dasharray stroke_linejoin stroke_linecap font_family font_size
-                  font_weight text_anchor opacity blend effect effect_radius class curve
-                  curve_opts symbol symbol_size)
+                  font_weight line_height text_anchor vertical_align margin_x margin_y
+                  text_angle opacity blend effect effect_radius class curve curve_opts symbol
+                  symbol_size)
 
       {extends, _} = :binary.match(html, ~s(phx-value-field="extends"))
       {first, _} = :binary.match(html, "<fieldset")
@@ -405,6 +406,30 @@ defmodule Visualize.Chart.Builder.EditorTest do
 
       # A kind whose keys carry no group has no block.
       refute render_component(&Editor.panel/1, %{kind: :axis, node: %{}}) =~ "<fieldset"
+    end
+
+    test "line height shows the points between lines it means" do
+      html =
+        render_component(&Editor.panel/1, %{
+          kind: :style,
+          node: %{font_size: 20, line_height: 1.5},
+          facet: :style
+        })
+
+      assert html =~ ~s(name="line_height.range")
+      assert html =~ "10.0 pt between lines"
+
+      # Without a font size the theme's stands in, and without a line height the default.
+      html =
+        render_component(&Editor.panel/1, %{
+          kind: :style,
+          node: %{},
+          facet: :style,
+          theme: Visualize.Theme.default()
+        })
+
+      assert html =~
+               "#{Float.round(Visualize.Theme.default().font_size * 0.2, 1)} pt between lines"
     end
 
     test "a key's errors are under its control and nowhere else" do

@@ -368,6 +368,149 @@ defmodule Visualize.Chart.FrameTest do
     end
   end
 
+  describe "a text has lines (spec/14 §7.1)" do
+    test "a newline breaks a label into tspans spaced by line_height; one line is left as it is" do
+      styles = %{wide: %{line_height: 2, font_size: 10}}
+
+      labels = [
+        %{anchor: :title, text: "Uptime\n24 h"},
+        %{anchor: :caption, text: "one line"},
+        %{anchor: :subtitle, text: "a\nb\nc", style: :wide}
+      ]
+
+      chart =
+        chart(%{scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}, %{
+          styles: styles,
+          labels: labels
+        })
+
+      tree = chart |> Frame.new() |> Frame.generate()
+      # The labels are drawn in the order they are declared.
+      [title, caption, subtitle] = Enum.filter(tree.children, &(&1.style[:class] == "label"))
+
+      assert title.content == nil
+      assert Enum.map(title.children, & &1.content) == ["Uptime", "24 h"]
+
+      assert Enum.map(title.children, & &1.attrs) == [
+               %{x: title.attrs.x},
+               %{x: title.attrs.x, dy: "1.2em"}
+             ]
+
+      assert caption.content == "one line" and caption.children == []
+      assert subtitle.children |> Enum.drop(1) |> Enum.map(& &1.attrs.dy) == ["2em", "2em"]
+
+      svg = Render.to_string(tree)
+      x = title.attrs.x
+
+      assert svg =~
+               ~s(<tspan x="#{x}">Uptime</tspan><tspan dy="1.2em" x="#{x}">24 h</tspan></text>)
+
+      refute svg =~ "line-height"
+
+      # A canvas draws the literal tree, one fillText per line.
+      js =
+        chart
+        |> Frame.new()
+        |> Frame.generate(resolve: :literal)
+        |> Visualize.Backend.Canvas.render_element()
+        |> IO.iodata_to_binary()
+
+      assert js =~ "ctx.fillText('Uptime', "
+      assert js =~ "ctx.fillText('24 h', "
+      # The wide style steps two font sizes per line: 20 px.
+      ys =
+        ~r/ctx\.fillText\('[abc]', [-\d.]+, ([-\d.]+)\);/
+        |> Regex.scan(js)
+        |> Enum.map(fn [_, y] -> y |> Float.parse() |> elem(0) end)
+
+      [y0, y1, y2] = ys
+      assert_in_delta y1 - y0, 20, 0.01
+      assert_in_delta y2 - y1, 20, 0.01
+    end
+  end
+
+  describe "text position (spec/14 §3.1, §6.3, §5.5)" do
+    test "vertical_align sets the baseline, margins move outward, text_angle turns about the point" do
+      styles = %{
+        low: %{vertical_align: :bottom},
+        out: %{margin_x: 6, margin_y: 4},
+        tilt: %{text_angle: -45}
+      }
+
+      labels = [
+        %{anchor: :title, text: "t", style: :low},
+        %{anchor: :caption, text: "c", style: :out},
+        %{anchor: {:frame, :top_left}, text: "tl", style: :out},
+        %{anchor: {:frame, :bottom_right}, text: "br", style: :out},
+        %{anchor: {:axis, :y}, text: "y", style: :tilt},
+        %{anchor: {:data, [1, 5]}, text: "d", style: :out}
+      ]
+
+      scales = %{x: %{kind: :linear, domain: [0, 3]}, y: %{kind: :linear, domain: [0, 10]}}
+      plain = chart(%{scales: scales}, %{labels: Enum.map(labels, &Map.delete(&1, :style))})
+      styled = chart(%{scales: scales}, %{styles: styles, labels: labels})
+
+      texts = fn c ->
+        c
+        |> Frame.new()
+        |> Frame.generate()
+        |> Map.fetch!(:children)
+        |> Enum.filter(&(&1.style[:class] == "label"))
+      end
+
+      [t0, c0, tl0, br0, y0, d0] = texts.(plain)
+      [t1, c1, tl1, br1, y1, d1] = texts.(styled)
+
+      # Only the dy changes for the title; the caption and the corners move outward.
+      assert t1.attrs == %{t0.attrs | dy: "-0.25em"}
+      assert c1.attrs == %{c0.attrs | y: c0.attrs.y + 4}
+      assert tl1.attrs == %{tl0.attrs | x: tl0.attrs.x + 6, y: tl0.attrs.y + 4}
+      assert br1.attrs == %{br0.attrs | x: br0.attrs.x - 6, y: br0.attrs.y - 4}
+      # A data anchor has no outward direction.
+      assert d1.attrs == d0.attrs
+      # The axis title keeps its rotate(-90) and turns about its own point after it.
+      assert y0.transform.operations == [{:rotate, -90}]
+      assert y1.transform.operations == [{:rotate, -90}, {:rotate, -45, y1.attrs.x, y1.attrs.y}]
+      # None of the four reaches the element as an attribute.
+      svg = styled |> Frame.new() |> Frame.generate() |> Render.to_string()
+      refute svg =~ "margin-x" or svg =~ "text-angle" or svg =~ "vertical-align"
+      assert svg =~ ~s|transform="rotate(-90) rotate(-45,-75,-25)"|
+    end
+
+    test "a mark label moves along its anchor's side, and an axis style angles its tick labels" do
+      styles = %{
+        up: %{margin_y: 6, vertical_align: :top},
+        slant: %{text_angle: -45, font_size: 9}
+      }
+
+      label = %{text: "v", anchor: :top, style: :up}
+      mark = %{type: :circle, data: :primary, channels: %{x: :n, y: :v}, label: label}
+      axes = [%{scale: :x, side: :bottom, style: :slant}, %{scale: :y, side: :left}]
+      scales = %{x: %{kind: :linear, domain: [0, 3]}, y: %{kind: :linear, domain: [0, 10]}}
+
+      tree =
+        chart(%{scales: scales, axes: axes}, %{styles: styles, marks: [mark]})
+        |> Frame.new(sources: %{primary: @rows})
+        |> Frame.generate(sources: %{primary: @rows})
+
+      group = Enum.find(tree.children, &(&1.style[:class] == "mark mark-circle"))
+      [circle | _] = group.children
+      text = Enum.find(group.children, &(&1.type == :text))
+      # 4 up for the anchor's inset, 6 more for the margin, hanging below its point.
+      assert text.attrs == %{x: circle.attrs.cx, y: circle.attrs.cy - 4 - 6, dy: "0.71em"}
+
+      [bottom, left] =
+        Enum.filter(tree.children, &String.starts_with?(&1.style[:class] || "", "axis"))
+
+      ticks = fn axis -> axis |> tick_texts() end
+      assert Enum.all?(ticks.(bottom), &match?([{:rotate, -45, _, _}], &1.transform.operations))
+      assert Enum.all?(ticks.(left), &(&1.transform == nil))
+    end
+
+    defp tick_texts(%Element{type: :text} = text), do: [text]
+    defp tick_texts(%Element{children: children}), do: Enum.flat_map(children, &tick_texts/1)
+  end
+
   describe "blend and effect (spec/14 §3.1, spec/09 §2.5, §3.3.3)" do
     test "a blend is an inline style and an effect a filter declared once per pair" do
       scales = %{x: %{kind: :linear}, y: %{kind: :linear}}

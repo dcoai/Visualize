@@ -71,6 +71,35 @@ defmodule Visualize.Chart.Text do
     end)
   end
 
+  @doc ~S"""
+  Parts as lines: the parts split at every newline in a string part; `[[]]` for an empty
+  text (spec/14 §7.1).
+
+      iex> Visualize.Chart.Text.lines(["Uptime\n24 h ", %Visualize.Chart.Var{name: :unit}])
+      [["Uptime"], ["24 h ", %Visualize.Chart.Var{name: :unit}]]
+
+      iex> Visualize.Chart.Text.lines(["one line"])
+      [["one line"]]
+
+      iex> Visualize.Chart.Text.lines([])
+      [[]]
+  """
+  @spec lines([part()]) :: [[part()]]
+  def lines(parts) when is_list(parts) do
+    parts
+    |> Enum.reduce([[]], fn
+      string, [line | done] when is_binary(string) ->
+        # The first piece continues the open line; every further piece opens one.
+        [first | rest] = String.split(string, "\n")
+        Enum.reduce(rest, [[first | line] | done], fn piece, acc -> [[piece] | acc] end)
+
+      part, [line | done] ->
+        [[part | line] | done]
+    end)
+    |> Enum.map(fn line -> line |> Enum.reverse() |> Enum.reject(&(&1 == "")) end)
+    |> Enum.reverse()
+  end
+
   @doc "Whether a string carries a hole, so a plain string can be told from a template at a glance."
   @spec template?(term()) :: boolean()
   def template?(string) when is_binary(string), do: String.contains?(string, "\#{")

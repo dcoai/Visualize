@@ -65,7 +65,8 @@ Each `IR.Element` type maps to exactly one tag. "attrs" is `element.attrs`, "sty
 | `:root` | `svg` | `xmlns="http://www.w3.org/2000/svg"`, then attrs (`view_box` emitted as `viewBox`, 2.4); `element.style` and `element.transform` are ignored | children |
 | `:rect`, `:circle`, `:ellipse`, `:line`, `:image` | same name | attrs, then style merged over it, transform | none |
 | `:polyline`, `:polygon` | same name | `points` (2.6), style, transform; every other key in attrs is dropped | none |
-| `:text` | `text` | attrs, style, transform | `element.content` as escaped text |
+| `:text` | `text` | attrs, style, transform | `element.content` as escaped text, then the children — its `tspan`s when it has lines |
+| `:tspan` | `tspan` | attrs | `element.content` as escaped text |
 | `:title`, `:desc` | same name | attrs (the `id`) | `element.content` as escaped text |
 | `:defs` | `defs` | none | children |
 | `:clip_path` | `clipPath` | attrs verbatim | children |
@@ -211,6 +212,8 @@ Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outp
 | `:effect` | `:shadow`: `{:set_shadowColor, ["rgba(0,0,0,0.35)"]}`, `{:set_shadowBlur, [r]}`, `{:set_shadowOffsetX, [r / 2]}`, `{:set_shadowOffsetY, [r / 2]}`; `:blur`: `{:set_filter, ["blur(<r>px)"]}`; `r` the `:effect_radius`, `3` when absent | omitted for `:none` |
 
 `style_apply_commands/1` emits `{:fill, []}` when `:fill` is present and not `:none`, then `{:stroke, []}` when `:stroke` is present and not `:none`.
+
+A `:text` with `:tspan` children (its lines, spec/14 §7.1) emits its style commands once, then one `fillText` per line at the text's `x` and at `y` plus the sum of the lines' `dy` so far, a `dy` in `em` read as that many times the style's `font_size` (`10` when absent).
 
 Text style (`:text` elements only) emits `{:set_font, [font]}` when any of `:font_size` (default `10`), `:font_family` (default `"sans-serif"`), `:font_weight` or `:font_style` is set, `font` being the CSS shorthand `[style] [weight] size family` — `12px serif`, `italic 300 12px sans-serif`, `bold 12px serif` — with the style and the weight present only when set; `{:set_textAlign, ["left" | "center" | "right"]}` for `:text_anchor` `:start | :middle | :end`; and `set_fillStyle` under the fill rules above. No other style keys affect Canvas output.
 

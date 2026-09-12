@@ -722,6 +722,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           placeholder={@field.placeholder}
           data-builder-text={@field.text? && "true"}
         />
+        <span :if={is_nil(@field.variable) and @field.points != nil} class="vis-builder-item-text">
+          {@field.points} pt between lines
+        </span>
         <svg
           :if={is_nil(@field.variable) and @field.dash != nil}
           class="vis-builder-dash"
@@ -877,6 +880,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               Map.get(assigns, :defs) || %{}
             ),
           fill: fill_view(assigns.kind, spec.key, Map.get(node, spec.key), assigns),
+          points: points(spec.key, node, Map.get(assigns, :theme)),
           variable: if(spec.type == :text, do: nil, else: variable_name(Map.get(node, spec.key))),
           placeholder: shown(widget, default(spec)),
           errors: key_errors(errors, path ++ [spec.key])
@@ -1021,6 +1025,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp well(:colour, value, theme, _defs), do: well(value, theme)
     defp well(_widget, _value, _theme, _defs), do: %{colour: nil, none?: false, word: nil}
+
+    # The points between lines a line height means (§18.6): font_size × (line_height − 1),
+    # from the node's font size or the theme's.
+    defp points(:line_height, node, theme) do
+      height = number_or(Map.get(node, :line_height), Schema.default(:style, :line_height) || 1.2)
+      size = number_or(Map.get(node, :font_size), (theme && theme.font_size) || 12)
+      Float.round(size * (height - 1) * 1.0, 1)
+    end
+
+    defp points(_key, _node, _theme), do: nil
+
+    defp number_or(n, _default) when is_number(n), do: n
+    defp number_or(_other, default), do: default
 
     # A style's fill is a fill style (§18.6); any other colour is a well alone.
     defp fill_view(:style, :fill, value, assigns) when not is_struct(value, Var) do

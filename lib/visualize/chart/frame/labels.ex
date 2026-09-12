@@ -3,6 +3,7 @@ defmodule Visualize.Chart.Frame.Labels do
   # The frame's labels (spec/14 §6.3): one text element per label at its anchor's
   # position, in its style, `dx` and `dy` added.
 
+  alias Visualize.Chart.Frame.Position
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.Chart.Text
   alias Visualize.Geo.Projection
@@ -37,6 +38,7 @@ defmodule Visualize.Chart.Frame.Labels do
             content: text(node.text),
             transform: Map.get(placement, :transform)
           )
+          |> Position.apply(style_node, outward(frame, node.anchor))
         ]
     end
   end
@@ -81,6 +83,24 @@ defmodule Visualize.Chart.Frame.Labels do
     case point(frame, x, y) do
       nil -> nil
       {px, py} -> %{x: px, y: py, anchor: :start}
+    end
+  end
+
+  # The outward direction of an anchor (spec/14 §6.3): away from the plot for the titles
+  # and the caption, into the plot for a corner, none for a data point.
+  defp outward(_frame, anchor) when anchor in [:title, :subtitle], do: {0, -1}
+  defp outward(_frame, :caption), do: {0, 1}
+  defp outward(_frame, {:frame, :top_left}), do: {1, 1}
+  defp outward(_frame, {:frame, :top_right}), do: {-1, 1}
+  defp outward(_frame, {:frame, :bottom_left}), do: {1, -1}
+  defp outward(_frame, {:frame, :bottom_right}), do: {-1, -1}
+  defp outward(_frame, {:data, _point}), do: nil
+
+  defp outward(frame, {:axis, scale}) do
+    case axis_side(frame, scale) do
+      :bottom -> {0, 1}
+      # A side title is rotated; further from the plot is −y in its own frame.
+      _top_left_right -> {0, -1}
     end
   end
 
