@@ -910,7 +910,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 
 ### 14.2 `Visualize.Chart.Schema`
 
-**Implemented.** The schema as data. A key spec (`t:Visualize.Chart.Schema.key_spec/0`) is `%{key, type, facet, default, required, merge}`; `nil` as a default means "none".
+**Implemented.** The schema as data. A key spec (`t:Visualize.Chart.Schema.key_spec/0`) is `%{key, type, facet, default, required, merge, range}`; `nil` as a default means "none". `range` is `{min, max, step}` for a numeric key that has a sensible span — an opacity is 0 to 1, a stroke width 0 to 20, a font size 6 to 72, a margin 0 to 200, a size 100 to 2000 — and `nil` for every other key. It is data about the key for a control to read (§18.6), never a bound the validator enforces: a value outside it is unusual, not wrong.
 
 | Function | Contract |
 |---|---|
@@ -1480,6 +1480,8 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 | `kind` of a frame | cartesian axes, a polar ring, a globe, a facet grid |
 
 Every other enum stays a select of its words; `Glyphs.glyph/2` is total over the drawn keys' values, which a test walks.
+
+**A ranged number is a slider beside its box.** A key whose spec carries a `range` (§14.2) renders `<input type="range" name="key.range">` before its box, so a value can be dragged while the preview redraws; the box stays for typing, and for a `:size` key it still takes a slot word. `Visualize.Chart.Builder.Editor.change/2` reads `key.range` as the key itself, with the key's type, so a slider's write is the box's write. A value typed outside the range is kept, since the range is a control's span and not a rule. `stroke_dasharray` draws its pattern beside the box — a short line with the value as its `stroke-dasharray` — so a pattern is seen, not decoded.
 
 A `:textarea` holds the value as `inspect/1` writes it and `parse/2` reads it back as a **literal**: the string is parsed with `Code.string_to_quoted/1` — parsed, never evaluated — and the quoted form is accepted only where it is a number, a string, an atom, `true`, `false`, `nil`, a list, a tuple, a map, a `%Visualize.Chart.Var{}` or a `~U` sigil, which is the whole vocabulary a design may contain (§1.4). Anything else — a call, an operator, a variable, any other struct — is `:error`, so a design map cannot acquire a function or a term the codec has no form for (§11). That the reader is one walk over the literal grammar rather than a rule per type is what keeps it total: a type added to the schema needs no case here.
 
