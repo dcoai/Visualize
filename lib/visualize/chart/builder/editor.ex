@@ -585,11 +585,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
                     </label>
                   </span>
                 </label>
+                <.field
+                  :for={field <- fields}
+                  :if={field.key == :fill_opacity}
+                  field={field}
+                  label="opacity"
+                  selected={@selected}
+                  found={@found}
+                  origins={@origins}
+                  target={@target}
+                />
                 <div class="vis-builder-fill-colours">
                   <.field
                     :for={field <- fields}
                     :if={field.key == :fill}
                     field={field}
+                    label="colour"
                     selected={@selected}
                     found={@found}
                     origins={@origins}
@@ -599,7 +610,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 <div class="vis-builder-fill-numbers">
                   <.field
                     :for={field <- fields}
-                    :if={field.key != :fill}
+                    :if={field.key not in [:fill, :fill_opacity]}
                     field={field}
                     selected={@selected}
                     found={@found}
@@ -658,6 +669,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     attr(:field, :map, required: true)
+    attr(:label, :string, default: nil, doc: "the title shown instead of the key's name")
     attr(:selected, :string, default: nil)
     attr(:found, :string, default: nil)
     attr(:origins, :map, default: %{})
@@ -676,7 +688,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         phx-target={@target}
       >
         <span class="vis-builder-key">
-          {@field.key}<span
+          {@label || @field.key}<span
             :if={@origins[@field.key]}
             class="vis-builder-origin"
           >{@origins[@field.key]}</span>

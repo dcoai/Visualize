@@ -406,7 +406,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
       refute fill_row =~ ~s(name="fill_style")
 
       assert keys ==
-               ~w(extends style fill fill_opacity stroke_style stroke_width stroke stroke_opacity
+               ~w(extends style opacity colour stroke_style stroke_width stroke stroke_opacity
                   stroke_dasharray stroke_linejoin stroke_linecap font_family font_size
                   font_weight line_height text_anchor vertical_align margin_x margin_y
                   text_angle opacity blend effect effect_radius class curve curve_opts symbol

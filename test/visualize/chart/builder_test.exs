@@ -1430,6 +1430,19 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert colours =~ ~s(fill.stop.0) and colours =~ ~s(fill.stop.1)
 
+      # The opacity sits beside the style at the top, titled opacity; the colours are titled
+      # colour; the angle sits under the opacity.
+      {style_at, _} = :binary.match(html, ~s(<span class="vis-builder-key">style</span>))
+      {opacity_at, _} = :binary.match(html, ~s(name="fill_opacity"))
+      {colours_at, _} = :binary.match(html, ~s(class="vis-builder-fill-colours"))
+      assert style_at < opacity_at and opacity_at < colours_at
+
+      assert html =~
+               ~r|phx-value-field="fill_opacity" phx-target="-1">\s*<span class="vis-builder-key">\s*opacity\s*<|
+
+      assert html =~
+               ~r|phx-value-field="fill" phx-target="-1">\s*<span class="vis-builder-key">\s*colour\s*<|
+
       numbers =
         html
         |> String.split(~s(class="vis-builder-fill-numbers"))
@@ -1437,9 +1450,7 @@ defmodule Visualize.Chart.BuilderTest do
         |> String.split("</fieldset>")
         |> hd()
 
-      {opacity_at, _} = :binary.match(numbers, ~s(name="fill_opacity"))
-      {angle_at, _} = :binary.match(numbers, ~s(name="fill.angle"))
-      assert opacity_at < angle_at
+      refute numbers =~ ~s(name="fill_opacity")
       assert numbers =~ ~s(<input type="text" name="fill.angle" value="180")
 
       assert numbers =~

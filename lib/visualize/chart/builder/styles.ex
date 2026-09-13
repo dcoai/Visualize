@@ -1729,10 +1729,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
 
-    .vis-builder-block-fill > .vis-builder-field-fill-style {
-      grid-column: 1 / -1;
-    }
-
     .vis-builder-fill-colours,
     .vis-builder-fill-numbers {
       display: flex;
