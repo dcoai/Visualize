@@ -1738,6 +1738,119 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "signals are the chart's sources while it is designed (spec/14 §19.10)" do
+    setup do
+      %{
+        socket:
+          BuilderFixture.socket(BuilderFixture.layers(), store: Visualize.Chart.BuilderTest.Refs)
+      }
+    end
+
+    test "+ declares a sine, the tab edits it in place, and × removes it", %{socket: s} do
+      assert s.assigns.signals == %{}
+      {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
+      assert s.assigns.context == :sources
+      assert %{signal_1: %{kind: :sine, fields: [:t, :value], window: 24}} = s.assigns.signals
+
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(<form class="vis-builder-signals" phx-change="edit_signal")
+      assert html =~ ~s(<legend class="vis-builder-signal-name">)
+      assert html =~ ~s(<select name="signal_1.kind">)
+      assert html =~ ~s(<input type="text" name="signal_1.fields" value="t, value")
+      assert html =~ ~s(name="signal_1.window" value="24")
+      assert html =~ ~s(phx-click="play")
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_signal",
+          %{"_target" => ["signal_1.fields"], "signal_1.fields" => "hour, cpu, mem"},
+          s
+        )
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_signal",
+          %{"_target" => ["signal_1.kind"], "signal_1.kind" => "square"},
+          s
+        )
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_signal",
+          %{"_target" => ["signal_1.window"], "signal_1.window" => "6"},
+          s
+        )
+
+      assert %{fields: [:hour, :cpu, :mem], kind: :square, window: 6} = s.assigns.signals.signal_1
+
+      # A second is named past the first; removing leaves the other.
+      {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
+      assert Map.keys(s.assigns.signals) |> Enum.sort() == [:signal_1, :signal_2]
+      {:noreply, s} = Builder.handle_event("remove_signal", %{"name" => "signal_1"}, s)
+      assert Map.keys(s.assigns.signals) == [:signal_2]
+    end
+
+    test "the pool is the host's under the signals at the tick; a source picks a signal and takes its fields",
+         %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_signal",
+          %{"_target" => ["signal_1.fields"], "signal_1.fields" => "hour, cpu"},
+          s
+        )
+
+      # The declared-as list offers the signal beside the host's pool.
+      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(<input type="radio" name="key" value="signal_1">)
+      assert html =~ ~s(<input type="radio" name="key" value="primary">)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "set_key",
+          %{"_target" => ["key"], "key" => "signal_1", "key.other" => ""},
+          s
+        )
+
+      site = Visualize.Chart.Builder.Stack.get(s.assigns.uses, s.assigns.selected)
+      assert site.local == %{source: %{fields: [:cpu, :hour]}}
+
+      # The signal draws: a mark over it renders, and the tick moves the rows.
+      {:noreply, s} = Builder.handle_event("select_chart", %{"chart" => "1"}, s)
+      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "mark"}, s)
+      {:noreply, s} = Builder.handle_event("edit", %{"_target" => ["type"], "type" => "line"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["data"], "data" => "signal_1"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["channels"], "channels" => "%{x: :hour, y: :cpu}"},
+          s
+        )
+
+      before = BuilderFixture.render(s)
+      assert before =~ ~s(class="mark mark-line")
+
+      {:noreply, playing} = Builder.handle_event("play", %{}, s)
+      assert playing.assigns.playing
+      assert_receive {:visualize_chart_tick, "b"}, 1000
+      {:ok, ticked} = Builder.update(%{tick: :next}, playing)
+      assert ticked.assigns.tick == 1
+      refute BuilderFixture.render(ticked) == before
+      {:noreply, paused} = Builder.handle_event("pause", %{}, ticked)
+      {:ok, still} = Builder.update(%{tick: :next}, paused)
+      assert still.assigns.tick == 1
+
+      # Save carries the signals with the chart's structure.
+      {:noreply, _} = Builder.handle_event("save", %{}, still)
+      assert_received {:visualize_chart_saved, "b", %{composite: %{signals: %{signal_1: _}}}}
+    end
+  end
+
   describe "the context's icon row (spec/14 §19.10)" do
     setup do
       s = BuilderFixture.socket(BuilderFixture.layers(), store: Visualize.Chart.BuilderTest.Refs)
