@@ -9,10 +9,9 @@
       </select>
       <button type="submit" class="vis-builder-new-submit">New</button>
     </form>
-    
     <form class="vis-builder-keep" phx-submit="put_design" phx-target="-1">
       <label class="vis-builder-control-label" for="builder-keep">
-        Save the stack as
+        Save the chart as
       </label>
       <input id="builder-keep" type="text" name="name" class="vis-builder-name" value="" placeholder="Group:sub-group:name">
       <button type="submit" class="vis-builder-put">Save to library</button>
@@ -50,11 +49,19 @@
 </aside>
     <aside class="vis-builder-sidebar">
       <h2 class="vis-builder-sidebar-title vis-builder-sidebar-title-row">
-        Layers
-        <button type="button" class="vis-builder-add" title="add an empty site below the selected layer" aria-label="add a site" aria-expanded="false" phx-click="adding" phx-target="-1">+</button>
+        Charts
+        <button type="button" class="vis-builder-add" title="add a chart: one frame layer to start" aria-label="add a chart" phx-click="add_chart" phx-target="-1">+</button>
       </h2>
-      
-      <ol id="builder-layers" class="vis-builder-layers" phx-hook="BuilderHook" data-builder-target="-1" data-builder-stack="true">
+      <ol class="vis-builder-charts">
+        <li class="vis-builder-chart vis-builder-chart-selected">
+          <div class="vis-builder-chart-row">
+            <button type="button" class="vis-builder-chart-toggle" title="collapse" aria-label="collapse chart 1" aria-expanded="true" phx-click="toggle_chart" phx-value-chart="1" phx-target="-1">▾</button>
+            <button type="button" class="vis-builder-chart-name" title="a chart" phx-click="select_chart" phx-value-chart="1" phx-target="-1">chart 1</button>
+            <button type="button" class="vis-builder-add" title="add an empty site below the selected layer" aria-label="add a site" aria-expanded="false" phx-click="adding" phx-target="-1">+</button>
+            <button type="button" class="vis-builder-chart-close" title="close chart 1" aria-label="close chart 1" phx-click="close_chart" phx-value-chart="1" phx-target="-1">×</button>
+          </div>
+          
+          <ol id="builder-layers" class="vis-builder-layers" phx-hook="BuilderHook" data-builder-target="-1" data-builder-stack="true">
   <li id="builder-layers-row-0" class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="0" draggable="true" role="button" tabindex="0" title="house, layer 1 of 3, selected: Enter to edit, arrows to move, drag to reorder" aria-label="house, layer 1 of 3, selected: Enter to edit, arrows to move, drag to reorder" phx-click="select_layer" phx-keydown="layer_key" phx-value-index="0" phx-target="-1">
     <span class="vis-builder-layer-name">house</span>
     <button type="button" draggable="false" class="vis-builder-layer-toggle" title="Disable house" aria-label="Disable house" phx-click="toggle_layer" phx-value-index="0" phx-target="-1"><span class="vis-builder-action-label">Disable</span></button>
@@ -66,6 +73,9 @@
     <button type="button" draggable="false" class="vis-builder-layer-toggle" title="Disable panel" aria-label="Disable panel" phx-click="toggle_layer" phx-value-index="2" phx-target="-1"><span class="vis-builder-action-label">Disable</span></button>
   </li>
 </ol>
+          
+        </li>
+      </ol>
       
       
     </aside>

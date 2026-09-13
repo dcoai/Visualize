@@ -888,9 +888,58 @@ defmodule Visualize.Chart.BuilderTest do
 
       html = BuilderFixture.render(s)
       assert html =~ ~s(phx-value-root="style")
-      assert html =~ "style stack"
-      assert html =~ ~s(class="vis-builder-opened")
+      # The chart's row names it and says its kind; a style is a chart of one site.
+      assert html =~ ~s(<span class="vis-builder-chart-kind">style</span>)
+      assert html =~ ~s(class="vis-builder-chart-name" title="a style opened from the library")
       refute html =~ ~s(class="vis-builder-preview")
+    end
+
+    test "the workspace holds several charts; + adds one frame layer; closing selects the neighbour (spec/14 §18.8, §19.9)",
+         %{socket: s} do
+      assert Enum.map(s.assigns.charts, & &1.name) == ["chart 1"]
+      assert s.assigns.chart == 1
+
+      {:noreply, two} = Builder.handle_event("add_chart", %{}, s)
+      assert Enum.map(two.assigns.charts, & &1.name) == ["chart 1", "chart 2"]
+      assert two.assigns.chart == 2
+      assert [%{local: %{frame: %{}}, ref: nil}] = two.assigns.uses
+      assert BuilderFixture.layers(two) == [{"new frame", %{frame: %{}}}]
+
+      html = BuilderFixture.render(two)
+
+      assert html =~
+               ~s(<button type="button" class="vis-builder-add" title="add a chart: one frame layer to start")
+
+      assert length(Regex.scan(~r/class="vis-builder-chart-row"/, html)) == 2
+      assert html =~ ~s(<li class="vis-builder-chart vis-builder-chart-selected">)
+      # The first chart, not selected, shows its layers as names to select.
+      assert html =~ ~s(phx-click="select_chart_layer" phx-value-chart="1" phx-value-index="2")
+
+      # Selecting the other chart brings its stack back, unchanged; the new one is parked.
+      {:noreply, back} = Builder.handle_event("select_chart", %{"chart" => "1"}, two)
+      assert back.assigns.chart == 1
+      assert BuilderFixture.layers(back) == BuilderFixture.layers(s)
+      assert Enum.at(back.assigns.charts, 1).uses == two.assigns.uses
+
+      # A layer of the other chart, clicked, selects that chart and the layer.
+      {:noreply, jumped} =
+        Builder.handle_event("select_chart_layer", %{"chart" => "2", "index" => "0"}, back)
+
+      assert jumped.assigns.chart == 2 and BuilderFixture.selected(jumped) == 0
+
+      # Collapse and expand.
+      {:noreply, folded} = Builder.handle_event("toggle_chart", %{"chart" => "1"}, jumped)
+      refute Enum.at(folded.assigns.charts, 0).expanded
+      refute BuilderFixture.render(folded) =~ ~s(phx-click="select_chart_layer")
+
+      # Deploy is the selected chart's; closing it selects the neighbour; the last stays.
+      {:noreply, _} = Builder.handle_event("deploy", %{}, jumped)
+      assert_received {:visualize_chart_deployed, "b", %{frame: %{}}}
+      {:noreply, closed} = Builder.handle_event("close_chart", %{"chart" => "2"}, jumped)
+      assert Enum.map(closed.assigns.charts, & &1.id) == [1] and closed.assigns.chart == 1
+      {:noreply, kept} = Builder.handle_event("close_chart", %{"chart" => "1"}, closed)
+      assert kept.assigns.notice =~ "the last chart stays"
+      assert length(kept.assigns.charts) == 1
     end
 
     test "an edit writes to the site, and closing brings the stack back", %{socket: s} do
@@ -980,7 +1029,7 @@ defmodule Visualize.Chart.BuilderTest do
                %{version: 1, frame: %{size: %{width: 900}}, vars: %{unit: %{default: "%"}}}
 
       html = BuilderFixture.render(opened)
-      assert html =~ "Layers"
+      assert html =~ "Charts"
       assert html =~ ~s(class="vis-builder-preview")
 
       {:noreply, saved} = Builder.handle_event("put_design", %{"name" => "Charts::pair"}, opened)

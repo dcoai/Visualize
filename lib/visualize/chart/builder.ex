@@ -139,7 +139,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
          labels: %{},
          selected: nil,
          open: nil,
-         stash: nil,
+         charts: [],
+         chart: nil,
+         next_chart: 1,
          stack_vars: %{},
          notice: nil,
          facet: nil,
@@ -179,16 +181,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
       else
         {uses, labels} = Stack.seed(layers)
 
-        assign(socket,
-          uses: uses,
-          labels: labels,
-          selected: selection(socket.assigns.selected, uses),
-          host_layers: layers
-        )
+        socket
+        |> assign(host_layers: layers)
+        |> seeded_chart(uses, labels)
       end
     end
 
     defp seed(socket, _assigns), do: socket
+
+    # The host's layers are the first chart of the workspace (spec/14 §19.9); a host
+    # replacing its list replaces that chart's stack and leaves the others alone.
+    defp seeded_chart(%{assigns: %{charts: []}} = socket, uses, labels) do
+      socket
+      |> assign(uses: uses, labels: labels, stack_vars: %{}, open: nil)
+      |> assign(selected: selection(socket.assigns.selected, uses))
+      |> added_chart("chart 1")
+    end
+
+    defp seeded_chart(socket, uses, labels) do
+      first = hd(socket.assigns.charts)
+
+      socket
+      |> park()
+      |> update(:charts, fn charts ->
+        List.update_at(
+          charts,
+          0,
+          &%{&1 | uses: uses, labels: labels, selected: selection(&1.selected, uses)}
+        )
+      end)
+      |> load(first.id)
+    end
 
     # A selection that names a use the seeded stack has is kept — a host may seed one, and
     # the person's place survives a replaced list of the same shape — else the first use.
@@ -217,15 +240,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </select>
             <button type="submit" class="vis-builder-new-submit">New</button>
           </form>
-          <span :if={@open} class="vis-builder-opened">
-            editing {@open.kind} <strong>{@open.name || "(unsaved)"}</strong>
-            <button type="button" class="vis-builder-close" phx-click="close" phx-target={@myself}>
-              back to the stack
-            </button>
-          </span>
           <form :if={@store} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
             <label class="vis-builder-control-label" for={@id <> "-keep"}>
-              {if @open, do: "Save as", else: "Save the stack as"}
+              {if @open, do: "Save as", else: "Save the chart as"}
             </label>
             <input
               id={@id <> "-keep"}
@@ -263,35 +280,93 @@ if Code.ensure_loaded?(Phoenix.Component) do
           />
           <aside class="vis-builder-sidebar">
             <h2 class="vis-builder-sidebar-title vis-builder-sidebar-title-row">
-              {@stack_title}
+              Charts
               <button
                 type="button"
                 class="vis-builder-add"
-                title="add an empty site below the selected layer"
-                aria-label="add a site"
-                aria-expanded={to_string(@adding)}
-                phx-click="adding"
+                title="add a chart: one frame layer to start"
+                aria-label="add a chart"
+                phx-click="add_chart"
                 phx-target={@myself}
               >+</button>
             </h2>
-            <div :if={@adding} class="vis-builder-add-menu" role="menu" aria-label="a kind to add">
-              <button
-                :for={kind <- Stack.kinds() -- [:composite]}
-                type="button"
-                class="vis-builder-add-kind"
-                role="menuitem"
-                phx-click="add_site"
-                phx-value-kind={kind}
-                phx-target={@myself}
-              >{kind}</button>
-            </div>
-            <Layers.panel
-              id={@id <> "-layers"}
-              layers={@layers}
-              selected={@selected_index}
-              disabled={@disabled}
-              target={@myself}
-            />
+            <ol class="vis-builder-charts">
+              <li
+                :for={row <- @chart_rows}
+                class={"vis-builder-chart" <> if(row.selected?, do: " vis-builder-chart-selected", else: "")}
+              >
+                <div class="vis-builder-chart-row">
+                  <button
+                    type="button"
+                    class="vis-builder-chart-toggle"
+                    title={if(row.expanded, do: "collapse", else: "expand")}
+                    aria-label={"#{if(row.expanded, do: "collapse", else: "expand")} #{row.name}"}
+                    aria-expanded={to_string(row.expanded)}
+                    phx-click="toggle_chart"
+                    phx-value-chart={row.id}
+                    phx-target={@myself}
+                  >{if row.expanded, do: "▾", else: "▸"}</button>
+                  <button
+                    type="button"
+                    class="vis-builder-chart-name"
+                    title={row.title}
+                    phx-click="select_chart"
+                    phx-value-chart={row.id}
+                    phx-target={@myself}
+                  >{row.name}<span :if={row.kind} class="vis-builder-chart-kind">{row.kind}</span></button>
+                  <button
+                    :if={row.selected?}
+                    type="button"
+                    class="vis-builder-add"
+                    title="add an empty site below the selected layer"
+                    aria-label="add a site"
+                    aria-expanded={to_string(@adding)}
+                    phx-click="adding"
+                    phx-target={@myself}
+                  >+</button>
+                  <button
+                    type="button"
+                    class="vis-builder-chart-close"
+                    title={"close #{row.name}"}
+                    aria-label={"close #{row.name}"}
+                    phx-click="close_chart"
+                    phx-value-chart={row.id}
+                    phx-target={@myself}
+                  >×</button>
+                </div>
+                <div :if={row.selected? and @adding} class="vis-builder-add-menu" role="menu" aria-label="a kind to add">
+                  <button
+                    :for={kind <- Stack.kinds() -- [:composite]}
+                    type="button"
+                    class="vis-builder-add-kind"
+                    role="menuitem"
+                    phx-click="add_site"
+                    phx-value-kind={kind}
+                    phx-target={@myself}
+                  >{kind}</button>
+                </div>
+                <Layers.panel
+                  :if={row.selected? and row.expanded}
+                  id={@id <> "-layers"}
+                  layers={@layers}
+                  selected={@selected_index}
+                  disabled={@disabled}
+                  target={@myself}
+                />
+                <ol :if={not row.selected? and row.expanded} class="vis-builder-layers vis-builder-layers-other">
+                  <li :for={{name, index} <- row.layers} class="vis-builder-layer">
+                    <button
+                      type="button"
+                      class="vis-builder-layer-name vis-builder-layer-other"
+                      phx-click="select_chart_layer"
+                      phx-value-chart={row.id}
+                      phx-value-index={index}
+                      phx-target={@myself}
+                    >{name}</button>
+                  </li>
+                </ol>
+              </li>
+            </ol>
             <p :if={@missing != []} class="vis-builder-missing">
               {length(@missing)} {if length(@missing) == 1, do: "reference", else: "references"} no longer exist — showing through
             </p>
@@ -529,9 +604,76 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # Closing an entry is the way back to the stack it was opened over (spec/14 §19.9).
+    # -- the charts (spec/14 §18.8, §19.9) ------------------------------------------------
+
+    # A new chart is one frame layer: a chart minimally is a frame.
+    def handle_event("add_chart", _params, socket) do
+      use = %{Use.new(nil, []) | ref: nil, local: Stack.empty(:frame)}
+      n = socket.assigns.next_chart
+
+      {:noreply,
+       socket
+       |> park()
+       |> assign(
+         uses: [use],
+         labels: %{use.id => "new frame"},
+         stack_vars: %{},
+         selected: use.id,
+         open: nil,
+         node_label: "design",
+         facet: nil,
+         style_entry: nil,
+         field: nil,
+         context: :layer,
+         notice: nil
+       )
+       |> added_chart("chart #{n}")}
+    end
+
+    def handle_event("select_chart", %{"chart" => id}, socket) do
+      {:noreply, socket |> park() |> load(String.to_integer(id))}
+    end
+
+    def handle_event("toggle_chart", %{"chart" => id}, socket) do
+      id = String.to_integer(id)
+
+      {:noreply,
+       update(socket, :charts, fn charts ->
+         Enum.map(charts, &if(&1.id == id, do: %{&1 | expanded: not &1.expanded}, else: &1))
+       end)}
+    end
+
+    # A layer of another chart is selected by selecting its chart first.
+    def handle_event("select_chart_layer", %{"chart" => id, "index" => index}, socket) do
+      {:noreply, socket |> park() |> load(String.to_integer(id)) |> select(position(index))}
+    end
+
+    # Closing a chart removes it and selects its neighbour; the last chart stays.
+    def handle_event("close_chart", %{"chart" => id}, socket) do
+      id = String.to_integer(id)
+      %{charts: charts} = socket.assigns
+
+      case charts do
+        [_only] ->
+          {:noreply,
+           assign(socket, :notice, "the last chart stays; add another to close this one")}
+
+        _many ->
+          socket = park(socket)
+          index = Enum.find_index(charts, &(&1.id == id))
+          remaining = Enum.reject(socket.assigns.charts, &(&1.id == id))
+          neighbour = Enum.at(remaining, min(index, length(remaining) - 1))
+
+          socket
+          |> assign(:charts, remaining)
+          |> then(&if(socket.assigns.chart == id, do: load(&1, neighbour.id), else: &1))
+          |> then(&{:noreply, &1})
+      end
+    end
+
+    # The first draft's close: the selected chart closes.
     def handle_event("close", _params, socket) do
-      {:noreply, closed(socket)}
+      handle_event("close_chart", %{"chart" => to_string(socket.assigns.chart)}, socket)
     end
 
     # Saving names the entry, never the body. The workspace and a composite are saved as
@@ -1353,7 +1495,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         unplaced: Enum.map(keyless, &Stack.label(assigns.labels, Stack.get(assigns.uses, &1))),
         kind: kind,
         preview?: kind == :composite,
-        stack_title: stack_title(kind),
+        chart_rows: chart_rows(assigns),
         selected_index: Stack.index_of(assigns.uses, assigns.selected),
         disabled: disabled(assigns.uses)
       }
@@ -1501,8 +1643,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    defp stack_title(:composite), do: "Layers"
-    defp stack_title(kind), do: "#{kind} stack"
+    # The Charts panel's rows (spec/14 §18.8): every chart of the workspace, the selected
+    # one's layers drawn by the stack panel, another's as names to select.
+    defp chart_rows(%{charts: charts, chart: selected} = assigns) do
+      for chart <- charts do
+        live? = chart.id == selected
+        state = if live?, do: assigns, else: chart
+        kind = state.open && state.open.kind != :composite && state.open.kind
+
+        %{
+          id: chart.id,
+          name: chart.name,
+          kind: kind,
+          title: if(kind, do: "a #{kind} opened from the library", else: "a chart"),
+          selected?: live?,
+          expanded: chart.expanded,
+          layers:
+            if(live?,
+              do: [],
+              else:
+                state.uses
+                |> Enum.with_index()
+                |> Enum.map(fn {use, i} -> {Stack.label(state.labels, use), i} end)
+            )
+        }
+      end
+    end
 
     defp disabled(uses) do
       uses
@@ -1761,14 +1927,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
         String.starts_with?(path, label <> "[")
     end
 
-    # Opening an entry makes it the stack — a composite's sites, or the body as one inline
-    # site — and the field forms then write to a site in it. The stack it was opened over
-    # is stashed once and comes back on close (spec/14 §19.9).
+    # Opening an entry opens it as a new chart — a composite's sites, or the body as one
+    # inline site — selected, the entry recorded on it so Save as writes the entry
+    # (spec/14 §19.9).
     defp opened_entry(socket, entry) do
       {uses, labels, vars} = Stack.open(entry, names(socket.assigns.store))
+      n = socket.assigns.next_chart
 
       socket
-      |> stashed()
+      |> park()
       |> assign(
         open: %{id: entry.id, name: entry.name, kind: entry.kind},
         uses: uses,
@@ -1778,23 +1945,55 @@ if Code.ensure_loaded?(Phoenix.Component) do
         node_label: "design",
         facet: nil,
         style_entry: nil,
+        field: nil,
+        context: :layer,
         added: nil,
         notice: nil
       )
+      |> added_chart(entry.name || "new #{entry.kind}", "chart #{n}")
     end
 
-    defp stashed(%{assigns: %{open: nil} = assigns} = socket) do
-      assign(socket, :stash, Map.take(assigns, [:uses, :labels, :stack_vars, :selected]))
+    # -- the workspace of charts (spec/14 §19.9) ------------------------------------------
+
+    # The live assigns are the selected chart's; parking writes them back to its row.
+    @chart_state [:uses, :labels, :stack_vars, :selected, :open]
+
+    defp park(%{assigns: %{chart: nil}} = socket), do: socket
+
+    defp park(%{assigns: assigns} = socket) do
+      state = Map.take(assigns, @chart_state)
+
+      update(socket, :charts, fn charts ->
+        Enum.map(charts, &if(&1.id == assigns.chart, do: Map.merge(&1, state), else: &1))
+      end)
     end
 
-    defp stashed(socket), do: socket
+    defp load(socket, id) do
+      case Enum.find(socket.assigns.charts, &(&1.id == id)) do
+        nil ->
+          socket
 
-    defp closed(%{assigns: %{stash: nil}} = socket), do: assign(socket, :open, nil)
+        chart ->
+          socket
+          |> assign(Map.take(chart, @chart_state))
+          |> assign(chart: id, node_label: "design", facet: nil, style_entry: nil, field: nil)
+          |> update(:charts, fn charts ->
+            Enum.map(charts, &if(&1.id == id, do: %{&1 | expanded: true}, else: &1))
+          end)
+      end
+    end
 
-    defp closed(%{assigns: %{stash: stash}} = socket) do
-      socket
-      |> assign(stash)
-      |> assign(open: nil, stash: nil, node_label: "design", facet: nil, style_entry: nil)
+    # The live assigns become a new, selected, expanded chart of the workspace.
+    defp added_chart(socket, name, fallback \\ nil) do
+      %{next_chart: id} = socket.assigns
+      state = Map.take(socket.assigns, @chart_state)
+      chart = Map.merge(state, %{id: id, name: name || fallback, expanded: true})
+
+      assign(socket,
+        charts: socket.assigns.charts ++ [chart],
+        chart: id,
+        next_chart: id + 1
+      )
     end
 
     # The store's names, for the labels of an opened composite's sites.
