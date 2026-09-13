@@ -303,11 +303,16 @@ defmodule Visualize.Chart.Validator do
     %{required: required, optional: optional} = Schema.transform_keys(op)
 
     for s <- Schema.describe(:transform), s.key == :op or s.key in (required ++ optional) do
-      %{s | required: s.key == :op or s.key in required}
+      %{s | required: s.key == :op or s.key in required, type: as_type(s, op)}
     end
   end
 
   defp specs(kind, _ctx), do: Schema.describe(kind)
+
+  # `as` is a pair of names for a fold and one name for every other op (spec/14 §5.4).
+  defp as_type(%{key: :as}, :fold), do: {:list, :name}
+  defp as_type(%{key: :as}, _op), do: :name
+  defp as_type(%{type: type}, _op), do: type
 
   defp allowed(:channels, type) do
     %{required: required, optional: optional} = Schema.channels(type)

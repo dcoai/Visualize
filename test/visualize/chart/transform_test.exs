@@ -85,6 +85,71 @@ defmodule Visualize.Chart.TransformTest do
       assert Enum.map(sorted, & &1.t) == [2, 4, 1, 3, 0, 5]
     end
 
+    test ":fold turns wide columns into long rows, skipping listed columns the rows lack (spec/14 §5.4.1)" do
+      wide = [%{hour: 0, cpu: 1, mem: 2}, %{hour: 1, cpu: 3}, %{hour: 2, mem: nil, cpu: 5}]
+
+      assert run(%{op: :fold, fields: [:cpu, :mem, :disk]}, wide) == [
+               %{hour: 0, key: :cpu, value: 1},
+               %{hour: 0, key: :mem, value: 2},
+               %{hour: 1, key: :cpu, value: 3},
+               %{hour: 2, key: :cpu, value: 5}
+             ]
+
+      # The order within a row is the author's; `as` names the two columns.
+      assert run(%{op: :fold, fields: [:mem, :cpu], as: [:series, :v]}, Enum.take(wide, 1)) == [
+               %{hour: 0, series: :mem, v: 2},
+               %{hour: 0, series: :cpu, v: 1}
+             ]
+
+      # A line over the fold draws one path per folded column, and a variable chooses the set.
+      design = %{
+        version: 1,
+        # The source declares the columns every row has; the fold lists the ones a row may.
+        sources: %{wide: %{fields: [:hour]}},
+        vars: %{metrics: %{default: [:cpu, :mem, :disk]}},
+        frame: %{
+          kind: :cartesian,
+          scales: %{x: %{kind: :linear}, y: %{kind: :linear}, color: %{kind: :ordinal}}
+        },
+        marks: [
+          %{
+            type: :line,
+            data: %{
+              source: :wide,
+              transforms: [%{op: :fold, fields: Visualize.Chart.var(:metrics)}]
+            },
+            channels: %{x: :hour, y: :value, series: :key}
+          }
+        ]
+      }
+
+      assert Visualize.Chart.Validator.validate(design) == :ok
+      {:ok, applied} = Visualize.Chart.apply(design, sources: %{wide: wide})
+      svg = Visualize.Chart.render(applied)
+      assert length(Regex.scan(~r/data-series="(cpu|mem)"/, svg)) == 2
+      refute svg =~ ~s(data-series="disk")
+
+      {:ok, two} = Visualize.Chart.apply(design, sources: %{wide: wide}, vars: %{metrics: [:cpu]})
+      assert length(Regex.scan(~r/data-series=/, Visualize.Chart.render(two))) == 1
+
+      # `as` is a pair for a fold and one name for a sum; the validator holds each to its shape.
+      bad =
+        put_in(design, [:marks, Access.at(0), :data, :transforms], [
+          %{op: :fold, fields: [:cpu], as: :key}
+        ])
+
+      assert {:error, [{[:marks, 0, :data, :transforms, 0, :as], {:type, {:list, :name}}}]} =
+               Visualize.Chart.Validator.validate(bad)
+
+      bad =
+        put_in(design, [:marks, Access.at(0), :data, :transforms], [
+          %{op: :sum, field: :cpu, as: [:a, :b]}
+        ])
+
+      assert {:error, [{[:marks, 0, :data, :transforms, 0, :as], {:type, :name}}]} =
+               Visualize.Chart.Validator.validate(bad)
+    end
+
     test ":filter keeps the rows whose reading passes the test, a missing field reading nil" do
       # `v` is 0 2 4 1 3 0 over `t` 0..5; the last row lacks `v` altogether.
       rows = Enum.take(@rows, 5) ++ [%{t: 5}]

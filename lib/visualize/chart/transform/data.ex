@@ -13,6 +13,7 @@ defmodule Visualize.Chart.Transform.Data do
   def run(:filter, node, rows), do: filter(node, rows)
   def run(:bin, node, rows), do: bin(node, rows)
   def run(:stack, node, rows), do: stack(node, rows)
+  def run(:fold, node, rows), do: fold(node, rows)
   def run(:sum, node, rows), do: sum(node, rows)
   def run(:sort, node, rows), do: sort(node, rows)
 
@@ -90,6 +91,29 @@ defmodule Visualize.Chart.Transform.Data do
     |> Enum.with_index()
     |> Enum.max_by(fn {v, _i} -> v end, fn -> {0, 0} end)
     |> elem(1)
+  end
+
+  # -- fold -------------------------------------------------------------------------------
+
+  # Wide columns to long rows (spec/14 §5.4.1): one row per input row per listed column
+  # the row has, the other columns carried, the column's name and value under `as`.
+  defp fold(node, rows) do
+    fields = node.fields
+    {key, value} = as_pair(Map.get(node, :as, [:key, :value]))
+
+    for row <- rows, field <- fields, (reading = Table.get(row, field)) != nil do
+      row
+      |> Map.drop(fields)
+      |> Map.put(key, field)
+      |> Map.put(value, reading)
+    end
+  end
+
+  defp as_pair([key, value]) when is_atom(key) and is_atom(value), do: {key, value}
+
+  defp as_pair(other) do
+    raise ArgumentError,
+          "a :fold step's as is a pair of names; got #{inspect(other)} (spec/14 §5.4)"
   end
 
   # -- sum --------------------------------------------------------------------------------
