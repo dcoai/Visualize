@@ -484,6 +484,57 @@ defmodule Visualize.Chart.MarkTest do
     end
   end
 
+  describe "a filled line is the area under it (spec/14 §5.6)" do
+    test "a fill on a line draws the area to the baseline beneath an unfilled line" do
+      styles = %{s: %{fill: "#abc", curve: :step_after}}
+      group = generate(%{type: :line, channels: %{x: :t, y: :v}, style: :s}, %{styles: styles})
+      [area, line] = group.children
+
+      assert area.style == %{class: "line-fill", stroke: :none}
+      assert line.style == %{fill: :none}
+      assert group.style.fill == "#abc"
+
+      assert d(area) ==
+               Area.new()
+               |> Area.x(px(:t))
+               |> Area.y0(Scale.apply(y(), 0))
+               |> Area.y1(py(:v))
+               |> Area.curve(:step_after)
+               |> Area.generate(@rows)
+
+      assert d(line) ==
+               Line.new()
+               |> Line.x(px(:t))
+               |> Line.y(py(:v))
+               |> Line.curve(:step_after)
+               |> Line.generate(@rows)
+
+      # A line with no fill, or fill none, is one path as before.
+      [only] = generate(%{type: :line, channels: %{x: :t, y: :v}}).children
+      refute Map.has_key?(only.style, :fill)
+
+      [only] =
+        generate(%{type: :line, channels: %{x: :t, y: :v}, style: :n}, %{
+          styles: %{n: %{fill: :none}}
+        }).children
+
+      assert only.style == %{}
+
+      # Per series, the area comes before each series' line and carries its series.
+      group =
+        generate(%{type: :line, channels: %{x: :t, y: :v, series: :k}, style: :s}, %{
+          styles: styles
+        })
+
+      assert Enum.map(group.children, &{&1.style[:class], &1.attrs["data-series"]}) == [
+               {"line-fill", "k0"},
+               {nil, "k0"},
+               {"line-fill", "k1"},
+               {nil, "k1"}
+             ]
+    end
+  end
+
   describe "stroke style (spec/14 §5.6)" do
     @styles %{s: %{stroke: "#000", stroke_width: 2, stroke_style: :inside}}
 

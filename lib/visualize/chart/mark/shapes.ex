@@ -36,10 +36,13 @@ defmodule Visualize.Chart.Mark.Shapes do
   # -- line and area: one path per series ------------------------------------------------
 
   defp line(ctx) do
+    filled? = filled?(ctx)
+    baseline = Channels.baseline(ctx)
+
     ctx
     |> Channels.pixels()
     |> series(ctx)
-    |> Enum.map(fn {value, rows, j} ->
+    |> Enum.flat_map(fn {value, rows, j} ->
       path =
         Line.new()
         |> Line.x(:x)
@@ -48,8 +51,45 @@ defmodule Visualize.Chart.Mark.Shapes do
         |> defined(rows, [:x, :y], &Line.defined/2)
         |> Line.generate_path(rows)
 
-      child(series_path(path, value), rows, series_style(ctx, value, j), last_point(rows, :x, :y))
+      style = series_style(ctx, value, j)
+      anchor = last_point(rows, :x, :y)
+
+      # A filled line is the area under it (spec/14 §5.6): the area to the baseline first,
+      # then the line itself, unfilled.
+      if filled? do
+        [
+          child(
+            under(rows, baseline, ctx, value),
+            rows,
+            %{class: "line-fill", stroke: :none},
+            anchor
+          ),
+          child(series_path(path, value), rows, Map.put(style, :fill, :none), anchor)
+        ]
+      else
+        [child(series_path(path, value), rows, style, anchor)]
+      end
     end)
+  end
+
+  # Whether the style gives the line a fill: a static one other than none, or a binding.
+  defp filled?(%{static: static, bound: bound}) do
+    Map.has_key?(bound, :fill) or (Map.has_key?(static, :fill) and static.fill != :none)
+  end
+
+  # The area from a series' line down to the baseline, in the line's curve.
+  defp under(rows, baseline, ctx, value) do
+    rows = Enum.map(rows, &Map.merge(&1, %{x0: &1.x, x1: &1.x, y0: baseline, y1: &1.y}))
+
+    Area.new()
+    |> Area.x0(:x0)
+    |> Area.x1(:x1)
+    |> Area.y0(:y0)
+    |> Area.y1(:y1)
+    |> curve(ctx, &Area.curve/3)
+    |> defined(rows, [:x0, :x1, :y0, :y1], &Area.defined/2)
+    |> Area.generate_path(rows)
+    |> series_path(value)
   end
 
   defp area(ctx) do
