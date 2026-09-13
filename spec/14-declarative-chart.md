@@ -452,10 +452,10 @@ A `:transform` node has `op` (`{:enum, ops}`, `:binding`, required) and the keys
 | Key | Type | Facet | Read by |
 |---|---|---|---|
 | `field` | `:field` | `:binding` | `:bin`, `:sum`, `:sort`, `:contour` (the value); the hierarchies (the value summed); `:chord`, `:sankey` (the flow's value); `:density` (the weight) |
-| `fields` | `{:list, :field}` | `:binding` | `:stack` (the series); `:chord`, `:sankey`, `:force` (`[source, target]`); `:delaunay`, `:voronoi`, `:density` (`[x, y]`); `:projection` (`[longitude, latitude]`) |
+| `fields` | `{:list, :field}` | `:binding` | `:stack` (the series); `:fold` (the columns to fold, those the rows have); `:chord`, `:sankey`, `:force` (`[source, target]`); `:delaunay`, `:voronoi`, `:density` (`[x, y]`); `:projection` (`[longitude, latitude]`) |
 | `by` | `:field` | `:binding` | `:sum` (the group), the hierarchies (the parent) |
 | `id` | `:field` | `:binding` | the hierarchies (the node identifier) |
-| `as` | `:name` | `:binding` | `:bin`, `:sum` (the output column) |
+| `as` | `{:one_of, [:name, {:list, :name}]}` | `:binding` | `:bin`, `:sum` (the output column, a name); `:fold` (the two output columns, a pair of names) — the validator holds each op to its shape |
 | `thresholds` | `{:one_of, [:integer, {:list, :number}]}` | `:geometry` | `:bin`, `:contour`, `:density` |
 | `order` | `{:enum, [:none, :ascending, :descending, :inside_out, :reverse, :appearance]}` | `:geometry` | `:stack`, `:sort` |
 | `offset` | `{:enum, [:none, :expand, :silhouette, :wiggle, :diverging]}` | `:geometry` | `:stack` |
@@ -468,13 +468,14 @@ A `:transform` node has `op` (`{:enum, ops}`, `:binding`, required) and the keys
 | `test` | `{:enum, [:eq, :ne, :lt, :lte, :gt, :gte, :present, :absent]}` | `:binding` | `:filter` (how the reading is tested, `:present` by default) |
 | `value` | `:term` | `:binding` | `:filter` (what the reading is tested against, `nil` by default) |
 
-The ops are `:filter`, `:bin`, `:stack`, `:sum`, `:sort`, `:tree`, `:cluster`, `:pack`, `:partition`, `:treemap`, `:chord`, `:sankey`, `:force`, `:contour`, `:density`, `:delaunay` and `:voronoi` (`Visualize.Chart.Schema.transform_ops/0`) and `:projection`. Every row a step yields is a map; a row the step derives from a datum keeps the datum's columns and adds its own, so a `:treemap` node still carries its `name`. A field named in a mark's `channels`, in its inline label's text or in its transforms is checked against the source's declared `fields` when the mark reads the source directly. After a transform the columns are the transform's, and a `{:field, f}` in a style is shared by every mark that references the style; those references are read at render, when the rows exist.
+The ops are `:filter`, `:bin`, `:stack`, `:fold`, `:sum`, `:sort`, `:tree`, `:cluster`, `:pack`, `:partition`, `:treemap`, `:chord`, `:sankey`, `:force`, `:contour`, `:density`, `:delaunay` and `:voronoi` (`Visualize.Chart.Schema.transform_ops/0`) and `:projection`. Every row a step yields is a map; a row the step derives from a datum keeps the datum's columns and adds its own, so a `:treemap` node still carries its `name`. A field named in a mark's `channels`, in its inline label's text or in its transforms is checked against the source's declared `fields` when the mark reads the source directly. After a transform the columns are the transform's, and a `{:field, f}` in a style is shared by every mark that references the style; those references are read at render, when the rows exist.
 
 #### 5.4.1 Data steps
 
 - `:filter` — `field` required; `test` (`:present`) and `value` (`nil`). The rows, in order, whose reading of `field` through `Visualize.Data.Table.get/2` passes the test: `:present` keeps a reading that is not `nil` and `:absent` one that is; `:eq` keeps a reading equal to `value` (`==`) and `:ne` one that is not; `:lt`, `:lte`, `:gt` and `:gte` keep a reading that is not `nil` and stands so to `value` under Elixir's term ordering, as `:sort` orders — a `nil` reading never passes an ordering. The step reads a column the rows lack as `nil`, so `%{op: :filter, field: :height, test: :eq, value: 0}` after a hierarchy keeps its leaves and `%{op: :filter, field: :depth, test: :gt, value: 0}` drops its root (D-68). The transform node's `op` names the step, which is why the test is not under `op`.
 - `:bin` — `field` required; `thresholds` (`10`) and `as` (`:count`). `Visualize.Data.bin/2` over the column with `nil`s dropped, one row per bin: `x0`, `x1`, `y0` (`0`, so a histogram's channels read the rows alone), `as` (the bin's count) and `values`.
 - `:stack` — `fields` required (the series keys); `order` (`:none`), `offset` (`:none`). `Visualize.Shape.Stack` with the keys, the order and the offset (`:inside_out` is its `:insideout`; `:appearance` orders the keys by the index of each series' greatest value, d3's `stackOrderAppearance`, before a `:none` stack). One row per series in key order, per datum in data order: the datum's columns plus `key`, `series` (the series' stacking position), `value`, `y0` and `y1`.
+- `:fold` — `fields` required; `as` (`[:key, :value]`). Wide columns to long rows (#237): one output row per input row per listed column the row *has* — a listed column the rows lack is skipped, never a fault, which is how a design says "these, if they exist", and a row's `nil` in a folded column yields no row for it — the row's other columns carried unchanged, the folded column's name under the first name of `as` and its value under the second. Input rows in order, and within a row the columns in the order `fields` lists them, so the series order is the author's. A `fields` that is a variable resolves at application like any list (§7.1), so a host or the variables panel chooses the set. The validator holds `fields` to names alone — not to the source's fields, since a missing one is not a fault — and, as after any step, does not check a channel against the folded rows (a step's columns are known at run time); a channel that reads a folded column after the fold reads `nil`, as §5.4 says of any column the rows lack.
 - `:sum` — `field` required; `by` and `as` (`:sum`). One row per distinct `by` value in order of first appearance, `%{by => value, as => sum}` with `nil`s ignored; without `by`, one row `%{as => sum}`.
 - `:sort` — `field` required; `order` (`:ascending`, or `:descending`). The rows stably sorted by the column under `Enum.sort_by/3`'s ordering.
 
@@ -1170,6 +1171,8 @@ The transform appenders, one per op of §5.4 (`Visualize.Chart.Schema.transform_
 | `Visualize.Chart.Build.bin/3` | `bin(data, field, opts)`: a `:bin` step appended to the data node (§5.4) — `opts` are `thresholds`, `as`. |
 | `Visualize.Chart.Build.stack/2` | As `stack/3` with no options. |
 | `Visualize.Chart.Build.stack/3` | `stack(data, fields, opts)`: a `:stack` step appended to the data node (§5.4) — `opts` are `order`, `offset`. |
+| `Visualize.Chart.Build.fold/2` | As `fold/3` with no options. |
+| `Visualize.Chart.Build.fold/3` | `fold(data, fields, opts)`: a `:fold` step appended to the data node (§5.4) — `opts` are `as`. |
 | `Visualize.Chart.Build.sum/2` | As `sum/3` with no options. |
 | `Visualize.Chart.Build.sum/3` | `sum(data, field, opts)`: a `:sum` step appended to the data node (§5.4) — `opts` are `by`, `as`. |
 | `Visualize.Chart.Build.sort/2` | As `sort/3` with no options. |
