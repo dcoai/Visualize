@@ -523,6 +523,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "the names of the host's sample sources, for a source's `default` (spec/14 §19.10)"
     )
 
+    attr(:hidden, :list,
+      default: [],
+      doc:
+        "keys the host keeps out of a `:source` form — `default` when it binds by name alone (§19.10)"
+    )
+
     attr(:strip, :boolean,
       default: true,
       doc: "render the facet strip; `false` where the caller does"
@@ -960,7 +966,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       pool = Map.get(assigns, :pool) || []
 
-      for spec <- specs, spec.facet == open, not (faced? and spec.key == :font_style) do
+      hidden = if assigns.kind == :source, do: Map.get(assigns, :hidden) || [], else: []
+
+      for spec <- specs,
+          spec.facet == open,
+          spec.key not in hidden,
+          not (faced? and spec.key == :font_style) do
         widget = pooled(assigns.kind, spec.key, pool) || referenced(spec.type, refs)
 
         %{

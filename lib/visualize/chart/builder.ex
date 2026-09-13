@@ -90,6 +90,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         store: nil,
         on_save: :visualize_chart_saved,
         on_deploy: :visualize_chart_deployed,
+        source_defaults: true,
         styles: true,
         class: nil
       ]
@@ -105,6 +106,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:sources, :map, default: %{}, doc: "the pool the preview binds the design's slots to")
     attr(:vars, :map, default: %{}, doc: "the values the preview applies the variables with")
     attr(:theme, :any, default: nil, doc: "a `Visualize.Theme` for the preview")
+
+    attr(:source_defaults, :boolean,
+      default: true,
+      doc: "whether a source's `default` is offered in the form (spec/14 §18.1, §19.10)"
+    )
 
     attr(:store, :any,
       default: nil,
@@ -337,6 +343,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 theme={@colour.theme}
                 defs={@defs}
                 pool={@pool}
+                hidden={if(@source_defaults, do: [], else: [:default])}
                 strip={false}
                 target={@myself}
               />
@@ -900,6 +907,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
              node_label: "design",
              facet: nil,
              field: nil,
+             context: :layer,
              adding: false,
              notice: nil
            )}
@@ -1715,12 +1723,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           socket
 
         use ->
+          # Selecting a site opens the site's context (spec/14 §19.10).
           assign(socket,
             selected: use.id,
             node_label: "design",
             facet: nil,
             style_entry: nil,
-            field: nil
+            field: nil,
+            context: :layer
           )
       end
     end
