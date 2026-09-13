@@ -386,12 +386,18 @@ defmodule Visualize.Hooks.Builder do
 
       handleClick(e) {
         if (!e.target || !e.target.closest) return;
-        // A well selects its own field — a gradient's stop, not the fill under it — so the
-        // click stops here rather than reaching the row's own select (spec/14 §18.6).
+        // The one listener that selects a field (spec/14 §19.10): a well selects its own
+        // field — a gradient's stop, not the fill row it sits in — and any other click in
+        // a row selects the row's key. Rows carry no click binding, so this is the only
+        // selection a click makes.
         const well = e.target.closest('[data-builder-well]');
         if (well && this.el.contains(well)) {
-          e.stopPropagation();
           this.push('select_field', { field: well.getAttribute('data-builder-well') });
+          return;
+        }
+        const field = e.target.closest('[data-builder-bind]');
+        if (field && this.el.contains(field) && field.hasAttribute('phx-keyup')) {
+          this.push('select_field', { field: field.getAttribute('data-builder-bind') });
           return;
         }
         const row = e.target.closest('[data-builder-path]');

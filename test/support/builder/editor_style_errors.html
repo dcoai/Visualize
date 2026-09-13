@@ -5,7 +5,7 @@
   <form id="vis-builder-editor-form" class="vis-builder-form" phx-change="edit" phx-hook="BuilderHook" data-builder-scope="ref" data-builder-edit="edit">
     
       
-      <label class="vis-builder-field" data-builder-ref="extends" data-builder-bind="extends" phx-click="select_field" phx-keyup="select_field" phx-value-field="extends">
+      <label class="vis-builder-field" data-builder-ref="extends" data-builder-bind="extends" phx-keyup="select_field" phx-value-field="extends">
   <span class="vis-builder-key">
     extends
     
@@ -30,7 +30,7 @@
       <fieldset class="vis-builder-block vis-builder-block-fill">
         <legend class="vis-builder-block-name">fill</legend>
         
-          <label class="vis-builder-field vis-builder-field-fill-style">
+          <div class="vis-builder-field vis-builder-field-fill-style">
             <span class="vis-builder-key">style</span>
             <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
               <label class="vis-builder-glyph" title="none">
@@ -47,8 +47,8 @@
                 <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><radialGradient id="vis-glyph-radial"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></radialGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-radial)" stroke="currentColor" stroke-width="1"/></svg>
               </label>
             </span>
-          </label>
-          <label class="vis-builder-field" data-builder-bind="fill_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill_opacity">
+          </div>
+          <label class="vis-builder-field" data-builder-bind="fill_opacity" phx-keyup="select_field" phx-value-field="fill_opacity">
   <span class="vis-builder-key">
     opacity
     
@@ -74,7 +74,7 @@
   
 </label>
           <div class="vis-builder-fill-colours">
-            <label class="vis-builder-field" data-builder-bind="fill" phx-click="select_field" phx-keyup="select_field" phx-value-field="fill">
+            <label class="vis-builder-field" data-builder-bind="fill" phx-keyup="select_field" phx-value-field="fill">
   <span class="vis-builder-key">
     colour
     
@@ -108,7 +108,7 @@
       <fieldset class="vis-builder-block">
         <legend class="vis-builder-block-name">stroke</legend>
         
-          <label class="vis-builder-field" data-builder-bind="stroke_style" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_style">
+          <label class="vis-builder-field" data-builder-bind="stroke_style" phx-keyup="select_field" phx-value-field="stroke_style">
   <span class="vis-builder-key">
     stroke_style
     
@@ -142,7 +142,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="stroke_width" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_width">
+</label><label class="vis-builder-field" data-builder-bind="stroke_width" phx-keyup="select_field" phx-value-field="stroke_width">
   <span class="vis-builder-key">
     stroke_width
     <span class="vis-builder-field-handle" draggable="true" data-builder-promote="stroke_width" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
@@ -166,7 +166,7 @@
   
   
   
-</label><label class="vis-builder-field vis-builder-field-needs" data-builder-bind="stroke" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke">
+</label><label class="vis-builder-field vis-builder-field-needs" data-builder-bind="stroke" phx-keyup="select_field" phx-value-field="stroke">
   <span class="vis-builder-key">
     stroke
     
@@ -188,7 +188,7 @@
   <ul class="vis-builder-key-errors">
     <li class="vis-builder-error">styles.series.stroke: slot :series_1 is not a slot of the theme</li>
   </ul>
-</label><label class="vis-builder-field" data-builder-bind="stroke_opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_opacity">
+</label><label class="vis-builder-field" data-builder-bind="stroke_opacity" phx-keyup="select_field" phx-value-field="stroke_opacity">
   <span class="vis-builder-key">
     stroke_opacity
     
@@ -212,7 +212,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="stroke_dasharray" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_dasharray">
+</label><label class="vis-builder-field" data-builder-bind="stroke_dasharray" phx-keyup="select_field" phx-value-field="stroke_dasharray">
   <span class="vis-builder-key">
     stroke_dasharray
     
@@ -232,7 +232,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="stroke_linejoin" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linejoin">
+</label><label class="vis-builder-field" data-builder-bind="stroke_linejoin" phx-keyup="select_field" phx-value-field="stroke_linejoin">
   <span class="vis-builder-key">
     stroke_linejoin
     
@@ -263,7 +263,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="stroke_linecap" phx-click="select_field" phx-keyup="select_field" phx-value-field="stroke_linecap">
+</label><label class="vis-builder-field" data-builder-bind="stroke_linecap" phx-keyup="select_field" phx-value-field="stroke_linecap">
   <span class="vis-builder-key">
     stroke_linecap
     
@@ -302,7 +302,7 @@
       <fieldset class="vis-builder-block">
         <legend class="vis-builder-block-name">font</legend>
         
-          <label class="vis-builder-field" data-builder-bind="font_family" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_family">
+          <label class="vis-builder-field" data-builder-bind="font_family" phx-keyup="select_field" phx-value-field="font_family">
   <span class="vis-builder-key">
     font_family
     
@@ -322,7 +322,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="font_size" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_size">
+</label><label class="vis-builder-field" data-builder-bind="font_size" phx-keyup="select_field" phx-value-field="font_size">
   <span class="vis-builder-key">
     font_size
     
@@ -346,7 +346,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="font_weight" phx-click="select_field" phx-keyup="select_field" phx-value-field="font_weight">
+</label><label class="vis-builder-field" data-builder-bind="font_weight" phx-keyup="select_field" phx-value-field="font_weight">
   <span class="vis-builder-key">
     font_weight
     
@@ -392,7 +392,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="line_height" phx-click="select_field" phx-keyup="select_field" phx-value-field="line_height">
+</label><label class="vis-builder-field" data-builder-bind="line_height" phx-keyup="select_field" phx-value-field="line_height">
   <span class="vis-builder-key">
     line_height
     
@@ -426,7 +426,7 @@
       <fieldset class="vis-builder-block">
         <legend class="vis-builder-block-name">position</legend>
         
-          <label class="vis-builder-field" data-builder-bind="text_anchor" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_anchor">
+          <label class="vis-builder-field" data-builder-bind="text_anchor" phx-keyup="select_field" phx-value-field="text_anchor">
   <span class="vis-builder-key">
     text_anchor
     
@@ -457,7 +457,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="vertical_align" phx-click="select_field" phx-keyup="select_field" phx-value-field="vertical_align">
+</label><label class="vis-builder-field" data-builder-bind="vertical_align" phx-keyup="select_field" phx-value-field="vertical_align">
   <span class="vis-builder-key">
     vertical_align
     
@@ -491,7 +491,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="margin_x" phx-click="select_field" phx-keyup="select_field" phx-value-field="margin_x">
+</label><label class="vis-builder-field" data-builder-bind="margin_x" phx-keyup="select_field" phx-value-field="margin_x">
   <span class="vis-builder-key">
     margin_x
     
@@ -515,7 +515,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="margin_y" phx-click="select_field" phx-keyup="select_field" phx-value-field="margin_y">
+</label><label class="vis-builder-field" data-builder-bind="margin_y" phx-keyup="select_field" phx-value-field="margin_y">
   <span class="vis-builder-key">
     margin_y
     
@@ -539,7 +539,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="text_angle" phx-click="select_field" phx-keyup="select_field" phx-value-field="text_angle">
+</label><label class="vis-builder-field" data-builder-bind="text_angle" phx-keyup="select_field" phx-value-field="text_angle">
   <span class="vis-builder-key">
     text_angle
     
@@ -571,7 +571,7 @@
       <fieldset class="vis-builder-block">
         <legend class="vis-builder-block-name">effects</legend>
         
-          <label class="vis-builder-field" data-builder-bind="opacity" phx-click="select_field" phx-keyup="select_field" phx-value-field="opacity">
+          <label class="vis-builder-field" data-builder-bind="opacity" phx-keyup="select_field" phx-value-field="opacity">
   <span class="vis-builder-key">
     opacity
     
@@ -595,7 +595,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="blend" phx-click="select_field" phx-keyup="select_field" phx-value-field="blend">
+</label><label class="vis-builder-field" data-builder-bind="blend" phx-keyup="select_field" phx-value-field="blend">
   <span class="vis-builder-key">
     blend
     
@@ -618,7 +618,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="effect" phx-click="select_field" phx-keyup="select_field" phx-value-field="effect">
+</label><label class="vis-builder-field" data-builder-bind="effect" phx-keyup="select_field" phx-value-field="effect">
   <span class="vis-builder-key">
     effect
     
@@ -649,7 +649,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="effect_radius" phx-click="select_field" phx-keyup="select_field" phx-value-field="effect_radius">
+</label><label class="vis-builder-field" data-builder-bind="effect_radius" phx-keyup="select_field" phx-value-field="effect_radius">
   <span class="vis-builder-key">
     effect_radius
     
@@ -679,7 +679,7 @@
       
     
       
-      <label class="vis-builder-field" data-builder-bind="class" phx-click="select_field" phx-keyup="select_field" phx-value-field="class">
+      <label class="vis-builder-field" data-builder-bind="class" phx-keyup="select_field" phx-value-field="class">
   <span class="vis-builder-key">
     class
     
@@ -699,7 +699,7 @@
   
   
   
-</label><label class="vis-builder-field vis-builder-field-needs" data-builder-bind="curve" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve">
+</label><label class="vis-builder-field vis-builder-field-needs" data-builder-bind="curve" phx-keyup="select_field" phx-value-field="curve">
   <span class="vis-builder-key">
     curve
     
@@ -753,7 +753,7 @@
   <ul class="vis-builder-key-errors">
     <li class="vis-builder-error">styles.series.curve: must be one of :linear, :step</li>
   </ul>
-</label><label class="vis-builder-field" data-builder-bind="curve_opts" phx-click="select_field" phx-keyup="select_field" phx-value-field="curve_opts">
+</label><label class="vis-builder-field" data-builder-bind="curve_opts" phx-keyup="select_field" phx-value-field="curve_opts">
   <span class="vis-builder-key">
     curve_opts
     
@@ -773,7 +773,7 @@
   
   <textarea name="curve_opts"></textarea>
   
-</label><label class="vis-builder-field" data-builder-bind="symbol" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol">
+</label><label class="vis-builder-field" data-builder-bind="symbol" phx-keyup="select_field" phx-value-field="symbol">
   <span class="vis-builder-key">
     symbol
     
@@ -816,7 +816,7 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="symbol_size" phx-click="select_field" phx-keyup="select_field" phx-value-field="symbol_size">
+</label><label class="vis-builder-field" data-builder-bind="symbol_size" phx-keyup="select_field" phx-value-field="symbol_size">
   <span class="vis-builder-key">
     symbol_size
     

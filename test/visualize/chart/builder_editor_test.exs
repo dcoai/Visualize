@@ -394,7 +394,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
 
       # The fill block opens with the fill style, in a row of its own (§18.6).
       assert html =~
-               ~r|<legend class="vis-builder-block-name">fill</legend>\s*<label class="vis-builder-field vis-builder-field-fill-style">\s*<span class="vis-builder-key">style</span>|
+               ~r|<legend class="vis-builder-block-name">fill</legend>\s*<div class="vis-builder-field vis-builder-field-fill-style">\s*<span class="vis-builder-key">style</span>|
 
       fill_row =
         html
