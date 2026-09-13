@@ -1,12 +1,13 @@
 defmodule Examples.Charts.MultiLineChart do
   @moduledoc """
-  Multi-series line chart as a design (#125): one `:line` mark with a `series` channel.
+  Multi-series line chart as a design (#125, #237): one `:line` mark over a **wide** feed.
 
   The four hand-built path elements, their four colours and the hand-laid legend are one
-  mark, one ordinal `color` scale and one `legend` node: a `series` channel splits the mark
-  into one path per distinct value and colours each from the scale (spec/14 §5.6), and the
-  legend explains the same scale. The data reaches the design as one table with a `series`
-  column rather than as a map of series, which is what a mark reads.
+  mark, one ordinal `color` scale and one `legend` node: the feed is wide — one row per
+  point with a column per series — a `:fold` step turns it long, one row per point per
+  column the row has (spec/14 §5.4.1), and a `series` channel on the folded key splits the
+  mark into one path per column and colours each from the scale (§5.6); the legend
+  explains the same scale. A column the feed drops is a line that is simply not there.
 
   The legend draws *inside* the plot area, at the top right of the right margin the chart
   already reserved for it, because that is the only place the layer can put one (#136).
@@ -33,7 +34,8 @@ defmodule Examples.Charts.MultiLineChart do
     design =
       Design.fold([
         chart(meta: %{name: title(), description: [description()]}),
-        source(:series, [:x, :y, :series]),
+        # The source declares the column every row has; the fold lists the ones a row may.
+        source(:series, [:x]),
         style(:wave, stroke_width: 2, curve: :monotone_x),
         cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
         linear_scale(:x),
@@ -42,7 +44,11 @@ defmodule Examples.Charts.MultiLineChart do
         axis(:x, :bottom, ticks: 10),
         axis(:y, :left, ticks: 5),
         legend(:color, position: :top_right),
-        line(:series, %{x: :x, y: :y, series: :series}, style: :wave)
+        line(
+          fold(:series, [:series_a, :series_b, :series_c, :series_d], as: [:series, :y]),
+          %{x: :x, y: :y, series: :series},
+          style: :wave
+        )
       ])
 
     {design, %{series: rows(opts)}}
@@ -50,12 +56,16 @@ defmodule Examples.Charts.MultiLineChart do
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-  # One row per point, the series named as the legend prints it. The key order is fixed by
-  # sorting, so the colour a series takes never depends on map iteration order.
+  # One row per point with a column per series — the wide shape a feed of several
+  # metrics has; the fold's field order fixes the colour each takes.
   defp rows(opts) do
-    for {key, points} <- Enum.sort_by(series(opts), &elem(&1, 0)),
-        point <- points,
-        do: Map.put(point, :series, format_key(key))
+    series = series(opts)
+
+    for i <- 0..30 do
+      Enum.reduce(series, %{x: i}, fn {key, points}, row ->
+        Map.put(row, key, Enum.at(points, i).y)
+      end)
+    end
   end
 
   defp series(opts) do
@@ -63,14 +73,6 @@ defmodule Examples.Charts.MultiLineChart do
       nil -> opts[:data] || @data
       tick -> animated(tick)
     end
-  end
-
-  defp format_key(key) do
-    key
-    |> to_string()
-    |> String.replace("_", " ")
-    |> String.split(" ")
-    |> Enum.map_join(" ", &String.capitalize/1)
   end
 
   # Animation: moving waves with different frequencies.
@@ -89,13 +91,13 @@ defmodule Examples.Charts.MultiLineChart do
     ~S"""
     import Visualize.Chart.Build
 
-    # One table with a series column, not a map of series: a mark reads rows.
-    rows = [%{x: 0, y: 50.0, series: "Series A"}, %{x: 0, y: 45.0, series: "Series B"}, ...]
+    # A wide feed: one row per point, a column per series.
+    rows = [%{x: 0, series_a: 50.0, series_b: 45.0, series_c: 60.0, series_d: 40.0}, ...]
 
     {:ok, design} =
       Visualize.Chart.compose([
         chart(meta: %{name: "Multi-line Chart"}),
-        source(:series, [:x, :y, :series]),
+        source(:series, [:x]),
         style(:wave, stroke_width: 2, curve: :monotone_x),
         cartesian(600, 400, margin: %{top: 20, right: 120, bottom: 30, left: 50}),
         linear_scale(:x),
@@ -105,8 +107,13 @@ defmodule Examples.Charts.MultiLineChart do
         axis(:y, :left, ticks: 5),
         legend(:color, position: :top_right),
 
-        # `series` splits the mark into one path per value and colours each from `color`.
-        line(:series, %{x: :x, y: :y, series: :series}, style: :wave)
+        # The fold makes one row per point per column the row has; `series` on the folded
+        # key splits the mark into one path per column and colours each from `color`.
+        line(
+          fold(:series, [:series_a, :series_b, :series_c, :series_d], as: [:series, :y]),
+          %{x: :x, y: :y, series: :series},
+          style: :wave
+        )
       ])
 
     {:ok, applied} = Visualize.Chart.apply(design, sources: %{series: rows})

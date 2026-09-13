@@ -28,7 +28,7 @@ defmodule Visualize.Chart.Transform do
   @typedoc "What a step sees of the frame: the plot area and, in a `:geo` frame, its projection."
   @type context :: %{size: [number()], projection: Projection.t() | nil}
 
-  @data_ops [:filter, :bin, :stack, :sum, :sort]
+  @data_ops [:filter, :bin, :stack, :fold, :sum, :sort]
   @layout_ops [:tree, :cluster, :pack, :partition, :treemap, :chord, :sankey, :force]
   @geo_ops [:delaunay, :voronoi, :contour, :density, :projection]
 
