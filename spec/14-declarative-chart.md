@@ -1718,20 +1718,21 @@ There is now **one strip**: the children of the open root, then the facets of th
 
 ### 18.16 The workspace, and the library as a tree
 
-The shell of §18.13 put the stack beside one editing column. The workspace is four regions across:
+The shell of §18.13 put the stack beside one editing column. The workspace is four regions across (#243 — the drawing-tool shell):
 
 ```
-┌───────────┬───────────┬──────────────────────────────┬─────────────┐
-│ LIBRARY   │ LAYERS    │ Category  Sub-category  Name │ CONTEXT     │
-│ a tree of │ the stack │ the save-fragment form       │ the control │
-│ the store │ and the   ├──────────────────────────────┤ for the     │
-│ full      │ drop      │ node tabs, chips, form       │ field with  │
-│ height,   │ target    ├──────────────────────────────┤ focus       │
-│ scrolling │           │ preview                      │             │
-└───────────┴───────────┴──────────────────────────────┴─────────────┘
+┌───────────┬───────────┬──────────────────────────────┬──────────────────┐
+│ LIBRARY   │ CHARTS    │                              │ CONTEXT          │
+│ a tree of │ the       │ the graph: the selected      │ inspect · layer  │
+│ the store,│ charts,   │ chart drawn, alone           │ colour · font    │
+│ folding   │ each with │                              │ variables        │
+│ to a rail │ its layers│                              │ node tabs, chips,│
+│           │           │                              │ form / pickers   │
+│           │           │                              │ 400px, adjustable│
+└───────────┴───────────┴──────────────────────────────┴──────────────────┘
 ```
 
-The **library** is the left-most column, at the height of the viewport and scrolling on its own, so browsing a large library never moves the chart. The **layers** sit beside it, because a fragment travels from one to the other and a gesture across two adjacent columns is a gesture. The **context panel** is the right-most column (§18.18). The middle is the editor of §18.13, with the save-fragment form (§18.17) as its header.
+The **library** is the left-most column, at the height of the viewport and scrolling on its own, so browsing a large library never moves the chart; it **folds to a rail** (`library_open`, a person's choice kept while they work) with one button to unfold it, so the graph may have the room. The **charts** sit beside it (§18.8), because a fragment travels from one to the other and a gesture across two adjacent columns is a gesture. The **middle is the graph** — the selected chart's preview and nothing else; a chart that is not a composite (a style opened from the library) has no chart to look at and the middle says so. The **context** is the right-most column, the inspector (§18.18): **400px wide by default and adjustable** — a handle on its left edge is dragged, `Visualize.Hooks.Builder` in scope `resize` reporting the width (`context_width`, kept between 300 and 800) — with a tab row of five: **inspect**, the selected chart's node tabs, its chips and the selected node's form (what the first draft's middle column held); **layer**, **colour**, **font** and **variables**, the panels of §19.10. Selecting a node or a root opens *inspect*, a layer opens *layer*, a colour or font field its picker. The toolbar — New, Save as, Save, Deploy — stays above the columns.
 
 **A library item's name carries its place in the tree.**
 
@@ -2120,7 +2121,7 @@ The names on offer are those the stack declares under `vars` and those any layer
 | `Visualize.Chart.Builder.Variables.type_of/1` | the type a variable took from its first use, or `nil` for none |
 | `Visualize.Chart.Builder.Editor.label/1` | a path as a person reads it — the spelling the validator uses for an error's path |
 
-**The context panel opens with an icon row of four panels** — *layer*, *colour*, *font*, *variables* — one open at a time (`context`), each staying put while a person works, the way a drawing tool keeps its pickers beside the canvas:
+**The context panel opens with an icon row of five panels** — *inspect*, *layer*, *colour*, *font*, *variables* — one open at a time (`context`), *inspect* holding the node tabs, the chips and the form (§18.16), each staying put while a person works, the way a drawing tool keeps its pickers beside the canvas:
 
 | Panel | Shows | Writes |
 |---|---|---|
