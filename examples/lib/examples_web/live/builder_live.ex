@@ -188,7 +188,14 @@ defmodule ExamplesWeb.BuilderLive do
         # (spec/14 §19.3), so a body serves any chart, whatever it calls its style.
         {"Styles::thick line", %{style: %{stroke_width: 5}}},
         {"Styles::stepped", %{style: %{curve: :step}}}
-      ]
+      ] ++ templates()
+    end
+
+    # A chart type is a template (spec/14 §18.16, #233): every gallery design and every
+    # preset without one, as a composite under Charts::<title>.
+    defp templates do
+      for template <- Examples.Charts.Templates.all(),
+          do: {template.name, composite(template.design)}
     end
   end
 
@@ -201,7 +208,7 @@ defmodule ExamplesWeb.BuilderLive do
     {:ok,
      assign(socket,
        layers: Enum.map(~w(Uptime::house Uptime::shared Uptime::panel), &{&1, Library.id_of(&1)}),
-       sources: %{primary: rows()},
+       sources: Map.merge(Examples.Charts.Templates.pool(), %{primary: rows()}),
        saved: nil
      )}
   end
@@ -234,9 +241,12 @@ defmodule ExamplesWeb.BuilderLive do
       <p>
         <code>Visualize.Chart.Builder</code>
         over three entries of this page's library — a house design, a shared frame and a
-        panel. Click an entry to open it, drag one into the stack, edit a node, bind a
-        variable, mask a key; <em>Save</em> keeps the structure and <em>Deploy</em> hands the
-        page the flat design.
+        panel — beside a template for every chart of the gallery under <em>Charts</em>. Click
+        an entry to open it, drag one into the stack, edit a node, bind a variable, mask a
+        key; <em>Save</em>
+        keeps the structure and <em>Deploy</em>
+        hands the page the flat
+        design.
       </p>
       <p :if={@saved} class="builder-saved">{@saved}</p>
       <p><a href="/">← back to the gallery</a></p>
