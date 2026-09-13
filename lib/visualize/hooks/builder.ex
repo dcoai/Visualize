@@ -34,6 +34,8 @@ defmodule Visualize.Hooks.Builder do
   - `inspect` with `%{"path" => string, "layer" => string}` on a click on a row
   - `drop_colour` with `%{"field" => string, "colour" => string, "edit" => string}` when a
     patch of the colour chooser is dropped on a colour well (spec/14 §19.10)
+  - `context_width` with `%{"width" => integer}` when the inspector's edge is released
+    after a drag (spec/14 §18.16)
   """
 
   @doc """
@@ -72,6 +74,10 @@ defmodule Visualize.Hooks.Builder do
         // position, so the builder says which row to land on (spec/14 §18.17).
         // The pool list's chosen entry is scrolled into view (spec/14 §19.10).
         this.reveal();
+        // The inspector's edge (spec/14 §18.16): a drag on the handle reports the width
+        // once the pointer is released; while it moves the column follows it.
+        this.onPointerDown = this.handlePointerDown.bind(this);
+        this.el.addEventListener('pointerdown', this.onPointerDown);
         this.handleEvent('vis:focus', ({ id }) => {
           const row = document.getElementById(id);
           if (row && this.el.contains(row)) row.focus();
@@ -80,6 +86,28 @@ defmodule Visualize.Hooks.Builder do
 
       updated() {
         this.reveal();
+      },
+
+      handlePointerDown(e) {
+        if (this.scope !== 'resize' || !e.target || !e.target.closest) return;
+        const handle = e.target.closest('[data-builder-resize]');
+        if (!handle || !this.el.contains(handle)) return;
+        e.preventDefault();
+        // The width is a custom property of the panels grid, which lays the columns out.
+        const grid = this.el.closest('.vis-builder-panels') || this.el;
+        const right = this.el.getBoundingClientRect().right;
+        const move = (ev) => {
+          const width = Math.max(300, Math.min(800, right - ev.clientX));
+          grid.style.setProperty('--vis-builder-context', width + 'px');
+        };
+        const up = (ev) => {
+          window.removeEventListener('pointermove', move);
+          window.removeEventListener('pointerup', up);
+          const width = Math.max(300, Math.min(800, Math.round(right - ev.clientX)));
+          this.push('context_width', { width: width });
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
       },
 
       reveal() {
@@ -425,6 +453,7 @@ defmodule Visualize.Hooks.Builder do
 
       destroyed() {
         this.el.removeEventListener('input', this.onInput);
+        this.el.removeEventListener('pointerdown', this.onPointerDown);
         this.el.removeEventListener('dragstart', this.onDragStart);
         this.el.removeEventListener('dragover', this.onDragOver);
         this.el.removeEventListener('drop', this.onDrop);

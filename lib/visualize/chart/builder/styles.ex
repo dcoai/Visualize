@@ -242,6 +242,74 @@ if Code.ensure_loaded?(Phoenix.Component) do
         minmax(0, 1fr) var(--vis-builder-context);
     }
 
+    /* The library folded to a rail (spec/14 §18.16). */
+    .vis-builder-panels-library-folded {
+      grid-template-columns:
+        36px var(--vis-builder-sidebar)
+        minmax(0, 1fr) var(--vis-builder-context);
+    }
+
+    .vis-builder-library-rail {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: var(--vis-builder-panel);
+    }
+
+    .vis-builder-library-rail-word {
+      writing-mode: vertical-rl;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .vis-builder-library-fold {
+      padding: 0 6px;
+      border: 0;
+      background: none;
+      color: var(--vis-builder-muted);
+      cursor: pointer;
+    }
+
+    /* The graph alone in the middle (spec/14 §18.16). */
+    .vis-builder-graph {
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: var(--vis-builder-gap);
+      overflow: auto;
+    }
+
+    /* The inspector (spec/14 §18.16): its width a custom property the drag sets, its
+       left edge a handle. */
+    .vis-builder-context {
+      position: relative;
+    }
+
+    .vis-builder-context-handle {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 6px;
+      cursor: col-resize;
+    }
+
+    .vis-builder-context-handle:hover {
+      background: var(--vis-builder-line);
+    }
+
+    .vis-builder-inspect {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px;
+    }
+
     .vis-builder-library-pane,
     .vis-builder-sidebar,
     .vis-builder-main,

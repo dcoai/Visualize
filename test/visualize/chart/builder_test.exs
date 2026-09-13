@@ -105,7 +105,9 @@ defmodule Visualize.Chart.BuilderTest do
       refute plain =~ "vis-builder-library-pane"
       refute plain =~ "vis-builder-panels-library"
 
-      assert stored =~ ~s(<div class="vis-builder-panels vis-builder-panels-library">)
+      assert stored =~
+               ~s(<div class="vis-builder-panels vis-builder-panels-library" style="--vis-builder-context: 400px">)
+
       assert stored =~ ~s(class="vis-builder-library-pane")
       assert stored =~ ~s(<h3 class="vis-builder-category-name">Uncategorised</h3>)
       assert stored =~ ~s(data-builder-fragment="composite:1")
@@ -115,10 +117,10 @@ defmodule Visualize.Chart.BuilderTest do
     test "the three regions are rendered, the layers in the sidebar and the nodes as tabs" do
       html = rendered(:builder)
 
-      assert html =~ ~s(<div class="vis-builder-panels">)
+      assert html =~ ~s(<div class="vis-builder-panels" style="--vis-builder-context: 400px">)
       assert html =~ ~s(<aside class="vis-builder-sidebar">)
       assert html =~ ~s(<main class="vis-builder-main">)
-      assert html =~ ~s(<div class="vis-builder-workspace">)
+      assert html =~ ~s(<div class="vis-builder-graph">)
       assert html =~ ~s(<div class="vis-builder-tray">)
 
       # The stack is inside the sidebar and the node strip inside the main column, which is
@@ -1359,7 +1361,7 @@ defmodule Visualize.Chart.BuilderTest do
       pool = %{primary: BuilderFixture.sources().primary, other: [%{b: 1, a: 2}]}
       s = BuilderFixture.socket(BuilderFixture.layers(), sources: pool)
       {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
-      assert s.assigns.context == :layer
+      assert s.assigns.context == :inspect
 
       # A colour picked leaves the context on the chooser; selecting the site brings the
       # layer's context — and the source list — back.
@@ -1369,7 +1371,7 @@ defmodule Visualize.Chart.BuilderTest do
                ~s(class="vis-builder-pool" role="radiogroup" aria-label="a source of the pool")
 
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
-      assert s.assigns.context == :layer
+      assert s.assigns.context == :inspect
 
       assert BuilderFixture.render(s) =~
                ~s(class="vis-builder-pool" role="radiogroup" aria-label="a source of the pool")
@@ -1743,16 +1745,16 @@ defmodule Visualize.Chart.BuilderTest do
       %{socket: s}
     end
 
-    test "four icons, one open; the layer's context is the default", %{socket: s} do
+    test "four icons, one open; inspect is the default", %{socket: s} do
       html = BuilderFixture.render(s)
       assert html =~ ~s(<nav class="vis-builder-context-icons" aria-label="context panels">)
 
-      for panel <- ~w(layer colour font variables) do
+      for panel <- ~w(inspect colour font variables) do
         assert html =~ ~s(phx-click="context" phx-value-panel="#{panel}")
       end
 
       assert html =~
-               ~s(class="vis-builder-context-icon vis-builder-context-icon-on" title="layer")
+               ~s(class="vis-builder-context-icon vis-builder-context-icon-on" title="inspect")
 
       assert html =~ ~s(class="vis-builder-layer-context")
       refute html =~ ~s(class="vis-builder-picker")
@@ -1764,7 +1766,7 @@ defmodule Visualize.Chart.BuilderTest do
       refute html =~ ~s(class="vis-builder-layer-context")
 
       {:noreply, same} = Builder.handle_event("context", %{"panel" => "nonsense"}, s)
-      assert same.assigns.context == :layer
+      assert same.assigns.context == :inspect
     end
 
     test "the chooser: patches above the picker, each draggable, writing the selected colour field",
@@ -1862,8 +1864,12 @@ defmodule Visualize.Chart.BuilderTest do
       assert faced_html =~
                ~s(name="font_face" value="light_italic" checked aria-label="light italic")
 
+      # The form's face is a dropdown wearing the chosen face — the form is under the
+      # inspect tab, the panel keeps its list.
+      {:noreply, inspected} = Builder.handle_event("context", %{"panel" => "inspect"}, faced)
+      faced_html = BuilderFixture.render(inspected)
       refute faced_html =~ ~s(phx-value-field="font_style")
-      # The form's face is a dropdown wearing the chosen face; the panel keeps its list.
+
       assert faced_html =~
                ~s(<select name="font_face" class="vis-builder-face-select" style="font-weight: 300; font-style: italic" aria-label="face">)
 
@@ -1873,7 +1879,8 @@ defmodule Visualize.Chart.BuilderTest do
       assert faced_html =~
                ~r|<option value="bold" style="font-weight: 700; font-style: normal">\s*bold\s*</option>|
 
-      assert length(Regex.scan(~r/class="vis-builder-face-list/, faced_html)) == 1
+      assert length(Regex.scan(~r/class="vis-builder-face-list/, BuilderFixture.render(faced))) ==
+               1
 
       {:noreply, s} =
         Builder.handle_event(
@@ -2452,7 +2459,10 @@ defmodule Visualize.Chart.BuilderTest do
 
       # No tab: variables live in the context.
       refute html =~ ~s(phx-value-root="variables")
-      [_, context] = String.split(html, ~s(<aside class="vis-builder-context">), parts: 2)
+
+      [_, context] =
+        String.split(html, ~s(class="vis-builder-context" phx-hook="BuilderHook"), parts: 2)
+
       assert context =~ ~s(class="vis-builder-variables")
 
       chips = Regex.scan(~r/data-builder-variable="(\w+)"/, context) |> Enum.map(&List.last/1)
@@ -2496,7 +2506,9 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("find_variable", %{"find" => "accent"}, s)
       html = BuilderFixture.render(s)
       assert html =~ ~s(class="vis-builder-var-chip vis-builder-var-chip-found")
-      assert html =~ "vis-builder-field-found"
+      # The fields are in the form, under the inspect tab; the find holds across tabs.
+      {:noreply, inspected} = Builder.handle_event("context", %{"panel" => "inspect"}, s)
+      assert BuilderFixture.render(inspected) =~ "vis-builder-field-found"
     end
 
     test "create declares a var site keyed by the name, with the default", %{} do

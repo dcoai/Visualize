@@ -150,7 +150,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
          style_entry: nil,
          field: nil,
          adding: false,
-         context: :layer,
+         context: :inspect,
+         library_open: true,
+         context_width: 400,
          expanded: MapSet.new(),
          find: "",
          node_label: "design"
@@ -269,15 +271,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </button>
         </div>
         <p :if={@notice} class="vis-builder-notice">{@notice}</p>
-        <div class={class("vis-builder-panels", if(@store, do: "vis-builder-panels-library"))}>
+        <div class={
+          class(
+            "vis-builder-panels",
+            cond do
+              @store && @library_open -> "vis-builder-panels-library"
+              @store -> "vis-builder-panels-library vis-builder-panels-library-folded"
+              true -> nil
+            end
+          )
+        } style={"--vis-builder-context: #{@context_width}px"}>
           <Library.panel
-            :if={@store}
+            :if={@store && @library_open}
             id={@id <> "-library"}
             entries={Store.list(@store)}
             view={@library_view}
             open={(@open && @open.id) || @added}
             target={@myself}
           />
+          <aside :if={@store && !@library_open} class="vis-builder-library-rail">
+            <button
+              type="button"
+              class="vis-builder-library-fold"
+              title="show the library"
+              aria-label="show the library"
+              aria-expanded="false"
+              phx-click="library_fold"
+              phx-target={@myself}
+            >▸</button>
+            <span class="vis-builder-library-rail-word">Library</span>
+          </aside>
           <aside class="vis-builder-sidebar">
             <h2 class="vis-builder-sidebar-title vis-builder-sidebar-title-row">
               Charts
@@ -375,6 +398,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </p>
           </aside>
           <main class="vis-builder-main">
+            <div class="vis-builder-graph">
+              <Preview.panel
+                :if={@preview?}
+                design={@design}
+                sources={@sources}
+                vars={@bindings}
+                theme={@theme}
+              />
+              <p :if={!@preview?} class="vis-builder-context-note">
+                a {@kind} has no chart to look at; its form is in the inspector
+              </p>
+            </div>
+          </main>
+          <aside
+            id={@id <> "-context"}
+            class="vis-builder-context"
+            phx-hook="BuilderHook"
+            data-builder-target={@myself}
+            data-builder-scope="resize"
+          >
+            <div class="vis-builder-context-handle" data-builder-resize="true" title="drag to resize the inspector" aria-hidden="true"></div>
             <nav
               id={@id <> "-nodes"}
               class="vis-builder-nodes"
@@ -404,7 +448,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-target={@myself}
               >{chip.label}</button>
             </nav>
-            <div class="vis-builder-workspace">
+            <nav class="vis-builder-context-icons" aria-label="context panels">
+              <button
+                :for={{panel, icon, word} <- context_icons()}
+                type="button"
+                class={"vis-builder-context-icon" <> if(@context == panel, do: " vis-builder-context-icon-on", else: "")}
+                title={word}
+                aria-label={word}
+                aria-pressed={to_string(@context == panel)}
+                phx-click="context"
+                phx-value-panel={panel}
+                phx-target={@myself}
+              >{Phoenix.HTML.raw(icon)}</button>
+            </nav>
+            <div :if={@context == :inspect} class="vis-builder-inspect">
               <Editor.panel
                 id={@id <> "-editor"}
                 kind={@entry.kind}
@@ -422,31 +479,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 strip={false}
                 target={@myself}
               />
-              <Preview.panel
-                :if={@preview?}
-                design={@design}
-                sources={@sources}
-                vars={@bindings}
-                theme={@theme}
-              />
             </div>
-          </main>
-          <aside class="vis-builder-context">
-            <nav class="vis-builder-context-icons" aria-label="context panels">
-              <button
-                :for={{panel, icon, word} <- context_icons()}
-                type="button"
-                class={"vis-builder-context-icon" <> if(@context == panel, do: " vis-builder-context-icon-on", else: "")}
-                title={word}
-                aria-label={word}
-                aria-pressed={to_string(@context == panel)}
-                phx-click="context"
-                phx-value-panel={panel}
-                phx-target={@myself}
-              >{Phoenix.HTML.raw(icon)}</button>
-            </nav>
             <StyleStack.panel
-              :if={@context == :layer and @style_site}
+              :if={@context == :inspect and @style_site}
               id={@id <> "-style-stack"}
               value={@style_site.value}
               fallback={@style_site.fallback}
@@ -455,7 +490,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <Editor.panel
-              :if={@context == :layer && @style_site && @style_entry}
+              :if={@context == :inspect && @style_site && @style_entry}
               id={@id <> "-style-editor"}
               class="vis-builder-style-panel"
               kind={:style}
@@ -486,7 +521,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <Masks.panel
-              :if={@context == :layer && @site && !(@style_site && @style_entry)}
+              :if={@context == :inspect && @site && !(@style_site && @style_entry)}
               id={@id <> "-masks"}
               use={@site.use}
               label={@site.label}
@@ -624,7 +659,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          facet: nil,
          style_entry: nil,
          field: nil,
-         context: :layer,
+         context: :inspect,
          notice: nil
        )
        |> added_chart("chart #{n}")}
@@ -699,13 +734,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # -- the strip -----------------------------------------------------------------------
 
     def handle_event("select_node", %{"node" => label}, socket) do
-      {:noreply, assign(socket, node_label: label, facet: nil, field: nil)}
+      {:noreply, assign(socket, node_label: label, facet: nil, field: nil, context: :inspect)}
     end
 
     # Clicking into a field selects it, and the context panel becomes its picker
     # (spec/14 §19.10); the same click on the field already selected leaves it.
     def handle_event("select_field", %{"field" => key}, socket) do
       {:noreply, assign(socket, field: key, context: context_for(socket, key))}
+    end
+
+    # The library folds to a rail and unfolds (spec/14 §18.16).
+    def handle_event("library_fold", _params, socket) do
+      {:noreply, update(socket, :library_open, &(not &1))}
+    end
+
+    # The inspector's width, dragged at its edge and kept within reason (spec/14 §18.16).
+    def handle_event("context_width", %{"width" => width}, socket) do
+      case Integer.parse(to_string(width)) do
+        {n, _} -> {:noreply, assign(socket, :context_width, n |> max(300) |> min(800))}
+        :error -> {:noreply, socket}
+      end
     end
 
     # The icon row: which of the context's panels is open (spec/14 §19.10).
@@ -745,7 +793,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           end
 
         label ->
-          {:noreply, assign(socket, node_label: label, facet: nil)}
+          {:noreply, assign(socket, node_label: label, facet: nil, context: :inspect)}
       end
     end
 
@@ -1049,7 +1097,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
              node_label: "design",
              facet: nil,
              field: nil,
-             context: :layer,
+             context: :inspect,
              adding: false,
              notice: nil
            )}
@@ -1605,9 +1653,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp context_icons do
       [
-        {:layer,
-         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8 L12 4 L20 8 L12 12 Z"/><path d="M4 12 L12 16 L20 12"/><path d="M4 16 L12 20 L20 16"/></svg>|,
-         "layer"},
+        {:inspect,
+         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9 H16 M8 13 H16 M8 17 H12"/></svg>|,
+         "inspect"},
         {:colour,
          ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.5" fill="currentColor"/><circle cx="14" cy="8.5" r="1.5" fill="currentColor"/><circle cx="15.5" cy="13" r="1.5" fill="currentColor"/></svg>|,
          "colour"},
@@ -1896,7 +1944,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             facet: nil,
             style_entry: nil,
             field: nil,
-            context: :layer
+            context: :inspect
           )
       end
     end
@@ -1917,7 +1965,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> Enum.max_by(&String.length(&1.label), fn -> %{label: "design"} end)
         |> Map.fetch!(:label)
 
-      assign(socket, node_label: label, facet: nil, field: nil)
+      assign(socket, node_label: label, facet: nil, field: nil, context: :inspect)
     end
 
     defp owns?("design", _path), do: false
@@ -1946,7 +1994,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         facet: nil,
         style_entry: nil,
         field: nil,
-        context: :layer,
+        context: :inspect,
         added: nil,
         notice: nil
       )
