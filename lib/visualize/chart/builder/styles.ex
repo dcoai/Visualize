@@ -1951,6 +1951,59 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     .vis-builder-tick-period input {
       width: 5em;
+
+    /* The page of sections (spec/14 §18.15): a facet or a part folds; a sub-section is
+       indented; a fault under a folded section marks its title. */
+    .vis-builder-section {
+      margin: 0 0 6px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: var(--vis-builder-panel);
+    }
+
+    .vis-builder-section-title {
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--vis-builder-muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .vis-builder-section > .vis-builder-page,
+    .vis-builder-section > .vis-builder-editor,
+    .vis-builder-section > .vis-builder-form {
+      padding: 4px 8px 8px;
+    }
+
+    .vis-builder-subsection {
+      margin: 4px 0 4px 8px;
+      border-color: transparent;
+      border-left-color: var(--vis-builder-line);
+      border-radius: 0;
+    }
+
+    .vis-builder-subsection-title {
+      text-transform: none;
+      letter-spacing: 0;
+      font-family: var(--vis-builder-mono);
+      font-weight: 600;
+    }
+
+    .vis-builder-section-needs > .vis-builder-section-title {
+      color: var(--vis-builder-needs);
+    }
+
+    .vis-builder-page {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .vis-builder-page .vis-builder-form {
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     }
 
     /* The pool list (spec/14 §19.10): the pool's names in columns, down then across as

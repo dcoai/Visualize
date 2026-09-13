@@ -126,6 +126,13 @@ defmodule Visualize.Hooks.Builder do
         return parseInt(layer.getAttribute('data-builder-layer'), 10);
       },
 
+      // A push from inside a node's form aims at that node (spec/14 §18.15).
+      aimed(el, payload) {
+        const form = el && el.closest ? el.closest('[data-builder-node]') : null;
+        const node = form && form.getAttribute('data-builder-node');
+        return node ? { ...payload, node: node } : payload;
+      },
+
       push(event, payload) {
         const carried = this.scope ? { ...payload, scope: this.scope } : payload;
         if (this.target) this.pushEventTo(this.target, event, carried);
@@ -315,11 +322,11 @@ defmodule Visualize.Hooks.Builder do
             // The well's own form says which edit writes it: the node's, or the style
             // panel's (spec/14 §19.10).
             const form = chipTarget.closest('form');
-            this.push('drop_colour', {
+            this.push('drop_colour', this.aimed(chipTarget, {
               field: chipTarget.getAttribute('data-builder-well'),
               colour: e.dataTransfer.getData('application/x-visualize-colour'),
               edit: (form && form.dataset.builderEdit) || 'edit'
-            });
+            }));
           } else if (kind === 'variable') {
             const name = e.dataTransfer.getData('application/x-visualize-variable');
             const box = chipTarget.querySelector('[data-builder-text]');
@@ -328,12 +335,12 @@ defmodule Visualize.Hooks.Builder do
               // goes in at the caret, and the field's own change event writes the string.
               this.insertAtCaret(box, '\#{var(:' + name + ')}');
             } else if (chipTarget.hasAttribute('data-builder-bind')) {
-              this.push('bind_field', { field: chipTarget.getAttribute('data-builder-bind'), name: name });
+              this.push('bind_field', this.aimed(chipTarget, { field: chipTarget.getAttribute('data-builder-bind'), name: name }));
             } else {
               this.push('bind_root', { root: chipTarget.getAttribute('data-builder-bind-root'), name: name });
             }
           } else if (kind === 'promote') {
-            this.push('promote', { field: e.dataTransfer.getData('application/x-visualize-promote') });
+            this.push('promote', this.aimed(chipTarget, { field: e.dataTransfer.getData('application/x-visualize-promote') }));
           }
           return;
         }
@@ -344,7 +351,7 @@ defmodule Visualize.Hooks.Builder do
           field.classList.remove('vis-builder-field-over');
           const stored = this.dragged(e);
           if (stored !== null) {
-            this.push('insert', { field: field.getAttribute('data-builder-ref'), name: stored });
+            this.push('insert', this.aimed(field, { field: field.getAttribute('data-builder-ref'), name: stored }));
           }
           return;
         }
@@ -431,12 +438,12 @@ defmodule Visualize.Hooks.Builder do
         // selection a click makes.
         const well = e.target.closest('[data-builder-well]');
         if (well && this.el.contains(well)) {
-          this.push('select_field', { field: well.getAttribute('data-builder-well') });
+          this.push('select_field', this.aimed(well, { field: well.getAttribute('data-builder-well') }));
           return;
         }
         const field = e.target.closest('[data-builder-bind]');
         if (field && this.el.contains(field) && field.hasAttribute('phx-keyup')) {
-          this.push('select_field', { field: field.getAttribute('data-builder-bind') });
+          this.push('select_field', this.aimed(field, { field: field.getAttribute('data-builder-bind') }));
           return;
         }
         const row = e.target.closest('[data-builder-path]');
