@@ -1488,8 +1488,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-size: 11px;
     }
 
-    /* The face list (spec/14 §18.6): eight faces, each drawn in itself — two columns in
-       the form, one in the font panel. */
+    /* The face dropdown (spec/14 §18.6): the select wears the chosen face. */
+    .vis-builder .vis-builder-face-select {
+      width: 100%;
+      font-size: 13px;
+    }
+
+    /* The face list (spec/14 §18.6): eight faces, each drawn in itself, in the font panel. */
     .vis-builder-face-list {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));

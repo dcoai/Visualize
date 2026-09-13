@@ -762,21 +762,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
           value={@field.value}
           placeholder={@field.placeholder}
         />
-        <span
+        <select
           :if={is_nil(@field.variable) and @field.widget == :faces}
-          class="vis-builder-face-list"
-          role="radiogroup"
+          name="font_face"
+          class="vis-builder-face-select"
+          style={Enum.find_value(@field.faces, &(&1.on? and &1.css))}
           aria-label="face"
         >
-          <label
-            :for={row <- @field.faces}
-            class={"vis-builder-face-row" <> if(row.on?, do: " vis-builder-face-row-on", else: "")}
-            style={row.css}
-          >
-            <input type="radio" name="font_face" value={row.face} checked={row.on?} aria-label={row.label} />
+          <option :for={row <- @field.faces} value={row.face} style={row.css} selected={row.on?}>
             {row.label}
-          </label>
-        </span>
+          </option>
+        </select>
         <input
           :if={is_nil(@field.variable) and @field.widget == :text and not ranged?(@field)}
           type="text"
