@@ -70,10 +70,21 @@ defmodule Visualize.Hooks.Builder do
         this.el.addEventListener('input', this.onInput);
         // Focus follows a layer moved from the keyboard: the rows are re-rendered by
         // position, so the builder says which row to land on (spec/14 §18.17).
+        // The pool list's chosen entry is scrolled into view (spec/14 §19.10).
+        this.reveal();
         this.handleEvent('vis:focus', ({ id }) => {
           const row = document.getElementById(id);
           if (row && this.el.contains(row)) row.focus();
         });
+      },
+
+      updated() {
+        this.reveal();
+      },
+
+      reveal() {
+        const chosen = this.el.querySelector('.vis-builder-pool-name-on');
+        if (chosen && chosen.scrollIntoView) chosen.scrollIntoView({ block: 'nearest' });
       },
 
       // The element under the pointer that carries a layer position, or null.

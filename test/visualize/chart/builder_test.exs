@@ -1212,39 +1212,98 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
       html = BuilderFixture.render(s)
 
-      # A dropdown of the pool's names, not a box; a style site keeps the box.
-      assert html =~ ~s(<select id="b-masks-key" name="key" class="vis-builder-declared-name">)
-      assert html =~ ~s(<option value="">a source of the pool…</option>)
-      assert html =~ ~s(<option value="other">)
-      assert html =~ ~s(<option value="primary">)
-      refute html =~ ~s(type="text" name="key")
+      # A list of the pool's names in ls order with none first, and a box beneath for a
+      # name the pool lacks; a style site keeps the box alone.
+      assert html =~
+               ~s(<div class="vis-builder-pool" role="radiogroup" aria-label="a source of the pool">)
 
-      {:noreply, picked} = Builder.handle_event("set_key", %{"key" => "other"}, s)
+      assert html =~ ~r|<input type="radio" name="key" value="" checked>\s*none|
+      {other_at, _} = :binary.match(html, ~s(<input type="radio" name="key" value="other">))
+      {primary_at, _} = :binary.match(html, ~s(<input type="radio" name="key" value="primary">))
+      assert other_at < primary_at
+      refute html =~ ~s(<select id="b-masks-key")
+      assert html =~ ~s(type="text" name="key.other" class="vis-builder-declared-name")
+
+      assert html =~
+               ~s(phx-hook="BuilderHook" phx-target="-1" data-builder-target="-1" data-builder-scope="pool")
+
+      pick = fn socket, name ->
+        Builder.handle_event(
+          "set_key",
+          %{"_target" => ["key"], "key" => name, "key.other" => ""},
+          socket
+        )
+      end
+
+      {:noreply, picked} = pick.(s, "other")
       site = Visualize.Chart.Builder.Stack.get(picked.assigns.uses, picked.assigns.selected)
       assert site.key == :other
       assert site.local == %{source: %{fields: [:a, :b]}}
-      assert BuilderFixture.render(picked) =~ ~s(<option value="other" selected>)
 
-      # Fields already declared are left alone; a name the pool lacks is kept as an option.
-      {:noreply, repicked} = Builder.handle_event("set_key", %{"key" => "primary"}, picked)
+      assert BuilderFixture.render(picked) =~
+               ~r|vis-builder-pool-name-on">\s*<input type="radio" name="key" value="other" checked>|
+
+      # Fields already declared are left alone; the box takes a name the pool lacks, kept
+      # marked in the list.
+      {:noreply, repicked} = pick.(picked, "primary")
 
       assert Visualize.Chart.Builder.Stack.get(repicked.assigns.uses, repicked.assigns.selected).local ==
-               %{
-                 source: %{fields: [:a, :b]}
-               }
+               %{source: %{fields: [:a, :b]}}
 
-      {:noreply, odd} = Builder.handle_event("set_key", %{"key" => "elsewhere"}, s)
-      assert BuilderFixture.render(odd) =~ ~s(<option value="elsewhere" selected>)
+      {:noreply, odd} =
+        Builder.handle_event(
+          "set_key",
+          %{"_target" => ["key.other"], "key" => "other", "key.other" => "elsewhere"},
+          s
+        )
 
-      # The source's default is a dropdown of the pool too.
+      assert Visualize.Chart.Builder.Stack.get(odd.assigns.uses, odd.assigns.selected).key ==
+               :elsewhere
+
+      assert BuilderFixture.render(odd) =~
+               ~r|vis-builder-pool-name-on">\s*<input type="radio" name="key" value="elsewhere" checked>|
+
+      # The source's default is the same list, with its own box.
       {:noreply, form} = Builder.handle_event("select_node", %{"node" => "source"}, picked)
+      form_html = BuilderFixture.render(form)
 
-      assert BuilderFixture.render(form) =~
-               ~r|<select name="default">\s*<option value=""></option>\s*<option value="other">other</option><option value="primary">primary</option>|
+      assert form_html =~
+               ~s(<div class="vis-builder-pool" role="radiogroup" aria-label="default">)
 
-      # A style site still types its name.
+      assert form_html =~ ~s(<input type="radio" name="default" value="primary">)
+      assert form_html =~ ~s(name="default.other")
+
+      {:noreply, defaulted} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["default.other"], "default.other" => "gitlab_uptime"},
+          form
+        )
+
+      assert Visualize.Chart.Builder.Stack.get(defaulted.assigns.uses, defaulted.assigns.selected).local.source.default ==
+               :gitlab_uptime
+
+      {:noreply, defaulted} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["default"], "default" => "primary"},
+          defaulted
+        )
+
+      assert Visualize.Chart.Builder.Stack.get(defaulted.assigns.uses, defaulted.assigns.selected).local.source.default ==
+               :primary
+
+      # A style site still types its name, with no list.
       {:noreply, style} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
-      assert BuilderFixture.render(style) =~ ~s(type="text" name="key")
+      style_html = BuilderFixture.render(style)
+      assert style_html =~ ~s(type="text" name="key" class="vis-builder-declared-name")
+      refute style_html =~ ~s(class="vis-builder-pool")
+
+      # The stylesheet lays the list out in columns, bounded and scrolling.
+      css = Visualize.Chart.Builder.Styles.css()
+
+      assert css =~
+               ~r/\.vis-builder-pool \{[^}]*columns: 9em auto;[^}]*max-height: 12em;[^}]*overflow-y: auto;/s
     end
 
     test "a frame site offers no key" do

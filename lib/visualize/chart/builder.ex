@@ -818,8 +818,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The key a name-keyed site is declared under, from the context panel (spec/14 §19.3):
     # the one surface that writes `Use.key`; blank removes it.
-    def handle_event("set_key", %{"key" => submitted}, socket) do
+    def handle_event("set_key", params, socket) do
       %{selected: selected, sources: pool} = socket.assigns
+
+      # The pool list writes `key`; the box beneath it, a name the pool lacks, `key.other`
+      # (spec/14 §19.10) — whichever changed.
+      submitted =
+        case params do
+          %{"_target" => ["key.other"]} -> Map.get(params, "key.other")
+          _other -> Map.get(params, "key")
+        end
 
       key =
         case Editor.parse(:name, submitted) do
