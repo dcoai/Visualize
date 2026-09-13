@@ -231,7 +231,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <aside id={@id} class={class(@class)} phx-hook="BuilderHook" data-builder-target={@target}>
-        <h2 class="vis-builder-sidebar-title">Library</h2>
+        <h2 class="vis-builder-sidebar-title vis-builder-sidebar-title-row">
+          Library
+          <button
+            type="button"
+            class="vis-builder-library-fold"
+            title="hide the library"
+            aria-label="hide the library"
+            aria-expanded="true"
+            phx-click="library_fold"
+            phx-target={@target}
+          >◂</button>
+        </h2>
         <nav class="vis-builder-views">
           <button
             type="button"
