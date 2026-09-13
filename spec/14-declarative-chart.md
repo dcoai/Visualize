@@ -1733,6 +1733,8 @@ The **library** is the left-most column, at the height of the viewport and scrol
 
 `Frame:axes:dense ticks` is the fragment `dense ticks`, under `axes`, under `Frame`. The tree is that name parsed and nothing else: no classification is stored, computed from a fragment's keys, or kept in a list here. A category exists because some item names it, which is what lets a person invent one.
 
+**A chart type is a template in the library** (#233). The builder has no chooser of chart types, because a chart type is a composition — a frame, its scales, its marks — and a composition is what a library entry holds. The demo's library therefore seeds, under `Charts::<title>`, one composite per chart the gallery draws as a design (`Examples.Charts.Templates`, every module with `design/1`) and per preset of `Visualize.Chart.Presets` that has no gallery design, each decomposed through `Visualize.Chart.Composite.decompose/1` so it opens as sites of one kind; a template's sources are renamed with the chart's slug (`bar_chart_bars`) and its marks' `data` rewritten to match, so every template's sample rows sit together in the host's pool, and its `meta` names it. A chart converted to a design later is a template by construction; nothing lists them by hand. Picking a bar chart is dragging `Charts::Bar Chart` into the stack, or opening it as the stack, and restyling it.
+
 | Function | Contract |
 |---|---|
 | `Visualize.Chart.Builder.Library.parse/1` | a stored name as `{category, sub_category, name}` |
