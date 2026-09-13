@@ -1306,6 +1306,35 @@ defmodule Visualize.Chart.BuilderTest do
                ~r/\.vis-builder-pool \{[^}]*columns: 9em auto;[^}]*max-height: 12em;[^}]*overflow-y: auto;/s
     end
 
+    test "selecting a layer opens the layer's context, and a host may hide a source's default" do
+      pool = %{primary: BuilderFixture.sources().primary, other: [%{b: 1, a: 2}]}
+      s = BuilderFixture.socket(BuilderFixture.layers(), sources: pool)
+      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
+      assert s.assigns.context == :layer
+
+      # A colour picked leaves the context on the chooser; selecting the site brings the
+      # layer's context — and the source list — back.
+      {:noreply, s} = Builder.handle_event("context", %{"panel" => "colour"}, s)
+
+      refute BuilderFixture.render(s) =~
+               ~s(class="vis-builder-pool" role="radiogroup" aria-label="a source of the pool")
+
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+      assert s.assigns.context == :layer
+
+      assert BuilderFixture.render(s) =~
+               ~s(class="vis-builder-pool" role="radiogroup" aria-label="a source of the pool")
+
+      # A host that binds by name alone keeps default out of the form.
+      {:noreply, form} = Builder.handle_event("select_node", %{"node" => "source"}, s)
+      assert BuilderFixture.render(form) =~ ~s(phx-value-field="default")
+      {:ok, without} = Builder.update(%{source_defaults: false}, form)
+      {:noreply, without} = Builder.handle_event("select_node", %{"node" => "source"}, without)
+      html = BuilderFixture.render(without)
+      refute html =~ ~s(phx-value-field="default")
+      assert html =~ ~s(phx-value-field="fields")
+    end
+
     test "a frame site offers no key" do
       s = BuilderFixture.socket(BuilderFixture.layers())
       refute BuilderFixture.render(s) =~ ~s(class="vis-builder-declared-as")
