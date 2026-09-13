@@ -516,6 +516,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "the design's paints, for a fill's style and its gradient's controls (spec/14 §18.6)"
     )
 
+    attr(:pool, :list,
+      default: [],
+      doc: "the names of the host's sample sources, for a source's `default` (spec/14 §19.10)"
+    )
+
     attr(:strip, :boolean,
       default: true,
       doc: "render the facet strip; `false` where the caller does"
@@ -930,8 +935,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       faced? = Enum.any?(specs, &(&1.key == :font_style))
 
+      pool = Map.get(assigns, :pool) || []
+
       for spec <- specs, spec.facet == open, not (faced? and spec.key == :font_style) do
-        widget = referenced(spec.type, refs)
+        widget = pooled(assigns.kind, spec.key, pool) || referenced(spec.type, refs)
 
         %{
           key: spec.key,
@@ -964,6 +971,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
         }
       end
     end
+
+    # A source's default is a pool name, chosen where the host's pool is known (§19.10).
+    defp pooled(:source, :default, [_ | _] = pool), do: {:select, pool}
+    defp pooled(_kind, _key, _pool), do: nil
 
     # A reference is a choice among the names something declares, so where the caller knows
     # them it is a select rather than a box to spell a name into (spec/14 §18.14). `widget/1`

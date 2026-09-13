@@ -2156,6 +2156,9 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Glyphs.drawn?/1` | whether a key's enum is chosen by its picture (§18.6) |
 | `Visualize.Chart.Builder.Glyphs.glyph/2` | the inline SVG for one value of a drawn key, or `nil` |
 | `Visualize.Chart.Builder.Masks.keyed?/1` | whether a contribution is of a kind the document keys by name, so the panel offers the key control |
+| `Visualize.Chart.Builder.Masks.pooled?/1` | whether a contribution is a source, whose key control lists the host's pool rather than taking a name |
+
+**A source is chosen from the pool** (#235). The key control of a *source* site is not a box but a dropdown of the pool's names — the sample sources the host hands the builder (`sources`), sorted — with the site's current name kept as an option when the pool lacks it and a blank that removes the key; a source is bound by its name, so a name the pool lacks is a guess the builder can spare a person. Choosing a name whose source the pool holds also **fills the source's `fields`** when it declares none — the pool's first row's keys, sorted — so a source is one pick and previews at once; fields already declared are left alone. Every other name-keyed kind — a style, a scale, a gradient, a var — keeps the box, since those are named by the person. In the form, a source's `default` (§2.3) is a dropdown of the same names with a blank for none. A host with an empty pool sees the box, there being nothing to list.
 | `Visualize.Chart.Builder.Stack.unmasked/2` | what a site contributes before its mask and bindings |
 
 **The typed controls in place.** A field's control is chosen from its type (§18.6), and three types now carry more than a box:

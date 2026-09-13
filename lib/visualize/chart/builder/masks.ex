@@ -33,6 +33,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "whether the site was left out for want of a key"
     )
 
+    attr(:pool, :list,
+      default: [],
+      doc: "the names of the host's sample sources, sorted (§19.10)"
+    )
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
 
     @doc """
@@ -44,7 +49,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         assign(assigns,
           rows: rows(assigns.fragment, assigns.use),
           disabled?: assigns.use.mask == :all,
-          keyed?: keyed?(assigns.fragment)
+          keyed?: keyed?(assigns.fragment),
+          choices: choices(assigns)
         )
 
       ~H"""
@@ -52,7 +58,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <h3 class="vis-builder-context-title">{@label}</h3>
         <form :if={@keyed?} class="vis-builder-declared-as" phx-change="set_key" phx-target={@target}>
           <label class="vis-builder-control-label" for={@id <> "-key"}>declared as</label>
+          <select :if={@choices} id={@id <> "-key"} name="key" class="vis-builder-declared-name">
+            <option value="">a source of the pool…</option>
+            <option :for={name <- @choices} value={name} selected={to_string(@use.key) == name}>
+              {name}
+            </option>
+          </select>
           <input
+            :if={!@choices}
             id={@id <> "-key"}
             type="text"
             name="key"
@@ -98,6 +111,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case Fragment.wrapped(fragment) do
         {kind, _body} -> kind in [:style, :scale, :source, :var, :gradient]
         nil -> false
+      end
+    end
+
+    @doc """
+    Whether a contribution is a source, whose key is chosen from the host's pool rather
+    than typed (spec/14 §19.10).
+
+        iex> Visualize.Chart.Builder.Masks.pooled?(%{source: %{fields: [:t]}})
+        true
+
+        iex> Visualize.Chart.Builder.Masks.pooled?(%{style: %{}})
+        false
+    """
+    @spec pooled?(map()) :: boolean()
+    def pooled?(fragment), do: match?({:source, _}, Fragment.wrapped(fragment))
+
+    # A source site's choices: the pool's names with the current key kept, or nil for a
+    # kind that is named by the person or a pool with nothing to list.
+    defp choices(%{fragment: fragment, pool: pool, use: use}) do
+      if pooled?(fragment) and pool != [] do
+        current = use.key && to_string(use.key)
+        if current && current not in pool, do: [current | pool], else: pool
       end
     end
 
