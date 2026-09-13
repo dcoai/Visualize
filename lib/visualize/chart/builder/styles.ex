@@ -1893,6 +1893,66 @@ if Code.ensure_loaded?(Phoenix.Component) do
       min-width: 0;
     }
 
+    /* The sources tab (spec/14 §19.10): a signal per fieldset, the numbers in a row, the
+       transport beneath. */
+    .vis-builder-sources {
+      padding: 8px;
+    }
+
+    .vis-builder-signals {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .vis-builder-signal {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0;
+      padding: 6px 8px 8px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      min-width: 0;
+    }
+
+    .vis-builder-signal-name {
+      padding: 0 4px;
+      font-family: var(--vis-builder-mono);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .vis-builder-signal-numbers {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+      gap: 6px;
+    }
+
+    .vis-builder-signal-numbers input {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    .vis-builder-play {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .vis-builder-tick-period {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+    }
+
+    .vis-builder-tick-period input {
+      width: 5em;
+    }
+
     /* The pool list (spec/14 §19.10): the pool's names in columns, down then across as
        ls lays them out, bounded and scrolling when long. */
     .vis-builder-pool {

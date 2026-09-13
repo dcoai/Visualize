@@ -67,6 +67,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Params,
       Picker,
       Preview,
+      Sources,
       Stack,
       Store,
       Styles,
@@ -75,7 +76,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     alias Visualize.Chart.{Composite, Fragment, Schema, Use, Validator}
-    alias Visualize.Theme
+    alias Visualize.{Signals, Theme}
 
     @doc false
     # The assigns a host may leave out, and their defaults (spec/14 §18.2). `attr/3` applies
@@ -91,6 +92,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         on_save: :visualize_chart_saved,
         on_deploy: :visualize_chart_deployed,
         source_defaults: true,
+        tick_ms: 500,
         styles: true,
         class: nil
       ]
@@ -110,6 +112,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:source_defaults, :boolean,
       default: true,
       doc: "whether a source's `default` is offered in the form (spec/14 §18.1, §19.10)"
+    )
+
+    attr(:tick_ms, :integer,
+      default: 500,
+      doc: "the period of the signals' tick while playing (spec/14 §19.10)"
     )
 
     attr(:store, :any,
@@ -142,6 +149,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
          charts: [],
          chart: nil,
          next_chart: 1,
+         signals: %{},
+         tick: 0,
+         playing: false,
          stack_vars: %{},
          notice: nil,
          facet: nil,
@@ -160,6 +170,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @impl true
+    def update(%{tick: :next}, socket) do
+      if socket.assigns.playing,
+        do: {:ok, socket |> update(:tick, &(&1 + 1)) |> schedule()},
+        else: {:ok, socket}
+    end
+
     def update(assigns, socket) do
       socket =
         socket
@@ -195,7 +211,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # replacing its list replaces that chart's stack and leaves the others alone.
     defp seeded_chart(%{assigns: %{charts: []}} = socket, uses, labels) do
       socket
-      |> assign(uses: uses, labels: labels, stack_vars: %{}, open: nil)
+      |> assign(uses: uses, labels: labels, stack_vars: %{}, open: nil, signals: %{})
       |> assign(selected: selection(socket.assigns.selected, uses))
       |> added_chart("chart 1")
     end
@@ -402,7 +418,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <Preview.panel
                 :if={@preview?}
                 design={@design}
-                sources={@sources}
+                sources={@bound_pool}
                 vars={@bindings}
                 theme={@theme}
               />
@@ -501,6 +517,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
               refs={@refs}
               theme={@colour.theme}
               defs={@defs}
+              target={@myself}
+            />
+            <Sources.panel
+              :if={@context == :sources}
+              id={@id <> "-sources"}
+              signals={@signals}
+              tick={@tick}
+              playing={@playing}
+              tick_ms={@tick_ms}
               target={@myself}
             />
             <Picker.panel
@@ -653,6 +678,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          uses: [use],
          labels: %{use.id => "new frame"},
          stack_vars: %{},
+         signals: %{},
          selected: use.id,
          open: nil,
          node_label: "design",
@@ -746,6 +772,65 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The library folds to a rail and unfolds (spec/14 §18.16).
     def handle_event("library_fold", _params, socket) do
       {:noreply, update(socket, :library_open, &(not &1))}
+    end
+
+    # -- the signals (spec/14 §19.10) ------------------------------------------------------
+
+    def handle_event("add_signal", _params, socket) do
+      %{signals: signals} = socket.assigns
+
+      name =
+        map_size(signals)
+        |> Stream.iterate(&(&1 + 1))
+        |> Stream.map(&:"signal_#{&1 + 1}")
+        |> Enum.find(&(not Map.has_key?(signals, &1)))
+
+      {:noreply,
+       assign(socket,
+         signals: Map.put(signals, name, Signals.new(:sine, [:t, :value])),
+         context: :sources,
+         notice: nil
+       )}
+    end
+
+    def handle_event("remove_signal", %{"name" => name}, socket) do
+      {:noreply, update(socket, :signals, &Map.delete(&1, String.to_atom(name)))}
+    end
+
+    def handle_event("edit_signal", %{"_target" => [target]} = params, socket) do
+      case String.split(target, ".", parts: 2) do
+        [name, key] ->
+          atom = String.to_atom(name)
+
+          {:noreply,
+           update(socket, :signals, fn signals ->
+             case Map.fetch(signals, atom) do
+               {:ok, signal} ->
+                 Map.put(signals, atom, Sources.edit(signal, key, params[target] || ""))
+
+               :error ->
+                 signals
+             end
+           end)}
+
+        _other ->
+          {:noreply, socket}
+      end
+    end
+
+    def handle_event("play", _params, socket) do
+      {:noreply, socket |> assign(:playing, true) |> schedule()}
+    end
+
+    def handle_event("pause", _params, socket) do
+      {:noreply, assign(socket, :playing, false)}
+    end
+
+    def handle_event("tick_ms", %{"ms" => ms}, socket) do
+      case Integer.parse(to_string(ms)) do
+        {n, _} when n >= 50 -> {:noreply, assign(socket, :tick_ms, n)}
+        _other -> {:noreply, socket}
+      end
     end
 
     # The inspector's width, dragged at its edge and kept within reason (spec/14 §18.16).
@@ -1016,7 +1101,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The key a name-keyed site is declared under, from the context panel (spec/14 §19.3):
     # the one surface that writes `Use.key`; blank removes it.
     def handle_event("set_key", params, socket) do
-      %{selected: selected, sources: pool} = socket.assigns
+      %{selected: selected} = socket.assigns
+      pool = pool(socket.assigns)
 
       # The pool list writes `key`; the box beneath it, a name the pool lacks, `key.other`
       # (spec/14 §19.10) — whichever changed.
@@ -1536,7 +1622,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         refs: refs(design, assigns.store),
         colour: colour(assigns, entry, at(layer, entry.path), design),
         defs: Map.get(design, :defs, %{}),
-        pool: assigns.sources |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort(),
+        pool: assigns |> pool() |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort(),
+        bound_pool: pool(assigns),
         editing: at(layer, entry.path),
         errors: errors,
         keyless: keyless,
@@ -1656,6 +1743,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:inspect,
          ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9 H16 M8 13 H16 M8 17 H12"/></svg>|,
          "inspect"},
+        {:sources,
+         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12 C6 4 9 4 12 12 C15 20 18 20 21 12"/></svg>|,
+         "sources"},
         {:colour,
          ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.5" fill="currentColor"/><circle cx="14" cy="8.5" r="1.5" fill="currentColor"/><circle cx="15.5" cy="13" r="1.5" fill="currentColor"/></svg>|,
          "colour"},
@@ -1729,8 +1819,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # validated as that kind — per-kind validity (spec/14 §19.8).
     defp faults(_kind, _design, _assigns, [_ | _] = chain), do: [{[], {:cycle, chain}}]
 
-    defp faults(:composite, design, %{sources: sources, bindings: vars, theme: theme}, nil) do
-      case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
+    defp faults(:composite, design, %{bindings: vars, theme: theme} = assigns, nil) do
+      case Chart.apply(design, sources: pool(assigns), vars: vars, theme: theme) do
         {:ok, _applied} -> []
         {:error, errors} -> errors
       end
@@ -1979,7 +2069,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # inline site — selected, the entry recorded on it so Save as writes the entry
     # (spec/14 §19.9).
     defp opened_entry(socket, entry) do
-      {uses, labels, vars} = Stack.open(entry, names(socket.assigns.store))
+      {uses, labels, vars, signals} = Stack.open(entry, names(socket.assigns.store))
       n = socket.assigns.next_chart
 
       socket
@@ -1989,6 +2079,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         uses: uses,
         labels: labels,
         stack_vars: vars,
+        signals: signals,
         selected: uses |> List.first() |> then(&(&1 && &1.id)),
         node_label: "design",
         facet: nil,
@@ -2004,7 +2095,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # -- the workspace of charts (spec/14 §19.9) ------------------------------------------
 
     # The live assigns are the selected chart's; parking writes them back to its row.
-    @chart_state [:uses, :labels, :stack_vars, :selected, :open]
+    @chart_state [:uses, :labels, :stack_vars, :selected, :open, :signals]
 
     defp park(%{assigns: %{chart: nil}} = socket), do: socket
 
@@ -2163,6 +2254,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp filled(local, _key, _pool), do: local
 
+    # The tick goes to the host's process, which forwards it (spec/14 §18.2).
+    defp schedule(socket) do
+      Process.send_after(
+        self(),
+        {:visualize_chart_tick, socket.assigns.id},
+        socket.assigns.tick_ms
+      )
+
+      socket
+    end
+
     defp edited(socket, _entry, nil), do: socket
     defp edited(socket, entry, {key, parsed}), do: update_layer(socket, entry.path, key, parsed)
 
@@ -2307,6 +2409,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp class(base, extra), do: base <> " " <> extra
 
     # The stack as a composite: what saving sends (spec/14 §19.6).
-    defp structure(%{uses: uses, stack_vars: vars}), do: Stack.structure(uses, vars)
+    defp structure(%{uses: uses, stack_vars: vars} = assigns),
+      do: Stack.structure(uses, vars, Map.get(assigns, :signals, %{}))
+
+    # The pool a chart binds while designed (spec/14 §19.10): the host's under the chart's
+    # signals at the tick.
+    defp pool(%{sources: sources} = assigns) do
+      Map.merge(
+        sources,
+        Signals.pool(Map.get(assigns, :signals, %{}), Map.get(assigns, :tick, 0))
+      )
+    end
+
+    @doc """
+    The host's one line for the signals' tick (spec/14 §18.2): forwards the message the
+    builder scheduled to itself, `{:visualize_chart_tick, id}`, as an update.
+
+        def handle_info({:visualize_chart_tick, id}, socket),
+          do: {:noreply, Visualize.Chart.Builder.tick(id, socket)}
+    """
+    @spec tick(String.t(), Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+    def tick(id, socket) do
+      send_update(__MODULE__, id: id, tick: :next)
+      socket
+    end
   end
 end

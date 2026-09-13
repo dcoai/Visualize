@@ -62,11 +62,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     An entry as a stack (spec/14 §19.9): a composite's sites, labelled by the store's
-    names, with its vars; any other body as one inline site named for the entry.
+    names, with its vars and its signals (§19.10); any other body as one inline site named
+    for the entry.
     """
     @spec open(%{kind: atom(), name: String.t() | nil, fragment: map()}, (Fragment.id() ->
                                                                             String.t() | nil)) ::
-            {[Use.t()], labels(), map()}
+            {[Use.t()], labels(), map(), map()}
     def open(%{fragment: %{composite: %{uses: uses} = composite}}, name_of) when is_list(uses) do
       labels =
         Map.new(uses, fn
@@ -74,17 +75,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
           %Use{id: id, ref: ref} -> {id, name_of.(ref) || "#{elem(ref, 0)} #{elem(ref, 1)}"}
         end)
 
-      {uses, labels, Map.get(composite, :vars, %{})}
+      {uses, labels, Map.get(composite, :vars, %{}), Map.get(composite, :signals, %{})}
     end
 
     def open(%{kind: kind, name: name, fragment: fragment}, _name_of) do
       use = %Use{id: {:use, 1}, ref: nil, local: fragment}
-      {[use], %{use.id => name || "new #{kind}"}, %{}}
+      {[use], %{use.id => name || "new #{kind}"}, %{}, %{}}
     end
 
     @doc "The stack as a composite: what saving sends and a composite stores (spec/14 §19.6)."
     @spec structure([Use.t()], map()) :: map()
     def structure(uses, vars), do: %{composite: %{uses: uses, vars: vars}}
+
+    @doc "As `structure/2`, with the chart's signals when it has any (spec/14 §19.10)."
+    @spec structure(list(), map(), map()) :: map()
+    def structure(uses, vars, signals) when map_size(signals) == 0, do: structure(uses, vars)
+
+    def structure(uses, vars, signals),
+      do: %{composite: %{uses: uses, vars: vars, signals: signals}}
 
     @doc """
     The lowest tier that holds the stack (D-99): one bare inline site is its body, values

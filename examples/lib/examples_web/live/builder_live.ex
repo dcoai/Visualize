@@ -221,6 +221,11 @@ defmodule ExamplesWeb.BuilderLive do
     {:noreply, assign(socket, :saved, "saved: a structure of #{length(uses)} site(s)")}
   end
 
+  # The signals' tick (spec/14 §18.2): the builder schedules it here, the page forwards it.
+  def handle_info({:visualize_chart_tick, id}, socket) do
+    {:noreply, Visualize.Chart.Builder.tick(id, socket)}
+  end
+
   def handle_info({:design_deployed, _id, design}, socket) do
     result =
       case Chart.apply(design, sources: socket.assigns.sources) do
