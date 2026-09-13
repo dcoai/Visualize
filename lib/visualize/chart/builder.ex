@@ -336,6 +336,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 refs={@refs}
                 theme={@colour.theme}
                 defs={@defs}
+                pool={@pool}
                 strip={false}
                 target={@myself}
               />
@@ -410,6 +411,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               fragment={@site.fragment}
               free={@site.free}
               keyless={@site.use.id in @keyless}
+              pool={@pool}
               target={@myself}
             />
             <Variables.panel
@@ -817,7 +819,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The key a name-keyed site is declared under, from the context panel (spec/14 §19.3):
     # the one surface that writes `Use.key`; blank removes it.
     def handle_event("set_key", %{"key" => submitted}, socket) do
-      %{selected: selected} = socket.assigns
+      %{selected: selected, sources: pool} = socket.assigns
 
       key =
         case Editor.parse(:name, submitted) do
@@ -825,7 +827,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           :error -> nil
         end
 
-      {:noreply, update(socket, :uses, &Stack.update(&1, selected, fn u -> %{u | key: key} end))}
+      # A source chosen from the pool takes the pool's fields when it declares none
+      # (spec/14 §19.10): one pick, and it previews.
+      {:noreply,
+       update(socket, :uses, fn uses ->
+         Stack.update(uses, selected, fn u ->
+           %{u | key: key, local: filled(u.local, key, pool)}
+         end)
+       end)}
     end
 
     # A list of scalars as items (spec/14 §18.6): Enter in the + box appends one read by the
@@ -1321,6 +1330,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         refs: refs(design, assigns.store),
         colour: colour(assigns, entry, at(layer, entry.path), design),
         defs: Map.get(design, :defs, %{}),
+        pool: assigns.sources |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort(),
         editing: at(layer, entry.path),
         errors: errors,
         keyless: keyless,
@@ -1868,6 +1878,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
       do: is_map(local[:defs]) and Map.has_key?(local[:defs], name)
 
     defp declares_gradient?(_use, _name), do: false
+
+    # A source chosen from the pool takes the pool's fields when it declares none (§19.10).
+    defp filled(%{source: body} = local, key, pool) when is_map(body) and key != nil do
+      case {Map.get(body, :fields, []), Map.get(pool, key)} do
+        {[], rows} when rows != nil ->
+          case Visualize.Data.Table.rows(rows) do
+            [first | _] when is_map(first) ->
+              %{local | source: Map.put(body, :fields, first |> Map.keys() |> Enum.sort())}
+
+            _none ->
+              local
+          end
+
+        _other ->
+          local
+      end
+    end
+
+    defp filled(local, _key, _pool), do: local
 
     defp edited(socket, _entry, nil), do: socket
     defp edited(socket, entry, {key, parsed}), do: update_layer(socket, entry.path, key, parsed)

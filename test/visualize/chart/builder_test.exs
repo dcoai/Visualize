@@ -1203,6 +1203,50 @@ defmodule Visualize.Chart.BuilderTest do
       assert Enum.at(blank.assigns.uses, 3).key == nil
     end
 
+    test "a source site chooses its key from the pool, and the pick fills its fields (§19.10)" do
+      s =
+        BuilderFixture.socket(BuilderFixture.layers(),
+          sources: %{primary: BuilderFixture.sources().primary, other: [%{b: 1, a: 2}]}
+        )
+
+      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
+      html = BuilderFixture.render(s)
+
+      # A dropdown of the pool's names, not a box; a style site keeps the box.
+      assert html =~ ~s(<select id="b-masks-key" name="key" class="vis-builder-declared-name">)
+      assert html =~ ~s(<option value="">a source of the pool…</option>)
+      assert html =~ ~s(<option value="other">)
+      assert html =~ ~s(<option value="primary">)
+      refute html =~ ~s(type="text" name="key")
+
+      {:noreply, picked} = Builder.handle_event("set_key", %{"key" => "other"}, s)
+      site = Visualize.Chart.Builder.Stack.get(picked.assigns.uses, picked.assigns.selected)
+      assert site.key == :other
+      assert site.local == %{source: %{fields: [:a, :b]}}
+      assert BuilderFixture.render(picked) =~ ~s(<option value="other" selected>)
+
+      # Fields already declared are left alone; a name the pool lacks is kept as an option.
+      {:noreply, repicked} = Builder.handle_event("set_key", %{"key" => "primary"}, picked)
+
+      assert Visualize.Chart.Builder.Stack.get(repicked.assigns.uses, repicked.assigns.selected).local ==
+               %{
+                 source: %{fields: [:a, :b]}
+               }
+
+      {:noreply, odd} = Builder.handle_event("set_key", %{"key" => "elsewhere"}, s)
+      assert BuilderFixture.render(odd) =~ ~s(<option value="elsewhere" selected>)
+
+      # The source's default is a dropdown of the pool too.
+      {:noreply, form} = Builder.handle_event("select_node", %{"node" => "source"}, picked)
+
+      assert BuilderFixture.render(form) =~
+               ~r|<select name="default">\s*<option value=""></option>\s*<option value="other">other</option><option value="primary">primary</option>|
+
+      # A style site still types its name.
+      {:noreply, style} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+      assert BuilderFixture.render(style) =~ ~s(type="text" name="key")
+    end
+
     test "a frame site offers no key" do
       s = BuilderFixture.socket(BuilderFixture.layers())
       refute BuilderFixture.render(s) =~ ~s(class="vis-builder-declared-as")
