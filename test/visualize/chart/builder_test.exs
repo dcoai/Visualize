@@ -1682,7 +1682,17 @@ defmodule Visualize.Chart.BuilderTest do
                ~s(name="font_face" value="light_italic" checked aria-label="light italic")
 
       refute faced_html =~ ~s(phx-value-field="font_style")
-      assert length(Regex.scan(~r/class="vis-builder-face-list/, faced_html)) == 2
+      # The form's face is a dropdown wearing the chosen face; the panel keeps its list.
+      assert faced_html =~
+               ~s(<select name="font_face" class="vis-builder-face-select" style="font-weight: 300; font-style: italic" aria-label="face">)
+
+      assert faced_html =~
+               ~r|<option value="light_italic" style="font-weight: 300; font-style: italic" selected>\s*light italic\s*</option>|
+
+      assert faced_html =~
+               ~r|<option value="bold" style="font-weight: 700; font-style: normal">\s*bold\s*</option>|
+
+      assert length(Regex.scan(~r/class="vis-builder-face-list/, faced_html)) == 1
 
       {:noreply, s} =
         Builder.handle_event(
