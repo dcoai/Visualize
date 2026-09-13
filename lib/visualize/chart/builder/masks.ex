@@ -56,22 +56,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
       ~H"""
       <div id={@id} class="vis-builder-layer-context">
         <h3 class="vis-builder-context-title">{@label}</h3>
-        <form :if={@keyed?} class="vis-builder-declared-as" phx-change="set_key" phx-target={@target}>
+        <form
+          :if={@keyed?}
+          id={@id <> "-declared"}
+          class="vis-builder-declared-as"
+          phx-change="set_key"
+          phx-hook="BuilderHook"
+          phx-target={@target}
+          data-builder-target={@target}
+          data-builder-scope="pool"
+        >
           <label class="vis-builder-control-label" for={@id <> "-key"}>declared as</label>
-          <select :if={@choices} id={@id <> "-key"} name="key" class="vis-builder-declared-name">
-            <option value="">a source of the pool…</option>
-            <option :for={name <- @choices} value={name} selected={to_string(@use.key) == name}>
+          <div :if={@choices} class="vis-builder-pool" role="radiogroup" aria-label="a source of the pool">
+            <label class={"vis-builder-pool-name" <> if(@use.key == nil, do: " vis-builder-pool-name-on", else: "")}>
+              <input type="radio" name="key" value="" checked={@use.key == nil} />
+              none
+            </label>
+            <label
+              :for={name <- @choices}
+              class={"vis-builder-pool-name" <> if(to_string(@use.key) == name, do: " vis-builder-pool-name-on", else: "")}
+            >
+              <input type="radio" name="key" value={name} checked={to_string(@use.key) == name} />
               {name}
-            </option>
-          </select>
+            </label>
+          </div>
           <input
-            :if={!@choices}
             id={@id <> "-key"}
             type="text"
-            name="key"
+            name={if(@choices, do: "key.other", else: "key")}
             class="vis-builder-declared-name"
-            value={@use.key && to_string(@use.key)}
-            placeholder="a name"
+            value={if(!@choices, do: @use.key && to_string(@use.key))}
+            placeholder={if(@choices, do: "or a name the pool lacks", else: "a name")}
+            aria-label={if(@choices, do: "a name the pool lacks", else: "declared as")}
           />
         </form>
         <p :if={@keyless} class="vis-builder-context-fault">

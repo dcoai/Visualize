@@ -26,7 +26,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Theme
 
     @typedoc "The control a key's type gets (spec/14 §18.6)."
-    @type widget :: :checkbox | :number | :text | :textarea | {:select, [atom()]}
+    @type widget ::
+            :checkbox | :number | :text | :textarea | {:select, [atom()]} | {:pool, [String.t()]}
 
     @typedoc "One editable node of a fragment (spec/14 §18.5)."
     @type node_entry :: %{path: Validator.path(), kind: Schema.kind(), label: String.t()}
@@ -329,6 +330,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case String.split(target, ".", parts: 2) do
         [key, "slot"] -> with %{key: k} <- key_spec(kind, key), do: {k, slot_face(params[target])}
         [key, "range"] -> with spec <- key_spec(kind, key), do: typed(spec, params[target])
+        [key, "other"] -> with spec <- key_spec(kind, key), do: typed(spec, params[target])
         [_key, "add"] -> nil
         [key] -> with spec <- key_spec(kind, key), do: typed(spec, params[key])
       end
@@ -814,6 +816,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
           aria-label={"#{@field.key}: #{@field.well.word || "not set"}"}
           data-builder-well={@field.key}
         ></span>
+        <div :if={is_nil(@field.variable) and @field.widget == :pool} class="vis-builder-pool" role="radiogroup" aria-label={to_string(@field.key)}>
+          <label class={"vis-builder-pool-name" <> if(@field.value == nil, do: " vis-builder-pool-name-on", else: "")}>
+            <input type="radio" name={@field.key} value="" checked={@field.value == nil} />
+            none
+          </label>
+          <label
+            :for={{value, label} <- @field.options}
+            class={"vis-builder-pool-name" <> if(@field.value == value, do: " vis-builder-pool-name-on", else: "")}
+          >
+            <input type="radio" name={@field.key} value={value} checked={@field.value == value} />
+            {label}
+          </label>
+        </div>
+        <input
+          :if={is_nil(@field.variable) and @field.widget == :pool}
+          type="text"
+          name={"#{@field.key}.other"}
+          class="vis-builder-declared-name"
+          placeholder="or a name the pool lacks"
+          aria-label={"#{@field.key}, a name the pool lacks"}
+        />
         <select
           :if={is_nil(@field.variable) and @field.widget == :select and @field.glyphs == []}
           name={@field.key}
@@ -973,7 +996,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # A source's default is a pool name, chosen where the host's pool is known (§19.10).
-    defp pooled(:source, :default, [_ | _] = pool), do: {:select, pool}
+    defp pooled(:source, :default, [_ | _] = pool), do: {:pool, pool}
     defp pooled(_kind, _key, _pool), do: nil
 
     # A reference is a choice among the names something declares, so where the caller knows
@@ -1007,6 +1030,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp variable_name(_value), do: nil
 
     defp shape({:select, _allowed}), do: :select
+    defp shape({:pool, _names}), do: :pool
     defp shape({:items, _scalar}), do: :items
     defp shape(widget), do: widget
 
@@ -1060,6 +1084,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # An option is what the control submits and what a person reads: an id is spelt as the
     # DOM carries one, and read back through the same table (§19.2).
     defp options({:select, allowed}), do: Enum.map(allowed, &{option(&1), option(&1)})
+    defp options({:pool, names}), do: Enum.map(names, &{&1, &1})
     defp options(_widget), do: []
 
     defp option({kind, n}) when is_atom(kind) and is_integer(n), do: Store.encode_id({kind, n})
@@ -1195,6 +1220,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(:colour, {:ok, _value}), do: nil
     defp shown(:textarea, {:ok, value}), do: inspect(value)
     defp shown({:select, _}, {:ok, value}), do: option(value)
+    defp shown({:pool, _}, {:ok, value}), do: option(value)
     defp shown({:items, _}, {:ok, _value}), do: nil
     defp shown(:items, {:ok, _value}), do: nil
     defp shown(:select, {:ok, value}), do: option(value)

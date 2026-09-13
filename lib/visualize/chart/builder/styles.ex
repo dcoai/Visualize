@@ -1756,6 +1756,58 @@ if Code.ensure_loaded?(Phoenix.Component) do
       min-width: 0;
     }
 
+    /* The pool list (spec/14 §19.10): the pool's names in columns, down then across as
+       ls lays them out, bounded and scrolling when long. */
+    .vis-builder-pool {
+      columns: 9em auto;
+      column-gap: 8px;
+      max-height: 12em;
+      overflow-y: auto;
+      padding: 4px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      font-family: var(--vis-builder-mono);
+      font-size: 12px;
+    }
+
+    .vis-builder-pool-name {
+      position: relative;
+      display: block;
+      padding: 1px 6px;
+      border-radius: var(--vis-builder-radius);
+      break-inside: avoid;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .vis-builder-pool-name:hover {
+      background: var(--vis-builder-bg);
+    }
+
+    .vis-builder-pool-name-on {
+      background: var(--vis-builder-ink);
+      color: var(--vis-builder-panel);
+    }
+
+    .vis-builder-pool-name input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .vis-builder-pool-name:focus-within {
+      outline: 2px solid var(--vis-builder-accent);
+      outline-offset: -2px;
+    }
+
     /* The chooser's own picker, for any colour a patch does not offer. */
     .vis-builder .vis-builder-colour {
       width: 2.4em;
