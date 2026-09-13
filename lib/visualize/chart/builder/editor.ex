@@ -536,6 +536,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:event, :string, default: "edit", doc: "the `phx-change` the form pushes")
     attr(:origins, :map, default: %{}, doc: "what supplied each key's value, by key")
+    attr(:label, :string, default: nil, doc: "the node's label, carried by the form (§18.16)")
+    attr(:only, :list, default: nil, doc: "the keys to show; nil for the open facet's")
 
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the editor's class")
@@ -549,7 +551,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     default as a placeholder, and its own errors under it.
     """
     def panel(assigns) do
-      specs = Schema.describe(assigns.kind)
       facets = facets(assigns.kind)
       open = if assigns.facet in facets, do: assigns.facet, else: List.first(facets)
 
@@ -557,7 +558,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         assigns
         |> assign(:facets, facets)
         |> assign(:open, open)
-        |> assign(:blocks, blocks(fields(specs, open, assigns)))
 
       ~H"""
       <div class={class(@class)}>
@@ -571,118 +571,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-target={@target}
           >{facet}</button>
         </nav>
-        <form
-          id={@id <> "-form"}
-          class="vis-builder-form"
-          phx-change={@event}
-          phx-hook="BuilderHook"
-          phx-target={@target}
-          data-builder-target={@target}
-          data-builder-scope="ref"
-          data-builder-edit={@event}
-        >
-          <%= for {group, fields} <- @blocks do %>
-            <fieldset :if={group} class={"vis-builder-block" <> if(fill_style(group, fields), do: " vis-builder-block-fill", else: "")}>
-              <legend class="vis-builder-block-name">{group}</legend>
-              <%= if fill = fill_style(group, fields) do %>
-                <div class="vis-builder-field vis-builder-field-fill-style">
-                  <span class="vis-builder-key">style</span>
-                  <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
-                    <label
-                      :for={{style, svg} <- fill.glyphs}
-                      class={"vis-builder-glyph" <> if(fill.style == style, do: " vis-builder-glyph-on", else: "")}
-                      title={style}
-                    >
-                      <input type="radio" name="fill_style" value={style} checked={fill.style == style} aria-label={style} />
-                      {Phoenix.HTML.raw(svg)}
-                    </label>
-                  </span>
-                </div>
-                <.field
-                  :for={field <- fields}
-                  :if={field.key == :fill_opacity}
-                  field={field}
-                  label="opacity"
-                  selected={@selected}
-                  found={@found}
-                  origins={@origins}
-                  target={@target}
-                />
-                <div class="vis-builder-fill-colours">
-                  <.field
-                    :for={field <- fields}
-                    :if={field.key == :fill}
-                    field={field}
-                    label="colour"
-                    selected={@selected}
-                    found={@found}
-                    origins={@origins}
-                    target={@target}
-                  />
-                </div>
-                <div class="vis-builder-fill-numbers">
-                  <.field
-                    :for={field <- fields}
-                    :if={field.key not in [:fill, :fill_opacity]}
-                    field={field}
-                    selected={@selected}
-                    found={@found}
-                    origins={@origins}
-                    target={@target}
-                  />
-                  <label :if={fill.style == :linear} class="vis-builder-field">
-                    <span class="vis-builder-key">angle</span>
-                    <span class="vis-builder-ranged">
-                      <input type="text" name="fill.angle" value={fill.angle} aria-label="angle" />
-                      <input
-                        type="range"
-                        name="fill.angle.range"
-                        class="vis-builder-range vis-builder-scrubber"
-                        style={scrub(fill.angle, 0, 360)}
-                        min="0"
-                        max="360"
-                        step="5"
-                        value={fill.angle}
-                        aria-label="angle, dragged"
-                      />
-                    </span>
-                  </label>
-                  <label :if={fill.style == :radial} class="vis-builder-field">
-                    <span class="vis-builder-key">centre</span>
-                    <span class="vis-builder-pair">
-                      <input type="number" name="fill.centre.x" min="0" max="1" step="0.05" value={Enum.at(fill.centre, 0)} aria-label="centre x" />
-                      <input type="number" name="fill.centre.y" min="0" max="1" step="0.05" value={Enum.at(fill.centre, 1)} aria-label="centre y" />
-                    </span>
-                  </label>
-                </div>
-              <% else %>
-                <.field
-                  :for={field <- fields}
-                  field={field}
-                  selected={@selected}
-                  found={@found}
-                  origins={@origins}
-                  target={@target}
-                />
-              <% end %>
-            </fieldset>
-            <.field
-              :for={field <- fields}
-              :if={is_nil(group)}
-              field={field}
-              selected={@selected}
-              found={@found}
-              origins={@origins}
-              target={@target}
-            />
-          <% end %>
-        </form>
+        <.form_body {form_assigns(assigns)} />
       </div>
       """
     end
 
     attr(:field, :map, required: true)
     attr(:label, :string, default: nil, doc: "the title shown instead of the key's name")
+
+    attr(:node_label, :string,
+      default: nil,
+      doc: "the node's label, aimed at by the field's events"
+    )
+
     attr(:selected, :string, default: nil)
     attr(:found, :string, default: nil)
     attr(:origins, :map, default: %{})
@@ -720,6 +621,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             class="vis-builder-var-unbind"
             phx-click="unbind_field"
             phx-value-field={@field.key}
+            phx-value-node={@node_label}
             phx-target={@target}
             aria-label={"unbind #{@field.key} from #{@field.variable}"}
             title="unbind"
@@ -884,6 +786,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               class="vis-builder-item-remove"
               phx-click="list_remove"
               phx-value-field={@field.key}
+              phx-value-node={@node_label}
               phx-value-index={index}
               phx-target={@target}
               aria-label={"remove #{item.text || item.chip} from #{@field.key}"}
@@ -899,6 +802,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               phx-keydown="list_add"
               phx-key="Enter"
               phx-value-field={@field.key}
+              phx-value-node={@node_label}
               phx-target={@target}
             />
           </span>
@@ -952,6 +856,190 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # block under its heading; a run with none is fields on their own.
     defp blocks(fields), do: Enum.chunk_by(fields, & &1.group) |> Enum.map(&{hd(&1).group, &1})
 
+    @doc """
+    One node's form alone (spec/14 §18.7): the fields of one facet — or, with `only`, of the
+    listed keys — as the controls `widget/1` chose, carrying the node's label so an edit in
+    it aims at the node (`_node`, `data-builder-node`, §18.16).
+    """
+    attr(:id, :string, required: true)
+    attr(:kind, :atom, required: true)
+    attr(:node, :map, required: true)
+    attr(:path, :list, default: [])
+
+    attr(:label, :string,
+      default: nil,
+      doc: "the node's label, aimed at by every event of the form"
+    )
+
+    attr(:facet, :atom, default: nil)
+
+    attr(:only, :list,
+      default: nil,
+      doc: "the keys to show, in schema order; nil for the facet's"
+    )
+
+    attr(:errors, :list, default: [])
+    attr(:refs, :map, default: %{})
+    attr(:selected, :string, default: nil)
+    attr(:found, :string, default: nil)
+    attr(:theme, :any, default: nil)
+    attr(:defs, :map, default: %{})
+    attr(:pool, :list, default: [])
+    attr(:hidden, :list, default: [])
+    attr(:event, :string, default: "edit")
+    attr(:origins, :map, default: %{})
+    attr(:target, :any, default: nil)
+
+    def form_body(assigns) do
+      specs = Schema.describe(assigns.kind)
+      facets = facets(assigns.kind)
+      open = if assigns.facet in facets, do: assigns.facet, else: List.first(facets)
+
+      assigns =
+        assigns
+        |> assign(:open, open)
+        |> assign(:blocks, blocks(fields(specs, open, assigns)))
+
+      ~H"""
+        <form
+          id={@id <> "-form"}
+          class="vis-builder-form"
+          phx-change={@event}
+          phx-hook="BuilderHook"
+          phx-target={@target}
+          data-builder-target={@target}
+          data-builder-scope="ref"
+          data-builder-edit={@event}
+          data-builder-node={@label}
+        >
+          <input :if={@label} type="hidden" name="_node" value={@label} />
+          <%= for {group, fields} <- @blocks do %>
+            <fieldset :if={group} class={"vis-builder-block" <> if(fill_style(group, fields), do: " vis-builder-block-fill", else: "")}>
+              <legend class="vis-builder-block-name">{group}</legend>
+              <%= if fill = fill_style(group, fields) do %>
+                <div class="vis-builder-field vis-builder-field-fill-style">
+                  <span class="vis-builder-key">style</span>
+                  <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
+                    <label
+                      :for={{style, svg} <- fill.glyphs}
+                      class={"vis-builder-glyph" <> if(fill.style == style, do: " vis-builder-glyph-on", else: "")}
+                      title={style}
+                    >
+                      <input type="radio" name="fill_style" value={style} checked={fill.style == style} aria-label={style} />
+                      {Phoenix.HTML.raw(svg)}
+                    </label>
+                  </span>
+                </div>
+                <.field
+                  :for={field <- fields}
+                  :if={field.key == :fill_opacity}
+                  field={field}
+                  node_label={@label}
+                  label="opacity"
+                  selected={@selected}
+                  found={@found}
+                  origins={@origins}
+                  target={@target}
+                />
+                <div class="vis-builder-fill-colours">
+                  <.field
+                    :for={field <- fields}
+                    :if={field.key == :fill}
+                    field={field}
+                    node_label={@label}
+                    label="colour"
+                    selected={@selected}
+                    found={@found}
+                    origins={@origins}
+                    target={@target}
+                  />
+                </div>
+                <div class="vis-builder-fill-numbers">
+                  <.field
+                    :for={field <- fields}
+                    :if={field.key not in [:fill, :fill_opacity]}
+                    field={field}
+                    node_label={@label}
+                    selected={@selected}
+                    found={@found}
+                    origins={@origins}
+                    target={@target}
+                  />
+                  <label :if={fill.style == :linear} class="vis-builder-field">
+                    <span class="vis-builder-key">angle</span>
+                    <span class="vis-builder-ranged">
+                      <input type="text" name="fill.angle" value={fill.angle} aria-label="angle" />
+                      <input
+                        type="range"
+                        name="fill.angle.range"
+                        class="vis-builder-range vis-builder-scrubber"
+                        style={scrub(fill.angle, 0, 360)}
+                        min="0"
+                        max="360"
+                        step="5"
+                        value={fill.angle}
+                        aria-label="angle, dragged"
+                      />
+                    </span>
+                  </label>
+                  <label :if={fill.style == :radial} class="vis-builder-field">
+                    <span class="vis-builder-key">centre</span>
+                    <span class="vis-builder-pair">
+                      <input type="number" name="fill.centre.x" min="0" max="1" step="0.05" value={Enum.at(fill.centre, 0)} aria-label="centre x" />
+                      <input type="number" name="fill.centre.y" min="0" max="1" step="0.05" value={Enum.at(fill.centre, 1)} aria-label="centre y" />
+                    </span>
+                  </label>
+                </div>
+              <% else %>
+                <.field
+                  :for={field <- fields}
+                  field={field}
+                  node_label={@label}
+                  selected={@selected}
+                  found={@found}
+                  origins={@origins}
+                  target={@target}
+                />
+              <% end %>
+            </fieldset>
+            <.field
+              :for={field <- fields}
+              :if={is_nil(group)}
+              field={field}
+              node_label={@label}
+              selected={@selected}
+              found={@found}
+              origins={@origins}
+              target={@target}
+            />
+          <% end %>
+        </form>
+      """
+    end
+
+    # The assigns a panel hands its form: everything the form takes, nothing more.
+    @form_keys [
+      :id,
+      :kind,
+      :node,
+      :path,
+      :label,
+      :facet,
+      :only,
+      :errors,
+      :refs,
+      :selected,
+      :found,
+      :theme,
+      :defs,
+      :pool,
+      :hidden,
+      :event,
+      :origins,
+      :target
+    ]
+    defp form_assigns(assigns), do: Map.take(assigns, @form_keys)
+
     defp class(nil), do: "vis-builder-editor"
     defp class(extra), do: "vis-builder-editor " <> extra
 
@@ -968,8 +1056,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       hidden = if assigns.kind == :source, do: Map.get(assigns, :hidden) || [], else: []
 
+      only = Map.get(assigns, :only)
+
       for spec <- specs,
-          spec.facet == open,
+          if(only, do: spec.key in only, else: spec.facet == open),
           spec.key not in hidden,
           not (faced? and spec.key == :font_style) do
         widget = pooled(assigns.kind, spec.key, pool) || referenced(spec.type, refs)

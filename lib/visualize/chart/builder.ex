@@ -63,6 +63,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Layers,
       Library,
       Masks,
+      Page,
       Palette,
       Params,
       Picker,
@@ -163,6 +164,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          context: :inspect,
          library_open: true,
          context_width: 400,
+         collapsed: MapSet.new(),
          expanded: MapSet.new(),
          find: "",
          node_label: "design"
@@ -453,17 +455,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-target={@myself}
               >{tab.label}</button>
             </nav>
-            <nav :if={@chips != []} class="vis-builder-chips">
-              <button
-                :for={chip <- @chips}
-                type="button"
-                class={chip.class}
-                phx-click={chip.event}
-                phx-value-node={chip.node}
-                phx-value-facet={chip.facet}
-                phx-target={@myself}
-              >{chip.label}</button>
-            </nav>
             <nav class="vis-builder-context-icons" aria-label="context panels">
               <button
                 :for={{panel, icon, word} <- context_icons()}
@@ -478,21 +469,57 @@ if Code.ensure_loaded?(Phoenix.Component) do
               >{Phoenix.HTML.raw(icon)}</button>
             </nav>
             <div :if={@context == :inspect} class="vis-builder-inspect">
-              <Editor.panel
-                id={@id <> "-editor"}
-                kind={@entry.kind}
-                selected={@field}
-                found={@find_hit}
-                node={@editing}
-                path={@entry.path}
-                facet={@facet}
+              <details
+                :for={top <- @page.tops}
+                :if={@page.sections?}
+                class={"vis-builder-section vis-builder-section-top" <> if(top.needs > 0, do: " vis-builder-section-needs", else: "")}
+                open={not MapSet.member?(@collapsed, top.label)}
+              >
+                <summary
+                  class="vis-builder-section-title"
+                  title={top.label}
+                  phx-click="toggle_section"
+                  phx-value-section={top.label}
+                  phx-target={@myself}
+                >{top.name}</summary>
+                <Page.page
+                  id={@id <> "-page-" <> top.slug}
+                  kind={top.kind}
+                  node={top.node}
+                  path={top.path}
+                  label={top.label}
+                  before={top.before}
+                  collapsed={@collapsed}
+                  errors={@errors}
+                  refs={@refs}
+                  selected={@field}
+                  selected_node={@entry.label}
+                  found={@find_hit}
+                  theme={@colour.theme}
+                  defs={@defs}
+                  pool={@pool}
+                  hidden={if(@source_defaults, do: [], else: [:default])}
+                  target={@myself}
+                />
+              </details>
+              <Page.page
+                :if={not @page.sections?}
+                id={@id <> "-page"}
+                kind={@page.single.kind}
+                node={@page.single.node}
+                path={@page.single.path}
+                label={@page.single.label}
+                before={@page.single.before}
+                collapsed={@collapsed}
                 errors={@errors}
                 refs={@refs}
+                selected={@field}
+                selected_node={@entry.label}
+                found={@find_hit}
                 theme={@colour.theme}
                 defs={@defs}
                 pool={@pool}
                 hidden={if(@source_defaults, do: [], else: [:default])}
-                strip={false}
                 target={@myself}
               />
             </div>
@@ -765,8 +792,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # Clicking into a field selects it, and the context panel becomes its picker
     # (spec/14 §19.10); the same click on the field already selected leaves it.
-    def handle_event("select_field", %{"field" => key}, socket) do
+    def handle_event("select_field", %{"field" => key} = params, socket) do
+      socket = aimed(socket, params)
       {:noreply, assign(socket, field: key, context: context_for(socket, key))}
+    end
+
+    # A section of the inspector folds and unfolds (spec/14 §18.15).
+    def handle_event("toggle_section", %{"section" => key}, socket) do
+      {:noreply,
+       update(socket, :collapsed, fn set ->
+         if MapSet.member?(set, key), do: MapSet.delete(set, key), else: MapSet.put(set, key)
+       end)}
     end
 
     # The library folds to a rail and unfolds (spec/14 §18.16).
@@ -977,7 +1013,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A library entry dropped on a reference field writes its id there — the same write the
     # field's select makes — and an entry of another kind is refused by name (spec/14
     # §19.10). A style field is a stack, so a style goes onto it as a drop on the stack does.
-    def handle_event("insert", %{"scope" => "ref", "field" => field, "name" => submitted}, socket) do
+    def handle_event(
+          "insert",
+          %{"scope" => "ref", "field" => field, "name" => submitted} = params,
+          socket
+        ) do
+      socket = aimed(socket, params)
       %{entry: entry} = editing(socket.assigns)
 
       with {:ok, stored} <- fetch(socket.assigns.store, submitted),
@@ -1080,6 +1121,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # -- the form, the parameters, the document ------------------------------------------
 
     def handle_event("edit", %{"_target" => [target]} = params, socket) do
+      socket = aimed(socket, params)
       %{entry: entry} = editing(socket.assigns)
 
       if Fills.control?(target) do
@@ -1131,6 +1173,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A list of scalars as items (spec/14 §18.6): Enter in the + box appends one read by the
     # element's type; × removes by index. Both write the whole list, as the schema says.
     def handle_event("list_add", %{"field" => field} = params, socket) do
+      socket = aimed(socket, params)
       %{entry: entry, editing: node} = editing(socket.assigns)
       typed = Map.get(params, "value") || Map.get(params, "#{field}.add") || ""
 
@@ -1144,7 +1187,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    def handle_event("list_remove", %{"field" => field, "index" => index}, socket) do
+    def handle_event("list_remove", %{"field" => field, "index" => index} = params, socket) do
+      socket = aimed(socket, params)
       %{entry: entry, editing: node} = editing(socket.assigns)
 
       with %{key: key, type: {:list, _}} <-
@@ -1210,7 +1254,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A chip dropped on a field binds it: the field's key takes var(:name). A variable
     # already typed by a use of another type is refused by name; one used nowhere takes
     # the control's type by being used here (spec/14 §19.9).
-    def handle_event("bind_field", %{"field" => field, "name" => name}, socket) do
+    def handle_event("bind_field", %{"field" => field, "name" => name} = params, socket) do
+      socket = aimed(socket, params)
       %{entry: entry, layers: layers, design: design} = editing(socket.assigns)
 
       with %{key: key, type: type} when type != :text <-
@@ -1257,7 +1302,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    def handle_event("unbind_field", %{"field" => field}, socket) do
+    def handle_event("unbind_field", %{"field" => field} = params, socket) do
+      socket = aimed(socket, params)
       %{entry: entry} = editing(socket.assigns)
 
       case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)) do
@@ -1270,6 +1316,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # word is a slot, a `#rrggbb` a literal, each through the edit the chooser would make;
     # the form the well sits in says which edit. A key that is not a colour refuses by name.
     def handle_event("drop_colour", %{"field" => field, "colour" => colour} = params, socket) do
+      socket = aimed(socket, params)
       edit = if Map.get(params, "edit") == "edit_style", do: "edit_style", else: "edit"
       kind = if edit == "edit_style", do: :style, else: editing(socket.assigns).entry.kind
 
@@ -1299,7 +1346,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A field's value promoted: a variable named for the key, its literal as the default,
     # and the field bound to it.
-    def handle_event("promote", %{"field" => field}, socket) do
+    def handle_event("promote", %{"field" => field} = params, socket) do
+      socket = aimed(socket, params)
       %{entry: entry, editing: node, layers: layers, design: design} = editing(socket.assigns)
 
       case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)) do
@@ -1598,7 +1646,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       entry =
         case assigns.node_label do
           "design" -> first_node(nodes)
-          label -> Enum.find(nodes, &(&1.label == label)) || first_node(nodes)
+          label -> Enum.find(nodes, &(&1.label == label)) || implied(label) || first_node(nodes)
         end
 
       errors = faults(kind, design, assigns, cycle)
@@ -1612,6 +1660,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         entry: entry,
         tabs: tabs,
         chips: chips(children, entry, assigns.facet),
+        page: page(nodes, entry, layer, errors),
         needs: needs(errors),
         style_site: style_site(entry, at(layer, entry.path)),
         open_style: open_style(entry),
@@ -1890,8 +1939,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
       declared = design |> Editor.nodes() |> Enum.map(&root(&1.label)) |> Enum.uniq()
       # Neither the design's own root nor `vars` is a tab: a declaration is the variable
       # panel's (§19.10), where it is made, defaulted and bound in one place.
-      Enum.reject(declared ++ Enum.reject(here, &(&1 in declared)), &(&1 in ["design", "vars"]))
+      # `meta` is not a tab either: the frame's page opens with the design's name (§18.15).
+      Enum.reject(
+        declared ++ Enum.reject(here, &(&1 in declared)),
+        &(&1 in ["design", "vars", "meta"])
+      )
     end
+
+    # A node the layer does not carry yet but a page shows a form for — the frame's meta
+    # (§18.15) — is implied by its label: writing to it creates it.
+    defp implied("meta"), do: %{path: [:meta], kind: :meta, label: "meta"}
+    defp implied(_label), do: nil
 
     defp first_node(nodes) do
       Enum.find(nodes, &(&1.label != "design")) || hd(nodes)
@@ -2263,6 +2321,61 @@ if Code.ensure_loaded?(Phoenix.Component) do
       )
 
       socket
+    end
+
+    # An event from a form on a page aims at the form's node (spec/14 §18.15): the node is
+    # selected first, so everything that reads the entry reads that node.
+    defp aimed(socket, params) do
+      case Map.get(params, "_node") || Map.get(params, "node") do
+        label when is_binary(label) and label != "" ->
+          if label == socket.assigns.node_label,
+            do: socket,
+            else: assign(socket, node_label: label, facet: nil, style_entry: nil)
+
+        _none ->
+          socket
+      end
+    end
+
+    # The inspect tab's page (spec/14 §18.15): the nodes at the top of the open root — the
+    # root itself when it is one node, else its members — each a page of sections; the
+    # frame's opens with the design's meta.
+    defp page(nodes, entry, layer, errors) do
+      open_root = root(entry.label)
+      under = Enum.filter(nodes, &(root(&1.label) == open_root and &1.label != "design"))
+      needs = needs(errors)
+
+      tops =
+        case Enum.find(under, &(length(&1.path) == 1)) do
+          nil -> Enum.filter(under, &(length(&1.path) == 2))
+          single -> [single]
+        end
+
+      tops =
+        for node <- tops do
+          name = leaf(node.label, open_root)
+
+          %{
+            kind: node.kind,
+            node: at(layer, node.path) || %{},
+            path: node.path,
+            label: node.label,
+            name: if(name == "", do: node.label, else: name),
+            slug: node.label |> String.replace(~r/[^A-Za-z0-9]+/, "-") |> String.trim("-"),
+            needs: Map.get(needs, node.label, 0),
+            before: if(node.kind == :frame, do: [meta_form(layer)], else: [])
+          }
+        end
+
+      case tops do
+        [one] when length(one.path) == 1 -> %{sections?: false, single: one, tops: []}
+        many -> %{sections?: true, single: nil, tops: many}
+      end
+    end
+
+    # The design's name and description open the frame's page (spec/14 §18.15).
+    defp meta_form(layer) do
+      %{kind: :meta, node: Map.get(layer, :meta) || %{}, path: [:meta], label: "meta", only: nil}
     end
 
     defp edited(socket, _entry, nil), do: socket

@@ -121,18 +121,22 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<aside class="vis-builder-sidebar">)
       assert html =~ ~s(<main class="vis-builder-main">)
       assert html =~ ~s(<div class="vis-builder-graph">)
-      assert html =~ ~s(<div class="vis-builder-tray">)
 
-      # The stack is inside the sidebar and the node strip inside the main column, which is
-      # the whole of what the shell is: the panels themselves are unchanged.
+      # The stack is inside the sidebar; the graph alone in the main column; the node strip
+      # and the page of sections in the inspector (spec/14 §18.16).
       [_, sidebar] = String.split(html, ~s(<aside class="vis-builder-sidebar">), parts: 2)
       [sidebar, _] = String.split(sidebar, "</aside>", parts: 2)
       assert sidebar =~ ~s(class="vis-builder-layers")
 
       [_, main] = String.split(html, ~s(<main class="vis-builder-main">), parts: 2)
-      assert main =~ ~s(class="vis-builder-nodes")
-      assert main =~ ~s(class="vis-builder-editor")
+
+      [main, context] =
+        String.split(main, ~s(class="vis-builder-context" phx-hook="BuilderHook"), parts: 2)
+
+      refute main =~ ~s(class="vis-builder-nodes")
       assert main =~ ~s(class="vis-builder-preview")
+      assert context =~ ~s(class="vis-builder-nodes")
+      assert context =~ ~s(class="vis-builder-page vis-builder-page-0")
     end
 
     test "the top row is every root the design has, in the schema's order" do
@@ -156,50 +160,99 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(class="vis-builder-node" title="frame of this layer")
     end
 
-    test "the open root's children and the node's facets are one strip" do
+    test "a root tab is one page of sections: the frame reads kind, name, size, binding, then its parts (spec/14 §18.15)" do
       html = at_node("frame")
-      assert html =~ ~s(<nav class="vis-builder-chips">)
-
-      # Children first, then the facets, in one row of one kind of control.
-      chips = tabs(html, "vis-builder-chip")
-      assert Enum.take(chips, 2) == ["size", "margin"]
-      assert Enum.drop(chips, 2) == Enum.map(Editor.facets(:frame), &to_string/1)
-
-      # The root stays marked while a child is open, so the strip says where you are.
-      open = at_node("frame.size")
-      assert open =~ ~s(class="vis-builder-node vis-builder-node-open")
-      assert open =~ ~s(class="vis-builder-chip vis-builder-chip-open")
-      assert open =~ ~s(phx-value-node="frame.size")
-    end
-
-    test "a lone facet is not a chip, because it is not a choice" do
-      # A style has one facet, so the strip over `styles.series` is the declared styles and
-      # nothing else; the `style` chip it used to carry was a control that did nothing.
-      assert Editor.facets(:style) == [:style]
-
-      html = at_node("styles.series")
-      assert tabs(html, "vis-builder-chip") == ["series"]
-      refute html =~ ~s(phx-value-facet="style")
-    end
-
-    test "a node with one facet and no children has no strip at all" do
-      html =
-        render_component(Builder, %{
-          id: "b",
-          layers: [{:only, %{meta: %{name: "Uptime"}}}],
-          styles: false,
-          node_label: "meta"
-        })
-
-      assert Editor.facets(:meta) == [:content]
-      assert html =~ ~s(phx-value-root="meta")
+      # No chips, no facet tabs: sections.
       refute html =~ ~s(class="vis-builder-chips")
+      refute html =~ ~s(phx-click="facet")
+
+      page =
+        html
+        |> String.split(~s(class="vis-builder-page vis-builder-page-0"))
+        |> Enum.at(1)
+        |> String.split("</details>\n</div>")
+        |> hd()
+
+      titles =
+        Regex.scan(~r/<summary class="vis-builder-section-title[^"]*"[^>]*>([^<]+)</, page)
+        |> Enum.map(&List.last/1)
+
+      assert titles == ["size", "binding", "scales", "axes", "x", "y", "x bottom", "y left"] or
+               Enum.take(titles, 2) == ["size", "binding"]
+
+      # Kind and the design's name come first, bare; size holds width, height and the margins
+      # in one section; no textarea repeats a part.
+      {kind_at, _} = :binary.match(page, ~s(name="kind"))
+      {name_at, _} = :binary.match(page, ~s(name="name"))
+      {size_at, _} = :binary.match(page, ~s(>size</summary>))
+      assert kind_at < size_at and name_at < size_at
+
+      size =
+        page
+        |> String.split(~s(>size</summary>))
+        |> Enum.at(1)
+        |> String.split(~s(>binding</summary>))
+        |> hd()
+
+      for key <- ~w(width height top right bottom left),
+          do: assert(size =~ ~s(name="#{key}"), key)
+
+      refute page =~ ~s(<textarea name="size")
+      refute page =~ ~s(<textarea name="scales")
+      # Every form carries its node.
+      assert page =~ ~s(data-builder-node="frame")
+      assert page =~ ~s(<input type="hidden" name="_node" value="frame.size">)
+      assert page =~ ~s(<input type="hidden" name="_node" value="meta">)
     end
 
-    test "a facet chip carries its facet and a node chip carries its node" do
+    test "meta is not a tab; a member root's page is a section per member, each with its facets as sections" do
       html = at_node("frame")
-      assert html =~ ~s(phx-click="select_node" phx-value-node="frame.size")
-      assert html =~ ~s(phx-click="facet" phx-value-facet="geometry")
+      refute html =~ ~s(phx-value-root="meta")
+
+      html = at_node("marks[0]", selected: 2)
+      assert html =~ ~s(<summary class="vis-builder-section-title" title="marks[0]")
+      assert html =~ ~s(>binding</summary>)
+      assert html =~ ~s(>channel</summary>)
+      # The mark's channels node is a sub-section inside the channel facet, not a textarea.
+      refute html =~ ~s(<textarea name="channels")
+      assert html =~ ~s(<input type="hidden" name="_node" value="marks[0].channels">)
+    end
+
+    test "a section folds and keeps, and an edit in a sub-section's form writes that node" do
+      s = BuilderFixture.socket(BuilderFixture.layers())
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
+      {:noreply, s} = Builder.handle_event("toggle_section", %{"section" => "frame:size"}, s)
+      assert MapSet.member?(s.assigns.collapsed, "frame:size")
+
+      assert BuilderFixture.render(s) =~
+               ~r|<details class="vis-builder-section"[^>]*>\s*<summary[^>]*>size<|
+
+      refute BuilderFixture.render(s) =~
+               ~r|<details class="vis-builder-section" open[^>]*>\s*<summary[^>]*>size<|
+
+      {:noreply, s} = Builder.handle_event("toggle_section", %{"section" => "frame:size"}, s)
+      refute MapSet.member?(s.assigns.collapsed, "frame:size")
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["width"], "width" => "500", "_node" => "frame.size"},
+          s
+        )
+
+      assert s.assigns.node_label == "frame.size"
+      {_, house} = hd(BuilderFixture.layers(s))
+      assert house.frame.size.width == 500
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["name"], "name" => "Uptime!", "_node" => "meta"},
+          s
+        )
+
+      {_, house} = hd(BuilderFixture.layers(s))
+      assert house.meta.name == "Uptime!"
     end
   end
 
@@ -2091,8 +2144,8 @@ defmodule Visualize.Chart.BuilderTest do
       s = BuilderFixture.socket(layers, node_label: "marks[0]")
       html = BuilderFixture.render(s)
 
-      assert html =~ "vis-builder-chip vis-builder-chip-open vis-builder-chip-needs" or
-               html =~ "vis-builder-chip vis-builder-chip-needs"
+      # The mark's page: the section holding the faulty channels is marked.
+      assert html =~ ~s(class="vis-builder-section vis-builder-section-needs")
     end
 
     test "the stylesheet has the needs token and every marking rule uses it" do
@@ -2121,7 +2174,10 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render(s)
       assert html =~ ~s(class="vis-builder-items")
       assert html =~ ~s(<span class="vis-builder-item-text">t</span>)
-      assert html =~ ~s(phx-click="list_remove" phx-value-field="fields" phx-value-index="0")
+
+      assert html =~
+               ~s(phx-click="list_remove" phx-value-field="fields" phx-value-node="sources.primary" phx-value-index="0")
+
       assert html =~ ~s(name="fields.add" class="vis-builder-item-box" placeholder="+ add")
       refute html =~ ~s(<textarea name="fields">)
 
@@ -2953,7 +3009,7 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "the editor is rendered over the selected layer, with the design's faults" do
       html = rendered(:builder)
-      assert html =~ ~s(<div class="vis-builder-editor">)
+      assert html =~ ~s(class="vis-builder-page vis-builder-page-0")
       # `frame.size` is reachable through the `frame` root now that the strip is grouped;
       # the second row is asserted with the rest of the grouping above.
       assert html =~ ~s(phx-value-root="frame" phx-target="-1">frame</button>)

@@ -1707,11 +1707,17 @@ The palette is a view of the **stacked** design, because the stack is what a mar
 
 **A reference becomes a choice.** `Visualize.Chart.Builder.Editor.panel/1` takes a `refs` assign — the names a `{:ref, kind}` may take, by kind — and renders a select over them instead of a text box wherever it has them. `Visualize.Chart.Builder.Editor.widget/1` is unchanged and stays a function of the type alone, which is the property that makes it total over the schema (§18.6); the panel is what narrows a reference when it happens to know the names. A kind the caller knows no names for is still a text box, so the editor remains renderable over any node with no palette at all.
 
-### 18.15 One strip, of one kind of control
+### 18.15 A root tab is one page of sections
 
-The nodes of §18.13 are the top row. Beneath them was a second row of the open node's *children* and, below that, the editor's own row of the open node's *facets* (§18.7) — two rows of chips that looked different, sat at different sizes, and did different things: one changed which node is open, the other which keys of it are shown. A style node has exactly one facet, so it carried a lone `style` chip that was a control offering no choice.
+The nodes of §18.13 are the top row — the root tabs. Beneath them the first drafts put chips for the open node's children and tabs for its facets, so a frame was *geometry / binding* beside *size, margin, scales.hour, axes[0]*, the geometry facet listing `size` and `margin` as textareas beside the chips that opened them, and a mark was five subtabs. **A root tab is now one page of sections** (#249): `Visualize.Chart.Builder.Page.page/1` renders the node under the open root — or, for a root that is a map or a list (styles, marks, labels…), a section per member — as collapsible sections (`<details>` with a `<summary>`, folded and kept through `toggle_section` in `collapsed`):
 
-There is now **one strip**: the children of the open root, then the facets of the open node, in one row, of one appearance, with a rule between the two groups rather than a line break. `Visualize.Chart.Builder.Editor.panel/1` takes a `strip` assign so the caller that renders the row can suppress the editor's own; the editor still renders it by default, because it must stay usable on its own.
+- the node's own keys grouped by **facet**, one section per facet in the order of §1.3, titled by the facet's word, the style groups of §18.7 inside the style section;
+- a key that holds a **node** — `{:node, _}`, a map or a list of nodes, or a `one_of` whose value is a node — is not a textarea in its facet's section but a **sub-section inside it**, titled by the node's label, itself a page; so the whole subtree of a root is one page and nothing is listed twice;
+- a section with a fault under it is marked (`vis-builder-section-needs`), as a chip was, so a folded fault still shows.
+
+**The frame's page reads as a frame**: its `kind` first, bare, then the design's **name and description** — the `meta` node's fields, written to the layer's `meta` (created when the layer lacks it), so `meta` is no tab of its own — then **size**, one section holding the `size` node's width and height and the `margin` node's four together, then **binding** (the frame's `facet`), then its parts — scales, axes, legend, projection, viewport — each a section with its members as sub-sections. The frame's geometry facet, which held only `kind` beside its parts, is not a section of its own.
+
+**Every form knows its node.** Every form on a page carries its node's label — `data-builder-node`, and a hidden `_node` input — so an edit, a field selection, a chip drop, a colour drop, a list add or remove in any section aims at that node: the builder selects it first (`aimed`), and the context — the colour chooser, the style stack — follows the node last touched. `Visualize.Chart.Builder.Editor.form_body/1` is that form alone, of one facet's keys or of the listed ones; `Visualize.Chart.Builder.Editor.panel/1` still renders a node as facet tabs over one form, for the style panel and for a host that wants the smaller thing.
 
 | Function | Contract |
 |---|---|
@@ -2168,6 +2174,9 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Glyphs.drawn?/1` | whether a key's enum is chosen by its picture (§18.6) |
 | `Visualize.Chart.Builder.Glyphs.glyph/2` | the inline SVG for one value of a drawn key, or `nil` |
 | `Visualize.Chart.Builder.Masks.keyed?/1` | whether a contribution is of a kind the document keys by name, so the panel offers the key control |
+| `Visualize.Chart.Builder.Page.page/1` | a root tab's node as a page of sections (§18.15): facet sections with the node keys' sub-sections inside, the frame's page as a frame, every form aimed at its node |
+| `Visualize.Chart.Builder.Page.sections/1` | the sections of a node's page — per facet the value keys and the child nodes; a frame's kind, size, binding and parts |
+| `Visualize.Chart.Builder.Editor.form_body/1` | one node's form alone: the fields of one facet, or of the listed keys, carrying the node's label (`_node`, `data-builder-node`) |
 | `Visualize.Chart.Builder.Sources.panel/1` | the sources tab: the chart's signals as rows, +, ×, play and pause, the tick's period |
 | `Visualize.Chart.Builder.Sources.rows/1` | the signals as the tab's rows, sorted by name — the fields as one comma-separated string, the numbers as pairs |
 | `Visualize.Chart.Builder.Sources.edit/3` | `edit(signal, key, value)`: a signal edited by one control of the tab — kind, fields, or a number — left as it is when the value does not read |

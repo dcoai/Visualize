@@ -58,8 +58,15 @@ defmodule Visualize.Hooks.BuilderTest do
     {well_at, _} = :binary.match(js, "closest('[data-builder-well]')")
     {row_at, _} = :binary.match(js, "closest('[data-builder-bind]')")
     assert well_at < row_at
-    assert js =~ "this.push('select_field', { field: well.getAttribute('data-builder-well') })"
-    assert js =~ "this.push('select_field', { field: field.getAttribute('data-builder-bind') })"
+
+    assert js =~
+             "this.push('select_field', this.aimed(well, { field: well.getAttribute('data-builder-well') }))"
+
+    assert js =~
+             "this.push('select_field', this.aimed(field, { field: field.getAttribute('data-builder-bind') }))"
+
+    # A push from inside a node's form carries the node (spec/14 §18.15).
+    assert js =~ "closest('[data-builder-node]')"
 
     # The rows carry no click binding of their own, only the keyboard's.
     html =
