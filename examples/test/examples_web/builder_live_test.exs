@@ -33,6 +33,73 @@ defmodule ExamplesWeb.BuilderLiveTest do
     assert html =~ ~s(class="vis-builder-deploy")
   end
 
+  describe "a chart type is a template in the library (spec/14 §18.16, #233)" do
+    alias Examples.Charts.Templates
+
+    test "every gallery design and every preset without one is a Charts:: entry" do
+      names = Enum.map(Templates.all(), & &1.name)
+
+      for module <- Templates.gallery_modules() do
+        assert "Charts::#{module.title()}" in names
+      end
+
+      assert "Charts::Tree Diagram" in names and "Charts::Treemap" in names
+      assert Enum.sort(Enum.uniq(names)) == Enum.sort(names)
+
+      # The presets stand in only while the gallery has no design of that title.
+      drawn = Enum.map(Templates.gallery_modules(), & &1.title())
+      refute "Tree Diagram" in drawn
+
+      html = build_conn() |> get("/builder") |> html_response(200)
+
+      for name <- names do
+        assert Library.id_of(name) != nil, "#{name} is not in the library"
+
+        assert html =~
+                 ~s(<span class="vis-builder-fragment">#{String.replace(name, "Charts::", "")}</span>)
+      end
+    end
+
+    test "each template is one kind per site, flattens back to its design, and binds the pool" do
+      pool = Templates.pool()
+
+      for template <- Templates.all() do
+        assert Chart.Validator.validate(template.design) == :ok, template.name
+        {:ok, entry} = Library.get(Library.id_of(template.name), nil)
+
+        {:ok, flat, %{missing: [], keyless: []}} =
+          Chart.flatten(entry.fragment, fn _ -> :error end)
+
+        assert Map.delete(flat, :version) == Map.delete(template.design, :version), template.name
+
+        # Its sources are named for it and every one binds from the pool.
+        for name <- Map.keys(template.design.sources) do
+          assert String.starts_with?(to_string(name), "#{template.slug}_"),
+                 "#{template.name}: #{name}"
+
+          assert Map.has_key?(pool, name)
+        end
+
+        {:ok, chart} = Chart.from_map(template.design)
+        assert {:ok, applied} = Chart.apply(chart, sources: pool), template.name
+        svg = Chart.render(applied)
+
+        for %{type: type} <- template.design.marks do
+          assert svg =~ ~s(class="mark mark-#{type}"), "#{template.name} drew no #{type}"
+        end
+      end
+    end
+
+    test "the page's pool is every template's rows beside its own" do
+      {:ok, socket} = BuilderLive.mount(%{}, %{}, %Socket{})
+      assert Map.has_key?(socket.assigns.sources, :primary)
+
+      for {name, rows} <- Templates.pool() do
+        assert socket.assigns.sources[name] == rows
+      end
+    end
+  end
+
   test "save keeps structure; deploy applies the design and says so" do
     {:ok, socket} = BuilderLive.mount(%{}, %{}, %Socket{})
 
