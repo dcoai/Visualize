@@ -477,3 +477,41 @@ A theme MUST hold, by `Visualize.Color.contrast/2` against its own `background`:
 | `Visualize.Theme.mode/1` | `:css` for the SVG backend, `:literal` for any other (7.3). |
 | `Visualize.Theme.stylesheet/1` | The `.vis-theme-<name>` rule declaring every slot (7.3). |
 
+
+## 8. Signals
+
+**Implemented** (#244). A signal is a *generated source*: a description from which `Visualize.Signals` yields rows, pure and deterministic for a tick, so a chart under design has feeds that move without a host supplying any. A deployed design still binds to the host's pool (spec/14 §7.3) under the same names; signals are the builder's stand-in for it.
+
+### 8.1 A signal
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `kind` | `:sine \| :square \| :random \| :discrete` | required | the wave every value column follows; `:discrete` is a counter — non-negative integers stepping up by one per tick, wrapping past `max` |
+| `fields` | `[atom()]` | required | the columns: the **first is time** and carries the tick number; every other is a value column |
+| `window` | `pos_integer()` | `24` | the rows a tick yields — the last `window` ticks, ending at the tick |
+| `period` | `number()` | `12` | ticks per cycle of a `:sine` or a `:square` |
+| `min`, `max` | `number()` | `0`, `100` | the value range: a sine swings between them, a square alternates them, a random draws within them, a discrete counts from `min` to `max` |
+| `seed` | `integer()` | `0` | for `:random`, so a chart replays the same feed |
+
+Value columns differ from each other: the *n*-th value column (0-based) of a sine or a square is shifted by `n / count` of a cycle, so two columns are never the same line; a random column draws its own stream from `seed` and the column's index; a discrete column starts `n` higher.
+
+### 8.2 The rows
+
+`rows(signal, tick)` yields `window` rows, one per tick from `tick − window + 1` to `tick` in order — a tick below `0` yields no row, so the window fills over its first ticks — each a map of the signal's fields: the time column the tick, and each value column its kind's value at that tick:
+
+- `:sine` — `min + (max − min) · (1 + sin(2π (t / period + phase))) / 2`, so at tick `0` the first column stands at the midpoint;
+- `:square` — `max` for the first half of a cycle, `min` for the second, the column's phase applied;
+- `:random` — a value in `[min, max)` from `:rand.uniform_real/0` under a seed derived from `seed`, the column's index and the tick, so the same tick always draws the same value;
+- `:discrete` — `min + rem(t + n, max − min + 1)`.
+
+The window **slides**: tick 25 over a window of 24 yields ticks 2..25, and the next tick drops 2 and adds 26. `pool(signals, tick)` yields a pool, name to rows, for a map of named signals, ready for `Visualize.Chart.apply/2`.
+
+### 8.3 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Signals.kinds/0` | The four kinds, in the order of 8.1. |
+| `Visualize.Signals.new/2` | `new(kind, fields)` — a signal of the kind over the fields with 8.1's defaults; `new/3` takes the remaining keys as options. |
+| `Visualize.Signals.new/3` | As `new/2` with options. |
+| `Visualize.Signals.rows/2` | `rows(signal, tick)`: the window of rows ending at the tick (8.2). |
+| `Visualize.Signals.pool/2` | `pool(signals, tick)`: `rows/2` of every signal of a map, under its name. |
