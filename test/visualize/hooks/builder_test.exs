@@ -53,6 +53,26 @@ defmodule Visualize.Hooks.BuilderTest do
     assert js =~ "else this.pushEvent(event, carried)"
   end
 
+  test "a click selects a field once: a well its own, any other click in a row the row's (spec/14 §19.10)" do
+    js = Hooks.Builder.js_hook()
+    {well_at, _} = :binary.match(js, "closest('[data-builder-well]')")
+    {row_at, _} = :binary.match(js, "closest('[data-builder-bind]')")
+    assert well_at < row_at
+    assert js =~ "this.push('select_field', { field: well.getAttribute('data-builder-well') })"
+    assert js =~ "this.push('select_field', { field: field.getAttribute('data-builder-bind') })"
+
+    # The rows carry no click binding of their own, only the keyboard's.
+    html =
+      Visualize.BuilderFixture.render_case(
+        {&Visualize.Chart.Builder.Editor.panel/1, %{kind: :style, node: %{}, facet: :style}}
+      )
+
+    refute html =~ ~s(phx-click="select_field")
+    assert html =~ ~s(phx-keyup="select_field")
+    # The style row is not a label, so a click on its word picks no radio.
+    assert html =~ ~s(<div class="vis-builder-field vis-builder-field-fill-style">)
+  end
+
   test "nothing is logged and no element outside the hook takes part" do
     js = Hooks.Builder.js_hook()
     refute js =~ "console.log"

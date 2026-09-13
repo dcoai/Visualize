@@ -572,7 +572,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <fieldset :if={group} class={"vis-builder-block" <> if(fill_style(group, fields), do: " vis-builder-block-fill", else: "")}>
               <legend class="vis-builder-block-name">{group}</legend>
               <%= if fill = fill_style(group, fields) do %>
-                <label class="vis-builder-field vis-builder-field-fill-style">
+                <div class="vis-builder-field vis-builder-field-fill-style">
                   <span class="vis-builder-key">style</span>
                   <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
                     <label
@@ -584,7 +584,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                       {Phoenix.HTML.raw(svg)}
                     </label>
                   </span>
-                </label>
+                </div>
                 <.field
                   :for={field <- fields}
                   :if={field.key == :fill_opacity}
@@ -682,7 +682,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         class={field_class(@field, @selected, @found)}
         data-builder-ref={@field.ref && to_string(@field.key)}
         data-builder-bind={@field.key}
-        phx-click="select_field"
         phx-keyup="select_field"
         phx-value-field={@field.key}
         phx-target={@target}
