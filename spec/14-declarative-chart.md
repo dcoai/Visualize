@@ -1472,6 +1472,9 @@ It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every
 | `on_save` | `:any` | `:visualize_chart_saved` | the tag of the message of the next paragraph |
 | `on_deploy` | `:any` | `:visualize_chart_deployed` | the tag of the deploy message (§19.6): the flat design, where save's carries structure |
 | `source_defaults` | `:boolean` | `true` | whether a source's `default` (§2.3) is offered in the form; a host that binds every source by its own name sets `false` and the field is not shown (§19.10) |
+| `tick_ms` | `:integer` | `500` | the period of the signals' tick while playing (§19.10) |
+
+**The tick is the host's to forward.** A component receives no messages of its own, so the builder schedules its tick to the host's process — `{:visualize_chart_tick, id}` after `tick_ms` while playing — and the host forwards it with one line, `Visualize.Chart.Builder.tick(id, socket)`, which sends the component an update; a host that does not forward it sees signals that do not move and nothing else amiss. The demo host forwards it.
 | `class` | `:string` | `nil` | placed on the builder's root element |
 
 Saving sends `{on_save, id, design}` to the host LiveView process — `send(self(), …)` from the component's own callback, which runs in that process — where `design` is `Visualize.Chart.stack/1` of the enabled layers, the same map the preview drew. The `id` is the component's, so a page with two builders tells them apart. That message is the entire output of the component: it pushes no event, patches no URL and touches no store the host did not give it. The host handles it in `handle_info/2` and decides what a saved design means.
@@ -2121,7 +2124,7 @@ The names on offer are those the stack declares under `vars` and those any layer
 | `Visualize.Chart.Builder.Variables.type_of/1` | the type a variable took from its first use, or `nil` for none |
 | `Visualize.Chart.Builder.Editor.label/1` | a path as a person reads it — the spelling the validator uses for an error's path |
 
-**The context panel opens with an icon row of four panels** — *inspect*, *colour*, *font*, *variables* — one open at a time (`context`), *inspect* holding the form and the layer's context, under the node tabs and chips that stand above the row (§18.16), each staying put while a person works, the way a drawing tool keeps its pickers beside the canvas:
+**The context panel opens with an icon row of five panels** — *inspect*, *sources*, *colour*, *font*, *variables* — one open at a time (`context`), *inspect* holding the form and the layer's context, under the node tabs and chips that stand above the row (§18.16), *sources* the chart's signals (below), each staying put while a person works, the way a drawing tool keeps its pickers beside the canvas:
 
 | Panel | Shows | Writes |
 |---|---|---|
@@ -2152,6 +2155,8 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Editor.face/2` | the face a weight and a style show as: one of the eight words, an integer weight rounded to the nearest of the four |
 | `Visualize.Chart.Builder.Editor.faces/0` | the eight faces in order, each with the weight and style it writes |
 | `Visualize.Chart.Builder.Fonts.keys/1` | the font keys a node kind carries |
+
+**Signals are the chart's sources while it is designed** (#244, spec/08 §8). Each chart of the workspace carries `signals` — a map of name to `Visualize.Signals` signal — part of its structure on Save (`%{composite: %{uses, vars, signals}}`) and read back on open, since a chart without its stand-in sources draws nothing. The **sources** tab is `Visualize.Chart.Builder.Sources.panel/1`: one row per signal — its name, a kind select, its fields as a comma-separated box, its window, period, min and max — edited in place (`edit_signal`); a **+** declares one (`add_signal`: `signal_n`, a sine over `[t, value]`); an **×** removes one (`remove_signal`); **play** and **pause** (`play`, `pause`) with the tick's period. While playing the tick advances (`tick`), the pool is regenerated and the graph redraws. The pool the preview binds, and the pool list of a source site (above), is the host's `sources` **under** the chart's signals at the tick — `Visualize.Signals.pool/2` merged over the host's, so where a name is both the signal wins while designing; picking a signal fills a source's fields as picking a pool name does. A deployed design binds to the host's pool alone.
 
 **The layer's context** is `Visualize.Chart.Builder.Masks.panel/1`, shown under the form in the *inspect* tab for the selected site whenever no style entry is chosen: the site's name; one checkbox per path its contribution carries — every top-level key, and the keys of each node under one, which are the paths `Use.mask/2` takes (§19.5) — checked where the mask holds it; and the variables the site still needs, pointing at the Variables tab. The contribution is what the site would say before its mask, `Visualize.Chart.Builder.Stack.unmasked/2`, so a key the mask has removed is still offered to un-mask. A site masked as a whole is disabled (§19.3) and is said so rather than drawn as every box checked. The `mask` event carries the checkbox that changed; an unchecked box submits nothing, which is the path leaving.
 
