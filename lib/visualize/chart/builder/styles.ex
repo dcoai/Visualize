@@ -1164,6 +1164,75 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     /* The + on the Layers title, and its menu of kinds (spec/14 §18.8). */
+    /* The Charts panel (spec/14 §18.8): a row per chart, its layers beneath when expanded. */
+    .vis-builder-charts {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .vis-builder-chart {
+      margin-bottom: 4px;
+      border: 1px solid transparent;
+      border-radius: var(--vis-builder-radius);
+    }
+
+    .vis-builder-chart-selected {
+      border-color: var(--vis-builder-line);
+      background: var(--vis-builder-panel);
+    }
+
+    .vis-builder-chart-row {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px 4px;
+    }
+
+    .vis-builder-chart-toggle,
+    .vis-builder-chart-close {
+      flex: none;
+      width: 20px;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--vis-builder-muted);
+      cursor: pointer;
+    }
+
+    .vis-builder-chart-name {
+      flex: 1;
+      min-width: 0;
+      padding: 2px 4px;
+      border: 0;
+      background: none;
+      text-align: left;
+      font-weight: 600;
+      color: var(--vis-builder-ink);
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .vis-builder-chart-kind {
+      margin-left: 6px;
+      color: var(--vis-builder-muted);
+      font-weight: 400;
+      font-size: 11px;
+    }
+
+    .vis-builder-layers-other {
+      opacity: 0.7;
+    }
+
+    .vis-builder-layer-other {
+      border: 0;
+      background: none;
+      text-align: left;
+      cursor: pointer;
+    }
+
     .vis-builder-sidebar-title-row {
       display: flex;
       align-items: center;
