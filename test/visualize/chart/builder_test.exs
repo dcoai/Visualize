@@ -139,7 +139,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert context =~ ~s(class="vis-builder-page vis-builder-page-0")
     end
 
-    test "the top row is every root the design has, in the schema's order" do
+    test "the top row is every root the design has, the frame first, then the schema's order (spec/14 §18.13)" do
       html = rendered(:builder)
       assert html =~ ~s(class="vis-builder-node vis-builder-node-open")
 
@@ -147,7 +147,7 @@ defmodule Visualize.Chart.BuilderTest do
       # seven, because a person asks where the marks are, not which fragment holds them.
       # Neither the design's own root nor vars is a tab (§18.13): a declaration is the
       # variable panel's, and variables are chips in the context (§19.10).
-      assert tabs(html, "vis-builder-node") == ~w(sources styles frame marks labels)
+      assert tabs(html, "vis-builder-node") == ~w(frame sources styles marks labels)
     end
 
     test "no root is elsewhere: the page is the chart's, whatever layer is selected (spec/14 §18.15)" do
