@@ -825,12 +825,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> Stream.map(&:"signal_#{&1 + 1}")
         |> Enum.find(&(not Map.has_key?(signals, &1)))
 
+      signal = Signals.new(:sine, [:t, :value])
+
       {:noreply,
-       assign(socket,
-         signals: Map.put(signals, name, Signals.new(:sine, [:t, :value])),
-         context: :sources,
-         notice: nil
-       )}
+       socket
+       |> assign(signals: Map.put(signals, name, signal), context: :sources, notice: nil)
+       |> declared_source(name, signal)}
     end
 
     def handle_event("remove_signal", %{"name" => name}, socket) do
@@ -2316,6 +2316,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp filled(local, _key, _pool), do: local
+
+    # A signal added is a source of the chart (spec/14 §19.10): declared under its name in
+    # the selected layer with the signal's fields, unless the chart declares one already.
+    defp declared_source(socket, name, %{fields: fields}) do
+      %{design: design} = editing(socket.assigns)
+
+      if Map.has_key?(Map.get(design, :sources, %{}), name) do
+        socket
+      else
+        update_layer(socket, [:sources], name, {:ok, %{fields: fields}})
+      end
+    end
 
     # The tick goes to the host's process, which forwards it (spec/14 §18.2).
     defp schedule(socket) do

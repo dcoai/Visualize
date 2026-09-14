@@ -1805,6 +1805,25 @@ defmodule Visualize.Chart.BuilderTest do
       assert s.assigns.context == :sources
       assert %{signal_1: %{kind: :sine, fields: [:t, :value], window: 24}} = s.assigns.signals
 
+      # The signal is a source of the chart at once: declared in the selected layer with
+      # its fields, listed under the sources tab, offered to a mark's data (§19.10).
+      {_, house} = hd(BuilderFixture.layers(s))
+      assert house.sources.signal_1 == %{fields: [:t, :value]}
+      {:noreply, sources} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
+      assert BuilderFixture.render(sources) =~ ~s(title="sources.signal_1")
+      {:noreply, marks} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
+      {:noreply, marks} = Builder.handle_event("select_layer", %{"index" => "2"}, marks)
+      {:noreply, marks} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, marks)
+      assert BuilderFixture.render(marks) =~ ~s(<option value="signal_1">signal_1</option>)
+      # A second signal with a source already declared leaves the declaration alone.
+      {:noreply, s2} = Builder.handle_event("add_signal", %{}, s)
+      {:noreply, s2} = Builder.handle_event("remove_signal", %{"name" => "signal_2"}, s2)
+
+      assert Map.keys(elem(hd(BuilderFixture.layers(s2)), 1).sources) |> Enum.sort() == [
+               :signal_1,
+               :signal_2
+             ]
+
       html = BuilderFixture.render(s)
       assert html =~ ~s(<form class="vis-builder-signals" phx-change="edit_signal")
       assert html =~ ~s(<legend class="vis-builder-signal-name">)
