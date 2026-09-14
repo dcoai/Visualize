@@ -539,6 +539,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:label, :string, default: nil, doc: "the node's label, carried by the form (§18.16)")
     attr(:only, :list, default: nil, doc: "the keys to show; nil for the open facet's")
 
+    attr(:columns, :map,
+      default: %{},
+      doc: "the columns the pool's rows have, by source name (§18.6)"
+    )
+
+    attr(:source_name, :any, default: nil, doc: "the name a keyed source site is declared under")
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
     attr(:class, :string, default: nil, doc: "appended to the editor's class")
 
@@ -777,8 +784,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
             {Phoenix.HTML.raw(svg)}
           </label>
         </span>
+        <div
+          :if={is_nil(@field.variable) and @field.widget == :items and @field.picks}
+          class="vis-builder-pool vis-builder-picks"
+          role="group"
+          aria-label={"#{@field.key}: the columns the rows have"}
+        >
+          <label
+            :for={pick <- @field.picks}
+            class={"vis-builder-pool-name" <> if(pick.on?, do: " vis-builder-pool-name-on", else: "") <> if(pick.missing?, do: " vis-builder-pool-name-missing", else: "")}
+            title={if(pick.missing?, do: "#{pick.name} — not in the rows", else: pick.name)}
+          >
+            <input type="checkbox" name={"#{@field.key}.pick[]"} value={pick.name} checked={pick.on?} />
+            {pick.name}
+          </label>
+        </div>
         <div :if={is_nil(@field.variable) and @field.widget == :items} class="vis-builder-items">
-          <span :for={{item, index} <- Enum.with_index(@field.items)} class="vis-builder-item-row">
+          <span :for={{item, index} <- Enum.with_index(@field.items)} :if={!@field.picks or item.chip} class="vis-builder-item-row">
             <span :if={item.chip} class="vis-builder-var-chip vis-builder-var-chip-bound">var(:{item.chip})</span>
             <span :if={!item.chip} class="vis-builder-item-text">{item.text}</span>
             <button
@@ -886,6 +908,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:defs, :map, default: %{})
     attr(:pool, :list, default: [])
     attr(:hidden, :list, default: [])
+
+    attr(:columns, :map,
+      default: %{},
+      doc: "the columns the pool's rows have, by source name (§18.6)"
+    )
+
+    attr(:source_name, :any, default: nil, doc: "the name a keyed source site is declared under")
     attr(:event, :string, default: "edit")
     attr(:origins, :map, default: %{})
     attr(:target, :any, default: nil)
@@ -1034,6 +1063,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       :defs,
       :pool,
       :hidden,
+      :columns,
+      :source_name,
       :event,
       :origins,
       :target
@@ -1089,6 +1120,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             ),
           fill: fill_view(assigns.kind, spec.key, Map.get(node, spec.key), assigns),
           points: points(spec.key, node, Map.get(assigns, :theme)),
+          picks: picks(assigns.kind, spec.key, Map.get(node, spec.key), assigns),
           variable: if(spec.type == :text, do: nil, else: variable_name(Map.get(node, spec.key))),
           placeholder: shown(widget, default(spec)),
           errors: key_errors(errors, path ++ [spec.key])
@@ -1210,6 +1242,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp css_weight(:normal), do: 400
     defp css_weight(:medium), do: 500
     defp css_weight(:bold), do: 700
+
+    # A source's fields as the columns its rows have (§18.6): every column and every
+    # declared name, sorted, the declared ones on, a declared name the rows lack marked;
+    # nil when the source has no rows to offer.
+    defp picks(:source, :fields, value, assigns) do
+      name =
+        Map.get(assigns, :source_name) ||
+          case Map.get(assigns, :path) do
+            [:sources, name] -> name
+            _other -> nil
+          end
+
+      case name && Map.get(Map.get(assigns, :columns) || %{}, name) do
+        columns when is_list(columns) and columns != [] ->
+          declared = for item <- List.wrap(value), is_atom(item), do: to_string(item)
+
+          for column <- Enum.sort(Enum.uniq(columns ++ declared)) do
+            %{name: column, on?: column in declared, missing?: column not in columns}
+          end
+
+        _none ->
+          nil
+      end
+    end
+
+    defp picks(_kind, _key, _value, _assigns), do: nil
 
     # A list of scalars as its rows: a chip for a variable, the text for anything else.
     defp items({:items, _scalar}, list) when is_list(list) do
