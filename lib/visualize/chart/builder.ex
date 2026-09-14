@@ -472,16 +472,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <details
                 :for={top <- @page.tops}
                 :if={@page.sections?}
-                class={"vis-builder-section vis-builder-section-top" <> if(top.needs > 0, do: " vis-builder-section-needs", else: "")}
+                class={"vis-builder-section vis-builder-section-top" <> if(top.needs > 0, do: " vis-builder-section-needs", else: "") <> if(top.other?, do: " vis-builder-section-other", else: "")}
                 open={not MapSet.member?(@collapsed, top.label)}
               >
                 <summary
                   class="vis-builder-section-title"
-                  title={top.label}
+                  title={if(top.layer, do: "#{top.label} — in #{top.layer}", else: top.label)}
                   phx-click="toggle_section"
                   phx-value-section={top.label}
                   phx-target={@myself}
-                >{top.name}</summary>
+                >{top.name}<span :if={top.layer} class="vis-builder-section-layer">{top.layer}</span></summary>
                 <Page.page
                   id={@id <> "-page-" <> top.slug}
                   kind={top.kind}
@@ -501,9 +501,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   hidden={if(@source_defaults, do: [], else: [:default])}
                   columns={@columns}
                   source_name={@source_name}
+                  owners={@page.owners}
+                  layer={@page.layer}
                   target={@myself}
                 />
               </details>
+              <div
+                :if={not @page.sections? and @page.single.layer}
+                class={"vis-builder-page-head" <> if(@page.single.other?, do: " vis-builder-section-other", else: "")}
+                title={"#{@page.single.label} — in #{@page.single.layer}"}
+              >
+                <span class="vis-builder-section-layer">{@page.single.layer}</span>
+              </div>
               <Page.page
                 :if={not @page.sections?}
                 id={@id <> "-page"}
@@ -524,6 +533,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 hidden={if(@source_defaults, do: [], else: [:default])}
                 columns={@columns}
                 source_name={@source_name}
+                owners={@page.owners}
+                layer={@page.layer}
                 target={@myself}
               />
             </div>
@@ -897,14 +908,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event("library_view", %{"view" => _group}, socket),
       do: {:noreply, assign(socket, :library_view, :group)}
 
-    # A root the editing target declares opens there; one it does not takes the person to
-    # the highest layer that declares it — what the inspector and the palette already do
-    # (spec/14 §18.13, §18.9, §18.14).
+    # A root opens as the chart declares it, whatever layer is selected (spec/14 §18.13,
+    # §18.15). From the page of a site the design has no node of, a root of the design
+    # takes the person to the highest layer that declares it, as the inspector does.
     def handle_event("select_root", %{"root" => root}, socket) do
-      case first_under(target_fragment(socket.assigns), root) do
-        nil ->
-          %{layers: layers} = editing(socket.assigns)
+      %{design: design, chart?: chart?, layers: layers, nodes: nodes} = editing(socket.assigns)
+      label = if chart?, do: first_under(design, root), else: first_under_nodes(nodes, root)
 
+      cond do
+        label ->
+          {:noreply, assign(socket, node_label: label, facet: nil, context: :inspect)}
+
+        first_under(design, root) ->
           layers
           |> Enum.with_index()
           |> Enum.reverse()
@@ -913,12 +928,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
             nil ->
               {:noreply, socket}
 
-            {{_label, fragment}, index} ->
-              {:noreply, socket |> select(index) |> opened(first_under(fragment, root))}
+            {{_label, _fragment}, index} ->
+              {:noreply, socket |> select(index) |> opened(first_under(design, root))}
           end
 
-        label ->
-          {:noreply, assign(socket, node_label: label, facet: nil, context: :inspect)}
+        true ->
+          {:noreply, socket}
       end
     end
 
@@ -1616,18 +1631,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp admits(%{kind: kind}, entry),
       do: {:refused, "a #{kind} composer takes a #{kind}; #{entry.name} is a #{entry.kind}"}
 
-    # The editing target: the selected use, resolved.
-    defp target_fragment(%{uses: uses, labels: labels, selected: selected, store: store}) do
-      case Stack.get(uses, selected) do
-        nil ->
-          %{}
-
-        use ->
-          {[{_label, fragment}], _missing} = Stack.resolve([use], labels, Stack.fetch(store))
-          fragment
-      end
-    end
-
     # What the editor is looking at: the resolved layers, the design they stand for, the
     # target's nodes, the open one and its value, and the faults application reports.
     defp editing(assigns) do
@@ -1641,19 +1644,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       kind = (assigns.open && assigns.open.kind) || :composite
-      layer = target_fragment(assigns)
-      nodes = Editor.nodes(layer)
+      # The page is the chart's (spec/14 §18.15): the nodes are walked over the composed
+      # design, and each is owned by the highest layer that gives a value under it. A
+      # selected site that gives the design nothing — keyless, disabled, empty — has no
+      # node there, so its page is its own fragment, as every layer's once was.
+      chart_nodes = Editor.nodes(design)
+      owned = owned(assigns, fetch, chart_nodes)
+      selected_use = Stack.get(assigns.uses, assigns.selected)
+      mine = for {path, id} <- owned, selected_use && id == selected_use.id, do: path
+
+      {nodes, layer} =
+        if selected_use == nil or mine != [] do
+          {chart_nodes, design}
+        else
+          fragment = target_fragment(assigns)
+          {Editor.nodes(fragment), fragment}
+        end
 
       # The design root itself is not a place to edit: its keys are Deploy's (`version`)
-      # or sites of their own (§19.8), so a layer opens on its first real node.
+      # or sites of their own (§19.8), so a layer opens on its first real node — the
+      # first the selected layer owns, where it owns one.
       entry =
         case assigns.node_label do
-          "design" -> first_node(nodes)
-          label -> Enum.find(nodes, &(&1.label == label)) || implied(label) || first_node(nodes)
+          "design" ->
+            first_node(nodes, mine)
+
+          label ->
+            Enum.find(nodes, &(&1.label == label)) || implied(label) || first_node(nodes, mine)
         end
 
       errors = faults(kind, design, assigns, cycle)
-      {tabs, children} = strip(nodes, entry, design, errors)
+      {tabs, children} = strip(nodes, entry, design, errors, layer == design)
 
       %{
         layers: layers,
@@ -1663,7 +1684,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         entry: entry,
         tabs: tabs,
         chips: chips(children, entry, assigns.facet),
-        page: page(nodes, entry, layer, errors),
+        page: page(nodes, entry, layer, errors, owned, assigns),
         needs: needs(errors),
         style_site: style_site(entry, at(layer, entry.path)),
         open_style: open_style(entry),
@@ -1680,6 +1701,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         source_name: source_name(assigns, fetch),
         editing: at(layer, entry.path),
         errors: errors,
+        chart?: layer == design,
         keyless: keyless,
         unplaced: Enum.map(keyless, &Stack.label(assigns.labels, Stack.get(assigns.uses, &1))),
         kind: kind,
@@ -1889,7 +1911,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The strip: every root the stacked design declares, in the schema's order, then the
     # Variables tab; the open root's children and the node's facets as one row of chips.
-    defp strip(nodes, entry, design, errors) do
+    defp strip(nodes, entry, design, errors, chart?) do
       open_root = root(entry.label)
       here = nodes |> Enum.map(&root(&1.label)) |> Enum.uniq()
       needs = needs(errors)
@@ -1903,7 +1925,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             open: root == open_root,
             elsewhere: root not in here,
             class: tab_class(root == open_root, root in here, count),
-            title: tab_title(root, root in here, count)
+            title: tab_title(root, root in here, chart?, count)
           }
         end
 
@@ -1956,8 +1978,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp implied("meta"), do: %{path: [:meta], kind: :meta, label: "meta"}
     defp implied(_label), do: nil
 
-    defp first_node(nodes) do
-      Enum.find(nodes, &(&1.label != "design")) || hd(nodes)
+    defp first_node(nodes, mine) do
+      Enum.find(nodes, &(&1.label != "design" and &1.path in mine)) ||
+        Enum.find(nodes, &(&1.label != "design")) || hd(nodes)
+    end
+
+    # The selected use, resolved: the page of a site the design has no node of.
+    defp target_fragment(%{uses: uses, labels: labels, selected: selected, store: store}) do
+      case Stack.get(uses, selected) do
+        nil ->
+          %{}
+
+        use ->
+          {[{_label, fragment}], _missing} = Stack.resolve([use], labels, Stack.fetch(store))
+          fragment
+      end
     end
 
     defp tab_class(open?, here?, count) do
@@ -1968,11 +2003,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.join(" ")
     end
 
-    defp tab_title(root, here?, count) do
+    defp tab_title(root, here?, chart?, count) do
       base =
-        if here?,
-          do: "#{root} of this layer",
-          else: "#{root} — this layer declares none; opens the layer that does"
+        cond do
+          chart? -> "#{root} of the chart"
+          here? -> "#{root} of this site"
+          true -> "#{root} — this site declares none; opens the layer that does"
+        end
 
       case count do
         0 -> base
@@ -2069,6 +2106,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp first_under(_other, _root), do: nil
 
+    defp first_under_nodes(nodes, root) do
+      case Enum.find(nodes, &(root(&1.label) == root)) do
+        nil -> nil
+        node -> node.label
+      end
+    end
+
     # -- writes --------------------------------------------------------------------------
 
     # A position arrives as a string from a `phx-value-index` and as a number from the hook.
@@ -2107,12 +2151,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       List.insert_at(rest, to, value)
     end
 
-    # The node of the target that owns a path: the deepest whose label is a prefix of it,
-    # and the root where none is (spec/14 §18.9).
+    # The node of the chart that owns a path: the deepest whose label is a prefix of it,
+    # and the root where none is (spec/14 §18.9, §18.15).
     defp opened(socket, path) do
       label =
         socket.assigns
-        |> target_fragment()
+        |> editing()
+        |> Map.fetch!(:design)
         |> Editor.nodes()
         |> Enum.filter(&owns?(&1.label, path))
         |> Enum.max_by(&String.length(&1.label), fn -> %{label: "design"} end)
@@ -2357,10 +2402,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The inspect tab's page (spec/14 §18.15): the nodes at the top of the open root — the
     # root itself when it is one node, else its members — each a page of sections; the
     # frame's opens with the design's meta.
-    defp page(nodes, entry, layer, errors) do
+    defp page(nodes, entry, layer, errors, owned, %{uses: uses, labels: labels} = assigns) do
       open_root = root(entry.label)
       under = Enum.filter(nodes, &(root(&1.label) == open_root and &1.label != "design"))
       needs = needs(errors)
+
+      owners =
+        Map.new(owned, fn {path, id} -> {path, Stack.label(labels, Stack.get(uses, id))} end)
+
+      selected = Stack.get(uses, assigns.selected)
+      layer_label = selected && Stack.label(labels, selected)
 
       tops =
         case Enum.find(under, &(length(&1.path) == 1)) do
@@ -2380,14 +2431,54 @@ if Code.ensure_loaded?(Phoenix.Component) do
             name: if(name == "", do: node.label, else: name),
             slug: node.label |> String.replace(~r/[^A-Za-z0-9]+/, "-") |> String.trim("-"),
             needs: Map.get(needs, node.label, 0),
+            layer: Map.get(owners, node.path),
+            other?: Map.get(owners, node.path) not in [nil, layer_label],
             before: if(node.kind == :frame, do: [meta_form(layer)], else: [])
           }
         end
 
       case tops do
-        [one] when length(one.path) == 1 -> %{sections?: false, single: one, tops: []}
-        many -> %{sections?: true, single: nil, tops: many}
+        [one] when length(one.path) == 1 ->
+          %{sections?: false, single: one, tops: [], owners: owners, layer: layer_label}
+
+        many ->
+          %{sections?: true, single: nil, tops: many, owners: owners, layer: layer_label}
       end
+    end
+
+    # Which layer gave every value of the design and which owns every node (spec/14
+    # §18.15): the provenance of the placed layers (§17.1), and for a node the highest
+    # enabled layer with a value under its path — the one whose word the cascade keeps.
+    defp owned(%{uses: uses}, fetch, nodes) do
+      placed = Stack.placed(uses, fetch)
+      leaves = Chart.explain(placed)
+      by_leaf = Map.new(leaves, &{&1.path, &1.layer})
+
+      Enum.reduce(nodes, by_leaf, fn %{path: path}, acc ->
+        case owner_of(leaves, placed, uses, path) do
+          nil -> acc
+          id -> Map.put(acc, path, id)
+        end
+      end)
+    end
+
+    # The provenance is of values, so a node with none yet — a site just keyed, a `%{}` —
+    # is owned by the highest layer that carries it; a path through a list is a value's.
+    defp owner_of(_leaves, _placed, _uses, []), do: nil
+
+    defp owner_of(leaves, placed, uses, path) do
+      order = uses |> Enum.map(& &1.id) |> Enum.with_index() |> Map.new()
+
+      carried =
+        if Enum.all?(path, &is_atom/1),
+          do: for({id, fragment} <- placed, at(fragment, path) != nil, do: id),
+          else: []
+
+      leaves
+      |> Enum.filter(&List.starts_with?(&1.path, path))
+      |> Enum.map(& &1.layer)
+      |> Kernel.++(carried)
+      |> Enum.max_by(&Map.get(order, &1, -1), fn -> nil end)
     end
 
     # A list ticked from the columns the rows have (spec/14 §18.6): the ticked names in
@@ -2447,18 +2538,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp edited(socket, _entry, nil), do: socket
     defp edited(socket, entry, {key, parsed}), do: update_layer(socket, entry.path, key, parsed)
 
-    # A write goes to the selected use's local — the one surface that writes `Use.local`
-    # (spec/14 §19.3).
+    # A write goes to the use that owns what it writes — the one surface that writes
+    # `Use.local` (spec/14 §19.3): the layer that gives the key's value, else the node's
+    # owner, else the selected layer, which is where anything new is made (§18.15). A
+    # declaration under a root — a source, a style, a def — is new unless a layer has it.
     defp update_layer(socket, path, key, parsed) do
-      %{uses: uses, selected: selected} = socket.assigns
+      %{uses: uses, selected: selected, store: store} = socket.assigns
+      fetch = Stack.fetch(store)
 
-      case Stack.get(uses, selected) do
+      case owner_for(uses, fetch, path, key) || Stack.get(uses, selected) do
         nil ->
           socket
 
-        _use ->
-          assign(socket, :uses, Stack.update(uses, selected, &Stack.write(&1, path, key, parsed)))
+        use ->
+          local = Stack.local_path(use, fetch, path)
+          assign(socket, :uses, Stack.update(uses, use.id, &Stack.write(&1, local, key, parsed)))
       end
+    end
+
+    @declaring [[:sources], [:styles], [:defs], [:vars]]
+
+    defp owner_for(uses, fetch, path, key) do
+      placed = Stack.placed(uses, fetch)
+      leaves = Chart.explain(placed)
+      candidates = if path in @declaring, do: [path ++ [key]], else: [path ++ [key], path]
+
+      Enum.find_value(candidates, fn at ->
+        case owner_of(leaves, placed, uses, at) do
+          nil -> nil
+          id -> Stack.get(uses, id)
+        end
+      end)
     end
 
     defp styled(socket, nil), do: socket

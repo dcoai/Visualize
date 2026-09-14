@@ -1996,6 +1996,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color: var(--vis-builder-needs);
     }
 
+    /* The page is the chart's (spec/14 §18.15): a section says which layer owns it, and
+       one of a layer other than the selected is drawn back. */
+    .vis-builder-section-layer {
+      float: right;
+      padding: 0 4px;
+      border-radius: 3px;
+      background: var(--vis-builder-bg);
+      color: var(--vis-builder-accent);
+      font-size: 10px;
+      font-weight: 400;
+      font-style: italic;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .vis-builder-page-head {
+      padding: 2px 8px 0;
+      min-height: 14px;
+    }
+
+    .vis-builder-section-other > .vis-builder-section-title,
+    .vis-builder-section-other > .vis-builder-page,
+    .vis-builder-page-head.vis-builder-section-other {
+      opacity: 0.65;
+    }
+
+    .vis-builder-section-other > .vis-builder-page:focus-within,
+    .vis-builder-section-other:hover > .vis-builder-page,
+    .vis-builder-section-other:hover > .vis-builder-section-title {
+      opacity: 1;
+    }
+
     .vis-builder-page {
       display: flex;
       flex-direction: column;

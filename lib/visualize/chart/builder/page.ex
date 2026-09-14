@@ -53,7 +53,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:hidden, :list, default: [])
     attr(:columns, :map, default: %{})
     attr(:source_name, :any, default: nil)
-    attr(:origins, :map, default: %{})
+
+    attr(:owners, :map,
+      default: %{},
+      doc: "the label of the layer that owns each path of the design (§18.15)"
+    )
+
+    attr(:layer, :any, default: nil, doc: "the selected layer's label")
     attr(:target, :any, default: nil)
     attr(:depth, :integer, default: 0)
 
@@ -76,14 +82,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
             >{section.name}</summary>
             <.form_for :if={section.keys != []} page={assigns} kind={@kind} node={@node} path={@path} label={@label} only={section.keys} suffix={section.name} />
             <.form_for :for={form <- section.forms} page={assigns} kind={form.kind} node={form.node} path={form.path} label={form.label} />
-            <details :for={child <- section.children} class={child_class(child)} open={not MapSet.member?(@collapsed, child.label)}>
+            <details :for={child <- section.children} class={child_class(child, @owners, @layer)} open={not MapSet.member?(@collapsed, child.label)}>
               <summary
                 class="vis-builder-section-title vis-builder-subsection-title"
                 title={child.title}
                 phx-click="toggle_section"
                 phx-value-section={child.label}
                 phx-target={@target}
-              >{child.name}</summary>
+              >{child.name}<span :if={tag(child, @owners, @path)} class="vis-builder-section-layer">{tag(child, @owners, @path)}</span></summary>
               <.page
                 id={@id <> "-" <> slug(child.label)}
                 kind={child.kind}
@@ -102,7 +108,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 hidden={@hidden}
                 columns={@columns}
                 source_name={@source_name}
-                origins={@origins}
+                owners={@owners}
+                layer={@layer}
                 target={@target}
                 depth={@depth + 1}
               />
@@ -149,10 +156,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
         hidden={@page.hidden}
         columns={@page.columns}
         source_name={@page.source_name}
-        origins={@page.origins}
+        origins={origins(@page.owners, @path)}
         target={@page.target}
       />
       """
+    end
+
+    # A key another layer than the node's owner gives is badged with that layer (§18.15):
+    # the field says where its value comes from, which is where an edit of it goes.
+    defp origins(owners, path) do
+      owner = Map.get(owners, path)
+      depth = length(path) + 1
+
+      for {at, layer} <- owners,
+          length(at) == depth,
+          List.starts_with?(at, path),
+          layer != owner,
+          into: %{},
+          do: {List.last(at), layer}
+    end
+
+    # A sub-section's tag: its owner where that is not its parent's.
+    defp tag(child, owners, parent) do
+      case Map.get(owners, child.path) do
+        nil -> nil
+        layer -> if layer == Map.get(owners, parent), do: nil, else: layer
+      end
     end
 
     # -- the sections (spec/14 §18.15) ----------------------------------------------------
@@ -332,7 +361,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp section_class(_section), do: "vis-builder-section"
 
-    defp child_class(_child), do: "vis-builder-section vis-builder-subsection"
+    # A sub-section of a layer other than the selected one is drawn muted (§18.15).
+    defp child_class(child, owners, layer) do
+      case Map.get(owners, child.path) do
+        nil -> "vis-builder-section vis-builder-subsection"
+        ^layer -> "vis-builder-section vis-builder-subsection"
+        _other -> "vis-builder-section vis-builder-subsection vis-builder-section-other"
+      end
+    end
 
     defp slug(label), do: label |> String.replace(~r/[^A-Za-z0-9]+/, "-") |> String.trim("-")
   end

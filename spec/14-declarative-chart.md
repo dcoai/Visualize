@@ -1723,6 +1723,11 @@ The nodes of §18.13 are the top row — the root tabs. Beneath them the first d
 
 **An edit goes to the layer that owns the node.** The owner of a node is the highest enabled layer that gives any value under its path — `Visualize.Chart.explain/1` over the placed layers (§17.1, `Visualize.Chart.Composite.place/2`), the provenance the inspector already shows (§18.9) — and every write a form raises for a node goes there: a field, a list add or remove, a tick in a picks list, a colour or a chip dropped, a style stacked. The write reaches the layer at its *own* path — a site of one kind holds its body under the kind's key (§19.3), so the composed `sources.primary` of a `source` site keyed `primary` is written at that site's `[:source]`. A node no layer owns yet — a new declaration under a root, the frame's `meta`, a signal's source (§19.10), a **+** site — goes to the **selected layer**, as before: what exists is edited where it is, and what is new is made where the person is standing.
 
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Stack.placed/2` | the enabled uses as the design's layers, `{id, fragment}` in stack order, each resolved and placed where the design keeps its kind; a keyless name-keyed site is left out |
+| `Visualize.Chart.Builder.Stack.local_path/3` | the path a design path has inside a use: `[:source | rest]` for a `source` site's `[:sources, key | rest]`, and so for every placed kind; a design-level site's path as it is |
+
 **Every form knows its node.** Every form on a page carries its node's label — `data-builder-node`, and a hidden `_node` input — so an edit, a field selection, a chip drop, a colour drop, a list add or remove in any section aims at that node: the builder selects it first (`aimed`), and the context — the colour chooser, the style stack — follows the node last touched. `Visualize.Chart.Builder.Editor.form_body/1` is that form alone, of one facet's keys or of the listed ones; `Visualize.Chart.Builder.Editor.panel/1` still renders a node as facet tabs over one form, for the style panel and for a host that wants the smaller thing.
 
 | Function | Contract |
