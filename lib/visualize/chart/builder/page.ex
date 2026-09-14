@@ -51,6 +51,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:defs, :map, default: %{})
     attr(:pool, :list, default: [])
     attr(:hidden, :list, default: [])
+    attr(:columns, :map, default: %{})
+    attr(:source_name, :any, default: nil)
     attr(:origins, :map, default: %{})
     attr(:target, :any, default: nil)
     attr(:depth, :integer, default: 0)
@@ -98,6 +100,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 defs={@defs}
                 pool={@pool}
                 hidden={@hidden}
+                columns={@columns}
+                source_name={@source_name}
                 origins={@origins}
                 target={@target}
                 depth={@depth + 1}
@@ -143,6 +147,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         defs={@page.defs}
         pool={@page.pool}
         hidden={@page.hidden}
+        columns={@page.columns}
+        source_name={@page.source_name}
         origins={@page.origins}
         target={@page.target}
       />

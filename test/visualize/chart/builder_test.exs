@@ -2173,13 +2173,68 @@ defmodule Visualize.Chart.BuilderTest do
     } do
       html = BuilderFixture.render(s)
       assert html =~ ~s(class="vis-builder-items")
-      assert html =~ ~s(<span class="vis-builder-item-text">t</span>)
+      refute html =~ ~s(<textarea name="fields">)
+
+      # A source with rows shows the columns to tick, the declared ones highlighted, and
+      # no text rows; the + box stays beneath (§18.6).
+      assert html =~
+               ~s(class="vis-builder-pool vis-builder-picks" role="group" aria-label="fields: the columns the rows have")
 
       assert html =~
-               ~s(phx-click="list_remove" phx-value-field="fields" phx-value-node="sources.primary" phx-value-index="0")
+               ~r|class="vis-builder-pool-name vis-builder-pool-name-on" title="t">\s*<input type="checkbox" name="fields.pick\[\]" value="t" checked>|
 
+      assert html =~ ~r|class="vis-builder-pool-name vis-builder-pool-name-on" title="v">|
+      refute html =~ ~s(<span class="vis-builder-item-text">t</span>)
       assert html =~ ~s(name="fields.add" class="vis-builder-item-box" placeholder="+ add")
-      refute html =~ ~s(<textarea name="fields">)
+
+      # Ticking writes the whole list in the list's order; unticking removes; a declared
+      # column the rows lack is highlighted and marked.
+      {:noreply, ticked} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["fields.pick"], "fields.pick" => ["t"], "_node" => "sources.primary"},
+          s
+        )
+
+      {_, shared} = Enum.at(BuilderFixture.layers(ticked), 1)
+      assert shared.sources.primary.fields == [:t]
+
+      {:noreply, promised} =
+        Builder.handle_event(
+          "list_add",
+          %{"field" => "fields", "fields.add" => "w", "key" => "Enter"},
+          ticked
+        )
+
+      promised_html = BuilderFixture.render(promised)
+
+      assert promised_html =~
+               ~r|class="vis-builder-pool-name vis-builder-pool-name-on vis-builder-pool-name-missing" title="w — not in the rows">|
+
+      {:noreply, none} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["fields.pick"], "_node" => "sources.primary"},
+          promised
+        )
+
+      {_, shared} = Enum.at(BuilderFixture.layers(none), 1)
+      refute Map.has_key?(shared.sources.primary, :fields)
+
+      # A source with no rows under its name is the items list as before.
+      unbound =
+        BuilderFixture.socket(BuilderFixture.layers(),
+          selected: 1,
+          node_label: "sources.primary",
+          sources: %{}
+        )
+
+      unbound_html = BuilderFixture.render(unbound)
+      refute unbound_html =~ "vis-builder-picks"
+      assert unbound_html =~ ~s(<span class="vis-builder-item-text">t</span>)
+
+      assert unbound_html =~
+               ~s(phx-click="list_remove" phx-value-field="fields" phx-value-node="sources.primary" phx-value-index="0")
 
       {:noreply, s} =
         Builder.handle_event(

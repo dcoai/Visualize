@@ -2041,6 +2041,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color: var(--vis-builder-panel);
     }
 
+    /* A declared column the rows lack (spec/14 §18.6): highlighted, and marked. */
+    .vis-builder-pool-name-missing {
+      text-decoration: underline dotted;
+      color: var(--vis-builder-needs);
+    }
+
+    .vis-builder-picks {
+      margin-bottom: 4px;
+    }
+
     .vis-builder-pool-name input {
       position: absolute;
       width: 1px;

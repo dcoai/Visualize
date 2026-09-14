@@ -76,7 +76,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Variables
     }
 
-    alias Visualize.Chart.{Composite, Fragment, Schema, Use, Validator}
+    alias Visualize.Chart.{Composite, Fragment, Schema, Use, Validator, Var}
     alias Visualize.{Signals, Theme}
 
     @doc false
@@ -499,6 +499,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   defs={@defs}
                   pool={@pool}
                   hidden={if(@source_defaults, do: [], else: [:default])}
+                  columns={@columns}
+                  source_name={@source_name}
                   target={@myself}
                 />
               </details>
@@ -520,6 +522,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 defs={@defs}
                 pool={@pool}
                 hidden={if(@source_defaults, do: [], else: [:default])}
+                columns={@columns}
+                source_name={@source_name}
                 target={@myself}
               />
             </div>
@@ -1124,11 +1128,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       socket = aimed(socket, params)
       %{entry: entry} = editing(socket.assigns)
 
-      if Fills.control?(target) do
-        {:noreply, filled(socket, target, params[target], &edited(&1, entry, &2))}
+      if String.ends_with?(target, ".pick") do
+        {:noreply, picked(socket, entry, String.trim_trailing(target, ".pick"), params)}
       else
-        {:noreply,
-         Enum.reduce(Editor.changes(entry.kind, params), socket, &edited(&2, entry, &1))}
+        edit_field(socket, entry, target, params)
       end
     end
 
@@ -1673,6 +1676,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         defs: Map.get(design, :defs, %{}),
         pool: assigns |> pool() |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort(),
         bound_pool: pool(assigns),
+        columns: columns(pool(assigns)),
+        source_name: source_name(assigns, fetch),
         editing: at(layer, entry.path),
         errors: errors,
         keyless: keyless,
@@ -2373,9 +2378,58 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # A list ticked from the columns the rows have (spec/14 §18.6): the ticked names in
+    # the list's order, the variable items kept.
+    defp picked(socket, entry, field, params) do
+      %{editing: node} = editing(socket.assigns)
+
+      case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)) do
+        %{key: key, type: {:list, _}} ->
+          ticked =
+            params |> Map.get(field <> ".pick", []) |> List.wrap() |> Enum.map(&String.to_atom/1)
+
+          vars = for %Var{} = v <- (is_map(node) && Map.get(node, key, [])) || [], do: v
+          parsed = if ticked ++ vars == [], do: :error, else: {:ok, ticked ++ vars}
+          socket |> update_layer(entry.path, key, parsed) |> assign(:notice, nil)
+
+        _other ->
+          socket
+      end
+    end
+
+    # The columns the pool's rows have, by name (spec/14 §18.6): the first row's keys.
+    defp columns(pool) do
+      Map.new(pool, fn {name, rows} ->
+        case Visualize.Data.Table.rows(rows) do
+          [first | _] when is_map(first) ->
+            {name, first |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort()}
+
+          _none ->
+            {name, []}
+        end
+      end)
+    end
+
+    # The name a keyed source site is declared under, for its fields' columns.
+    defp source_name(%{uses: uses, selected: selected}, _fetch) do
+      case Stack.get(uses, selected) do
+        %Use{local: %{source: _}, key: key} -> key
+        _other -> nil
+      end
+    end
+
     # The design's name and description open the frame's page (spec/14 §18.15).
     defp meta_form(layer) do
       %{kind: :meta, node: Map.get(layer, :meta) || %{}, path: [:meta], label: "meta", only: nil}
+    end
+
+    defp edit_field(socket, entry, target, params) do
+      if Fills.control?(target) do
+        {:noreply, filled(socket, target, params[target], &edited(&1, entry, &2))}
+      else
+        {:noreply,
+         Enum.reduce(Editor.changes(entry.kind, params), socket, &edited(&2, entry, &1))}
+      end
     end
 
     defp edited(socket, _entry, nil), do: socket
