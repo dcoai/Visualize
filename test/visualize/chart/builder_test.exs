@@ -150,14 +150,37 @@ defmodule Visualize.Chart.BuilderTest do
       assert tabs(html, "vis-builder-node") == ~w(sources styles frame marks labels)
     end
 
-    test "a root the selected layer does not declare is marked elsewhere" do
+    test "no root is elsewhere: the page is the chart's, whatever layer is selected (spec/14 §18.15)" do
       html = rendered(:builder)
+      refute html =~ "vis-builder-node-elsewhere"
+      assert html =~ ~s(class="vis-builder-node" title="marks of the chart")
+      assert html =~ ~s(class="vis-builder-node" title="frame of the chart")
+    end
+
+    test "every section is tagged with the layer that owns it, and another layer's is muted (spec/14 §18.15)" do
+      # `house` is selected; the sources are `shared`'s and the marks `panel`'s.
+      html = at_node("sources.primary")
 
       assert html =~
-               ~s(class="vis-builder-node vis-builder-node-elsewhere" title="marks — this layer declares none; opens the layer that does")
+               ~s(<summary class="vis-builder-section-title" title="sources.primary — in shared")
 
-      # And one it does declare is not.
-      assert html =~ ~s(class="vis-builder-node" title="frame of this layer")
+      assert html =~ ~s(>primary<span class="vis-builder-section-layer">shared</span></summary>)
+
+      assert html =~
+               ~s(class="vis-builder-section vis-builder-section-top vis-builder-section-other")
+
+      # The frame is `shared`'s at the top (its scales and axes) and `house` gives its size:
+      # the size section carries no tag of its own but its keys say where they come from.
+      html = at_node("frame")
+
+      assert html =~
+               ~s(<div class="vis-builder-page-head vis-builder-section-other" title="frame — in shared">)
+
+      assert html =~ ~s(<span class="vis-builder-origin">house</span>)
+
+      # Selecting `shared` brings its sections forward.
+      html = at_node("sources.primary", selected: 1)
+      refute html =~ "vis-builder-section-other"
     end
 
     test "a root tab is one page of sections: the frame reads kind, name, size, binding, then its parts (spec/14 §18.15)" do
@@ -210,7 +233,7 @@ defmodule Visualize.Chart.BuilderTest do
       refute html =~ ~s(phx-value-root="meta")
 
       html = at_node("marks[0]", selected: 2)
-      assert html =~ ~s(<summary class="vis-builder-section-title" title="marks[0]")
+      assert html =~ ~s(<summary class="vis-builder-section-title" title="marks[0] — in panel")
       assert html =~ ~s(>binding</summary>)
       assert html =~ ~s(>channel</summary>)
       # The mark's channels node is a sub-section inside the channel facet, not a textarea.
@@ -1778,11 +1801,12 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "linear"}, s)
 
+      # Named for the style as the chart knows it, `styles.thick` (§18.6, §18.15).
       [style, gradient] = s.assigns.uses
-      assert style.local == %{style: %{stroke: "#000", fill: {:paint, :style_fill}}}
-      assert gradient.key == :style_fill
+      assert style.local == %{style: %{stroke: "#000", fill: {:paint, :thick_fill}}}
+      assert gradient.key == :thick_fill
       assert gradient.local.gradient.kind == :linear
-      assert s.assigns.labels[gradient.id] == "gradient style_fill"
+      assert s.assigns.labels[gradient.id] == "gradient thick_fill"
 
       {:noreply, s} =
         Builder.handle_event("edit", %{"_target" => ["fill.angle"], "fill.angle" => "45"}, s)
@@ -1810,7 +1834,7 @@ defmodule Visualize.Chart.BuilderTest do
       {_, house} = hd(BuilderFixture.layers(s))
       assert house.sources.signal_1 == %{fields: [:t, :value]}
       {:noreply, sources} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
-      assert BuilderFixture.render(sources) =~ ~s(title="sources.signal_1")
+      assert BuilderFixture.render(sources) =~ ~s(title="sources.signal_1 — in house")
       {:noreply, marks} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
       {:noreply, marks} = Builder.handle_event("select_layer", %{"index" => "2"}, marks)
       {:noreply, marks} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, marks)
@@ -2112,7 +2136,7 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render(s)
 
       assert html =~ ~s(class="vis-builder-node vis-builder-node-open vis-builder-node-needs")
-      assert html =~ "marks of this layer — 1 thing still needed"
+      assert html =~ "marks of the chart — 1 thing still needed"
       refute html =~ ~s(title="frame of this layer — )
 
       # The field that must have a value and has none, and its words under the control.
@@ -2130,7 +2154,7 @@ defmodule Visualize.Chart.BuilderTest do
       refute html =~ "vis-builder-node-needs"
     end
 
-    test "an elsewhere tab is marked too, since the need is the design's", %{} do
+    test "a tab of another layer's root is marked too, since the need is the design's", %{} do
       layers = [
         {:house, %{version: 1, frame: %{kind: :cartesian}}},
         {:panel, %{marks: [%{id: :m, type: :line}]}}
@@ -2139,9 +2163,7 @@ defmodule Visualize.Chart.BuilderTest do
       s = BuilderFixture.socket(layers, selected: 0)
       html = BuilderFixture.render(s)
 
-      assert html =~
-               ~s(class="vis-builder-node vis-builder-node-elsewhere vis-builder-node-needs")
-
+      assert html =~ ~s(class="vis-builder-node vis-builder-node-needs")
       assert html =~ "still needed"
     end
 
@@ -2456,7 +2478,128 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
-  describe "reaching a root the selected layer does not declare (spec/14 §18.13)" do
+  describe "an edit goes to the layer that owns the node (spec/14 §18.15)" do
+    setup do
+      %{socket: BuilderFixture.socket(BuilderFixture.layers())}
+    end
+
+    test "editing a node another layer declares writes there, not to the selected layer", %{
+      socket: s
+    } do
+      # `house` is selected; `primary` is `shared`'s.
+      assert BuilderFixture.selected(s) == 0
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["default"], "default" => "other", "_node" => "sources.primary"},
+          s
+        )
+
+      [{:house, house}, {:shared, shared}, _panel] = BuilderFixture.layers(s)
+      assert shared.sources.primary == %{fields: [:t, :v], default: :other}
+      refute Map.has_key?(house, :sources)
+      assert BuilderFixture.selected(s) == 0
+    end
+
+    test "a key a higher layer overrides is written where its value comes from", %{socket: s} do
+      # `shared` owns the frame node; `house` gives its size and is badged on the width.
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["width"], "width" => "500", "_node" => "frame.size"},
+          s
+        )
+
+      [{:house, house}, {:shared, shared}, {:panel, panel}] = BuilderFixture.layers(s)
+      assert house.frame.size.width == 500
+      refute Map.has_key?(shared.frame, :size)
+      refute Map.has_key?(panel, :frame)
+    end
+
+    test "a node two layers declare is written to the highest, which the tag names" do
+      s =
+        BuilderFixture.socket([
+          {:house,
+           %{version: 1, frame: %{kind: :cartesian}, styles: %{series: %{stroke_width: 2}}}},
+          {:panel, %{styles: %{series: %{stroke_width: 4}}}}
+        ])
+
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "styles.series"}, s)
+      assert BuilderFixture.render(s) =~ ~s(title="styles.series — in panel")
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["stroke_width"], "stroke_width" => "7", "_node" => "styles.series"},
+          s
+        )
+
+      [{:house, house}, {:panel, panel}] = BuilderFixture.layers(s)
+      assert house.styles.series.stroke_width == 2
+      assert panel.styles.series.stroke_width == 7
+    end
+
+    test "a keyed site is written at its own path", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
+      {:noreply, s} = Builder.handle_event("set_key", %{"key" => "other", "key.other" => ""}, s)
+      site = Visualize.Chart.Builder.Stack.get(s.assigns.uses, s.assigns.selected)
+      assert site.key == :other
+
+      # Its node is the chart's `sources.other`, tagged with the site; a write from the
+      # composed page lands in the site's `source` body. The selection moves back to
+      # `house`, which owns nothing of it, to show the owner is what routes the write.
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(title="sources.other — in new source")
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["default"], "default" => "primary", "_node" => "sources.other"},
+          s
+        )
+
+      assert Visualize.Chart.Builder.Stack.get(s.assigns.uses, site.id).local ==
+               %{source: %{default: :primary}}
+    end
+
+    test "a new declaration goes to the selected layer", %{socket: s} do
+      # `shared` declares the sources; a signal added with `house` selected declares its
+      # source in `house` (§19.10), and the page lists both, each tagged.
+      {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
+      [{:house, house}, {:shared, shared}, _panel] = BuilderFixture.layers(s)
+      assert house.sources == %{signal_1: %{fields: [:t, :value]}}
+      assert shared.sources == %{primary: %{fields: [:t, :v]}}
+
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(title="sources.primary — in shared")
+      assert html =~ ~s(title="sources.signal_1 — in house")
+    end
+
+    test "a site the design has no node of shows its own form, untagged", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+      html = BuilderFixture.render(s)
+      refute html =~ "vis-builder-section-layer"
+      assert html =~ ~s(<input type="hidden" name="_node" value="style">)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["stroke_width"], "stroke_width" => "3", "_node" => "style"},
+          s
+        )
+
+      assert Visualize.Chart.Builder.Stack.get(s.assigns.uses, s.assigns.selected).local ==
+               %{style: %{stroke_width: 3}}
+    end
+  end
+
+  describe "reaching a root the selected layer does not declare (spec/14 §18.13, §18.15)" do
     setup do
       host = %{id: "b", layers: BuilderFixture.layers(), sources: BuilderFixture.sources()}
       {:ok, socket} = Builder.mount(%Socket{})
@@ -2464,14 +2607,16 @@ defmodule Visualize.Chart.BuilderTest do
       %{socket: socket}
     end
 
-    test "clicking it selects the layer that declares it, and opens it", %{socket: s} do
-      # `house` is selected and declares no marks; `panel` does.
+    test "clicking it opens it as the chart declares it, with no move", %{socket: s} do
+      # `house` is selected and declares no marks; `panel` does — the page shows them
+      # tagged `panel`, and the selection stays.
       assert BuilderFixture.selected(s) == 0
 
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "marks"}, s)
 
-      assert BuilderFixture.selected(s) == 2
+      assert BuilderFixture.selected(s) == 0
       assert s.assigns.node_label == "marks[0]"
+      assert BuilderFixture.render(s) =~ ~s(title="marks[0] — in panel")
     end
 
     test "a root the selected layer does declare opens there, with no move", %{socket: s} do
@@ -2481,12 +2626,19 @@ defmodule Visualize.Chart.BuilderTest do
       assert s.assigns.node_label == "frame"
     end
 
-    test "the highest layer wins when more than one declares it", %{socket: s} do
-      # Both `house` and `shared` declare a frame; the higher is `shared`.
-      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+    test "from a site the design has no node of, a root takes the person to the highest layer that declares it",
+         %{socket: s} do
+      # A new, keyless style site shows its own form; the frame is `house`'s and `shared`'s,
+      # and `shared` is the higher.
+      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+
+      assert BuilderFixture.render(s) =~
+               ~s(title="frame — this site declares none; opens the layer that does")
+
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
 
-      assert BuilderFixture.selected(s) == 1
+      # The new site sits at 1, below `house`; `shared` is at 2.
+      assert BuilderFixture.selected(s) == 2
       assert s.assigns.node_label == "frame"
     end
 

@@ -178,6 +178,68 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
+    The enabled uses as the layers the design is stacked from — `{id, fragment}` in stack
+    order, each resolved and placed where the design keeps its kind (spec/14 §18.15,
+    §19.6) — so `Visualize.Chart.explain/1` over them says which use gave every value. A
+    name-keyed site with no key has nowhere to be placed and is left out, as `design/3`
+    leaves it out.
+
+        iex> uses = [
+        ...>   %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frame: %{kind: :cartesian}}},
+        ...>   %Visualize.Chart.Use{id: {:use, 2}, ref: nil, key: :primary, local: %{source: %{fields: [:t]}}},
+        ...>   %Visualize.Chart.Use{id: {:use, 3}, ref: nil, mask: :all, local: %{theme: :dark}}
+        ...> ]
+        iex> Visualize.Chart.Builder.Stack.placed(uses, fn _id -> :error end)
+        [{{:use, 1}, %{frame: %{kind: :cartesian}}}, {{:use, 2}, %{sources: %{primary: %{fields: [:t]}}}}]
+    """
+    @spec placed([Use.t()], (Fragment.id() -> {:ok, map()} | :error)) :: [{Use.id(), map()}]
+    def placed(uses, fetch) do
+      for use <- uses,
+          enabled?(use),
+          {:ok, layer} <- [Composite.place(shown_fragment(use, fetch), use)],
+          do: {use.id, layer}
+    end
+
+    defp shown_fragment(use, fetch) do
+      case Use.resolve(shown(use), flattening(fetch)) do
+        {:ok, fragment} -> fragment
+        {:missing, _ref, fragment} -> fragment
+      end
+    end
+
+    @doc """
+    The path a design path has inside a use: a site of one kind holds its body under the
+    kind's key (spec/14 §19.3), so the design's `sources.primary` is a `source` site's
+    `[:source]`, and a design-level site's path is its own (§18.15).
+
+        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, key: :primary, local: %{source: %{fields: [:t]}}}
+        iex> Visualize.Chart.Builder.Stack.local_path(use, fn _id -> :error end, [:sources, :primary])
+        [:source]
+        iex> Visualize.Chart.Builder.Stack.local_path(use, fn _id -> :error end, [:sources, :primary, :fields])
+        [:source, :fields]
+        iex> mark = %Visualize.Chart.Use{id: {:use, 2}, ref: nil, local: %{mark: %{type: :line}}}
+        iex> Visualize.Chart.Builder.Stack.local_path(mark, fn _id -> :error end, [:marks, 3, :channels])
+        [:mark, :channels]
+        iex> house = %Visualize.Chart.Use{id: {:use, 3}, ref: nil, local: %{frame: %{kind: :cartesian}}}
+        iex> Visualize.Chart.Builder.Stack.local_path(house, fn _id -> :error end, [:frame, :size])
+        [:frame, :size]
+    """
+    @spec local_path(Use.t(), (Fragment.id() -> {:ok, map()} | :error), [term()]) :: [term()]
+    def local_path(use, fetch, path) do
+      case {Fragment.wrapped(shown_fragment(use, fetch)), path} do
+        {{:style, _}, [:styles, _key | rest]} -> [:style | rest]
+        {{:source, _}, [:sources, _key | rest]} -> [:source | rest]
+        {{:var, _}, [:vars, _key | rest]} -> [:var | rest]
+        {{:gradient, _}, [:defs, _key | rest]} -> [:gradient | rest]
+        {{:mark, _}, [:marks, _index | rest]} -> [:mark | rest]
+        {{:label, _}, [:labels, _index | rest]} -> [:label | rest]
+        {{:scale, _}, [:frame, :scales, _key | rest]} -> [:scale | rest]
+        {{:axis, _}, [:frame, :axes, _index | rest]} -> [:axis | rest]
+        _own -> path
+      end
+    end
+
+    @doc """
     The design the stack stands for: the enabled uses as a composite over the stack's own
     vars, flattened through the store, every id at a reference site resolved, so the frame
     can draw it (spec/14 §19.6).

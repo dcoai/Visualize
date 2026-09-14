@@ -12,6 +12,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
   doctest Visualize.Chart.Builder.Fills
   doctest Visualize.Chart.Builder.Sources
   doctest Visualize.Chart.Builder.Page
+  doctest Visualize.Chart.Builder.Stack
   doctest Visualize.Chart.Builder.Styles
   doctest Visualize.Chart.Builder.Palette
   doctest Visualize.Chart.Builder.Library
