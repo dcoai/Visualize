@@ -1961,16 +1961,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.reject(&(&1 == "design"))
     end
 
-    # Every root but the design's own: design is the deployed tier, not a node to edit.
+    # Every root but the design's own, the frame first (spec/14 §18.13): design is the
+    # deployed tier, not a node to edit, and a chart starts from its frame.
     defp roots(design, here) do
       declared = design |> Editor.nodes() |> Enum.map(&root(&1.label)) |> Enum.uniq()
       # Neither the design's own root nor `vars` is a tab: a declaration is the variable
       # panel's (§19.10), where it is made, defaulted and bound in one place.
       # `meta` is not a tab either: the frame's page opens with the design's name (§18.15).
-      Enum.reject(
-        declared ++ Enum.reject(here, &(&1 in declared)),
-        &(&1 in ["design", "vars", "meta"])
-      )
+      roots =
+        Enum.reject(
+          declared ++ Enum.reject(here, &(&1 in declared)),
+          &(&1 in ["design", "vars", "meta"])
+        )
+
+      Enum.filter(roots, &(&1 == "frame")) ++ Enum.reject(roots, &(&1 == "frame"))
     end
 
     # A node the layer does not carry yet but a page shows a form for — the frame's meta
