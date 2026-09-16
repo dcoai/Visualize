@@ -23,7 +23,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.Store
+    alias Visualize.Chart.Builder.{Place, Store}
 
     @separator ":"
     @uncategorised "Uncategorised"
@@ -259,6 +259,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-target={@target}
           >kind</button>
         </nav>
+        <section class="vis-builder-category vis-builder-components">
+          <h3 class="vis-builder-category-name">Components</h3>
+          <ul class="vis-builder-group-items">
+            <li
+              :for={{component, word} <- Place.components()}
+              class="vis-builder-item vis-builder-component"
+              draggable="true"
+              role="button"
+              tabindex="0"
+              title={"#{word}: drag onto the chart, Insert to place"}
+              aria-label={"#{word}: drag onto the chart, Insert to place"}
+              data-builder-component={component}
+              phx-keydown="component_key"
+              phx-value-component={component}
+              phx-target={@target}
+            >{word}</li>
+          </ul>
+        </section>
         <p :if={@tree == [] and @view == :group} class="vis-builder-library-empty">
           The store holds nothing yet.
         </p>
