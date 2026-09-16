@@ -214,7 +214,8 @@ defmodule Visualize.Incremental do
     element = state.build_element.(state.data, build_opts(state))
 
     # Encode as full redraw
-    binary = CanvasIncremental.encode_full_redraw(element)
+    binary =
+      CanvasIncremental.encode_full_redraw(element, {state.canvas_width, state.canvas_height})
 
     {binary, state}
   end

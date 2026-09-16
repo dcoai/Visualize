@@ -203,7 +203,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
   defp send_full_render(socket) do
     element = build_chart_element(socket.assigns)
-    binary = CanvasIncremental.encode_full_redraw(element)
+    binary = CanvasIncremental.encode_full_redraw(element, {@width, @height})
     encoded = Base.encode64(binary)
 
     socket
@@ -239,8 +239,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
       {bounds, element}
     end)
 
-    # Encode incremental update
-    binary = CanvasIncremental.encode_incremental({dx, 0}, {@width, @height}, region_elements)
+    # Encode incremental update: the plot is what scrolls, the margin's axes stay (D-106)
+    binary =
+      CanvasIncremental.encode_incremental({dx, 0}, {@width, @height}, region_elements,
+        viewport: {@margin.left, @margin.top, @inner_width, @inner_height}
+      )
     encoded = Base.encode64(binary)
 
     socket

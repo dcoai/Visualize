@@ -394,7 +394,7 @@ defmodule Visualize.Chart.CompiledTest do
       assert payload.svg =~ "axis-bottom"
       assert compiled.viewport.hi == 15
 
-      assert [{:full_redraw, records}] =
+      assert [{:full_redraw, _viewport, records}] =
                payload.incremental.binary |> Base.decode64!() |> Decoder.decode()
 
       assert Enum.any?(records, &match?({:path32, points} when length(points) == 11, &1))
@@ -412,7 +412,10 @@ defmodule Visualize.Chart.CompiledTest do
       {second, compiled} = Compiled.tick(compiled, sources, now: 22)
       assert %{mode: "scroll_x", dx: 20, dy: 0} = second.incremental
 
-      assert [{:incremental, :scroll_x, 20.0, +0.0, [{{80.0, +0.0, 20.0, 100.0}, records}]}] =
+      assert [
+               {:incremental, :scroll_x, 20.0, +0.0, {+0.0, +0.0, 100.0, 100.0},
+                [{{80.0, +0.0, 20.0, 100.0}, records}]}
+             ] =
                second.incremental.binary |> Base.decode64!() |> Decoder.decode()
 
       assert Enum.any?(records, &match?({:path32, _}, &1))

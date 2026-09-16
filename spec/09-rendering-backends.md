@@ -470,8 +470,10 @@ The `d` string parser accepts the commands `M m L l H h V v C c Q q A a Z z`, nu
 | `Visualize.Backend.CanvasIncremental.scroll_mode/2` | Classifies a scroll offset against a canvas size as `:none`, `:scroll_x`, `:scroll_y`, `:scroll_xy` or `:full_redraw` (5.2). |
 | `Visualize.Backend.CanvasIncremental.exposed_regions/2` | Returns the rectangles `{x, y, w, h}` (floats) newly exposed after shifting the canvas by the offset (5.3). |
 | `Visualize.Backend.CanvasIncremental.filter_to_regions/3` | Keeps the data points whose `{x, y}` (from the accessor) lie inside any region, bounds inclusive. |
-| `Visualize.Backend.CanvasIncremental.encode_incremental/4` | Encodes an `0x60` incremental update record for the offset, canvas size and `[{bounds, element}]` list (5.5), with `viewport: {x, y, w, h}` the rectangle that scrolls — the whole canvas by default (D-106); raises `ArgumentError` for more than three regions or a zero offset. `encode_incremental/3` is the whole-canvas call. |
-| `Visualize.Backend.CanvasIncremental.encode_full_redraw/2` | Encodes an `0x60` record in full-redraw mode carrying the element's whole binary stream, with the canvas size as the record's viewport (5.6). `encode_full_redraw/1` writes a zero viewport, which a full redraw never consults. |
+| `Visualize.Backend.CanvasIncremental.encode_incremental/4` | Encodes an `0x60` incremental update record for the offset, canvas size and `[{bounds, element}]` list (5.5), with `viewport: {x, y, w, h}` the rectangle that scrolls — the whole canvas by default (D-106); raises `ArgumentError` for more than three regions or a zero offset. |
+| `Visualize.Backend.CanvasIncremental.encode_incremental/3` | `encode_incremental/4` with no options: the whole canvas is the viewport. |
+| `Visualize.Backend.CanvasIncremental.encode_full_redraw/2` | Encodes an `0x60` record in full-redraw mode carrying the element's whole binary stream, with the canvas size as the record's viewport (5.6). |
+| `Visualize.Backend.CanvasIncremental.encode_full_redraw/1` | `encode_full_redraw/2` with no size: a zero viewport, which a full redraw never consults. |
 
 ### 5.2 Scroll classification
 

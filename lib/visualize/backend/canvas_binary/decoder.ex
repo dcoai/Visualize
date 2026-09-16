@@ -14,7 +14,7 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
   - `{:transform, :translate, {tx, ty}}`, `{:transform, :translate_scale, {tx, ty, sx, sy}}`,
     `{:transform, :matrix, {a, b, c, d, e, f}}`
   - `:save`, `:restore`, `:fill`, `:stroke`
-  - `{:incremental, mode, dx, dy, [{{x, y, w, h}, records}]}` and `{:full_redraw, records}`
+  - `{:incremental, mode, dx, dy, {x, y, w, h}, [{{x, y, w, h}, records}]}` and `{:full_redraw, viewport, records}`
     for the `0x60` records of `Visualize.Backend.CanvasIncremental`
 
   An unknown opcode or a truncated record raises, since either is an encoder bug.
@@ -134,17 +134,27 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
   defp decode(<<0x40, rest::binary>>, acc), do: decode(rest, [:fill | acc])
   defp decode(<<0x41, rest::binary>>, acc), do: decode(rest, [:stroke | acc])
 
-  defp decode(<<0x60, 0x00, _dx::little-float-32, _dy::little-float-32, 0, data::binary>>, acc),
-    do: Enum.reverse([{:full_redraw, decode(data)} | acc])
+  defp decode(
+         <<0x60, 0x00, _dx::little-float-32, _dy::little-float-32, viewport::binary-size(16), 0,
+           data::binary>>,
+         acc
+       ),
+       do: Enum.reverse([{:full_redraw, viewport(viewport), decode(data)} | acc])
 
   defp decode(
-         <<0x60, mode::8, dx::little-float-32, dy::little-float-32, count::8, rest::binary>>,
+         <<0x60, mode::8, dx::little-float-32, dy::little-float-32, viewport::binary-size(16),
+           count::8, rest::binary>>,
          acc
        ) do
     {regions, rest} = take(rest, count, &region/1)
     mode = Enum.at([:full_redraw, :scroll_x, :scroll_y, :scroll_xy], mode)
-    decode(rest, [{:incremental, mode, dx, dy, regions} | acc])
+    decode(rest, [{:incremental, mode, dx, dy, viewport(viewport), regions} | acc])
   end
+
+  defp viewport(
+         <<x::little-float-32, y::little-float-32, w::little-float-32, h::little-float-32>>
+       ),
+       do: {x, y, w, h}
 
   defp region(
          <<x::little-float-32, y::little-float-32, w::little-float-32, h::little-float-32,

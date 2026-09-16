@@ -26,7 +26,7 @@ defmodule Visualize.IncrementalTest do
     assert length(CanvasIncremental.exposed_regions({-20, 30}, @size)) == 2
   end
 
-  test "encode_incremental/3 refuses more than three regions and a zero offset" do
+  test "encode_incremental/4 refuses more than three regions and a zero offset" do
     region = {{0.0, 0.0, 1.0, 1.0}, Element.group([])}
 
     assert_raise ArgumentError, fn ->
@@ -38,8 +38,47 @@ defmodule Visualize.IncrementalTest do
     end
 
     binary = CanvasIncremental.encode_incremental({20, 0}, @size, List.duplicate(region, 3))
-    assert [{:incremental, :scroll_x, 20.0, +0.0, regions}] = Decoder.decode(binary)
+
+    assert [{:incremental, :scroll_x, 20.0, +0.0, {+0.0, +0.0, 800.0, 600.0}, regions}] =
+             Decoder.decode(binary)
+
     assert length(regions) == 3
+  end
+
+  test "the record names what scrolls: the viewport, the whole canvas by default (D-106, #294)" do
+    region = {{0.0, 0.0, 1.0, 1.0}, Element.group([])}
+    plot = {60, 40, 810, 410}
+
+    # The viewport is written after the offset, one 27-byte header in every mode.
+    binary = CanvasIncremental.encode_incremental({5, 0}, {900, 500}, [region], viewport: plot)
+
+    assert <<0x60, 0x01, 5.0::little-float-32, +0.0::little-float-32, 60.0::little-float-32,
+             40.0::little-float-32, 810.0::little-float-32, 410.0::little-float-32, 1, _::binary>> =
+             binary
+
+    assert [{:incremental, :scroll_x, 5.0, +0.0, {60.0, 40.0, 810.0, 410.0}, [_]}] =
+             Decoder.decode(binary)
+
+    # The offset is classified against the viewport's size, since that is what is copied:
+    # 500 px is a full redraw of a 810 px plot and a scroll of a 2000 px canvas.
+    wide = CanvasIncremental.encode_incremental({500, 0}, {2000, 500}, [region], viewport: plot)
+
+    assert [{:incremental, :full_redraw, 500.0, +0.0, {60.0, 40.0, 810.0, 410.0}, [_]}] =
+             Decoder.decode(wide)
+
+    whole = CanvasIncremental.encode_incremental({500, 0}, {2000, 500}, [region])
+
+    assert [{:incremental, :scroll_x, 500.0, +0.0, {+0.0, +0.0, 2000.0, 500.0}, [_]}] =
+             Decoder.decode(whole)
+
+    # A full redraw carries the canvas size, or zeros from the arity-1 call.
+    assert [{:full_redraw, {+0.0, +0.0, 900.0, 500.0}, [:save, :restore]}] =
+             Element.group([])
+             |> CanvasIncremental.encode_full_redraw({900, 500})
+             |> Decoder.decode()
+
+    assert [{:full_redraw, {+0.0, +0.0, +0.0, +0.0}, [:save, :restore]}] =
+             Element.group([]) |> CanvasIncremental.encode_full_redraw() |> Decoder.decode()
   end
 
   defp state(build_element) do

@@ -2213,7 +2213,10 @@ defmodule ExamplesWeb.PerformanceLive do
       {bounds, element}
     end)
 
-    CanvasIncremental.encode_incremental({@scroll_delta, 0}, canvas_size, region_elements)
+    # The plot is what scrolls; the margin's axes stay (D-106)
+    CanvasIncremental.encode_incremental({@scroll_delta, 0}, canvas_size, region_elements,
+      viewport: {@margin.left, @margin.top, inner_width, inner_height}
+    )
     |> Base.encode64()
   end
 
@@ -2305,7 +2308,10 @@ defmodule ExamplesWeb.PerformanceLive do
       {bounds, element}
     end)
 
-    CanvasIncremental.encode_incremental({pixel_shift, 0}, canvas_size, region_elements)
+    # The plot is what scrolls; the margin's axes stay (D-106)
+    CanvasIncremental.encode_incremental({pixel_shift, 0}, canvas_size, region_elements,
+      viewport: {margin.left, margin.top, inner_width, inner_height}
+    )
     |> Base.encode64()
   end
 
