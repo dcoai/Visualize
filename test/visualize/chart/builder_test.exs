@@ -122,7 +122,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<main class="vis-builder-main">)
 
       assert html =~
-               ~s(<div id="builder-graph" class="vis-builder-graph" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="graph">)
+               ~s(<div id="builder-graph" class="vis-builder-graph" tabindex="0" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="graph">)
 
       # The stack is inside the sidebar; the graph alone in the main column; the node strip
       # and the page of sections in the inspector (spec/14 §18.16).
@@ -1329,7 +1329,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       js = Visualize.Hooks.Builder.js_hook()
       assert js =~ "e.dataTransfer.setData('application/x-visualize-component', word);"
-      assert js =~ "return graph && types.includes('application/x-visualize-component');"
+      assert js =~ "return graph && (types.includes('application/x-visualize-component') ||"
       assert js =~ "const sx = rect.width > 0 ? width / rect.width : 1;"
       assert js =~ "this.push('place', { component: word, x: point.x, y: point.y });"
     end
@@ -1386,6 +1386,117 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s6} = Builder.handle_event("add_site", %{"kind" => "mark"}, bare)
       assert %Use{local: %{mark: %{type: :line}}} = Enum.at(s6.assigns.uses, 1)
       assert s6.assigns.guessed == MapSet.new()
+    end
+
+    test "a placed node is moved on the graph to another region, in the layer that owns it (spec/14 §18.16)",
+         %{socket: s} do
+      # The fixture's axes are shared's: x at the bottom, y at the left. Moving the x axis
+      # to the top band writes its side to shared and keeps its scale.
+      {:noreply, s1} =
+        Builder.handle_event("move", %{"node" => "frame.axes[0]", "x" => 200, "y" => 5}, s)
+
+      assert %Use{local: %{frame: %{axes: [%{scale: :x, side: :top}, _]}}} =
+               Enum.at(s1.assigns.uses, 1)
+
+      assert s1.assigns.node_label == "frame.axes[0]"
+      assert BuilderFixture.design(s1).frame.axes |> Enum.map(& &1.side) == [:top, :left]
+
+      # The same region again is nothing; a mark does not move; a region by name works.
+      {:noreply, same} =
+        Builder.handle_event("move", %{"node" => "frame.axes[0]", "x" => 200, "y" => 190}, s)
+
+      assert same.assigns.uses == s.assigns.uses
+
+      {:noreply, mark} =
+        Builder.handle_event("move", %{"node" => "marks[0]", "x" => 200, "y" => 5}, s)
+
+      assert mark.assigns.uses == s.assigns.uses and mark.assigns.notice == nil
+
+      {:noreply, s2} =
+        Builder.handle_event("move", %{"node" => "frame.axes[1]", "region" => "right"}, s)
+
+      assert %Use{local: %{frame: %{axes: [_, %{scale: :y, side: :right}]}}} =
+               Enum.at(s2.assigns.uses, 1)
+
+      # A title to the bottom band becomes a caption; into the plot, the nearest corner.
+      {:noreply, s3} =
+        Builder.handle_event("move", %{"node" => "labels[0]", "x" => 200, "y" => 190}, s)
+
+      assert %Use{local: %{labels: [%{anchor: :caption}]}} = Enum.at(s3.assigns.uses, 2)
+
+      {:noreply, s4} =
+        Builder.handle_event("move", %{"node" => "labels[0]", "x" => 370, "y" => 160}, s)
+
+      assert %Use{local: %{labels: [%{anchor: {:frame, :bottom_right}}]}} =
+               Enum.at(s4.assigns.uses, 2)
+
+      # The render carries the frame for the hook's overlay.
+      assert BuilderFixture.render(s) =~ ~s(data-builder-frame="400 200 20 20 30 40")
+    end
+
+    test "a legend moves between the margins and the plot's positions; a locked owner refuses" do
+      with_legend =
+        BuilderFixture.layers() ++
+          [
+            {:colours,
+             %{
+               frame: %{
+                 scales: %{c: %{kind: :ordinal, domain: ["a"]}},
+                 legend: %{scale: :c, position: :top_right}
+               }
+             }}
+          ]
+
+      Recording.seed(%{
+        {:axis, 1} => %{name: "Axes::y", fragment: %{axis: %{scale: :y, side: :left, ticks: 3}}}
+      })
+
+      s = BuilderFixture.socket(with_legend, store: Recording)
+
+      {:noreply, s1} =
+        Builder.handle_event("move", %{"node" => "frame.legend", "x" => 20, "y" => 100}, s)
+
+      assert %Use{local: %{frame: %{legend: %{position: :left}}}} = List.last(s1.assigns.uses)
+
+      {:noreply, s2} =
+        Builder.handle_event("move", %{"node" => "frame.legend", "x" => 50, "y" => 160}, s)
+
+      assert %Use{local: %{frame: %{legend: %{position: :bottom_left}}}} =
+               List.last(s2.assigns.uses)
+
+      # A linked layer's axis is the library's word: the move is refused with the notice.
+      {:noreply, s3} =
+        Builder.handle_event("insert", %{"name" => "axis:1", "at" => 9, "as" => "link"}, s)
+
+      {:noreply, refused} =
+        Builder.handle_event("move", %{"node" => "frame.axes[1]", "region" => "top"}, s3)
+
+      assert refused.assigns.uses == s3.assigns.uses
+      assert refused.assigns.notice == "Axes::y is from the library — open it to edit"
+    end
+
+    test "the hook moves a movable drawn node, draws the region while it drags, and has the keyboard twin (spec/10 §16.3)" do
+      js = Visualize.Hooks.Builder.js_hook()
+
+      assert js =~
+               "return label.startsWith('frame.axes[') || label === 'frame.legend' || label.startsWith('labels[');"
+
+      assert js =~ "e.dataTransfer.setData('application/x-visualize-node', label);"
+
+      assert js =~
+               "if (this.scope === 'graph') this.markRegion(this.regionAt(this.chartPoint(e)));"
+
+      assert js =~ "this.el.classList.toggle('vis-builder-region-' + name, region === name);"
+      assert js =~ "this.push('move', { node: label, x: point.x, y: point.y });"
+      assert js =~ "this.push('move', { node: label, region: region });"
+
+      assert js =~
+               "const regions = { ArrowUp: 'top', ArrowDown: 'bottom', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'plot' };"
+
+      css = Builder.css()
+
+      for region <- ~w(top bottom left right plot),
+          do: assert(css =~ ".vis-builder .vis-builder-region-#{region}::after")
     end
 
     test "the composer takes only its kind; the workspace takes anything", %{socket: s} do
@@ -3626,7 +3737,7 @@ defmodule Visualize.Chart.BuilderTest do
       html = at_node("marks[0]")
 
       assert html =~
-               ~s(<div id="b-graph" class="vis-builder-graph" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="graph">)
+               ~s(<div id="b-graph" class="vis-builder-graph" tabindex="0" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="graph">)
 
       assert html =~ ~s(data-builder-selected="marks[0]")
       assert html =~ ~s(<g class="mark mark-line" data-node="marks[0]")

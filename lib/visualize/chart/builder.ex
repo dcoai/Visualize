@@ -422,6 +422,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <div
               id={@id <> "-graph"}
               class="vis-builder-graph"
+              tabindex="0"
               phx-hook="BuilderHook"
               data-builder-target={@myself}
               data-builder-scope="graph"
@@ -1387,6 +1388,35 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         :error ->
           {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
+      end
+    end
+
+    # A drawn node moved on the graph (spec/14 §18.16): its placement key rewritten in the
+    # layer that owns it, by the region the point falls in or the region given; a move into
+    # the region it already occupies, or of a node with no placement, is nothing.
+    def handle_event("move", %{"node" => label} = params, socket) do
+      design = composed(socket)
+
+      case Enum.find(Editor.nodes(design), &(&1.label == label)) do
+        %{kind: kind, path: path} = node when kind in [:axis, :legend, :label] ->
+          {region, point} = where(socket, params, nil)
+          body = at(design, path) || %{}
+
+          case Place.moved(kind, body, region, point, Place.geometry(design)) do
+            {:ok, moved} ->
+              key = placement_key(kind)
+
+              {:noreply,
+               socket
+               |> update_layer(path, key, {:ok, Map.fetch!(moved, key)})
+               |> opened(node.label)}
+
+            _same_or_unmovable ->
+              {:noreply, socket}
+          end
+
+        _other ->
+          {:noreply, socket}
       end
     end
 
@@ -2737,6 +2767,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # -- placing a component (spec/14 §18.16) ------------------------------------------------
+
+    defp placement_key(:axis), do: :side
+    defp placement_key(:legend), do: :position
+    defp placement_key(:label), do: :anchor
 
     # The region a drop names: its point classified against the frame the preview drew, or
     # the region given outright; absent both, the component's home.

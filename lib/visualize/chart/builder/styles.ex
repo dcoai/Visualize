@@ -300,6 +300,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
       outline-offset: 2px;
     }
 
+    /* The region a move would snap to (spec/14 §18.16): the graph draws the band or the
+       plot under the pointer as a translucent overlay while a node is dragged. */
+    .vis-builder .vis-builder-graph {
+      position: relative;
+    }
+
+    .vis-builder .vis-builder-graph::after {
+      content: "";
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: var(--vis-builder-accent);
+      opacity: 0.15;
+    }
+
+    .vis-builder .vis-builder-graph[class*="vis-builder-region-"]::after {
+      display: block;
+    }
+
+    .vis-builder .vis-builder-region-top::after { top: 0; left: 0; right: 0; height: 15%; }
+    .vis-builder .vis-builder-region-bottom::after { bottom: 0; left: 0; right: 0; height: 15%; }
+    .vis-builder .vis-builder-region-left::after { top: 0; bottom: 0; left: 0; width: 15%; }
+    .vis-builder .vis-builder-region-right::after { top: 0; bottom: 0; right: 0; width: 15%; }
+    .vis-builder .vis-builder-region-plot::after { top: 15%; bottom: 15%; left: 15%; right: 15%; }
+
     /* The inspector (spec/14 §18.16): its width a custom property the drag sets, its
        left edge a handle. */
     .vis-builder-context {

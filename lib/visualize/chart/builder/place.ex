@@ -262,6 +262,72 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def placed(fragment, _region), do: fragment
 
+    @doc """
+    Whether a drawn node's label names a node that is moved on the graph (spec/14 §18.16):
+    an axis, the legend, a label. A mark's position is its data; the frame does not move.
+
+        iex> Visualize.Chart.Builder.Place.movable?("frame.axes[1]")
+        true
+        iex> Visualize.Chart.Builder.Place.movable?("marks[0]")
+        false
+    """
+    @spec movable?(String.t()) :: boolean()
+    def movable?("frame.axes[" <> _rest), do: true
+    def movable?("frame.legend"), do: true
+    def movable?("labels[" <> _rest), do: true
+    def movable?(_label), do: false
+
+    @doc """
+    A node moved to a region at a point (spec/14 §18.16): its body with the placement key
+    rewritten — an axis's `side`, a legend's `position`, a label's `anchor` — or `:same`
+    when the region names what it already is, or `:unmovable` for a kind with no placement.
+
+        iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :top, {0, 0})
+        {:ok, %{scale: :x, side: :top}}
+        iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :bottom, {0, 0})
+        :same
+        iex> Visualize.Chart.Builder.Place.moved(:mark, %{type: :line}, :top, {0, 0})
+        :unmovable
+    """
+    @spec moved(atom(), map(), region(), {number(), number()}, map()) ::
+            {:ok, map()} | :same | :unmovable
+    def moved(kind, body, region, point, geometry \\ geometry(%{}))
+
+    def moved(:axis, body, region, _point, _geometry)
+        when region in [:top, :bottom, :left, :right],
+        do: rewritten(body, :side, region)
+
+    def moved(:axis, _body, :plot, _point, _geometry), do: :same
+
+    def moved(:legend, body, :plot, point, geometry),
+      do: rewritten(body, :position, position(point, geometry))
+
+    def moved(:legend, body, region, _point, _geometry),
+      do: rewritten(body, :position, region)
+
+    def moved(:label, body, :plot, point, geometry),
+      do: rewritten(body, :anchor, {:frame, corner(point, geometry)})
+
+    def moved(:label, body, region, _point, _geometry) do
+      current = Map.get(body, :anchor)
+
+      anchor =
+        case region do
+          :top -> if current in [:title, :subtitle], do: current, else: :title
+          :bottom -> if current in [:title, :subtitle, :caption], do: :caption, else: {:axis, :x}
+          :left -> {:axis, :y}
+          :right -> {:frame, :top_right}
+        end
+
+      rewritten(body, :anchor, anchor)
+    end
+
+    def moved(_kind, _body, _region, _point, _geometry), do: :unmovable
+
+    defp rewritten(body, key, value) do
+      if Map.get(body, key) == value, do: :same, else: {:ok, Map.put(body, key, value)}
+    end
+
     # -- the design's word ----------------------------------------------------------------
 
     defp scale_declared?(design, name) do
