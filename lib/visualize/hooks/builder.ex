@@ -225,6 +225,20 @@ defmodule Visualize.Hooks.Builder do
           return;
         }
 
+        // A palette row (spec/14 §18.16): the component's word travels as its own type.
+        const component = e.target && e.target.closest ? e.target.closest('[data-builder-component]') : null;
+        if (component && this.el.contains(component)) {
+          const word = component.getAttribute('data-builder-component');
+          this.from = null;
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('application/x-visualize-component', word);
+            e.dataTransfer.setData('text/plain', word);
+          }
+          component.classList.add('vis-builder-item-dragging');
+          return;
+        }
+
         const fragment = this.fragmentAt(e);
         if (fragment) {
           const stored = fragment.getAttribute('data-builder-fragment');
@@ -324,8 +338,23 @@ defmodule Visualize.Hooks.Builder do
         const graph = this.scope === 'graph';
         if (!graph && !this.el.hasAttribute('data-builder-stack')) return false;
         if (this.from !== null) return !graph;
-        return !!(e.dataTransfer && Array.from(e.dataTransfer.types || [])
-          .includes('application/x-visualize-fragment'));
+        const types = Array.from((e.dataTransfer && e.dataTransfer.types) || []);
+        if (types.includes('application/x-visualize-fragment')) return true;
+        return graph && types.includes('application/x-visualize-component');
+      },
+
+      // A drop's position in chart coordinates (spec/10 §16.3): the client offset within
+      // the chart's <svg>, scaled by its viewBox over its drawn size.
+      chartPoint(e) {
+        const svg = this.el.querySelector('svg.vis-builder-chart');
+        if (!svg) return null;
+        const rect = svg.getBoundingClientRect();
+        const box = (svg.getAttribute('viewBox') || '').split(/\s+/).map(Number);
+        const width = box.length === 4 && box[2] > 0 ? box[2] : rect.width;
+        const height = box.length === 4 && box[3] > 0 ? box[3] : rect.height;
+        const sx = rect.width > 0 ? width / rect.width : 1;
+        const sy = rect.height > 0 ? height / rect.height : 1;
+        return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
       },
 
       // A drop is a copy unless Alt asks for a link (spec/14 §18.17).
@@ -396,9 +425,16 @@ defmodule Visualize.Hooks.Builder do
         e.preventDefault();
         this.clearOver();
 
+        // The graph (spec/14 §18.16): a component or an entry, placed where it landed.
         if (this.scope === 'graph') {
+          const point = this.chartPoint(e) || { x: 0, y: 0 };
+          const word = e.dataTransfer ? e.dataTransfer.getData('application/x-visualize-component') : '';
+          if (word) {
+            this.push('place', { component: word, x: point.x, y: point.y });
+            return;
+          }
           const name = this.dragged(e);
-          if (name !== null) this.push('insert', { name: name, as: this.dropAs(e) });
+          if (name !== null) this.push('place', { name: name, as: this.dropAs(e), x: point.x, y: point.y });
           return;
         }
 

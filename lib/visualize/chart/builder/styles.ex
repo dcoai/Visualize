@@ -439,6 +439,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
       cursor: grab;
     }
 
+    /* The palette's rows (spec/14 §18.16): items like the library's, with padding of their
+       own since they carry no id badge. */
+    .vis-builder-component {
+      padding: 2px 6px;
+      color: var(--vis-builder-ink);
+    }
+
+    .vis-builder-components {
+      border-bottom: 1px solid var(--vis-builder-line);
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+
     .vis-builder-item:hover {
       border-color: var(--vis-builder-line);
       background: var(--vis-builder-bg);

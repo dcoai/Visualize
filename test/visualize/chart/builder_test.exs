@@ -1101,7 +1101,10 @@ defmodule Visualize.Chart.BuilderTest do
       js = Visualize.Hooks.Builder.js_hook()
       assert js =~ "return e.altKey ? 'link' : 'copy';"
       assert js =~ "this.push('insert', { name: stored, at: at, as: this.dropAs(e) });"
-      assert js =~ "if (name !== null) this.push('insert', { name: name, as: this.dropAs(e) });"
+
+      assert js =~
+               "if (name !== null) this.push('place', { name: name, as: this.dropAs(e), x: point.x, y: point.y });"
+
       assert js =~ "if (this.from !== null) return !graph;"
     end
 
@@ -1170,6 +1173,165 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, s} = Builder.handle_event("select_node", %{"node" => "sources.primary"}, s)
       refute BuilderFixture.render(s) =~ "vis-builder-form-locked"
+    end
+
+    test "a component dropped on the graph is placed where it landed (spec/14 §18.16)", %{
+      socket: s
+    } do
+      # The fixture chart is 400×200 with margins 20/20/30/40 and scales x and y. An axis
+      # in the bottom band: an x axis at the bottom, no scale to bring — and the same
+      # identity as shared's, so it goes above shared, whose axis it replaces, and the
+      # design still has two axes, the new site's the one that draws.
+      {:noreply, s1} =
+        Builder.handle_event("place", %{"component" => "axis", "x" => 200, "y" => 190}, s)
+
+      assert BuilderFixture.names(s1) == [:house, :shared, "new axis", :panel]
+
+      assert %Use{ref: nil, local: %{axis: %{scale: :x, side: :bottom}}} =
+               Enum.at(s1.assigns.uses, 2)
+
+      assert BuilderFixture.selected(s1) == 2
+      assert s1.assigns.node_label =~ ~r/^frame\.axes\[\d\]$/
+      assert length(BuilderFixture.design(s1).frame.axes) == 2
+
+      # In the right band: a y axis on the right; `y` is declared, so no scale site.
+      {:noreply, s2} =
+        Builder.handle_event("place", %{"component" => "axis", "x" => 395, "y" => 100}, s)
+
+      assert %Use{local: %{axis: %{scale: :y, side: :right}}} = Enum.at(s2.assigns.uses, 1)
+      assert length(BuilderFixture.design(s2).frame.axes) == 3
+
+      # A title in the top band; a label in the plot at the nearest corner.
+      {:noreply, s3} =
+        Builder.handle_event("place", %{"component" => "title", "x" => 200, "y" => 5}, s)
+
+      assert %Use{local: %{label: %{anchor: :title, text: ["Title"]}}} =
+               Enum.at(s3.assigns.uses, 1)
+
+      assert s3.assigns.node_label =~ ~r/^labels\[\d\]$/
+
+      {:noreply, s4} =
+        Builder.handle_event("place", %{"component" => "label", "x" => 370, "y" => 160}, s)
+
+      assert %Use{local: %{label: %{anchor: {:frame, :bottom_right}}}} =
+               Enum.at(s4.assigns.uses, 1)
+
+      # A mark of a type; a word that is no component.
+      {:noreply, s5} =
+        Builder.handle_event("place", %{"component" => "mark:circle", "x" => 200, "y" => 100}, s)
+
+      assert %Use{local: %{mark: %{type: :circle}}} = Enum.at(s5.assigns.uses, 1)
+      assert s5.assigns.node_label =~ ~r/^marks\[\d\]$/
+
+      {:noreply, s6} =
+        Builder.handle_event("place", %{"component" => "banana", "x" => 1, "y" => 1}, s)
+
+      assert s6.assigns.notice == "banana is not a component"
+      assert s6.assigns.uses == s.assigns.uses
+    end
+
+    test "an axis brings the scale it needs, beneath it", %{socket: _s} do
+      only_x = [{:base, %{frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}}}}}]
+      s = BuilderFixture.socket(only_x)
+
+      {:noreply, s} =
+        Builder.handle_event("place", %{"component" => "axis", "region" => "left"}, s)
+
+      assert BuilderFixture.names(s) == ["base", "new scale", "new axis"]
+
+      assert %Use{key: :y, local: %{scale: %{kind: :linear, domain: :auto}}} =
+               Enum.at(s.assigns.uses, 1)
+
+      assert %Use{local: %{axis: %{scale: :y, side: :left}}} = Enum.at(s.assigns.uses, 2)
+      assert BuilderFixture.design(s).frame.scales.y == %{kind: :linear, domain: :auto}
+    end
+
+    test "a legend takes the ordinal scale and is written through the ownership rule; none is a notice",
+         %{socket: s} do
+      {:noreply, refused} =
+        Builder.handle_event("place", %{"component" => "legend", "x" => 200, "y" => 100}, s)
+
+      assert refused.assigns.notice == "a legend needs a colour scale"
+      assert refused.assigns.uses == s.assigns.uses
+
+      with_colour =
+        BuilderFixture.layers() ++
+          [{:colours, %{frame: %{scales: %{c: %{kind: :ordinal, domain: ["a", "b"]}}}}}]
+
+      s = BuilderFixture.socket(with_colour, selected: 0)
+
+      {:noreply, placed} =
+        Builder.handle_event("place", %{"component" => "legend", "x" => 370, "y" => 30}, s)
+
+      # No layer owns `frame.legend`, so it goes to the frame's owner — the highest layer
+      # with a value under `frame`, `colours` (§18.15) — not to the selected `house`.
+      assert %Use{local: %{frame: %{legend: %{scale: :c, position: :top_right}}}} =
+               List.last(placed.assigns.uses)
+
+      assert placed.assigns.node_label == "frame.legend"
+      assert BuilderFixture.design(placed).frame.legend == %{scale: :c, position: :top_right}
+    end
+
+    test "the + menu and the palette's keys place a component in its home region", %{socket: s} do
+      # An x axis at the bottom replaces shared's, so it is placed above shared.
+      {:noreply, added} = Builder.handle_event("add_site", %{"kind" => "axis"}, s)
+      assert %Use{local: %{axis: %{scale: :x, side: :bottom}}} = Enum.at(added.assigns.uses, 2)
+      assert added.assigns.node_label =~ ~r/^frame\.axes\[\d\]$/
+
+      {:noreply, added} = Builder.handle_event("add_site", %{"kind" => "label"}, s)
+      assert %Use{local: %{label: %{anchor: {:axis, :x}}}} = Enum.at(added.assigns.uses, 1)
+
+      {:noreply, added} = Builder.handle_event("add_site", %{"kind" => "mark"}, s)
+      assert %Use{local: %{mark: %{type: :line}}} = Enum.at(added.assigns.uses, 1)
+
+      # Any other kind is the empty site it was.
+      {:noreply, added} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+      assert %Use{local: %{style: %{}}} = Enum.at(added.assigns.uses, 1)
+
+      {:noreply, keyed} =
+        Builder.handle_event("component_key", %{"key" => "Insert", "component" => "title"}, s)
+
+      assert %Use{local: %{label: %{anchor: :title}}} = Enum.at(keyed.assigns.uses, 1)
+    end
+
+    test "a library entry dropped on the graph is its copy, snapped where the region names a place",
+         %{socket: s} do
+      Recording.seed(%{
+        {:axis, 1} => %{name: "Axes::y", fragment: %{axis: %{scale: :y, side: :left, ticks: 3}}}
+      })
+
+      {:noreply, s1} =
+        Builder.handle_event("place", %{"name" => "axis:1", "x" => 395, "y" => 100}, s)
+
+      assert %Use{ref: nil, local: %{axis: %{scale: :y, side: :right, ticks: 3}}} =
+               Enum.at(s1.assigns.uses, 1)
+
+      {:noreply, s2} =
+        Builder.handle_event("place", %{"name" => "axis:1", "x" => 200, "y" => 100}, s)
+
+      assert %Use{ref: nil, local: %{axis: %{side: :left}}} = Enum.at(s2.assigns.uses, 1)
+
+      {:noreply, s3} =
+        Builder.handle_event(
+          "place",
+          %{"name" => "axis:1", "as" => "link", "x" => 395, "y" => 100},
+          s
+        )
+
+      assert %Use{ref: {:axis, 1}} = Enum.at(s3.assigns.uses, 1)
+    end
+
+    test "the Components section and the hook's drop (spec/10 §16.3)", %{socket: s} do
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(<h3 class="vis-builder-category-name">Components</h3>)
+      assert html =~ ~s(data-builder-component="axis")
+      assert html =~ ~s(data-builder-component="mark:line" phx-keydown="component_key")
+
+      js = Visualize.Hooks.Builder.js_hook()
+      assert js =~ "e.dataTransfer.setData('application/x-visualize-component', word);"
+      assert js =~ "return graph && types.includes('application/x-visualize-component');"
+      assert js =~ "const sx = rect.width > 0 ? width / rect.width : 1;"
+      assert js =~ "this.push('place', { component: word, x: point.x, y: point.y });"
     end
 
     test "the composer takes only its kind; the workspace takes anything", %{socket: s} do

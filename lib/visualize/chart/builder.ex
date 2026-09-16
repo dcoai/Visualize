@@ -67,6 +67,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Palette,
       Params,
       Picker,
+      Place,
       Preview,
       Sources,
       Stack,
@@ -1309,6 +1310,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {:noreply,
            assign(socket, notice: "#{submitted} is not a kind a site can be", adding: false)}
 
+        # An axis, a label and a mark are placed as a drop in their home region would
+        # place them (spec/14 §18.16); any other kind is the empty site it was.
+        :axis ->
+          {:noreply, placed(socket, :axis, Place.home(:axis), {0, 0})}
+
+        :label ->
+          {:noreply, placed(socket, :label, Place.home(:label), {0, 0})}
+
+        :mark ->
+          {:noreply, placed(socket, {:mark, :line}, Place.home({:mark, :line}), {0, 0})}
+
         kind ->
           %{uses: uses, labels: labels, selected: selected} = socket.assigns
           use = %{Use.new(nil, uses) | ref: nil, local: Stack.empty(kind)}
@@ -1326,6 +1338,52 @@ if Code.ensure_loaded?(Phoenix.Component) do
              adding: false,
              notice: nil
            )}
+      end
+    end
+
+    # -- the palette, and a drop on the graph (spec/14 §18.16) ------------------------------
+
+    # A palette row from the keyboard: Insert places it in its home region.
+    def handle_event("component_key", %{"key" => key, "component" => word}, socket) do
+      case {key, Place.component(word)} do
+        {insert, {:ok, component}} when insert in ["Insert", "i", "Enter", " "] ->
+          {:noreply, placed(socket, component, Place.home(component), {0, 0})}
+
+        _other ->
+          {:noreply, socket}
+      end
+    end
+
+    # A drop on the graph: a component, or a library entry, placed where it landed — by
+    # the point in chart coordinates, or by the region the keyboard twin names.
+    def handle_event("place", %{"component" => word} = params, socket) do
+      case Place.component(word) do
+        {:ok, component} ->
+          {region, point} = where(socket, params, component)
+          {:noreply, placed(socket, component, region, point)}
+
+        :error ->
+          {:noreply, assign(socket, :notice, "#{word} is not a component")}
+      end
+    end
+
+    def handle_event("place", %{"name" => submitted} = params, socket) do
+      case fetch(socket.assigns.store, submitted) do
+        {:ok, entry} ->
+          case admits(socket.assigns.open, entry) do
+            :ok ->
+              {region, _point} = where(socket, params, nil)
+              link? = Map.get(params, "as") == "link"
+              at = (Stack.index_of(socket.assigns.uses, socket.assigns.selected) || -1) + 1
+              socket = if link?, do: linked(socket, entry, at), else: copied(socket, entry, at)
+              {:noreply, if(link?, do: socket, else: snapped(socket, entry, at, region))}
+
+            {:refused, notice} ->
+              {:noreply, assign(socket, :notice, notice)}
+          end
+
+        :error ->
+          {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}
       end
     end
 
@@ -2659,6 +2717,160 @@ if Code.ensure_loaded?(Phoenix.Component) do
           local = Stack.local_path(use, fetch, path)
           assign(socket, :uses, Stack.update(uses, use.id, &Stack.write(&1, local, key, parsed)))
       end
+    end
+
+    # -- placing a component (spec/14 §18.16) ------------------------------------------------
+
+    # The region a drop names: its point classified against the frame the preview drew, or
+    # the region given outright; absent both, the component's home.
+    defp where(socket, params, component) do
+      point = {number(Map.get(params, "x")), number(Map.get(params, "y"))}
+
+      region =
+        case Map.get(params, "region") do
+          given when given in ~w(plot top bottom left right) ->
+            String.to_existing_atom(given)
+
+          _none when is_map_key(params, "x") ->
+            Place.region(point, Place.geometry(composed(socket)))
+
+          _none ->
+            if component, do: Place.home(component), else: :plot
+        end
+
+      {region, point}
+    end
+
+    defp number(value) when is_number(value), do: value
+
+    defp number(value) when is_binary(value) do
+      case Float.parse(value) do
+        {n, _} -> n
+        :error -> 0
+      end
+    end
+
+    defp number(_none), do: 0
+
+    # The composed design, or `%{}` where the stack does not compose.
+    defp composed(socket) do
+      %{uses: uses, store: store, stack_vars: vars} = socket.assigns
+
+      case Stack.design(uses, vars, Stack.fetch(store)) do
+        {:ok, design, _keyless} -> design
+        {:error, _cycle} -> %{}
+      end
+    end
+
+    # A component placed: its sites inserted above the selected layer — or above the layer
+    # whose axis of the same identity it replaces, so the drop is what draws (§8.2) —
+    # lowest first, the last one selected and its node opened; a legend written through
+    # the ownership rule.
+    defp placed(socket, component, region, point) do
+      design = composed(socket)
+
+      case Place.node(component, region, design, point) do
+        {:sites, sites} ->
+          %{uses: uses, labels: labels, selected: selected} = socket.assigns
+          above_selected = (Stack.index_of(uses, selected) || length(uses) - 1) + 1
+          at = max(above_selected, above_replaced(socket, design, sites))
+
+          {issued, _} =
+            Enum.map_reduce(sites, uses, fn site, among ->
+              use = %{
+                Use.new(nil, among)
+                | ref: nil,
+                  local: %{site.kind => site.body},
+                  key: site.key
+              }
+
+              {use, among ++ [use]}
+            end)
+
+          last = List.last(issued)
+
+          socket
+          |> assign(
+            uses: List.flatten(List.insert_at(uses, at, issued)),
+            labels: Enum.reduce(issued, labels, &Map.put(&2, &1.id, "new #{site_kind(&1)}")),
+            selected: last.id,
+            adding: false,
+            notice: nil
+          )
+          |> opened_placed(component, last)
+
+        {:legend, node} ->
+          socket
+          |> update_layer([:frame], :legend, {:ok, node})
+          |> assign(adding: false, notice: nil)
+          |> opened("frame.legend")
+
+        {:error, :no_scale} ->
+          assign(socket, notice: "a legend needs a colour scale", adding: false)
+      end
+    end
+
+    defp site_kind(%Use{local: local}), do: local |> Map.keys() |> List.first()
+
+    # The gap above the layer that owns an axis the placed one replaces — its `{scale,
+    # side}` is an axis's identity in the cascade — or 0 when nothing is replaced.
+    defp above_replaced(socket, design, sites) do
+      %{uses: uses, store: store} = socket.assigns
+      axes = design |> Editor.nodes() |> Enum.filter(&(&1.kind == :axis))
+      owners = owned(socket.assigns, Stack.fetch(store), axes)
+
+      sites
+      |> Enum.filter(&(&1.kind == :axis))
+      |> Enum.flat_map(fn %{body: %{scale: scale, side: side}} ->
+        for node <- axes,
+            match?(%{scale: ^scale, side: ^side}, at(design, node.path)),
+            owner = Map.get(owners, node.path),
+            index = Stack.index_of(uses, owner),
+            do: index + 1
+      end)
+      |> Enum.max(fn -> 0 end)
+    end
+
+    # The placed node opened: the composed design's node of the site's kind that the site
+    # owns (§18.15) — an axis that replaced one of its identity owns that one's node.
+    defp opened_placed(socket, _component, %Use{id: id, local: local}) do
+      [{kind, _body}] = Map.to_list(local)
+      design = composed(socket)
+      nodes = design |> Editor.nodes() |> Enum.filter(&(&1.kind == kind))
+      owners = owned(socket.assigns, Stack.fetch(socket.assigns.store), nodes)
+
+      label =
+        case Enum.find(nodes, &(Map.get(owners, &1.path) == id)) do
+          nil -> root_of(kind)
+          node -> node.label
+        end
+
+      opened(socket, label)
+    end
+
+    defp root_of(:axis), do: "frame"
+    defp root_of(:mark), do: "marks"
+    defp root_of(:label), do: "labels"
+    defp root_of(:scale), do: "frame"
+    defp root_of(_kind), do: "design"
+
+    # A library entry copied onto the graph takes its placement from the region (§18.16):
+    # the copy's sites are the ones just inserted at `at`.
+    defp snapped(socket, entry, at, region) do
+      {sites, _vars, _signals} =
+        Stack.copies(entry, Stack.fetch(socket.assigns.store), names(socket.assigns.store))
+
+      count = length(sites)
+
+      update(socket, :uses, fn uses ->
+        uses
+        |> Enum.with_index()
+        |> Enum.map(fn {use, i} ->
+          if i >= at and i < at + count and use.ref == nil,
+            do: %{use | local: Place.placed(use.local, region)},
+            else: use
+        end)
+      end)
     end
 
     defp locked_notice(%{labels: labels}, use),
