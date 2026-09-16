@@ -1105,6 +1105,73 @@ defmodule Visualize.Chart.BuilderTest do
       assert js =~ "if (this.from !== null) return !graph;"
     end
 
+    test "a linked layer wears a lock, its forms are read-only, and it opens to be edited (spec/14 §18.8, §18.15)",
+         %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"name" => "frame:1", "at" => 3, "as" => "link"}, s)
+
+      assert BuilderFixture.names(s) == [:house, :shared, :panel, "Frame::wide"]
+      html = BuilderFixture.render(s)
+
+      # The row: locked class, the lock button that opens it, the title saying so.
+      assert html =~ ~s(class="vis-builder-layer vis-builder-layer-locked" data-builder-layer="3")
+
+      assert html =~
+               ~s(class="vis-builder-layer-lock" title="Open Frame::wide — from the library, edited by opening it")
+
+      assert html =~ ~s(phx-click="open_layer" phx-value-index="3")
+
+      assert html =~
+               "Frame::wide, layer 4 of 4: Enter to edit, arrows to move, drag to reorder, from the library: o to open"
+
+      assert length(Regex.scan(~r/vis-builder-layer-lock"/, html)) == 1
+
+      # Its page: `frame.size` is Frame::wide's word (width 900, on top), so the form is
+      # disabled under the note, and an edit is refused with the notice.
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "3"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "frame.size"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(class="vis-builder-form-body vis-builder-form-locked" disabled)
+      assert html =~ "from the library — open it to edit"
+      assert html =~ "vis-builder-page-locked"
+
+      {:noreply, refused} =
+        Builder.handle_event("edit", %{"_target" => ["width"], "width" => "500"}, s)
+
+      assert refused.assigns.uses == s.assigns.uses
+      assert refused.assigns.notice == "Frame::wide is from the library — open it to edit"
+
+      # The site's own parts stay the site's: it disables and enables.
+      {:noreply, off} = Builder.handle_event("toggle_layer", %{"index" => "3"}, s)
+      assert BuilderFixture.disabled(off) == MapSet.new([3])
+
+      # The lock, and `o`, open the entry at the chart level.
+      {:noreply, opened} = Builder.handle_event("open_layer", %{"index" => "3"}, s)
+      assert opened.assigns.open == %{id: {:frame, 1}, name: "Frame::wide", kind: :frame}
+
+      {:noreply, by_key} = Builder.handle_event("layer_key", %{"key" => "o", "index" => "3"}, s)
+      assert by_key.assigns.open.id == {:frame, 1}
+
+      # An inline layer has nothing to open, and no lock.
+      {:noreply, same} = Builder.handle_event("open_layer", %{"index" => "0"}, s)
+      assert same.assigns.open == s.assigns.open
+      refute BuilderFixture.render(s) =~ ~s(phx-click="open_layer" phx-value-index="0")
+    end
+
+    test "a section another, locked layer owns is read-only from any selection", %{socket: s} do
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"name" => "frame:1", "at" => 3, "as" => "link"}, s)
+
+      # `house` selected; the size is Frame::wide's, so its form is locked while the
+      # sources section, which is `shared`'s, is not.
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "frame.size"}, s)
+      assert BuilderFixture.render(s) =~ "vis-builder-form-locked"
+
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "sources.primary"}, s)
+      refute BuilderFixture.render(s) =~ "vis-builder-form-locked"
+    end
+
     test "the composer takes only its kind; the workspace takes anything", %{socket: s} do
       {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
 

@@ -416,7 +416,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
                   symbol_size)
 
       {extends, _} = :binary.match(html, ~s(phx-value-field="extends"))
-      {first, _} = :binary.match(html, "<fieldset")
+      {first, _} = :binary.match(html, ~s(<fieldset class="vis-builder-block))
       assert extends < first
 
       stroke =
@@ -430,7 +430,8 @@ defmodule Visualize.Chart.Builder.EditorTest do
       refute stroke =~ ~s(phx-value-field="font_family")
 
       # A kind whose keys carry no group has no block.
-      refute render_component(&Editor.panel/1, %{kind: :axis, node: %{}}) =~ "<fieldset"
+      refute render_component(&Editor.panel/1, %{kind: :axis, node: %{}}) =~
+               ~s(<fieldset class="vis-builder-block)
     end
 
     test "line height shows the points between lines it means" do

@@ -29,10 +29,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
+    alias Visualize.Chart.Builder.Glyphs
+
     attr(:id, :string, required: true, doc: "the hook element's id")
     attr(:layers, :list, required: true, doc: "the layers in precedence order, the higher last")
     attr(:selected, :integer, default: 0, doc: "the position of the layer being edited")
     attr(:disabled, :any, default: nil, doc: "the positions dropped from the stack, a `MapSet`")
+
+    attr(:locked, :any,
+      default: nil,
+      doc: "the positions whose site references a library entry, a `MapSet` (spec/14 §18.8)"
+    )
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
     attr(:class, :string, default: nil, doc: "appended to the panel's class")
 
@@ -70,6 +78,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
         >
           <span class="vis-builder-layer-name">{entry.name}</span>
           <button
+            :if={entry.locked?}
+            type="button"
+            draggable="false"
+            class="vis-builder-layer-lock"
+            title={"Open " <> entry.name <> " — from the library, edited by opening it"}
+            aria-label={"Open " <> entry.name}
+            phx-click="open_layer"
+            phx-value-index={entry.index}
+            phx-target={@target}
+          >{Phoenix.HTML.raw(Glyphs.icon(:lock))}</button>
+          <button
             type="button"
             draggable="false"
             class="vis-builder-layer-toggle"
@@ -78,7 +97,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-click="toggle_layer"
             phx-value-index={entry.index}
             phx-target={@target}
-          ><span class="vis-builder-action-label">{entry.toggle}</span></button>
+          >{Phoenix.HTML.raw(Glyphs.icon(entry.eye))}<span class="vis-builder-action-label">{entry.toggle}</span></button>
         </li>
       </ol>
       """
@@ -89,8 +108,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # One entry per layer: its name as `Visualize.Chart.explain/1` names it, its classes and
     # what its toggle now offers.
-    defp entries(%{layers: layers, selected: selected, disabled: disabled}) do
+    defp entries(%{layers: layers, selected: selected, disabled: disabled, locked: locked}) do
       off = disabled || MapSet.new()
+      held = locked || MapSet.new()
 
       count = length(layers)
 
@@ -100,15 +120,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
         %{
           index: index,
           name: name,
-          class: classes(index == selected, index in off),
+          class: classes(index == selected, index in off, index in held),
           toggle: if(index in off, do: "Enable", else: "Disable"),
-          says: says(name, index, count, index == selected, index in off)
+          eye: if(index in off, do: :eye_off, else: :eye),
+          locked?: index in held,
+          says: says(name, index, count, index == selected, index in off, index in held)
         }
       end
     end
 
-    # What the row is and what its keys do, for hover and for what is announced (§18.17).
-    defp says(name, index, count, selected?, disabled?) do
+    # What the row is and what its keys do, for hover and for what is announced (§18.17);
+    # a library layer says it is one, and that `o` opens it (§18.8).
+    defp says(name, index, count, selected?, disabled?, locked?) do
       state =
         [selected? && "selected", disabled? && "disabled"]
         |> Enum.filter(& &1)
@@ -116,16 +139,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       "#{name}, layer #{index + 1} of #{count}" <>
         if(state == "", do: "", else: ", " <> state) <>
-        ": Enter to edit, arrows to move, drag to reorder"
+        ": Enter to edit, arrows to move, drag to reorder" <>
+        if(locked?, do: ", from the library: o to open", else: "")
     end
 
     defp name({name, _layer}, _index), do: to_string(name)
     defp name(_layer, index), do: to_string(index)
 
-    defp classes(selected?, disabled?) do
+    defp classes(selected?, disabled?, locked?) do
       ["vis-builder-layer"]
       |> then(&if selected?, do: &1 ++ ["vis-builder-layer-selected"], else: &1)
       |> then(&if disabled?, do: &1 ++ ["vis-builder-layer-disabled"], else: &1)
+      |> then(&if locked?, do: &1 ++ ["vis-builder-layer-locked"], else: &1)
       |> Enum.join(" ")
     end
   end

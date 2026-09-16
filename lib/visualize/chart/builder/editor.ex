@@ -909,6 +909,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:source_name, :any, default: nil, doc: "the name a keyed source site is declared under")
     attr(:event, :string, default: "edit")
     attr(:origins, :map, default: %{})
+
+    attr(:locked, :boolean,
+      default: false,
+      doc: "the node is the library's: the fields are disabled under a note (§18.15)"
+    )
+
     attr(:target, :any, default: nil)
 
     def form_body(assigns) do
@@ -934,6 +940,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
           data-builder-node={@label}
         >
           <input :if={@label} type="hidden" name="_node" value={@label} />
+          <p :if={@locked} class="vis-builder-context-note vis-builder-locked-note">
+            from the library — open it to edit
+          </p>
+          <fieldset class={"vis-builder-form-body" <> if(@locked, do: " vis-builder-form-locked", else: "")} disabled={@locked}>
           <%= for {group, fields} <- @blocks do %>
             <fieldset :if={group} class={"vis-builder-block" <> if(fill_style(group, fields), do: " vis-builder-block-fill", else: "")}>
               <legend class="vis-builder-block-name">{group}</legend>
@@ -1034,6 +1044,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@target}
             />
           <% end %>
+          </fieldset>
         </form>
       """
     end
