@@ -1329,7 +1329,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       js = Visualize.Hooks.Builder.js_hook()
       assert js =~ "e.dataTransfer.setData('application/x-visualize-component', word);"
-      assert js =~ "return graph && (types.includes('application/x-visualize-component') ||"
+      assert js =~ "return graph && types.includes('application/x-visualize-component');"
       assert js =~ "const sx = rect.width > 0 ? width / rect.width : 1;"
       assert js =~ "this.push('place', { component: word, x: point.x, y: point.y });"
     end
@@ -1481,7 +1481,16 @@ defmodule Visualize.Chart.BuilderTest do
       assert js =~
                "return label.startsWith('frame.axes[') || label === 'frame.legend' || label.startsWith('labels[');"
 
-      assert js =~ "e.dataTransfer.setData('application/x-visualize-node', label);"
+      # A drawn node is moved with the pointer, never an HTML5 drag (spec/10 §16.3, #277).
+      refute js =~ "application/x-visualize-node"
+      assert js =~ "if (this.scope === 'graph') return this.startMove(e);"
+      assert js =~ "if (label === null || !this.movable(label)) return;"
+
+      assert js =~
+               "if (!moved && Math.abs(ev.clientX - start.x) + Math.abs(ev.clientY - start.y) < 4) return;"
+
+      assert js =~ "this.el.classList.add('vis-builder-moving');"
+      assert js =~ "if (!moved) return;"
 
       assert js =~
                "if (this.scope === 'graph') this.markRegion(this.regionAt(this.chartPoint(e)));"
