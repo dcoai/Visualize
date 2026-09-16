@@ -71,7 +71,8 @@ defmodule Visualize.Hooks.CanvasIncremental do
         }
       },
 
-      // 0x60 mode:u8 dx:f32 dy:f32 region_count:u8, then the whole stream (spec/09 §5.6).
+      // 0x60 mode:u8 dx:f32 dy:f32 vx:f32 vy:f32 vw:f32 vh:f32 region_count:u8, then the
+      // whole stream (spec/09 §5.6).
       fullRender(bytes) {
         const ctx = this.ctx;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -79,12 +80,27 @@ defmodule Visualize.Hooks.CanvasIncremental do
         if (bytes[0] !== 0x60) {
           throw new Error('Expected incremental header 0x60, got 0x' + bytes[0].toString(16));
         }
-        executeVisualizeBinary(ctx, bytes, 11);
+        executeVisualizeBinary(ctx, bytes, 27);
+      },
+
+      // The viewport of the record at bytes 10-25: the rectangle that scrolls (D-106).
+      readViewport(bytes) {
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        return {
+          x: view.getFloat32(10, true),
+          y: view.getFloat32(14, true),
+          w: view.getFloat32(18, true),
+          h: view.getFloat32(22, true)
+        };
       },
 
       incrementalRender(bytes, dx, dy) {
         const ctx = this.ctx;
         const offCtx = this.offscreenCtx;
+        if (bytes[0] !== 0x60) {
+          throw new Error('Expected incremental header 0x60, got 0x' + bytes[0].toString(16));
+        }
+        const v = this.readViewport(bytes);
 
         // Integer shifts: a sub-pixel copy blurs the canvas.
         const intDx = Math.round(dx);
@@ -93,22 +109,26 @@ defmodule Visualize.Hooks.CanvasIncremental do
         offCtx.clearRect(0, 0, this.offscreen.width, this.offscreen.height);
         offCtx.drawImage(this.canvas, 0, 0);
 
+        // Only the viewport scrolls: clear it, copy its own pixels back shifted, and
+        // leave every pixel outside it — a margin's axes — as it was (spec/09 §5.5).
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(v.x, v.y, v.w, v.h);
+        ctx.clip();
+        ctx.clearRect(v.x, v.y, v.w, v.h);
         // dx > 0 means the content moved left, so the copy lands at -dx.
-        ctx.drawImage(this.offscreen, -intDx, -intDy);
+        ctx.drawImage(this.offscreen, v.x, v.y, v.w, v.h, v.x - intDx, v.y - intDy, v.w, v.h);
+        ctx.restore();
 
         this.executeRegions(ctx, bytes);
       },
 
-      // 0x60 mode:u8 dx:f32 dy:f32 region_count:u8, then per region
-      // x:f32 y:f32 w:f32 h:f32 data_length:u32 data (spec/09 §5.5).
+      // After the 27-byte header, per region x:f32 y:f32 w:f32 h:f32 data_length:u32 data
+      // (spec/09 §5.5).
       executeRegions(ctx, bytes) {
         const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-        if (bytes[0] !== 0x60) {
-          throw new Error('Expected incremental header 0x60, got 0x' + bytes[0].toString(16));
-        }
-        let offset = 10;
+        let offset = 26;
         const regionCount = bytes[offset++];
 
         for (let r = 0; r < regionCount; r++) {

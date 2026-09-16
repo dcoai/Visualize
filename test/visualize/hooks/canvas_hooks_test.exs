@@ -120,8 +120,25 @@ defmodule Visualize.Hooks.CanvasHooksTest do
     hook = Hooks.CanvasIncremental.js_hook()
     assert hook =~ "0x60"
     assert hook =~ "if (mode === 'none') return;"
-    assert hook =~ "executeVisualizeBinary(ctx, bytes, 11)"
+    assert hook =~ "executeVisualizeBinary(ctx, bytes, 27)"
     assert hook =~ "ctx.clip();"
+  end
+
+  test "CanvasIncrementalChart copies the record's viewport alone, clipped to it (D-106, #294)" do
+    hook = Hooks.CanvasIncremental.js_hook()
+    # The viewport read from bytes 10-25, the regions counted at byte 26.
+    assert hook =~ "x: view.getFloat32(10, true)"
+    assert hook =~ "h: view.getFloat32(22, true)"
+    assert hook =~ "let offset = 26;"
+    # A source-rectangle copy inside a clip to the viewport: nothing outside it is read or
+    # written, so a margin's axes survive every scroll frame.
+    assert hook =~
+             ~r/ctx\.rect\(v\.x, v\.y, v\.w, v\.h\);\s+ctx\.clip\(\);\s+ctx\.clearRect\(v\.x, v\.y, v\.w, v\.h\);/
+
+    assert hook =~
+             "ctx.drawImage(this.offscreen, v.x, v.y, v.w, v.h, v.x - intDx, v.y - intDy, v.w, v.h);"
+
+    refute hook =~ "ctx.drawImage(this.offscreen, -intDx, -intDy)"
   end
 
   test "CanvasChart replays data-commands as JSON and data-script as JavaScript" do

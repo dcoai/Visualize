@@ -38,8 +38,11 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
   end
 
   defp full(assigns) do
-    assert [{:full_redraw, records}] =
-             assigns |> Page.build_chart_element() |> CanvasIncremental.encode_full_redraw() |> Decoder.decode()
+    assert [{:full_redraw, {+0.0, +0.0, 900.0, 500.0}, records}] =
+             assigns
+             |> Page.build_chart_element()
+             |> CanvasIncremental.encode_full_redraw({900, 500})
+             |> Decoder.decode()
 
     records
   end
@@ -92,8 +95,11 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
     regions = CanvasIncremental.exposed_regions({@scroll * 1.0, 0}, @inner)
     adjusted = Enum.map(regions, fn {rx, ry, rw, rh} -> {mx + rx, my + ry, rw, rh} end)
     elements = Enum.map(adjusted, fn bounds -> {bounds, Page.build_region_element(a, bounds)} end)
-    binary = CanvasIncremental.encode_incremental({@scroll * 1.0, 0}, {900, 500}, elements)
-    assert [{:incremental, :scroll_x, dx, +0.0, [region]}] = Decoder.decode(binary)
+    {iw, ih} = @inner
+    plot = {mx, my, iw, ih}
+    binary = CanvasIncremental.encode_incremental({@scroll * 1.0, 0}, {900, 500}, elements, viewport: plot)
+    # The plot is what scrolls: the margin, and the y axis in it, is outside the viewport (#294).
+    assert [{:incremental, :scroll_x, dx, +0.0, {60.0, 40.0, 810.0, 410.0}, [region]}] = Decoder.decode(binary)
     assert dx == @scroll * 1.0
 
     # The strip's lines are the full render's points at the same columns: the same x, the

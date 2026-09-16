@@ -23,12 +23,15 @@ defmodule Visualize.Backend.CanvasIncremental do
   [mode: u8]              # 0x01=scroll_x, 0x02=scroll_y, 0x03=scroll_xy, 0x00=full
   [dx: f32]               # horizontal scroll (pixels)
   [dy: f32]               # vertical scroll (pixels)
+  [vx: f32][vy: f32][vw: f32][vh: f32]  # the viewport: the rectangle that scrolls (D-106)
   [region_count: u8]      # number of exposed regions (0-3)
   [regions...]            # region data
   ```
 
   `exposed_regions/2` yields at most two regions (one strip, or an L of two); the record
-  admits three and `encode_incremental/3` raises on more (D-38).
+  admits three and `encode_incremental/4` raises on more (D-38). The decoder copies the
+  viewport's pixels alone, clipped to it, so a plot that scrolls inside a margin leaves
+  the margin — and the axes in it — untouched (#294).
 
   Each region:
   ```
@@ -251,6 +254,8 @@ defmodule Visualize.Backend.CanvasIncremental do
     - `scroll` - `{dx, dy}` scroll offset in pixels
     - `canvas_size` - `{width, height}` of the canvas
     - `region_elements` - List of `{bounds, element}` tuples for each exposed region
+    - `opts` - `viewport: {x, y, w, h}`, the rectangle of the canvas that scrolls; the
+      whole canvas when absent (D-106). The offset is classified against its size.
 
   ## Returns
 
@@ -262,14 +267,16 @@ defmodule Visualize.Backend.CanvasIncremental do
   """
   @max_regions 3
 
-  @spec encode_incremental(scroll_offset(), canvas_size(), [{bounds(), Element.t()}]) :: binary()
-  def encode_incremental({dx, dy}, {width, height}, region_elements) do
+  @spec encode_incremental(scroll_offset(), canvas_size(), [{bounds(), Element.t()}], keyword()) ::
+          binary()
+  def encode_incremental({dx, dy}, {width, height}, region_elements, opts \\ []) do
     if length(region_elements) > @max_regions do
       raise ArgumentError,
-            "encode_incremental/3 takes at most #{@max_regions} regions, got #{length(region_elements)}"
+            "encode_incremental/4 takes at most #{@max_regions} regions, got #{length(region_elements)}"
     end
 
-    mode = scroll_mode({dx, dy}, {width, height})
+    {vx, vy, vw, vh} = Keyword.get(opts, :viewport, {0, 0, width, height})
+    mode = scroll_mode({dx, dy}, {vw, vh})
 
     if mode == :none do
       raise ArgumentError, "a zero scroll offset is not an incremental update"
@@ -304,6 +311,10 @@ defmodule Visualize.Backend.CanvasIncremental do
       mode_byte::8,
       dx_f32::little-float-32,
       dy_f32::little-float-32,
+      to_float(vx)::little-float-32,
+      to_float(vy)::little-float-32,
+      to_float(vw)::little-float-32,
+      to_float(vh)::little-float-32,
       region_count::8,
       regions_binary::binary
     >>
@@ -312,11 +323,13 @@ defmodule Visualize.Backend.CanvasIncremental do
   @doc """
   Encodes a full redraw command (when scroll is too large for optimization).
 
-  This signals to the client to clear and redraw everything.
+  This signals to the client to clear and redraw everything. The record's viewport is the
+  canvas size when given, zeros otherwise; a full redraw does not consult it (D-106).
   """
-  @spec encode_full_redraw(Element.t()) :: binary()
-  def encode_full_redraw(element) do
+  @spec encode_full_redraw(Element.t(), canvas_size() | nil) :: binary()
+  def encode_full_redraw(element, canvas_size \\ nil) do
     element_binary = CanvasBinary.encode_element!(element)
+    {vw, vh} = canvas_size || {0, 0}
 
     <<
       @cmd_incremental_update::8,
@@ -324,6 +337,10 @@ defmodule Visualize.Backend.CanvasIncremental do
       0x00::8,
       0.0::little-float-32,
       0.0::little-float-32,
+      0.0::little-float-32,
+      0.0::little-float-32,
+      to_float(vw)::little-float-32,
+      to_float(vh)::little-float-32,
       # no regions
       0::8,
       element_binary::binary
