@@ -416,13 +416,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </p>
           </aside>
           <main class="vis-builder-main">
-            <div class="vis-builder-graph">
+            <div
+              id={@id <> "-graph"}
+              class="vis-builder-graph"
+              phx-hook="BuilderHook"
+              data-builder-target={@myself}
+              data-builder-scope="graph"
+            >
               <Preview.panel
                 :if={@preview?}
                 design={@design}
                 sources={@bound_pool}
                 vars={@bindings}
                 theme={@theme}
+                selected={@entry.label}
               />
               <p :if={!@preview?} class="vis-builder-context-note">
                 a {@kind} has no chart to look at; its form is in the inspector
@@ -803,6 +810,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("select_node", %{"node" => label}, socket) do
       {:noreply, assign(socket, node_label: label, facet: nil, field: nil, context: :inspect)}
+    end
+
+    # A click on the graph (spec/14 §18.16): the node the element draws is opened in the
+    # layer that owns it — the highest enabled layer with a value under its path, the
+    # provenance every write follows (§18.15) — selected first, then opened. A label the
+    # composed design has no node for is a no-op.
+    def handle_event("pick", %{"node" => label}, socket) do
+      %{uses: uses, store: store, stack_vars: vars} = socket.assigns
+      fetch = Stack.fetch(store)
+
+      design =
+        case Stack.design(uses, vars, fetch) do
+          {:ok, design, _keyless} -> design
+          {:error, _cycle} -> %{}
+        end
+
+      case Enum.find(Editor.nodes(design), &(&1.label == label)) do
+        nil ->
+          {:noreply, socket}
+
+        node ->
+          owner = socket.assigns |> owned(fetch, [node]) |> Map.get(node.path)
+          at = Enum.find_index(uses, &(&1.id == owner))
+          socket = if at, do: select(socket, at), else: socket
+          {:noreply, opened(socket, label)}
+      end
     end
 
     # Clicking into a field selects it, and the context panel becomes its picker

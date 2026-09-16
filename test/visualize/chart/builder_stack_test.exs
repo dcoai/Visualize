@@ -182,10 +182,10 @@ defmodule Visualize.Chart.Builder.StackTest do
       html = BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), :builder))
       assert html =~ ~s(<ol id="builder-layers" class="vis-builder-layers" phx-hook="BuilderHook")
       assert html =~ ~s(<table id="builder-inspector" class="vis-builder-inspector")
-      # The layers, the inspector, the editor's form, the node strip and the context's
-      # edge: every hook instance is targeted at the component (the variables panel and
-      # the pool list when theirs are open).
-      assert length(Regex.scan(~r/data-builder-target="-1"/, html)) == 5
+      # The layers, the inspector, the editor's form, the node strip, the context's edge
+      # and the graph (spec/14 §18.16): every hook instance is targeted at the component
+      # (the variables panel and the pool list when theirs are open).
+      assert length(Regex.scan(~r/data-builder-target="-1"/, html)) == 6
     end
   end
 

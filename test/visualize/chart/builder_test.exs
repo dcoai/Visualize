@@ -120,7 +120,9 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<div class="vis-builder-panels" style="--vis-builder-context: 400px">)
       assert html =~ ~s(<aside class="vis-builder-sidebar">)
       assert html =~ ~s(<main class="vis-builder-main">)
-      assert html =~ ~s(<div class="vis-builder-graph">)
+
+      assert html =~
+               ~s(<div id="builder-graph" class="vis-builder-graph" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="graph">)
 
       # The stack is inside the sidebar; the graph alone in the main column; the node strip
       # and the page of sections in the inspector (spec/14 §18.16).
@@ -3240,6 +3242,79 @@ defmodule Visualize.Chart.BuilderTest do
       # the second row is asserted with the rest of the grouping above.
       assert html =~ ~s(phx-value-root="frame" phx-target="-1">frame</button>)
       refute html =~ "vis-builder-key-errors"
+    end
+  end
+
+  describe "the graph selects (spec/14 §18.4, §18.16, spec/10 §16.3)" do
+    test "the graph carries the hook in scope graph, the chart its paths and the open node" do
+      html = at_node("marks[0]")
+
+      assert html =~
+               ~s(<div id="b-graph" class="vis-builder-graph" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="graph">)
+
+      assert html =~ ~s(data-builder-selected="marks[0]")
+      assert html =~ ~s(<g class="mark mark-line" data-node="marks[0]")
+      assert html =~ ~s(<g class="frame" data-node="frame")
+      assert html =~ ~s(data-node="frame.axes[1]")
+      assert html =~ ~s(<text class="label" data-node="labels[0]")
+
+      # The label is the resolved entry's. A sub-node the graph does not draw — a scale —
+      # is carried as it is; the hook outlines the drawn node it is under, `frame`.
+      assert at_node("frame.scales.x") =~ ~s(data-builder-selected="frame.scales.x")
+    end
+
+    test "pick opens the node in the layer that owns it" do
+      # `house` is selected; the frame's word is `shared`'s (its scales and axes), the
+      # mark and the label are `panel`'s (§18.15).
+      s = BuilderFixture.socket(BuilderFixture.layers(), selected: 0)
+      assert BuilderFixture.selected(s) == 0
+
+      {:noreply, picked} = Builder.handle_event("pick", %{"node" => "marks[0]"}, s)
+      assert BuilderFixture.selected(picked) == 2
+      assert picked.assigns.node_label == "marks[0]"
+      assert picked.assigns.context == :inspect
+      assert BuilderFixture.render(picked) =~ ~s(data-builder-selected="marks[0]")
+
+      {:noreply, picked} = Builder.handle_event("pick", %{"node" => "frame"}, s)
+      assert BuilderFixture.selected(picked) == 1
+      assert picked.assigns.node_label == "frame"
+
+      {:noreply, picked} = Builder.handle_event("pick", %{"node" => "frame.axes[0]"}, s)
+      assert BuilderFixture.selected(picked) == 1
+      assert picked.assigns.node_label == "frame.axes[0]"
+
+      {:noreply, picked} = Builder.handle_event("pick", %{"node" => "labels[0]"}, s)
+      assert BuilderFixture.selected(picked) == 2
+      assert picked.assigns.node_label == "labels[0]"
+    end
+
+    test "a pick for a node the chart does not have changes nothing" do
+      s = BuilderFixture.socket(BuilderFixture.layers(), selected: 0, node_label: "frame")
+      {:noreply, same} = Builder.handle_event("pick", %{"node" => "marks[7]"}, s)
+      assert BuilderFixture.selected(same) == 0
+      assert same.assigns.node_label == "frame"
+    end
+
+    test "the hook picks in scope graph and outlines the longest prefix of the open label" do
+      js = Visualize.Hooks.Builder.js_hook()
+      assert js =~ "if (this.scope === 'graph') {"
+      assert js =~ "e.target.closest('[data-node]')"
+      assert js =~ "this.push('pick', { node: node.getAttribute('data-node') })"
+      assert js =~ "svg[data-builder-selected]"
+      assert js =~ "label.startsWith(path + '.') || label.startsWith(path + '[')"
+      assert js =~ "classList.toggle('vis-builder-graph-selected'"
+      # Mounted and updated both outline: the render carries the label and the hook draws it.
+      assert length(Regex.scan(~r/this\.outline\(\);/, js)) == 2
+    end
+
+    test "hover and the open node are outlined from the stylesheet, in the accent" do
+      css = Builder.css()
+
+      assert css =~
+               ".vis-builder .vis-builder-graph [data-node]:hover:not(:has([data-node]:hover)) {"
+
+      assert css =~ ".vis-builder .vis-builder-graph .vis-builder-graph-selected {"
+      assert css =~ "outline: 2px solid var(--vis-builder-accent);"
     end
   end
 
