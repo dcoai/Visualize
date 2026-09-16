@@ -549,6 +549,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     .vis-builder-layer {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 4px;
       padding: 6px 8px;
@@ -562,12 +563,64 @@ if Code.ensure_loaded?(Phoenix.Component) do
       border-color: var(--vis-builder-line);
     }
 
-    .vis-builder-layer::before {
-      content: "⠿";
+    /* The row opens on what its layer declares (spec/14 §18.8): a › that turns to ⌄, and
+       a list beneath the name — root, then its members as buttons that open their node. */
+    .vis-builder .vis-builder-layer-expand {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 22px;
+      padding: 0;
+      border: 0;
+      background: transparent;
       color: var(--vis-builder-muted);
       font-size: 14px;
       line-height: 1;
-      cursor: grab;
+      cursor: pointer;
+    }
+
+    .vis-builder .vis-builder-layer-detail {
+      flex: 1 0 100%;
+      margin: 2px 0 4px 18px;
+      font-size: 12px;
+    }
+
+    .vis-builder .vis-builder-declared-root {
+      color: var(--vis-builder-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.04em;
+    }
+
+    .vis-builder .vis-builder-declared-members {
+      margin: 0 0 4px 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 6px;
+    }
+
+    .vis-builder .vis-builder-declared {
+      padding: 0 4px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: var(--vis-builder-panel);
+      color: var(--vis-builder-ink);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .vis-builder .vis-builder-declared:hover {
+      border-color: var(--vis-builder-accent);
+    }
+
+    .vis-builder .vis-builder-declared-none {
+      color: var(--vis-builder-muted);
+      font-style: italic;
+    }
+
+    .vis-builder .vis-builder-layer-disabled .vis-builder-layer-detail {
+      opacity: 0.6;
     }
 
     .vis-builder-layer-name {

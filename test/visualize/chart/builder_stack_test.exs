@@ -15,6 +15,8 @@ defmodule Visualize.Chart.Builder.StackTest do
   alias Visualize.Chart.Builder
   alias Visualize.Chart.Builder.Layers
 
+  doctest Layers
+
   for name <- ~w(layers layers_disabled inspector inspector_overrides)a do
     test "#{name} renders as recorded" do
       c = Keyword.fetch!(BuilderFixture.cases(), unquote(name))
