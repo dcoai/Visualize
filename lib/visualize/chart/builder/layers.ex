@@ -29,7 +29,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Editor, Glyphs}
+    alias Visualize.Chart.Builder.Glyphs
 
     attr(:id, :string, required: true, doc: "the hook element's id")
     attr(:layers, :list, required: true, doc: "the layers in precedence order, the higher last")
@@ -119,24 +119,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-value-index={entry.index}
             phx-target={@target}
           >{Phoenix.HTML.raw(Glyphs.icon(entry.eye))}<span class="vis-builder-action-label">{entry.toggle}</span></button>
-          <dl :if={entry.expanded? and entry.declared != []} class="vis-builder-layer-detail">
-            <%= for {root, members} <- entry.declared do %>
-              <dt class="vis-builder-declared-root">{root}</dt>
-              <dd class="vis-builder-declared-members">
-                <button
-                  :for={{name, path} <- members}
-                  type="button"
-                  draggable="false"
-                  class="vis-builder-declared"
-                  title={"open " <> name <> " in " <> entry.name}
-                  phx-click="open_declared"
-                  phx-value-index={entry.index}
-                  phx-value-path={Editor.label(path)}
-                  phx-target={@target}
-                >{name}</button>
-              </dd>
-            <% end %>
-          </dl>
+          <div :if={entry.expanded? and entry.declared != []} class="vis-builder-layer-detail">
+            <button
+              :for={kind <- entry.declared}
+              type="button"
+              draggable="false"
+              class="vis-builder-declared"
+              title={"open the " <> to_string(kind) <> " of " <> entry.name <> " in the inspector"}
+              phx-click="open_declared"
+              phx-value-index={entry.index}
+              phx-value-kind={kind}
+              phx-target={@target}
+            >{kind}</button>
+          </div>
           <p :if={entry.expanded? and entry.declared == []} class="vis-builder-layer-detail vis-builder-declared-none">
             declares nothing yet
           </p>
@@ -161,87 +156,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @frame_parts [:size, :margin, :legend, :projection, :facet, :viewport]
 
     @doc """
-    What a placed fragment declares (spec/14 §18.8): `[{root, [{name, path}]}]` in the
-    schema's order — `meta`, `theme`, `sources`, `vars`, `styles`, `defs`, `frame` (its
-    parts), `scales`, `axes`, `marks`, `labels` — only the roots it declares, each member
-    named as the strip names it: a keyed node by its key, an axis by `scale · side`, a mark
-    by its `id` or its `type`, a label by its anchor.
+    The kinds a placed fragment declares (spec/14 §18.8), in the schema's order — `meta`,
+    `theme`, `sources`, `vars`, `styles`, `defs`, `frame`, `scales`, `axes`, `marks`,
+    `labels` — only those it declares; the details are the inspector's.
 
         iex> Visualize.Chart.Builder.Layers.declared(%{styles: %{series: %{stroke: :red}}, frame: %{size: %{width: 1}, scales: %{x: %{kind: :linear}}, axes: [%{scale: :x, side: :bottom}]}})
-        [styles: [{"series", [:styles, :series]}], frame: [{"size", [:frame, :size]}], scales: [{"x", [:frame, :scales, :x]}], axes: [{"x · bottom", [:frame, :axes, 0]}]]
+        [:styles, :frame, :scales, :axes]
         iex> Visualize.Chart.Builder.Layers.declared(%{})
         []
     """
-    @spec declared(map()) :: [{atom(), [{String.t(), [atom() | non_neg_integer()]}]}]
+    @spec declared(map()) :: [atom()]
     def declared(fragment) when is_map(fragment) do
       frame = node_or_empty(Map.get(fragment, :frame))
-
-      for root <- @roots,
-          members = members(root, fragment, frame),
-          members != [],
-          do: {root, members}
+      for kind <- @roots, declares?(kind, fragment, frame), do: kind
     end
 
-    defp members(:meta, fragment, _frame) do
-      case Map.get(fragment, :meta) do
-        %{} = meta when map_size(meta) > 0 -> [{Map.get(meta, :name) || "meta", [:meta]}]
-        _none -> []
-      end
-    end
+    defp declares?(:meta, fragment, _frame), do: full?(Map.get(fragment, :meta))
+    defp declares?(:theme, fragment, _frame), do: Map.get(fragment, :theme) != nil
 
-    defp members(:theme, fragment, _frame) do
-      case Map.get(fragment, :theme) do
-        nil -> []
-        name when is_atom(name) -> [{to_string(name), [:theme]}]
-        _node -> [{"theme", [:theme]}]
-      end
-    end
+    defp declares?(kind, fragment, _frame) when kind in [:sources, :vars, :styles, :defs],
+      do: full?(Map.get(fragment, kind))
 
-    defp members(root, fragment, _frame) when root in [:sources, :vars, :styles, :defs],
-      do: keyed(Map.get(fragment, root), [root])
+    defp declares?(:frame, _fragment, frame),
+      do: Enum.any?(@frame_parts ++ [:kind], &(Map.get(frame, &1) != nil))
 
-    defp members(:frame, _fragment, frame) do
-      for part <- @frame_parts,
-          is_map(Map.get(frame, part)),
-          do: {to_string(part), [:frame, part]}
-    end
+    defp declares?(:scales, _fragment, frame), do: full?(Map.get(frame, :scales))
+    defp declares?(:axes, _fragment, frame), do: full?(Map.get(frame, :axes))
+    defp declares?(:marks, fragment, _frame), do: full?(Map.get(fragment, :marks))
+    defp declares?(:labels, fragment, _frame), do: full?(Map.get(fragment, :labels))
 
-    defp members(:scales, _fragment, frame), do: keyed(Map.get(frame, :scales), [:frame, :scales])
-
-    defp members(:axes, _fragment, frame) do
-      listed(Map.get(frame, :axes), [:frame, :axes], fn axis ->
-        "#{Map.get(axis, :scale, "?")} · #{Map.get(axis, :side, "?")}"
-      end)
-    end
-
-    defp members(:marks, fragment, _frame) do
-      listed(Map.get(fragment, :marks), [:marks], fn mark ->
-        to_string(Map.get(mark, :id) || Map.get(mark, :type) || "mark")
-      end)
-    end
-
-    defp members(:labels, fragment, _frame) do
-      listed(Map.get(fragment, :labels), [:labels], fn label ->
-        case Map.get(label, :anchor) do
-          nil -> "label"
-          {kind, at} -> "#{kind} #{at}"
-          anchor -> to_string(anchor)
-        end
-      end)
-    end
-
-    defp keyed(map, path) when is_map(map),
-      do: for({key, _node} <- Enum.sort(map), do: {to_string(key), path ++ [key]})
-
-    defp keyed(_other, _path), do: []
-
-    defp listed(list, path, name) when is_list(list) do
-      list
-      |> Enum.with_index()
-      |> Enum.map(fn {node, i} -> {if(is_map(node), do: name.(node), else: "?"), path ++ [i]} end)
-    end
-
-    defp listed(_other, _path, _name), do: []
+    defp full?(map) when is_map(map), do: map_size(map) > 0
+    defp full?(list) when is_list(list), do: list != []
+    defp full?(_other), do: false
 
     defp node_or_empty(node) when is_map(node) and not is_struct(node), do: node
     defp node_or_empty(_other), do: %{}

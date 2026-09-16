@@ -1561,70 +1561,67 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.design(s4).frame.scales.y == %{kind: :linear, domain: :auto}
     end
 
-    test "a layer row opens on what it declares, and a member opens its node in that layer (spec/14 §18.8, #281)",
+    test "a layer row opens on the kinds it declares, and a kind opens its page in the inspector (spec/14 §18.8, #285)",
          %{socket: s} do
       html = BuilderFixture.render(s)
-      # The expander, closed; no six-dot handle in the stylesheet.
+      # The expander, closed; no six-dot handle on the row.
       assert html =~
                ~s(class="vis-builder-layer-expand" title="show what shared declares" aria-label="show what shared declares" aria-expanded="false" phx-click="toggle_layer_detail" phx-value-index="1")
 
       refute html =~ "vis-builder-layer-detail"
       refute Builder.css() =~ ".vis-builder-layer::before"
 
-      # Open `shared`: its sources, scales and axes — and nothing it does not declare.
+      # Open `shared`: sources, scales, axes — the kinds alone, and nothing it does not declare.
       {:noreply, s1} = Builder.handle_event("toggle_layer_detail", %{"index" => "1"}, s)
       html = BuilderFixture.render(s1)
       assert html =~ ~s(aria-expanded="true" phx-click="toggle_layer_detail" phx-value-index="1")
-      assert html =~ ~s(<dt class="vis-builder-declared-root">sources</dt>)
 
-      assert html =~
-               ~s(phx-click="open_declared" phx-value-index="1" phx-value-path="sources.primary")
+      kinds =
+        Regex.scan(~r/phx-value-index="1" phx-value-kind="([a-z]+)"/, html)
+        |> Enum.map(&Enum.at(&1, 1))
 
-      assert html =~ ~s(<dt class="vis-builder-declared-root">scales</dt>)
-      assert html =~ ~s(phx-value-path="frame.scales.x")
-      assert html =~ ~s(<dt class="vis-builder-declared-root">axes</dt>)
-      assert html =~ ~s(>x · bottom</button>)
-      assert html =~ ~s(>y · left</button>)
-      refute html =~ ~s(<dt class="vis-builder-declared-root">styles</dt>)
-      refute html =~ ~s(<dt class="vis-builder-declared-root">marks</dt>)
+      assert kinds == ~w(sources scales axes)
+      refute html =~ "x · bottom"
 
-      # `house` declares styles and the frame's size and margin; `panel` marks and labels.
       {:noreply, s2} = Builder.handle_event("toggle_layer_detail", %{"index" => "0"}, s)
-      html = BuilderFixture.render(s2)
-      assert html =~ ~s(<dt class="vis-builder-declared-root">styles</dt>)
-      assert html =~ ~s(phx-value-index="0" phx-value-path="styles.series")
-      assert html =~ ~s(phx-value-index="0" phx-value-path="frame.size")
-      assert html =~ ~s(phx-value-index="0" phx-value-path="frame.margin")
+
+      assert Regex.scan(
+               ~r/phx-value-index="0" phx-value-kind="([a-z]+)"/,
+               BuilderFixture.render(s2)
+             )
+             |> Enum.map(&Enum.at(&1, 1)) == ~w(theme styles frame)
 
       {:noreply, s3} = Builder.handle_event("toggle_layer_detail", %{"index" => "2"}, s)
-      html = BuilderFixture.render(s3)
 
-      assert html =~
-               ~s(phx-value-index="2" phx-value-path="marks[0]" phx-target="-1">series</button>)
+      assert Regex.scan(
+               ~r/phx-value-index="2" phx-value-kind="([a-z]+)"/,
+               BuilderFixture.render(s3)
+             )
+             |> Enum.map(&Enum.at(&1, 1)) == ~w(vars marks labels)
 
-      assert html =~
-               ~s(phx-value-index="2" phx-value-path="labels[0]" phx-target="-1">title</button>)
+      # A kind opens its page in the inspector with the layer selected.
+      {:noreply, o} =
+        Builder.handle_event("open_declared", %{"index" => "0", "kind" => "styles"}, s)
 
-      assert html =~ ~s(phx-value-index="2" phx-value-path="vars.unit")
+      assert BuilderFixture.selected(o) == 0 and o.assigns.node_label == "styles.series" and
+               o.assigns.context == :inspect
 
-      # A member opens its node in its layer: a keyed node at its path, an axis by its
-      # identity — shared's `frame.axes[1]` is y · left in the chart too.
-      {:noreply, opened} =
-        Builder.handle_event("open_declared", %{"index" => "0", "path" => "styles.series"}, s)
+      {:noreply, o} =
+        Builder.handle_event("open_declared", %{"index" => "1", "kind" => "axes"}, s)
 
-      assert BuilderFixture.selected(opened) == 0 and opened.assigns.node_label == "styles.series"
+      assert BuilderFixture.selected(o) == 1 and o.assigns.node_label == "frame"
 
-      {:noreply, opened} =
-        Builder.handle_event("open_declared", %{"index" => "1", "path" => "frame.axes[1]"}, s)
+      {:noreply, o} =
+        Builder.handle_event("open_declared", %{"index" => "2", "kind" => "marks"}, s)
 
-      assert BuilderFixture.selected(opened) == 1 and opened.assigns.node_label == "frame.axes[1]"
+      assert BuilderFixture.selected(o) == 2 and o.assigns.node_label == "marks[0]"
 
-      {:noreply, opened} =
-        Builder.handle_event("open_declared", %{"index" => "2", "path" => "marks[0]"}, s)
+      {:noreply, o} =
+        Builder.handle_event("open_declared", %{"index" => "2", "kind" => "vars"}, s)
 
-      assert BuilderFixture.selected(opened) == 2 and opened.assigns.node_label == "marks[0]"
+      assert BuilderFixture.selected(o) == 2 and o.assigns.context == :variables
 
-      # The keys: Right opens, Left closes; the detail closes again from the button.
+      # The keys: Right opens, Left closes; the button closes again.
       {:noreply, keyed} =
         Builder.handle_event("layer_key", %{"key" => "ArrowRight", "index" => "1"}, s)
 
@@ -1644,7 +1641,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.render(empty) =~ "declares nothing yet"
     end
 
-    test "a layer referencing a composite lists what the composite declares (spec/14 §18.8, #283)",
+    test "a layer referencing a composite lists the kinds the composite declares (spec/14 §18.8, #283)",
          %{socket: s} do
       # `Charts::pair` is a composite of a reference to `Frame::wide` and an inline site.
       {:noreply, s1} =
@@ -1653,11 +1650,11 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} = Builder.handle_event("toggle_layer_detail", %{"index" => "3"}, s1)
       html = BuilderFixture.render(s1)
       refute html =~ "declares nothing yet"
-      assert html =~ ~s(phx-value-index="3" phx-value-path="frame.size")
+      assert html =~ ~s(phx-value-index="3" phx-value-kind="frame")
 
       # A disabled layer still lists what it declares.
       {:noreply, s2} = Builder.handle_event("toggle_layer", %{"index" => "3"}, s1)
-      assert BuilderFixture.render(s2) =~ ~s(phx-value-index="3" phx-value-path="frame.size")
+      assert BuilderFixture.render(s2) =~ ~s(phx-value-index="3" phx-value-kind="frame")
     end
 
     test "the composer takes only its kind; the workspace takes anything", %{socket: s} do

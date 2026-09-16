@@ -580,23 +580,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     .vis-builder .vis-builder-layer-detail {
       flex: 1 0 100%;
-      margin: 2px 0 4px 18px;
-      font-size: 12px;
-    }
-
-    .vis-builder .vis-builder-declared-root {
-      color: var(--vis-builder-muted);
-      font-weight: 600;
-      text-transform: uppercase;
-      font-size: 10px;
-      letter-spacing: 0.04em;
-    }
-
-    .vis-builder .vis-builder-declared-members {
-      margin: 0 0 4px 0;
       display: flex;
       flex-wrap: wrap;
       gap: 2px 6px;
+      margin: 2px 0 4px 18px;
+      font-size: 12px;
     }
 
     .vis-builder .vis-builder-declared {
