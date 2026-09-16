@@ -241,9 +241,28 @@ defmodule ExamplesWeb.ChartLive do
           <%= if @backend == :svg do %>
             <%= Phoenix.HTML.raw(render_chart_svg(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius)) %>
           <% else %>
-            <div id="canvas-chart" phx-hook="CanvasBinaryChart" data-binary={render_chart_canvas(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius)}>
-              <canvas width="700" height="450"></canvas>
-            </div>
+            <%= if Design.design?(@module) do %>
+              <%!-- Canvas mode is the hybrid split (spec/14 §12.6, #268): the marks on a binary canvas under the furniture as SVG. --%>
+              <% hybrid = render_chart_hybrid(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius) %>
+              <div class="hybrid-wrapper" style={"position: relative; width: #{hybrid.width}px; height: #{hybrid.height}px;"}>
+                <div id="canvas-chart" phx-hook="CanvasBinaryChart" data-binary={hybrid.canvas} data-width={hybrid.width} data-height={hybrid.height} style="position: absolute; top: 0; left: 0; z-index: 1;">
+                  <canvas width={hybrid.width} height={hybrid.height} style="display: block;"></canvas>
+                </div>
+                <div class="hybrid-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(hybrid.static) %>
+                </div>
+                <div :if={hybrid.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(hybrid.dynamic_svg) %>
+                </div>
+              </div>
+            <% else %>
+              <div id="canvas-chart" phx-hook="CanvasBinaryChart" data-binary={render_chart_canvas(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius)}>
+                <canvas width="700" height="450"></canvas>
+              </div>
+              <p class="canvas-note" style="margin-top: 0.5rem; color: #666; font-size: 0.9rem;">
+                The binary stream carries the marks and no text (spec/09 §4.4), so this chart's axes and labels draw once it is a design (#124); the charts that are designs draw them as SVG over the canvas.
+              </p>
+            <% end %>
           <% end %>
         </div>
 
@@ -544,6 +563,12 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
+  # Canvas mode for a design: the hybrid split, the furniture as SVG over the binary
+  # canvas of the marks (spec/14 §12.6, #268).
+  defp render_chart_hybrid(module, palette, tick, animating, slug, hex_radius) do
+    Design.hybrid(module, build_chart_opts(palette, tick, animating, slug, hex_radius))
+  end
+
   defp render_chart_canvas(module, palette, tick, animating, slug, hex_radius) do
     opts = build_chart_opts(palette, tick, animating, slug, hex_radius)
 
@@ -563,33 +588,10 @@ defmodule ExamplesWeb.ChartLive do
 
   defp backend_sample_code(:svg, module), do: module.sample_code()
 
-  defp backend_sample_code(:canvas, _module) do
-    ~S"""
-    # Canvas Binary Rendering
-    # Encodes chart as compact binary for efficient transfer
-
-    # In LiveView:
-    element = MyChart.render(opts)
-    {:ok, binary} = Visualize.Backend.CanvasBinary.encode_element(element)
-
-    {:noreply, push_event(socket, "canvas_update", %{
-      binary: Base.encode64(binary)
-    })}
-
-    # In template - use the CanvasBinaryChart hook:
-    <div id="chart" phx-hook="CanvasBinaryChart" data-binary={@binary}>
-      <canvas width="700" height="450"></canvas>
-    </div>
-
-    # The hook decodes and renders:
-    # - 0x01: Simple paths (move + line sequences)
-    # - 0x02: Complex paths (bezier, quadratic, arcs)
-    # - 0x03: Circles
-    # - 0x04: Rectangles
-    # - 0x10: Style (fill, stroke, lineWidth)
-    # - 0x20: Transform (translate, scale, rotate)
-    """
+  defp backend_sample_code(:canvas, module) do
+    if Design.design?(module), do: hybrid_sample_code(), else: binary_sample_code()
   end
+
 
   defp backend_sample_code(:canvas_incremental, _module) do
     ~S"""
@@ -629,6 +631,62 @@ defmodule ExamplesWeb.ChartLive do
     # 4. Render new commands
     """
   end
+
+  # A chart that is not yet a design: the whole element on the binary stream.
+  defp binary_sample_code do
+    ~S"""
+    # Canvas Binary Rendering
+    # Encodes chart as compact binary for efficient transfer
+
+    # In LiveView:
+    element = MyChart.render(opts)
+    {:ok, binary} = Visualize.Backend.CanvasBinary.encode_element(element)
+
+    {:noreply, push_event(socket, "canvas_update", %{
+      binary: Base.encode64(binary)
+    })}
+
+    # In template - use the CanvasBinaryChart hook:
+    <div id="chart" phx-hook="CanvasBinaryChart" data-binary={@binary}>
+      <canvas width="700" height="450"></canvas>
+    </div>
+
+    # The hook decodes and renders:
+    # - 0x01: Simple paths (move + line sequences)
+    # - 0x02: Complex paths (bezier, quadratic, arcs)
+    # - 0x03: Circles
+    # - 0x04: Rectangles
+    # - 0x10: Style (fill, stroke, lineWidth)
+    # - 0x20: Transform (translate, scale, rotate)
+    """
+  end
+
+  # The compile-and-render call the page makes for a design in Canvas mode (#268).
+  defp hybrid_sample_code do
+    ~S"""
+    # Canvas mode is the hybrid split (spec/14 §12): the furniture — axes, grid,
+    # legend, labels — as SVG, the marks on a binary canvas beneath it.
+
+    {:ok, applied} = Visualize.Chart.apply(design, sources: sources)
+    {:ok, compiled} = Visualize.Chart.compile(applied, ceiling: 1)
+    static = Visualize.Chart.Compiled.static(compiled)          # the furniture, once
+    {tick, compiled} = Visualize.Chart.Compiled.tick(compiled, applied.sources)
+    # tick.canvas — the marks as a base64 binary stream for the hook
+    # tick.svg    — any SVG-layer marks (text, small marks) for the layer above
+
+    # In the template, the canvas under the static SVG:
+    <div style="position: relative">
+      <div id="chart" phx-hook="CanvasBinaryChart" data-binary={tick.canvas}
+           style="position: absolute; top: 0; left: 0">
+        <canvas width={width} height={height}></canvas>
+      </div>
+      <div style="position: absolute; top: 0; left: 0; pointer-events: none">
+        <%= Phoenix.HTML.raw(static) %>
+      </div>
+    </div>
+    """
+  end
+
 
   defp animation_sample_code(:svg) do
     ~S"""

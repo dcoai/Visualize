@@ -167,6 +167,34 @@ defmodule Examples.ChartsTest do
     end
   end
 
+  # Canvas mode on the gallery page is the split (spec/14 §12.6, #268): the furniture as
+  # SVG, the marks on the binary canvas — so the axes a whole-chart binary stream drops
+  # (spec/09 §4.4) are drawn.
+  test "every design's hybrid draws its furniture as SVG over a binary canvas of its marks" do
+    for module <- charts() do
+      hybrid = Design.hybrid(module, [])
+      axes = Design.applied(module, []).chart.frame |> Map.get(:axes, [])
+
+      assert hybrid.static =~ "<svg"
+      assert hybrid.width > 0 and hybrid.height > 0
+
+      # The furniture is SVG — static where its scales are fixed, in the tick's SVG layer
+      # where a domain is :auto (spec/14 §12.2); the page draws both over the canvas.
+      furniture = hybrid.static <> hybrid.dynamic_svg
+      assert length(Regex.scan(~r/class="axis /, furniture)) == length(axes)
+
+      # The marks are on the canvas — literal paints, no CSS reference — or, for a facet
+      # frame, in the SVG layer (§12.3).
+      if hybrid.canvas != "" do
+        binary = Base.decode64!(hybrid.canvas)
+        assert byte_size(binary) > 0
+        assert :binary.match(binary, "var(") == :nomatch
+      else
+        assert hybrid.dynamic_svg =~ ~s(class="mark )
+      end
+    end
+  end
+
   test "sample_code/0 is the design a reader would write" do
     for module <- charts() do
       code = module.sample_code()
