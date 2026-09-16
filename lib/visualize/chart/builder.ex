@@ -166,6 +166,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          library_open: true,
          context_width: 400,
          collapsed: MapSet.new(),
+         guessed: MapSet.new(),
          expanded: MapSet.new(),
          find: "",
          node_label: "design"
@@ -513,6 +514,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   owners={@page.owners}
                   layer={@page.layer}
                   locked={@page.locked}
+                  guessed={@guessed}
                   target={@myself}
                 />
               </details>
@@ -546,6 +548,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 owners={@page.owners}
                 layer={@page.layer}
                 locked={@page.locked}
+                guessed={@guessed}
                 target={@myself}
               />
             </div>
@@ -2695,7 +2698,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp edited(socket, _entry, nil), do: socket
-    defp edited(socket, entry, {key, parsed}), do: update_layer(socket, entry.path, key, parsed)
+
+    defp edited(socket, entry, {key, parsed}),
+      do: socket |> update_layer(entry.path, key, parsed) |> unguessed(entry, key)
+
+    # An edited field is no longer a guess; a mark's data changed clears its channels' (§18.16).
+    defp unguessed(socket, entry, key) do
+      prefix = if key == :data and entry.kind == :mark, do: entry.label <> ".channels.", else: nil
+      own = entry.label <> "." <> to_string(key)
+
+      update(socket, :guessed, fn guessed ->
+        guessed
+        |> MapSet.delete(own)
+        |> MapSet.reject(&(prefix != nil and String.starts_with?(&1, prefix)))
+      end)
+    end
 
     # A write goes to the use that owns what it writes — the one surface that writes
     # `Use.local` (spec/14 §19.3): the layer that gives the key's value, else the node's
@@ -2834,7 +2851,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The placed node opened: the composed design's node of the site's kind that the site
     # owns (§18.15) — an axis that replaced one of its identity owns that one's node.
     defp opened_placed(socket, _component, %Use{id: id, local: local}) do
-      [{kind, _body}] = Map.to_list(local)
+      [{kind, body}] = Map.to_list(local)
       design = composed(socket)
       nodes = design |> Editor.nodes() |> Enum.filter(&(&1.kind == kind))
       owners = owned(socket.assigns, Stack.fetch(socket.assigns.store), nodes)
@@ -2845,8 +2862,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
           node -> node.label
         end
 
-      opened(socket, label)
+      socket |> guessed(label, kind, body) |> opened(label)
     end
+
+    # A placed mark's guessed channels are marked as guesses (§18.16) until edited.
+    defp guessed(socket, label, :mark, %{channels: channels}) when map_size(channels) > 0 do
+      update(socket, :guessed, fn set ->
+        Enum.reduce(channels, set, fn {key, _}, acc ->
+          MapSet.put(acc, "#{label}.channels.#{key}")
+        end)
+      end)
+    end
+
+    defp guessed(socket, _label, _kind, _body), do: socket
 
     defp root_of(:axis), do: "frame"
     defp root_of(:mark), do: "marks"

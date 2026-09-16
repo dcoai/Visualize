@@ -178,9 +178,62 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    def node({:mark, type}, _region, _design, _point) do
-      {:sites, [%{kind: :mark, body: %{type: type}, key: nil}]}
+    def node({:mark, type}, _region, design, _point) do
+      {:sites, [%{kind: :mark, body: Map.merge(%{type: type}, guess(design, type)), key: nil}]}
     end
+
+    @doc """
+    A mark type's `data` and `channels` guessed over the composed design (spec/14 §18.16):
+    the chart's first source — the one the last mark binds, else the first declared by
+    name — and its fields in order over the type's required channels; fewer fields leave
+    the rest unbound; no source, nothing.
+
+        iex> design = %{sources: %{s: %{fields: [:hour, :value, :extra]}}}
+        iex> Visualize.Chart.Builder.Place.guess(design, :line)
+        %{data: :s, channels: %{x: :hour, y: :value}}
+        iex> Visualize.Chart.Builder.Place.guess(design, :rect)
+        %{data: :s, channels: %{x0: :hour, x1: :value, y0: :extra}}
+        iex> Visualize.Chart.Builder.Place.guess(%{}, :line)
+        %{}
+    """
+    @spec guess(map(), atom()) :: map()
+    def guess(design, type) do
+      case first_source(design) do
+        nil ->
+          %{}
+
+        {name, fields} ->
+          %{required: required} = Schema.channels(type)
+          channels = required |> Enum.zip(fields) |> Map.new()
+          %{data: name, channels: channels}
+      end
+    end
+
+    # The source the last mark binds, else the first declared by name, with its fields.
+    defp first_source(design) when is_map(design) do
+      sources = Map.get(design, :sources)
+      sources = if is_map(sources), do: sources, else: %{}
+
+      bound =
+        case Map.get(design, :marks) do
+          [_ | _] = marks -> marks |> List.last() |> then(&(is_map(&1) && Map.get(&1, :data)))
+          _none -> nil
+        end
+
+      name =
+        cond do
+          is_atom(bound) and bound != nil and Map.has_key?(sources, bound) -> bound
+          map_size(sources) > 0 -> sources |> Map.keys() |> Enum.sort() |> List.first()
+          true -> nil
+        end
+
+      case name && Map.get(sources, name) do
+        %{fields: fields} when is_list(fields) -> {name, Enum.filter(fields, &is_atom/1)}
+        _other -> nil
+      end
+    end
+
+    defp first_source(_design), do: nil
 
     @doc """
     A library entry's body placed: an axis's `side`, a label's `anchor` set from the region

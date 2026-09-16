@@ -66,6 +66,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "the labels of the layers that are the library's, read-only here (§18.15)"
     )
 
+    attr(:guessed, :any,
+      default: MapSet.new(),
+      doc: "the field labels a placed mark guessed, drawn as guesses (§18.16)"
+    )
+
     attr(:target, :any, default: nil)
     attr(:depth, :integer, default: 0)
 
@@ -117,6 +122,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 owners={@owners}
                 layer={@layer}
                 locked={@locked}
+                guessed={@guessed}
                 target={@target}
                 depth={@depth + 1}
               />
@@ -165,6 +171,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         source_name={@page.source_name}
         origins={origins(@page.owners, @path)}
         locked={locked?(@page, @path)}
+        guessed={@page.guessed}
         target={@page.target}
       />
       """

@@ -593,6 +593,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       ~H"""
       <label
         class={field_class(@field, @selected, @found)}
+        title={if(Map.get(@field, :guess?), do: "guessed from the source's fields — check it")}
         data-builder-ref={@field.ref && to_string(@field.key)}
         data-builder-bind={@field.key}
         phx-keyup="select_field"
@@ -915,6 +916,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "the node is the library's: the fields are disabled under a note (§18.15)"
     )
 
+    attr(:guessed, :any,
+      default: MapSet.new(),
+      doc: "the field labels — `marks[0].channels.x` — a placed mark guessed (§18.16)"
+    )
+
     attr(:target, :any, default: nil)
 
     def form_body(assigns) do
@@ -1100,6 +1106,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         %{
           key: spec.key,
+          guess?:
+            MapSet.member?(
+              Map.get(assigns, :guessed) || MapSet.new(),
+              guess_label(assigns, spec.key)
+            ),
           faces: if(faced? and spec.key == :font_weight, do: face_rows(node), else: []),
           # The face list stands in for the weight's box (§18.6).
           widget: if(faced? and spec.key == :font_weight, do: :faces, else: shape(widget)),
@@ -1170,9 +1181,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shape({:items, _scalar}), do: :items
     defp shape(widget), do: widget
 
+    # The label a guess is kept under: the node's label and the key (§18.16).
+    defp guess_label(%{label: label}, key) when is_binary(label), do: "#{label}.#{key}"
+    defp guess_label(_assigns, key), do: to_string(key)
+
     defp field_class(field, selected, found) do
       ["vis-builder-field"]
       |> then(&if field.errors != [], do: &1 ++ ["vis-builder-field-needs"], else: &1)
+      |> then(&if Map.get(field, :guess?), do: &1 ++ ["vis-builder-field-guess"], else: &1)
       |> then(
         &if selected == to_string(field.key), do: &1 ++ ["vis-builder-field-selected"], else: &1
       )

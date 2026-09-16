@@ -1334,6 +1334,60 @@ defmodule Visualize.Chart.BuilderTest do
       assert js =~ "this.push('place', { component: word, x: point.x, y: point.y });"
     end
 
+    test "a placed mark guesses its channels over the chart's first source, marked until edited (spec/14 §18.16)",
+         %{socket: s} do
+      # The fixture's one source is `primary` with fields [:t, :v]; a line guesses x: t, y: v.
+      {:noreply, s1} =
+        Builder.handle_event("place", %{"component" => "mark:line", "x" => 200, "y" => 100}, s)
+
+      [_, placed | _] = s1.assigns.uses
+
+      assert %Use{local: %{mark: %{type: :line, data: :primary, channels: %{x: :t, y: :v}}}} =
+               placed
+
+      label = s1.assigns.node_label
+      assert label =~ ~r/^marks\[\d\]$/
+      assert s1.assigns.guessed == MapSet.new(["#{label}.channels.x", "#{label}.channels.y"])
+
+      # It draws at once, and the channel fields say they were guessed.
+      html = BuilderFixture.render(s1)
+      assert length(Regex.scan(~r/class="mark mark-line"/, html)) == 2
+
+      assert html =~
+               ~s(class="vis-builder-field vis-builder-field-guess" title="guessed from the source&#39;s fields — check it")
+
+      assert length(Regex.scan(~r/vis-builder-field-guess"/, html)) == 2
+
+      # Editing `x` clears its mark alone; changing `data` clears the mark's guesses.
+      {:noreply, s2} = Builder.handle_event("select_node", %{"node" => label <> ".channels"}, s1)
+      {:noreply, s2} = Builder.handle_event("edit", %{"_target" => ["x"], "x" => "v"}, s2)
+      assert s2.assigns.guessed == MapSet.new(["#{label}.channels.y"])
+      assert length(Regex.scan(~r/vis-builder-field-guess"/, BuilderFixture.render(s2))) == 1
+
+      {:noreply, s3} = Builder.handle_event("select_node", %{"node" => label}, s1)
+
+      {:noreply, s3} =
+        Builder.handle_event("edit", %{"_target" => ["data"], "data" => "primary"}, s3)
+
+      assert s3.assigns.guessed == MapSet.new()
+
+      # A rect over two fields binds x0 and x1 and leaves y0, y1 for the needs marks.
+      {:noreply, s4} =
+        Builder.handle_event("place", %{"component" => "mark:rect", "x" => 200, "y" => 100}, s)
+
+      assert %Use{local: %{mark: %{type: :rect, data: :primary, channels: %{x0: :t, x1: :v}}}} =
+               Enum.at(s4.assigns.uses, 1)
+
+      # `+ mark` guesses the same; a chart with no source places the type alone.
+      {:noreply, s5} = Builder.handle_event("add_site", %{"kind" => "mark"}, s)
+      assert %Use{local: %{mark: %{type: :line, data: :primary}}} = Enum.at(s5.assigns.uses, 1)
+
+      bare = BuilderFixture.socket([{:base, %{frame: %{kind: :cartesian}}}])
+      {:noreply, s6} = Builder.handle_event("add_site", %{"kind" => "mark"}, bare)
+      assert %Use{local: %{mark: %{type: :line}}} = Enum.at(s6.assigns.uses, 1)
+      assert s6.assigns.guessed == MapSet.new()
+    end
+
     test "the composer takes only its kind; the workspace takes anything", %{socket: s} do
       {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
 
