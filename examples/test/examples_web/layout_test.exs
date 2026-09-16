@@ -29,6 +29,26 @@ defmodule ExamplesWeb.LayoutTest do
       assert @layout =~ "the hooks module did not load"
     end
 
+    # The layout defines no hook of its own (#270): it once redefined CanvasChart,
+    # CanvasBinaryChart and CanvasIncrementalChart with copies whose decoder was frozen
+    # before D-73's f32 records, so every canvas page ran a decoder that did not know the
+    # bytes the library sends, and the High-Performance page drew nothing.
+    test "defines no hook of its own; the canvas hooks are the library's" do
+      refute @layout =~ ~r/const \w+Hook\s*=\s*\{/
+      refute @layout =~ ~r/const Canvas\w+\s*=\s*\{/
+      refute @layout =~ "executeBinaryCommands"
+      assert @layout =~ "hooks: { ...(window.VisualizeHooks || {}) }"
+
+      hooks = Visualize.Hooks.js_code()
+
+      for name <- ~w(CanvasChart CanvasBinaryChart CanvasIncrementalChart) do
+        assert hooks =~ "export const #{name}", "#{name} is not in Visualize.Hooks.js_code/0"
+      end
+
+      # The library's decoder knows every record the encoder writes, the f32 ones included.
+      for opcode <- ["0x05", "0x06", "0x07"], do: assert(hooks =~ "case #{opcode}:")
+    end
+
     test "carries the hook the builder needs, and the rest of them" do
       hooks = Visualize.Hooks.js_code()
 
