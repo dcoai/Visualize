@@ -116,4 +116,29 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
       end
     end
   end
+  test "samples arrive by the clock and a frame scrolls by the whole columns they fill (#300)" do
+    a = assigns(2) |> Map.merge(%{data_rate: 600, pending: 0, carry: 0.0})
+
+    # 600 samples/s for 16 ms is 9.6 samples: 9 arrive, 0.6 carries; at two per column that is
+    # four columns with one sample pending.
+    assert {4, 9, %{pending: 1, carry: carry}} = Page.arrivals(a, 16)
+    assert_in_delta carry, 0.6, 1.0e-9
+
+    # The next tick adds its samples to the pending one and the carry: 0.6 + 9.6 = 10.2 →
+    # 10 arrive, 11 pending → five columns, one pending, 0.2 carried.
+    assert {5, 10, %{pending: 1, carry: carry}} = Page.arrivals(%{a | pending: 1, carry: carry}, 16)
+    assert_in_delta carry, 0.2, 1.0e-9
+
+    # A slow rate fills no column on most ticks: the frame draws nothing, and nothing is lost.
+    slow = %{a | data_rate: 60}
+    assert {0, 0, %{pending: 0, carry: c1}} = Page.arrivals(slow, 16)
+    assert_in_delta c1, 0.96, 1.0e-9
+    assert {0, 1, %{pending: 1, carry: c2}} = Page.arrivals(%{slow | carry: c1}, 16)
+    assert_in_delta c2, 0.92, 1.0e-9
+
+    # The columns a tick yields are what the frame scrolls by: whole pixels, whole samples.
+    scroll = Scroll.advance(a.scroll, 4)
+    assert scroll.origin == 8
+    assert length(Scroll.shift(scroll, a.random_data, 4, fn _ -> 0.0 end)) == a.points_per_series
+  end
 end
