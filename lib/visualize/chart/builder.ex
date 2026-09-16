@@ -1951,22 +1951,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # Each layer's own contribution placed where the design keeps its kind, by position,
-    # disabled ones included — what its row lists when opened (§18.8).
+    # disabled ones included — what its row lists when opened (§18.8); a reference to a
+    # composite is what it flattens to, as the stack reads it (#283).
     defp placed_layers(%{uses: uses, store: store}) do
       fetch = Stack.fetch(store)
-
-      for use <- uses do
-        fragment =
-          case Use.resolve(%{use | mask: []}, fetch) do
-            {:ok, fragment} -> fragment
-            {:missing, _ref, fragment} -> fragment
-          end
-
-        case Composite.place(fragment, use) do
-          {:ok, placed} -> placed
-          :keyless -> %{}
-        end
-      end
+      for use <- uses, do: Stack.contribution(use, fetch)
     end
 
     # The selected site for its context: what it contributes before its mask, and what it
