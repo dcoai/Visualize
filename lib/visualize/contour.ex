@@ -102,6 +102,46 @@ defmodule Visualize.Contour do
   end
 
   @doc """
+  The work one `compute/2` does, as counts (spec/07 §6.3, #271): `reads`, the padded cells
+  the marching visits, once per threshold; `segments`, the segments it builds; `hops`, the
+  points the ring-following steps through. D-72's claim — the tracing is linear in the
+  segments and the grid is read once per threshold — is these numbers: `hops` never
+  exceeds `segments`, and `reads` is the padded cells times the thresholds, whatever the
+  grid's size; a test holds it by count rather than by a clock.
+
+      iex> grid = for y <- 0..3, x <- 0..3, do: x + y
+      iex> cost = Visualize.Contour.new() |> Visualize.Contour.size(4, 4) |> Visualize.Contour.thresholds([3]) |> Visualize.Contour.cost(grid)
+      iex> cost.reads
+      25
+      iex> cost.hops <= cost.segments
+      true
+  """
+  @spec cost(t(), [[number()]] | [number()]) :: %{
+          reads: non_neg_integer(),
+          segments: non_neg_integer(),
+          hops: non_neg_integer()
+        }
+  def cost(%__MODULE__{} = contour, grid) do
+    {values, width, height} = normalize_grid(grid, contour)
+    threshold_values = resolve_thresholds(contour.thresholds, values)
+    {padded_values, padded_width, padded_height} = pad_grid(values, width, height)
+    reads = (padded_width - 1) * (padded_height - 1)
+
+    Enum.reduce(threshold_values, %{reads: 0, segments: 0, hops: 0}, fn threshold, acc ->
+      segments =
+        build_segments(padded_values, padded_width, padded_height, threshold, contour.smooth?)
+
+      hops = segments |> connect_segments() |> Enum.map(&(length(&1) - 1)) |> Enum.sum()
+
+      %{
+        reads: acc.reads + reads,
+        segments: acc.segments + length(segments),
+        hops: acc.hops + hops
+      }
+    end)
+  end
+
+  @doc """
   Renders contours as SVG path data.
 
   Returns a list of path strings, one per threshold.
