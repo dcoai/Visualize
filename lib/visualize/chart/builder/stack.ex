@@ -275,6 +275,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
+    One use's contribution placed where the design keeps its kind (spec/14 §18.8, #283):
+    resolved through the flattening fetch, as `placed/2` resolves it, so a reference to a
+    composite is what the composite flattens to; its mask ignored, since a disabled layer
+    still declares what it declares; a missing entry its local alone; a keyless site `%{}`.
+
+        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, mask: :all, local: %{axis: %{scale: :x, side: :bottom}}}
+        iex> Visualize.Chart.Builder.Stack.contribution(use, fn _id -> :error end)
+        %{frame: %{axes: [%{scale: :x, side: :bottom}]}}
+    """
+    @spec contribution(Use.t(), (Fragment.id() -> {:ok, map()} | :error)) :: map()
+    def contribution(%Use{} = use, fetch) do
+      case Composite.place(shown_fragment(%{use | mask: []}, fetch), use) do
+        {:ok, placed} -> placed
+        :keyless -> %{}
+      end
+    end
+
+    @doc """
     The path a design path has inside a use: a site of one kind holds its body under the
     kind's key (spec/14 §19.3), so the design's `sources.primary` is a `source` site's
     `[:source]`, and a design-level site's path is its own (§18.15).

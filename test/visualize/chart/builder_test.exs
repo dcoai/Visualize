@@ -1644,6 +1644,22 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.render(empty) =~ "declares nothing yet"
     end
 
+    test "a layer referencing a composite lists what the composite declares (spec/14 §18.8, #283)",
+         %{socket: s} do
+      # `Charts::pair` is a composite of a reference to `Frame::wide` and an inline site.
+      {:noreply, s1} =
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3, "as" => "link"}, s)
+
+      {:noreply, s1} = Builder.handle_event("toggle_layer_detail", %{"index" => "3"}, s1)
+      html = BuilderFixture.render(s1)
+      refute html =~ "declares nothing yet"
+      assert html =~ ~s(phx-value-index="3" phx-value-path="frame.size")
+
+      # A disabled layer still lists what it declares.
+      {:noreply, s2} = Builder.handle_event("toggle_layer", %{"index" => "3"}, s1)
+      assert BuilderFixture.render(s2) =~ ~s(phx-value-index="3" phx-value-path="frame.size")
+    end
+
     test "the composer takes only its kind; the workspace takes anything", %{socket: s} do
       {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
 
