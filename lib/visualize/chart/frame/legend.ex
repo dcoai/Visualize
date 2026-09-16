@@ -5,6 +5,7 @@ defmodule Visualize.Chart.Frame.Legend do
   # the eight positions inside the plot area.
 
   alias Visualize.{Axis, Scale, Theme}
+  alias Visualize.Chart.Frame
   alias Visualize.Chart.{Schema, Style, Text, Var}
   alias Visualize.IR.{Element, Transform}
 
@@ -15,11 +16,14 @@ defmodule Visualize.Chart.Frame.Legend do
   @per_char 0.6
 
   @doc false
-  # The legend group, or `[]` when the frame has no legend.
-  @spec generate(map(), atom()) :: [Element.t()]
-  def generate(%{legend: nil}, _mode), do: []
+  # The legend group, or `[]` when the frame has no legend; stamped `frame.legend` when
+  # `paths?` (spec/14 §4.7).
+  @spec generate(map(), atom(), boolean()) :: [Element.t()]
+  def generate(frame, mode, paths? \\ false)
 
-  def generate(frame, mode) do
+  def generate(%{legend: nil}, _mode, _paths?), do: []
+
+  def generate(frame, mode, paths?) do
     node = frame.legend
     scale = Map.fetch!(frame.scales, node.scale)
     style_node = Style.node(frame.styles, Map.get(node, :style, Schema.default(:legend, :style)))
@@ -44,6 +48,7 @@ defmodule Visualize.Chart.Frame.Legend do
         style: Map.put(group_style, :class, "legend"),
         transform: Transform.translate(x, y)
       )
+      |> Frame.stamp([:frame, :legend], paths?)
     ]
   end
 

@@ -136,6 +136,27 @@ defmodule Visualize.Chart.Validator do
   @spec format(error()) :: String.t()
   def format({path, reason}), do: "#{format_path(path)}: #{words(reason)}"
 
+  @doc """
+  A path as a person reads it — `design` for the root, else `frame.scales.x`,
+  `marks[0].channels` — the one spelling every error, node label and rendered `data-node`
+  uses (spec/14 §4.7, §18.5).
+
+      iex> Visualize.Chart.Validator.format_path([:marks, 0, :channels])
+      "marks[0].channels"
+      iex> Visualize.Chart.Validator.format_path([])
+      "design"
+  """
+  @spec format_path(path()) :: String.t()
+  def format_path([]), do: "design"
+
+  def format_path(path) do
+    Enum.reduce(path, "", fn
+      i, acc when is_integer(i) -> "#{acc}[#{i}]"
+      k, "" -> "#{k}"
+      k, acc -> "#{acc}.#{k}"
+    end)
+  end
+
   # -- style derivation (spec/14 §3.5) --------------------------------------------------
 
   # A style that reaches itself through `extends` is `:cycle` at its own path; a style that
@@ -534,16 +555,6 @@ defmodule Visualize.Chart.Validator do
   defp plural(:slot), do: :slots
 
   # -- formatting -----------------------------------------------------------------------
-
-  defp format_path([]), do: "design"
-
-  defp format_path(path) do
-    Enum.reduce(path, "", fn
-      i, acc when is_integer(i) -> "#{acc}[#{i}]"
-      k, "" -> "#{k}"
-      k, acc -> "#{acc}.#{k}"
-    end)
-  end
 
   defp words(:required), do: "is required"
   defp words(:unknown_key), do: "is not a key of this node"

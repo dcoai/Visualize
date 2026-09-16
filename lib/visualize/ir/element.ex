@@ -389,6 +389,19 @@ defmodule Visualize.IR.Element do
   # ============================================================
 
   @doc """
+  The element with one attribute set: `key` — an atom, or a string for an attribute the
+  IR has no name for, such as a `data-` attribute — to `value`.
+
+      iex> Visualize.IR.Element.group([]) |> Visualize.IR.Element.put_attr("data-node", "marks[0]") |> Map.fetch!(:attrs)
+      %{"data-node" => "marks[0]"}
+  """
+  @spec put_attr(t(), atom() | String.t(), term()) :: t()
+  def put_attr(%__MODULE__{attrs: attrs} = element, key, value)
+      when is_atom(key) or is_binary(key) do
+    %{element | attrs: Map.put(attrs, key, value)}
+  end
+
+  @doc """
   Appends a child element.
   """
   @spec append(t(), t() | [t()]) :: t()
