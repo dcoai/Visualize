@@ -51,8 +51,19 @@ defmodule Visualize.Chart.Builder.StackTest do
       assert html =~
                ~s(class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="2")
 
-      assert html =~ ~s(phx-value-index="0"><span class="vis-builder-action-label">Enable</span>)
-      assert html =~ ~s(phx-value-index="2"><span class="vis-builder-action-label">Disable</span>)
+      # The toggle is an eye (spec/14 §18.8): struck for a disabled layer, open otherwise;
+      # the word stays the button's text.
+      assert html =~
+               ~s(phx-value-index="0"><svg class="vis-builder-icon vis-builder-icon-eye_off")
+
+      assert html =~ ~s(<span class="vis-builder-action-label">Enable</span>)
+
+      assert html =~
+               ~s(phx-value-index="2"><svg class="vis-builder-icon vis-builder-icon-eye")
+
+      assert html =~ ~s(<span class="vis-builder-action-label">Disable</span>)
+      # The fixture's layers are the host's, inline: no lock on any of them.
+      refute html =~ "vis-builder-layer-lock"
     end
 
     test "the list is the hook element and every layer is draggable at its position" do

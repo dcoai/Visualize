@@ -575,8 +575,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
        carries the component class as well as the action's own, because `.vis-builder button`
        is (0,1,1) and would otherwise out-specify a bare `.vis-builder-layer-up` at (0,1,0)
        and restore the label, the padding and the border. */
-    .vis-builder .vis-builder-layer-toggle {
+    .vis-builder .vis-builder-layer-toggle,
+    .vis-builder .vis-builder-layer-lock {
       position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       flex: 0 0 auto;
       width: 22px;
       height: 22px;
@@ -603,24 +607,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
       white-space: nowrap;
     }
 
-    .vis-builder .vis-builder-layer-toggle::before {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
+    /* The eye and the lock are inline glyphs in currentColor (spec/14 §18.8). */
+    .vis-builder .vis-builder-icon {
+      display: block;
     }
 
-    .vis-builder .vis-builder-layer-toggle::before { content: "◉"; }
-
-    .vis-builder .vis-builder-layer-disabled .vis-builder-layer-toggle::before {
-      content: "○";
-    }
-
-    .vis-builder .vis-builder-layer-toggle:hover {
+    .vis-builder .vis-builder-layer-toggle:hover,
+    .vis-builder .vis-builder-layer-lock:hover {
       border-color: var(--vis-builder-line);
       background: var(--vis-builder-panel);
       color: var(--vis-builder-ink);
+    }
+
+    /* A library layer is the library's word: its lock reads in the accent, and its forms
+       are read-only under a note (§18.8, §18.15). */
+    .vis-builder .vis-builder-layer-locked .vis-builder-layer-lock {
+      color: var(--vis-builder-accent);
+    }
+
+    .vis-builder .vis-builder-form-body {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      min-width: 0;
+    }
+
+    .vis-builder .vis-builder-form-locked {
+      opacity: 0.7;
+    }
+
+    .vis-builder .vis-builder-locked-note {
+      color: var(--vis-builder-accent);
     }
 
     /* The row is the control, so it says so on hover. */

@@ -392,6 +392,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   layers={@layers}
                   selected={@selected_index}
                   disabled={@disabled}
+                  locked={@locked}
                   target={@myself}
                 />
                 <ol :if={not row.selected? and row.expanded} class="vis-builder-layers vis-builder-layers-other">
@@ -510,12 +511,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   source_name={@source_name}
                   owners={@page.owners}
                   layer={@page.layer}
+                  locked={@page.locked}
                   target={@myself}
                 />
               </details>
               <div
                 :if={not @page.sections? and @page.single.layer}
-                class={"vis-builder-page-head" <> if(@page.single.other?, do: " vis-builder-section-other", else: "")}
+                class={"vis-builder-page-head" <> if(@page.single.other?, do: " vis-builder-section-other", else: "") <> if(MapSet.member?(@page.locked, @page.single.layer), do: " vis-builder-page-locked", else: "")}
                 title={"#{@page.single.label} — in #{@page.single.layer}"}
               >
                 <span class="vis-builder-section-layer">{@page.single.layer}</span>
@@ -542,6 +544,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 source_name={@source_name}
                 owners={@page.owners}
                 layer={@page.layer}
+                locked={@page.locked}
                 target={@myself}
               />
             </div>
@@ -998,7 +1001,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
         "ArrowDown" when at < count - 1 ->
           {:noreply, moved_by_key(socket, at, at + 1)}
 
+        # A library layer opens, so the entry is edited where it lives (§18.8).
+        "o" ->
+          handle_event("open_layer", %{"index" => index}, socket)
+
         _other ->
+          {:noreply, socket}
+      end
+    end
+
+    # The lock on a library layer (spec/14 §18.8): the entry it references opens at the
+    # chart level, as the library click opens it, and saving it reaches every chart that
+    # references it. A layer with no reference has nothing to open.
+    def handle_event("open_layer", %{"index" => index}, socket) do
+      case Enum.at(socket.assigns.uses, position(index)) do
+        %Use{ref: ref} when ref != nil ->
+          case Store.get(socket.assigns.store, ref) do
+            {:ok, entry} ->
+              {:noreply, opened_entry(socket, entry)}
+
+            :error ->
+              {:noreply, assign(socket, :notice, "the library no longer holds this entry")}
+          end
+
+        _inline ->
           {:noreply, socket}
       end
     end
@@ -1227,10 +1253,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       # A source chosen from the pool takes the pool's fields when it declares none
       # (spec/14 §19.10): one pick, and it previews.
+      # The key is the site's own and is always written; the fields are the body's, and a
+      # locked site keeps the entry's (§18.15).
       {:noreply,
        update(socket, :uses, fn uses ->
          Stack.update(uses, selected, fn u ->
-           %{u | key: key, local: filled(u.local, key, pool)}
+           if Stack.locked?(u),
+             do: %{u | key: key},
+             else: %{u | key: key, local: filled(u.local, key, pool)}
          end)
        end)}
     end
@@ -1443,6 +1473,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           case declarer(uses, var.name) do
             nil ->
               {:noreply, declared(socket, var.name, default, :top)}
+
+            {%Use{ref: ref} = site, _path} when ref != nil ->
+              {:noreply, assign(socket, :notice, locked_notice(socket.assigns, site))}
 
             {site, path} ->
               {:noreply,
@@ -1755,7 +1788,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         preview?: kind == :composite,
         chart_rows: chart_rows(assigns),
         selected_index: Stack.index_of(assigns.uses, assigns.selected),
-        disabled: disabled(assigns.uses)
+        disabled: disabled(assigns.uses),
+        locked: locked(assigns.uses)
       }
     end
 
@@ -1935,6 +1969,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       uses
       |> Enum.with_index()
       |> Enum.reject(fn {use, _index} -> Stack.enabled?(use) end)
+      |> MapSet.new(fn {_use, index} -> index end)
+    end
+
+    # The positions whose site references a library entry: locked in the chart (§18.8).
+    defp locked(uses) do
+      uses
+      |> Enum.with_index()
+      |> Enum.filter(fn {use, _index} -> Stack.locked?(use) end)
       |> MapSet.new(fn {_use, index} -> index end)
     end
 
@@ -2372,6 +2414,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         nil ->
           assign(socket, :notice, "gradient #{name} is not declared in this stack")
 
+        %Use{ref: ref} = use when ref != nil ->
+          assign(socket, :notice, locked_notice(socket.assigns, use))
+
         %Use{id: id, local: %{gradient: body}} ->
           assign(socket, :uses, Stack.update(uses, id, &%{&1 | local: %{gradient: fun.(body)}}))
 
@@ -2463,6 +2508,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       selected = Stack.get(uses, assigns.selected)
       layer_label = selected && Stack.label(labels, selected)
+      # The labels of the library's layers: read-only in the chart (§18.8, §18.15).
+      locked =
+        for use <- uses, Stack.locked?(use), into: MapSet.new(), do: Stack.label(labels, use)
 
       tops =
         case Enum.find(under, &(length(&1.path) == 1)) do
@@ -2488,12 +2536,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           }
         end
 
+      page = %{owners: owners, layer: layer_label, locked: locked}
+
       case tops do
         [one] when length(one.path) == 1 ->
-          %{sections?: false, single: one, tops: [], owners: owners, layer: layer_label}
+          Map.merge(page, %{sections?: false, single: one, tops: []})
 
         many ->
-          %{sections?: true, single: nil, tops: many, owners: owners, layer: layer_label}
+          Map.merge(page, %{sections?: true, single: nil, tops: many})
       end
     end
 
@@ -2601,11 +2651,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
         nil ->
           socket
 
+        # A referenced site is the library's word: nothing is written here (§18.15).
+        %Use{ref: ref} = use when ref != nil ->
+          assign(socket, :notice, locked_notice(socket.assigns, use))
+
         use ->
           local = Stack.local_path(use, fetch, path)
           assign(socket, :uses, Stack.update(uses, use.id, &Stack.write(&1, local, key, parsed)))
       end
     end
+
+    defp locked_notice(%{labels: labels}, use),
+      do: "#{Stack.label(labels, use)} is from the library — open it to edit"
 
     @declaring [[:sources], [:styles], [:defs], [:vars]]
 

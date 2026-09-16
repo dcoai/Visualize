@@ -67,6 +67,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    @doc """
+    The inline SVG of a control's icon — `:eye` and `:eye_off` for the layer toggle, `:lock`
+    for a library layer (spec/14 §18.8) — in `currentColor`, 18px, hidden from readers since
+    the control names itself.
+
+        iex> Visualize.Chart.Builder.Glyphs.icon(:lock) =~ ~s|<rect x="5" y="11"|
+        true
+    """
+    @spec icon(:eye | :eye_off | :lock) :: String.t()
+    def icon(name) when name in [:eye, :eye_off, :lock] do
+      ~s|<svg class="vis-builder-icon vis-builder-icon-#{name}" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">#{icon_inner(name)}</svg>|
+    end
+
+    defp icon_inner(:eye),
+      do:
+        ~s|<path d="M2 12 C5 6 9 4 12 4 C15 4 19 6 22 12 C19 18 15 20 12 20 C9 20 5 18 2 12 Z"/><circle cx="12" cy="12" r="3"/>|
+
+    defp icon_inner(:eye_off),
+      do:
+        ~s|<path d="M2 12 C5 6 9 4 12 4 C15 4 19 6 22 12 C19 18 15 20 12 20 C9 20 5 18 2 12 Z"/><circle cx="12" cy="12" r="3"/><path d="M4 20 L20 4"/>|
+
+    defp icon_inner(:lock),
+      do:
+        ~s|<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11 V7 a4 4 0 0 1 8 0 V11"/>|
+
     # -- the pictures ---------------------------------------------------------------------
 
     # A vertical alignment (§3.1): a bar of text against the point's line.

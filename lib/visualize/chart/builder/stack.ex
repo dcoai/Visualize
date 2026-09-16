@@ -159,6 +159,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def enabled?(%Use{mask: :all}), do: false
     def enabled?(%Use{}), do: true
 
+    @doc """
+    Whether a use is the library's word — it references an entry — and so is locked in the
+    chart: read-only, edited by opening the entry (spec/14 §18.8, §18.15).
+
+        iex> Visualize.Chart.Builder.Stack.locked?(Visualize.Chart.Use.new({:style, 3}))
+        true
+        iex> Visualize.Chart.Builder.Stack.locked?(Visualize.Chart.Use.new(nil))
+        false
+    """
+    @spec locked?(Use.t()) :: boolean()
+    def locked?(%Use{ref: nil}), do: false
+    def locked?(%Use{}), do: true
+
     @doc "A use with its enabled state flipped: disabling is a mask of everything (§19.3)."
     @spec toggle(Use.t()) :: Use.t()
     def toggle(%Use{mask: :all} = use), do: %{use | mask: []}

@@ -1738,6 +1738,7 @@ The nodes of §18.13 are the top row — the root tabs. Beneath them the first d
 |---|---|
 | `Visualize.Chart.Builder.Stack.placed/2` | the enabled uses as the design's layers, `{id, fragment}` in stack order, each resolved and placed where the design keeps its kind; a keyless name-keyed site is left out |
 | `Visualize.Chart.Builder.Stack.local_path/3` | the path a design path has inside a use: `[:source | rest]` for a `source` site's `[:sources, key | rest]`, and so for every placed kind; a design-level site's path as it is |
+| `Visualize.Chart.Builder.Stack.locked?/1` | whether a use references a library entry and so is locked in the chart — read-only, opened to edit (§18.8, §18.15) |
 | `Visualize.Chart.Builder.Stack.copies/3` | an entry as the inline sites a copy of it is (§18.17): a composite's sites each holding what its use contributed, labelled by the referenced entry's name or the composite's own, with the composite's vars and signals; any other body as one site named for the entry; ids left for the caller to issue |
 
 **Every form knows its node.** Every form on a page carries its node's label — `data-builder-node`, and a hidden `_node` input — so an edit, a field selection, a chip drop, a colour drop, a list add or remove in any section aims at that node: the builder selects it first (`aimed`), and the context — the colour chooser, the style stack — follows the node last touched. `Visualize.Chart.Builder.Editor.form_body/1` is that form alone, of one facet's keys or of the listed ones; `Visualize.Chart.Builder.Editor.panel/1` still renders a node as facet tabs over one form, for the style panel and for a host that wants the smaller thing.
@@ -2200,6 +2201,7 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Masks.paths/1` | the paths a contribution can mask: top-level keys and each node's keys, sorted |
 | `Visualize.Chart.Builder.Masks.toggle/3` | a use with a path added to or removed from its mask, as its checkbox says; a site masked as a whole is left alone |
 | `Visualize.Chart.Builder.Glyphs.drawn?/1` | whether a key's enum is chosen by its picture (§18.6) |
+| `Visualize.Chart.Builder.Glyphs.icon/1` | the inline SVG of a control's icon — `:eye`, `:eye_off`, `:lock` — for the layer row (§18.8) |
 | `Visualize.Chart.Builder.Glyphs.glyph/2` | the inline SVG for one value of a drawn key, or `nil` |
 | `Visualize.Chart.Builder.Masks.keyed?/1` | whether a contribution is of a kind the document keys by name, so the panel offers the key control |
 | `Visualize.Chart.Builder.Page.page/1` | a root tab's node as a page of sections (§18.15): facet sections with the node keys' sub-sections inside, the frame's page as a frame, every form aimed at its node |
