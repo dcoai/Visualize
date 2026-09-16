@@ -1037,6 +1037,74 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.selected(closed) == BuilderFixture.selected(s)
     end
 
+    test "a drop copies a composite as its sites, each holding what its use contributed; a link references it (spec/14 §18.17)",
+         %{socket: s} do
+      {:noreply, copied} =
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
+
+      assert BuilderFixture.names(copied) == [
+               "Frame::wide",
+               "Charts::pair",
+               :house,
+               :shared,
+               :panel
+             ]
+
+      [wide, pair | rest] = copied.assigns.uses
+      assert %Use{ref: nil, local: %{frame: %{size: %{width: 900}}}} = wide
+      assert %Use{ref: nil, local: %{version: 1}} = pair
+      assert length(Enum.uniq(Enum.map([wide, pair | rest], & &1.id))) == 5
+      # The composite's own vars join the chart's.
+      assert copied.assigns.stack_vars == %{unit: %{default: "%"}}
+      assert copied.assigns.notice == nil
+
+      # Editing the copy never reaches the library: the entry is what it was.
+      # The copy is put on top, so it owns `frame.size` and the edit lands in it (§18.15).
+      {:noreply, top} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, s)
+      assert BuilderFixture.names(top) == [:house, :shared, :panel, "Frame::wide", "Charts::pair"]
+      {:noreply, s2} = Builder.handle_event("select_layer", %{"index" => "3"}, top)
+      {:noreply, s2} = Builder.handle_event("select_node", %{"node" => "frame.size"}, s2)
+
+      {:noreply, edited} =
+        Builder.handle_event("edit", %{"_target" => ["width"], "width" => "500"}, s2)
+
+      assert {:ok, %{fragment: %{frame: %{size: %{width: 900}}}}} =
+               Recording.get({:frame, 1}, %{})
+
+      assert %Use{ref: nil, local: %{frame: %{size: %{width: 500}}}} =
+               Enum.at(edited.assigns.uses, 3)
+
+      # A link is the reference site as before, one use for the whole composite.
+      {:noreply, linked} =
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0, "as" => "link"}, s)
+
+      assert BuilderFixture.names(linked) == ["Charts::pair", :house, :shared, :panel]
+      assert %Use{ref: {:composite, 1}} = hd(linked.assigns.uses)
+      assert linked.assigns.stack_vars == %{}
+    end
+
+    test "a drop on the graph lands above the selected layer: insert without a position", %{
+      socket: s
+    } do
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
+
+      {:noreply, dropped} =
+        Builder.handle_event("insert", %{"name" => "frame:1", "as" => "copy"}, s)
+
+      assert BuilderFixture.names(dropped) == [:house, :shared, "Frame::wide", :panel]
+
+      assert %Use{ref: nil, local: %{frame: %{size: %{width: 900}}}} =
+               Enum.at(dropped.assigns.uses, 2)
+    end
+
+    test "the hook sends a link for an Alt-drop and accepts a library drag on the graph (spec/10 §16.3)" do
+      js = Visualize.Hooks.Builder.js_hook()
+      assert js =~ "return e.altKey ? 'link' : 'copy';"
+      assert js =~ "this.push('insert', { name: stored, at: at, as: this.dropAs(e) });"
+      assert js =~ "if (name !== null) this.push('insert', { name: name, as: this.dropAs(e) });"
+      assert js =~ "if (this.from !== null) return !graph;"
+    end
+
     test "the composer takes only its kind; the workspace takes anything", %{socket: s} do
       {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
 
@@ -1073,7 +1141,7 @@ defmodule Visualize.Chart.BuilderTest do
                Recording.get({:style, 1}, %{})
 
       {:noreply, stacked} =
-        Builder.handle_event("insert", %{"name" => "style:2", "at" => 0}, opened)
+        Builder.handle_event("insert", %{"name" => "style:2", "at" => 0, "as" => "link"}, opened)
 
       {:noreply, _saved} =
         Builder.handle_event("put_design", %{"name" => "Styles::both"}, stacked)
@@ -1274,7 +1342,10 @@ defmodule Visualize.Chart.BuilderTest do
     test "a stack that reaches itself is refused, and nothing is sent" do
       store = Visualize.Chart.BuilderTest.Cyclic
       s = BuilderFixture.socket([], store: store, on_deploy: :deployed)
-      {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0, "as" => "link"}, s)
+
       {:noreply, refused} = Builder.handle_event("deploy", %{}, s)
       refute_received {:deployed, _, _}
       assert refused.assigns.notice =~ "refers to itself"
@@ -2464,7 +2535,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-keydown="fragment_key")
 
       assert html =~
-               ~s(: Enter to open, Insert to add above the selected layer, drag into the stack")
+               ": Enter to open, Insert to copy above the selected layer (I to link), drag into the stack or onto the chart (Alt to link)\""
 
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
 
@@ -2472,6 +2543,13 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("fragment_key", %{"key" => "Insert", "name" => "composite:1"}, s)
 
       assert BuilderFixture.names(added) == [:house, :shared, "baseline", :panel]
+      assert %Use{ref: nil} = Enum.at(added.assigns.uses, 2)
+
+      {:noreply, linked} =
+        Builder.handle_event("fragment_key", %{"key" => "I", "name" => "composite:1"}, s)
+
+      assert BuilderFixture.names(linked) == [:house, :shared, "baseline", :panel]
+      assert %Use{ref: {:composite, 1}} = Enum.at(linked.assigns.uses, 2)
 
       {:noreply, opened} =
         Builder.handle_event("fragment_key", %{"key" => "Enter", "name" => "composite:1"}, s)
@@ -3140,13 +3218,28 @@ defmodule Visualize.Chart.BuilderTest do
       # A composite entry opens as its sites: the baseline is one inline frame site.
       assert BuilderFixture.layers(opened) == [{"local", %{frame: %{kind: :cartesian}}}]
 
+      # A drop is a copy: the site's own body, and nothing the store adds (spec/14 §18.17).
       {:noreply, added} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, socket)
 
       assert BuilderFixture.layers(added) ==
+               layers ++ [{"baseline", %{frame: %{kind: :cartesian}}}]
+
+      assert %Use{ref: nil, local: %{frame: %{kind: :cartesian}}} = List.last(added.assigns.uses)
+      assert added.assigns.notice == nil
+
+      # A link resolves through the store, flattened.
+      {:noreply, linked} =
+        Builder.handle_event(
+          "insert",
+          %{"name" => "composite:1", "at" => 3, "as" => "link"},
+          socket
+        )
+
+      assert BuilderFixture.layers(linked) ==
                layers ++ [{"baseline", %{version: 1, frame: %{kind: :cartesian}}}]
 
-      assert added.assigns.notice == nil
+      assert %Use{ref: {:composite, 1}} = List.last(linked.assigns.uses)
     end
 
     test "a name the store does not hold is a notice and changes no layer" do

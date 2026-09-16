@@ -31,6 +31,9 @@ defmodule Visualize.Hooks.Builder do
   ## Events
 
   - `reorder` with `%{"from" => integer, "to" => integer}` on a drop between two positions
+  - `insert` with `%{"name" => string, "at" => integer, "as" => "copy" | "link"}` on a
+    library entry dropped into the stack — `"link"` when Alt was held — and without `at`
+    on one dropped onto the graph in scope `graph` (spec/14 §18.17)
   - `inspect` with `%{"path" => string, "layer" => string}` on a click on a row
   - `drop_colour` with `%{"field" => string, "colour" => string, "edit" => string}` when a
     patch of the colour chooser is dropped on a colour well (spec/14 §19.10)
@@ -301,7 +304,7 @@ defmodule Visualize.Hooks.Builder do
         if (!this.accepts(e)) return;
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = this.from === null ? 'copy' : 'move';
-        this.markPoint(this.insertionPoint(e));
+        if (this.scope !== 'graph') this.markPoint(this.insertionPoint(e));
       },
 
       // A drag that leaves the stack leaves no mark behind. dragend fires on the source,
@@ -315,11 +318,19 @@ defmodule Visualize.Hooks.Builder do
         });
       },
 
+      // The stack accepts a layer or a library entry; the graph accepts a library entry
+      // alone, and the copy lands above the selected layer (spec/14 §18.17).
       accepts(e) {
-        if (!this.el.hasAttribute('data-builder-stack')) return false;
-        if (this.from !== null) return true;
-        return e.dataTransfer && Array.from(e.dataTransfer.types || [])
-          .includes('application/x-visualize-fragment');
+        const graph = this.scope === 'graph';
+        if (!graph && !this.el.hasAttribute('data-builder-stack')) return false;
+        if (this.from !== null) return !graph;
+        return !!(e.dataTransfer && Array.from(e.dataTransfer.types || [])
+          .includes('application/x-visualize-fragment'));
+      },
+
+      // A drop is a copy unless Alt asks for a link (spec/14 §18.17).
+      dropAs(e) {
+        return e.altKey ? 'link' : 'copy';
       },
 
       // Where the drop lands, as a position BETWEEN layers: 0 above the first, n below the
@@ -385,6 +396,12 @@ defmodule Visualize.Hooks.Builder do
         e.preventDefault();
         this.clearOver();
 
+        if (this.scope === 'graph') {
+          const name = this.dragged(e);
+          if (name !== null) this.push('insert', { name: name, as: this.dropAs(e) });
+          return;
+        }
+
         const at = this.insertionPoint(e);
 
         // A move within the stack. `at` is a gap in the list as it stands; once the dragged
@@ -397,7 +414,7 @@ defmodule Visualize.Hooks.Builder do
 
         const stored = this.dragged(e);
         if (stored === null) return;
-        this.push('insert', { name: stored, at: at });
+        this.push('insert', { name: stored, at: at, as: this.dropAs(e) });
       },
 
       insertAtCaret(box, text) {

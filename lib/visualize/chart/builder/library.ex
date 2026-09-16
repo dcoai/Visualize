@@ -323,9 +323,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp view_class(false), do: "vis-builder-view"
 
     # What the item is and what its keys do, for hover and for what is announced (§18.17).
+    # A drop is a copy and a link is asked for (spec/14 §18.17): the row says both.
     defp says(item) do
-      "#{item.stored} · #{Store.encode_id(item.id)}: Enter to open, Insert to add above the " <>
-        "selected layer, drag into the stack"
+      "#{item.stored} · #{Store.encode_id(item.id)}: Enter to open, Insert to copy above the " <>
+        "selected layer (I to link), drag into the stack or onto the chart (Alt to link)"
     end
 
     defp kind_class(true), do: "vis-builder-category-name vis-builder-category-empty"
