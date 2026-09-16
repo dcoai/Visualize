@@ -488,6 +488,8 @@ The `d` string parser accepts the commands `M m L l H h V v C c Q q A a Z z`, nu
 
 Regions with zero or negative width or height are removed. The function does not consult `copy_beneficial?/2`; a caller MUST classify with `scroll_mode/2` first, because an offset beyond the canvas produces nonsensical strips. The result has 0, 1 or 2 entries, never 3.
 
+**The scroll contract** (#292). A copy-shift is exact: the hook copies the previous frame's pixels by `{dx, dy}` and draws only the exposed strips over what it copied, so it is correct only when the picture of the new frame *is* the picture of the old one translated by exactly `{dx, dy}` — every mark that stays on the canvas keeps its shape and moves by that offset, and a strip's marks are the same function of the same data as the full render's, evaluated over the strip's columns. A caller whose marks change in any other way between frames — a phase that animates, a series that slides by a fraction of a pixel — MUST NOT use the scroll modes for it: the copied pixels are then a different picture from the one the strips join, and every strip draws a fresh segment against stale neighbours. The High-Performance page sat like that (spec/14 §12.6).
+
 ### 5.4 Filtering
 
 `filter_to_regions(data, regions, accessor)` returns `data` filtered to points `{px, py} = accessor.(point)` for which some region `{rx, ry, rw, rh}` satisfies `rx ≤ px ≤ rx + rw` and `ry ≤ py ≤ ry + rh`. Coordinates are compared in the same space the regions are expressed in (canvas pixels); the caller is responsible for applying scales before comparison.
