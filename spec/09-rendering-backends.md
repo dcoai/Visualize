@@ -259,7 +259,7 @@ The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<n
 | `Visualize.Backend.CanvasBinary.encode_element!/1` | `encode_element!(element, [])`. |
 | `Visualize.Backend.CanvasBinary.encode_element!/2` | As `encode_element/2` but returns the binary directly and raises `RuntimeError` when Nx is absent. |
 | `Visualize.Backend.CanvasBinary.to_base64/1` | Standard Base64 (`Base.encode64/1`, padded) of a binary, for embedding in an HTML attribute or a LiveView event payload. |
-| `Visualize.Backend.CanvasBinary.Decoder.decode/1` | The reference decoder (#270): the records of a stream in order — the path records with their commands, `circles`, `rects`, `style`, `transform`, `save`/`restore`/`fill`/`stroke`, and the `0x60` records of §5 as `{:incremental, mode, dx, dy, regions}` and `{:full_redraw, records}` — written against the record layouts this section states, not against the encoder, so `decode(encode(x))` is a round trip (D-36). Raises on an unknown opcode or a truncated record. It is the executing guard a consumer runs over its own streams under test; the JavaScript executor of spec/10 §12 reads the same layouts. |
+| `Visualize.Backend.CanvasBinary.Decoder.decode/1` | The reference decoder (#270): the records of a stream in order — the path records with their commands, `circles`, `rects`, `style`, `transform`, `save`/`restore`/`fill`/`stroke`, and the `0x60` records of §5 as `{:incremental, mode, dx, dy, viewport, regions}` and `{:full_redraw, viewport, records}` with the viewport as `{x, y, w, h}` — written against the record layouts this section states, not against the encoder, so `decode(encode(x))` is a round trip (D-36). Raises on an unknown opcode or a truncated record. It is the executing guard a consumer runs over its own streams under test; the JavaScript executor of spec/10 §12 reads the same layouts. |
 | `Visualize.Backend.CanvasBinary.Decoder.decode_path/1` | The one path record of a stream as a `Visualize.IR.Path`. |
 
 ### 4.2 Stream model and opcodes
@@ -470,8 +470,8 @@ The `d` string parser accepts the commands `M m L l H h V v C c Q q A a Z z`, nu
 | `Visualize.Backend.CanvasIncremental.scroll_mode/2` | Classifies a scroll offset against a canvas size as `:none`, `:scroll_x`, `:scroll_y`, `:scroll_xy` or `:full_redraw` (5.2). |
 | `Visualize.Backend.CanvasIncremental.exposed_regions/2` | Returns the rectangles `{x, y, w, h}` (floats) newly exposed after shifting the canvas by the offset (5.3). |
 | `Visualize.Backend.CanvasIncremental.filter_to_regions/3` | Keeps the data points whose `{x, y}` (from the accessor) lie inside any region, bounds inclusive. |
-| `Visualize.Backend.CanvasIncremental.encode_incremental/3` | Encodes an `0x60` incremental update record for the offset, canvas size and `[{bounds, element}]` list (5.5); raises `ArgumentError` for more than three regions or a zero offset. |
-| `Visualize.Backend.CanvasIncremental.encode_full_redraw/1` | Encodes an `0x60` record in full-redraw mode carrying the element's whole binary stream (5.6). |
+| `Visualize.Backend.CanvasIncremental.encode_incremental/4` | Encodes an `0x60` incremental update record for the offset, canvas size and `[{bounds, element}]` list (5.5), with `viewport: {x, y, w, h}` the rectangle that scrolls — the whole canvas by default (D-106); raises `ArgumentError` for more than three regions or a zero offset. `encode_incremental/3` is the whole-canvas call. |
+| `Visualize.Backend.CanvasIncremental.encode_full_redraw/2` | Encodes an `0x60` record in full-redraw mode carrying the element's whole binary stream, with the canvas size as the record's viewport (5.6). `encode_full_redraw/1` writes a zero viewport, which a full redraw never consults. |
 
 ### 5.2 Scroll classification
 
@@ -497,23 +497,24 @@ Regions with zero or negative width or height are removed. The function does not
 ### 5.5 Incremental update record (0x60)
 
 ```
-0x60  mode:u8  dx:f32  dy:f32  region_count:u8  region₀ … region(n-1)
+0x60  mode:u8  dx:f32  dy:f32  vx:f32  vy:f32  vw:f32  vh:f32  region_count:u8  region₀ … region(n-1)
 ```
 
-- `mode`: `0x00` full redraw, `0x01` `:scroll_x`, `0x02` `:scroll_y`, `0x03` `:scroll_xy`, computed by `scroll_mode/2` from the offset and canvas size. `:none` has no byte: a zero offset is not an incremental update and `encode_incremental/3` raises `ArgumentError` for it (D-38).
+- `mode`: `0x00` full redraw, `0x01` `:scroll_x`, `0x02` `:scroll_y`, `0x03` `:scroll_xy`, computed by `scroll_mode/2` from the offset and the **viewport's** size — the viewport is what is copied, so it is what the offset is classified against. `:none` has no byte: a zero offset is not an incremental update and `encode_incremental/4` raises `ArgumentError` for it (D-38).
 - `dx`, `dy`: the offset as little-endian f32.
-- `region_count`: `length(region_elements)`, 0–3. `encode_incremental/3` raises `ArgumentError` for more than three regions — `exposed_regions/2` never yields more than two, and the byte is never written unchecked (D-38).
+- `vx`, `vy`, `vw`, `vh`: the viewport — the rectangle of the canvas that scrolls — as little-endian f32 (D-106, #294). `encode_incremental/4` writes its `viewport:` option, `{0, 0, width, height}` when the caller gives none.
+- `region_count`: `length(region_elements)`, 0–3. `encode_incremental/4` raises `ArgumentError` for more than three regions — `exposed_regions/2` never yields more than two, and the byte is never written unchecked (D-38).
 - Each region: `x:f32 y:f32 w:f32 h:f32 data_length:u32 data`, where `data` is `CanvasBinary.encode_element!/1` of the element and `data_length = byte_size(data)`.
 
-The decoder MUST copy the existing canvas content shifted by `(−dx, −dy)`, then clear and replay each region's stream clipped to its bounds.
+The decoder MUST copy the viewport's pixels alone, shifted by `(−dx, −dy)` and clipped to the viewport, then clear and replay each region's stream clipped to its bounds. A pixel outside the viewport is never touched by a scroll frame (D-106): the High-Performance page's plot scrolls inside a margin that holds the axes, and a copy of the whole canvas carried the plot's leftmost columns into that margin every frame, where nothing cleared them — the y axis disappeared under the smear of everything that had scrolled off the plot (#294).
 
 ### 5.6 Full redraw record
 
 ```
-0x60  0x00  0.0:f32  0.0:f32  0x00  data
+0x60  0x00  0.0:f32  0.0:f32  vx:f32  vy:f32  vw:f32  vh:f32  0x00  data
 ```
 
-`data` is the element's whole binary stream and runs to the end of the record; no length prefix is written. The decoder MUST clear the canvas and replay `data`.
+`data` is the element's whole binary stream and runs to the end of the record; no length prefix is written. The header is the one layout of 5.5 — 27 bytes in every mode, so a decoder reads one header — and the viewport is the canvas size from `encode_full_redraw/2` or zeros from `encode_full_redraw/1`; a full redraw does not consult it. The decoder MUST clear the canvas and replay `data`.
 
 ## 6. Visualize.Backend.Hybrid
 
@@ -591,7 +592,7 @@ Every public entry point returns the event name `"canvas_incremental"` and a pay
 | `dx`, `dy` | the applied delta, or `0` for a full redraw and for `"none"` |
 | `mode` | `"full"`, `"scroll_x"`, `"scroll_y"`, `"scroll_xy"` or `"none"` |
 
-`scroll/2` first advances `viewport_x/viewport_y` by the delta, then classifies it with `scroll_mode/2`: `:none` yields the `"none"` payload with nothing encoded (D-38); `:full_redraw` yields `render_viewport/1` output as a `"full"` payload with `dx = dy = 0`; any scroll mode yields `exposed_regions/2`, one `build_element` call per region, and `encode_incremental/3`. The host application pushes the tuple with `push_event/3` (or skips the push on `"none"`); the `CanvasIncrementalChart` hook decodes the payload and ignores `"none"` (spec/10 §9).
+`scroll/2` first advances `viewport_x/viewport_y` by the delta, then classifies it with `scroll_mode/2`: `:none` yields the `"none"` payload with nothing encoded (D-38); `:full_redraw` yields `render_viewport/1` output as a `"full"` payload with `dx = dy = 0`; any scroll mode yields `exposed_regions/2`, one `build_element` call per region, and `encode_incremental/3` — the whole canvas is the viewport, since the state's canvas is its plot. The host application pushes the tuple with `push_event/3` (or skips the push on `"none"`); the `CanvasIncrementalChart` hook decodes the payload and ignores `"none"` (spec/10 §9).
 
 ## 8. Visualize.Benchmark
 
