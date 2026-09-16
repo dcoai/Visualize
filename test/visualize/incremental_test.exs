@@ -2,8 +2,8 @@ defmodule Visualize.IncrementalTest do
   @moduledoc "Scroll classification, region bounds and the state contract (spec/09 §5, §7; D-38)."
   use ExUnit.Case, async: true
 
+  alias Visualize.Backend.CanvasBinary.Decoder
   alias Visualize.Backend.CanvasIncremental
-  alias Visualize.CanvasBinaryDecoder, as: Decoder
   alias Visualize.Incremental
   alias Visualize.IR.Element
 

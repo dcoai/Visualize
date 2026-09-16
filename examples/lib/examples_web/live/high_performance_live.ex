@@ -237,7 +237,8 @@ defmodule ExamplesWeb.HighPerformanceLive do
   end
 
   # Build element for ONLY the data in the exposed region
-  defp build_region_element(assigns, {rx, _ry, rw, _rh}) do
+  @doc false
+  def build_region_element(assigns, {rx, _ry, rw, _rh}) do
     %{frame: frame, points_per_series: count, x_scale: x_scale, y_scale: y_scale} = assigns
 
     # Convert pixel bounds to data index range
@@ -343,7 +344,9 @@ defmodule ExamplesWeb.HighPerformanceLive do
     end
   end
 
-  defp build_chart_element(assigns) do
+  @doc false
+  # Public for the stream test of #270: the page's own bytes decoded under test.
+  def build_chart_element(assigns) do
     %{frame: frame, points_per_series: count, x_scale: x_scale, y_scale: y_scale} = assigns
 
     phase = frame * 0.04

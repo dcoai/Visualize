@@ -7,7 +7,7 @@ defmodule Visualize.Chart.CompiledTest do
   use ExUnit.Case, async: true
 
   alias Visualize.Backend.CanvasBinary
-  alias Visualize.CanvasBinaryDecoder, as: Decoder
+  alias Visualize.Backend.CanvasBinary.Decoder
   alias Visualize.Chart
   alias Visualize.Chart.{Compiled, Frame}
 
