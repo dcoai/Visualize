@@ -1789,6 +1789,19 @@ An axis, a label and a mark are **sites** of their kind — inline, as a `+` sit
 | `Visualize.Chart.Builder.Place.node/4` | a component in a region, over the composed design at a point: `{:sites, [site]}` — each `%{kind, body, key}` lowest first, an axis's scale before it — or `{:legend, node}`, or `{:error, :no_scale}` |
 | `Visualize.Chart.Builder.Place.component/1` | a palette row's word as the component, or `:error` |
 | `Visualize.Chart.Builder.Place.guess/2` | a mark type's `data` and `channels` over the composed design: the first source and its fields in order over the required channels; `%{}` with no source |
+| `Visualize.Chart.Builder.Place.moved/4` | a node kind and its body moved to a region at a point: the body with its placement key rewritten, `:same` when the region names what it already is, `:unmovable` for a kind with no placement |
+| `Visualize.Chart.Builder.Place.movable?/1` | whether a drawn node's label names a movable node: an axis, the legend, a label |
+
+**What is placed is moved** (#275, proposal D of #242; #276). A drawn node with a placement is dragged on the graph to another region, snapped as a drop is. The hook in scope `graph` starts a **move** on `dragstart` from an element carrying `data-node` whose label `Visualize.Chart.Builder.Place.movable?/1` admits — `frame.axes[i]`, `frame.legend`, `labels[i]`; a mark's position is its data and the frame does not move — the label travelling as `application/x-visualize-node`; while it moves the region the drop would snap to is drawn, `vis-builder-region-<name>` on the graph element, the four bands and the plot as translucent overlays; the drop pushes `move` with the label and the point in chart coordinates. The builder classifies the point (`region/2`) and rewrites the node's **placement key** through the ownership rule of §18.15 — the layer that owns the node takes the write, a locked owner refuses with its notice (§18.8) — as `moved/4` says:
+
+| Node | Moved to | Writes |
+|---|---|---|
+| axis | any margin | `side`; the axis keeps its scale — a `y` axis on the bottom is a legitimate if unusual chart, and rebinding the scale is the inspector's job |
+| legend | a margin, or the plot | `position`: the margin's edge, or the nearest of the eight in the plot, as a drop does |
+| title, label | a margin, or the plot | `anchor`: the region's anchor of the table above, a plot drop the nearest corner |
+| mark, frame | — | not movable |
+
+A move into the region the node already occupies is nothing. The moved node opens, as a placed one does. **The keyboard twin:** the graph is focusable (`tabindex="0"`), and with a movable node open `Shift+Arrow` pushes `move` with a region — up `:top`, down `:bottom`, left `:left`, right `:right`, and `Shift+Enter` the `:plot` — so a legend goes to a corner and back without a pointer.
 | `Visualize.Chart.Builder.Place.placed/2` | a library entry's body with its placement key set from the region where the region names one |
 | `Visualize.Chart.Builder.Place.home/1` | the region a component is placed in from the keyboard or the `+` menu |
 | `Visualize.Chart.Builder.Place.components/0` | the palette's rows: `{component, word}` in the order shown |
