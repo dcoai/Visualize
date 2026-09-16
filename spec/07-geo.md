@@ -250,6 +250,7 @@ The grid is an indexed structure: `compute/2` turns the list into a tuple and pa
 | `Visualize.Contour.smooth/2` | Enables or disables crossing interpolation. |
 | `Visualize.Contour.compute/2` | Contour polygons per threshold (6.3). |
 | `Visualize.Contour.render/2` | Path data per threshold. |
+| `Visualize.Contour.cost/2` | The work one `compute/2` does, as counts: `%{reads, segments, hops}` — the padded cells read per threshold, the segments built, the hops the tracing takes — summed over the thresholds; what holds D-72 (#271). |
 
 ## 7. Density contours
 
@@ -272,7 +273,7 @@ The grid is an indexed structure: `compute/2` turns the list into a tuple and pa
 
 The grid has `div(width, cell_size) + 1` columns and `div(height, cell_size) + 1` rows. Each point `{px, py, w}` adds `w * exp(-d² / (2σ²)) / (2πσ²)` to every cell within a square of half-side `ceil(3 * bandwidth / cell_size)` cells around it (clamped to the grid), where `d` is the distance from the point to the cell in cell units and `σ = bandwidth / cell_size`. Densities are therefore expressed per cell². Contours are computed with smoothing on, and every coordinate is multiplied by `cell_size` so the result is in pixels. `compute/2` returns the same shape as 6.3; `render/2` returns `[%{value, path}]` with every ring closed by `Z`.
 
-A point touches only the cells of its footprint, and its contributions accumulate in a map keyed by cell index that is materialised into the grid once, so the estimate costs time proportional to the points times the footprint plus the cells, never the points times the grid; a cell's contributions are summed in point order, so the surface is the same whatever the order of accumulation (D-72). With the defaults of 7.1 — a 241 × 126 grid and 20 thresholds — `compute/2` over a handful of points completes well inside a second, and `test/visualize/contour_test.exs` holds it to that and holds the cost of `Visualize.Contour.compute/2` to grow no faster than about linearly in the cells.
+A point touches only the cells of its footprint, and its contributions accumulate in a map keyed by cell index that is materialised into the grid once, so the estimate costs time proportional to the points times the footprint plus the cells, never the points times the grid; a cell's contributions are summed in point order, so the surface is the same whatever the order of accumulation (D-72). With the defaults of 7.1 — a 241 × 126 grid and 20 thresholds — `compute/2` over a handful of points completes well inside a second, and `test/visualize/contour_test.exs` holds it to that and holds the cost of `Visualize.Contour.compute/2` linear by count — `Visualize.Contour.cost/2`, the reads, segments and hops of one compute ([12-testing-and-conformance](12-testing-and-conformance.md), #271).
 
 ### 7.3 Functions
 

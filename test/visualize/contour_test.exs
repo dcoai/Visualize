@@ -9,6 +9,8 @@ defmodule Visualize.ContourTest do
   alias Visualize.Contour
   alias Visualize.Contour.Density
 
+  doctest Contour
+
   @points [
     %{x: 100, y: 100},
     %{x: 300, y: 250},
@@ -46,32 +48,42 @@ defmodule Visualize.ContourTest do
       for y <- 0..(n - 1), x <- 0..(n - 1), do: :math.sin(x / 5) * :math.cos(y / 7) * 10
     end
 
-    defp contour_ms(n) do
-      contour = Contour.new() |> Contour.size(n, n) |> Contour.thresholds(10)
-      grid = wavy(n)
-      best_of_three_ms(fn -> Contour.compute(contour, grid) end)
-    end
+    # D-72 by count, not by clock (#271): the tracing follows each segment at most once and
+    # the grid is read once per threshold, whatever its size — a wall-clock ratio moved by
+    # a third between runs on a shared box and said nothing about the algorithm.
+    test "the tracing is linear in the segments and the grid is read once per threshold" do
+      for n <- [101, 201] do
+        contour = Contour.new() |> Contour.size(n, n) |> Contour.thresholds(10)
+        cost = Contour.cost(contour, wavy(n))
 
-    test "four times the cells cost at most about five times the time" do
-      # Quadratic in the cells — the list walk D-72 replaced — is fourteen times.
-      small = contour_ms(101)
-      large = contour_ms(201)
+        assert cost.hops <= cost.segments,
+               "#{n}²: #{cost.hops} hops over #{cost.segments} segments"
 
-      assert large <= max(6 * small, 50),
-             "101² took #{small} ms, 201² took #{large} ms (#{Float.round(large / small, 1)}×)"
-    end
+        assert cost.reads == (n + 1) * (n + 1) * 10
+        assert cost.segments > 0
+      end
 
-    test "four times the density cells cost at most about five times the time" do
-      points = [%{x: 10, y: 10}, %{x: 30, y: 30}]
-
+      # Four times the cells is about four times the work — the reads exactly, and the
+      # segments and the hops within the ratio a doubled contour length gives.
       small =
-        best_of_three_ms(fn -> Density.compute(Density.size(Density.new(), 200, 200), points) end)
+        Contour.cost(Contour.new() |> Contour.size(101, 101) |> Contour.thresholds(10), wavy(101))
+
+      large =
+        Contour.cost(Contour.new() |> Contour.size(201, 201) |> Contour.thresholds(10), wavy(201))
+
+      assert large.reads / small.reads < 4.0
+      assert large.hops / small.hops < 4.5
+    end
+
+    # A smoke, not a ratio (#271): the claim is *usable* — D-72's 159 s became milliseconds
+    # — so the bound is generous and absolute, and a shared box cannot trip it by noise.
+    test "a density on a plot-sized grid is milliseconds, not seconds" do
+      points = [%{x: 10, y: 10}, %{x: 30, y: 30}]
 
       large =
         best_of_three_ms(fn -> Density.compute(Density.size(Density.new(), 400, 400), points) end)
 
-      assert large <= max(6 * small, 50),
-             "51² took #{small} ms, 101² took #{large} ms (#{Float.round(large / small, 1)}×)"
+      assert large < 2000, "400² took #{large} ms"
     end
   end
 
