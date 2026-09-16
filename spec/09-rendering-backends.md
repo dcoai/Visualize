@@ -259,6 +259,8 @@ The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<n
 | `Visualize.Backend.CanvasBinary.encode_element!/1` | `encode_element!(element, [])`. |
 | `Visualize.Backend.CanvasBinary.encode_element!/2` | As `encode_element/2` but returns the binary directly and raises `RuntimeError` when Nx is absent. |
 | `Visualize.Backend.CanvasBinary.to_base64/1` | Standard Base64 (`Base.encode64/1`, padded) of a binary, for embedding in an HTML attribute or a LiveView event payload. |
+| `Visualize.Backend.CanvasBinary.Decoder.decode/1` | The reference decoder (#270): the records of a stream in order — the path records with their commands, `circles`, `rects`, `style`, `transform`, `save`/`restore`/`fill`/`stroke`, and the `0x60` records of §5 as `{:incremental, mode, dx, dy, regions}` and `{:full_redraw, records}` — written against the record layouts this section states, not against the encoder, so `decode(encode(x))` is a round trip (D-36). Raises on an unknown opcode or a truncated record. It is the executing guard a consumer runs over its own streams under test; the JavaScript executor of spec/10 §12 reads the same layouts. |
+| `Visualize.Backend.CanvasBinary.Decoder.decode_path/1` | The one path record of a stream as a `Visualize.IR.Path`. |
 
 ### 4.2 Stream model and opcodes
 
