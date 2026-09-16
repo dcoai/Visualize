@@ -36,6 +36,9 @@ defmodule Visualize.Hooks.Builder do
     patch of the colour chooser is dropped on a colour well (spec/14 §19.10)
   - `context_width` with `%{"width" => integer}` when the inspector's edge is released
     after a drag (spec/14 §18.16)
+  - `pick` with `%{"node" => string}` in scope `graph` when an element of the chart that
+    carries `data-node` is clicked (spec/14 §18.16); the hook also outlines the drawn node
+    whose path is the longest prefix of the `<svg>`'s `data-builder-selected`
   """
 
   @doc """
@@ -74,6 +77,8 @@ defmodule Visualize.Hooks.Builder do
         // position, so the builder says which row to land on (spec/14 §18.17).
         // The pool list's chosen entry is scrolled into view (spec/14 §19.10).
         this.reveal();
+        // The graph outlines the open node (spec/14 §18.16); the render carries its label.
+        this.outline();
         // The inspector's edge (spec/14 §18.16): a drag on the handle reports the width
         // once the pointer is released; while it moves the column follows it.
         this.onPointerDown = this.handlePointerDown.bind(this);
@@ -86,6 +91,27 @@ defmodule Visualize.Hooks.Builder do
 
       updated() {
         this.reveal();
+        this.outline();
+      },
+
+      // In scope `graph`, the drawn node whose path is the longest prefix of the open
+      // node's label — equal to it, or followed in it by `.` or `[` — is marked
+      // `vis-builder-graph-selected` and every other element is not (spec/14 §18.16,
+      // spec/10 §16.3). A facet frame draws one node several times; every copy is marked.
+      outline() {
+        if (this.scope !== 'graph') return;
+        const svg = this.el.querySelector('svg[data-builder-selected]');
+        const label = svg ? svg.getAttribute('data-builder-selected') : null;
+        const nodes = Array.from(this.el.querySelectorAll('[data-node]'));
+        let best = null;
+        nodes.forEach((node) => {
+          const path = node.getAttribute('data-node');
+          const fits = label !== null && (label === path || label.startsWith(path + '.') || label.startsWith(path + '['));
+          if (fits && (best === null || path.length > best.length)) best = path;
+        });
+        nodes.forEach((node) => {
+          node.classList.toggle('vis-builder-graph-selected', best !== null && node.getAttribute('data-node') === best);
+        });
       },
 
       handlePointerDown(e) {
@@ -432,6 +458,13 @@ defmodule Visualize.Hooks.Builder do
 
       handleClick(e) {
         if (!e.target || !e.target.closest) return;
+        // The graph (spec/14 §18.16): the nearest drawn node under the pointer is picked;
+        // the server selects its owning layer and opens it, and the re-render outlines it.
+        if (this.scope === 'graph') {
+          const node = e.target.closest('[data-node]');
+          if (node && this.el.contains(node)) this.push('pick', { node: node.getAttribute('data-node') });
+          return;
+        }
         // The one listener that selects a field (spec/14 §19.10): a well selects its own
         // field — a gradient's stop, not the fill row it sits in — and any other click in
         // a row selects the row's key. Rows carry no click binding, so this is the only

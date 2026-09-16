@@ -599,6 +599,9 @@ The preview pane is `<div class="vis-builder-preview">`. When the design applies
 | `data-builder-target` | the hook element | the `phx-target` the hook pushes to — a LiveComponent's `@myself` printed — so the events reach the builder and not its host; absent, the hook pushes to the LiveView |
 | `data-builder-layer` | a layer of the stack panel, and a row of the inspector | the layer's zero-based position in the `layers` list |
 | `data-builder-path` | a row of the inspector | the entry's path, spelled as `Visualize.Chart.Validator.format/1` spells one (`frame.axes[0].scale`) |
+| `data-builder-scope` | the hook element | which list or region this instance serves; absent for the layer stack, `graph` for the builder's graph ([14-declarative-chart](14-declarative-chart.md) §18.16), and the others §18.18 and §18.16 name |
+| `data-node` | an element of the chart under a `graph` hook | the design node the element draws, spelled as `Visualize.Chart.Validator.format_path/1` spells one (`marks[0]`), rendered with `paths: true` ([14-declarative-chart](14-declarative-chart.md) §4.7) |
+| `data-builder-selected` | the `<svg>` of the chart under a `graph` hook | the open node's label, which the hook outlines |
 
 A `draggable="true"` element carrying `data-builder-layer` is a layer that can be dragged; a row carrying `data-builder-path` is one that can be clicked. An element carrying neither takes part in neither gesture, which is how one hook serves two panels without knowing which it is on.
 
@@ -611,3 +614,5 @@ A `dragstart` on an element whose nearest `[data-builder-layer]` ancestor-or-sel
 A `click` whose target's nearest `[data-builder-path]` ancestor-or-self is inside the hook element pushes `inspect` with `{path, layer}`, the two attributes as strings, and marks that row `vis-builder-entry-open`, removing the class from every other row under the element — the highlight is the browser's because it needs no server round trip, and the selection is the server's because it changes what the editor edits. A click on anything else pushes nothing.
 
 Both pushes go through `pushEventTo(target, …)` when `data-builder-target` is set and through `pushEvent(…)` when it is not. `destroyed()` removes the five listeners with the kept references. `test/visualize/hooks/builder_test.exs` holds the source to this shape.
+
+**In scope `graph`** ([14-declarative-chart](14-declarative-chart.md) §18.16) a `click` whose target's nearest `[data-node]` ancestor-or-self is inside the hook element pushes `pick` with `{node}`, the attribute as a string, and pushes nothing for a click on anything else; no class is set by the click, because the server's answer re-renders the chart. On `mounted()` and on every `updated()` the hook reads `data-builder-selected` from the `<svg>` under it and gives `vis-builder-graph-selected` to every element whose `data-node` is the longest prefix of that label — equal to it, or followed in it by `.` or `[` — and to no other; with no `<svg>`, no label, or no element that fits, nothing is marked. The prefix rule is what lets the open form be a facet of a node the graph draws whole.

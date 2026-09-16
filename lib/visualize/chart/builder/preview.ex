@@ -29,12 +29,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:theme, :any, default: nil, doc: "a `Visualize.Theme`, `nil` for the design's own")
     attr(:class, :string, default: nil, doc: "appended to the pane's class")
 
+    attr(:selected, :string,
+      default: nil,
+      doc: "the open node's label, carried on the `<svg>` for the graph's hook (spec/14 §18.4)"
+    )
+
     @doc """
     Renders the preview pane (spec/10 §15.3).
 
     `<div class="vis-builder-preview">` holding either the chart's markup or
     `<ul class="vis-builder-errors">` with one `<li class="vis-builder-error">` per fault.
-    Exactly one of the two is present.
+    Exactly one of the two is present. The chart is drawn with `paths: true`, so every
+    node it draws carries `data-node`, and the `<svg>` carries `data-builder-selected`
+    with the open node's label (spec/14 §18.4, §18.16).
     """
     def panel(assigns) do
       assigns = assign(assigns, draw(assigns))
@@ -51,6 +58,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           height={@height}
           role="img"
           viewBox={"0 0 #{@width} #{@height}"}
+          data-builder-selected={@selected}
         >{@chart}</svg>
       </div>
       """
@@ -63,12 +71,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The design applied over the pool and drawn into the `<svg>` shell at the frame's own
     # size, or the faults application reported. The frame renders a group and the shell is
     # the pane's, as it is a component's (spec/10 §1.2); the markup is a string and MUST be
-    # raw to reach the document (§11.2).
+    # raw to reach the document (§11.2). Drawn with paths, so a click can name what it hit
+    # (spec/14 §4.7, §18.16).
     defp draw(%{design: design, sources: sources, vars: vars, theme: theme}) do
       case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
         {:ok, %{frame: %{size: size}} = applied} ->
           %{
-            chart: Phoenix.HTML.raw(Chart.render(applied)),
+            chart: Phoenix.HTML.raw(Chart.render(applied, paths: true)),
             errors: [],
             width: size.width,
             height: size.height

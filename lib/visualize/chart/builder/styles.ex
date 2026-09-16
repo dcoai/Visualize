@@ -284,6 +284,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
       overflow: auto;
     }
 
+    /* The graph selects (spec/14 §18.16): the innermost drawn node under the pointer is
+       outlined, and the open node — marked by the hook — steadier than hover. */
+    .vis-builder .vis-builder-graph [data-node] {
+      cursor: pointer;
+    }
+
+    .vis-builder .vis-builder-graph [data-node]:hover:not(:has([data-node]:hover)) {
+      outline: 1px dashed var(--vis-builder-accent);
+      outline-offset: 2px;
+    }
+
+    .vis-builder .vis-builder-graph .vis-builder-graph-selected {
+      outline: 2px solid var(--vis-builder-accent);
+      outline-offset: 2px;
+    }
+
     /* The inspector (spec/14 §18.16): its width a custom property the drag sets, its
        left edge a handle. */
     .vis-builder-context {
