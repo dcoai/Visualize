@@ -84,6 +84,33 @@ defmodule Examples.Charts.Design do
     |> Chart.render(backend: :canvas, format: :binary_base64)
   end
 
+  @doc """
+  The module's design as the hybrid split of spec/14 §12 (#268): the furniture as the
+  compiled chart's static SVG and every mark of more than a point on the binary canvas —
+  `canvas` base64 for the `CanvasBinaryChart` hook, `""` when no mark goes there — with
+  the frame's size, for the page to layer the two.
+  """
+  @spec hybrid(module(), keyword()) :: %{
+          static: String.t(),
+          canvas: String.t(),
+          dynamic_svg: String.t(),
+          width: number(),
+          height: number()
+        }
+  def hybrid(module, opts) do
+    applied = applied(module, opts)
+    {:ok, compiled} = Chart.compile(applied, ceiling: 1)
+    {payload, _compiled} = Visualize.Chart.Compiled.tick(compiled, applied.sources)
+
+    %{
+      static: Visualize.Chart.Compiled.static(compiled),
+      canvas: payload.canvas,
+      dynamic_svg: payload.svg,
+      width: applied.frame.size.width,
+      height: applied.frame.size.height
+    }
+  end
+
   @doc "The plot area of a frame of `width` by `height` with `margin` (spec/14 §4.2)."
   @spec plot(number(), number(), map()) :: {number(), number()}
   def plot(width, height, margin) do
