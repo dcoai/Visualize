@@ -1,9 +1,10 @@
 defmodule ExamplesWeb.HighPerformanceStreamTest do
   @moduledoc """
   The High-Performance page's streams decoded under test (#270): the full redraw and an
-  incremental frame, built by the page's own functions, run through the reference
-  decoder of `test/support` — so a stream the browser cannot draw fails here and not as
-  a blank canvas.
+  incremental frame, built by the page's own functions, run through the library's
+  reference decoder — so a stream the browser cannot draw fails here and not as a blank
+  canvas — and the scroll contract of spec/09 §5.3 held (#292): a frame is the previous
+  one translated by the scroll, and a strip is the full render over its columns.
   """
   use ExUnit.Case, async: true
 
@@ -12,26 +13,41 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
   alias Visualize.Backend.CanvasBinary.Decoder
   alias Visualize.Scale
 
-  # The page's own assigns as mount/3 makes them, for a frame.
-  defp assigns(frame) do
-    points = div(1000, 5)
+  # The page's frame is 900 by 500 with the plot at (60, 40), 810 by 410.
+  @margin {60, 40}
+  @inner {810, 410}
+  @scroll 5
 
-    x = Scale.Linear.new() |> Scale.Linear.domain([0, points - 1]) |> Scale.Linear.range([0, 640])
-    y = Scale.Linear.new() |> Scale.Linear.domain([-100, 100]) |> Scale.Linear.range([340, 0])
+  # The page's own assigns as mount/3 makes them at a density, with a random line that
+  # is not random so two frames can be compared.
+  defp assigns(samples_per_px) do
+    y = Scale.Linear.new() |> Scale.Linear.domain([-100, 100]) |> Scale.Linear.range([410, 0])
 
-    %{
-      frame: frame,
-      points_per_series: points,
-      x_scale: x,
-      y_scale: y,
-      random_data: for(_ <- 1..points, do: 50.0)
-    }
+    %Phoenix.LiveView.Socket{}
+    |> Phoenix.Component.assign(y_scale: y, frame: 0)
+    |> Page.at_density(samples_per_px)
+    |> Map.fetch!(:assigns)
+    |> then(&%{&1 | random_data: Enum.map(1..&1.points_per_series, fn i -> rem(i, 7) * 10.0 end)})
   end
 
+  # The frame after `assigns`: the origin on by the scroll, the random line too.
+  defp scrolled(assigns) do
+    step = Page.scroll_samples(assigns)
+    fresh = for _ <- 1..step, do: 5.0
+    %{assigns | origin: assigns.origin + step, random_data: Enum.drop(assigns.random_data, step) ++ fresh}
+  end
+
+  defp full(assigns) do
+    assert [{:full_redraw, records}] =
+             assigns |> Page.build_chart_element() |> CanvasIncremental.encode_full_redraw() |> Decoder.decode()
+
+    records
+  end
+
+  defp lines(records), do: for({:path32, points} <- records, do: points)
+
   test "the full redraw decodes to the five series' paths" do
-    element = Page.build_chart_element(assigns(0))
-    binary = CanvasIncremental.encode_full_redraw(element)
-    assert [{:full_redraw, records}] = Decoder.decode(binary)
+    records = full(assigns(2))
     kinds = records |> Enum.map(&if(is_tuple(&1), do: elem(&1, 0), else: &1)) |> Enum.frequencies()
     # The area as one cubic path, the four lines as f32 polylines, each styled and stroked,
     # the area filled, all inside one save/translate/restore.
@@ -39,16 +55,59 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
     assert kinds[:path32] == 4
     assert kinds[:style] == 5 and kinds[:stroke] == 5 and kinds[:fill] == 1
     assert kinds[:save] == 1 and kinds[:restore] == 1 and kinds[:transform] == 1
+    # One point per sample: two per pixel column and one more.
+    assert Enum.all?(lines(records), &(length(&1) == 2 * 810 + 1))
   end
 
-  test "an incremental frame decodes to its exposed region" do
-    a = assigns(3)
-    regions = CanvasIncremental.exposed_regions({2.0, 0}, {640, 340})
-    adjusted = Enum.map(regions, fn {rx, ry, rw, rh} -> {60 + rx, 20 + ry, rw, rh} end)
+  test "a density is a whole number of samples per pixel and the select's totals are its" do
+    for d <- [1, 2, 5, 12] do
+      a = assigns(d)
+      assert a.points_per_series == d * 810 + 1
+      assert a.total_points == a.points_per_series * 5
+      assert Page.total_at(d) == a.total_points
+      assert Page.scroll_samples(a) == @scroll * d
+      # A sample is exactly 1/d pixels: the scroll's samples are the scroll's pixels.
+      assert_in_delta Scale.Linear.apply(a.x_scale, @scroll * d), @scroll, 1.0e-9
+    end
+  end
+
+  test "the next frame is this one translated by the scroll (spec/09 §5.3)" do
+    a = assigns(2)
+    step = Page.scroll_samples(a)
+    before = lines(full(a))
+    after_ = lines(full(scrolled(a)))
+
+    for {was, now} <- Enum.zip(before, after_) do
+      # Every point that stays on the canvas keeps its y and moves left by the scroll.
+      for {{x1, y1}, {x0, y0}} <- Enum.zip(now, Enum.drop(was, step)) do
+        assert_in_delta x1, x0 - @scroll, 1.0e-3
+        assert_in_delta y1, y0, 1.0e-3
+      end
+    end
+  end
+
+  test "an incremental frame decodes to its exposed region, the full render over its columns" do
+    a = assigns(2) |> scrolled()
+    {mx, my} = @margin
+    regions = CanvasIncremental.exposed_regions({@scroll * 1.0, 0}, @inner)
+    adjusted = Enum.map(regions, fn {rx, ry, rw, rh} -> {mx + rx, my + ry, rw, rh} end)
     elements = Enum.map(adjusted, fn bounds -> {bounds, Page.build_region_element(a, bounds)} end)
-    binary = CanvasIncremental.encode_incremental({2.0, 0}, {700, 400}, elements)
-    assert [{:incremental, _mode, dx, 0.0, decoded}] = Decoder.decode(binary)
-    assert dx == 2.0
-    assert length(decoded) == length(adjusted)
+    binary = CanvasIncremental.encode_incremental({@scroll * 1.0, 0}, {900, 500}, elements)
+    assert [{:incremental, :scroll_x, dx, +0.0, [region]}] = Decoder.decode(binary)
+    assert dx == @scroll * 1.0
+
+    # The strip's lines are the full render's points at the same columns: the same x, the
+    # same y, for every point the strip carries.
+    {_bounds, records} = region
+    whole = lines(full(a))
+
+    for {strip, line} <- Enum.zip(lines(records), whole) do
+      assert length(strip) > 1
+      by_x = Map.new(line)
+
+      for {x, y} <- strip do
+        assert_in_delta y, Map.fetch!(by_x, x), 1.0e-3
+      end
+    end
   end
 end

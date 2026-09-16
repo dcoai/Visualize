@@ -1,13 +1,18 @@
 defmodule ExamplesWeb.HighPerformanceLive do
   @moduledoc """
-  High-performance chart demo with 10,000 total data points.
+  High-performance chart demo: five series at a whole number of samples per pixel column.
 
   Demonstrates:
-  - Combined area chart + multi-line overlay (10,000 points total)
+  - Combined area chart + multi-line overlay (8,105 points at the default density)
   - Incremental rendering with scroll+copy optimization
   - Binary Canvas encoding (60% smaller than JSON)
   - Hybrid rendering (static SVG axes + dynamic Canvas data)
   - Real-time FPS monitoring
+
+  The animation is the scroll (spec/14 §12.6, #292): a copy-shift frame is the previous
+  frame translated by exactly `scroll_delta` pixels, so every series is a function of an
+  absolute sample index, a sample is `1 / samples_per_px` pixels, and the frame's `origin`
+  advances by a whole number of samples. Nothing else changes between frames.
   """
 
   use Phoenix.LiveView
@@ -22,8 +27,10 @@ defmodule ExamplesWeb.HighPerformanceLive do
   @inner_width @width - @margin.left - @margin.right
   @inner_height @height - @margin.top - @margin.bottom
 
-  @total_points 10_000
   @num_lines 4  # 4 lines on top of area = 5 series total
+  @series @num_lines + 1
+  @densities [1, 2, 5, 12]  # samples per pixel column the page offers
+  @default_samples_per_px 2
   @default_target_fps 60
   @scroll_delta 5  # pixels to scroll per frame
 
@@ -32,23 +39,9 @@ defmodule ExamplesWeb.HighPerformanceLive do
   @line_colors ["#f28e2c", "#e15759", "#76b7b2", "#59a14f"]
 
   def mount(_params, _session, socket) do
-    # Points per series (area + 4 lines = 5 series)
-    points_per_series = div(@total_points, @num_lines + 1)
-
-    # Create scales
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, points_per_series - 1])
-      |> Scale.Linear.range([0, @inner_width])
-
     y_scale = Scale.Linear.new()
       |> Scale.Linear.domain([-100, 100])
       |> Scale.Linear.range([@inner_height, 0])
-
-    # Pre-render static SVG axes
-    static_svg = render_static_svg(x_scale, y_scale, points_per_series)
-
-    # Initialize random data for the scrolling random line
-    random_data = for _i <- 1..points_per_series, do: :rand.uniform() * 60 + 40
 
     {:ok, assign(socket,
       width: @width,
@@ -57,20 +50,17 @@ defmodule ExamplesWeb.HighPerformanceLive do
       frame: 0,
       fps: 0.0,
       target_fps: @default_target_fps,
-      total_points: @total_points,
-      points_per_series: points_per_series,
-      x_scale: x_scale,
+      densities: @densities,
       y_scale: y_scale,
-      static_svg: static_svg,
       frame_times: [],
       render_times: [],
       payload_size: 0,
-      random_data: random_data,
       viewport_x: 0,
       use_incremental: true,
       last_full_render: true,
       points_rendered: 0
-    )}
+    )
+    |> at_density(@default_samples_per_px)}
   end
 
   def handle_event("start", _params, socket) do
@@ -94,28 +84,10 @@ defmodule ExamplesWeb.HighPerformanceLive do
     {:noreply, assign(socket, use_incremental: not socket.assigns.use_incremental)}
   end
 
-  def handle_event("set_points", %{"points" => points_str}, socket) do
-    total = String.to_integer(points_str)
-    points_per_series = div(total, @num_lines + 1)
-
-    # Update scales for new point count
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, points_per_series - 1])
-      |> Scale.Linear.range([0, @inner_width])
-
-    static_svg = render_static_svg(x_scale, socket.assigns.y_scale, points_per_series)
-
-    # Regenerate random data for new point count
-    random_data = for _i <- 1..points_per_series, do: :rand.uniform() * 60 + 40
-
-    {:noreply, assign(socket,
-      total_points: total,
-      points_per_series: points_per_series,
-      x_scale: x_scale,
-      static_svg: static_svg,
-      random_data: random_data,
-      last_full_render: true
-    )}
+  def handle_event("set_points", %{"points" => density}, socket) do
+    samples_per_px = String.to_integer(density)
+    true = samples_per_px in @densities
+    {:noreply, socket |> at_density(samples_per_px) |> assign(:last_full_render, true)}
   end
 
   def handle_event("set_fps", %{"fps" => fps_str}, socket) do
@@ -128,15 +100,16 @@ defmodule ExamplesWeb.HighPerformanceLive do
     if socket.assigns.running do
       render_start = System.monotonic_time(:microsecond)
 
-      # Shift random data left and add new value on right
-      [_first | rest] = socket.assigns.random_data
-      new_value = :rand.uniform() * 60 + 40
-      random_data = rest ++ [new_value]
+      # The scroll is the animation: the origin advances by the frame's scroll in samples,
+      # and the random line drops and appends that many (spec/14 §12.6).
+      step = scroll_samples(socket.assigns)
+      random_data = Enum.drop(socket.assigns.random_data, step) ++ random_samples(step)
+      origin = socket.assigns.origin + step
 
       # Update viewport (scrolling right exposes new data on right)
       viewport_x = socket.assigns.viewport_x + @scroll_delta
 
-      socket = assign(socket, random_data: random_data, viewport_x: viewport_x)
+      socket = assign(socket, random_data: random_data, origin: origin, viewport_x: viewport_x)
 
       # Choose rendering mode
       socket = if socket.assigns.use_incremental and not socket.assigns.last_full_render do
@@ -167,17 +140,75 @@ defmodule ExamplesWeb.HighPerformanceLive do
     end
   end
 
+  # ============================================================
+  # The data model: samples per pixel column (spec/14 §12.6)
+  # ============================================================
+
+  @doc false
+  # The page at `samples_per_px`: a series is `samples_per_px × inner_width + 1` samples so
+  # that the x scale maps a sample to exactly `1 / samples_per_px` pixels, the origin is
+  # back at zero, and the random line is fresh. Public for the stream test.
+  def at_density(socket, samples_per_px) do
+    points_per_series = samples_per_px * @inner_width + 1
+
+    x_scale = Scale.Linear.new()
+      |> Scale.Linear.domain([0, points_per_series - 1])
+      |> Scale.Linear.range([0, @inner_width])
+
+    assign(socket,
+      samples_per_px: samples_per_px,
+      points_per_series: points_per_series,
+      total_points: points_per_series * @series,
+      x_scale: x_scale,
+      static_svg: render_static_svg(x_scale, socket.assigns.y_scale, points_per_series),
+      random_data: random_samples(points_per_series),
+      origin: 0
+    )
+  end
+
+  @doc false
+  # The samples one frame scrolls by: `scroll_delta` pixels at the page's density.
+  def scroll_samples(%{samples_per_px: samples_per_px}), do: @scroll_delta * samples_per_px
+
+  @doc false
+  # The total the page offers at a density, for the select.
+  def total_at(samples_per_px), do: (samples_per_px * @inner_width + 1) * @series
+
+  defp random_samples(n), do: for(_ <- 1..n//1, do: :rand.uniform() * 60 + 40)
+
+  @doc false
+  # A series' value at absolute sample `j` of a series `count` samples long: one function
+  # for the full render and a region render, with no term that changes between frames, so
+  # a frame is the previous one translated by the scroll (spec/09 §5.3). Line 0 is the
+  # random line and is read from `random_data`, not computed.
+  def series_y(:area, j, count) do
+    t = j / count
+    :math.sin(t * 8) * 25 + :math.sin(t * 3) * 15 - 20
+  end
+
+  def series_y({:line, line_idx}, j, count) when line_idx > 0 do
+    offset = line_idx * 0.8
+    amplitude = 35 - line_idx * 5
+    frequency = 12 + line_idx * 4
+    t = j / count
+
+    :math.sin(t * frequency + offset) * amplitude +
+      :math.cos(t * (frequency / 2.5) + offset) * (amplitude / 3) +
+      (line_idx - 1.5) * 15
+  end
+
+  # ============================================================
+  # Rendering
+  # ============================================================
+
   defp send_full_render(socket) do
     element = build_chart_element(socket.assigns)
     binary = CanvasIncremental.encode_full_redraw(element)
     encoded = Base.encode64(binary)
 
-    # Full render processes all points (5 series × points_per_series)
-    total_points = socket.assigns.points_per_series * 5
-
     socket
     |> assign(:payload_size, byte_size(binary))
-    |> assign(:points_rendered, total_points)
+    |> assign(:points_rendered, socket.assigns.total_points)
     |> push_event("canvas_incremental", %{
       binary: encoded,
       dx: 0,
@@ -225,33 +256,33 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
   # Calculate how many points are in the exposed regions
   defp calculate_region_points(assigns, regions) do
-    %{points_per_series: count, x_scale: x_scale} = assigns
+    %{points_per_series: count} = assigns
 
     Enum.reduce(regions, 0, fn {rx, _ry, rw, _rh}, acc ->
       # Convert pixel bounds to data indices
-      {start_idx, end_idx} = pixel_to_data_range(rx - @margin.left, rw, x_scale, count)
+      {start_idx, end_idx} = pixel_to_data_range(rx - @margin.left, rw, count)
       points_in_region = max(0, end_idx - start_idx + 1)
-      # Multiply by number of series (1 area + 4 lines)
-      acc + points_in_region * 5
+      acc + points_in_region * @series
     end)
   end
 
-  # Build element for ONLY the data in the exposed region
   @doc false
+  # The chart over ONLY the samples under the exposed region: the same series function as
+  # the full render over the region's columns, with a two-sample buffer each side so a
+  # path enters and leaves the strip on its own line. Public for the stream test.
   def build_region_element(assigns, {rx, _ry, rw, _rh}) do
-    %{frame: frame, points_per_series: count, x_scale: x_scale, y_scale: y_scale} = assigns
+    %{points_per_series: count} = assigns
 
     # Convert pixel bounds to data index range
     # Account for margin offset - region might be in margin area
     pixel_x = rx - @margin.left
-    {raw_start, raw_end} = pixel_to_data_range(pixel_x, rw, x_scale, count)
+    {raw_start, raw_end} = pixel_to_data_range(pixel_x, rw, count)
 
     # Check for invalid range BEFORE applying buffer
     # (region might be entirely in margin area)
     if raw_start > raw_end do
       Element.root(@width, @height, children: [])
     else
-      # Add 2 points buffer on each side for smooth line entry/exit
       buffer = 2
       start_idx = max(0, raw_start - buffer)
       end_idx = min(count - 1, raw_end + buffer)
@@ -260,74 +291,16 @@ defmodule ExamplesWeb.HighPerformanceLive do
       if end_idx - start_idx < 1 do
         Element.root(@width, @height, children: [])
       else
-        build_region_chart(assigns, frame, count, x_scale, y_scale, start_idx, end_idx)
+        chart(assigns, start_idx, end_idx)
       end
     end
-  end
-
-  # Build the actual chart elements for the region
-  defp build_region_chart(assigns, frame, count, x_scale, y_scale, start_idx, end_idx) do
-    phase = frame * 0.04
-
-    # Generate data ONLY for the region
-    xs = for i <- start_idx..end_idx, do: i * 1.0
-
-    # 1. Area chart (bottom layer) - only for region
-    area_ys = for i <- start_idx..end_idx do
-      t = i / count
-      :math.sin(t * 8 + phase) * 25 + :math.sin(t * 3 + phase * 0.7) * 15 - 20
-    end
-
-    area_data = Enum.zip(xs, area_ys) |> Enum.map(fn {x, y} -> %{x: x, y: y} end)
-
-    area = Shape.Area.new()
-      |> Shape.Area.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
-      |> Shape.Area.y0(fn _ -> @inner_height end)
-      |> Shape.Area.y1(fn d -> Scale.Linear.apply(y_scale, d.y) end)
-
-    area_path = Shape.Area.generate_path(area, area_data)
-    area_element = Element.path(area_path, %{fill: @area_color, fill_opacity: 0.7, stroke: @area_color, stroke_width: 1})
-
-    # 2. Line series - only for region
-    line_elements = for {color, line_idx} <- Enum.with_index(@line_colors) do
-      ys = if line_idx == 0 do
-        # Extract only the region slice from random_data
-        Enum.slice(assigns.random_data, start_idx..end_idx)
-      else
-        offset = line_idx * 0.8
-        amplitude = 35 - line_idx * 5
-        frequency = 12 + line_idx * 4
-
-        for i <- start_idx..end_idx do
-          t = i / count
-          :math.sin(t * frequency + phase + offset) * amplitude +
-          :math.cos(t * (frequency / 2.5) + phase * 1.3 + offset) * (amplitude / 3) +
-          (line_idx - 1.5) * 15
-        end
-      end
-
-      line_data = Enum.zip(xs, ys) |> Enum.map(fn {x, y} -> %{x: x, y: y} end)
-
-      line = Shape.Line.new()
-        |> Shape.Line.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
-        |> Shape.Line.y(fn d -> Scale.Linear.apply(y_scale, d.y) end)
-
-      line_path = Shape.Line.generate_path(line, line_data)
-      Element.path(line_path, %{stroke: color, stroke_width: 2, fill: :none})
-    end
-
-    chart_group = Element.group([area_element | line_elements],
-      transform: Transform.translate(@margin.left, @margin.top)
-    )
-
-    Element.root(@width, @height, children: [chart_group])
   end
 
   # Convert pixel x position and width to data index range
-  defp pixel_to_data_range(pixel_x, pixel_width, _x_scale, count) do
+  defp pixel_to_data_range(pixel_x, pixel_width, count) do
     # Invert the scale to get data values from pixels
-    # x_scale maps [0, count-1] -> [0, @inner_width]
-    points_per_pixel = (count - 1) / @inner_width
+    # x_scale maps [0, count-1] -> [0, @inner_width], a whole number of samples per pixel
+    samples_per_px = div(count - 1, @inner_width)
 
     # Clamp pixel values to valid chart area
     # Region might extend into margin areas (negative or beyond inner_width)
@@ -338,31 +311,29 @@ defmodule ExamplesWeb.HighPerformanceLive do
     if effective_start >= effective_end do
       {1, 0}  # Invalid range (start > end)
     else
-      start_idx = max(0, floor(effective_start * points_per_pixel))
-      end_idx = min(count - 1, ceil(effective_end * points_per_pixel))
+      start_idx = max(0, floor(effective_start * samples_per_px))
+      end_idx = min(count - 1, ceil(effective_end * samples_per_px))
       {start_idx, end_idx}
     end
   end
 
   @doc false
-  # Public for the stream test of #270: the page's own bytes decoded under test.
+  # The whole chart. Public for the stream test of #270: the page's own bytes decoded under test.
   def build_chart_element(assigns) do
-    %{frame: frame, points_per_series: count, x_scale: x_scale, y_scale: y_scale} = assigns
+    chart(assigns, 0, assigns.points_per_series - 1)
+  end
 
-    phase = frame * 0.04
+  # The chart over columns `start_idx..end_idx`: the area under four lines, each series
+  # `series_y/3` at `origin + i` for column `i`, in a group at the plot's margin.
+  defp chart(assigns, start_idx, end_idx) do
+    %{origin: origin, points_per_series: count, x_scale: x_scale, y_scale: y_scale} = assigns
 
-    # Generate data for all series
-    xs = for i <- 0..(count - 1), do: i * 1.0
+    xs = for i <- start_idx..end_idx, do: i * 1.0
 
     # 1. Area chart (bottom layer) - smooth wave
-    area_ys = for i <- 0..(count - 1) do
-      t = i / count
-      :math.sin(t * 8 + phase) * 25 + :math.sin(t * 3 + phase * 0.7) * 15 - 20
-    end
-
+    area_ys = for i <- start_idx..end_idx, do: series_y(:area, origin + i, count)
     area_data = Enum.zip(xs, area_ys) |> Enum.map(fn {x, y} -> %{x: x, y: y} end)
 
-    # Build area element
     area = Shape.Area.new()
       |> Shape.Area.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
       |> Shape.Area.y0(fn _ -> @inner_height end)
@@ -374,18 +345,9 @@ defmodule ExamplesWeb.HighPerformanceLive do
     # 2. Line series
     line_elements = for {color, line_idx} <- Enum.with_index(@line_colors) do
       ys = if line_idx == 0 do
-        assigns.random_data
+        Enum.slice(assigns.random_data, start_idx..end_idx)
       else
-        offset = line_idx * 0.8
-        amplitude = 35 - line_idx * 5
-        frequency = 12 + line_idx * 4
-
-        for i <- 0..(count - 1) do
-          t = i / count
-          :math.sin(t * frequency + phase + offset) * amplitude +
-          :math.cos(t * (frequency / 2.5) + phase * 1.3 + offset) * (amplitude / 3) +
-          (line_idx - 1.5) * 15
-        end
+        for i <- start_idx..end_idx, do: series_y({:line, line_idx}, origin + i, count)
       end
 
       line_data = Enum.zip(xs, ys) |> Enum.map(fn {x, y} -> %{x: x, y: y} end)
@@ -440,7 +402,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
     grid_lines = create_grid_lines(x_scale, y_scale)
 
     # Title with point breakdown
-    total = points_per_series * (@num_lines + 1)
+    total = points_per_series * @series
     title = Element.text("Area + Multi-Line Chart (#{format_number(total)} points total)",
       x: @inner_width / 2,
       y: -15,
@@ -523,10 +485,9 @@ defmodule ExamplesWeb.HighPerformanceLive do
           <form phx-change="set_points" class="control-group">
             <label>Total Points:</label>
             <select name="points" class="points-select">
-              <option value="5000" selected={@total_points == 5000}>5,000</option>
-              <option value="10000" selected={@total_points == 10000}>10,000</option>
-              <option value="20000" selected={@total_points == 20000}>20,000</option>
-              <option value="50000" selected={@total_points == 50000}>50,000</option>
+              <option :for={d <- @densities} value={d} selected={@samples_per_px == d}>
+                <%= format_number(total_at(d)) %> (<%= d %>/px)
+              </option>
             </select>
             <span class="point-breakdown">
               (1 area + 4 lines × <%= format_number(@points_per_series) %> pts each)
