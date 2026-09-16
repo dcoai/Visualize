@@ -141,4 +141,20 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
     assert scroll.origin == 8
     assert length(Scroll.shift(scroll, a.random_data, 4, fn _ -> 0.0 end)) == a.points_per_series
   end
+  test "ticks follow a deadline: a 600 fps target alternates 1 and 2 ms and averages its period (#302)" do
+    # Each tick fires when its delay elapses; the deadline advances by the period, not by
+    # the delay, so rounding never accumulates.
+    {delays, _} =
+      Enum.map_reduce(1..6, {0, 0}, fn _, {due, now} ->
+        {next, delay} = Page.deadline(due, now, 600)
+        {delay, {next, now + delay * 1000}}
+      end)
+
+    assert delays == [2, 1, 2, 2, 1, 2]
+    assert Enum.sum(delays) * 1000 == 6 * 1_000_000 / 600 * 1.0 |> round()
+
+    # 500 fps is whole milliseconds; a late tick is due now, not caught up in a burst.
+    assert {2000.0, 2} = Page.deadline(0, 0, 500)
+    assert {9_000, 0} = Page.deadline(0, 9_000, 500)
+  end
 end

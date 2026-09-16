@@ -58,6 +58,8 @@ defmodule ExamplesWeb.HighPerformanceLive do
       pending: 0,
       carry: 0.0,
       last_tick: nil,
+      # The next tick's deadline in microseconds (#302): ticks follow it, not a whole-ms timer
+      next_due: nil,
       arrivals: [],
       measured_rate: 0.0,
       densities: @densities,
@@ -76,7 +78,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   def handle_event("start", _params, socket) do
     # Send initial full render
     socket = send_full_render(socket)
-    schedule_frame(socket.assigns.target_fps)
+    socket = socket |> assign(next_due: System.monotonic_time(:microsecond)) |> schedule_frame()
     {:noreply, assign(socket,
       running: true,
       last_tick: System.monotonic_time(:millisecond),
@@ -117,7 +119,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   def handle_info(:render_frame, socket) do
     if socket.assigns.running do
       now = System.monotonic_time(:millisecond)
-      schedule_frame(socket.assigns.target_fps)
+      socket = schedule_frame(socket)
 
       # The samples due since the last tick, and the whole columns they fill: the frame
       # scrolls by those columns and keeps the rest pending (spec/14 §12.6, #300).
@@ -128,12 +130,8 @@ defmodule ExamplesWeb.HighPerformanceLive do
         assign(socket, arrival)
         |> assign(last_tick: now, arrivals: arrivals, measured_rate: measured_rate(arrivals, now))
 
-      if px == 0 do
-        # No column filled: the picture would not change, so nothing is drawn.
-        {:noreply, socket}
-      else
-        {:noreply, draw(socket, px, now)}
-      end
+      # Every tick sends a frame, columns or none (#302).
+      {:noreply, draw(socket, px, now)}
     else
       {:noreply, socket}
     end
@@ -141,7 +139,8 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
   # A frame: the window advances by `px` columns, the random line drops and appends
   # their samples (`Examples.Scroll`), and the frame goes as strips when the scroll is
-  # one `scroll_mode/2` calls a scroll, in full otherwise.
+  # one `scroll_mode/2` calls a scroll, as the empty "none" update when no column filled
+  # (D-38), and in full otherwise — or always, with Incremental OFF.
   defp draw(socket, px, now) do
     render_start = System.monotonic_time(:microsecond)
 
@@ -150,15 +149,16 @@ defmodule ExamplesWeb.HighPerformanceLive do
     viewport_x = socket.assigns.viewport_x + px
     socket = assign(socket, random_data: random_data, scroll: scroll, viewport_x: viewport_x)
 
-    incremental? =
-      socket.assigns.use_incremental and not socket.assigns.last_full_render and
-        CanvasIncremental.scroll_mode({px, 0}, {@inner_width, @inner_height}) == :scroll_x
+    mode =
+      if socket.assigns.use_incremental and not socket.assigns.last_full_render,
+        do: CanvasIncremental.scroll_mode({px, 0}, {@inner_width, @inner_height}),
+        else: :full_redraw
 
     socket =
-      if incremental? do
-        send_incremental_render(socket, px)
-      else
-        socket |> send_full_render() |> assign(:last_full_render, false)
+      case mode do
+        :scroll_x -> send_incremental_render(socket, px)
+        :none -> send_none(socket)
+        :full_redraw -> socket |> send_full_render() |> assign(:last_full_render, false)
       end
 
     render_time = System.monotonic_time(:microsecond) - render_start
@@ -272,6 +272,14 @@ defmodule ExamplesWeb.HighPerformanceLive do
     })
   end
 
+  # The frame with no new column: the "none" update of spec/09 §7.3, nothing to draw and
+  # nothing to copy, zero bytes — what an incremental frame without data costs.
+  defp send_none(socket) do
+    socket
+    |> assign(payload_size: 0, points_rendered: 0)
+    |> push_event("canvas_incremental", %{binary: "", dx: 0, dy: 0, mode: "none"})
+  end
+
   # The frame as the strips a scroll of `dx` pixels exposes.
   defp send_incremental_render(socket, dx) do
     # Use inner chart dimensions for exposed region calculation
@@ -383,10 +391,21 @@ defmodule ExamplesWeb.HighPerformanceLive do
     Element.root(@width, @height, children: [chart_group])
   end
 
-  defp schedule_frame(target_fps) do
-    # > 2000 = unlimited (no delay), otherwise convert FPS to milliseconds
-    interval = if target_fps > 2000, do: 0, else: div(1000, target_fps)
-    Process.send_after(self(), :render_frame, interval)
+  # The next tick at its deadline (#302): > 2000 fps is unlimited, no delay.
+  defp schedule_frame(%{assigns: %{target_fps: fps, next_due: due}} = socket) do
+    now = System.monotonic_time(:microsecond)
+    {next, delay} = if fps > 2000, do: {now, 0}, else: deadline(due, now, fps)
+    Process.send_after(self(), :render_frame, delay)
+    assign(socket, next_due: next)
+  end
+
+  @doc false
+  # The next deadline after `due` at `fps`, never before `now` — a late tick is not caught
+  # up in a burst — and the whole milliseconds to wait for it, rounded to the nearest, so
+  # a target between whole-millisecond rates averages to it. Public for the stream test.
+  def deadline(due, now, fps) do
+    next = max(due + 1_000_000 / fps, now)
+    {next, round((next - now) / 1000)}
   end
 
   defp calculate_fps([]), do: 0.0
