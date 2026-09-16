@@ -3,10 +3,12 @@ defmodule ExamplesWeb.PerformanceLive.MultiLine do
   The performance page's Multi-Line chart: 48 scrolling ridgelines on the scroll model of
   `Examples.Scroll` (spec/14 §12.6, #296).
 
-  One builder, `ridges/3`, draws the lines over a column range in one geometry — the whole
-  700 × 400 canvas, no margin — for every backend: the full render is the range of every
-  column, and an incremental frame's strips are the columns under them, so a strip is the
-  full render's picture there. `advance/1` scrolls by exactly `px_per_frame/0` pixels'
+  One builder, `ridges/3`, draws the lines over a column range in one geometry — the plot
+  `init/2` is given, the rectangle inside the page's margin that the hybrid backends' axes
+  frame — for every backend: the full render is the range of every column, and an
+  incremental frame's strips are the columns under them, so a strip is the full render's
+  picture there, and the plot is the record's viewport, so the margin is never copied or
+  drawn over (#298). `advance/1` scrolls by exactly `px_per_frame/0` pixels'
   worth of samples, and each line's value is a function of its absolute sample index, so
   the next frame is this one translated by that many pixels — the copy-shift contract of
   spec/09 §5.3.
@@ -22,8 +24,11 @@ defmodule ExamplesWeb.PerformanceLive.MultiLine do
   @height 400
   @px_per_frame 1
 
-  @type t :: %__MODULE__{scroll: Scroll.t(), params: [map()], data: [[number()]]}
-  defstruct [:scroll, :params, :data]
+  @typedoc "The plot `{x, y, width, height}` in canvas pixels."
+  @type plot :: {number(), number(), pos_integer(), pos_integer()}
+
+  @type t :: %__MODULE__{plot: plot(), scroll: Scroll.t(), params: [map()], data: [[number()]]}
+  defstruct [:plot, :scroll, :params, :data]
 
   @doc "The ridgelines' count."
   @spec lines() :: pos_integer()
@@ -38,16 +43,17 @@ defmodule ExamplesWeb.PerformanceLive.MultiLine do
   def size, do: {@width, @height}
 
   @doc """
-  The chart at the density nearest `requested` points over its lines: each line the
-  window's `Examples.Scroll.count/1` samples from sample zero, with its own wave.
+  The chart in `plot` at the density nearest `requested` points over its lines: a window
+  of the plot's columns, each line its `Examples.Scroll.count/1` samples from sample zero,
+  with its own wave.
   """
-  @spec init(pos_integer()) :: t()
-  def init(requested) do
-    scroll = Scroll.new(@width, Scroll.density(requested / @lines, @width))
+  @spec init(pos_integer(), plot()) :: t()
+  def init(requested, {_x, _y, w, _h} = plot) do
+    scroll = Scroll.new(w, Scroll.density(requested / @lines, w))
     params = for idx <- 0..(@lines - 1), do: params(idx)
     count = Scroll.count(scroll)
     data = for p <- params, do: for(i <- 0..(count - 1), do: value(p, i))
-    %__MODULE__{scroll: scroll, params: params, data: data}
+    %__MODULE__{plot: plot, scroll: scroll, params: params, data: data}
   end
 
   @doc "The points in play: lines × samples per line."
@@ -74,15 +80,15 @@ defmodule ExamplesWeb.PerformanceLive.MultiLine do
   end
 
   @doc """
-  The ridgelines over columns `first..last`: a group at the canvas origin, each line a
+  The ridgelines over columns `first..last`: a group at the plot's origin, each line a
   linear path — a curve would depend on samples beyond the range and a strip's would
   differ from the full render's — at its ridge's offset, coloured bottom to top.
   """
   @spec ridges(t(), non_neg_integer(), non_neg_integer()) :: Element.t()
-  def ridges(%__MODULE__{scroll: scroll, data: data}, first, last) do
+  def ridges(%__MODULE__{plot: {px, py, _w, h}, scroll: scroll, data: data}, first, last) do
     x_scale = Scroll.x_scale(scroll)
     n = length(data)
-    spacing = @height / n
+    spacing = h / n
 
     y_scale =
       Scale.Linear.new() |> Scale.Linear.domain([0, 100]) |> Scale.Linear.range([spacing * 3, 0])
@@ -104,11 +110,11 @@ defmodule ExamplesWeb.PerformanceLive.MultiLine do
         stroke = color(idx / max(1, n - 1))
 
         Element.group([Element.path(path, %{fill: :none, stroke: stroke, stroke_width: 1.5})],
-          transform: Transform.translate(0, @height - (idx + 1) * spacing)
+          transform: Transform.translate(0, h - (idx + 1) * spacing)
         )
       end
 
-    Element.group(ridges)
+    Element.group(ridges, transform: Transform.translate(px, py))
   end
 
   @doc "The full-redraw record of the chart, for the incremental hook's first frame."
@@ -117,24 +123,25 @@ defmodule ExamplesWeb.PerformanceLive.MultiLine do
 
   @doc """
   The frame's incremental record: the strips `exposed_regions/2` yields for the frame's
-  scroll, each `ridges/3` over the columns under it, with the whole canvas as the viewport.
+  scroll of the plot, each `ridges/3` over the columns under it, with the plot as the
+  viewport (D-106), so the margin around it is neither copied nor drawn over.
   """
   @spec incremental(t()) :: binary()
-  def incremental(%__MODULE__{scroll: scroll} = chart) do
+  def incremental(%__MODULE__{plot: {px, py, w, h} = plot, scroll: scroll} = chart) do
     dx = @px_per_frame
 
     regions =
-      for {rx, _ry, rw, _rh} = bounds <- CanvasIncremental.exposed_regions({dx, 0}, size()) do
+      for {rx, ry, rw, rh} <- CanvasIncremental.exposed_regions({dx, 0}, {w, h}) do
         children =
           case Scroll.columns(scroll, {rx, rw}) do
             {first, last} -> [ridges(chart, first, last)]
             nil -> []
           end
 
-        {bounds, Element.root(@width, @height, children: children)}
+        {{px + rx, py + ry, rw, rh}, Element.root(@width, @height, children: children)}
       end
 
-    CanvasIncremental.encode_incremental({dx, 0}, size(), regions)
+    CanvasIncremental.encode_incremental({dx, 0}, size(), regions, viewport: plot)
   end
 
   @doc "The ridge colour at `t` in `0..1`, deep purple at the bottom to orange at the top."
