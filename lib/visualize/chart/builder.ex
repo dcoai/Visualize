@@ -1082,10 +1082,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # A member of what a layer declares: the layer selected, the chart's node it is opened —
-    # a keyed node at its path, an axis by its identity, a mark or label by its id or its
-    # value; one the chart does not carry opens the layer's own root (spec/14 §18.8).
-    def handle_event("open_declared", %{"index" => index, "path" => label}, socket) do
+    # A kind a layer declares: the layer selected, the kind's page opened in the inspector
+    # (spec/14 §18.8) — the frame's page for the frame and what it holds, a root's own for
+    # the rest, the variables panel for vars.
+    def handle_event("open_declared", %{"index" => index, "kind" => kind}, socket) do
       at = position(index)
 
       case Enum.at(socket.assigns.uses, at) do
@@ -1094,12 +1094,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         _use ->
           socket = select(socket, at)
-          placed = Enum.at(placed_layers(socket.assigns), at) || %{}
-          design = composed(socket)
 
-          case Enum.find(Editor.nodes(placed), &(&1.label == label)) do
-            nil -> {:noreply, socket}
-            node -> {:noreply, opened(socket, chart_label(design, node, at(placed, node.path)))}
+          # A kind opens as its root tab does (§18.13): the frame's tab holds the frame's parts,
+          # the scales and the axes; vars are the variables panel.
+          case kind do
+            "vars" ->
+              {:noreply, assign(socket, context: :variables)}
+
+            k when k in ~w(meta frame scales axes) ->
+              handle_event("select_root", %{"root" => "frame"}, socket)
+
+            k when k in ~w(sources styles defs marks labels theme) ->
+              handle_event("select_root", %{"root" => k}, socket)
+
+            _other ->
+              {:noreply, socket}
           end
       end
     end
@@ -2850,49 +2859,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.reduce(socket, fn key, acc ->
         update_layer(acc, path, key, {:ok, Map.fetch!(moved, key)})
       end)
-    end
-
-    # The chart's label for a member of a layer's contribution: a keyed node at its path;
-    # an axis by its `{scale, side}` identity (§8.2); a mark or a label by its id, else the
-    # chart's node of that kind whose value is the layer's; the root when the chart does
-    # not carry it.
-    defp chart_label(design, %{path: path, kind: kind}, body) do
-      nodes = Editor.nodes(design)
-      chart_body = at(design, path)
-
-      cond do
-        Enum.all?(path, &is_atom/1) and chart_body != nil ->
-          Editor.label(path)
-
-        kind == :axis and is_map(body) ->
-          twin(
-            nodes,
-            :axis,
-            design,
-            &(Map.get(&1, :scale) == Map.get(body, :scale) and
-                Map.get(&1, :side) == Map.get(body, :side))
-          )
-          |> Kernel.||("frame")
-
-        kind in [:mark, :label] and is_map(body) ->
-          id = Map.get(body, :id)
-
-          twin(nodes, kind, design, &((id != nil and Map.get(&1, :id) == id) or &1 == body))
-          |> Kernel.||(Editor.label(Enum.take_while(path, &is_atom/1)))
-
-        true ->
-          Editor.label(Enum.take_while(path, &is_atom/1))
-      end
-    end
-
-    defp twin(nodes, kind, design, match?) do
-      nodes
-      |> Enum.filter(&(&1.kind == kind))
-      |> Enum.find(fn node ->
-        value = at(design, node.path)
-        is_map(value) and match?.(value)
-      end)
-      |> then(&(&1 && &1.label))
     end
 
     defp placement_key(:axis), do: :side
