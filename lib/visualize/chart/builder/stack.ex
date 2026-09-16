@@ -61,6 +61,50 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp site(map) when is_map(map), do: %{ref: nil, local: map}
 
     @doc """
+    An entry as the inline sites a copy of it is (spec/14 §18.17): a composite's sites,
+    each holding what its use contributed — the referenced fragment (flattened, when it is
+    a composite) stacked under the use's `local`, the use's `mask`, `vars` and `key` kept
+    — labelled with the referenced entry's name, or the composite's own for a site it
+    declares in place, with the composite's own vars and signals; any other body as one
+    inline site named for the entry. The sites carry no id: the caller issues one each
+    among the stack they join.
+    """
+    @spec copies(
+            %{kind: atom(), name: String.t() | nil, fragment: map()},
+            (Fragment.id() -> {:ok, map()} | :error),
+            (Fragment.id() -> String.t() | nil)
+          ) :: {[{Use.t(), String.t()}], map(), map()}
+    def copies(%{fragment: %{composite: %{uses: uses} = composite}} = entry, fetch, name_of)
+        when is_list(uses) do
+      resolve = flattening(fetch)
+      own = Map.get(entry, :name) || "local"
+
+      sites =
+        for %Use{} = use <- uses do
+          {body, name} =
+            case use.ref do
+              nil ->
+                {use.local, own}
+
+              ref ->
+                case resolve.(ref) do
+                  {:ok, fragment} -> {Chart.stack([fragment, use.local]), name_of.(ref)}
+                  :error -> {use.local, nil}
+                end
+            end
+
+          {%Use{id: nil, ref: nil, local: body, mask: use.mask, vars: use.vars, key: use.key},
+           name || "#{elem(use.ref, 0)} #{elem(use.ref, 1)}"}
+        end
+
+      {sites, Map.get(composite, :vars, %{}), Map.get(composite, :signals, %{})}
+    end
+
+    def copies(%{kind: kind, name: name, fragment: fragment}, _fetch, _name_of) do
+      {[{%Use{id: nil, ref: nil, local: fragment}, name || "new #{kind}"}], %{}, %{}}
+    end
+
+    @doc """
     An entry as a stack (spec/14 §19.9): a composite's sites, labelled by the store's
     names, with its vars and its signals (§19.10); any other body as one inline site named
     for the entry.

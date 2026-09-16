@@ -1009,9 +1009,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
         enter when enter in ["Enter", " "] ->
           handle_event("add_layer", %{"name" => name}, socket)
 
+        # `i` copies and `I` links, as a drop and an Alt-drop do (spec/14 §18.17).
         insert when insert in ["Insert", "i"] ->
-          above = (Stack.index_of(socket.assigns.uses, socket.assigns.selected) || -1) + 1
-          handle_event("insert", %{"name" => name, "at" => above}, socket)
+          handle_event("insert", %{"name" => name, "as" => "copy"}, socket)
+
+        "I" ->
+          handle_event("insert", %{"name" => name, "as" => "link"}, socket)
 
         _other ->
           {:noreply, socket}
@@ -1101,11 +1104,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A fragment dragged out of the library lands at the position it was dropped at, as a
     # use referring to it (spec/14 §18.17, §19.3).
-    def handle_event("insert", %{"name" => submitted, "at" => at}, socket) do
+    # A library entry into the stack (spec/14 §18.17): a copy unless a link is asked for;
+    # at the gap given, or above the selected layer when the drop was on the graph.
+    def handle_event("insert", %{"name" => submitted} = params, socket) do
+      at =
+        case Map.get(params, "at") do
+          nil -> (Stack.index_of(socket.assigns.uses, socket.assigns.selected) || -1) + 1
+          given -> position(given)
+        end
+
+      link? = Map.get(params, "as") == "link"
+
       case fetch(socket.assigns.store, submitted) do
         {:ok, entry} ->
           case admits(socket.assigns.open, entry) do
-            :ok -> {:noreply, inserted(socket, entry, position(at))}
+            :ok when link? -> {:noreply, linked(socket, entry, at)}
+            :ok -> {:noreply, copied(socket, entry, at)}
             {:refused, notice} -> {:noreply, assign(socket, :notice, notice)}
           end
 
@@ -2686,7 +2700,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A use referring to the entry, at the position it was dropped at; the label is the
     # entry's name (spec/14 §19.3).
-    defp inserted(socket, entry, at) do
+    # A link: the reference site of §19.3, for a layer that is to follow the library.
+    defp linked(socket, entry, at) do
       %{uses: uses, labels: labels} = socket.assigns
       use = Use.new(entry.id, uses)
 
@@ -2694,6 +2709,35 @@ if Code.ensure_loaded?(Phoenix.Component) do
         uses: List.insert_at(uses, clamp(at, uses), use),
         labels: Map.put(labels, use.id, entry.name),
         selected: socket.assigns.selected || use.id,
+        added: entry.id,
+        notice: nil
+      )
+    end
+
+    # A copy: the entry's body as inline sites — a composite as its sites — each issued an
+    # id among the stack it joins, inserted in order at the gap; the composite's vars and
+    # signals join the chart's where it does not declare them (spec/14 §18.17).
+    defp copied(socket, entry, at) do
+      %{uses: uses, labels: labels, store: store, stack_vars: vars, signals: signals} =
+        socket.assigns
+
+      {sites, entry_vars, entry_signals} = Stack.copies(entry, Stack.fetch(store), names(store))
+
+      {issued, _} =
+        Enum.map_reduce(sites, uses, fn {use, name}, among ->
+          issued = %{use | id: Use.new(nil, among).id}
+          {{issued, name}, among ++ [issued]}
+        end)
+
+      inserted = Enum.map(issued, &elem(&1, 0))
+
+      assign(socket,
+        uses: List.flatten(List.insert_at(uses, clamp(at, uses), inserted)),
+        labels:
+          Enum.reduce(issued, labels, fn {use, name}, acc -> Map.put(acc, use.id, name) end),
+        stack_vars: Map.merge(entry_vars, vars),
+        signals: Map.merge(entry_signals, signals),
+        selected: socket.assigns.selected || (List.first(inserted) && List.first(inserted).id),
         added: entry.id,
         notice: nil
       )

@@ -1734,6 +1734,7 @@ The nodes of §18.13 are the top row — the root tabs. Beneath them the first d
 |---|---|
 | `Visualize.Chart.Builder.Stack.placed/2` | the enabled uses as the design's layers, `{id, fragment}` in stack order, each resolved and placed where the design keeps its kind; a keyless name-keyed site is left out |
 | `Visualize.Chart.Builder.Stack.local_path/3` | the path a design path has inside a use: `[:source | rest]` for a `source` site's `[:sources, key | rest]`, and so for every placed kind; a design-level site's path as it is |
+| `Visualize.Chart.Builder.Stack.copies/3` | an entry as the inline sites a copy of it is (§18.17): a composite's sites each holding what its use contributed, labelled by the referenced entry's name or the composite's own, with the composite's vars and signals; any other body as one site named for the entry; ids left for the caller to issue |
 
 **Every form knows its node.** Every form on a page carries its node's label — `data-builder-node`, and a hidden `_node` input — so an edit, a field selection, a chip drop, a colour drop, a list add or remove in any section aims at that node: the builder selects it first (`aimed`), and the context — the colour chooser, the style stack — follows the node last touched. `Visualize.Chart.Builder.Editor.form_body/1` is that form alone, of one facet's keys or of the listed ones; `Visualize.Chart.Builder.Editor.panel/1` still renders a node as facet tabs over one form, for the style panel and for a host that wants the smaller thing.
 
