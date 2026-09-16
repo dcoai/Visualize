@@ -1277,6 +1277,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color: var(--vis-builder-needs);
     }
 
+    /* A guessed channel (spec/14 §18.16): the accent, dashed — an assumption, not a fault. */
+    .vis-builder-field-guess {
+      border-radius: var(--vis-builder-radius);
+      box-shadow: 0 0 0 1px var(--vis-builder-accent);
+    }
+
+    .vis-builder-field-guess .vis-builder-key {
+      color: var(--vis-builder-accent);
+      font-style: italic;
+    }
+
     /* The + on the Layers title, and its menu of kinds (spec/14 §18.8). */
     /* The Charts panel (spec/14 §18.8): a row per chart, its layers beneath when expanded. */
     .vis-builder-charts {

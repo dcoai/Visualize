@@ -104,6 +104,37 @@ defmodule Visualize.Chart.Builder.PlaceTest do
     end
   end
 
+  describe "guess/2" do
+    test "the last mark's source first, else the first by name; fields over required channels" do
+      design = %{
+        sources: %{b: %{fields: [:p, :q]}, a: %{fields: [:hour, :value, :extra]}},
+        marks: [%{type: :line, data: :b, channels: %{}}]
+      }
+
+      assert Place.guess(design, :line) == %{data: :b, channels: %{x: :p, y: :q}}
+
+      assert Place.guess(Map.delete(design, :marks), :line) == %{
+               data: :a,
+               channels: %{x: :hour, y: :value}
+             }
+
+      assert Place.guess(Map.delete(design, :marks), :rect) == %{
+               data: :a,
+               channels: %{x0: :hour, x1: :value, y0: :extra}
+             }
+
+      assert Place.guess(%{sources: %{s: %{fields: [:only]}}}, :line) == %{
+               data: :s,
+               channels: %{x: :only}
+             }
+
+      assert Place.guess(%{sources: %{}}, :line) == %{}
+      # A mark placed carries the guess in its body.
+      assert {:sites, [%{body: %{type: :circle, data: :a, channels: %{x: :hour, y: :value}}}]} =
+               Place.node({:mark, :circle}, :plot, Map.delete(design, :marks), {0, 0})
+    end
+  end
+
   test "home/1 is where the keyboard and the + menu place a component" do
     assert Enum.map([:axis, :title, :label, :legend, {:mark, :line}], &Place.home/1) ==
              [:bottom, :top, :bottom, :plot, :plot]
