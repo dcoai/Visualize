@@ -19,9 +19,9 @@ defmodule ExamplesWeb.PerformanceLive do
   @default_update_interval 16  # ~60 FPS target
   @scroll_delta 20
   @margin %{top: 20, right: 20, bottom: 30, left: 40}
+  # The plot every chart is laid into and the hybrid axes frame, in canvas pixels (#298)
+  @plot {@margin.left, @margin.top, 700 - @margin.left - @margin.right, 400 - @margin.top - @margin.bottom}
 
-  # Multi-line scrolling chart config (48 ridgelines)
-  @num_lines 48
 
   # Chord diagram config
   @chord_groups 6
@@ -151,7 +151,7 @@ defmodule ExamplesWeb.PerformanceLive do
 
     # The Multi-Line chart starts fresh at the requested points
     socket = if socket.assigns.chart_type == :multi_line do
-      assign(socket, multi_line: MultiLine.init(socket.assigns.data_points))
+      assign(socket, multi_line: MultiLine.init(socket.assigns.data_points, @plot))
     else
       socket
     end
@@ -575,7 +575,7 @@ defmodule ExamplesWeb.PerformanceLive do
   end
 
   defp build_chart(:line, data, width, height) do
-    margin = %{top: 20, right: 20, bottom: 30, left: 40}
+    margin = @margin
     inner_width = width - margin.left - margin.right
     inner_height = height - margin.top - margin.bottom
 
@@ -611,7 +611,7 @@ defmodule ExamplesWeb.PerformanceLive do
   end
 
   defp build_chart(:area, data, width, height) do
-    margin = %{top: 20, right: 20, bottom: 30, left: 40}
+    margin = @margin
     inner_width = width - margin.left - margin.right
     inner_height = height - margin.top - margin.bottom
 
@@ -649,7 +649,7 @@ defmodule ExamplesWeb.PerformanceLive do
   end
 
   defp build_chart(:scatter, data, width, height) do
-    margin = %{top: 20, right: 20, bottom: 30, left: 40}
+    margin = @margin
     inner_width = width - margin.left - margin.right
     inner_height = height - margin.top - margin.bottom
 
@@ -683,7 +683,7 @@ defmodule ExamplesWeb.PerformanceLive do
 
   # Ridgeline plot - layered line charts with vertical offset (48 ridges)
   defp build_chart(:ridgeline, ridges_data, width, height) do
-    margin = %{top: 10, right: 20, bottom: 10, left: 40}
+    margin = @margin
     inner_width = width - margin.left - margin.right
     inner_height = height - margin.top - margin.bottom
 
@@ -1746,7 +1746,7 @@ defmodule ExamplesWeb.PerformanceLive do
 
   # Hybrid mode: render data only (no axes) using Canvas backend
   defp render_data_only(chart_type, data, width, height) do
-    margin = %{top: 20, right: 20, bottom: 30, left: 40}
+    margin = @margin
     inner_width = width - margin.left - margin.right
     inner_height = height - margin.top - margin.bottom
 
@@ -1793,7 +1793,7 @@ defmodule ExamplesWeb.PerformanceLive do
 
   # Binary version for hybrid mode - ~60% smaller than JSON
   defp render_data_only_binary(chart_type, data, width, height) do
-    margin = %{top: 20, right: 20, bottom: 30, left: 40}
+    margin = @margin
     inner_width = width - margin.left - margin.right
     inner_height = height - margin.top - margin.bottom
 
@@ -1850,8 +1850,10 @@ defmodule ExamplesWeb.PerformanceLive do
   end
 
   # Build ridgeline elements for hybrid/incremental modes (48 lines)
-  defp build_ridgeline_data_element(ridges_data, width, height) do
-    margin = %{top: 10, right: 20, bottom: 10, left: 40}
+  @doc false
+  # Public for the plot test of #298: the ridges sit in the plot the hybrid axes frame.
+  def build_ridgeline_data_element(ridges_data, width, height) do
+    margin = @margin
     inner_width = width - margin.left - margin.right
     inner_height = height - margin.top - margin.bottom
 
@@ -2044,8 +2046,9 @@ defmodule ExamplesWeb.PerformanceLive do
   end
 
   # Render static SVG (axes only) for hybrid mode - called once at start
-  defp render_static_svg_for_hybrid(width, height, chart_type, data_points) do
-    margin = %{top: 20, right: 20, bottom: 30, left: 40}
+  @doc false
+  def render_static_svg_for_hybrid(width, height, chart_type, _data_points) do
+    margin = @margin
     inner_width = width - margin.left - margin.right
     inner_height = height - margin.top - margin.bottom
 
