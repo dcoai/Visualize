@@ -42,6 +42,9 @@ defmodule Visualize.Hooks.Builder do
   - `pick` with `%{"node" => string}` in scope `graph` when an element of the chart that
     carries `data-node` is clicked (spec/14 §18.16); the hook also outlines the drawn node
     whose path is the longest prefix of the `<svg>`'s `data-builder-selected`
+  - `move` with `%{"node" => string, "x" => number, "y" => number}` when a movable drawn
+    node is dragged with the pointer and released, or with `"region"` from Shift+Arrow
+    (spec/14 §18.16, spec/10 §16.3)
   """
 
   @doc """
@@ -134,6 +137,7 @@ defmodule Visualize.Hooks.Builder do
       },
 
       handlePointerDown(e) {
+        if (this.scope === 'graph') return this.startMove(e);
         if (this.scope !== 'resize' || !e.target || !e.target.closest) return;
         const handle = e.target.closest('[data-builder-resize]');
         if (!handle || !this.el.contains(handle)) return;
@@ -150,6 +154,36 @@ defmodule Visualize.Hooks.Builder do
           window.removeEventListener('pointerup', up);
           const width = Math.max(300, Math.min(800, Math.round(right - ev.clientX)));
           this.push('context_width', { width: width });
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+      },
+
+      // A drawn node is moved with the pointer (spec/10 §16.3, #277): a browser does not
+      // start an HTML5 drag from an SVG element, so pointerdown on a movable node captures
+      // the pointer, pointermove past four pixels draws the region it would snap to, and
+      // pointerup pushes the move — or, having not moved, leaves the click to select.
+      startMove(e) {
+        if (!e.target || !e.target.closest || e.button !== 0) return;
+        const drawn = e.target.closest('[data-node]');
+        const label = drawn && this.el.contains(drawn) ? drawn.getAttribute('data-node') : null;
+        if (label === null || !this.movable(label)) return;
+        const start = { x: e.clientX, y: e.clientY };
+        let moved = false;
+        const move = (ev) => {
+          if (!moved && Math.abs(ev.clientX - start.x) + Math.abs(ev.clientY - start.y) < 4) return;
+          moved = true;
+          this.el.classList.add('vis-builder-moving');
+          this.markRegion(this.regionAt(this.chartPoint(ev)));
+        };
+        const up = (ev) => {
+          window.removeEventListener('pointermove', move);
+          window.removeEventListener('pointerup', up);
+          this.el.classList.remove('vis-builder-moving');
+          this.markRegion(null);
+          if (!moved) return;
+          const point = this.chartPoint(ev) || { x: 0, y: 0 };
+          this.push('move', { node: label, x: point.x, y: point.y });
         };
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', up);
@@ -239,20 +273,6 @@ defmodule Visualize.Hooks.Builder do
             e.dataTransfer.setData('text/plain', handle.getAttribute('data-builder-promote'));
           }
           return;
-        }
-
-        // A drawn node with a placement (spec/14 §18.16): an axis, the legend, a label is
-        // moved on the graph; its label travels as its own type.
-        if (this.scope === 'graph') {
-          const drawn = e.target && e.target.closest ? e.target.closest('[data-node]') : null;
-          const label = drawn && this.el.contains(drawn) ? drawn.getAttribute('data-node') : null;
-          if (label !== null && this.movable(label) && e.dataTransfer) {
-            this.from = null;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('application/x-visualize-node', label);
-            e.dataTransfer.setData('text/plain', label);
-            return;
-          }
         }
 
         // A palette row (spec/14 §18.16): the component's word travels as its own type.
@@ -347,9 +367,7 @@ defmodule Visualize.Hooks.Builder do
         }
         if (!this.accepts(e)) return;
         e.preventDefault();
-        const types = Array.from((e.dataTransfer && e.dataTransfer.types) || []);
-        const moving = types.includes('application/x-visualize-node');
-        if (e.dataTransfer) e.dataTransfer.dropEffect = moving ? 'move' : (this.from === null ? 'copy' : 'move');
+        if (e.dataTransfer) e.dataTransfer.dropEffect = this.from === null ? 'copy' : 'move';
         if (this.scope === 'graph') this.markRegion(this.regionAt(this.chartPoint(e)));
         else this.markPoint(this.insertionPoint(e));
       },
@@ -374,8 +392,7 @@ defmodule Visualize.Hooks.Builder do
         if (this.from !== null) return !graph;
         const types = Array.from((e.dataTransfer && e.dataTransfer.types) || []);
         if (types.includes('application/x-visualize-fragment')) return true;
-        return graph && (types.includes('application/x-visualize-component') ||
-          types.includes('application/x-visualize-node'));
+        return graph && types.includes('application/x-visualize-component');
       },
 
       // Whether a drawn node's label is one that moves (spec/14 §18.16): an axis, the
@@ -492,11 +509,6 @@ defmodule Visualize.Hooks.Builder do
         if (this.scope === 'graph') {
           this.markRegion(null);
           const point = this.chartPoint(e) || { x: 0, y: 0 };
-          const label = e.dataTransfer ? e.dataTransfer.getData('application/x-visualize-node') : '';
-          if (label) {
-            this.push('move', { node: label, x: point.x, y: point.y });
-            return;
-          }
           const word = e.dataTransfer ? e.dataTransfer.getData('application/x-visualize-component') : '';
           if (word) {
             this.push('place', { component: word, x: point.x, y: point.y });

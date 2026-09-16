@@ -319,6 +319,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       display: block;
     }
 
+    .vis-builder .vis-builder-moving {
+      cursor: grabbing;
+      user-select: none;
+    }
+
     .vis-builder .vis-builder-region-top::after { top: 0; left: 0; right: 0; height: 15%; }
     .vis-builder .vis-builder-region-bottom::after { bottom: 0; left: 0; right: 0; height: 15%; }
     .vis-builder .vis-builder-region-left::after { top: 0; bottom: 0; left: 0; width: 15%; }
