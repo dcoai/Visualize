@@ -1803,7 +1803,7 @@ The dragged name travels in `dataTransfer` under `application/x-visualize-fragme
 | Event | Payload | Meaning |
 |---|---|---|
 | `reorder` | `%{"from" => integer, "to" => integer}` | a layer moved within the stack (§18.10) |
-| `insert` | `%{"name" => string, "at" => integer}` | a library fragment dropped at a position |
+| `insert` | `%{"name" => string, "at" => integer, "as" => "copy" \| "link"}` | a library fragment dropped at a position, as a copy (the default, `as` absent) or a reference; `at` absent is the gap above the selected layer, which is where a drop on the graph lands (#262) |
 
 **Where it lands** is one rule for both drags, and the rule is a **gap**, not a row. The pointer's position is compared with each row's midpoint: the result is the first row whose midpoint is below the pointer, and the end of the stack when none is. A gap is therefore always named — including the gap above the first row and the gap below the last — and the pointer never has to be inside a row at all.
 
@@ -1823,6 +1823,8 @@ A **move** is the same gap, adjusted: `at` is a gap in the list as it stands, an
 
 Inserting does not consult the fragment: the stack is a list and a fragment is an element of it, so an insert is `List.insert_at/3` and the design is recomputed from the result. There is nothing to validate at insertion time that applying the design does not already say better (§18.4).
 
+**A drop is a copy; a link is asked for** (#262, proposal C of #242). What a drop inserts is an **inline site** — `ref: nil`, `local` the entry's body, labelled with the entry's name — so the chart holds its own values and editing them never reaches the library; the library is a palette, and a palette is copied from. A **composite** entry — a `Charts::` template — is copied as its sites: each of the entry's uses becomes an inline site holding what the use contributed, its referenced fragment (flattened, when that is itself a composite) stacked under its `local`, with the use's `mask`, `vars` and `key` kept, labelled with the referenced entry's name; the composite's own `vars` and `signals` join the chart's where the chart does not already declare them. `Visualize.Chart.Builder.Stack.copies/3` is that reading of an entry. A **link** — `as: "link"` — is the reference site of §19.3 as before, for the house look: a layer that is to follow the library. A link is made by holding **Alt** while dropping, or with `I` on a library row (`i` copies); a linked layer is locked in the chart and edited by opening the entry (#263). The graph is also a drop target for a library entry: the hook in scope `graph` accepts the drag and the copy lands above the selected layer.
+
 **The keyboard has every gesture the pointer has.** Making the row the control took the `<button>` away, and with it Enter and Space; a row is reachable — `role="button"`, `tabindex="0"` — only if it is also operable. Every row therefore carries `phx-keydown`, and the builder reads the key:
 
 | Row | Key | Does |
@@ -1830,7 +1832,8 @@ Inserting does not consult the fragment: the stack is a list and a fragment is a
 | a layer | Enter, Space | selects it, as clicking does |
 | a layer | ArrowUp, ArrowDown | moves it one position — the same `reorder` a drop raises — and focus follows the row to where it went |
 | a library item | Enter, Space | opens it, as clicking does (§19.8) |
-| a library item | Insert, `i` | inserts it directly above the selected layer — the same `insert` a drop raises — with no drag to make |
+| a library item | Insert, `i` | inserts a copy directly above the selected layer — the same `insert` a drop raises — with no drag to make |
+| a library item | `I` | inserts it as a link, as an Alt-drop does |
 
 Focus follows a moved layer because the rows are re-rendered by position: the builder pushes `vis:focus` with the id of the row at the layer's new position, and `Visualize.Hooks.Builder` focuses it after the patch. A row's accessible name says what it is and what activating it does — *house, layer 1 of 3, selected: Enter to edit, arrows to move* — so what is announced is what the keys do, and the `title` that pointer users hover is the same sentence.
 
@@ -1935,7 +1938,7 @@ A layer in a composite and an entry in a style stack are the same thing: a fragm
 
 | Part | Means | Written by |
 |---|---|---|
-| `ref` | which fragment | the library click |
+| `ref` | which fragment | a linked drop or `I` on a library row (§18.17); a plain drop makes a copy with no `ref` |
 | `mask` | keys removed at this site | checkboxes in the context panel (§19.10) |
 | `vars` | what the fragment's variables mean at this site | the Variables tab (§19.10) |
 | `local` | what is added or overridden at this site | the field forms |
