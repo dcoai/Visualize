@@ -1508,6 +1508,59 @@ defmodule Visualize.Chart.BuilderTest do
           do: assert(css =~ ".vis-builder .vis-builder-region-#{region}::after")
     end
 
+    test "an axis moved between orientations takes the scale its new side reads, bringing it when missing (spec/14 §18.16, #279)",
+         %{socket: s} do
+      # The fixture's x axis to the right: it reads `y`, as the left axis does — not `x`,
+      # whose range is the plot's width and would run off the side.
+      {:noreply, s1} =
+        Builder.handle_event("move", %{"node" => "frame.axes[0]", "region" => "right"}, s)
+
+      assert %Use{
+               local: %{frame: %{axes: [%{scale: :y, side: :right}, %{scale: :y, side: :left}]}}
+             } =
+               Enum.at(s1.assigns.uses, 1)
+
+      html = BuilderFixture.render(s1)
+      # Drawn the plot's height on the right: the domain path of an axis on the right spans y.
+      assert html =~
+               ~s|<g class="axis axis-right" data-node="frame.axes[0]" transform="translate(340,0)">|
+
+      assert html =~ ~s|<path d="M6,150H0V0H6"|
+
+      # Back to the bottom, it reads `x` again.
+      {:noreply, s2} =
+        Builder.handle_event("move", %{"node" => "frame.axes[0]", "region" => "bottom"}, s1)
+
+      assert %Use{local: %{frame: %{axes: [%{scale: :x, side: :bottom}, _]}}} =
+               Enum.at(s2.assigns.uses, 1)
+
+      # A chart with no vertical scale: the move brings `y` beneath the axis's owner.
+      only_x =
+        [
+          {:base,
+           %{
+             frame: %{
+               kind: :cartesian,
+               scales: %{x: %{kind: :linear}},
+               axes: [%{scale: :x, side: :bottom}]
+             }
+           }}
+        ]
+
+      s3 = BuilderFixture.socket(only_x)
+
+      {:noreply, s4} =
+        Builder.handle_event("move", %{"node" => "frame.axes[0]", "region" => "left"}, s3)
+
+      assert BuilderFixture.names(s4) == ["new scale", "base"]
+      assert %Use{key: :y, local: %{scale: %{kind: :linear, domain: :auto}}} = hd(s4.assigns.uses)
+
+      assert %Use{local: %{frame: %{axes: [%{scale: :y, side: :left}]}}} =
+               List.last(s4.assigns.uses)
+
+      assert BuilderFixture.design(s4).frame.scales.y == %{kind: :linear, domain: :auto}
+    end
+
     test "the composer takes only its kind; the workspace takes anything", %{socket: s} do
       {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
 

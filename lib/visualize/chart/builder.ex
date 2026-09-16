@@ -1402,13 +1402,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {region, point} = where(socket, params, nil)
           body = at(design, path) || %{}
 
-          case Place.moved(kind, body, region, point, Place.geometry(design)) do
+          case Place.moved(kind, body, region, point, design) do
             {:ok, moved} ->
-              key = placement_key(kind)
+              {:noreply, socket |> rewritten(path, kind, body, moved) |> opened(node.label)}
 
+            # The axis's new orientation reads a scale the design lacks: brought beneath
+            # the axis's owner, as a drop brings it (§18.16).
+            {:ok, moved, sites} ->
               {:noreply,
                socket
-               |> update_layer(path, key, {:ok, Map.fetch!(moved, key)})
+               |> brought(path, sites)
+               |> rewritten(path, kind, body, moved)
                |> opened(node.label)}
 
             _same_or_unmovable ->
@@ -2768,9 +2772,43 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- placing a component (spec/14 §18.16) ------------------------------------------------
 
+    # The keys a move changed, written through the ownership rule: the placement key, and
+    # an axis's scale when its orientation changed.
+    defp rewritten(socket, path, kind, before, moved) do
+      [placement_key(kind), :scale]
+      |> Enum.filter(&(Map.has_key?(moved, &1) and Map.get(moved, &1) != Map.get(before, &1)))
+      |> Enum.reduce(socket, fn key, acc ->
+        update_layer(acc, path, key, {:ok, Map.fetch!(moved, key)})
+      end)
+    end
+
     defp placement_key(:axis), do: :side
     defp placement_key(:legend), do: :position
     defp placement_key(:label), do: :anchor
+
+    # Scale sites brought by a move, inserted beneath the moved node's owner — or the
+    # selected layer when nothing owns it — so the axis reads them.
+    defp brought(socket, path, sites) do
+      %{uses: uses, labels: labels, selected: selected, store: store} = socket.assigns
+      fetch = Stack.fetch(store)
+
+      owner =
+        case owned(socket.assigns, fetch, [%{path: path}]) |> Map.get(path) do
+          nil -> Stack.index_of(uses, selected) || 0
+          id -> Stack.index_of(uses, id) || 0
+        end
+
+      {issued, _} =
+        Enum.map_reduce(sites, uses, fn site, among ->
+          use = %{Use.new(nil, among) | ref: nil, local: %{site.kind => site.body}, key: site.key}
+          {use, among ++ [use]}
+        end)
+
+      assign(socket,
+        uses: List.flatten(List.insert_at(uses, owner, issued)),
+        labels: Enum.reduce(issued, labels, &Map.put(&2, &1.id, "new #{site_kind(&1)}"))
+      )
+    end
 
     # The region a drop names: its point classified against the frame the preview drew, or
     # the region given outright; absent both, the component's home.
