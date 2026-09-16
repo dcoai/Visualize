@@ -380,7 +380,11 @@ group  style: %{class: "frame"}, transform: translate(margin.left, margin.top)
 └── text   style: %{class: "label", …}                               — one per label (§6.3)
 ```
 
+With `paths: true` the frame's group, each mark's and axis's group, the legend's group and each label's text carry `data-node` with the node's path (below).
+
 A `:facet` frame holds one `class="panel"` group per panel in place of the grid, marks and axes; a `:polar` frame's grid, marks and axes sit inside a group translated to the plot centre. `generate/2` draws the marks only when given `sources:` — a map from source name to anything `Visualize.Data.Table.rows/1` reads, as `new/2` takes — each through `Visualize.Chart.Mark.generate/3` at its one-based position; without sources it is the furniture alone, which is what the static split needs (§12). A `%Visualize.Chart.Var{}` reached while building — in a text, a style or a node — raises `ArgumentError` naming it: variables resolve at application (§7.3), and a frame is built from an applied design or from one that uses none. `Visualize.Chart.Frame.render/2` is `generate/2` followed by `Visualize.Render.to_string/2`, with `:resolve` defaulting to `Visualize.Theme.mode/1` of the `:backend`, as `Visualize.Axis.render/2` does.
+
+**Every node the frame draws carries its path when asked** (#259, D-105). `generate/2` and `render/2` take `paths:`, `false` by default; with `paths: true` the element each design node renders carries `data-node` spelling the node's path as `Visualize.Chart.Validator.format/1` spells one — `frame` on the frame's own group, `marks[i]` on a mark's group (its zero-based position among `marks`), `frame.axes[i]` on an axis's group, `frame.legend` on the legend's, `labels[i]` on a label's text. The frame stamps what it places: a mark's group is `Visualize.Chart.Mark.generate/3`'s as it is, tagged by the frame at the position it drew it, so a facet frame's copies of one mark carry one path and a polar frame's ring and spoke axes keep their positions among `axes`. A mark's inline label (§5.5) sits inside its mark's group and has no path of its own; the grid is furniture, not a node. Without the option the markup is byte for byte what it was, so a chart drawn for a page is unchanged, and the builder — which draws with it so a click on the graph can name what it hit (§18.4, §18.16) — is the caller that asks. `Visualize.Chart.render/2` passes it through.
 
 ## 5. Marks
 
@@ -525,7 +529,7 @@ A `:rule` and an `:x_band` label themselves through their generator's own `label
 **Implemented.** `Visualize.Chart.Mark.generate/3` is one mark as one `Visualize.IR.Element` group in the plot area's coordinates, its rows those of `Visualize.Chart.Mark.rows/3` (the bound source through the pipeline of §5.4; `[]` when the source is not bound, so a mark renders empty rather than raising), its channels mapped as §5.2 says through `Visualize.Chart.Frame.scales/1`, its style resolved as §3.4 says in the `:resolve` mode:
 
 ```
-group  style: %{class: "mark mark-<type>[ <class>]", …the resolved style}
+group  style: %{class: "mark mark-<type>[ <class>]", …the resolved style}   — attrs: %{"data-node" => "marks[i]"} when the frame draws with paths: true (§4.7)
 ├── <element>   one per datum, or one per series for a :line and an :area (§5.2)
 └── text  style: %{class: "mark-label", …}                                — the inline label (§5.5)
 ```
@@ -961,7 +965,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.compile/1` | As `compile/2` with `[]` options: an applied chart compiled as it is, or a design applied with no options first. |
 | `Visualize.Chart.compile/2` | `compile(design, opts)`: `{:ok, %Visualize.Chart.Compiled{}}` for an applied chart, or for a chart or a design map applied first with `sources:`, `vars:` and `theme:` as `apply/2` takes them (§12.1), with `ceiling:` the point-count ceiling of §12.3 (`1000`); else the `{:error, errors}` of application. Raises `ArgumentError` as `apply/2` does, and for a `ceiling:` that is not a positive integer. |
 | `Visualize.Chart.render/1` | As `render/2` with `[]` options. |
-| `Visualize.Chart.render/2` | `render(applied, opts)`: `Visualize.Chart.Frame.render/2` of the applied chart's frame over its bound sources — `backend:` and `resolve:` as that function takes them, `sources:` supplied by the applied chart. |
+| `Visualize.Chart.render/2` | `render(applied, opts)`: `Visualize.Chart.Frame.render/2` of the applied chart's frame over its bound sources — `backend:`, `resolve:` and `paths:` as that function takes them, `sources:` supplied by the applied chart. |
 
 ### 14.2 `Visualize.Chart.Schema`
 
@@ -1017,9 +1021,9 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.Frame.put_scale/3` | `put_scale(frame, name, scale)`: the frame with the realised scale replaced by the given struct; the override of §4.3. |
 | `Visualize.Chart.Frame.projection/1` | The `%Visualize.Geo.Projection{}` of a `:geo` frame (§4.6), `nil` for any other kind. |
 | `Visualize.Chart.Frame.generate/1` | As `generate/2` with `resolve: :css`. |
-| `Visualize.Chart.Frame.generate/2` | The `Visualize.IR.Element` group of §4.7: the static furniture, and every mark of the design between the grid and the axes when `sources:` is given, theme slots resolved in the `:resolve` mode. |
+| `Visualize.Chart.Frame.generate/2` | The `Visualize.IR.Element` group of §4.7: the static furniture, and every mark of the design between the grid and the axes when `sources:` is given, theme slots resolved in the `:resolve` mode; with `paths: true` every node's element carries `data-node` with its path. |
 | `Visualize.Chart.Frame.render/1` | As `render/2` with `[]` options. |
-| `Visualize.Chart.Frame.render/2` | `generate/2` rendered through `Visualize.Render.to_string/2`; `sources:` as `generate/2` takes it, `:resolve` defaulting to `Visualize.Theme.mode/1` of the `:backend`. |
+| `Visualize.Chart.Frame.render/2` | `generate/2` rendered through `Visualize.Render.to_string/2`; `sources:` and `paths:` as `generate/2` takes them, `:resolve` defaulting to `Visualize.Theme.mode/1` of the `:backend`. |
 
 ### 14.6 `Visualize.Chart.Mark`
 
