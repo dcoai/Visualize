@@ -1468,7 +1468,7 @@ It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every
 | Assign | Type | Default | Meaning |
 |---|---|---|---|
 | `id` | `:string` | required | the component id, as every LiveComponent takes |
-| `layers` | `:list` | `[]` | the fragments in precedence order, the higher later (§8.2); **seeded, not controlled** — the builder owns the stack once given it, and adopts a new one only when the host's list changes (§18.1, D-95) |
+| `layers` | `:list` | `[]` | the fragments in precedence order, the higher later (§8.2) — each a fragment map, a `%Visualize.Chart{}`, an id `{kind, n}` of the host's library, or a `{name, one of those}` pair; a `nil` where a fragment was expected is refused by `Visualize.Chart.Builder.Stack.seed/1` with an `ArgumentError` naming the layer, since a host that resolved a name to nothing has a bug to read, not a blank layer to edit (#272); **seeded, not controlled** — the builder owns the stack once given it, and adopts a new one only when the host's list changes (§18.1, D-95) |
 | `sources` | `:map` | `%{}` | the pool of sample sources the preview binds the design's slots to, as `Visualize.Chart.apply/2` takes it (§7.3) |
 | `styles` | `:boolean` | `true` | render the stylesheet in a `<style>` element (§18.13); `false` when the host ships it |
 | `vars` | `:map` | `%{}` | the variable values the preview applies with; the parameters form edits a copy of this |

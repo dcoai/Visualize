@@ -109,6 +109,18 @@ defmodule Visualize.Chart.Builder.StackTest do
     end
   end
 
+  describe "seeding (spec/14 §18.2, #272)" do
+    test "a nil layer is refused with its name, bare or named" do
+      assert_raise ArgumentError, ~r/layer "Uptime::house" is nil/, fn ->
+        Visualize.Chart.Builder.Stack.seed([{"Uptime::house", nil}])
+      end
+
+      assert_raise ArgumentError, ~r/layer "1" is nil/, fn ->
+        Visualize.Chart.Builder.Stack.seed([%{frame: %{}}, nil])
+      end
+    end
+  end
+
   describe "the events (spec/14 §18.8, §18.10)" do
     test "selecting a layer opens its root node" do
       socket = BuilderFixture.socket(BuilderFixture.layers(), node_label: "frame.size")

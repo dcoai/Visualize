@@ -29,6 +29,16 @@ defmodule ExamplesWeb.BuilderLiveTest do
 
     refute html =~ "drag diagnostics"
     refute html =~ "builder-diagnostics"
+
+    # The library is seeded whole, and a name it does not hold is a named failure rather
+    # than a nil layer (#272).
+    names = Library.list(nil) |> Enum.map(& &1.name)
+    assert Enum.all?(~w(Uptime::house Uptime::shared Uptime::panel Theme::dark), &(&1 in names))
+
+    assert_raise ArgumentError, ~r/holds no entry named "nope"; it holds \[/, fn ->
+      Library.id_of("nope")
+    end
+
     assert html =~ ~s(<button type="submit" class="vis-builder-new-submit">New</button>)
     assert html =~ ~s(class="vis-builder-deploy")
   end
