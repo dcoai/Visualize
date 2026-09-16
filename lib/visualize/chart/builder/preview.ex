@@ -59,6 +59,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           role="img"
           viewBox={"0 0 #{@width} #{@height}"}
           data-builder-selected={@selected}
+          data-builder-frame={"#{@width} #{@height} #{@margin.top} #{@margin.right} #{@margin.bottom} #{@margin.left}"}
         >{@chart}</svg>
       </div>
       """
@@ -75,16 +76,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # (spec/14 §4.7, §18.16).
     defp draw(%{design: design, sources: sources, vars: vars, theme: theme}) do
       case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
-        {:ok, %{frame: %{size: size}} = applied} ->
+        {:ok, %{frame: %{size: size, margin: margin}} = applied} ->
           %{
             chart: Phoenix.HTML.raw(Chart.render(applied, paths: true)),
             errors: [],
             width: size.width,
-            height: size.height
+            height: size.height,
+            margin: margin
           }
 
         {:error, errors} ->
-          %{chart: nil, errors: Enum.map(errors, &Validator.format/1), width: 0, height: 0}
+          %{
+            chart: nil,
+            errors: Enum.map(errors, &Validator.format/1),
+            width: 0,
+            height: 0,
+            margin: %{top: 0, right: 0, bottom: 0, left: 0}
+          }
       end
     end
   end
