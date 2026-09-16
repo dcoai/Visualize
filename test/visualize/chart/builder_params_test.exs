@@ -77,7 +77,10 @@ defmodule Visualize.Chart.Builder.ParamsTest do
 
     test "a stack with no free variable renders an empty form" do
       html = render_component(&Params.panel/1, %{layers: [%{version: 1}]})
-      assert html =~ ~s(<form class="vis-builder-params" phx-change="set_var">)
+
+      assert html =~
+               ~s(<form class="vis-builder-params" phx-change="set_var" phx-submit="submitted">)
+
       refute html =~ "vis-builder-param-name"
     end
   end

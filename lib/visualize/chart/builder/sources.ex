@@ -43,7 +43,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <p :if={@rows == []} class="vis-builder-context-note">
           no signals yet — a signal is a generated source the chart draws while it is designed
         </p>
-        <form :if={@rows != []} class="vis-builder-signals" phx-change="edit_signal" phx-target={@target}>
+        <form :if={@rows != []} class="vis-builder-signals" phx-change="edit_signal" phx-target={@target} phx-submit="submitted">
           <fieldset :for={row <- @rows} class="vis-builder-signal">
             <legend class="vis-builder-signal-name">
               {row.name}
@@ -84,7 +84,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             aria-pressed={to_string(@playing)}
           >{if @playing, do: "pause", else: "play"}</button>
           <span class="vis-builder-item-text">tick {@tick}</span>
-          <form class="vis-builder-tick-period" phx-change="tick_ms" phx-target={@target}>
+          <form class="vis-builder-tick-period" phx-change="tick_ms" phx-target={@target} phx-submit="submitted">
             <label class="vis-builder-control-label" for={@id <> "-ms"}>every</label>
             <input id={@id <> "-ms"} type="number" name="ms" value={@tick_ms} min="50" step="50" />
             <span class="vis-builder-item-text">ms</span>

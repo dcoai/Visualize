@@ -65,6 +65,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           phx-target={@target}
           data-builder-target={@target}
           data-builder-scope="pool"
+          phx-submit="submitted"
         >
           <label class="vis-builder-control-label" for={@id <> "-key"}>declared as</label>
           <div :if={@choices} class="vis-builder-pool" role="radiogroup" aria-label="a source of the pool">
@@ -99,7 +100,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <p :if={not @disabled? and @rows == []} class="vis-builder-context-note">
           this layer sets nothing yet
         </p>
-        <form :if={not @disabled? and @rows != []} class="vis-builder-masks" phx-change="mask" phx-target={@target}>
+        <form :if={not @disabled? and @rows != []} class="vis-builder-masks" phx-change="mask" phx-target={@target} phx-submit="submitted">
           <label :for={row <- @rows} class={row.class} title={row.title}>
             <input type="checkbox" name={row.name} value="true" checked={row.masked} />
             <span class="vis-builder-mask-path">{row.name}</span>

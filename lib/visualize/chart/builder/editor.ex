@@ -944,6 +944,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           data-builder-scope="ref"
           data-builder-edit={@event}
           data-builder-node={@label}
+          phx-submit="submitted"
         >
           <input :if={@label} type="hidden" name="_node" value={@label} />
           <p :if={@locked} class="vis-builder-context-note vis-builder-locked-note">
