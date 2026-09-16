@@ -1434,9 +1434,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.render(s) =~ ~s(data-builder-frame="400 200 20 20 30 40")
     end
 
-    test "a legend moves between the margins and the plot's positions; a locked owner refuses", %{
-      socket: s
-    } do
+    test "a legend moves between the margins and the plot's positions; a locked owner refuses" do
       with_legend =
         BuilderFixture.layers() ++
           [
