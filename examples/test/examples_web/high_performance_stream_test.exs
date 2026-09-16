@@ -8,6 +8,7 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
   """
   use ExUnit.Case, async: true
 
+  alias Examples.Scroll
   alias ExamplesWeb.HighPerformanceLive, as: Page
   alias Visualize.Backend.CanvasIncremental
   alias Visualize.Backend.CanvasBinary.Decoder
@@ -30,11 +31,10 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
     |> then(&%{&1 | random_data: Enum.map(1..&1.points_per_series, fn i -> rem(i, 7) * 10.0 end)})
   end
 
-  # The frame after `assigns`: the origin on by the scroll, the random line too.
+  # The frame after `assigns`: the window on by the scroll, the random line too.
   defp scrolled(assigns) do
-    step = Page.scroll_samples(assigns)
-    fresh = for _ <- 1..step, do: 5.0
-    %{assigns | origin: assigns.origin + step, random_data: Enum.drop(assigns.random_data, step) ++ fresh}
+    scroll = Scroll.advance(assigns.scroll, @scroll)
+    %{assigns | scroll: scroll, random_data: Scroll.shift(scroll, assigns.random_data, @scroll, fn _ -> 5.0 end)}
   end
 
   defp full(assigns) do
@@ -68,7 +68,7 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
       assert a.points_per_series == d * 810 + 1
       assert a.total_points == a.points_per_series * 5
       assert Page.total_at(d) == a.total_points
-      assert Page.scroll_samples(a) == @scroll * d
+      assert Scroll.samples(a.scroll, @scroll) == @scroll * d
       # A sample is exactly 1/d pixels: the scroll's samples are the scroll's pixels.
       assert_in_delta Scale.Linear.apply(a.x_scale, @scroll * d), @scroll, 1.0e-9
     end
@@ -76,7 +76,7 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
 
   test "the next frame is this one translated by the scroll (spec/09 §5.3)" do
     a = assigns(2)
-    step = Page.scroll_samples(a)
+    step = Scroll.samples(a.scroll, @scroll)
     before = lines(full(a))
     after_ = lines(full(scrolled(a)))
 

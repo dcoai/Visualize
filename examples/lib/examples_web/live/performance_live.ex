@@ -9,6 +9,8 @@ defmodule ExamplesWeb.PerformanceLive do
   use Phoenix.LiveView
 
   alias Visualize.{Chart, Scale, Shape, Render}
+  alias Examples.Scroll
+  alias ExamplesWeb.PerformanceLive.MultiLine
   alias Visualize.Chart.Compiled
   alias Visualize.IR.Element
   alias Visualize.Backend.CanvasIncremental
@@ -73,13 +75,9 @@ defmodule ExamplesWeb.PerformanceLive do
       payload_sizes: [],
       last_fps_calc: nil,
 
-      # Multi-line scrolling state (for true incremental rendering)
-      scrolling_data: nil,
-      line_params: nil,
-      scroll_offset: 0,
-      viewport_x: 0,
-      # Accumulator for sub-pixel shifts (accumulates until >= 1 data point worth)
-      pixel_accumulator: 0.0
+      # The Multi-Line chart in play (ExamplesWeb.PerformanceLive.MultiLine), started with it
+      multi_line: nil,
+      viewport_x: 0
     )}
   end
 
@@ -151,27 +149,21 @@ defmodule ExamplesWeb.PerformanceLive do
       hybrid_static_svg_bytes: hybrid_static_svg_bytes
     )
 
-    # Reset scrolling data when starting with multi_line
+    # The Multi-Line chart starts fresh at the requested points
     socket = if socket.assigns.chart_type == :multi_line do
-      {data, params} = init_scrolling_data(socket.assigns.data_points)
-      assign(socket,
-        scrolling_data: data,
-        line_params: params,
-        scroll_offset: 0,
-        pixel_accumulator: 0.0
-      )
+      assign(socket, multi_line: MultiLine.init(socket.assigns.data_points))
     else
       socket
     end
 
     # For incremental modes, send initial full render immediately
     socket = if socket.assigns.backend in [:canvas_incremental, :hybrid_incremental] do
-      data = if socket.assigns.chart_type == :multi_line do
-        socket.assigns.scrolling_data
+      full_output = if socket.assigns.chart_type == :multi_line do
+        socket.assigns.multi_line |> MultiLine.full() |> Base.encode64()
       else
-        generate_animated_data(socket.assigns.chart_type, socket.assigns.data_points, 0)
+        data = generate_animated_data(socket.assigns.chart_type, socket.assigns.data_points, 0)
+        render_full_for_incremental(socket.assigns.backend, socket.assigns.chart_type, data, 700, 400)
       end
-      full_output = render_full_for_incremental(socket.assigns.backend, socket.assigns.chart_type, data, 700, 400)
       push_event(socket, "canvas_incremental", %{binary: full_output, dx: 0, dy: 0, mode: "full"})
     else
       socket
@@ -189,7 +181,7 @@ defmodule ExamplesWeb.PerformanceLive do
       avg_payload_bytes: socket.assigns.avg_payload_bytes,
       total_frames: socket.assigns.total_frames,
       total_bytes: socket.assigns.total_bytes,
-      data_points: socket.assigns.data_points,
+      data_points: points_in_play(socket.assigns),
       update_interval: socket.assigns.update_interval
     }
 
@@ -312,115 +304,94 @@ defmodule ExamplesWeb.PerformanceLive do
 
   def handle_info(:render_frame, socket) do
     if socket.assigns.running do
-      # Handle multi_line specially - it uses scrolling data with accumulator
-      {data, socket, pixel_shift} = if socket.assigns.chart_type == :multi_line do
-        {scrolling_data, pixel_shift, new_accumulator, new_scroll_offset} =
-          shift_scrolling_data(
-            socket.assigns.scrolling_data,
-            socket.assigns.line_params,
-            socket.assigns.scroll_offset,
-            socket.assigns.pixel_accumulator
-          )
-        socket = assign(socket,
-          scrolling_data: scrolling_data,
-          pixel_accumulator: new_accumulator,
-          scroll_offset: new_scroll_offset
-        )
-        {scrolling_data, socket, pixel_shift}
+      # The Multi-Line chart scrolls by exactly a frame's pixels (spec/14 §12.6); the
+      # other charts animate in place, and a frame of theirs is a new picture.
+      {data, socket} = if socket.assigns.chart_type == :multi_line do
+        chart = MultiLine.advance(socket.assigns.multi_line)
+        {chart, assign(socket, multi_line: chart)}
       else
-        data = generate_animated_data(
-          socket.assigns.chart_type,
-          socket.assigns.data_points,
-          socket.assigns.frame
-        )
-        {data, socket, @scroll_delta}
+        {generate_animated_data(socket.assigns.chart_type, socket.assigns.data_points, socket.assigns.frame), socket}
       end
 
       # Schedule next frame regardless of whether we render
       schedule_frame(socket.assigns.update_interval)
 
-      # For incremental multi_line, skip rendering if pixel_shift is 0 (accumulating)
-      if pixel_shift == 0.0 and socket.assigns.chart_type == :multi_line and
-         socket.assigns.backend in [:canvas_incremental, :hybrid_incremental] do
-        # Just accumulating pixels, no visual update this frame
-        {:noreply, socket}
+      # An incremental backend scrolls the Multi-Line chart and redraws any other in
+      # full: a picture that changes other than by translation must not be scrolled
+      # (spec/09 §5.3).
+      scrolling? = socket.assigns.chart_type == :multi_line
+
+      render_start = System.monotonic_time(:microsecond)
+
+      {output, socket} = if socket.assigns.backend in [:compiled_svg, :compiled_binary] do
+        compiled_frame(socket, data)
       else
-        render_start = System.monotonic_time(:microsecond)
-
-        {output, socket} = if socket.assigns.backend in [:compiled_svg, :compiled_binary] do
-          compiled_frame(socket, data)
-        else
-          {case socket.assigns.backend do
-          :hybrid ->
-            # Hybrid mode: render data only using binary format
-            render_data_only_binary(socket.assigns.chart_type, data, 700, 400)
-          :canvas ->
-            # Canvas mode: render full chart using binary format
-            element = build_chart(socket.assigns.chart_type, data, 700, 400)
-            Visualize.Backend.Canvas.render_element(element, format: :binary_base64)
-          :svg ->
-            # SVG mode: render full chart as SVG
-            element = build_chart(socket.assigns.chart_type, data, 700, 400)
-            Render.to_string(element, backend: :svg)
-          :canvas_incremental ->
-            # Canvas incremental: render based on chart type
-            if socket.assigns.chart_type == :multi_line do
-              # True incremental for scrolling multi-line
-              render_multiline_incremental(:canvas, data, 700, 400, pixel_shift)
-            else
-              render_incremental(:canvas, socket.assigns.chart_type, data, 700, 400)
-            end
-          :hybrid_incremental ->
-            # Hybrid incremental: render based on chart type
-            if socket.assigns.chart_type == :multi_line do
-              render_multiline_incremental(:hybrid, data, 700, 400, pixel_shift)
-            else
-              render_incremental(:hybrid, socket.assigns.chart_type, data, 700, 400)
-            end
-          end, socket}
-        end
-
-        render_time = System.monotonic_time(:microsecond) - render_start
-        payload_size = byte_size(output)
-        now = System.monotonic_time(:millisecond)
-
-        # Update rolling metrics (keep last 60 samples)
-        render_times = Enum.take([render_time | socket.assigns.render_times], 60)
-        payload_sizes = Enum.take([payload_size | socket.assigns.payload_sizes], 60)
-        frame_times = Enum.take([now | socket.assigns.frame_times], 60)
-
-        # Calculate FPS from frame times
-        fps = calculate_fps(frame_times)
-        avg_render = Enum.sum(render_times) / length(render_times)
-        avg_payload = round(Enum.sum(payload_sizes) / length(payload_sizes))
-
-        socket = assign(socket,
-          frame: socket.assigns.frame + 1,
-          total_frames: socket.assigns.total_frames + 1,
-          total_bytes: socket.assigns.total_bytes + payload_size,
-          fps: fps,
-          avg_render_time_us: avg_render,
-          avg_payload_bytes: avg_payload,
-          render_times: render_times,
-          payload_sizes: payload_sizes,
-          frame_times: frame_times,
-          chart_output: output
-        )
-
-        # Push canvas commands via event for canvas/hybrid modes (both use binary format)
-        socket = cond do
-          socket.assigns.backend in [:canvas, :hybrid] ->
-            push_event(socket, "canvas_update", %{binary: output})
-          socket.assigns.backend in [:canvas_incremental, :hybrid_incremental] ->
-            # Initial full render was already sent in handle_event("start_test")
-            # All subsequent frames use incremental mode
-            push_event(socket, "canvas_incremental", %{binary: output, dx: pixel_shift, dy: 0, mode: "scroll_x"})
-          true ->
-            socket
-        end
-
-        {:noreply, socket}
+        {case socket.assigns.backend do
+        :hybrid ->
+          # Hybrid mode: render data only using binary format
+          render_data_only_binary(socket.assigns.chart_type, data, 700, 400)
+        :canvas ->
+          # Canvas mode: render full chart using binary format
+          element = build_chart(socket.assigns.chart_type, data, 700, 400)
+          Visualize.Backend.Canvas.render_element(element, format: :binary_base64)
+        :svg ->
+          # SVG mode: render full chart as SVG
+          element = build_chart(socket.assigns.chart_type, data, 700, 400)
+          Render.to_string(element, backend: :svg)
+        backend when backend in [:canvas_incremental, :hybrid_incremental] ->
+          if scrolling? do
+            data |> MultiLine.incremental() |> Base.encode64()
+          else
+            render_full_for_incremental(backend, socket.assigns.chart_type, data, 700, 400)
+          end
+        end, socket}
       end
+
+      render_time = System.monotonic_time(:microsecond) - render_start
+      payload_size = byte_size(output)
+      now = System.monotonic_time(:millisecond)
+
+      # Update rolling metrics (keep last 60 samples)
+      render_times = Enum.take([render_time | socket.assigns.render_times], 60)
+      payload_sizes = Enum.take([payload_size | socket.assigns.payload_sizes], 60)
+      frame_times = Enum.take([now | socket.assigns.frame_times], 60)
+
+      # Calculate FPS from frame times
+      fps = calculate_fps(frame_times)
+      avg_render = Enum.sum(render_times) / length(render_times)
+      avg_payload = round(Enum.sum(payload_sizes) / length(payload_sizes))
+
+      socket = assign(socket,
+        frame: socket.assigns.frame + 1,
+        total_frames: socket.assigns.total_frames + 1,
+        total_bytes: socket.assigns.total_bytes + payload_size,
+        fps: fps,
+        avg_render_time_us: avg_render,
+        avg_payload_bytes: avg_payload,
+        render_times: render_times,
+        payload_sizes: payload_sizes,
+        frame_times: frame_times,
+        chart_output: output
+      )
+
+      # Push canvas commands via event for canvas/hybrid modes (both use binary format)
+      socket = cond do
+        socket.assigns.backend in [:canvas, :hybrid] ->
+          push_event(socket, "canvas_update", %{binary: output})
+        socket.assigns.backend in [:canvas_incremental, :hybrid_incremental] ->
+          # Initial full render was already sent in handle_event("start_test")
+          # All subsequent frames use incremental mode
+          if scrolling? do
+            dx = MultiLine.px_per_frame()
+            push_event(socket, "canvas_incremental", %{binary: output, dx: dx, dy: 0, mode: "scroll_x"})
+          else
+            push_event(socket, "canvas_incremental", %{binary: output, dx: 0, dy: 0, mode: "full"})
+          end
+        true ->
+          socket
+      end
+
+      {:noreply, socket}
     else
       {:noreply, socket}
     end
@@ -533,103 +504,10 @@ defmodule ExamplesWeb.PerformanceLive do
     end
   end
 
-  # Initialize scrolling data for multi-line chart (random values for each line)
-  # count is total data points across all lines
-  defp init_scrolling_data(total_count) do
-    points_per_line = max(10, div(total_count, @num_lines))
-
-    # Generate unique parameters for each line
-    line_params = for line_idx <- 0..(@num_lines - 1) do
-      # Each line gets unique amplitude, frequency, and phase
-      # Use deterministic but varied values based on line index
-      base_amplitude = 30 + :rand.uniform() * 20  # 30-50
-      frequency1 = 0.02 + (line_idx / @num_lines) * 0.03  # Primary wave
-      frequency2 = 0.05 + :rand.uniform() * 0.03  # Secondary wave
-      phase1 = line_idx * 0.5 + :rand.uniform() * :math.pi()
-      phase2 = :rand.uniform() * 2 * :math.pi()
-      amplitude_ratio = 0.3 + :rand.uniform() * 0.4  # Ratio of secondary to primary
-
-      %{
-        amplitude: base_amplitude,
-        freq1: frequency1,
-        freq2: frequency2,
-        phase1: phase1,
-        phase2: phase2,
-        amp_ratio: amplitude_ratio
-      }
-    end
-
-    # Generate initial data using the parameters
-    data = line_params
-    |> Enum.map(fn params ->
-      for i <- 0..(points_per_line - 1) do
-        generate_sine_value(params, i)
-      end
-    end)
-
-    {data, line_params}
-  end
-
-  # Generate a sine wave value for a given x position and line parameters
-  defp generate_sine_value(params, x) do
-    primary = :math.sin(x * params.freq1 + params.phase1) * params.amplitude
-    secondary = :math.sin(x * params.freq2 + params.phase2) * params.amplitude * params.amp_ratio
-    # Center around 50 with the wave oscillations
-    50 + primary + secondary
-  end
-
-  # Fixed pixel shift per frame (1 pixel for smooth scrolling)
-  @pixel_shift_per_frame 1.0
-  # inner_width = 700 (full canvas width with zero margins)
-  @inner_width 700
-
-  # Shift scrolling data left and add new sine wave values on right
-  # Uses accumulator to handle sub-pixel shifts - data only shifts when
-  # accumulated pixels >= 1 data point worth
-  # Returns {shifted_data, pixel_shift, new_accumulator, new_scroll_offset}
-  # pixel_shift is always an integer (0 when not enough accumulated) to avoid blur
-  defp shift_scrolling_data(data, line_params, scroll_offset, accumulator) do
-    count = length(hd(data))
-    pixels_per_point = @inner_width / (count - 1)
-
-    # Add this frame's pixel shift to accumulator
-    total_pixels = accumulator + @pixel_shift_per_frame
-
-    # Calculate how many whole data points we can shift
-    points_to_shift = trunc(total_pixels / pixels_per_point)
-
-    if points_to_shift >= 1 do
-      # New scroll offset for generating new values
-      new_scroll_offset = scroll_offset + points_to_shift
-
-      # Shift the data by the calculated number of points
-      shifted_data = data
-      |> Enum.zip(line_params)
-      |> Enum.map(fn {line_data, params} ->
-        remaining = Enum.drop(line_data, points_to_shift)
-        # Generate new sine wave values at the new x positions
-        new_values = for i <- 0..(points_to_shift - 1) do
-          # x position is the scroll offset plus position within the window
-          x = new_scroll_offset + count - points_to_shift + i
-          generate_sine_value(params, x)
-        end
-        remaining ++ new_values
-      end)
-
-      # Calculate pixel shift and round to integer to avoid canvas blur
-      exact_pixel_shift = points_to_shift * pixels_per_point
-      rounded_pixel_shift = round(exact_pixel_shift)
-      # Accumulate the rounding error to maintain long-term accuracy
-      rounding_error = exact_pixel_shift - rounded_pixel_shift
-      new_accumulator = (total_pixels - exact_pixel_shift) + rounding_error
-
-      {shifted_data, rounded_pixel_shift, new_accumulator, new_scroll_offset}
-    else
-      # Not enough accumulated to shift data - don't shift canvas either
-      # Return original data with 0 pixel shift (no visual change this frame)
-      {data, 0, total_pixels, scroll_offset}
-    end
-  end
+  # The points a run reports: the Multi-Line chart's are the points in play, the
+  # requested count for any other.
+  defp points_in_play(%{chart_type: :multi_line, multi_line: %MultiLine{} = chart}), do: MultiLine.points(chart)
+  defp points_in_play(assigns), do: assigns.data_points
 
   defp generate_animated_data(:line, count, frame) do
     phase = frame * 0.1
@@ -657,10 +535,6 @@ defmodule ExamplesWeb.PerformanceLive do
 
   # Multi-line scrolling - data is pre-generated and shifted each frame
   # This returns the scrolling_data directly (handled specially in render_frame)
-  defp generate_animated_data(:multi_line, _count, _frame) do
-    # Placeholder - actual data comes from socket.assigns.scrolling_data
-    []
-  end
 
   # Ridgeline plot - multiple overlapping density curves (48 ridges)
   @ridgeline_count 48
@@ -804,80 +678,8 @@ defmodule ExamplesWeb.PerformanceLive do
   end
 
   # Multi-line scrolling chart - ridgeline style (48 layered lines)
-  defp build_chart(:multi_line, scrolling_data, width, height) do
-    margin = %{top: 0, right: 0, bottom: 0, left: 0}
-    inner_width = width - margin.left - margin.right
-    inner_height = height - margin.top - margin.bottom
+  defp build_chart(:multi_line, %MultiLine{} = chart, _width, _height), do: MultiLine.element(chart)
 
-    count = length(hd(scrolling_data))
-    num_ridges = length(scrolling_data)
-
-    # Calculate spacing to fill vertical space evenly
-    ridge_spacing = inner_height / num_ridges
-    ridge_height = ridge_spacing * 3  # Allow ridges to overlap visually
-
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, count - 1])
-      |> Scale.Linear.range([0, inner_width])
-
-    ridge_elements = scrolling_data
-    |> Enum.with_index()
-    |> Enum.map(fn {line_data, idx} ->
-      # Position from bottom to top
-      y_offset = inner_height - (idx + 1) * ridge_spacing
-
-      y_scale = Scale.Linear.new()
-        |> Scale.Linear.domain([0, 100])
-        |> Scale.Linear.range([ridge_height, 0])
-
-      data = line_data
-      |> Enum.with_index()
-      |> Enum.map(fn {y, i} -> %{x: i, y: y} end)
-
-      # Use linear interpolation for incremental rendering compatibility
-      line = Shape.Line.new()
-        |> Shape.Line.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
-        |> Shape.Line.y(fn d -> Scale.Linear.apply(y_scale, d.y) end)
-
-      path = Shape.Line.generate_path(line, data)
-
-      # Interpolate from deep purple (bottom) to orange (top)
-      color = interpolate_purple_orange(idx / (num_ridges - 1))
-
-      line_element = Element.path(path, %{
-        fill: :none,
-        stroke: color,
-        stroke_width: 1.5
-      })
-
-      Element.group([line_element],
-        transform: Visualize.IR.Transform.translate(0, y_offset)
-      )
-    end)
-
-    chart_group = Element.group(ridge_elements,
-      transform: Visualize.IR.Transform.translate(margin.left, margin.top)
-    )
-
-    Element.root(width, height, children: [chart_group])
-  end
-
-  # Interpolate from deep purple to orange
-  defp interpolate_purple_orange(t) when t >= 0 and t <= 1 do
-    # Deep purple: #5B21B6, Orange: #F97316
-    r1 = 0x5B; g1 = 0x21; b1 = 0xB6
-    r2 = 0xF9; g2 = 0x73; b2 = 0x16
-
-    r = round(r1 + (r2 - r1) * t)
-    g = round(g1 + (g2 - g1) * t)
-    b = round(b1 + (b2 - b1) * t)
-
-    r_hex = r |> Integer.to_string(16) |> String.pad_leading(2, "0")
-    g_hex = g |> Integer.to_string(16) |> String.pad_leading(2, "0")
-    b_hex = b |> Integer.to_string(16) |> String.pad_leading(2, "0")
-
-    "##{r_hex}#{g_hex}#{b_hex}"
-  end
 
   # Ridgeline plot - layered line charts with vertical offset (48 ridges)
   defp build_chart(:ridgeline, ridges_data, width, height) do
@@ -913,7 +715,7 @@ defmodule ExamplesWeb.PerformanceLive do
       path = Shape.Line.generate_path(line, ridge_data)
 
       # Interpolate from deep purple (bottom) to orange (top)
-      color = interpolate_purple_orange(idx / max(1, num_ridges - 1))
+      color = MultiLine.color(idx / max(1, num_ridges - 1))
 
       line_element = Element.path(path, %{
         fill: :none,
@@ -2032,36 +1834,7 @@ defmodule ExamplesWeb.PerformanceLive do
           |> Element.set_transform(Visualize.IR.Transform.translate(margin.left, margin.top))
 
       :multi_line ->
-        # data is scrolling_data (list of lists) - ridgeline style with 48 lines
-        count = length(hd(data))
-        num_ridges = length(data)
-        ridge_spacing = inner_height / num_ridges
-        ridge_height = ridge_spacing * 3
-
-        ml_x_scale = Scale.Linear.new() |> Scale.Linear.domain([0, count - 1]) |> Scale.Linear.range([0, inner_width])
-
-        ridge_elements = data
-        |> Enum.with_index()
-        |> Enum.map(fn {line_data, idx} ->
-          y_offset = inner_height - (idx + 1) * ridge_spacing
-
-          ml_y_scale = Scale.Linear.new() |> Scale.Linear.domain([0, 100]) |> Scale.Linear.range([ridge_height, 0])
-
-          line_points = line_data |> Enum.with_index() |> Enum.map(fn {y, i} -> %{x: i, y: y} end)
-
-          line = Shape.Line.new()
-            |> Shape.Line.x(fn d -> Scale.Linear.apply(ml_x_scale, d.x) end)
-            |> Shape.Line.y(fn d -> Scale.Linear.apply(ml_y_scale, d.y) end)
-
-          path = Shape.Line.generate_path(line, line_points)
-
-          color = interpolate_purple_orange(idx / max(1, num_ridges - 1))
-
-          line_element = Element.path(path, %{fill: :none, stroke: color, stroke_width: 1.5})
-          Element.group([line_element], transform: Visualize.IR.Transform.translate(0, y_offset))
-        end)
-        Element.group(ridge_elements)
-          |> Element.set_transform(Visualize.IR.Transform.translate(margin.left, margin.top))
+        MultiLine.ridges(data, 0, Scroll.count(data.scroll) - 1)
 
       :ridgeline ->
         # Ridgeline uses layered lines
@@ -2109,7 +1882,7 @@ defmodule ExamplesWeb.PerformanceLive do
       path = Shape.Line.generate_path(line, ridge_data)
 
       # Interpolate from deep purple (bottom) to orange (top)
-      color = interpolate_purple_orange(idx / max(1, num_ridges - 1))
+      color = MultiLine.color(idx / max(1, num_ridges - 1))
 
       line_element = Element.path(path, %{
         fill: :none,
@@ -2174,147 +1947,6 @@ defmodule ExamplesWeb.PerformanceLive do
     |> Base.encode64()
   end
 
-  # Incremental rendering: only render exposed region for scrolling charts
-  # NOTE: For animated (phase-shifting) data, we render the full data in the exposed region
-  # because the visual content changes every frame. True incremental optimization
-  # works best with scrolling data where only edge data is new.
-  defp render_incremental(mode, chart_type, data, width, height) do
-    inner_width = width - @margin.left - @margin.right
-    inner_height = height - @margin.top - @margin.bottom
-    canvas_size = {width, height}
-
-    # Use inner dimensions for exposed region calculation (like high_performance_live)
-    inner_size = {inner_width, inner_height}
-
-    {x_scale, y_scale} = build_data_scales(chart_type, data, inner_width, inner_height)
-
-    # Calculate exposed region relative to inner chart area
-    regions = CanvasIncremental.exposed_regions({@scroll_delta, 0}, inner_size)
-
-    # Adjust region coordinates to account for margins
-    adjusted_regions = Enum.map(regions, fn {rx, ry, rw, rh} ->
-      {@margin.left + rx, @margin.top + ry, rw, rh}
-    end)
-
-    region_elements = Enum.map(adjusted_regions, fn bounds ->
-      # Render full chart data - client-side clipping shows only the exposed region.
-      # Note: For animated data (phase-shifting), all values change each frame,
-      # so we render the full dataset. True incremental optimization requires
-      # scrolling data where only edge data is new (see high_performance_live).
-      element = build_data_element(chart_type, data, x_scale, y_scale, inner_height)
-
-      # For canvas mode, wrap in root element
-      element = if mode == :canvas do
-        Element.root(width, height, children: [element])
-      else
-        element
-      end
-
-      {bounds, element}
-    end)
-
-    # The plot is what scrolls; the margin's axes stay (D-106)
-    CanvasIncremental.encode_incremental({@scroll_delta, 0}, canvas_size, region_elements,
-      viewport: {@margin.left, @margin.top, inner_width, inner_height}
-    )
-    |> Base.encode64()
-  end
-
-  # True incremental rendering for multi-line scrolling chart (ridgeline style, 48 lines)
-  # Only renders the data points in the newly exposed region (right edge)
-  # pixel_shift is the exact pixel amount that corresponds to the data shift
-  defp render_multiline_incremental(mode, scrolling_data, width, height, pixel_shift) do
-    margin = %{top: 0, right: 0, bottom: 0, left: 0}
-    inner_width = width - margin.left - margin.right
-    inner_height = height - margin.top - margin.bottom
-    canvas_size = {width, height}
-    inner_size = {inner_width, inner_height}
-
-    count = length(hd(scrolling_data))
-    num_ridges = length(scrolling_data)
-
-    # Calculate spacing to fill vertical space evenly
-    ridge_spacing = inner_height / num_ridges
-    ridge_height = ridge_spacing * 3  # Allow ridges to overlap visually
-
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, count - 1])
-      |> Scale.Linear.range([0, inner_width])
-
-    # Calculate exposed region relative to inner chart area
-    regions = CanvasIncremental.exposed_regions({pixel_shift, 0}, inner_size)
-
-    # Only draw the data points in the newly exposed region (right edge)
-    # This prevents smearing caused by overlapping with shifted bitmap content
-    points_per_pixel = (count - 1) / inner_width
-    region_elements = Enum.map(regions, fn {inner_rx, inner_ry, inner_rw, inner_rh} ->
-      # Calculate which data indices fall in the exposed region
-      # Add a small buffer on the left to ensure line segments connect properly
-      pixel_start = max(0, inner_rx - 2)
-      pixel_end = inner_rx + inner_rw
-
-      start_idx = max(0, floor(pixel_start * points_per_pixel) - 1)
-      end_idx = min(count - 1, ceil(pixel_end * points_per_pixel) + 1)
-
-      # Clip to the exposed region (in canvas coordinates with margin offset)
-      # This prevents drawing over the shifted bitmap content
-      bounds = {margin.left + inner_rx, margin.top + inner_ry, inner_rw, inner_rh}
-
-      # Build ridgeline elements for ONLY the data in this region
-      ridge_elements = scrolling_data
-      |> Enum.with_index()
-      |> Enum.map(fn {line_data, idx} ->
-        # Position from bottom to top
-        y_offset = inner_height - (idx + 1) * ridge_spacing
-
-        y_scale = Scale.Linear.new()
-          |> Scale.Linear.domain([0, 100])
-          |> Scale.Linear.range([ridge_height, 0])
-
-        region_data = line_data
-        |> Enum.slice(start_idx..end_idx)
-        |> Enum.with_index(start_idx)
-        |> Enum.map(fn {y, i} -> %{x: i, y: y} end)
-
-        if length(region_data) >= 2 do
-          # Use linear interpolation for incremental rendering - curves don't align
-          # with shifted bitmap content due to B-spline's dependency on surrounding points
-          line = Shape.Line.new()
-            |> Shape.Line.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
-            |> Shape.Line.y(fn d -> Scale.Linear.apply(y_scale, d.y) end)
-
-          path = Shape.Line.generate_path(line, region_data)
-
-          # Interpolate from deep purple (bottom) to orange (top)
-          color = interpolate_purple_orange(idx / max(1, num_ridges - 1))
-
-          line_element = Element.path(path, %{fill: :none, stroke: color, stroke_width: 1.5})
-          Element.group([line_element], transform: Visualize.IR.Transform.translate(0, y_offset))
-        else
-          nil
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
-
-      element = Element.group(ridge_elements)
-        |> Element.set_transform(Visualize.IR.Transform.translate(margin.left, margin.top))
-
-      element = if mode == :canvas do
-        Element.root(width, height, children: [element])
-      else
-        element
-      end
-
-      {bounds, element}
-    end)
-
-    # The plot is what scrolls; the margin's axes stay (D-106)
-    CanvasIncremental.encode_incremental({pixel_shift, 0}, canvas_size, region_elements,
-      viewport: {margin.left, margin.top, inner_width, inner_height}
-    )
-    |> Base.encode64()
-  end
-
   defp build_data_element(:line, data, x_scale, y_scale, _inner_height) do
     line = Shape.Line.new()
       |> Shape.Line.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
@@ -2351,43 +1983,8 @@ defmodule ExamplesWeb.PerformanceLive do
       |> Element.set_transform(Visualize.IR.Transform.translate(@margin.left, @margin.top))
   end
 
-  defp build_data_element(:multi_line, scrolling_data, _x_scale, _y_scale, _inner_height) do
-    # Ridgeline style for multi_line with 48 lines
-    count = length(hd(scrolling_data))
-    num_ridges = length(scrolling_data)
-    inner_width = 700 - 40 - 20  # margin.left=40, margin.right=20
-    inner_height = 400 - 10 - 10  # margin.top=10, margin.bottom=10
-
-    # Calculate spacing to fill vertical space evenly
-    ridge_spacing = inner_height / num_ridges
-    ridge_height = ridge_spacing * 3  # Allow ridges to overlap visually
-
-    ml_x_scale = Scale.Linear.new() |> Scale.Linear.domain([0, count - 1]) |> Scale.Linear.range([0, inner_width])
-
-    ridge_elements = scrolling_data
-    |> Enum.with_index()
-    |> Enum.map(fn {line_data, idx} ->
-      # Position from bottom to top
-      y_offset = inner_height - (idx + 1) * ridge_spacing
-
-      ml_y_scale = Scale.Linear.new() |> Scale.Linear.domain([0, 100]) |> Scale.Linear.range([ridge_height, 0])
-
-      data = line_data |> Enum.with_index() |> Enum.map(fn {y, i} -> %{x: i, y: y} end)
-
-      line = Shape.Line.new()
-        |> Shape.Line.x(fn d -> Scale.Linear.apply(ml_x_scale, d.x) end)
-        |> Shape.Line.y(fn d -> Scale.Linear.apply(ml_y_scale, d.y) end)
-
-      path = Shape.Line.generate_path(line, data)
-
-      # Interpolate from deep purple (bottom) to orange (top)
-      color = interpolate_purple_orange(idx / max(1, num_ridges - 1))
-
-      line_element = Element.path(path, %{fill: :none, stroke: color, stroke_width: 1.5})
-      Element.group([line_element], transform: Visualize.IR.Transform.translate(0, y_offset))
-    end)
-    Element.group(ridge_elements)
-      |> Element.set_transform(Visualize.IR.Transform.translate(40, 10))
+  defp build_data_element(:multi_line, %MultiLine{} = chart, _x_scale, _y_scale, _inner_height) do
+    MultiLine.ridges(chart, 0, Scroll.count(chart.scroll) - 1)
   end
 
   defp build_data_element(:ridgeline, ridges_data, _x_scale, _y_scale, _inner_height) do
@@ -2412,17 +2009,9 @@ defmodule ExamplesWeb.PerformanceLive do
     {x_scale, y_scale}
   end
 
-  defp build_data_scales(:multi_line, data, inner_width, inner_height) do
-    count = length(hd(data))
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, count - 1])
-      |> Scale.Linear.range([0, inner_width])
-
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, 100])
-      |> Scale.Linear.range([inner_height, 0])
-
-    {x_scale, y_scale}
+  defp build_data_scales(:multi_line, %MultiLine{} = chart, _inner_width, inner_height) do
+    y_scale = Scale.Linear.new() |> Scale.Linear.domain([0, 100]) |> Scale.Linear.range([inner_height, 0])
+    {Scroll.x_scale(chart.scroll), y_scale}
   end
 
   defp build_data_scales(:ridgeline, _data, inner_width, inner_height) do

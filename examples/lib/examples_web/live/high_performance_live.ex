@@ -17,6 +17,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
   use Phoenix.LiveView
 
+  alias Examples.Scroll
   alias Visualize.{Scale, Shape, Axis}
   alias Visualize.IR.{Element, Transform}
   alias Visualize.Backend.{SVG, CanvasIncremental}
@@ -100,16 +101,15 @@ defmodule ExamplesWeb.HighPerformanceLive do
     if socket.assigns.running do
       render_start = System.monotonic_time(:microsecond)
 
-      # The scroll is the animation: the origin advances by the frame's scroll in samples,
-      # and the random line drops and appends that many (spec/14 §12.6).
-      step = scroll_samples(socket.assigns)
-      random_data = Enum.drop(socket.assigns.random_data, step) ++ random_samples(step)
-      origin = socket.assigns.origin + step
+      # The scroll is the animation: the window advances by the frame's scroll in samples,
+      # and the random line drops and appends that many (spec/14 §12.6, `Examples.Scroll`).
+      scroll = Scroll.advance(socket.assigns.scroll, @scroll_delta)
+      random_data = Scroll.shift(scroll, socket.assigns.random_data, @scroll_delta, fn _ -> random_sample() end)
 
       # Update viewport (scrolling right exposes new data on right)
       viewport_x = socket.assigns.viewport_x + @scroll_delta
 
-      socket = assign(socket, random_data: random_data, origin: origin, viewport_x: viewport_x)
+      socket = assign(socket, random_data: random_data, scroll: scroll, viewport_x: viewport_x)
 
       # Choose rendering mode
       socket = if socket.assigns.use_incremental and not socket.assigns.last_full_render do
@@ -145,36 +145,29 @@ defmodule ExamplesWeb.HighPerformanceLive do
   # ============================================================
 
   @doc false
-  # The page at `samples_per_px`: a series is `samples_per_px × inner_width + 1` samples so
-  # that the x scale maps a sample to exactly `1 / samples_per_px` pixels, the origin is
-  # back at zero, and the random line is fresh. Public for the stream test.
+  # The page at `samples_per_px`: a fresh `Examples.Scroll` window over the plot's columns,
+  # its x scale, and a fresh random line. Public for the stream test.
   def at_density(socket, samples_per_px) do
-    points_per_series = samples_per_px * @inner_width + 1
-
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, points_per_series - 1])
-      |> Scale.Linear.range([0, @inner_width])
+    scroll = Scroll.new(@inner_width, samples_per_px)
+    points_per_series = Scroll.count(scroll)
+    x_scale = Scroll.x_scale(scroll)
 
     assign(socket,
       samples_per_px: samples_per_px,
+      scroll: scroll,
       points_per_series: points_per_series,
       total_points: points_per_series * @series,
       x_scale: x_scale,
       static_svg: render_static_svg(x_scale, socket.assigns.y_scale, points_per_series),
-      random_data: random_samples(points_per_series),
-      origin: 0
+      random_data: for(_ <- 1..points_per_series, do: random_sample())
     )
   end
 
   @doc false
-  # The samples one frame scrolls by: `scroll_delta` pixels at the page's density.
-  def scroll_samples(%{samples_per_px: samples_per_px}), do: @scroll_delta * samples_per_px
-
-  @doc false
   # The total the page offers at a density, for the select.
-  def total_at(samples_per_px), do: (samples_per_px * @inner_width + 1) * @series
+  def total_at(samples_per_px), do: Scroll.count(Scroll.new(@inner_width, samples_per_px)) * @series
 
-  defp random_samples(n), do: for(_ <- 1..n//1, do: :rand.uniform() * 60 + 40)
+  defp random_sample, do: :rand.uniform() * 60 + 40
 
   @doc false
   # A series' value at absolute sample `j` of a series `count` samples long: one function
@@ -258,14 +251,12 @@ defmodule ExamplesWeb.HighPerformanceLive do
   end
 
   # Calculate how many points are in the exposed regions
-  defp calculate_region_points(assigns, regions) do
-    %{points_per_series: count} = assigns
-
+  defp calculate_region_points(%{scroll: scroll}, regions) do
     Enum.reduce(regions, 0, fn {rx, _ry, rw, _rh}, acc ->
-      # Convert pixel bounds to data indices
-      {start_idx, end_idx} = pixel_to_data_range(rx - @margin.left, rw, count)
-      points_in_region = max(0, end_idx - start_idx + 1)
-      acc + points_in_region * @series
+      case Scroll.columns(scroll, {rx - @margin.left, rw}, 0) do
+        {first, last} -> acc + (last - first + 1) * @series
+        nil -> acc
+      end
     end)
   end
 
@@ -273,50 +264,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
   # The chart over ONLY the samples under the exposed region: the same series function as
   # the full render over the region's columns, with a two-sample buffer each side so a
   # path enters and leaves the strip on its own line. Public for the stream test.
-  def build_region_element(assigns, {rx, _ry, rw, _rh}) do
-    %{points_per_series: count} = assigns
-
-    # Convert pixel bounds to data index range
-    # Account for margin offset - region might be in margin area
-    pixel_x = rx - @margin.left
-    {raw_start, raw_end} = pixel_to_data_range(pixel_x, rw, count)
-
-    # Check for invalid range BEFORE applying buffer
-    # (region might be entirely in margin area)
-    if raw_start > raw_end do
-      Element.root(@width, @height, children: [])
-    else
-      buffer = 2
-      start_idx = max(0, raw_start - buffer)
-      end_idx = min(count - 1, raw_end + buffer)
-
-      # Need at least 2 points to draw lines/areas
-      if end_idx - start_idx < 1 do
-        Element.root(@width, @height, children: [])
-      else
-        chart(assigns, start_idx, end_idx)
-      end
-    end
-  end
-
-  # Convert pixel x position and width to data index range
-  defp pixel_to_data_range(pixel_x, pixel_width, count) do
-    # Invert the scale to get data values from pixels
-    # x_scale maps [0, count-1] -> [0, @inner_width], a whole number of samples per pixel
-    samples_per_px = div(count - 1, @inner_width)
-
-    # Clamp pixel values to valid chart area
-    # Region might extend into margin areas (negative or beyond inner_width)
-    effective_start = max(0, pixel_x)
-    effective_end = min(@inner_width, pixel_x + pixel_width)
-
-    # If region is entirely outside chart area, return invalid range
-    if effective_start >= effective_end do
-      {1, 0}  # Invalid range (start > end)
-    else
-      start_idx = max(0, floor(effective_start * samples_per_px))
-      end_idx = min(count - 1, ceil(effective_end * samples_per_px))
-      {start_idx, end_idx}
+  def build_region_element(%{scroll: scroll} = assigns, {rx, _ry, rw, _rh}) do
+    # The region is in canvas pixels; the window's columns are the plot's.
+    case Scroll.columns(scroll, {rx - @margin.left, rw}) do
+      {first, last} -> chart(assigns, first, last)
+      nil -> Element.root(@width, @height, children: [])
     end
   end
 
@@ -329,7 +281,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   # The chart over columns `start_idx..end_idx`: the area under four lines, each series
   # `series_y/3` at `origin + i` for column `i`, in a group at the plot's margin.
   defp chart(assigns, start_idx, end_idx) do
-    %{origin: origin, points_per_series: count, x_scale: x_scale, y_scale: y_scale} = assigns
+    %{scroll: %{origin: origin}, points_per_series: count, x_scale: x_scale, y_scale: y_scale} = assigns
 
     xs = for i <- start_idx..end_idx, do: i * 1.0
 
