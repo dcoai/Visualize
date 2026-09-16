@@ -93,17 +93,31 @@ defmodule ExamplesWeb.BuilderLive do
 
     # The seeded library on first use. Names carry their place in the tree
     # (spec/14 §18.16); every fragment names what this page's stack declares, so adding
-    # any of them changes something visible.
+    # any of them changes something visible. The state is built whole and written once,
+    # so a seed that fails leaves no half-seeded library behind for the BEAM's lifetime
+    # (#272); a seed the page itself wrote and cannot store is a bug in the page, and says so.
     defp state do
       case :persistent_term.get(@key, nil) do
         nil ->
-          :persistent_term.put(@key, %{entries: %{}, counters: %{}})
+          seeded =
+            Enum.reduce(seeds(), %{entries: %{}, counters: %{}}, fn {name, fragment}, state ->
+              case Fragment.kind(fragment) do
+                nil ->
+                  raise ArgumentError, "the seed #{inspect(name)} is no one kind of fragment"
 
-          Enum.each(seeds(), fn {name, fragment} ->
-            put(%{id: nil, name: name, kind: nil, fragment: fragment}, nil)
-          end)
+                kind ->
+                  n = Map.get(state.counters, kind, 0) + 1
+                  stored = %{name: name, kind: kind, fragment: fragment}
 
-          :persistent_term.get(@key)
+                  %{
+                    entries: Map.put(state.entries, {kind, n}, stored),
+                    counters: Map.put(state.counters, kind, n)
+                  }
+              end
+            end)
+
+          :persistent_term.put(@key, seeded)
+          seeded
 
         state ->
           state
@@ -112,7 +126,10 @@ defmodule ExamplesWeb.BuilderLive do
 
     @doc "The id of the entry with a name, for a page that starts from its own library."
     def id_of(name) do
-      Enum.find_value(list(nil), fn entry -> entry.name == name and entry.id end)
+      Enum.find_value(list(nil), fn entry -> entry.name == name and entry.id end) ||
+        raise ArgumentError,
+              "the library holds no entry named #{inspect(name)}; it holds " <>
+                inspect(list(nil) |> Enum.map(& &1.name) |> Enum.sort())
     end
 
     defp composite(document) do

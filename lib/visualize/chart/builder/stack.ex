@@ -49,12 +49,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end)
     end
 
-    # An id is a pair too; it is told from a `{name, layer}` pair by its integer.
+    # An id is a pair too; it is told from a `{name, layer}` pair by its integer. A `nil`
+    # where a fragment was expected is a host that resolved a name to nothing: refused with
+    # the name, so the bug is read at the line that lies (spec/14 §18.2, #272).
     defp named({kind, n}, index) when is_atom(kind) and is_integer(n),
       do: {to_string(index), site({kind, n})}
 
+    defp named({name, nil}, _index), do: nil_layer(name)
     defp named({name, layer}, _index), do: {to_string(name), site(layer)}
+    defp named(nil, index), do: nil_layer(index)
     defp named(layer, index), do: {to_string(index), site(layer)}
+
+    defp nil_layer(name) do
+      raise ArgumentError,
+            "layer #{inspect(to_string(name))} is nil: the host gave a name with no fragment " <>
+              "or id behind it — a library entry that was not found, or a seed that failed"
+    end
 
     defp site({kind, n}) when is_atom(kind) and is_integer(n), do: %{ref: {kind, n}}
     defp site(%Chart{} = chart), do: %{ref: nil, local: Chart.to_map(chart)}
