@@ -1744,6 +1744,7 @@ The nodes of §18.13 are the top row — the root tabs. Beneath them the first d
 |---|---|
 | `Visualize.Chart.Builder.Stack.placed/2` | the enabled uses as the design's layers, `{id, fragment}` in stack order, each resolved and placed where the design keeps its kind; a keyless name-keyed site is left out |
 | `Visualize.Chart.Builder.Stack.local_path/3` | the path a design path has inside a use: `[:source | rest]` for a `source` site's `[:sources, key | rest]`, and so for every placed kind; a design-level site's path as it is |
+| `Visualize.Chart.Builder.Stack.contribution/2` | one use's contribution placed where the design keeps its kind, resolved through the flattening fetch as `placed/2` resolves it, its mask ignored — what a layer's row lists (§18.8, #283) |
 | `Visualize.Chart.Builder.Stack.locked?/1` | whether a use references a library entry and so is locked in the chart — read-only, opened to edit (§18.8, §18.15) |
 | `Visualize.Chart.Builder.Stack.copies/3` | an entry as the inline sites a copy of it is (§18.17): a composite's sites each holding what its use contributed, labelled by the referenced entry's name or the composite's own, with the composite's vars and signals; any other body as one site named for the entry; ids left for the caller to issue |
 
