@@ -17,6 +17,79 @@ defmodule Visualize.Backend.CanvasBinaryTest do
 
   require Opcodes
 
+  describe "the geometric types that are not paths (spec/09 §4.4, #269)" do
+    @style %{stroke: "#123456", stroke_width: 2, fill: :none}
+
+    defp bytes(element), do: CanvasBinary.encode_element!(element)
+
+    test "a line is byte for byte its two-point path" do
+      line = Element.line(1, 2, 30, 40, @style)
+      path = Element.path(Path.new() |> Path.move_to(1, 2) |> Path.line_to(30, 40), @style)
+      assert bytes(line) == bytes(path)
+      assert byte_size(bytes(line)) > 0
+    end
+
+    test "a polyline is a move and its lines; a polygon the same, closed" do
+      points = [{0, 0}, {10, 5}, {20, 0}]
+      open = Path.new() |> Path.move_to(0, 0) |> Path.line_to(10, 5) |> Path.line_to(20, 0)
+      assert bytes(Element.polyline(points, @style)) == bytes(Element.path(open, @style))
+
+      assert bytes(Element.polygon(points, @style)) ==
+               bytes(Element.path(Path.close(open), @style))
+
+      refute bytes(Element.polyline(points, @style)) == bytes(Element.polygon(points, @style))
+    end
+
+    test "an ellipse is four cubic quarter-arcs, closed, with the control distance κ of each radius" do
+      k = 0.5522847
+      {cx, cy, rx, ry} = {50, 40, 20, 10}
+
+      path =
+        Path.new()
+        |> Path.move_to(70, 40)
+        |> Path.curve_to(70, 40 + ry * k, 50 + rx * k, 50, 50, 50)
+        |> Path.curve_to(50 - rx * k, 50, 30, 40 + ry * k, 30, 40)
+        |> Path.curve_to(30, 40 - ry * k, 50 - rx * k, 30, 50, 30)
+        |> Path.curve_to(50 + rx * k, 30, 70, 40 - ry * k, 70, 40)
+        |> Path.close()
+
+      assert bytes(Element.ellipse(cx, cy, rx, ry, @style)) == bytes(Element.path(path, @style))
+    end
+
+    test "the transform and the style travel with the element, and text is still dropped" do
+      moved = %{Element.line(0, 0, 1, 1, @style) | transform: Transform.translate(5, 6)}
+
+      moved_path = %{
+        Element.path(Path.new() |> Path.move_to(0, 0) |> Path.line_to(1, 1), @style)
+        | transform: Transform.translate(5, 6)
+      }
+
+      assert bytes(moved) == bytes(moved_path)
+      assert bytes(Element.text("hi", 1, 2)) == <<>>
+    end
+
+    test "an axis on the binary stream carries one record per tick line and the domain" do
+      axis =
+        Visualize.Axis.bottom(
+          Visualize.Scale.linear()
+          |> Visualize.Scale.domain([0, 10])
+          |> Visualize.Scale.range([0, 100])
+        )
+        |> Visualize.Axis.ticks(5)
+
+      element = Visualize.Axis.generate(axis, resolve: :literal)
+      lines = element |> flatten() |> Enum.count(&(&1.type == :line))
+      paths = element |> flatten() |> Enum.count(&(&1.type == :path))
+      assert lines > 0
+      records = bytes(element)
+      # Every line and path draws: at least one path record per element of either type.
+      assert length(Regex.scan(~r/[\x01\x02\x05\x06\x07]/, records)) >= lines + paths
+    end
+
+    defp flatten(%Element{children: children} = element),
+      do: [element | Enum.flat_map(children, &flatten/1)]
+  end
+
   describe "path form selection" do
     property "a polyline takes the point-list record and round-trips at either width" do
       check all(path <- PathGen.polyline()) do

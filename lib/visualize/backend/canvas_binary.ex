@@ -352,6 +352,14 @@ defmodule Visualize.Backend.CanvasBinary do
     IO.iodata_to_binary(parts)
   end
 
+  # The geometric types that are not paths are encoded as the path they are (spec/09
+  # §4.4, #269): each becomes a `:path` element with the same style and transform, so it
+  # takes the same record and form selection as any path.
+  defp do_encode_element(%Element{type: type} = element, precision)
+       when type in [:line, :polyline, :polygon, :ellipse] do
+    do_encode_element(%{element | type: :path, path: as_path(element)}, precision)
+  end
+
   defp do_encode_element(%Element{type: :root, children: children}, precision) do
     children
     |> Enum.map(&do_encode_element(&1, precision))
@@ -360,6 +368,41 @@ defmodule Visualize.Backend.CanvasBinary do
 
   defp do_encode_element(_element, _precision) do
     <<>>
+  end
+
+  # A line is a two-point path; a polyline a move and its lines; a polygon the same,
+  # closed; an ellipse four cubic quarter-arcs with the control distance κ of each radius.
+  @kappa 0.5522847
+
+  defp as_path(%Element{type: :line, attrs: %{x1: x1, y1: y1, x2: x2, y2: y2}}),
+    do: Path.new() |> Path.move_to(x1, y1) |> Path.line_to(x2, y2)
+
+  defp as_path(%Element{type: :polyline, attrs: %{points: points}}), do: polyline(points)
+
+  defp as_path(%Element{type: :polygon, attrs: %{points: points}}),
+    do: points |> polyline() |> Path.close()
+
+  defp as_path(%Element{type: :ellipse, attrs: %{cx: cx, cy: cy, rx: rx, ry: ry}}) do
+    kx = rx * @kappa
+    ky = ry * @kappa
+
+    Path.new()
+    |> Path.move_to(cx + rx, cy)
+    |> Path.curve_to(cx + rx, cy + ky, cx + kx, cy + ry, cx, cy + ry)
+    |> Path.curve_to(cx - kx, cy + ry, cx - rx, cy + ky, cx - rx, cy)
+    |> Path.curve_to(cx - rx, cy - ky, cx - kx, cy - ry, cx, cy - ry)
+    |> Path.curve_to(cx + kx, cy - ry, cx + rx, cy - ky, cx + rx, cy)
+    |> Path.close()
+  end
+
+  defp as_path(_element), do: Path.new()
+
+  defp polyline([]), do: Path.new()
+
+  defp polyline([{x, y} | rest]) do
+    Enum.reduce(rest, Path.move_to(Path.new(), x, y), fn {px, py}, path ->
+      Path.line_to(path, px, py)
+    end)
   end
 
   # The two compact kinds cover the common cases exactly; everything else folds into one
