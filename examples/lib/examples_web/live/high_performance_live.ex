@@ -33,7 +33,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   @densities [1, 2, 5, 12]  # samples per pixel column the page offers
   @default_samples_per_px 2
   @default_target_fps 60
-  @scroll_delta 5  # pixels to scroll per frame
+  @default_data_rate 600  # samples per second per series: 5 px × 2 per px × 60 fps, as it was
 
   # Color palette: first is area fill, rest are lines
   @area_color "#4e79a7"
@@ -51,6 +51,15 @@ defmodule ExamplesWeb.HighPerformanceLive do
       frame: 0,
       fps: 0.0,
       target_fps: @default_target_fps,
+      data_rate: @default_data_rate,
+      # Samples arrive by the clock (spec/14 §12.6): `pending` whole samples not yet a
+      # column, `carry` the fraction of one, `last_tick` when they were last counted, and
+      # `arrivals` the last second's `{at, samples}` for the measured rate.
+      pending: 0,
+      carry: 0.0,
+      last_tick: nil,
+      arrivals: [],
+      measured_rate: 0.0,
       densities: @densities,
       y_scale: y_scale,
       frame_times: [],
@@ -70,6 +79,10 @@ defmodule ExamplesWeb.HighPerformanceLive do
     schedule_frame(socket.assigns.target_fps)
     {:noreply, assign(socket,
       running: true,
+      last_tick: System.monotonic_time(:millisecond),
+      pending: 0,
+      carry: 0.0,
+      arrivals: [],
       frame: 0,
       frame_times: [],
       render_times: [],
@@ -97,46 +110,95 @@ defmodule ExamplesWeb.HighPerformanceLive do
     {:noreply, assign(socket, target_fps: target_fps)}
   end
 
+  def handle_event("set_data_rate", %{"data_rate" => rate}, socket) do
+    {:noreply, assign(socket, data_rate: String.to_integer(rate))}
+  end
+
   def handle_info(:render_frame, socket) do
     if socket.assigns.running do
-      render_start = System.monotonic_time(:microsecond)
-
-      # The scroll is the animation: the window advances by the frame's scroll in samples,
-      # and the random line drops and appends that many (spec/14 §12.6, `Examples.Scroll`).
-      scroll = Scroll.advance(socket.assigns.scroll, @scroll_delta)
-      random_data = Scroll.shift(scroll, socket.assigns.random_data, @scroll_delta, fn _ -> random_sample() end)
-
-      # Update viewport (scrolling right exposes new data on right)
-      viewport_x = socket.assigns.viewport_x + @scroll_delta
-
-      socket = assign(socket, random_data: random_data, scroll: scroll, viewport_x: viewport_x)
-
-      # Choose rendering mode
-      socket = if socket.assigns.use_incremental and not socket.assigns.last_full_render do
-        send_incremental_render(socket)
-      else
-        send_full_render(socket)
-        |> assign(:last_full_render, false)
-      end
-
-      render_time = System.monotonic_time(:microsecond) - render_start
       now = System.monotonic_time(:millisecond)
-
-      # Track metrics
-      frame_times = Enum.take([now | socket.assigns.frame_times], 60)
-      render_times = Enum.take([render_time | socket.assigns.render_times], 60)
-      fps = calculate_fps(frame_times)
-
       schedule_frame(socket.assigns.target_fps)
 
-      {:noreply, assign(socket,
-        frame: socket.assigns.frame + 1,
-        frame_times: frame_times,
-        render_times: render_times,
-        fps: fps
-      )}
+      # The samples due since the last tick, and the whole columns they fill: the frame
+      # scrolls by those columns and keeps the rest pending (spec/14 §12.6, #300).
+      {px, arrived, arrival} = arrivals(socket.assigns, now - socket.assigns.last_tick)
+      arrivals = Enum.take([{now, arrived} | socket.assigns.arrivals], 120)
+
+      socket =
+        assign(socket, arrival)
+        |> assign(last_tick: now, arrivals: arrivals, measured_rate: measured_rate(arrivals, now))
+
+      if px == 0 do
+        # No column filled: the picture would not change, so nothing is drawn.
+        {:noreply, socket}
+      else
+        {:noreply, draw(socket, px, now)}
+      end
     else
       {:noreply, socket}
+    end
+  end
+
+  # A frame: the window advances by `px` columns, the random line drops and appends
+  # their samples (`Examples.Scroll`), and the frame goes as strips when the scroll is
+  # one `scroll_mode/2` calls a scroll, in full otherwise.
+  defp draw(socket, px, now) do
+    render_start = System.monotonic_time(:microsecond)
+
+    scroll = Scroll.advance(socket.assigns.scroll, px)
+    random_data = Scroll.shift(scroll, socket.assigns.random_data, px, fn _ -> random_sample() end)
+    viewport_x = socket.assigns.viewport_x + px
+    socket = assign(socket, random_data: random_data, scroll: scroll, viewport_x: viewport_x)
+
+    incremental? =
+      socket.assigns.use_incremental and not socket.assigns.last_full_render and
+        CanvasIncremental.scroll_mode({px, 0}, {@inner_width, @inner_height}) == :scroll_x
+
+    socket =
+      if incremental? do
+        send_incremental_render(socket, px)
+      else
+        socket |> send_full_render() |> assign(:last_full_render, false)
+      end
+
+    render_time = System.monotonic_time(:microsecond) - render_start
+
+    # Track metrics
+    frame_times = Enum.take([now | socket.assigns.frame_times], 60)
+    render_times = Enum.take([render_time | socket.assigns.render_times], 60)
+
+    assign(socket,
+      frame: socket.assigns.frame + 1,
+      frame_times: frame_times,
+      render_times: render_times,
+      fps: calculate_fps(frame_times)
+    )
+  end
+
+  @doc false
+  # The samples due after `elapsed` ms at the page's data rate, on top of what was pending:
+  # `{columns, arrived, %{pending, carry}}` — the whole columns the pending samples fill,
+  # the samples that arrived this tick, and what stays pending (a column's worth at most)
+  # with the fraction of a sample carried. Public for the stream test.
+  def arrivals(%{data_rate: rate, carry: carry, pending: pending, scroll: scroll}, elapsed) do
+    due = carry + rate * elapsed / 1000
+    arrived = trunc(due)
+    pending = pending + arrived
+    columns = div(pending, scroll.samples_per_px)
+    {columns, arrived, %{pending: rem(pending, scroll.samples_per_px), carry: due - arrived}}
+  end
+
+  # Samples per second per series over the last second of ticks.
+  defp measured_rate(arrivals, now) do
+    recent = Enum.take_while(arrivals, fn {at, _} -> now - at <= 1000 end)
+
+    case recent do
+      [] -> 0.0
+      [_] -> 0.0
+      _ ->
+        {oldest, _} = List.last(recent)
+        span = now - oldest
+        if span > 0, do: Enum.sum(for {_, n} <- recent, do: n) * 1000 / span, else: 0.0
     end
   end
 
@@ -210,13 +272,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
     })
   end
 
-  defp send_incremental_render(socket) do
+  # The frame as the strips a scroll of `dx` pixels exposes.
+  defp send_incremental_render(socket, dx) do
     # Use inner chart dimensions for exposed region calculation
     # This ensures the region falls within the data area, not the margins
     inner_size = {@inner_width, @inner_height}
-
-    # Positive dx = scroll right = RIGHT edge exposed (where new data appears)
-    dx = @scroll_delta
 
     # Calculate exposed region relative to inner chart area
     regions = CanvasIncremental.exposed_regions({dx, 0}, inner_size)
@@ -422,7 +482,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
       0
     end
 
-    assigns = assign(assigns, avg_render_time: avg_render_time)
+    assigns = assign(assigns, avg_render_time: avg_render_time, series: @series)
 
     ~H"""
     <header>
@@ -455,6 +515,12 @@ defmodule ExamplesWeb.HighPerformanceLive do
             <span class="fps-value"><%= if @target_fps > 2000, do: "∞", else: @target_fps %></span>
           </form>
 
+          <form phx-change="set_data_rate" class="control-group">
+            <label>Data rate:</label>
+            <input type="range" name="data_rate" min="10" max="20000" step="10" value={@data_rate} class="fps-slider" />
+            <span class="fps-value"><%= format_number(@data_rate) %> samples/s per series</span>
+          </form>
+
           <button type="button" phx-click="toggle_incremental" class={"btn mode #{if @use_incremental, do: "active", else: ""}"}>
             <%= if @use_incremental, do: "Incremental ON", else: "Incremental OFF" %>
           </button>
@@ -474,6 +540,14 @@ defmodule ExamplesWeb.HighPerformanceLive do
           <div class="metric">
             <span class="value"><%= if @target_fps > 2000, do: "∞", else: @target_fps %></span>
             <span class="label">Target</span>
+          </div>
+          <div class="metric">
+            <span class="value"><%= format_number(round(@measured_rate)) %></span>
+            <span class="label">Samples/s</span>
+          </div>
+          <div class="metric">
+            <span class="value"><%= format_number(round(@measured_rate * @series)) %></span>
+            <span class="label">Pts/s</span>
           </div>
           <div class="metric">
             <span class="value"><%= format_number(@total_points) %></span>
