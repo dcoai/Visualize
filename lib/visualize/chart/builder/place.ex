@@ -278,37 +278,61 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def movable?(_label), do: false
 
     @doc """
-    A node moved to a region at a point (spec/14 §18.16): its body with the placement key
-    rewritten — an axis's `side`, a legend's `position`, a label's `anchor` — or `:same`
-    when the region names what it already is, or `:unmovable` for a kind with no placement.
+    A node moved to a region at a point over the composed design (spec/14 §18.16): its body
+    with the placement key rewritten — an axis's `side`, a legend's `position`, a label's
+    `anchor` — or `:same` when the region names what it already is, or `:unmovable` for a
+    kind with no placement. An axis whose orientation changes takes the scale its new side
+    reads — the one another axis on that orientation reads, else `x` or `y` — since a
+    scale's range is set by its name (§4.3); a scale the design lacks is brought as a drop
+    brings it, `{:ok, body, [scale_site]}`.
 
         iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :top, {0, 0})
         {:ok, %{scale: :x, side: :top}}
+        iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :left, {0, 0}, %{frame: %{scales: %{x: %{}, y: %{}}}})
+        {:ok, %{scale: :y, side: :left}}
+        iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :left, {0, 0})
+        {:ok, %{scale: :y, side: :left}, [%{kind: :scale, body: %{kind: :linear, domain: :auto}, key: :y}]}
         iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :bottom, {0, 0})
         :same
         iex> Visualize.Chart.Builder.Place.moved(:mark, %{type: :line}, :top, {0, 0})
         :unmovable
     """
     @spec moved(atom(), map(), region(), {number(), number()}, map()) ::
-            {:ok, map()} | :same | :unmovable
-    def moved(kind, body, region, point, geometry \\ geometry(%{}))
+            {:ok, map()} | {:ok, map(), [site()]} | :same | :unmovable
+    def moved(kind, body, region, point, design \\ %{})
 
-    def moved(:axis, body, region, _point, _geometry)
-        when region in [:top, :bottom, :left, :right],
-        do: rewritten(body, :side, region)
+    def moved(:axis, body, region, _point, design)
+        when region in [:top, :bottom, :left, :right] do
+      case rewritten(body, :side, region) do
+        :same ->
+          :same
 
-    def moved(:axis, _body, :plot, _point, _geometry), do: :same
+        {:ok, turned} ->
+          if orientation(region) == orientation(Map.get(body, :side)) do
+            {:ok, turned}
+          else
+            scale = scale_for(design, region, Map.get(body, :scale))
+            turned = Map.put(turned, :scale, scale)
 
-    def moved(:legend, body, :plot, point, geometry),
-      do: rewritten(body, :position, position(point, geometry))
+            if scale_declared?(design, scale),
+              do: {:ok, turned},
+              else: {:ok, turned, [scale_site(scale)]}
+          end
+      end
+    end
 
-    def moved(:legend, body, region, _point, _geometry),
+    def moved(:axis, _body, :plot, _point, _design), do: :same
+
+    def moved(:legend, body, :plot, point, design),
+      do: rewritten(body, :position, position(point, geometry(design)))
+
+    def moved(:legend, body, region, _point, _design),
       do: rewritten(body, :position, region)
 
-    def moved(:label, body, :plot, point, geometry),
-      do: rewritten(body, :anchor, {:frame, corner(point, geometry)})
+    def moved(:label, body, :plot, point, design),
+      do: rewritten(body, :anchor, {:frame, corner(point, geometry(design))})
 
-    def moved(:label, body, region, _point, _geometry) do
+    def moved(:label, body, region, _point, _design) do
       current = Map.get(body, :anchor)
 
       anchor =
@@ -322,7 +346,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
       rewritten(body, :anchor, anchor)
     end
 
-    def moved(_kind, _body, _region, _point, _geometry), do: :unmovable
+    def moved(_kind, _body, _region, _point, _design), do: :unmovable
+
+    defp orientation(side) when side in [:top, :bottom], do: :horizontal
+    defp orientation(side) when side in [:left, :right], do: :vertical
+    defp orientation(_none), do: nil
+
+    # The scale a side reads: the one another axis on that orientation already reads —
+    # other than the axis being moved — else `x` or `y` by orientation.
+    defp scale_for(design, side, own) do
+      wanted = orientation(side)
+
+      axes =
+        case get_in(design, [:frame, :axes]) do
+          axes when is_list(axes) -> axes
+          _none -> []
+        end
+
+      Enum.find_value(axes, fn axis ->
+        is_map(axis) and orientation(Map.get(axis, :side)) == wanted and
+          Map.get(axis, :scale) != own and Map.get(axis, :scale)
+      end) || if(wanted == :horizontal, do: :x, else: :y)
+    end
 
     defp rewritten(body, key, value) do
       if Map.get(body, key) == value, do: :same, else: {:ok, Map.put(body, key, value)}
