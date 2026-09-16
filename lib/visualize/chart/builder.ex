@@ -1291,6 +1291,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("edit", _params, socket), do: {:noreply, socket}
 
+    # A form's submit is intercepted so Enter in a box never navigates (spec/14 §18.7,
+    # #274); the change event already wrote every field, so there is nothing to do.
+    def handle_event("submitted", _params, socket), do: {:noreply, socket}
+
     def handle_event("set_var", %{"_target" => [name]} = params, socket) do
       %{layers: layers} = editing(socket.assigns)
       free = Enum.find(Chart.free_vars(layers), &(to_string(&1.name) == name))

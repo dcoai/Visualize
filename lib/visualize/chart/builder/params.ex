@@ -51,7 +51,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <div class="vis-builder-variables">
-      <form class={class(@class)} phx-change="set_var" phx-target={@target}>
+      <form class={class(@class)} phx-change="set_var" phx-target={@target} phx-submit="submitted">
         <label :for={param <- @params} class={param.class}>
           <span class="vis-builder-param-name">{param.name}</span>
           <input
@@ -96,7 +96,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         class="vis-builder-site"
         phx-change="bind_site"
         phx-target={@target}
-      >
+       phx-submit="submitted">
         <h3 class="vis-builder-site-name">{site.label}</h3>
         <input type="hidden" name="site" value={site.index} />
         <div :for={row <- site.rows} class={"vis-builder-site-var vis-builder-site-var-" <> to_string(row.state)}>

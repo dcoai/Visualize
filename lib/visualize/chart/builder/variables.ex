@@ -48,7 +48,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         data-builder-target={@target}
         data-builder-scope="variables"
       >
-        <form class="vis-builder-find" phx-change="find_variable" phx-target={@target}>
+        <form class="vis-builder-find" phx-change="find_variable" phx-target={@target} phx-submit="submitted">
           <input
             type="search"
             name="find"
@@ -93,13 +93,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   >{use.label} → {use.path}</button>
                 </li>
               </ul>
-              <form class="vis-builder-variable-default" phx-change="set_default" phx-target={@target}>
+              <form class="vis-builder-variable-default" phx-change="set_default" phx-target={@target} phx-submit="submitted">
                 <label class="vis-builder-picker-row">
                   <span class="vis-builder-control-label">default</span>
                   <input type="text" name={row.name} value={row.default} placeholder="none" phx-debounce="300" />
                 </label>
               </form>
-              <form class="vis-builder-variable-value" phx-change="set_var" phx-target={@target}>
+              <form class="vis-builder-variable-value" phx-change="set_var" phx-target={@target} phx-submit="submitted">
                 <label class="vis-builder-picker-row">
                   <span class="vis-builder-control-label">value in the preview</span>
                   <input type="text" name={row.name} value={row.value} placeholder={row.default} />
@@ -110,7 +110,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 class="vis-builder-site"
                 phx-change="bind_site"
                 phx-target={@target}
-              >
+               phx-submit="submitted">
                 <h4 class="vis-builder-site-name">{site.label}</h4>
                 <input type="hidden" name="site" value={site.index} />
                 <div class={"vis-builder-site-var vis-builder-site-var-" <> to_string(site.state)}>

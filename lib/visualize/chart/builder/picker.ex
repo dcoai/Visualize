@@ -75,7 +75,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         phx-target={@target}
         data-builder-target={@target}
         data-builder-scope="colour"
-      >
+       phx-submit="submitted">
         <h3 class="vis-builder-context-title">{@key || "colour"}</h3>
         <p :if={@off?} class="vis-builder-context-note">
           click a colour well to set it here, or drag a patch onto any well

@@ -3648,6 +3648,50 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "every form intercepts its submit (spec/14 §18.7, #274)" do
+    # The builder in every state that renders a form: each context panel, a mark's page
+    # with its style stack, a source's page, the parameters form, and the store's toolbar.
+    defp forms_in(html), do: Regex.scan(~r/<form\b[^>]*>/, html) |> List.flatten()
+
+    test "a form without phx-submit fails here rather than reloading a page in a browser" do
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: BuilderFixture.Library)
+
+      states =
+        for context <- [:inspect, :sources, :colour, :font, :variables],
+            label <- ["frame", "marks[0]", "sources.primary", "styles.series", "labels[0]"],
+            selected <- [0, 2] do
+          {:noreply, s1} =
+            Builder.handle_event("select_layer", %{"index" => to_string(selected)}, s)
+
+          {:noreply, s1} = Builder.handle_event("select_node", %{"node" => label}, s1)
+          {:noreply, s1} = Builder.handle_event("context", %{"panel" => to_string(context)}, s1)
+          s1
+        end
+
+      {:noreply, with_signal} = Builder.handle_event("add_signal", %{}, s)
+      {:noreply, adding} = Builder.handle_event("adding", %{}, s)
+      {:noreply, expanded} = Builder.handle_event("expand_variable", %{"name" => "unit"}, s)
+
+      htmls =
+        Enum.map(states ++ [with_signal, adding, expanded], &BuilderFixture.render/1) ++
+          Enum.map(Keyword.keys(BuilderFixture.cases()), &rendered/1)
+
+      forms = htmls |> Enum.flat_map(&forms_in/1) |> Enum.uniq()
+      assert forms != []
+
+      for form <- forms do
+        assert form =~ ~s(phx-submit="), "a form a browser would submit as a GET: " <> form
+      end
+    end
+
+    test "submitted is a no-op: the socket is unchanged" do
+      s = BuilderFixture.socket(BuilderFixture.layers())
+
+      assert {:noreply, ^s} =
+               Builder.handle_event("submitted", %{"_node" => "frame", "width" => "1"}, s)
+    end
+  end
+
   describe "the stylesheet (spec/14 §18.13, D-94)" do
     test "every rule is scoped under .vis-builder" do
       selectors =
