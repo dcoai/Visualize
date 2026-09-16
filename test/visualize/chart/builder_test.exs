@@ -358,7 +358,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-click="select_layer" phx-keydown="layer_key" phx-value-index="0")
 
       assert html =~
-               ~s(title="house, layer 1 of 3, selected: Enter to edit, arrows to move, drag to reorder")
+               ~s(title="house, layer 1 of 3, selected: Enter to edit, arrows to move, Right to show what it declares, drag to reorder")
 
       # The one button left names itself, and is not a drag source: a control inside a
       # draggable row swallows its own click otherwise (spec/14 §18.8).
@@ -1125,7 +1125,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-click="open_layer" phx-value-index="3")
 
       assert html =~
-               "Frame::wide, layer 4 of 4: Enter to edit, arrows to move, drag to reorder, from the library: o to open"
+               "Frame::wide, layer 4 of 4: Enter to edit, arrows to move, Right to show what it declares, drag to reorder, from the library: o to open"
 
       assert length(Regex.scan(~r/vis-builder-layer-lock"/, html)) == 1
 
@@ -1559,6 +1559,89 @@ defmodule Visualize.Chart.BuilderTest do
                List.last(s4.assigns.uses)
 
       assert BuilderFixture.design(s4).frame.scales.y == %{kind: :linear, domain: :auto}
+    end
+
+    test "a layer row opens on what it declares, and a member opens its node in that layer (spec/14 §18.8, #281)",
+         %{socket: s} do
+      html = BuilderFixture.render(s)
+      # The expander, closed; no six-dot handle in the stylesheet.
+      assert html =~
+               ~s(class="vis-builder-layer-expand" title="show what shared declares" aria-label="show what shared declares" aria-expanded="false" phx-click="toggle_layer_detail" phx-value-index="1")
+
+      refute html =~ "vis-builder-layer-detail"
+      refute Builder.css() =~ ".vis-builder-layer::before"
+
+      # Open `shared`: its sources, scales and axes — and nothing it does not declare.
+      {:noreply, s1} = Builder.handle_event("toggle_layer_detail", %{"index" => "1"}, s)
+      html = BuilderFixture.render(s1)
+      assert html =~ ~s(aria-expanded="true" phx-click="toggle_layer_detail" phx-value-index="1")
+      assert html =~ ~s(<dt class="vis-builder-declared-root">sources</dt>)
+
+      assert html =~
+               ~s(phx-click="open_declared" phx-value-index="1" phx-value-path="sources.primary")
+
+      assert html =~ ~s(<dt class="vis-builder-declared-root">scales</dt>)
+      assert html =~ ~s(phx-value-path="frame.scales.x")
+      assert html =~ ~s(<dt class="vis-builder-declared-root">axes</dt>)
+      assert html =~ ~s(>x · bottom</button>)
+      assert html =~ ~s(>y · left</button>)
+      refute html =~ ~s(<dt class="vis-builder-declared-root">styles</dt>)
+      refute html =~ ~s(<dt class="vis-builder-declared-root">marks</dt>)
+
+      # `house` declares styles and the frame's size and margin; `panel` marks and labels.
+      {:noreply, s2} = Builder.handle_event("toggle_layer_detail", %{"index" => "0"}, s)
+      html = BuilderFixture.render(s2)
+      assert html =~ ~s(<dt class="vis-builder-declared-root">styles</dt>)
+      assert html =~ ~s(phx-value-index="0" phx-value-path="styles.series")
+      assert html =~ ~s(phx-value-index="0" phx-value-path="frame.size")
+      assert html =~ ~s(phx-value-index="0" phx-value-path="frame.margin")
+
+      {:noreply, s3} = Builder.handle_event("toggle_layer_detail", %{"index" => "2"}, s)
+      html = BuilderFixture.render(s3)
+
+      assert html =~
+               ~s(phx-value-index="2" phx-value-path="marks[0]" phx-target="-1">series</button>)
+
+      assert html =~
+               ~s(phx-value-index="2" phx-value-path="labels[0]" phx-target="-1">title</button>)
+
+      assert html =~ ~s(phx-value-index="2" phx-value-path="vars.unit")
+
+      # A member opens its node in its layer: a keyed node at its path, an axis by its
+      # identity — shared's `frame.axes[1]` is y · left in the chart too.
+      {:noreply, opened} =
+        Builder.handle_event("open_declared", %{"index" => "0", "path" => "styles.series"}, s)
+
+      assert BuilderFixture.selected(opened) == 0 and opened.assigns.node_label == "styles.series"
+
+      {:noreply, opened} =
+        Builder.handle_event("open_declared", %{"index" => "1", "path" => "frame.axes[1]"}, s)
+
+      assert BuilderFixture.selected(opened) == 1 and opened.assigns.node_label == "frame.axes[1]"
+
+      {:noreply, opened} =
+        Builder.handle_event("open_declared", %{"index" => "2", "path" => "marks[0]"}, s)
+
+      assert BuilderFixture.selected(opened) == 2 and opened.assigns.node_label == "marks[0]"
+
+      # The keys: Right opens, Left closes; the detail closes again from the button.
+      {:noreply, keyed} =
+        Builder.handle_event("layer_key", %{"key" => "ArrowRight", "index" => "1"}, s)
+
+      assert BuilderFixture.render(keyed) =~
+               ~s(aria-expanded="true" phx-click="toggle_layer_detail" phx-value-index="1")
+
+      {:noreply, keyed} =
+        Builder.handle_event("layer_key", %{"key" => "ArrowLeft", "index" => "1"}, keyed)
+
+      refute BuilderFixture.render(keyed) =~ "vis-builder-layer-detail"
+      {:noreply, closed} = Builder.handle_event("toggle_layer_detail", %{"index" => "1"}, s1)
+      refute BuilderFixture.render(closed) =~ "vis-builder-layer-detail"
+
+      # An empty site declares nothing yet.
+      {:noreply, empty} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+      {:noreply, empty} = Builder.handle_event("toggle_layer_detail", %{"index" => "1"}, empty)
+      assert BuilderFixture.render(empty) =~ "declares nothing yet"
     end
 
     test "the composer takes only its kind; the workspace takes anything", %{socket: s} do
@@ -2957,7 +3040,7 @@ defmodule Visualize.Chart.BuilderTest do
                ~s(id="b-layers-row-0" class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="0" draggable="true" role="button" tabindex="0")
 
       assert html =~
-               ~s(aria-label="house, layer 1 of 3, selected: Enter to edit, arrows to move, drag to reorder")
+               ~s(aria-label="house, layer 1 of 3, selected: Enter to edit, arrows to move, Right to show what it declares, drag to reorder")
 
       assert html =~ ~s(phx-keydown="layer_key")
     end

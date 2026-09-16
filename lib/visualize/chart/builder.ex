@@ -167,6 +167,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          context_width: 400,
          collapsed: MapSet.new(),
          guessed: MapSet.new(),
+         expanded_layers: MapSet.new(),
          expanded: MapSet.new(),
          find: "",
          node_label: "design"
@@ -395,6 +396,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   selected={@selected_index}
                   disabled={@disabled}
                   locked={@locked}
+                  expanded={@expanded_index}
+                  placed={@placed_layers}
                   target={@myself}
                 />
                 <ol :if={not row.selected? and row.expanded} class="vis-builder-layers vis-builder-layers-other">
@@ -1010,6 +1013,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
         "o" ->
           handle_event("open_layer", %{"index" => index}, socket)
 
+        # Right and Left open and close what the row declares, as a tree's do (§18.8).
+        "ArrowRight" ->
+          if at in expanded_index(socket.assigns),
+            do: {:noreply, socket},
+            else: handle_event("toggle_layer_detail", %{"index" => index}, socket)
+
+        "ArrowLeft" ->
+          if at in expanded_index(socket.assigns),
+            do: handle_event("toggle_layer_detail", %{"index" => index}, socket),
+            else: {:noreply, socket}
+
         _other ->
           {:noreply, socket}
       end
@@ -1049,6 +1063,44 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         _other ->
           {:noreply, socket}
+      end
+    end
+
+    # A row opens or closes on what its layer declares (spec/14 §18.8).
+    def handle_event("toggle_layer_detail", %{"index" => index}, socket) do
+      case Enum.at(socket.assigns.uses, position(index)) do
+        nil ->
+          {:noreply, socket}
+
+        use ->
+          {:noreply,
+           update(socket, :expanded_layers, fn open ->
+             if MapSet.member?(open, use.id),
+               do: MapSet.delete(open, use.id),
+               else: MapSet.put(open, use.id)
+           end)}
+      end
+    end
+
+    # A member of what a layer declares: the layer selected, the chart's node it is opened —
+    # a keyed node at its path, an axis by its identity, a mark or label by its id or its
+    # value; one the chart does not carry opens the layer's own root (spec/14 §18.8).
+    def handle_event("open_declared", %{"index" => index, "path" => label}, socket) do
+      at = position(index)
+
+      case Enum.at(socket.assigns.uses, at) do
+        nil ->
+          {:noreply, socket}
+
+        _use ->
+          socket = select(socket, at)
+          placed = Enum.at(placed_layers(socket.assigns), at) || %{}
+          design = composed(socket)
+
+          case Enum.find(Editor.nodes(placed), &(&1.label == label)) do
+            nil -> {:noreply, socket}
+            node -> {:noreply, opened(socket, chart_label(design, node, at(placed, node.path)))}
+          end
       end
     end
 
@@ -1884,8 +1936,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
         chart_rows: chart_rows(assigns),
         selected_index: Stack.index_of(assigns.uses, assigns.selected),
         disabled: disabled(assigns.uses),
-        locked: locked(assigns.uses)
+        locked: locked(assigns.uses),
+        expanded_index: expanded_index(assigns),
+        placed_layers: placed_layers(assigns)
       }
+    end
+
+    # The positions whose rows are open on what they declare (spec/14 §18.8).
+    defp expanded_index(%{uses: uses, expanded_layers: open}) do
+      uses
+      |> Enum.with_index()
+      |> Enum.filter(fn {use, _index} -> MapSet.member?(open, use.id) end)
+      |> MapSet.new(fn {_use, index} -> index end)
+    end
+
+    # Each layer's own contribution placed where the design keeps its kind, by position,
+    # disabled ones included — what its row lists when opened (§18.8).
+    defp placed_layers(%{uses: uses, store: store}) do
+      fetch = Stack.fetch(store)
+
+      for use <- uses do
+        fragment =
+          case Use.resolve(%{use | mask: []}, fetch) do
+            {:ok, fragment} -> fragment
+            {:missing, _ref, fragment} -> fragment
+          end
+
+        case Composite.place(fragment, use) do
+          {:ok, placed} -> placed
+          :keyless -> %{}
+        end
+      end
     end
 
     # The selected site for its context: what it contributes before its mask, and what it
@@ -2780,6 +2861,49 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.reduce(socket, fn key, acc ->
         update_layer(acc, path, key, {:ok, Map.fetch!(moved, key)})
       end)
+    end
+
+    # The chart's label for a member of a layer's contribution: a keyed node at its path;
+    # an axis by its `{scale, side}` identity (§8.2); a mark or a label by its id, else the
+    # chart's node of that kind whose value is the layer's; the root when the chart does
+    # not carry it.
+    defp chart_label(design, %{path: path, kind: kind}, body) do
+      nodes = Editor.nodes(design)
+      chart_body = at(design, path)
+
+      cond do
+        Enum.all?(path, &is_atom/1) and chart_body != nil ->
+          Editor.label(path)
+
+        kind == :axis and is_map(body) ->
+          twin(
+            nodes,
+            :axis,
+            design,
+            &(Map.get(&1, :scale) == Map.get(body, :scale) and
+                Map.get(&1, :side) == Map.get(body, :side))
+          )
+          |> Kernel.||("frame")
+
+        kind in [:mark, :label] and is_map(body) ->
+          id = Map.get(body, :id)
+
+          twin(nodes, kind, design, &((id != nil and Map.get(&1, :id) == id) or &1 == body))
+          |> Kernel.||(Editor.label(Enum.take_while(path, &is_atom/1)))
+
+        true ->
+          Editor.label(Enum.take_while(path, &is_atom/1))
+      end
+    end
+
+    defp twin(nodes, kind, design, match?) do
+      nodes
+      |> Enum.filter(&(&1.kind == kind))
+      |> Enum.find(fn node ->
+        value = at(design, node.path)
+        is_map(value) and match?.(value)
+      end)
+      |> then(&(&1 && &1.label))
     end
 
     defp placement_key(:axis), do: :side
