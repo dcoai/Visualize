@@ -57,11 +57,17 @@ defmodule Visualize.Hooks.CanvasIncremental do
 
       handleIncremental({binary, dx, dy, mode}) {
         if (mode === 'none') return;
-        const bytes = decodeBase64(binary);
-        if (mode === 'full') {
-          this.fullRender(bytes);
-        } else {
-          this.incrementalRender(bytes, dx, dy);
+        try {
+          const bytes = decodeBase64(binary);
+          if (mode === 'full') {
+            this.fullRender(bytes);
+          } else {
+            this.incrementalRender(bytes, dx, dy);
+          }
+          clearVisualizeError(this.el);
+        } catch (error) {
+          reportVisualizeError(this.el, error);
+          throw error;
         }
       },
 

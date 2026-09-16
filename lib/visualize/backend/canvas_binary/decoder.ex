@@ -1,4 +1,4 @@
-defmodule Visualize.CanvasBinaryDecoder do
+defmodule Visualize.Backend.CanvasBinary.Decoder do
   @moduledoc """
   A decoder for the canvas binary format of spec/09 §4 and §5, written against the record
   layouts the specification states — not against the encoder — so that
@@ -22,6 +22,11 @@ defmodule Visualize.CanvasBinaryDecoder do
 
   alias Visualize.IR.Path
 
+  @doc """
+  The records of a stream, in order (spec/09 §4.1, #270). Raises on an unknown opcode or a
+  truncated record, since either is an encoder bug — or a decoder that has drifted from
+  the encoder, which is what a consumer's test of its own streams is for.
+  """
   @spec decode(binary()) :: [term()]
   def decode(binary), do: decode(binary, [])
 

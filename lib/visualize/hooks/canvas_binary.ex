@@ -275,6 +275,28 @@ defmodule Visualize.Hooks.CanvasBinary do
     // from startOffset up to endOffset (default: the end of bytes). Returns the offset
     // reached. Opcodes are those of Visualize.Backend.CanvasBinary.Opcodes; an unknown
     // byte is an encoder/decoder mismatch and throws.
+    // A decode failure is visible on the page (spec/10 §9.2, #270): the message goes on
+    // the hook element as data-vis-error and under the canvas as a line of text, and the
+    // error is rethrown so the console keeps the stack. A stream that replays clears both.
+    export function reportVisualizeError(el, error) {
+      const message = error && error.message ? error.message : String(error);
+      el.setAttribute('data-vis-error', message);
+      let note = el.querySelector('.vis-canvas-error');
+      if (!note) {
+        note = document.createElement('p');
+        note.className = 'vis-canvas-error';
+        note.setAttribute('role', 'alert');
+        el.appendChild(note);
+      }
+      note.textContent = 'canvas stream failed: ' + message;
+    }
+
+    export function clearVisualizeError(el) {
+      el.removeAttribute('data-vis-error');
+      const note = el.querySelector('.vis-canvas-error');
+      if (note) note.remove();
+    }
+
     export function executeVisualizeBinary(ctx, bytes, startOffset, endOffset) {
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
       let offset = startOffset || 0;
@@ -458,7 +480,13 @@ defmodule Visualize.Hooks.CanvasBinary do
         const ctx = this.ctx;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        executeVisualizeBinary(ctx, decodeBase64(base64Data));
+        try {
+          executeVisualizeBinary(ctx, decodeBase64(base64Data));
+          clearVisualizeError(this.el);
+        } catch (error) {
+          reportVisualizeError(this.el, error);
+          throw error;
+        }
       }
     };
     """

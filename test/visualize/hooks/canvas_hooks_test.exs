@@ -99,6 +99,23 @@ defmodule Visualize.Hooks.CanvasHooksTest do
     end
   end
 
+  test "a decode failure is visible on the page, and rethrown (spec/10 §9.2, #270)" do
+    js = Visualize.Hooks.js_code()
+    assert length(String.split(js, "export function reportVisualizeError(el, error)")) == 2
+    assert js =~ "el.setAttribute('data-vis-error', message);"
+    assert js =~ "note.className = 'vis-canvas-error';"
+    assert js =~ "note.setAttribute('role', 'alert');"
+    # Both replaying hooks guard, clear on success, report and rethrow on failure.
+    assert length(Regex.scan(~r/reportVisualizeError\(this\.el, error\);\n\s+throw error;/, js)) ==
+             2
+
+    assert length(Regex.scan(~r/clearVisualizeError\(this\.el\);/, js)) == 2
+    # The reporter precedes the hooks that call it.
+    reporter_at = :binary.match(js, "export function reportVisualizeError") |> elem(0)
+    binary_at = :binary.match(js, "export const CanvasBinaryChart") |> elem(0)
+    assert reporter_at < binary_at
+  end
+
   test "CanvasIncrementalChart handles the 0x60 record and ignores mode none" do
     hook = Hooks.CanvasIncremental.js_hook()
     assert hook =~ "0x60"

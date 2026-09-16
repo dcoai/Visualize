@@ -9,8 +9,8 @@ defmodule Visualize.Backend.CanvasBinaryTest do
   use ExUnitProperties
 
   alias Visualize.Backend.CanvasBinary
+  alias Visualize.Backend.CanvasBinary.Decoder
   alias Visualize.Backend.CanvasBinary.Opcodes
-  alias Visualize.CanvasBinaryDecoder, as: Decoder
   alias Visualize.IR.{Element, Path, Transform}
   alias Visualize.PathGen
   alias Visualize.SVG
