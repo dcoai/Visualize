@@ -107,24 +107,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp descend(_type, _value, _path), do: []
 
-    # The path as `Visualize.Chart.Validator.format/1` spells it.
     @doc """
     A path as a person reads it — `design` for the root, else `frame.scales.x`,
-    `marks[0].channels` — the spelling `Visualize.Chart.Validator.format/1` uses (§18.5).
+    `marks[0].channels` — `Visualize.Chart.Validator.format_path/1`, the one spelling an
+    error, a node label and a rendered `data-node` share (§4.7, §18.5).
 
         iex> Visualize.Chart.Builder.Editor.label([:marks, 0, :style])
         "marks[0].style"
     """
     @spec label([atom() | non_neg_integer()]) :: String.t()
-    def label([]), do: "design"
-
-    def label(path) do
-      Enum.reduce(path, "", fn
-        index, acc when is_integer(index) -> "#{acc}[#{index}]"
-        key, "" -> "#{key}"
-        key, acc -> "#{acc}.#{key}"
-      end)
-    end
+    def label(path), do: Validator.format_path(path)
 
     # -- widgets and values (spec/14 §18.6) -----------------------------------------------
 

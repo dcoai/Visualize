@@ -3,6 +3,7 @@ defmodule Visualize.Chart.Frame.Labels do
   # The frame's labels (spec/14 §6.3): one text element per label at its anchor's
   # position, in its style, `dx` and `dy` added.
 
+  alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Position
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.Chart.Text
@@ -13,8 +14,17 @@ defmodule Visualize.Chart.Frame.Labels do
   @inset 4
 
   @doc false
-  @spec generate(map(), atom()) :: [Element.t()]
-  def generate(frame, mode), do: Enum.flat_map(frame.labels, &label(frame, &1, mode))
+  # One text per label that has a place, each stamped with its path among `labels` when
+  # `paths?` (spec/14 §4.7) — the index is the design's, so a label with no place skips
+  # its number.
+  @spec generate(map(), atom(), boolean()) :: [Element.t()]
+  def generate(frame, mode, paths? \\ false) do
+    frame.labels
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {node, i} ->
+      frame |> label(node, mode) |> Enum.map(&Frame.stamp(&1, [:labels, i], paths?))
+    end)
+  end
 
   defp label(frame, node, mode) do
     default_style = if node.anchor == :title, do: :title, else: Schema.default(:label, :style)

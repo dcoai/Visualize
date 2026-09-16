@@ -41,7 +41,7 @@ defmodule Visualize.Chart.Frame do
 
   alias Visualize.{Chart, Theme}
   alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Scales}
-  alias Visualize.Chart.{Mark, Schema, Style, Var}
+  alias Visualize.Chart.{Mark, Schema, Style, Validator, Var}
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
 
@@ -175,21 +175,38 @@ defmodule Visualize.Chart.Frame do
       stylesheet can override, `:literal` for the plain values a canvas needs
     * `:sources` - a map from source name to anything `Visualize.Data.Table.rows/1`
       reads, as `new/2` takes; when given, the marks are drawn from them (spec/14 §5.6)
+    * `:paths` - `true` for every design node's element to carry `data-node` with the
+      node's path as `Visualize.Chart.Validator.format_path/1` spells it — `frame`,
+      `marks[0]`, `frame.axes[0]`, `frame.legend`, `labels[0]` — for a caller that must
+      name what it drew, as the builder's graph does (spec/14 §4.7, D-105); `false`
+      (default) leaves the markup as it is
+
+  ## Examples
+
+      iex> chart = Visualize.Chart.from_map!(%{version: 1, sources: %{s: %{fields: [:x, :y]}},
+      ...>   frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}},
+      ...>   marks: [%{type: :line, data: :s, channels: %{x: :x, y: :y}}]})
+      iex> rows = [%{x: 0, y: 1}, %{x: 1, y: 2}]
+      iex> group = Visualize.Chart.Frame.new(chart, sources: %{s: rows}) |> Visualize.Chart.Frame.generate(sources: %{s: rows}, paths: true)
+      iex> {group.attrs["data-node"], Enum.map(group.children, & &1.attrs["data-node"])}
+      {"frame", ["marks[0]"]}
   """
   @spec generate(t(), keyword()) :: Element.t()
   def generate(%__MODULE__{} = frame, opts) do
     mode = Keyword.get(opts, :resolve, :css)
     sources = Keyword.get(opts, :sources)
+    paths? = Keyword.get(opts, :paths, false)
 
     children =
-      furniture(frame, mode, sources) ++
-        Legend.generate(frame, mode) ++ Labels.generate(frame, mode)
+      furniture(frame, mode, sources, paths?) ++
+        Legend.generate(frame, mode, paths?) ++ Labels.generate(frame, mode, paths?)
 
     group =
       Element.group(children,
         style: %{class: "frame"},
         transform: Transform.translate(frame.margin.left, frame.margin.top)
       )
+      |> stamp([:frame], paths?)
       |> Defs.resolve(frame, mode)
       |> Lines.split()
 
@@ -209,17 +226,29 @@ defmodule Visualize.Chart.Frame do
     * `:backend` - `:svg`, `:canvas`, or a module; defaults to the configured backend
     * `:resolve` - the theme mode of `generate/2`; defaults to `Visualize.Theme.mode/1`
       of the backend
-    * `:sources` - as `generate/2` takes it
+    * `:sources` and `:paths` - as `generate/2` takes them
   """
   @spec render(t(), keyword()) :: String.t()
   def render(%__MODULE__{} = frame, opts) do
     {mode, opts} = Keyword.pop_lazy(opts, :resolve, fn -> Theme.mode(opts[:backend]) end)
     {sources, opts} = Keyword.pop(opts, :sources)
+    {paths?, opts} = Keyword.pop(opts, :paths, false)
 
     frame
-    |> generate(resolve: mode, sources: sources)
+    |> generate(resolve: mode, sources: sources, paths: paths?)
     |> Visualize.Render.to_string(opts)
   end
+
+  @doc false
+  # The element a design node renders, tagged with the node's path when the frame draws
+  # with `paths: true` (spec/14 §4.7, D-105): the frame stamps what it places, so a
+  # generator's element is tagged at the position the frame drew it and no generator
+  # knows its path.
+  @spec stamp(Element.t(), Validator.path(), boolean()) :: Element.t()
+  def stamp(element, path, true),
+    do: Element.put_attr(element, "data-node", Validator.format_path(path))
+
+  def stamp(element, _path, false), do: element
 
   # -- construction ---------------------------------------------------------------------
 
@@ -307,22 +336,26 @@ defmodule Visualize.Chart.Frame do
 
   # -- furniture by kind ----------------------------------------------------------------
 
-  defp furniture(%{kind: :polar} = frame, mode, sources) do
-    Furniture.polar(frame, mode, marks(frame, mode, sources, []))
+  defp furniture(%{kind: :polar} = frame, mode, sources, paths?) do
+    Furniture.polar(frame, mode, marks(frame, mode, sources, paths?, []), paths?)
   end
 
-  defp furniture(%{kind: :facet} = frame, mode, sources), do: panels(frame, mode, sources)
+  defp furniture(%{kind: :facet} = frame, mode, sources, paths?),
+    do: panels(frame, mode, sources, paths?)
 
-  defp furniture(frame, mode, sources) do
-    Furniture.cartesian(frame, mode, marks(frame, mode, sources, []))
+  defp furniture(frame, mode, sources, paths?) do
+    Furniture.cartesian(frame, mode, marks(frame, mode, sources, paths?, []), paths?)
   end
 
   @doc false
   # The panels of a facet frame (spec/14 §4.6): one `class="panel"` group per panel
   # value, translated to its cell, holding the grid, the marks drawn from the rows whose
-  # `by` is the value, the axes and the value as a title.
-  @spec panels(t(), Theme.mode(), map() | nil) :: [Element.t()]
-  def panels(%__MODULE__{kind: :facet, facet: %{columns: columns}} = frame, mode, sources) do
+  # `by` is the value, the axes and the value as a title. Every panel's copy of a mark or
+  # an axis carries the one node's path when `paths?` (§4.7).
+  @spec panels(t(), Theme.mode(), map() | nil, boolean()) :: [Element.t()]
+  def panels(frame, mode, sources, paths? \\ false)
+
+  def panels(%__MODULE__{kind: :facet, facet: %{columns: columns}} = frame, mode, sources, paths?) do
     panel = panel_plot(frame.plot, columns, frame.panels)
     inner = %{frame | plot: panel}
     style = Style.resolve(Style.node(frame.styles, :label), frame.theme, mode)
@@ -331,21 +364,24 @@ defmodule Visualize.Chart.Frame do
       x = rem(i, columns) * panel.width
       y = div(i, columns) * panel.height
       title = if value == nil, do: [], else: [panel_title(value, style)]
-      marks = marks(inner, mode, sources, panel: value)
+      marks = marks(inner, mode, sources, paths?, panel: value)
 
-      Element.group(Furniture.cartesian(inner, mode, marks) ++ title,
+      Element.group(Furniture.cartesian(inner, mode, marks, paths?) ++ title,
         style: %{class: "panel"},
         transform: Transform.translate(x, y)
       )
     end)
   end
 
-  # Every mark of the design at its one-based position, or nothing without sources.
-  defp marks(_frame, _mode, nil, _opts), do: []
+  # Every mark of the design at its one-based position, or nothing without sources; each
+  # stamped with its path at the position the frame drew it (§4.7).
+  defp marks(_frame, _mode, nil, _paths?, _opts), do: []
 
-  defp marks(frame, mode, sources, opts) do
+  defp marks(frame, mode, sources, paths?, opts) do
     Enum.with_index(frame.marks, fn mark, i ->
-      Mark.generate(frame, mark, [sources: sources, resolve: mode, index: i + 1] ++ opts)
+      frame
+      |> Mark.generate(mark, [sources: sources, resolve: mode, index: i + 1] ++ opts)
+      |> stamp([:marks, i], paths?)
     end)
   end
 

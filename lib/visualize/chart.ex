@@ -487,7 +487,7 @@ defmodule Visualize.Chart do
 
   @doc """
   The applied chart drawn: `Visualize.Chart.Frame.render/2` of its frame over its bound
-  sources, `backend:` and `resolve:` as that function takes them.
+  sources, `backend:`, `resolve:` and `paths:` as that function takes them.
   """
   @spec render(Applied.t(), keyword()) :: String.t()
   def render(%Applied{frame: frame, sources: sources}, opts) do

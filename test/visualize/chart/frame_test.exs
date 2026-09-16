@@ -711,4 +711,128 @@ defmodule Visualize.Chart.FrameTest do
       assert Enum.map(horizontal, & &1.attrs.y1) == [150.0, 75.0, 0.0]
     end
   end
+
+  describe "every node carries its path when asked (spec/14 §4.7, D-105)" do
+    defp addressed(sources \\ %{primary: @rows}) do
+      chart(
+        %{
+          scales: %{
+            x: %{kind: :linear},
+            y: %{kind: :linear, domain: [0, :auto]},
+            color: %{kind: :ordinal}
+          },
+          axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}],
+          legend: %{scale: :color, position: :top_right}
+        },
+        %{
+          marks: [
+            %{type: :line, data: :primary, channels: %{x: :n, y: :v}, style: :by_k},
+            %{type: :circle, data: :primary, channels: %{x: :n, y: :v}}
+          ],
+          labels: [%{text: ["Mass"], anchor: :title}, %{text: ["hours"], anchor: {:axis, :x}}],
+          styles: %{by_k: %{stroke: {:field, :k}}}
+        }
+      )
+      |> Frame.new(sources: sources)
+    end
+
+    defp nodes(svg), do: Regex.scan(~r/data-node="([^"]+)"/, svg) |> Enum.map(&Enum.at(&1, 1))
+
+    test "the frame, each mark, each axis, the legend and each label are tagged" do
+      svg = Frame.render(addressed(), sources: %{primary: @rows}, paths: true)
+
+      assert nodes(svg) == [
+               "frame",
+               "marks[0]",
+               "marks[1]",
+               "frame.axes[0]",
+               "frame.axes[1]",
+               "frame.legend",
+               "labels[0]",
+               "labels[1]"
+             ]
+
+      # The grid is furniture, not a node: it is between the frame and the marks, untagged.
+      group = Frame.generate(addressed(), sources: %{primary: @rows}, paths: true)
+      [grid | _] = Enum.reject(group.children, &(&1.type == :defs))
+      assert grid.style.class == "grid" and grid.attrs["data-node"] == nil
+
+      assert svg =~ ~s(<g class="frame" data-node="frame" transform=)
+      assert svg =~ ~s(<g class="mark mark-line" data-node="marks[0]")
+      assert svg =~ ~s(<g class="axis axis-bottom" data-node="frame.axes[0]")
+      assert svg =~ ~s(<g class="legend" data-node="frame.legend")
+      assert svg =~ ~s(<text class="label" data-node="labels[0]")
+    end
+
+    test "without the option the markup is byte for byte what it was" do
+      frame = addressed()
+      before = Frame.render(frame, sources: %{primary: @rows})
+      refute before =~ "data-node"
+      assert Frame.render(frame, sources: %{primary: @rows}, paths: false) == before
+      # The furniture alone, and the applied chart through Visualize.Chart.render/2, likewise.
+      refute Frame.render(frame) =~ "data-node"
+      refute Frame.render(frame, paths: true) =~ ~r/data-node="marks/
+      assert Frame.render(frame, paths: true) =~ ~s(data-node="frame.axes[1]")
+    end
+
+    test "Visualize.Chart.render/2 passes the option through" do
+      chart =
+        chart(%{scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}, %{
+          marks: [%{type: :line, data: :primary, channels: %{x: :n, y: :v}}]
+        })
+
+      {:ok, applied} = Chart.apply(chart, sources: %{primary: @rows})
+      refute Chart.render(applied) =~ "data-node"
+      assert nodes(Chart.render(applied, paths: true)) == ["frame", "marks[0]"]
+    end
+
+    test "a facet frame's copies of one mark carry one path, and a polar frame's axes keep their positions" do
+      facet =
+        chart(
+          %{
+            kind: :facet,
+            facet: %{by: :k, columns: 2},
+            scales: %{x: %{kind: :linear, domain: [0, 3]}, y: %{kind: :linear, domain: [0, 10]}},
+            axes: [%{scale: :x, side: :bottom}]
+          },
+          %{marks: [%{type: :circle, data: :primary, channels: %{x: :n, y: :v}}]}
+        )
+        |> Frame.new(sources: %{primary: @rows})
+
+      svg = Frame.render(facet, sources: %{primary: @rows}, paths: true)
+      assert nodes(svg) == ["frame", "marks[0]", "frame.axes[0]", "marks[0]", "frame.axes[0]"]
+
+      polar =
+        chart(
+          %{
+            kind: :polar,
+            scales: %{angle: %{kind: :radial}, r: %{kind: :sqrt}, y: %{kind: :linear}},
+            axes: [
+              %{scale: :y, side: :left},
+              %{scale: :angle, side: :bottom},
+              %{scale: :r, side: :left}
+            ]
+          },
+          %{marks: [%{type: :rose, data: :primary, channels: %{angle: :n, value: :v}}]}
+        )
+        |> Frame.new(sources: %{primary: @rows})
+
+      svg = Frame.render(polar, sources: %{primary: @rows}, paths: true)
+      # The ring and the spoke are drawn inside the centred group, the cartesian axis
+      # after it — and each keeps the position the design gave it.
+      assert nodes(svg) == [
+               "frame",
+               "marks[0]",
+               "frame.axes[1]",
+               "frame.axes[2]",
+               "frame.axes[0]"
+             ]
+    end
+
+    test "a canvas render takes the option without drawing it" do
+      frame = addressed()
+      canvas = Frame.render(frame, sources: %{primary: @rows}, backend: :canvas, paths: true)
+      assert canvas == Frame.render(frame, sources: %{primary: @rows}, backend: :canvas)
+    end
+  end
 end

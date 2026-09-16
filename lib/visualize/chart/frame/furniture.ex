@@ -6,6 +6,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   # spokes drawn from the plot centre.
 
   alias Visualize.{Axis, Format, Scale}
+  alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Position
   alias Visualize.Chart.{Schema, Style}
   alias Visualize.IR.{Element, Transform}
@@ -23,22 +24,36 @@ defmodule Visualize.Chart.Frame.Furniture do
 
   @doc false
   # The grid group when any axis asks for one, then the marks given, then one group per
-  # axis (cartesian).
-  @spec cartesian(map(), atom(), [Element.t()]) :: [Element.t()]
-  def cartesian(frame, mode, marks \\ []) do
-    grid(frame, mode) ++ marks ++ Enum.map(frame.axes, &place_axis(frame, &1, mode))
+  # axis (cartesian), each stamped with its path among `axes` when `paths?` (spec/14 §4.7).
+  @spec cartesian(map(), atom(), [Element.t()], boolean()) :: [Element.t()]
+  def cartesian(frame, mode, marks \\ [], paths? \\ false) do
+    grid(frame, mode) ++ marks ++ axes(frame, Enum.with_index(frame.axes), mode, paths?)
   end
 
   @doc false
   # One group at the plot centre holding the polar grid, the marks given, and the ring
-  # and spoke axes; an axis on any other scale draws as a cartesian one.
-  @spec polar(map(), atom(), [Element.t()]) :: [Element.t()]
-  def polar(frame, mode, marks \\ []) do
-    {polar, other} = polar_split(frame)
-    rings = Enum.map(polar, &polar_axis(frame, &1, mode))
+  # and spoke axes; an axis on any other scale draws as a cartesian one. Every axis keeps
+  # its position among `axes` whichever way it is drawn, so its path is the design's.
+  @spec polar(map(), atom(), [Element.t()], boolean()) :: [Element.t()]
+  def polar(frame, mode, marks \\ [], paths? \\ false) do
+    {polar, other} =
+      frame.axes
+      |> Enum.with_index()
+      |> Enum.split_with(fn {node, _i} -> node.scale in [:angle, :r] end)
+
+    rings =
+      for {node, i} <- polar,
+          do: frame |> polar_axis(node, mode) |> Frame.stamp([:frame, :axes, i], paths?)
 
     [centred(frame, polar_grid(frame, mode) ++ marks ++ rings)] ++
-      cartesian(%{frame | axes: other}, mode)
+      grid(%{frame | axes: Enum.map(other, &elem(&1, 0))}, mode) ++
+      axes(frame, other, mode, paths?)
+  end
+
+  # The indexed axis nodes drawn and placed, each stamped with its path when asked.
+  defp axes(frame, indexed, mode, paths?) do
+    for {node, i} <- indexed,
+        do: frame |> place_axis(node, mode) |> Frame.stamp([:frame, :axes, i], paths?)
   end
 
   @doc false
