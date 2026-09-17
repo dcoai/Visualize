@@ -34,7 +34,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   @default_data_rate 600  # samples per second per series
   @span_seconds 5  # the plot spans about this much data at the rate; the density follows (#308)
   @lag_alpha 2 / 31  # the lag's moving average, about thirty ticks
-  @window 8  # frames in flight before flow control holds a frame back (#304)
+  @max_lag_ms 250  # the lag budget: flow control holds a frame while this much is in flight (#310)
   @ack_timeout 2000  # ms a hold may last without an ack before it fails open (#306)
 
   # Color palette: first is area fill, rest are lines
@@ -244,8 +244,13 @@ defmodule ExamplesWeb.HighPerformanceLive do
   def in_flight(%{sent_seq: sent, acked_seq: acked}), do: sent - acked
 
   defp holding?(assigns) do
-    assigns.flow_control and assigns.acking != :no and in_flight(assigns) >= @window
+    assigns.flow_control and assigns.acking != :no and in_flight(assigns) >= window(assigns)
   end
+
+  @doc false
+  # The frames the lag budget allows in flight at the target rate — fifteen at 60 fps —
+  # taken at 2,000 fps when the target is unlimited. Public for the page test.
+  def window(%{target_fps: fps}), do: max(2, ceil(@max_lag_ms * min(fps, 2000) / 1000))
 
   @doc false
   # A hold fails open (#306, D-107): a hold that outlives `@ack_timeout` without an ack
@@ -655,11 +660,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
           </button>
 
           <button type="button" phx-click="toggle_flow_control" class={"btn mode #{if @flow_control, do: "active", else: ""}"}
-                  title="Hold frames back while 8 are in flight; resync with a full frame after a dropped scroll">
+                  title="Hold frames back while 250 ms of them are in flight; resync with a full frame after a dropped scroll">
             <%= cond do
               not @flow_control -> "Flow control OFF"
               @acking == :no -> "Flow control: no acks"
-              true -> "Flow control ON"
+              true -> "Flow control ON (250 ms)"
             end %>
           </button>
 
@@ -756,7 +761,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
               phx-hook="CanvasIncrementalChart"
               phx-update="ignore"
               data-ack="frame_drawn"
-              data-ack-interval="100"
+              data-ack-interval="50"
               data-width={@width}
               data-height={@height}
               style="position: absolute; top: 0; left: 0;"
