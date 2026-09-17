@@ -106,6 +106,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         ],
         text_anchor: [:start, :middle, :end],
         orientation: [:vertical, :horizontal],
+        link: [:curve, :elbow, :line],
         kind: [:cartesian, :polar, :geo, :facet]
       ]
 

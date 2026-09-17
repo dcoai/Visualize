@@ -472,6 +472,7 @@ A `:transform` node has `op` (`{:enum, ops}`, `:binding`, required) and the keys
 | `padding` | `:number` | `:geometry` | the hierarchies, `:sankey` (the node gap), `:chord` (the pad angle) |
 | `tile` | `{:enum, [:squarify, :binary, :slice, :dice, :slice_dice]}` | `:geometry` | `:treemap` |
 | `orientation` | `{:enum, [:vertical, :horizontal]}` | `:geometry` | `:tree`, `:cluster` (the orientation of the `:links` rows' `path`, `:vertical` by default) |
+| `link` | `{:enum, [:curve, :elbow, :line]}` | `:geometry` | `:tree`, `:cluster` (the shape of the `:links` rows' `path`, `:curve` by default) |
 | `bandwidth` | `:number` | `:geometry` | `:density` |
 | `output` | `{:enum, [:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges]}` | `:binding` | the layouts and the geo algorithms: which rows they yield |
 | `test` | `{:enum, [:eq, :ne, :lt, :lte, :gt, :gte, :present, :absent]}` | `:binding` | `:filter` (how the reading is tested, `:present` by default) |
@@ -493,7 +494,7 @@ The ops are `:filter`, `:bin`, `:stack`, `:fold`, `:sum`, `:sort`, `:tree`, `:cl
 `:tree`, `:cluster`, `:pack`, `:partition` and `:treemap` read the rows as a flat node list: `id` (`:id`) names each node and `by` (`:parent`) its parent, `nil` or `""` for the root, through `Visualize.Layout.Hierarchy.stratify/2`; `field` names the value `Visualize.Layout.Hierarchy.sum/2` adds up (`nil` as `0`), and without it `Visualize.Layout.Hierarchy.count/1` counts leaves. `size` (`[width, height]`, default the plot area) and `padding` (`0`) reach the layout's own setters, `tile` (`:squarify`) the treemap's. The hierarchies of [06-layouts](06-layouts.md) §2–5 lay out the tree exactly as a direct call would.
 
 - `output: :nodes` (the default) — one row per node in pre-order (`Visualize.Layout.Hierarchy.descendants/1`): the datum's columns plus `depth`, `height`, `value` and the layout's own fields — `x`, `y` for `:tree` and `:cluster`; `x`, `y`, `r` for `:pack`; `x0`, `y0`, `x1`, `y1` for `:partition` and `:treemap`.
-- `output: :links` (`:tree`, `:cluster` and `:pack`) — one row per parent–child pair in the order of `Visualize.Layout.Hierarchy.links/1`: `source` and `target` (the ids), `x0`, `y0` (the parent's position), `x1`, `y1` (the child's) and `path`, a `Visualize.IR.Path` — for `:tree` and `:cluster` the link of `orientation` (`:vertical`): vertical is `M x0,y0 C x0,ym x1,ym x1,y1` with `ym` the mid-height, horizontal the same curve with the axes swapped, `M y0,x0 C ym,x0 ym,x1 y1,x1`, so `size: [height, width]` with `orientation: :horizontal` is the tree spec/10 §3.2 draws; the rows' `x`, `y`, `x0`, `y0`, `x1` and `y1` stay the layout's own in either orientation (D-70) — for `:pack` the straight line between the centres.
+- `output: :links` (`:tree`, `:cluster` and `:pack`) — one row per parent–child pair in the order of `Visualize.Layout.Hierarchy.links/1`: `source` and `target` (the ids), `x0`, `y0` (the parent's position), `x1`, `y1` (the child's) and `path`, a `Visualize.IR.Path` — for `:tree` and `:cluster` the link of `orientation` (`:vertical`): vertical is `M x0,y0 C x0,ym x1,ym x1,y1` with `ym` the mid-height, horizontal the same curve with the axes swapped, `M y0,x0 C ym,x0 ym,x1 y1,x1`, so `size: [height, width]` with `orientation: :horizontal` is the tree spec/10 §3.2 draws; the rows' `x`, `y`, `x0`, `y0`, `x1` and `y1` stay the layout's own in either orientation (D-70). `link` (`:curve`) is the path's shape (#127): `:curve` the cubic above; `:elbow` the dendrogram's step, across at the parent's depth and then down to the child — vertical `M x0,y0 H x1 V y1`, horizontal `M y0,x0 V x1 H y1` — so the branches of one parent leave it as one line; `:line` the straight segment. For `:pack` the path is the straight line between the centres.
 
 #### 5.4.3 Graphs
 
@@ -1211,9 +1212,9 @@ The transform appenders, one per op of §5.4 (`Visualize.Chart.Schema.transform_
 | `Visualize.Chart.Build.sort/2` | As `sort/3` with no options. |
 | `Visualize.Chart.Build.sort/3` | `sort(data, field, opts)`: a `:sort` step appended to the data node (§5.4) — `opts` are `order`. |
 | `Visualize.Chart.Build.tree/1` | As `tree/2` with no options. |
-| `Visualize.Chart.Build.tree/2` | `tree(data, opts)`: a `:tree` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `orientation`. |
+| `Visualize.Chart.Build.tree/2` | `tree(data, opts)`: a `:tree` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `orientation`, `link`. |
 | `Visualize.Chart.Build.cluster/1` | As `cluster/2` with no options. |
-| `Visualize.Chart.Build.cluster/2` | `cluster(data, opts)`: a `:cluster` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `orientation`. |
+| `Visualize.Chart.Build.cluster/2` | `cluster(data, opts)`: a `:cluster` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `orientation`, `link`. |
 | `Visualize.Chart.Build.pack/1` | As `pack/2` with no options. |
 | `Visualize.Chart.Build.pack/2` | `pack(data, opts)`: a `:pack` step appended to the data node (§5.4) — `opts` are `id`, `by`, `field`, `size`, `output`, `padding`. |
 | `Visualize.Chart.Build.partition/1` | As `partition/2` with no options. |

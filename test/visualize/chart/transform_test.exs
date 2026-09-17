@@ -243,6 +243,25 @@ defmodule Visualize.Chart.TransformTest do
       assert {cx0, cy0} == {cluster.x0, cluster.y0}
     end
 
+    test ":tree and :cluster links take the elbow or the line of `link` (#127)" do
+      [link | _] = run(%{op: :tree, output: :links}, @tree)
+      %{x0: x0, y0: y0, x1: x1, y1: y1} = link
+
+      [elbow | _] = run(%{op: :cluster, output: :links, link: :elbow}, @tree)
+      assert elbow.path.commands == [{:M, x0, y0}, {:H, x1}, {:V, y1}]
+
+      [swapped | _] =
+        run(%{op: :cluster, output: :links, link: :elbow, orientation: :horizontal}, @tree)
+
+      assert swapped.path.commands == [{:M, y0, x0}, {:V, x1}, {:H, y1}]
+
+      [line | _] = run(%{op: :tree, output: :links, link: :line}, @tree)
+      assert line.path.commands == [{:M, x0, y0}, {:L, x1, y1}]
+
+      assert run(%{op: :tree, output: :links, link: :curve}, @tree) ==
+               run(%{op: :tree, output: :links}, @tree)
+    end
+
     test ":tree links carry the vertical link and :pack links the straight line" do
       [link | _] = run(%{op: :tree, output: :links}, @tree)
 
