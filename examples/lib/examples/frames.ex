@@ -15,22 +15,32 @@ defmodule Examples.Frames do
   alias Visualize.Chart
   alias Visualize.Chart.Compiled
 
-  @type backend :: :svg | :canvas
+  @type backend :: :svg | :canvas | :incremental
   @type frame :: %{
           svg: String.t() | nil,
           canvas: String.t() | nil,
+          incremental: map() | nil,
           dynamic_svg: String.t(),
           bytes: non_neg_integer(),
           points: non_neg_integer() | nil
         }
 
-  @doc "The backends a chart offers: both, for every chart."
+  @doc "The backends a chart offers: SVG and Canvas for every chart, Incremental for a streaming design (#327)."
   @spec backends(module()) :: [backend()]
-  def backends(_module), do: [:svg, :canvas]
+  def backends(module) do
+    if stream?(module), do: [:svg, :canvas, :incremental], else: [:svg, :canvas]
+  end
 
-  @doc "Whether frames of a backend are acknowledged by the browser: the canvas's are (spec/10 §8.2), an SVG frame's, in the LiveView diff, are not."
+  @doc "Whether a chart module streams: a design with a viewport that says `stream?/0`."
+  @spec stream?(module()) :: boolean()
+  def stream?(module) do
+    Code.ensure_loaded?(module) and function_exported?(module, :stream?, 0) and module.stream?()
+  end
+
+  @doc "Whether frames of a backend are acknowledged by the browser: the canvases' are (spec/10 §8.2, §9.2), an SVG frame's, in the LiveView diff, are not."
   @spec acks?(backend()) :: boolean()
   def acks?(:canvas), do: true
+  def acks?(:incremental), do: true
   def acks?(:svg), do: false
 
   @doc """
@@ -38,11 +48,19 @@ defmodule Examples.Frames do
   the compiled chart and its static SVG (the furniture, rendered once); nothing otherwise.
   """
   @spec prepare(module(), keyword(), backend()) :: map() | nil
-  def prepare(module, opts, :canvas) do
+  def prepare(module, opts, backend) when backend in [:canvas, :incremental] do
     if Design.design?(module) do
       applied = Design.applied(module, opts)
       {:ok, compiled} = Chart.compile(applied, ceiling: 1)
-      %{compiled: compiled, static: Compiled.static(compiled), width: applied.frame.size.width, height: applied.frame.size.height}
+
+      %{
+        compiled: compiled,
+        static: Compiled.static(compiled),
+        width: applied.frame.size.width,
+        height: applied.frame.size.height,
+        plot: compiled.plot,
+        margin: compiled.margin
+      }
     end
   end
 
@@ -67,15 +85,25 @@ defmodule Examples.Frames do
           |> Visualize.SVG.Renderer.render_to_string()
       end
 
-    {%{svg: svg, canvas: nil, dynamic_svg: "", bytes: byte_size(svg), points: points(module, opts)}, state}
+    {%{svg: svg, canvas: nil, incremental: nil, dynamic_svg: "", bytes: byte_size(svg), points: points(module, opts)},
+     state}
   end
 
-  def frame(module, opts, :canvas, %{compiled: compiled} = state) do
+  # The compiled chart ticked: `now:` from the opts for a streaming design, so the
+  # window's upper end is the run's and not the rows' (spec/14 §12.5).
+  def frame(module, opts, backend, %{compiled: compiled} = state) when backend in [:canvas, :incremental] do
     {_design, sources} = module.design(opts)
-    {payload, compiled} = Compiled.tick(compiled, sources)
+    tick_opts = if now = opts[:now], do: [now: now], else: []
+    {payload, compiled} = Compiled.tick(compiled, sources, tick_opts)
 
-    {%{svg: nil, canvas: payload.canvas, dynamic_svg: payload.svg, bytes: payload.bytes, points: rows(sources)},
-     %{state | compiled: compiled}}
+    {%{
+       svg: nil,
+       canvas: payload.canvas,
+       incremental: payload.incremental,
+       dynamic_svg: payload.svg,
+       bytes: payload.bytes,
+       points: rows(sources)
+     }, %{state | compiled: compiled}}
   end
 
   def frame(module, opts, :canvas, nil) do
@@ -85,7 +113,7 @@ defmodule Examples.Frames do
         {:error, _} -> ""
       end
 
-    {%{svg: nil, canvas: canvas, dynamic_svg: "", bytes: byte_size(canvas), points: nil}, nil}
+    {%{svg: nil, canvas: canvas, incremental: nil, dynamic_svg: "", bytes: byte_size(canvas), points: nil}, nil}
   end
 
   # The rows a design binds at `opts`, or nil for a chart that is not one.

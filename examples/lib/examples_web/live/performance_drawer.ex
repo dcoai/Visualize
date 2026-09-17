@@ -17,6 +17,7 @@ defmodule ExamplesWeb.PerformanceDrawer do
   attr(:compare, :list, default: nil, doc: "Compare's rows, `Examples.Compare.run/3`")
   attr(:comparing, :boolean, default: false, doc: "whether a comparison is running")
   attr(:ticks, :integer, default: 100, doc: "the ticks Compare runs per backend")
+  attr(:stream, :map, default: nil, doc: "a streaming design's window: `%{samples_per_px, count, span}` (#327), or nil")
 
   def performance(assigns) do
     assigns = assign(assigns, acks?: Frames.acks?(assigns.backend))
@@ -53,6 +54,13 @@ defmodule ExamplesWeb.PerformanceDrawer do
             <span class="perf-value"><%= if @run.target_fps > 2000, do: "∞", else: @run.target_fps %></span>
           </form>
 
+          <form :if={@stream} phx-change="run_data_rate" class="perf-group perf-group-stream">
+            <label class="perf-label" for="perf-rate">Data rate</label>
+            <input id="perf-rate" type="range" name="data_rate" min="10" max="5000" step="10" value={@run.data_rate} class="perf-slider" disabled={@run.running} />
+            <span class="perf-value perf-rate-value"><%= @run.data_rate %> samples/s per series</span>
+            <span class="perf-note"><%= @stream.samples_per_px %>/px · <%= @stream.count %> samples · <%= Float.round(@stream.span, 1) %> s across</span>
+          </form>
+
           <button
             :if={@acks?}
             type="button"
@@ -86,6 +94,7 @@ defmodule ExamplesWeb.PerformanceDrawer do
           <.metric :if={@acks?} value={if(@run.ack_age, do: "#{@run.ack_age} ms", else: "none")} label="Last ack" />
           <.metric :if={@acks?} value={@run.stalls} label="Stalls" />
           <.metric value={@run.skipped} label="Skipped" />
+          <.metric :if={@stream} value={round(@run.measured_rate)} label="Samples/s" />
           <.metric value={Float.round(Run.avg_render_us(@run) / 1000, 2)} label="Render ms" />
           <.metric value={Float.round(@run.payload_size / 1024, 1)} label="Payload KB" />
           <.metric value={@run.frame} label="Frame" />
@@ -124,6 +133,7 @@ defmodule ExamplesWeb.PerformanceDrawer do
 
   defp backend_name(:svg), do: "SVG"
   defp backend_name(:canvas), do: "Canvas"
+  defp backend_name(:incremental), do: "Incremental"
   defp backend_name(other), do: to_string(other)
 
   @doc "The drawer's stylesheet, inlined by the page."
@@ -142,6 +152,9 @@ defmodule ExamplesWeb.PerformanceDrawer do
     .perf-chip:disabled { opacity: 0.6; cursor: default; }
     .perf-slider { width: 120px; }
     .perf-value { min-width: 2.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .perf-rate-value { min-width: 12rem; }
+    .perf-group-stream { display: grid; grid-template-columns: auto auto auto; align-items: center; column-gap: 0.4rem; }
+    .perf-note { grid-column: 1 / -1; font-size: 12px; color: #888; font-variant-numeric: tabular-nums; }
     .perf-btn { padding: 0.45rem 0.9rem; border: none; border-radius: 6px; background: #e5e7eb; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
     .perf-btn:disabled { opacity: 0.6; cursor: default; }
     .perf-start { background: #16a34a; color: #fff; }
