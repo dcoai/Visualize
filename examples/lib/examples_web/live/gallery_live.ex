@@ -46,9 +46,9 @@ defmodule ExamplesWeb.GalleryLive do
     <ExamplesWeb.SiteHeader.header tab={:charts} />
     <main>
       <div class="tools-bar">
-        <a href="/high-performance" class="tool-link" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+        <a href="/chart/scrolling_series" class="tool-link" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
           <span class="tool-icon">🚀</span>
-          <span>High-Performance (Area + Lines, 10K pts)</span>
+          <span>Scrolling series (incremental, with a data rate)</span>
         </a>
         <a href="/performance" class="tool-link">
           <span class="tool-icon">⚡</span>

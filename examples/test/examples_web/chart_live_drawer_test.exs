@@ -114,4 +114,42 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert h =~ "This chart, 100 ticks per backend, headless"
     assert h =~ "<td>SVG</td>" and h =~ "<td>Canvas</td>"
   end
+  test "a streaming design runs incrementally at a data rate: the window advances by whole columns and the strip is pushed with a sequence (#327)" do
+    s = page("scrolling_series")
+    {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
+    {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "incremental"}, s)
+    {:noreply, s} = ChartLive.handle_event("run_data_rate", %{"data_rate" => "600"}, s)
+    assert %Examples.Scroll{inner_width: 810, samples_per_px: 4, origin: 0} = s.assigns.run_scroll
+    h = html(s)
+    assert h =~ ~s(phx-value-backend="incremental")
+    assert h =~ "Data rate" and h =~ "4/px · 3241 samples · 5.4 s across"
+
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    assert s.assigns.run.data_rate == 600 and s.assigns.run.flow_control
+    s = settled(s)
+    assert s.assigns.run_frame.incremental.mode == "full"
+    assert pushed(s) == [{"canvas_incremental", 1}]
+    h = html(s)
+    assert h =~ ~s(phx-hook="CanvasIncrementalChart")
+    assert h =~ "top: 40px; left: 60px"
+
+    # 16 ms at 600/s is 9 samples: two columns at four per pixel, one sample pending.
+    s = Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 16})
+    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    assert s.assigns.run_scroll.origin >= 8 and rem(s.assigns.run_scroll.origin, 4) == 0
+    s = settled(s)
+    assert %{mode: "scroll_x", dx: dx} = s.assigns.run_frame.incremental
+    assert dx == div(s.assigns.run_scroll.origin, 4)
+    assert pushed(s) == [{"canvas_incremental", 1}, {"canvas_incremental", 2}]
+    assert s.assigns.run_frame.bytes < 30_000
+
+    {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
+    refute s.assigns.run.running
+  end
+
+  test "/high-performance is the Scrolling series chart's page now" do
+    import Phoenix.ConnTest
+    conn = build_conn() |> Phoenix.ConnTest.dispatch(ExamplesWeb.Endpoint, :get, "/high-performance")
+    assert redirected_to(conn) == "/chart/scrolling_series"
+  end
 end

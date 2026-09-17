@@ -27,7 +27,8 @@ defmodule ExamplesWeb.Router do
     live "/chart/:chart", ChartLive, :show
     live "/performance", PerformanceLive, :index
     live "/hybrid", HybridLive, :index
-    live "/high-performance", HighPerformanceLive, :index
+    # The High-Performance page is the Scrolling series chart's drawer now (#327)
+    get "/high-performance", RedirectController, :scrolling_series
     live "/incremental", IncrementalLive, :index
     live "/interaction", InteractionLive, :index
     live "/builder", BuilderLive, :index

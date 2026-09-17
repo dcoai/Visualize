@@ -14,6 +14,7 @@ defmodule ExamplesWeb.ChartLive do
     "grouped_bar" => Examples.Charts.GroupedBarChart,
     "stacked_bar" => Examples.Charts.StackedBarChart,
     "line" => Examples.Charts.LineChart,
+    "scrolling_series" => Examples.Charts.ScrollingSeries,
     "multi_line" => Examples.Charts.MultiLineChart,
     "area" => Examples.Charts.AreaChart,
     "stacked_area" => Examples.Charts.StackedAreaChart,
@@ -88,6 +89,9 @@ defmodule ExamplesWeb.ChartLive do
           run_backend: :svg,
           run_state: nil,
           run_frame: nil,
+          # A streaming design's window (#327): an `Examples.Scroll` at the density the
+          # data rate implies, nil for any other chart
+          run_scroll: nil,
           compare: nil,
           compare_task: nil
         )}
@@ -154,6 +158,7 @@ defmodule ExamplesWeb.ChartLive do
   # compiled chart, once), and the first frame renders.
   def handle_event("run_start", _params, socket) do
     %{module: module, run_backend: backend} = socket.assigns
+    socket = assign(socket, run_scroll: fresh_scroll(socket.assigns))
     state = Frames.prepare(module, run_opts(socket.assigns, 0), backend)
 
     run =
@@ -166,6 +171,15 @@ defmodule ExamplesWeb.ChartLive do
     socket = assign(socket, run: run, run_state: state, run_frame: nil, animating: false)
     {:noreply, socket |> start_frame() |> schedule_run()}
   end
+
+  # The data rate of a streaming design (#327): its density follows the rate, as the
+  # High-Performance page's did — about five seconds of samples across the plot.
+  def handle_event("run_data_rate", %{"data_rate" => rate}, %{assigns: %{run: %Run{running: false}}} = socket) do
+    socket = update(socket, :run, &%{&1 | data_rate: String.to_integer(rate)})
+    {:noreply, assign(socket, run_scroll: fresh_scroll(socket.assigns))}
+  end
+
+  def handle_event("run_data_rate", _params, socket), do: {:noreply, socket}
 
   def handle_event("run_stop", _params, socket) do
     {:noreply, socket |> update(:run, &Run.stop/1) |> assign(run_frame: nil)}
@@ -194,18 +208,32 @@ defmodule ExamplesWeb.ChartLive do
   def handle_info(:run_tick, socket) do
     now = System.monotonic_time(:millisecond)
     socket = schedule_run(socket)
+    %{run_scroll: scroll, run_backend: backend} = socket.assigns
+    density = if scroll, do: scroll.samples_per_px, else: 1
 
-    case Run.tick(socket.assigns.run, now, 1) do
+    case Run.tick(socket.assigns.run, now, density) do
       {run, :skipped} ->
         {:noreply, assign(socket, run: run)}
 
-      {run, {:draw, _columns}} ->
-        {run, mode} = Run.decide(run, 1, false, {1, 1}, now)
+      {run, {:draw, columns}} ->
+        # A streaming design's window advances by the columns the samples filled; the
+        # compiled chart then scrolls by exactly those pixels (spec/14 §12.5, §12.6). Any
+        # other chart's frame is the chart at its next animation tick, a full render.
+        incremental? = backend == :incremental and scroll != nil
+        size = if scroll, do: {scroll.inner_width, 1}, else: {1, 1}
+        {run, mode} = Run.decide(run, if(incremental?, do: columns, else: 1), incremental?, size, now)
         socket = assign(socket, run: run)
 
-        case mode do
-          :drop -> {:noreply, socket}
-          :full_redraw -> {:noreply, start_frame(socket)}
+        cond do
+          mode == :drop ->
+            {:noreply, socket}
+
+          incremental? ->
+            socket = assign(socket, run_scroll: Examples.Scroll.advance(scroll, columns))
+            {:noreply, start_frame(socket, mode)}
+
+          true ->
+            {:noreply, start_frame(socket)}
         end
     end
   end
@@ -221,13 +249,20 @@ defmodule ExamplesWeb.ChartLive do
 
       {:ok, run} ->
         now = System.monotonic_time(:millisecond)
-        {run, seq} = Run.sending(run, :full_redraw)
+        {run, seq} = Run.sending(run, if(frame.incremental, do: incremental_mode(frame), else: :full_redraw))
         run = Run.rendered(run, frame.bytes, now)
         socket = assign(socket, run: run, run_state: state, run_frame: frame)
 
-        if frame.canvas,
-          do: {:noreply, push_event(socket, "canvas_update", %{binary: frame.canvas, seq: seq})},
-          else: {:noreply, socket}
+        cond do
+          frame.incremental ->
+            {:noreply, push_event(socket, "canvas_incremental", Map.put(frame.incremental, :seq, seq))}
+
+          frame.canvas ->
+            {:noreply, push_event(socket, "canvas_update", %{binary: frame.canvas, seq: seq})}
+
+          true ->
+            {:noreply, socket}
+        end
     end
   end
 
@@ -265,14 +300,19 @@ defmodule ExamplesWeb.ChartLive do
     Process.send_after(self(), :animate_tick, @animation_interval)
   end
 
+  defp incremental_mode(%{incremental: %{mode: "full"}}), do: :full_redraw
+  defp incremental_mode(%{incremental: %{mode: "none"}}), do: :none
+  defp incremental_mode(_frame), do: :scroll_x
+
   def terminate(_reason, socket) do
     Run.cancel(socket.assigns.run)
     if task = socket.assigns[:compare_task], do: Task.Supervisor.terminate_child(Examples.TaskSupervisor, task.pid)
     :ok
   end
 
-  # The frame at the run's next tick, rendering in a task over a snapshot.
-  defp start_frame(socket) do
+  # The frame at the run's next tick, rendering in a task over a snapshot: a streaming
+  # design's at its window, any other chart's at its next animation tick.
+  defp start_frame(socket, _mode \\ :full_redraw) do
     %{module: module, run_backend: backend, run_state: state, run: run} = socket.assigns
     opts = run_opts(socket.assigns, run.frame)
     render = fn ->
@@ -295,10 +335,35 @@ defmodule ExamplesWeb.ChartLive do
   defp run_size(_state, :width), do: 700
   defp run_size(_state, :height), do: 450
 
-  # A run's frame is the chart at an animation tick, whatever the page's animation.
+  # A run's frame is the chart at an animation tick, whatever the page's animation; a
+  # streaming design's is its window — origin, density, and `now` the window's upper end.
+  defp run_opts(%{run_scroll: %Examples.Scroll{} = scroll} = assigns, tick) do
+    count = Examples.Scroll.count(scroll)
+
+    assigns.current_palette
+    |> build_chart_opts(tick, true, assigns.slug, assigns.hex_radius)
+    |> Keyword.merge(samples_per_px: scroll.samples_per_px, origin: scroll.origin, now: scroll.origin + count - 1)
+  end
+
   defp run_opts(assigns, tick) do
     build_chart_opts(assigns.current_palette, tick, true, assigns.slug, assigns.hex_radius)
   end
+
+  # A streaming design's window at the run's data rate: about five seconds across the plot.
+  defp fresh_scroll(%{module: module, run: run}) do
+    if Frames.stream?(module) do
+      {_x, _y, width, _h} = module.plot()
+      Examples.Scroll.new(width, Examples.Scroll.density(run.data_rate * 5, width))
+    end
+  end
+
+  # The window a streaming design shows, for the drawer.
+  defp stream_info(%{run_scroll: %Examples.Scroll{} = scroll, run: run}) do
+    count = Examples.Scroll.count(scroll)
+    %{samples_per_px: scroll.samples_per_px, count: count, span: if(run.data_rate > 0, do: count / run.data_rate, else: 0.0)}
+  end
+
+  defp stream_info(_assigns), do: nil
 
   def render(assigns) do
     ~H"""
@@ -410,6 +475,20 @@ defmodule ExamplesWeb.ChartLive do
             <%= if @run_backend == :svg do %>
               <%= Phoenix.HTML.raw(@run_frame.svg) %>
             <% else %>
+            <%= if @run_backend == :incremental do %>
+              <%!-- The incremental canvas is the plot area, at the margin's offset (spec/14 §12.5). --%>
+              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(@run_state, :width)}px; height: #{run_size(@run_state, :height)}px;"}>
+                <div id="incremental-chart" phx-hook="CanvasIncrementalChart" phx-update="ignore" data-ack="frame_drawn" data-ack-interval="50" data-width={@run_state.plot.width} data-height={@run_state.plot.height} style={"position: absolute; top: #{@run_state.margin.top}px; left: #{@run_state.margin.left}px; z-index: 1;"}>
+                  <canvas width={@run_state.plot.width} height={@run_state.plot.height} style="display: block;"></canvas>
+                </div>
+                <div class="hybrid-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(Frames.static(@run_state)) %>
+                </div>
+                <div :if={@run_frame.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(@run_frame.dynamic_svg) %>
+                </div>
+              </div>
+            <% else %>
               <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(@run_state, :width)}px; height: #{run_size(@run_state, :height)}px;"}>
                 <div id="canvas-chart" phx-hook="CanvasBinaryChart" phx-update="ignore" data-ack="frame_drawn" data-ack-interval="50" data-binary={@run_frame.canvas} data-width={run_size(@run_state, :width)} data-height={run_size(@run_state, :height)} style="position: absolute; top: 0; left: 0; z-index: 1;">
                   <canvas width={run_size(@run_state, :width)} height={run_size(@run_state, :height)} style="display: block;"></canvas>
@@ -421,6 +500,7 @@ defmodule ExamplesWeb.ChartLive do
                   <%= Phoenix.HTML.raw(@run_frame.dynamic_svg) %>
                 </div>
               </div>
+            <% end %>
             <% end %>
           <% else %>
           <%= if @backend == :svg do %>
@@ -459,6 +539,7 @@ defmodule ExamplesWeb.ChartLive do
           open={@drawer_open}
           compare={@compare}
           comparing={@compare_task != nil}
+          stream={stream_info(assigns)}
         />
 
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@backend, @module) %></h3>
