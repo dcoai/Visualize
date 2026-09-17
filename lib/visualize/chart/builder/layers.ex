@@ -125,22 +125,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-value-index={entry.index}
             phx-target={@target}
           >{Phoenix.HTML.raw(Glyphs.icon(entry.eye))}<span class="vis-builder-action-label">{entry.toggle}</span></button>
-          <div :if={entry.expanded? and entry.declared != []} class="vis-builder-layer-detail">
-            <button
-              :for={kind <- entry.declared}
-              type="button"
-              draggable="false"
-              class="vis-builder-declared"
-              title={"open the " <> to_string(kind) <> " of " <> entry.name <> " in the inspector"}
-              phx-click="open_declared"
-              phx-value-index={entry.index}
-              phx-value-kind={kind}
-              phx-target={@target}
-            >{kind}</button>
-          </div>
-          <p :if={entry.expanded? and entry.declared == []} class="vis-builder-layer-detail vis-builder-declared-none">
-            declares nothing yet
-          </p>
           <div :if={entry.expanded?} class="vis-builder-layer-mask">
             <button
               type="button"
@@ -172,6 +156,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
               </label>
             </form>
           </div>
+          <div :if={entry.expanded? and entry.declared != []} class="vis-builder-layer-detail">
+            <button
+              :for={kind <- entry.declared}
+              type="button"
+              draggable="false"
+              class="vis-builder-declared"
+              title={"open the " <> to_string(kind) <> " of " <> entry.name <> " in the inspector"}
+              phx-click="open_declared"
+              phx-value-index={entry.index}
+              phx-value-kind={kind}
+              phx-target={@target}
+            >{kind}</button>
+          </div>
+          <p :if={entry.expanded? and entry.declared == []} class="vis-builder-layer-detail vis-builder-declared-none">
+            declares nothing yet
+          </p>
         </li>
       </ol>
       """
