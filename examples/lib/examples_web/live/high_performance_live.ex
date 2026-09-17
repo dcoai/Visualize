@@ -30,10 +30,10 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
   @num_lines 4  # 4 lines on top of area = 5 series total
   @series @num_lines + 1
-  @densities [1, 2, 5, 12]  # samples per pixel column the page offers
-  @default_samples_per_px 2
   @default_target_fps 60
-  @default_data_rate 600  # samples per second per series: 5 px × 2 per px × 60 fps, as it was
+  @default_data_rate 600  # samples per second per series
+  @span_seconds 5  # the plot spans about this much data at the rate; the density follows (#308)
+  @lag_alpha 2 / 31  # the lag's moving average, about thirty ticks
   @window 8  # frames in flight before flow control holds a frame back (#304)
   @ack_timeout 2000  # ms a hold may last without an ack before it fails open (#306)
 
@@ -84,7 +84,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
       acking: :unknown,
       stalls: 0,
       ack_age: nil,
-      densities: @densities,
+      lag: 0.0,
       y_scale: y_scale,
       frame_times: [],
       render_times: [],
@@ -94,7 +94,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
       last_full_render: true,
       points_rendered: 0
     )
-    |> at_density(@default_samples_per_px)}
+    |> at_density(density_for(@default_data_rate))}
   end
 
   def handle_event("start", _params, socket) do
@@ -133,20 +133,21 @@ defmodule ExamplesWeb.HighPerformanceLive do
     {:noreply, assign(socket, use_incremental: not socket.assigns.use_incremental)}
   end
 
-  def handle_event("set_points", %{"points" => density}, socket) do
-    samples_per_px = String.to_integer(density)
-    true = samples_per_px in @densities
-    {:noreply, socket |> at_density(samples_per_px) |> assign(:last_full_render, true)}
-  end
-
   def handle_event("set_fps", %{"fps" => fps_str}, socket) do
     # Slider value 130 = unlimited (no delay)
     target_fps = String.to_integer(fps_str)
     {:noreply, assign(socket, target_fps: target_fps)}
   end
 
+  # The rate sizes the window: a new density is a fresh window and a full next frame.
   def handle_event("set_data_rate", %{"data_rate" => rate}, socket) do
-    {:noreply, assign(socket, data_rate: String.to_integer(rate))}
+    rate = String.to_integer(rate)
+    density = density_for(rate)
+    socket = assign(socket, data_rate: rate)
+
+    if density == socket.assigns.samples_per_px,
+      do: {:noreply, socket},
+      else: {:noreply, socket |> at_density(density) |> assign(last_full_render: true)}
   end
 
   def handle_event("toggle_flow_control", _params, socket) do
@@ -221,7 +222,8 @@ defmodule ExamplesWeb.HighPerformanceLive do
       frame: socket.assigns.frame + 1,
       frame_times: frame_times,
       render_times: render_times,
-      fps: calculate_fps(frame_times)
+      fps: calculate_fps(frame_times),
+      lag: lag(socket.assigns)
     )
   end
 
@@ -260,6 +262,13 @@ defmodule ExamplesWeb.HighPerformanceLive do
       a.last_ack_at == nil -> assign(socket, acking: :no, hold_since: nil)
       true -> assign(socket, acked_seq: a.sent_seq, stalls: a.stalls + 1, hold_since: nil)
     end
+  end
+
+  # The lag's moving average of `in flight × period` ms: the instantaneous figure swings
+  # between acks, which come in bursts every ack interval (#308).
+  defp lag(%{target_fps: fps} = assigns) when fps > 2000, do: assigns.lag
+  defp lag(%{target_fps: fps, lag: lag} = assigns) do
+    lag + @lag_alpha * (in_flight(assigns) * 1000 / fps - lag)
   end
 
   defp ack_age(%{last_ack_at: nil}, _now), do: nil
@@ -340,8 +349,14 @@ defmodule ExamplesWeb.HighPerformanceLive do
   end
 
   @doc false
-  # The total the page offers at a density, for the select.
-  def total_at(samples_per_px), do: Scroll.count(Scroll.new(@inner_width, samples_per_px)) * @series
+  # The density at a data rate: the whole samples per pixel column that put about
+  # `@span_seconds` of data across the plot, at least one (#308).
+  def density_for(data_rate), do: Scroll.density(data_rate * @span_seconds, @inner_width)
+
+  @doc false
+  # The seconds of data the plot spans at the page's density and rate.
+  def span(%{points_per_series: count, data_rate: rate}) when rate > 0, do: count / rate
+  def span(_assigns), do: 0.0
 
   defp random_sample, do: :rand.uniform() * 60 + 40
 
@@ -620,18 +635,6 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
       <div class="performance-demo">
         <div class="controls">
-          <form phx-change="set_points" class="control-group">
-            <label>Total Points:</label>
-            <select name="points" class="points-select">
-              <option :for={d <- @densities} value={d} selected={@samples_per_px == d}>
-                <%= format_number(total_at(d)) %> (<%= d %>/px)
-              </option>
-            </select>
-            <span class="point-breakdown">
-              (1 area + 4 lines × <%= format_number(@points_per_series) %> pts each)
-            </span>
-          </form>
-
           <form phx-change="set_fps" class="control-group">
             <label>Target FPS:</label>
             <input type="range" name="fps" min="10" max="2010" step="10" value={@target_fps} class="fps-slider" />
@@ -640,8 +643,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
           <form phx-change="set_data_rate" class="control-group">
             <label>Data rate:</label>
-            <input type="range" name="data_rate" min="10" max="20000" step="10" value={@data_rate} class="fps-slider" />
+            <input type="range" name="data_rate" min="10" max="5000" step="10" value={@data_rate} class="fps-slider" />
             <span class="fps-value"><%= format_number(@data_rate) %> samples/s per series</span>
+            <span class="point-breakdown">
+              (<%= @samples_per_px %>/px · 1 area + 4 lines × <%= format_number(@points_per_series) %> pts · <%= Float.round(span(assigns), 1) %> s across)
+            </span>
           </form>
 
           <button type="button" phx-click="toggle_incremental" class={"btn mode #{if @use_incremental, do: "active", else: ""}"}>
@@ -682,7 +688,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
             <span class="label">In flight</span>
           </div>
           <div class="metric">
-            <span class="value"><%= if @target_fps > 2000, do: "—", else: "#{round((@sent_seq - @acked_seq) * 1000 / @target_fps)} ms" %></span>
+            <span class="value"><%= if @target_fps > 2000, do: "—", else: "#{round(@lag)} ms" %></span>
             <span class="label">Lag</span>
           </div>
           <div class="metric">
@@ -697,6 +703,9 @@ defmodule ExamplesWeb.HighPerformanceLive do
             <span class="value"><%= format_number(@stalls) %></span>
             <span class="label">Stalls</span>
           </div>
+        </div>
+
+        <div class="metrics-bar">
           <div class="metric">
             <span class="value"><%= format_number(round(@measured_rate)) %></span>
             <span class="label">Samples/s</span>
@@ -706,8 +715,8 @@ defmodule ExamplesWeb.HighPerformanceLive do
             <span class="label">Pts/s</span>
           </div>
           <div class="metric">
-            <span class="value"><%= format_number(@total_points) %></span>
-            <span class="label">Total Points</span>
+            <span class="value"><%= format_number(@total_points) %> <small>(<%= @samples_per_px %>/px · <%= Float.round(span(assigns), 1) %> s)</small></span>
+            <span class="label">Total points</span>
           </div>
           <div class="metric">
             <span class="value"><%= format_number(@points_rendered) %></span>
@@ -803,14 +812,6 @@ defmodule ExamplesWeb.HighPerformanceLive do
         font-weight: 500;
       }
 
-      .points-select {
-        padding: 0.5rem;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        font-size: 13px;
-        background: white;
-      }
-
       .point-breakdown {
         font-size: 12px;
         color: #888;
@@ -866,9 +867,10 @@ defmodule ExamplesWeb.HighPerformanceLive do
       }
 
       .metrics-bar {
-        display: flex;
-        gap: 1.5rem;
-        margin-bottom: 1rem;
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
         padding: 1rem 1.5rem;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         border-radius: 8px;
@@ -879,6 +881,12 @@ defmodule ExamplesWeb.HighPerformanceLive do
         display: flex;
         flex-direction: column;
         align-items: center;
+      }
+
+      .metric .value small {
+        font-size: 0.7rem;
+        font-weight: 400;
+        opacity: 0.85;
       }
 
       .metric .value {
