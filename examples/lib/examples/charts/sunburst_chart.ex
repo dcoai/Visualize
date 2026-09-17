@@ -25,7 +25,6 @@ defmodule Examples.Charts.SunburstChart do
   alias Examples.Charts.Design
 
   @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
-  @fields [:id, :parent, :name, :value, :branch]
 
   @data %{
     name: "root",
@@ -88,7 +87,7 @@ defmodule Examples.Charts.SunburstChart do
     design =
       Design.fold([
         chart(meta: %{name: title(), description: [description()]}),
-        source(:nodes, @fields),
+        source(:nodes, Design.hierarchy_fields()),
         style(:sector, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
         style(:sector_label,
           extends: :label,
@@ -104,7 +103,7 @@ defmodule Examples.Charts.SunburstChart do
         )
       ])
 
-    {design, %{nodes: flatten(tree, "0", nil, nil)}}
+    {design, %{nodes: Design.nodes(tree)}}
   end
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
@@ -114,26 +113,6 @@ defmodule Examples.Charts.SunburstChart do
       nil -> opts[:data] || @data
       tick -> animated(tick)
     end
-  end
-
-  # One row per node in pre-order: the dotted position as `id`, its parent's, and the root's
-  # child it descends from, which is what the colour scale reads.
-  defp flatten(node, id, parent, branch) do
-    row = %{
-      id: id,
-      parent: parent,
-      name: node[:name],
-      value: node[:value] || 0,
-      branch: branch
-    }
-
-    children =
-      node
-      |> children()
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {child, i} -> flatten(child, "#{id}.#{i}", id, branch || i) end)
-
-    [row | children]
   end
 
   defp children(node), do: node[:children] || []

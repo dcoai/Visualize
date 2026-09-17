@@ -1,211 +1,132 @@
 defmodule Examples.Charts.SankeyDiagram do
-  @moduledoc "Sankey diagram showing flow between nodes"
+  @moduledoc """
+  Sankey diagram as a design (#127): the `:sankey` transform over the flows under a
+  `:path` mark for the ribbons and two `:rect` marks for the nodes.
 
-  alias Visualize.Layout.Sankey
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  The layout reads the flows as `source`, `target`, `value` and is a step of each mark's
+  data pipeline (spec/14 §5.4.3): `output: :links` yields each ribbon as a ready path,
+  painted in its source's colour at a light opacity, and `output: :nodes` yields each
+  node's four edges, which the `:rect` reads directly. The nodes are split by a `:filter`
+  on `height` so the end uses — the last column — are named to the left of their bar and
+  every other node to the right, the edge anchors of §5.5. The node ids are the names
+  themselves: a node is whatever the flows mention, and the layer derives them.
+  """
 
-  # Energy flow - classic Sankey example
-  @nodes [
-    %{id: "coal", name: "Coal"},
-    %{id: "gas", name: "Natural Gas"},
-    %{id: "oil", name: "Oil"},
-    %{id: "nuclear", name: "Nuclear"},
-    %{id: "solar", name: "Solar"},
-    %{id: "electricity", name: "Electricity"},
-    %{id: "heating", name: "Heating"},
-    %{id: "transport", name: "Transport"},
-    %{id: "industry", name: "Industry"},
-    %{id: "homes", name: "Homes"}
-  ]
+  import Visualize.Chart.Build
 
-  @links [
-    # Sources to conversion
-    %{source: "coal", target: "electricity", value: 20},
-    %{source: "gas", target: "electricity", value: 15},
-    %{source: "gas", target: "heating", value: 10},
-    %{source: "nuclear", target: "electricity", value: 18},
-    %{source: "solar", target: "electricity", value: 8},
-    %{source: "oil", target: "transport", value: 25},
-    # Conversion to end use
-    %{source: "electricity", target: "industry", value: 25},
-    %{source: "electricity", target: "homes", value: 20},
-    %{source: "electricity", target: "transport", value: 16},
-    %{source: "heating", target: "homes", value: 10},
-    %{source: "transport", target: "industry", value: 15}
+  alias Examples.Charts.Design
+
+  @margin %{top: 25, right: 90, bottom: 25, left: 60}
+
+  # Energy flow — the classic Sankey example: sources to conversion to end use, each flow
+  # with the phase and the amplitude its animation breathes by.
+  @flows [
+    {"Coal", "Electricity", 20, 0.0, 8},
+    {"Natural Gas", "Electricity", 15, 0.5, 6},
+    {"Natural Gas", "Heating", 10, 1.0, 4},
+    {"Nuclear", "Electricity", 18, 1.5, 3},
+    {"Solar", "Electricity", 8, 2.0, 6},
+    {"Oil", "Transport", 25, 2.5, 8},
+    {"Electricity", "Industry", 25, 3.0, 10},
+    {"Electricity", "Homes", 20, 3.5, 8},
+    {"Electricity", "Transport", 16, 4.0, 6},
+    {"Heating", "Homes", 10, 4.5, 5},
+    {"Transport", "Industry", 15, 5.0, 6}
   ]
 
   def title, do: "Sankey Diagram"
   def description, do: "Energy flow from sources to end use"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 700
     height = opts[:height] || 400
+    flows = rows(opts)
+    # The nodes in the layout's own order: every source, then every target, as first met.
+    names = Enum.uniq(Enum.map(flows, & &1.source) ++ Enum.map(flows, & &1.target))
 
-    animation_tick = opts[:animation_tick]
+    layout = [padding: 15]
+    nodes = sankey(from(:flows), [:source, :target], :value, layout)
+    links = sankey(from(:flows), [:source, :target], :value, layout ++ [output: :links])
+    edges = %{x0: :x0, x1: :x1, y0: :y0, y1: :y1}
 
-    nodes = opts[:nodes] || @nodes
-    links = if animation_tick do
-      generate_animated_links(animation_tick)
-    else
-      opts[:links] || @links
-    end
-
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
-
-    chart_width = width - 150
-    chart_height = height - 50
-
-    # Compute sankey layout
-    sankey = Sankey.new()
-      |> Sankey.size(chart_width, chart_height)
-      |> Sankey.node_width(20)
-      |> Sankey.node_padding(15)
-      |> Sankey.iterations(32)
-      |> Sankey.compute(nodes, links)
-
-    # Find actual bounds and compute scale to fit (check both nodes and links)
-    node_y = sankey.nodes |> Enum.flat_map(fn n -> [n.y0, n.y1] end)
-    link_y = sankey.links |> Enum.flat_map(fn l -> [l.y0, l.y1, l.y0 + l.width, l.y1 + l.width] end)
-    all_y = node_y ++ link_y
-    max_y = Enum.max(all_y, fn -> chart_height end)
-    y_scale = if max_y > chart_height, do: chart_height / max_y, else: 1.0
-
-    # Scale nodes to fit
-    scaled_nodes = Enum.map(sankey.nodes, fn node ->
-      %{node |
-        y0: node.y0 * y_scale,
-        y1: node.y1 * y_scale
-      }
-    end)
-
-    # Scale links to fit (set path to nil to force regeneration)
-    scaled_links = Enum.map(sankey.links, fn link ->
-      %{link |
-        y0: link.y0 * y_scale,
-        y1: link.y1 * y_scale,
-        width: link.width * y_scale,
-        source_node: %{link.source_node | y0: link.source_node.y0 * y_scale, y1: link.source_node.y1 * y_scale},
-        target_node: %{link.target_node | y0: link.target_node.y0 * y_scale, y1: link.target_node.y1 * y_scale},
-        path: nil
-      }
-    end)
-
-    # Draw links
-    link_elements = Enum.map(scaled_links, fn link ->
-      path_d = Sankey.link_path(link)
-      source_idx = Enum.find_index(sankey.nodes, fn n -> n.id == link.source end) || 0
-      color = Enum.at(colors, rem(source_idx, length(colors)))
-
-      Element.path(%{
-        d: path_d,
-        fill: color,
-        fill_opacity: 0.4,
-        stroke: "none"
-      })
-    end)
-
-    # Draw nodes
-    node_elements = scaled_nodes
-      |> Enum.with_index()
-      |> Enum.map(fn {node, idx} ->
-        color = Enum.at(colors, rem(idx, length(colors)))
-        node_height = max(2, node.y1 - node.y0)
-
-        group = Element.g(%{})
-          |> Element.append(
-            Element.rect(%{
-              x: node.x0,
-              y: node.y0,
-              width: node.x1 - node.x0,
-              height: node_height,
-              fill: color,
-              stroke: ColorPalettes.text_color(palette),
-              stroke_width: 0.5
-            })
-          )
-
-        # Label on right for left nodes, left for right nodes
-        {label_x, text_anchor} = if node.x0 < (width - 150) / 2 do
-          {node.x1 + 6, "start"}
-        else
-          {node.x0 - 6, "end"}
-        end
-
-        Element.append(group,
-          Element.text(%{
-            x: label_x,
-            y: node.y0 + node_height / 2 + 4,
-            text_anchor: text_anchor,
-            font_size: 11,
-            fill: ColorPalettes.text_color(palette)
-          })
-          |> Element.content(node.name || node.id)
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:flows, [:source, :target, :value]),
+        style(:ribbon, fill: {:field, :source}, fill_opacity: 0.4, stroke: :none),
+        style(:node, fill: {:field, :id}, stroke: :text, stroke_width: 0.5),
+        style(:name, extends: :label, font_size: 11),
+        cartesian(width, height, margin: @margin),
+        ordinal_scale(:color, domain: names),
+        path(links, %{path: :path}, style: :ribbon),
+        # Every node named to the right of its bar — but the last column, which nothing
+        # leaves, to the left.
+        rect(filter(nodes, :height, test: :gt, value: 0), edges,
+          label: %{text: [{:field, :id}], anchor: :x1, style: :name},
+          style: :node
+        ),
+        rect(filter(nodes, :height, test: :eq, value: 0), edges,
+          label: %{text: [{:field, :id}], anchor: :x0, style: :name},
+          style: :node
         )
-      end)
+      ])
 
-    # Compose SVG
-    chart_group = Element.g(%{transform: "translate(60,25)"})
-      |> Element.append(link_elements)
-      |> Element.append(node_elements)
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{flows: flows}}
   end
 
-  # Animation: vary flow values with smooth sine waves
-  # Each link has its own phase offset for visual interest
-  defp generate_animated_links(tick) do
-    phase = tick * 0.08
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-    # Base values for each link with individual phase offsets
-    base_links = [
-      # Sources to conversion - primary energy fluctuates
-      {%{source: "coal", target: "electricity"}, 20, 0.0, 8},
-      {%{source: "gas", target: "electricity"}, 15, 0.5, 6},
-      {%{source: "gas", target: "heating"}, 10, 1.0, 4},
-      {%{source: "nuclear", target: "electricity"}, 18, 1.5, 3},  # Nuclear is more stable
-      {%{source: "solar", target: "electricity"}, 8, 2.0, 6},     # Solar varies more (day/night)
-      {%{source: "oil", target: "transport"}, 25, 2.5, 8},
-      # Conversion to end use - demand fluctuates
-      {%{source: "electricity", target: "industry"}, 25, 3.0, 10},
-      {%{source: "electricity", target: "homes"}, 20, 3.5, 8},
-      {%{source: "electricity", target: "transport"}, 16, 4.0, 6},
-      {%{source: "heating", target: "homes"}, 10, 4.5, 5},
-      {%{source: "transport", target: "industry"}, 15, 5.0, 6}
-    ]
+  # The flows as rows; animated, each breathes about its value with its own phase.
+  defp rows(opts) do
+    case opts[:animation_tick] do
+      nil ->
+        opts[:flows] ||
+          for {s, t, v, _phase, _amplitude} <- @flows, do: %{source: s, target: t, value: v}
 
-    Enum.map(base_links, fn {link_base, base_value, phase_offset, amplitude} ->
-      # Smooth sine wave variation
-      variation = :math.sin(phase + phase_offset) * amplitude
-      value = max(2, base_value + variation)  # Ensure minimum flow
+      tick ->
+        phase = tick * 0.08
 
-      Map.put(link_base, :value, value)
-    end)
+        for {s, t, v, offset, amplitude} <- @flows do
+          %{source: s, target: t, value: max(2, v + :math.sin(phase + offset) * amplitude)}
+        end
+    end
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Layout.Sankey
+    import Visualize.Chart.Build
 
-    nodes = [
-      %{id: "a", name: "Source A"},
-      %{id: "b", name: "Target B"}
-    ]
+    nodes = sankey(from(:flows), [:source, :target], :value, padding: 15)
+    links = sankey(from(:flows), [:source, :target], :value, padding: 15, output: :links)
+    edges = %{x0: :x0, x1: :x1, y0: :y0, y1: :y1}
 
-    links = [
-      %{source: "a", target: "b", value: 10}
-    ]
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Sankey Diagram"}),
+        source(:flows, [:source, :target, :value]),
+        style(:ribbon, fill: {:field, :source}, fill_opacity: 0.4, stroke: :none),
+        style(:node, fill: {:field, :id}, stroke: :text, stroke_width: 0.5),
+        style(:name, extends: :label, font_size: 11),
+        cartesian(700, 400, margin: %{top: 25, right: 90, bottom: 25, left: 60}),
+        ordinal_scale(:color, domain: ["Coal", "Natural Gas", "Oil", "Nuclear", "Solar",
+          "Electricity", "Heating", "Transport", "Industry", "Homes"]),
+        # The ribbons are ready paths (spec/14 §5.4.3); the nodes read their own edges,
+        # named to the right — and the last column, which nothing leaves, to the left.
+        path(links, %{path: :path}, style: :ribbon),
+        rect(filter(nodes, :height, test: :gt, value: 0), edges,
+          label: %{text: [{:field, :id}], anchor: :x1, style: :name},
+          style: :node
+        ),
+        rect(filter(nodes, :height, test: :eq, value: 0), edges,
+          label: %{text: [{:field, :id}], anchor: :x0, style: :name},
+          style: :node
+        )
+      ])
 
-    sankey = Sankey.new()
-      |> Sankey.size(width, height)
-      |> Sankey.node_width(20)
-      |> Sankey.node_padding(10)
-      |> Sankey.compute(nodes, links)
-
-    # sankey.nodes have x0, x1, y0, y1
-    # sankey.links have path data
+    # flows: one row per flow — source, target, value.
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{flows: flows})
+    Visualize.Chart.render(applied)
     """
   end
 end

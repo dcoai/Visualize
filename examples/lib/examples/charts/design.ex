@@ -25,6 +25,8 @@ defmodule Examples.Charts.Design do
   alias Visualize.IR.Element
   alias Visualize.Render
 
+  @hierarchy_fields [:id, :parent, :name, :value, :branch]
+
   @doc """
   The fragments folded into a design (spec/14 §16.1).
 
@@ -109,6 +111,34 @@ defmodule Examples.Charts.Design do
       width: applied.frame.size.width,
       height: applied.frame.size.height
     }
+  end
+
+  @doc """
+  The columns of `nodes/1`'s rows: what a hierarchy chart's source declares.
+  """
+  @spec hierarchy_fields() :: [atom()]
+  def hierarchy_fields, do: @hierarchy_fields
+
+  @doc """
+  A nested `%{name, value, children}` map as the flat node list a hierarchy transform reads
+  (spec/14 §5.4.2): one row per node in pre-order — the dotted position as `id`, its
+  parent's, the node's `name` and `value` (`0` when absent), and `branch`, the index of
+  the root's child it descends from, which is what a hierarchy's colour scale reads (D-46;
+  `nil` for the root). The mapping `Visualize.Chart.Presets.sources/2` applies to a
+  component's tree, for the gallery's own trees.
+  """
+  @spec nodes(map()) :: [map()]
+  def nodes(tree), do: flatten(tree, "0", nil, nil)
+
+  defp flatten(node, id, parent, branch) do
+    row = %{id: id, parent: parent, name: node[:name], value: node[:value] || 0, branch: branch}
+
+    children =
+      (node[:children] || [])
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {child, i} -> flatten(child, "#{id}.#{i}", id, branch || i) end)
+
+    [row | children]
   end
 
   @doc "The plot area of a frame of `width` by `height` with `margin` (spec/14 §4.2)."

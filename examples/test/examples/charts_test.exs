@@ -18,7 +18,8 @@ defmodule Examples.ChartsTest do
   alias Visualize.Chart
 
   # The families of #124 that have been through the layer, in the proposal's order:
-  # work item 1 (#125, cartesian basics) and work item 2 (#126, angular and radial).
+  # work item 1 (#125, cartesian basics), work item 2 (#126, angular and radial) and
+  # work item 3 (#127, hierarchy and graph).
   @families [
     Examples.Charts.LineChart,
     Examples.Charts.MultiLineChart,
@@ -34,7 +35,13 @@ defmodule Examples.ChartsTest do
     Examples.Charts.DonutChart,
     Examples.Charts.RadialBarChart,
     Examples.Charts.SunburstChart,
-    Examples.Charts.ChordDiagram
+    Examples.Charts.ChordDiagram,
+    Examples.Charts.TreemapChart,
+    Examples.Charts.CirclePacking,
+    Examples.Charts.TreeLayout,
+    Examples.Charts.ClusterDendrogram,
+    Examples.Charts.SankeyDiagram,
+    Examples.Charts.ForceGraph
   ]
 
   # Converted and deterministic: these hold the golden.
@@ -51,7 +58,12 @@ defmodule Examples.ChartsTest do
     Examples.Charts.SunburstChart,
     Examples.Charts.RadialBarChart,
     Examples.Charts.ChordDiagram,
-    Examples.Charts.GroupedBarChart
+    Examples.Charts.GroupedBarChart,
+    Examples.Charts.TreemapChart,
+    Examples.Charts.CirclePacking,
+    Examples.Charts.TreeLayout,
+    Examples.Charts.ClusterDendrogram,
+    Examples.Charts.SankeyDiagram
   ]
 
   # Converted, but seeded at compile time: asserted on, never recorded.
@@ -60,9 +72,8 @@ defmodule Examples.ChartsTest do
     Examples.Charts.ScatterPlot
   ]
 
-  # Left imperative, each with a filed gap named in its `@moduledoc`: none of these
-  # families any more (#335); the list stays for the next family's conversions.
-  @filed []
+  # Left imperative, each with the filed gap named in its `@moduledoc` (#335).
+  @filed [{Examples.Charts.ForceGraph, "#346"}]
 
   @golden "test/support/charts_golden.txt"
 

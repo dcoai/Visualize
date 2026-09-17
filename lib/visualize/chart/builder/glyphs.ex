@@ -31,6 +31,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       :position,
       :text_anchor,
       :orientation,
+      :link,
       :kind
     ]
 
@@ -312,6 +313,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp picture(:orientation, :horizontal),
       do:
         ~s|<g fill="currentColor"><rect x="5" y="5" width="10" height="4"/><rect x="5" y="10" width="14" height="4"/><rect x="5" y="15" width="7" height="4"/></g>|
+
+    # A parent at the top left joined to a child at the bottom right (spec/14 §5.4.2).
+    defp picture(:link, :curve),
+      do:
+        ~s|<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 5 C6 14 18 10 18 19"/></g>|
+
+    defp picture(:link, :elbow),
+      do:
+        ~s|<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5 H18 V19"/></g>|
+
+    defp picture(:link, :line),
+      do:
+        ~s|<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 5 L18 19"/></g>|
 
     defp picture(:kind, :cartesian),
       do:

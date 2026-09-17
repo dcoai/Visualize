@@ -1,5 +1,13 @@
 defmodule Examples.Charts.ForceGraph do
-  @moduledoc "Force-directed graph layout example"
+  @moduledoc """
+  Force-directed graph layout example.
+
+  Left imperative by #127 (the hierarchy and graph family as designs): the `:force`
+  transform derives its nodes from the flows, so a node row has no `group` for the colour
+  to read, and its forces are fixed at strengths that pack these twelve nodes into a blob
+  (spec/14 §5.4.3). Both are one gap, filed as #346 — a node source on the graph
+  transforms, and `strength` and `distance` on `:force`; the chart converts when it lands.
+  """
 
   alias Visualize.Layout.Force
   alias Visualize.SVG.Element
