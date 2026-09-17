@@ -145,6 +145,7 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:data, {:one_of, [{:ref, :source}, {:node, :data}]}, :binding, required: true),
       spec(:channels, {:node, :channels}, :channel, default: %{}),
       spec(:scales, {:node, :mark_scales}, :channel, default: %{}),
+      spec(:offset, {:node, :mark_offset}, :channel, default: %{}),
       spec(:options, {:node, :options}, :geometry, default: %{}),
       spec(
         :style,
@@ -194,7 +195,14 @@ defmodule Visualize.Chart.Schema.Mark do
   # The scale names of the frame kinds' tables (spec/14 §4.3), each renamed to a declared
   # scale by a mark's `scales` node (§5.1).
   def describe(:mark_scales) do
-    for key <- [:x, :y, :angle, :r, :color], do: spec(key, {:ref, :scale}, :channel)
+    for key <- [:x, :y, :angle, :r, :color, :x_offset, :y_offset],
+        do: spec(key, {:ref, :scale}, :channel)
+  end
+
+  # A band within a band (spec/14 §5.1, D-109): the field that places a datum within its
+  # band on a family, read through the family's offset scale.
+  def describe(:mark_offset) do
+    for key <- [:x, :y], do: spec(key, :field, :channel)
   end
 
   def describe(:options) do

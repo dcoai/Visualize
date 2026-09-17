@@ -81,6 +81,7 @@ defmodule Visualize.Chart.ValidatorTest do
         },
         channels: %{value: :count},
         scales: %{color: :color},
+        offset: %{x: :v},
         options: %{inner_radius: 10, outer_radius: 50}
       }
     ],
@@ -117,6 +118,7 @@ defmodule Visualize.Chart.ValidatorTest do
     transform: [:marks, 2, :data, :transforms, 0],
     channels: [:marks, 2, :channels],
     mark_scales: [:marks, 2, :scales],
+    mark_offset: [:marks, 2, :offset],
     options: [:marks, 2, :options],
     mark_label: [:marks, 1, :label],
     tooltip: [:marks, 2, :tooltip]

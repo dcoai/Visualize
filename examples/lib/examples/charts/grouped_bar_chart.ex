@@ -1,17 +1,17 @@
 defmodule Examples.Charts.GroupedBarChart do
   @moduledoc """
-  Grouped bar chart with multiple series — **left imperative** (#125).
-
-  A grouped bar is two band scales, the inner one ranged over the outer one's bandwidth, and
-  a mark reads exactly one scale per channel family: there is no offset within a band.
-  Filed as #132 with this chart as the evidence. The three workarounds — one band over the
-  pairs, a `:facet` frame, or the pixel x precomputed into the rows — each produce a
-  different chart or put the layout back in the caller, so none of them is a conversion.
+  Grouped bar chart as a design (#125, #132): one `:rect` mark over one row per bar, the
+  series placed within the quarter's band by an **offset** — `offset: %{x: :series}` on
+  the mark and an `x_offset` band scale in the frame whose range is the quarter band's
+  width (spec/14 §4.3, §5.1, D-109). The wide rows of the imperative chart are folded
+  to long ones by the `:fold` transform, so the design reads `quarter`, `series`, `value`.
   """
 
-  alias Visualize.Scale
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 30, right: 100, bottom: 50, left: 60}
 
   @data [
     %{category: "Q1", sales: 120, expenses: 90, profit: 30},
@@ -19,169 +19,95 @@ defmodule Examples.Charts.GroupedBarChart do
     %{category: "Q3", sales: 180, expenses: 120, profit: 60},
     %{category: "Q4", sales: 200, expenses: 130, profit: 70}
   ]
-
   @series [:sales, :expenses, :profit]
 
   def title, do: "Grouped Bar Chart"
   def description, do: "Quarterly financial comparison"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 500
     height = opts[:height] || 350
-    margin = %{top: 30, right: 100, bottom: 50, left: 60}
 
-    chart_width = width - margin.left - margin.right
-    chart_height = height - margin.top - margin.bottom
-
-    base_data = opts[:data] || @data
-    series = @series
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
-
-    # Apply animation if tick is provided
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      animate_data(base_data, animation_tick)
-    else
-      base_data
-    end
-
-    # Create scales
-    categories = Enum.map(data, & &1.category)
-
-    x0_scale = Scale.Band.new()
-      |> Scale.Band.domain(categories)
-      |> Scale.Band.range([0, chart_width])
-      |> Scale.Band.padding(0.2)
-
-    x1_scale = Scale.Band.new()
-      |> Scale.Band.domain(series)
-      |> Scale.Band.range([0, Scale.Band.bandwidth(x0_scale)])
-      |> Scale.Band.padding(0.05)
-
-    max_value = data
-      |> Enum.flat_map(fn d -> Enum.map(series, &Map.get(d, &1, 0)) end)
-      |> Enum.max()
-
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_value * 1.1])
-      |> Scale.Linear.range([chart_height, 0])
-
-    # Draw bars
-    bar_groups = Enum.map(data, fn d ->
-      group_x = Scale.Band.apply(x0_scale, d.category)
-
-      bars = series
-        |> Enum.with_index()
-        |> Enum.map(fn {key, i} ->
-          value = Map.get(d, key, 0)
-          bar_x = group_x + Scale.Band.apply(x1_scale, key)
-          bar_y = Scale.Linear.apply(y_scale, value)
-          bar_height = chart_height - bar_y
-
-          Element.rect(%{
-            x: bar_x,
-            y: bar_y,
-            width: Scale.Band.bandwidth(x1_scale),
-            height: bar_height,
-            fill: Enum.at(colors, rem(i, length(colors))),
-            rx: 2
-          })
-        end)
-
-      Element.g(%{}) |> Element.append(bars)
-    end)
-
-    # X-axis labels
-    x_labels = Enum.map(data, fn d ->
-      x = Scale.Band.apply(x0_scale, d.category) + Scale.Band.bandwidth(x0_scale) / 2
-
-      Element.text(%{
-        x: x,
-        y: chart_height + 20,
-        text_anchor: "middle",
-        font_size: 11,
-        fill: ColorPalettes.text_color(palette)
-      })
-      |> Element.content(d.category)
-    end)
-
-    # Y-axis
-    y_ticks = for i <- 0..5, do: max_value * 1.1 * i / 5
-
-    y_axis = Enum.map(y_ticks, fn tick ->
-      y = Scale.Linear.apply(y_scale, tick)
-
-      Element.g(%{})
-      |> Element.append(
-        Element.line(%{x1: -5, x2: chart_width, y1: y, y2: y, stroke: "#ddd", stroke_width: 1})
-      )
-      |> Element.append(
-        Element.text(%{x: -10, y: y + 4, text_anchor: "end", font_size: 10, fill: ColorPalettes.axis_color(palette)})
-        |> Element.content("#{trunc(tick)}")
-      )
-    end)
-
-    # Legend
-    legend = series
-      |> Enum.with_index()
-      |> Enum.map(fn {key, i} ->
-        Element.g(%{transform: "translate(#{chart_width + 20},#{i * 20})"})
-        |> Element.append(
-          Element.rect(%{width: 15, height: 15, fill: Enum.at(colors, rem(i, length(colors))), rx: 2})
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:quarters, [:category, :sales, :expenses, :profit]),
+        style(:bar, fill: {:field, :series}),
+        cartesian(width, height, margin: @margin),
+        band_scale(:x, padding: 0.2),
+        band_scale(:x_offset, padding: 0.05),
+        linear_scale(:y, domain: [0, :auto], nice: true),
+        ordinal_scale(:color, domain: @series),
+        axis(:x, :bottom),
+        axis(:y, :left, ticks: 5, grid: true),
+        legend(:color, position: :top_right),
+        # One row per bar: the wide quarter folded to (quarter, series, value); the series
+        # places the bar within its quarter's band through the offset (D-109).
+        rect(fold(:quarters, @series, as: [:series, :value]),
+          %{x0: :category, x1: :category, y0: 0, y1: :value},
+          offset: %{x: :series},
+          options: %{corner_radius: 2},
+          style: :bar
         )
-        |> Element.append(
-          Element.text(%{x: 20, y: 12, font_size: 11, fill: ColorPalettes.text_color(palette)})
-          |> Element.content(Atom.to_string(key) |> String.capitalize())
-        )
-      end)
+      ])
 
-    # Compose SVG
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(y_axis)
-      |> Element.append(bar_groups)
-      |> Element.append(x_labels)
-      |> Element.append(legend)
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{quarters: rows(opts)}}
   end
 
-  # Animation: bars grow and shrink with wave effect
-  defp animate_data(data, tick) do
-    data
-    |> Enum.with_index()
-    |> Enum.map(fn {item, i} ->
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  defp rows(opts) do
+    base = opts[:data] || @data
+
+    case opts[:animation_tick] do
+      nil -> base
+      tick -> animate(base, tick)
+    end
+  end
+
+  # Animation: each series oscillates about its value with its own phase.
+  defp animate(data, tick) do
+    for {item, i} <- Enum.with_index(data) do
       phase = i * 0.5
-      # Each series oscillates with different phase
+
       %{
-        item |
-        sales: item.sales * (1.0 + 0.3 * :math.sin(tick * 0.1 + phase)),
-        expenses: item.expenses * (1.0 + 0.3 * :math.sin(tick * 0.1 + phase + 1)),
-        profit: item.profit * (1.0 + 0.4 * :math.sin(tick * 0.1 + phase + 2))
+        item
+        | sales: item.sales * (1.0 + 0.3 * :math.sin(tick * 0.1 + phase)),
+          expenses: item.expenses * (1.0 + 0.3 * :math.sin(tick * 0.1 + phase + 1)),
+          profit: item.profit * (1.0 + 0.4 * :math.sin(tick * 0.1 + phase + 2))
       }
-    end)
+    end
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Scale
+    import Visualize.Chart.Build
 
-    # Outer scale for categories
-    x0_scale = Scale.Band.new()
-      |> Scale.Band.domain(categories)
-      |> Scale.Band.range([0, width])
-      |> Scale.Band.padding(0.2)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Grouped Bar Chart"}),
+        source(:quarters, [:category, :sales, :expenses, :profit]),
+        style(:bar, fill: {:field, :series}),
+        cartesian(500, 350, margin: %{top: 30, right: 100, bottom: 50, left: 60}),
+        band_scale(:x, padding: 0.2),
+        # The band within the band: its range is the quarter band's width (spec/14 §4.3).
+        band_scale(:x_offset, padding: 0.05),
+        linear_scale(:y, domain: [0, :auto], nice: true),
+        ordinal_scale(:color, domain: [:sales, :expenses, :profit]),
+        axis(:x, :bottom),
+        axis(:y, :left, ticks: 5, grid: true),
+        legend(:color, position: :top_right),
+        # One rect per bar; the series places it within its quarter (D-109).
+        rect(fold(:quarters, [:sales, :expenses, :profit], as: [:series, :value]),
+          %{x0: :category, x1: :category, y0: 0, y1: :value},
+          offset: %{x: :series},
+          style: :bar
+        )
+      ])
 
-    # Inner scale for series within each category
-    x1_scale = Scale.Band.new()
-      |> Scale.Band.domain(series_keys)
-      |> Scale.Band.range([0, Scale.Band.bandwidth(x0_scale)])
-      |> Scale.Band.padding(0.05)
-
-    # Position each bar
-    group_x = Scale.Band.apply(x0_scale, category)
-    bar_x = group_x + Scale.Band.apply(x1_scale, series_key)
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{quarters: quarters})
+    Visualize.Chart.render(applied)
     """
   end
 end

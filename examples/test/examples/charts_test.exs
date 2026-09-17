@@ -50,7 +50,8 @@ defmodule Examples.ChartsTest do
     Examples.Charts.DonutChart,
     Examples.Charts.SunburstChart,
     Examples.Charts.RadialBarChart,
-    Examples.Charts.ChordDiagram
+    Examples.Charts.ChordDiagram,
+    Examples.Charts.GroupedBarChart
   ]
 
   # Converted, but seeded at compile time: asserted on, never recorded.
@@ -59,10 +60,9 @@ defmodule Examples.ChartsTest do
     Examples.Charts.ScatterPlot
   ]
 
-  # Left imperative, each with a filed gap named in its `@moduledoc`.
-  @filed [
-    {Examples.Charts.GroupedBarChart, "#132"}
-  ]
+  # Left imperative, each with a filed gap named in its `@moduledoc`: none of these
+  # families any more (#335); the list stays for the next family's conversions.
+  @filed []
 
   @golden "test/support/charts_golden.txt"
 

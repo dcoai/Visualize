@@ -36,7 +36,7 @@ defmodule Visualize.Chart.MarkTest do
       Map.merge(
         %{
           version: 1,
-          sources: %{primary: %{fields: [:t, :v, :lo, :hi, :lo2, :hi2, :k]}},
+          sources: %{primary: %{fields: [:t, :v, :lo, :hi, :lo2, :hi2, :k, :s]}},
           frame: @frame,
           marks: [Map.merge(%{data: :primary}, mark)]
         },
@@ -340,6 +340,73 @@ defmodule Visualize.Chart.MarkTest do
         generate(%{type: :symbol, channels: %{x: :k, y: :v}}, %{frame: frame}).children
 
       assert point.transform == Visualize.IR.Transform.translate(75.0, 120.0)
+    end
+
+    test "an offset places a datum within its band: the two-band grouped bar, byte for byte the hand-built one (#132, D-109)" do
+      # Rows: k0 and k1 twice each (t = 0..3), s = the series within the category.
+      rows =
+        for {v, i} <- Enum.with_index([4, 9, 2, 7]),
+            do: %{k: "k#{rem(i, 2)}", s: "s#{div(i, 2)}", v: v}
+
+      scales = %{
+        x: %{kind: :band, domain: ["k0", "k1"], padding: 0.2},
+        x_offset: %{kind: :band, padding: 0.1},
+        y: %{kind: :linear, domain: [0, 10]}
+      }
+
+      chart =
+        chart(
+          %{type: :rect, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}, offset: %{x: :s}},
+          %{frame: Map.put(@frame, :scales, scales)}
+        )
+
+      frame = Frame.new(chart, sources: %{primary: rows})
+      # The offset scale's domain is the offset field's values, its range the outer bandwidth.
+      assert frame.scales.x_offset.domain == ["s0", "s1"]
+
+      assert frame.scales.x_offset.range == [
+               0,
+               Visualize.Scale.Band.bandwidth(frame.scales.x)
+             ]
+
+      rects = Mark.generate(frame, hd(chart.marks), sources: %{primary: rows}).children
+
+      # By hand: the outer band over the categories, the inner over the series inside it.
+      outer =
+        Scale.band()
+        |> Scale.domain(["k0", "k1"])
+        |> Scale.range([0, 300])
+        |> Scale.Band.padding(0.2)
+
+      inner =
+        Scale.band()
+        |> Scale.domain(["s0", "s1"])
+        |> Scale.range([0, Scale.Band.bandwidth(outer)])
+        |> Scale.Band.padding(0.1)
+
+      expected =
+        for %{k: k, s: s, v: v} <- rows do
+          x = Scale.apply(outer, k) + Scale.apply(inner, s)
+          {x, Scale.apply(y(), v), Scale.Band.bandwidth(inner), 200 - Scale.apply(y(), v)}
+        end
+
+      round4 = fn tuple -> tuple |> Tuple.to_list() |> Enum.map(&Float.round(&1 * 1.0, 4)) end
+
+      assert Enum.map(rects, &round4.({&1.attrs.x, &1.attrs.y, &1.attrs.width, &1.attrs.height})) ==
+               Enum.map(expected, round4)
+
+      # A series the inner scale lacks places nothing; a family whose outer is not a band too.
+      lacking = Map.put(scales, :x_offset, %{kind: :band, domain: ["s0"]})
+
+      chart2 =
+        chart(%{type: :rect, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}, offset: %{x: :s}}, %{
+          frame: Map.put(@frame, :scales, lacking)
+        })
+
+      frame2 = Frame.new(chart2, sources: %{primary: rows})
+
+      assert length(Mark.generate(frame2, hd(chart2.marks), sources: %{primary: rows}).children) ==
+               2
     end
 
     test "a datum a scale cannot place is dropped from a per-datum mark and breaks a path" do
