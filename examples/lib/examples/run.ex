@@ -216,11 +216,33 @@ defmodule Examples.Run do
     {%{run | sent_seq: seq, needs_full: needs_full}, seq}
   end
 
-  @doc "A frame rendering in a task (#323): `fun` runs under `Examples.TaskSupervisor`, unlinked."
+  @doc """
+  A frame rendering in a task (#323): `fun` runs under `Examples.TaskSupervisor`,
+  unlinked. With no supervisor running the run fails open — stopped, its `error` saying
+  what to do — rather than raising in the view (#340).
+  """
   @spec rendering(t(), (-> term())) :: t()
   def rendering(%__MODULE__{task: nil} = run, fun) do
-    task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, fun)
-    %{run | task: task, render_started: System.monotonic_time(:microsecond)}
+    case supervisor() do
+      :ok ->
+        task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, fun)
+        %{run | task: task, render_started: System.monotonic_time(:microsecond)}
+
+      {:error, message} ->
+        %{run | running: false, error: message}
+    end
+  end
+
+  @no_supervisor "the task supervisor is not running — the server was started before Examples.TaskSupervisor joined its supervision tree; restart the server (a recompile does not rebuild the tree)"
+
+  @doc """
+  Whether `Examples.TaskSupervisor` is running: `:ok`, or `{:error, message}` saying
+  what to do — a server started before the supervisor joined the application's tree has
+  the new code and the old tree, and every task start would raise (#340).
+  """
+  @spec supervisor() :: :ok | {:error, String.t()}
+  def supervisor do
+    if Process.whereis(Examples.TaskSupervisor), do: :ok, else: {:error, @no_supervisor}
   end
 
   @doc """

@@ -193,8 +193,16 @@ defmodule ExamplesWeb.ChartLive do
     %{module: module} = socket.assigns
     assigns = socket.assigns
     opts_for = fn tick -> run_opts(assigns, tick) end
-    task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, fn -> {:compare, Compare.run(module, opts_for, 100)} end)
-    {:noreply, assign(socket, compare_task: task, compare: nil)}
+
+    case Run.supervisor() do
+      :ok ->
+        task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, fn -> {:compare, Compare.run(module, opts_for, 100)} end)
+        {:noreply, assign(socket, compare_task: task, compare: nil)}
+
+      {:error, message} ->
+        # Fail open with the reason in the drawer (#340).
+        {:noreply, update(socket, :run, &%{&1 | error: message})}
+    end
   end
 
   def handle_event("run_compare", _params, socket), do: {:noreply, socket}
