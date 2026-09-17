@@ -5,6 +5,8 @@ defmodule Examples.Application do
   def start(_type, _args) do
     children = [
       {Phoenix.PubSub, name: Examples.PubSub},
+      # A performance run's frames render here, off the view's process (#323)
+      {Task.Supervisor, name: Examples.TaskSupervisor},
       ExamplesWeb.Endpoint
     ]
 
