@@ -383,7 +383,7 @@ Rendering reads `data-commands` — the `:json` output of `Visualize.Backend.Can
 
 ### 8.2 `CanvasBinaryChart` behaviour
 
-Attach as for `CanvasChart` (7.2). The hook renders on `mounted()`, on `updated()`, and on a `canvas_update` event with a `binary` key, which it stores into `data-binary` first. Rendering reads `data-binary` (a `Visualize.Backend.CanvasBinary.to_base64/1` string), skips a value equal to the last rendered, resets the transform, clears the canvas and calls `executeVisualizeBinary(ctx, decodeBase64(value))`.
+Attach as for `CanvasChart` (7.2). The hook renders on `mounted()`, on `updated()`, and on a `canvas_update` event with a `binary` key, which it stores into `data-binary` first. Rendering reads `data-binary` (a `Visualize.Backend.CanvasBinary.to_base64/1` string), skips a value equal to the last rendered, resets the transform, clears the canvas and calls `executeVisualizeBinary(ctx, decodeBase64(value))`. **The hook acknowledges `canvas_update` frames when asked** (#322), exactly as `CanvasIncrementalChart` does (9.2, D-107): a payload may carry a `seq`, and an element carrying `data-ack="<event>"` pushes `<event>` with `%{seq, drawn, at}` at most once per `data-ack-interval` ms (default 100), with a trailing flush — so a page streaming whole frames to the binary canvas at a rate can see and bound what the browser has drawn, as a page streaming increments can.
 
 ### 8.3 The decoder
 

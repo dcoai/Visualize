@@ -169,6 +169,18 @@ defmodule Visualize.Hooks.CanvasHooksTest do
     assert hook =~ "new Function('ctx', script)(ctx)"
   end
 
+  test "CanvasBinaryChart acknowledges canvas_update frames when asked, as the incremental hook does (#322)" do
+    hook = Hooks.CanvasBinary.js_hook()
+    assert hook =~ "this.ackEvent = this.el.dataset.ack || null;"
+    assert hook =~ "parseInt(this.el.dataset.ackInterval, 10) || 100"
+
+    assert hook =~
+             ~r/this\.render\(\);\s+if \(payload\.seq !== undefined\) this\.acknowledge\(payload\.seq\);/
+
+    assert hook =~
+             "this.pushEvent(this.ackEvent, { seq: this.ackSeq, drawn: this.ackDrawn, at: performance.now() });"
+  end
+
   test "CanvasBinaryChart reads data-binary and canvas_update events" do
     hook = Hooks.CanvasBinary.js_hook()
     assert hook =~ "this.handleEvent(\"canvas_update\""

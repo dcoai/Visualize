@@ -453,14 +453,38 @@ defmodule Visualize.Hooks.CanvasBinary do
         this.ctx = this.canvas.getContext('2d');
         this.lastData = null;
 
-        this.handleEvent("canvas_update", ({binary}) => {
-          this.el.dataset.binary = binary;
+        // Acknowledge frames when asked (spec/10 §8.2, D-107), as CanvasIncrementalChart
+        // does: data-ack names the event, data-ack-interval the most often it is pushed.
+        this.ackEvent = this.el.dataset.ack || null;
+        this.ackInterval = parseInt(this.el.dataset.ackInterval, 10) || 100;
+        this.ackSeq = null;
+        this.ackDrawn = 0;
+        this.ackTimer = null;
+
+        this.handleEvent("canvas_update", (payload) => {
+          this.el.dataset.binary = payload.binary;
           this.render();
+          if (payload.seq !== undefined) this.acknowledge(payload.seq);
         });
 
         this.render();
       },
-      destroyed() {},
+      destroyed() {
+        if (this.ackTimer !== null) clearTimeout(this.ackTimer);
+      },
+      acknowledge(seq) {
+        if (this.ackEvent === null) return;
+        this.ackSeq = seq;
+        this.ackDrawn += 1;
+        if (this.ackTimer === null) {
+          this.ackTimer = setTimeout(() => this.flushAck(), this.ackInterval);
+        }
+      },
+      flushAck() {
+        this.ackTimer = null;
+        this.pushEvent(this.ackEvent, { seq: this.ackSeq, drawn: this.ackDrawn, at: performance.now() });
+        this.ackDrawn = 0;
+      },
       updated() {
         this.render();
       },
