@@ -105,6 +105,7 @@ defmodule Visualize.Chart.Schema.Frame do
     [
       spec(:scale, {:ref, :scale}, :geometry, required: true),
       spec(:position, {:enum, @positions}, :geometry, default: :top_right),
+      spec(:inside, :boolean, :geometry, default: true),
       spec(:title, :text, :content, default: ""),
       spec(
         :style,

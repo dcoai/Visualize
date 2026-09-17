@@ -9,8 +9,8 @@ defmodule Examples.Charts.MultiLineChart do
   mark into one path per column and colours each from the scale (§5.6); the legend
   explains the same scale. A column the feed drops is a line that is simply not there.
 
-  The legend draws *inside* the plot area, at the top right of the right margin the chart
-  already reserved for it, because that is the only place the layer can put one (#136).
+  The legend draws in the right margin the chart reserves for it, `inside: false` at the
+  top right (spec/14 §4.5, #136).
   """
 
   import Visualize.Chart.Build
@@ -43,7 +43,7 @@ defmodule Examples.Charts.MultiLineChart do
         ordinal_scale(:color),
         axis(:x, :bottom, ticks: 10),
         axis(:y, :left, ticks: 5),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
         line(
           fold(:series, [:series_a, :series_b, :series_c, :series_d], as: [:series, :y]),
           %{x: :x, y: :y, series: :series},
@@ -105,7 +105,7 @@ defmodule Examples.Charts.MultiLineChart do
         ordinal_scale(:color),
         axis(:x, :bottom, ticks: 10),
         axis(:y, :left, ticks: 5),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
 
         # The fold makes one row per point per column the row has; `series` on the folded
         # key splits the mark into one path per column and colours each from `color`.

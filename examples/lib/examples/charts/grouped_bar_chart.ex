@@ -41,10 +41,11 @@ defmodule Examples.Charts.GroupedBarChart do
         ordinal_scale(:color, domain: @series),
         axis(:x, :bottom),
         axis(:y, :left, ticks: 5, grid: true),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
         # One row per bar: the wide quarter folded to (quarter, series, value); the series
         # places the bar within its quarter's band through the offset (D-109).
-        rect(fold(:quarters, @series, as: [:series, :value]),
+        rect(
+          fold(:quarters, @series, as: [:series, :value]),
           %{x0: :category, x1: :category, y0: 0, y1: :value},
           offset: %{x: :series},
           options: %{corner_radius: 2},
@@ -97,7 +98,7 @@ defmodule Examples.Charts.GroupedBarChart do
         ordinal_scale(:color, domain: [:sales, :expenses, :profit]),
         axis(:x, :bottom),
         axis(:y, :left, ticks: 5, grid: true),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
         # One rect per bar; the series places it within its quarter (D-109).
         rect(fold(:quarters, [:sales, :expenses, :profit], as: [:series, :value]),
           %{x0: :category, x1: :category, y0: 0, y1: :value},

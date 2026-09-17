@@ -94,8 +94,9 @@ defmodule Visualize.Chart.Frame do
     * `:theme` - a `%Visualize.Theme{}`; taken for any theme name the design gives, and
       required for one that is neither built-in nor inline
 
-  Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, or
-  a bound value a scale cannot take.
+  Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, a
+  bound value a scale cannot take, or a legend in a margin that cannot hold it (spec/14
+  §4.5).
   """
   @spec new(Chart.t(), keyword()) :: t()
   def new(%Chart{} = chart, opts \\ []) do
@@ -117,18 +118,22 @@ defmodule Visualize.Chart.Frame do
     facet = facet(kind, node, panels)
     scale_plot = if facet, do: panel_plot(plot, facet.columns, panels), else: plot
     ctx = context(scale_plot, projection)
+    scales = Scales.realise(chart, kind, scale_plot, theme, sources, styles, ctx)
+    legend = Map.get(node, :legend)
+    # A legend in a margin that cannot hold it is a fault here, not a clipped drawing (§4.5).
+    Legend.check!(legend, scales, margin, styles, theme)
 
     %__MODULE__{
       kind: kind,
       size: size,
       margin: margin,
       plot: plot,
-      scales: Scales.realise(chart, kind, scale_plot, theme, sources, styles, ctx),
+      scales: scales,
       projection: projection,
       panels: panels,
       facet: facet,
       axes: Map.get(node, :axes, []),
-      legend: Map.get(node, :legend),
+      legend: legend,
       labels: chart.labels,
       marks: chart.marks,
       theme: theme,

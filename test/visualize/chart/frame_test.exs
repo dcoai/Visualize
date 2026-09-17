@@ -10,6 +10,7 @@ defmodule Visualize.Chart.FrameTest do
 
   alias Visualize.{Axis, Chart, Render, Scale, Theme}
   alias Visualize.Chart.Frame
+  alias Visualize.Chart.Frame.Legend
 
   doctest Frame
   alias Visualize.IR.{Element, Transform}
@@ -862,6 +863,95 @@ defmodule Visualize.Chart.FrameTest do
       frame = addressed()
       canvas = Frame.render(frame, sources: %{primary: @rows}, backend: :canvas, paths: true)
       assert canvas == Frame.render(frame, sources: %{primary: @rows}, backend: :canvas)
+    end
+  end
+
+  describe "a legend in a margin (spec/14 §4.5, #136)" do
+    # 400 × 300 with margins of 100: a 200 × 100 plot with room on every side.
+    defp legend_frame(legend, margin \\ %{top: 100, right: 100, bottom: 100, left: 100}) do
+      chart(
+        %{
+          size: %{width: 400, height: 300},
+          margin: margin,
+          scales: %{x: %{kind: :linear}, y: %{kind: :linear}, color: %{kind: :ordinal}},
+          legend: Map.merge(%{scale: :color}, legend)
+        },
+        %{
+          marks: [%{type: :line, data: :primary, channels: %{x: :n, y: :v}, style: :by_k}],
+          styles: %{by_k: %{stroke: {:field, :k}}}
+        }
+      )
+      |> Frame.new(sources: %{primary: @rows})
+    end
+
+    defp legend_at(frame) do
+      [group] = Legend.generate(frame, :literal)
+      {group.transform.operations, group}
+    end
+
+    test "inside: true is byte for byte what the frame draws with no key" do
+      for position <- [
+            :top_left,
+            :top_right,
+            :bottom_left,
+            :bottom_right,
+            :top,
+            :bottom,
+            :left,
+            :right
+          ] do
+        assert Legend.generate(legend_frame(%{position: position, inside: true}), :literal) ==
+                 Legend.generate(legend_frame(%{position: position}), :literal)
+      end
+    end
+
+    test ":right sits 8 past the plot's right edge, centred, reading swatch then label" do
+      {[{:translate, x, y}], group} = legend_at(legend_frame(%{position: :right, inside: false}))
+      # Two entries (c0, c1): 32 high, centred on the 100-high plot.
+      assert {x, y} == {208, 34.0}
+      [item | _] = group.children
+      [swatch, label] = item.children
+      assert swatch.attrs.x == 0 and label.attrs.x == 16
+      assert label.style.text_anchor == :start
+    end
+
+    test "each position lands in the margin it names" do
+      at = fn position ->
+        legend_at(legend_frame(%{position: position, inside: false})) |> elem(0)
+      end
+
+      # A stacked legend's estimated width: 16 + 0.6 × the 12 label size × 2 characters.
+      width = 16 + 0.6 * 12 * 2
+      assert at.(:top_right) == [{:translate, 208, 8}]
+      assert at.(:bottom_right) == [{:translate, 208, 100 - 32}]
+      assert at.(:right) == [{:translate, 208, 34.0}]
+      assert [{:translate, x, 8}] = at.(:top_left)
+      assert_in_delta x, -8 - width, 1.0e-9
+      assert [{:translate, x, 68}] = at.(:bottom_left)
+      assert_in_delta x, -8 - width, 1.0e-9
+      assert [{:translate, x, 34.0}] = at.(:left)
+      assert_in_delta x, -8 - width, 1.0e-9
+      assert [{:translate, _, -20}] = at.(:top)
+      assert [{:translate, _, 108}] = at.(:bottom)
+    end
+
+    test "a legend that does not fit its margin is a fault of Frame.new/2" do
+      assert_raise ArgumentError, ~r/needs .* in the right margin, which is 10/, fn ->
+        legend_frame(%{position: :right, inside: false}, %{
+          top: 20,
+          right: 10,
+          bottom: 20,
+          left: 20
+        })
+      end
+
+      assert_raise ArgumentError, ~r/in the top margin, which is 4/, fn ->
+        legend_frame(%{position: :top, inside: false}, %{top: 4, right: 20, bottom: 20, left: 20})
+      end
+
+      # Inside, the margin is no concern.
+      assert %Frame{} =
+               legend_frame(%{position: :right}, %{top: 4, right: 10, bottom: 20, left: 20})
     end
   end
 end

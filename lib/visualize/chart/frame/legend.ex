@@ -2,7 +2,8 @@ defmodule Visualize.Chart.Frame.Legend do
   @moduledoc false
   # The legend of a frame (spec/14 §4.5): one entry per tick of the realised scale, a
   # swatch in the scale's colour beside the value's label, stacked or in a row at one of
-  # the eight positions inside the plot area.
+  # the eight positions inside the plot area — or, with `inside: false`, in the margin the
+  # position names (#136).
 
   alias Visualize.{Axis, Scale, Theme}
   alias Visualize.Chart.Frame
@@ -14,6 +15,8 @@ defmodule Visualize.Chart.Frame.Legend do
   @row 16
   @inset 8
   @per_char 0.6
+  @right [:top_right, :bottom_right, :right]
+  @left [:top_left, :bottom_left, :left]
 
   @doc false
   # The legend group, or `[]` when the frame has no legend; stamped `frame.legend` when
@@ -30,9 +33,11 @@ defmodule Visualize.Chart.Frame.Legend do
     style = Style.resolve(style_node, frame.theme, mode)
     title = text(Map.get(node, :title, []))
     position = Map.get(node, :position, Schema.default(:legend, :position))
+    inside? = Map.get(node, :inside, Schema.default(:legend, :inside))
     entries = entries(scale, frame.theme, mode)
     font_size = font_size(style_node, frame.theme)
-    right? = position in [:top_right, :bottom_right, :right]
+    # Outside there is room, so every position reads swatch-then-label (spec/14 §4.5).
+    right? = inside? and position in @right
     horizontal? = position in [:top, :bottom]
 
     rows =
@@ -40,7 +45,13 @@ defmodule Visualize.Chart.Frame.Legend do
         do: row(entries, title, font_size, style),
         else: stack(entries, title, right?, style)
 
-    {x, y} = origin(position, frame.plot, length(entries) + if(title, do: 1, else: 0), rows)
+    count = length(entries) + if(title, do: 1, else: 0)
+
+    {x, y} =
+      if inside?,
+        do: origin(position, frame.plot, count, rows),
+        else: outside(position, frame.plot, count, rows, width(entries, title, font_size))
+
     group_style = Map.take(style, [:font_family, :font_size, :opacity])
 
     [
@@ -168,7 +179,75 @@ defmodule Visualize.Chart.Frame.Legend do
     )
   end
 
+  @doc false
+  # The fault of a legend that does not fit the margin `inside: false` puts it in (spec/14
+  # §4.5): `ArgumentError` naming the margin and the size the legend needs — its estimated
+  # width for a side margin, the swatch and the inset for a top or bottom one. `:ok` for a
+  # legend inside the plot, or one that fits.
+  @spec check!(map() | nil, map(), map(), map(), Theme.t()) :: :ok
+  def check!(nil, _scales, _margin, _styles, _theme), do: :ok
+
+  def check!(node, scales, margin, styles, theme) do
+    if Map.get(node, :inside, Schema.default(:legend, :inside)) do
+      :ok
+    else
+      position = Map.get(node, :position, Schema.default(:legend, :position))
+      style_node = Style.node(styles, Map.get(node, :style, Schema.default(:legend, :style)))
+      title = text(Map.get(node, :title, []))
+      entries = entries(Map.fetch!(scales, node.scale), theme, :literal)
+      width = width(entries, title, font_size(style_node, theme))
+
+      {side, needs} =
+        cond do
+          position in @right -> {:right, @inset + width}
+          position in @left -> {:left, @inset + width}
+          position == :top -> {:top, @inset + @swatch}
+          true -> {:bottom, @inset + @swatch}
+        end
+
+      room = Map.fetch!(margin, side)
+
+      if room < needs do
+        raise ArgumentError,
+              "the legend at #{inspect(position)} outside the plot needs #{needs} in the " <>
+                "#{side} margin, which is #{room} (spec/14 §4.5)"
+      end
+
+      :ok
+    end
+  end
+
+  # The estimated width of a stacked legend: the swatch, the gap and the longest label
+  # (the title counted as one) at 0.6 × the font size per character.
+  defp width(entries, title, font_size) do
+    labels = Enum.map(entries, &elem(&1, 1)) ++ List.wrap(title)
+    longest = labels |> Enum.map(&String.length/1) |> Enum.max(fn -> 0 end)
+    @gap + @per_char * font_size * longest
+  end
+
   # -- position -------------------------------------------------------------------------
+
+  # In the margin the position names, 8 out from the plot's edge (spec/14 §4.5, #136).
+  defp outside(:top_left, _plot, _rows, _layout, width), do: {-@inset - width, @inset}
+  defp outside(:top_right, plot, _rows, _layout, _width), do: {plot.width + @inset, @inset}
+
+  defp outside(:bottom_left, plot, rows, _layout, width),
+    do: {-@inset - width, plot.height - rows * @row}
+
+  defp outside(:bottom_right, plot, rows, _layout, _width),
+    do: {plot.width + @inset, plot.height - rows * @row}
+
+  defp outside(:left, plot, rows, _layout, width),
+    do: {-@inset - width, plot.height / 2 - rows * @row / 2}
+
+  defp outside(:right, plot, rows, _layout, _width),
+    do: {plot.width + @inset, plot.height / 2 - rows * @row / 2}
+
+  defp outside(:top, plot, _rows, {_, width}, _w),
+    do: {plot.width / 2 - width / 2, -@inset - @swatch}
+
+  defp outside(:bottom, plot, _rows, {_, width}, _w),
+    do: {plot.width / 2 - width / 2, plot.height + @inset}
 
   defp origin(:top_left, _plot, _rows, _layout), do: {@inset, @inset}
   defp origin(:top_right, plot, _rows, _layout), do: {plot.width - @inset, @inset}

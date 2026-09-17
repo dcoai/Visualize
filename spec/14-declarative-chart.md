@@ -338,6 +338,7 @@ An axis has no `id`: its identity in a stack is `{scale, side}` (§8.2), so a la
 |---|---|---|---|---|
 | `scale` | `{:ref, :scale}` | `:geometry` | required | `:override` |
 | `position` | `{:enum, [:top_left, :top_right, :bottom_left, :bottom_right, :top, :bottom, :left, :right]}` | `:geometry` | `:top_right` | `:override` |
+| `inside` | `:boolean` | `:geometry` | `true` | `:override` |
 | `title` | `:text` | `:content` | `""` | `:override` |
 | `style` | `{:ref, :style}` | `:style` | `:label` | `:override` |
 
@@ -352,6 +353,8 @@ group  style: %{class: "legend", font_family: <font_family>, font_size: <font_si
 ```
 
 Entries are 16 apart and the title, when given, is the first row. `position` places the legend inside the plot area, 8 user units from its edges: the four corner positions stack the entries downward from the corner, the right-hand ones laid out right to left — the swatch at the edge and the label anchored `end` to its left — so no text width is needed; `:left` and `:right` stack them likewise, centred on the plot's height; `:top` and `:bottom` lay them in one row centred on the plot's width, each entry's width taken as 16 plus 0.6 × the font size per character of its label — the one place the layout estimates text.
+
+**A legend in a margin** (#136). With `inside: false` the legend sits in the margin its position names, 8 user units out from the plot's edge, laid out in the same direction as inside: `:right`, `:top_right` and `:bottom_right` stack in the right margin, at the plot's top, centred on its height, or at its bottom; `:left`, `:top_left` and `:bottom_left` likewise in the left margin; `:top` and `:bottom` run in one row in the top and bottom margins, centred on the plot's width, the row's swatches 8 above the plot's top edge or 8 below its bottom one. Outside there is room, so every position reads swatch-then-label — the right-to-left order is the inside layout's alone — and a left-margin legend is placed by its estimated width so its labels end 8 from the plot: the swatch, the gap and 0.6 × the font size per character of the longest label (the title counted as a label). A legend that does not fit its margin is not clipped silently: `Visualize.Chart.Frame.new/2` raises `ArgumentError` naming the margin and the size the legend needs — its estimated width for a side margin, its rows × 16 (the swatch's 12 for a row) plus the 8 for a top or bottom one — as it raises for an empty range, since a legend the author cannot see is worse than a fault. The converted gallery charts that reserved a margin for their legend draw it there.
 
 Every entry's group carries `data-series`, `to_string/1` of the entry's value — the string a series path carries (§5.6) — so `LegendHook` (spec/10 §14) can hide what the entry explains; it is written whatever the scale and is inert without the hook (D-77).
 
@@ -1155,7 +1158,7 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Build.axis/2` | As `axis/3` with `[]`. |
 | `Visualize.Chart.Build.axis/3` | `axis(scale, side, opts)`: `%{frame: %{axes: [%{scale: scale, side: side}]}}`, one axis (§4.4); `opts` are its remaining keys. |
 | `Visualize.Chart.Build.legend/1` | As `legend/2` with `[]`. |
-| `Visualize.Chart.Build.legend/2` | `legend(scale, opts)`: `%{frame: %{legend: %{scale: scale}}}` (§4.5). |
+| `Visualize.Chart.Build.legend/2` | `legend(scale, opts)`: `%{frame: %{legend: %{scale: scale}}}` (§4.5) — `opts` are `position`, `inside`, `title`, `style`. |
 | `Visualize.Chart.Build.label/2` | As `label/3` with `[]`. |
 | `Visualize.Chart.Build.label/3` | `label(anchor, text, opts)`: `%{labels: [%{anchor: anchor, text: text}]}`, one frame label (§6.1). |
 | `Visualize.Chart.Build.title/1` | As `title/2` with `[]`. |
