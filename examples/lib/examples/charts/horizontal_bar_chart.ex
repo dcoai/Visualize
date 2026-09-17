@@ -3,12 +3,10 @@ defmodule Examples.Charts.HorizontalBarChart do
   Horizontal bar chart as a design (#125): a `:sort` transform under one `:rect` mark, with
   the band scale on `y`.
 
-  Two things the layer decides differently from the imperative chart, both filed:
+  The value at the end of each bar is the `:rect`'s own inline label at the `:x1` edge
+  anchor (spec/14 §5.5, #134) — it once needed a zero-radius `:circle` to carry it. One
+  thing the layer still decides differently from the imperative chart, filed:
 
-  - **The value at the end of each bar needs a carrier mark.** A `:rect`'s inline label
-    anchors at the rectangle's *centre* (spec/14 §5.5), and there is no `:text` mark, so the
-    text is carried by a second mark — a `:circle` whose `value` channel is the constant `0`,
-    which draws `<circle r="0">` and nothing else (#134).
   - **The x axis lost its `M`.** A `Visualize.Format` specifier has no unit suffix (#135), so
     the millions are named in the axis title instead of on every tick. The bar labels keep
     theirs, because a label's text is a list and a literal is one of its parts.
@@ -50,7 +48,6 @@ defmodule Examples.Charts.HorizontalBarChart do
       Design.fold([
         chart(meta: %{name: title(), description: [description()]}),
         source(:countries, [:country, :population]),
-        style(:value, fill: :none),
         cartesian(width, height, margin: @margin),
         linear_scale(:x, domain: [0, :auto], nice: true),
         band_scale(:y, padding: 0.2, range: [0, plot_height]),
@@ -59,11 +56,8 @@ defmodule Examples.Charts.HorizontalBarChart do
         axis(:y, :left),
         label({:axis, :x}, ["population (millions)"]),
         rect(data, %{x0: 0, x1: :population, y0: :country, y1: :country, value: :country},
-          options: %{corner_radius: 2}
-        ),
-        circle(data, %{x: :population, y: :country, value: 0},
-          label: %{text: [{:field, :population}, "M"], anchor: :right},
-          style: :value
+          options: %{corner_radius: 2},
+          label: %{text: [{:field, :population}, "M"], anchor: :x1}
         )
       ])
 
@@ -99,7 +93,6 @@ defmodule Examples.Charts.HorizontalBarChart do
       Visualize.Chart.compose([
         chart(meta: %{name: "Horizontal Bar Chart"}),
         source(:countries, [:country, :population]),
-        style(:value, fill: :none),
         cartesian(600, 400, margin: %{top: 20, right: 30, bottom: 40, left: 100}),
         linear_scale(:x, domain: [0, :auto], nice: true),
 
@@ -109,14 +102,10 @@ defmodule Examples.Charts.HorizontalBarChart do
         axis(:x, :bottom, ticks: 5),
         axis(:y, :left),
         label({:axis, :x}, ["population (millions)"]),
+        # The value past the end of each bar: the rect's own label at its x1 edge (#134).
         rect(data, %{x0: 0, x1: :population, y0: :country, y1: :country, value: :country},
-          options: %{corner_radius: 2}
-        ),
-
-        # The carrier for the value text: `value: 0` is a zero-radius circle (#134).
-        circle(data, %{x: :population, y: :country, value: 0},
-          label: %{text: [{:field, :population}, "M"], anchor: :right},
-          style: :value
+          options: %{corner_radius: 2},
+          label: %{text: [{:field, :population}, "M"], anchor: :x1}
         )
       ])
 

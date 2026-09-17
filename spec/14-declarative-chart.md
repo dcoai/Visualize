@@ -1183,6 +1183,8 @@ The mark, transform and scale functions are generated from the schema (§16.6), 
 | `Visualize.Chart.Build.rect/3` | `rect(data, channels, opts)`: `mark/4` of the `:rect` type (§5.2) — required channels `x0`, `x1`, `y0`, `y1`; optional `value`; options `corner_radius`. |
 | `Visualize.Chart.Build.circle/2` | As `circle/3` with no options. |
 | `Visualize.Chart.Build.circle/3` | `circle(data, channels, opts)`: `mark/4` of the `:circle` type (§5.2) — required channels `x`, `y`; optional `value`; options `radius`. |
+| `Visualize.Chart.Build.text/2` | As `text/3` with no options. |
+| `Visualize.Chart.Build.text/3` | `text(data, channels, opts)`: `mark/4` of the `:text` type (§5.2, #134) — required channels `x`, `y`; optional `value`; no options; the text is the mark's `label`, else `value`. |
 
 The transform appenders, one per op of §5.4 (`Visualize.Chart.Schema.transform_ops/0`, the `:projection` step among them), each taking the data node — a `:data` node or a source name, read as `from/1` of it — and returning it with the step appended. The positional arguments after the node are the op's required keys, in the schema's order.
 

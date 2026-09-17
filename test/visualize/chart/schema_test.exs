@@ -74,7 +74,8 @@ defmodule Visualize.Chart.SchemaTest do
              :arc,
              :path,
              :rect,
-             :circle
+             :circle,
+             :text
            ]
 
     assert Schema.channels(:area) ==

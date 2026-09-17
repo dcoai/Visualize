@@ -1,13 +1,12 @@
 defmodule Examples.Charts.BubbleChart do
   @moduledoc """
   Bubble chart as a design (#125): three dimensions on one `:circle` mark, with a second,
-  filtered mark carrying the names.
+  filtered `:text` mark naming the big ones.
 
   The pipeline does the work the caller used to: `:sort` draws the largest bubbles first,
   and a `:filter` on the radius is what makes only the big ones carry a name — a condition
-  on a *label* is a condition on the rows the labelling mark reads. That second mark's
-  `value` is the constant `0`, so it draws nothing itself; the layer has no `:text` mark
-  (#134).
+  on a *label* is a condition on the rows the labelling mark reads. That second mark is a
+  `:text` (spec/14 §5.2, #134); it once was a zero-radius circle carrying a label.
 
   The bubble's radius is a column, because a `:circle`'s `value` is user units and names no
   scale (spec/14 §5.2). The hand-drawn ticks are real axes now, and the units the ticks
@@ -57,7 +56,7 @@ defmodule Examples.Charts.BubbleChart do
           stroke: {:field, :region},
           stroke_width: 1
         ),
-        style(:name, fill: :none, font_size: 9, font_weight: :bold),
+        style(:name, extends: :label, font_size: 9, font_weight: :bold),
         style(:caption, extends: :label, font_size: 9, fill: :axis),
         cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
         linear_scale(:x, domain: [0, 1500]),
@@ -70,9 +69,8 @@ defmodule Examples.Charts.BubbleChart do
         label({:frame, :bottom_right}, ["Size = GDP/capita"], style: :caption),
         legend(:color, position: :top_right),
         circle(largest_first, %{x: :population, y: :gdp, value: :r}, style: :bubble),
-        circle(named, %{x: :population, y: :gdp, value: 0},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :name},
-          style: :name
+        text(named, %{x: :population, y: :gdp},
+          label: %{text: [{:field, :name}], anchor: :middle, style: :name}
         )
       ])
 
@@ -130,7 +128,7 @@ defmodule Examples.Charts.BubbleChart do
           stroke: {:field, :region},
           stroke_width: 1
         ),
-        style(:name, fill: :none, font_size: 9, font_weight: :bold),
+        style(:name, extends: :label, font_size: 9, font_weight: :bold),
         cartesian(600, 400, margin: %{top: 30, right: 120, bottom: 50, left: 70}),
         linear_scale(:x, domain: [0, 1500]),
         linear_scale(:y, domain: [0, 25]),
@@ -142,10 +140,9 @@ defmodule Examples.Charts.BubbleChart do
         legend(:color, position: :top_right),
         circle(largest_first, %{x: :population, y: :gdp, value: :r}, style: :bubble),
 
-        # The carrier for the names: `value: 0` is a zero-radius circle (#134).
-        circle(named, %{x: :population, y: :gdp, value: 0},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :name},
-          style: :name
+        # The names: a :text mark over the filtered rows (#134).
+        text(named, %{x: :population, y: :gdp},
+          label: %{text: [{:field, :name}], anchor: :middle, style: :name}
         )
       ])
 

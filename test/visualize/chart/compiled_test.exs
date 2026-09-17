@@ -358,6 +358,23 @@ defmodule Visualize.Chart.CompiledTest do
     end
   end
 
+  describe "the render target of a text mark (§12.3, #134)" do
+    test "a :text mark is :svg whatever render says, since the binary stream carries no text" do
+      design =
+        Map.put(
+          design(%{x: %{kind: :linear, domain: [0, 3]}, y: %{kind: :linear, domain: [0, 10]}}),
+          :marks,
+          [
+            %{type: :text, data: :primary, channels: %{x: :t, y: :v, value: :v}, render: :binary},
+            %{type: :line, data: :primary, channels: %{x: :t, y: :v}, render: :binary}
+          ]
+        )
+
+      compiled = compile!(design, sources: %{primary: rows(4)})
+      assert Compiled.targets(compiled) == [{:svg, 4}, {:binary, 4}]
+    end
+  end
+
   describe "the viewport (§12.5)" do
     @stream %{
       version: 1,

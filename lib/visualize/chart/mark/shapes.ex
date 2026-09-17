@@ -223,7 +223,14 @@ defmodule Visualize.Chart.Mark.Shapes do
 
     Enum.zip_with(elements, rows, fn element, row ->
       %{x: x, y: y, width: w, height: h} = element.attrs
-      %{element: element, datum: row.datum, style: %{}, anchor: {x + w / 2, y + h / 2}}
+
+      %{
+        element: element,
+        datum: row.datum,
+        style: %{},
+        anchor: {x + w / 2, y + h / 2},
+        bounds: {x, y, w, h}
+      }
     end)
   end
 
