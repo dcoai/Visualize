@@ -640,22 +640,25 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
       <div class="performance-demo">
         <div class="controls">
-          <form phx-change="set_fps" class="control-group">
-            <label>Target FPS:</label>
-            <input type="range" name="fps" min="10" max="2010" step="10" value={@target_fps} class="fps-slider" />
-            <span class="fps-value"><%= if @target_fps > 2000, do: "∞", else: @target_fps %></span>
-          </form>
+          <div class="controls-row">
+            <form phx-change="set_fps" class="control-group">
+              <label>Target FPS:</label>
+              <input type="range" name="fps" min="10" max="2010" step="10" value={@target_fps} class="fps-slider" />
+              <span class="fps-value"><%= if @target_fps > 2000, do: "∞", else: @target_fps %></span>
+            </form>
 
-          <form phx-change="set_data_rate" class="control-group">
-            <label>Data rate:</label>
-            <input type="range" name="data_rate" min="10" max="5000" step="10" value={@data_rate} class="fps-slider" />
-            <span class="fps-value"><%= format_number(@data_rate) %> samples/s per series</span>
-            <span class="point-breakdown">
-              (<%= @samples_per_px %>/px · 1 area + 4 lines × <%= format_number(@points_per_series) %> pts · <%= Float.round(span(assigns), 1) %> s across)
-            </span>
-          </form>
+            <form phx-change="set_data_rate" class="control-group">
+              <label>Data rate:</label>
+              <input type="range" name="data_rate" min="10" max="5000" step="10" value={@data_rate} class="fps-slider" />
+              <span class="fps-value rate-value"><%= format_number(@data_rate) %> samples/s per series</span>
+              <span class="point-breakdown">
+                <%= @samples_per_px %>/px · 1 area + 4 lines × <%= format_number(@points_per_series) %> pts · <%= Float.round(span(assigns), 1) %> s across
+              </span>
+            </form>
+          </div>
 
-          <button type="button" phx-click="toggle_incremental" class={"btn mode #{if @use_incremental, do: "active", else: ""}"}>
+          <div class="controls-row">
+            <button type="button" phx-click="toggle_incremental" class={"btn mode #{if @use_incremental, do: "active", else: ""}"}>
             <%= if @use_incremental, do: "Incremental ON", else: "Incremental OFF" %>
           </button>
 
@@ -673,6 +676,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
           <% else %>
             <button type="button" phx-click="start" class="btn start">Start Animation</button>
           <% end %>
+          </div>
         </div>
 
         <div class="metrics-bar">
@@ -796,8 +800,8 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
       .controls {
         display: flex;
-        align-items: center;
-        gap: 1.5rem;
+        flex-direction: column;
+        gap: 0.75rem;
         margin-bottom: 1rem;
         padding: 1rem;
         background: #f8f9fa;
@@ -805,10 +809,21 @@ defmodule ExamplesWeb.HighPerformanceLive do
         flex-wrap: wrap;
       }
 
-      .control-group {
+      /* The sliders on one row, the buttons on the next; a slider control is a grid of
+         label, slider and a fixed-width value, with the rate's derivation beneath. */
+      .controls-row {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 1.5rem;
+        flex-wrap: nowrap;
+      }
+
+      .control-group {
+        display: grid;
+        grid-template-columns: auto auto auto;
+        align-items: center;
+        column-gap: 0.5rem;
+        row-gap: 0.15rem;
       }
 
       .control-group label {
@@ -818,9 +833,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
       }
 
       .point-breakdown {
+        grid-column: 1 / -1;
         font-size: 12px;
         color: #888;
-        margin-left: 0.5rem;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
       }
 
       .fps-slider {
@@ -832,8 +849,14 @@ defmodule ExamplesWeb.HighPerformanceLive do
         font-size: 14px;
         font-weight: 600;
         color: #333;
-        min-width: 2rem;
-        text-align: center;
+        min-width: 2.5rem;
+        text-align: left;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      .rate-value {
+        min-width: 13.5rem;
       }
 
       .btn {
