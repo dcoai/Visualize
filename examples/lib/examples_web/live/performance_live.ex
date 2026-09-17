@@ -37,6 +37,12 @@ defmodule ExamplesWeb.PerformanceLive do
 
       # Running state
       running: false,
+      # A frame renders in a task (#323): the one in flight, when it started, and the
+      # ticks that found one in flight and were skipped
+      render_task: nil,
+      render_started: nil,
+      skipped: 0,
+      render_error: nil,
       frame: 0,
 
       # Metrics
@@ -138,6 +144,8 @@ defmodule ExamplesWeb.PerformanceLive do
 
     socket = assign(socket,
       running: true,
+      skipped: 0,
+      render_error: nil,
       frame: 0,
       total_frames: 0,
       total_bytes: 0,
@@ -217,7 +225,8 @@ defmodule ExamplesWeb.PerformanceLive do
         assign(socket, compiled_results: compiled_results)
     end
 
-    {:noreply, assign(socket, running: false)}
+    # Stop is immediate: a render in flight is terminated and a late result ignored.
+    {:noreply, socket |> assign(running: false) |> cancel_render()}
   end
 
   def handle_event("clear_results", _params, socket) do
@@ -302,52 +311,124 @@ defmodule ExamplesWeb.PerformanceLive do
     )}
   end
 
+  # A tick (#323): the view renders nothing itself. With no render in flight it advances
+  # the data, snapshots the frame's inputs and renders them in a task; the result comes
+  # back as a message and the completion schedules the next tick. A tick that finds a
+  # render in flight is skipped, so the mailbox is never more than a tick deep and every
+  # click — Stop above all — is answered at once.
   def handle_info(:render_frame, socket) do
+    cond do
+      not socket.assigns.running ->
+        {:noreply, socket}
+
+      socket.assigns.render_task != nil ->
+        {:noreply, update(socket, :skipped, &(&1 + 1))}
+
+      true ->
+        # The Multi-Line chart scrolls by exactly a frame's pixels (spec/14 §12.6); the
+        # other charts animate in place, and a frame of theirs is a new picture.
+        {data, socket} = if socket.assigns.chart_type == :multi_line do
+          chart = MultiLine.advance(socket.assigns.multi_line)
+          {chart, assign(socket, multi_line: chart)}
+        else
+          {generate_animated_data(socket.assigns.chart_type, socket.assigns.data_points, socket.assigns.frame), socket}
+        end
+
+        inputs = %{
+          backend: socket.assigns.backend,
+          chart_type: socket.assigns.chart_type,
+          data: data,
+          compiled: socket.assigns.compiled
+        }
+
+        task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, fn -> frame_output(inputs) end)
+        {:noreply, assign(socket, render_task: task, render_started: System.monotonic_time(:microsecond))}
+    end
+  end
+
+  # The frame's render is back: pushed and measured, and the next tick scheduled — unless
+  # the run was stopped meanwhile, in which case the late result is dropped.
+  def handle_info({ref, result}, %{assigns: %{render_task: %Task{ref: ref}}} = socket) do
+    Process.demonitor(ref, [:flush])
+    socket = assign(socket, render_task: nil)
+
     if socket.assigns.running do
-      # The Multi-Line chart scrolls by exactly a frame's pixels (spec/14 §12.6); the
-      # other charts animate in place, and a frame of theirs is a new picture.
-      {data, socket} = if socket.assigns.chart_type == :multi_line do
-        chart = MultiLine.advance(socket.assigns.multi_line)
-        {chart, assign(socket, multi_line: chart)}
-      else
-        {generate_animated_data(socket.assigns.chart_type, socket.assigns.data_points, socket.assigns.frame), socket}
-      end
-
-      # Schedule next frame regardless of whether we render
       schedule_frame(socket.assigns.update_interval)
+      {:noreply, frame_done(socket, result)}
+    else
+      {:noreply, socket}
+    end
+  end
 
-      # An incremental backend scrolls the Multi-Line chart and redraws any other in
-      # full: a picture that changes other than by translation must not be scrolled
-      # (spec/09 §5.3).
-      scrolling? = socket.assigns.chart_type == :multi_line
+  # The render died: the run stops and says so, rather than ticking into the same fault.
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{assigns: %{render_task: %Task{ref: ref}}} = socket) do
+    {:noreply, assign(socket, render_task: nil, running: false, render_error: inspect(reason))}
+  end
 
-      render_start = System.monotonic_time(:microsecond)
+  # A result or a DOWN from a render that was cancelled: nothing to do with it.
+  def handle_info({ref, _result}, socket) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, socket}
+  end
 
-      {output, socket} = if socket.assigns.backend in [:compiled_svg, :compiled_binary] do
-        compiled_frame(socket, data)
-      else
-        {case socket.assigns.backend do
-        :hybrid ->
-          # Hybrid mode: render data only using binary format
-          render_data_only_binary(socket.assigns.chart_type, data, 700, 400)
-        :canvas ->
-          # Canvas mode: render full chart using binary format
-          element = build_chart(socket.assigns.chart_type, data, 700, 400)
-          Visualize.Backend.Canvas.render_element(element, format: :binary_base64)
-        :svg ->
-          # SVG mode: render full chart as SVG
-          element = build_chart(socket.assigns.chart_type, data, 700, 400)
-          Render.to_string(element, backend: :svg)
-        backend when backend in [:canvas_incremental, :hybrid_incremental] ->
-          if scrolling? do
-            data |> MultiLine.incremental() |> Base.encode64()
-          else
-            render_full_for_incremental(backend, socket.assigns.chart_type, data, 700, 400)
-          end
-        end, socket}
-      end
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, socket), do: {:noreply, socket}
 
-      render_time = System.monotonic_time(:microsecond) - render_start
+  def terminate(_reason, socket), do: cancel_render(socket)
+
+  # A render in flight is terminated and its messages flushed.
+  defp cancel_render(%{assigns: %{render_task: %Task{ref: ref, pid: pid}}} = socket) do
+    Process.demonitor(ref, [:flush])
+    Task.Supervisor.terminate_child(Examples.TaskSupervisor, pid)
+    assign(socket, render_task: nil)
+  end
+
+  defp cancel_render(socket), do: socket
+
+  @doc false
+  # One frame as a pure function of its inputs, which is what lets it run in a task:
+  # `%{output, pushes, compiled, compiled_svg}` — the output measured, the events the view
+  # pushes, and a compiled chart's new state (its viewport moved) or nil.
+  def frame_output(%{backend: backend, chart_type: chart_type, data: data} = inputs) do
+    # An incremental backend scrolls the Multi-Line chart and redraws any other in full:
+    # a picture that changes other than by translation must not be scrolled (spec/09 §5.3).
+    scrolling? = chart_type == :multi_line
+
+    case backend do
+      b when b in [:compiled_svg, :compiled_binary] ->
+        {payload, compiled} = Compiled.tick(inputs.compiled, %{primary: data})
+        pushes = if payload.canvas == "", do: [], else: [{"canvas_update", %{binary: payload.canvas}}]
+        %{output: payload.svg <> payload.canvas, pushes: pushes, compiled: compiled, compiled_svg: payload.svg}
+
+      :hybrid ->
+        output = render_data_only_binary(chart_type, data, 700, 400)
+        %{output: output, pushes: [{"canvas_update", %{binary: output}}], compiled: nil, compiled_svg: nil}
+
+      :canvas ->
+        output = build_chart(chart_type, data, 700, 400) |> Visualize.Backend.Canvas.render_element(format: :binary_base64)
+        %{output: output, pushes: [{"canvas_update", %{binary: output}}], compiled: nil, compiled_svg: nil}
+
+      :svg ->
+        output = build_chart(chart_type, data, 700, 400) |> Render.to_string(backend: :svg)
+        %{output: output, pushes: [], compiled: nil, compiled_svg: nil}
+
+      b when b in [:canvas_incremental, :hybrid_incremental] ->
+        # The first full frame went at start; every frame after scrolls or redraws.
+        if scrolling? do
+          output = data |> MultiLine.incremental() |> Base.encode64()
+          push = {"canvas_incremental", %{binary: output, dx: MultiLine.px_per_frame(), dy: 0, mode: "scroll_x"}}
+          %{output: output, pushes: [push], compiled: nil, compiled_svg: nil}
+        else
+          output = render_full_for_incremental(b, chart_type, data, 700, 400)
+          push = {"canvas_incremental", %{binary: output, dx: 0, dy: 0, mode: "full"}}
+          %{output: output, pushes: [push], compiled: nil, compiled_svg: nil}
+        end
+    end
+  end
+
+  # The frame recorded: the render time from the task's start, the payload, the rolling
+  # metrics, the pushes, and a compiled chart's state.
+  defp frame_done(socket, %{output: output, pushes: pushes} = result) do
+      render_time = System.monotonic_time(:microsecond) - socket.assigns.render_started
       payload_size = byte_size(output)
       now = System.monotonic_time(:millisecond)
 
@@ -374,27 +455,12 @@ defmodule ExamplesWeb.PerformanceLive do
         chart_output: output
       )
 
-      # Push canvas commands via event for canvas/hybrid modes (both use binary format)
-      socket = cond do
-        socket.assigns.backend in [:canvas, :hybrid] ->
-          push_event(socket, "canvas_update", %{binary: output})
-        socket.assigns.backend in [:canvas_incremental, :hybrid_incremental] ->
-          # Initial full render was already sent in handle_event("start_test")
-          # All subsequent frames use incremental mode
-          if scrolling? do
-            dx = MultiLine.px_per_frame()
-            push_event(socket, "canvas_incremental", %{binary: output, dx: dx, dy: 0, mode: "scroll_x"})
-          else
-            push_event(socket, "canvas_incremental", %{binary: output, dx: 0, dy: 0, mode: "full"})
-          end
-        true ->
-          socket
-      end
+      socket =
+        if result.compiled,
+          do: assign(socket, compiled: result.compiled, compiled_svg: result.compiled_svg),
+          else: socket
 
-      {:noreply, socket}
-    else
-      {:noreply, socket}
-    end
+      Enum.reduce(pushes, socket, fn {event, payload}, socket -> push_event(socket, event, payload) end)
   end
 
   @doc """
@@ -474,18 +540,6 @@ defmodule ExamplesWeb.PerformanceLive do
 
   # One frame of a compiled mode: the tick's dynamic SVG replaces the last, its canvas
   # (binary) is pushed to the hook; the transmitted bytes are the two together.
-  defp compiled_frame(socket, data) do
-    {payload, compiled} = Compiled.tick(socket.assigns.compiled, %{primary: data})
-    socket = assign(socket, compiled: compiled, compiled_svg: payload.svg)
-
-    socket =
-      if payload.canvas == "",
-        do: socket,
-        else: push_event(socket, "canvas_update", %{binary: payload.canvas})
-
-    {payload.svg <> payload.canvas, socket}
-  end
-
   defp schedule_frame(interval) do
     Process.send_after(self(), :render_frame, interval)
   end
@@ -1053,6 +1107,9 @@ defmodule ExamplesWeb.PerformanceLive do
 
         <div class="metrics-panel">
           <h3>Live Metrics (<%= @backend %>)</h3>
+          <p :if={@render_error} class="render-error" role="alert">
+            the render failed and the run stopped: <%= @render_error %>
+          </p>
 
           <div class="metric">
             <span class="label">Frame:</span>
@@ -1062,6 +1119,11 @@ defmodule ExamplesWeb.PerformanceLive do
           <div class="metric highlight">
             <span class="label">FPS:</span>
             <span class="value"><%= Float.round(@fps, 1) %></span>
+          </div>
+
+          <div class="metric" title="ticks that found a frame still rendering; the FPS is what the render allows">
+            <span class="label">Skipped:</span>
+            <span class="value"><%= @skipped %></span>
           </div>
 
           <div class="metric">
