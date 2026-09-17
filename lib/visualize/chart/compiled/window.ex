@@ -98,14 +98,90 @@ defmodule Visualize.Chart.Compiled.Window do
   def sources(_window, _frame, _mark, sources, _hi), do: sources
 
   @doc false
+  # The sources a mark draws into a strip of the incremental canvas (spec/14 §12.5,
+  # D-108): its source's rows whose reading lies within the strip's range — the region's
+  # `x` and `x + width` in plot pixels mapped back through the window — widened by three
+  # rows each side in reading order, so a path enters and leaves the strip on its own
+  # line. A mark with no channel on the scale draws every row, as `sources/5` has it.
+  @neighbours 3
+  @spec strip(t(), Frame.t(), map(), map(), term(), {number(), number(), number(), number()}) ::
+          map()
+  def strip(
+        %{scale: scale, span: span},
+        frame,
+        %{data: name} = mark,
+        sources,
+        hi,
+        {rx, _ry, rw, _rh}
+      )
+      when is_atom(name) do
+    case {fields(frame.kind, mark, scale), Map.fetch(sources, name)} do
+      {[field | _], {:ok, source}} ->
+        lo = units(subtract(hi, span))
+        top = units(hi)
+        width = frame.plot.width
+        x0 = lo + rx / width * span
+        x1 = lo + (rx + rw) / width * span
+
+        # The window's rows in reading order; the neighbours are the window's too.
+        read =
+          source
+          |> Table.rows()
+          |> Enum.flat_map(fn row ->
+            case Table.get(row, field) do
+              nil -> []
+              value -> [{units(value), row}]
+            end
+          end)
+          |> Enum.filter(fn {v, _} -> v >= lo and v <= top end)
+          |> Enum.sort_by(&elem(&1, 0))
+
+        first = Enum.find_index(read, fn {v, _} -> v >= x0 end)
+        last = read |> Enum.reverse() |> Enum.find_index(fn {v, _} -> v <= x1 end)
+
+        rows =
+          case {first, last} do
+            {nil, _} ->
+              []
+
+            {_, nil} ->
+              []
+
+            {first, last} ->
+              last = length(read) - 1 - last
+              from = max(0, first - @neighbours)
+              to = min(length(read) - 1, last + @neighbours)
+              if to < from, do: [], else: read |> Enum.slice(from..to) |> Enum.map(&elem(&1, 1))
+          end
+
+        Map.put(sources, name, rows)
+
+      _ ->
+        sources
+    end
+  end
+
+  def strip(_window, _frame, _mark, sources, _hi, _bounds), do: sources
+
+  @doc false
   # The incremental payload of a tick over the canvas layer's element (in plot
   # coordinates): a full redraw on the first tick, when the window jumped, or when
-  # `full?` says the old pixels are stale; else a scroll by the window's movement,
-  # rounded to whole pixels, `"none"` when it moved by less than one.
-  @spec scroll(t(), Frame.t(), Element.t(), term(), boolean()) :: {map(), t()}
-  def scroll(%{span: span} = window, frame, element, hi, full?) do
+  # `full?` says the old pixels are stale — the whole window — else a scroll by the
+  # window's movement, rounded to whole pixels, each exposed strip built by `strip_fn`
+  # over its bounds (D-108), `"none"` when it moved by less than one.
+  @spec scroll(t(), Frame.t(), Element.t(), (tuple() -> [Element.t()]), term(), boolean()) ::
+          {map(), t()}
+  def scroll(%{span: span} = window, frame, element, strip_fn, hi, full?) do
     plot = frame.plot
-    state = %{state(window, plot) | build_element: fn _data, _opts -> element end}
+
+    build = fn _data, opts ->
+      case Map.get(opts, :clip_region) do
+        nil -> element
+        bounds -> Element.group(strip_fn.(bounds))
+      end
+    end
+
+    state = %{state(window, plot) | build_element: build}
     top = units(hi)
 
     if window.drawn == nil or full? do
