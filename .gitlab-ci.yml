@@ -115,15 +115,18 @@ consumer-compile:
     - elixir scripts/consumer_check.exs
 
 # The gallery is the only thing that exercises the LiveView side; it must keep building.
-examples:compile:
+# The gallery is the only thing that exercises the LiveView side; it must keep building
+# AND its pages must keep rendering — its suite fetches every route (#331).
+examples:test:
   extends: .elixir
   stage: verify
   variables:
-    MIX_ENV: dev
+    MIX_ENV: test
   script:
     - cd examples
     - mix deps.get
     - mix compile
+    - mix test
 
 credo:
   extends: .elixir

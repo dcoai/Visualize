@@ -17,6 +17,10 @@ defmodule ExamplesWeb.IncrementalLive do
 
     socket =
       socket
+      # The canvas's size: the template reads them as assigns, and a module attribute is
+      # not one — the page raised on render for seven months with nothing to load it (#331).
+      |> assign(:width, @width)
+      |> assign(:height, @height)
       |> assign(:data, data)
       |> assign(:viewport_x, 0)
       |> assign(:viewport_y, 0)
