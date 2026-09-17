@@ -18,6 +18,7 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.Chart
   alias Visualize.Chart.Builder
   alias Visualize.Chart.Builder.Editor
+  alias Visualize.Chart.Builder.Glyphs
   alias Visualize.Chart.Builder.Palette
   alias Visualize.Chart.Builder.Preview
   alias Visualize.Chart.Builder.StyleStack
@@ -150,6 +151,23 @@ defmodule Visualize.Chart.BuilderTest do
       # Neither the design's own root nor vars is a tab (§18.13): a declaration is the
       # variable panel's, and variables are chips in the context (§19.10).
       assert tabs(html, "vis-builder-node") == ~w(frame sources styles marks labels)
+
+      # Each root is an icon with its name on hover and for a reader (#314); the sine wave
+      # the signals panel had is the sources root's.
+      assert html =~ ~s(class="vis-builder-icon vis-builder-icon-root vis-builder-icon-frame")
+
+      assert html =~
+               ~s(class="vis-builder-icon vis-builder-icon-root vis-builder-icon-sources" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 C6 4 9 4 12 12 C15 20 18 20 21 12"/>)
+
+      assert html =~ ~s(aria-label="frame" data-builder-bind-root="frame")
+      refute html =~ ~s(phx-target="-1">frame</button>)
+    end
+
+    test "a root the schema does not name is its first letter in a ring (spec/14 §18.13)" do
+      assert Glyphs.icon("extras") =~
+               ~s(<text x="12" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor" stroke="none">E</text>)
+
+      assert Glyphs.icon("marks") =~ ~s(<rect x="4" y="12" width="4" height="8")
     end
 
     test "no root is elsewhere: the page is the chart's, whatever layer is selected (spec/14 §18.15)" do
@@ -2451,7 +2469,10 @@ defmodule Visualize.Chart.BuilderTest do
     test "+ declares a sine, the tab edits it in place, and × removes it", %{socket: s} do
       assert s.assigns.signals == %{}
       {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
-      assert s.assigns.context == :sources
+      # Adding a signal opens the sources root, where the signals panel stands (#314).
+      assert s.assigns.context == :inspect
+      assert String.starts_with?(s.assigns.node_label, "sources")
+      assert BuilderFixture.render(s) =~ ~s(class="vis-builder-sources")
       assert %{signal_1: %{kind: :sine, fields: [:t, :value], window: 24}} = s.assigns.signals
 
       # The signal is a source of the chart at once: declared in the selected layer with
@@ -2579,12 +2600,20 @@ defmodule Visualize.Chart.BuilderTest do
       %{socket: s}
     end
 
-    test "four icons, one open; inspect is the default", %{socket: s} do
+    test "three icons, one open; inspect is the default", %{socket: s} do
       html = BuilderFixture.render(s)
       assert html =~ ~s(<nav class="vis-builder-context-icons" aria-label="context panels">)
 
-      for panel <- ~w(inspect colour font variables) do
+      for panel <- ~w(inspect colour variables) do
         assert html =~ ~s(phx-click="context" phx-value-panel="#{panel}")
+      end
+
+      # The signals and the font panel are under their roots now (#314): no panel of theirs,
+      # and a stale click on one is a no-op.
+      for panel <- ~w(sources font) do
+        refute html =~ ~s(phx-value-panel="#{panel}")
+        {:noreply, same} = Builder.handle_event("context", %{"panel" => panel}, s)
+        assert same.assigns.context == :inspect
       end
 
       assert html =~
@@ -2672,7 +2701,8 @@ defmodule Visualize.Chart.BuilderTest do
            socket: s
          } do
       {:noreply, s} = Builder.handle_event("select_field", %{"field" => "font_family"}, s)
-      assert s.assigns.context == :font
+      # A font key leaves inspect where it is: the font panel is under the styles root (#314).
+      assert s.assigns.context == :inspect
       html = BuilderFixture.render(s)
       assert html =~ ~s(<form class="vis-builder-fonts" phx-change="edit")
       assert html =~ ~s(class="vis-builder-face" style="font-family: Georgia")
@@ -2725,10 +2755,10 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert get_in(hd(s.assigns.uses).local, [:styles, :series, :font_family]) == "Georgia"
 
-      # A node with no font keys says which to open.
+      # Under another root there is no font panel; under styles with a node that has no
+      # font keys it says which to open.
       {:noreply, frame} = Builder.handle_event("select_node", %{"node" => "frame"}, s)
-      {:noreply, frame} = Builder.handle_event("context", %{"panel" => "font"}, frame)
-      assert BuilderFixture.render(frame) =~ "open a style"
+      refute BuilderFixture.render(frame) =~ ~s(class="vis-builder-fonts")
     end
 
     test "selecting a node or a layer clears the field", %{socket: s} do
@@ -3929,7 +3959,9 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(class="vis-builder-page vis-builder-page-0")
       # `frame.size` is reachable through the `frame` root now that the strip is grouped;
       # the second row is asserted with the rest of the grouping above.
-      assert html =~ ~s(phx-value-root="frame" phx-target="-1">frame</button>)
+      assert html =~
+               ~s(phx-value-root="frame" phx-target="-1"><svg class="vis-builder-icon vis-builder-icon-root vis-builder-icon-frame")
+
       refute html =~ "vis-builder-key-errors"
     end
   end
@@ -4009,6 +4041,13 @@ defmodule Visualize.Chart.BuilderTest do
 
   defp rendered(name),
     do: BuilderFixture.render_case(Keyword.fetch!(BuilderFixture.cases(), name))
+
+  # A node tab is an icon named by its aria-label (spec/14 §18.13, #314); a chip is its text.
+  defp tabs(html, "vis-builder-node") do
+    ~r{<button[^>]*class="vis-builder-node(?: [^"]*)?"[^>]*aria-label="([^"]*)"}
+    |> Regex.scan(html)
+    |> Enum.map(&List.last/1)
+  end
 
   defp tabs(html, class) do
     ~r{<button[^>]*class="#{class}(?: [^"]*)?"[^>]*>([^<]*)</button>}

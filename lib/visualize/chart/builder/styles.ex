@@ -744,16 +744,40 @@ if Code.ensure_loaded?(Phoenix.Component) do
       scrollbar-width: thin;
     }
 
+    /* A root is an icon with its name in the title (spec/14 §18.13, #314); the needs count
+       is a badge at its corner. */
     .vis-builder-node {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       flex: 0 0 auto;
+      width: 34px;
+      height: 30px;
       margin-bottom: -1px;
-      padding: 6px 10px;
+      padding: 0;
       border: 1px solid transparent;
       border-radius: 5px 5px 0 0;
       background: transparent;
       color: var(--vis-builder-muted);
       font-family: var(--vis-builder-mono);
       font-size: 12px;
+    }
+
+    .vis-builder-node-badge {
+      position: absolute;
+      top: 1px;
+      right: 2px;
+      min-width: 13px;
+      height: 13px;
+      padding: 0 3px;
+      border-radius: 7px;
+      background: var(--vis-builder-needs);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 13px;
+      text-align: center;
     }
 
     .vis-builder-node:hover {

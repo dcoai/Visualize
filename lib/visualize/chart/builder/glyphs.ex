@@ -69,15 +69,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     The inline SVG of a control's icon — `:eye` and `:eye_off` for the layer toggle, `:lock`
-    for a library layer (spec/14 §18.8) — in `currentColor`, 18px, hidden from readers since
-    the control names itself.
+    for a library layer (spec/14 §18.8), `:inspect`, `:colour` and `:variables` for the
+    panel row, and a root's name (a string) for the node row (§18.13, #314) — in
+    `currentColor`, 18px, hidden from readers since the control names itself.
 
         iex> Visualize.Chart.Builder.Glyphs.icon(:lock) =~ ~s|<rect x="5" y="11"|
         true
     """
-    @spec icon(:eye | :eye_off | :lock) :: String.t()
-    def icon(name) when name in [:eye, :eye_off, :lock] do
+    @spec icon(atom() | String.t()) :: String.t()
+    def icon(name) when name in [:eye, :eye_off, :lock, :inspect, :colour, :variables] do
       ~s|<svg class="vis-builder-icon vis-builder-icon-#{name}" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">#{icon_inner(name)}</svg>|
+    end
+
+    # A root of the design as the node row's icon (spec/14 §18.13, #314): the seven the
+    # schema names each drawn, any other as its first letter in a ring.
+    def icon(root) when is_binary(root) do
+      class = "vis-builder-icon vis-builder-icon-root vis-builder-icon-" <> root
+
+      ~s|<svg class="#{class}" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">#{root_inner(root)}</svg>|
     end
 
     defp icon_inner(:eye),
@@ -91,6 +100,64 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp icon_inner(:lock),
       do:
         ~s|<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11 V7 a4 4 0 0 1 8 0 V11"/>|
+
+    # The panel row (§19.10).
+    defp icon_inner(:inspect),
+      do:
+        ~s|<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9 H16 M8 13 H16 M8 17 H12"/>|
+
+    defp icon_inner(:colour),
+      do:
+        ~s|<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="14" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="13" r="1.5" fill="currentColor" stroke="none"/>|
+
+    defp icon_inner(:variables),
+      do:
+        ~s|<path d="M6 6 C4 6 4 10 4 12 C4 14 4 18 6 18"/><path d="M18 6 C20 6 20 10 20 12 C20 14 20 18 18 18"/><path d="M9 9 L15 15 M15 9 L9 15"/>|
+
+    # The plot's corner with an axis each way, and a mark inside.
+    defp root_inner("frame"),
+      do:
+        ~s|<path d="M5 4 V19 H20"/><path d="M5 19 L10 12 L14 15 L19 7"/><path d="M8 19 V21 M13 19 V21 M5 9 H3 M5 14 H3"/>|
+
+    # The sine wave the signals carried.
+    defp root_inner("sources"), do: ~s|<path d="M3 12 C6 4 9 4 12 12 C15 20 18 20 21 12"/>|
+
+    # A brush.
+    defp root_inner("styles"),
+      do:
+        ~s|<path d="M20 4 L10 14"/><path d="M9.5 13.5 C7 13.5 5 15.5 5 18 C5 19.5 4 20 3 20.5 C6 21.5 10.5 21 10.5 17 C10.5 15.5 10 14.5 9.5 13.5 Z" fill="currentColor" stroke="none"/>|
+
+    # Two bars and a line.
+    defp root_inner("marks"),
+      do:
+        ~s|<rect x="4" y="12" width="4" height="8" fill="currentColor" stroke="none"/><rect x="10" y="8" width="4" height="12" fill="currentColor" stroke="none"/><path d="M4 8 L11 4 L16 7 L20 3"/>|
+
+    # A tag.
+    defp root_inner("labels"),
+      do:
+        ~s|<path d="M4 4 H12 L20 12 L12 20 L4 12 Z"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/>|
+
+    # A swatch grid.
+    defp root_inner("theme"),
+      do:
+        ~s|<rect x="4" y="4" width="7" height="7" rx="1" fill="currentColor" stroke="none"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1" fill="currentColor" stroke="none" opacity="0.5"/>|
+
+    # A gradient disc.
+    defp root_inner("defs"),
+      do:
+        ~s|<circle cx="12" cy="12" r="8"/><path d="M12 4 A8 8 0 0 1 12 20 Z" fill="currentColor" stroke="none"/>|
+
+    # Any other root: its first letter in a ring.
+    defp root_inner(root) do
+      letter =
+        root
+        |> String.first()
+        |> String.upcase()
+        |> Phoenix.HTML.html_escape()
+        |> Phoenix.HTML.safe_to_string()
+
+      ~s|<circle cx="12" cy="12" r="9"/><text x="12" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor" stroke="none">#{letter}</text>|
+    end
 
     # -- the pictures ---------------------------------------------------------------------
 
