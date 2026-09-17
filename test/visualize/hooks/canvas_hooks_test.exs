@@ -124,6 +124,27 @@ defmodule Visualize.Hooks.CanvasHooksTest do
     assert hook =~ "ctx.clip();"
   end
 
+  test "CanvasIncrementalChart acknowledges frames when asked, at most once per interval (D-107, #304)" do
+    hook = Hooks.CanvasIncremental.js_hook()
+    # Opt-in by data-ack; the interval defaults to 100 ms; only payloads with a seq count.
+    assert hook =~ "this.ackEvent = this.el.dataset.ack || null;"
+    assert hook =~ "parseInt(this.el.dataset.ackInterval, 10) || 100"
+    assert hook =~ "if (payload.seq !== undefined) this.acknowledge(payload.seq);"
+    assert hook =~ "if (this.ackEvent === null) return;"
+    # The first frame in an interval schedules the flush; the flush pushes the last seq and
+    # the count since, then resets the count — a trailing ack, never more than one per interval.
+    assert hook =~
+             ~r/if \(this\.ackTimer === null\) \{\s+this\.ackTimer = setTimeout\(\(\) => this\.flushAck\(\), this\.ackInterval\);/
+
+    assert hook =~
+             "this.pushEvent(this.ackEvent, { seq: this.ackSeq, drawn: this.ackDrawn, at: performance.now() });"
+
+    assert hook =~ "this.ackDrawn = 0;"
+
+    # A "none" payload is handled and so acknowledged: the ack follows handleIncremental unconditionally.
+    assert hook =~ ~r/this\.handleIncremental\(payload\);\s+if \(payload\.seq !== undefined\)/
+  end
+
   test "CanvasIncrementalChart copies the record's viewport alone, clipped to it (D-106, #294)" do
     hook = Hooks.CanvasIncremental.js_hook()
     # The viewport read from bytes 10-25, the regions counted at byte 26.

@@ -19,6 +19,10 @@ defmodule Visualize.Hooks.CanvasIncremental do
       push_event(socket, event, payload)
 
   Decoding is `executeVisualizeBinary` from `Visualize.Hooks.CanvasBinary.js_decoder/0`.
+
+  When the element carries `data-ack="<event>"`, every payload with a `seq` is
+  acknowledged: `<event>` is pushed with `%{seq, drawn, at}` at most once per
+  `data-ack-interval` ms (default 100), with a trailing flush (spec/10 §9.2, D-107).
   """
 
   @doc """
@@ -40,11 +44,40 @@ defmodule Visualize.Hooks.CanvasIncremental do
         this.offscreen.height = this.canvas.height;
         this.offscreenCtx = this.offscreen.getContext('2d');
 
+        // Acknowledge frames when asked (spec/10 §9.2, D-107): data-ack names the event,
+        // data-ack-interval the most often it is pushed, in ms.
+        this.ackEvent = this.el.dataset.ack || null;
+        this.ackInterval = parseInt(this.el.dataset.ackInterval, 10) || 100;
+        this.ackSeq = null;
+        this.ackDrawn = 0;
+        this.ackTimer = null;
+
         this.handleEvent("canvas_incremental", (payload) => {
           this.handleIncremental(payload);
+          if (payload.seq !== undefined) this.acknowledge(payload.seq);
         });
       },
-      destroyed() {},
+      destroyed() {
+        if (this.ackTimer !== null) clearTimeout(this.ackTimer);
+      },
+
+      // The last seq handled and the frames handled since the previous ack, pushed at most
+      // once per interval: the first frame in an interval schedules the flush, so the last
+      // frame is always reported.
+      acknowledge(seq) {
+        if (this.ackEvent === null) return;
+        this.ackSeq = seq;
+        this.ackDrawn += 1;
+        if (this.ackTimer === null) {
+          this.ackTimer = setTimeout(() => this.flushAck(), this.ackInterval);
+        }
+      },
+
+      flushAck() {
+        this.ackTimer = null;
+        this.pushEvent(this.ackEvent, { seq: this.ackSeq, drawn: this.ackDrawn, at: performance.now() });
+        this.ackDrawn = 0;
+      },
       updated() {},
       createCanvas() {
         const canvas = document.createElement('canvas');
