@@ -17,7 +17,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
   use Phoenix.LiveView
 
-  alias Examples.Scroll
+  alias Examples.{Run, Scroll}
   alias Visualize.{Scale, Shape, Axis}
   alias Visualize.IR.{Element, Transform}
   alias Visualize.Backend.{SVG, CanvasIncremental}
@@ -33,9 +33,6 @@ defmodule ExamplesWeb.HighPerformanceLive do
   @default_target_fps 60
   @default_data_rate 600  # samples per second per series
   @span_seconds 5  # the plot spans about this much data at the rate; the density follows (#308)
-  @lag_alpha 2 / 31  # the lag's moving average, about thirty ticks
-  @max_lag_ms 250  # the lag budget: flow control holds a frame while this much is in flight (#310)
-  @ack_timeout 2000  # ms a hold may last without an ack before it fails open (#306)
 
   # Color palette: first is area fill, rest are lines
   @area_color "#4e79a7"
@@ -49,84 +46,26 @@ defmodule ExamplesWeb.HighPerformanceLive do
     {:ok, assign(socket,
       width: @width,
       height: @height,
-      running: false,
-      frame: 0,
-      fps: 0.0,
-      target_fps: @default_target_fps,
-      data_rate: @default_data_rate,
-      # Samples arrive by the clock (spec/14 §12.6): `pending` whole samples not yet a
-      # column, `carry` the fraction of one, `last_tick` when they were last counted, and
-      # `arrivals` the last second's `{at, samples}` for the measured rate.
-      pending: 0,
-      carry: 0.0,
-      last_tick: nil,
-      # The next tick's deadline in microseconds (#302): ticks follow it, not a whole-ms timer
-      next_due: nil,
-      arrivals: [],
-      measured_rate: 0.0,
-      # Frames in flight (#304, D-107): every frame carries `sent_seq`, the hook acks the
-      # last it drew (`acked_seq`, `acks` as `{at, drawn}` for the client's rate); with
-      # `flow_control` the page holds a frame back while `@window` are in flight, counts
-      # it `dropped`, and resyncs with a full frame after a dropped scroll (`needs_full`).
-      sent_seq: 0,
-      acked_seq: 0,
-      acks: [],
-      client_fps: 0.0,
-      flow_control: true,
-      dropped: 0,
-      needs_full: false,
-      # A hold fails open (#306): `hold_since` when the current hold began, `last_ack_at`
-      # the last ack's time (nil until one arrives), `acking` `:unknown` → `:yes` on the
-      # first ack or `:no` when a hold outlives `@ack_timeout` with none, `stalls` the
-      # holds released because an acking client stopped, `ack_age` for the metrics.
-      hold_since: nil,
-      last_ack_at: nil,
-      acking: :unknown,
-      stalls: 0,
-      ack_age: nil,
-      lag: 0.0,
+      # The run (`Examples.Run`, #322): the frame loop, its clock, samples, acks, flow
+      # control and metrics, in one assign.
+      run: Run.new(target_fps: @default_target_fps, data_rate: @default_data_rate),
       y_scale: y_scale,
-      frame_times: [],
-      render_times: [],
-      payload_size: 0,
+      points_rendered: 0,
       viewport_x: 0,
-      use_incremental: true,
-      last_full_render: true,
-      points_rendered: 0
+      use_incremental: true
     )
     |> at_density(density_for(@default_data_rate))}
   end
 
   def handle_event("start", _params, socket) do
-    socket =
-      assign(socket,
-        running: true,
-        last_tick: System.monotonic_time(:millisecond),
-        pending: 0,
-        carry: 0.0,
-        arrivals: [],
-        sent_seq: 0,
-        acked_seq: 0,
-        acks: [],
-        dropped: 0,
-        needs_full: false,
-        hold_since: nil,
-        last_ack_at: nil,
-        acking: :unknown,
-        stalls: 0,
-        ack_age: nil,
-        frame: 0,
-        frame_times: [],
-        render_times: []
-      )
-
-    # The run opens with a full render; the ticks build on it.
-    socket = socket |> send_full_render() |> assign(last_full_render: false)
-    {:noreply, socket |> assign(next_due: System.monotonic_time(:microsecond)) |> schedule_frame()}
+    run = Run.start(socket.assigns.run, System.monotonic_time(:millisecond), System.monotonic_time(:microsecond))
+    # The run opens with a full render, rendered like any frame; the ticks build on it.
+    socket = socket |> assign(run: run, viewport_x: 0) |> start_render(:full_redraw, 0)
+    {:noreply, schedule_frame(socket)}
   end
 
   def handle_event("stop", _params, socket) do
-    {:noreply, assign(socket, running: false)}
+    {:noreply, update(socket, :run, &Run.stop/1)}
   end
 
   def handle_event("toggle_incremental", _params, socket) do
@@ -134,200 +73,150 @@ defmodule ExamplesWeb.HighPerformanceLive do
   end
 
   def handle_event("set_fps", %{"fps" => fps_str}, socket) do
-    # Slider value 130 = unlimited (no delay)
-    target_fps = String.to_integer(fps_str)
-    {:noreply, assign(socket, target_fps: target_fps)}
+    # A slider value above 2000 is unlimited (no delay)
+    {:noreply, update(socket, :run, &%{&1 | target_fps: String.to_integer(fps_str)})}
   end
 
   # The rate sizes the window: a new density is a fresh window and a full next frame.
   def handle_event("set_data_rate", %{"data_rate" => rate}, socket) do
     rate = String.to_integer(rate)
     density = density_for(rate)
-    socket = assign(socket, data_rate: rate)
+    socket = update(socket, :run, &%{&1 | data_rate: rate})
 
     if density == socket.assigns.samples_per_px,
       do: {:noreply, socket},
-      else: {:noreply, socket |> at_density(density) |> assign(last_full_render: true)}
+      else: {:noreply, socket |> at_density(density) |> update(:run, &%{&1 | needs_full: true})}
   end
 
   def handle_event("toggle_flow_control", _params, socket) do
-    {:noreply, assign(socket, flow_control: not socket.assigns.flow_control)}
+    {:noreply, update(socket, :run, &%{&1 | flow_control: not &1.flow_control})}
   end
 
   # The hook's ack (spec/10 §9.2): the last frame it drew and how many since its last ack.
   def handle_event("frame_drawn", %{"seq" => seq, "drawn" => drawn}, socket) do
-    now = System.monotonic_time(:millisecond)
-    acks = Enum.take([{now, drawn} | socket.assigns.acks], 120)
-
-    {:noreply,
-     assign(socket,
-       acked_seq: max(socket.assigns.acked_seq, seq),
-       acks: acks,
-       client_fps: rate_over(acks, now),
-       last_ack_at: now,
-       acking: :yes
-     )}
+    {:noreply, update(socket, :run, &Run.acked(&1, seq, drawn, System.monotonic_time(:millisecond)))}
   end
+
+  # A tick: the run accounts the samples due and, with no render in flight, the columns
+  # they fill; the window advances by those columns and the frame goes as the run
+  # decides — strips, the empty update, a full render, or held back (spec/14 §12.6).
+  def handle_info(:render_frame, %{assigns: %{run: %Run{running: false}}} = socket), do: {:noreply, socket}
 
   def handle_info(:render_frame, socket) do
-    if socket.assigns.running do
-      now = System.monotonic_time(:millisecond)
-      socket = schedule_frame(socket)
+    now = System.monotonic_time(:millisecond)
+    socket = schedule_frame(socket)
 
-      # The samples due since the last tick, and the whole columns they fill: the frame
-      # scrolls by those columns and keeps the rest pending (spec/14 §12.6, #300).
-      {px, arrived, arrival} = arrivals(socket.assigns, now - socket.assigns.last_tick)
-      arrivals = Enum.take([{now, arrived} | socket.assigns.arrivals], 120)
+    case Run.tick(socket.assigns.run, now, socket.assigns.samples_per_px) do
+      {run, :skipped} ->
+        {:noreply, assign(socket, run: run)}
 
-      socket =
-        assign(socket, arrival)
-        |> assign(last_tick: now, arrivals: arrivals, measured_rate: measured_rate(arrivals, now))
+      {run, {:draw, px}} ->
+        scroll = Scroll.advance(socket.assigns.scroll, px)
+        random_data = Scroll.shift(scroll, socket.assigns.random_data, px, fn _ -> random_sample() end)
+        socket = assign(socket, run: run, scroll: scroll, random_data: random_data, viewport_x: socket.assigns.viewport_x + px)
 
-      # Every tick sends a frame, columns or none (#302).
-      {:noreply, draw(socket, px, now)}
-    else
-      {:noreply, socket}
+        {run, mode} = Run.decide(socket.assigns.run, px, socket.assigns.use_incremental, {@inner_width, @inner_height}, now)
+        socket = assign(socket, run: run)
+
+        case mode do
+          :drop -> {:noreply, socket}
+          :none -> {:noreply, send_none(socket, now)}
+          mode -> {:noreply, start_render(socket, mode, px)}
+        end
     end
   end
 
-  # A frame: the window advances by `px` columns, the random line drops and appends
-  # their samples (`Examples.Scroll`), and the frame goes as strips when the scroll is
-  # one `scroll_mode/2` calls a scroll, as the empty "none" update when no column filled
-  # (D-38), and in full otherwise — or always, with Incremental OFF.
-  defp draw(socket, px, now) do
-    render_start = System.monotonic_time(:microsecond)
+  # The frame's render is back (#323): numbered, pushed and measured — or dropped, if the
+  # run was stopped meanwhile or the render was cancelled.
+  def handle_info({ref, %{payload: payload, bytes: bytes, points: points, mode: mode}}, socket) when is_reference(ref) do
+    case Run.result(socket.assigns.run, ref) do
+      :stale ->
+        {:noreply, socket}
 
-    scroll = Scroll.advance(socket.assigns.scroll, px)
-    random_data = Scroll.shift(scroll, socket.assigns.random_data, px, fn _ -> random_sample() end)
-    viewport_x = socket.assigns.viewport_x + px
-    socket = assign(socket, random_data: random_data, scroll: scroll, viewport_x: viewport_x)
+      {:ok, %Run{running: false} = run} ->
+        {:noreply, assign(socket, run: run)}
 
-    socket = socket |> hold(now) |> assign(ack_age: ack_age(socket.assigns, now))
+      {:ok, run} ->
+        now = System.monotonic_time(:millisecond)
+        {run, seq} = Run.sending(run, mode)
+        run = Run.rendered(run, bytes, now)
 
-    socket =
-      case frame_mode(socket.assigns, px) do
-        :scroll_x -> send_incremental_render(socket, px)
-        :none -> send_none(socket)
-        :full_redraw -> socket |> send_full_render() |> assign(last_full_render: false, needs_full: false)
-        :drop -> drop(socket, px)
+        {:noreply,
+         socket
+         |> assign(run: run, points_rendered: points)
+         |> push_event("canvas_incremental", Map.put(payload, :seq, seq))}
+    end
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, socket) do
+    case Run.down(socket.assigns.run, ref, reason) do
+      :stale -> {:noreply, socket}
+      {:ok, run} -> {:noreply, assign(socket, run: run)}
+    end
+  end
+
+  def terminate(_reason, socket), do: Run.cancel(socket.assigns.run)
+
+  # A frame rendering in a task: the full chart, or the strips a scroll of `px` exposes,
+  # over a snapshot of the page's data.
+  defp start_render(socket, mode, px) do
+    inputs = Map.take(socket.assigns, [:scroll, :random_data, :points_per_series, :x_scale, :y_scale, :total_points])
+
+    render =
+      case mode do
+        :full_redraw -> fn -> full_frame(inputs) end
+        :scroll_x -> fn -> incremental_frame(inputs, px) end
       end
 
-    render_time = System.monotonic_time(:microsecond) - render_start
-
-    # Track metrics
-    frame_times = Enum.take([now | socket.assigns.frame_times], 60)
-    render_times = Enum.take([render_time | socket.assigns.render_times], 60)
-
-    assign(socket,
-      frame: socket.assigns.frame + 1,
-      frame_times: frame_times,
-      render_times: render_times,
-      fps: calculate_fps(frame_times),
-      lag: lag(socket.assigns)
-    )
+    update(socket, :run, &Run.rendering(&1, render))
   end
 
-  @doc false
-  # What this tick sends for a scroll of `px` columns: `:drop` when flow control holds it
-  # back (the window is in flight); a full render with Incremental OFF, on the first frame
-  # of a run, or after a dropped scroll (D-107); otherwise what `scroll_mode/2` says —
-  # strips, or the empty "none" update. Public for the page test.
-  def frame_mode(assigns, px) do
-    cond do
-      holding?(assigns) -> :drop
-      not assigns.use_incremental or assigns.last_full_render or assigns.needs_full -> :full_redraw
-      true -> CanvasIncremental.scroll_mode({px, 0}, {@inner_width, @inner_height})
-    end
-  end
-
-  @doc false
-  def in_flight(%{sent_seq: sent, acked_seq: acked}), do: sent - acked
-
-  defp holding?(assigns) do
-    assigns.flow_control and assigns.acking != :no and in_flight(assigns) >= window(assigns)
-  end
-
-  @doc false
-  # The frames the lag budget allows in flight at the target rate — fifteen at 60 fps —
-  # taken at 2,000 fps when the target is unlimited. Public for the page test.
-  def window(%{target_fps: fps}), do: max(2, ceil(@max_lag_ms * min(fps, 2000) / 1000))
-
-  @doc false
-  # A hold fails open (#306, D-107): a hold that outlives `@ack_timeout` without an ack
-  # ends — when no ack has ever arrived the client does not acknowledge and the run stops
-  # holding (`acking: :no`); when acks had arrived the client is stalled, the window is
-  # released and the stall counted. Public for the page test.
-  def hold(socket, now) do
-    a = socket.assigns
-
-    cond do
-      not holding?(a) -> assign(socket, hold_since: nil)
-      a.hold_since == nil -> assign(socket, hold_since: now)
-      now - a.hold_since <= @ack_timeout -> socket
-      a.last_ack_at == nil -> assign(socket, acking: :no, hold_since: nil)
-      true -> assign(socket, acked_seq: a.sent_seq, stalls: a.stalls + 1, hold_since: nil)
-    end
-  end
-
-  # The lag's moving average of `in flight × period` ms: the instantaneous figure swings
-  # between acks, which come in bursts every ack interval (#308).
-  defp lag(%{target_fps: fps} = assigns) when fps > 2000, do: assigns.lag
-  defp lag(%{target_fps: fps, lag: lag} = assigns) do
-    lag + @lag_alpha * (in_flight(assigns) * 1000 / fps - lag)
-  end
-
-  defp ack_age(%{last_ack_at: nil}, _now), do: nil
-  defp ack_age(%{last_ack_at: at}, now), do: now - at
-
-  # A frame held back: the data has advanced, nothing is sent, and if the picture moved
-  # the next frame sent must be a full one — a strip against a canvas that missed a
-  # scroll is the wrong picture.
-  defp drop(socket, px) do
-    assign(socket,
-      dropped: socket.assigns.dropped + 1,
-      needs_full: socket.assigns.needs_full or px > 0,
-      payload_size: 0,
-      points_rendered: 0
-    )
-  end
-
-  # Every frame carries its sequence number, which the hook acks (data-ack).
-  defp push_frame(socket, payload) do
-    seq = socket.assigns.sent_seq + 1
+  # The frame with no new column: the "none" update of spec/09 §7.3, nothing to draw and
+  # nothing to copy, zero bytes — what an incremental frame without data costs. It needs
+  # no render, so it is sent from the tick.
+  defp send_none(socket, now) do
+    {run, seq} = Run.sending(socket.assigns.run, :none)
+    run = Run.rendered(run, 0, now)
 
     socket
-    |> assign(sent_seq: seq)
-    |> push_event("canvas_incremental", Map.put(payload, :seq, seq))
+    |> assign(run: run, points_rendered: 0)
+    |> push_event("canvas_incremental", %{binary: "", dx: 0, dy: 0, mode: "none", seq: seq})
   end
 
   @doc false
-  # The samples due after `elapsed` ms at the page's data rate, on top of what was pending:
-  # `{columns, arrived, %{pending, carry}}` — the whole columns the pending samples fill,
-  # the samples that arrived this tick, and what stays pending (a column's worth at most)
-  # with the fraction of a sample carried. Public for the stream test.
-  def arrivals(%{data_rate: rate, carry: carry, pending: pending, scroll: scroll}, elapsed) do
-    due = carry + rate * elapsed / 1000
-    arrived = trunc(due)
-    pending = pending + arrived
-    columns = div(pending, scroll.samples_per_px)
-    {columns, arrived, %{pending: rem(pending, scroll.samples_per_px), carry: due - arrived}}
+  # The whole chart as a full-redraw record, for the task. Public for the stream test.
+  def full_frame(inputs) do
+    binary = inputs |> build_chart_element() |> CanvasIncremental.encode_full_redraw({@width, @height})
+    %{payload: %{binary: Base.encode64(binary), dx: 0, dy: 0, mode: "full"}, bytes: byte_size(binary), points: inputs.total_points, mode: :full_redraw}
   end
 
-  # Samples per second per series over the last second of ticks.
-  defp measured_rate(arrivals, now), do: rate_over(arrivals, now)
+  @doc false
+  # The frame as the strips a scroll of `dx` pixels exposes, for the task: the plot is
+  # what scrolls, the margin's axes stay (D-106). Public for the stream test.
+  def incremental_frame(inputs, dx) do
+    regions = CanvasIncremental.exposed_regions({dx, 0}, {@inner_width, @inner_height})
 
-  # Events per second over the last second of `{at, count}` entries, newest first.
-  defp rate_over(entries, now) do
-    recent = Enum.take_while(entries, fn {at, _} -> now - at <= 1000 end)
+    adjusted = Enum.map(regions, fn {rx, ry, rw, rh} -> {@margin.left + rx, @margin.top + ry, rw, rh} end)
+    region_elements = Enum.map(adjusted, fn bounds -> {bounds, build_region_element(inputs, bounds)} end)
 
-    case recent do
-      [] -> 0.0
-      [_] -> 0.0
-      _ ->
-        {oldest, _} = List.last(recent)
-        span = now - oldest
-        if span > 0, do: Enum.sum(for {_, n} <- recent, do: n) * 1000 / span, else: 0.0
-    end
+    binary =
+      CanvasIncremental.encode_incremental({dx, 0}, {@width, @height}, region_elements,
+        viewport: {@margin.left, @margin.top, @inner_width, @inner_height}
+      )
+
+    %{
+      payload: %{binary: Base.encode64(binary), dx: dx, dy: 0, mode: "scroll_x"},
+      bytes: byte_size(binary),
+      points: calculate_region_points(inputs, adjusted),
+      mode: :scroll_x
+    }
+  end
+
+  # The next tick at the run's deadline (#302).
+  defp schedule_frame(socket) do
+    {run, delay} = Run.schedule(socket.assigns.run, System.monotonic_time(:microsecond))
+    Process.send_after(self(), :render_frame, delay)
+    assign(socket, run: run)
   end
 
   # ============================================================
@@ -360,7 +249,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
   @doc false
   # The seconds of data the plot spans at the page's density and rate.
-  def span(%{points_per_series: count, data_rate: rate}) when rate > 0, do: count / rate
+  def span(%{points_per_series: count, run: %{data_rate: rate}}) when rate > 0, do: count / rate
   def span(_assigns), do: 0.0
 
   defp random_sample, do: :rand.uniform() * 60 + 40
@@ -390,59 +279,6 @@ defmodule ExamplesWeb.HighPerformanceLive do
   # Rendering
   # ============================================================
 
-  defp send_full_render(socket) do
-    element = build_chart_element(socket.assigns)
-    binary = CanvasIncremental.encode_full_redraw(element, {@width, @height})
-    encoded = Base.encode64(binary)
-
-    socket
-    |> assign(:payload_size, byte_size(binary))
-    |> assign(:points_rendered, socket.assigns.total_points)
-    |> push_frame(%{binary: encoded, dx: 0, dy: 0, mode: "full"})
-  end
-
-  # The frame with no new column: the "none" update of spec/09 §7.3, nothing to draw and
-  # nothing to copy, zero bytes — what an incremental frame without data costs.
-  defp send_none(socket) do
-    socket
-    |> assign(payload_size: 0, points_rendered: 0)
-    |> push_frame(%{binary: "", dx: 0, dy: 0, mode: "none"})
-  end
-
-  # The frame as the strips a scroll of `dx` pixels exposes.
-  defp send_incremental_render(socket, dx) do
-    # Use inner chart dimensions for exposed region calculation
-    # This ensures the region falls within the data area, not the margins
-    inner_size = {@inner_width, @inner_height}
-
-    # Calculate exposed region relative to inner chart area
-    regions = CanvasIncremental.exposed_regions({dx, 0}, inner_size)
-
-    # Adjust region coordinates to account for margins
-    adjusted_regions = Enum.map(regions, fn {rx, ry, rw, rh} ->
-      {@margin.left + rx, @margin.top + ry, rw, rh}
-    end)
-
-    # Build elements ONLY for the exposed region's data
-    region_elements = Enum.map(adjusted_regions, fn {rx, ry, rw, rh} = bounds ->
-      element = build_region_element(socket.assigns, {rx, ry, rw, rh})
-      {bounds, element}
-    end)
-
-    # Encode incremental update: the plot is what scrolls, the margin's axes stay (D-106)
-    binary =
-      CanvasIncremental.encode_incremental({dx, 0}, {@width, @height}, region_elements,
-        viewport: {@margin.left, @margin.top, @inner_width, @inner_height}
-      )
-    encoded = Base.encode64(binary)
-
-    socket
-    |> assign(:payload_size, byte_size(binary))
-    |> assign(:points_rendered, calculate_region_points(socket.assigns, adjusted_regions))
-    |> push_frame(%{binary: encoded, dx: dx, dy: 0, mode: "scroll_x"})
-  end
-
-  # Calculate how many points are in the exposed regions
   defp calculate_region_points(%{scroll: scroll}, regions) do
     Enum.reduce(regions, 0, fn {rx, _ry, rw, _rh}, acc ->
       case Scroll.columns(scroll, {rx - @margin.left, rw}, 0) do
@@ -516,31 +352,6 @@ defmodule ExamplesWeb.HighPerformanceLive do
   end
 
   # The next tick at its deadline (#302): > 2000 fps is unlimited, no delay.
-  defp schedule_frame(%{assigns: %{target_fps: fps, next_due: due}} = socket) do
-    now = System.monotonic_time(:microsecond)
-    {next, delay} = if fps > 2000, do: {now, 0}, else: deadline(due, now, fps)
-    Process.send_after(self(), :render_frame, delay)
-    assign(socket, next_due: next)
-  end
-
-  @doc false
-  # The next deadline after `due` at `fps`, never before `now` — a late tick is not caught
-  # up in a burst — and the whole milliseconds to wait for it, rounded to the nearest, so
-  # a target between whole-millisecond rates averages to it. Public for the stream test.
-  def deadline(due, now, fps) do
-    next = max(due + 1_000_000 / fps, now)
-    {next, round((next - now) / 1000)}
-  end
-
-  defp calculate_fps([]), do: 0.0
-  defp calculate_fps([_]), do: 0.0
-  defp calculate_fps(times) do
-    oldest = List.last(times)
-    newest = hd(times)
-    duration_ms = newest - oldest
-    if duration_ms > 0, do: (length(times) - 1) / (duration_ms / 1000), else: 0.0
-  end
-
   # ============================================================
   # Static SVG (Axes, Grid, Labels)
   # ============================================================
@@ -619,13 +430,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   end
 
   def render(assigns) do
-    avg_render_time = if length(assigns.render_times) > 0 do
-      Enum.sum(assigns.render_times) / length(assigns.render_times)
-    else
-      0
-    end
-
-    assigns = assign(assigns, avg_render_time: avg_render_time, series: @series)
+    assigns = assign(assigns, avg_render_time: Run.avg_render_us(assigns.run), series: @series)
 
     ~H"""
     <header>
@@ -643,14 +448,14 @@ defmodule ExamplesWeb.HighPerformanceLive do
           <div class="controls-row">
             <form phx-change="set_fps" class="control-group">
               <label>Target FPS:</label>
-              <input type="range" name="fps" min="10" max="2010" step="10" value={@target_fps} class="fps-slider" />
-              <span class="fps-value"><%= if @target_fps > 2000, do: "∞", else: @target_fps %></span>
+              <input type="range" name="fps" min="10" max="2010" step="10" value={@run.target_fps} class="fps-slider" />
+              <span class="fps-value"><%= if @run.target_fps > 2000, do: "∞", else: @run.target_fps %></span>
             </form>
 
             <form phx-change="set_data_rate" class="control-group">
               <label>Data rate:</label>
-              <input type="range" name="data_rate" min="10" max="5000" step="10" value={@data_rate} class="fps-slider" />
-              <span class="fps-value rate-value"><%= format_number(@data_rate) %> samples/s per series</span>
+              <input type="range" name="data_rate" min="10" max="5000" step="10" value={@run.data_rate} class="fps-slider" />
+              <span class="fps-value rate-value"><%= format_number(@run.data_rate) %> samples/s per series</span>
               <span class="point-breakdown">
                 <%= @samples_per_px %>/px · 1 area + 4 lines × <%= format_number(@points_per_series) %> pts · <%= Float.round(span(assigns), 1) %> s across
               </span>
@@ -662,16 +467,16 @@ defmodule ExamplesWeb.HighPerformanceLive do
             <%= if @use_incremental, do: "Incremental ON", else: "Incremental OFF" %>
           </button>
 
-          <button type="button" phx-click="toggle_flow_control" class={"btn mode #{if @flow_control, do: "active", else: ""}"}
+          <button type="button" phx-click="toggle_flow_control" class={"btn mode #{if @run.flow_control, do: "active", else: ""}"}
                   title="Hold frames back while 250 ms of them are in flight; resync with a full frame after a dropped scroll">
             <%= cond do
-              not @flow_control -> "Flow control OFF"
-              @acking == :no -> "Flow control: no acks"
+              not @run.flow_control -> "Flow control OFF"
+              @run.acking == :no -> "Flow control: no acks"
               true -> "Flow control ON (250 ms)"
             end %>
           </button>
 
-          <%= if @running do %>
+          <%= if @run.running do %>
             <button type="button" phx-click="stop" class="btn stop">Stop</button>
           <% else %>
             <button type="button" phx-click="start" class="btn start">Start Animation</button>
@@ -681,46 +486,50 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
         <div class="metrics-bar">
           <div class="metric big">
-            <span class="value"><%= trunc(@fps) %></span>
+            <span class="value"><%= trunc(@run.fps) %></span>
             <span class="label">FPS</span>
           </div>
           <div class="metric">
-            <span class="value"><%= if @target_fps > 2000, do: "∞", else: @target_fps %></span>
+            <span class="value"><%= if @run.target_fps > 2000, do: "∞", else: @run.target_fps %></span>
             <span class="label">Target</span>
           </div>
           <div class="metric">
-            <span class="value"><%= trunc(@client_fps) %></span>
+            <span class="value"><%= trunc(@run.client_fps) %></span>
             <span class="label">Client FPS</span>
           </div>
           <div class="metric">
-            <span class="value"><%= @sent_seq - @acked_seq %></span>
+            <span class="value"><%= Run.in_flight(@run) %></span>
             <span class="label">In flight</span>
           </div>
           <div class="metric">
-            <span class="value"><%= if @target_fps > 2000, do: "—", else: "#{round(@lag)} ms" %></span>
+            <span class="value"><%= if @run.target_fps > 2000, do: "—", else: "#{round(@run.lag)} ms" %></span>
             <span class="label">Lag</span>
           </div>
           <div class="metric">
-            <span class="value"><%= format_number(@dropped) %></span>
+            <span class="value"><%= format_number(@run.dropped) %></span>
             <span class="label">Dropped</span>
           </div>
           <div class="metric">
-            <span class="value"><%= if @ack_age, do: "#{format_number(@ack_age)} ms", else: "none" %></span>
+            <span class="value"><%= if @run.ack_age, do: "#{format_number(@run.ack_age)} ms", else: "none" %></span>
             <span class="label">Last ack</span>
           </div>
           <div class="metric">
-            <span class="value"><%= format_number(@stalls) %></span>
+            <span class="value"><%= format_number(@run.stalls) %></span>
             <span class="label">Stalls</span>
+          </div>
+          <div class="metric" title="ticks that found a frame still rendering (#323)">
+            <span class="value"><%= format_number(@run.skipped) %></span>
+            <span class="label">Skipped</span>
           </div>
         </div>
 
         <div class="metrics-bar">
           <div class="metric">
-            <span class="value"><%= format_number(round(@measured_rate)) %></span>
+            <span class="value"><%= format_number(round(@run.measured_rate)) %></span>
             <span class="label">Samples/s</span>
           </div>
           <div class="metric">
-            <span class="value"><%= format_number(round(@measured_rate * @series)) %></span>
+            <span class="value"><%= format_number(round(@run.measured_rate * @series)) %></span>
             <span class="label">Pts/s</span>
           </div>
           <div class="metric">
@@ -736,7 +545,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
             <span class="label">Render Time</span>
           </div>
           <div class="metric">
-            <span class="value"><%= Float.round(@payload_size / 1024, 1) %> KB</span>
+            <span class="value"><%= Float.round(@run.payload_size / 1024, 1) %> KB</span>
             <span class="label">Payload</span>
           </div>
           <div class="metric">
@@ -744,7 +553,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
             <span class="label">Mode</span>
           </div>
           <div class="metric">
-            <span class="value"><%= @frame %></span>
+            <span class="value"><%= @run.frame %></span>
             <span class="label">Frame</span>
           </div>
         </div>
@@ -896,7 +705,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
       .metrics-bar {
         display: grid;
-        grid-template-columns: repeat(8, 1fr);
+        grid-template-columns: repeat(9, 1fr);
         gap: 0.75rem;
         margin-bottom: 0.75rem;
         padding: 1rem 1.5rem;
