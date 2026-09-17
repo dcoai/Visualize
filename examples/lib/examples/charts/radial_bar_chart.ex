@@ -1,18 +1,17 @@
 defmodule Examples.Charts.RadialBarChart do
   @moduledoc """
-  Radial bar chart example — **left imperative** (#126).
-
-  The bars themselves are a `:rose` mark over an `angle` and an `r` scale, and the value
-  colouring is a sequential `color` scale: the chart is expressible right up to its
-  annotation. What is not is the ring of weekday names outside the bars, each rotated to its
-  own spoke — a mark label has no radial offset and no rotation, and an `angle` axis places
-  its labels from the scale's tick values rather than from the data. Filed as #137 with this
-  chart as the evidence; a radial bar whose sectors are not named is not the same example.
+  Radial bar chart as a design (#126, #137): a `:rose` mark over a polar frame's `angle`
+  and `r` scales, the bars coloured by value through a `:sequential` `color` scale, and
+  the weekday names outside the ring on each sector's own spoke — the `:outward` anchor
+  with a radial offset and `rotate: :radial` (spec/14 §5.5), which is what kept this chart
+  imperative until #137. The centre shows the average as two frame labels at the origin.
   """
 
-  alias Visualize.{Scale, Shape}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
 
   @data [
     %{name: "Monday", value: 85},
@@ -27,160 +26,86 @@ defmodule Examples.Charts.RadialBarChart do
   def title, do: "Radial Bar Chart"
   def description, do: "Weekly activity levels"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 400
     height = opts[:height] || 400
-    inner_radius = 50
-    outer_radius = min(width, height) / 2 - 40
+    outer = min(width, height) / 2 - 40
+    rows = rows(opts)
+    avg = Float.round(Enum.sum(Enum.map(rows, & &1.value)) / length(rows), 1)
 
-    base_data = opts[:data] || @data
-    palette = opts[:palette] || :default
-    gradient = ColorPalettes.gradient(palette)
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:days, [:name, :value, :index]),
+        style(:bar, fill: {:field, :value}, stroke: :background, stroke_width: 1),
+        style(:day, extends: :label, font_size: 11),
+        style(:average, extends: :title, font_size: 24, text_anchor: :middle),
+        style(:average_word, extends: :label, font_size: 12, fill: :axis, text_anchor: :middle),
+        polar(width, height, margin: @zero_margin),
+        radial_scale(:angle, domain: [0, length(rows)]),
+        linear_scale(:r, domain: [0, 100], range: [50, outer]),
+        sequential_scale(:color, domain: [0, :auto]),
+        rose(:days, %{angle: :index, value: :value},
+          options: %{width: 1, inner_radius: 50, pad_angle: 0.1},
+          label: %{text: [{:field, :name}], anchor: :outward, dr: 11, rotate: :radial, style: :day},
+          style: :bar
+        ),
+        label({:data, [0, 0]}, [to_string(avg)], style: :average, dy: -5),
+        label({:data, [0, 0]}, ["average"], style: :average_word, dy: 15)
+      ])
 
-    # Apply animation if tick is provided
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      animate_data(base_data, animation_tick)
-    else
-      base_data
+    {design, %{days: rows}}
+  end
+
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  defp rows(opts) do
+    base = opts[:data] || @data
+
+    data =
+      case opts[:animation_tick] do
+        nil -> base
+        tick -> animate(base, tick)
+      end
+
+    for {d, i} <- Enum.with_index(data), do: Map.put(d, :index, i)
+  end
+
+  # Animation: each bar breathes between half and one and a half of its value.
+  defp animate(data, tick) do
+    for {item, i} <- Enum.with_index(data) do
+      multiplier = 1.0 + 0.5 * :math.sin(tick * 0.15 + i * 0.9)
+      %{item | value: max(10, min(100, item.value * multiplier))}
     end
-
-    n = length(data)
-
-    # Create scales
-    angle_scale = fn i -> i * 2 * :math.pi() / n - :math.pi() / 2 end
-
-    max_value = data |> Enum.map(& &1.value) |> Enum.max()
-
-    radius_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_value])
-      |> Scale.Linear.range([inner_radius, outer_radius])
-
-    color_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, max_value])
-      |> Scale.Linear.range([0, 1])
-
-    # Generate arcs
-    arcs = data
-      |> Enum.with_index()
-      |> Enum.map(fn {d, i} ->
-        start_angle = angle_scale.(i) + 0.05
-        end_angle = angle_scale.(i + 1) - 0.05
-        r = Scale.Linear.apply(radius_scale, d.value)
-
-        # Color based on value using palette gradient
-        t = Scale.Linear.apply(color_scale, d.value)
-        color = ColorPalettes.interpolate_gradient(palette, t)
-
-        arc = Shape.Arc.new()
-          |> Shape.Arc.inner_radius(inner_radius)
-          |> Shape.Arc.outer_radius(r)
-          |> Shape.Arc.start_angle(start_angle + :math.pi() / 2)
-          |> Shape.Arc.end_angle(end_angle + :math.pi() / 2)
-
-        arc_data = %{start_angle: start_angle + :math.pi() / 2, end_angle: end_angle + :math.pi() / 2}
-        path_data = Shape.Arc.generate(arc, arc_data)
-
-        Element.path(%{d: path_data, fill: color, stroke: "white", stroke_width: 1})
-      end)
-
-    # Generate labels
-    labels = data
-      |> Enum.with_index()
-      |> Enum.map(fn {d, i} ->
-        angle = (angle_scale.(i) + angle_scale.(i + 1)) / 2
-        label_radius = outer_radius + 15
-        x = label_radius * :math.cos(angle)
-        y = label_radius * :math.sin(angle)
-
-        # Rotate text to follow arc
-        rotation = angle * 180 / :math.pi()
-        text_anchor = if angle > :math.pi() / 2 or angle < -:math.pi() / 2, do: "end", else: "start"
-        rotation = if text_anchor == "end", do: rotation + 180, else: rotation
-
-        Element.text(%{
-          x: x,
-          y: y,
-          text_anchor: text_anchor,
-          font_size: 11,
-          fill: ColorPalettes.text_color(palette),
-          transform: "rotate(#{rotation},#{x},#{y})"
-        })
-        |> Element.content(d.name)
-      end)
-
-    # Center value label
-    total = Enum.sum(Enum.map(data, & &1.value))
-    avg = Float.round(total / n, 1)
-
-    center_label = Element.g(%{text_anchor: "middle"})
-      |> Element.append(
-        Element.text(%{y: -5, font_size: 24, font_weight: "bold", fill: ColorPalettes.text_color(palette)})
-        |> Element.content("#{avg}")
-      )
-      |> Element.append(
-        Element.text(%{y: 15, font_size: 12, fill: ColorPalettes.axis_color(palette)})
-        |> Element.content("Average")
-      )
-
-    # Build SVG
-    chart_group = Element.g(%{transform: "translate(#{width / 2},#{height / 2})"})
-      |> Element.append(arcs)
-      |> Element.append(labels)
-      |> Element.append(center_label)
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
-  end
-
-  # Animation: activity levels pulse up and down
-  defp animate_data(data, tick) do
-    data
-    |> Enum.with_index()
-    |> Enum.map(fn {item, i} ->
-      phase = i * 0.9
-      # Vary between 50% and 150% of original value
-      multiplier = 1.0 + 0.5 * :math.sin(tick * 0.15 + phase)
-      new_value = item.value * multiplier
-      # Keep within reasonable bounds
-      %{item | value: max(10, min(100, new_value))}
-    end)
-  end
-
-  defp interpolate_color(color1, color2, t) do
-    {r1, g1, b1} = parse_hex(color1)
-    {r2, g2, b2} = parse_hex(color2)
-
-    r = trunc(r1 + (r2 - r1) * t)
-    g = trunc(g1 + (g2 - g1) * t)
-    b = trunc(b1 + (b2 - b1) * t)
-
-    r_hex = r |> Integer.to_string(16) |> String.pad_leading(2, "0")
-    g_hex = g |> Integer.to_string(16) |> String.pad_leading(2, "0")
-    b_hex = b |> Integer.to_string(16) |> String.pad_leading(2, "0")
-
-    "#" <> r_hex <> g_hex <> b_hex
-  end
-
-  defp parse_hex("#" <> hex) do
-    {r, ""} = Integer.parse(String.slice(hex, 0, 2), 16)
-    {g, ""} = Integer.parse(String.slice(hex, 2, 2), 16)
-    {b, ""} = Integer.parse(String.slice(hex, 4, 2), 16)
-    {r, g, b}
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Shape
+    import Visualize.Chart.Build
 
-    arc = Shape.Arc.new()
-      |> Shape.Arc.inner_radius(inner_radius)
-      |> Shape.Arc.outer_radius(value_radius)
-      |> Shape.Arc.start_angle(start_angle)
-      |> Shape.Arc.end_angle(end_angle)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Radial Bar Chart"}),
+        source(:days, [:name, :value, :index]),
+        style(:bar, fill: {:field, :value}, stroke: :background),
+        style(:day, extends: :label, font_size: 11),
+        polar(400, 400, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        radial_scale(:angle, domain: [0, 7]),
+        linear_scale(:r, domain: [0, 100], range: [50, 160]),
+        sequential_scale(:color, domain: [0, :auto]),
+        # The names outside the ring, on each sector's own spoke, reading along it:
+        # the :outward anchor with a radial offset and rotate: :radial (spec/14 §5.5).
+        rose(:days, %{angle: :index, value: :value},
+          options: %{width: 1, inner_radius: 50, pad_angle: 0.1},
+          label: %{text: [{:field, :name}], anchor: :outward, dr: 11, rotate: :radial, style: :day},
+          style: :bar
+        ),
+        label({:data, [0, 0]}, ["67.1"], style: :title, dy: -5)
+      ])
 
-    # Radial bars are just arcs with different outer radii
-    path_data = Shape.Arc.generate(arc, arc_data)
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{days: days})
+    Visualize.Chart.render(applied)
     """
   end
 end

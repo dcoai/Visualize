@@ -1,156 +1,117 @@
 defmodule Examples.Charts.ChordDiagram do
   @moduledoc """
-  Chord diagram showing relationships between groups — **left imperative** (#126).
-
-  The diagram is a `:chord` transform under two `:path` marks — the transform the layer grew
-  for exactly this figure, yielding the group arcs and the ribbons as ready paths. What stops
-  the conversion is the ring of region names outside the group arcs, each rotated to its own
-  spoke: a mark label has no radial offset and no rotation. Filed as #137 with this chart as
-  the evidence; an unnamed chord diagram does not say which region is which.
+  Chord diagram as a design (#126, #137): the `:chord` transform over the flows — the
+  transform the layer grew for exactly this figure — under two marks: the ribbons as a
+  `:path` mark over `output: :chords`, and the group arcs as an `:arc` mark over the
+  groups' own `start_angle` and `end_angle` (spec/14 §5.6, D-69), which is what lets the
+  region names sit outside the ring on each group's spoke — the `:outward` anchor with
+  `rotate: :radial` (§5.5). That annotation kept the chart imperative until #137.
   """
 
-  alias Visualize.Layout.Chord
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
-  @group_names ["Asia", "Europe", "Americas", "Africa", "Oceania"]
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
+  @groups ["Asia", "Europe", "Americas", "Africa", "Oceania"]
 
   # Migration flow matrix (rows = from, columns = to)
   @matrix [
-    [11975,  5871, 8916, 2868, 1200],
-    [ 1951, 10048, 2060, 6171,  950],
-    [ 8010, 16145, 8090, 8045, 1500],
-    [ 1013,   990,  940, 6907,  800],
-    [  500,   800,  600,  400, 2000]
+    [11975, 5871, 8916, 2868, 1200],
+    [1951, 10048, 2060, 6171, 950],
+    [8010, 16145, 8090, 8045, 1500],
+    [1013, 990, 940, 6907, 800],
+    [500, 800, 600, 400, 2000]
   ]
 
   def title, do: "Chord Diagram"
   def description, do: "Inter-regional migration flows"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 500
     height = opts[:height] || 500
-    animation_tick = opts[:animation_tick]
+    radius = min(width, height) / 2 - 40
+    size = [2 * radius, 2 * radius]
 
-    matrix = if animation_tick do
-      generate_animated_matrix(animation_tick)
-    else
-      opts[:matrix] || @matrix
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:flows, [:from, :to, :value]),
+        style(:group, fill: {:field, :id}, stroke: :background, stroke_width: 1),
+        style(:ribbon, fill: {:field, :source}, fill_opacity: 0.6, stroke: {:field, :source}, stroke_width: 0.5),
+        style(:region, extends: :label, font_size: 11),
+        cartesian(width, height, margin: @zero_margin),
+        ordinal_scale(:color),
+        path(chord(:flows, [:from, :to], :value, padding: 0.05, output: :chords, size: size), %{path: :path},
+          style: :ribbon
+        ),
+        arc(chord(:flows, [:from, :to], :value, padding: 0.05, size: size),
+          %{value: :value, start: :start_angle, end: :end_angle},
+          options: %{inner_radius: radius - 20, outer_radius: radius},
+          label: %{text: [{:field, :id}], anchor: :outward, dr: 6, rotate: :radial, style: :region},
+          style: :group
+        )
+      ])
+
+    {design, %{flows: rows(opts)}}
+  end
+
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  # The matrix as flows: one row per from → to cell.
+  defp rows(opts) do
+    matrix =
+      case opts[:animation_tick] do
+        nil -> opts[:matrix] || @matrix
+        tick -> animated(tick)
+      end
+
+    for {row, i} <- Enum.with_index(matrix), {value, j} <- Enum.with_index(row) do
+      %{from: Enum.at(@groups, i), to: Enum.at(@groups, j), value: value}
     end
-
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
-
-    outer_radius = min(width, height) / 2 - 40
-    inner_radius = outer_radius - 20
-
-    # Generate chord layout
-    chord = Chord.new()
-      |> Chord.pad_angle(0.05)
-
-    result = Chord.generate(chord, matrix)
-
-    # Draw group arcs
-    group_arcs = Enum.map(result.groups, fn group ->
-      color = Enum.at(colors, rem(group.index, length(colors)))
-      path_d = Chord.arc_path(group, inner_radius, outer_radius)
-
-      Element.g(%{})
-      |> Element.append(
-        Element.path(%{
-          d: path_d,
-          fill: color,
-          stroke: "white",
-          stroke_width: 1
-        })
-      )
-      |> Element.append(
-        # Add label
-        create_group_label(group, outer_radius + 10, palette)
-      )
-    end)
-
-    # Draw chords (ribbons)
-    ribbons = Enum.map(result.chords, fn chord_data ->
-      source_color = Enum.at(colors, rem(chord_data.source.index, length(colors)))
-      path_d = Chord.ribbon_path(chord_data, inner_radius)
-
-      Element.path(%{
-        d: path_d,
-        fill: source_color,
-        fill_opacity: 0.6,
-        stroke: source_color,
-        stroke_width: 0.5
-      })
-    end)
-
-    # Compose SVG
-    chart_group = Element.g(%{transform: "translate(#{width / 2},#{height / 2})"})
-      |> Element.append(ribbons)
-      |> Element.append(group_arcs)
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
   end
 
-  defp create_group_label(group, radius, palette) do
-    mid_angle = (group.start_angle + group.end_angle) / 2
-    x = radius * :math.sin(mid_angle)
-    y = -radius * :math.cos(mid_angle)
-
-    rotation = mid_angle * 180 / :math.pi()
-    text_anchor = if mid_angle > :math.pi(), do: "end", else: "start"
-    rotation = if text_anchor == "end", do: rotation - 180, else: rotation
-
-    name = Enum.at(@group_names, group.index, "Group #{group.index}")
-
-    Element.text(%{
-      x: x,
-      y: y,
-      text_anchor: text_anchor,
-      font_size: 11,
-      fill: ColorPalettes.text_color(palette),
-      transform: "rotate(#{rotation},#{x},#{y})"
-    })
-    |> Element.content(name)
-  end
-
-  # Animation: vary migration flow values
-  defp generate_animated_matrix(tick) do
+  # Animation: each flow breathes about its value.
+  defp animated(tick) do
     phase = tick * 0.05
 
-    # Base matrix with animated variations
-    [
-      [animate_val(11975, phase, 0, 2000), animate_val(5871, phase, 0.5, 1200), animate_val(8916, phase, 1.0, 1800), animate_val(2868, phase, 1.5, 700), animate_val(1200, phase, 2.0, 300)],
-      [animate_val(1951, phase, 2.5, 500), animate_val(10048, phase, 3.0, 2000), animate_val(2060, phase, 3.5, 500), animate_val(6171, phase, 4.0, 1400), animate_val(950, phase, 4.5, 250)],
-      [animate_val(8010, phase, 5.0, 1600), animate_val(16145, phase, 5.5, 3000), animate_val(8090, phase, 6.0, 1600), animate_val(8045, phase, 6.5, 1600), animate_val(1500, phase, 7.0, 350)],
-      [animate_val(1013, phase, 7.5, 300), animate_val(990, phase, 8.0, 250), animate_val(940, phase, 8.5, 250), animate_val(6907, phase, 9.0, 1400), animate_val(800, phase, 9.5, 200)],
-      [animate_val(500, phase, 10.0, 150), animate_val(800, phase, 10.5, 200), animate_val(600, phase, 11.0, 150), animate_val(400, phase, 11.5, 100), animate_val(2000, phase, 12.0, 500)]
-    ]
-  end
-
-  defp animate_val(base, phase, offset, amplitude) do
-    trunc(max(100, base + :math.sin(phase + offset) * amplitude))
+    for {row, i} <- Enum.with_index(@matrix) do
+      for {base, j} <- Enum.with_index(row) do
+        k = i * 5 + j
+        trunc(max(100, base + :math.sin(phase + k * 0.5) * base / 6))
+      end
+    end
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Layout.Chord
+    import Visualize.Chart.Build
 
-    matrix = [
-      [11975, 5871, 8916, 2868],
-      [ 1951, 10048, 2060, 6171],
-      # ... flow from group i to group j
-    ]
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Chord Diagram"}),
+        source(:flows, [:from, :to, :value]),
+        style(:group, fill: {:field, :id}, stroke: :background),
+        style(:ribbon, fill: {:field, :source}, fill_opacity: 0.6),
+        style(:region, extends: :label, font_size: 11),
+        cartesian(500, 500, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        ordinal_scale(:color),
+        # The ribbons: the :chord transform's chords, each a ready path.
+        path(chord(:flows, [:from, :to], :value, padding: 0.05, output: :chords, size: [420, 420]),
+          %{path: :path}, style: :ribbon),
+        # The group arcs from the groups' own angles, and the region names outside the
+        # ring on each group's spoke (spec/14 §5.5).
+        arc(chord(:flows, [:from, :to], :value, padding: 0.05, size: [420, 420]),
+          %{value: :value, start: :start_angle, end: :end_angle},
+          options: %{inner_radius: 190, outer_radius: 210},
+          label: %{text: [{:field, :id}], anchor: :outward, dr: 6, rotate: :radial, style: :region},
+          style: :group
+        )
+      ])
 
-    chord = Chord.new()
-      |> Chord.pad_angle(0.05)
-
-    result = Chord.generate(chord, matrix)
-
-    # result.groups - arcs for each group
-    # result.chords - ribbons connecting groups
-    # Chord.arc_path(group, inner_r, outer_r)
-    # Chord.ribbon_path(chord, radius)
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{flows: flows})
+    Visualize.Chart.render(applied)
     """
   end
 end

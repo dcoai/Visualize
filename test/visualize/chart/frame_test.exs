@@ -477,6 +477,35 @@ defmodule Visualize.Chart.FrameTest do
       assert svg =~ ~s|transform="rotate(-90) rotate(-45,-75,-25)"|
     end
 
+    test "rotate on a frame label turns it about its own point: degrees, or :tangent/:radial about the plot's middle (#137)" do
+      scales = %{x: %{kind: :linear, domain: [0, 3]}, y: %{kind: :linear, domain: [0, 10]}}
+
+      labels = [
+        %{anchor: {:data, [3, 5]}, text: "r", rotate: :radial},
+        %{anchor: {:data, [0, 5]}, text: "l", rotate: :radial},
+        %{anchor: {:data, [1.5, 10]}, text: "t", rotate: :tangent},
+        %{anchor: {:frame, :top_left}, text: "n", rotate: 30}
+      ]
+
+      texts =
+        chart(%{scales: scales}, %{labels: labels})
+        |> Frame.new()
+        |> Frame.generate()
+        |> Map.fetch!(:children)
+        |> Enum.filter(&(&1.style[:class] == "label"))
+
+      [right, left, top, fixed] = texts
+
+      # The plot is 240 × 150: (3, 5) is its right edge's middle, (0, 5) its left's, (1.5, 10) its top's.
+      assert right.transform.operations == [{:rotate, 0.0, 240.0, 75.0}]
+      assert right.style.text_anchor == :start
+      assert left.transform.operations == [{:rotate, 0.0, 0.0, 75.0}]
+      assert left.style.text_anchor == :end
+      assert top.transform.operations == [{:rotate, 0.0, 120.0, 0.0}]
+      assert top.style.text_anchor == :middle
+      assert fixed.transform.operations == [{:rotate, 30, 4, 4}]
+    end
+
     test "a mark label moves along its anchor's side, and an axis style angles its tick labels" do
       styles = %{
         up: %{margin_y: 6, vertical_align: :top},

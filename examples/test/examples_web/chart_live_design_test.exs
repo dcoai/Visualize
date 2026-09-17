@@ -45,7 +45,7 @@ defmodule ExamplesWeb.ChartLiveDesignTest do
   end
 
   test "a chart that is not a design shows the whole-element binary sample and no data panel" do
-    slug = "chord"
+    slug = "force"
     html = page(slug, :canvas)
     assert html =~ "Canvas Binary Rendering Code"
     refute html =~ "The design (data)"

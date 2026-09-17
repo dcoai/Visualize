@@ -154,6 +154,12 @@ defmodule Visualize.Shape.Arc do
     end
   end
 
+  @doc "The inner and outer radius of the arc for `data`, `{r0, r1}` (spec/14 §5.5)."
+  @spec radii(t(), map() | any()) :: {number(), number()}
+  def radii(%__MODULE__{} = arc, data) do
+    {apply_accessor(arc.inner_radius, data), apply_accessor(arc.outer_radius, data)}
+  end
+
   @doc "Generates a centroid point for the arc"
   @spec centroid(t(), map() | any()) :: {number(), number()}
   def centroid(%__MODULE__{} = arc, data) do

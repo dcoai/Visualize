@@ -4,6 +4,7 @@ defmodule Visualize.Chart.Mark.Label do
   # label's style, `{:field, f}` read from the datum.
 
   alias Visualize.Chart.Frame.Position
+  alias Visualize.Chart.Label.Polar
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.Chart.Text
   alias Visualize.Data.Table
@@ -44,7 +45,13 @@ defmodule Visualize.Chart.Mark.Label do
 
   def elements(children, %{label: label} = ctx) do
     for %{anchor: point, datum: datum} = child <- children do
-      element(ctx, point, Map.get(child, :bounds), text(label.text, datum), "mark-label")
+      element(
+        ctx,
+        point,
+        Map.take(child, [:bounds, :radii]),
+        text(label.text, datum),
+        "mark-label"
+      )
     end
   end
 
@@ -52,8 +59,10 @@ defmodule Visualize.Chart.Mark.Label do
   # One text at a point — or, for an edge anchor, at an edge of the element's bounds —
   # anchored, offset and styled as the mark's label says (spec/14 §5.5). A `:text` mark
   # draws its element through this too (#134), with no label node to read past its style.
-  @spec element(map(), {number(), number()}, tuple() | nil, String.t(), String.t()) :: Element.t()
-  def element(%{frame: frame} = ctx, {px, py}, bounds, content, class) do
+  @spec element(map(), {number(), number()}, map() | nil, String.t(), String.t()) :: Element.t()
+  def element(%{frame: frame} = ctx, {px, py}, shape, content, class) do
+    shape = shape || %{}
+    bounds = Map.get(shape, :bounds)
     label = ctx.label || %{}
     style = style(%{ctx | label: label})
 
@@ -63,13 +72,40 @@ defmodule Visualize.Chart.Mark.Label do
     anchor = Map.get(label, :anchor, Schema.default(:mark_label, :anchor))
     dx = Map.get(label, :dx, 0)
     dy = Map.get(label, :dy, 0)
+    centre = centre(ctx)
 
-    {x, y, baseline, text_anchor} = place(anchor, px, py, bounds)
+    {x, y, baseline, text_anchor} =
+      case anchor do
+        polar when polar in [:outward, :inward] ->
+          Polar.place(
+            polar,
+            {px, py},
+            centre,
+            Map.get(shape, :radii),
+            @inset + Map.get(label, :dr, 0)
+          )
+
+        _ ->
+          place(anchor, px, py, bounds)
+      end
+
     attrs = %{x: x + dx, y: y + dy} |> put_unless_nil(:dy, baseline)
+
+    {rotation, text_anchor} =
+      Polar.rotation(Map.get(label, :rotate), {x + dx, y + dy}, centre, text_anchor)
+
     base = %{class: class, text_anchor: text_anchor}
 
     Element.new(:text, attrs: attrs, style: Map.merge(base, style), content: content)
+    |> Polar.rotate(rotation)
     |> Position.apply(style_node, outward(anchor))
+  end
+
+  # The centre a polar anchor and a polar rotation are about (spec/14 §5.5): the group's
+  # origin for a centred mark or in a polar frame, the plot's middle otherwise.
+  @centred [:rose, :arc]
+  defp centre(%{type: type, frame: %{kind: kind, plot: plot}}) do
+    if type in @centred or kind == :polar, do: {0, 0}, else: {plot.width / 2, plot.height / 2}
   end
 
   # The outward direction of an anchor (spec/14 §5.5): the side the label sits on.
