@@ -59,6 +59,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Editor,
       Fills,
       Fonts,
+      Glyphs,
       Inspector,
       Layers,
       Library,
@@ -463,11 +464,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 type="button"
                 class={tab.class}
                 title={tab.title}
+                aria-label={tab.label}
                 data-builder-bind-root={tab.label}
                 phx-click="select_root"
                 phx-value-root={tab.label}
                 phx-target={@myself}
-              >{tab.label}</button>
+              >{Phoenix.HTML.raw(Glyphs.icon(tab.label))}<span :if={tab.needs > 0} class="vis-builder-node-badge">{tab.needs}</span></button>
             </nav>
             <nav class="vis-builder-context-icons" aria-label="context panels">
               <button
@@ -580,7 +582,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <Sources.panel
-              :if={@context == :sources}
+              :if={@context == :inspect and root(@entry.label) == "sources"}
               id={@id <> "-sources"}
               signals={@signals}
               tick={@tick}
@@ -599,7 +601,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <Fonts.panel
-              :if={@context == :font}
+              :if={@context == :inspect and root(@entry.label) == "styles"}
               id={@id <> "-fonts"}
               kind={@entry.kind}
               node={@editing}
@@ -882,10 +884,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       signal = Signals.new(:sine, [:t, :value])
 
-      {:noreply,
-       socket
-       |> assign(signals: Map.put(signals, name, signal), context: :sources, notice: nil)
-       |> declared_source(name, signal)}
+      # The signals stand under the sources root (§19.10): adding one opens it.
+      socket =
+        socket
+        |> assign(signals: Map.put(signals, name, signal), notice: nil)
+        |> declared_source(name, signal)
+
+      handle_event("select_root", %{"root" => "sources"}, socket)
     end
 
     def handle_event("remove_signal", %{"name" => name}, socket) do
@@ -2051,8 +2056,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp stop_colour(_field, _node, _design), do: nil
 
-    # A colour field opens the colour panel and a font key the font panel; any other field
-    # leaves the panel where it is.
+    # A colour field opens the colour panel; any other field leaves the panel where it is —
+    # a font key is a style's, and the font panel is under the styles root the form is in.
     defp context_for(socket, key) do
       %{entry: entry} = editing(socket.assigns)
 
@@ -2065,32 +2070,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
         %{type: :colour} ->
           :colour
 
-        %{key: k} when k in [:font_family, :font_size, :font_weight, :font_style, :text_anchor] ->
-          :font
-
         _other ->
           socket.assigns.context
       end
     end
 
+    # The panel row: three panels (spec/14 §19.10, #314). The signals stand under the
+    # sources root and the font panel under styles, so neither is a panel of its own.
     defp context_icons do
-      [
-        {:inspect,
-         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9 H16 M8 13 H16 M8 17 H12"/></svg>|,
-         "inspect"},
-        {:sources,
-         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12 C6 4 9 4 12 12 C15 20 18 20 21 12"/></svg>|,
-         "sources"},
-        {:colour,
-         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.5" fill="currentColor"/><circle cx="14" cy="8.5" r="1.5" fill="currentColor"/><circle cx="15.5" cy="13" r="1.5" fill="currentColor"/></svg>|,
-         "colour"},
-        {:font,
-         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 19 L12 4 L19 19"/><path d="M8 13 H16"/></svg>|,
-         "font"},
-        {:variables,
-         ~s|<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6 C4 6 4 10 4 12 C4 14 4 18 6 18"/><path d="M18 6 C20 6 20 10 20 12 C20 14 20 18 18 18"/><path d="M9 9 L15 15 M15 9 L9 15"/></svg>|,
-         "variables"}
-      ]
+      for panel <- [:inspect, :colour, :variables],
+          do: {panel, Glyphs.icon(panel), to_string(panel)}
     end
 
     # Every "#rrggbb" the design's styles carry, once each, in order of first use.
@@ -2191,6 +2180,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             label: root,
             open: root == open_root,
             elsewhere: root not in here,
+            needs: count,
             class: tab_class(root == open_root, root in here, count),
             title: tab_title(root, root in here, chart?, count)
           }
