@@ -8,7 +8,7 @@ defmodule Examples.Charts.StackedAreaChart do
   its `series` channel — which both splits the paths and colours them from the `color`
   scale the legend explains.
 
-  The legend draws inside the plot area (#136).
+  The legend draws in the right margin the chart reserves for it (spec/14 §4.5, #136).
   """
 
   import Visualize.Chart.Build
@@ -45,7 +45,7 @@ defmodule Examples.Charts.StackedAreaChart do
         ordinal_scale(:color, domain: @keys),
         axis(:x, :bottom, ticks: 10),
         axis(:y, :left, ticks: 5),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
         area(stack(from(:fruit), @keys), %{x: :x, y: :y1, y0: :y0, series: :key}, style: :layer)
       ])
 
@@ -94,7 +94,7 @@ defmodule Examples.Charts.StackedAreaChart do
         ordinal_scale(:color, domain: keys),
         axis(:x, :bottom, ticks: 10),
         axis(:y, :left, ticks: 5),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
 
         # The stack is a step of the mark's pipeline; it yields key, y0 and y1 per row.
         area(stack(from(:fruit), keys), %{x: :x, y: :y1, y0: :y0, series: :key}, style: :layer)

@@ -10,7 +10,8 @@ defmodule Examples.Charts.BubbleChart do
 
   The bubble's radius is a column, because a `:circle`'s `value` is user units and names no
   scale (spec/14 §5.2). The hand-drawn ticks are real axes now, and the units the ticks
-  carried (`$…T`) are in the axis titles (#135); the legend is inside the plot area (#136).
+  carried (`$…T`) are in the axis titles (#135); the legend is in the right margin the
+  chart reserves for it (spec/14 §4.5, #136).
   """
 
   import Visualize.Chart.Build
@@ -67,7 +68,7 @@ defmodule Examples.Charts.BubbleChart do
         label({:axis, :x}, ["Population (millions)"]),
         label({:axis, :y}, ["GDP (trillions USD)"]),
         label({:frame, :bottom_right}, ["Size = GDP/capita"], style: :caption),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
         circle(largest_first, %{x: :population, y: :gdp, value: :r}, style: :bubble),
         text(named, %{x: :population, y: :gdp},
           label: %{text: [{:field, :name}], anchor: :middle, style: :name}
@@ -137,7 +138,7 @@ defmodule Examples.Charts.BubbleChart do
         axis(:y, :left, ticks: [0, 5, 10, 15, 20, 25], grid: true),
         label({:axis, :x}, ["Population (millions)"]),
         label({:axis, :y}, ["GDP (trillions USD)"]),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
         circle(largest_first, %{x: :population, y: :gdp, value: :r}, style: :bubble),
 
         # The names: a :text mark over the filtered rows (#134).

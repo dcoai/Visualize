@@ -9,7 +9,7 @@ defmodule Examples.Charts.StackedBarChart do
 
   The hand-drawn tick lines are a real y axis with `grid: true` now; the `%` those ticks
   carried is in the axis title, because a format specifier has no unit (#135). The legend
-  draws inside the plot area (#136).
+  draws in the right margin the chart reserves for it (spec/14 §4.5, #136).
   """
 
   import Visualize.Chart.Build
@@ -44,7 +44,7 @@ defmodule Examples.Charts.StackedBarChart do
         axis(:x, :bottom),
         axis(:y, :left, ticks: 5, grid: true),
         label({:axis, :y}, ["share (%)"]),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
         rect(stack(from(:devices), @keys), %{x0: :year, x1: :year, y0: :y0, y1: :y1},
           style: :segment
         )
@@ -99,7 +99,7 @@ defmodule Examples.Charts.StackedBarChart do
         axis(:x, :bottom),
         axis(:y, :left, ticks: 5, grid: true),
         label({:axis, :y}, ["share (%)"]),
-        legend(:color, position: :top_right),
+        legend(:color, position: :top_right, inside: false),
         rect(stack(from(:devices), keys), %{x0: :year, x1: :year, y0: :y0, y1: :y1},
           style: :segment
         )

@@ -8,8 +8,8 @@ defmodule Examples.Charts.DonutChart do
   zero is the centre — which is why the frame declares an `angle` and an `r` scale it draws
   no axis for.
 
-  The legend draws inside the plot area, in the right margin the chart already reserved for
-  it (#136).
+  The legend draws in the right margin the chart reserves for it, `inside: false` at the
+  right, centred (spec/14 §4.5, #136).
   """
 
   import Visualize.Chart.Build
@@ -51,7 +51,7 @@ defmodule Examples.Charts.DonutChart do
         # Declared so the centre has coordinates; no axis draws either of them.
         linear_scale(:angle, domain: [0, 1]),
         linear_scale(:r, domain: [0, 1]),
-        legend(:color, position: :right),
+        legend(:color, position: :right, inside: false),
         arc(:slices, %{value: :revenue},
           options: %{inner_radius: outer * 0.6, outer_radius: outer, pad_angle: 0.02},
           style: :slice
@@ -102,7 +102,7 @@ defmodule Examples.Charts.DonutChart do
         # Declared so the centre has coordinates; no axis draws either of them.
         linear_scale(:angle, domain: [0, 1]),
         linear_scale(:r, domain: [0, 1]),
-        legend(:color, position: :right),
+        legend(:color, position: :right, inside: false),
 
         # An inner radius is all that separates a donut from a pie.
         arc(:slices, %{value: :revenue},
