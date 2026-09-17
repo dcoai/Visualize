@@ -17,14 +17,28 @@ defmodule ExamplesWeb.Layouts do
             color: #333;
             line-height: 1.6;
           }
-          header {
+          /* One header on every page, at half its former height, with the tab bar (#329) */
+          header.site-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 2rem;
+            padding: 1rem 2rem 0;
             text-align: center;
           }
-          header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
-          header p { opacity: 0.9; font-size: 1.1rem; }
+          header.site-header h1 { font-size: 1.25rem; margin-bottom: 0.15rem; }
+          header.site-header p { opacity: 0.9; font-size: 0.85rem; margin-bottom: 0.6rem; }
+          .site-tabs { display: flex; justify-content: center; gap: 0.25rem; }
+          .site-tab {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.45rem 0.9rem; border-radius: 6px 6px 0 0;
+            color: rgba(255,255,255,0.85); text-decoration: none; font-size: 0.9rem; font-weight: 500;
+          }
+          .site-tab:hover { background: rgba(255,255,255,0.12); color: #fff; }
+          .site-tab[aria-current="page"] { background: #f5f5f5; color: #4c3fa0; font-weight: 600; }
+          .site-tab svg { width: 16px; height: 16px; }
+          .site-tab-icon { display: inline-flex; }
+          .page-intro { margin-bottom: 1rem; }
+          .page-intro h2 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+          .page-intro p { color: #666; }
           body > main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
           .gallery {
             display: grid;

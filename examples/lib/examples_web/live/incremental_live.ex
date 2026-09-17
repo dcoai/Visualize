@@ -195,8 +195,9 @@ defmodule ExamplesWeb.IncrementalLive do
 
   def render(assigns) do
     ~H"""
+    <ExamplesWeb.SiteHeader.header tab={:performance} />
     <div style="padding: 20px; font-family: sans-serif;">
-      <h1>Incremental Canvas Rendering Demo</h1>
+      <h2>Incremental Canvas Rendering Demo</h2>
       <p>This demo shows the copy+shift optimization for scrolling charts.</p>
 
       <div style="margin-bottom: 20px;">

@@ -258,8 +258,9 @@ defmodule ExamplesWeb.BuilderLive do
 
   def render(assigns) do
     ~H"""
-    <header>
-      <h1>Chart builder</h1>
+    <ExamplesWeb.SiteHeader.header tab={:builder} />
+    <div class="page-intro builder-intro">
+      <h2>Chart builder</h2>
       <p>
         <code>Visualize.Chart.Builder</code>
         over three entries of this page's library — a house design, a shared frame and a
@@ -271,8 +272,7 @@ defmodule ExamplesWeb.BuilderLive do
         design.
       </p>
       <p :if={@saved} class="builder-saved">{@saved}</p>
-      <p><a href="/">← back to the gallery</a></p>
-    </header>
+    </div>
     <main>
       <.live_component
         module={Visualize.Chart.Builder}
