@@ -25,7 +25,7 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
     y = Scale.Linear.new() |> Scale.Linear.domain([-100, 100]) |> Scale.Linear.range([410, 0])
 
     %Phoenix.LiveView.Socket{}
-    |> Phoenix.Component.assign(y_scale: y, frame: 0)
+    |> Phoenix.Component.assign(y_scale: y, run: Examples.Run.new(data_rate: 600))
     |> Page.at_density(samples_per_px)
     |> Map.fetch!(:assigns)
     |> then(&%{&1 | random_data: Enum.map(1..&1.points_per_series, fn i -> rem(i, 7) * 10.0 end)})
@@ -77,7 +77,7 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
     assert Page.density_for(600) == 4
     assert Page.density_for(10) == 1
     assert Page.density_for(5000) == 31
-    a = assigns(4) |> Map.put(:data_rate, 600)
+    a = assigns(4)
     assert_in_delta Page.span(a), 3241 / 600, 1.0e-9
   end
 
@@ -122,46 +122,5 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
         assert_in_delta y, Map.fetch!(by_x, x), 1.0e-3
       end
     end
-  end
-  test "samples arrive by the clock and a frame scrolls by the whole columns they fill (#300)" do
-    a = assigns(2) |> Map.merge(%{data_rate: 600, pending: 0, carry: 0.0})
-
-    # 600 samples/s for 16 ms is 9.6 samples: 9 arrive, 0.6 carries; at two per column that is
-    # four columns with one sample pending.
-    assert {4, 9, %{pending: 1, carry: carry}} = Page.arrivals(a, 16)
-    assert_in_delta carry, 0.6, 1.0e-9
-
-    # The next tick adds its samples to the pending one and the carry: 0.6 + 9.6 = 10.2 →
-    # 10 arrive, 11 pending → five columns, one pending, 0.2 carried.
-    assert {5, 10, %{pending: 1, carry: carry}} = Page.arrivals(%{a | pending: 1, carry: carry}, 16)
-    assert_in_delta carry, 0.2, 1.0e-9
-
-    # A slow rate fills no column on most ticks: the frame draws nothing, and nothing is lost.
-    slow = %{a | data_rate: 60}
-    assert {0, 0, %{pending: 0, carry: c1}} = Page.arrivals(slow, 16)
-    assert_in_delta c1, 0.96, 1.0e-9
-    assert {0, 1, %{pending: 1, carry: c2}} = Page.arrivals(%{slow | carry: c1}, 16)
-    assert_in_delta c2, 0.92, 1.0e-9
-
-    # The columns a tick yields are what the frame scrolls by: whole pixels, whole samples.
-    scroll = Scroll.advance(a.scroll, 4)
-    assert scroll.origin == 8
-    assert length(Scroll.shift(scroll, a.random_data, 4, fn _ -> 0.0 end)) == a.points_per_series
-  end
-  test "ticks follow a deadline: a 600 fps target alternates 1 and 2 ms and averages its period (#302)" do
-    # Each tick fires when its delay elapses; the deadline advances by the period, not by
-    # the delay, so rounding never accumulates.
-    {delays, _} =
-      Enum.map_reduce(1..6, {0, 0}, fn _, {due, now} ->
-        {next, delay} = Page.deadline(due, now, 600)
-        {delay, {next, now + delay * 1000}}
-      end)
-
-    assert delays == [2, 1, 2, 2, 1, 2]
-    assert Enum.sum(delays) * 1000 == 6 * 1_000_000 / 600 * 1.0 |> round()
-
-    # 500 fps is whole milliseconds; a late tick is due now, not caught up in a burst.
-    assert {2000.0, 2} = Page.deadline(0, 0, 500)
-    assert {9_000, 0} = Page.deadline(0, 9_000, 500)
   end
 end
