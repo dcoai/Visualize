@@ -1147,6 +1147,24 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert length(Regex.scan(~r/vis-builder-layer-lock"/, html)) == 1
 
+      # Its mask is the site's, not the entry's: the › Mask item under its row lists the
+      # entry's keys and a tick masks one in the chart, the entry untouched (§18.8, #316).
+      {:noreply, m} = Builder.handle_event("toggle_layer_detail", %{"index" => "3"}, s)
+      {:noreply, m} = Builder.handle_event("toggle_layer_mask", %{"index" => "3"}, m)
+      masked_html = BuilderFixture.render(m)
+      assert masked_html =~ ~s(<input type="hidden" name="_index" value="3">)
+      assert masked_html =~ ~s(name="frame.size" value="true">)
+
+      {:noreply, m} =
+        Builder.handle_event(
+          "mask",
+          %{"_target" => ["frame.size"], "_index" => "3", "frame.size" => "true"},
+          m
+        )
+
+      assert Enum.at(m.assigns.uses, 3).mask == [[:frame, :size]]
+      assert BuilderFixture.render(m) =~ ~s(name="frame.size" value="true" checked>)
+
       # Its page: `frame.size` is Frame::wide's word (width 900, on top), so the form is
       # disabled under the note, and an edit is refused with the notice.
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "3"}, s)
@@ -1776,19 +1794,34 @@ defmodule Visualize.Chart.BuilderTest do
       %{socket: BuilderFixture.socket(BuilderFixture.layers(), store: Library)}
     end
 
-    test "the selected layer's keys are mask checkboxes, checked where the mask holds them", %{
-      socket: s
-    } do
+    test "a layer's mask is the › Mask item under its row, not the context panel (spec/14 §18.8, #316)",
+         %{
+           socket: s
+         } do
       html = BuilderFixture.render(s)
       assert html =~ ~s(<h3 class="vis-builder-context-title">house</h3>)
+      # No checkboxes in the context panel; the item appears once the row is open.
+      refute html =~ ~s(class="vis-builder-masks")
+      refute html =~ "vis-builder-layer-mask-toggle"
+
+      {:noreply, open} = Builder.handle_event("toggle_layer_detail", %{"index" => "0"}, s)
+      html = BuilderFixture.render(open)
+      assert html =~ ~s(phx-click="toggle_layer_mask" phx-value-index="0")
+      assert html =~ "› Mask</button>"
+      refute html =~ ~s(class="vis-builder-masks")
+
+      {:noreply, s} = Builder.handle_event("toggle_layer_mask", %{"index" => "0"}, open)
+      html = BuilderFixture.render(s)
+      assert html =~ "⌄ Mask</button>"
       assert html =~ ~s(<form class="vis-builder-masks" phx-change="mask")
+      assert html =~ ~s(<input type="hidden" name="_index" value="0">)
       assert html =~ ~s(name="frame.margin" value="true">)
       refute html =~ ~s(name="frame.margin" value="true" checked>)
 
       {:noreply, masked} =
         Builder.handle_event(
           "mask",
-          %{"_target" => ["frame.margin"], "frame.margin" => "true"},
+          %{"_target" => ["frame.margin"], "_index" => "0", "frame.margin" => "true"},
           s
         )
 
@@ -1801,12 +1834,27 @@ defmodule Visualize.Chart.BuilderTest do
       assert Map.has_key?(house.frame, :size)
 
       # An unchecked box submits nothing, which is the path leaving.
-      {:noreply, back} = Builder.handle_event("mask", %{"_target" => ["frame.margin"]}, masked)
+      {:noreply, back} =
+        Builder.handle_event("mask", %{"_target" => ["frame.margin"], "_index" => "0"}, masked)
+
       assert hd(back.assigns.uses).mask == []
+
+      # The form names the layer: a row other than the selected one writes its own mask.
+      {:noreply, other} =
+        Builder.handle_event(
+          "mask",
+          %{"_target" => ["theme"], "_index" => "1", "theme" => "true"},
+          back
+        )
+
+      assert Enum.at(other.assigns.uses, 1).mask == [[:theme]]
+      assert hd(other.assigns.uses).mask == []
     end
 
     test "a disabled layer is said to be, not drawn as every box checked", %{socket: s} do
       {:noreply, off} = Builder.handle_event("toggle_layer", %{"index" => "0"}, s)
+      {:noreply, off} = Builder.handle_event("toggle_layer_detail", %{"index" => "0"}, off)
+      {:noreply, off} = Builder.handle_event("toggle_layer_mask", %{"index" => "0"}, off)
       html = BuilderFixture.render(off)
       assert html =~ "disabled — every key is masked"
       refute html =~ ~s(class="vis-builder-masks")
