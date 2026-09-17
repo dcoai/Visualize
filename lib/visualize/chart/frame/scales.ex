@@ -46,9 +46,50 @@ defmodule Visualize.Chart.Frame.Scales do
     columns = columns(design, kind, sources, styles, ctx)
     axes = Map.get(frame, :axes, [])
 
-    Map.new(Map.get(frame, :scales, %{}), fn {name, node} ->
-      {name, build(name, node, Map.get(columns, name, []), plot, theme, axes)}
+    nodes = Map.get(frame, :scales, %{})
+
+    scales =
+      Map.new(nodes, fn {name, node} ->
+        {name, build(name, node, Map.get(columns, name, []), plot, theme, axes)}
+      end)
+
+    # An offset scale's :auto range is the bandwidth of the scale its family maps to,
+    # so it is built again once the outer one exists (spec/14 §4.3, D-109).
+    Enum.reduce(offsets(design, kind), scales, fn {name, outer}, scales ->
+      with %{} = node <- Map.get(nodes, name),
+           :auto <- get(node, :range),
+           %Band{} = outer <- Map.get(scales, outer) do
+        range = [0, Band.bandwidth(outer)]
+
+        Map.put(
+          scales,
+          name,
+          build(name, Map.put(node, :range, range), Map.get(columns, name, []), plot, theme, axes)
+        )
+      else
+        _ -> scales
+      end
     end)
+  end
+
+  # The offset scales the marks name, each with the scale its family maps to: `{name, outer}`.
+  defp offsets(design, kind) do
+    for mark <- design.marks,
+        {family, _field} <- Map.get(mark, :offset, %{}),
+        name = offset_scale(mark, family),
+        outer = scale_for(kind, mark, family),
+        outer != nil,
+        uniq: true,
+        do: {name, outer}
+  end
+
+  @doc false
+  # The offset scale of a family for a mark: `x_offset`/`y_offset`, renamed by the mark's
+  # `scales` node (spec/14 §5.1).
+  @spec offset_scale(map(), :x | :y) :: atom()
+  def offset_scale(mark, family) do
+    name = :"#{family}_offset"
+    Map.get(Map.get(mark, :scales, %{}), name, name)
   end
 
   @doc false
@@ -117,7 +158,12 @@ defmodule Visualize.Chart.Frame.Scales do
           {:field, field} <- [Map.get(Style.node(styles, Map.get(mark, :style)), key)],
           do: {:color, column(rows, field)}
 
-    channels ++ colours
+    # An offset field's values are its offset scale's domain (spec/14 §4.3).
+    offsets =
+      for {family, field} <- Map.get(mark, :offset, %{}),
+          do: {offset_scale(mark, family), column(rows, field)}
+
+    channels ++ colours ++ offsets
   end
 
   defp values(%Var{name: name}, _rows), do: Style.unresolved!(name)

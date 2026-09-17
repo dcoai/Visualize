@@ -24,19 +24,56 @@ defmodule Visualize.Chart.Mark.Channels do
     channels = Map.get(ctx.mark, :channels, %{})
     frame = ctx.frame
 
+    offsets = Map.get(ctx.mark, :offset, %{})
+
     Enum.map(ctx.rows, fn row ->
       Enum.reduce(channels, %{datum: row}, fn {channel, spec}, acc ->
         value = read(spec, row)
 
         pixel =
-          if channel in @raw_always or channel in raw,
-            do: value,
-            else: map(frame, ctx.mark, channel, value)
+          cond do
+            channel in @raw_always or channel in raw ->
+              value
+
+            Map.has_key?(offsets, family(channel)) ->
+              offset(frame, ctx.mark, channel, value, row, offsets)
+
+            true ->
+              map(frame, ctx.mark, channel, value)
+          end
 
         Map.put(acc, channel, pixel)
       end)
     end)
   end
+
+  # A channel's family: the position scale its edges and position read (spec/14 §4.3).
+  defp family(channel) when channel in [:x, :x0, :x1], do: :x
+  defp family(channel) when channel in [:y, :y0, :y1], do: :y
+  defp family(channel), do: channel
+
+  # A band within a band (spec/14 §5.1, D-109): the outer band's start from the family's
+  # scale, then the inner band's placement from the offset scale over the offset field —
+  # start, end or centre by the channel. Anything not a band, or a datum either scale
+  # cannot place, places nothing.
+  defp offset(_frame, _mark, _channel, nil, _row, _offsets), do: nil
+
+  defp offset(frame, mark, channel, value, row, offsets) do
+    family = family(channel)
+
+    with %Band{} = outer <- scale_named(frame, Scales.scale_for(frame.kind, mark, family)),
+         %Band{} = inner <- scale_named(frame, Scales.offset_scale(mark, family)),
+         outer_start when is_number(outer_start) <- Scale.apply(outer, value),
+         inner_value when inner_value != nil <- Table.get(row, Map.fetch!(offsets, family)),
+         inner_start when is_number(inner_start) <- Scale.apply(inner, inner_value) do
+      outer_start + inner_start + Band.bandwidth(inner) * band_share(channel)
+    else
+      _ -> nil
+    end
+  end
+
+  defp scale_named(_frame, nil), do: nil
+  defp scale_named(frame, name), do: Map.get(frame.scales, name)
 
   @doc false
   # Whether the mark declares the channel.

@@ -82,6 +82,7 @@ defmodule Visualize.Chart.Schema do
     :transform,
     :channels,
     :mark_scales,
+    :mark_offset,
     :options,
     :mark_label,
     :tooltip

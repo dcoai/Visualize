@@ -879,3 +879,11 @@ Two rejected alternatives. Binding an identity into the fragment at drop time (#
 **Decision.** A strip is built over the rows whose reading on the viewport scale lies within the strip's range, widened by three rows each side per source. Three is the most neighbours a curve of spec/04 reads: `:linear` none, `:monotone_x` one, `:basis` two; a fourth would be waste, a second would break a basis curve at the edge. The clip removes the overhang. The full redraw is the whole window, as before.
 
 **Consequences.** A scroll payload is proportional to the strip, not the window. A mark whose geometry depends on rows far from the strip — a stacked area's baseline, a transform's output — is not a scroll candidate and `dynamic_regions/1`'s reasons already say when a canvas layer goes full per tick; a design author who sees seams at a strip's edge has a curve reading more than three neighbours, which no curve of the library does.
+
+## 109. D-109 — A band within a band is an offset scale, not a transform
+
+**Context.** #132. A grouped bar chart is two band scales, the inner ranged over the outer's bandwidth, and a mark read exactly one scale per channel family: nothing in the layer could put a datum *within* its band. Three workarounds were considered and rejected — one band over the category/series pairs loses the grouping, a facet frame is a different chart, precomputed pixels put the layout back in the caller.
+
+**Decision.** The mark declares `offset: %{x: field}`; the frame declares an `x_offset` (or `y_offset`) scale of kind `:band` whose `:auto` range is the outer scale's bandwidth and whose domain is inferred from the offset fields; the channel reading adds the inner band's placement to the outer's. The alternative — a `:group` transform yielding band fractions — was rejected because a transform runs before the scales exist (§5.4) and would have had to be told the bandwidth some other way.
+
+**Consequences.** A grouped bar is one `:rect` mark over one row per bar, expressible in the builder and the library like any other; `Examples.Charts.GroupedBarChart` converts. The reading adds, so an offset on `y` groups horizontal bars and an offset scale with one member draws the ungrouped chart. A family whose outer scale is not a band places nothing with an offset, since there is no band to be within.
