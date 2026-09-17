@@ -5,6 +5,7 @@ defmodule Visualize.Chart.Frame.Labels do
 
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Position
+  alias Visualize.Chart.Label.Polar
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.Chart.Text
   alias Visualize.Geo.Projection
@@ -39,7 +40,12 @@ defmodule Visualize.Chart.Frame.Labels do
 
       %{x: x, y: y} = placement ->
         attrs = %{x: x + dx, y: y + dy} |> put_unless_nil(:dy, Map.get(placement, :dy))
-        base = %{class: "label", text_anchor: placement.anchor}
+        centre = {frame.plot.width / 2, frame.plot.height / 2}
+
+        {rotation, text_anchor} =
+          Polar.rotation(Map.get(node, :rotate), {x + dx, y + dy}, centre, placement.anchor)
+
+        base = %{class: "label", text_anchor: text_anchor}
 
         [
           Element.new(:text,
@@ -48,6 +54,7 @@ defmodule Visualize.Chart.Frame.Labels do
             content: text(node.text),
             transform: Map.get(placement, :transform)
           )
+          |> Polar.rotate(rotation)
           |> Position.apply(style_node, outward(frame, node.anchor))
         ]
     end

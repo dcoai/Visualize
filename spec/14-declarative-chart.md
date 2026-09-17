@@ -512,7 +512,7 @@ The ops are `:filter`, `:bin`, `:stack`, `:fold`, `:sum`, `:sort`, `:tree`, `:cl
 
 ### 5.5 Inline label
 
-**Implemented.** A `:mark_label` node labels the mark from its own data: `text` (`:text`, `:content`, required), `anchor` (`{:enum, [:top, :bottom, :left, :right, :start, :middle, :end, :x0, :x1, :y0, :y1]}`, `:geometry`, `:top`), `style` (`{:ref, :style}`, `:style`, `:label`), `dx` and `dy` (`:number`, `:geometry`, `0`); every key `:override`. A `{:field, f}` in its text reads the datum through `Visualize.Data.Table.get/2` — `to_string/1` of the value, nothing for `nil` — which is how a rule labels itself with the deploy's `sha`.
+**Implemented.** A `:mark_label` node labels the mark from its own data: `text` (`:text`, `:content`, required), `anchor` (`{:enum, [:top, :bottom, :left, :right, :start, :middle, :end, :x0, :x1, :y0, :y1, :outward, :inward]}`, `:geometry`, `:top`), `style` (`{:ref, :style}`, `:style`, `:label`), `dx`, `dy` and `dr` (`:number`, `:geometry`, `0`), `rotate` (`{:one_of, [:number, {:enum, [:tangent, :radial]}]}`, `:geometry`, `nil`); every key `:override`. A `{:field, f}` in its text reads the datum through `Visualize.Data.Table.get/2` — `to_string/1` of the value, nothing for `nil` — which is how a rule labels itself with the deploy's `sha`.
 
 `Visualize.Chart.Mark.generate/3` draws the label as one `text` element per datum — per series for a `:line` or an `:area`, at its last point — in the label's `style` with `class="mark-label"`, `dx` and `dy` added. Each mark type has an *anchor point* `(px, py)`: the datum's position for a `:symbol`, a `:circle` and the end of a `:line` or an `:area`; the centre of the rectangle for a `:rect` and a `:band`; `Visualize.Shape.Arc.centroid/2` about the plot centre for an `:arc` — over the pie's angles, or the datum's own `start` and `end` — and a `:rose`; the first point of the path for a `:path`. The anchor names where the text sits:
 
@@ -525,6 +525,8 @@ The ops are `:filter`, `:bin`, `:stack`, `:fold`, `:sum`, `:sort`, `:tree`, `:cl
 | `:start`, `:middle`, `:end` | `(px, py)`, `dy: "0.32em"` | as named |
 | `:x0`, `:x1` | the midpoint of the rectangle's left or right edge, 4 outside it, `dy: "0.32em"` (#134) | `:end`, `:start` |
 | `:y1`, `:y0` | the midpoint of its top or bottom edge, 4 outside it — `:y0` with `dy: "0.71em"` | `:middle` |
+
+The two **polar anchors** (#137) place the label along the ray from the plot's centre through the anchor point — a sector's from its rim, the outer radius outward or the inner inward, any other mark's from its own point — 4 plus `dr` beyond it, rather than along an axis, so a label leaves the sector it belongs to on the sector's own spoke: `:outward` on a `:rose` at `dr: 15` sits at `R + 19` on the sector's ray, `R` its outer radius. The centre is the group's origin for a centred mark (a `:rose`, an `:arc`, §5.6) or in a `:polar` frame, and the plot's middle otherwise. The `text_anchor` follows the side: `:start` right of the centre, `:end` left of it, `:middle` on the vertical. **`rotate`** turns the text about its own position: a number is degrees, `rotate(deg, x, y)`; `:tangent` and `:radial` are computed per datum from the anchor point's angle about the centre — `:radial` along the ray, `:tangent` across it — with the half-turn flip that keeps the text upright on the left (radial) or the lower (tangent) half, the flip every hand-written ring label does and the reason it is written once here; a radial label anchors `:start` on the right and, flipped, `:end` on the left, so it runs toward the centre and ends at the point; a tangent label anchors `:middle`. A `text_anchor` in the label's style replaces both. The same `rotate` on a frame `:label` (§6.1) turns it about its own position, `:tangent` and `:radial` about the plot's middle.
 
 The four **edge anchors** are for the rectangular types, a `:rect` and a `:band`, whose elements carry their bounds: a bar labels itself past its own end, whatever its length, with no second mark. On any other type they fall back to the cartesian anchor of the same side — `:x0` to `:left`, `:x1` to `:right`, `:y1` to `:top`, `:y0` to `:bottom` — so the anchor list stays total.
 
@@ -599,7 +601,10 @@ The group is returned untranslated. `Visualize.Chart.Frame.generate/2` places ev
 | `style` | `{:ref, :style}` | `:style` | `:label` (`:title` for the `:title` anchor) | `:override` |
 | `dx` | `:number` | `:geometry` | `0` | `:override` |
 | `dy` | `:number` | `:geometry` | `0` | `:override` |
+| `rotate` | `{:one_of, [:number, {:enum, [:tangent, :radial]}]}` | `:geometry` | `nil` | `:override` |
 | `id` | `:name` | `:content` | `nil` | `:override` |
+
+`rotate` turns the text about its own position — degrees, or `:tangent`/`:radial` about the plot's middle with the upright flip — as a mark label's does (§5.5, #137); it composes with an axis title's own rotation.
 
 `{:axis, s}` anchors the label as the title of the axis drawn for scale `s`; `s` is a scale reference and is checked as one. `{:frame, c}` anchors it at a corner of the plot area and `{:data, [x, y]}` at a point of the data (§6.3).
 

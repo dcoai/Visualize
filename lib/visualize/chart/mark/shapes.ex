@@ -377,7 +377,13 @@ defmodule Visualize.Chart.Mark.Shapes do
         |> Arc.end_angle(a1)
         |> Arc.centroid(row)
 
-      %{element: Element.path(path), datum: row.datum, style: %{}, anchor: anchor}
+      %{
+        element: Element.path(path),
+        datum: row.datum,
+        style: %{},
+        anchor: anchor,
+        radii: {inner, row.outer}
+      }
     end)
   end
 

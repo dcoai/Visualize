@@ -173,7 +173,8 @@ defmodule Visualize.Chart.Mark.Generic do
       element: Element.path(Arc.generate_path(generator, data)),
       datum: datum,
       style: %{},
-      anchor: Arc.centroid(generator, data)
+      anchor: Arc.centroid(generator, data),
+      radii: Arc.radii(generator, data)
     }
   end
 end

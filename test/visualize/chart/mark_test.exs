@@ -763,6 +763,59 @@ defmodule Visualize.Chart.MarkTest do
       assert hd(plain.children).attrs == %{x: 0.0, y: 116.0}
     end
 
+    test ":outward on a rose lands on the sector's own ray at R + 4 + dr, anchored to its side; rotate follows the ray (#137)" do
+      polar = %{
+        kind: :polar,
+        size: %{width: 200, height: 200},
+        margin: %{top: 0, right: 0, bottom: 0, left: 0},
+        scales: %{angle: %{kind: :radial, domain: [0, 4]}, r: %{kind: :linear, domain: [0, 10]}}
+      }
+
+      labels = fn label ->
+        generate(
+          %{type: :rose, channels: %{angle: :t, value: :v}, options: %{width: 1}, label: label},
+          %{frame: polar}
+        ).children
+        |> Enum.filter(&(&1.type == :text))
+      end
+
+      # Sector i is centred on its angle, a quarter turn each from 12 o'clock: up, right,
+      # down, left. Its label leaves from its rim (v × 10) along the ray, 4 + 15 beyond it;
+      # the side gives the anchor.
+      texts = labels.(%{text: [{:field, :k}], anchor: :outward, dr: 15})
+      assert length(texts) == 4
+
+      for {text, {v, i}} <- Enum.zip(texts, Enum.with_index([4, 9, 2, 7])) do
+        a = i * :math.pi() / 2
+        radius = v * 10 + 19
+        assert_in_delta text.attrs.x, radius * :math.sin(a), 1.0e-6
+        assert_in_delta text.attrs.y, -radius * :math.cos(a), 1.0e-6
+        assert text.style.text_anchor == Enum.at([:middle, :start, :middle, :end], i)
+      end
+
+      # :radial rotation is the ray's angle; on the left half it flips a half turn and the
+      # text anchors :end so it runs toward the centre. A number is plain degrees.
+      # Sector 1 is at 3 o'clock (ray 0°), sector 3 at 9 o'clock (ray 180°): a radial
+      # label reads along the ray on the right and flips a half turn on the left, where it
+      # anchors :end so it runs toward the centre.
+      [_, right, _, left] = labels.(%{text: ["!"], anchor: :outward, rotate: :radial})
+      assert right.style.text_anchor == :start and left.style.text_anchor == :end
+      [{:rotate, deg_r, _, _}] = right.transform.operations
+      [{:rotate, deg_l, _, _}] = left.transform.operations
+      assert_in_delta deg_r, 0.0, 1.0e-6
+      assert_in_delta deg_l, 0.0, 1.0e-6
+      [fixed | _] = labels.(%{text: ["!"], anchor: :outward, rotate: 30})
+      assert [{:rotate, 30, _, _}] = fixed.transform.operations
+
+      # :tangent is a quarter turn from the ray, flipped on the lower half: sector 0 (up,
+      # ray −90°) and sector 2 (down, ray 90°) both read level.
+      [top, _, bottom, _] = labels.(%{text: ["!"], anchor: :outward, rotate: :tangent})
+      [{:rotate, t_deg, _, _}] = top.transform.operations
+      [{:rotate, b_deg, _, _}] = bottom.transform.operations
+      assert_in_delta t_deg, 0.0, 1.0e-6
+      assert_in_delta b_deg, 0.0, 1.0e-6
+    end
+
     test "the edge anchors of a rect land 4 outside the midpoint of that edge; on a circle they fall back to the side (#134)" do
       at = fn anchor, type, channels ->
         [first | _] =

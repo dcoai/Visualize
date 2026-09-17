@@ -383,6 +383,7 @@ defmodule Visualize.Chart.Schema do
       ),
       spec(:dx, :number, :geometry, default: 0),
       spec(:dy, :number, :geometry, default: 0),
+      spec(:rotate, Mark.rotate_type(), :geometry),
       spec(:id, :name, :content)
     ]
   end

@@ -85,7 +85,26 @@ defmodule Visualize.Chart.Schema.Mark do
   @tiles [:squarify, :binary, :slice, :dice, :slice_dice]
   @outputs [:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges]
   # The four edge anchors are the rectangular types' (spec/14 §5.5, #134).
-  @anchors [:top, :bottom, :left, :right, :start, :middle, :end, :x0, :x1, :y0, :y1]
+  # The two polar anchors displace along the ray from the centre (spec/14 §5.5, #137).
+  @anchors [
+    :top,
+    :bottom,
+    :left,
+    :right,
+    :start,
+    :middle,
+    :end,
+    :x0,
+    :x1,
+    :y0,
+    :y1,
+    :outward,
+    :inward
+  ]
+  @rotate {:one_of, [:number, {:enum, [:tangent, :radial]}]}
+
+  @doc false
+  def rotate_type, do: @rotate
 
   @doc false
   def types, do: @types
@@ -202,7 +221,9 @@ defmodule Visualize.Chart.Schema.Mark do
         default: :label
       ),
       spec(:dx, :number, :geometry, default: 0),
-      spec(:dy, :number, :geometry, default: 0)
+      spec(:dy, :number, :geometry, default: 0),
+      spec(:dr, :number, :geometry, default: 0),
+      spec(:rotate, @rotate, :geometry)
     ]
   end
 end

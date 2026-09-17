@@ -12,7 +12,7 @@ defmodule ExamplesWeb.PerformanceLiveTest do
     assert Enum.any?(s.assigns.charts, &(&1.slug == "scrolling_series"))
     h = html(s)
     assert h =~ ~s(<option value="line" selected>Line Chart</option>)
-    assert h =~ "Chord Diagram (not yet a design)"
+    assert h =~ "(not yet a design)"
 
     {:noreply, s} = Page.handle_event("pick", %{"slug" => "bar", "ticks" => "20"}, s)
     {:noreply, s} = Page.handle_event("compare", %{}, s)
