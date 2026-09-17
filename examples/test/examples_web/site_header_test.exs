@@ -13,7 +13,7 @@ defmodule ExamplesWeb.SiteHeaderTest do
     {"/performance", :performance},
     {"/chart/scrolling_series", :charts},
     {"/hybrid", :performance},
-    # /incremental raises on render before this change — pre-existing, filed #331; not listed until it renders
+    {"/incremental", :performance},
     {"/interaction", :interaction},
     {"/builder", :builder}
   ]
