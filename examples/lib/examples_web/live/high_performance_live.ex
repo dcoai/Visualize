@@ -433,10 +433,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
     assigns = assign(assigns, avg_render_time: Run.avg_render_us(assigns.run), series: @series)
 
     ~H"""
-    <header>
-      <h1>High-Performance Charts</h1>
-      <p>Area + Multi-Line with 10,000 total data points</p>
-    </header>
+    <ExamplesWeb.SiteHeader.header tab={:performance} />
+    <div class="page-intro" style="padding: 1.5rem 2rem 0;">
+      <h2>High-Performance Charts</h2>
+      <p>An area and four lines scrolling at a data rate, drawn incrementally</p>
+    </div>
 
     <main>
       <a href="/" class="back-link">

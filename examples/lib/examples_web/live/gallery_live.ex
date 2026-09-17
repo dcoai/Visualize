@@ -43,10 +43,7 @@ defmodule ExamplesWeb.GalleryLive do
 
   def render(assigns) do
     ~H"""
-    <header>
-      <h1>Visualize Examples</h1>
-      <p>D3-style data visualizations in Elixir</p>
-    </header>
+    <ExamplesWeb.SiteHeader.header tab={:charts} />
     <main>
       <div class="tools-bar">
         <a href="/high-performance" class="tool-link" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">

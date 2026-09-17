@@ -124,10 +124,7 @@ defmodule ExamplesWeb.InteractionLive do
 
   def render(assigns) do
     ~H"""
-    <header>
-      <h1>Visualize Examples</h1>
-      <p>Client-side interaction: tooltip and crosshair with no round trip</p>
-    </header>
+    <ExamplesWeb.SiteHeader.header tab={:interaction} />
     <main>
       <a href="/" class="back-link"><span>&larr;</span> Back to Gallery</a>
 

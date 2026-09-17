@@ -302,10 +302,7 @@ defmodule ExamplesWeb.ChartLive do
 
   def render(assigns) do
     ~H"""
-    <header>
-      <h1>Visualize Examples</h1>
-      <p>D3-style data visualizations in Elixir</p>
-    </header>
+    <ExamplesWeb.SiteHeader.header tab={:charts} />
     <main>
       <a href="/" class="back-link">
         <span>&larr;</span> Back to Gallery

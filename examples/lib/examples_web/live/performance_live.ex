@@ -892,10 +892,11 @@ defmodule ExamplesWeb.PerformanceLive do
 
   def render(assigns) do
     ~H"""
-    <header>
-      <h1>Backend Performance Test</h1>
+    <ExamplesWeb.SiteHeader.header tab={:performance} />
+    <div class="page-intro" style="padding: 1.5rem 2rem 0;">
+      <h2>Backend Performance Test</h2>
       <p>Compare SVG vs Canvas rendering throughput over LiveView</p>
-    </header>
+    </div>
 
     <main>
       <a href="/" class="back-link">

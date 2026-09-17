@@ -221,10 +221,11 @@ defmodule ExamplesWeb.HybridLive do
     assigns = assign(assigns, avg_render_time: avg_render_time)
 
     ~H"""
-    <header>
-      <h1>Hybrid SVG/Canvas Rendering</h1>
+    <ExamplesWeb.SiteHeader.header tab={:performance} />
+    <div class="page-intro" style="padding: 1.5rem 2rem 0;">
+      <h2>Hybrid SVG/Canvas Rendering</h2>
       <p>Static axes in SVG, dynamic data on Canvas</p>
-    </header>
+    </div>
 
     <main>
       <a href="/" class="back-link">
