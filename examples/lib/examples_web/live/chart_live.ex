@@ -3,6 +3,8 @@ defmodule ExamplesWeb.ChartLive do
 
   alias Examples.Charts.Design
   alias Examples.ColorPalettes
+  alias Examples.{Compare, Frames, Run}
+  alias ExamplesWeb.PerformanceDrawer
   alias Visualize.Backend.CanvasBinary
 
   @charts %{
@@ -78,7 +80,16 @@ defmodule ExamplesWeb.ChartLive do
           animatable: chart_slug in @animatable_charts,
           is_time_series: chart_slug in @time_series_charts,
           backend: :svg,
-          hex_radius: 20
+          hex_radius: 20,
+          # The performance drawer (spec/14 §12.6, #322): a run of this chart on a
+          # backend, its frame, the compiled chart's state, and Compare's rows.
+          drawer_open: false,
+          run: Run.new(target_fps: 60, data_rate: 0, flow_control: true),
+          run_backend: :svg,
+          run_state: nil,
+          run_frame: nil,
+          compare: nil,
+          compare_task: nil
         )}
     end
   end
@@ -117,6 +128,130 @@ defmodule ExamplesWeb.ChartLive do
     {:noreply, assign(socket, backend: backend)}
   end
 
+  # ── the performance drawer ──────────────────────────────────────────────────────────
+
+  def handle_event("drawer_toggle", _params, socket) do
+    {:noreply, assign(socket, drawer_open: not socket.assigns.drawer_open)}
+  end
+
+  def handle_event("run_backend", %{"backend" => backend}, %{assigns: %{run: %Run{running: false}}} = socket) do
+    backend = String.to_existing_atom(backend)
+    true = backend in Frames.backends(socket.assigns.module)
+    {:noreply, assign(socket, run_backend: backend)}
+  end
+
+  def handle_event("run_backend", _params, socket), do: {:noreply, socket}
+
+  def handle_event("run_fps", %{"fps" => fps}, socket) do
+    {:noreply, update(socket, :run, &%{&1 | target_fps: String.to_integer(fps)})}
+  end
+
+  def handle_event("run_flow_control", _params, socket) do
+    {:noreply, update(socket, :run, &%{&1 | flow_control: not &1.flow_control})}
+  end
+
+  # A run: the page's own animation stops, the backend's state is prepared (a design's
+  # compiled chart, once), and the first frame renders.
+  def handle_event("run_start", _params, socket) do
+    %{module: module, run_backend: backend} = socket.assigns
+    state = Frames.prepare(module, run_opts(socket.assigns, 0), backend)
+
+    run =
+      Run.start(
+        %{socket.assigns.run | flow_control: socket.assigns.run.flow_control and Frames.acks?(backend)},
+        System.monotonic_time(:millisecond),
+        System.monotonic_time(:microsecond)
+      )
+
+    socket = assign(socket, run: run, run_state: state, run_frame: nil, animating: false)
+    {:noreply, socket |> start_frame() |> schedule_run()}
+  end
+
+  def handle_event("run_stop", _params, socket) do
+    {:noreply, socket |> update(:run, &Run.stop/1) |> assign(run_frame: nil)}
+  end
+
+  # Compare, headless in a task: a fixed count of ticks per backend.
+  def handle_event("run_compare", _params, %{assigns: %{compare_task: nil}} = socket) do
+    %{module: module} = socket.assigns
+    assigns = socket.assigns
+    opts_for = fn tick -> run_opts(assigns, tick) end
+    task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, fn -> {:compare, Compare.run(module, opts_for, 100)} end)
+    {:noreply, assign(socket, compare_task: task, compare: nil)}
+  end
+
+  def handle_event("run_compare", _params, socket), do: {:noreply, socket}
+
+  # The hook's ack (spec/10 §8.2).
+  def handle_event("frame_drawn", %{"seq" => seq, "drawn" => drawn}, socket) do
+    {:noreply, update(socket, :run, &Run.acked(&1, seq, drawn, System.monotonic_time(:millisecond)))}
+  end
+
+  def handle_info(:run_tick, %{assigns: %{run: %Run{running: false}}} = socket), do: {:noreply, socket}
+
+  # A tick of the run: no data rate here, so every frame is the chart at its next
+  # animation tick — a full render, decided by the run for flow control's sake.
+  def handle_info(:run_tick, socket) do
+    now = System.monotonic_time(:millisecond)
+    socket = schedule_run(socket)
+
+    case Run.tick(socket.assigns.run, now, 1) do
+      {run, :skipped} ->
+        {:noreply, assign(socket, run: run)}
+
+      {run, {:draw, _columns}} ->
+        {run, mode} = Run.decide(run, 1, false, {1, 1}, now)
+        socket = assign(socket, run: run)
+
+        case mode do
+          :drop -> {:noreply, socket}
+          :full_redraw -> {:noreply, start_frame(socket)}
+        end
+    end
+  end
+
+  # A frame's render is back: numbered, shown or pushed, and measured.
+  def handle_info({ref, {:frame, frame, state}}, socket) when is_reference(ref) do
+    case Run.result(socket.assigns.run, ref) do
+      :stale ->
+        {:noreply, socket}
+
+      {:ok, %Run{running: false} = run} ->
+        {:noreply, assign(socket, run: run)}
+
+      {:ok, run} ->
+        now = System.monotonic_time(:millisecond)
+        {run, seq} = Run.sending(run, :full_redraw)
+        run = Run.rendered(run, frame.bytes, now)
+        socket = assign(socket, run: run, run_state: state, run_frame: frame)
+
+        if frame.canvas,
+          do: {:noreply, push_event(socket, "canvas_update", %{binary: frame.canvas, seq: seq})},
+          else: {:noreply, socket}
+    end
+  end
+
+  def handle_info({ref, {:compare, rows}}, %{assigns: %{compare_task: %Task{ref: ref}}} = socket) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, assign(socket, compare: rows, compare_task: nil)}
+  end
+
+  def handle_info({ref, _stale}, socket) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, socket}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{assigns: %{compare_task: %Task{ref: ref}}} = socket) do
+    {:noreply, assign(socket, compare_task: nil, compare: [], run: %{socket.assigns.run | error: inspect(reason)})}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, socket) do
+    case Run.down(socket.assigns.run, ref, reason) do
+      :stale -> {:noreply, socket}
+      {:ok, run} -> {:noreply, assign(socket, run: run, run_frame: nil)}
+    end
+  end
+
   def handle_info(:animate_tick, socket) do
     if socket.assigns.animating do
       schedule_animation()
@@ -128,6 +263,41 @@ defmodule ExamplesWeb.ChartLive do
 
   defp schedule_animation do
     Process.send_after(self(), :animate_tick, @animation_interval)
+  end
+
+  def terminate(_reason, socket) do
+    Run.cancel(socket.assigns.run)
+    if task = socket.assigns[:compare_task], do: Task.Supervisor.terminate_child(Examples.TaskSupervisor, task.pid)
+    :ok
+  end
+
+  # The frame at the run's next tick, rendering in a task over a snapshot.
+  defp start_frame(socket) do
+    %{module: module, run_backend: backend, run_state: state, run: run} = socket.assigns
+    opts = run_opts(socket.assigns, run.frame)
+    render = fn ->
+      {frame, state} = Frames.frame(module, opts, backend, state)
+      {:frame, frame, state}
+    end
+
+    update(socket, :run, &Run.rendering(&1, render))
+  end
+
+  defp schedule_run(socket) do
+    {run, delay} = Run.schedule(socket.assigns.run, System.monotonic_time(:microsecond))
+    Process.send_after(self(), :run_tick, delay)
+    assign(socket, run: run)
+  end
+
+  # The canvas a run draws on: the compiled chart's size for a design, the page's otherwise.
+  defp run_size(%{width: w}, :width), do: w
+  defp run_size(%{height: h}, :height), do: h
+  defp run_size(_state, :width), do: 700
+  defp run_size(_state, :height), do: 450
+
+  # A run's frame is the chart at an animation tick, whatever the page's animation.
+  defp run_opts(assigns, tick) do
+    build_chart_opts(assigns.current_palette, tick, true, assigns.slug, assigns.hex_radius)
   end
 
   def render(assigns) do
@@ -238,6 +408,24 @@ defmodule ExamplesWeb.ChartLive do
         </div>
 
         <div class="chart-container" style={"background-color: #{ColorPalettes.background(@current_palette)}"}>
+          <%= if @run.running and @run_frame do %>
+            <%!-- A run's frame (spec/14 §12.6, #322): the SVG whole, or the canvas pushed under the compiled chart's static furniture. --%>
+            <%= if @run_backend == :svg do %>
+              <%= Phoenix.HTML.raw(@run_frame.svg) %>
+            <% else %>
+              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(@run_state, :width)}px; height: #{run_size(@run_state, :height)}px;"}>
+                <div id="canvas-chart" phx-hook="CanvasBinaryChart" phx-update="ignore" data-ack="frame_drawn" data-ack-interval="50" data-binary={@run_frame.canvas} data-width={run_size(@run_state, :width)} data-height={run_size(@run_state, :height)} style="position: absolute; top: 0; left: 0; z-index: 1;">
+                  <canvas width={run_size(@run_state, :width)} height={run_size(@run_state, :height)} style="display: block;"></canvas>
+                </div>
+                <div class="hybrid-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(Frames.static(@run_state)) %>
+                </div>
+                <div :if={@run_frame.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(@run_frame.dynamic_svg) %>
+                </div>
+              </div>
+            <% end %>
+          <% else %>
           <%= if @backend == :svg do %>
             <%= Phoenix.HTML.raw(render_chart_svg(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius)) %>
           <% else %>
@@ -264,7 +452,17 @@ defmodule ExamplesWeb.ChartLive do
               </p>
             <% end %>
           <% end %>
+          <% end %>
         </div>
+
+        <PerformanceDrawer.performance
+          run={@run}
+          backend={@run_backend}
+          backends={Frames.backends(@module)}
+          open={@drawer_open}
+          compare={@compare}
+          comparing={@compare_task != nil}
+        />
 
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@backend, @module) %></h3>
         <pre><code><%= backend_sample_code(@backend, @module) %></code></pre>
@@ -286,6 +484,7 @@ defmodule ExamplesWeb.ChartLive do
     </main>
 
     <style>
+      <%= Phoenix.HTML.raw(PerformanceDrawer.css()) %>
       .controls-row {
         display: flex;
         flex-wrap: wrap;
