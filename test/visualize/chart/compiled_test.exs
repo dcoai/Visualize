@@ -421,8 +421,34 @@ defmodule Visualize.Chart.CompiledTest do
       assert Enum.any?(records, &match?({:path32, _}, &1))
       assert second.bytes == byte_size(second.svg) + byte_size(second.incremental.binary)
 
+      # The strip draws the rows under it and three neighbours each side, not the window
+      # (§12.5, D-108): the window at hi = 22 is t ∈ [12, 22], 11 rows; the 20 px strip
+      # is the last 2 units, t ∈ [20, 22], 3 rows, and the three before make 6 — so the
+      # path has six points and the payload is a fraction of the full redraw's.
+      [{:path32, points}] = for({:path32, _} = p <- records, do: p)
+      assert length(points) == 6
+      # Its points are the window's last six, at the x the scrolled window gives them:
+      # t = 17..22 over [12, 22] on 100 px is x = 50..100, ten pixels a unit.
+      assert Enum.map(points, fn {x, _y} -> Float.round(x, 3) end) == [
+               50.0,
+               60.0,
+               70.0,
+               80.0,
+               90.0,
+               100.0
+             ]
+
       {third, compiled} = Compiled.tick(compiled, sources, now: 22)
       assert %{mode: "none", binary: ""} = third.incremental
+      # At scale the strip is a fraction of the full redraw: a thousand-row window on
+      # 100 px scrolled 20 px carries 200 rows and six neighbours against 1,001.
+      big = %{@stream | frame: %{@stream.frame | viewport: %{scale: :x, span: 1000}}}
+      big_rows = rows(1400)
+      compiled_big = compile!(big, sources: %{primary: big_rows})
+      {full_big, compiled_big} = Compiled.tick(compiled_big, %{primary: big_rows}, now: 1000)
+      {strip_big, _} = Compiled.tick(compiled_big, %{primary: big_rows}, now: 1200)
+      assert strip_big.incremental.mode == "scroll_x" and strip_big.incremental.dx == 20
+      assert byte_size(strip_big.incremental.binary) < byte_size(full_big.incremental.binary) / 3
 
       {fourth, compiled} = Compiled.tick(compiled, sources, now: 22.04)
       assert fourth.incremental.mode == "none"

@@ -231,8 +231,13 @@ defmodule Visualize.Chart.Compiled do
     svg = fragment(compiled, layer(compiled, drawn, :dynamic_svg, false))
     format = format(compiled)
 
+    # A scroll strip is built over the strip's rows and their neighbours (§12.5, D-108).
+    strip = fn bounds ->
+      layer(compiled, drawn_strip(compiled, frame, sources, hi, bounds), :canvas, false)
+    end
+
     {canvas, incremental, window} =
-      canvas(compiled, frame, layer(compiled, drawn, :canvas, false), hi)
+      canvas(compiled, frame, layer(compiled, drawn, :canvas, false), strip, hi)
 
     bytes =
       byte_size(svg) + byte_size(canvas) +
@@ -285,6 +290,27 @@ defmodule Visualize.Chart.Compiled do
 
       %{region: region, build: build} ->
         {region, %{svg: build.(frame, sources, :css), canvas: []}}
+    end)
+  end
+
+  # The canvas marks over the rows under a strip and three neighbours each side (§12.5,
+  # D-108): what an exposed region of the incremental canvas is drawn from. Every other
+  # region draws nothing into a strip.
+  defp drawn_strip(%{regions: regions, viewport: window} = compiled, frame, sources, hi, bounds) do
+    Map.new(regions, fn
+      %{region: {:mark, i} = region, build: build} ->
+        mark = Enum.at(compiled.chart.marks, i)
+        {target, _points} = Enum.at(compiled.targets, i)
+
+        if target == :svg do
+          {region, %{svg: [], canvas: []}}
+        else
+          sources = Window.strip(window, frame, mark, sources, hi, bounds)
+          {region, %{mark_output(target, mark, build, frame, sources) | svg: []}}
+        end
+
+      %{region: region} ->
+        {region, %{svg: [], canvas: []}}
     end)
   end
 
@@ -343,10 +369,10 @@ defmodule Visualize.Chart.Compiled do
 
   # The canvas layer of a tick: the whole layer per tick, or the incremental payload of a
   # viewport design with a binary layer (spec/14 §12.5).
-  defp canvas(%{viewport: nil}, _frame, [], _hi), do: {"", nil, nil}
-  defp canvas(%{viewport: window}, _frame, [], hi), do: {"", nil, %{window | hi: hi}}
+  defp canvas(%{viewport: nil}, _frame, [], _strip, _hi), do: {"", nil, nil}
+  defp canvas(%{viewport: window}, _frame, [], _strip, hi), do: {"", nil, %{window | hi: hi}}
 
-  defp canvas(%{viewport: window} = compiled, frame, elements, hi) do
+  defp canvas(%{viewport: window} = compiled, frame, elements, strip, hi) do
     format = format(compiled)
 
     if window == nil or format != :binary_base64 do
@@ -360,7 +386,9 @@ defmodule Visualize.Chart.Compiled do
 
       {string, nil, window && %{window | hi: hi}}
     else
-      {payload, window} = Window.scroll(window, frame, Element.group(elements), hi, window.full)
+      {payload, window} =
+        Window.scroll(window, frame, Element.group(elements), strip, hi, window.full)
+
       {"", payload, window}
     end
   end
