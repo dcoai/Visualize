@@ -8,8 +8,12 @@ defmodule ExamplesWeb.HighPerformanceFlowTest do
 
   alias ExamplesWeb.HighPerformanceLive, as: Page
 
-  defp started do
+  defp started(data_rate \\ nil) do
     {:ok, s} = Page.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
+
+    {:noreply, s} =
+      if data_rate, do: Page.handle_event("set_data_rate", %{"data_rate" => "#{data_rate}"}, s), else: {:noreply, s}
+
     {:noreply, s} = Page.handle_event("start", %{}, s)
     s
   end
@@ -67,8 +71,7 @@ defmodule ExamplesWeb.HighPerformanceFlowTest do
   end
 
   test "a dropped tick that moved nothing needs no resync" do
-    {:noreply, s} = Page.handle_event("set_data_rate", %{"data_rate" => "0"}, started())
-    s = Enum.reduce(1..8, s, fn _, s -> tick(s) end)
+    s = Enum.reduce(1..8, started(0), fn _, s -> tick(s) end)
     assert [{1, "full"} | nones] = modes(s)
     assert Enum.all?(nones, &match?({_, "none"}, &1))
     assert Page.frame_mode(s.assigns, 0) == :drop

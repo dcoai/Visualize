@@ -62,16 +62,23 @@ defmodule ExamplesWeb.HighPerformanceStreamTest do
     assert Enum.all?(lines(records), &(length(&1) == 2 * 810 + 1))
   end
 
-  test "a density is a whole number of samples per pixel and the select's totals are its" do
+  test "a density is a whole number of samples per pixel, and follows the data rate (#308)" do
     for d <- [1, 2, 5, 12] do
       a = assigns(d)
       assert a.points_per_series == d * 810 + 1
       assert a.total_points == a.points_per_series * 5
-      assert Page.total_at(d) == a.total_points
       assert Scroll.samples(a.scroll, @scroll) == @scroll * d
       # A sample is exactly 1/d pixels: the scroll's samples are the scroll's pixels.
       assert_in_delta Scale.Linear.apply(a.x_scale, @scroll * d), @scroll, 1.0e-9
     end
+
+    # About five seconds of data across 810 columns: 600/s is four per pixel (3000/810 =
+    # 3.7), 10/s the one-per-pixel floor, 5,000/s thirty-one.
+    assert Page.density_for(600) == 4
+    assert Page.density_for(10) == 1
+    assert Page.density_for(5000) == 31
+    a = assigns(4) |> Map.put(:data_rate, 600)
+    assert_in_delta Page.span(a), 3241 / 600, 1.0e-9
   end
 
   test "the next frame is this one translated by the scroll (spec/09 §5.3)" do
