@@ -34,6 +34,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   @default_samples_per_px 2
   @default_target_fps 60
   @default_data_rate 600  # samples per second per series: 5 px × 2 per px × 60 fps, as it was
+  @window 8  # frames in flight before flow control holds a frame back (#304)
 
   # Color palette: first is area fill, rest are lines
   @area_color "#4e79a7"
@@ -62,6 +63,17 @@ defmodule ExamplesWeb.HighPerformanceLive do
       next_due: nil,
       arrivals: [],
       measured_rate: 0.0,
+      # Frames in flight (#304, D-107): every frame carries `sent_seq`, the hook acks the
+      # last it drew (`acked_seq`, `acks` as `{at, drawn}` for the client's rate); with
+      # `flow_control` the page holds a frame back while `@window` are in flight, counts
+      # it `dropped`, and resyncs with a full frame after a dropped scroll (`needs_full`).
+      sent_seq: 0,
+      acked_seq: 0,
+      acks: [],
+      client_fps: 0.0,
+      flow_control: true,
+      dropped: 0,
+      needs_full: false,
       densities: @densities,
       y_scale: y_scale,
       frame_times: [],
@@ -76,20 +88,26 @@ defmodule ExamplesWeb.HighPerformanceLive do
   end
 
   def handle_event("start", _params, socket) do
-    # Send initial full render
-    socket = send_full_render(socket)
-    socket = socket |> assign(next_due: System.monotonic_time(:microsecond)) |> schedule_frame()
-    {:noreply, assign(socket,
-      running: true,
-      last_tick: System.monotonic_time(:millisecond),
-      pending: 0,
-      carry: 0.0,
-      arrivals: [],
-      frame: 0,
-      frame_times: [],
-      render_times: [],
-      last_full_render: true
-    )}
+    socket =
+      assign(socket,
+        running: true,
+        last_tick: System.monotonic_time(:millisecond),
+        pending: 0,
+        carry: 0.0,
+        arrivals: [],
+        sent_seq: 0,
+        acked_seq: 0,
+        acks: [],
+        dropped: 0,
+        needs_full: false,
+        frame: 0,
+        frame_times: [],
+        render_times: []
+      )
+
+    # The run opens with a full render; the ticks build on it.
+    socket = socket |> send_full_render() |> assign(last_full_render: false)
+    {:noreply, socket |> assign(next_due: System.monotonic_time(:microsecond)) |> schedule_frame()}
   end
 
   def handle_event("stop", _params, socket) do
@@ -114,6 +132,23 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
   def handle_event("set_data_rate", %{"data_rate" => rate}, socket) do
     {:noreply, assign(socket, data_rate: String.to_integer(rate))}
+  end
+
+  def handle_event("toggle_flow_control", _params, socket) do
+    {:noreply, assign(socket, flow_control: not socket.assigns.flow_control)}
+  end
+
+  # The hook's ack (spec/10 §9.2): the last frame it drew and how many since its last ack.
+  def handle_event("frame_drawn", %{"seq" => seq, "drawn" => drawn}, socket) do
+    now = System.monotonic_time(:millisecond)
+    acks = Enum.take([{now, drawn} | socket.assigns.acks], 120)
+
+    {:noreply,
+     assign(socket,
+       acked_seq: max(socket.assigns.acked_seq, seq),
+       acks: acks,
+       client_fps: rate_over(acks, now)
+     )}
   end
 
   def handle_info(:render_frame, socket) do
@@ -149,16 +184,12 @@ defmodule ExamplesWeb.HighPerformanceLive do
     viewport_x = socket.assigns.viewport_x + px
     socket = assign(socket, random_data: random_data, scroll: scroll, viewport_x: viewport_x)
 
-    mode =
-      if socket.assigns.use_incremental and not socket.assigns.last_full_render,
-        do: CanvasIncremental.scroll_mode({px, 0}, {@inner_width, @inner_height}),
-        else: :full_redraw
-
     socket =
-      case mode do
+      case frame_mode(socket.assigns, px) do
         :scroll_x -> send_incremental_render(socket, px)
         :none -> send_none(socket)
-        :full_redraw -> socket |> send_full_render() |> assign(:last_full_render, false)
+        :full_redraw -> socket |> send_full_render() |> assign(last_full_render: false, needs_full: false)
+        :drop -> drop(socket, px)
       end
 
     render_time = System.monotonic_time(:microsecond) - render_start
@@ -176,6 +207,43 @@ defmodule ExamplesWeb.HighPerformanceLive do
   end
 
   @doc false
+  # What this tick sends for a scroll of `px` columns: `:drop` when flow control holds it
+  # back (the window is in flight); a full render with Incremental OFF, on the first frame
+  # of a run, or after a dropped scroll (D-107); otherwise what `scroll_mode/2` says —
+  # strips, or the empty "none" update. Public for the page test.
+  def frame_mode(assigns, px) do
+    cond do
+      assigns.flow_control and in_flight(assigns) >= @window -> :drop
+      not assigns.use_incremental or assigns.last_full_render or assigns.needs_full -> :full_redraw
+      true -> CanvasIncremental.scroll_mode({px, 0}, {@inner_width, @inner_height})
+    end
+  end
+
+  @doc false
+  def in_flight(%{sent_seq: sent, acked_seq: acked}), do: sent - acked
+
+  # A frame held back: the data has advanced, nothing is sent, and if the picture moved
+  # the next frame sent must be a full one — a strip against a canvas that missed a
+  # scroll is the wrong picture.
+  defp drop(socket, px) do
+    assign(socket,
+      dropped: socket.assigns.dropped + 1,
+      needs_full: socket.assigns.needs_full or px > 0,
+      payload_size: 0,
+      points_rendered: 0
+    )
+  end
+
+  # Every frame carries its sequence number, which the hook acks (data-ack).
+  defp push_frame(socket, payload) do
+    seq = socket.assigns.sent_seq + 1
+
+    socket
+    |> assign(sent_seq: seq)
+    |> push_event("canvas_incremental", Map.put(payload, :seq, seq))
+  end
+
+  @doc false
   # The samples due after `elapsed` ms at the page's data rate, on top of what was pending:
   # `{columns, arrived, %{pending, carry}}` — the whole columns the pending samples fill,
   # the samples that arrived this tick, and what stays pending (a column's worth at most)
@@ -189,8 +257,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
   end
 
   # Samples per second per series over the last second of ticks.
-  defp measured_rate(arrivals, now) do
-    recent = Enum.take_while(arrivals, fn {at, _} -> now - at <= 1000 end)
+  defp measured_rate(arrivals, now), do: rate_over(arrivals, now)
+
+  # Events per second over the last second of `{at, count}` entries, newest first.
+  defp rate_over(entries, now) do
+    recent = Enum.take_while(entries, fn {at, _} -> now - at <= 1000 end)
 
     case recent do
       [] -> 0.0
@@ -264,12 +335,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
     socket
     |> assign(:payload_size, byte_size(binary))
     |> assign(:points_rendered, socket.assigns.total_points)
-    |> push_event("canvas_incremental", %{
-      binary: encoded,
-      dx: 0,
-      dy: 0,
-      mode: "full"
-    })
+    |> push_frame(%{binary: encoded, dx: 0, dy: 0, mode: "full"})
   end
 
   # The frame with no new column: the "none" update of spec/09 §7.3, nothing to draw and
@@ -277,7 +343,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   defp send_none(socket) do
     socket
     |> assign(payload_size: 0, points_rendered: 0)
-    |> push_event("canvas_incremental", %{binary: "", dx: 0, dy: 0, mode: "none"})
+    |> push_frame(%{binary: "", dx: 0, dy: 0, mode: "none"})
   end
 
   # The frame as the strips a scroll of `dx` pixels exposes.
@@ -310,12 +376,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
     socket
     |> assign(:payload_size, byte_size(binary))
     |> assign(:points_rendered, calculate_region_points(socket.assigns, adjusted_regions))
-    |> push_event("canvas_incremental", %{
-      binary: encoded,
-      dx: dx,
-      dy: 0,
-      mode: "scroll_x"
-    })
+    |> push_frame(%{binary: encoded, dx: dx, dy: 0, mode: "scroll_x"})
   end
 
   # Calculate how many points are in the exposed regions
@@ -544,6 +605,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
             <%= if @use_incremental, do: "Incremental ON", else: "Incremental OFF" %>
           </button>
 
+          <button type="button" phx-click="toggle_flow_control" class={"btn mode #{if @flow_control, do: "active", else: ""}"}
+                  title="Hold frames back while 8 are in flight; resync with a full frame after a dropped scroll">
+            <%= if @flow_control, do: "Flow control ON", else: "Flow control OFF" %>
+          </button>
+
           <%= if @running do %>
             <button type="button" phx-click="stop" class="btn stop">Stop</button>
           <% else %>
@@ -559,6 +625,22 @@ defmodule ExamplesWeb.HighPerformanceLive do
           <div class="metric">
             <span class="value"><%= if @target_fps > 2000, do: "∞", else: @target_fps %></span>
             <span class="label">Target</span>
+          </div>
+          <div class="metric">
+            <span class="value"><%= trunc(@client_fps) %></span>
+            <span class="label">Client FPS</span>
+          </div>
+          <div class="metric">
+            <span class="value"><%= @sent_seq - @acked_seq %></span>
+            <span class="label">In flight</span>
+          </div>
+          <div class="metric">
+            <span class="value"><%= if @target_fps > 2000, do: "—", else: "#{round((@sent_seq - @acked_seq) * 1000 / @target_fps)} ms" %></span>
+            <span class="label">Lag</span>
+          </div>
+          <div class="metric">
+            <span class="value"><%= format_number(@dropped) %></span>
+            <span class="label">Dropped</span>
           </div>
           <div class="metric">
             <span class="value"><%= format_number(round(@measured_rate)) %></span>
@@ -609,6 +691,8 @@ defmodule ExamplesWeb.HighPerformanceLive do
               id="high-perf-canvas"
               phx-hook="CanvasIncrementalChart"
               phx-update="ignore"
+              data-ack="frame_drawn"
+              data-ack-interval="100"
               data-width={@width}
               data-height={@height}
               style="position: absolute; top: 0; left: 0;"
