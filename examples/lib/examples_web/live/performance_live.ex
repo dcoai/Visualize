@@ -47,25 +47,35 @@ defmodule ExamplesWeb.PerformanceLive do
     %{slug: slug, ticks: ticks} = socket.assigns
     module = ChartLive.charts()[slug]
     opts_for = fn tick -> [width: 700, height: 450, palette: :default, animation_tick: tick] end
-    task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, fn -> {:rows, Compare.run(module, opts_for, ticks)} end)
-    {:noreply, assign(socket, task: task, rows: nil, error: nil)}
+    {:noreply, start_task(socket, fn -> {:rows, Compare.run(module, opts_for, ticks)} end, :rows)}
   end
 
   def handle_event("compare_all", _params, %{assigns: %{task: nil}} = socket) do
     %{charts: charts, ticks: ticks} = socket.assigns
     designs = Enum.filter(charts, & &1.design?)
 
-    task =
-      Task.Supervisor.async_nolink(Examples.TaskSupervisor, fn ->
-        opts_for = fn tick -> [width: 700, height: 450, palette: :default, animation_tick: tick] end
+    work = fn ->
+      opts_for = fn tick -> [width: 700, height: 450, palette: :default, animation_tick: tick] end
 
-        {:all,
-         for chart <- designs, row <- Compare.run(chart.module, opts_for, ticks) do
-           Map.merge(row, %{slug: chart.slug, title: chart.title})
-         end}
-      end)
+      {:all,
+       for chart <- designs, row <- Compare.run(chart.module, opts_for, ticks) do
+         Map.merge(row, %{slug: chart.slug, title: chart.title})
+       end}
+    end
 
-    {:noreply, assign(socket, task: task, all: nil, error: nil)}
+    {:noreply, start_task(socket, work, :all)}
+  end
+
+  # A comparison in a task, or the reason there is none (#340).
+  defp start_task(socket, work, key) do
+    case Examples.Run.supervisor() do
+      :ok ->
+        task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, work)
+        assign(socket, [task: task, error: nil] ++ [{key, nil}])
+
+      {:error, message} ->
+        assign(socket, error: message)
+    end
   end
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
