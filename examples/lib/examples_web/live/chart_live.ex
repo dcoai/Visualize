@@ -45,6 +45,9 @@ defmodule ExamplesWeb.ChartLive do
   }
 
   # Charts that support animation
+  @doc "The gallery's charts by slug, for the performance view (#328)."
+  def charts, do: @charts
+
   @animatable_charts [
     "bar", "horizontal_bar", "line", "area", "pie", "donut",
     "scatter", "radial", "multi_line", "grouped_bar", "stacked_bar",

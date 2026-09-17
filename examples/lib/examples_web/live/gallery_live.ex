@@ -52,7 +52,7 @@ defmodule ExamplesWeb.GalleryLive do
         </a>
         <a href="/performance" class="tool-link">
           <span class="tool-icon">⚡</span>
-          <span>Backend Performance Test</span>
+          <span>Performance Test — compare the backends on any chart</span>
         </a>
         <a href="/hybrid" class="tool-link">
           <span class="tool-icon">🔀</span>
