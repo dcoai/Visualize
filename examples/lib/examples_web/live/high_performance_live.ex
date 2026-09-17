@@ -35,6 +35,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   @default_target_fps 60
   @default_data_rate 600  # samples per second per series: 5 px × 2 per px × 60 fps, as it was
   @window 8  # frames in flight before flow control holds a frame back (#304)
+  @ack_timeout 2000  # ms a hold may last without an ack before it fails open (#306)
 
   # Color palette: first is area fill, rest are lines
   @area_color "#4e79a7"
@@ -74,6 +75,15 @@ defmodule ExamplesWeb.HighPerformanceLive do
       flow_control: true,
       dropped: 0,
       needs_full: false,
+      # A hold fails open (#306): `hold_since` when the current hold began, `last_ack_at`
+      # the last ack's time (nil until one arrives), `acking` `:unknown` → `:yes` on the
+      # first ack or `:no` when a hold outlives `@ack_timeout` with none, `stalls` the
+      # holds released because an acking client stopped, `ack_age` for the metrics.
+      hold_since: nil,
+      last_ack_at: nil,
+      acking: :unknown,
+      stalls: 0,
+      ack_age: nil,
       densities: @densities,
       y_scale: y_scale,
       frame_times: [],
@@ -100,6 +110,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
         acks: [],
         dropped: 0,
         needs_full: false,
+        hold_since: nil,
+        last_ack_at: nil,
+        acking: :unknown,
+        stalls: 0,
+        ack_age: nil,
         frame: 0,
         frame_times: [],
         render_times: []
@@ -147,7 +162,9 @@ defmodule ExamplesWeb.HighPerformanceLive do
      assign(socket,
        acked_seq: max(socket.assigns.acked_seq, seq),
        acks: acks,
-       client_fps: rate_over(acks, now)
+       client_fps: rate_over(acks, now),
+       last_ack_at: now,
+       acking: :yes
      )}
   end
 
@@ -184,6 +201,8 @@ defmodule ExamplesWeb.HighPerformanceLive do
     viewport_x = socket.assigns.viewport_x + px
     socket = assign(socket, random_data: random_data, scroll: scroll, viewport_x: viewport_x)
 
+    socket = socket |> hold(now) |> assign(ack_age: ack_age(socket.assigns, now))
+
     socket =
       case frame_mode(socket.assigns, px) do
         :scroll_x -> send_incremental_render(socket, px)
@@ -213,7 +232,7 @@ defmodule ExamplesWeb.HighPerformanceLive do
   # strips, or the empty "none" update. Public for the page test.
   def frame_mode(assigns, px) do
     cond do
-      assigns.flow_control and in_flight(assigns) >= @window -> :drop
+      holding?(assigns) -> :drop
       not assigns.use_incremental or assigns.last_full_render or assigns.needs_full -> :full_redraw
       true -> CanvasIncremental.scroll_mode({px, 0}, {@inner_width, @inner_height})
     end
@@ -221,6 +240,30 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
   @doc false
   def in_flight(%{sent_seq: sent, acked_seq: acked}), do: sent - acked
+
+  defp holding?(assigns) do
+    assigns.flow_control and assigns.acking != :no and in_flight(assigns) >= @window
+  end
+
+  @doc false
+  # A hold fails open (#306, D-107): a hold that outlives `@ack_timeout` without an ack
+  # ends — when no ack has ever arrived the client does not acknowledge and the run stops
+  # holding (`acking: :no`); when acks had arrived the client is stalled, the window is
+  # released and the stall counted. Public for the page test.
+  def hold(socket, now) do
+    a = socket.assigns
+
+    cond do
+      not holding?(a) -> assign(socket, hold_since: nil)
+      a.hold_since == nil -> assign(socket, hold_since: now)
+      now - a.hold_since <= @ack_timeout -> socket
+      a.last_ack_at == nil -> assign(socket, acking: :no, hold_since: nil)
+      true -> assign(socket, acked_seq: a.sent_seq, stalls: a.stalls + 1, hold_since: nil)
+    end
+  end
+
+  defp ack_age(%{last_ack_at: nil}, _now), do: nil
+  defp ack_age(%{last_ack_at: at}, now), do: now - at
 
   # A frame held back: the data has advanced, nothing is sent, and if the picture moved
   # the next frame sent must be a full one — a strip against a canvas that missed a
@@ -607,7 +650,11 @@ defmodule ExamplesWeb.HighPerformanceLive do
 
           <button type="button" phx-click="toggle_flow_control" class={"btn mode #{if @flow_control, do: "active", else: ""}"}
                   title="Hold frames back while 8 are in flight; resync with a full frame after a dropped scroll">
-            <%= if @flow_control, do: "Flow control ON", else: "Flow control OFF" %>
+            <%= cond do
+              not @flow_control -> "Flow control OFF"
+              @acking == :no -> "Flow control: no acks"
+              true -> "Flow control ON"
+            end %>
           </button>
 
           <%= if @running do %>
@@ -641,6 +688,14 @@ defmodule ExamplesWeb.HighPerformanceLive do
           <div class="metric">
             <span class="value"><%= format_number(@dropped) %></span>
             <span class="label">Dropped</span>
+          </div>
+          <div class="metric">
+            <span class="value"><%= if @ack_age, do: "#{format_number(@ack_age)} ms", else: "none" %></span>
+            <span class="label">Last ack</span>
+          </div>
+          <div class="metric">
+            <span class="value"><%= format_number(@stalls) %></span>
+            <span class="label">Stalls</span>
           </div>
           <div class="metric">
             <span class="value"><%= format_number(round(@measured_rate)) %></span>
