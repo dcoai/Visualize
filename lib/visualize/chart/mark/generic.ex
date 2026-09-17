@@ -4,7 +4,7 @@ defmodule Visualize.Chart.Mark.Generic do
   # rectangle, a circle, and an arc over `Visualize.Shape.Pie`. Children are
   # `%{element, datum, style, anchor}` as in `Visualize.Chart.Mark.Shapes`.
 
-  alias Visualize.Chart.Mark.{Channels, Shapes}
+  alias Visualize.Chart.Mark.{Channels, Label, Shapes}
   alias Visualize.Chart.Style
   alias Visualize.IR.{Element, Path}
   alias Visualize.Shape.{Arc, Pie}
@@ -14,6 +14,7 @@ defmodule Visualize.Chart.Mark.Generic do
   def elements(%{type: :path} = ctx), do: path(ctx)
   def elements(%{type: :rect} = ctx), do: rect(ctx)
   def elements(%{type: :circle} = ctx), do: circle(ctx)
+  def elements(%{type: :text} = ctx), do: text(ctx)
   def elements(%{type: :arc} = ctx), do: arc(ctx)
 
   # -- path ----------------------------------------------------------------------------
@@ -59,10 +60,35 @@ defmodule Visualize.Chart.Mark.Generic do
         element: element,
         datum: row.datum,
         style: value_fill(ctx, Map.get(row, :value)),
-        anchor: {x + width / 2, y + height / 2}
+        anchor: {x + width / 2, y + height / 2},
+        bounds: {x, y, width, height}
       }
     end)
   end
+
+  # -- text ----------------------------------------------------------------------------
+
+  # A text per datum at its position (spec/14 §5.2, #134): the mark's inline label's text
+  # read from the datum, else `value` as a string; anchored as the label says about the
+  # position, in the label's style — the label's whole job done by the mark itself.
+  defp text(ctx) do
+    ctx
+    |> Channels.pixels([:value])
+    |> Channels.placed([:x, :y])
+    |> Enum.map(fn row ->
+      content =
+        case ctx.label do
+          %{text: text} -> Label.text(text, row.datum)
+          nil -> row |> Map.get(:value) |> to_content()
+        end
+
+      element = Label.element(ctx, {row.x, row.y}, nil, content, "mark-text")
+      %{element: element, datum: row.datum, style: %{}, anchor: {row.x, row.y}}
+    end)
+  end
+
+  defp to_content(nil), do: ""
+  defp to_content(value), do: to_string(value)
 
   # A rect's `value` reaches the colour scale as its fill (spec/14 §5.2); the pixel row
   # already carries the scale's output when the frame declares `color`.

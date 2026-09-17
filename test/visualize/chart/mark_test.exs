@@ -738,6 +738,49 @@ defmodule Visualize.Chart.MarkTest do
       assert {t1.content, t1.attrs} == {"k1", %{x: 300.0, y: 56.0}}
       assert t0.style.text_anchor == :middle
     end
+
+    test "a :text mark is one text per datum at its position, its label's text in its label's style, and nothing else (#134)" do
+      group =
+        generate(%{
+          type: :text,
+          channels: %{x: :t, y: :v},
+          label: %{text: [{:field, :k}, ":", {:field, :v}], anchor: :bottom, dx: 3}
+        })
+
+      assert length(group.children) == 4
+      assert Enum.all?(group.children, &(&1.type == :text))
+      [first | _] = group.children
+      assert first.content == "k0:4"
+      # Row 0: t = 0 → x 0, v = 4 → y 120; anchored below, 4 down, dx 3.
+      assert first.attrs == %{x: 3.0, y: 124.0, dy: "0.71em"}
+      assert first.style.class == "mark-text"
+      assert first.style.text_anchor == :middle
+      assert first.style.fill == "var(--vis-text, #333333)"
+
+      # Without a label node, the value channel is the text and the anchor the default.
+      plain = generate(%{type: :text, channels: %{x: :t, y: :v, value: :v}})
+      assert Enum.map(plain.children, & &1.content) == ["4", "9", "2", "7"]
+      assert hd(plain.children).attrs == %{x: 0.0, y: 116.0}
+    end
+
+    test "the edge anchors of a rect land 4 outside the midpoint of that edge; on a circle they fall back to the side (#134)" do
+      at = fn anchor, type, channels ->
+        [first | _] =
+          generate(%{type: type, channels: channels, label: %{text: ["!"], anchor: anchor}}).children
+          |> Enum.filter(&(&1.type == :text))
+
+        {first.attrs, first.style.text_anchor}
+      end
+
+      rect = %{x0: :t, x1: :hi, y0: 0, y1: :v}
+      # Row 0's rect: x 0..500, y 120..200 (v = 4 → 120, 0 → 200).
+      assert at.(:x1, :rect, rect) == {%{x: 504.0, y: 160.0, dy: "0.32em"}, :start}
+      assert at.(:x0, :rect, rect) == {%{x: -4.0, y: 160.0, dy: "0.32em"}, :end}
+      assert at.(:y1, :rect, rect) == {%{x: 250.0, y: 116.0}, :middle}
+      assert at.(:y0, :rect, rect) == {%{x: 250.0, y: 204.0, dy: "0.71em"}, :middle}
+      # A circle has no edges: the same side, from its point.
+      assert at.(:x1, :circle, %{x: :t, y: :v}) == {%{x: 4.0, y: 120.0, dy: "0.32em"}, :start}
+    end
   end
 
   describe "the frame" do

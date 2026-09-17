@@ -10,8 +10,8 @@ defmodule Visualize.Chart.Mark.Label do
   alias Visualize.IR.Element
 
   @inset 4
-  # Types whose generator draws its own label (spec/14 §5.5).
-  @own_label [:rule, :x_band]
+  # Types whose generator draws its own label (spec/14 §5.5); a `:text` mark is its label.
+  @own_label [:rule, :x_band, :text]
 
   @doc false
   # The text of the label's parts for a datum.
@@ -32,7 +32,7 @@ defmodule Visualize.Chart.Mark.Label do
   # The label's resolved style.
   @spec style(map()) :: map()
   def style(%{label: label, frame: frame, mode: mode}) do
-    name = Map.get(label, :style, Schema.default(:mark_label, :style))
+    name = Map.get(label || %{}, :style, Schema.default(:mark_label, :style))
     Style.resolve(Style.node(frame.styles, name), frame.theme, mode)
   end
 
@@ -42,8 +42,20 @@ defmodule Visualize.Chart.Mark.Label do
   def elements(_children, %{label: nil}), do: []
   def elements(_children, %{type: type}) when type in @own_label, do: []
 
-  def elements(children, %{label: label, frame: frame} = ctx) do
-    style = style(ctx)
+  def elements(children, %{label: label} = ctx) do
+    for %{anchor: point, datum: datum} = child <- children do
+      element(ctx, point, Map.get(child, :bounds), text(label.text, datum), "mark-label")
+    end
+  end
+
+  @doc false
+  # One text at a point — or, for an edge anchor, at an edge of the element's bounds —
+  # anchored, offset and styled as the mark's label says (spec/14 §5.5). A `:text` mark
+  # draws its element through this too (#134), with no label node to read past its style.
+  @spec element(map(), {number(), number()}, tuple() | nil, String.t(), String.t()) :: Element.t()
+  def element(%{frame: frame} = ctx, {px, py}, bounds, content, class) do
+    label = ctx.label || %{}
+    style = style(%{ctx | label: label})
 
     style_node =
       Style.node(frame.styles, Map.get(label, :style, Schema.default(:mark_label, :style)))
@@ -52,18 +64,12 @@ defmodule Visualize.Chart.Mark.Label do
     dx = Map.get(label, :dx, 0)
     dy = Map.get(label, :dy, 0)
 
-    for %{anchor: {px, py}, datum: datum} <- children do
-      {x, y, baseline, text_anchor} = place(anchor, px, py)
-      attrs = %{x: x + dx, y: y + dy} |> put_unless_nil(:dy, baseline)
-      base = %{class: "mark-label", text_anchor: text_anchor}
+    {x, y, baseline, text_anchor} = place(anchor, px, py, bounds)
+    attrs = %{x: x + dx, y: y + dy} |> put_unless_nil(:dy, baseline)
+    base = %{class: class, text_anchor: text_anchor}
 
-      Element.new(:text,
-        attrs: attrs,
-        style: Map.merge(base, style),
-        content: text(label.text, datum)
-      )
-      |> Position.apply(style_node, outward(anchor))
-    end
+    Element.new(:text, attrs: attrs, style: Map.merge(base, style), content: content)
+    |> Position.apply(style_node, outward(anchor))
   end
 
   # The outward direction of an anchor (spec/14 §5.5): the side the label sits on.
@@ -73,13 +79,27 @@ defmodule Visualize.Chart.Mark.Label do
   defp outward(:right), do: {1, 0}
   defp outward(:start), do: {1, 0}
   defp outward(:end), do: {-1, 0}
+  defp outward(:x0), do: {-1, 0}
+  defp outward(:x1), do: {1, 0}
+  defp outward(:y1), do: {0, -1}
+  defp outward(:y0), do: {0, 1}
   defp outward(_middle), do: nil
 
-  defp place(:top, px, py), do: {px, py - @inset, nil, :middle}
-  defp place(:bottom, px, py), do: {px, py + @inset, "0.71em", :middle}
-  defp place(:left, px, py), do: {px - @inset, py, "0.32em", :end}
-  defp place(:right, px, py), do: {px + @inset, py, "0.32em", :start}
-  defp place(named, px, py), do: {px, py, "0.32em", named}
+  # An edge anchor on an element with bounds sits 4 outside the midpoint of that edge
+  # (#134); on any other element it is the cartesian anchor of the same side.
+  defp place(:x0, _px, _py, {x, y, _w, h}), do: place(:left, x, y + h / 2, nil)
+  defp place(:x1, _px, _py, {x, y, w, h}), do: place(:right, x + w, y + h / 2, nil)
+  defp place(:y1, _px, _py, {x, y, w, _h}), do: place(:top, x + w / 2, y, nil)
+  defp place(:y0, _px, _py, {x, y, w, h}), do: place(:bottom, x + w / 2, y + h, nil)
+  defp place(:x0, px, py, nil), do: place(:left, px, py, nil)
+  defp place(:x1, px, py, nil), do: place(:right, px, py, nil)
+  defp place(:y1, px, py, nil), do: place(:top, px, py, nil)
+  defp place(:y0, px, py, nil), do: place(:bottom, px, py, nil)
+  defp place(:top, px, py, _bounds), do: {px, py - @inset, nil, :middle}
+  defp place(:bottom, px, py, _bounds), do: {px, py + @inset, "0.71em", :middle}
+  defp place(:left, px, py, _bounds), do: {px - @inset, py, "0.32em", :end}
+  defp place(:right, px, py, _bounds), do: {px + @inset, py, "0.32em", :start}
+  defp place(named, px, py, _bounds), do: {px, py, "0.32em", named}
 
   defp put_unless_nil(map, _key, nil), do: map
   defp put_unless_nil(map, key, value), do: Map.put(map, key, value)

@@ -18,7 +18,8 @@ defmodule Visualize.Chart.Schema.Mark do
      [:inner_radius, :outer_radius, :corner_radius, :pad_angle, :start_angle, :end_angle]},
     {:path, [:path], [], []},
     {:rect, [:x0, :x1, :y0, :y1], [:value], [:corner_radius]},
-    {:circle, [:x, :y], [:value], [:radius]}
+    {:circle, [:x, :y], [:value], [:radius]},
+    {:text, [:x, :y], [:value], []}
   ]
   @types Enum.map(@marks, &elem(&1, 0))
   @channel_keys [
@@ -83,7 +84,8 @@ defmodule Visualize.Chart.Schema.Mark do
   @offsets [:none, :expand, :silhouette, :wiggle, :diverging]
   @tiles [:squarify, :binary, :slice, :dice, :slice_dice]
   @outputs [:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges]
-  @anchors [:top, :bottom, :left, :right, :start, :middle, :end]
+  # The four edge anchors are the rectangular types' (spec/14 §5.5, #134).
+  @anchors [:top, :bottom, :left, :right, :start, :middle, :end, :x0, :x1, :y0, :y1]
 
   @doc false
   def types, do: @types

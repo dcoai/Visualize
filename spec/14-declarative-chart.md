@@ -427,6 +427,7 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 | `:path` | `path` | | one path element per datum: the row's `Visualize.IR.Path`, in plot pixels |
 | `:rect` | `x0`, `x1`, `y0`, `y1` | `value` | a rectangle per datum; `value` reaches the colour scale |
 | `:circle` | `x`, `y` | `value` | a circle per datum; `value` is the radius |
+| `:text` | `x`, `y` | `value` | a text per datum at the scaled position (#134): its content the mark's inline `label` text (§5.5) read from the datum, else `value` as a string; drawn in the label's style, `class="mark mark-text"`, and anchored as the label's `anchor` says about the position — the mark a grammar of graphics has, so a text at a data position needs no invisible carrier. It draws text alone, so its render target is `:svg` whatever `render` says (§12.3) |
 
 `Visualize.Chart.Schema.channels/1` returns the two lists for a type. A channel reads its field from each row through `Visualize.Data.Table.get/2` — a number is a constant, a `{:field, f}` reads `f` — and the frame maps the reading through the scale the channel names (§4.3) when the frame declares that scale. A datum the scale cannot place (a `nil` reading, or a category a `:band` or an `:ordinal` scale does not hold) is dropped from a per-datum mark and breaks a path mark's path there, as `defined/2` of spec/04 §1.2 would. Through a `:band` scale `x0` (and `y0`) is the band's start, `x1` (`y1`) its end — the start plus `Visualize.Scale.bandwidth/1` — and `x` (`y`) its centre, so a bar over categories is `x0: :cat, x1: :cat` and a point over them sits mid-band. A channel that names no scale, or names one the frame does not declare, is read as pixels: `path`, the `value` of a `:symbol` and of a `:circle`, the `value`, `start` and `end` of an `:arc` (a share and two angles in radians, never scaled in any kind), and the position channels of a `:geo` frame, whose pixels come from the `:projection` transform (§5.4.4). An `:arc`'s `value` is required unless both `start` and `end` are given, and either of those two requires the other: the validator reports the missing one as `:required` (D-69). `series` splits a `:line` or an `:area` into one path per distinct value, in order of first appearance, and colours each as §5.6 says.
 
@@ -441,6 +442,7 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 | `:arc` | `inner_radius` (`0`), `outer_radius` (`R`), `corner_radius` (`0`), `pad_angle` (`0`), `start_angle` (`0`), `end_angle` (`2π`) |
 | `:rect` | `corner_radius` (`0`) |
 | `:circle` | `radius` (`3`, when `value` is absent) |
+| `:text` | — |
 | every other type | none |
 
 An `:arc`'s `inner` and `outer` channels replace `inner_radius` and `outer_radius` per datum; its `start` and `end` channels, given together, replace the pie — `start_angle` and `end_angle` are not read then, and `pad_angle` is the arc's own (`Visualize.Shape.Arc.pad_angle/2`) rather than the pie's. Angles are radians and sizes user units, as in [11-public-api](11-public-api.md) §3.3.
@@ -510,7 +512,7 @@ The ops are `:filter`, `:bin`, `:stack`, `:fold`, `:sum`, `:sort`, `:tree`, `:cl
 
 ### 5.5 Inline label
 
-**Implemented.** A `:mark_label` node labels the mark from its own data: `text` (`:text`, `:content`, required), `anchor` (`{:enum, [:top, :bottom, :left, :right, :start, :middle, :end]}`, `:geometry`, `:top`), `style` (`{:ref, :style}`, `:style`, `:label`), `dx` and `dy` (`:number`, `:geometry`, `0`); every key `:override`. A `{:field, f}` in its text reads the datum through `Visualize.Data.Table.get/2` — `to_string/1` of the value, nothing for `nil` — which is how a rule labels itself with the deploy's `sha`.
+**Implemented.** A `:mark_label` node labels the mark from its own data: `text` (`:text`, `:content`, required), `anchor` (`{:enum, [:top, :bottom, :left, :right, :start, :middle, :end, :x0, :x1, :y0, :y1]}`, `:geometry`, `:top`), `style` (`{:ref, :style}`, `:style`, `:label`), `dx` and `dy` (`:number`, `:geometry`, `0`); every key `:override`. A `{:field, f}` in its text reads the datum through `Visualize.Data.Table.get/2` — `to_string/1` of the value, nothing for `nil` — which is how a rule labels itself with the deploy's `sha`.
 
 `Visualize.Chart.Mark.generate/3` draws the label as one `text` element per datum — per series for a `:line` or an `:area`, at its last point — in the label's `style` with `class="mark-label"`, `dx` and `dy` added. Each mark type has an *anchor point* `(px, py)`: the datum's position for a `:symbol`, a `:circle` and the end of a `:line` or an `:area`; the centre of the rectangle for a `:rect` and a `:band`; `Visualize.Shape.Arc.centroid/2` about the plot centre for an `:arc` — over the pie's angles, or the datum's own `start` and `end` — and a `:rose`; the first point of the path for a `:path`. The anchor names where the text sits:
 
@@ -521,6 +523,10 @@ The ops are `:filter`, `:bin`, `:stack`, `:fold`, `:sum`, `:sort`, `:tree`, `:cl
 | `:left` | `(px − 4, py)`, `dy: "0.32em"` | `:end` |
 | `:right` | `(px + 4, py)`, `dy: "0.32em"` | `:start` |
 | `:start`, `:middle`, `:end` | `(px, py)`, `dy: "0.32em"` | as named |
+| `:x0`, `:x1` | the midpoint of the rectangle's left or right edge, 4 outside it, `dy: "0.32em"` (#134) | `:end`, `:start` |
+| `:y1`, `:y0` | the midpoint of its top or bottom edge, 4 outside it — `:y0` with `dy: "0.71em"` | `:middle` |
+
+The four **edge anchors** are for the rectangular types, a `:rect` and a `:band`, whose elements carry their bounds: a bar labels itself past its own end, whatever its length, with no second mark. On any other type they fall back to the cartesian anchor of the same side — `:x0` to `:left`, `:x1` to `:right`, `:y1` to `:top`, `:y0` to `:bottom` — so the anchor list stays total.
 
 A `:rule` and an `:x_band` label themselves through their generator's own `label/2` — to the right of the upper end, spec/04 §12.2 — so the annotation is byte for byte the one the generator draws; `anchor`, `dx` and `dy` are not read by those two types, and the label's `style` reaches the generator's text. A `text_anchor` in the label's style replaces the anchor's own.
 
@@ -804,7 +810,7 @@ A static region is drawn at compilation in the `:css` mode from the frame the ch
 
 ### 12.3 The render target
 
-**Implemented.** The render target is a compiler decision per mark, never a design property beyond the `render` override (§5.1). For each mark, in design order: `render: :svg`, `:canvas` or `:binary` is taken as given; `:auto` (the default) counts the rows the mark draws over the bound sources — `Visualize.Chart.Mark.rows/3`, the points of a path mark, the elements of a per-datum one — and picks `:svg` when the count is at most the ceiling, else `:binary` when `Visualize.Backend.CanvasBinary.available?/0` (Nx is loaded) and `:canvas` otherwise. The ceiling is the `ceiling:` option of `compile/2`, `1000` by default: the ~1,000 DOM-node ceiling of [00-prior-art](00-prior-art.md) §3.2. Rebinding a slot to a denser source and recompiling moves a mark from SVG to canvas without touching the design. `Visualize.Chart.Compiled.targets/1` reports `{target, points}` per mark, the target chosen and the count it was chosen from, so `[{:svg, 120}, {:binary, 5000}]` is a chart whose second mark went to the binary path.
+**Implemented.** The render target is a compiler decision per mark, never a design property beyond the `render` override (§5.1). For each mark, in design order: `render: :svg`, `:canvas` or `:binary` is taken as given; `:auto` (the default) counts the rows the mark draws over the bound sources — a `:text` mark is `:svg` whatever `render` says, since it draws text alone and the binary stream carries none (spec/09 §4.4, #134) — — `Visualize.Chart.Mark.rows/3`, the points of a path mark, the elements of a per-datum one — and picks `:svg` when the count is at most the ceiling, else `:binary` when `Visualize.Backend.CanvasBinary.available?/0` (Nx is loaded) and `:canvas` otherwise. The ceiling is the `ceiling:` option of `compile/2`, `1000` by default: the ~1,000 DOM-node ceiling of [00-prior-art](00-prior-art.md) §3.2. Rebinding a slot to a denser source and recompiling moves a mark from SVG to canvas without touching the design. `Visualize.Chart.Compiled.targets/1` reports `{target, points}` per mark, the target chosen and the count it was chosen from, so `[{:svg, 120}, {:binary, 5000}]` is a chart whose second mark went to the binary path.
 
 Static furniture is always SVG. Layering is fixed — the canvas layer under the SVG layer, and mark order within each layer — and text stays in the SVG layer: a canvas-layer mark's inline label (§5.5) is drawn as SVG text in the mark's group, since the canvas has no text a stylesheet or a DOM hit can reach (spec/09 §4.4). The marks of a `:facet` frame are drawn per panel inside the `:panels` region and stay in the SVG layer whatever their count: their target is reported as `:svg`. One node of style resolves for both layers (§3.4): the SVG layer in `:css`, the canvas layer in `:literal`.
 
@@ -1177,6 +1183,8 @@ The mark, transform and scale functions are generated from the schema (§16.6), 
 | `Visualize.Chart.Build.rect/3` | `rect(data, channels, opts)`: `mark/4` of the `:rect` type (§5.2) — required channels `x0`, `x1`, `y0`, `y1`; optional `value`; options `corner_radius`. |
 | `Visualize.Chart.Build.circle/2` | As `circle/3` with no options. |
 | `Visualize.Chart.Build.circle/3` | `circle(data, channels, opts)`: `mark/4` of the `:circle` type (§5.2) — required channels `x`, `y`; optional `value`; options `radius`. |
+| `Visualize.Chart.Build.text/2` | As `text/3` with no options. |
+| `Visualize.Chart.Build.text/3` | `text(data, channels, opts)`: `mark/4` of the `:text` type (§5.2, #134) — required channels `x`, `y`; optional `value`; no options; the text is the mark's `label`, else `value`. |
 
 The transform appenders, one per op of §5.4 (`Visualize.Chart.Schema.transform_ops/0`, the `:projection` step among them), each taking the data node — a `:data` node or a source name, read as `from/1` of it — and returning it with the step appended. The positional arguments after the node are the op's required keys, in the schema's order.
 

@@ -416,7 +416,11 @@ defmodule Visualize.Chart.Compiled do
   defp targets(%Chart{marks: marks}, frame, sources, ceiling) do
     Enum.map(marks, fn mark ->
       points = length(Mark.rows(frame, mark, sources))
-      {target(frame.kind, Map.get(mark, :render, :auto), points, ceiling), points}
+
+      case mark.type do
+        :text -> {:svg, points}
+        _type -> {target(frame.kind, Map.get(mark, :render, :auto), points, ceiling), points}
+      end
     end)
   end
 
