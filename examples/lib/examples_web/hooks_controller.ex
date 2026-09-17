@@ -9,6 +9,8 @@ defmodule ExamplesWeb.HooksController do
   def show(conn, _params) do
     conn
     |> put_resp_content_type("text/javascript")
+    # Never stale: a reload revalidates, so a restarted server's hooks reach the browser (#306).
+    |> put_resp_header("cache-control", "no-cache")
     |> send_resp(200, Visualize.Hooks.js_code())
   end
 end

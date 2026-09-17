@@ -75,4 +75,38 @@ defmodule ExamplesWeb.HighPerformanceFlowTest do
     {:noreply, s} = Page.handle_event("frame_drawn", %{"seq" => 8, "drawn" => 8}, s)
     assert Page.frame_mode(s.assigns, 0) == :none
   end
+  # The current hold began `ms` ago.
+  defp held_for(s, ms), do: Phoenix.Component.assign(s, hold_since: s.assigns.hold_since - ms)
+
+  test "a client that never acks: the hold times out, the run stops holding and says so (#306)" do
+    s = Enum.reduce(1..9, started(), fn _, s -> tick(s) end)
+    assert s.assigns.sent_seq == 8 and s.assigns.dropped == 2
+    assert s.assigns.hold_since != nil and s.assigns.acking == :unknown
+
+    # Within the timeout the hold stands; past it, with no ack ever, frames flow again.
+    s = tick(held_for(s, 1500))
+    assert s.assigns.sent_seq == 8 and s.assigns.dropped == 3
+    s = tick(held_for(s, 2001))
+    assert s.assigns.acking == :no
+    assert s.assigns.sent_seq == 9
+    assert List.last(modes(s)) == {9, "full"}
+    s = tick(s)
+    assert s.assigns.sent_seq == 10 and s.assigns.dropped == 3
+    assert s.assigns.ack_age == nil
+  end
+
+  test "a client that stops acking: the window is released, the stall counted, a full frame sent (#306)" do
+    s = Enum.reduce(1..4, started(), fn _, s -> tick(s) end)
+    {:noreply, s} = Page.handle_event("frame_drawn", %{"seq" => 5, "drawn" => 5}, s)
+    assert s.assigns.acking == :yes
+    s = Enum.reduce(1..10, s, fn _, s -> tick(s) end)
+    assert Page.in_flight(s.assigns) == 8 and s.assigns.dropped == 2
+
+    s = tick(held_for(s, 2001))
+    assert s.assigns.stalls == 1
+    assert s.assigns.acking == :yes
+    assert List.last(modes(s)) == {14, "full"}
+    assert Page.in_flight(s.assigns) == 1
+    assert is_integer(s.assigns.ack_age) and s.assigns.ack_age >= 0
+  end
 end
