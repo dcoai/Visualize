@@ -169,6 +169,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          collapsed: MapSet.new(),
          guessed: MapSet.new(),
          expanded_layers: MapSet.new(),
+         mask_layers: MapSet.new(),
          expanded: MapSet.new(),
          find: "",
          node_label: "design"
@@ -399,6 +400,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   locked={@locked}
                   expanded={@expanded_index}
                   placed={@placed_layers}
+                  masks={@layer_masks}
                   target={@myself}
                 />
                 <ol :if={not row.selected? and row.expanded} class="vis-builder-layers vis-builder-layers-other">
@@ -1072,6 +1074,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # A row opens or closes on what its layer declares (spec/14 §18.8).
+    def handle_event("toggle_layer_mask", %{"index" => index}, socket) do
+      case Enum.at(socket.assigns.uses, position(index)) do
+        nil ->
+          {:noreply, socket}
+
+        use ->
+          {:noreply,
+           update(socket, :mask_layers, fn open ->
+             if MapSet.member?(open, use.id),
+               do: MapSet.delete(open, use.id),
+               else: MapSet.put(open, use.id)
+           end)}
+      end
+    end
+
     def handle_event("toggle_layer_detail", %{"index" => index}, socket) do
       case Enum.at(socket.assigns.uses, position(index)) do
         nil ->
@@ -1658,10 +1675,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A mask checkbox: the path joins or leaves the selected site's mask (spec/14 §19.5).
     # An unchecked box submits nothing, which is the path leaving.
+    # A mask checkbox under a layer's row (§18.8): the form names the layer's position, and
+    # the write is the site's own, so a locked layer's mask is written like any other's.
     def handle_event("mask", %{"_target" => [name]} = params, socket) do
-      %{uses: uses, selected: selected} = socket.assigns
+      %{uses: uses} = socket.assigns
 
-      case Stack.get(uses, selected) do
+      at =
+        case Map.fetch(params, "_index") do
+          {:ok, index} -> Enum.at(uses, position(index)) |> then(&(&1 && &1.id))
+          :error -> socket.assigns.selected
+        end
+
+      case at && Stack.get(uses, at) do
         nil ->
           {:noreply, socket}
 
@@ -1672,7 +1697,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
            update(
              socket,
              :uses,
-             &Stack.update(&1, selected, fn u -> Masks.toggle(u, name, checked) end)
+             &Stack.update(&1, at, fn u -> Masks.toggle(u, name, checked) end)
            )}
       end
     end
@@ -1956,8 +1981,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
         disabled: disabled(assigns.uses),
         locked: locked(assigns.uses),
         expanded_index: expanded_index(assigns),
-        placed_layers: placed_layers(assigns)
+        placed_layers: placed_layers(assigns),
+        layer_masks: layer_masks(assigns)
       }
+    end
+
+    # The mask rows of every layer whose › Mask item is open, by position (spec/14 §18.8,
+    # #316): over what the site contributes before its mask, the entry's body included, so
+    # a locked layer's mask is as editable as any — it is the site's, not the entry's.
+    defp layer_masks(%{uses: uses, mask_layers: open, store: store}) do
+      fetch = Stack.fetch(store)
+
+      for {use, index} <- Enum.with_index(uses), MapSet.member?(open, use.id), into: %{} do
+        {index, %{rows: Masks.rows(Stack.unmasked(use, fetch), use), all?: use.mask == :all}}
+      end
     end
 
     # The positions whose rows are open on what they declare (spec/14 §18.8).

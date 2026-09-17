@@ -1,14 +1,14 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Chart.Builder.Masks do
     @moduledoc """
-    The context panel over a layer: its keys with mask checkboxes, and its free variables
-    (spec/14 §19.5, §19.10).
+    The context panel over a layer — its key and its free variables (spec/14 §19.5,
+    §19.10) — and the rows of its mask, which the layer's row lists (§18.8, #316).
 
     A site's mask is the keys removed at that site, so a lower layer shows through
-    (§19.5). The panel lists the paths the site's contribution carries — its top-level
-    keys, and the keys of each node under them — with a checkbox per path, checked where
-    the mask holds it. A site masked as a whole is disabled (§19.3) and is said so rather
-    than drawn as every box checked.
+    (§19.5). `rows/2` lists the paths the site's contribution carries — its top-level
+    keys, and the keys of each node under them — one checkbox per path under the layer's
+    › Mask item, checked where the mask holds it. A site masked as a whole is disabled
+    (§19.3) and is said so rather than drawn as every box checked.
 
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
@@ -41,14 +41,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
 
     @doc """
-    Renders the layer's context: a `<form class="vis-builder-masks">` with one checkbox
-    per maskable path, and the free variables the site carries.
+    Renders the layer's context: its *declared as* key control, its not-placed fault, and
+    the free variables the site carries. Its mask is the layer row's (§18.8).
     """
     def panel(assigns) do
       assigns =
         assign(assigns,
-          rows: rows(assigns.fragment, assigns.use),
-          disabled?: assigns.use.mask == :all,
           keyed?: keyed?(assigns.fragment),
           choices: choices(assigns)
         )
@@ -94,18 +92,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <p :if={@keyless} class="vis-builder-context-fault">
           not placed: a {kind_word(@fragment)} needs a name to be declared under
         </p>
-        <p :if={@disabled?} class="vis-builder-context-note">
-          disabled — every key is masked, so the layers below show through
-        </p>
-        <p :if={not @disabled? and @rows == []} class="vis-builder-context-note">
-          this layer sets nothing yet
-        </p>
-        <form :if={not @disabled? and @rows != []} class="vis-builder-masks" phx-change="mask" phx-target={@target} phx-submit="submitted">
-          <label :for={row <- @rows} class={row.class} title={row.title}>
-            <input type="checkbox" name={row.name} value="true" checked={row.masked} />
-            <span class="vis-builder-mask-path">{row.name}</span>
-          </label>
-        </form>
         <p :if={@free != []} class="vis-builder-context-vars">
           needs {Enum.map_join(@free, ", ", &"var(:#{&1.name})")} — bind them on the Variables tab
         </p>
@@ -197,7 +183,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp normal(key) when is_atom(key), do: [key]
     defp normal(path) when is_list(path), do: path
 
-    defp rows(fragment, %Use{mask: mask}) do
+    @doc """
+    One row per maskable path of a contribution, for the layer row's › Mask item (spec/14
+    §18.8, #316): its name (the keys joined by `.`, which is the checkbox's name), whether
+    `use` masks it, and the class and title that say so.
+
+        iex> use = %Visualize.Chart.Use{id: 1, ref: nil, mask: [[:frame, :size]]}
+        iex> rows = Visualize.Chart.Builder.Masks.rows(%{frame: %{size: %{width: 1}}}, use)
+        iex> Enum.map(rows, &{&1.name, &1.masked})
+        [{"frame", false}, {"frame.size", true}]
+    """
+    @spec rows(map(), Use.t()) :: [map()]
+    def rows(fragment, %Use{mask: mask}) do
       masked = if is_list(mask), do: Enum.map(mask, &normal/1), else: []
 
       for path <- paths(fragment) do

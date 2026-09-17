@@ -611,6 +611,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
       opacity: 0.6;
     }
 
+    /* The › Mask item under an open row (spec/14 §18.8, #316): a disclosure, then the
+       mask checkboxes of the layer — a locked layer's too, since the mask is the site's. */
+    .vis-builder .vis-builder-layer-mask {
+      flex: 1 0 100%;
+      margin: 0 0 4px 18px;
+      font-size: 12px;
+    }
+
+    .vis-builder .vis-builder-layer-mask-toggle {
+      padding: 0;
+      border: none;
+      background: none;
+      color: var(--vis-builder-muted);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .vis-builder .vis-builder-layer-mask-toggle:hover {
+      color: var(--vis-builder-ink);
+    }
+
+    .vis-builder .vis-builder-layer-mask .vis-builder-masks {
+      margin: 2px 0 0 12px;
+    }
+
+    .vis-builder .vis-builder-layer-mask .vis-builder-context-note {
+      margin: 2px 0 0 12px;
+    }
+
     .vis-builder-layer-name {
       flex: 1 1 auto;
       overflow: hidden;

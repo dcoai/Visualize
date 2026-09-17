@@ -51,6 +51,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "each layer placed where the design keeps its kind, by position, for `declared/1`"
     )
 
+    attr(:masks, :map,
+      default: %{},
+      doc:
+        "by position, the mask of a layer whose › Mask item is open: `%{rows, all?}` from `Masks.rows/2` (§18.8, #316)"
+    )
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
     attr(:class, :string, default: nil, doc: "appended to the panel's class")
 
@@ -135,6 +141,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <p :if={entry.expanded? and entry.declared == []} class="vis-builder-layer-detail vis-builder-declared-none">
             declares nothing yet
           </p>
+          <div :if={entry.expanded?} class="vis-builder-layer-mask">
+            <button
+              type="button"
+              draggable="false"
+              class="vis-builder-layer-mask-toggle"
+              title={"which keys of " <> entry.name <> " the layers below show through"}
+              aria-expanded={to_string(entry.mask != nil)}
+              phx-click="toggle_layer_mask"
+              phx-value-index={entry.index}
+              phx-target={@target}
+            >{if entry.mask, do: "⌄", else: "›"} Mask</button>
+            <p :if={entry.mask && entry.mask.all?} class="vis-builder-context-note">
+              disabled — every key is masked, so the layers below show through
+            </p>
+            <p :if={entry.mask && !entry.mask.all? && entry.mask.rows == []} class="vis-builder-context-note">
+              this layer sets nothing yet
+            </p>
+            <form
+              :if={entry.mask && !entry.mask.all? && entry.mask.rows != []}
+              class="vis-builder-masks"
+              phx-change="mask"
+              phx-target={@target}
+              phx-submit="submitted"
+            >
+              <input type="hidden" name="_index" value={entry.index} />
+              <label :for={row <- entry.mask.rows} class={row.class} title={row.title}>
+                <input type="checkbox" name={row.name} value="true" checked={row.masked} />
+                <span class="vis-builder-mask-path">{row.name}</span>
+              </label>
+            </form>
+          </div>
         </li>
       </ol>
       """
@@ -217,6 +254,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           locked?: index in held,
           expanded?: index in open,
           declared: if(index in open, do: declared(Enum.at(placed, index) || %{}), else: []),
+          mask: Map.get(assigns.masks || %{}, index),
           says: says(name, index, count, index == selected, index in off, index in held)
         }
       end
