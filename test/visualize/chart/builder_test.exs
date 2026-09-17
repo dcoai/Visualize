@@ -1809,6 +1809,10 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-click="toggle_layer_mask" phx-value-index="0")
       assert html =~ "› Mask</button>"
       refute html =~ ~s(class="vis-builder-masks")
+      # The item is the open row's first line, the kinds beneath it (#319).
+      {mask_at, _} = :binary.match(html, "vis-builder-layer-mask\"")
+      {kinds_at, _} = :binary.match(html, "vis-builder-layer-detail\"")
+      assert mask_at < kinds_at
 
       {:noreply, s} = Builder.handle_event("toggle_layer_mask", %{"index" => "0"}, open)
       html = BuilderFixture.render(s)
