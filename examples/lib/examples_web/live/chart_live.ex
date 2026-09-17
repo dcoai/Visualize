@@ -266,8 +266,17 @@ defmodule ExamplesWeb.ChartLive do
           <% end %>
         </div>
 
-        <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@backend) %></h3>
+        <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@backend, @module) %></h3>
         <pre><code><%= backend_sample_code(@backend, @module) %></code></pre>
+
+        <%= if Design.design?(@module) do %>
+          <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">The design (data)</h3>
+          <p style="color: #666; font-size: 0.9rem; margin-bottom: 0.5rem;">
+            What the Build calls fold to: the stored form the builder and a host exchange (spec/14 §1, §9).
+            <code>Visualize.Chart.to_json/1</code> is the same map as JSON.
+          </p>
+          <pre><code><%= design_data(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius) %></code></pre>
+        <% end %>
 
         <%= if @animatable do %>
           <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">LiveView Animation Code</h3>
@@ -582,14 +591,24 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
-  defp backend_code_title(:svg), do: "SVG Rendering Code"
-  defp backend_code_title(:canvas), do: "Canvas Binary Rendering Code"
-  defp backend_code_title(:canvas_incremental), do: "Canvas Incremental Rendering Code"
+  defp backend_code_title(:svg, _module), do: "SVG Rendering Code"
+
+  defp backend_code_title(:canvas, module) do
+    if Design.design?(module),
+      do: "The design (Build), then the canvas rendering (the split)",
+      else: "Canvas Binary Rendering Code"
+  end
+
+  defp backend_code_title(:canvas_incremental, _module), do: "Canvas Incremental Rendering Code"
 
   defp backend_sample_code(:svg, module), do: module.sample_code()
 
+  # A design chart's Canvas sample opens with the design the split takes (#318): the
+  # module's Build calls up to `{:ok, design}`, then the split.
   defp backend_sample_code(:canvas, module) do
-    if Design.design?(module), do: hybrid_sample_code(), else: binary_sample_code()
+    if Design.design?(module),
+      do: design_build_code(module) <> "\n" <> hybrid_sample_code(),
+      else: binary_sample_code()
   end
 
 
@@ -633,6 +652,21 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   # A chart that is not yet a design: the whole element on the binary stream.
+  # The Build calls of a module's sample: everything before its `Visualize.Chart.apply`
+  # line, which is where the SVG sample turns from the design to its rendering.
+  @doc false
+  def design_build_code(module) do
+    [build | _] = String.split(module.sample_code(), ~r/\n[^\n]*Visualize\.Chart\.apply\(/, parts: 2)
+    String.trim_trailing(build) <> "\n"
+  end
+
+  # The folded design as data: what the Build calls fold to (#318).
+  @doc false
+  def design_data(module, palette, tick, animating, slug, hex_radius) do
+    {design, _sources} = module.design(build_chart_opts(palette, tick, animating, slug, hex_radius))
+    inspect(design, pretty: true, limit: :infinity, width: 80)
+  end
+
   defp binary_sample_code do
     ~S"""
     # Canvas Binary Rendering
