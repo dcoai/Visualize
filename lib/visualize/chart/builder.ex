@@ -141,6 +141,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:class, :string, default: nil, doc: "appended to the builder's root class")
 
+    attr(:library_folded, :any,
+      doc:
+        "the library's top-level headers folded at the start, a set of names; a person's" <>
+          " folds are the builder's own after that (spec/14 §18.16, #355)"
+    )
+
     @impl true
     def mount(socket) do
       {:ok,
@@ -186,7 +192,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def update(assigns, socket) do
       socket =
         socket
-        |> assign(Map.drop(assigns, [:layers]))
+        |> assign(Map.drop(assigns, [:layers, :library_folded]))
+        |> assign_new(:library_folded, fn -> Map.get(assigns, :library_folded, MapSet.new()) end)
         |> seed(assigns)
         |> then(&Enum.reduce(defaults(), &1, fn pair, acc -> default(pair, acc) end))
 
@@ -310,6 +317,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             entries={Store.list(@store)}
             view={@library_view}
             open={(@open && @open.id) || @added}
+            folded={@library_folded}
             target={@myself}
           />
           <aside :if={@store && !@library_open} class="vis-builder-library-rail">
@@ -871,6 +879,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The library folds to a rail and unfolds (spec/14 §18.16).
     def handle_event("library_fold", _params, socket) do
       {:noreply, update(socket, :library_open, &(not &1))}
+    end
+
+    # A top-level header of the library folded or unfolded, by name (spec/14 §18.16, #355).
+    def handle_event("library_toggle", %{"name" => name}, socket) do
+      toggle = fn set ->
+        if MapSet.member?(set, name), do: MapSet.delete(set, name), else: MapSet.put(set, name)
+      end
+
+      {:noreply, update(socket, :library_folded, toggle)}
     end
 
     # -- the signals (spec/14 §19.10) ------------------------------------------------------

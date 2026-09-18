@@ -444,6 +444,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
       text-transform: uppercase;
     }
 
+    .vis-builder-category-fold {
+      all: unset;
+      cursor: pointer;
+      display: inline-flex;
+      gap: 4px;
+      align-items: baseline;
+    }
+
+    .vis-builder-category-fold:focus-visible {
+      outline: 2px solid var(--vis-builder-ink);
+      outline-offset: 2px;
+    }
+
+    .vis-builder-category-count {
+      color: var(--vis-builder-muted);
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
     .vis-builder-group-name {
       margin: 0;
       padding: 4px 10px 2px 18px;
