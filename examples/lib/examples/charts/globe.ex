@@ -1,185 +1,119 @@
 defmodule Examples.Charts.Globe do
-  @moduledoc "Rotating globe using orthographic projection"
+  @moduledoc """
+  Globe as a design (#129): a `:geo` frame whose projection is the orthographic, and four
+  `:path` marks over the `:projection` step — the ocean, the graticule, the land and the
+  rim — as the world map's, with the globe's own projection.
 
-  alias Visualize.Geo.{Projection, Path}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
-  alias Examples.Charts.WorldGeography
+  The orthographic clips the far hemisphere itself (spec/07 §1.5), so the `Sphere` is the
+  visible disc and the land and the graticule end at its edge with no `clipPath` (§5.4.4,
+  #349). The animation turns the projection's `rotate` — the globe spinning east with a
+  slow nod — where the hand-written version rebuilt the projection each frame. Its dark
+  page background and the highlight it painted on the glass are not the chart's.
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.{Design, WorldGeography}
+
+  @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
+  @ocean "#a8d5e5"
 
   def title, do: "Globe"
   def description, do: "Rotating orthographic projection"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 500
     height = opts[:height] || 450
-    animation_tick = opts[:animation_tick]
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
+    radius = min(width, height) / 2 - 20
 
-    # Calculate globe parameters
-    size = min(width, height)
-    radius = size / 2 - 20
-    cx = width / 2
-    cy = height / 2
+    {lon, lat} =
+      case opts[:animation_tick] do
+        nil -> {0, -20}
+        tick -> {-rem(tick * 2, 360), -15 * :math.sin(tick * 0.03)}
+      end
 
-    # Animate rotation
-    {rotate_lon, rotate_lat} = if animation_tick do
-      lon = rem(animation_tick * 2, 360)
-      lat = 15 * :math.sin(animation_tick * 0.03)
-      {-lon, -lat}
-    else
-      {0, -20}
-    end
-
-    # Create orthographic projection (globe view)
-    projection = Projection.new(:orthographic)
-      |> Projection.scale(radius)
-      |> Projection.translate(cx, cy)
-      |> Projection.rotate(rotate_lon, rotate_lat, 0)
-
-    geo_path = Path.new(projection)
-
-    # Create a unique clip path ID
-    clip_id = "globe-clip"
-
-    # Define clip path for the globe circle
-    clip_circle = Element.circle(%{cx: cx, cy: cy, r: radius})
-    clip_path_elem = Element.clipPath(%{id: clip_id})
-      |> Element.append(clip_circle)
-    defs = Element.defs(%{})
-      |> Element.append(clip_path_elem)
-
-    # Draw ocean (globe background)
-    ocean = Element.circle(%{
-      cx: cx,
-      cy: cy,
-      r: radius,
-      fill: "#a8d5e5",
-      stroke: ColorPalettes.axis_color(palette),
-      stroke_width: 1
-    })
-
-    # Draw graticule
-    graticule = render_graticule(geo_path)
-
-    # Draw land masses
-    world_data = WorldGeography.world_data()
-    land_elements = world_data["features"]
-      |> Enum.with_index()
-      |> Enum.map(fn {feature, idx} ->
-        path_data = Path.render(geo_path, feature)
-        color = Enum.at(colors, rem(idx, length(colors)))
-
-        Element.path(%{
-          d: path_data,
-          fill: color,
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:globe, [:shape]),
+        source(:graticule, [:kind, :degree, :shape, :weight, :opacity]),
+        source(:land, [:name, :shape]),
+        style(:ocean, fill: @ocean, stroke: :none),
+        style(:rim, fill: :none, stroke: :axis, stroke_width: 1.5),
+        style(:graticule,
+          fill: :none,
+          stroke: :background,
+          stroke_width: {:field, :weight},
+          stroke_opacity: {:field, :opacity}
+        ),
+        style(:land,
+          fill: {:field, :name},
           fill_opacity: 0.9,
-          stroke: darken(color),
+          stroke: :background,
           stroke_width: 0.5
-        })
-      end)
+        ),
+        geo(width, height,
+          margin: @zero_margin,
+          projection: %{type: :orthographic, scale: radius, rotate: [lon, lat, 0]}
+        ),
+        ordinal_scale(:color),
+        # The visible disc under everything, the lines, the land, and its rim over all.
+        path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :ocean),
+        path(projection(from(:graticule), nil, field: :shape), %{path: :path}, style: :graticule),
+        path(projection(from(:land), nil, field: :shape), %{path: :path}, style: :land),
+        path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :rim)
+      ])
 
-    # Group content that needs clipping
-    clipped_content = Element.g(%{clip_path: "url(##{clip_id})"})
-      |> Element.append(ocean)
-      |> Element.append(graticule)
-      |> Element.append(land_elements)
-
-    # Globe outline (drawn on top, not clipped)
-    globe_outline = Element.circle(%{
-      cx: cx,
-      cy: cy,
-      r: radius,
-      fill: "none",
-      stroke: ColorPalettes.axis_color(palette),
-      stroke_width: 1.5
-    })
-
-    # Globe highlight (specular reflection effect)
-    highlight = Element.ellipse(%{
-      cx: cx - radius * 0.3,
-      cy: cy - radius * 0.3,
-      rx: radius * 0.15,
-      ry: radius * 0.1,
-      fill: "white",
-      fill_opacity: 0.3
-    })
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(
-      Element.rect(%{width: width, height: height, fill: "#1a1a2e"})
-    )
-    |> Element.append(defs)
-    |> Element.append(clipped_content)
-    |> Element.append(globe_outline)
-    |> Element.append(highlight)
+    {design,
+     %{
+       globe: [%{shape: %{"type" => "Sphere"}}],
+       graticule: graticule(),
+       land: WorldGeography.land()
+     }}
   end
 
-  defp render_graticule(geo_path) do
-    # Longitude lines (meridians)
-    lon_lines = for lon <- -180..150//30 do
-      coords = for lat <- -90..90//5, do: [lon, lat]
-      geojson = %{"type" => "LineString", "coordinates" => coords}
-      path_data = Path.render(geo_path, geojson)
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-      Element.path(%{
-        d: path_data,
-        fill: "none",
-        stroke: "#fff",
-        stroke_width: 0.3,
-        stroke_opacity: 0.4
-      })
+  # Every thirty degrees, faint on the water; the equator and the prime meridian heavier.
+  defp graticule do
+    for line <- WorldGeography.graticule(30) do
+      Map.merge(
+        line,
+        if(line.degree == 0, do: %{weight: 0.8, opacity: 0.6}, else: %{weight: 0.3, opacity: 0.4})
+      )
     end
-
-    # Latitude lines (parallels)
-    lat_lines = for lat <- -60..60//30 do
-      coords = for lon <- -180..180//5, do: [lon, lat]
-      geojson = %{"type" => "LineString", "coordinates" => coords}
-      path_data = Path.render(geo_path, geojson)
-
-      Element.path(%{
-        d: path_data,
-        fill: "none",
-        stroke: "#fff",
-        stroke_width: if(lat == 0, do: 0.8, else: 0.3),
-        stroke_opacity: if(lat == 0, do: 0.6, else: 0.4)
-      })
-    end
-
-    Element.g(%{})
-    |> Element.append(lon_lines)
-    |> Element.append(lat_lines)
-  end
-
-  defp darken("#" <> hex) do
-    {r, ""} = Integer.parse(String.slice(hex, 0, 2), 16)
-    {g, ""} = Integer.parse(String.slice(hex, 2, 2), 16)
-    {b, ""} = Integer.parse(String.slice(hex, 4, 2), 16)
-
-    r = trunc(r * 0.7)
-    g = trunc(g * 0.7)
-    b = trunc(b * 0.7)
-
-    "#" <>
-      (Integer.to_string(r, 16) |> String.pad_leading(2, "0")) <>
-      (Integer.to_string(g, 16) |> String.pad_leading(2, "0")) <>
-      (Integer.to_string(b, 16) |> String.pad_leading(2, "0"))
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Geo.{Projection, Path}
+    import Visualize.Chart.Build
 
-    # Orthographic gives a globe view
-    projection = Projection.new(:orthographic)
-      |> Projection.scale(radius)
-      |> Projection.translate(cx, cy)
-      |> Projection.rotate(lon, lat, 0)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Globe"}),
+        source(:globe, [:shape]),
+        source(:graticule, [:kind, :degree, :shape, :weight, :opacity]),
+        source(:land, [:name, :shape]),
+        style(:ocean, fill: "#a8d5e5", stroke: :none),
+        style(:rim, fill: :none, stroke: :axis, stroke_width: 1.5),
+        style(:graticule, fill: :none, stroke: :background,
+          stroke_width: {:field, :weight}, stroke_opacity: {:field, :opacity}),
+        style(:land, fill: {:field, :name}, fill_opacity: 0.9, stroke: :background, stroke_width: 0.5),
+        # The orthographic clips the far hemisphere itself; rotate turns the globe.
+        geo(500, 450, margin: %{top: 0, right: 0, bottom: 0, left: 0},
+          projection: %{type: :orthographic, scale: 205, rotate: [0, -20, 0]}),
+        ordinal_scale(:color),
+        # The Sphere is the visible disc; each other mark ends in a :projection step over
+        # its rows' geometry (spec/14 §5.4.4).
+        path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :ocean),
+        path(projection(from(:graticule), nil, field: :shape), %{path: :path}, style: :graticule),
+        path(projection(from(:land), nil, field: :shape), %{path: :path}, style: :land),
+        path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :rim)
+      ])
 
-    geo_path = Path.new(projection)
-    path_data = Path.render(geo_path, geojson)
-
-    # Rotation animates the globe spinning
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{globe: globe, graticule: graticule, land: land})
+    Visualize.Chart.render(applied)
     """
   end
 end

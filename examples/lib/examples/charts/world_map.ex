@@ -1,177 +1,120 @@
 defmodule Examples.Charts.WorldMap do
-  @moduledoc "World map with selectable projections"
+  @moduledoc """
+  World map as a design (#129): a `:geo` frame whose projection is the Natural Earth, and
+  four `:path` marks over the `:projection` step — the ocean, the graticule, the land and
+  the rim.
 
-  alias Visualize.Geo.{Projection, Path}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
-  alias Examples.Charts.WorldGeography
+  The projection is the frame's (spec/14 §4.6) and every mark's data pipeline ends in a
+  `:projection` step over a geometry column (§5.4.4, #349): the ocean and the rim are the
+  `Sphere`, the projection's own outline, filled under everything and stroked over it; the
+  graticule is one `LineString` per meridian and parallel, the equator and the prime
+  meridian heavier through style keys bound to the row; the land is one feature per land
+  mass, coloured by name through the `color` scale. The hand-written version clipped the
+  map to an ellipse it drew by hand — a pseudo-cylindrical projection ends at the
+  antimeridian, so the design clips nothing. The animation turns the projection's
+  `rotate`, the map's centre moving west.
+  """
 
-  # Graticule lines (longitude/latitude grid)
-  @graticule_lons (for lon <- -180..180//30, do: lon)
-  @graticule_lats (for lat <- -90..90//30, do: lat)
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.{Design, WorldGeography}
+
+  @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
+  @ocean "#a8d5e5"
 
   def title, do: "World Map"
   def description, do: "Natural Earth projection with graticule"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 700
     height = opts[:height] || 400
-    animation_tick = opts[:animation_tick]
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
+    lon = if tick = opts[:animation_tick], do: rem(tick * 2, 360), else: 0
 
-    # Animate by slowly rotating the map center
-    {center_lon, center_lat} = if animation_tick do
-      lon = rem(animation_tick * 2, 360) - 180
-      {lon, 0}
-    else
-      {0, 0}
-    end
-
-    # Create projection
-    projection = Projection.new(:natural_earth)
-      |> Projection.scale(width / 5.5)
-      |> Projection.translate(width / 2, height / 2)
-      |> Projection.center(center_lon, center_lat)
-
-    geo_path = Path.new(projection)
-
-    # Calculate ellipse parameters for clipping
-    cx = width / 2
-    cy = height / 2
-    rx = width / 2 - 20
-    ry = height / 2 - 20
-
-    # Create clip path for the projection boundary
-    clip_id = "world-map-clip"
-    clip_ellipse = Element.ellipse(%{cx: cx, cy: cy, rx: rx, ry: ry})
-    clip_path_elem = Element.clipPath(%{id: clip_id})
-      |> Element.append(clip_ellipse)
-    defs = Element.defs(%{})
-      |> Element.append(clip_path_elem)
-
-    # Ocean background inside the ellipse
-    ocean = Element.ellipse(%{
-      cx: cx,
-      cy: cy,
-      rx: rx,
-      ry: ry,
-      fill: "#a8d5e5"
-    })
-
-    # Draw graticule
-    graticule_elements = render_graticule(geo_path, width, height)
-
-    # Draw land masses
-    world_data = WorldGeography.world_data()
-    land_elements = world_data["features"]
-      |> Enum.with_index()
-      |> Enum.map(fn {feature, idx} ->
-        path_data = Path.render(geo_path, feature)
-        color = Enum.at(colors, rem(idx, length(colors)))
-
-        Element.path(%{
-          d: path_data,
-          fill: color,
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:globe, [:shape]),
+        source(:graticule, [:kind, :degree, :shape, :weight, :opacity]),
+        source(:land, [:name, :shape]),
+        style(:ocean, fill: @ocean, stroke: :none),
+        style(:rim, fill: :none, stroke: :axis, stroke_width: 1.5),
+        style(:graticule,
+          fill: :none,
+          stroke: :grid,
+          stroke_width: {:field, :weight},
+          stroke_opacity: {:field, :opacity}
+        ),
+        style(:land,
+          fill: {:field, :name},
           fill_opacity: 0.8,
-          stroke: darken(color),
+          stroke: :background,
           stroke_width: 0.5
-        })
-      end)
+        ),
+        geo(width, height,
+          margin: @zero_margin,
+          projection: %{type: :natural_earth, scale: width / 5.5, rotate: [lon, 0, 0]}
+        ),
+        ordinal_scale(:color),
+        # The sphere under everything, the lines, the land, and the sphere's rim over all.
+        path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :ocean),
+        path(projection(from(:graticule), nil, field: :shape), %{path: :path}, style: :graticule),
+        path(projection(from(:land), nil, field: :shape), %{path: :path}, style: :land),
+        path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :rim)
+      ])
 
-    # Group content that needs clipping
-    clipped_content = Element.g(%{clip_path: "url(##{clip_id})"})
-      |> Element.append(ocean)
-      |> Element.append(graticule_elements)
-      |> Element.append(land_elements)
-
-    # Sphere outline (drawn on top, not clipped)
-    sphere_outline = Element.ellipse(%{
-      cx: cx,
-      cy: cy,
-      rx: rx,
-      ry: ry,
-      fill: "none",
-      stroke: ColorPalettes.axis_color(palette),
-      stroke_width: 1.5
-    })
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(
-      Element.rect(%{width: width, height: height, fill: "#e8f4f8"})
-    )
-    |> Element.append(defs)
-    |> Element.append(clipped_content)
-    |> Element.append(sphere_outline)
+    {design,
+     %{
+       globe: [%{shape: %{"type" => "Sphere"}}],
+       graticule: graticule(),
+       land: WorldGeography.land()
+     }}
   end
 
-  defp render_graticule(geo_path, _width, _height) do
-    # Longitude lines
-    lon_lines = Enum.map(@graticule_lons, fn lon ->
-      coords = for lat <- -90..90//5, do: [lon, lat]
-      geojson = %{"type" => "LineString", "coordinates" => coords}
-      path_data = Path.render(geo_path, geojson)
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-      Element.path(%{
-        d: path_data,
-        fill: "none",
-        stroke: "#ccc",
-        stroke_width: 0.5,
-        stroke_opacity: 0.5
-      })
-    end)
-
-    # Latitude lines
-    lat_lines = Enum.map(@graticule_lats, fn lat ->
-      coords = for lon <- -180..180//5, do: [lon, lat]
-      geojson = %{"type" => "LineString", "coordinates" => coords}
-      path_data = Path.render(geo_path, geojson)
-
-      Element.path(%{
-        d: path_data,
-        fill: "none",
-        stroke: "#ccc",
-        stroke_width: if(lat == 0, do: 1, else: 0.5),
-        stroke_opacity: if(lat == 0, do: 0.8, else: 0.5)
-      })
-    end)
-
-    Element.g(%{})
-    |> Element.append(lon_lines)
-    |> Element.append(lat_lines)
-  end
-
-  defp darken("#" <> hex) do
-    {r, ""} = Integer.parse(String.slice(hex, 0, 2), 16)
-    {g, ""} = Integer.parse(String.slice(hex, 2, 2), 16)
-    {b, ""} = Integer.parse(String.slice(hex, 4, 2), 16)
-
-    r = trunc(r * 0.7)
-    g = trunc(g * 0.7)
-    b = trunc(b * 0.7)
-
-    "#" <>
-      (Integer.to_string(r, 16) |> String.pad_leading(2, "0")) <>
-      (Integer.to_string(g, 16) |> String.pad_leading(2, "0")) <>
-      (Integer.to_string(b, 16) |> String.pad_leading(2, "0"))
+  # Every thirty degrees; the equator and the prime meridian heavier.
+  defp graticule do
+    for line <- WorldGeography.graticule(30) do
+      Map.merge(
+        line,
+        if(line.degree == 0, do: %{weight: 1, opacity: 0.8}, else: %{weight: 0.5, opacity: 0.5})
+      )
+    end
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Geo.{Projection, Path}
+    import Visualize.Chart.Build
 
-    projection = Projection.new(:natural_earth)
-      |> Projection.scale(150)
-      |> Projection.translate(width / 2, height / 2)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "World Map"}),
+        source(:globe, [:shape]),
+        source(:graticule, [:kind, :degree, :shape, :weight, :opacity]),
+        source(:land, [:name, :shape]),
+        style(:ocean, fill: "#a8d5e5", stroke: :none),
+        style(:rim, fill: :none, stroke: :axis, stroke_width: 1.5),
+        style(:graticule, fill: :none, stroke: :grid,
+          stroke_width: {:field, :weight}, stroke_opacity: {:field, :opacity}),
+        style(:land, fill: {:field, :name}, fill_opacity: 0.8, stroke: :background, stroke_width: 0.5),
+        # The projection is the frame's (spec/14 §4.6).
+        geo(700, 400, margin: %{top: 0, right: 0, bottom: 0, left: 0},
+          projection: %{type: :natural_earth, scale: 700 / 5.5}),
+        ordinal_scale(:color),
+        # Each mark ends in a :projection step over its rows' geometry (§5.4.4): the
+        # Sphere is the projection's outline, a LineString a graticule line, a feature a
+        # land mass.
+        path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :ocean),
+        path(projection(from(:graticule), nil, field: :shape), %{path: :path}, style: :graticule),
+        path(projection(from(:land), nil, field: :shape), %{path: :path}, style: :land),
+        path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :rim)
+      ])
 
-    geo_path = Path.new(projection)
-
-    # Render GeoJSON
-    path_data = Path.render(geo_path, geojson_feature)
-
-    # Available projections:
-    # :mercator, :orthographic, :natural_earth,
-    # :mollweide, :equal_earth, :robinson, etc.
+    # globe: [%{shape: %{"type" => "Sphere"}}]; graticule and land: rows with GeoJSON
+    # under :shape (Examples.Charts.WorldGeography.graticule/1 and land/0).
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{globe: globe, graticule: graticule, land: land})
+    Visualize.Chart.render(applied)
     """
   end
 end

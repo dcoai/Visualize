@@ -19,7 +19,8 @@ defmodule Examples.ChartsTest do
 
   # The families of #124 that have been through the layer, in the proposal's order:
   # work item 1 (#125, cartesian basics), work item 2 (#126, angular and radial),
-  # work item 3 (#127, hierarchy and graph) and work item 4 (#128, statistical and dense).
+  # work item 3 (#127, hierarchy and graph), work item 4 (#128, statistical and dense) and
+  # work item 5 (#129, geographic).
   @families [
     Examples.Charts.LineChart,
     Examples.Charts.MultiLineChart,
@@ -46,7 +47,9 @@ defmodule Examples.ChartsTest do
     Examples.Charts.ContourPlot,
     Examples.Charts.RidgelinePlot,
     Examples.Charts.Streamgraph,
-    Examples.Charts.HexbinChart
+    Examples.Charts.HexbinChart,
+    Examples.Charts.WorldMap,
+    Examples.Charts.Globe
   ]
 
   # Converted and deterministic: these hold the golden.
@@ -71,7 +74,9 @@ defmodule Examples.ChartsTest do
     Examples.Charts.SankeyDiagram,
     Examples.Charts.Heatmap,
     Examples.Charts.ContourPlot,
-    Examples.Charts.RidgelinePlot
+    Examples.Charts.RidgelinePlot,
+    Examples.Charts.WorldMap,
+    Examples.Charts.Globe
   ]
 
   # Converted, but seeded at compile time: asserted on, never recorded.
