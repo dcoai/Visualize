@@ -119,6 +119,55 @@ defmodule Visualize.ChartTest do
     end
   end
 
+  describe "generate/2 and render/2 with root: (spec/14 §4.7, #131)" do
+    defp applied(meta) do
+      design = %{
+        version: 1,
+        meta: meta,
+        sources: %{s: %{fields: [:x, :y]}},
+        frame: %{kind: :cartesian, size: %{width: 300, height: 200}},
+        marks: [%{type: :line, data: :s, channels: %{x: :x, y: :y}}]
+      }
+
+      {:ok, applied} = Chart.apply(design, sources: %{s: [%{x: 1, y: 2}, %{x: 2, y: 3}]})
+      applied
+    end
+
+    test "the root is one <svg> whose only child group is byte for byte the bare render" do
+      applied = applied(%{name: "Rain", description: ["Rain in ", "mm"]})
+      bare = Chart.render(applied)
+      svg = Chart.render(applied, root: true)
+
+      assert svg =~ ~r/^<svg /
+      assert String.ends_with?(svg, bare <> "</svg>")
+      assert svg =~ ~s(role="img") and svg =~ ~s(viewBox="0 0 300 200")
+      assert svg =~ ~s(<title id="vis-) and svg =~ ">Rain</title>"
+      assert svg =~ ">Rain in mm</desc>" and svg =~ ~s(aria-labelledby=")
+      assert length(String.split(svg, "<svg ")) == 2
+
+      root = Chart.generate(applied, root: true)
+      assert root.type == :root and length(root.children) == 3
+      assert Chart.generate(applied) == List.last(root.children)
+    end
+
+    test "an empty meta leaves the title and description out; the options override them" do
+      svg = Chart.render(applied(%{}), root: true)
+      refute svg =~ "<title" or svg =~ "<desc"
+      assert svg =~ ~s(role="img")
+
+      svg = Chart.render(applied(%{name: "Rain"}), root: true, title: "Snow", description: "cm")
+      assert svg =~ ">Snow</title>" and svg =~ ">cm</desc>"
+      assert Chart.render(applied(%{}), root: true, responsive: true) =~ "width:100%;height:auto"
+    end
+
+    test "without root: nothing changes, and the group renders on a canvas as before" do
+      applied = applied(%{name: "Rain"})
+      assert Chart.render(applied) == Chart.render(applied, root: false)
+      refute Chart.render(applied) =~ "<svg"
+      assert is_binary(Chart.render(applied, backend: :canvas, format: :binary_base64))
+    end
+  end
+
   test "var/1 is the name-only term" do
     assert Chart.var(:unit) == %Var{name: :unit}
   end
