@@ -138,8 +138,21 @@ defmodule Examples.Charts.Templates do
   defp rename_data(%{data: name} = mark, renames) when is_atom(name),
     do: %{mark | data: Map.get(renames, name, name)}
 
-  defp rename_data(%{data: %{source: name} = data} = mark, renames) when is_atom(name),
-    do: %{mark | data: %{data | source: Map.get(renames, name, name)}}
+  # A data node names its source, and a graph step in it may name a second — its node
+  # table under `nodes` (spec/14 §5.4.3) — which is renamed the same way.
+  defp rename_data(%{data: %{source: name} = data} = mark, renames) when is_atom(name) do
+    data = %{data | source: Map.get(renames, name, name)}
+
+    data =
+      Map.update(data, :transforms, [], fn steps ->
+        Enum.map(steps, fn
+          %{nodes: nodes} = step -> %{step | nodes: Map.get(renames, nodes, nodes)}
+          step -> step
+        end)
+      end)
+
+    %{mark | data: data}
+  end
 
   defp rename_data(mark, _renames), do: mark
 end

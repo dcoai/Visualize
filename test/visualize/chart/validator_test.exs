@@ -242,6 +242,17 @@ defmodule Visualize.Chart.ValidatorTest do
                [{path ++ [:field], {:invalid_for, :projection}}]
     end
 
+    test "a graph's node source must be a declared source (#346)" do
+      path = @paths[:transform]
+      step = %{op: :force, fields: [:t, :v], nodes: :nobody}
+
+      assert errors(put_at(@full, path, step)) == [
+               {path ++ [:nodes], {:undeclared, :source, :nobody}}
+             ]
+
+      assert Validator.validate(put_at(@full, path, %{step | nodes: :primary})) == :ok
+    end
+
     test "an unknown key reports at its path in every node kind" do
       for {kind, path} <- @paths do
         assert {path ++ [:bogus], :unknown_key} in errors(put_at(@full, path ++ [:bogus], 1)),

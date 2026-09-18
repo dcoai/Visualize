@@ -121,7 +121,12 @@ defmodule Visualize.Chart.Frame.Scales do
     case Map.fetch(sources, source_name(mark.data)) do
       {:ok, source} ->
         rows = source |> Table.rows() |> Enum.filter(&is_map/1)
-        Transform.apply(transforms(mark.data), rows, size: ctx.size, projection: ctx.projection)
+
+        Transform.apply(transforms(mark.data), rows,
+          size: ctx.size,
+          projection: ctx.projection,
+          sources: sources
+        )
 
       :error ->
         []
