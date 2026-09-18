@@ -9,9 +9,9 @@ defmodule Examples.Charts.TreemapChart do
 
   **Colour follows the branch** — the root child a cell descends from, as
   `Visualize.Chart.Presets.treemap_chart/1` colours — which is what the hand-written
-  version did by looking up each leaf's top-level parent. **Labels print in full** at the
-  cell's centre: a mark label cannot be fitted to the cell it sits in (#138), so the
-  truncation and the hide-when-small the hand-written version did are not expressible.
+  version did by looking up each leaf's top-level parent. **Labels are fitted to their
+  cell** with `fit: :truncate` (spec/14 §5.5, #138), cut to what the cell's width holds,
+  as the hand-written version cut them.
   """
 
   import Visualize.Chart.Build
@@ -113,7 +113,7 @@ defmodule Examples.Charts.TreemapChart do
         cartesian(width, height, margin: @zero_margin),
         ordinal_scale(:color, domain: Enum.to_list(0..(branches - 1)//1)),
         rect(leaves, %{x0: :x0, x1: :x1, y0: :y0, y1: :y1},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :cell_label},
+          label: %{text: [{:field, :name}], anchor: :middle, fit: :truncate, style: :cell_label},
           style: :cell
         )
       ])
@@ -160,7 +160,7 @@ defmodule Examples.Charts.TreemapChart do
           |> treemap(id: :id, by: :parent, field: :value, padding: 2)
           |> filter(:height, test: :eq, value: 0),
           %{x0: :x0, x1: :x1, y0: :y0, y1: :y1},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :cell_label},
+          label: %{text: [{:field, :name}], anchor: :middle, fit: :truncate, style: :cell_label},
           style: :cell
         )
       ])

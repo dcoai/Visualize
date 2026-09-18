@@ -11,9 +11,9 @@ defmodule Examples.Charts.CirclePacking do
 
   **Colour follows the branch** — the root child a leaf descends from — where the
   hand-written version coloured leaves by their depth, which in a two-level tree gave every
-  leaf the same colour. **Labels print in full**: a mark label cannot be fitted to the
-  circle it sits in (#138), so the shrinking and the truncation the hand-written version did
-  are not expressible.
+  leaf the same colour. **Labels are fitted to their circle** with `fit: :truncate`
+  (spec/14 §5.5, #138), cut to what the diameter holds, where the hand-written version
+  shrank and cut them.
   """
 
   import Visualize.Chart.Build
@@ -97,7 +97,7 @@ defmodule Examples.Charts.CirclePacking do
         # The enclosing circles under the leaves, each over its own centre and radius.
         circle(groups, %{x: :x, y: :y, value: :r}, style: :group),
         circle(leaves, %{x: :x, y: :y, value: :r},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :leaf_label},
+          label: %{text: [{:field, :name}], anchor: :middle, fit: :truncate, style: :leaf_label},
           style: :leaf
         )
       ])
@@ -145,7 +145,7 @@ defmodule Examples.Charts.CirclePacking do
           style: :group
         ),
         circle(filter(packed, :height, test: :eq, value: 0), %{x: :x, y: :y, value: :r},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :leaf_label},
+          label: %{text: [{:field, :name}], anchor: :middle, fit: :truncate, style: :leaf_label},
           style: :leaf
         )
       ])

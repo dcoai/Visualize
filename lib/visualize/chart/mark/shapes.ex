@@ -382,7 +382,8 @@ defmodule Visualize.Chart.Mark.Shapes do
         datum: row.datum,
         style: %{},
         anchor: anchor,
-        radii: {inner, row.outer}
+        radii: {inner, row.outer},
+        span: a1 - a0
       }
     end)
   end

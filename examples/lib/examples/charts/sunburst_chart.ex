@@ -16,8 +16,8 @@ defmodule Examples.Charts.SunburstChart do
   - **Colour follows the branch**, as `Visualize.Chart.Presets.sunburst_chart/1` does — the
     root child a node descends from. The hand-written scheme gave every node below the first
     ring a darkened shade of one colour, so the outer ring told you nothing.
-  - **Labels print in full.** A mark label cannot be fitted to the sector it sits in (#138),
-    so the truncation the hand-written version did is not expressible.
+  - **Labels are fitted to their sector** with `fit: :truncate` (spec/14 §5.5, #138): cut
+    to the characters the arc's length at the label's radius holds, ending in `…`.
   """
 
   import Visualize.Chart.Build
@@ -98,7 +98,7 @@ defmodule Examples.Charts.SunburstChart do
         polar(width, height, margin: @zero_margin),
         ordinal_scale(:color, domain: Enum.to_list(0..(branches - 1)//1)),
         arc(data, %{start: :x0, end: :x1, inner: :y0, outer: :y1},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :sector_label},
+          label: %{text: [{:field, :name}], anchor: :middle, fit: :truncate, style: :sector_label},
           style: :sector
         )
       ])
@@ -193,7 +193,7 @@ defmodule Examples.Charts.SunburstChart do
 
         # `start`/`end` and `inner`/`outer` are the sector's own angles and radii: no pie.
         arc(data, %{start: :x0, end: :x1, inner: :y0, outer: :y1},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :sector_label},
+          label: %{text: [{:field, :name}], anchor: :middle, fit: :truncate, style: :sector_label},
           style: :sector
         )
       ])

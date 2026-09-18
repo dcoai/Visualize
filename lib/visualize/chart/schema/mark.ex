@@ -237,7 +237,8 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:dx, :number, :geometry, default: 0),
       spec(:dy, :number, :geometry, default: 0),
       spec(:dr, :number, :geometry, default: 0),
-      spec(:rotate, @rotate, :geometry)
+      spec(:rotate, @rotate, :geometry),
+      spec(:fit, {:enum, [:none, :truncate, :hide]}, :geometry, default: :none)
     ]
   end
 end
