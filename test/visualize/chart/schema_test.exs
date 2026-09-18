@@ -92,7 +92,7 @@ defmodule Visualize.Chart.SchemaTest do
            }
 
     assert Schema.transform_keys(:bin) == %{required: [:field], optional: [:thresholds, :as]}
-    assert Schema.transform_keys(:projection) == %{required: [:fields], optional: []}
+    assert Schema.transform_keys(:projection) == %{required: [], optional: [:fields, :field]}
     assert Schema.transform_keys(:filter) == %{required: [:field], optional: [:test, :value]}
     assert Schema.default(:transform, :test) == :present
     assert :projection in Schema.transform_ops() and :filter in Schema.transform_ops()

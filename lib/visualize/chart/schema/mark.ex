@@ -76,7 +76,7 @@ defmodule Visualize.Chart.Schema.Mark do
     {:density, [:fields], [:field, :size, :bandwidth, :thresholds]},
     {:delaunay, [:fields], [:output]},
     {:voronoi, [:fields], [:size, :output]},
-    {:projection, [:fields], []}
+    {:projection, [], [:fields, :field]}
   ]
   @ops Enum.map(@transforms, &elem(&1, 0))
   @tests [:eq, :ne, :lt, :lte, :gt, :gte, :present, :absent]

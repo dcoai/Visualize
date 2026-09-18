@@ -331,16 +331,26 @@ defmodule Visualize.ChartGen do
 
   defp transform do
     bind(member_of(Schema.transform_ops()), fn op ->
-      %{required: required, optional: optional} = Schema.transform_keys(op)
-      # A fold's `as` is a pair of names, every other op's one (spec/14 §5.4).
-      keys =
-        if op == :fold,
-          do: Map.put(transform_keys(), :as, list_of(member_of(@names), length: 2)),
-          else: transform_keys()
+      bind(transform_key_sets(op), fn {required, optional} ->
+        # A fold's `as` is a pair of names, every other op's one (spec/14 §5.4).
+        keys =
+          if op == :fold,
+            do: Map.put(transform_keys(), :as, list_of(member_of(@names), length: 2)),
+            else: transform_keys()
 
-      required = keys |> Map.take(required) |> Map.put(:op, constant(op))
-      node(required, Map.take(keys, optional))
+        required = keys |> Map.take(required) |> Map.put(:op, constant(op))
+        node(required, Map.take(keys, optional))
+      end)
     end)
+  end
+
+  # The op's required and optional keys; a projection reads points through `fields` or
+  # geometries through `field`, one of the two and never both (spec/14 §5.4.4).
+  defp transform_key_sets(:projection), do: member_of([{[:fields], []}, {[:field], []}])
+
+  defp transform_key_sets(op) do
+    %{required: required, optional: optional} = Schema.transform_keys(op)
+    constant({required, optional})
   end
 
   defp transform_keys do

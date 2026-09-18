@@ -404,6 +404,26 @@ defmodule Visualize.Chart.TransformTest do
       end
     end
 
+    test ":projection over a geometry column adds its path and centroid, dropping one that projects to nothing (#349)" do
+      projection = Projection.new(:orthographic) |> Projection.translate(100, 50)
+      geo = Visualize.Geo.Path.new(projection)
+      near = %{"type" => "Polygon", "coordinates" => [[[0, 0], [10, 0], [10, 10], [0, 0]]]}
+      behind = %{"type" => "Polygon", "coordinates" => [[[170, 0], [175, 0], [175, 5], [170, 0]]]}
+      sphere = %{"type" => "Sphere"}
+
+      rows = [
+        %{name: "near", shape: near},
+        %{name: "behind", shape: behind},
+        %{name: "globe", shape: sphere},
+        %{name: "none", shape: nil}
+      ]
+
+      assert [a, b] = run(%{op: :projection, field: :shape}, rows, projection: projection)
+      assert a.name == "near" and a.path == Visualize.Geo.Path.path(geo, near)
+      assert {a.x, a.y} == Visualize.Geo.Path.centroid(geo, near)
+      assert b.name == "globe" and b.path == Visualize.Geo.Path.path(geo, sphere)
+    end
+
     test ":delaunay triangles and hull are Geo.Delaunay over the placed points" do
       points = [{10, 10}, {90, 10}, {50, 60}, {20, 80}]
       delaunay = Delaunay.new(points)

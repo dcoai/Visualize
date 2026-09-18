@@ -33,9 +33,7 @@ defmodule Visualize.Chart.Build.Generate do
     marks = for type <- Schema.mark_types(), do: {type, 3}
     scales = for kind <- Schema.scale_kinds(), do: {scale_function(kind), 2}
 
-    ops =
-      for op <- Schema.transform_ops(),
-          do: {op, 2 + length(Schema.transform_keys(op).required)}
+    ops = for op <- Schema.transform_ops(), do: {op, 2 + length(positional(op))}
 
     marks ++ ops ++ scales
   end
@@ -70,25 +68,33 @@ defmodule Visualize.Chart.Build.Generate do
 
   defp transforms do
     for op <- Schema.transform_ops() do
-      %{required: required} = Schema.transform_keys(op)
-      args = for key <- required, do: Macro.var(key, __MODULE__)
-      types = for _ <- required, do: quote(do: term())
-      node = {:%{}, [], [{:op, op} | Enum.zip(required, args)]}
-      doc = op_doc(op, required)
+      positional = positional(op)
+      args = for key <- positional, do: Macro.var(key, __MODULE__)
+      types = for _ <- positional, do: quote(do: term())
+      node = {:%{}, [], [{:op, op} | Enum.zip(positional, args)]}
+      doc = op_doc(op, positional)
 
       quote do
         @doc unquote(doc)
         @spec unquote(op)(data(), unquote_splicing(types), opts()) :: map()
         def unquote(op)(data, unquote_splicing(args), opts \\ []) do
-          step(data, unquote(node), opts)
+          # A positional argument given as `nil` is left out, so `projection(data, nil,
+          # field: :shape)` reads a geometry column (spec/14 §5.4.4).
+          step(data, Map.reject(unquote(node), fn {_, v} -> is_nil(v) end), opts)
         end
       end
     end
   end
 
-  defp op_doc(op, required) do
+  # The keys an op's builder takes positionally: its required keys — and `fields` for a
+  # projection, whose one required key is either of two (spec/14 §5.4.4, §16).
+  defp positional(:projection), do: [:fields]
+  defp positional(op), do: Schema.transform_keys(op).required
+
+  defp op_doc(op, positional) do
     %{optional: optional} = Schema.transform_keys(op)
-    args = Enum.map_join(["data" | Enum.map(required, &to_string/1)] ++ ["opts"], ", ", & &1)
+    optional = optional -- positional
+    args = Enum.map_join(["data" | Enum.map(positional, &to_string/1)] ++ ["opts"], ", ", & &1)
 
     """
     A `:#{op}` step appended to a data node (spec/14 §5.4).

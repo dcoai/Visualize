@@ -9,6 +9,7 @@ defmodule Visualize.Chart.Transform.Geo do
   alias Visualize.Contour.Density
   alias Visualize.Data.Table
   alias Visualize.Geo.{Delaunay, Projection, Voronoi}
+  alias Visualize.Geo.Path, as: GeoPath
   alias Visualize.IR.Path
 
   @doc false
@@ -20,6 +21,21 @@ defmodule Visualize.Chart.Transform.Geo do
   def run(:density, node, rows, ctx), do: density(node, rows, ctx)
 
   # -- projection -------------------------------------------------------------------------
+
+  # A geometry column: each row gains the projected outline as `path` and its centroid
+  # as `x`, `y`; a geometry that projects to nothing is dropped (#349).
+  defp projection(%{field: field}, rows, %{projection: %Projection{} = projection}) do
+    geo_path = GeoPath.new(projection)
+
+    Enum.flat_map(rows, fn row ->
+      geometry = Table.get(row, field)
+
+      case is_map(geometry) and GeoPath.centroid(geo_path, geometry) do
+        {x, y} -> [Map.merge(row, %{path: GeoPath.path(geo_path, geometry), x: x, y: y})]
+        _ -> []
+      end
+    end)
+  end
 
   defp projection(node, rows, %{projection: %Projection{} = projection}) do
     [lon, lat] = node.fields

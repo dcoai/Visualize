@@ -130,9 +130,16 @@ defmodule Visualize.Chart.BuildTest do
       end
     end
 
+    # The keys an op's builder takes positionally: its required keys, and `fields` for the
+    # projection, whose one required key is either of two (spec/14 §5.4.4, §16).
+    defp positional(:projection), do: [:fields]
+    defp positional(op), do: Chart.Schema.transform_keys(op).required
+
     test "one appender per transform op, its required keys as its arguments" do
       for op <- Chart.Schema.transform_ops() do
-        %{required: required, optional: optional} = Chart.Schema.transform_keys(op)
+        %{optional: optional} = Chart.Schema.transform_keys(op)
+        required = positional(op)
+        optional = optional -- required
         args = Enum.map(required, fn _ -> :f end)
 
         assert function_exported?(Build, op, 1 + length(required))
@@ -145,6 +152,11 @@ defmodule Visualize.Chart.BuildTest do
         assert Map.take(step, optional) == Map.new(optional, &{&1, :v})
         assert apply(Build, op, [:src | args]) == apply(Build, op, [from(:src) | args])
       end
+    end
+
+    test "a projection over a geometry column is projection/3 with nil fields (#349)" do
+      assert projection(from(:land), nil, field: :shape) ==
+               %{source: :land, transforms: [%{op: :projection, field: :shape}]}
     end
 
     test "one function per scale kind, suffixed because band is also a mark type" do
@@ -180,7 +192,7 @@ defmodule Visualize.Chart.BuildTest do
       end
 
       for op <- Chart.Schema.transform_ops() do
-        n = length(Chart.Schema.transform_keys(op).required)
+        n = length(positional(op))
         assert {op, 1 + n} in injected
         assert {op, 2 + n} in injected
       end
