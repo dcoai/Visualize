@@ -91,7 +91,7 @@ defmodule Visualize.Backend.Canvas do
         |> CanvasBinary.to_base64()
 
       _ ->
-        commands = element_to_commands(element)
+        commands = element_to_commands(element, %{})
         format_output(commands, format)
     end
   end
@@ -107,7 +107,7 @@ defmodule Visualize.Backend.Canvas do
         render_scene(elements, format: :binary) |> CanvasBinary.to_base64()
 
       format ->
-        all_commands = Enum.flat_map(elements, &element_to_commands/1)
+        all_commands = Enum.flat_map(elements, &element_to_commands(&1, %{}))
 
         case format do
           :js ->
@@ -161,7 +161,7 @@ defmodule Visualize.Backend.Canvas do
   # A clipped element (spec/02 §2.1, spec/09 §3.3): the shape's geometry as the clip —
   # alone for inside, under a rectangle of everything with the even-odd rule for
   # outside — around the element's own commands, inside a save/restore pair.
-  defp element_to_commands(%Element{clip: %{shape: shape, keep: keep}} = element) do
+  defp element_to_commands(%Element{clip: %{shape: shape, keep: keep}} = element, inherited) do
     region =
       case keep do
         :inside ->
@@ -173,64 +173,79 @@ defmodule Visualize.Backend.Canvas do
       end
 
     [{:save, []}, {:beginPath, []}] ++
-      region ++ element_to_commands(%{element | clip: nil}) ++ [{:restore, []}]
+      region ++ element_to_commands(%{element | clip: nil}, inherited) ++ [{:restore, []}]
   end
 
-  defp element_to_commands(%Element{type: :path, path: path, style: style, transform: transform}) do
+  defp element_to_commands(
+         %Element{type: :path, path: path, style: style, transform: transform},
+         inherited
+       ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     path_cmds = path_data(path)
 
-    setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(style)
+    setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(Map.merge(inherited, style))
   end
 
-  defp element_to_commands(%Element{
-         type: :rect,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp element_to_commands(
+         %Element{
+           type: :rect,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         inherited
+       ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{x: x, y: y, width: w, height: h} = attrs
 
     setup ++
       [{:beginPath, []}, {:rect, [x, y, w, h]}] ++
-      style_apply_commands(style)
+      style_apply_commands(Map.merge(inherited, style))
   end
 
-  defp element_to_commands(%Element{
-         type: :circle,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp element_to_commands(
+         %Element{
+           type: :circle,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         inherited
+       ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{cx: cx, cy: cy, r: r} = attrs
 
     setup ++
       [{:beginPath, []}, {:arc, [cx, cy, r, 0, 2 * :math.pi()]}] ++
-      style_apply_commands(style)
+      style_apply_commands(Map.merge(inherited, style))
   end
 
-  defp element_to_commands(%Element{
-         type: :ellipse,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp element_to_commands(
+         %Element{
+           type: :ellipse,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         inherited
+       ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{cx: cx, cy: cy, rx: rx, ry: ry} = attrs
 
     setup ++
       [{:beginPath, []}, {:ellipse, [cx, cy, rx, ry, 0, 0, 2 * :math.pi()]}] ++
-      style_apply_commands(style)
+      style_apply_commands(Map.merge(inherited, style))
   end
 
-  defp element_to_commands(%Element{
-         type: :line,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp element_to_commands(
+         %Element{
+           type: :line,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         _inherited
+       ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{x1: x1, y1: y1, x2: x2, y2: y2} = attrs
 
@@ -243,12 +258,15 @@ defmodule Visualize.Backend.Canvas do
       ]
   end
 
-  defp element_to_commands(%Element{
-         type: :polyline,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp element_to_commands(
+         %Element{
+           type: :polyline,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         inherited
+       ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     points = attrs[:points] || []
 
@@ -261,15 +279,18 @@ defmodule Visualize.Backend.Canvas do
           []
       end
 
-    setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(style)
+    setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(Map.merge(inherited, style))
   end
 
-  defp element_to_commands(%Element{
-         type: :polygon,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp element_to_commands(
+         %Element{
+           type: :polygon,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         inherited
+       ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     points = attrs[:points] || []
 
@@ -284,19 +305,22 @@ defmodule Visualize.Backend.Canvas do
           []
       end
 
-    setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(style)
+    setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(Map.merge(inherited, style))
   end
 
   # A text of several lines (spec/14 §7.1) is one fillText per tspan, each `dy` em below
   # the last at the style's font size (spec/09 §3.3).
-  defp element_to_commands(%Element{
-         type: :text,
-         attrs: attrs,
-         style: style,
-         content: nil,
-         children: [_ | _] = lines,
-         transform: transform
-       }) do
+  defp element_to_commands(
+         %Element{
+           type: :text,
+           attrs: attrs,
+           style: style,
+           content: nil,
+           children: [_ | _] = lines,
+           transform: transform
+         },
+         _inherited
+       ) do
     setup = transform_commands(transform) ++ text_style_commands(style)
     x = attrs[:x] || 0
     y = attrs[:y] || 0
@@ -311,13 +335,16 @@ defmodule Visualize.Backend.Canvas do
     setup ++ commands
   end
 
-  defp element_to_commands(%Element{
-         type: :text,
-         attrs: attrs,
-         style: style,
-         content: content,
-         transform: transform
-       }) do
+  defp element_to_commands(
+         %Element{
+           type: :text,
+           attrs: attrs,
+           style: style,
+           content: content,
+           transform: transform
+         },
+         _inherited
+       ) do
     setup = transform_commands(transform) ++ text_style_commands(style)
     x = attrs[:x] || 0
     y = attrs[:y] || 0
@@ -327,25 +354,28 @@ defmodule Visualize.Backend.Canvas do
 
   # A group's style is set after its transform, inside the save/restore pair, so children
   # without a style of their own inherit it through Canvas state (D-37).
-  defp element_to_commands(%Element{
-         type: :group,
-         children: children,
-         style: style,
-         transform: transform
-       }) do
+  defp element_to_commands(
+         %Element{
+           type: :group,
+           children: children,
+           style: style,
+           transform: transform
+         },
+         inherited
+       ) do
     setup = [{:save, []}] ++ transform_commands(transform) ++ style_setup_commands(style)
-    child_cmds = Enum.flat_map(children, &element_to_commands/1)
+    child_cmds = Enum.flat_map(children, &element_to_commands(&1, Map.merge(inherited, style)))
     teardown = [{:restore, []}]
 
     setup ++ child_cmds ++ teardown
   end
 
-  defp element_to_commands(%Element{type: :root, children: children}) do
-    Enum.flat_map(children, &element_to_commands/1)
+  defp element_to_commands(%Element{type: :root, children: children}, inherited) do
+    Enum.flat_map(children, &element_to_commands(&1, inherited))
   end
 
   # Skip defs, gradients, clip paths and the accessible name and description: none draws
-  defp element_to_commands(%Element{type: type})
+  defp element_to_commands(%Element{type: type}, _inherited)
        when type in [
               :defs,
               :clip_path,
@@ -362,7 +392,7 @@ defmodule Visualize.Backend.Canvas do
     []
   end
 
-  defp element_to_commands(%Element{type: :image, attrs: attrs, transform: transform}) do
+  defp element_to_commands(%Element{type: :image, attrs: attrs, transform: transform}, _inherited) do
     setup = transform_commands(transform)
     %{href: href, x: x, y: y, width: w, height: h} = attrs
     setup ++ [{:drawImage, [href, x, y, w, h]}]

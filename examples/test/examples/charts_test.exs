@@ -218,6 +218,11 @@ defmodule Examples.ChartsTest do
         binary = Base.decode64!(hybrid.canvas)
         assert byte_size(binary) > 0
         assert :binary.match(binary, "var(") == :nomatch
+        # Every mark on the canvas draws: a fill or a stroke record per mark, the paint
+        # that sits on the mark's group reaching its elements (spec/09 §4.4, #231).
+        records = Visualize.Backend.CanvasBinary.Decoder.decode(binary)
+        draws = Enum.count(records, &(&1 in [:fill, :stroke]))
+        assert draws > 0, "#{inspect(module)} draws nothing on the canvas"
       else
         assert hybrid.dynamic_svg =~ ~s(class="mark )
       end
