@@ -7,8 +7,9 @@ defmodule Examples.Charts.StackedBarChart do
   and top, and the `key` column reaches the `color` scale through the mark's style, which is
   what the legend explains.
 
-  The hand-drawn tick lines are a real y axis with `grid: true` now; the `%` those ticks
-  carried is in the axis title, because a format specifier has no unit (#135). The legend
+  The hand-drawn tick lines are a real y axis with `grid: true` now, its ticks carrying
+  the `%` through the axis's `unit` — the values are shares already, which a specifier's
+  `%` would multiply by a hundred (spec/14 §4.4, #135). The legend
   draws in the right margin the chart reserves for it (spec/14 §4.5, #136).
   """
 
@@ -42,8 +43,7 @@ defmodule Examples.Charts.StackedBarChart do
         linear_scale(:y, domain: [0, :auto]),
         ordinal_scale(:color, domain: @keys),
         axis(:x, :bottom),
-        axis(:y, :left, ticks: 5, grid: true),
-        label({:axis, :y}, ["share (%)"]),
+        axis(:y, :left, ticks: 5, grid: true, unit: "%"),
         legend(:color, position: :top_right, inside: false),
         rect(stack(from(:devices), @keys), %{x0: :year, x1: :year, y0: :y0, y1: :y1},
           style: :segment
@@ -97,8 +97,7 @@ defmodule Examples.Charts.StackedBarChart do
         linear_scale(:y, domain: [0, :auto]),
         ordinal_scale(:color, domain: keys),
         axis(:x, :bottom),
-        axis(:y, :left, ticks: 5, grid: true),
-        label({:axis, :y}, ["share (%)"]),
+        axis(:y, :left, ticks: 5, grid: true, unit: "%"),
         legend(:color, position: :top_right, inside: false),
         rect(stack(from(:devices), keys), %{x0: :year, x1: :year, y0: :y0, y1: :y1},
           style: :segment

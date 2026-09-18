@@ -318,13 +318,15 @@ It is **anonymous in the document**: an inline node is not a key of `design.styl
 | `side` | `{:enum, [:top, :right, :bottom, :left]}` | `:geometry` | required | `:override` |
 | `ticks` | `{:one_of, [:integer, {:list, :term}, {:node, :ticks}]}` | `:geometry` | `nil` | `:override` |
 | `format` | `:string` | `:content` | `nil` | `:override` |
+| `prefix` | `:string` | `:content` | `nil` | `:override` |
+| `unit` | `:string` | `:content` | `nil` | `:override` |
 | `grid` | `:boolean` | `:geometry` | `false` | `:override` |
 | `offset` | `:number` | `:geometry` | `0` | `:override` |
 | `style` | `{:ref, :style}` | `:style` | `:axis` | `:override` |
 
 `ticks` as an integer is the count hint, as a list the explicit values, as a `:ticks` node both with the sizes: `count` (`:integer`, `:geometry`), `values` (`{:list, :term}`, `:content`), `size_inner` and `size_outer` (`:number`, `:geometry`, `6`) and `padding` (`:number`, `:geometry`, `3`) — the setters of [05-axes-and-formatting](05-axes-and-formatting.md) §1.2 by name. Explicit values beat the count, and the count beats the scale's default of ten.
 
-Each axis is a `Visualize.Axis` on the realised scale, oriented by `side`, with the tick spec, `offset` and the frame's theme applied, generated in the `:resolve` mode of the render (spec/05 §1.4) and placed at its side of the plot area: `:bottom` at `translate(0, height)`, `:right` at `translate(width, 0)`, `:top` and `:left` at the origin. A frame's axis is therefore byte for byte the axis a caller builds by hand from the same scale, and `test/visualize/chart/frame_test.exs` holds it to that. `format` is a `Visualize.Format` specifier applied to every tick value: `Visualize.Format.time/2` on a `:time` scale, `Visualize.Format.formatter/1` on any other, a tick value that is not a number passing through `to_string/1`.
+Each axis is a `Visualize.Axis` on the realised scale, oriented by `side`, with the tick spec, `offset` and the frame's theme applied, generated in the `:resolve` mode of the render (spec/05 §1.4) and placed at its side of the plot area: `:bottom` at `translate(0, height)`, `:right` at `translate(width, 0)`, `:top` and `:left` at the origin. A frame's axis is therefore byte for byte the axis a caller builds by hand from the same scale, and `test/visualize/chart/frame_test.exs` holds it to that. `format` is a `Visualize.Format` specifier applied to every tick value: `Visualize.Format.time/2` on a `:time` scale, `Visualize.Format.formatter/1` on any other, a tick value that is not a number passing through `to_string/1`. **A tick carries a unit** (#135): `prefix` and `unit` are literals put before and after every tick's label — the formatted value, or the default label when there is no `format` — so `unit: "M"` prints `1412M`, `prefix: "$", unit: "T"` prints `$5T`, and `unit: "%"` prints `45%` of a value already in percent, where the specifier's own `%` would multiply by a hundred. The specifier stays d3's; a unit is what every caller was concatenating by hand, and the two keys live on the axis beside `format`, the key they complete, rather than on the `:ticks` node, which holds geometry.
 
 `grid: true` draws a line at each tick position across the plot area — the height for a `:top` or `:bottom` axis, the width for a `:left` or `:right` one — in the `:grid` style, behind every axis, in one group `class="grid"` that is `aria-hidden` like the axes (D-56). The axis's line, ticks and labels draw in its `style`; tick sizes stay geometry. A `style` other than `:axis` restyles the generated axis: `stroke`, `stroke_width`, `stroke_dasharray`, `stroke_linecap`, `stroke_linejoin` and `stroke_opacity` reach the domain line and the tick lines, `fill` and the font keys reach the tick labels, `opacity` and `class` the axis group.
 
@@ -340,9 +342,11 @@ An axis has no `id`: its identity in a stack is `{scale, side}` (§8.2), so a la
 | `position` | `{:enum, [:top_left, :top_right, :bottom_left, :bottom_right, :top, :bottom, :left, :right]}` | `:geometry` | `:top_right` | `:override` |
 | `inside` | `:boolean` | `:geometry` | `true` | `:override` |
 | `title` | `:text` | `:content` | `""` | `:override` |
+| `prefix` | `:string` | `:content` | `nil` | `:override` |
+| `unit` | `:string` | `:content` | `nil` | `:override` |
 | `style` | `{:ref, :style}` | `:style` | `:label` | `:override` |
 
-The frame builds the legend from the realised scale: one entry per value of `Visualize.Scale.ticks/2` — the domain of a discrete scale, five ticks of a continuous one — each a 12 × 12 swatch and, 16 user units to its right, the value's label as an axis would print it (spec/05 §1.5). The swatch is filled with the scale's value for the entry when that is a colour — a string, or a theme slot resolved through `Visualize.Theme.resolve/3` (§4.3) — and with the theme's `{:series, i}` for the i-th entry of a scale that yields anything else. The labels and the title take the legend's `style`.
+The frame builds the legend from the realised scale: one entry per value of `Visualize.Scale.ticks/2` — the domain of a discrete scale, five ticks of a continuous one — each a 12 × 12 swatch and, 16 user units to its right, the value's label as an axis would print it (spec/05 §1.5), with the legend's own `prefix` and `unit` before and after it (#135), so a legend explaining a scale with units agrees with the axis drawing it. The swatch is filled with the scale's value for the entry when that is a colour — a string, or a theme slot resolved through `Visualize.Theme.resolve/3` (§4.3) — and with the theme's `{:series, i}` for the i-th entry of a scale that yields anything else. The labels and the title take the legend's `style`.
 
 ```
 group  style: %{class: "legend", font_family: <font_family>, font_size: <font_size>}, transform: translate(x, y)
@@ -1163,7 +1167,7 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Build.axis/2` | As `axis/3` with `[]`. |
 | `Visualize.Chart.Build.axis/3` | `axis(scale, side, opts)`: `%{frame: %{axes: [%{scale: scale, side: side}]}}`, one axis (§4.4); `opts` are its remaining keys. |
 | `Visualize.Chart.Build.legend/1` | As `legend/2` with `[]`. |
-| `Visualize.Chart.Build.legend/2` | `legend(scale, opts)`: `%{frame: %{legend: %{scale: scale}}}` (§4.5) — `opts` are `position`, `inside`, `title`, `style`. |
+| `Visualize.Chart.Build.legend/2` | `legend(scale, opts)`: `%{frame: %{legend: %{scale: scale}}}` (§4.5) — `opts` are `position`, `inside`, `title`, `prefix`, `unit`, `style`. |
 | `Visualize.Chart.Build.label/2` | As `label/3` with `[]`. |
 | `Visualize.Chart.Build.label/3` | `label(anchor, text, opts)`: `%{labels: [%{anchor: anchor, text: text}]}`, one frame label (§6.1). |
 | `Visualize.Chart.Build.title/1` | As `title/2` with `[]`. |

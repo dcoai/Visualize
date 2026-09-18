@@ -34,7 +34,7 @@ defmodule Visualize.Chart.Frame.Legend do
     title = text(Map.get(node, :title, []))
     position = Map.get(node, :position, Schema.default(:legend, :position))
     inside? = Map.get(node, :inside, Schema.default(:legend, :inside))
-    entries = entries(scale, frame.theme, mode)
+    entries = entries(scale, node, frame.theme, mode)
     font_size = font_size(style_node, frame.theme)
     # Outside there is room, so every position reads swatch-then-label (spec/14 §4.5).
     right? = inside? and position in @right
@@ -82,12 +82,18 @@ defmodule Visualize.Chart.Frame.Legend do
 
   # -- entries --------------------------------------------------------------------------
 
-  defp entries(scale, theme, mode) do
+  # One entry per tick: the value, its label with the legend's prefix and unit around it
+  # (spec/14 §4.5, #135), and its swatch.
+  defp entries(scale, node, theme, mode) do
+    prefix = Map.get(node, :prefix) || ""
+    unit = Map.get(node, :unit) || ""
+
     scale
     |> Scale.ticks(5)
     |> Enum.with_index(1)
     |> Enum.map(fn {value, i} ->
-      {value, Axis.default_label(value), swatch(Scale.apply(scale, value), i, theme, mode)}
+      label = prefix <> Axis.default_label(value) <> unit
+      {value, label, swatch(Scale.apply(scale, value), i, theme, mode)}
     end)
   end
 
@@ -194,7 +200,7 @@ defmodule Visualize.Chart.Frame.Legend do
       position = Map.get(node, :position, Schema.default(:legend, :position))
       style_node = Style.node(styles, Map.get(node, :style, Schema.default(:legend, :style)))
       title = text(Map.get(node, :title, []))
-      entries = entries(Map.fetch!(scales, node.scale), theme, :literal)
+      entries = entries(Map.fetch!(scales, node.scale), node, theme, :literal)
       width = width(entries, title, font_size(style_node, theme))
 
       {side, needs} =

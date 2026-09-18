@@ -9,9 +9,9 @@ defmodule Examples.Charts.BubbleChart do
   `:text` (spec/14 §5.2, #134); it once was a zero-radius circle carrying a label.
 
   The bubble's radius is a column, because a `:circle`'s `value` is user units and names no
-  scale (spec/14 §5.2). The hand-drawn ticks are real axes now, and the units the ticks
-  carried (`$…T`) are in the axis titles (#135); the legend is in the right margin the
-  chart reserves for it (spec/14 §4.5, #136).
+  scale (spec/14 §5.2). The hand-drawn ticks are real axes now, their units on every tick
+  through the axes' `prefix` and `unit` — `$…T`, `…M` (spec/14 §4.4, #135); the legend is
+  in the right margin the chart reserves for it (spec/14 §4.5, #136).
   """
 
   import Visualize.Chart.Build
@@ -63,10 +63,10 @@ defmodule Examples.Charts.BubbleChart do
         linear_scale(:x, domain: [0, 1500]),
         linear_scale(:y, domain: [0, 25]),
         ordinal_scale(:color, domain: @regions),
-        axis(:x, :bottom, ticks: [0, 300, 600, 900, 1200, 1500]),
-        axis(:y, :left, ticks: [0, 5, 10, 15, 20, 25], grid: true),
-        label({:axis, :x}, ["Population (millions)"]),
-        label({:axis, :y}, ["GDP (trillions USD)"]),
+        axis(:x, :bottom, ticks: [0, 300, 600, 900, 1200, 1500], unit: "M"),
+        axis(:y, :left, ticks: [0, 5, 10, 15, 20, 25], grid: true, prefix: "$", unit: "T"),
+        label({:axis, :x}, ["Population"]),
+        label({:axis, :y}, ["GDP"]),
         label({:frame, :bottom_right}, ["Size = GDP/capita"], style: :caption),
         legend(:color, position: :top_right, inside: false),
         circle(largest_first, %{x: :population, y: :gdp, value: :r}, style: :bubble),
@@ -134,10 +134,10 @@ defmodule Examples.Charts.BubbleChart do
         linear_scale(:x, domain: [0, 1500]),
         linear_scale(:y, domain: [0, 25]),
         ordinal_scale(:color, domain: ["Americas", "Asia", "Europe", "Oceania"]),
-        axis(:x, :bottom, ticks: [0, 300, 600, 900, 1200, 1500]),
-        axis(:y, :left, ticks: [0, 5, 10, 15, 20, 25], grid: true),
-        label({:axis, :x}, ["Population (millions)"]),
-        label({:axis, :y}, ["GDP (trillions USD)"]),
+        axis(:x, :bottom, ticks: [0, 300, 600, 900, 1200, 1500], unit: "M"),
+        axis(:y, :left, ticks: [0, 5, 10, 15, 20, 25], grid: true, prefix: "$", unit: "T"),
+        label({:axis, :x}, ["Population"]),
+        label({:axis, :y}, ["GDP"]),
         legend(:color, position: :top_right, inside: false),
         circle(largest_first, %{x: :population, y: :gdp, value: :r}, style: :bubble),
 
