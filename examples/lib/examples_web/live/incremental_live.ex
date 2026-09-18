@@ -4,7 +4,7 @@ defmodule ExamplesWeb.IncrementalLive do
 
   alias Visualize.{Scale, Shape}
   alias Visualize.IR.{Element, Transform}
-  alias Visualize.Backend.{CanvasBinary, CanvasIncremental}
+  alias Visualize.Backend.CanvasIncremental
 
   @width 800
   @height 500

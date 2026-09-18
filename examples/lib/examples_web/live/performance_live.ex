@@ -64,6 +64,8 @@ defmodule ExamplesWeb.PerformanceLive do
     {:noreply, start_task(socket, work, :all)}
   end
 
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
+
   # A comparison in a task, or the reason there is none (#340).
   defp start_task(socket, work, key) do
     case Examples.Run.supervisor() do
@@ -75,8 +77,6 @@ defmodule ExamplesWeb.PerformanceLive do
         assign(socket, error: message)
     end
   end
-
-  def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   @impl true
   def handle_info({ref, result}, %{assigns: %{task: %Task{ref: ref}}} = socket) do

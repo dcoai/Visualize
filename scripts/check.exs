@@ -12,7 +12,8 @@ defmodule Visualize.Check do
     {"verify:models", "dev", ~w(vis.verify)},
     {"consumer-compile", "prod", ~w(compile --force --warnings-as-errors)},
     {"consumer-compile", "prod", {"elixir", ~w(scripts/consumer_check.exs)}},
-    {"examples:test", "test", ~w(test), "examples"},
+    {"examples:compile", "test", ~w(compile --warnings-as-errors), "examples"},
+    {"examples:test", "test", ~w(test --warnings-as-errors), "examples"},
     {"credo", "test", ~w(credo --strict)},
     {"docs", "dev", ~w(docs --warnings-as-errors)}
   ]
