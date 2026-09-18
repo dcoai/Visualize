@@ -113,7 +113,8 @@ defmodule Visualize.Chart.Mark.Generic do
         element: Element.circle(row.x, row.y, r),
         datum: row.datum,
         style: %{},
-        anchor: {row.x, row.y}
+        anchor: {row.x, row.y},
+        extent: 2 * r
       }
     end)
   end
@@ -174,7 +175,8 @@ defmodule Visualize.Chart.Mark.Generic do
       datum: datum,
       style: %{},
       anchor: Arc.centroid(generator, data),
-      radii: Arc.radii(generator, data)
+      radii: Arc.radii(generator, data),
+      span: Arc.angles(generator, data) |> then(fn {a0, a1} -> a1 - a0 end)
     }
   end
 end

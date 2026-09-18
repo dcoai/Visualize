@@ -266,6 +266,7 @@ Every `A` is emitted as d3-path emits it: an implicit `L` to the arc's start whe
 | `Visualize.Shape.Arc.generate_path/2` | Returns the `IR.Path` as in 6.2. |
 | `Visualize.Shape.Arc.centroid/2` | Returns `{x, y}` at mid-radius and mid-angle. |
 | `Visualize.Shape.Arc.radii/2` | Returns `{inner, outer}`, the radii the arc's accessors give for a datum, for a label placed at its rim (spec/14 §5.5, #137). |
+| `Visualize.Shape.Arc.angles/2` | Returns `{start, end}`, the angles the arc's accessors give for a datum, for a label fitted to its sector (spec/14 §5.5, #138). |
 
 ## 7. `Visualize.Shape.Pie`
 

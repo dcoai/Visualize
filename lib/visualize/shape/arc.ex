@@ -160,6 +160,12 @@ defmodule Visualize.Shape.Arc do
     {apply_accessor(arc.inner_radius, data), apply_accessor(arc.outer_radius, data)}
   end
 
+  @doc "The `{start, end}` angles the arc's accessors give for a datum, for a label fitted to its sector (spec/14 §5.5, #138)."
+  @spec angles(t(), map() | any()) :: {number(), number()}
+  def angles(%__MODULE__{} = arc, data) do
+    {apply_accessor(arc.start_angle, data), apply_accessor(arc.end_angle, data)}
+  end
+
   @doc "Generates a centroid point for the arc"
   @spec centroid(t(), map() | any()) :: {number(), number()}
   def centroid(%__MODULE__{} = arc, data) do

@@ -901,6 +901,41 @@ defmodule Visualize.Chart.MarkTest do
       # A circle has no edges: the same side, from its point.
       assert at.(:x1, :circle, %{x: :t, y: :v}) == {%{x: 4.0, y: 120.0, dy: "0.32em"}, :start}
     end
+
+    test "fit cuts a label to its element's width or hides it; a type with no extent fits everything (#138)" do
+      texts = fn mark ->
+        generate(mark).children |> Enum.filter(&(&1.type == :text)) |> Enum.map(& &1.content)
+      end
+
+      # The rects span 500, 900, 100 and 500 px (t to hi through x); at the default 12px
+      # font, 0.6 × 12 = 7.2 per character, that is 69, 125, 13 and 69 characters of room.
+      wide = %{type: :rect, channels: %{x0: :t, x1: :hi, y0: 0, y1: :v}}
+      label = fn fit, text -> %{text: [text], anchor: :middle, fit: fit} end
+      long = String.duplicate("abcdefghij", 8)
+
+      assert texts.(Map.put(wide, :label, label.(:truncate, "short"))) |> hd() == "short"
+
+      assert texts.(Map.put(wide, :label, label.(:truncate, long))) == [
+               String.slice(long, 0, 68) <> "…",
+               long,
+               String.slice(long, 0, 12) <> "…",
+               String.slice(long, 0, 68) <> "…"
+             ]
+
+      assert texts.(Map.put(wide, :label, label.(:none, long))) |> hd() == long
+      assert texts.(Map.put(wide, :label, label.(:hide, long))) == [long]
+      assert texts.(Map.put(wide, :label, label.(:hide, "short"))) |> length() == 4
+
+      # A circle's extent is its diameter: r 3 by default, no room for even one character.
+      circle = %{type: :circle, channels: %{x: :t, y: :v}, label: label.(:truncate, "ab")}
+      assert texts.(circle) == []
+      big = Map.put(circle, :options, %{radius: 20})
+      assert texts.(Map.put(big, :label, label.(:truncate, "abcdefgh"))) |> hd() == "abcd…"
+
+      # A symbol has no extent, so nothing is cut.
+      symbol = %{type: :symbol, channels: %{x: :t, y: :v}, label: label.(:truncate, long)}
+      assert texts.(symbol) |> hd() == long
+    end
   end
 
   describe "the frame" do

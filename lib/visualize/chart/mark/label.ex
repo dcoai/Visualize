@@ -44,22 +44,25 @@ defmodule Visualize.Chart.Mark.Label do
   def elements(_children, %{type: type}) when type in @own_label, do: []
 
   def elements(children, %{label: label} = ctx) do
-    for %{anchor: point, datum: datum} = child <- children do
-      element(
-        ctx,
-        point,
-        Map.take(child, [:bounds, :radii]),
-        text(label.text, datum),
-        "mark-label"
-      )
-    end
+    for %{anchor: point, datum: datum} = child <- children,
+        element =
+          element(
+            ctx,
+            point,
+            Map.take(child, [:bounds, :radii, :span, :extent]),
+            text(label.text, datum),
+            "mark-label"
+          ),
+        element != nil,
+        do: element
   end
 
   @doc false
   # One text at a point — or, for an edge anchor, at an edge of the element's bounds —
   # anchored, offset and styled as the mark's label says (spec/14 §5.5). A `:text` mark
   # draws its element through this too (#134), with no label node to read past its style.
-  @spec element(map(), {number(), number()}, map() | nil, String.t(), String.t()) :: Element.t()
+  @spec element(map(), {number(), number()}, map() | nil, String.t(), String.t()) ::
+          Element.t() | nil
   def element(%{frame: frame} = ctx, {px, py}, shape, content, class) do
     shape = shape || %{}
     bounds = Map.get(shape, :bounds)
@@ -96,9 +99,54 @@ defmodule Visualize.Chart.Mark.Label do
 
     base = %{class: class, text_anchor: text_anchor}
 
-    Element.new(:text, attrs: attrs, style: Map.merge(base, style), content: content)
-    |> Polar.rotate(rotation)
-    |> Position.apply(style_node, outward(anchor))
+    # The text fitted to the element's own width (spec/14 §5.5, #138), or nothing.
+    fit = Map.get(label, :fit, Schema.default(:mark_label, :fit))
+    width = extent(shape, {x + dx, y + dy}, centre)
+
+    case fit(fit, content, width, font_size(style_node, frame.theme)) do
+      nil ->
+        nil
+
+      content ->
+        Element.new(:text, attrs: attrs, style: Map.merge(base, style), content: content)
+        |> Polar.rotate(rotation)
+        |> Position.apply(style_node, outward(anchor))
+    end
+  end
+
+  # The width an element offers its label: a rectangle's, a circle's diameter, a sector's
+  # arc length at the label's own radius; `nil` for a type with no extent.
+  defp extent(%{bounds: {_x, _y, w, _h}}, _point, _centre), do: w
+  defp extent(%{extent: w}, _point, _centre), do: w
+
+  defp extent(%{span: span}, {x, y}, {cx, cy}),
+    do: span * :math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))
+
+  defp extent(_shape, _point, _centre), do: nil
+
+  # 0.6 × the font size per character is the estimate the legend's layout makes (§4.5).
+  @per_char 0.6
+
+  defp fit(:none, content, _width, _font_size), do: content
+  defp fit(_fit, content, nil, _font_size), do: content
+
+  defp fit(fit, content, width, font_size) do
+    room = trunc(width / (@per_char * font_size))
+    length = String.length(content)
+
+    cond do
+      length <= room -> content
+      fit == :hide -> nil
+      room <= 1 -> nil
+      true -> String.slice(content, 0, room - 1) <> "…"
+    end
+  end
+
+  defp font_size(style_node, theme) do
+    case Style.value(:font_size, Map.get(style_node, :font_size, :label_size), theme, :literal) do
+      n when is_number(n) -> n
+      _other -> theme.label_size
+    end
   end
 
   # The centre a polar anchor and a polar rotation are about (spec/14 §5.5): the group's
