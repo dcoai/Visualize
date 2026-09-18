@@ -82,7 +82,7 @@ Every label therefore sits `i + p` beyond the tick, away from the plot, as in d3
 
 Tick values are `tick_values` when set, else `Scale.ticks(scale, ticks || 10)`. For a `Band` or `Ordinal` scale that is the domain. On a `Band` scale each tick is centred in its band by the `c` term of 1.3, so `offset/2` is only the pixel offset; on every other scale the tick sits at `apply/2` (D-23).
 
-Default label (no `tick_format`): floats are rounded to 6 decimal places and printed with trailing zeros and a trailing `.` removed (`2.0 → "2"`, `0.1 + 0.2 → "0.3"`); any other value is `to_string/1` (`DateTime` therefore prints ISO 8601). A custom formatter receives the raw tick value.
+Default label (no `tick_format`): floats are rounded to 6 decimal places and printed in plain decimal notation with trailing zeros and a trailing `.` removed (`2.0 → "2"`, `0.1 + 0.2 → "0.3"`, `1000.0 → "1000"`, `0.00001 → "0.00001"`) — never in exponent form, and never `-0` (#354; the rule of `Visualize.IR.Path.format_number/1`, D-12, at six decimals); any other value is `to_string/1` (`DateTime` therefore prints ISO 8601). A custom formatter receives the raw tick value.
 
 ### 1.6 Rendering
 
