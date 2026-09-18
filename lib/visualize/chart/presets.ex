@@ -366,7 +366,7 @@ defmodule Visualize.Chart.Presets do
     fold(
       seed(a, @hierarchy_fields) ++
         [
-          style(:link, stroke: colour(a.link_stroke, :grid), stroke_width: 1.5),
+          style(:link, fill: :none, stroke: colour(a.link_stroke, :grid), stroke_width: 1.5),
           style(:node,
             fill: colour(a.node_fill, :background),
             stroke: colour(a.node_stroke, :series_1),
