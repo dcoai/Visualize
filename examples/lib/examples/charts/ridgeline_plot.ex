@@ -1,140 +1,105 @@
 defmodule Examples.Charts.RidgelinePlot do
-  @moduledoc "Ridgeline plot (joy plot) example"
+  @moduledoc """
+  Ridgeline plot as a design (#128): one `:area` mark and one `:line` mark, each split by a
+  `series` channel into one path per ridge.
 
-  alias Visualize.{Scale, Shape}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  A ridge is an area drawn from its own baseline, and the baselines step up the plot with
+  the ridges overlapping by half their height. That offset is a modelling question the
+  layer answers in the data rather than the mark: the `y` scale runs over *ridge heights*
+  — the plot's height is `(n − 1) × (1 − overlap) + 1` of them — and every row carries its
+  ridge's `base` and its density's `top` in that unit, so the `:area` reads `y0: :base,
+  y1: :top` through the one linear scale and nothing is translated by hand. The rows are
+  listed back to front, so the ridge at the top of the plot is drawn last and lies over the
+  one beneath it, as the hand-written version layered them; the `color` scale's domain is
+  the ridge index, so the colours still run top to bottom. The basis curve is the style's.
+  """
 
-  # Generate sample distribution data for each ridge
-  @num_ridges 8
-  @points_per_ridge 50
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 20, right: 20, bottom: 30, left: 50}
+  @ridges 8
+  @points 50
+  @overlap 0.5
+  # The density's own range, which one ridge height spans.
+  @peak 80
 
   def title, do: "Ridgeline Plot"
   def description, do: "Overlapping density distributions"
 
-  def render(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
-    margin = %{top: 20, right: 20, bottom: 30, left: 50}
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
+    ridges = Enum.to_list(0..(@ridges - 1)//1)
 
-    inner_width = width - margin.left - margin.right
-    inner_height = height - margin.top - margin.bottom
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:ridges, [:ridge, :x, :base, :top]),
+        style(:ridge, fill_opacity: 0.85, curve: :basis),
+        style(:crest, stroke_width: 1.5, curve: :basis),
+        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        linear_scale(:x, domain: [0, 100]),
+        # Ridge heights: the last ridge's baseline is 0, the first ridge's top is the plot's.
+        linear_scale(:y, domain: [0, (@ridges - 1) * (1 - @overlap) + 1]),
+        ordinal_scale(:color, domain: ridges),
+        area(:ridges, %{x: :x, y: :top, y0: :base, series: :ridge}, style: :ridge),
+        line(:ridges, %{x: :x, y: :top, series: :ridge}, style: :crest)
+      ])
 
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
-
-    # Generate animated or static data
-    animation_tick = opts[:animation_tick]
-    ridges_data = if animation_tick do
-      generate_animated_ridges(animation_tick)
-    else
-      generate_static_ridges()
-    end
-
-    num_ridges = length(ridges_data)
-    ridge_height = inner_height / num_ridges
-    overlap = 0.5  # How much ridges overlap
-
-    # X scale shared across all ridges
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([0, 100])
-      |> Scale.Linear.range([0, inner_width])
-
-    # Build ridge elements
-    ridge_elements = ridges_data
-    |> Enum.with_index()
-    |> Enum.reverse()  # Draw back to front for proper layering
-    |> Enum.map(fn {ridge_data, idx} ->
-      y_offset = idx * ridge_height * (1 - overlap)
-
-      y_scale = Scale.Linear.new()
-        |> Scale.Linear.domain([0, 80])
-        |> Scale.Linear.range([ridge_height, 0])
-
-      # Create area generator
-      area = Shape.Area.new()
-        |> Shape.Area.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
-        |> Shape.Area.y0(ridge_height)
-        |> Shape.Area.y1(fn d -> Scale.Linear.apply(y_scale, d.y) end)
-        |> Shape.Area.curve(:basis)
-
-      area_path = Shape.Area.generate(area, ridge_data)
-
-      # Create line for the top edge
-      line = Shape.Line.new()
-        |> Shape.Line.x(fn d -> Scale.Linear.apply(x_scale, d.x) end)
-        |> Shape.Line.y(fn d -> Scale.Linear.apply(y_scale, d.y) end)
-        |> Shape.Line.curve(:basis)
-
-      line_path = Shape.Line.generate(line, ridge_data)
-
-      color = Enum.at(colors, rem(idx, length(colors)))
-
-      Element.g(%{transform: "translate(0,#{y_offset})"})
-      |> Element.append(
-        Element.path(%{d: area_path, fill: color, fill_opacity: 0.85})
-      )
-      |> Element.append(
-        Element.path(%{d: line_path, fill: "none", stroke: color, stroke_width: 1.5})
-      )
-    end)
-
-    # Build chart
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-    chart_group = Enum.reduce(ridge_elements, chart_group, &Element.append(&2, &1))
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{ridges: rows(opts[:animation_tick])}}
   end
 
-  defp generate_static_ridges do
-    for ridge <- 0..(@num_ridges - 1) do
-      ridge_phase = ridge * 0.4
-      for i <- 0..(@points_per_ridge - 1) do
-        x = i / (@points_per_ridge - 1) * 100
-        # Create wave-like density with multiple peaks
-        y = :math.sin(x / 15 + ridge_phase) * 20 +
-            :math.cos(x / 10 + ridge_phase * 1.3) * 15 +
-            :math.sin(x / 5 + ridge_phase * 0.7) * 10 +
-            40
-        %{x: x, y: max(0, y)}
-      end
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  # One row per point per ridge, the last ridge first so the first is drawn over it; each
+  # ridge's baseline is its distance from the bottom in ridge heights, and its top the
+  # density above that in the same unit.
+  defp rows(tick) do
+    phase = if tick, do: tick * 0.08, else: 0
+
+    for ridge <- (@ridges - 1)..0//-1, i <- 0..(@points - 1)//1 do
+      x = i / (@points - 1) * 100
+      base = (@ridges - 1 - ridge) * (1 - @overlap)
+      %{ridge: ridge, x: x, base: base, top: base + density(x, ridge, phase, tick) / @peak}
     end
   end
 
-  defp generate_animated_ridges(tick) do
-    phase = tick * 0.08
-    for ridge <- 0..(@num_ridges - 1) do
-      ridge_phase = phase + ridge * 0.3
-      for i <- 0..(@points_per_ridge - 1) do
-        x = i / (@points_per_ridge - 1) * 100
-        y = :math.sin(x / 15 + ridge_phase) * 20 +
-            :math.cos(x / 10 + ridge_phase * 1.3) * 15 +
-            :math.sin(x / 5 + ridge_phase * 0.7) * 10 +
-            40
-        %{x: x, y: max(0, y)}
-      end
-    end
+  # A wave-like density with several peaks; animated, the peaks travel.
+  defp density(x, ridge, phase, tick) do
+    ridge_phase = if tick, do: phase + ridge * 0.3, else: ridge * 0.4
+
+    y =
+      :math.sin(x / 15 + ridge_phase) * 20 +
+        :math.cos(x / 10 + ridge_phase * 1.3) * 15 +
+        :math.sin(x / 5 + ridge_phase * 0.7) * 10 + 40
+
+    max(0, y)
   end
 
   def sample_code do
     ~S"""
-    # Ridgeline plots show multiple overlapping distributions
-    # Each ridge is an area chart offset vertically
+    import Visualize.Chart.Build
 
-    for {ridge_data, idx} <- Enum.with_index(ridges) do
-      y_offset = idx * ridge_height * (1 - overlap)
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Ridgeline Plot"}),
+        # One row per point per ridge: the ridge's baseline and the density's top, both in
+        # ridge heights, so the offset is in the data and the y scale is one linear scale.
+        source(:ridges, [:ridge, :x, :base, :top]),
+        style(:ridge, fill_opacity: 0.85, curve: :basis),
+        style(:crest, stroke_width: 1.5, curve: :basis),
+        cartesian(600, 400, margin: %{top: 20, right: 20, bottom: 30, left: 50}),
+        linear_scale(:x, domain: [0, 100]),
+        # Eight ridges overlapping by half: the plot is 4.5 ridge heights tall.
+        linear_scale(:y, domain: [0, 4.5]),
+        ordinal_scale(:color, domain: [0, 1, 2, 3, 4, 5, 6, 7]),
+        area(:ridges, %{x: :x, y: :top, y0: :base, series: :ridge}, style: :ridge),
+        line(:ridges, %{x: :x, y: :top, series: :ridge}, style: :crest)
+      ])
 
-      area = Shape.Area.new()
-        |> Shape.Area.x(fn d -> x_scale(d.x) end)
-        |> Shape.Area.y0(ridge_height)
-        |> Shape.Area.y1(fn d -> y_scale(d.y) end)
-        |> Shape.Area.curve(:basis)
-
-      # Translate each ridge vertically
-      Element.g(%{transform: "translate(0,#{y_offset})"})
-      |> Element.append(Element.path(%{d: area_path, fill: color}))
-    end
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{ridges: ridges})
+    Visualize.Chart.render(applied)
     """
   end
 end
