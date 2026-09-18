@@ -13,17 +13,15 @@ defmodule Examples.Charts.Design do
   - **The palette is the theme.** The gallery's `palette` option becomes the `theme:` of
     `Visualize.Chart.apply/2` (`Examples.ColorPalettes.theme/1`), so a mark that names no
     colour paints in the palette's series slots and a palette swap recolours every chart.
-  - **The `<svg>` shell.** `Visualize.Chart.render/2` draws the frame's group, not a
-    document, so the accessible root of spec/02 §2.1 is built here with
-    `Visualize.IR.Element.root/3` and the group placed inside it (#131).
+  - **The `<svg>` shell** is the library's: `Visualize.Chart.render/2` with `root: true`
+    draws the accessible root of spec/02 §2.1 around the frame, titled from the design's
+    `meta` (#131).
   - **The canvas.** The same applied chart through the binary canvas backend, which is what
     the gallery's backend selector pushes to `CanvasBinaryChart`.
   """
 
   alias Examples.ColorPalettes
   alias Visualize.Chart
-  alias Visualize.IR.Element
-  alias Visualize.Render
 
   @hierarchy_fields [:id, :parent, :name, :value, :branch]
 
@@ -59,24 +57,11 @@ defmodule Examples.Charts.Design do
   end
 
   @doc """
-  The module's design drawn as the gallery's `<svg>` document.
-
-  `Visualize.Chart.render/2` of the applied chart, inside the accessible root the module's
-  `title/0` and `description/0` name.
+  The module's design drawn as the gallery's `<svg>` document: `Visualize.Chart.render/2`
+  with `root: true`, the accessible root titled from the design's own `meta` (#131).
   """
   @spec render(module(), keyword()) :: String.t()
-  def render(module, opts) do
-    applied = applied(module, opts)
-    %{size: size} = applied.frame
-
-    document(
-      Chart.render(applied),
-      size.width,
-      size.height,
-      module.title(),
-      module.description()
-    )
-  end
+  def render(module, opts), do: Chart.render(applied(module, opts), root: true)
 
   @doc "The module's design through the binary canvas backend, base64 for the hook."
   @spec canvas(module(), keyword()) :: String.t()
@@ -150,15 +135,4 @@ defmodule Examples.Charts.Design do
   @doc "The `palette` option as a `Visualize.Theme`, the default palette when absent."
   @spec theme(keyword()) :: Visualize.Theme.t()
   def theme(opts), do: ColorPalettes.theme(opts[:palette] || :default)
-
-  # The `<svg>` around the frame's group. `Visualize.Chart.render/2` returns the group as a
-  # string, so the root is rendered empty — its `role`, `<title>`, `<desc>` and
-  # `aria-labelledby` are `Visualize.IR.Element.root/3`'s own (D-56) — and the group goes
-  # in before the closing tag. A design that rendered its own document would not need this
-  # (#131).
-  defp document(group, width, height, title, description) do
-    Element.root(width, height, title: title, description: description)
-    |> Render.to_string()
-    |> String.replace_suffix("</svg>", group <> "</svg>")
-  end
 end

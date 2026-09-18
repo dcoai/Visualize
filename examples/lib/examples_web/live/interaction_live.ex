@@ -9,15 +9,14 @@ defmodule ExamplesWeb.InteractionLive do
   use Phoenix.LiveView
 
   alias Visualize.Chart
-  alias Visualize.Chart.Frame
   alias Visualize.Hooks.Crosshair
-  alias Visualize.IR.Element
-  alias Visualize.{Render, Theme}
+  alias Visualize.Theme
 
   @width 720
   @height 380
 
   @series ~w(alpha beta gamma)
+  @title "Three series over a day"
 
   defp rows do
     for i <- 0..23, s <- @series do
@@ -100,8 +99,6 @@ defmodule ExamplesWeb.InteractionLive do
   defp build do
     chart = Chart.from_map!(@design)
     {:ok, applied} = Chart.apply(chart, sources: %{primary: rows()})
-    svg_group = Frame.generate(applied.frame, sources: applied.sources)
-    canvas_group = Frame.generate(applied.frame, sources: applied.sources, resolve: :literal)
 
     colours =
       Enum.map_join(1..length(@series), ",", fn i ->
@@ -109,17 +106,13 @@ defmodule ExamplesWeb.InteractionLive do
       end)
 
     %{
-      svg: root(svg_group) |> Render.to_string(),
-      binary: root(canvas_group) |> Render.to_string(backend: :canvas, format: :binary_base64),
+      svg: Chart.render(applied, root: true, title: @title),
+      binary: Chart.render(applied, root: true, title: @title, backend: :canvas, format: :binary_base64),
       crosshair: Crosshair.attrs(applied.frame, applied.sources),
       colors: "[" <> colours <> "]",
       width: @width,
       height: @height
     }
-  end
-
-  defp root(group) do
-    Element.root(@width, @height, children: [group], title: "Three series over a day")
   end
 
   def render(assigns) do

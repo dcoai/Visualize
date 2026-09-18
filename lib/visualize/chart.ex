@@ -50,10 +50,13 @@ defmodule Visualize.Chart do
     Schema,
     Stack,
     Template,
+    Text,
     Use,
     Validator,
     Var
   }
+
+  alias Visualize.IR.Element
 
   @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :defs, :frame, :marks, :labels]
 
@@ -481,16 +484,77 @@ defmodule Visualize.Chart do
     end
   end
 
+  @doc "As `generate/2` with `[]` options."
+  @spec generate(Applied.t()) :: Element.t()
+  def generate(%Applied{} = applied), do: generate(applied, [])
+
+  @doc """
+  The applied chart as a `Visualize.IR.Element` (spec/14 §4.7): the frame's group over
+  the bound sources — `resolve:` and `paths:` as `Visualize.Chart.Frame.generate/2` takes
+  them — or, with `root: true`, that group inside the accessible root of
+  `Visualize.IR.Element.root/3` at the frame's size (#131).
+
+  ## Options
+
+    * `:root` - wrap the group in a root `<svg>` (default `false`)
+    * `:title` and `:description` - the root's; default the design's `meta.name` and
+      `meta.description`, an absent or empty one leaving its element out
+    * `:responsive` - the root's, as `Visualize.IR.Element.root/3` takes it
+  """
+  @spec generate(Applied.t(), keyword()) :: Element.t()
+  def generate(%Applied{chart: chart, frame: frame, sources: sources}, opts) do
+    group = Frame.generate(frame, Keyword.take(opts, [:resolve, :paths]) ++ [sources: sources])
+
+    if Keyword.get(opts, :root, false) do
+      meta = chart.meta || %{}
+
+      Element.root(frame.size.width, frame.size.height,
+        title: Keyword.get_lazy(opts, :title, fn -> meta_text(Map.get(meta, :name)) end),
+        description:
+          Keyword.get_lazy(opts, :description, fn -> meta_text(Map.get(meta, :description)) end),
+        responsive: Keyword.get(opts, :responsive, false),
+        children: [group]
+      )
+    else
+      group
+    end
+  end
+
+  # A meta text as the root's string, `nil` when absent or empty; an applied chart has no
+  # hole left in it, so a variable here is the unresolved-variable fault.
+  defp meta_text(nil), do: nil
+
+  defp meta_text(text) do
+    case Text.parse!(text) do
+      [] ->
+        nil
+
+      parts ->
+        Enum.map_join(parts, "", fn
+          string when is_binary(string) -> string
+          %Var{name: name} -> Visualize.Chart.Style.unresolved!(name)
+        end)
+    end
+  end
+
   @doc "As `render/2` with `[]` options."
   @spec render(Applied.t()) :: String.t()
   def render(%Applied{} = applied), do: render(applied, [])
 
   @doc """
-  The applied chart drawn: `Visualize.Chart.Frame.render/2` of its frame over its bound
-  sources, `backend:`, `resolve:` and `paths:` as that function takes them.
+  The applied chart drawn: `generate/2` serialised through `Visualize.Render.to_string/2`
+  — `backend:` and `resolve:` (default `Visualize.Theme.mode/1` of the backend), and
+  `paths:`, `root:`, `title:`, `description:` and `responsive:` as `generate/2` takes them.
   """
   @spec render(Applied.t(), keyword()) :: String.t()
-  def render(%Applied{frame: frame, sources: sources}, opts) do
-    Frame.render(frame, Keyword.put(opts, :sources, sources))
+  def render(%Applied{} = applied, opts) do
+    {mode, opts} =
+      Keyword.pop_lazy(opts, :resolve, fn -> Visualize.Theme.mode(opts[:backend]) end)
+
+    {ours, rest} = Keyword.split(opts, [:paths, :root, :title, :description, :responsive])
+
+    applied
+    |> generate([resolve: mode] ++ ours)
+    |> Visualize.Render.to_string(rest)
   end
 end
