@@ -3,15 +3,14 @@ defmodule Examples.Frames do
   One chart's frames, for a run or a comparison (spec/14 §12.6, #322): what a backend
   renders of a chart module at a tick, and the state a backend keeps between ticks.
 
-  Two backends: `:svg`, the chart rendered whole; `:canvas`, for a design the split —
-  compiled once (`prepare/3`), ticked per frame with `render: :binary` — and for a chart
-  that is not yet a design the whole-element binary. A frame is `%{svg, canvas,
+  Two backends: `:svg`, the chart rendered whole; `:canvas`, the split — compiled once
+  (`prepare/3`), ticked per frame with `render: :binary` (every chart of the gallery is a
+  design, #335). A frame is `%{svg, canvas,
   dynamic_svg, bytes, points}`: the SVG to show or nil, the base64 stream to push or nil,
   a tick's SVG-layer marks, the bytes the frame cost, and the rows it drew.
   """
 
   alias Examples.Charts.Design
-  alias Visualize.Backend.CanvasBinary
   alias Visualize.Chart
   alias Visualize.Chart.Compiled
 
@@ -44,24 +43,22 @@ defmodule Examples.Frames do
   def acks?(:svg), do: false
 
   @doc """
-  The state a backend keeps for a run of `module` at `opts`: for a design on the canvas,
-  the compiled chart and its static SVG (the furniture, rendered once); nothing otherwise.
+  The state a backend keeps for a run of `module` at `opts`: on a canvas, the compiled
+  chart and its static SVG (the furniture, rendered once); nothing on SVG.
   """
   @spec prepare(module(), keyword(), backend()) :: map() | nil
   def prepare(module, opts, backend) when backend in [:canvas, :incremental] do
-    if Design.design?(module) do
-      applied = Design.applied(module, opts)
-      {:ok, compiled} = Chart.compile(applied, ceiling: 1)
+    applied = Design.applied(module, opts)
+    {:ok, compiled} = Chart.compile(applied, ceiling: 1)
 
-      %{
-        compiled: compiled,
-        static: Compiled.static(compiled),
-        width: applied.frame.size.width,
-        height: applied.frame.size.height,
-        plot: compiled.plot,
-        margin: compiled.margin
-      }
-    end
+    %{
+      compiled: compiled,
+      static: Compiled.static(compiled),
+      width: applied.frame.size.width,
+      height: applied.frame.size.height,
+      plot: compiled.plot,
+      margin: compiled.margin
+    }
   end
 
   def prepare(_module, _opts, :svg), do: nil
@@ -74,24 +71,23 @@ defmodule Examples.Frames do
   @doc "A frame of `module` at `opts` on `backend`, and the state after it."
   @spec frame(module(), keyword(), backend(), map() | nil) :: {frame(), map() | nil}
   def frame(module, opts, :svg, state) do
-    svg =
-      case module.render(opts) do
-        svg when is_binary(svg) ->
-          svg
+    svg = Design.render(module, opts)
+    {_design, sources} = module.design(opts)
 
-        element ->
-          element
-          |> Examples.Accessible.name(module.title(), module.description())
-          |> Visualize.SVG.Renderer.render_to_string()
-      end
-
-    {%{svg: svg, canvas: nil, incremental: nil, dynamic_svg: "", bytes: byte_size(svg), points: points(module, opts)},
-     state}
+    {%{
+       svg: svg,
+       canvas: nil,
+       incremental: nil,
+       dynamic_svg: "",
+       bytes: byte_size(svg),
+       points: rows(sources)
+     }, state}
   end
 
   # The compiled chart ticked: `now:` from the opts for a streaming design, so the
   # window's upper end is the run's and not the rows' (spec/14 §12.5).
-  def frame(module, opts, backend, %{compiled: compiled} = state) when backend in [:canvas, :incremental] do
+  def frame(module, opts, backend, %{compiled: compiled} = state)
+      when backend in [:canvas, :incremental] do
     {_design, sources} = module.design(opts)
     tick_opts = if now = opts[:now], do: [now: now], else: []
     {payload, compiled} = Compiled.tick(compiled, sources, tick_opts)
@@ -104,24 +100,6 @@ defmodule Examples.Frames do
        bytes: payload.bytes,
        points: rows(sources)
      }, %{state | compiled: compiled}}
-  end
-
-  def frame(module, opts, :canvas, nil) do
-    canvas =
-      case CanvasBinary.encode_element(module.render(opts)) do
-        {:ok, binary} -> Base.encode64(binary)
-        {:error, _} -> ""
-      end
-
-    {%{svg: nil, canvas: canvas, incremental: nil, dynamic_svg: "", bytes: byte_size(canvas), points: nil}, nil}
-  end
-
-  # The rows a design binds at `opts`, or nil for a chart that is not one.
-  defp points(module, opts) do
-    if Design.design?(module) do
-      {_design, sources} = module.design(opts)
-      rows(sources)
-    end
   end
 
   defp rows(sources) when is_map(sources) do

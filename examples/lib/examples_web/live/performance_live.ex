@@ -11,7 +11,6 @@ defmodule ExamplesWeb.PerformanceLive do
 
   use Phoenix.LiveView
 
-  alias Examples.Charts.Design
   alias Examples.Compare
   alias ExamplesWeb.ChartLive
 
@@ -21,8 +20,8 @@ defmodule ExamplesWeb.PerformanceLive do
   def mount(_params, _session, socket) do
     charts =
       ChartLive.charts()
-      |> Enum.map(fn {slug, module} -> %{slug: slug, module: module, title: module.title(), design?: Design.design?(module)} end)
-      |> Enum.sort_by(&{not &1.design?, &1.title})
+      |> Enum.map(fn {slug, module} -> %{slug: slug, module: module, title: module.title()} end)
+      |> Enum.sort_by(& &1.title)
 
     {:ok,
      assign(socket,
@@ -52,13 +51,12 @@ defmodule ExamplesWeb.PerformanceLive do
 
   def handle_event("compare_all", _params, %{assigns: %{task: nil}} = socket) do
     %{charts: charts, ticks: ticks} = socket.assigns
-    designs = Enum.filter(charts, & &1.design?)
 
     work = fn ->
       opts_for = fn tick -> [width: 700, height: 450, palette: :default, animation_tick: tick] end
 
       {:all,
-       for chart <- designs, row <- Compare.run(chart.module, opts_for, ticks) do
+       for chart <- charts, row <- Compare.run(chart.module, opts_for, ticks) do
          Map.merge(row, %{slug: chart.slug, title: chart.title})
        end}
     end
@@ -120,7 +118,7 @@ defmodule ExamplesWeb.PerformanceLive do
       <form phx-change="pick" class="compare-controls">
         <label>Chart
           <select name="slug">
-            <option :for={c <- @charts} value={c.slug} selected={c.slug == @slug}><%= c.title %><%= if c.design?, do: "", else: " (not yet a design)" %></option>
+            <option :for={c <- @charts} value={c.slug} selected={c.slug == @slug}><%= c.title %></option>
           </select>
         </label>
         <label>Ticks

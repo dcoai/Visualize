@@ -42,7 +42,8 @@ defmodule ExamplesWeb.ChartLiveDesignTest do
 
   test "the SVG tab keeps the module's sample, and the data panel is there too" do
     html = page("line", :svg)
-    assert html =~ "SVG Rendering Code"
+    assert html =~ "The design (Build), then the SVG rendering"
+    assert html =~ "The design is the thing to copy"
     assert html =~ "The design (data)"
     refute html =~ "the canvas rendering (the split)"
   end

@@ -31,7 +31,19 @@ defmodule ExamplesWeb.RoutesTest do
 
   test "a chart page renders for every chart the gallery lists" do
     for {slug, _module} <- ExamplesWeb.ChartLive.charts() do
-      assert build_conn() |> get("/chart/#{slug}") |> html_response(200) =~ ~s(class="site-header"), slug
+      assert build_conn() |> get("/chart/#{slug}") |> html_response(200) =~
+               ~s(class="site-header"),
+             slug
+    end
+  end
+
+  test "the gallery says every chart is a design, and every chart it lists is one (#130)" do
+    html = build_conn() |> get("/") |> html_response(200)
+    assert html =~ "Every chart here is a design"
+
+    for {slug, module} <- ExamplesWeb.ChartLive.charts() do
+      assert Examples.Charts.Design.design?(module), slug
+      assert html =~ ~s(href="/chart/#{slug}"), slug
     end
   end
 
