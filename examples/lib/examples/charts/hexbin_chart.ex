@@ -1,261 +1,130 @@
 defmodule Examples.Charts.HexbinChart do
   @moduledoc """
-  Hexagonal binning chart for visualizing point density.
+  Hexbin chart as a design (#348): the `:hexbin` transform over the points under one
+  `:path` mark, each cell filled by its count through a `:sequential` `color` scale.
 
-  Left imperative by #128 (the statistical and dense family as designs): the layer has no
-  `:hexbin` transform — `:bin` is one-dimensional and `:density` a kernel estimate — and a
-  hexbin's lattice is laid in pixels after the points are scaled, which no step of a mark's
-  pipeline sees (spec/14 §5.4, D-62). Filed as #348, a pixel-space `:hexbin` step beside
-  `:density`; the chart converts when it lands.
+  A hexbin's lattice is laid in pixels — the hexagon's radius is a length on the page, the
+  page's slider — so the step reads pixel coordinates (spec/14 §5.4.4) and never a scale
+  (D-62). The chart therefore places its points itself, through the same two linear
+  mappings the frame's `x` and `y` scales draw their axes with, and hands the step the
+  pixel columns; the data columns stay on the rows for the axes' domains. The count reaches
+  each cell's fill as `fill: {:field, :count}` (§3.4), and the page's hex size reaches the
+  step's `radius` through `design/1`'s `hex_radius` option.
   """
 
-  alias Visualize.{Scale, Axis}
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  import Visualize.Chart.Build
 
-  # Generate sample data - clustered points
-  @sample_data (
-    :rand.seed(:exsss, {42, 42, 42})
+  alias Examples.Charts.Design
 
-    # Create several clusters of points
-    cluster1 = for _ <- 1..80 do
-      {150 + :rand.normal() * 40, 120 + :rand.normal() * 35}
-    end
+  @margin %{top: 40, right: 20, bottom: 40, left: 50}
+  @pad 20
 
-    cluster2 = for _ <- 1..60 do
-      {400 + :rand.normal() * 50, 200 + :rand.normal() * 45}
-    end
+  # Clustered points, seeded once so the chart holds a golden.
+  @points (
+            :rand.seed(:exsss, {42, 42, 42})
 
-    cluster3 = for _ <- 1..100 do
-      {280 + :rand.normal() * 60, 300 + :rand.normal() * 50}
-    end
+            clusters = [
+              {80, 150, 40, 120, 35},
+              {60, 400, 50, 200, 45},
+              {100, 280, 60, 300, 50},
+              {40, 500, 30, 350, 30}
+            ]
 
-    cluster4 = for _ <- 1..40 do
-      {500 + :rand.normal() * 30, 350 + :rand.normal() * 30}
-    end
+            clustered =
+              for {n, cx, sx, cy, sy} <- clusters, _ <- 1..n do
+                {cx + :rand.normal() * sx, cy + :rand.normal() * sy}
+              end
 
-    # Some scattered points
-    scattered = for _ <- 1..50 do
-      {:rand.uniform() * 600 + 50, :rand.uniform() * 380 + 30}
-    end
+            scattered =
+              for _ <- 1..50, do: {:rand.uniform() * 600 + 50, :rand.uniform() * 380 + 30}
 
-    cluster1 ++ cluster2 ++ cluster3 ++ cluster4 ++ scattered
-  )
+            clustered ++ scattered
+          )
 
   def title, do: "Hexbin Chart"
   def description, do: "Hexagonal binning for point density visualization"
 
-  def render(opts \\ []) do
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
     width = opts[:width] || 700
     height = opts[:height] || 450
-    animation_tick = opts[:animation_tick]
-    palette = opts[:palette] || :default
-    colors = ColorPalettes.colors(palette)
+    radius = opts[:hex_radius] || 20
+    points = points(opts[:animation_tick])
+    {plot_width, plot_height} = Design.plot(width, height, @margin)
+    {min_x, max_x} = points |> Enum.map(&elem(&1, 0)) |> Enum.min_max()
+    {min_y, max_y} = points |> Enum.map(&elem(&1, 1)) |> Enum.min_max()
+    x_domain = [min_x - @pad, max_x + @pad]
+    y_domain = [min_y - @pad, max_y + @pad]
 
-    margin = %{top: 20, right: 20, bottom: 40, left: 50}
-    inner_width = width - margin.left - margin.right
-    inner_height = height - margin.top - margin.bottom
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:points, [:x, :y, :px, :py]),
+        style(:cell, fill: {:field, :count}, stroke: :axis, stroke_opacity: 0.5, stroke_width: 1),
+        cartesian(width, height, margin: @margin),
+        linear_scale(:x, domain: x_domain),
+        linear_scale(:y, domain: y_domain),
+        sequential_scale(:color, domain: [0, :auto]),
+        axis(:x, :bottom, ticks: 6),
+        axis(:y, :left, ticks: 5),
+        label(:title, ["Point Density (#{length(points)} points)"]),
+        # The lattice over the pixel columns; each cell's hexagon filled by its count.
+        path(hexbin(from(:points), [:px, :py], radius: radius), %{path: :path}, style: :cell)
+      ])
 
-    # Hex radius (configurable via slider)
-    hex_radius = opts[:hex_radius] || 20
+    rows =
+      for {x, y} <- points do
+        %{
+          x: x,
+          y: y,
+          px: place(x, x_domain, 0, plot_width),
+          py: place(y, y_domain, plot_height, 0)
+        }
+      end
 
-    # Get data (animate by adding jitter)
-    data = if animation_tick do
-      animate_data(@sample_data, animation_tick)
-    else
-      @sample_data
-    end
-
-    # Scale data to fit in chart area
-    {min_x, max_x} = data |> Enum.map(&elem(&1, 0)) |> Enum.min_max()
-    {min_y, max_y} = data |> Enum.map(&elem(&1, 1)) |> Enum.min_max()
-
-    x_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([min_x - 20, max_x + 20])
-      |> Scale.Linear.range([0, inner_width])
-
-    y_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([min_y - 20, max_y + 20])
-      |> Scale.Linear.range([inner_height, 0])
-
-    # Scale the data points
-    scaled_data = Enum.map(data, fn {x, y} ->
-      {Scale.Linear.apply(x_scale, x), Scale.Linear.apply(y_scale, y)}
-    end)
-
-    # Compute hexbin
-    bins = hexbin(scaled_data, hex_radius)
-
-    # Find max count for color scaling
-    max_count = bins |> Enum.map(& &1.count) |> Enum.max(fn -> 1 end)
-
-    # Create color scale (use first few colors from palette for gradient effect)
-    base_color = Enum.at(colors, 0)
-
-    # Draw hexagons
-    hex_elements = Enum.map(bins, fn bin ->
-      # Color intensity based on count
-      opacity = 0.2 + 0.8 * (bin.count / max_count)
-
-      Element.path(%{
-        d: hexagon_path(bin.x, bin.y, hex_radius),
-        fill: base_color,
-        fill_opacity: opacity,
-        stroke: darken(base_color),
-        stroke_width: 1,
-        stroke_opacity: 0.5
-      })
-    end)
-
-    # Create axes
-    x_axis = Axis.bottom(x_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(6)
-    y_axis = Axis.left(y_scale) |> Axis.theme(ColorPalettes.theme(palette)) |> Axis.ticks(5)
-
-    # Create clip path for the chart area
-    clip_path = Element.defs(%{})
-      |> Element.append(
-        Element.clipPath(%{id: "hexbin-clip"})
-        |> Element.append(Element.rect(%{x: 0, y: 0, width: inner_width, height: inner_height}))
-      )
-
-    # Clipped hex group
-    hex_group = Element.g(%{clip_path: "url(#hexbin-clip)"})
-      |> Element.append(hex_elements)
-
-    # Chart group with margin transform
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(hex_group)
-      |> Element.append(
-        Element.g(%{transform: "translate(0,#{inner_height})"})
-        |> Element.append(Axis.generate(x_axis))
-      )
-      |> Element.append(Axis.generate(y_axis))
-
-    # Title
-    title = Element.text(%{
-      x: width / 2,
-      y: 15,
-      text_anchor: "middle",
-      font_size: 14,
-      font_weight: "bold",
-      fill: ColorPalettes.text_color(palette)
-    })
-    |> Element.content("Point Density (#{length(data)} points)")
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(clip_path)
-    |> Element.append(chart_group)
-    |> Element.append(title)
+    {design, %{points: rows}}
   end
 
-  # Hexagonal binning algorithm
-  defp hexbin(points, radius) do
-    # Hexagon dimensions
-    dx = radius * 2 * :math.sin(:math.pi() / 3)  # horizontal spacing
-    dy = radius * 1.5  # vertical spacing
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-    # Group points into bins
-    bins = Enum.reduce(points, %{}, fn {px, py}, acc ->
-      # Find which hexagon this point belongs to
-      col = px / dx
-      row = py / dy
+  # The linear mapping the frame's scale draws its axis with (spec/14 §4.3).
+  defp place(v, [d0, d1], r0, r1), do: r0 + (v - d0) / (d1 - d0) * (r1 - r0)
 
-      # Offset for odd rows
-      col_offset = if trunc(row) |> rem(2) == 1, do: 0.5, else: 0
+  # Animation: every point drifts in a small circle about its place.
+  defp points(nil), do: @points
 
-      # Round to nearest hex center
-      hex_col = round(col - col_offset)
-      hex_row = round(row)
-
-      # Compute actual hex center
-      cx = (hex_col + (if rem(hex_row, 2) == 1, do: 0.5, else: 0)) * dx
-      cy = hex_row * dy
-
-      key = {hex_col, hex_row}
-
-      Map.update(acc, key, %{x: cx, y: cy, count: 1, points: [{px, py}]}, fn bin ->
-        %{bin | count: bin.count + 1, points: [{px, py} | bin.points]}
-      end)
-    end)
-
-    Map.values(bins)
-  end
-
-  # Generate SVG path for a flat-topped hexagon
-  defp hexagon_path(cx, cy, radius) do
-    angles = for i <- 0..5 do
-      angle = :math.pi() / 3 * i - :math.pi() / 6
-      x = cx + radius * :math.cos(angle)
-      y = cy + radius * :math.sin(angle)
-      {x, y}
-    end
-
-    [{x0, y0} | rest] = angles
-
-    path = "M#{Float.round(x0, 2)},#{Float.round(y0, 2)}"
-
-    rest_path = Enum.map(rest, fn {x, y} ->
-      "L#{Float.round(x, 2)},#{Float.round(y, 2)}"
-    end)
-    |> Enum.join()
-
-    path <> rest_path <> "Z"
-  end
-
-  # Animation: add subtle jitter to points
-  defp animate_data(data, tick) do
-    data
-    |> Enum.with_index()
-    |> Enum.map(fn {{x, y}, i} ->
+  defp points(tick) do
+    Enum.with_index(@points, fn {x, y}, i ->
       phase = i * 0.3
-      jitter_x = 5 * :math.sin(tick * 0.08 + phase)
-      jitter_y = 5 * :math.cos(tick * 0.08 + phase + 1.0)
-      {x + jitter_x, y + jitter_y}
+      {x + 5 * :math.sin(tick * 0.08 + phase), y + 5 * :math.cos(tick * 0.08 + phase + 1.0)}
     end)
-  end
-
-  defp darken("#" <> hex) do
-    {r, ""} = Integer.parse(String.slice(hex, 0, 2), 16)
-    {g, ""} = Integer.parse(String.slice(hex, 2, 2), 16)
-    {b, ""} = Integer.parse(String.slice(hex, 4, 2), 16)
-
-    r = trunc(r * 0.7)
-    g = trunc(g * 0.7)
-    b = trunc(b * 0.7)
-
-    "#" <>
-      (Integer.to_string(r, 16) |> String.pad_leading(2, "0")) <>
-      (Integer.to_string(g, 16) |> String.pad_leading(2, "0")) <>
-      (Integer.to_string(b, 16) |> String.pad_leading(2, "0"))
   end
 
   def sample_code do
     ~S"""
-    # Hexbin groups points into hexagonal bins
-    # Each bin's opacity reflects point density
+    import Visualize.Chart.Build
 
-    data = [
-      {x1, y1}, {x2, y2}, ...
-    ]
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Hexbin Chart"}),
+        # Each row carries its data coordinates and, placed by the chart through the same
+        # mapping the axes draw with, its pixel coordinates: a hexbin is laid in pixels.
+        source(:points, [:x, :y, :px, :py]),
+        style(:cell, fill: {:field, :count}, stroke: :axis, stroke_opacity: 0.5, stroke_width: 1),
+        cartesian(700, 450, margin: %{top: 40, right: 20, bottom: 40, left: 50}),
+        linear_scale(:x, domain: [30, 670]),
+        linear_scale(:y, domain: [10, 430]),
+        sequential_scale(:color, domain: [0, :auto]),
+        axis(:x, :bottom, ticks: 6),
+        axis(:y, :left, ticks: 5),
+        label(:title, ["Point Density"]),
+        # One row per non-empty cell — its centre, its count and its hexagon (spec/14
+        # §5.4.4); the count is the cell's fill through the colour scale.
+        path(hexbin(from(:points), [:px, :py], radius: 20), %{path: :path}, style: :cell)
+      ])
 
-    # Hexbin algorithm:
-    # 1. Define hex grid with radius
-    # 2. Assign each point to nearest hex center
-    # 3. Count points per hex
-    # 4. Color by count (opacity or color scale)
-
-    hex_radius = 20
-    bins = hexbin(scaled_data, hex_radius)
-
-    # Draw hexagons with opacity based on count
-    Enum.map(bins, fn bin ->
-      opacity = bin.count / max_count
-      Element.path(%{
-        d: hexagon_path(bin.x, bin.y, radius),
-        fill: color,
-        fill_opacity: opacity
-      })
-    end)
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{points: points})
+    Visualize.Chart.render(applied)
     """
   end
 end

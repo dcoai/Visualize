@@ -11,7 +11,10 @@ defmodule ExamplesWeb.ChartLiveDesignTest do
   defp page(slug, backend) do
     {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
     s = Phoenix.Component.assign(s, backend: backend)
-    Phoenix.LiveViewTest.rendered_to_string(ChartLive.render(Map.put(s.assigns, :__changed__, %{})))
+
+    Phoenix.LiveViewTest.rendered_to_string(
+      ChartLive.render(Map.put(s.assigns, :__changed__, %{}))
+    )
   end
 
   test "the Build calls of a sample are everything before its apply line" do
@@ -44,11 +47,13 @@ defmodule ExamplesWeb.ChartLiveDesignTest do
     refute html =~ "the canvas rendering (the split)"
   end
 
-  test "a chart that is not a design shows the whole-element binary sample and no data panel" do
-    slug = "hexbin"
-    html = page(slug, :canvas)
-    assert html =~ "Canvas Binary Rendering Code"
-    refute html =~ "The design (data)"
-    refute html =~ "the canvas rendering (the split)"
+  test "every chart of the gallery is a design, so every Canvas tab is the split (#335)" do
+    for {slug, module} <- ExamplesWeb.ChartLive.charts() do
+      assert Examples.Charts.Design.design?(module), slug
+    end
+
+    html = page("hexbin", :canvas)
+    assert html =~ "The design (data)"
+    assert html =~ "the canvas rendering (the split)"
   end
 end

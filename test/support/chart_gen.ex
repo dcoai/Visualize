@@ -367,7 +367,8 @@ defmodule Visualize.ChartGen do
       padding: number(),
       tile: member_of([:squarify, :binary, :slice, :dice, :slice_dice]),
       bandwidth: number(),
-      output: member_of([:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges])
+      output:
+        member_of([:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges, :points])
     }
   end
 

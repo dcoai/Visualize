@@ -11,6 +11,7 @@ defmodule Visualize.Chart.Transform.Geo do
   alias Visualize.Geo.{Delaunay, Projection, Voronoi}
   alias Visualize.Geo.Path, as: GeoPath
   alias Visualize.IR.Path
+  alias Visualize.Layout.Hexbin
 
   @doc false
   @spec run(atom(), map(), [map()], map()) :: [map()]
@@ -19,6 +20,7 @@ defmodule Visualize.Chart.Transform.Geo do
   def run(:voronoi, node, rows, ctx), do: voronoi(node, rows, ctx)
   def run(:contour, node, rows, ctx), do: contour(node, rows, ctx)
   def run(:density, node, rows, ctx), do: density(node, rows, ctx)
+  def run(:hexbin, node, rows, _ctx), do: hexbin(node, rows)
 
   # -- projection -------------------------------------------------------------------------
 
@@ -58,6 +60,34 @@ defmodule Visualize.Chart.Transform.Geo do
     raise ArgumentError,
           "a :projection transform needs a projection: only a :geo frame has one " <>
             "(spec/14 §5.4.4)"
+  end
+
+  # -- hexbin -----------------------------------------------------------------------------
+
+  # The cells of `Visualize.Layout.Hexbin` over the placed points (spec/14 §5.4.4, #348):
+  # each with its hexagon, or every input row with its cell's centre and count.
+  defp hexbin(node, rows) do
+    radius = Map.get(node, :radius, 20)
+    placed = points(node, rows)
+    cells = Hexbin.bin(Enum.map(placed, &elem(&1, 1)), radius)
+
+    case Map.get(node, :output, :cells) do
+      :cells ->
+        Enum.map(cells, fn %{x: x, y: y, count: count} ->
+          %{x: x, y: y, count: count, path: Hexbin.hexagon(x, y, radius)}
+        end)
+
+      :points ->
+        by_point = for cell <- cells, point <- cell.points, into: %{}, do: {point, cell}
+
+        Enum.map(placed, fn {row, point} ->
+          %{x: cx, y: cy, count: count} = Map.fetch!(by_point, point)
+          Map.merge(row, %{cx: cx, cy: cy, count: count})
+        end)
+
+      other ->
+        raise ArgumentError, ":hexbin yields no #{inspect(other)} (spec/14 §5.4.4)"
+    end
   end
 
   # -- points -----------------------------------------------------------------------------

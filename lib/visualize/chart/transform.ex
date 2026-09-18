@@ -30,7 +30,7 @@ defmodule Visualize.Chart.Transform do
 
   @data_ops [:filter, :bin, :stack, :fold, :sum, :sort]
   @layout_ops [:tree, :cluster, :pack, :partition, :treemap, :chord, :sankey, :force]
-  @geo_ops [:delaunay, :voronoi, :contour, :density, :projection]
+  @geo_ops [:delaunay, :voronoi, :contour, :density, :hexbin, :projection]
 
   @doc """
   The rows after every transform node, in order (spec/14 §5.4).

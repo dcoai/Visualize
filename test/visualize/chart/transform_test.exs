@@ -11,7 +11,7 @@ defmodule Visualize.Chart.TransformTest do
   alias Visualize.Contour.Density
   alias Visualize.Geo.{Delaunay, Projection, Voronoi}
   alias Visualize.IR.Path
-  alias Visualize.Layout.{Chord, Force, Hierarchy, Pack, Sankey, Tree, Treemap}
+  alias Visualize.Layout.{Chord, Force, Hexbin, Hierarchy, Pack, Sankey, Tree, Treemap}
   alias Visualize.Shape.Stack
 
   doctest Transform
@@ -472,6 +472,28 @@ defmodule Visualize.Chart.TransformTest do
       assert a.name == "near" and a.path == Visualize.Geo.Path.path(geo, near)
       assert {a.x, a.y} == Visualize.Geo.Path.centroid(geo, near)
       assert b.name == "globe" and b.path == Visualize.Geo.Path.path(geo, sphere)
+    end
+
+    test ":hexbin cells carry their hexagon and count; :points each row its cell (#348)" do
+      cells = run(%{op: :hexbin, fields: [:x, :y], radius: 40}, @points)
+      assert Enum.map(cells, & &1.count) |> Enum.sum() == 4
+      assert Enum.all?(cells, &(match?([{:M, _, _} | _], &1.path.commands) and &1.count > 0))
+
+      assert cells ==
+               Enum.map(
+                 Hexbin.bin([{10, 10}, {90, 10}, {50, 60}, {20, 80}], 40),
+                 &%{x: &1.x, y: &1.y, count: &1.count, path: Hexbin.hexagon(&1.x, &1.y, 40)}
+               )
+
+      points = run(%{op: :hexbin, fields: [:x, :y], radius: 40, output: :points}, @points)
+      assert length(points) == 4
+
+      assert Enum.all?(
+               points,
+               &(Map.has_key?(&1, :cx) and Map.has_key?(&1, :count) and &1.count >= 1)
+             )
+
+      assert hd(points).x == 10
     end
 
     test ":delaunay triangles and hull are Geo.Delaunay over the placed points" do
