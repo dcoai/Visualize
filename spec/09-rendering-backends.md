@@ -179,7 +179,7 @@ Each element produces, in order, its *setup* (transform commands per 3.3.4, then
 | `:image` | T, `{:drawImage, [href, x, y, width, height]}` |
 | `:defs`, `:clip_path`, `:linear_gradient`, `:radial_gradient`, `:stop`, `:title`, `:desc` | nothing |
 
-A `:group`'s style setup is emitted after its transform, inside the `save`/`restore` pair, so that children without their own style inherit fill, stroke and line width through Canvas state; `Visualize.Backend.Hybrid` relies on this when it wraps a list of dynamic elements in a styled group (6.3) (D-37).
+A `:group`'s style setup is emitted after its transform, inside the `save`/`restore` pair, so that children without their own style inherit fill, stroke and line width through Canvas state — and the `fill`/`stroke` calls that end a child's path are decided by its *effective* style, its own over the groups' above it, since a state that is set but never applied draws nothing (#231); `Visualize.Backend.Hybrid` relies on this when it wraps a list of dynamic elements in a styled group (6.3) (D-37).
 
 #### 3.3.2 Path commands
 
@@ -414,10 +414,10 @@ The path `M x0,y0` followed by `count` absolute cubic curves `C x1,y1 x2,y2 x,y`
 
 | IR type | Records |
 |---|---|
-| `:path` | transform (if non-nil with ≥1 operation), style (if the style map is non-empty), the path record (4.5), then `fill` if `style.fill` is set and not `:none`, then `stroke` if `style.stroke` is set and not `:none` |
+| `:path` | transform (if non-nil with ≥1 operation), style (if the style map is non-empty), the path record (4.5), then `fill` if the *effective* style's `fill` is set and not `:none`, then `stroke` if its `stroke` is set and not `:none` — the effective style being the element's own over the styles of the groups above it, nearest last (#231) |
 | `:circle` | transform, style, `circles` with one entry from `attrs.cx/cy/r`, draw records as above |
 | `:rect` | transform, style, `rects` with one entry from `attrs.x/y/width/height`, draw records as above |
-| `:group` | `save`, transform (if any), each child's records, `restore`; the group's own style is ignored |
+| `:group` | `save`, transform (if any), style (if the style map is non-empty — it sets the state the children draw in, scoped by the `save`/`restore`), each child's records, `restore` (#231) |
 | `:root` | each child's records, nothing else |
 | any other type | nothing (zero bytes) |
 
