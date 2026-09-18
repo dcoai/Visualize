@@ -24,7 +24,9 @@ defmodule ExamplesWeb.BuilderLiveTest do
 
     for name <- ~w(Uptime::house Uptime::shared Uptime::panel) do
       assert html =~ ~s(<span class="vis-builder-layer-name">#{name}</span>)
-      assert Library.id_of(name) != nil
+      # `id_of/1` raises for a name the library lacks; a tagged id is what it returns.
+      assert {_kind, n} = Library.id_of(name)
+      assert is_integer(n)
     end
 
     refute html =~ "drag diagnostics"
@@ -63,7 +65,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
       html = build_conn() |> get("/builder") |> html_response(200)
 
       for name <- names do
-        assert Library.id_of(name) != nil, "#{name} is not in the library"
+        assert {_kind, _n} = Library.id_of(name)
 
         assert html =~
                  ~s(<span class="vis-builder-fragment">#{String.replace(name, "Charts::", "")}</span>)
