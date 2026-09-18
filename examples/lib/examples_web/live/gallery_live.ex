@@ -67,6 +67,11 @@ defmodule ExamplesWeb.GalleryLive do
           <span>Chart Builder (edit a stack of fragments)</span>
         </a>
       </div>
+      <p class="gallery-note">
+        Every chart here is a design (spec/14): a map that says what the chart is, applied to rows and rendered by the
+        library on any backend. Open one for the <code>Visualize.Chart.Build</code> calls that make it — the thing to copy — the map
+        they fold to, and the same design on SVG and canvas.
+      </p>
       <div class="gallery">
         <%= for {module, slug} <- @charts do %>
           <div class="chart-card">
@@ -86,17 +91,6 @@ defmodule ExamplesWeb.GalleryLive do
     """
   end
 
-  # A chart written as a design renders its own document (`Examples.Charts.Design`); an
-  # imperative one returns the element tree the gallery names and serialises.
-  defp render_preview(module) do
-    case module.render(width: 320, height: 220) do
-      svg when is_binary(svg) ->
-        svg
-
-      element ->
-        element
-        |> Examples.Accessible.name(module.title(), module.description())
-        |> Visualize.SVG.Renderer.render_to_string()
-    end
-  end
+  # Every chart is a design and renders its own document (`Examples.Charts.Design`, #335).
+  defp render_preview(module), do: Examples.Charts.Design.render(module, width: 320, height: 220)
 end

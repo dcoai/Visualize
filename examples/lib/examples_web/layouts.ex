@@ -40,6 +40,14 @@ defmodule ExamplesWeb.Layouts do
           .page-intro h2 { font-size: 1.4rem; margin-bottom: 0.25rem; }
           .page-intro p { color: #666; }
           body > main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+          .gallery-note {
+            max-width: 60rem;
+            margin: 0 auto 1.25rem;
+            color: #555;
+            font-size: 0.95rem;
+            line-height: 1.5;
+          }
+
           .gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));

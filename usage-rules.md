@@ -20,6 +20,14 @@ is the source of truth; these rules are the short form.
 | `Visualize.Theme` | Colours, font and sizes as named slots; `resolve/3` gives CSS `var()` references for SVG or literals for canvas |
 | `Visualize.Chart` | A chart as a design map (spec/14): `from_map/1`, `to_map/1`, the JSON round trip (Jason optional), `var/1`; `Chart.Schema` is the schema as data, `Chart.Validator` reports faults by path |
 
+## Start at the gallery
+
+Every chart in `examples/lib/examples/charts/` is a design (spec/14): a `design/1` that
+returns the map and the rows it binds, a `sample_code/0` with the `Visualize.Chart.Build`
+calls that make it, and nothing drawn by hand. To make a chart, find the nearest one there
+and copy its sample; the grammar of scales, shapes and elements below is what the layer is
+built from, not the way to write a chart.
+
 ## The pipeline
 
 Data (a row list, or any `Visualize.Data.Table.rows/1` source: a column map, a keyword list

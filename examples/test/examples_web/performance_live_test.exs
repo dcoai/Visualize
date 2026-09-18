@@ -4,11 +4,13 @@ defmodule ExamplesWeb.PerformanceLiveTest do
 
   alias ExamplesWeb.PerformanceLive, as: Page
 
-  defp html(s), do: Phoenix.LiveViewTest.rendered_to_string(Page.render(Map.put(s.assigns, :__changed__, %{})))
+  defp html(s),
+    do:
+      Phoenix.LiveViewTest.rendered_to_string(Page.render(Map.put(s.assigns, :__changed__, %{})))
 
-  test "the page lists the gallery's charts, designs first, and compares the picked one in a task" do
+  test "the page lists the gallery's charts by title and compares the picked one in a task" do
     {:ok, s} = Page.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
-    assert hd(s.assigns.charts).design?
+    assert hd(s.assigns.charts).title == "Area Chart"
     assert Enum.any?(s.assigns.charts, &(&1.slug == "scrolling_series"))
     h = html(s)
     assert h =~ ~s(<option value="line" selected>Line Chart</option>)
@@ -33,7 +35,7 @@ defmodule ExamplesWeb.PerformanceLiveTest do
     %Task{ref: ref} = s.assigns.task
     assert_receive {^ref, {:all, all} = result}, 120_000
     {:noreply, s} = Page.handle_info({ref, result}, s)
-    designs = Enum.count(s.assigns.charts, & &1.design?)
+    designs = length(s.assigns.charts)
     assert length(all) >= designs * 2
     assert Enum.any?(all, &(&1.slug == "scrolling_series" and &1.backend == :incremental))
     assert html(s) =~ "Every design, 20 ticks per backend"
