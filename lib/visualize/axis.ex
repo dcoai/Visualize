@@ -293,14 +293,14 @@ defmodule Visualize.Axis do
   end
 
   @doc false
-  # The default tick label of spec/05 §1.5: a float rounded to six places with trailing
-  # zeros and point removed, anything else `to_string/1`. The frame's legend labels its
-  # entries the same way.
+  # The default tick label of spec/05 §1.5: a float rounded to six places in plain
+  # decimal notation — never the exponent form `Float.to_string/1` takes from a thousand
+  # up (#354) — with trailing zeros and point removed, anything else `to_string/1`. The
+  # frame's legend labels its entries the same way.
   @spec default_label(any()) :: String.t()
   def default_label(value) when is_float(value) do
-    value
-    |> Float.round(6)
-    |> Float.to_string()
+    (Float.round(value, 6) + 0.0)
+    |> :erlang.float_to_binary(decimals: 6)
     |> String.trim_trailing("0")
     |> String.trim_trailing(".")
   end
