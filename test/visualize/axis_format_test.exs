@@ -220,4 +220,28 @@ defmodule Visualize.AxisFormatTest do
       assert Format.time(dt, "%z %Z") == "-0530 X"
     end
   end
+
+  describe "the default label (spec/05 §1.5, #354)" do
+    test "a float prints in plain decimal notation, six places, trimmed, never -0" do
+      assert Visualize.Axis.default_label(1000.0) == "1000"
+      assert Visualize.Axis.default_label(1500.0) == "1500"
+      assert Visualize.Axis.default_label(1.0e7) == "10000000"
+      assert Visualize.Axis.default_label(0.00001) == "0.00001"
+      assert Visualize.Axis.default_label(2.0) == "2"
+      assert Visualize.Axis.default_label(0.1 + 0.2) == "0.3"
+      assert Visualize.Axis.default_label(-0.0) == "0"
+      assert Visualize.Axis.default_label(7) == "7"
+    end
+
+    test "an axis over a domain in the thousands prints its ticks in full" do
+      scale =
+        Visualize.Scale.linear()
+        |> Visualize.Scale.domain([0, 1500])
+        |> Visualize.Scale.range([0, 300])
+
+      svg = scale |> Visualize.Axis.bottom() |> Visualize.Axis.ticks(3) |> Visualize.Axis.render()
+      assert svg =~ ">1000<" and svg =~ ">1500<"
+      refute svg =~ "e3"
+    end
+  end
 end
