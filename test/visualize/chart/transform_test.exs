@@ -387,6 +387,56 @@ defmodule Visualize.Chart.TransformTest do
       [link | _] = run(%{op: :force, fields: [:from, :to], output: :links}, @flows)
       assert {link.x0, link.y0} == {hd(nodes).x, hd(nodes).y}
     end
+
+    test "a graph reads its nodes from a second source, in its order, with their columns (#346, D-110)" do
+      table = [
+        %{id: "c", group: 2},
+        %{id: "a", group: 1},
+        %{id: "d", group: 3},
+        %{id: "b", group: 1}
+      ]
+
+      sources = %{people: table}
+      step = %{op: :force, fields: [:from, :to], nodes: :people}
+
+      nodes = run(step, @flows, sources: sources)
+      assert Enum.map(nodes, & &1.id) == ["c", "a", "d", "b"]
+      assert Enum.map(nodes, & &1.group) == [2, 1, 3, 1]
+      assert Enum.all?(nodes, &(is_number(&1.x) and is_number(&1.y)))
+
+      # The isolated node is laid out too; a sankey carries the table the same way.
+      assert Enum.any?(nodes, &(&1.id == "d"))
+      sankey = %{op: :sankey, fields: [:from, :to], field: :n, nodes: :people}
+      [first | _] = run(sankey, @flows, sources: sources)
+      assert first.group == 2 and first.id == "c" and Map.has_key?(first, :x0)
+
+      # A flow the table cannot place, and a source that is not bound, are faults.
+      assert_raise ArgumentError, ~r/names "d", which the node source :people lacks/, fn ->
+        run(step, [%{from: "a", to: "d"} | @flows], sources: %{people: List.delete_at(table, 2)})
+      end
+
+      assert_raise ArgumentError, ~r/reads its nodes from :people, which is not bound/, fn ->
+        run(step, @flows)
+      end
+    end
+
+    test ":force takes its strength and distance (#346)" do
+      spread = run(%{op: :force, fields: [:from, :to], strength: -400, distance: 100}, @flows)
+
+      expected =
+        Force.run(
+          nodes: [%{id: "a"}, %{id: "b"}, %{id: "c"}],
+          links: Enum.map(@flows, &%{source: &1.from, target: &1.to}),
+          forces: [
+            {:center, x: 100.0, y: 50.0},
+            {:many_body, strength: -400},
+            {:link, distance: 100}
+          ]
+        )
+
+      assert spread == Enum.map(expected.nodes, &Map.take(&1, [:id, :x, :y]))
+      refute spread == run(%{op: :force, fields: [:from, :to]}, @flows)
+    end
   end
 
   describe "geo" do

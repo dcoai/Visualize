@@ -145,15 +145,48 @@ defmodule Visualize.Chart.Transform.Layout do
     end)
   end
 
-  defp ids(flows) do
-    Enum.uniq(Enum.map(flows, &elem(&1, 0)) ++ Enum.map(flows, &elem(&1, 1)))
+  # The graph's nodes: `{ids, table}` — without a node source, the distinct ids over
+  # every source and then every target with an empty table; with one (`nodes`, spec/14
+  # §5.4.3, D-110), the source's rows in its order keyed by `id`, a flow naming an id the
+  # table lacks a fault. A node row the layout yields is its table row under the layout's.
+  defp nodes(node, flows, ctx) do
+    mentioned = Enum.uniq(Enum.map(flows, &elem(&1, 0)) ++ Enum.map(flows, &elem(&1, 1)))
+
+    case Map.get(node, :nodes) do
+      nil ->
+        {mentioned, %{}}
+
+      name ->
+        id = Map.get(node, :id, :id)
+        rows = Table.rows(source!(ctx, name, node.op))
+        table = Map.new(rows, &{Table.get(&1, id), &1})
+
+        case Enum.reject(mentioned, &Map.has_key?(table, &1)) do
+          [] ->
+            {Enum.map(rows, &Table.get(&1, id)), table}
+
+          [missing | _] ->
+            raise ArgumentError,
+                  "a flow of the #{inspect(node.op)} names #{inspect(missing)}, which the " <>
+                    "node source #{inspect(name)} lacks (spec/14 §5.4.3)"
+        end
+    end
   end
+
+  defp source!(ctx, name, op) do
+    Map.get(Map.get(ctx, :sources, %{}), name) ||
+      raise ArgumentError,
+            "the #{inspect(op)} reads its nodes from #{inspect(name)}, which is not bound " <>
+              "(spec/14 §5.4.3)"
+  end
+
+  defp with_node(table, %{id: id} = row), do: Map.merge(Map.get(table, id, %{}), row)
 
   # -- chord ------------------------------------------------------------------------------
 
   defp chord(node, rows, ctx) do
     flows = flows(node, rows, 0)
-    ids = ids(flows)
+    {ids, table} = nodes(node, flows, ctx)
     index = ids |> Enum.with_index() |> Map.new()
     n = length(ids)
 
@@ -172,14 +205,14 @@ defmodule Visualize.Chart.Transform.Layout do
     case Map.get(node, :output, :groups) do
       :groups ->
         Enum.map(result.groups, fn g ->
-          %{
+          with_node(table, %{
             index: g.index,
             id: Enum.at(ids, g.index),
             start_angle: g.start_angle,
             end_angle: g.end_angle,
             value: g.value,
             path: Path.transform(group_path(g, r), centre)
-          }
+          })
         end)
 
       :chords ->
@@ -241,7 +274,8 @@ defmodule Visualize.Chart.Transform.Layout do
 
   defp sankey(node, rows, ctx) do
     flows = flows(node, rows, 0)
-    nodes = Enum.map(ids(flows), &%{id: &1})
+    {ids, table} = nodes(node, flows, ctx)
+    nodes = Enum.map(ids, &%{id: &1})
     links = Enum.map(flows, fn {s, t, v} -> %{source: s, target: t, value: v} end)
     [w, h] = Map.get(node, :size, ctx.size)
 
@@ -255,7 +289,10 @@ defmodule Visualize.Chart.Transform.Layout do
       :nodes ->
         Enum.map(
           result.nodes,
-          &Map.take(&1, [:id, :index, :depth, :height, :layer, :value, :x0, :x1, :y0, :y1])
+          &with_node(
+            table,
+            Map.take(&1, [:id, :index, :depth, :height, :layer, :value, :x0, :x1, :y0, :y1])
+          )
         )
 
       :links ->
@@ -296,7 +333,8 @@ defmodule Visualize.Chart.Transform.Layout do
 
   defp force(node, rows, ctx) do
     flows = flows(node, rows, 1)
-    nodes = Enum.map(ids(flows), &%{id: &1})
+    {ids, table} = nodes(node, flows, ctx)
+    nodes = Enum.map(ids, &%{id: &1})
     links = Enum.map(flows, fn {s, t, _v} -> %{source: s, target: t} end)
     [w, h] = Map.get(node, :size, ctx.size)
 
@@ -306,8 +344,8 @@ defmodule Visualize.Chart.Transform.Layout do
         links: links,
         forces: [
           {:center, x: w / 2, y: h / 2},
-          {:many_body, strength: -30},
-          {:link, distance: 30}
+          {:many_body, strength: Map.get(node, :strength, -30)},
+          {:link, distance: Map.get(node, :distance, 30)}
         ]
       )
 
@@ -315,7 +353,7 @@ defmodule Visualize.Chart.Transform.Layout do
 
     case Map.get(node, :output, :nodes) do
       :nodes ->
-        Enum.map(result.nodes, &Map.take(&1, [:id, :x, :y]))
+        Enum.map(result.nodes, &with_node(table, Map.take(&1, [:id, :x, :y])))
 
       :links ->
         Enum.map(flows, fn {s, t, _v} ->

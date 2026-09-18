@@ -79,15 +79,17 @@ defmodule Examples.ChartsTest do
     Examples.Charts.Globe
   ]
 
-  # Converted, but seeded at compile time: asserted on, never recorded.
+  # Converted, but asserted on rather than recorded: seeded at compile time, or — the
+  # force graph — a layout a golden would pin across any change to the simulation (#127).
   @seeded_charts [
     Examples.Charts.StackedAreaChart,
     Examples.Charts.ScatterPlot,
-    Examples.Charts.Streamgraph
+    Examples.Charts.Streamgraph,
+    Examples.Charts.ForceGraph
   ]
 
   # Left imperative, each with the filed gap named in its `@moduledoc` (#335).
-  @filed [{Examples.Charts.ForceGraph, "#346"}, {Examples.Charts.HexbinChart, "#348"}]
+  @filed [{Examples.Charts.HexbinChart, "#348"}]
 
   @golden "test/support/charts_golden.txt"
 

@@ -92,7 +92,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
   end
 
   test "a chart that is not a design runs on SVG and the whole-element binary" do
-    s = page("force")
+    s = page("hexbin")
     {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
     assert s.assigns.run_state == nil

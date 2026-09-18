@@ -25,8 +25,8 @@ defmodule Visualize.Chart.Transform do
   alias Visualize.Data.Table
   alias Visualize.Geo.Projection
 
-  @typedoc "What a step sees of the frame: the plot area and, in a `:geo` frame, its projection."
-  @type context :: %{size: [number()], projection: Projection.t() | nil}
+  @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, and the bound sources for a graph's node table."
+  @type context :: %{size: [number()], projection: Projection.t() | nil, sources: map()}
 
   @data_ops [:filter, :bin, :stack, :fold, :sum, :sort]
   @layout_ops [:tree, :cluster, :pack, :partition, :treemap, :chord, :sankey, :force]
@@ -41,6 +41,7 @@ defmodule Visualize.Chart.Transform do
       (default `[1, 1]`)
     * `:projection` - the `%Visualize.Geo.Projection{}` a `:projection` step maps through
       (default `nil`)
+    * `:sources` - the bound sources by name, for a graph step's `nodes` (default `%{}`)
 
   Raises `ArgumentError` for an op that is not one of spec/14 §5.4, a key an op requires
   and the node lacks, or a `:projection` step without a projection.
@@ -56,7 +57,11 @@ defmodule Visualize.Chart.Transform do
   def step(transform, rows, opts), do: run(transform, Table.rows(rows), context(opts))
 
   defp context(opts) do
-    %{size: Keyword.get(opts, :size, [1, 1]), projection: Keyword.get(opts, :projection)}
+    %{
+      size: Keyword.get(opts, :size, [1, 1]),
+      projection: Keyword.get(opts, :projection),
+      sources: Keyword.get(opts, :sources, %{})
+    }
   end
 
   defp run(%{op: op} = node, rows, ctx) do
