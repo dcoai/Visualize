@@ -76,6 +76,7 @@ defmodule Visualize.Chart.Schema.Mark do
     {:density, [:fields], [:field, :size, :bandwidth, :thresholds]},
     {:delaunay, [:fields], [:output]},
     {:voronoi, [:fields], [:size, :output]},
+    {:hexbin, [:fields], [:radius, :size, :output]},
     {:projection, [], [:fields, :field]}
   ]
   @ops Enum.map(@transforms, &elem(&1, 0))
@@ -83,7 +84,7 @@ defmodule Visualize.Chart.Schema.Mark do
   @orders [:none, :ascending, :descending, :inside_out, :reverse, :appearance]
   @offsets [:none, :expand, :silhouette, :wiggle, :diverging]
   @tiles [:squarify, :binary, :slice, :dice, :slice_dice]
-  @outputs [:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges]
+  @outputs [:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges, :points]
   # The four edge anchors are the rectangular types' (spec/14 §5.5, #134).
   # The two polar anchors displace along the ray from the centre (spec/14 §5.5, #137).
   @anchors [
@@ -183,6 +184,7 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:orientation, {:enum, [:vertical, :horizontal]}, :geometry, default: :vertical),
       spec(:link, {:enum, [:curve, :elbow, :line]}, :geometry, default: :curve),
       spec(:nodes, {:ref, :source}, :binding),
+      spec(:radius, :number, :geometry, default: 20),
       spec(:strength, :number, :geometry, default: -30),
       spec(:distance, :number, :geometry, default: 30),
       spec(:test, {:enum, @tests}, :binding, default: :present),

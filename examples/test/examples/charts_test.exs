@@ -76,7 +76,8 @@ defmodule Examples.ChartsTest do
     Examples.Charts.ContourPlot,
     Examples.Charts.RidgelinePlot,
     Examples.Charts.WorldMap,
-    Examples.Charts.Globe
+    Examples.Charts.Globe,
+    Examples.Charts.HexbinChart
   ]
 
   # Converted, but asserted on rather than recorded: seeded at compile time, or — the
@@ -88,8 +89,9 @@ defmodule Examples.ChartsTest do
     Examples.Charts.ForceGraph
   ]
 
-  # Left imperative, each with the filed gap named in its `@moduledoc` (#335).
-  @filed [{Examples.Charts.HexbinChart, "#348"}]
+  # Left imperative, each with the filed gap named in its `@moduledoc`: none, since #348
+  # (#335); the list stays so the next family's conversions have somewhere to file.
+  @filed []
 
   @golden "test/support/charts_golden.txt"
 

@@ -14,7 +14,11 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     s
   end
 
-  defp html(s), do: Phoenix.LiveViewTest.rendered_to_string(ChartLive.render(Map.put(s.assigns, :__changed__, %{})))
+  defp html(s),
+    do:
+      Phoenix.LiveViewTest.rendered_to_string(
+        ChartLive.render(Map.put(s.assigns, :__changed__, %{}))
+      )
 
   defp settled(s) do
     %Task{ref: ref} = s.assigns.run.task
@@ -91,13 +95,13 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert s.assigns.run.frame == 2
   end
 
-  test "a chart that is not a design runs on SVG and the whole-element binary" do
+  test "the last chart converted runs on the split like every other (#348)" do
     s = page("hexbin")
     {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
-    assert s.assigns.run_state == nil
+    assert %{compiled: %Visualize.Chart.Compiled{}} = s.assigns.run_state
     s = settled(s)
-    assert s.assigns.run_frame.canvas != nil and s.assigns.run_frame.points == nil
+    assert s.assigns.run_frame.canvas != nil
     assert pushed(s) == [{"canvas_update", 1}]
   end
 
@@ -114,6 +118,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert h =~ "This chart, 100 ticks per backend, headless"
     assert h =~ "<td>SVG</td>" and h =~ "<td>Canvas</td>"
   end
+
   test "a streaming design runs incrementally at a data rate: the window advances by whole columns and the strip is pushed with a sequence (#327)" do
     s = page("scrolling_series")
     {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
@@ -134,7 +139,9 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert h =~ "top: 40px; left: 60px"
 
     # 16 ms at 600/s is 9 samples: two columns at four per pixel, one sample pending.
-    s = Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 16})
+    s =
+      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 16})
+
     {:noreply, s} = ChartLive.handle_info(:run_tick, s)
     assert s.assigns.run_scroll.origin >= 8 and rem(s.assigns.run_scroll.origin, 4) == 0
     s = settled(s)
@@ -149,7 +156,10 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
   test "/high-performance is the Scrolling series chart's page now" do
     import Phoenix.ConnTest
-    conn = build_conn() |> Phoenix.ConnTest.dispatch(ExamplesWeb.Endpoint, :get, "/high-performance")
+
+    conn =
+      build_conn() |> Phoenix.ConnTest.dispatch(ExamplesWeb.Endpoint, :get, "/high-performance")
+
     assert redirected_to(conn) == "/chart/scrolling_series"
   end
 end

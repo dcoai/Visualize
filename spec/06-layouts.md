@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-This document specifies the layout algorithms under `Visualize.Layout`: the `Hierarchy` node structure shared by every hierarchical layout; the hierarchical layouts `Tree`, `Cluster`, `Pack`, `Partition` and `Treemap`; the relational layouts `Chord` and `Sankey`; and the force-directed system (`Force`, `Force.Forces`, `Force.Simulation`). Every layout is a pure function of a configuration struct and its input, with the exception of the force simulation, which additionally offers a GenServer that advances the same pure tick function on a timer. Coordinates are in user units (pixels unless stated otherwise); the y axis points down, as in SVG.
+This document specifies the layout algorithms under `Visualize.Layout`: the `Hierarchy` node structure shared by every hierarchical layout; the hierarchical layouts `Tree`, `Cluster`, `Pack`, `Partition` and `Treemap`; the relational layouts `Chord` and `Sankey`; the force-directed system (`Force`, `Force.Forces`, `Force.Simulation`); and the hexagonal binning `Hexbin`. Every layout is a pure function of a configuration struct and its input, with the exception of the force simulation, which additionally offers a GenServer that advances the same pure tick function on a timer. Coordinates are in user units (pixels unless stated otherwise); the y axis points down, as in SVG.
 
 ## 1. Hierarchy
 
@@ -455,3 +455,16 @@ Tick messages are `{:tick, tag}` where `tag` is the reference the server generat
 | `Visualize.Layout.Force.Simulation.unfix_node/2` | Clears `fx`, `fy` on the node with the given id. |
 | `Visualize.Layout.Force.Simulation.subscribe/2` | Adds and monitors a subscriber pid. |
 | `Visualize.Layout.Force.Simulation.unsubscribe/2` | Removes a subscriber pid. |
+
+## 9. Hexbin
+
+**Status:** Implemented (#348)
+
+`Visualize.Layout.Hexbin` bins points in the plane into a lattice of flat-topped hexagons, d3-hexbin's: for a circumradius `r`, the columns are `dx = 2 r sin(π/3)` apart and the rows `dy = 1.5 r`, every odd row offset by half a column. A point `{x, y}` belongs to the cell whose centre is nearest: with `row = round(y / dy)` and `col = round(x / dx − offset)` where `offset` is `0.5` for an odd row and `0` otherwise, the centre is `{(col + offset) dx, row dy}`. The lattice is in the coordinates of the points, so a chart bins pixels.
+
+### 9.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Layout.Hexbin.bin/2` | `bin(points, radius)`: `[{x, y}]` to one map per non-empty cell — `x`, `y` (the centre), `count`, `points` (the cell's points in input order) — in lattice order (row, then column). |
+| `Visualize.Layout.Hexbin.hexagon/3` | `hexagon(cx, cy, radius)`: the closed flat-topped hexagon at the centre as a `Visualize.IR.Path`, its first vertex at bearing −30° (upper right), then clockwise on screen. |
