@@ -1,236 +1,118 @@
 defmodule Examples.Charts.Heatmap do
-  @moduledoc "Heatmap visualization using color scales"
+  @moduledoc """
+  Heatmap as a design (#128): one `:rect` mark over a linear `x` and a band `y`, its
+  `value` reaching the `color` scale as each cell's fill.
 
-  alias Visualize.Scale
-  alias Visualize.SVG.Element
-  alias Examples.ColorPalettes
+  A cell is the hour's rectangle — `x0` the hour, `x1` the hour after, on a linear scale
+  over the day — in the day's band, and its `value` is what a `:rect`'s `value` channel is:
+  the reading the frame's `color` scale maps to the element's fill (spec/14 §5.6). The
+  `:sequential` scale runs from the theme's background to its first series colour, so a
+  palette swap recolours the map; the legend that explains it sits in the top margin
+  (`inside: false`, §4.5, #136), and the two axes are real axes where the hand-written
+  version placed its labels by hand.
 
+  The activity pattern is deterministic — a hash of the cell stands in for the random draw
+  the hand-written version made on every render — so the chart holds a golden.
+  """
+
+  import Visualize.Chart.Build
+
+  alias Examples.Charts.Design
+
+  @margin %{top: 36, right: 30, bottom: 45, left: 60}
   @days ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-  @hours (for h <- 0..23, do: "#{h}:00")
 
   def title, do: "Heatmap"
   def description, do: "Hourly activity by day of week"
 
-  def render(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 300
-    margin = %{top: 30, right: 30, bottom: 50, left: 60}
-    palette = opts[:palette] || :default
-    gradient = ColorPalettes.gradient(palette)
+  @doc "The design and the rows it binds (spec/14 §16.1)."
+  def design(opts \\ []) do
+    design =
+      Design.fold([
+        chart(meta: %{name: title(), description: [description()]}),
+        source(:cells, [:day, :hour, :hour_end, :value]),
+        style(:cell, stroke: :background, stroke_width: 1),
+        cartesian(opts[:width] || 600, opts[:height] || 300, margin: @margin),
+        linear_scale(:x, domain: [0, 24]),
+        band_scale(:y, domain: @days),
+        sequential_scale(:color, domain: [0, :auto]),
+        axis(:x, :bottom, ticks: 6),
+        axis(:y, :left),
+        label({:axis, :x}, ["Hour"]),
+        legend(:color, position: :top, inside: false, title: ["Activity"]),
+        rect(:cells, %{x0: :hour, x1: :hour_end, y0: :day, y1: :day, value: :value},
+          options: %{corner_radius: 2},
+          style: :cell
+        )
+      ])
 
-    chart_width = width - margin.left - margin.right
-    chart_height = height - margin.top - margin.bottom
-
-    # Generate sample data (7 days x 24 hours)
-    animation_tick = opts[:animation_tick]
-    data = if animation_tick do
-      generate_animated_data(animation_tick)
-    else
-      generate_sample_data()
-    end
-
-    # Calculate cell dimensions
-    cell_width = chart_width / 24
-    cell_height = chart_height / 7
-
-    # Find data range for color scale
-    all_values = List.flatten(data)
-    min_val = Enum.min(all_values)
-    max_val = Enum.max(all_values)
-
-    # Create color scale
-    color_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([min_val, max_val])
-      |> Scale.Linear.range([0, 1])
-
-    # Draw cells
-    cells = data
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {row, day_idx} ->
-        row
-        |> Enum.with_index()
-        |> Enum.map(fn {value, hour_idx} ->
-          t = Scale.Linear.apply(color_scale, value)
-          color = interpolate_gradient(gradient, t)
-
-          Element.rect(%{
-            x: hour_idx * cell_width,
-            y: day_idx * cell_height,
-            width: cell_width - 1,
-            height: cell_height - 1,
-            fill: color,
-            rx: 2
-          })
-        end)
-      end)
-
-    # Day labels (y-axis)
-    day_labels = @days
-      |> Enum.with_index()
-      |> Enum.map(fn {day, i} ->
-        Element.text(%{
-          x: -10,
-          y: i * cell_height + cell_height / 2 + 4,
-          text_anchor: "end",
-          font_size: 10,
-          fill: ColorPalettes.text_color(palette)
-        })
-        |> Element.content(day)
-      end)
-
-    # Hour labels (x-axis) - show every 4 hours
-    hour_labels = [0, 4, 8, 12, 16, 20]
-      |> Enum.map(fn h ->
-        Element.text(%{
-          x: h * cell_width + cell_width / 2,
-          y: chart_height + 15,
-          text_anchor: "middle",
-          font_size: 9,
-          fill: ColorPalettes.text_color(palette)
-        })
-        |> Element.content(Enum.at(@hours, h))
-      end)
-
-    # Color legend
-    legend = create_color_legend(min_val, max_val, gradient, chart_width - 100, -20, palette)
-
-    # Compose SVG
-    chart_group = Element.g(%{transform: "translate(#{margin.left},#{margin.top})"})
-      |> Element.append(cells)
-      |> Element.append(day_labels)
-      |> Element.append(hour_labels)
-      |> Element.append(legend)
-
-    Element.svg(%{width: width, height: height, viewBox: "0 0 #{width} #{height}"})
-    |> Element.append(chart_group)
+    {design, %{cells: rows(opts[:animation_tick])}}
   end
 
-  defp generate_sample_data do
-    # Simulate activity patterns (higher during work hours on weekdays)
-    for day <- 0..6 do
-      for hour <- 0..23 do
-        base = if day < 5 do  # weekday
-          cond do
-            hour >= 9 and hour <= 17 -> 70 + :rand.uniform(30)
-            hour >= 7 and hour <= 20 -> 30 + :rand.uniform(30)
-            true -> :rand.uniform(20)
-          end
-        else  # weekend
-          cond do
-            hour >= 10 and hour <= 22 -> 20 + :rand.uniform(40)
-            true -> :rand.uniform(15)
-          end
-        end
-        base
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  # One row per day per hour. Static, the working hours of a weekday and the afternoons of
+  # a weekend are busy, with a deterministic scatter; animated, waves ripple across.
+  defp rows(tick) do
+    for {day, d} <- Enum.with_index(@days), hour <- 0..23 do
+      %{day: day, hour: hour, hour_end: hour + 1, value: activity(d, hour, tick)}
+    end
+  end
+
+  defp activity(day, hour, nil) do
+    {base, spread} =
+      cond do
+        day < 5 and hour in 9..17 -> {70, 30}
+        day < 5 and hour in 7..20 -> {30, 30}
+        day < 5 -> {0, 20}
+        hour in 10..22 -> {20, 40}
+        true -> {0, 15}
       end
-    end
+
+    base + rem(:erlang.phash2({day, hour}), spread) + 1
   end
 
-  # Animation: activity waves ripple across the heatmap
-  defp generate_animated_data(tick) do
-    phase = tick * 0.15
-    for day <- 0..6 do
-      for hour <- 0..23 do
-        # Base pattern with animated wave
-        base = if day < 5 do
-          cond do
-            hour >= 9 and hour <= 17 -> 70
-            hour >= 7 and hour <= 20 -> 40
-            true -> 15
-          end
-        else
-          cond do
-            hour >= 10 and hour <= 22 -> 35
-            true -> 10
-          end
-        end
-        # Add wave effect
-        wave = 25 * :math.sin((day / 2) + (hour / 4) + phase)
-        max(5, min(100, base + wave))
+  defp activity(day, hour, tick) do
+    base =
+      cond do
+        day < 5 and hour in 9..17 -> 70
+        day < 5 and hour in 7..20 -> 40
+        day < 5 -> 15
+        hour in 10..22 -> 35
+        true -> 10
       end
-    end
-  end
 
-  defp interpolate_gradient(gradient, t) do
-    t = max(0, min(1, t))
-    n = length(gradient) - 1
-    idx = t * n
-    lower = trunc(idx)
-    upper = min(lower + 1, n)
-    local_t = idx - lower
-
-    color1 = Enum.at(gradient, lower)
-    color2 = Enum.at(gradient, upper)
-
-    interpolate_color(color1, color2, local_t)
-  end
-
-  defp interpolate_color(color1, color2, t) do
-    {r1, g1, b1} = parse_hex(color1)
-    {r2, g2, b2} = parse_hex(color2)
-
-    r = trunc(r1 + (r2 - r1) * t)
-    g = trunc(g1 + (g2 - g1) * t)
-    b = trunc(b1 + (b2 - b1) * t)
-
-    r_hex = Integer.to_string(r, 16) |> String.pad_leading(2, "0")
-    g_hex = Integer.to_string(g, 16) |> String.pad_leading(2, "0")
-    b_hex = Integer.to_string(b, 16) |> String.pad_leading(2, "0")
-
-    "#" <> r_hex <> g_hex <> b_hex
-  end
-
-  defp parse_hex("#" <> hex) do
-    {r, ""} = Integer.parse(String.slice(hex, 0, 2), 16)
-    {g, ""} = Integer.parse(String.slice(hex, 2, 2), 16)
-    {b, ""} = Integer.parse(String.slice(hex, 4, 2), 16)
-    {r, g, b}
-  end
-
-  defp create_color_legend(min_val, max_val, gradient, x, y, palette) do
-    gradient_width = 100
-    gradient_height = 10
-
-    # Create gradient stops
-    stops = for i <- 0..10 do
-      t = i / 10
-      color = interpolate_gradient(gradient, t)
-
-      Element.rect(%{
-        x: i * (gradient_width / 10),
-        width: gradient_width / 10 + 1,
-        height: gradient_height,
-        fill: color
-      })
-    end
-
-    Element.g(%{transform: "translate(#{x},#{y})"})
-    |> Element.append(stops)
-    |> Element.append(
-      Element.text(%{x: 0, y: gradient_height + 12, font_size: 9, fill: ColorPalettes.text_color(palette)})
-      |> Element.content("#{trunc(min_val)}")
-    )
-    |> Element.append(
-      Element.text(%{x: gradient_width, y: gradient_height + 12, text_anchor: "end", font_size: 9, fill: ColorPalettes.text_color(palette)})
-      |> Element.content("#{trunc(max_val)}")
-    )
+    wave = 25 * :math.sin(day / 2 + hour / 4 + tick * 0.15)
+    max(5, min(100, base + wave))
   end
 
   def sample_code do
     ~S"""
-    alias Visualize.Scale
+    import Visualize.Chart.Build
 
-    # Create color scale
-    color_scale = Scale.Linear.new()
-      |> Scale.Linear.domain([min, max])
-      |> Scale.Linear.range([0, 1])
+    {:ok, design} =
+      Visualize.Chart.compose([
+        chart(meta: %{name: "Heatmap"}),
+        source(:cells, [:day, :hour, :hour_end, :value]),
+        style(:cell, stroke: :background, stroke_width: 1),
+        cartesian(600, 300, margin: %{top: 36, right: 30, bottom: 45, left: 60}),
+        linear_scale(:x, domain: [0, 24]),
+        band_scale(:y, domain: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
+        # Background to the first series colour; a palette swap recolours the map.
+        sequential_scale(:color, domain: [0, :auto]),
+        axis(:x, :bottom, ticks: 6),
+        axis(:y, :left),
+        label({:axis, :x}, ["Hour"]),
+        legend(:color, position: :top, inside: false, title: ["Activity"]),
+        # Each cell is the hour's rectangle in the day's band; its value is its fill.
+        rect(:cells, %{x0: :hour, x1: :hour_end, y0: :day, y1: :day, value: :value},
+          options: %{corner_radius: 2},
+          style: :cell
+        )
+      ])
 
-    # Map value to color
-    t = Scale.Linear.apply(color_scale, value)
-    color = interpolate_color("#f7fbff", "#08306b", t)
-
-    # Draw cells
-    Element.rect(%{x: x, y: y, width: w, height: h, fill: color})
+    {:ok, applied} = Visualize.Chart.apply(design, sources: %{cells: cells})
+    Visualize.Chart.render(applied)
     """
   end
 end

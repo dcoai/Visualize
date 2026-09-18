@@ -18,8 +18,8 @@ defmodule Examples.ChartsTest do
   alias Visualize.Chart
 
   # The families of #124 that have been through the layer, in the proposal's order:
-  # work item 1 (#125, cartesian basics), work item 2 (#126, angular and radial) and
-  # work item 3 (#127, hierarchy and graph).
+  # work item 1 (#125, cartesian basics), work item 2 (#126, angular and radial),
+  # work item 3 (#127, hierarchy and graph) and work item 4 (#128, statistical and dense).
   @families [
     Examples.Charts.LineChart,
     Examples.Charts.MultiLineChart,
@@ -41,7 +41,12 @@ defmodule Examples.ChartsTest do
     Examples.Charts.TreeLayout,
     Examples.Charts.ClusterDendrogram,
     Examples.Charts.SankeyDiagram,
-    Examples.Charts.ForceGraph
+    Examples.Charts.ForceGraph,
+    Examples.Charts.Heatmap,
+    Examples.Charts.ContourPlot,
+    Examples.Charts.RidgelinePlot,
+    Examples.Charts.Streamgraph,
+    Examples.Charts.HexbinChart
   ]
 
   # Converted and deterministic: these hold the golden.
@@ -63,17 +68,21 @@ defmodule Examples.ChartsTest do
     Examples.Charts.CirclePacking,
     Examples.Charts.TreeLayout,
     Examples.Charts.ClusterDendrogram,
-    Examples.Charts.SankeyDiagram
+    Examples.Charts.SankeyDiagram,
+    Examples.Charts.Heatmap,
+    Examples.Charts.ContourPlot,
+    Examples.Charts.RidgelinePlot
   ]
 
   # Converted, but seeded at compile time: asserted on, never recorded.
   @seeded_charts [
     Examples.Charts.StackedAreaChart,
-    Examples.Charts.ScatterPlot
+    Examples.Charts.ScatterPlot,
+    Examples.Charts.Streamgraph
   ]
 
   # Left imperative, each with the filed gap named in its `@moduledoc` (#335).
-  @filed [{Examples.Charts.ForceGraph, "#346"}]
+  @filed [{Examples.Charts.ForceGraph, "#346"}, {Examples.Charts.HexbinChart, "#348"}]
 
   @golden "test/support/charts_golden.txt"
 

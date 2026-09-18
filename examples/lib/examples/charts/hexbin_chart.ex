@@ -1,5 +1,13 @@
 defmodule Examples.Charts.HexbinChart do
-  @moduledoc "Hexagonal binning chart for visualizing point density"
+  @moduledoc """
+  Hexagonal binning chart for visualizing point density.
+
+  Left imperative by #128 (the statistical and dense family as designs): the layer has no
+  `:hexbin` transform — `:bin` is one-dimensional and `:density` a kernel estimate — and a
+  hexbin's lattice is laid in pixels after the points are scaled, which no step of a mark's
+  pipeline sees (spec/14 §5.4, D-62). Filed as #348, a pixel-space `:hexbin` step beside
+  `:density`; the chart converts when it lands.
+  """
 
   alias Visualize.{Scale, Axis}
   alias Visualize.SVG.Element
