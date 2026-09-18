@@ -253,6 +253,36 @@ defmodule Visualize.Chart.PresetsTest do
     assert length(Regex.scan(~r/<rect /, svg)) == 2
   end
 
+  test "every preset draws its marks on both canvas formats (spec/09 §3.3, §4.4, #231)" do
+    for name <- Presets.names() do
+      a = Map.fetch!(assigns(), name)
+      chart = Chart.from_map!(Presets.design(name, a))
+      sources = Presets.sources(name, a)
+
+      applied = %Visualize.Chart.Applied{
+        chart: chart,
+        sources: sources,
+        frame: Frame.new(chart, sources: sources)
+      }
+
+      marks = length(chart.marks)
+
+      # The JS commands: a fill or a stroke per mark element, decided by the effective
+      # style — the mark group's paint reaches its children (D-111).
+      commands =
+        Visualize.Chart.generate(applied, resolve: :literal)
+        |> Visualize.Backend.Canvas.render_element(format: :commands)
+
+      draws = Enum.count(commands, &(&1 in [{:fill, []}, {:stroke, []}]))
+      assert draws >= marks, "#{name}: #{draws} draw calls for #{marks} marks"
+
+      # The binary stream the same: a draw record per mark at least.
+      binary = Chart.render(applied, backend: :canvas, format: :binary)
+      records = Visualize.Backend.CanvasBinary.Decoder.decode(binary)
+      assert Enum.count(records, &(&1 in [:fill, :stroke])) >= marks, "#{name}"
+    end
+  end
+
   test "an empty colour list is an ArgumentError naming the scale" do
     a = Map.put(assigns().pie_chart, :colors, [])
 

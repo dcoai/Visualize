@@ -102,13 +102,15 @@ defmodule Visualize.Backend.CanvasTest do
     end
   end
 
-  test "a group's style is set after its transform and reaches its children" do
+  test "a group's style is set after its transform, reaches its children, and is drawn by them (#231)" do
     group =
       Element.group([Element.rect(0, 0, 1, 1)],
         style: %{stroke: "blue", stroke_width: 2},
         transform: Transform.translate(5, 5)
       )
 
+    # The child has no style of its own: the group's state is what it strokes with, and
+    # the stroke call is the effective style's (D-111).
     assert Canvas.render_element(group, format: :commands) == [
              {:save, []},
              {:translate, [5, 5]},
@@ -116,8 +118,16 @@ defmodule Visualize.Backend.CanvasTest do
              {:set_lineWidth, [2]},
              {:beginPath, []},
              {:rect, [0, 0, 1, 1]},
+             {:stroke, []},
              {:restore, []}
            ]
+
+    # A child's own :none still suppresses an inherited paint; a nested group inherits.
+    quiet = Element.group([Element.rect(0, 0, 1, 1, %{stroke: :none})], style: %{stroke: "blue"})
+    refute {:stroke, []} in Canvas.render_element(quiet, format: :commands)
+
+    nested = Element.group([Element.group([Element.circle(0, 0, 1)])], style: %{fill: "red"})
+    assert {:fill, []} in Canvas.render_element(nested, format: :commands)
   end
 
   test "Hybrid keeps :dynamic_style for a list of dynamic elements" do

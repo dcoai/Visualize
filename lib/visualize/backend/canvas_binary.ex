@@ -131,7 +131,7 @@ defmodule Visualize.Backend.CanvasBinary do
     precision = precision!(opts)
 
     if available?() do
-      {:ok, do_encode_element(element, precision)}
+      {:ok, do_encode_element(element, precision, %{})}
     else
       {:error, :nx_not_available}
     end
@@ -229,7 +229,8 @@ defmodule Visualize.Backend.CanvasBinary do
 
   defp do_encode_element(
          %Element{type: :path, path: path, style: style, transform: transform},
-         precision
+         precision,
+         inherited
        ) do
     parts = []
 
@@ -253,14 +254,15 @@ defmodule Visualize.Backend.CanvasBinary do
     parts = parts ++ [do_encode_path(path.commands, precision)]
 
     # Draw commands
-    parts = parts ++ encode_draw_commands(style)
+    parts = parts ++ encode_draw_commands(Map.merge(inherited, style))
 
     IO.iodata_to_binary(parts)
   end
 
   defp do_encode_element(
          %Element{type: :circle, attrs: attrs, style: style, transform: transform},
-         _precision
+         _precision,
+         inherited
        ) do
     %{cx: cx, cy: cy, r: r} = attrs
 
@@ -289,14 +291,15 @@ defmodule Visualize.Backend.CanvasBinary do
         ]
 
     # Draw commands
-    parts = parts ++ encode_draw_commands(style)
+    parts = parts ++ encode_draw_commands(Map.merge(inherited, style))
 
     IO.iodata_to_binary(parts)
   end
 
   defp do_encode_element(
          %Element{type: :rect, attrs: attrs, style: style, transform: transform},
-         _precision
+         _precision,
+         inherited
        ) do
     %{x: x, y: y, width: w, height: h} = attrs
 
@@ -325,14 +328,17 @@ defmodule Visualize.Backend.CanvasBinary do
         ]
 
     # Draw commands
-    parts = parts ++ encode_draw_commands(style)
+    parts = parts ++ encode_draw_commands(Map.merge(inherited, style))
 
     IO.iodata_to_binary(parts)
   end
 
+  # A group's style is the state its children draw in, scoped by the save/restore, and
+  # what they inherit for their draw records (spec/09 §4.4, D-111).
   defp do_encode_element(
-         %Element{type: :group, children: children, transform: transform},
-         precision
+         %Element{type: :group, children: children, style: style, transform: transform},
+         precision,
+         inherited
        ) do
     parts = [<<Opcodes.save()::8>>]
 
@@ -343,8 +349,12 @@ defmodule Visualize.Backend.CanvasBinary do
         parts
       end
 
+    parts = if map_size(style) > 0, do: parts ++ [encode_style(style)], else: parts
+
     # Encode all children
-    child_data = Enum.map(children, &do_encode_element(&1, precision))
+    child_data =
+      Enum.map(children, &do_encode_element(&1, precision, Map.merge(inherited, style)))
+
     parts = parts ++ child_data
 
     parts = parts ++ [<<Opcodes.restore()::8>>]
@@ -355,18 +365,18 @@ defmodule Visualize.Backend.CanvasBinary do
   # The geometric types that are not paths are encoded as the path they are (spec/09
   # §4.4, #269): each becomes a `:path` element with the same style and transform, so it
   # takes the same record and form selection as any path.
-  defp do_encode_element(%Element{type: type} = element, precision)
+  defp do_encode_element(%Element{type: type} = element, precision, inherited)
        when type in [:line, :polyline, :polygon, :ellipse] do
-    do_encode_element(%{element | type: :path, path: as_path(element)}, precision)
+    do_encode_element(%{element | type: :path, path: as_path(element)}, precision, inherited)
   end
 
-  defp do_encode_element(%Element{type: :root, children: children}, precision) do
+  defp do_encode_element(%Element{type: :root, children: children}, precision, inherited) do
     children
-    |> Enum.map(&do_encode_element(&1, precision))
+    |> Enum.map(&do_encode_element(&1, precision, inherited))
     |> IO.iodata_to_binary()
   end
 
-  defp do_encode_element(_element, _precision) do
+  defp do_encode_element(_element, _precision, _inherited) do
     <<>>
   end
 
