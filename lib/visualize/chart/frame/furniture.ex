@@ -111,6 +111,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     |> Axis.offset(Map.get(node, :offset, Schema.default(:axis, :offset)))
     |> ticks(Map.get(node, :ticks))
     |> format(scale, Map.get(node, :format))
+    |> unit(Map.get(node, :prefix), Map.get(node, :unit))
   end
 
   defp ticks(axis, nil), do: axis
@@ -133,6 +134,15 @@ defmodule Visualize.Chart.Frame.Furniture do
   defp format(axis, _scale, spec) do
     formatter = Format.formatter(spec)
     Axis.tick_format(axis, fn v -> if is_number(v), do: formatter.(v), else: to_string(v) end)
+  end
+
+  # The literals around every tick's label — the formatted value, or the default label
+  # when there is no format (spec/14 §4.4, #135).
+  defp unit(axis, nil, nil), do: axis
+
+  defp unit(axis, prefix, unit) do
+    label = axis.tick_format || (&Axis.default_label/1)
+    Axis.tick_format(axis, fn v -> (prefix || "") <> label.(v) <> (unit || "") end)
   end
 
   # -- placement ------------------------------------------------------------------------

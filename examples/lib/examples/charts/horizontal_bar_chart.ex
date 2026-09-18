@@ -4,12 +4,10 @@ defmodule Examples.Charts.HorizontalBarChart do
   the band scale on `y`.
 
   The value at the end of each bar is the `:rect`'s own inline label at the `:x1` edge
-  anchor (spec/14 §5.5, #134) — it once needed a zero-radius `:circle` to carry it. One
-  thing the layer still decides differently from the imperative chart, filed:
-
-  - **The x axis lost its `M`.** A `Visualize.Format` specifier has no unit suffix (#135), so
-    the millions are named in the axis title instead of on every tick. The bar labels keep
-    theirs, because a label's text is a list and a literal is one of its parts.
+  anchor (spec/14 §5.5, #134) — it once needed a zero-radius `:circle` to carry it. The x
+  axis keeps its `M` through the axis's `unit` (spec/14 §4.4, #135), as the bar labels keep
+  theirs through a literal part of their text; the ticks at a thousand and above print in
+  exponent form until #354 fixes the default label.
 
   The `y` range is written out because `:auto` runs upward and the categories read downward,
   as `Visualize.Chart.Presets.horizontal_bar_chart/1` does.
@@ -52,9 +50,8 @@ defmodule Examples.Charts.HorizontalBarChart do
         linear_scale(:x, domain: [0, :auto], nice: true),
         band_scale(:y, padding: 0.2, range: [0, plot_height]),
         ordinal_scale(:color),
-        axis(:x, :bottom, ticks: 5),
+        axis(:x, :bottom, ticks: 5, unit: "M"),
         axis(:y, :left),
-        label({:axis, :x}, ["population (millions)"]),
         rect(data, %{x0: 0, x1: :population, y0: :country, y1: :country, value: :country},
           options: %{corner_radius: 2},
           label: %{text: [{:field, :population}, "M"], anchor: :x1}
@@ -99,9 +96,8 @@ defmodule Examples.Charts.HorizontalBarChart do
         # `:auto` on a band runs upward; the categories read downward, so the range is given.
         band_scale(:y, padding: 0.2, range: [0, 340]),
         ordinal_scale(:color),
-        axis(:x, :bottom, ticks: 5),
+        axis(:x, :bottom, ticks: 5, unit: "M"),
         axis(:y, :left),
-        label({:axis, :x}, ["population (millions)"]),
         # The value past the end of each bar: the rect's own label at its x1 edge (#134).
         rect(data, %{x0: 0, x1: :population, y0: :country, y1: :country, value: :country},
           options: %{corner_radius: 2},

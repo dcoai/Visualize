@@ -866,6 +866,44 @@ defmodule Visualize.Chart.FrameTest do
     end
   end
 
+  describe "a tick carries a unit (spec/14 §4.4, §4.5, #135)" do
+    defp unit_frame(axis, legend \\ %{}) do
+      chart(
+        %{
+          size: %{width: 400, height: 300},
+          margin: %{top: 50, right: 100, bottom: 50, left: 50},
+          scales: %{
+            x: %{kind: :linear, domain: [0, 100]},
+            y: %{kind: :linear, domain: [0, 5]},
+            color: %{kind: :sequential, domain: [0, 100]}
+          },
+          axes: [Map.merge(%{scale: :x, side: :bottom, ticks: 2}, axis)],
+          legend: Map.merge(%{scale: :color, position: :right, inside: false}, legend)
+        },
+        %{marks: [%{type: :line, data: :primary, channels: %{x: :n, y: :v}}]}
+      )
+      |> Frame.new(sources: %{primary: @rows})
+    end
+
+    defp tick_labels(frame) do
+      Regex.scan(~r/<text[^>]*>([^<]*)<\/text>/, Frame.render(frame)) |> Enum.map(&Enum.at(&1, 1))
+    end
+
+    test "a unit follows the default label, and a prefix and a unit surround a formatted one" do
+      # The domain stays under a thousand until #354 fixes the default label's exponent.
+      assert tick_labels(unit_frame(%{unit: "M"})) |> Enum.take(3) == ["0M", "50M", "100M"]
+
+      labels = tick_labels(unit_frame(%{prefix: "$", unit: "T", format: ".1f"}))
+      assert Enum.take(labels, 3) == ["$0.0T", "$50.0T", "$100.0T"]
+    end
+
+    test "the legend's entries carry the legend's own prefix and unit" do
+      labels = tick_labels(unit_frame(%{}, %{unit: "%"}))
+      assert Enum.take(labels, -6) == ["0%", "20%", "40%", "60%", "80%", "100%"]
+      refute Enum.any?(tick_labels(unit_frame(%{})), &String.ends_with?(&1, "%"))
+    end
+  end
+
   describe "a legend in a margin (spec/14 §4.5, #136)" do
     # 400 × 300 with margins of 100: a 200 × 100 plot with room on every side.
     defp legend_frame(legend, margin \\ %{top: 100, right: 100, bottom: 100, left: 100}) do

@@ -10,8 +10,8 @@ defmodule Examples.Charts.Streamgraph do
   and colours them from the `color` scale the legend explains. The basis curve is the
   style's; the legend sits in the right margin the chart reserves for it (§4.5, #136).
 
-  The x axis prints the month numbers; the hand-written version printed `Month n`, which a
-  format specifier cannot (#135), so the axis title says what the numbers are.
+  The x axis prints `Month n` as the hand-written version did, the word the axis's
+  `prefix` (spec/14 §4.4, #135).
   """
 
   import Visualize.Chart.Build
@@ -52,8 +52,7 @@ defmodule Examples.Charts.Streamgraph do
         linear_scale(:x),
         linear_scale(:y),
         ordinal_scale(:color, domain: @keys),
-        axis(:x, :bottom, ticks: 8),
-        label({:axis, :x}, ["Month"]),
+        axis(:x, :bottom, ticks: 8, prefix: "Month "),
         legend(:color, position: :top_right, inside: false),
         # The silhouette offset centres the stream; inside-out ordering puts the earliest
         # peaks in the middle (spec/14 §5.4.1).
@@ -108,8 +107,7 @@ defmodule Examples.Charts.Streamgraph do
         linear_scale(:x),
         linear_scale(:y),
         ordinal_scale(:color, domain: keys),
-        axis(:x, :bottom, ticks: 8),
-        label({:axis, :x}, ["Month"]),
+        axis(:x, :bottom, ticks: 8, prefix: "Month "),
         legend(:color, position: :top_right, inside: false),
         # A stack centred on zero, the earliest peaks in the middle (spec/14 §5.4.1).
         area(stack(from(:months), keys, offset: :silhouette, order: :inside_out),
