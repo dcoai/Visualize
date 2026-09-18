@@ -110,7 +110,7 @@ defmodule Visualize.Chart.BuilderTest do
                ~s(<div class="vis-builder-panels vis-builder-panels-library" style="--vis-builder-context: 400px">)
 
       assert stored =~ ~s(class="vis-builder-library-pane")
-      assert stored =~ ~s(<h3 class="vis-builder-category-name">Uncategorised</h3>)
+      assert stored =~ ~s(phx-value-name="Uncategorised" phx-target="-1">▾ Uncategorised</button>)
       assert stored =~ ~s(data-builder-fragment="composite:1")
       assert stored =~ ~s(class="vis-builder-put")
     end
@@ -1359,7 +1359,7 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "the Components section and the hook's drop (spec/10 §16.3)", %{socket: s} do
       html = BuilderFixture.render(s)
-      assert html =~ ~s(<h3 class="vis-builder-category-name">Components</h3>)
+      assert html =~ ~s(phx-value-name="Components" phx-target="-1">▾ Components</button>)
       assert html =~ ~s(data-builder-component="axis")
       assert html =~ ~s(data-builder-component="mark:line" phx-keydown="component_key")
 
@@ -3692,7 +3692,7 @@ defmodule Visualize.Chart.BuilderTest do
                ~s(class="vis-builder-view vis-builder-view-on" phx-click="library_view" phx-value-view="group")
 
       assert html =~ ~s(class="vis-builder-view" phx-click="library_view" phx-value-view="kind")
-      assert html =~ ~s(<h3 class="vis-builder-category-name">Uncategorised</h3>)
+      assert html =~ ~s(phx-value-name="Uncategorised" phx-target="-1">▾ Uncategorised</button>)
     end
 
     test "by kind shows every usual kind, empty or not, and the entry under its own" do
@@ -3706,14 +3706,14 @@ defmodule Visualize.Chart.BuilderTest do
         })
 
       # An empty kind is a heading that says so: information, not a bug.
-      assert html =~
-               ~s(<h3 class="vis-builder-category-name vis-builder-category-empty">style</h3>)
+      assert html =~ ~s(<h3 class="vis-builder-category-name vis-builder-category-empty">)
+      assert html =~ ~s(phx-value-name="style" phx-target="-1">▾ style</button>)
 
       assert html =~ ~s(<p class="vis-builder-kind-empty">none yet</p>)
 
       # The fixture's entries are composites; design is not a kind (§19.8).
-      refute html =~ ~s(>design</h3>)
-      assert html =~ ~s(<h3 class="vis-builder-category-name">composite</h3>)
+      refute html =~ ~s(phx-value-name="design")
+      assert html =~ ~s(phx-value-name="composite" phx-target="-1">▾ composite</button>)
       assert html =~ ~s(data-builder-fragment="composite:1")
     end
 
@@ -3727,6 +3727,53 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, s} = Builder.handle_event("library_view", %{"view" => "group"}, s)
       assert s.assigns.library_view == :group
+    end
+
+    test "a top-level header folds its section, says what it hides, and unfolds (#355)" do
+      {:ok, s} = Builder.mount(%Socket{})
+      {:ok, s} = Builder.update(%{id: "b", layers: BuilderFixture.layers(), store: Library}, s)
+      assert s.assigns.library_folded == MapSet.new()
+
+      html = fn s -> render_component(Builder, Map.put(s.assigns, :styles, false)) end
+      open = html.(s)
+      assert open =~ ~s(aria-expanded="true" title="hide Components")
+      assert open =~ ~s(class="vis-builder-item vis-builder-component")
+
+      {:noreply, s} = Builder.handle_event("library_toggle", %{"name" => "Components"}, s)
+      assert s.assigns.library_folded == MapSet.new(["Components"])
+      folded = html.(s)
+
+      assert folded =~
+               ~s(aria-expanded="false" title="show Components" phx-click="library_toggle" phx-value-name="Components")
+
+      assert folded =~ ~s(▸ Components<span class="vis-builder-category-count">()
+      refute folded =~ ~s(class="vis-builder-item vis-builder-component")
+      # The other headers are untouched.
+      assert folded =~ ~s(aria-expanded="true" title="hide Uncategorised")
+
+      # The fold survives a view switch and a store change.
+      {:noreply, s} = Builder.handle_event("library_view", %{"view" => "kind"}, s)
+      {:noreply, s} = Builder.handle_event("library_view", %{"view" => "group"}, s)
+      {:ok, s} = Builder.update(%{id: "b", layers: BuilderFixture.layers(), store: Library}, s)
+      assert s.assigns.library_folded == MapSet.new(["Components"])
+
+      {:noreply, s} = Builder.handle_event("library_toggle", %{"name" => "Components"}, s)
+      assert s.assigns.library_folded == MapSet.new()
+      assert html.(s) =~ ~s(class="vis-builder-item vis-builder-component")
+    end
+
+    test "a host seeds the folded headers once (#355)" do
+      html =
+        render_component(Builder, %{
+          id: "b",
+          layers: BuilderFixture.layers(),
+          store: Library,
+          styles: false,
+          library_folded: MapSet.new(["Uncategorised"])
+        })
+
+      assert html =~ ~s(aria-expanded="false" title="show Uncategorised")
+      assert html =~ ~s(aria-expanded="true" title="hide Components")
     end
   end
 

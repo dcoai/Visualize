@@ -213,6 +213,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:view, :atom, default: :group, doc: "`:group`, the default, or `:kind` (spec/14 §19.8)")
 
     attr(:open, :any, default: nil, doc: "the id last acted on, marked in the tree")
+
+    attr(:folded, :any,
+      default: MapSet.new(),
+      doc: "the top-level headers folded, by name (spec/14 §18.16, #355)"
+    )
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the library's events")
     attr(:id, :string, required: true, doc: "the hook element's id")
     attr(:class, :string, default: nil, doc: "appended to the library's class")
@@ -221,7 +227,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     Renders the library (spec/10 §15.3).
 
     An `<aside class="vis-builder-library-pane">` holding one section per category, each with
-    one list per sub-category, each item draggable by its stored name.
+    one list per sub-category, each item draggable by its stored name. Every top-level
+    header is a button that folds its section (#355): folded, the header stays with the
+    count of what it hides and the items are not rendered.
     """
     def panel(assigns) do
       assigns =
@@ -260,8 +268,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
           >kind</button>
         </nav>
         <section class="vis-builder-category vis-builder-components">
-          <h3 class="vis-builder-category-name">Components</h3>
-          <ul class="vis-builder-group-items">
+          <.header name="Components" folded={@folded} count={length(Place.components())} target={@target} />
+          <ul :if={not folded?(@folded, "Components")} class="vis-builder-group-items">
             <li
               :for={{component, word} <- Place.components()}
               class="vis-builder-item vis-builder-component"
@@ -281,9 +289,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
           The store holds nothing yet.
         </p>
         <section :for={group <- @kinds} :if={@view == :kind} class="vis-builder-category">
-          <h3 class={kind_class(group.items == [])}>{group.kind}</h3>
-          <p :if={group.items == []} class="vis-builder-kind-empty">none yet</p>
-          <ul :if={group.items != []} class="vis-builder-group-items">
+          <.header
+            name={to_string(group.kind)}
+            folded={@folded}
+            count={length(group.items)}
+            class={kind_class(group.items == [])}
+            target={@target}
+          />
+          <p :if={group.items == [] and not folded?(@folded, to_string(group.kind))} class="vis-builder-kind-empty">none yet</p>
+          <ul :if={group.items != [] and not folded?(@folded, to_string(group.kind))} class="vis-builder-group-items">
             <li
               :for={item <- group.items}
               class={item_class(item.id == @open)}
@@ -304,8 +318,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </ul>
         </section>
         <section :for={category <- @tree} :if={@view == :group} class="vis-builder-category">
-          <h3 class="vis-builder-category-name">{category.category}</h3>
-          <div :for={group <- category.groups} class="vis-builder-group">
+          <.header
+            name={category.category}
+            folded={@folded}
+            count={Enum.sum(Enum.map(category.groups, &length(&1.items)))}
+            target={@target}
+          />
+          <div :for={group <- category.groups} :if={not folded?(@folded, category.category)} class="vis-builder-group">
             <h4 :if={group.sub_category} class="vis-builder-group-name">{group.sub_category}</h4>
             <ul class="vis-builder-group-items">
               <li
@@ -330,6 +349,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       </aside>
       """
     end
+
+    # A top-level header: a button that folds its section, saying what it hides (#355).
+    attr(:name, :string, required: true)
+    attr(:folded, :any, required: true)
+    attr(:count, :integer, required: true)
+    attr(:class, :string, default: "vis-builder-category-name")
+    attr(:target, :any, default: nil)
+
+    defp header(assigns) do
+      assigns = assign(assigns, :is_folded, folded?(assigns.folded, assigns.name))
+
+      ~H"""
+      <h3 class={@class}>
+        <button
+          type="button"
+          class={"vis-builder-category-fold" <> if(@is_folded, do: " vis-builder-category-folded", else: "")}
+          aria-expanded={to_string(not @is_folded)}
+          title={if(@is_folded, do: "show", else: "hide") <> " " <> @name}
+          phx-click="library_toggle"
+          phx-value-name={@name}
+          phx-target={@target}
+        >{if @is_folded, do: "▸", else: "▾"} {@name}<span :if={@is_folded} class="vis-builder-category-count">({@count})</span></button>
+      </h3>
+      """
+    end
+
+    defp folded?(folded, name), do: MapSet.member?(folded, name)
 
     defp class(nil), do: "vis-builder-library-pane"
     defp class(extra), do: "vis-builder-library-pane " <> extra
