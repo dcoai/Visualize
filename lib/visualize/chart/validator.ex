@@ -202,6 +202,7 @@ defmodule Visualize.Chart.Validator do
       slots: slots(Map.get(map, :theme, Schema.default(:design, :theme))),
       mark_type: nil,
       op: nil,
+      transform_keys: [],
       fields: :unknown,
       datum?: false,
       channel_keys: [],
@@ -289,7 +290,7 @@ defmodule Visualize.Chart.Validator do
 
   defp enter(:transform, map, ctx) do
     op = map[:op]
-    %{ctx | op: if(op in Schema.transform_ops(), do: op)}
+    %{ctx | op: if(op in Schema.transform_ops(), do: op), transform_keys: Map.keys(map)}
   end
 
   defp enter(_kind, _map, ctx), do: ctx
@@ -319,9 +320,13 @@ defmodule Visualize.Chart.Validator do
     end
   end
 
-  # The keys a transform op reads, the op's required ones required (spec/14 §5.4).
-  defp specs(:transform, %{op: op}) when op != nil do
+  # The keys a transform op reads, the op's required ones required (spec/14 §5.4). A
+  # `:projection` reads points through `fields` or geometries through `field` (§5.4.4):
+  # `fields` is required unless `field` is given, and a step with both has `field` read
+  # as a key the op does not take.
+  defp specs(:transform, %{op: op} = ctx) when op != nil do
     %{required: required, optional: optional} = Schema.transform_keys(op)
+    {required, optional} = projection_keys(op, required, optional, ctx)
 
     for s <- Schema.describe(:transform), s.key == :op or s.key in (required ++ optional) do
       %{s | required: s.key == :op or s.key in required, type: as_type(s, op)}
@@ -329,6 +334,16 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp specs(kind, _ctx), do: Schema.describe(kind)
+
+  defp projection_keys(:projection, required, optional, %{transform_keys: keys}) do
+    case {:fields in keys, :field in keys} do
+      {true, true} -> {required, optional -- [:field]}
+      {_, true} -> {required, optional}
+      {_, false} -> {[:fields | required], optional -- [:fields]}
+    end
+  end
+
+  defp projection_keys(_op, required, optional, _ctx), do: {required, optional}
 
   # `as` is a pair of names for a fold and one name for every other op (spec/14 §5.4).
   defp as_type(%{key: :as}, :fold), do: {:list, :name}

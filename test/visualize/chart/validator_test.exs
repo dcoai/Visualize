@@ -232,6 +232,16 @@ defmodule Visualize.Chart.ValidatorTest do
                [{path ++ [:test], {:enum, [:eq, :ne, :lt, :lte, :gt, :gte, :present, :absent]}}]
     end
 
+    test "a projection reads points through fields or a geometry through field, never both (#349)" do
+      path = @paths[:transform]
+      assert Validator.validate(put_at(@full, path, %{op: :projection, fields: [:t, :v]})) == :ok
+      assert Validator.validate(put_at(@full, path, %{op: :projection, field: :v})) == :ok
+      assert errors(put_at(@full, path, %{op: :projection})) == [{path ++ [:fields], :required}]
+
+      assert errors(put_at(@full, path, %{op: :projection, fields: [:t, :v], field: :v})) ==
+               [{path ++ [:field], {:invalid_for, :projection}}]
+    end
+
     test "an unknown key reports at its path in every node kind" do
       for {kind, path} <- @paths do
         assert {path ++ [:bogus], :unknown_key} in errors(put_at(@full, path ++ [:bogus], 1)),

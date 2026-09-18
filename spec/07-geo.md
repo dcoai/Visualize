@@ -61,6 +61,8 @@ A point is clipped when its angular distance `c` from the projection centre — 
 
 `bounds/1` projects the four corners `{-180, -85}`, `{180, -85}`, `{180, 85}`, `{-180, 85}`, drops `nil` results, and returns `[min_x, min_y, max_x, max_y]`; if every corner is clipped it returns `[tx - scale, ty - scale, tx + scale, ty + scale]`. This is a corner-based estimate, not the outline of a curved graticule.
 
+`sphere/1` is that outline (#349): the projection's edge as a closed list of `{x, y}` pixel points, the sphere of d3-geo's `{type: "Sphere"}`. With a `clip_angle` it is the small circle at that angular distance from the projection's centre — for the orthographic the visible disc, radius `scale` — taken in the rotated and centred frame (1.3) so that `rotate` and `center` turn the globe under it, sampled at 360 bearings and projected without the clip test. Without one it is the map's edge: the antimeridian on either side and the two poles, sampled every degree, at latitude ±85 for `:mercator` and `:transverse_mercator` (which have no finite pole, as `bounds/1` assumes) and ±90 for every other type. A point the raw projection cannot place is dropped.
+
 `fit_extent(proj, [[x0, y0], [x1, y1]], [[lon0, lat0], [lon1, lat1]])` sets `scale` to `min(width / Δlon, height / Δlat) * 0.95` with the deltas in radians, `center` to the geographic midpoint and `translate` to the extent's midpoint; `rotate` is untouched. The fit is projection-independent and approximate.
 
 ### 1.7 Functions
@@ -79,6 +81,7 @@ A point is clipped when its angular distance `c` from the projection centre — 
 | `Visualize.Geo.Projection.project/3` | `{x, y}` pixels for `lon, lat` degrees, or `nil` when clipped or unprojectable (1.3). |
 | `Visualize.Geo.Projection.invert/3` | `{lon, lat}` degrees for `x, y` pixels, or `nil` (1.3). |
 | `Visualize.Geo.Projection.bounds/1` | `[x0, y0, x1, y1]` corner-based pixel bounds (1.6). |
+| `Visualize.Geo.Projection.sphere/1` | The projection's outline as a closed list of `{x, y}` pixel points (1.6). |
 | `Visualize.Geo.Projection.fit_extent/3` | Sets scale, centre and translate to fit a geographic box into a pixel box (1.6). |
 
 ## 2. GeoJSON paths
@@ -93,7 +96,7 @@ A point is clipped when its angular distance `c` from the projection centre — 
 | `point_radius` | `4.5` | Radius of the circle drawn for each `Point`. |
 | `context` | `nil` | Reserved; unused. |
 
-`new/0` is `new(nil)`. Input is a GeoJSON map with string keys (`"type"`, `"coordinates"`, `"geometry"`, `"features"`, `"geometries"`). `Feature` and `FeatureCollection` are unwrapped; a feature with `"geometry" => nil` contributes nothing. Supported geometry types: `Point`, `MultiPoint`, `LineString`, `MultiLineString`, `Polygon`, `MultiPolygon`, `GeometryCollection`. A position is a list `[lon, lat | _]`; extra elements are ignored. Any other `"type"` renders as `""`, measures as `0.0` and contributes no points.
+`new/0` is `new(nil)`. Input is a GeoJSON map with string keys (`"type"`, `"coordinates"`, `"geometry"`, `"features"`, `"geometries"`). `Feature` and `FeatureCollection` are unwrapped; a feature with `"geometry" => nil` contributes nothing. Supported geometry types: `Point`, `MultiPoint`, `LineString`, `MultiLineString`, `Polygon`, `MultiPolygon`, `GeometryCollection`, and `Sphere` (#349) — `%{"type" => "Sphere"}`, d3-geo's whole globe, whose outline is `Visualize.Geo.Projection.sphere/1` (1.6) and which is empty without a projection. A position is a list `[lon, lat | _]`; extra elements are ignored. Any other `"type"` renders as `""`, measures as `0.0` and contributes no points.
 
 ### 2.2 Rendering
 
@@ -102,8 +105,11 @@ A point is clipped when its angular distance `c` from the projection centre — 
 - `Point` — a circle of radius `point_radius` at the projected position as two arcs: `M{cx - r},{cy}A{r},{r},0,1,1,{cx + r},{cy}A{r},{r},0,1,1,{cx - r},{cy}Z`, with numbers interpolated as-is.
 - `LineString` — `M{x},{y}` followed by `L{x},{y}` per further vertex.
 - `Polygon` — each ring rendered as a line string followed by `Z`.
+- `Sphere` — the outline of 1.6 as one ring.
 
 Vertices whose projection is `nil` are dropped from lines and rings; lines are not split at clipped vertices. Line and ring numbers are floats rounded to 3 decimals (integers unchanged). A point whose projection is `nil` renders as `""`.
+
+`path/2` is the same walk as a `Visualize.IR.Path` (#349): a `Point` as `M` and two `A`s closed with `Z`, a line as `M` and `L`s, a ring the same closed with `Z`, the parts of multi-geometries, collections and feature collections concatenated into one path, an empty path for a geometry with nothing to draw. Its numbers are the projected coordinates unrounded — `Visualize.IR.Path.to_string/1` formats them (spec/02) — so `render/2` and `path/2` agree to the rounding.
 
 ### 2.3 Measures
 
@@ -120,6 +126,7 @@ Vertices whose projection is `nil` are dropped from lines and rings; lines are n
 | `Visualize.Geo.Path.projection/2` | Sets the projection. |
 | `Visualize.Geo.Path.point_radius/2` | Sets the point circle radius. |
 | `Visualize.Geo.Path.render/2` | SVG path data for a GeoJSON object (2.2). |
+| `Visualize.Geo.Path.path/2` | The GeoJSON object as a `Visualize.IR.Path` (2.2). |
 | `Visualize.Geo.Path.area/2` | Projected planar area (2.3). |
 | `Visualize.Geo.Path.bounds/2` | `[x0, y0, x1, y1]` of projected vertices or `nil`. |
 | `Visualize.Geo.Path.centroid/2` | Mean of projected vertices as `{x, y}` or `nil`. |

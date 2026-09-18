@@ -27,6 +27,7 @@ defmodule Visualize.Geo.Path do
   """
 
   alias Visualize.Geo.Projection
+  alias Visualize.IR
 
   defstruct projection: nil,
             point_radius: 4.5,
@@ -63,7 +64,17 @@ defmodule Visualize.Geo.Path do
   """
   @spec render(t(), map()) :: String.t()
   def render(%__MODULE__{} = geo_path, geojson) do
-    render_geojson(geo_path, geojson)
+    geo_path |> parts(geojson) |> Enum.map_join(&render_part/1)
+  end
+
+  @doc """
+  The GeoJSON object as a `Visualize.IR.Path` (spec/07 §2.2): the same walk as `render/2`,
+  its numbers the projected coordinates unrounded, and an empty path for a geometry with
+  nothing to draw.
+  """
+  @spec path(t(), map()) :: IR.Path.t()
+  def path(%__MODULE__{} = geo_path, geojson) do
+    geo_path |> parts(geojson) |> Enum.reduce(IR.Path.new(), &path_part/2)
   end
 
   @doc """
@@ -111,220 +122,68 @@ defmodule Visualize.Geo.Path do
   end
 
   # ============================================
-  # GeoJSON Rendering
+  # The walk (spec/07 §2.2)
   # ============================================
 
-  defp render_geojson(geo_path, %{"type" => "FeatureCollection", "features" => features}) do
-    features
-    |> Enum.map(&render_geojson(geo_path, &1))
-    |> Enum.join()
+  # A GeoJSON object as the parts a path is drawn from, every vertex projected: a point
+  # (its centre and radius), a line and a ring (their vertices, in order, the clipped ones
+  # dropped). `render/2` and `path/2` serialise the same parts, and the measures read
+  # their vertices.
+  defp parts(geo_path, %{"type" => "FeatureCollection", "features" => features}) do
+    Enum.flat_map(features, &parts(geo_path, &1))
   end
 
-  defp render_geojson(geo_path, %{"type" => "Feature", "geometry" => geometry}) do
-    render_geometry(geo_path, geometry)
+  defp parts(geo_path, %{"type" => "Feature", "geometry" => geometry}) do
+    geometry_parts(geo_path, geometry)
   end
 
-  defp render_geojson(geo_path, %{"type" => type} = geometry) when type != "Feature" do
-    render_geometry(geo_path, geometry)
+  defp parts(geo_path, %{"type" => type} = geometry) when type != "Feature" do
+    geometry_parts(geo_path, geometry)
   end
 
-  defp render_geojson(_, _), do: ""
+  defp parts(_, _), do: []
 
-  defp render_geometry(_, nil), do: ""
+  defp geometry_parts(_, nil), do: []
 
-  defp render_geometry(geo_path, %{"type" => "Point", "coordinates" => coords}) do
-    render_point(geo_path, coords)
-  end
-
-  defp render_geometry(geo_path, %{"type" => "MultiPoint", "coordinates" => points}) do
-    points
-    |> Enum.map(&render_point(geo_path, &1))
-    |> Enum.join()
-  end
-
-  defp render_geometry(geo_path, %{"type" => "LineString", "coordinates" => coords}) do
-    render_line(geo_path, coords)
-  end
-
-  defp render_geometry(geo_path, %{"type" => "MultiLineString", "coordinates" => lines}) do
-    lines
-    |> Enum.map(&render_line(geo_path, &1))
-    |> Enum.join()
-  end
-
-  defp render_geometry(geo_path, %{"type" => "Polygon", "coordinates" => rings}) do
-    render_polygon(geo_path, rings)
-  end
-
-  defp render_geometry(geo_path, %{"type" => "MultiPolygon", "coordinates" => polygons}) do
-    polygons
-    |> Enum.map(&render_polygon(geo_path, &1))
-    |> Enum.join()
-  end
-
-  defp render_geometry(geo_path, %{"type" => "GeometryCollection", "geometries" => geometries}) do
-    geometries
-    |> Enum.map(&render_geometry(geo_path, &1))
-    |> Enum.join()
-  end
-
-  defp render_geometry(_, _), do: ""
-
-  # Render a point as a circle
-  defp render_point(%{projection: nil} = geo_path, [x, y | _]) do
-    r = geo_path.point_radius
-    circle_path(x, y, r)
-  end
-
-  defp render_point(%{projection: proj} = geo_path, [lon, lat | _]) do
-    case Projection.project(proj, lon, lat) do
-      nil ->
-        ""
-
-      {x, y} ->
-        r = geo_path.point_radius
-        circle_path(x, y, r)
-    end
-  end
-
-  defp circle_path(cx, cy, r) do
-    "M#{cx - r},#{cy}A#{r},#{r},0,1,1,#{cx + r},#{cy}A#{r},#{r},0,1,1,#{cx - r},#{cy}Z"
-  end
-
-  # Render a line string
-  defp render_line(%{projection: nil}, coords) do
-    render_line_coords(coords)
-  end
-
-  defp render_line(%{projection: proj}, coords) do
-    projected =
-      coords
-      |> Enum.map(fn [lon, lat | _] -> Projection.project(proj, lon, lat) end)
-      |> Enum.filter(& &1)
-
-    render_line_coords(projected)
-  end
-
-  defp render_line_coords([]), do: ""
-
-  defp render_line_coords([{x0, y0} | rest]) do
-    start = "M#{format_num(x0)},#{format_num(y0)}"
-
-    lines =
-      rest
-      |> Enum.map(fn {x, y} -> "L#{format_num(x)},#{format_num(y)}" end)
-      |> Enum.join()
-
-    start <> lines
-  end
-
-  defp render_line_coords([[x0, y0 | _] | rest]) do
-    start = "M#{format_num(x0)},#{format_num(y0)}"
-
-    lines =
-      rest
-      |> Enum.map(fn [x, y | _] -> "L#{format_num(x)},#{format_num(y)}" end)
-      |> Enum.join()
-
-    start <> lines
-  end
-
-  # Render a polygon (with holes)
-  defp render_polygon(%{projection: nil}, rings) do
-    rings
-    |> Enum.map(&render_ring_coords/1)
-    |> Enum.join()
-  end
-
-  defp render_polygon(%{projection: proj}, rings) do
-    rings
-    |> Enum.map(fn ring ->
-      projected =
-        ring
-        |> Enum.map(fn [lon, lat | _] -> Projection.project(proj, lon, lat) end)
-        |> Enum.filter(& &1)
-
-      render_ring_coords(projected)
-    end)
-    |> Enum.join()
-  end
-
-  defp render_ring_coords([]), do: ""
-
-  defp render_ring_coords([{x0, y0} | rest]) do
-    start = "M#{format_num(x0)},#{format_num(y0)}"
-
-    lines =
-      rest
-      |> Enum.map(fn {x, y} -> "L#{format_num(x)},#{format_num(y)}" end)
-      |> Enum.join()
-
-    start <> lines <> "Z"
-  end
-
-  defp render_ring_coords([[x0, y0 | _] | rest]) do
-    start = "M#{format_num(x0)},#{format_num(y0)}"
-
-    lines =
-      rest
-      |> Enum.map(fn [x, y | _] -> "L#{format_num(x)},#{format_num(y)}" end)
-      |> Enum.join()
-
-    start <> lines <> "Z"
-  end
-
-  # ============================================
-  # Point Collection
-  # ============================================
-
-  defp collect_points(geo_path, %{"type" => "FeatureCollection", "features" => features}) do
-    Enum.flat_map(features, &collect_points(geo_path, &1))
-  end
-
-  defp collect_points(geo_path, %{"type" => "Feature", "geometry" => geometry}) do
-    collect_geometry_points(geo_path, geometry)
-  end
-
-  defp collect_points(geo_path, %{"type" => type} = geometry) when type != "Feature" do
-    collect_geometry_points(geo_path, geometry)
-  end
-
-  defp collect_points(_, _), do: []
-
-  defp collect_geometry_points(_, nil), do: []
-
-  defp collect_geometry_points(geo_path, %{"type" => "Point", "coordinates" => coords}) do
-    project_coord(geo_path, coords)
-  end
-
-  defp collect_geometry_points(geo_path, %{"type" => "MultiPoint", "coordinates" => points}) do
-    Enum.flat_map(points, &project_coord(geo_path, &1))
-  end
-
-  defp collect_geometry_points(geo_path, %{"type" => "LineString", "coordinates" => coords}) do
-    Enum.flat_map(coords, &project_coord(geo_path, &1))
-  end
-
-  defp collect_geometry_points(geo_path, %{"type" => "MultiLineString", "coordinates" => lines}) do
-    lines |> Enum.flat_map(fn line -> Enum.flat_map(line, &project_coord(geo_path, &1)) end)
-  end
-
-  defp collect_geometry_points(geo_path, %{"type" => "Polygon", "coordinates" => rings}) do
-    rings |> Enum.flat_map(fn ring -> Enum.flat_map(ring, &project_coord(geo_path, &1)) end)
-  end
-
-  defp collect_geometry_points(geo_path, %{"type" => "MultiPolygon", "coordinates" => polygons}) do
-    polygons
-    |> Enum.flat_map(fn polygon ->
-      Enum.flat_map(polygon, fn ring -> Enum.flat_map(ring, &project_coord(geo_path, &1)) end)
+  defp geometry_parts(geo_path, %{"type" => "Point", "coordinates" => coords}) do
+    Enum.map(project_coord(geo_path, coords), fn {x, y} ->
+      {:point, x, y, geo_path.point_radius}
     end)
   end
 
-  defp collect_geometry_points(geo_path, %{"type" => "GeometryCollection", "geometries" => geoms}) do
-    Enum.flat_map(geoms, &collect_geometry_points(geo_path, &1))
+  defp geometry_parts(geo_path, %{"type" => "MultiPoint", "coordinates" => points}) do
+    Enum.flat_map(points, &geometry_parts(geo_path, %{"type" => "Point", "coordinates" => &1}))
   end
 
-  defp collect_geometry_points(_, _), do: []
+  defp geometry_parts(geo_path, %{"type" => "LineString", "coordinates" => coords}) do
+    [{:line, vertices(geo_path, coords)}]
+  end
+
+  defp geometry_parts(geo_path, %{"type" => "MultiLineString", "coordinates" => lines}) do
+    Enum.map(lines, &{:line, vertices(geo_path, &1)})
+  end
+
+  defp geometry_parts(geo_path, %{"type" => "Polygon", "coordinates" => rings}) do
+    Enum.map(rings, &{:ring, vertices(geo_path, &1)})
+  end
+
+  defp geometry_parts(geo_path, %{"type" => "MultiPolygon", "coordinates" => polygons}) do
+    Enum.flat_map(polygons, fn rings -> Enum.map(rings, &{:ring, vertices(geo_path, &1)}) end)
+  end
+
+  defp geometry_parts(geo_path, %{"type" => "GeometryCollection", "geometries" => geometries}) do
+    Enum.flat_map(geometries, &geometry_parts(geo_path, &1))
+  end
+
+  # The whole globe: the projection's outline (spec/07 §1.6), nothing without one.
+  defp geometry_parts(%{projection: nil}, %{"type" => "Sphere"}), do: []
+
+  defp geometry_parts(%{projection: proj}, %{"type" => "Sphere"}),
+    do: [{:ring, Projection.sphere(proj)}]
+
+  defp geometry_parts(_, _), do: []
+
+  defp vertices(geo_path, coords), do: Enum.flat_map(coords, &project_coord(geo_path, &1))
 
   defp project_coord(%{projection: nil}, [x, y | _]), do: [{x, y}]
 
@@ -333,6 +192,59 @@ defmodule Visualize.Geo.Path do
       nil -> []
       point -> [point]
     end
+  end
+
+  # -- as a string: numbers rounded to 3 decimals (spec/07 §2.2) --
+
+  defp render_part({:point, cx, cy, r}) do
+    "M#{cx - r},#{cy}A#{r},#{r},0,1,1,#{cx + r},#{cy}A#{r},#{r},0,1,1,#{cx - r},#{cy}Z"
+  end
+
+  defp render_part({:line, points}), do: render_points(points)
+  defp render_part({:ring, []}), do: ""
+  defp render_part({:ring, points}), do: render_points(points) <> "Z"
+
+  defp render_points([]), do: ""
+
+  defp render_points([{x0, y0} | rest]) do
+    "M#{format_num(x0)},#{format_num(y0)}" <>
+      Enum.map_join(rest, fn {x, y} -> "L#{format_num(x)},#{format_num(y)}" end)
+  end
+
+  # -- as an IR path: the coordinates as they are --
+
+  defp path_part({:point, cx, cy, r}, path) do
+    path
+    |> IR.Path.move_to(cx - r, cy)
+    |> IR.Path.arc_to(r, r, 0, 1, 1, cx + r, cy)
+    |> IR.Path.arc_to(r, r, 0, 1, 1, cx - r, cy)
+    |> IR.Path.close()
+  end
+
+  defp path_part({:line, points}, path), do: path_points(path, points)
+  defp path_part({:ring, []}, path), do: path
+  defp path_part({:ring, points}, path), do: path |> path_points(points) |> IR.Path.close()
+
+  defp path_points(path, []), do: path
+
+  defp path_points(path, [{x0, y0} | rest]) do
+    Enum.reduce(rest, IR.Path.move_to(path, x0, y0), fn {x, y}, acc ->
+      IR.Path.line_to(acc, x, y)
+    end)
+  end
+
+  # ============================================
+  # Point Collection
+  # ============================================
+
+  # Every projected vertex of the object, a point's centre for a point part.
+  defp collect_points(geo_path, geojson) do
+    geo_path
+    |> parts(geojson)
+    |> Enum.flat_map(fn
+      {:point, x, y, _r} -> [{x, y}]
+      {_line_or_ring, points} -> points
+    end)
   end
 
   # ============================================

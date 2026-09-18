@@ -274,6 +274,63 @@ defmodule Visualize.Geo.Projection do
   end
 
   @doc """
+  The projection's outline as a closed list of `{x, y}` pixel points (spec/07 §1.6): the
+  sphere of d3-geo's `{type: "Sphere"}`.
+
+  With a `clip_angle` it is the small circle at that angular distance from the centre,
+  taken in the rotated and centred frame so `rotate` and `center` turn the globe under it,
+  at 360 bearings and projected without the clip test; without one it is the map's edge —
+  the antimeridian on either side and the two poles, sampled every degree, at latitude ±85
+  for the Mercators and ±90 otherwise. A point the raw projection cannot place is dropped.
+  """
+  @spec sphere(t()) :: [{float(), float()}]
+  def sphere(%__MODULE__{} = proj) do
+    proj
+    |> outline()
+    |> Enum.map(fn {lon, lat} -> raw(proj, lon, lat) end)
+    |> Enum.reject(&is_nil/1)
+    |> close()
+  end
+
+  # The small circle of radius `clip_angle` about the centre, by bearing.
+  defp outline(%{clip_angle: c} = _proj) when is_number(c) and c < 180 do
+    c = c * @deg_to_rad
+
+    for bearing <- 0..359 do
+      b = bearing * @deg_to_rad
+      lat = :math.asin(sin(c) * cos(b))
+      lon = :math.atan2(sin(b) * sin(c), cos(c))
+      {lon / @deg_to_rad, lat / @deg_to_rad}
+    end
+  end
+
+  # The map's edge: up the western antimeridian, across the north pole, down the eastern
+  # antimeridian and back across the south pole.
+  defp outline(proj) do
+    top = if proj.type in [:mercator, :transverse_mercator], do: 85, else: 90
+
+    Enum.map(-top..top//1, &{-180, &1}) ++
+      Enum.map(-179..179//1, &{&1, top}) ++
+      Enum.map(top..-top//-1, &{180, &1}) ++
+      Enum.map(179..-179//-1, &{&1, -top})
+  end
+
+  # The raw projection of a point already rotated and centred, scaled and translated.
+  defp raw(proj, lon, lat) do
+    case family(proj.type).project(proj.type, lon, lat, proj) do
+      nil ->
+        nil
+
+      {x, y} ->
+        {tx, ty} = proj.translate
+        {x * proj.scale + tx, -y * proj.scale + ty}
+    end
+  end
+
+  defp close([]), do: []
+  defp close([first | _] = points), do: points ++ [first]
+
+  @doc """
   Fits the projection to the specified extent for the given GeoJSON bounds.
 
   extent is [[x0, y0], [x1, y1]] in pixels

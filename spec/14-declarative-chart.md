@@ -463,7 +463,7 @@ A `:transform` node has `op` (`{:enum, ops}`, `:binding`, required) and the keys
 
 | Key | Type | Facet | Read by |
 |---|---|---|---|
-| `field` | `:field` | `:binding` | `:bin`, `:sum`, `:sort`, `:contour` (the value); the hierarchies (the value summed); `:chord`, `:sankey` (the flow's value); `:density` (the weight) |
+| `field` | `:field` | `:binding` | `:bin`, `:sum`, `:sort`, `:contour` (the value); the hierarchies (the value summed); `:chord`, `:sankey` (the flow's value); `:density` (the weight); `:projection` (the geometry, in place of `fields`) |
 | `fields` | `{:list, :field}` | `:binding` | `:stack` (the series); `:fold` (the columns to fold, those the rows have); `:chord`, `:sankey`, `:force` (`[source, target]`); `:delaunay`, `:voronoi`, `:density` (`[x, y]`); `:projection` (`[longitude, latitude]`) |
 | `by` | `:field` | `:binding` | `:sum` (the group), the hierarchies (the parent) |
 | `id` | `:field` | `:binding` | the hierarchies (the node identifier) |
@@ -511,7 +511,7 @@ The ops are `:filter`, `:bin`, `:stack`, `:fold`, `:sum`, `:sort`, `:tree`, `:cl
 
 `:delaunay`, `:voronoi` and `:density` read pixel coordinates from `fields: [x, y]` (required); a `nil` coordinate drops the datum. They run after a `:projection` step, or a `:force`, or over columns already in pixels, and never through a scale.
 
-- `:projection` — `fields: [longitude, latitude]` required; the projection is the frame's (`projection:` of `Visualize.Chart.Transform.apply/3`), and a pipeline without one raises `ArgumentError`. Each row gains `x` and `y` from `Visualize.Geo.Projection.project/3`; a point the projection clips is dropped.
+- `:projection` — the projection is the frame's (`projection:` of `Visualize.Chart.Transform.apply/3`), and a pipeline without one raises `ArgumentError`. With `fields: [longitude, latitude]` each row is a point: it gains `x` and `y` from `Visualize.Geo.Projection.project/3`, and a point the projection clips is dropped. With `field` (#349) each row holds a GeoJSON geometry or feature under that column — a map as `Visualize.Geo.Path` reads it (spec/07 §2.1), `%{"type" => "Sphere"}` included — and gains `path`, the projected outline as a `Visualize.IR.Path` from `Visualize.Geo.Path.path/2`, and `x`, `y`, its centroid from `Visualize.Geo.Path.centroid/2`; a row whose geometry projects to nothing is dropped. One of the two keys is required and the validator reports a step with neither as `fields` `:required`; a step with both is reported as `field` `{:invalid_for, :projection}`. Clipping is the projection's own (spec/07 §1.5): the orthographic drops the far hemisphere and a pseudo-cylindrical map ends at the antimeridian, so a design draws no `clipPath`.
 - `:delaunay` — `Visualize.Geo.Delaunay.new/1` over the points. `output: :triangles` (the default) yields one row per triangle in construction order: `index`, `vertices` (the three point indices, counter-clockwise) and `path`, the closed triangle; `output: :hull` one row, `path`, the closed hull (an empty path for fewer than three points).
 - `:voronoi` — `Visualize.Geo.Voronoi.new/1` over the points, bounded by `[0, 0, width, height]`. `output: :cells` (the default) yields one row per point in input order: the datum's columns plus `index` and `path`, the closed clipped cell (`Visualize.Geo.Voronoi.cell/2`; an empty path for a site without a cell); `output: :edges` one row per finite edge: `x0`, `y0`, `x1`, `y1` and `path`.
 - `:contour` — `field` required, read from every row in row-major order over the grid `size: [columns, rows]` (required); `thresholds` (`10`). `Visualize.Contour.compute/2` with smoothing on; one row per ring — a polygon of a threshold's `MultiPolygon` — in threshold order: `value` and `path`, the ring closed with `Z`, its grid coordinates scaled so that the grid's `columns − 1` by `rows − 1` cells span the plot area.
@@ -1239,7 +1239,7 @@ The transform appenders, one per op of §5.4 (`Visualize.Chart.Schema.transform_
 | `Visualize.Chart.Build.voronoi/2` | As `voronoi/3` with no options. |
 | `Visualize.Chart.Build.voronoi/3` | `voronoi(data, fields, opts)`: a `:voronoi` step appended to the data node (§5.4) — `opts` are `size`, `output`. |
 | `Visualize.Chart.Build.projection/2` | As `projection/3` with no options. |
-| `Visualize.Chart.Build.projection/3` | `projection(data, fields, opts)`: a `:projection` step appended to the data node (§5.4). |
+| `Visualize.Chart.Build.projection/3` | `projection(data, fields, opts)`: a `:projection` step appended to the data node (§5.4) — `fields` the point columns, or `nil` with `field:` in `opts` for a geometry column (§5.4.4). |
 
 The scale functions, one per kind of §4.3. The name carries the `_scale` suffix because a kind and a mark type may spell the same word: `band` is both.
 
