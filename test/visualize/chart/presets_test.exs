@@ -205,6 +205,15 @@ defmodule Visualize.Chart.PresetsTest do
     assert hd(horizontal.marks).data.transforms |> hd() |> Map.fetch!(:orientation) == :horizontal
     assert Enum.at(horizontal.marks, 1).channels == %{x: :y, y: :x}
 
+    # The links are open cubics: stroked, never filled and closed by their chord (#345).
+    assert tree.styles.link.fill == :none
+
+    {:ok, applied} =
+      Chart.apply(tree, sources: Presets.sources(:tree_diagram, %{data: @hierarchy}))
+
+    [link_group] = Regex.run(~r/<g class="mark mark-path"[^>]*>/, Chart.render(applied))
+    assert link_group =~ ~s(fill="none")
+
     treemap = Presets.treemap_chart(assigns().treemap_chart)
 
     assert [%{data: %{transforms: [%{op: :treemap}, leaves]}}] = treemap.marks
