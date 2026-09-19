@@ -1,10 +1,13 @@
 # The gates every change to visualize passes (spec/12 §4). `scripts/check.exs`, run as
 # `mix vis.check`, is the local mirror of this file: every job here, in this order.
 #
-# Compiled dependencies come from the depdep store (scripts/depdep.exs): `--pull` runs
-# BEFORE `mix deps.get`, because fetching source first gives it fresh mtimes and Mix then
-# rebuilds everything it just restored. `--push` runs only after a green build. Without the
-# DEPDEP_* variables depdep is a no-op that exits 0.
+# Compiled dependencies come from the depdep store (scripts/depdep.exs): one `--pull
+# --mix-get --compile-deps` line runs the pull, `mix deps.get` inside it (fetching source
+# first would give it fresh mtimes and Mix would rebuild what was just restored), a second
+# decision once the source is on disk, and a compile of exactly what the store lacked.
+# `--push` runs only after a green build. The library jobs exclude the examples member,
+# which the examples job pulls and pushes itself (#342, #343). Without the DEPDEP_*
+# variables depdep is a no-op that exits 0.
 #
 # The private git dependencies (surfex, extla, depdep itself) are reached with the job token
 # through the two `insteadOf` rewrites below. This only works because dco-tek/visualize is
@@ -39,10 +42,9 @@ default:
     - git config --global --add url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
     - mix local.hex --force
     - mix local.rebar --force
-    # A store that cannot be reached must not fail the build: fall back to compiling.
-    # (No colon inside the message: a `: ` in a plain scalar makes the item a YAML mapping.)
-    - elixir scripts/depdep.exs --pull || echo "depdep bootstrap failed - compiling dependencies from source"
-    - mix deps.get
+    # A store that cannot be reached must not fail the build: fall back to a bare deps.get.
+    # With --mix-get, mix deps.get's own failure is this line's failure, as it was before.
+    - elixir scripts/depdep.exs --pull --mix-get --compile-deps --exclude examples || mix deps.get
   cache:
     key:
       files:
@@ -62,7 +64,7 @@ compile:
   stage: check
   script:
     - mix compile --force --warnings-as-errors
-    - elixir scripts/depdep.exs --push || echo "depdep bootstrap failed - nothing pushed"
+    - elixir scripts/depdep.exs --push --exclude examples || echo "depdep bootstrap failed - nothing pushed"
 
 test:
   extends: .elixir
@@ -124,9 +126,12 @@ examples:test:
     MIX_ENV: test
   script:
     - cd examples
-    - mix deps.get
+    # The examples member's dependencies, pulled from the store and pushed after a green
+    # run by the one job that builds them (#342).
+    - elixir ../scripts/depdep.exs --pull --mix-get --compile-deps || mix deps.get
     - mix compile --warnings-as-errors
     - mix test --warnings-as-errors
+    - elixir ../scripts/depdep.exs --push || echo "depdep bootstrap failed - nothing pushed"
 
 credo:
   extends: .elixir
