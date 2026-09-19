@@ -80,6 +80,10 @@ defmodule ExamplesWeb.ChartLive do
           palette_info: palette_info,
           animating: false,
           animation_tick: 0,
+          # A design that eases a scale animates through a compiled chart kept here, its
+          # frame rendered on each tick (#360); nil for any other chart or while still.
+          page_compiled: nil,
+          page_svg: nil,
           animatable: chart_slug in @animatable_charts,
           is_time_series: chart_slug in @time_series_charts,
           backend: :svg,
@@ -116,15 +120,15 @@ defmodule ExamplesWeb.ChartLive do
       "dark" -> :dark
       _ -> :default
     end
-    {:noreply, assign(socket, current_palette: palette)}
+    {:noreply, assign(socket, current_palette: palette, page_compiled: nil, page_svg: nil)}
   end
 
   def handle_event("toggle_animation", _params, socket) do
     if socket.assigns.animating do
-      {:noreply, assign(socket, animating: false)}
+      {:noreply, assign(socket, animating: false, page_compiled: nil, page_svg: nil)}
     else
       schedule_animation()
-      {:noreply, assign(socket, animating: true, animation_tick: 0)}
+      {:noreply, socket |> assign(animating: true, animation_tick: 0) |> page_frame()}
     end
   end
 
@@ -306,11 +310,27 @@ defmodule ExamplesWeb.ChartLive do
   def handle_info(:animate_tick, socket) do
     if socket.assigns.animating do
       schedule_animation()
-      {:noreply, assign(socket, animation_tick: socket.assigns.animation_tick + 1)}
+      {:noreply, socket |> assign(animation_tick: socket.assigns.animation_tick + 1) |> page_frame()}
     else
       {:noreply, socket}
     end
   end
+
+  # The page's animated SVG frame for a design that eases a scale (#360): its compiled
+  # chart, kept across ticks and rebuilt on a palette change, stepped at this tick's rows.
+  defp page_frame(%{assigns: %{backend: :svg, module: module} = assigns} = socket) do
+    if Design.transitions?(module) do
+      opts = build_chart_opts(assigns.current_palette, assigns.animation_tick, true, assigns.slug, assigns.hex_radius)
+      compiled = assigns.page_compiled || Frames.prepare(module, opts, :svg).compiled
+      {_design, sources} = module.design(opts)
+      {svg, compiled} = Design.step(module, compiled, sources, [])
+      assign(socket, page_compiled: compiled, page_svg: svg)
+    else
+      socket
+    end
+  end
+
+  defp page_frame(socket), do: socket
 
   defp schedule_animation do
     Process.send_after(self(), :animate_tick, @animation_interval)
@@ -534,7 +554,7 @@ defmodule ExamplesWeb.ChartLive do
             <% end %>
           <% else %>
           <%= if @backend == :svg do %>
-            <%= Phoenix.HTML.raw(render_chart_svg(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius)) %>
+            <%= Phoenix.HTML.raw((@animating && @page_svg) || render_chart_svg(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius)) %>
           <% else %>
             <%!-- Canvas mode is the hybrid split (spec/14 §12.6, #268): the marks on a binary canvas under the furniture as SVG. --%>
             <% hybrid = render_chart_hybrid(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius) %>

@@ -42,7 +42,7 @@ defmodule Visualize.Chart.Compiled do
   alias Visualize.Backend.{CanvasBinary, Hybrid}
   alias Visualize.{Chart, Render, Theme}
   alias Visualize.Chart.{Applied, Frame, Mark}
-  alias Visualize.Chart.Compiled.{Regions, Window}
+  alias Visualize.Chart.Compiled.{Regions, Transition, Window}
   alias Visualize.Chart.Frame.{Defs, Furniture}
   alias Visualize.IR.{Element, Transform}
 
@@ -62,7 +62,9 @@ defmodule Visualize.Chart.Compiled do
     :margin,
     :plot,
     :viewport,
-    defs: []
+    defs: [],
+    transitions: %{},
+    eased: %{}
   ]
 
   @typedoc "A render target of spec/14 §12.3."
@@ -106,7 +108,9 @@ defmodule Visualize.Chart.Compiled do
           size: %{width: number(), height: number()},
           margin: %{top: number(), right: number(), bottom: number(), left: number()},
           plot: %{width: number(), height: number()},
-          viewport: map() | nil
+          viewport: map() | nil,
+          transitions: %{atom() => map()},
+          eased: %{atom() => map()}
         }
 
   @doc false
@@ -140,7 +144,8 @@ defmodule Visualize.Chart.Compiled do
       size: frame.size,
       margin: frame.margin,
       plot: frame.plot,
-      viewport: window && Map.put(window, :full, stale?(chart, window.scale, targets))
+      viewport: window && Map.put(window, :full, stale?(chart, window.scale, targets)),
+      transitions: Transition.scales(chart, window && window.scale)
     }
 
     # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
@@ -219,6 +224,39 @@ defmodule Visualize.Chart.Compiled do
     |> Render.to_string(backend: :svg)
   end
 
+  @doc """
+  One frame of the one-string form with the state after it (spec/14 §12.5, #360): the
+  frame's group of `svg/2` as a `Visualize.IR.Element`, its eased scales at their shown
+  domains for this tick, and the compiled chart carrying the easing on. `:now` and `:at`
+  as `tick/3` takes them. A caller that wants a page-ready document wraps it in
+  `Visualize.IR.Element.root/3`.
+  """
+  @spec step(t(), map(), keyword()) :: {Element.t(), t()}
+  def step(%__MODULE__{margin: margin} = compiled, sources, opts \\ []) when is_map(sources) do
+    {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
+    {frame, compiled} = ease(compiled, frame, opts)
+    children = layer(compiled, drawn(compiled, frame, sources, hi), :svg, true)
+
+    group =
+      Element.group(compiled.defs ++ children,
+        style: %{class: "frame"},
+        transform: Transform.translate(margin.left, margin.top)
+      )
+
+    {group, compiled}
+  end
+
+  # The frame at its eased scales' shown domains, and the chart carrying the states on;
+  # nothing to do for a chart with no transition.
+  defp ease(%{transitions: transitions} = compiled, frame, _opts) when map_size(transitions) == 0,
+    do: {frame, compiled}
+
+  defp ease(%{transitions: transitions, eased: eased} = compiled, frame, opts) do
+    at = Keyword.get_lazy(opts, :at, fn -> System.monotonic_time(:millisecond) end)
+    {frame, eased} = Transition.apply(frame, transitions, eased, at)
+    {frame, %{compiled | eased: eased}}
+  end
+
   @doc "As `tick/3` with `[]` options."
   @spec tick(t(), map()) :: {payload(), t()}
   def tick(%__MODULE__{} = compiled, sources), do: tick(compiled, sources, [])
@@ -237,10 +275,13 @@ defmodule Visualize.Chart.Compiled do
 
     * `:now` - the window's upper end for a viewport design; by default the newest
       value the marks bind to the viewport scale
+    * `:at` - the clock in milliseconds a scale's transition eases by (spec/14 §12.5);
+      by default `System.monotonic_time(:millisecond)`
   """
   @spec tick(t(), map(), keyword()) :: {payload(), t()}
   def tick(%__MODULE__{} = compiled, sources, opts) when is_map(sources) do
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
+    {frame, compiled} = ease(compiled, frame, opts)
     drawn = drawn(compiled, frame, sources, hi)
     svg = fragment(compiled, layer(compiled, drawn, :dynamic_svg, false))
     format = format(compiled)

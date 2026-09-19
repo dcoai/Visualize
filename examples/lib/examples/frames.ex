@@ -61,7 +61,15 @@ defmodule Examples.Frames do
     }
   end
 
-  def prepare(_module, _opts, :svg), do: nil
+  # A design that eases a scale keeps its compiled chart on SVG too, so the easing has a
+  # state to live in (spec/14 §12.5, #360); any other chart renders whole per frame.
+  def prepare(module, opts, :svg) do
+    if Design.transitions?(module) do
+      applied = Design.applied(module, opts)
+      {:ok, compiled} = Chart.compile(applied, ceiling: 1_000_000_000)
+      %{compiled: compiled}
+    end
+  end
 
   @doc "The static SVG a prepared state carries, or an empty string."
   @spec static(map() | nil) :: String.t()
@@ -70,18 +78,16 @@ defmodule Examples.Frames do
 
   @doc "A frame of `module` at `opts` on `backend`, and the state after it."
   @spec frame(module(), keyword(), backend(), map() | nil) :: {frame(), map() | nil}
-  def frame(module, opts, :svg, state) do
-    svg = Design.render(module, opts)
+  # A design that eases a scale steps its compiled chart (#360); any other renders whole.
+  def frame(module, opts, :svg, %{compiled: compiled} = state) do
     {_design, sources} = module.design(opts)
+    {svg, compiled} = Design.step(module, compiled, sources, Keyword.take(opts, [:now, :at]))
+    {svg_frame(svg, sources), %{state | compiled: compiled}}
+  end
 
-    {%{
-       svg: svg,
-       canvas: nil,
-       incremental: nil,
-       dynamic_svg: "",
-       bytes: byte_size(svg),
-       points: rows(sources)
-     }, state}
+  def frame(module, opts, :svg, state) do
+    {_design, sources} = module.design(opts)
+    {svg_frame(Design.render(module, opts), sources), state}
   end
 
   # The compiled chart ticked: `now:` from the opts for a streaming design, so the
@@ -100,6 +106,17 @@ defmodule Examples.Frames do
        bytes: payload.bytes,
        points: rows(sources)
      }, %{state | compiled: compiled}}
+  end
+
+  defp svg_frame(svg, sources) do
+    %{
+      svg: svg,
+      canvas: nil,
+      incremental: nil,
+      dynamic_svg: "",
+      bytes: byte_size(svg),
+      points: rows(sources)
+    }
   end
 
   defp rows(sources) when is_map(sources) do
