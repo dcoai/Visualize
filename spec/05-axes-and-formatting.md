@@ -234,7 +234,11 @@ Then, as d3's `format`: a negative whose formatted magnitude is all zeros shows 
 
 A `Date` has hour, minute, second and milliseconds `0`. Fields are printed as stored; no conversion between zones takes place.
 
-### 2.9 Functions
+### 2.9 `duration/1`
+
+`duration(seconds)` prints a length of time in the unit its magnitude chooses (#191) — the one thing a fixed specifier cannot express. The units are `d` (86400 s), `h` (3600), `m` (60), `s` and `ms`. The largest unit the value reaches is taken: a whole count prints as it is (`45s`, `2m`, `1h`, `3d`); a count that is whole in the next finer unit prints both (`2m30s`, `1h1m`, `1d1h`); any other prints the count to one decimal with a trailing zero trimmed (`1.5h`, `2.5s`, `0.5ms`). Below one second the unit is `ms`; zero is `0s`; a negative value is the positive one with a leading `−`. The value MUST be a number.
+
+### 2.10 Functions
 
 | Function | Contract |
 |---|---|
@@ -252,3 +256,4 @@ A `Date` has hour, minute, second and milliseconds `0`. Fields are printed as st
 | `Visualize.Format.formatter/1` | Parses a d3-format specifier and returns a formatter function (2.7); raises `ArgumentError` on an invalid one. |
 | `Visualize.Format.time/1` | As `time/2` with format `"%Y-%m-%d"`. |
 | `Visualize.Format.time/2` | One-pass strftime-style formatting of a date/time struct (2.8). |
+| `Visualize.Format.duration/1` | A length of time in seconds in the unit its magnitude chooses (2.9). |
