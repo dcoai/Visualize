@@ -236,7 +236,7 @@ A `Date` has hour, minute, second and milliseconds `0`. Fields are printed as st
 
 ### 2.9 `duration/1`
 
-`duration(seconds)` prints a length of time in the unit its magnitude chooses (#191) — the one thing a fixed specifier cannot express. The units are `d` (86400 s), `h` (3600), `m` (60), `s` and `ms`. The largest unit the value reaches is taken: a whole count prints as it is (`45s`, `2m`, `1h`, `3d`); a count that is whole in the next finer unit prints both (`2m30s`, `1h1m`, `1d1h`); any other prints the count to one decimal with a trailing zero trimmed (`1.5h`, `2.5s`, `0.5ms`). Below one second the unit is `ms`; zero is `0s`; a negative value is the positive one with a leading `−`. The value MUST be a number.
+`duration(seconds)` prints a length of time in the unit its magnitude chooses (#191) — the one thing a fixed specifier cannot express. The units are `d` (86400 s), `h` (3600), `m` (60), `s` and `ms`. The largest unit the value reaches is taken: a whole count prints as it is (`45s`, `2m`, `1h`, `3d`); a count whose remainder is whole in the next finer unit prints both (`2m30s`, `1h30m`, `1d1h`) — among `d`, `h`, `m` and `s` only, seconds never pairing with milliseconds; any other prints the count to one decimal with a trailing zero trimmed (`1.5h` for 5430 s, `2.5s`, `0.5ms`). Below one second the unit is `ms`; zero is `0s`; a negative value is the positive one with a leading `−`. The value MUST be a number.
 
 ### 2.10 Functions
 
