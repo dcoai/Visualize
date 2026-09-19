@@ -1,8 +1,12 @@
 # Depdep bootstrap: restore compiled dependencies from the shared store before
 # `mix deps.get`, and push what was missing after a green build.
 #
-#   elixir scripts/depdep.exs --pull     # before mix deps.get (the order is load-bearing)
-#   elixir scripts/depdep.exs --push     # after the build succeeded
+#   elixir scripts/depdep.exs --pull --mix-get --compile-deps   # the pull, mix deps.get inside it,
+#                                                              # and a compile of what was missing
+#   elixir scripts/depdep.exs --push                           # after the build succeeded
+#
+# `--exclude examples` in the library jobs: the examples member is pulled and pushed by
+# the job that builds it, from examples/ (#342, #343).
 #
 # Depdep lives in a private project, so the URL has to carry credentials, and what is
 # available differs between a developer's machine and a CI container: a developer has an
@@ -14,6 +18,6 @@ url =
     token -> "https://gitlab-ci-token:#{token}@gitlab.conet.yarina.org/dco-tek/depdep.git"
   end
 
-Mix.install([{:depdep, git: url, tag: "v0.3.0"}])
+Mix.install([{:depdep, git: url, tag: "v0.4.0"}])
 
 Depdep.CLI.main(System.argv())
