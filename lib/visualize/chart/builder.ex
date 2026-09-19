@@ -267,15 +267,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       ~H"""
       <div id={@id} class={class("vis-builder", @class)}>
         <Styles.styles :if={@styles} />
-        <div class="vis-builder-toolbar">
-          <form :if={@store} class="vis-builder-new" phx-submit="new_fragment" phx-target={@myself}>
-            <label class="vis-builder-control-label" for={@id <> "-new-kind"}>New</label>
-            <select id={@id <> "-new-kind"} name="kind" class="vis-builder-new-kind">
-              <option :for={kind <- Stack.kinds()} value={kind}>{kind}</option>
-            </select>
-            <button type="submit" class="vis-builder-new-submit">New</button>
-          </form>
-        </div>
         <p :if={@notice} class="vis-builder-notice">{@notice}</p>
         <div class={
           class(
@@ -320,6 +311,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-target={@myself}
               >+</button>
             </h2>
+            <form :if={@store} class="vis-builder-new" phx-submit="new_fragment" phx-target={@myself}>
+              <label class="vis-builder-control-label" for={@id <> "-new-kind"}>New</label>
+              <select id={@id <> "-new-kind"} name="kind" class="vis-builder-new-kind">
+                <option :for={kind <- Stack.kinds()} value={kind}>{kind}</option>
+              </select>
+              <button type="submit" class="vis-builder-new-submit">New</button>
+            </form>
             <ol class="vis-builder-charts">
               <li
                 :for={row <- @chart_rows}
