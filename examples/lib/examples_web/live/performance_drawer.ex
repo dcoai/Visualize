@@ -17,7 +17,10 @@ defmodule ExamplesWeb.PerformanceDrawer do
   attr(:compare, :list, default: nil, doc: "Compare's rows, `Examples.Compare.run/3`")
   attr(:comparing, :boolean, default: false, doc: "whether a comparison is running")
   attr(:ticks, :integer, default: 100, doc: "the ticks Compare runs per backend")
-  attr(:stream, :map, default: nil, doc: "a streaming design's window: `%{samples_per_px, count, span}` (#327), or nil")
+  attr(:stream, :map,
+    default: nil,
+    doc: "a streaming design's window: `%{samples_per_px, count, span, series, points, mode}` (#327, #359), or nil"
+  )
 
   def performance(assigns) do
     assigns = assign(assigns, acks?: Frames.acks?(assigns.backend))
@@ -95,6 +98,10 @@ defmodule ExamplesWeb.PerformanceDrawer do
           <.metric :if={@acks?} value={@run.stalls} label="Stalls" />
           <.metric value={@run.skipped} label="Skipped" />
           <.metric :if={@stream} value={round(@run.measured_rate)} label="Samples/s" />
+          <.metric :if={@stream} value={round(@run.measured_rate * @stream.series)} label="Pts/s" />
+          <.metric :if={@stream} value={@stream.count * @stream.series} label="Total points" />
+          <.metric :if={@stream} value={@stream.points} label="Pts/frame" />
+          <.metric :if={@stream} value={@stream.mode || "—"} label="Mode" />
           <.metric value={Float.round(Run.avg_render_us(@run) / 1000, 2)} label="Render ms" />
           <.metric value={Float.round(@run.payload_size / 1024, 1)} label="Payload KB" />
           <.metric value={@run.frame} label="Frame" />

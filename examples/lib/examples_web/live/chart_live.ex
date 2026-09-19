@@ -87,16 +87,20 @@ defmodule ExamplesWeb.ChartLive do
           # The performance drawer (spec/14 §12.6, #322): a run of this chart on a
           # backend, its frame, the compiled chart's state, and Compare's rows.
           drawer_open: false,
-          run: Run.new(target_fps: 60, data_rate: 0, flow_control: true),
+          # A streaming design starts at 600 samples/s per series, as the High-Performance
+          # page did, with its window at that density from the moment the drawer opens
+          # (#359); any other chart has no rate and no window.
+          run: Run.new(target_fps: 60, data_rate: if(Frames.stream?(module), do: 600, else: 0), flow_control: true),
           run_backend: :svg,
           run_state: nil,
           run_frame: nil,
-          # A streaming design's window (#327): an `Examples.Scroll` at the density the
-          # data rate implies, nil for any other chart
+          run_mode: nil,
           run_scroll: nil,
+          run_series: series(module),
           compare: nil,
           compare_task: nil
-        )}
+        )
+        |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))}
     end
   end
 
@@ -226,19 +230,20 @@ defmodule ExamplesWeb.ChartLive do
         {:noreply, assign(socket, run: run)}
 
       {run, {:draw, columns}} ->
-        # A streaming design's window advances by the columns the samples filled; the
-        # compiled chart then scrolls by exactly those pixels (spec/14 §12.5, §12.6). Any
-        # other chart's frame is the chart at its next animation tick, a full render.
+        # A streaming design's window advances by the columns the samples filled, on every
+        # backend (#359): Incremental scrolls the compiled chart by exactly those pixels
+        # (spec/14 §12.5, §12.6), SVG and Canvas render the full frame of the advanced
+        # window. Any other chart's frame is the chart at its next animation tick.
         incremental? = backend == :incremental and scroll != nil
         size = if scroll, do: {scroll.inner_width, 1}, else: {1, 1}
-        {run, mode} = Run.decide(run, if(incremental?, do: columns, else: 1), incremental?, size, now)
+        {run, mode} = Run.decide(run, if(scroll, do: columns, else: 1), incremental?, size, now)
         socket = assign(socket, run: run)
 
         cond do
           mode == :drop ->
             {:noreply, socket}
 
-          incremental? ->
+          scroll != nil ->
             socket = assign(socket, run_scroll: Examples.Scroll.advance(scroll, columns))
             {:noreply, start_frame(socket, mode)}
 
@@ -261,7 +266,8 @@ defmodule ExamplesWeb.ChartLive do
         now = System.monotonic_time(:millisecond)
         {run, seq} = Run.sending(run, if(frame.incremental, do: incremental_mode(frame), else: :full_redraw))
         run = Run.rendered(run, frame.bytes, now)
-        socket = assign(socket, run: run, run_state: state, run_frame: frame)
+        mode = if frame.incremental, do: frame.incremental.mode, else: "full"
+        socket = assign(socket, run: run, run_state: state, run_frame: frame, run_mode: mode)
 
         cond do
           frame.incremental ->
@@ -359,6 +365,12 @@ defmodule ExamplesWeb.ChartLive do
     build_chart_opts(assigns.current_palette, tick, true, assigns.slug, assigns.hex_radius)
   end
 
+  # The series a streaming design binds — the sources of its design — for the drawer's
+  # point counts; nil for any other chart.
+  defp series(module) do
+    if Frames.stream?(module), do: module.design([]) |> elem(1) |> map_size(), else: nil
+  end
+
   # A streaming design's window at the run's data rate: about five seconds across the plot.
   defp fresh_scroll(%{module: module, run: run}) do
     if Frames.stream?(module) do
@@ -368,9 +380,17 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   # The window a streaming design shows, for the drawer.
-  defp stream_info(%{run_scroll: %Examples.Scroll{} = scroll, run: run}) do
+  defp stream_info(%{run_scroll: %Examples.Scroll{} = scroll, run: run} = assigns) do
     count = Examples.Scroll.count(scroll)
-    %{samples_per_px: scroll.samples_per_px, count: count, span: if(run.data_rate > 0, do: count / run.data_rate, else: 0.0)}
+
+    %{
+      samples_per_px: scroll.samples_per_px,
+      count: count,
+      span: if(run.data_rate > 0, do: count / run.data_rate, else: 0.0),
+      series: assigns.run_series,
+      points: (assigns.run_frame && assigns.run_frame.points) || 0,
+      mode: assigns.run_mode
+    }
   end
 
   defp stream_info(_assigns), do: nil
