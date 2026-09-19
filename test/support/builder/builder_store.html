@@ -95,10 +95,7 @@
     <main class="vis-builder-main">
       <div class="vis-builder-chart-bar">
         <form class="vis-builder-keep" phx-submit="put_design" phx-target="-1">
-          <label class="vis-builder-control-label" for="builder-keep">
-            Save the chart as
-          </label>
-          <input id="builder-keep" type="text" name="name" class="vis-builder-name" value="" placeholder="Group:sub-group:name">
+          <input id="builder-keep" type="text" name="name" class="vis-builder-name" value="" placeholder="Group:sub-group:name" aria-label="save the chart as">
           <button type="submit" class="vis-builder-put">Save to library</button>
         </form>
         <button type="button" class="vis-builder-save" phx-click="save" phx-target="-1">
@@ -107,7 +104,6 @@
         <button type="button" class="vis-builder-deploy" phx-click="deploy" phx-target="-1" title="flatten the stack through the library and hand the host the design">
           Deploy
         </button>
-        <span class="vis-builder-layer-count">3</span>
       </div>
       <div id="builder-graph" class="vis-builder-graph" tabindex="0" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="graph">
         <div class="vis-builder-preview">

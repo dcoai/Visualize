@@ -409,9 +409,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <main class="vis-builder-main">
             <div class="vis-builder-chart-bar">
               <form :if={@store} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
-                <label class="vis-builder-control-label" for={@id <> "-keep"}>
-                  {if @open, do: "Save as", else: "Save the chart as"}
-                </label>
                 <input
                   id={@id <> "-keep"}
                   type="text"
@@ -419,6 +416,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   class="vis-builder-name"
                   value={(@open && @open.name) || ""}
                   placeholder="Group:sub-group:name"
+                  aria-label={if @open, do: "save as", else: "save the chart as"}
                 />
                 <button type="submit" class="vis-builder-put">Save to library</button>
               </form>
@@ -435,7 +433,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
               >
                 Deploy
               </button>
-              <span class="vis-builder-layer-count">{length(@uses)}</span>
             </div>
             <div
               id={@id <> "-graph"}

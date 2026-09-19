@@ -94,7 +94,7 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     # The chart's controls act on the middle column's chart, so they sit at its top
-    # (spec/10 §15.3, #364): the name form, Save, Deploy, the layer count — the toolbar
+    # (spec/10 §15.3, #364): the name form, Save, Deploy — no label, no layer count (#367).
     # keeps New alone.
     test "the chart bar holds the save controls just above the graph; there is no toolbar" do
       html = rendered(:builder_store)
@@ -105,10 +105,12 @@ defmodule Visualize.Chart.BuilderTest do
       assert bar =~ ~s(<div class="vis-builder-chart-bar">)
 
       order =
-        Regex.scan(~r/vis-builder-(keep|save|deploy|layer-count)/, bar) |> Enum.map(&List.last/1)
+        Regex.scan(~r/vis-builder-(keep|save|deploy|layer-count|control-label)/, bar)
+        |> Enum.map(&List.last/1)
 
-      assert order == ~w(keep save deploy layer-count)
-      assert bar =~ ~s(<span class="vis-builder-layer-count">3</span>)
+      assert order == ~w(keep save deploy)
+      refute html =~ "vis-builder-layer-count"
+      assert bar =~ ~s(placeholder="Group:sub-group:name" aria-label="save the chart as">)
       refute graph =~ ~s(vis-builder-chart-bar)
     end
 
@@ -137,7 +139,8 @@ defmodule Visualize.Chart.BuilderTest do
       [_, bar] = String.split(html, ~s(<div class="vis-builder-chart-bar">), parts: 2)
       [bar, _] = String.split(bar, ~s(class="vis-builder-graph"), parts: 2)
 
-      assert bar =~ ~s(Save as\n)
+      assert bar =~ ~s(aria-label="save as">)
+      refute bar =~ "vis-builder-control-label"
       assert bar =~ ~s(class="vis-builder-put")
       refute bar =~ ~s(vis-builder-save)
       refute bar =~ ~s(vis-builder-deploy)
