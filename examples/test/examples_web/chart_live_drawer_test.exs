@@ -52,7 +52,6 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     s = page("line")
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
     assert %Run{running: true, task: %Task{}, flow_control: false} = s.assigns.run
-    refute s.assigns.animating
     s = settled(s)
     assert %Run{frame: 1, sent_seq: 1, task: nil} = s.assigns.run
     assert s.assigns.run_frame.svg =~ "<svg"
@@ -251,21 +250,35 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
     refute s.assigns.run.running
 
-    # The page's own animation keeps a compiled chart and shows its stepped frame.
+    # The page's Animate button is the same run (#362): one frame loop, in a task.
     {:noreply, s} = ChartLive.handle_event("toggle_animation", %{}, s)
-    assert %Visualize.Chart.Compiled{} = s.assigns.page_compiled
-    assert s.assigns.page_svg =~ ~s(class="mark mark-area")
-    {:noreply, s} = ChartLive.handle_info(:animate_tick, s)
-    assert s.assigns.animation_tick == 1 and s.assigns.page_svg =~ "<svg"
-    assert html(s) =~ ~s(class="mark mark-area")
+    assert %Run{running: true, task: %Task{}} = s.assigns.run
+    assert %{compiled: %Visualize.Chart.Compiled{}} = s.assigns.run_state
+    s = settled(s)
+    assert html(s) =~ ~s(class="mark mark-area") and html(s) =~ "Stop Animation"
     {:noreply, s} = ChartLive.handle_event("toggle_animation", %{}, s)
-    assert s.assigns.page_compiled == nil and s.assigns.page_svg == nil
+    refute s.assigns.run.running
+  end
 
-    # A chart with no transition keeps the stateless path.
-    line = page("scrolling_series")
-    refute Examples.Charts.Design.transitions?(Examples.Charts.ScrollingSeries)
-    {:noreply, line} = ChartLive.handle_event("toggle_animation", %{}, line)
-    assert line.assigns.page_compiled == nil
+  test "the still chart is rendered in place on a disconnected mount, and re-rendered on a change; no frame in render/1 (#362)" do
+    s = page("line")
+    assert %{svg: svg} = s.assigns.still_frame
+    assert svg =~ ~s(class="mark mark-line") and s.assigns.still_design =~ "kind: :cartesian"
+    assert html(s) =~ svg
+
+    # A backend change renders the still frame for that backend: the split's layers.
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => "canvas"}, s)
+    assert s.assigns.run_backend == :canvas
+    assert %{canvas: canvas, svg: nil} = s.assigns.still_frame
+    assert is_binary(canvas) and s.assigns.still_state.static =~ "<svg"
+    assert html(s) =~ ~s(phx-hook="CanvasBinaryChart")
+
+    # A palette change re-renders it too; the page's backend buttons are the run's.
+    {:noreply, s} = ChartLive.handle_event("change_palette", %{"palette" => "dark"}, s)
+    assert s.assigns.still_frame.dynamic_svg =~ "#e6e6e6"
+    assert html(s) =~ ~s(phx-value-backend="svg")
+    refute html(s) =~ "Canvas-Incremental"
+    assert html(page("scrolling_series")) =~ "Canvas-Incremental"
   end
 
   test "/high-performance is the Scrolling series chart's page now" do

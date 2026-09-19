@@ -10,7 +10,7 @@ defmodule ExamplesWeb.ChartLiveDesignTest do
 
   defp page(slug, backend) do
     {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
-    s = Phoenix.Component.assign(s, backend: backend)
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => to_string(backend)}, s)
 
     Phoenix.LiveViewTest.rendered_to_string(
       ChartLive.render(Map.put(s.assigns, :__changed__, %{}))

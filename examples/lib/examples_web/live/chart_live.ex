@@ -1,7 +1,6 @@
 defmodule ExamplesWeb.ChartLive do
   use Phoenix.LiveView
 
-  alias Examples.Charts.Design
   alias Examples.ColorPalettes
   alias Examples.{Compare, Frames, Run}
   alias ExamplesWeb.PerformanceDrawer
@@ -55,13 +54,6 @@ defmodule ExamplesWeb.ChartLive do
     "world_map", "globe", "hexbin"
   ]
 
-  # Time-series charts that support incremental canvas rendering
-  @time_series_charts [
-    "line", "multi_line", "area", "stacked_area", "streamgraph", "ridgeline"
-  ]
-
-  @animation_interval 50  # milliseconds between frames (20 fps)
-
   def mount(%{"chart" => chart_slug}, _session, socket) do
     case Map.get(@charts, chart_slug) do
       nil ->
@@ -78,16 +70,14 @@ defmodule ExamplesWeb.ChartLive do
           current_palette: :default,
           palettes: palettes,
           palette_info: palette_info,
-          animating: false,
-          animation_tick: 0,
-          # A design that eases a scale animates through a compiled chart kept here, its
-          # frame rendered on each tick (#360); nil for any other chart or while still.
-          page_compiled: nil,
-          page_svg: nil,
           animatable: chart_slug in @animatable_charts,
-          is_time_series: chart_slug in @time_series_charts,
-          backend: :svg,
           hex_radius: 20,
+          # The still chart (#362): the last frame rendered outside a run — on mount and on
+          # a palette, backend or hex-size change — in a task, with the design as data.
+          still_frame: nil,
+          still_state: nil,
+          still_design: nil,
+          still_task: nil,
           # The performance drawer (spec/14 §12.6, #322): a run of this chart on a
           # backend, its frame, the compiled chart's state, and Compare's rows.
           drawer_open: false,
@@ -107,7 +97,8 @@ defmodule ExamplesWeb.ChartLive do
           compare: nil,
           compare_task: nil
         )
-        |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))}
+        |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))
+        |> still()}
     end
   end
 
@@ -123,27 +114,22 @@ defmodule ExamplesWeb.ChartLive do
       "dark" -> :dark
       _ -> :default
     end
-    {:noreply, assign(socket, current_palette: palette, page_compiled: nil, page_svg: nil)}
+    {:noreply, socket |> assign(current_palette: palette) |> still()}
   end
 
-  def handle_event("toggle_animation", _params, socket) do
-    if socket.assigns.animating do
-      {:noreply, assign(socket, animating: false, page_compiled: nil, page_svg: nil)}
-    else
-      schedule_animation()
-      {:noreply, socket |> assign(animating: true, animation_tick: 0) |> page_frame()}
-    end
-  end
+  # Animate is the drawer's run on the page's backend (#362): one frame loop.
+  def handle_event("toggle_animation", _params, %{assigns: %{run: %Run{running: true}}} = socket),
+    do: handle_event("run_stop", %{}, socket)
+
+  def handle_event("toggle_animation", _params, socket), do: handle_event("run_start", %{}, socket)
 
   def handle_event("change_hex_radius", %{"hex_radius" => radius_str}, socket) do
     radius = String.to_integer(radius_str)
-    {:noreply, assign(socket, hex_radius: radius)}
+    {:noreply, socket |> assign(hex_radius: radius) |> still()}
   end
 
-  def handle_event("set_backend", %{"backend" => backend_str}, socket) do
-    backend = String.to_existing_atom(backend_str)
-    {:noreply, assign(socket, backend: backend)}
-  end
+  # The page's backend buttons and the drawer's are one choice (#362).
+  def handle_event("set_backend", params, socket), do: handle_event("run_backend", params, socket)
 
   # ── the performance drawer ──────────────────────────────────────────────────────────
 
@@ -154,7 +140,7 @@ defmodule ExamplesWeb.ChartLive do
   def handle_event("run_backend", %{"backend" => backend}, %{assigns: %{run: %Run{running: false}}} = socket) do
     backend = String.to_existing_atom(backend)
     true = backend in Frames.backends(socket.assigns.module)
-    {:noreply, assign(socket, run_backend: backend)}
+    {:noreply, socket |> assign(run_backend: backend) |> still()}
   end
 
   def handle_event("run_backend", _params, socket), do: {:noreply, socket}
@@ -181,7 +167,7 @@ defmodule ExamplesWeb.ChartLive do
         System.monotonic_time(:microsecond)
       )
 
-    socket = assign(socket, run: run, run_state: state, run_frame: nil, run_ticks: 0, animating: false)
+    socket = assign(socket, run: run, run_state: state, run_frame: nil, run_ticks: 0)
     {:noreply, socket |> start_frame() |> schedule_run()}
   end
 
@@ -195,7 +181,7 @@ defmodule ExamplesWeb.ChartLive do
   def handle_event("run_data_rate", _params, socket), do: {:noreply, socket}
 
   def handle_event("run_stop", _params, socket) do
-    {:noreply, socket |> update(:run, &Run.stop/1) |> assign(run_frame: nil)}
+    {:noreply, socket |> update(:run, &Run.stop/1) |> assign(run_frame: nil) |> still()}
   end
 
   # Compare, headless in a task: a fixed count of ticks per backend.
@@ -296,9 +282,19 @@ defmodule ExamplesWeb.ChartLive do
     {:noreply, assign(socket, compare: rows, compare_task: nil)}
   end
 
+  # The still chart's frame (#362); a superseded one falls to the stale clause below.
+  def handle_info({ref, {:still, frame, state, design}}, %{assigns: %{still_task: %Task{ref: ref}}} = socket) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, assign(socket, still_frame: frame, still_state: state, still_design: design, still_task: nil)}
+  end
+
   def handle_info({ref, _stale}, socket) when is_reference(ref) do
     Process.demonitor(ref, [:flush])
     {:noreply, socket}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{assigns: %{still_task: %Task{ref: ref}}} = socket) do
+    {:noreply, assign(socket, still_task: nil, run: %{socket.assigns.run | error: inspect(reason)})}
   end
 
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{assigns: %{compare_task: %Task{ref: ref}}} = socket) do
@@ -312,33 +308,42 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
-  def handle_info(:animate_tick, socket) do
-    if socket.assigns.animating do
-      schedule_animation()
-      {:noreply, socket |> assign(animation_tick: socket.assigns.animation_tick + 1) |> page_frame()}
-    else
-      {:noreply, socket}
+  # The still chart (#362): one frame of the page's backend at the run's tick, with the
+  # design as data — in a task when the socket is connected, so the view answers while
+  # it renders; in place on the disconnected first render, which nothing can wait behind.
+  defp still(%{assigns: assigns} = socket) do
+    %{module: module, run_backend: backend} = assigns
+    opts = still_opts(assigns)
+
+    render = fn ->
+      state = Frames.prepare(module, opts, backend)
+      {frame, state} = Frames.frame(module, opts, backend, state)
+      {design, _sources} = module.design(opts)
+      {:still, frame, state, inspect(design, pretty: true, limit: :infinity, width: 80)}
+    end
+
+    cond do
+      not connected?(socket) ->
+        {:still, frame, state, design} = render.()
+        assign(socket, still_frame: frame, still_state: state, still_design: design)
+
+      match?(:ok, Run.supervisor()) ->
+        if task = assigns.still_task, do: Task.Supervisor.terminate_child(Examples.TaskSupervisor, task.pid)
+        assign(socket, still_task: Task.Supervisor.async_nolink(Examples.TaskSupervisor, render))
+
+      true ->
+        {:error, message} = Run.supervisor()
+        assign(socket, run: %{assigns.run | error: message})
     end
   end
 
-  # The page's animated SVG frame for a design that eases a scale (#360): its compiled
-  # chart, kept across ticks and rebuilt on a palette change, stepped at this tick's rows.
-  defp page_frame(%{assigns: %{backend: :svg, module: module} = assigns} = socket) do
-    if Design.transitions?(module) do
-      opts = build_chart_opts(assigns.current_palette, assigns.animation_tick, true, assigns.slug, assigns.hex_radius)
-      compiled = assigns.page_compiled || Frames.prepare(module, opts, :svg).compiled
-      {_design, sources} = module.design(opts)
-      {svg, compiled} = Design.step(module, compiled, sources, [])
-      assign(socket, page_compiled: compiled, page_svg: svg)
-    else
-      socket
-    end
-  end
+  # A chart that has not run is at rest; one that has stays at the run's tick.
+  defp still_opts(%{run_ticks: ticks} = assigns) when ticks > 0, do: run_opts(assigns, ticks)
 
-  defp page_frame(socket), do: socket
-
-  defp schedule_animation do
-    Process.send_after(self(), :animate_tick, @animation_interval)
+  defp still_opts(assigns) do
+    if assigns.run_scroll,
+      do: run_opts(assigns, 0),
+      else: build_chart_opts(assigns.current_palette, 0, false, assigns.slug, assigns.hex_radius)
   end
 
   defp incremental_mode(%{incremental: %{mode: "full"}}), do: :full_redraw
@@ -472,31 +477,15 @@ defmodule ExamplesWeb.ChartLive do
             <span class="backend-label">Render Backend:</span>
             <div class="backend-buttons">
               <button
+                :for={backend <- Frames.backends(@module)}
                 type="button"
                 phx-click="set_backend"
-                phx-value-backend="svg"
-                class={"backend-btn #{if @backend == :svg, do: "active", else: ""}"}
+                phx-value-backend={backend}
+                disabled={@run.running}
+                class={"backend-btn #{if @run_backend == backend, do: "active", else: ""}"}
               >
-                SVG
+                <%= backend_word(backend) %>
               </button>
-              <button
-                type="button"
-                phx-click="set_backend"
-                phx-value-backend="canvas"
-                class={"backend-btn #{if @backend == :canvas, do: "active", else: ""}"}
-              >
-                Canvas
-              </button>
-              <%= if @is_time_series do %>
-                <button
-                  type="button"
-                  phx-click="set_backend"
-                  phx-value-backend="canvas_incremental"
-                  class={"backend-btn #{if @backend == :canvas_incremental, do: "active", else: ""}"}
-                >
-                  Canvas-Incremental
-                </button>
-              <% end %>
             </div>
           </div>
 
@@ -528,9 +517,9 @@ defmodule ExamplesWeb.ChartLive do
               <button
                 type="button"
                 phx-click="toggle_animation"
-                class={"animate-btn #{if @animating, do: "animating", else: ""}"}
+                class={"animate-btn #{if @run.running, do: "animating", else: ""}"}
               >
-                <%= if @animating do %>
+                <%= if @run.running do %>
                   <span class="pulse-dot"></span>
                   Stop Animation
                 <% else %>
@@ -538,8 +527,8 @@ defmodule ExamplesWeb.ChartLive do
                   Animate Data
                 <% end %>
               </button>
-              <%= if @animating do %>
-                <span class="tick-counter">Frame: <%= @animation_tick %></span>
+              <%= if @run.running do %>
+                <span class="tick-counter">Tick: <%= @run_ticks %></span>
               <% end %>
             </div>
           <% end %>
@@ -560,59 +549,41 @@ defmodule ExamplesWeb.ChartLive do
         </div>
 
         <div class="chart-container" style={"background-color: #{ColorPalettes.background(@current_palette)}"}>
-          <%= if @run.running and @run_frame do %>
-            <%!-- A run's frame (spec/14 §12.6, #322): the SVG whole, or the canvas pushed under the compiled chart's static furniture. --%>
-            <%= if @run_backend == :svg do %>
-              <%= Phoenix.HTML.raw(@run_frame.svg) %>
-            <% else %>
-            <%= if @run_backend == :incremental do %>
+          <%!-- One frame loop (spec/14 §12.6, #362): the run's frame while a run is going, the still one
+                otherwise — SVG whole, or the canvas under the compiled chart's static furniture. --%>
+          <% {frame, state} = if(@run.running and @run_frame, do: {@run_frame, @run_state}, else: {@still_frame, @still_state}) %>
+          <%= cond do %>
+            <% frame == nil -> %>
+              <p class="chart-pending">rendering…</p>
+            <% frame.svg -> %>
+              <%= Phoenix.HTML.raw(frame.svg) %>
+            <% frame.incremental -> %>
               <%!-- The incremental canvas is the plot area, at the margin's offset (spec/14 §12.5). --%>
-              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(@run_state, :width)}px; height: #{run_size(@run_state, :height)}px;"}>
-                <div id="incremental-chart" phx-hook="CanvasIncrementalChart" phx-update="ignore" data-ack="frame_drawn" data-ack-interval="50" data-width={@run_state.plot.width} data-height={@run_state.plot.height} style={"position: absolute; top: #{@run_state.margin.top}px; left: #{@run_state.margin.left}px; z-index: 1;"}>
-                  <canvas width={@run_state.plot.width} height={@run_state.plot.height} style="display: block;"></canvas>
+              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(state, :width)}px; height: #{run_size(state, :height)}px;"}>
+                <div id="incremental-chart" phx-hook="CanvasIncrementalChart" phx-update="ignore" data-ack="frame_drawn" data-ack-interval="50" data-width={state.plot.width} data-height={state.plot.height} style={"position: absolute; top: #{state.margin.top}px; left: #{state.margin.left}px; z-index: 1;"}>
+                  <canvas width={state.plot.width} height={state.plot.height} style="display: block;"></canvas>
                 </div>
                 <div class="hybrid-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(Frames.static(@run_state)) %>
+                  <%= Phoenix.HTML.raw(Frames.static(state)) %>
                 </div>
-                <div :if={@run_frame.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(@run_frame.dynamic_svg) %>
+                <div :if={frame.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(frame.dynamic_svg) %>
                 </div>
               </div>
-            <% else %>
-              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(@run_state, :width)}px; height: #{run_size(@run_state, :height)}px;"}>
-                <div id="canvas-chart" phx-hook="CanvasBinaryChart" phx-update="ignore" data-ack="frame_drawn" data-ack-interval="50" data-binary={@run_frame.canvas} data-width={run_size(@run_state, :width)} data-height={run_size(@run_state, :height)} style="position: absolute; top: 0; left: 0; z-index: 1;">
-                  <canvas width={run_size(@run_state, :width)} height={run_size(@run_state, :height)} style="display: block;"></canvas>
+            <% true -> %>
+              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(state, :width)}px; height: #{run_size(state, :height)}px;"}>
+                <div id="canvas-chart" phx-hook="CanvasBinaryChart" phx-update="ignore" data-ack="frame_drawn" data-ack-interval="50" data-binary={frame.canvas} data-width={run_size(state, :width)} data-height={run_size(state, :height)} style="position: absolute; top: 0; left: 0; z-index: 1;">
+                  <canvas width={run_size(state, :width)} height={run_size(state, :height)} style="display: block;"></canvas>
                 </div>
                 <div class="hybrid-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(Frames.static(@run_state)) %>
+                  <%= Phoenix.HTML.raw(Frames.static(state)) %>
                 </div>
-                <div :if={@run_frame.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(@run_frame.dynamic_svg) %>
+                <div :if={frame.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(frame.dynamic_svg) %>
                 </div>
               </div>
-            <% end %>
-            <% end %>
-          <% else %>
-          <%= if @backend == :svg do %>
-            <%= Phoenix.HTML.raw((@animating && @page_svg) || render_chart_svg(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius)) %>
-          <% else %>
-            <%!-- Canvas mode is the hybrid split (spec/14 §12.6, #268): the marks on a binary canvas under the furniture as SVG. --%>
-            <% hybrid = render_chart_hybrid(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius) %>
-            <div class="hybrid-wrapper" style={"position: relative; width: #{hybrid.width}px; height: #{hybrid.height}px;"}>
-              <div id="canvas-chart" phx-hook="CanvasBinaryChart" data-binary={hybrid.canvas} data-width={hybrid.width} data-height={hybrid.height} style="position: absolute; top: 0; left: 0; z-index: 1;">
-                <canvas width={hybrid.width} height={hybrid.height} style="display: block;"></canvas>
-              </div>
-              <div class="hybrid-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
-                <%= Phoenix.HTML.raw(hybrid.static) %>
-              </div>
-              <div :if={hybrid.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
-                <%= Phoenix.HTML.raw(hybrid.dynamic_svg) %>
-              </div>
-            </div>
-          <% end %>
           <% end %>
         </div>
-
         <PerformanceDrawer.performance
           run={@run}
           backend={@run_backend}
@@ -624,23 +595,23 @@ defmodule ExamplesWeb.ChartLive do
           points={points_info(assigns)}
         />
 
-        <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@backend) %></h3>
+        <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@run_backend) %></h3>
         <p style="color: #666; font-size: 0.9rem; margin-bottom: 0.5rem;">
           The design is the thing to copy: the <code>Visualize.Chart.Build</code> calls below fold to a map,
           and the map is the chart — applied to rows and rendered by the library, on any backend (spec/14 §16).
         </p>
-        <pre><code><%= backend_sample_code(@backend, @module) %></code></pre>
+        <pre><code><%= backend_sample_code(@run_backend, @module) %></code></pre>
 
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">The design (data)</h3>
         <p style="color: #666; font-size: 0.9rem; margin-bottom: 0.5rem;">
           What the Build calls fold to: the stored form the builder and a host exchange (spec/14 §1, §9).
           <code>Visualize.Chart.to_json/1</code> is the same map as JSON.
         </p>
-        <pre><code><%= design_data(@module, @current_palette, @animation_tick, @animating, @slug, @hex_radius) %></code></pre>
+        <pre><code><%= @still_design || "rendering…" %></code></pre>
 
         <%= if @animatable do %>
           <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">LiveView Animation Code</h3>
-          <pre><code><%= animation_sample_code(@backend) %></code></pre>
+          <pre><code><%= animation_sample_code(@run_backend) %></code></pre>
         <% end %>
       </div>
     </main>
@@ -917,20 +888,13 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
-  # Every chart is a design and renders its own document (`Examples.Charts.Design`, #335).
-  defp render_chart_svg(module, palette, tick, animating, slug, hex_radius) do
-    Design.render(module, build_chart_opts(palette, tick, animating, slug, hex_radius))
-  end
-
-  # Canvas mode: the hybrid split, the furniture as SVG over the binary canvas of the
-  # marks (spec/14 §12.6, #268).
-  defp render_chart_hybrid(module, palette, tick, animating, slug, hex_radius) do
-    Design.hybrid(module, build_chart_opts(palette, tick, animating, slug, hex_radius))
-  end
+  defp backend_word(:svg), do: "SVG"
+  defp backend_word(:canvas), do: "Canvas"
+  defp backend_word(:incremental), do: "Canvas-Incremental"
 
   defp backend_code_title(:svg), do: "The design (Build), then the SVG rendering"
   defp backend_code_title(:canvas), do: "The design (Build), then the canvas rendering (the split)"
-  defp backend_code_title(:canvas_incremental), do: "Canvas Incremental Rendering Code"
+  defp backend_code_title(:incremental), do: "Canvas Incremental Rendering Code"
 
   defp backend_sample_code(:svg, module), do: module.sample_code()
 
@@ -940,7 +904,7 @@ defmodule ExamplesWeb.ChartLive do
     do: design_build_code(module) <> "\n" <> hybrid_sample_code()
 
 
-  defp backend_sample_code(:canvas_incremental, _module) do
+  defp backend_sample_code(:incremental, _module) do
     ~S"""
     # Canvas Incremental Rendering
     # Only redraws changed regions for scrolling time-series
@@ -985,13 +949,6 @@ defmodule ExamplesWeb.ChartLive do
   def design_build_code(module) do
     [build | _] = String.split(module.sample_code(), ~r/\n[^\n]*Visualize\.Chart\.apply\(/, parts: 2)
     String.trim_trailing(build) <> "\n"
-  end
-
-  # The folded design as data: what the Build calls fold to (#318).
-  @doc false
-  def design_data(module, palette, tick, animating, slug, hex_radius) do
-    {design, _sources} = module.design(build_chart_opts(palette, tick, animating, slug, hex_radius))
-    inspect(design, pretty: true, limit: :infinity, width: 80)
   end
 
   # The compile-and-render call the page makes for a design in Canvas mode (#268).
@@ -1084,7 +1041,7 @@ defmodule ExamplesWeb.ChartLive do
     """
   end
 
-  defp animation_sample_code(:canvas_incremental) do
+  defp animation_sample_code(:incremental) do
     ~S"""
     # Incremental Canvas Animation
     # Optimized for scrolling time-series data
