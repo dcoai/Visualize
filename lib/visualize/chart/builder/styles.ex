@@ -79,18 +79,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       box-sizing: border-box;
     }
 
-    /* ── toolbar ─────────────────────────────────────────────────────────────── */
-
-    .vis-builder-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      border: 1px solid var(--vis-builder-line);
-      border-radius: var(--vis-builder-radius);
-      background: var(--vis-builder-panel);
-    }
+    /* ── the chart bar and the New form ──────────────────────────────────────────── */
 
     .vis-builder-layer-count {
       display: inline-flex;
@@ -115,11 +104,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     .vis-builder-library,
     .vis-builder-new,
-    .vis-builder-opened,
     .vis-builder-keep {
       display: flex;
       align-items: center;
       gap: 6px;
+    }
+
+    /* A compact row at the column's width, the select taking what the button leaves. */
+    .vis-builder-sidebar > .vis-builder-new {
+      padding: 0 10px 8px;
+    }
+
+    .vis-builder-sidebar > .vis-builder-new .vis-builder-new-kind {
+      flex: 1 1 auto;
+      min-width: 0;
     }
 
     /* The chart's controls sit just above the chart they act on (spec/10 §15.3, #364): one
@@ -136,20 +134,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     .vis-builder-chart-bar .vis-builder-layer-count {
       margin-left: auto;
-    }
-
-    /* What is open is said in the toolbar, because the field forms write to it and not to
-       the stack, and the way back is beside the name (spec/14 §19.8). */
-    .vis-builder-opened {
-      padding: 2px 8px;
-      border: 1px solid var(--vis-builder-accent);
-      border-radius: var(--vis-builder-radius);
-      color: var(--vis-builder-muted);
-      font-size: 12px;
-    }
-
-    .vis-builder-opened strong {
-      color: var(--vis-builder-ink);
     }
 
     .vis-builder-close {

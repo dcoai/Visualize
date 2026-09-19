@@ -88,23 +88,19 @@ defmodule Visualize.Chart.BuilderTest do
         })
 
       assert html =~ ~s(<div id="b" class="vis-builder drawer">)
-      assert html =~ ~s(class="vis-builder-toolbar")
       assert html =~ ~s(class="vis-builder-save")
+      # No toolbar (#365): New is in the charts column, the chart's controls above the chart.
+      refute html =~ "vis-builder-toolbar"
     end
 
     # The chart's controls act on the middle column's chart, so they sit at its top
     # (spec/10 §15.3, #364): the name form, Save, Deploy, the layer count — the toolbar
     # keeps New alone.
-    test "the chart bar holds the save controls just above the graph, not the toolbar" do
+    test "the chart bar holds the save controls just above the graph; there is no toolbar" do
       html = rendered(:builder_store)
-      [_, after_toolbar] = String.split(html, ~s(class="vis-builder-toolbar"), parts: 2)
-      [toolbar, rest] = String.split(after_toolbar, "</div>", parts: 2)
-      assert toolbar =~ ~s(class="vis-builder-new")
-      refute toolbar =~ ~s(vis-builder-keep)
-      refute toolbar =~ ~s(vis-builder-save)
-      refute toolbar =~ ~s(vis-builder-layer-count)
+      refute html =~ "vis-builder-toolbar"
 
-      [_, main] = String.split(rest, ~s(<main class="vis-builder-main">), parts: 2)
+      [_, main] = String.split(html, ~s(<main class="vis-builder-main">), parts: 2)
       [bar, graph] = String.split(main, ~s(class="vis-builder-graph"), parts: 2)
       assert bar =~ ~s(<div class="vis-builder-chart-bar">)
 
@@ -114,6 +110,23 @@ defmodule Visualize.Chart.BuilderTest do
       assert order == ~w(keep save deploy layer-count)
       assert bar =~ ~s(<span class="vis-builder-layer-count">3</span>)
       refute graph =~ ~s(vis-builder-chart-bar)
+    end
+
+    # The New form fills the charts column, so it sits under the column's title (#365),
+    # beside the `+` that is its chart-only shortcut.
+    test "the New form sits under the Charts title, before the list of charts" do
+      html = rendered(:builder_store)
+      [_, sidebar] = String.split(html, ~s(<aside class="vis-builder-sidebar">), parts: 2)
+      [title, rest] = String.split(sidebar, "</h2>", parts: 2)
+      assert title =~ "Charts"
+      assert title =~ ~s(phx-click="add_chart")
+
+      [form, _charts] = String.split(rest, ~s(<ol class="vis-builder-charts">), parts: 2)
+      assert form =~ ~s(<form class="vis-builder-new" phx-submit="new_fragment" phx-target="-1">)
+      assert form =~ ~s(<button type="submit" class="vis-builder-new-submit">New</button>)
+
+      # Without a store there is nothing to make a fragment in, and no form.
+      refute rendered(:builder) =~ "vis-builder-new"
     end
 
     test "a style opened from the library has no chart: its bar offers Save as alone" do
