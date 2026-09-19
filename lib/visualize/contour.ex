@@ -293,11 +293,16 @@ defmodule Visualize.Contour do
     end
   end
 
+  # A crossing never sits on a corner (spec/07 §6.3, D-112): `t` stays in the edge's
+  # interior, so a corner on the threshold puts the crossing a hair along each of its edges
+  # and two cells share a crossing only through the edge they share.
+  @edge_eps 1.0e-6
+
   defp interpolate_t(v0, v1, threshold) do
     if v1 == v0 do
       0.5
     else
-      (threshold - v0) / (v1 - v0)
+      min(1 - @edge_eps, max(@edge_eps, (threshold - v0) / (v1 - v0)))
     end
   end
 
@@ -339,7 +344,8 @@ defmodule Visualize.Contour do
     ring = [current_point | ring]
     count = count + 1
 
-    if count > 2 and close_enough?(current_point, start_point) do
+    # A ring closes on its exact start point, never on a near neighbour (D-112).
+    if count > 2 and current_point == start_point do
       # Ring is closed
       {Enum.reverse(ring), start_map, used}
     else
@@ -353,10 +359,6 @@ defmodule Visualize.Contour do
           follow_ring(start_point, next, start_map, used, ring, count)
       end
     end
-  end
-
-  defp close_enough?({x1, y1}, {x2, y2}) do
-    abs(x1 - x2) < 0.001 and abs(y1 - y2) < 0.001
   end
 
   defp normalize_grid(grid, contour) when is_list(grid) do
@@ -407,7 +409,7 @@ defmodule Visualize.Contour do
             is_closed =
               case last_point do
                 [x_last, y_last] ->
-                  abs(x_last - x0) < 0.001 and abs(y_last - y0) < 0.001
+                  x_last == x0 and y_last == y0
 
                 _ ->
                   false
