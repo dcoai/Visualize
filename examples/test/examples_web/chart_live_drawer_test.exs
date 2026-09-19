@@ -154,7 +154,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     refute s.assigns.run.running
   end
 
-  test "a streaming design's drawer opens with the data rate at 600 and its window; another chart's has neither (#359)" do
+  test "a streaming design's drawer opens with the data rate at 600 and its window; another chart's at 20 ticks/s (#359, #361)" do
     s = page("scrolling_series")
     assert s.assigns.run.data_rate == 600
     assert %Examples.Scroll{samples_per_px: 4, origin: 0} = s.assigns.run_scroll
@@ -167,10 +167,44 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert h =~ ">16205<"
 
     line = page("line")
-    assert line.assigns.run.data_rate == 0 and line.assigns.run_scroll == nil
+    assert line.assigns.run.data_rate == 20 and line.assigns.run_scroll == nil
     {:noreply, line} = ChartLive.handle_event("drawer_toggle", %{}, line)
-    refute html(line) =~ ~s(id="perf-rate")
-    refute html(line) =~ "Total points"
+    h = html(line)
+    assert h =~ ~s(id="perf-rate") and h =~ ~s(value="20") and h =~ "20 ticks/s"
+    assert h =~ "Ticks/s" and h =~ "Total points" and h =~ "Pts/frame"
+    refute h =~ "samples across"
+  end
+
+  test "a chart that animates by tick moves its data at the data rate, not the frame rate (#361)" do
+    s = page("area")
+    {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
+    {:noreply, s} = ChartLive.handle_event("run_data_rate", %{"data_rate" => "10"}, s)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    assert s.assigns.run_ticks == 0
+    s = settled(s)
+    frame0 = s.assigns.run_frame.svg
+
+    # 100 ms at 10 ticks/s is one tick: the next frame is the chart at tick 1.
+    s =
+      Phoenix.Component.assign(s,
+        run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 100, carry: 0.0}
+      )
+
+    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    assert s.assigns.run_ticks >= 1
+    s = settled(s)
+    refute s.assigns.run_frame.svg == frame0
+    assert html(s) =~ ">full<"
+
+    # At rate 0 frames keep coming and the tick stays: the frame rate moves nothing.
+    still =
+      Phoenix.Component.assign(s, run: %{s.assigns.run | data_rate: 0, carry: 0.0, pending: 0})
+
+    ticks = still.assigns.run_ticks
+    {:noreply, still} = ChartLive.handle_info(:run_tick, still)
+    assert still.assigns.run_ticks == ticks and still.assigns.run.task != nil
+    {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
+    refute s.assigns.run.running
   end
 
   test "an SVG run of a streaming design advances the window by the rate, not the frame rate (#359)" do

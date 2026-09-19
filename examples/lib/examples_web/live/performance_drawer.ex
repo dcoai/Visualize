@@ -22,6 +22,11 @@ defmodule ExamplesWeb.PerformanceDrawer do
     doc: "a streaming design's window: `%{samples_per_px, count, span, series, points, mode}` (#327, #359), or nil"
   )
 
+  attr(:points, :map,
+    required: true,
+    doc: "the run's point metrics and the rate slider's unit and span (#361)"
+  )
+
   def performance(assigns) do
     assigns = assign(assigns, acks?: Frames.acks?(assigns.backend))
 
@@ -57,11 +62,11 @@ defmodule ExamplesWeb.PerformanceDrawer do
             <span class="perf-value"><%= if @run.target_fps > 2000, do: "∞", else: @run.target_fps %></span>
           </form>
 
-          <form :if={@stream} phx-change="run_data_rate" class="perf-group perf-group-stream">
+          <form phx-change="run_data_rate" class="perf-group perf-group-stream">
             <label class="perf-label" for="perf-rate">Data rate</label>
-            <input id="perf-rate" type="range" name="data_rate" min="10" max="5000" step="10" value={@run.data_rate} class="perf-slider" disabled={@run.running} />
-            <span class="perf-value perf-rate-value"><%= @run.data_rate %> samples/s per series</span>
-            <span class="perf-note"><%= @stream.samples_per_px %>/px · <%= @stream.count %> samples · <%= Float.round(@stream.span, 1) %> s across</span>
+            <input id="perf-rate" type="range" name="data_rate" min={@points.min} max={@points.max} step={@points.step} value={@run.data_rate} class="perf-slider" disabled={@run.running} />
+            <span class="perf-value perf-rate-value"><%= @run.data_rate %> <%= @points.unit %></span>
+            <span :if={@stream} class="perf-note"><%= @stream.samples_per_px %>/px · <%= @stream.count %> samples · <%= Float.round(@stream.span, 1) %> s across</span>
           </form>
 
           <button
@@ -97,11 +102,11 @@ defmodule ExamplesWeb.PerformanceDrawer do
           <.metric :if={@acks?} value={if(@run.ack_age, do: "#{@run.ack_age} ms", else: "none")} label="Last ack" />
           <.metric :if={@acks?} value={@run.stalls} label="Stalls" />
           <.metric value={@run.skipped} label="Skipped" />
-          <.metric :if={@stream} value={round(@run.measured_rate)} label="Samples/s" />
-          <.metric :if={@stream} value={round(@run.measured_rate * @stream.series)} label="Pts/s" />
-          <.metric :if={@stream} value={@stream.count * @stream.series} label="Total points" />
-          <.metric :if={@stream} value={@stream.points} label="Pts/frame" />
-          <.metric :if={@stream} value={@stream.mode || "—"} label="Mode" />
+          <.metric value={round(@run.measured_rate)} label={@points.rate_label} />
+          <.metric value={@points.per_second} label="Pts/s" />
+          <.metric value={@points.total} label="Total points" />
+          <.metric value={@points.per_frame} label="Pts/frame" />
+          <.metric value={@points.mode || "—"} label="Mode" />
           <.metric value={Float.round(Run.avg_render_us(@run) / 1000, 2)} label="Render ms" />
           <.metric value={Float.round(@run.payload_size / 1024, 1)} label="Payload KB" />
           <.metric value={@run.frame} label="Frame" />
