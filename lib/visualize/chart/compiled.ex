@@ -43,7 +43,7 @@ defmodule Visualize.Chart.Compiled do
   alias Visualize.{Chart, Render, Theme}
   alias Visualize.Chart.{Applied, Frame, Mark}
   alias Visualize.Chart.Compiled.{Regions, Window}
-  alias Visualize.Chart.Frame.Furniture
+  alias Visualize.Chart.Frame.{Defs, Furniture}
   alias Visualize.IR.{Element, Transform}
 
   @default_ceiling 1000
@@ -61,7 +61,8 @@ defmodule Visualize.Chart.Compiled do
     :size,
     :margin,
     :plot,
-    :viewport
+    :viewport,
+    defs: []
   ]
 
   @typedoc "A render target of spec/14 §12.3."
@@ -101,6 +102,7 @@ defmodule Visualize.Chart.Compiled do
           targets: [{target(), non_neg_integer()}],
           ceiling: pos_integer(),
           static: String.t(),
+          defs: [Element.t()],
           size: %{width: number(), height: number()},
           margin: %{top: number(), right: number(), bottom: number(), left: number()},
           plot: %{width: number(), height: number()},
@@ -141,8 +143,20 @@ defmodule Visualize.Chart.Compiled do
       viewport: window && Map.put(window, :full, stale?(chart, window.scale, targets))
     }
 
+    # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
+    # it declares and the filters any mark's effect needs, found over every mark rendered
+    # once in `:css` here, so a `url(#id)` on either SVG layer resolves on the page.
     static = layer(compiled, drawn(compiled, frame, sources, nil), :static, false)
-    %{compiled | static: root(compiled, static)}
+    defs = Defs.defs(frame, :css, Element.group(static ++ all_marks(compiled, frame, sources)))
+    compiled = %{compiled | defs: defs}
+    %{compiled | static: root(compiled, defs ++ static)}
+  end
+
+  defp all_marks(%{regions: regions}, frame, sources) do
+    Enum.flat_map(regions, fn
+      %{region: {:mark, _}, build: build} -> build.(frame, sources, :css)
+      _other -> []
+    end)
   end
 
   @doc "Every region in the frame's drawing order, `{region, :static | {:dynamic, reason}}`."
@@ -180,7 +194,7 @@ defmodule Visualize.Chart.Compiled do
       width: compiled.size.width,
       height: compiled.size.height,
       margin: compiled.margin,
-      static: layer(compiled, drawn, :static, false),
+      static: compiled.defs ++ layer(compiled, drawn, :static, false),
       dynamic: if(canvas == [], do: nil, else: canvas),
       dynamic_style: %{},
       canvas_format: format(compiled),
@@ -198,7 +212,7 @@ defmodule Visualize.Chart.Compiled do
     {frame, hi} = realise(compiled, sources, nil)
     children = layer(compiled, drawn(compiled, frame, sources, hi), :svg, true)
 
-    Element.group(children,
+    Element.group(compiled.defs ++ children,
       style: %{class: "frame"},
       transform: Transform.translate(margin.left, margin.top)
     )

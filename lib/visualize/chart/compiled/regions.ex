@@ -6,7 +6,7 @@ defmodule Visualize.Chart.Compiled.Regions do
 
   alias Visualize.Chart
   alias Visualize.Chart.Frame
-  alias Visualize.Chart.Frame.{Furniture, Labels, Legend, Scales}
+  alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Scales}
   alias Visualize.Chart.Mark
   alias Visualize.IR.Element
 
@@ -187,14 +187,16 @@ defmodule Visualize.Chart.Compiled.Regions do
 
   # -- builders -------------------------------------------------------------------------
 
+  # A mark's group as the frame builds it (spec/14 §4.7, §12.4, #356): its paints
+  # resolved for the mode — `url(#id)` in `:css`, the first stop's colour in `:literal` —
+  # and its texts' lines split.
   defp builder({:mark, i}, _kind, _axes) do
     fn frame, sources, mode ->
       [
-        Mark.generate(frame, Enum.at(frame.marks, i),
-          sources: sources,
-          resolve: mode,
-          index: i + 1
-        )
+        frame
+        |> Mark.generate(Enum.at(frame.marks, i), sources: sources, resolve: mode, index: i + 1)
+        |> Defs.resolve(frame, mode)
+        |> Lines.split()
       ]
     end
   end

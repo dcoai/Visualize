@@ -358,6 +358,46 @@ defmodule Visualize.Chart.CompiledTest do
     end
   end
 
+  describe "a design's paints through the compiled chart (§12.4, #356)" do
+    # An area filled by a gradient the design declares under defs, and a line beside it.
+    defp painted do
+      design(@fixed, %{
+        defs: %{
+          fade: %{
+            kind: :linear,
+            stops: [%{offset: 0, colour: :series_1}, %{offset: 1, colour: :background}]
+          }
+        },
+        styles: %{soft: %{fill: {:paint, :fade}}},
+        marks: [
+          %{type: :area, data: :primary, channels: %{x: :t, y: :v}, style: :soft},
+          %{type: :line, data: :primary, channels: %{x: :t, y: :v}}
+        ]
+      })
+    end
+
+    test "the static carries the defs and the SVG-layer mark refers to the gradient" do
+      compiled = compile!(painted(), sources: %{primary: rows(5)}, ceiling: 100)
+      assert Compiled.static(compiled) =~ ~r/<defs><linearGradient [^>]*id="vis-paint-\w+-fade"/
+      {payload, _} = Compiled.tick(compiled, %{primary: rows(5)})
+      assert payload.svg =~ ~r/class="mark mark-area" fill="url\(#vis-paint-\w+-fade\)"/
+    end
+
+    test "the canvas layer paints the first stop's colour, and the one-string form is the frame's" do
+      sources = %{primary: rows(5)}
+      compiled = compile!(painted(), sources: sources, ceiling: 1)
+      {payload, _} = Compiled.tick(compiled, sources)
+      records = Visualize.Backend.CanvasBinary.Decoder.decode(Base.decode64!(payload.canvas))
+      [{:style, area} | _] = Enum.filter(records, &match?({:style, _}, &1))
+      assert area.fill == {59, 111, 168, 255}
+
+      applied = compile!(painted(), sources: sources, ceiling: 100)
+
+      assert Compiled.svg(applied, sources) ==
+               Chart.render(elem(Chart.apply(painted(), sources: sources), 1))
+    end
+  end
+
   describe "the render target of a text mark (§12.3, #134)" do
     test "a :text mark is :svg whatever render says, since the binary stream carries no text" do
       design =
