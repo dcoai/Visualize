@@ -129,6 +129,11 @@ defmodule Visualize.Chart.Frame.Furniture do
 
   defp format(axis, _scale, nil), do: axis
 
+  # A named format no specifier can express (spec/14 §4.4, #191).
+  defp format(axis, _scale, :duration) do
+    Axis.tick_format(axis, fn v -> if is_number(v), do: Format.duration(v), else: to_string(v) end)
+  end
+
   defp format(axis, %Scale.Time{}, spec), do: Axis.tick_format(axis, &Format.time(&1, spec))
 
   defp format(axis, _scale, spec) do

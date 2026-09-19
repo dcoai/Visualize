@@ -5,6 +5,8 @@ defmodule Visualize.AxisFormatTest do
   alias Visualize.{Axis, Format, Scale}
   alias Visualize.Scale.Band
 
+  doctest Format
+
   defp tick_texts(axis) do
     axis
     |> Axis.generate()
@@ -218,6 +220,46 @@ defmodule Visualize.AxisFormatTest do
         |> Map.merge(%{utc_offset: -19_800, std_offset: 0, zone_abbr: "X"})
 
       assert Format.time(dt, "%z %Z") == "-0530 X"
+    end
+  end
+
+  describe "Format.duration/1 (spec/05 §2.9, #191)" do
+    test "the unit follows the magnitude, pairs with the next finer one when whole, else one decimal" do
+      assert Visualize.Format.duration(45) == "45s"
+      assert Visualize.Format.duration(150) == "2m30s"
+      assert Visualize.Format.duration(3600) == "1h"
+      assert Visualize.Format.duration(5400) == "1h30m"
+      assert Visualize.Format.duration(5430) == "1.5h"
+      assert Visualize.Format.duration(90_000) == "1d1h"
+      assert Visualize.Format.duration(2.5) == "2.5s"
+      assert Visualize.Format.duration(0.25) == "250ms"
+      assert Visualize.Format.duration(0.0005) == "0.5ms"
+      assert Visualize.Format.duration(0) == "0s"
+      assert Visualize.Format.duration(-90) == "−1m30s"
+    end
+
+    test "an axis with format: :duration prints its ticks by magnitude" do
+      design = %{
+        version: 1,
+        sources: %{s: %{fields: [:t, :v]}},
+        frame: %{
+          kind: :cartesian,
+          size: %{width: 300, height: 200},
+          scales: %{x: %{kind: :linear, domain: [0, 7200]}, y: %{kind: :linear, domain: [0, 1]}},
+          axes: [
+            %{scale: :x, side: :bottom, ticks: [0, 1800, 3600, 5400, 7200], format: :duration}
+          ]
+        },
+        marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]
+      }
+
+      {:ok, applied} =
+        Visualize.Chart.apply(design, sources: %{s: [%{t: 0, v: 0}, %{t: 7200, v: 1}]})
+
+      svg = Visualize.Chart.render(applied)
+
+      assert svg =~ ">0s<" and svg =~ ">30m<" and svg =~ ">1h<" and svg =~ ">1h30m<" and
+               svg =~ ">2h<"
     end
   end
 
