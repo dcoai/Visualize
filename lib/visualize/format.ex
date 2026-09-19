@@ -500,6 +500,61 @@ defmodule Visualize.Format do
   defp zero_string?(s, type) when type in ~w(b o x X), do: String.trim_leading(s, "0") == ""
   defp zero_string?(s, _type), do: not String.match?(s, ~r/[1-9]/)
 
+  # --- duration/1 ----------------------------------------------------------------------------
+
+  @doc """
+  A length of time in seconds, in the unit its magnitude chooses (spec/05 §2.9, #191): the
+  largest of `d`, `h`, `m`, `s`, `ms` the value reaches — a whole count as it is, one that
+  is whole in the next finer unit as both, any other to one decimal.
+
+  ## Examples
+
+      iex> Enum.map([45, 150, 5400, 5430, 3660, 2.5, 0.25, 0, -90], &Visualize.Format.duration/1)
+      ["45s", "2m30s", "1h30m", "1.5h", "1h1m", "2.5s", "250ms", "0s", "−1m30s"]
+
+  """
+  @spec duration(number()) :: String.t()
+  def duration(seconds) when is_number(seconds) and seconds < 0, do: "−" <> duration(-seconds)
+  def duration(0), do: "0s"
+  def duration(+0.0), do: "0s"
+
+  def duration(seconds) when is_number(seconds) do
+    units = [{"d", 86_400}, {"h", 3600}, {"m", 60}, {"s", 1}, {"ms", 0.001}]
+
+    case Enum.drop_while(units, fn {_u, size} -> seconds < size end) do
+      [] ->
+        "#{trim(Float.round(seconds * 1000, 1))}ms"
+
+      [{unit, size} | finer] ->
+        count = seconds / size
+
+        cond do
+          whole?(count) ->
+            "#{round(count)}#{unit}"
+
+          finer != [] and unit != "s" and whole?(rem_in(seconds, size, hd(finer))) and
+              rem_in(seconds, size, hd(finer)) >= 1 ->
+            {finer_unit, _} = hd(finer)
+            "#{trunc(count)}#{unit}#{round(rem_in(seconds, size, hd(finer)))}#{finer_unit}"
+
+          true ->
+            "#{trim(Float.round(count * 1.0, 1))}#{unit}"
+        end
+    end
+  end
+
+  defp rem_in(seconds, size, {_unit, finer_size}),
+    do: (seconds - trunc(seconds / size) * size) / finer_size
+
+  defp whole?(count), do: abs(count - round(count)) < 1.0e-9
+
+  defp trim(float),
+    do:
+      float
+      |> :erlang.float_to_binary(decimals: 1)
+      |> String.trim_trailing("0")
+      |> String.trim_trailing(".")
+
   # --- time/2: strftime ---------------------------------------------------------------------
 
   @doc """

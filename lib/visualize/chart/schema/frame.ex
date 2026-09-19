@@ -80,7 +80,7 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:scale, {:ref, :scale}, :geometry, required: true),
       spec(:side, {:enum, @sides}, :geometry, required: true),
       spec(:ticks, {:one_of, [:integer, {:list, :term}, {:node, :ticks}]}, :geometry),
-      spec(:format, :string, :content),
+      spec(:format, {:one_of, [:string, {:enum, [:duration]}]}, :content),
       spec(:prefix, :string, :content),
       spec(:unit, :string, :content),
       spec(:grid, :boolean, :geometry, default: false),
