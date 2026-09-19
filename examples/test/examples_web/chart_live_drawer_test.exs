@@ -154,6 +154,55 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     refute s.assigns.run.running
   end
 
+  test "a streaming design's drawer opens with the data rate at 600 and its window; another chart's has neither (#359)" do
+    s = page("scrolling_series")
+    assert s.assigns.run.data_rate == 600
+    assert %Examples.Scroll{samples_per_px: 4, origin: 0} = s.assigns.run_scroll
+    assert s.assigns.run_series == 5
+    {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
+    h = html(s)
+    assert h =~ ~s(id="perf-rate") and h =~ ~s(value="600")
+    assert h =~ "4/px · 3241 samples · 5.4 s across"
+    assert h =~ "Pts/s" and h =~ "Total points" and h =~ "Pts/frame" and h =~ "Mode"
+    assert h =~ ">16205<"
+
+    line = page("line")
+    assert line.assigns.run.data_rate == 0 and line.assigns.run_scroll == nil
+    {:noreply, line} = ChartLive.handle_event("drawer_toggle", %{}, line)
+    refute html(line) =~ ~s(id="perf-rate")
+    refute html(line) =~ "Total points"
+  end
+
+  test "an SVG run of a streaming design advances the window by the rate, not the frame rate (#359)" do
+    s = page("scrolling_series")
+    {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    s = settled(s)
+    assert s.assigns.run_frame.svg =~ "<svg" and s.assigns.run_mode == "full"
+    origin = s.assigns.run_scroll.origin
+
+    # 16 ms at 600/s is 9 samples, two whole columns at four per pixel — plus whatever
+    # the render's own time let arrive; the window moves by whole columns of samples.
+    s =
+      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 16})
+
+    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    assert s.assigns.run_scroll.origin >= origin + 8 and rem(s.assigns.run_scroll.origin, 4) == 0
+    s = settled(s)
+    assert s.assigns.run_frame.svg =~ "<svg"
+    h = html(s)
+    assert h =~ ">full<" and h =~ ">16205<"
+
+    # With no data rate nothing arrives, so a tick draws a frame and the window stays.
+    still =
+      Phoenix.Component.assign(s, run: %{s.assigns.run | data_rate: 0, carry: 0.0, pending: 0})
+
+    {:noreply, still} = ChartLive.handle_info(:run_tick, still)
+    assert still.assigns.run_scroll.origin == s.assigns.run_scroll.origin
+    {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
+    refute s.assigns.run.running
+  end
+
   test "/high-performance is the Scrolling series chart's page now" do
     import Phoenix.ConnTest
 
