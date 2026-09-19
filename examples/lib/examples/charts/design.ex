@@ -48,6 +48,39 @@ defmodule Examples.Charts.Design do
     Code.ensure_loaded?(module) and function_exported?(module, :design, 1)
   end
 
+  @doc """
+  Whether the module's design eases a moving scale — a `transition` on any scale (spec/14
+  §4.3, #360) — so a run of it keeps a compiled chart on SVG too.
+  """
+  @spec transitions?(module()) :: boolean()
+  def transitions?(module) do
+    {design, _sources} = module.design([])
+
+    Enum.any?(Map.get(design.frame, :scales, %{}), fn {_name, scale} ->
+      Map.has_key?(scale, :transition)
+    end)
+  end
+
+  @doc """
+  One SVG frame of a compiled chart at its eased scales, as the gallery's document, and
+  the compiled chart after it (spec/14 §12.5, #360): `Visualize.Chart.Compiled.step/3`
+  inside the accessible root the module's title and description name.
+  """
+  @spec step(module(), Chart.Compiled.t(), map(), keyword()) :: {String.t(), Chart.Compiled.t()}
+  def step(module, compiled, sources, opts) do
+    {group, compiled} = Chart.Compiled.step(compiled, sources, opts)
+
+    svg =
+      Visualize.IR.Element.root(compiled.size.width, compiled.size.height,
+        title: module.title(),
+        description: module.description(),
+        children: [group]
+      )
+      |> Visualize.Render.to_string()
+
+    {svg, compiled}
+  end
+
   @doc "The module's design applied over its rows, with the `palette` option as the theme."
   @spec applied(module(), keyword()) :: Chart.Applied.t()
   def applied(module, opts) do

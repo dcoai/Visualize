@@ -203,6 +203,37 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     refute s.assigns.run.running
   end
 
+  test "a design with a transition runs on SVG through a compiled chart whose scale eases, and animates through one on the page (#360)" do
+    s = page("area")
+    assert Examples.Charts.Design.transitions?(Examples.Charts.AreaChart)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    assert %{compiled: %Visualize.Chart.Compiled{}} = s.assigns.run_state
+    s = settled(s)
+
+    assert s.assigns.run_frame.svg =~ "<svg" and
+             s.assigns.run_frame.svg =~ ~s(class="mark mark-area")
+
+    assert %{y: %{shown: [+0.0, _]}} = s.assigns.run_state.compiled.eased
+    {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
+    refute s.assigns.run.running
+
+    # The page's own animation keeps a compiled chart and shows its stepped frame.
+    {:noreply, s} = ChartLive.handle_event("toggle_animation", %{}, s)
+    assert %Visualize.Chart.Compiled{} = s.assigns.page_compiled
+    assert s.assigns.page_svg =~ ~s(class="mark mark-area")
+    {:noreply, s} = ChartLive.handle_info(:animate_tick, s)
+    assert s.assigns.animation_tick == 1 and s.assigns.page_svg =~ "<svg"
+    assert html(s) =~ ~s(class="mark mark-area")
+    {:noreply, s} = ChartLive.handle_event("toggle_animation", %{}, s)
+    assert s.assigns.page_compiled == nil and s.assigns.page_svg == nil
+
+    # A chart with no transition keeps the stateless path.
+    line = page("scrolling_series")
+    refute Examples.Charts.Design.transitions?(Examples.Charts.ScrollingSeries)
+    {:noreply, line} = ChartLive.handle_event("toggle_animation", %{}, line)
+    assert line.assigns.page_compiled == nil
+  end
+
   test "/high-performance is the Scrolling series chart's page now" do
     import Phoenix.ConnTest
 

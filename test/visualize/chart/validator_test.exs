@@ -53,7 +53,12 @@ defmodule Visualize.Chart.ValidatorTest do
       margin: %{top: 20, right: 20, bottom: 30, left: 40},
       scales: %{
         x: %{kind: :time, domain: :auto},
-        y: %{kind: :linear, domain: [0, :auto], nice: true},
+        y: %{
+          kind: :linear,
+          domain: [0, :auto],
+          nice: true,
+          transition: %{duration: 300, easing: :cubic_in_out, shrink_after: 0}
+        },
         color: %{kind: :ordinal, range: :category10}
       },
       axes: [
@@ -113,6 +118,7 @@ defmodule Visualize.Chart.ValidatorTest do
     projection: [:frame, :projection],
     facet: [:frame, :facet],
     viewport: [:frame, :viewport],
+    transition: [:frame, :scales, :y, :transition],
     mark: [:marks, 2],
     data: [:marks, 2, :data],
     transform: [:marks, 2, :data, :transforms, 0],

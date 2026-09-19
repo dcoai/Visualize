@@ -29,7 +29,7 @@ defmodule Examples.Charts.LineChart do
         style(:wave, stroke_width: 2, curve: :monotone_x),
         cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
         linear_scale(:x),
-        linear_scale(:y, nice: true),
+        linear_scale(:y, nice: true, transition: %{duration: 300}),
         axis(:x, :bottom, ticks: 10),
         axis(:y, :left, ticks: 5),
         line(:points, %{x: :x, y: :y}, style: :wave)
@@ -68,7 +68,7 @@ defmodule Examples.Charts.LineChart do
         style(:wave, stroke_width: 2, curve: :monotone_x),
         cartesian(600, 400, margin: %{top: 20, right: 20, bottom: 30, left: 50}),
         linear_scale(:x),
-        linear_scale(:y, nice: true),
+        linear_scale(:y, nice: true, transition: %{duration: 300}),
         axis(:x, :bottom, ticks: 10),
         axis(:y, :left, ticks: 5),
         line(:points, %{x: :x, y: :y}, style: :wave)

@@ -37,7 +37,7 @@ defmodule Examples.Charts.GroupedBarChart do
         cartesian(width, height, margin: @margin),
         band_scale(:x, padding: 0.2),
         band_scale(:x_offset, padding: 0.05),
-        linear_scale(:y, domain: [0, :auto], nice: true),
+        linear_scale(:y, domain: [0, :auto], nice: true, transition: %{duration: 300}),
         ordinal_scale(:color, domain: @series),
         axis(:x, :bottom),
         axis(:y, :left, ticks: 5, grid: true),
@@ -94,7 +94,7 @@ defmodule Examples.Charts.GroupedBarChart do
         band_scale(:x, padding: 0.2),
         # The band within the band: its range is the quarter band's width (spec/14 §4.3).
         band_scale(:x_offset, padding: 0.05),
-        linear_scale(:y, domain: [0, :auto], nice: true),
+        linear_scale(:y, domain: [0, :auto], nice: true, transition: %{duration: 300}),
         ordinal_scale(:color, domain: [:sales, :expenses, :profit]),
         axis(:x, :bottom),
         axis(:y, :left, ticks: 5, grid: true),

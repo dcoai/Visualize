@@ -398,6 +398,116 @@ defmodule Visualize.Chart.CompiledTest do
     end
   end
 
+  describe "an inferred domain eases (§12.5, #360)" do
+    # A y scale inferred from the rows, easing over 100 ms along the linear curve.
+    defp eased(transition \\ %{duration: 100, easing: :linear}) do
+      design(%{
+        x: %{kind: :linear, domain: [0, 100]},
+        y: %{kind: :linear, domain: [0, :auto], transition: transition}
+      })
+    end
+
+    defp peak(v), do: %{primary: [%{t: 0, v: 0}, %{t: 50, v: v}, %{t: 100, v: 1}]}
+
+    # The y domain the axis was drawn at: the last tick's label.
+    defp shown_max(payload) do
+      Regex.scan(~r/<text[^>]*x="-9">([\d.]+)<\/text>/, payload.svg)
+      |> List.last()
+      |> List.last()
+      |> then(&elem(Float.parse(&1), 0))
+    end
+
+    test "the shown domain leaves the old extent, is between the two mid-way, and reaches the new one" do
+      compiled = compile!(eased(), sources: peak(10), ceiling: 100)
+      {first, compiled} = Compiled.tick(compiled, peak(10), at: 0)
+      assert first.svg =~ ">10</text>"
+      assert compiled.eased.y.shown == [0.0, 10.0]
+
+      # The extent doubles: a grow retargets at once and starts from where it was.
+      {_, compiled} = Compiled.tick(compiled, peak(20), at: 0)
+
+      assert compiled.eased.y == %{
+               from: [0.0, 10.0],
+               target: [0.0, 20.0],
+               since: 0,
+               shown: [0.0, 10.0],
+               pending: nil
+             }
+
+      {mid, compiled} = Compiled.tick(compiled, peak(20), at: 50)
+      assert compiled.eased.y.shown == [0.0, 15.0]
+      # The axis is drawn at the shown domain: its top tick is below 20.
+      assert shown_max(mid) < 20
+
+      {done, compiled} = Compiled.tick(compiled, peak(20), at: 100)
+      assert compiled.eased.y.shown == [0.0, 20.0]
+      assert done.svg =~ ">20</text>"
+
+      # A shrink eases the same way, and without shrink_after it is taken at once.
+      {_, compiled} = Compiled.tick(compiled, peak(10), at: 200)
+      assert compiled.eased.y.target == [0.0, 10.0] and compiled.eased.y.from == [0.0, 20.0]
+      {_, compiled} = Compiled.tick(compiled, peak(10), at: 250)
+      assert compiled.eased.y.shown == [0.0, 15.0]
+    end
+
+    test "the marks and the axis agree at an intermediate frame" do
+      compiled = compile!(eased(), sources: peak(10), ceiling: 100)
+      {_, compiled} = Compiled.tick(compiled, peak(10), at: 0)
+      {_, compiled} = Compiled.tick(compiled, peak(20), at: 0)
+      {mid, _} = Compiled.tick(compiled, peak(20), at: 50)
+
+      # The plot is 150 high (200 less the 20 + 30 margins); at a shown top of 15 the peak
+      # of 20 maps above the plot's top and the point at 1 maps to 150 − 10.
+      [path] = Regex.run(~r/<path d="([^"]+)"/, mid.svg, capture: :all_but_first)
+      assert path =~ "L120,-50"
+      assert path =~ "L240,140"
+    end
+
+    test "shrink_after holds a shrink and not a grow" do
+      compiled =
+        compile!(eased(%{duration: 100, easing: :linear, shrink_after: 500}),
+          sources: peak(10),
+          ceiling: 100
+        )
+
+      {_, compiled} = Compiled.tick(compiled, peak(10), at: 0)
+
+      # A shrink is seen and held: the target stays.
+      {_, compiled} = Compiled.tick(compiled, peak(5), at: 100)
+      assert compiled.eased.y.target == [0.0, 10.0] and compiled.eased.y.pending == 100
+      {_, compiled} = Compiled.tick(compiled, peak(5), at: 400)
+      assert compiled.eased.y.target == [0.0, 10.0]
+
+      # A grow in the meantime is taken at once and clears the pending shrink.
+      {_, compiled} = Compiled.tick(compiled, peak(30), at: 450)
+      assert compiled.eased.y.target == [0.0, 30.0] and compiled.eased.y.pending == nil
+
+      # A shrink that lasts is taken once shrink_after has passed.
+      {_, compiled} = Compiled.tick(compiled, peak(5), at: 600)
+      {_, compiled} = Compiled.tick(compiled, peak(5), at: 1100)
+      assert compiled.eased.y.target == [0.0, 5.0]
+    end
+
+    test "a scale without a transition jumps as before, and step/3 is the one-string form eased" do
+      plain =
+        design(%{x: %{kind: :linear, domain: [0, 100]}, y: %{kind: :linear, domain: [0, :auto]}})
+
+      compiled = compile!(plain, sources: peak(10), ceiling: 100)
+      assert compiled.transitions == %{}
+      {_, compiled} = Compiled.tick(compiled, peak(10), at: 0)
+      {jumped, compiled} = Compiled.tick(compiled, peak(20), at: 1)
+      assert jumped.svg =~ ">20</text>" and compiled.eased == %{}
+
+      compiled = compile!(eased(), sources: peak(10), ceiling: 100)
+      {group, compiled} = Compiled.step(compiled, peak(10), at: 0)
+      assert group.type == :group and group.style.class == "frame"
+      {_, compiled} = Compiled.step(compiled, peak(20), at: 0)
+      {group, compiled} = Compiled.step(compiled, peak(20), at: 50)
+      assert compiled.eased.y.shown == [0.0, 15.0]
+      assert Visualize.Render.to_string(group, backend: :svg) =~ ~s(class="mark mark-line")
+    end
+  end
+
   describe "the render target of a text mark (§12.3, #134)" do
     test "a :text mark is :svg whatever render says, since the binary stream carries no text" do
       design =

@@ -74,7 +74,8 @@ defmodule Visualize.Chart.Schema do
     :legend,
     :projection,
     :facet,
-    :viewport
+    :viewport,
+    :transition
   ]
   @mark_kinds [
     :mark,

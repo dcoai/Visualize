@@ -70,7 +70,8 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:padding_outer, :number, :geometry),
       spec(:align, :number, :geometry, default: 0.5),
       spec(:round, :boolean, :geometry, default: false),
-      spec(:unknown, :term, :geometry)
+      spec(:unknown, :term, :geometry),
+      spec(:transition, {:node, :transition}, :geometry)
     ]
   end
 
@@ -143,6 +144,15 @@ defmodule Visualize.Chart.Schema.Frame do
     [
       spec(:scale, {:ref, :scale}, :geometry, required: true),
       spec(:span, :number, :geometry, required: true)
+    ]
+  end
+
+  # How a moving domain reaches its new extent in a compiled chart (spec/14 §4.3, §12.5).
+  def describe(:transition) do
+    [
+      spec(:duration, :number, :geometry, default: 300),
+      spec(:easing, {:enum, Visualize.Ease.names()}, :geometry, default: :cubic_in_out),
+      spec(:shrink_after, :number, :geometry, default: 0)
     ]
   end
 end
