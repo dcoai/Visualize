@@ -81,27 +81,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     /* ── the chart bar and the New form ──────────────────────────────────────────── */
 
-    .vis-builder-layer-count {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 22px;
-      height: 22px;
-      padding: 0 6px;
-      border-radius: 11px;
-      background: var(--vis-builder-ink);
-      color: var(--vis-builder-panel);
-      font-variant-numeric: tabular-nums;
-      font-size: 11px;
-      font-weight: 600;
-    }
-
-    .vis-builder-layer-count::after {
-      content: " layers";
-      font-weight: 400;
-      opacity: 0.75;
-    }
-
     .vis-builder-library,
     .vis-builder-new,
     .vis-builder-keep {
@@ -121,7 +100,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     /* The chart's controls sit just above the chart they act on (spec/10 §15.3, #364): one
-       row at the top of the middle column, the layer count at its right. */
+       row at the top of the middle column. */
     .vis-builder-chart-bar {
       display: flex;
       flex: 0 0 auto;
@@ -130,10 +109,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       gap: 8px;
       padding: 8px 10px;
       border-bottom: 1px solid var(--vis-builder-line);
-    }
-
-    .vis-builder-chart-bar .vis-builder-layer-count {
-      margin-left: auto;
     }
 
     .vis-builder-close {
