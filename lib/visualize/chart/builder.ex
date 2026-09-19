@@ -268,7 +268,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       <div id={@id} class={class("vis-builder", @class)}>
         <Styles.styles :if={@styles} />
         <div class="vis-builder-toolbar">
-          <span class="vis-builder-layer-count">{length(@uses)}</span>
           <form :if={@store} class="vis-builder-new" phx-submit="new_fragment" phx-target={@myself}>
             <label class="vis-builder-control-label" for={@id <> "-new-kind"}>New</label>
             <select id={@id <> "-new-kind"} name="kind" class="vis-builder-new-kind">
@@ -276,33 +275,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </select>
             <button type="submit" class="vis-builder-new-submit">New</button>
           </form>
-          <form :if={@store} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
-            <label class="vis-builder-control-label" for={@id <> "-keep"}>
-              {if @open, do: "Save as", else: "Save the chart as"}
-            </label>
-            <input
-              id={@id <> "-keep"}
-              type="text"
-              name="name"
-              class="vis-builder-name"
-              value={(@open && @open.name) || ""}
-              placeholder="Group:sub-group:name"
-            />
-            <button type="submit" class="vis-builder-put">Save to library</button>
-          </form>
-          <button type="button" class="vis-builder-save" phx-click="save" phx-target={@myself}>
-            Save
-          </button>
-          <button
-            :if={@preview?}
-            type="button"
-            class="vis-builder-deploy"
-            phx-click="deploy"
-            phx-target={@myself}
-            title="flatten the stack through the library and hand the host the design"
-          >
-            Deploy
-          </button>
         </div>
         <p :if={@notice} class="vis-builder-notice">{@notice}</p>
         <div class={
@@ -437,6 +409,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </p>
           </aside>
           <main class="vis-builder-main">
+            <div class="vis-builder-chart-bar">
+              <form :if={@store} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
+                <label class="vis-builder-control-label" for={@id <> "-keep"}>
+                  {if @open, do: "Save as", else: "Save the chart as"}
+                </label>
+                <input
+                  id={@id <> "-keep"}
+                  type="text"
+                  name="name"
+                  class="vis-builder-name"
+                  value={(@open && @open.name) || ""}
+                  placeholder="Group:sub-group:name"
+                />
+                <button type="submit" class="vis-builder-put">Save to library</button>
+              </form>
+              <button :if={@preview?} type="button" class="vis-builder-save" phx-click="save" phx-target={@myself}>
+                Save
+              </button>
+              <button
+                :if={@preview?}
+                type="button"
+                class="vis-builder-deploy"
+                phx-click="deploy"
+                phx-target={@myself}
+                title="flatten the stack through the library and hand the host the design"
+              >
+                Deploy
+              </button>
+              <span class="vis-builder-layer-count">{length(@uses)}</span>
+            </div>
             <div
               id={@id <> "-graph"}
               class="vis-builder-graph"

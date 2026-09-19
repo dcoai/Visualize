@@ -92,6 +92,44 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(class="vis-builder-save")
     end
 
+    # The chart's controls act on the middle column's chart, so they sit at its top
+    # (spec/10 §15.3, #364): the name form, Save, Deploy, the layer count — the toolbar
+    # keeps New alone.
+    test "the chart bar holds the save controls just above the graph, not the toolbar" do
+      html = rendered(:builder_store)
+      [_, after_toolbar] = String.split(html, ~s(class="vis-builder-toolbar"), parts: 2)
+      [toolbar, rest] = String.split(after_toolbar, "</div>", parts: 2)
+      assert toolbar =~ ~s(class="vis-builder-new")
+      refute toolbar =~ ~s(vis-builder-keep)
+      refute toolbar =~ ~s(vis-builder-save)
+      refute toolbar =~ ~s(vis-builder-layer-count)
+
+      [_, main] = String.split(rest, ~s(<main class="vis-builder-main">), parts: 2)
+      [bar, graph] = String.split(main, ~s(class="vis-builder-graph"), parts: 2)
+      assert bar =~ ~s(<div class="vis-builder-chart-bar">)
+
+      order =
+        Regex.scan(~r/vis-builder-(keep|save|deploy|layer-count)/, bar) |> Enum.map(&List.last/1)
+
+      assert order == ~w(keep save deploy layer-count)
+      assert bar =~ ~s(<span class="vis-builder-layer-count">3</span>)
+      refute graph =~ ~s(vis-builder-chart-bar)
+    end
+
+    test "a style opened from the library has no chart: its bar offers Save as alone" do
+      store = Visualize.Chart.BuilderTest.Styles
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: store)
+      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
+      html = BuilderFixture.render(opened)
+      [_, bar] = String.split(html, ~s(<div class="vis-builder-chart-bar">), parts: 2)
+      [bar, _] = String.split(bar, ~s(class="vis-builder-graph"), parts: 2)
+
+      assert bar =~ ~s(Save as\n)
+      assert bar =~ ~s(class="vis-builder-put")
+      refute bar =~ ~s(vis-builder-save)
+      refute bar =~ ~s(vis-builder-deploy)
+    end
+
     test "every assign but the id may be left out" do
       html = render_component(Builder, %{id: "b"})
       assert html =~ ~s(<div id="b" class="vis-builder">)

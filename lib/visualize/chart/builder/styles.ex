@@ -122,7 +122,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
       gap: 6px;
     }
 
-    .vis-builder-keep {
+    /* The chart's controls sit just above the chart they act on (spec/10 §15.3, #364): one
+       row at the top of the middle column, the layer count at its right. */
+    .vis-builder-chart-bar {
+      display: flex;
+      flex: 0 0 auto;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--vis-builder-line);
+    }
+
+    .vis-builder-chart-bar .vis-builder-layer-count {
       margin-left: auto;
     }
 
