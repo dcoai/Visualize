@@ -94,7 +94,10 @@ defmodule ExamplesWeb.ChartLive do
           # A streaming design starts at 600 samples/s per series, as the High-Performance
           # page did, with its window at that density from the moment the drawer opens
           # (#359); any other chart has no rate and no window.
-          run: Run.new(target_fps: 60, data_rate: if(Frames.stream?(module), do: 600, else: 0), flow_control: true),
+          # Any other chart's rate is ticks per second of its animation, 20 by default, the
+          # page's own cadence (#361); the run's tick counter advances by its arrivals.
+          run: Run.new(target_fps: 60, data_rate: if(Frames.stream?(module), do: 600, else: 20), flow_control: true),
+          run_ticks: 0,
           run_backend: :svg,
           run_state: nil,
           run_frame: nil,
@@ -178,7 +181,7 @@ defmodule ExamplesWeb.ChartLive do
         System.monotonic_time(:microsecond)
       )
 
-    socket = assign(socket, run: run, run_state: state, run_frame: nil, animating: false)
+    socket = assign(socket, run: run, run_state: state, run_frame: nil, run_ticks: 0, animating: false)
     {:noreply, socket |> start_frame() |> schedule_run()}
   end
 
@@ -252,7 +255,9 @@ defmodule ExamplesWeb.ChartLive do
             {:noreply, start_frame(socket, mode)}
 
           true ->
-            {:noreply, start_frame(socket)}
+            # A chart that animates by tick: the run's tick advances by the arrivals at its
+            # rate (density one), whatever the frame rate (#361).
+            {:noreply, start_frame(update(socket, :run_ticks, &(&1 + columns)))}
         end
     end
   end
@@ -349,8 +354,8 @@ defmodule ExamplesWeb.ChartLive do
   # The frame at the run's next tick, rendering in a task over a snapshot: a streaming
   # design's at its window, any other chart's at its next animation tick.
   defp start_frame(socket, _mode \\ :full_redraw) do
-    %{module: module, run_backend: backend, run_state: state, run: run} = socket.assigns
-    opts = run_opts(socket.assigns, run.frame)
+    %{module: module, run_backend: backend, run_state: state} = socket.assigns
+    opts = run_opts(socket.assigns, socket.assigns.run_ticks)
     render = fn ->
       {frame, state} = Frames.frame(module, opts, backend, state)
       {:frame, frame, state}
@@ -414,6 +419,41 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   defp stream_info(_assigns), do: nil
+
+  # The point metrics of any run (#361): the rows the last frame drew, the rows the chart
+  # holds, the points a second moves at the measured rate, the frame's mode — and the
+  # slider's unit and span, samples for a streaming design, ticks for any other chart.
+  defp points_info(%{run: run, run_frame: frame, run_mode: mode} = assigns) do
+    per_frame = (frame && frame.points) || 0
+
+    case stream_info(assigns) do
+      nil ->
+        %{
+          per_frame: per_frame,
+          total: per_frame,
+          per_second: round(run.measured_rate * per_frame),
+          mode: mode,
+          unit: "ticks/s",
+          rate_label: "Ticks/s",
+          min: 1,
+          max: 100,
+          step: 1
+        }
+
+      stream ->
+        %{
+          per_frame: per_frame,
+          total: stream.count * stream.series,
+          per_second: round(run.measured_rate * stream.series),
+          mode: mode,
+          unit: "samples/s per series",
+          rate_label: "Samples/s",
+          min: 10,
+          max: 5000,
+          step: 10
+        }
+    end
+  end
 
   def render(assigns) do
     ~H"""
@@ -581,6 +621,7 @@ defmodule ExamplesWeb.ChartLive do
           compare={@compare}
           comparing={@compare_task != nil}
           stream={stream_info(assigns)}
+          points={points_info(assigns)}
         />
 
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@backend) %></h3>
