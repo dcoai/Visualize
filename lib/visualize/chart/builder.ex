@@ -81,6 +81,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart.{Composite, Fragment, Schema, Use, Validator, Var}
     alias Visualize.{Signals, Theme}
 
+    # The context's panels, one open at a time (spec/14 §19.10): two from the icon row, the
+    # third from the tab that ends the node row (§18.13, #363).
+    @panels [:inspect, :colour, :variables]
+
     @doc false
     # The assigns a host may leave out, and their defaults (spec/14 §18.2). `attr/3` applies
     # these at a `<.live_component>` call site; they are applied here too, so the component
@@ -480,6 +484,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-value-root={tab.label}
                 phx-target={@myself}
               >{Phoenix.HTML.raw(Glyphs.icon(tab.label))}<span :if={tab.needs > 0} class="vis-builder-node-badge">{tab.needs}</span></button>
+              <button
+                type="button"
+                class={@variables_tab.class}
+                title={@variables_tab.title}
+                aria-label="variables"
+                aria-pressed={to_string(@variables_tab.open)}
+                data-builder-promote-target="true"
+                phx-click="context"
+                phx-value-panel="variables"
+                phx-target={@myself}
+              >{Phoenix.HTML.raw(Glyphs.icon(:variables))}<span :if={@variables_tab.needs > 0} class="vis-builder-node-badge">{@variables_tab.needs}</span></button>
             </nav>
             <nav class="vis-builder-context-icons" aria-label="context panels">
               <button
@@ -960,11 +975,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The icon row: which of the context's panels is open (spec/14 §19.10).
+    # The icon row and the variables tab: which of the context's panels is open (spec/14
+    # §19.10, §18.13).
     def handle_event("context", %{"panel" => panel}, socket) do
-      case Enum.find(context_icons(), fn {p, _, _} -> to_string(p) == panel end) do
-        {p, _, _} -> {:noreply, assign(socket, :context, p)}
+      case Enum.find(@panels, &(to_string(&1) == panel)) do
         nil -> {:noreply, socket}
+        p -> {:noreply, assign(socket, :context, p)}
       end
     end
 
@@ -1961,7 +1977,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       errors = faults(kind, design, assigns, cycle)
-      {tabs, children} = strip(nodes, entry, design, errors, layer == design)
+      {tabs, children} = strip(nodes, entry, design, errors, layer == design, assigns.context)
 
       %{
         layers: layers,
@@ -1970,6 +1986,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         nodes: nodes,
         entry: entry,
         tabs: tabs,
+        variables_tab: variables_tab(layers, design, assigns.bindings, assigns.context),
         chips: chips(children, entry, assigns.facet),
         page: page(nodes, entry, layer, errors, owned, assigns),
         needs: needs(errors),
@@ -2129,11 +2146,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The panel row: three panels (spec/14 §19.10, #314). The signals stand under the
-    # sources root and the font panel under styles, so neither is a panel of its own.
+    # The panel row: the two panels that are modes of the selected node (spec/14 §19.10,
+    # #314, #363). The signals stand under the sources root and the font panel under
+    # styles, so neither is a panel of its own; variables opens from the node row's tab.
     defp context_icons do
-      for panel <- [:inspect, :colour, :variables],
-          do: {panel, Glyphs.icon(panel), to_string(panel)}
+      for panel <- [:inspect, :colour], do: {panel, Glyphs.icon(panel), to_string(panel)}
     end
 
     # Every "#rrggbb" the design's styles carry, once each, in order of first use.
@@ -2219,10 +2236,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The strip: every root the stacked design declares, in the schema's order, then the
-    # Variables tab; the open root's children and the node's facets as one row of chips.
-    defp strip(nodes, entry, design, errors, chart?) do
-      open_root = root(entry.label)
+    # The strip: every root the stacked design declares, in the schema's order — none of
+    # them open while the variables panel is up, since the tab that ends the row is (spec/14
+    # §18.13, #363) — and the open root's children and the node's facets as one row of chips.
+    defp strip(nodes, entry, design, errors, chart?, context) do
+      open_root = if context == :variables, do: nil, else: root(entry.label)
       here = nodes |> Enum.map(&root(&1.label)) |> Enum.uniq()
       needs = needs(errors)
 
@@ -2316,6 +2334,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> then(&if here?, do: &1, else: &1 ++ ["vis-builder-node-elsewhere"])
       |> then(&if count > 0, do: &1 ++ ["vis-builder-node-needs"], else: &1)
       |> Enum.join(" ")
+    end
+
+    # The tab that ends the row (spec/14 §18.13, #363): open while the panel is up, badged
+    # with the variables that have neither a default nor a binding.
+    defp variables_tab(layers, design, bindings, context) do
+      count = length(Variables.unbound(layers, design, bindings))
+      open? = context == :variables
+
+      %{
+        open: open?,
+        needs: count,
+        class: tab_class(open?, true, count) <> " vis-builder-node-variables",
+        title: tab_title("variables", true, false, count) |> String.replace(" of this site", "")
+      }
     end
 
     defp tab_title(root, here?, chart?, count) do

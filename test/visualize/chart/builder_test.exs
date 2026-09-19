@@ -148,9 +148,9 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The selected layer is `house`, which declares three of them; the strip shows all
       # seven, because a person asks where the marks are, not which fragment holds them.
-      # Neither the design's own root nor vars is a tab (§18.13): a declaration is the
-      # variable panel's, and variables are chips in the context (§19.10).
-      assert tabs(html, "vis-builder-node") == ~w(frame sources styles marks labels)
+      # Neither the design's own root nor vars is a root tab (§18.13): a declaration is
+      # the variable panel's, and the panel opens from the tab that ends the row (#363).
+      assert tabs(html, "vis-builder-node") == ~w(frame sources styles marks labels variables)
 
       # Each root is an icon with its name on hover and for a reader (#314); the sine wave
       # the signals panel had is the sources root's.
@@ -2652,13 +2652,19 @@ defmodule Visualize.Chart.BuilderTest do
       %{socket: s}
     end
 
-    test "three icons, one open; inspect is the default", %{socket: s} do
+    test "two icons and the variables tab, one open; inspect is the default", %{socket: s} do
       html = BuilderFixture.render(s)
       assert html =~ ~s(<nav class="vis-builder-context-icons" aria-label="context panels">)
 
       for panel <- ~w(inspect colour variables) do
         assert html =~ ~s(phx-click="context" phx-value-panel="#{panel}")
       end
+
+      # The icon row is the two modes of the selected node; variables is the node row's
+      # last tab (#363).
+      [_, icons] = String.split(html, ~s(class="vis-builder-context-icons"), parts: 2)
+      refute icons =~ ~s(phx-value-panel="variables")
+      assert Regex.scan(~r/class="vis-builder-context-icon[ "]/, icons) |> length() == 2
 
       # The signals and the font panel are under their roots now (#314): no panel of theirs,
       # and a stale click on one is a no-op.
@@ -3561,13 +3567,88 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "the variables tab (spec/14 §18.13, #363)" do
+    test "ends the node row, set off from the roots, badged with the variables still needing a value" do
+      s = BuilderFixture.socket(BuilderFixture.parameterised())
+      html = BuilderFixture.render(s)
+      [_, nodes] = String.split(html, ~s(class="vis-builder-nodes"), parts: 2)
+      [nodes, _] = String.split(nodes, "</nav>", parts: 2)
+
+      assert List.last(tabs(nodes, "vis-builder-node")) == "variables"
+
+      # `ticks` and `unit` have defaults; `accent` has neither a default nor a binding.
+      unbound = Variables.unbound(BuilderFixture.layers(s), BuilderFixture.design(s), %{})
+      assert Enum.map(unbound, & &1.name) == [:accent]
+
+      assert nodes =~
+               ~s(class="vis-builder-node vis-builder-node-needs vis-builder-node-variables" title="variables — 1 thing still needed" aria-label="variables" aria-pressed="false" data-builder-promote-target="true" phx-click="context" phx-value-panel="variables")
+
+      assert nodes =~ ~s(<span class="vis-builder-node-badge">1</span></button>)
+
+      # A binding takes a variable off the badge, as a default already had.
+      {:noreply, bound} =
+        Builder.handle_event("set_var", %{"_target" => ["accent"], "accent" => "#ff0000"}, s)
+
+      [_, nodes] =
+        String.split(BuilderFixture.render(bound), ~s(class="vis-builder-nodes"), parts: 2)
+
+      assert nodes =~
+               ~s(class="vis-builder-node vis-builder-node-variables" title="variables" aria-label="variables")
+
+      [_, tab] = String.split(nodes, ~s(aria-label="variables"), parts: 2)
+      refute tab =~ ~s(vis-builder-node-badge)
+    end
+
+    test "opens the panel in place of the page with no root open; a root brings the page back" do
+      s = BuilderFixture.socket(BuilderFixture.parameterised())
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "styles.series"}, s)
+      assert BuilderFixture.render(s) =~ ~s(aria-label="styles" data-builder-bind-root="styles")
+      assert BuilderFixture.render(s) =~ ~r/vis-builder-node-open[^>]*aria-label="styles"/
+
+      {:noreply, up} = Builder.handle_event("context", %{"panel" => "variables"}, s)
+      assert up.assigns.context == :variables
+      html = BuilderFixture.render(up)
+      assert html =~ ~s(class="vis-builder-variables")
+      refute html =~ ~s(class="vis-builder-inspect")
+
+      # The tab is the open one, and no root is.
+      assert html =~
+               ~s(class="vis-builder-node vis-builder-node-open vis-builder-node-needs vis-builder-node-variables")
+
+      assert Regex.scan(~r/vis-builder-node-open/, html) |> length() == 1
+      assert html =~ ~s(aria-pressed="true" data-builder-promote-target="true")
+
+      {:noreply, back} = Builder.handle_event("select_root", %{"root" => "styles"}, up)
+      assert back.assigns.context == :inspect
+      assert back.assigns.node_label == "styles.series"
+      html = BuilderFixture.render(back)
+      assert html =~ ~r/vis-builder-node-open[^>]*aria-label="styles"/
+      refute html =~ ~s(vis-builder-node-open vis-builder-node-needs vis-builder-node-variables)
+    end
+
+    test "a field's promote handle dropped on the tab promotes, as on the panel's create area" do
+      s = BuilderFixture.socket(BuilderFixture.parameterised())
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "styles.series"}, s)
+
+      {:noreply, promoted} =
+        Builder.handle_event("promote", %{"field" => "stroke_width", "scope" => "root"}, s)
+
+      assert %Visualize.Chart.Var{name: name} =
+               BuilderFixture.design(promoted).styles.series.stroke_width
+
+      assert to_string(name) =~ "stroke_width"
+    end
+  end
+
   describe "the variable panel (spec/14 §19.10)" do
     test "lists the composition's variables alphabetically, typed by first use, with their uses as links" do
       s = BuilderFixture.socket(BuilderFixture.parameterised(), context: :variables)
       html = BuilderFixture.render(s)
 
-      # No tab: variables live in the context.
+      # Not a root: the tab that ends the node row opens the panel (#363), it selects no
+      # root and binds nothing dropped on it.
       refute html =~ ~s(phx-value-root="variables")
+      refute html =~ ~s(data-builder-bind-root="variables")
 
       [_, context] =
         String.split(html, ~s(class="vis-builder-context" phx-hook="BuilderHook"), parts: 2)

@@ -183,6 +183,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end)
     end
 
+    @doc """
+    The variables the composition still needs a value for (spec/14 §18.13, #363): those of
+    `list/2` with neither a default in their declaration nor a binding among `bindings`,
+    alphabetically — the count the variables tab wears as its badge.
+
+        iex> layers = [{"a", %{labels: [%{anchor: :title, text: ["u ", Visualize.Chart.var(:unit)]}]}}]
+        iex> design = Visualize.Chart.stack(layers)
+        iex> Visualize.Chart.Builder.Variables.unbound(layers, design, %{}) |> Enum.map(& &1.name)
+        [:unit]
+        iex> Visualize.Chart.Builder.Variables.unbound(layers, design, %{unit: "%"})
+        []
+    """
+    @spec unbound([{term(), map()}], map(), map()) :: [map()]
+    def unbound(layers, design, bindings) do
+      for var <- list(layers, design),
+          var.default == nil,
+          not Map.has_key?(bindings, var.name),
+          do: var
+    end
+
     @doc "The type a variable took from its first use (spec/14 §17.2), or `nil` for none."
     @spec type_of([map()]) :: term() | nil
     def type_of([%{expects: type} | _rest]), do: type

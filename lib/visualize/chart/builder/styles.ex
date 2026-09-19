@@ -814,6 +814,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-size: 12px;
     }
 
+    /* The tab that ends the row is a destination, not a root (spec/14 §18.13, #363): the
+       same shape, set off from the roots by a gap. */
+    .vis-builder-node-variables {
+      margin-left: 10px;
+    }
+
     .vis-builder-node-badge {
       position: absolute;
       top: 1px;
