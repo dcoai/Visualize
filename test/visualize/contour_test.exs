@@ -5,6 +5,7 @@ defmodule Visualize.ContourTest do
   the module is synchronous so no other test shares the scheduler while it times.
   """
   use ExUnit.Case, async: false
+  use ExUnitProperties
 
   alias Visualize.Contour
   alias Visualize.Contour.Density
@@ -88,15 +89,80 @@ defmodule Visualize.ContourTest do
   end
 
   describe "the tracing terminates" do
-    # A corner exactly on a threshold heads two segments from one point; before D-72 the
-    # walk cycled forever. What such a grid should trace is #81's question — only the
-    # return is held here.
+    # A corner exactly on a threshold headed two segments from one point; before D-72 the
+    # walk cycled forever, and until D-112 (#81) the ring through it closed early.
     test "on the moduledoc grid with a threshold equal to a corner value" do
       grid = [[0, 0, 0, 0], [0, 5, 5, 0], [0, 5, 10, 5], [0, 0, 5, 0]]
       contour = Contour.new() |> Contour.size(4, 4) |> Contour.thresholds(3)
       task = Task.async(fn -> Contour.compute(contour, grid) end)
 
       assert {:ok, [%{value: 2.5}, %{value: 5.0}, %{value: 7.5}]} = Task.yield(task, 5_000)
+    end
+  end
+
+  describe "a corner on a threshold (spec/07 §6.3, D-112)" do
+    # The moduledoc grid at 5: four corners sit on the threshold. Every ring closes, on its
+    # exact start, with at least four points — no two-point polyline.
+    test "traces closed rings of at least four points, smoothing on and off" do
+      grid = [[0, 0, 0, 0], [0, 5, 5, 0], [0, 5, 10, 5], [0, 0, 5, 0]]
+
+      for smooth? <- [true, false] do
+        contour =
+          Contour.new()
+          |> Contour.size(4, 4)
+          |> Contour.thresholds([5])
+          |> Contour.smooth(smooth?)
+
+        [%{value: 5, coordinates: polygons}] = Contour.compute(contour, grid)
+        assert polygons != []
+        Enum.each(polygons, fn [ring] -> assert_closed(ring) end)
+      end
+    end
+
+    test "the crossing sits a hair along each edge of the corner, never on it" do
+      grid = [[0, 0, 0], [0, 5, 0], [0, 0, 0]]
+      contour = Contour.new() |> Contour.size(3, 3) |> Contour.thresholds([5])
+      [%{coordinates: polygons}] = Contour.compute(contour, grid)
+
+      points = for [ring] <- polygons, point <- ring, do: point
+      refute [1, 1] in points
+      assert Enum.any?(points, fn [x, y] -> abs(x - 1) < 1.0e-5 and abs(y - 1) < 1.0e-5 end)
+    end
+
+    test "render/2 closes every ring with Z" do
+      grid = [[0, 0, 0, 0], [0, 5, 5, 0], [0, 5, 10, 5], [0, 0, 5, 0]]
+      contour = Contour.new() |> Contour.size(4, 4) |> Contour.thresholds([5])
+      [%{path: path}] = Contour.render(contour, grid)
+
+      assert path != ""
+      for ring <- String.split(path, "M", trim: true), do: assert(String.ends_with?(ring, "Z"))
+    end
+
+    # Random small integer grids and integer thresholds put corners on thresholds all over:
+    # the tracing returns, and every ring is closed with at least four points.
+    property "every ring of a random integer grid is closed with at least four points" do
+      check all(
+              width <- integer(2..6),
+              height <- integer(2..6),
+              grid <- list_of(list_of(integer(0..4), length: width), length: height),
+              threshold <- integer(1..4),
+              smooth? <- boolean(),
+              max_runs: 200
+            ) do
+        contour =
+          Contour.new()
+          |> Contour.size(width, height)
+          |> Contour.thresholds([threshold])
+          |> Contour.smooth(smooth?)
+
+        [%{value: ^threshold, coordinates: polygons}] = Contour.compute(contour, grid)
+        Enum.each(polygons, fn [ring] -> assert_closed(ring) end)
+      end
+    end
+
+    defp assert_closed(ring) do
+      assert length(ring) >= 4, "a ring of #{length(ring)} points: #{inspect(ring)}"
+      assert List.first(ring) == List.last(ring), "an open ring: #{inspect(ring)}"
     end
   end
 end
