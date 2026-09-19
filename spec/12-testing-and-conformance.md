@@ -47,6 +47,8 @@ The two warning gates cover disjoint code and both are required (D-91). `mix com
 
 `mix vis.check` (`scripts/check.exs`) runs the same jobs locally in the same order and MUST be the last thing run before submitting a change for review.
 
+**Compiled dependencies come from the depdep store** (`scripts/depdep.exs`, pinned to a depdep tag; #342, #343). Every job's `before_script` pulls the root project's dependencies in one line — `--pull --mix-get --compile-deps --exclude examples`: the pull, `mix deps.get` inside it, a second decision once the source is on disk (so a git dependency and its cone are keyed in one invocation), and a compile of exactly what the store lacked — falling back to a bare `mix deps.get` when the store cannot be reached; the `compile` job pushes what was missing after a green build, the examples member excluded since those jobs never build it. The `examples:test` job is the one that builds `examples/`, so it pulls and pushes that member itself, from its own directory, the same way. Without the `DEPDEP_*` variables depdep is a no-op that exits 0, so a pipeline never depends on the store.
+
 ## 5. The ExTLA model of the force simulation
 
 **Implemented.** `Visualize.Specs.ForceSimulation` (`specs/force_simulation_spec.ex`, compiled in dev and test only) models the timer discipline of `Visualize.Layout.Force.Simulation` ([06-layouts](06-layouts.md) §8.5). Nodes, links and forces are abstracted away; what is kept exactly is every message the server handles, the deferred `:start_simulation` that `init/1` enqueues, and the two kinds of tick message: a *live* tick from the timer the server is waiting on, and a *stale* tick from a timer cancelled after its message had already reached the mailbox.
