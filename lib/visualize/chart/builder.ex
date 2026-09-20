@@ -70,6 +70,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Picker,
       Place,
       Preview,
+      Scales,
       Sources,
       Stack,
       Store,
@@ -2219,11 +2220,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # validated as that kind — per-kind validity (spec/14 §19.8).
     defp faults(_kind, _design, _assigns, [_ | _] = chain), do: [{[], {:cycle, chain}}]
 
+    # The layer's faults, and the builder's own: a position channel bound through no scale
+    # that nothing could type (spec/14 §18.16, #370).
     defp faults(:composite, design, %{bindings: vars, theme: theme} = assigns, nil) do
-      case Chart.apply(design, sources: pool(assigns), vars: vars, theme: theme) do
-        {:ok, _applied} -> []
-        {:error, errors} -> errors
-      end
+      pool = pool(assigns)
+
+      layer =
+        case Chart.apply(design, sources: pool, vars: vars, theme: theme) do
+          {:ok, _applied} -> []
+          {:error, errors} -> errors
+        end
+
+      layer ++ Scales.unscaled(design, Scales.pool_types(pool))
     end
 
     defp faults(kind, design, _assigns, nil) do
@@ -2885,8 +2893,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:noreply, filled(socket, target, params[target], &edited(&1, entry, &2))}
       else
         {:noreply,
-         Enum.reduce(Editor.changes(entry.kind, params), socket, &edited(&2, entry, &1))}
+         Editor.changes(entry.kind, params)
+         |> Enum.reduce(socket, &edited(&2, entry, &1))
+         |> derived_scales()}
       end
+    end
+
+    # The scales the bound channels need and the frame lacks, declared through the
+    # ownership rule (spec/14 §18.16, #370): after any binding — an edit, a placed mark.
+    defp derived_scales(socket) do
+      design = composed(socket)
+
+      design
+      |> Scales.derive(Scales.pool_types(pool(socket.assigns)))
+      |> Enum.reduce(socket, fn {name, node}, acc ->
+        update_layer(acc, [:frame, :scales], name, {:ok, node})
+      end)
     end
 
     defp edited(socket, _entry, nil), do: socket
@@ -3045,6 +3067,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             notice: nil
           )
           |> opened_placed(component, last)
+          |> derived_scales()
 
         {:legend, node} ->
           socket
@@ -3136,10 +3159,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @declaring [[:sources], [:styles], [:defs], [:vars]]
 
+    # The owner of the key's value, else of the node, else of the nearest ancestor that a
+    # layer gives — a scale derived under `frame.scales` goes to the frame's owner, not to
+    # the selected mark site (#370) — and a declaration under a root is new (§18.15).
     defp owner_for(uses, fetch, path, key) do
       placed = Stack.placed(uses, fetch)
       leaves = Chart.explain(placed)
-      candidates = if path in @declaring, do: [path ++ [key]], else: [path ++ [key], path]
+
+      candidates =
+        if path in @declaring,
+          do: [path ++ [key]],
+          else: [path ++ [key], path | ancestors(path)]
 
       Enum.find_value(candidates, fn at ->
         case owner_of(leaves, placed, uses, at) do
@@ -3147,6 +3177,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
           id -> Stack.get(uses, id)
         end
       end)
+    end
+
+    # The proper prefixes of a path, nearest first: `[:frame, :scales]` → `[[:frame]]`.
+    defp ancestors(path) do
+      for n <- (length(path) - 1)..1//-1, do: Enum.take(path, n)
     end
 
     defp styled(socket, nil), do: socket

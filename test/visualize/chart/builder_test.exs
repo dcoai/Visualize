@@ -28,6 +28,7 @@ defmodule Visualize.Chart.BuilderTest do
   doctest Visualize.Chart.Builder.Masks
   doctest Visualize.Chart.Builder.Picker
   doctest Visualize.Chart.Builder.Variables
+  doctest Visualize.Chart.Builder.Scales
   doctest Visualize.Chart.Builder.Fonts
 
   for name <- ~w(preview preview_errors builder builder_store)a do
@@ -3623,6 +3624,122 @@ defmodule Visualize.Chart.BuilderTest do
                )
 
       assert applied.chart.meta.name == "Uptime for db2"
+    end
+  end
+
+  describe "a bound channel has a scale (spec/14 §18.16, #370)" do
+    # One frame layer, one typed source, no scales: what a person has after adding data.
+    defp bare(types, sources \\ BuilderFixture.sources()) do
+      layers = [
+        {:chart,
+         %{
+           version: 1,
+           frame: %{kind: :cartesian},
+           sources: %{primary: %{fields: [:t, :v, :k], types: types}}
+         }}
+      ]
+
+      BuilderFixture.socket(layers, sources: sources)
+    end
+
+    defp scales(s), do: get_in(BuilderFixture.design(s), [:frame, :scales]) || %{}
+
+    test "a placed mark's guessed channels declare their scales from the columns' types" do
+      s = bare(%{t: :time, v: :number, k: :category})
+
+      {:noreply, s1} =
+        Builder.handle_event("place", %{"component" => "mark:line", "region" => "plot"}, s)
+
+      assert scales(s1) == %{
+               x: %{kind: :time, domain: :auto},
+               y: %{kind: :linear, domain: :auto}
+             }
+
+      # Written to the frame's owner, the chart layer — never into the mark site (§18.15).
+      [chart, mark] = Enum.map(s1.assigns.uses, & &1.local)
+      assert Map.keys(chart.frame.scales) == [:x, :y]
+      assert Map.keys(mark) == [:mark]
+
+      # The scale is a real node under frame › scales, and no need is raised.
+      {:noreply, frame} = Builder.handle_event("select_root", %{"root" => "frame"}, s1)
+      assert BuilderFixture.render(frame) =~ ~s(data-builder-node="frame.scales.x")
+      refute BuilderFixture.render(s1) =~ "through no scale"
+    end
+
+    test "a category is a band; a colour channel an ordinal; a literal a number; a declared scale stands" do
+      s = bare(%{t: :time, v: :number, k: :category})
+
+      # A rect guesses x0: t, x1: v, y0: k over the three fields: y is a band from k.
+      {:noreply, s1} =
+        Builder.handle_event("place", %{"component" => "mark:rect", "region" => "plot"}, s)
+
+      assert scales(s1) == %{x: %{kind: :time, domain: :auto}, y: %{kind: :band, domain: :auto}}
+
+      label = s1.assigns.node_label
+      {:noreply, s2} = Builder.handle_event("select_node", %{"node" => label <> ".channels"}, s1)
+      # (A channel is a literal until #371: a field is typed as `:k`.)
+      {:noreply, s2} = Builder.handle_event("edit", %{"_target" => ["y0"], "y0" => "0"}, s2)
+      {:noreply, s2} = Builder.handle_event("edit", %{"_target" => ["y1"], "y1" => ":v"}, s2)
+
+      {:noreply, s2} =
+        Builder.handle_event("edit", %{"_target" => ["value"], "value" => ":k"}, s2)
+
+      # The declared y stands, k notwithstanding; value: k derives the ordinal colour scale.
+      assert scales(s2) == %{
+               x: %{kind: :time, domain: :auto},
+               y: %{kind: :band, domain: :auto},
+               color: %{kind: :ordinal, domain: :auto}
+             }
+
+      # A literal number is number evidence; a numeric colour is sequential.
+      assert Visualize.Chart.Builder.Scales.derive(
+               %{
+                 frame: %{kind: :cartesian},
+                 sources: %{p: %{fields: [:v], types: %{v: :number}}},
+                 marks: [%{type: :rect, data: :p, channels: %{y0: 0, value: :v}}]
+               },
+               %{}
+             ) == %{
+               y: %{kind: :linear, domain: :auto},
+               color: %{kind: :sequential, domain: :auto}
+             }
+    end
+
+    test "the rows suggest a type the design does not declare; with neither the channel is a need" do
+      rows = %{primary: [%{t: ~U[2024-01-01 00:00:00Z], v: 1, k: "a"}]}
+      s = bare(%{}, rows)
+
+      {:noreply, s1} =
+        Builder.handle_event("place", %{"component" => "mark:line", "region" => "plot"}, s)
+
+      assert scales(s1) == %{x: %{kind: :time, domain: :auto}, y: %{kind: :linear, domain: :auto}}
+
+      s = bare(%{}, %{primary: []})
+
+      {:noreply, s2} =
+        Builder.handle_event("place", %{"component" => "mark:line", "region" => "plot"}, s)
+
+      assert scales(s2) == %{}
+      html = BuilderFixture.render(s2)
+
+      assert html =~
+               "reads :t through no scale — say what :t is under data, or declare the scale under frame"
+
+      # Counted on the mark's tab and its channels section, like any need.
+      assert html =~ ~r/vis-builder-node-needs[^>]*aria-label="marks"/
+      assert html =~ ~s(class="vis-builder-section vis-builder-section-needs")
+
+      # Typing the column clears it, and derives the scale on the next binding.
+      {:noreply, s3} = Builder.handle_event("select_node", %{"node" => "sources.primary"}, s2)
+
+      {:noreply, s3} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["types"], "types" => ~s({"t": "number", "v": "number"})},
+          s3
+        )
+
+      refute BuilderFixture.render(s3) =~ "through no scale"
     end
   end
 

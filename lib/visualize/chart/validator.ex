@@ -608,6 +608,12 @@ defmodule Visualize.Chart.Validator do
     "version #{inspect(v)} is not supported; the current version is #{Migration.current()}"
   end
 
+  # The builder's need of spec/14 §18.16 (#370), worded here so one reader serves it.
+  defp words({:unscaled, field}) do
+    "reads #{inspect(field)} through no scale — say what #{inspect(field)} is under data, " <>
+      "or declare the scale under frame"
+  end
+
   defp words({:json, message}), do: "JSON does not parse: #{message}"
   defp words({:missing_dependency, :jason}), do: "needs the optional dependency Jason"
 
