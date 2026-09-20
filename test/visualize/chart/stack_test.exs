@@ -80,7 +80,9 @@ defmodule Visualize.Chart.StackTest do
     end
 
     test "a chart struct is taken as its map" do
-      chart = Chart.from_map!(Chart.stack([@frame, @panel, %{version: 1}]))
+      # The house declares the style the panel's mark reads; without it the design is not
+      # one (D-113), and from_map!/1 says so.
+      chart = Chart.from_map!(Chart.stack([@frame, @house, @panel, %{version: 1}]))
 
       assert Chart.stack([@house, chart]) == Chart.stack(@house, Chart.to_map(chart))
     end

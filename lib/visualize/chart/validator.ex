@@ -214,10 +214,14 @@ defmodule Visualize.Chart.Validator do
   defp nested(map, [k | rest]) when is_map(map) and not is_struct(map), do: nested(map[k], rest)
   defp nested(_, _), do: nil
 
+  # What a design declares under a key: the names of the map, the empty set when the key is
+  # absent (D-113) — a reference into it is then undeclared, never unchecked — and unknown
+  # only for a value that is not a map, which is a type fault of its own.
   defp declared(map) when is_map(map) and not is_struct(map) do
     map |> Map.keys() |> Enum.filter(&name?/1) |> MapSet.new()
   end
 
+  defp declared(nil), do: MapSet.new()
   defp declared(_), do: :unknown
 
   defp union(:unknown, _), do: :unknown
@@ -230,6 +234,7 @@ defmodule Visualize.Chart.Validator do
     end)
   end
 
+  defp source_fields(nil), do: %{}
   defp source_fields(_), do: :unknown
 
   defp slots(:default), do: theme_slots(Theme.default())
