@@ -2711,13 +2711,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A signal added is a source of the chart (spec/14 §19.10): declared under its name in
     # the selected layer with the signal's fields, unless the chart declares one already.
-    defp declared_source(socket, name, %{fields: fields}) do
+    # A signal's first field is its time and the rest its numbers (spec/14 §2.3, #369).
+    defp declared_source(socket, name, %{fields: [time | numbers] = fields}) do
       %{design: design} = editing(socket.assigns)
 
       if Map.has_key?(Map.get(design, :sources, %{}), name) do
         socket
       else
-        update_layer(socket, [:sources], name, {:ok, %{fields: fields}})
+        types = Map.new([{time, :time} | Enum.map(numbers, &{&1, :number})])
+        update_layer(socket, [:sources], name, {:ok, %{fields: fields, types: types}})
       end
     end
 

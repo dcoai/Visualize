@@ -126,6 +126,42 @@ defmodule Visualize.Data.Table do
   end
 
   @doc """
+  Every named column's type, read whole (spec/08 §6.3, spec/14 §2.3, #369): all non-`nil`
+  values temporal is `:time`, all numbers `:number`, all strings `:text`, all atoms or
+  booleans `:category`; a mixed or empty column is left out. A suggestion for a tool, never
+  something the layer reads at render.
+
+      iex> rows = [%{t: ~U[2024-01-01 00:00:00Z], v: 1, k: :a, s: "x", m: 1},
+      ...>         %{t: ~U[2024-01-02 00:00:00Z], v: 2.5, k: :b, s: "y", m: "two"}]
+      iex> Visualize.Data.Table.column_types(rows)
+      %{t: :time, v: :number, k: :category, s: :text}
+      iex> Visualize.Data.Table.column_types([])
+      %{}
+  """
+  @spec column_types(source()) :: %{name() => :time | :number | :category | :text}
+  def column_types(source) do
+    rows = rows(source)
+
+    for name <- column_names(rows),
+        type = column_type(Enum.reject(Enum.map(rows, &Map.get(&1, name)), &is_nil/1)),
+        type != nil,
+        into: %{},
+        do: {name, type}
+  end
+
+  defp column_type([]), do: nil
+
+  defp column_type(values) do
+    cond do
+      Enum.all?(values, &temporal?/1) -> :time
+      Enum.all?(values, &is_number/1) -> :number
+      Enum.all?(values, &is_binary/1) -> :text
+      Enum.all?(values, &(is_atom(&1) and not is_nil(&1))) -> :category
+      true -> nil
+    end
+  end
+
+  @doc """
   Whether a value is a point in time: a `DateTime`, `Date` or `NaiveDateTime`, or a string
   in ISO 8601 form that one of those parses (`DateTime.from_iso8601/1` first, then
   `NaiveDateTime.from_iso8601/1`, then `Date.from_iso8601/1`).

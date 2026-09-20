@@ -2584,7 +2584,8 @@ defmodule Visualize.Chart.BuilderTest do
       # The signal is a source of the chart at once: declared in the selected layer with
       # its fields, listed under the sources tab, offered to a mark's data (§19.10).
       {_, house} = hd(BuilderFixture.layers(s))
-      assert house.sources.signal_1 == %{fields: [:t, :value]}
+      # The signal's first field is its time, the rest its numbers (#369).
+      assert house.sources.signal_1 == %{fields: [:t, :value], types: %{t: :time, value: :number}}
       {:noreply, sources} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
       assert BuilderFixture.render(sources) =~ ~s(title="sources.signal_1 — in house")
       {:noreply, marks} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
@@ -3346,7 +3347,11 @@ defmodule Visualize.Chart.BuilderTest do
       # source in `house` (§19.10), and the page lists both, each tagged.
       {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
       [{:house, house}, {:shared, shared}, _panel] = BuilderFixture.layers(s)
-      assert house.sources == %{signal_1: %{fields: [:t, :value]}}
+
+      assert house.sources == %{
+               signal_1: %{fields: [:t, :value], types: %{t: :time, value: :number}}
+             }
+
       assert shared.sources == %{primary: %{fields: [:t, :v]}}
 
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "sources"}, s)

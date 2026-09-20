@@ -6,6 +6,8 @@ defmodule Visualize.Data.TableTest do
   alias Explorer.DataFrame
   alias Visualize.Data.Table
 
+  doctest Table
+
   @rows [%{t: 1, v: 10.0}, %{t: 2, v: 20.0}, %{t: 3, v: 30.0}]
 
   # Rows to a column map: the inverse `rows/1` is tested against.
@@ -141,6 +143,52 @@ defmodule Visualize.Data.TableTest do
 
     test "a tuple row has no names" do
       assert_raise BadMapError, fn -> Table.get({1, 2}, :v) end
+    end
+  end
+
+  describe "column_types/1 (spec/08 §6.3, #369)" do
+    test "types a column by its whole, leaves a mixed or empty one out" do
+      rows = [
+        %{
+          t: ~U[2024-01-01 00:00:00Z],
+          d: "2024-01-01",
+          n: 1,
+          f: 1.5,
+          s: "a",
+          k: :x,
+          b: true,
+          m: 1,
+          e: nil
+        },
+        %{
+          t: ~U[2024-01-02 00:00:00Z],
+          d: "2024-01-02",
+          n: 2,
+          f: nil,
+          s: "b",
+          k: :y,
+          b: false,
+          m: "x",
+          e: nil
+        }
+      ]
+
+      assert Table.column_types(rows) == %{
+               t: :time,
+               d: :time,
+               n: :number,
+               f: :number,
+               s: :text,
+               k: :category,
+               b: :category
+             }
+    end
+
+    test "a column that stops being temporal is text, a column map and a tuple table" do
+      assert Table.column_types([%{d: "2024-01-01"}, %{d: "later"}]) == %{d: :text}
+      assert Table.column_types(%{t: [1, 2], s: ["a", "b"]}) == %{t: :number, s: :text}
+      assert Table.column_types([{1, 2}, {3, 4}]) == %{}
+      assert Table.column_types([]) == %{}
     end
   end
 

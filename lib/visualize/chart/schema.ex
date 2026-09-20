@@ -105,6 +105,7 @@ defmodule Visualize.Chart.Schema do
   @weights [:light, :normal, :medium, :bold]
   @blends [:normal, :multiply, :screen, :overlay, :darken, :lighten]
   @builtin_styles [:axis, :grid, :label, :title]
+  @column_types [:time, :number, :category, :text]
 
   @doc "Every node kind of spec/14 §1.2, the design first."
   @spec kinds() :: [kind(), ...]
@@ -189,6 +190,10 @@ defmodule Visualize.Chart.Schema do
   @doc "The style names every design declares (spec/14 §3.3)."
   @spec builtin_styles() :: [atom(), ...]
   def builtin_styles, do: @builtin_styles
+
+  @doc "The four column types a source's `types` may name (spec/14 §2.3, #369)."
+  @spec column_types() :: [atom(), ...]
+  def column_types, do: @column_types
 
   @doc false
   def curve_types, do: @curve_types
@@ -288,6 +293,7 @@ defmodule Visualize.Chart.Schema do
   defp design_node(:source) do
     [
       spec(:fields, {:list, :field}, :binding, required: true),
+      spec(:types, {:map, {:enum, @column_types}}, :binding, default: %{}),
       spec(:default, :name, :binding)
     ]
   end
