@@ -518,3 +518,24 @@ The window **slides**: tick 25 over a window of 24 yields ticks 2..25, and the n
 | `Visualize.Signals.new/3` | As `new/2` with options. |
 | `Visualize.Signals.rows/2` | `rows(signal, tick)`: the window of rows ending at the tick (8.2). |
 | `Visualize.Signals.pool/2` | `pool(signals, tick)`: `rows/2` of every signal of a map, under its name. |
+
+## 9. FFT
+
+### 9.1 The transform
+
+`Visualize.Data.FFT` (#375) is the fast Fourier transform in pure Elixir: a radix-2 Cooley–Tukey decimation in time over lists, `O(N log N)`, with no native code. `fft/1` takes a sequence whose length is a power of two — numbers read as real, `{re, im}` pairs as complex — and returns the `N` complex terms `X_k = Σ x_n e^{−2πi kn/N}` as `{re, im}` pairs; any other length raises `ArgumentError`. `magnitudes/1` is `sqrt(re² + im²)` of every term. Parseval holds: the sum of the squared magnitudes over `N` equals the sum of the squared samples, to floating precision.
+
+### 9.2 Windows and the spectrum
+
+`window/2` tapers a sequence by `:hann` (`0.5 − 0.5 cos(2πi/(N−1))`), `:hamming` (`0.54 − 0.46 cos(2πi/(N−1))`) or `:none` — a sequence shorter than four is not tapered, the Hann of two points being all zeros; `windows/0` lists them, `:hann` first. `spectrum/3` is the reading a chart draws: `spectrum(values, every, opts)` takes the newest `samples` values — the option, a power of two, else the largest power of two not above the count — tapers them, transforms them and returns `samples / 2` lines `%{frequency, magnitude, phase}`: `frequency` is `k / (samples · every)` in hertz for `every` seconds between samples; `magnitude` the one-sided amplitude `|X_k| · 2 / (samples · gain)` with the window's mean gain divided out, so a sine of amplitude `A` reads `A` at its frequency whatever the taper, the DC line not doubled; `phase` the argument of `X_k`. Fewer than two values, or fewer than `samples`, yield `[]`. A 4096-point spectrum costs single-digit milliseconds, a 1024-point one about two; the test suite holds those bounds.
+
+### 9.3 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Data.FFT.fft/1` | The `N` complex terms of a sequence whose length is a power of two (9.1). |
+| `Visualize.Data.FFT.magnitudes/1` | `sqrt(re² + im²)` of every term. |
+| `Visualize.Data.FFT.window/2` | `window(values, kind)`: the sequence tapered by `:hann`, `:hamming` or `:none` (9.2). |
+| `Visualize.Data.FFT.windows/0` | The three window kinds, `:hann` first. |
+| `Visualize.Data.FFT.spectrum/2` | As `spectrum/3` with no options. |
+| `Visualize.Data.FFT.spectrum/3` | `spectrum(values, every, opts)`: the one-sided amplitude spectrum of the newest power of two of values sampled every `every` seconds (9.2). |
