@@ -2072,34 +2072,84 @@ if Code.ensure_loaded?(Phoenix.Component) do
       min-width: 0;
     }
 
-    /* The sources tab (spec/14 §19.10): a signal per fieldset, the numbers in a row, the
-       transport beneath. */
+    /* The data page (spec/14 §19.10, #372): a source per section — its name, its columns
+       one to a line, its generator and numbers — the transport beneath. */
     .vis-builder-sources {
       padding: 8px;
     }
 
-    .vis-builder-signals {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .vis-builder-signal {
+    .vis-builder-source {
       display: flex;
       flex-direction: column;
       gap: 6px;
-      margin: 0;
+      margin: 0 0 8px;
       padding: 6px 8px 8px;
       border: 1px solid var(--vis-builder-line);
       border-radius: var(--vis-builder-radius);
       min-width: 0;
     }
 
-    .vis-builder-signal-name {
-      padding: 0 4px;
+    .vis-builder-source-name {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .vis-builder-source-name .vis-builder-name {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-family: var(--vis-builder-mono);
+      font-weight: 600;
+    }
+
+    .vis-builder-columns {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin: 0;
+      padding: 0 0 0 8px;
+      list-style: none;
+    }
+
+    .vis-builder-column {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .vis-builder-column-name input {
+      width: 9em;
+      min-width: 0;
       font-family: var(--vis-builder-mono);
       font-size: 12px;
-      font-weight: 600;
+    }
+
+    .vis-builder-column-picks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding-left: 8px;
+    }
+
+    .vis-builder-column-pick {
+      padding: 1px 6px;
+      border: 1px dashed var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: transparent;
+      color: var(--vis-builder-muted);
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+    }
+
+    .vis-builder-column-add {
+      padding-left: 8px;
+    }
+
+    .vis-builder-generator,
+    .vis-builder-source-default {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
     .vis-builder-signal-numbers {

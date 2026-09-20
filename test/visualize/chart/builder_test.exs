@@ -205,7 +205,11 @@ defmodule Visualize.Chart.BuilderTest do
       # seven, because a person asks where the marks are, not which fragment holds them.
       # Neither the design's own root nor vars is a root tab (§18.13): a declaration is
       # the variable panel's, and the panel opens from the tab that ends the row (#363).
-      assert tabs(html, "vis-builder-node") == ~w(frame sources styles marks labels variables)
+      # The sources root wears the word *data* (#372); its value stays the design key.
+      assert tabs(html, "vis-builder-node") == ~w(frame data styles marks labels variables)
+
+      assert html =~
+               ~s(title="data of the chart" aria-label="data" data-builder-bind-root="sources" phx-click="select_root" phx-value-root="sources")
 
       # Each root is an icon with its name on hover and for a reader (#314); the sine wave
       # the signals panel had is the sources root's.
@@ -233,13 +237,14 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "every section is tagged with the layer that owns it, and another layer's is muted (spec/14 §18.15)" do
-      # `house` is selected; the sources are `shared`'s and the marks `panel`'s.
+      # `house` is selected; the sources are `shared`'s and the marks `panel`'s. The sources
+      # root is the data page (#372): its row is tagged with the declaring layer.
       html = at_node("sources.primary")
+      [_, row] = String.split(html, ~s(data-builder-source="primary"), parts: 2)
+      assert row =~ ~s(<span class="vis-builder-section-layer">shared</span>)
+      refute html =~ ~s(<summary class="vis-builder-section-title" title="sources.primary)
 
-      assert html =~
-               ~s(<summary class="vis-builder-section-title" title="sources.primary — in shared")
-
-      assert html =~ ~s(>primary<span class="vis-builder-section-layer">shared</span></summary>)
+      html = at_node("marks[0]")
 
       assert html =~
                ~s(class="vis-builder-section vis-builder-section-top vis-builder-section-other")
@@ -253,8 +258,8 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert html =~ ~s(<span class="vis-builder-origin">house</span>)
 
-      # Selecting `shared` brings its sections forward.
-      html = at_node("sources.primary", selected: 1)
+      # Selecting `panel` brings its sections forward.
+      html = at_node("marks[0]", selected: 2)
       refute html =~ "vis-builder-section-other"
     end
 
@@ -2140,20 +2145,19 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.render(odd) =~
                ~r|vis-builder-pool-name-on">\s*<input type="radio" name="key" value="elsewhere" checked>|
 
-      # The source's default is the same list, with its own box.
+      # The source's default is a box on its data-page row with the pool's names to pick
+      # from (#372): a name the pool lacks is typed.
       {:noreply, form} = Builder.handle_event("select_node", %{"node" => "source"}, picked)
       form_html = BuilderFixture.render(form)
-
-      assert form_html =~
-               ~s(<div class="vis-builder-pool" role="radiogroup" aria-label="default">)
-
-      assert form_html =~ ~s(<input type="radio" name="default" value="primary">)
-      assert form_html =~ ~s(name="default.other")
+      [_, row] = String.split(form_html, ~s(data-builder-source="other"), parts: 2)
+      assert row =~ ~s(<input type="text" name="default" list="b-sources-pool")
+      assert form_html =~ ~s(<datalist id="b-sources-pool">)
+      assert form_html =~ ~s(<option value="primary"></option>)
 
       {:noreply, defaulted} =
         Builder.handle_event(
-          "edit",
-          %{"_target" => ["default.other"], "default.other" => "gitlab_uptime"},
+          "set_default_source",
+          %{"source" => "other", "default" => "gitlab_uptime"},
           form
         )
 
@@ -2162,8 +2166,8 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, defaulted} =
         Builder.handle_event(
-          "edit",
-          %{"_target" => ["default"], "default" => "primary"},
+          "set_default_source",
+          %{"source" => "other", "default" => "primary"},
           defaulted
         )
 
@@ -2573,83 +2577,159 @@ defmodule Visualize.Chart.BuilderTest do
       }
     end
 
-    test "+ declares a sine, the tab edits it in place, and × removes it", %{socket: s} do
+    test "+ adds a source with a sine; the row edits its columns, types and generator; × removes it",
+         %{socket: s} do
       assert s.assigns.signals == %{}
-      {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
-      # Adding a signal opens the sources root, where the signals panel stands (#314).
+      {:noreply, s} = Builder.handle_event("add_source", %{}, s)
+      # Adding a source opens the data page, where the rows stand (#372).
       assert s.assigns.context == :inspect
       assert String.starts_with?(s.assigns.node_label, "sources")
-      assert BuilderFixture.render(s) =~ ~s(class="vis-builder-sources")
-      assert %{signal_1: %{kind: :sine, fields: [:t, :value], window: 24}} = s.assigns.signals
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(class="vis-builder-sources")
+      assert %{source_1: %{kind: :sine, fields: [:t, :value], window: 24}} = s.assigns.signals
 
-      # The signal is a source of the chart at once: declared in the selected layer with
-      # its fields, listed under the sources tab, offered to a mark's data (§19.10).
+      # The source is declared in the selected layer with its columns typed (#369), one row
+      # on the page tagged with its layer, and offered to a mark's data (§19.10).
       {_, house} = hd(BuilderFixture.layers(s))
-      # The signal's first field is its time, the rest its numbers (#369).
-      assert house.sources.signal_1 == %{fields: [:t, :value], types: %{t: :time, value: :number}}
-      {:noreply, sources} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
-      assert BuilderFixture.render(sources) =~ ~s(title="sources.signal_1 — in house")
+      assert house.sources.source_1 == %{fields: [:t, :value], types: %{t: :time, value: :number}}
+
+      assert html =~
+               ~s(<section class="vis-builder-source" data-builder-source="source_1" data-builder-node="sources.source_1">)
+
+      [_, row] = String.split(html, ~s(data-builder-source="source_1"), parts: 2)
+      [row, _] = String.split(row, "</section>", parts: 2)
+      assert row =~ ~s(<span class="vis-builder-section-layer">house</span>)
+
+      assert row =~
+               ~r/<input type="hidden" name="column" value="t">\s*<input type="text" name="name" value="t"/
+
+      assert row =~
+               ~r/name="column" value="t">\s*<select name="type"[^>]*>\s*<option value="">type<\/option>\s*<option value="time" selected>/
+
+      assert row =~ ~s(<option value="sine" selected>sine</option>)
+      assert row =~ ~s(name="source_1.window" value="24")
+      # No second list: the row is the signal's home, its fields never edited apart.
+      refute html =~ ~s(name="source_1.fields")
+      refute html =~ "vis-builder-signal-name"
+      assert html =~ ~s(phx-click="play")
+
       {:noreply, marks} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
       {:noreply, marks} = Builder.handle_event("select_layer", %{"index" => "2"}, marks)
       {:noreply, marks} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, marks)
-      assert BuilderFixture.render(marks) =~ ~s(<option value="signal_1">signal_1</option>)
-      # A second signal with a source already declared leaves the declaration alone.
-      {:noreply, s2} = Builder.handle_event("add_signal", %{}, s)
-      {:noreply, s2} = Builder.handle_event("remove_signal", %{"name" => "signal_2"}, s2)
+      assert BuilderFixture.render(marks) =~ ~s(<option value="source_1">source_1</option>)
 
-      assert Map.keys(elem(hd(BuilderFixture.layers(s2)), 1).sources) |> Enum.sort() == [
-               :signal_1,
-               :signal_2
-             ]
-
-      html = BuilderFixture.render(s)
-      assert html =~ ~s(<form class="vis-builder-signals" phx-change="edit_signal")
-      assert html =~ ~s(<legend class="vis-builder-signal-name">)
-      assert html =~ ~s(<select name="signal_1.kind">)
-      assert html =~ ~s(<input type="text" name="signal_1.fields" value="t, value")
-      assert html =~ ~s(name="signal_1.window" value="24")
-      assert html =~ ~s(phx-click="play")
+      # A column added, renamed and typed writes fields, types and the signal's fields together.
+      {:noreply, s} =
+        Builder.handle_event("add_column", %{"source" => "source_1", "name" => "mem"}, s)
 
       {:noreply, s} =
         Builder.handle_event(
-          "edit_signal",
-          %{"_target" => ["signal_1.fields"], "signal_1.fields" => "hour, cpu, mem"},
+          "rename_column",
+          %{"source" => "source_1", "column" => "value", "name" => "cpu"},
           s
         )
 
       {:noreply, s} =
         Builder.handle_event(
+          "set_column_type",
+          %{"source" => "source_1", "column" => "mem", "type" => "number"},
+          s
+        )
+
+      {_, house} = hd(BuilderFixture.layers(s))
+
+      assert house.sources.source_1 == %{
+               fields: [:t, :cpu, :mem],
+               types: %{t: :time, cpu: :number, mem: :number}
+             }
+
+      assert s.assigns.signals.source_1.fields == [:t, :cpu, :mem]
+
+      {:noreply, s} =
+        Builder.handle_event("remove_column", %{"source" => "source_1", "column" => "mem"}, s)
+
+      assert elem(hd(BuilderFixture.layers(s)), 1).sources.source_1.fields == [:t, :cpu]
+      assert s.assigns.signals.source_1.fields == [:t, :cpu]
+
+      # The generator: a kind keeps the numbers, none removes the signal and leaves the source.
+      {:noreply, s} =
+        Builder.handle_event(
           "edit_signal",
-          %{"_target" => ["signal_1.kind"], "signal_1.kind" => "square"},
+          %{"_target" => ["source_1.window"], "source_1.window" => "6"},
           s
         )
 
       {:noreply, s} =
-        Builder.handle_event(
-          "edit_signal",
-          %{"_target" => ["signal_1.window"], "signal_1.window" => "6"},
-          s
-        )
+        Builder.handle_event("set_generator", %{"source" => "source_1", "kind" => "square"}, s)
 
-      assert %{fields: [:hour, :cpu, :mem], kind: :square, window: 6} = s.assigns.signals.signal_1
+      assert %{kind: :square, window: 6, fields: [:t, :cpu]} = s.assigns.signals.source_1
 
-      # A second is named past the first; removing leaves the other.
-      {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
-      assert Map.keys(s.assigns.signals) |> Enum.sort() == [:signal_1, :signal_2]
-      {:noreply, s} = Builder.handle_event("remove_signal", %{"name" => "signal_1"}, s)
-      assert Map.keys(s.assigns.signals) == [:signal_2]
+      {:noreply, s} =
+        Builder.handle_event("set_generator", %{"source" => "source_1", "kind" => ""}, s)
+
+      assert s.assigns.signals == %{}
+      assert Map.has_key?(elem(hd(BuilderFixture.layers(s)), 1).sources, :source_1)
+      assert BuilderFixture.render(s) =~ "no rows — pick a generator"
+
+      # A second source is named past the first; × removes a source and its signal.
+      {:noreply, s} = Builder.handle_event("add_source", %{}, s)
+      assert Map.keys(s.assigns.signals) == [:source_2]
+      {:noreply, s} = Builder.handle_event("remove_source", %{"source" => "source_2"}, s)
+      assert s.assigns.signals == %{}
+      refute Map.has_key?(elem(hd(BuilderFixture.layers(s)), 1).sources, :source_2)
+    end
+
+    test "a rename rewrites what reads the source and moves its signal; a taken name is refused",
+         %{socket: s} do
+      {:noreply, s} = Builder.handle_event("add_source", %{}, s)
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("edit", %{"_target" => ["data"], "data" => "source_1"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("rename_source", %{"source" => "source_1", "name" => "feed"}, s)
+
+      assert s.assigns.notice == nil
+      assert Map.keys(s.assigns.signals) == [:feed]
+      design = BuilderFixture.design(s)
+      assert Map.has_key?(design.sources, :feed) and not Map.has_key?(design.sources, :source_1)
+      assert hd(design.marks).data == :feed
+
+      {:noreply, refused} =
+        Builder.handle_event("rename_source", %{"source" => "feed", "name" => "primary"}, s)
+
+      assert refused.assigns.notice == "a source is already named primary"
+      assert Map.keys(refused.assigns.signals) == [:feed]
+
+      # The host's rows show where a source has no generator.
+      {:noreply, page} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
+      html = BuilderFixture.render(page)
+      [_, primary] = String.split(html, ~s(data-builder-source="primary"), parts: 2)
+      assert primary =~ "4 rows from the host"
     end
 
     test "the pool is the host's under the signals at the tick; a source picks a signal and takes its fields",
          %{socket: s} do
-      {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
+      {:noreply, s} = Builder.handle_event("add_source", %{}, s)
 
       {:noreply, s} =
         Builder.handle_event(
-          "edit_signal",
-          %{"_target" => ["signal_1.fields"], "signal_1.fields" => "hour, cpu"},
+          "rename_column",
+          %{"source" => "source_1", "column" => "t", "name" => "hour"},
           s
         )
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "rename_column",
+          %{"source" => "source_1", "column" => "value", "name" => "cpu"},
+          s
+        )
+
+      {:noreply, s} =
+        Builder.handle_event("rename_source", %{"source" => "source_1", "name" => "signal_1"}, s)
 
       # The declared-as list offers the signal beside the host's pool.
       {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
@@ -2978,100 +3058,110 @@ defmodule Visualize.Chart.BuilderTest do
       %{socket: s}
     end
 
-    test "each field is a row with an ×, and a + box adds one read by the element's type", %{
-      socket: s
-    } do
+    test "each column is a row with an ×; the rows' undeclared columns are offered; a box adds one",
+         %{socket: s} do
       html = BuilderFixture.render(s)
+      refute html =~ ~s(<textarea name="fields">)
+      [_, row] = String.split(html, ~s(data-builder-source="primary"), parts: 2)
+      [row, _] = String.split(row, "</section>", parts: 2)
+
+      # The declared columns as rows, each with its ×; the add box is a chip's drop target.
+      assert row =~ ~s(<ol class="vis-builder-columns">)
+      assert row =~ ~s(aria-label="remove t from primary")
+      assert row =~ ~s(aria-label="remove v from primary")
+      assert row =~ ~s(<span class="vis-builder-item-add" data-builder-bind="fields">)
+      assert row =~ ~s(placeholder="+ add a column")
+      refute row =~ "vis-builder-column-pick"
+
+      # A column in the rows and not declared is offered as a pick (§18.6).
+      with_extra =
+        BuilderFixture.socket(BuilderFixture.layers(),
+          selected: 1,
+          node_label: "sources.primary",
+          sources: %{primary: [%{t: 0, v: 1, w: 2}]}
+        )
+
+      html = BuilderFixture.render(with_extra)
+      assert html =~ ~s(class="vis-builder-column-pick" title="w — in the rows, not declared")
+
+      {:noreply, picked} =
+        Builder.handle_event("add_column", %{"source" => "primary", "name" => "w"}, with_extra)
+
+      {_, shared} = Enum.at(BuilderFixture.layers(picked), 1)
+      assert shared.sources.primary.fields == [:t, :v, :w]
+      refute BuilderFixture.render(picked) =~ "vis-builder-column-pick"
+
+      # The box adds one; × removes one; the last one removed removes the key.
+      {:noreply, s} =
+        Builder.handle_event("add_column", %{"source" => "primary", "name" => "w"}, s)
+
+      {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
+      assert shared.sources.primary.fields == [:t, :v, :w]
+
+      {:noreply, s} =
+        Builder.handle_event("remove_column", %{"source" => "primary", "column" => "t"}, s)
+
+      {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
+      assert shared.sources.primary.fields == [:v, :w]
+
+      {:noreply, s} =
+        Builder.handle_event("remove_column", %{"source" => "primary", "column" => "v"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("remove_column", %{"source" => "primary", "column" => "w"}, s)
+
+      {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
+      refute Map.has_key?(shared.sources.primary, :fields)
+
+      # A name that is not a name is ignored.
+      {:noreply, same} =
+        Builder.handle_event("add_column", %{"source" => "primary", "name" => "not a name"}, s)
+
+      assert same.assigns.uses == s.assigns.uses
+    end
+
+    # The list-of-items control itself stays for every other list (§18.6): rendered here
+    # for a source node alone, with its rows, ×, + box and the picks of the rows.
+    test "a list of scalars is rows with ×, a + box, and the rows' columns to tick" do
+      import Phoenix.LiveViewTest, only: [render_component: 2]
+
+      html =
+        render_component(&Visualize.Chart.Builder.Editor.form_body/1, %{
+          id: "f",
+          kind: :source,
+          node: %{fields: [:t, :v]},
+          path: [:sources, :primary],
+          label: "sources.primary",
+          columns: %{primary: ["t", "v", "w"]},
+          source_name: :primary
+        })
+
       assert html =~ ~s(class="vis-builder-items")
       refute html =~ ~s(<textarea name="fields">)
 
-      # A source with rows shows the columns to tick, the declared ones highlighted, and
-      # no text rows; the + box stays beneath (§18.6).
       assert html =~
                ~s(class="vis-builder-pool vis-builder-picks" role="group" aria-label="fields: the columns the rows have")
 
       assert html =~
                ~r|class="vis-builder-pool-name vis-builder-pool-name-on" title="t">\s*<input type="checkbox" name="fields.pick\[\]" value="t" checked>|
 
-      assert html =~ ~r|class="vis-builder-pool-name vis-builder-pool-name-on" title="v">|
-      refute html =~ ~s(<span class="vis-builder-item-text">t</span>)
+      assert html =~ ~r|class="vis-builder-pool-name" title="w">|
       assert html =~ ~s(name="fields.add" class="vis-builder-item-box" placeholder="+ add")
 
-      # Ticking writes the whole list in the list's order; unticking removes; a declared
-      # column the rows lack is highlighted and marked.
-      {:noreply, ticked} =
-        Builder.handle_event(
-          "edit",
-          %{"_target" => ["fields.pick"], "fields.pick" => ["t"], "_node" => "sources.primary"},
-          s
-        )
-
-      {_, shared} = Enum.at(BuilderFixture.layers(ticked), 1)
-      assert shared.sources.primary.fields == [:t]
-
-      {:noreply, promised} =
-        Builder.handle_event(
-          "list_add",
-          %{"field" => "fields", "fields.add" => "w", "key" => "Enter"},
-          ticked
-        )
-
-      promised_html = BuilderFixture.render(promised)
-
-      assert promised_html =~
-               ~r|class="vis-builder-pool-name vis-builder-pool-name-on vis-builder-pool-name-missing" title="w — not in the rows">|
-
-      {:noreply, none} =
-        Builder.handle_event(
-          "edit",
-          %{"_target" => ["fields.pick"], "_node" => "sources.primary"},
-          promised
-        )
-
-      {_, shared} = Enum.at(BuilderFixture.layers(none), 1)
-      refute Map.has_key?(shared.sources.primary, :fields)
-
-      # A source with no rows under its name is the items list as before.
       unbound =
-        BuilderFixture.socket(BuilderFixture.layers(),
-          selected: 1,
-          node_label: "sources.primary",
-          sources: %{}
-        )
+        render_component(&Visualize.Chart.Builder.Editor.form_body/1, %{
+          id: "f",
+          kind: :source,
+          node: %{fields: [:t, :v]},
+          path: [:sources, :primary],
+          label: "sources.primary"
+        })
 
-      unbound_html = BuilderFixture.render(unbound)
-      refute unbound_html =~ "vis-builder-picks"
-      assert unbound_html =~ ~s(<span class="vis-builder-item-text">t</span>)
+      refute unbound =~ "vis-builder-picks"
+      assert unbound =~ ~s(<span class="vis-builder-item-text">t</span>)
 
-      assert unbound_html =~
+      assert unbound =~
                ~s(phx-click="list_remove" phx-value-field="fields" phx-value-node="sources.primary" phx-value-index="0")
-
-      {:noreply, s} =
-        Builder.handle_event(
-          "list_add",
-          %{"field" => "fields", "fields.add" => "w", "key" => "Enter"},
-          s
-        )
-
-      {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
-      assert shared.sources.primary.fields == [:t, :v, :w]
-
-      {:noreply, s} =
-        Builder.handle_event("list_remove", %{"field" => "fields", "index" => "0"}, s)
-
-      {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
-      assert shared.sources.primary.fields == [:v, :w]
-
-      # A blank adds nothing; a field the node lacks changes nothing.
-      {:noreply, same} =
-        Builder.handle_event("list_add", %{"field" => "fields", "fields.add" => " "}, s)
-
-      assert same.assigns.uses == s.assigns.uses
-
-      {:noreply, same} =
-        Builder.handle_event("list_add", %{"field" => "nope", "nope.add" => "x"}, s)
-
-      assert same.assigns.uses == s.assigns.uses
     end
 
     test "a chip dropped on a field list adds the variable as an item, and a field is a channel" do
@@ -3324,18 +3414,20 @@ defmodule Visualize.Chart.BuilderTest do
       site = Visualize.Chart.Builder.Stack.get(s.assigns.uses, s.assigns.selected)
       assert site.key == :other
 
-      # Its node is the chart's `sources.other`, tagged with the site; a write from the
-      # composed page lands in the site's `source` body. The selection moves back to
-      # `house`, which owns nothing of it, to show the owner is what routes the write.
+      # Its row on the data page is tagged with the site; a write from the page lands in
+      # the site's `source` body. The selection moves back to `house`, which owns nothing
+      # of it, to show the owner is what routes the write.
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
       html = BuilderFixture.render(s)
-      assert html =~ ~s(title="sources.other — in new source")
+      [_, row] = String.split(html, ~s(data-builder-source="other"), parts: 2)
+      [row, _] = String.split(row, "</section>", parts: 2)
+      assert row =~ ~s(<span class="vis-builder-section-layer">new source</span>)
 
       {:noreply, s} =
         Builder.handle_event(
-          "edit",
-          %{"_target" => ["default"], "default" => "primary", "_node" => "sources.other"},
+          "set_default_source",
+          %{"source" => "other", "default" => "primary"},
           s
         )
 
@@ -3344,21 +3436,24 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "a new declaration goes to the selected layer", %{socket: s} do
-      # `shared` declares the sources; a signal added with `house` selected declares its
-      # source in `house` (§19.10), and the page lists both, each tagged.
-      {:noreply, s} = Builder.handle_event("add_signal", %{}, s)
+      # `shared` declares the sources; a source added with `house` selected declares in
+      # `house` (§19.10), and the data page lists both, each tagged.
+      {:noreply, s} = Builder.handle_event("add_source", %{}, s)
       [{:house, house}, {:shared, shared}, _panel] = BuilderFixture.layers(s)
 
       assert house.sources == %{
-               signal_1: %{fields: [:t, :value], types: %{t: :time, value: :number}}
+               source_1: %{fields: [:t, :value], types: %{t: :time, value: :number}}
              }
 
       assert shared.sources == %{primary: %{fields: [:t, :v]}}
 
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
       html = BuilderFixture.render(s)
-      assert html =~ ~s(title="sources.primary — in shared")
-      assert html =~ ~s(title="sources.signal_1 — in house")
+      [_, primary] = String.split(html, ~s(data-builder-source="primary"), parts: 2)
+      [primary, _] = String.split(primary, "</section>", parts: 2)
+      assert primary =~ ~s(<span class="vis-builder-section-layer">shared</span>)
+      [_, added] = String.split(html, ~s(data-builder-source="source_1"), parts: 2)
+      assert added =~ ~s(<span class="vis-builder-section-layer">house</span>)
     end
 
     test "a site the design has no node of shows its own form, untagged", %{socket: s} do
@@ -4127,7 +4222,7 @@ defmodule Visualize.Chart.BuilderTest do
           s1
         end
 
-      {:noreply, with_signal} = Builder.handle_event("add_signal", %{}, s)
+      {:noreply, with_signal} = Builder.handle_event("add_source", %{}, s)
       {:noreply, adding} = Builder.handle_event("adding", %{}, s)
       {:noreply, expanded} = Builder.handle_event("expand_variable", %{"name" => "unit"}, s)
 

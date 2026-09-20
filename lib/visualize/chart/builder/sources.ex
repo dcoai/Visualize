@@ -1,80 +1,165 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Chart.Builder.Sources do
     @moduledoc """
-    The sources tab (spec/14 §19.10): the chart's signals — generated sources of
-    `Visualize.Signals` — one row each, edited in place, added, removed, and played.
+    The data page (spec/14 §19.10, #372): what the *sources* root shows — one row per source
+    of the composed design, its name, its columns with their types, and its generator while
+    designing (a `Visualize.Signals` signal under the source's name) or the host's rows.
 
-    A signal stands in for the host's feed while the chart is designed: the pool the
-    preview binds is the host's under the chart's signals at the tick, and a deployed design
-    binds to the host's alone. This module renders; the builder holds the signals and the
-    tick.
+    One list, one name: a signal's fields are always its source's `fields`, written from
+    the row, so the two cannot drift. This module renders; the builder holds the design,
+    the signals and the tick.
 
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
     use Phoenix.Component
 
+    alias Visualize.Chart.{Schema, Var}
     alias Visualize.Signals
 
+    @numbers [:window, :period, :min, :max, :seed]
+
     attr(:id, :string, required: true, doc: "the panel's id")
-    attr(:signals, :map, default: %{}, doc: "the chart's signals by name")
+    attr(:rows, :list, required: true, doc: "the page's rows, as `rows/5` gives them")
     attr(:tick, :integer, default: 0, doc: "the tick the pool stands at")
     attr(:playing, :boolean, default: false, doc: "whether the tick advances")
     attr(:tick_ms, :integer, default: 500, doc: "the tick's period")
+    attr(:pool, :list, default: [], doc: "the host's pool names, for a source's default")
+    attr(:defaults?, :boolean, default: true, doc: "whether a source's `default` is offered")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
 
-    @doc "Renders the sources tab."
+    @doc "Renders the data page."
     def panel(assigns) do
-      assigns = assign(assigns, rows: rows(assigns.signals))
-
       ~H"""
       <div id={@id} class="vis-builder-sources">
         <h3 class="vis-builder-context-title vis-builder-sidebar-title-row">
-          sources
+          data
           <button
             type="button"
             class="vis-builder-add"
-            title="declare a signal: a sine over t and value"
-            aria-label="add a signal"
-            phx-click="add_signal"
+            title="add a source: two columns and a sine while designing"
+            aria-label="add a source"
+            phx-click="add_source"
             phx-target={@target}
           >+</button>
         </h3>
         <p :if={@rows == []} class="vis-builder-context-note">
-          no signals yet — a signal is a generated source the chart draws while it is designed
+          no data yet — a source is the columns the chart draws, generated while it is designed or bound by the host
         </p>
-        <form :if={@rows != []} class="vis-builder-signals" phx-change="edit_signal" phx-target={@target} phx-submit="submitted">
-          <fieldset :for={row <- @rows} class="vis-builder-signal">
-            <legend class="vis-builder-signal-name">
-              {row.name}
+        <section :for={row <- @rows} class="vis-builder-source" data-builder-source={row.name} data-builder-node={"sources." <> row.name}>
+          <form class="vis-builder-source-name" phx-change="rename_source" phx-target={@target} phx-submit="submitted">
+            <input type="hidden" name="source" value={row.name} />
+            <input
+              type="text"
+              name="name"
+              value={row.name}
+              class="vis-builder-name"
+              aria-label={"the name of #{row.name}"}
+              phx-debounce="blur"
+            />
+            <span :if={row.layer} class="vis-builder-section-layer">{row.layer}</span>
+            <button
+              type="button"
+              class="vis-builder-item-remove"
+              title={"remove #{row.name}"}
+              aria-label={"remove #{row.name}"}
+              phx-click="remove_source"
+              phx-value-source={row.name}
+              phx-target={@target}
+            >×</button>
+          </form>
+          <ol class="vis-builder-columns">
+            <li :for={column <- row.columns} class="vis-builder-column">
+              <span :if={column.var} class="vis-builder-var-chip vis-builder-var-chip-bound">var(:{column.var})</span>
+              <form :if={!column.var} class="vis-builder-column-name" phx-change="rename_column" phx-target={@target} phx-submit="submitted">
+                <input type="hidden" name="source" value={row.name} />
+                <input type="hidden" name="column" value={column.name} />
+                <input
+                  type="text"
+                  name="name"
+                  value={column.name}
+                  aria-label={"the name of #{column.name}"}
+                  phx-debounce="blur"
+                />
+              </form>
+              <form :if={!column.var} class="vis-builder-column-type" phx-change="set_column_type" phx-target={@target} phx-submit="submitted">
+                <input type="hidden" name="source" value={row.name} />
+                <input type="hidden" name="column" value={column.name} />
+                <select name="type" aria-label={"the type of #{column.name}"}>
+                  <option value="" selected={column.type == nil}>type</option>
+                  <option :for={type <- Schema.column_types()} value={type} selected={column.type == type}>{type}</option>
+                </select>
+              </form>
+              <span :if={column.suggested} class="vis-builder-item-text" title="what the rows suggest">{column.suggested}</span>
               <button
                 type="button"
                 class="vis-builder-item-remove"
-                title={"remove #{row.name}"}
-                aria-label={"remove #{row.name}"}
-                phx-click="remove_signal"
-                phx-value-name={row.name}
+                title={"remove #{column.name}"}
+                aria-label={"remove #{column.name} from #{row.name}"}
+                phx-click="remove_column"
+                phx-value-source={row.name}
+                phx-value-column={column.name}
                 phx-target={@target}
               >×</button>
-            </legend>
+            </li>
+          </ol>
+          <div class="vis-builder-column-picks" :if={row.picks != []}>
+            <button
+              :for={pick <- row.picks}
+              type="button"
+              class="vis-builder-column-pick"
+              title={"#{pick} — in the rows, not declared"}
+              phx-click="add_column"
+              phx-value-source={row.name}
+              phx-value-name={pick}
+              phx-target={@target}
+            >+ {pick}</button>
+          </div>
+          <form class="vis-builder-column-add" phx-submit="add_column" phx-target={@target}>
+            <input type="hidden" name="source" value={row.name} />
+            <span class="vis-builder-item-add" data-builder-bind="fields">
+              <input type="text" name="name" class="vis-builder-item-box" placeholder="+ add a column" aria-label={"a column to add to #{row.name}"} />
+            </span>
+          </form>
+          <form class="vis-builder-generator" phx-change="set_generator" phx-target={@target} phx-submit="submitted">
+            <input type="hidden" name="source" value={row.name} />
             <label class="vis-builder-field">
-              <span class="vis-builder-key">kind</span>
-              <select name={"#{row.name}.kind"}>
-                <option :for={kind <- Signals.kinds()} value={kind} selected={row.kind == kind}>{kind}</option>
+              <span class="vis-builder-key">while designing</span>
+              <select name="kind" aria-label={"the generator of #{row.name}"}>
+                <option value="" selected={row.signal == nil}>none</option>
+                <option :for={kind <- Signals.kinds()} value={kind} selected={row.signal != nil and row.signal.kind == kind}>{kind}</option>
               </select>
             </label>
-            <label class="vis-builder-field">
-              <span class="vis-builder-key">fields</span>
-              <input type="text" name={"#{row.name}.fields"} value={row.fields} placeholder="t, value" />
-            </label>
+            <span :if={row.signal == nil and row.host_rows > 0} class="vis-builder-item-text">{row.host_rows} rows from the host</span>
+            <span :if={row.signal == nil and row.host_rows == 0} class="vis-builder-item-text">no rows — pick a generator</span>
+          </form>
+          <form :if={row.signal} class="vis-builder-signals" phx-change="edit_signal" phx-target={@target} phx-submit="submitted">
             <div class="vis-builder-signal-numbers">
-              <label :for={{key, value} <- row.numbers} class="vis-builder-field">
+              <label :for={{key, value} <- row.signal.numbers} class="vis-builder-field">
                 <span class="vis-builder-key">{key}</span>
                 <input type="number" name={"#{row.name}.#{key}"} value={value} step="any" />
               </label>
             </div>
-          </fieldset>
-        </form>
+          </form>
+          <form :if={@defaults?} class="vis-builder-source-default" phx-change="set_default_source" phx-target={@target} phx-submit="submitted">
+            <input type="hidden" name="source" value={row.name} />
+            <label class="vis-builder-field">
+              <span class="vis-builder-key">from the host</span>
+              <input
+                type="text"
+                name="default"
+                list={@id <> "-pool"}
+                value={row.default}
+                placeholder="its own name"
+                aria-label={"the pool entry that fills #{row.name}"}
+                phx-debounce="blur"
+              />
+            </label>
+          </form>
+        </section>
+        <datalist :if={@defaults?} id={@id <> "-pool"}>
+          <option :for={name <- @pool} value={name}></option>
+        </datalist>
         <div class="vis-builder-play">
           <button
             type="button"
@@ -95,60 +180,89 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    The signals as the tab's rows, sorted by name: the fields as one comma-separated
-    string, the numbers as `{key, value}` pairs.
+    The page's rows (spec/14 §19.10, #372), sorted by name: for every source the composed
+    design declares, its columns — each with the type the design gives it and, when it
+    gives none, what the rows suggest — its signal's kind and numbers when it has one, the
+    host's row count, and its `default`. `owners` maps a source's name to the layer that
+    declares it, shown beside the name.
 
-        iex> [row] = Visualize.Chart.Builder.Sources.rows(%{feed: Visualize.Signals.new(:sine, [:t, :v], window: 8)})
-        iex> {row.name, row.kind, row.fields, row.numbers}
-        {"feed", :sine, "t, v", [window: 8, period: 12, min: 0, max: 100, seed: 0]}
+        iex> design = %{sources: %{feed: %{fields: [:t, :v], types: %{t: :time}}}}
+        iex> signals = %{feed: Visualize.Signals.new(:sine, [:t, :v], window: 8)}
+        iex> [row] = Visualize.Chart.Builder.Sources.rows(design, signals, %{}, %{}, %{})
+        iex> {row.name, Enum.map(row.columns, &{&1.name, &1.type}), row.signal.kind, row.signal.numbers}
+        {"feed", [{"t", :time}, {"v", nil}], :sine, [window: 8, period: 12, min: 0, max: 100, seed: 0]}
+        iex> [row] = Visualize.Chart.Builder.Sources.rows(design, %{}, %{feed: [%{t: 1, v: 2, w: 3}]}, %{feed: %{t: :number, v: :number, w: :number}}, %{})
+        iex> {row.picks, row.host_rows, Enum.map(row.columns, & &1.suggested)}
+        {["w"], 1, [nil, :number]}
     """
-    @spec rows(%{atom() => Signals.t()}) :: [map()]
-    def rows(signals) do
-      for {name, signal} <- Enum.sort_by(signals, fn {name, _} -> to_string(name) end) do
+    @spec rows(map(), %{atom() => Signals.t()}, map(), map(), %{atom() => term()}) :: [map()]
+    def rows(design, signals, pool, pool_types, owners) do
+      sources = Map.get(design, :sources) || %{}
+
+      for {name, node} <- Enum.sort_by(sources, fn {name, _} -> to_string(name) end),
+          is_map(node) do
+        fields = List.wrap(Map.get(node, :fields, []))
+        names = Enum.filter(fields, &is_atom/1)
+        types = Map.get(node, :types) || %{}
+        suggested = Map.get(pool_types, name, %{})
+        signal = Map.get(signals, name)
+
         %{
           name: to_string(name),
-          kind: signal.kind,
-          fields: Enum.map_join(signal.fields, ", ", &to_string/1),
-          numbers:
-            for(key <- [:window, :period, :min, :max, :seed], do: {key, Map.get(signal, key)})
+          layer: owners |> Map.get(name) |> then(&(&1 && to_string(&1))),
+          columns:
+            for field <- fields, is_atom(field) or is_struct(field, Var) do
+              case field do
+                %Var{name: var} ->
+                  %{name: "var(:#{var})", var: to_string(var), type: nil, suggested: nil}
+
+                field ->
+                  type = Map.get(types, field)
+
+                  %{
+                    name: to_string(field),
+                    var: nil,
+                    type: type,
+                    suggested: if(type == nil and Map.get(suggested, field), do: suggested[field])
+                  }
+              end
+            end,
+          picks:
+            for(
+              column <- Map.keys(suggested) |> Enum.sort(),
+              column not in names,
+              do: to_string(column)
+            ),
+          signal:
+            signal &&
+              %{kind: signal.kind, numbers: for(key <- @numbers, do: {key, Map.get(signal, key)})},
+          host_rows: if(signal, do: 0, else: host_rows(pool, name)),
+          default: Map.get(node, :default)
         }
       end
     end
 
+    defp host_rows(pool, name) do
+      case Map.get(pool, name) do
+        nil -> 0
+        source -> source |> Visualize.Data.Table.rows() |> length()
+      end
+    end
+
     @doc """
-    A signal edited by one control of the tab (spec/14 §19.10): `kind`, `fields` (a
-    comma-separated list, at least the time column), or a number; anything unreadable
-    leaves the signal as it is.
+    A signal edited by one number of the page (spec/14 §19.10): `window`, `period`, `min`,
+    `max` or `seed`; anything unreadable leaves the signal as it is. A signal's kind and
+    fields are the row's — `set_generator` and the columns — not this.
 
         iex> s = Visualize.Signals.new(:sine, [:t, :v])
-        iex> Visualize.Chart.Builder.Sources.edit(s, "fields", "hour, cpu, mem").fields
-        [:hour, :cpu, :mem]
-        iex> Visualize.Chart.Builder.Sources.edit(s, "kind", "square").kind
-        :square
         iex> Visualize.Chart.Builder.Sources.edit(s, "window", "12").window
         12
         iex> Visualize.Chart.Builder.Sources.edit(s, "window", "none") == s
         true
+        iex> Visualize.Chart.Builder.Sources.edit(s, "fields", "a, b") == s
+        true
     """
     @spec edit(Signals.t(), String.t(), String.t()) :: Signals.t()
-    def edit(signal, "kind", value) do
-      case Enum.find(Signals.kinds(), &(to_string(&1) == value)) do
-        nil -> signal
-        kind -> %{signal | kind: kind}
-      end
-    end
-
-    def edit(signal, "fields", value) do
-      fields =
-        value
-        |> String.split(",")
-        |> Enum.map(&String.trim/1)
-        |> Enum.reject(&(&1 == ""))
-        |> Enum.map(&String.to_atom/1)
-
-      if fields == [], do: signal, else: %{signal | fields: fields}
-    end
-
     def edit(signal, key, value) when key in ["window", "period", "min", "max", "seed"] do
       atom = String.to_existing_atom(key)
 
