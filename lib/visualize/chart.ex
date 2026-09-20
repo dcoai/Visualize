@@ -183,6 +183,29 @@ defmodule Visualize.Chart do
   @spec var(atom()) :: Var.t()
   def var(name) when is_atom(name), do: %Var{name: name}
 
+  @doc """
+  The type a source's `types` declares for a field (spec/14 §2.3, #369), or `nil` when
+  the design, the source or the type is absent.
+
+      iex> design = %{sources: %{s: %{fields: [:t, :v], types: %{t: :time}}}}
+      iex> Visualize.Chart.column_type(design, :s, :t)
+      :time
+      iex> Visualize.Chart.column_type(design, :s, :v)
+      nil
+      iex> Visualize.Chart.column_type(design, :other, :t)
+      nil
+  """
+  @spec column_type(t() | map(), atom(), atom()) :: atom() | nil
+  def column_type(%__MODULE__{sources: sources}, source, field),
+    do: column_type(%{sources: sources}, source, field)
+
+  def column_type(design, source, field) when is_map(design) do
+    case design do
+      %{sources: %{^source => %{types: %{^field => type}}}} when is_atom(type) -> type
+      _other -> nil
+    end
+  end
+
   # -- use sites and composites (spec/14 §19) --------------------------------------------
 
   @doc """

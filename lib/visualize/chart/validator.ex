@@ -276,8 +276,19 @@ defmodule Visualize.Chart.Validator do
         check_key(kind, s, Map.fetch!(map, s.key), path ++ [s.key], ctx)
       end
 
-    unknown ++ missing ++ List.flatten(present)
+    unknown ++ missing ++ List.flatten(present) ++ held(kind, map, path)
   end
+
+  # What a node's keys owe each other: a source's `types` names only its `fields` (§2.3).
+  defp held(:source, %{fields: fields, types: types}, path)
+       when is_list(fields) and is_map(types) do
+    for {name, _type} <- types,
+        name?(name),
+        name not in fields,
+        do: {path ++ [:types, name], {:undeclared, :field, name}}
+  end
+
+  defp held(_kind, _map, _path), do: []
 
   defp enter(:mark, map, ctx) do
     type = map[:type]

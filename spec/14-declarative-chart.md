@@ -118,12 +118,15 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 ### 2.3 Sources
 
-**Implemented.** A `:source` is a typed slot (§7.2): the fields the design reads from it, and the name of the pool entry that fills it when application supplies none under the slot's own name (§7.3).
+**Implemented.** A `:source` is a typed slot (§7.2): the fields the design reads from it, what each field's column *is*, and the name of the pool entry that fills it when application supplies none under the slot's own name (§7.3).
 
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
 | `fields` | `{:list, :field}` | `:binding` | required | `:override` |
+| `types` | `{:map, {:enum, [:time, :number, :category, :text]}}` | `:binding` | `%{}` | `:override` |
 | `default` | `:name` | `:binding` | `nil` | `:override` |
+
+**A column has a type** (#369): `types` maps a declared field to one of four — `:time` (a point in time), `:number`, `:category` (one of a set of names) or `:text` (free text). It is a separate key rather than a pair in `fields` because the JSON form (§11) has no tuples and a keyword list would not survive it; the validator holds the two together — a name under `types` that `fields` does not list is `{[:sources, name, :types, field], {:undeclared, :field, field}}` — so they cannot drift silently. A field with no type is as it always was. **Rendering reads no type**: a scale still says how a column maps to the plot, and a channel bound to a field with no scale is still the identity (§4.3); the type says what the column is, which is what lets a tool derive the scale a person did not write (§18.16, #370). `Visualize.Chart.column_type/3` answers `column_type(design, source, field)` with the type or `nil`; `Visualize.Chart.Schema.column_types/0` is the four. **Rows can suggest a type**: `Visualize.Data.Table.column_types/1` (spec/08 §6.3) reads a table's columns whole — every value temporal (`temporal?/1`) is `:time`, every value a number `:number`, every value a string `:text`, every value an atom or boolean `:category`, anything mixed no type — for a tool to pre-fill what a design does not declare; the design's word, once written, is never overridden by rows.
 
 ### 2.4 Vars
 
@@ -1002,6 +1005,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.from_json/1` | `from_map/1` over a JSON document decoded as §11; `{:error, [{[], {:json, message}}]}` for a document that does not parse, `{:error, {:missing_dependency, :jason}}` without Jason. |
 | `Visualize.Chart.to_json/1` | `{:ok, json}` for `to_map/1` encoded as §11, `{:error, {:missing_dependency, :jason}}` without Jason. |
 | `Visualize.Chart.var/1` | `%Visualize.Chart.Var{name: name}` for an atom (§7.1). |
+| `Visualize.Chart.column_type/3` | `column_type(design, source, field)`: the type `types` declares for the field of the source (§2.3), or `nil` when the design, the source or the type is absent; a chart struct or a design map. |
 | `Visualize.Chart.apply/1` | As `apply/2` with `[]` options: every variable takes its default and the pool is empty, so a slot with a default is unbound too — it applies a design that declares no source. |
 | `Visualize.Chart.apply/2` | `apply(design, opts)`: `{:ok, %Visualize.Chart.Applied{}}` for a chart or a design map with the variables of `vars:` resolved, the slots bound from the pool of `sources:` and the frame realised with `theme:` (§7.3), else `{:error, errors}` by path — the map's own errors, the unresolved variables, the unbound slots and missing fields, or the validator's, whichever step fails first. Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does. |
 | `Visualize.Chart.compose/1` | `compose(fragments)`: the fragments folded left to right through `compose/2`; `{:ok, %{}}` for `[]`. |
@@ -1024,6 +1028,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | Function | Contract |
 |---|---|
 | `Visualize.Chart.Schema.kinds/0` | Every node kind of §1.2, the design first. |
+| `Visualize.Chart.Schema.column_types/0` | The four column types of §2.3, `[:time, :number, :category, :text]`. |
 | `Visualize.Chart.Schema.describe/1` | The key specs of a node kind in the order of its table, for introspection and the builder's forms. |
 | `Visualize.Chart.Schema.key/2` | `key(kind, key)`: the key spec, or `nil` when the node has no such key. |
 | `Visualize.Chart.Schema.keys/1` | Every `{kind, key}` pair carrying the facet, over every node kind (§1.3). |

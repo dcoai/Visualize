@@ -110,11 +110,19 @@ defmodule Visualize.ChartGen do
     ])
   end
 
+  # A source's `types` names only its fields (#369): the fields are drawn first and a type
+  # is given to a subset of them.
   defp sources do
     source =
-      node(%{fields: uniq_list_of(member_of(@fields), min_length: 1, max_length: 4)}, %{
-        default: member_of(@names)
-      })
+      bind(uniq_list_of(member_of(@fields), min_length: 1, max_length: 4), fn fields ->
+        types =
+          fields
+          |> Map.new(&{&1, one_of([constant(nil), member_of(Schema.column_types())])})
+          |> fixed_map()
+          |> map(fn m -> for {k, v} <- m, v != nil, into: %{}, do: {k, v} end)
+
+        node(%{fields: constant(fields)}, %{types: types, default: member_of(@names)})
+      end)
 
     filter(optional_map(Map.new(@names, &{&1, source})), &(&1 != %{}))
   end

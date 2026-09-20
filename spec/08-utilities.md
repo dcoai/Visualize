@@ -393,6 +393,8 @@ A source names its columns with atoms or strings and a caller writes accessors i
 
 `Visualize.Data.Table.time_columns/1` names the columns a time scale could be inferred from: every key of every map row, sorted by term order (a row without the key contributes `nil`), kept when the column has at least one non-`nil` value and every value is `nil` or `temporal?/1`. `Visualize.Data.Table.temporal?/1` is true for `DateTime`, `Date` and `NaiveDateTime` and for a string one of `DateTime.from_iso8601/1`, `NaiveDateTime.from_iso8601/1` or `Date.from_iso8601/1` parses; anything else, including a bare year or a non-ISO date, is false. Detection reads the whole column, not the first row as Tucan does: every row is visited and every string parsed, so the cost is the size of the table, and a column that starts temporal and stops being so is not temporal. Tuple rows have no names and yield `[]`.
 
+`Visualize.Data.Table.column_types/1` (#369) types every named column of a table as spec/14 §2.3's four, reading the whole column as `time_columns/1` does: a column whose non-`nil` values are all `temporal?/1` is `:time`; all numbers, `:number`; all strings (none temporal), `:text`; all atoms or booleans, `:category`; a column with no non-`nil` value, or with values of more than one of those shapes, has no type and is left out. The result is a map from name to type, `%{}` for an empty table or tuple rows. It is a suggestion for a tool to pre-fill a design's `types`, never something the layer reads at render.
+
 ### 6.4 Functions
 
 | Function | Contract |
@@ -401,6 +403,7 @@ A source names its columns with atoms or strings and a caller writes accessors i
 | `Visualize.Data.Table.get/2` | The named column of a map row by either spelling of the name (6.2); `nil` when absent. |
 | `Visualize.Data.Table.accessor/1` | `fn row -> get(row, name) end`; a function is returned unchanged. |
 | `Visualize.Data.Table.time_columns/1` | The names whose whole column is temporal (6.3). |
+| `Visualize.Data.Table.column_types/1` | Every named column's type — `:time`, `:number`, `:category`, `:text` — read whole; a mixed or empty column is left out (6.3). |
 | `Visualize.Data.Table.temporal?/1` | Whether a value is a `DateTime`, `Date`, `NaiveDateTime` or ISO 8601 string. |
 
 ## 7. Theme

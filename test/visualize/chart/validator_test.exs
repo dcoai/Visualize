@@ -360,6 +360,20 @@ defmodule Visualize.Chart.ValidatorTest do
       assert Validator.validate(%{axis: %{scale: :x, side: :bottom}}, :axis) == :ok
     end
 
+    # A source's types name only its fields (§2.3, #369).
+    test "a typed column the source does not list" do
+      typed = put_at(@full, [:sources, :primary, :types], %{t: :time, nope: :number})
+
+      assert errors(typed) == [
+               {[:sources, :primary, :types, :nope], {:undeclared, :field, :nope}}
+             ]
+
+      assert Validator.validate(put_at(@full, [:sources, :primary, :types], %{t: :time})) == :ok
+
+      assert errors(put_at(@full, [:sources, :primary, :types], %{t: :date})) ==
+               [{[:sources, :primary, :types, :t], {:enum, Schema.column_types()}}]
+    end
+
     test "scales" do
       for path <- [
             [:frame, :axes, 0, :scale],
