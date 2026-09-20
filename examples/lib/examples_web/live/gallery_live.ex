@@ -32,6 +32,7 @@ defmodule ExamplesWeb.GalleryLive do
     {Examples.Charts.ContourPlot, "contour"},
     {Examples.Charts.Heatmap, "heatmap"},
     {Examples.Charts.HexbinChart, "hexbin"},
+    {Examples.Charts.SpectrumChart, "spectrum"},
     # Maps
     {Examples.Charts.WorldMap, "world_map"},
     {Examples.Charts.Globe, "globe"}

@@ -28,7 +28,7 @@ defmodule Visualize.Chart.Transform do
   @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, and the bound sources for a graph's node table."
   @type context :: %{size: [number()], projection: Projection.t() | nil, sources: map()}
 
-  @data_ops [:filter, :bin, :stack, :fold, :sum, :sort]
+  @data_ops [:filter, :bin, :stack, :fold, :sum, :sort, :spectrum]
   @layout_ops [:tree, :cluster, :pack, :partition, :treemap, :chord, :sankey, :force]
   @geo_ops [:delaunay, :voronoi, :contour, :density, :hexbin, :projection]
 

@@ -48,6 +48,7 @@ defmodule Examples.ChartsTest do
     Examples.Charts.RidgelinePlot,
     Examples.Charts.Streamgraph,
     Examples.Charts.HexbinChart,
+    Examples.Charts.SpectrumChart,
     Examples.Charts.WorldMap,
     Examples.Charts.Globe
   ]
@@ -77,7 +78,8 @@ defmodule Examples.ChartsTest do
     Examples.Charts.RidgelinePlot,
     Examples.Charts.WorldMap,
     Examples.Charts.Globe,
-    Examples.Charts.HexbinChart
+    Examples.Charts.HexbinChart,
+    Examples.Charts.SpectrumChart
   ]
 
   # Converted, but asserted on rather than recorded: seeded at compile time, or — the
