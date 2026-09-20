@@ -242,7 +242,34 @@ defmodule Visualize.Chart.Builder.EditorTest do
     test "a one_of takes the widget of its first alternative" do
       assert Editor.widget({:one_of, [:name, {:node, :theme}]}) == :text
       assert Editor.widget({:one_of, [:integer, {:list, :term}]}) == :number
-      assert Editor.widget({:one_of, [:extent, :name]}) == :textarea
+      assert Editor.widget({:one_of, [:anchor, :name]}) == :textarea
+    end
+
+    # A channel and an extent are text, not textareas (#371): a name, a number, `auto` or
+    # `min, max` are typed as a person writes them; the literal forms still read.
+    test "a channel and an extent are text" do
+      assert Editor.widget(:channel) == :text
+      assert Editor.widget(:extent) == :text
+
+      assert Editor.parse(:channel, "value") == {:ok, :value}
+      assert Editor.parse(:channel, ":value") == {:ok, :value}
+      assert Editor.parse(:channel, "0") == {:ok, 0}
+      assert Editor.parse(:channel, "2.5") == {:ok, 2.5}
+      assert Editor.parse(:channel, "{:field, :v}") == {:ok, {:field, :v}}
+      assert Editor.parse(:channel, "not a name") == :error
+
+      assert Editor.parse(:extent, "auto") == {:ok, :auto}
+      assert Editor.parse(:extent, "0, 100") == {:ok, [0, 100]}
+      assert Editor.parse(:extent, "auto, 100") == {:ok, [:auto, 100]}
+      assert Editor.parse(:extent, "-1.5,2") == {:ok, [-1.5, 2]}
+
+      assert Editor.parse(:extent, "2024-01-01T00:00:00Z, 2024-12-31T00:00:00Z") ==
+               {:ok, [~U[2024-01-01 00:00:00Z], ~U[2024-12-31 00:00:00Z]]}
+
+      assert Editor.parse(:extent, "[0, 100]") == {:ok, [0, 100]}
+      assert Editor.parse(:extent, ~s(["a", "b", "c"])) == {:ok, ["a", "b", "c"]}
+      assert Editor.parse(:extent, "1, 2, 3") == :error
+      assert Editor.parse(:extent, "low, high") == :error
     end
   end
 

@@ -142,6 +142,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def widget(:colour), do: :colour
     def widget(type) when type in @text_types, do: :text
     def widget({:ref, _kind}), do: :text
+    # A channel is a field's name or a constant, an extent `auto` or `min, max` (#371).
+    def widget(type) when type in [:channel, :extent], do: :text
     # A list of scalars is a list of items, each with an ×, and a + to add one (§18.6).
     def widget({:list, scalar}) when is_atom(scalar) and scalar != :term, do: {:items, scalar}
     def widget({:one_of, [first | _rest]}), do: widget(first)
@@ -206,7 +208,46 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp read({:one_of, [first | _rest]}, string), do: read(first, string)
+
+    # A channel: a number is the constant, a bare name the field, anything else a literal.
+    defp read(:channel, string) do
+      with :error <- number(string) do
+        if Regex.match?(~r/^[a-z_][a-zA-Z0-9_?!]*$/, string),
+          do: {:ok, String.to_atom(string)},
+          else: literal(string)
+      end
+    end
+
+    # An extent: `auto`, or `min, max` of numbers, ISO 8601 date-times or `auto`; else the
+    # literal forms a design can hold (§4.1).
+    defp read(:extent, "auto"), do: {:ok, :auto}
+
+    defp read(:extent, string) do
+      case String.split(string, ",") do
+        [lo, hi] ->
+          with {:ok, lo} <- bound(String.trim(lo)), {:ok, hi} <- bound(String.trim(hi)) do
+            {:ok, [lo, hi]}
+          else
+            :error -> literal(string)
+          end
+
+        _other ->
+          literal(string)
+      end
+    end
+
     defp read(_type, string), do: literal(string)
+
+    defp bound("auto"), do: {:ok, :auto}
+
+    defp bound(string) do
+      with :error <- number(string) do
+        case DateTime.from_iso8601(string) do
+          {:ok, at, _offset} -> {:ok, at}
+          _other -> :error
+        end
+      end
+    end
 
     defp integer(string) do
       case Integer.parse(string) do
@@ -908,6 +949,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     )
 
     attr(:source_name, :any, default: nil, doc: "the name a keyed source site is declared under")
+    attr(:channel_columns, :map, default: %{})
     attr(:event, :string, default: "edit")
     attr(:origins, :map, default: %{})
 
@@ -1075,6 +1117,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       :hidden,
       :columns,
       :source_name,
+      :channel_columns,
       :event,
       :origins,
       :target
@@ -1103,7 +1146,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           if(only, do: spec.key in only, else: spec.facet == open),
           spec.key not in hidden,
           not (faced? and spec.key == :font_style) do
-        widget = pooled(assigns.kind, spec.key, pool) || referenced(spec.type, refs)
+        widget =
+          pooled(assigns.kind, spec.key, pool) || columned(assigns, spec) ||
+            referenced(spec.type, refs)
 
         %{
           key: spec.key,
@@ -1137,7 +1182,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           points: points(spec.key, node, Map.get(assigns, :theme)),
           picks: picks(assigns.kind, spec.key, Map.get(node, spec.key), assigns),
           variable: if(spec.type == :text, do: nil, else: variable_name(Map.get(node, spec.key))),
-          placeholder: shown(widget, default(spec)),
+          placeholder: placeholder(assigns, spec, widget),
           errors: key_errors(errors, path ++ [spec.key])
         }
       end
@@ -1146,6 +1191,34 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A source's default is a pool name, chosen where the host's pool is known (§19.10).
     defp pooled(:source, :default, [_ | _] = pool), do: {:pool, pool}
     defp pooled(_kind, _key, _pool), do: nil
+
+    # A channel on a mark whose source the editor knows picks from its columns (§18.6,
+    # #371): the select when the value is unbound or one of them, else the text box with
+    # the value as it is, so a literal or a lost column is never hidden.
+    defp columned(%{kind: :channels, node: node, path: path} = assigns, %{key: key}) do
+      case Map.get(Map.get(assigns, :channel_columns) || %{}, path) do
+        [_ | _] = columns ->
+          value = Map.get(node, key)
+
+          if value == nil or Enum.any?(columns, &(&1.name == value)),
+            do: {:columns, columns},
+            else: nil
+
+        _none ->
+          nil
+      end
+    end
+
+    defp columned(_assigns, _spec), do: nil
+
+    # A channel with no source to pick from says what to do first.
+    defp placeholder(%{kind: :channels} = assigns, _spec, :text) do
+      if Map.get(Map.get(assigns, :channel_columns) || %{}, assigns.path) in [nil, []],
+        do: "bind data first",
+        else: nil
+    end
+
+    defp placeholder(_assigns, spec, widget), do: shown(widget, default(spec))
 
     # A reference is a choice among the names something declares, so where the caller knows
     # them it is a select rather than a box to spell a name into (spec/14 §18.14). `widget/1`
@@ -1178,6 +1251,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp variable_name(_value), do: nil
 
     defp shape({:select, _allowed}), do: :select
+    defp shape({:columns, _columns}), do: :select
     defp shape({:pool, _names}), do: :pool
     defp shape({:items, _scalar}), do: :items
     defp shape(widget), do: widget
@@ -1237,11 +1311,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # An option is what the control submits and what a person reads: an id is spelt as the
     # DOM carries one, and read back through the same table (§19.2).
     defp options({:select, allowed}), do: Enum.map(allowed, &{option(&1), option(&1)})
+
+    defp options({:columns, columns}),
+      do: Enum.map(columns, &{to_string(&1.name), column_word(&1)})
+
     defp options({:pool, names}), do: Enum.map(names, &{&1, &1})
     defp options(_widget), do: []
 
     defp option({kind, n}) when is_atom(kind) and is_integer(n), do: Store.encode_id({kind, n})
     defp option(value), do: to_string(value)
+
+    defp column_word(%{name: name, type: nil}), do: to_string(name)
+    defp column_word(%{name: name, type: type}), do: "#{name} · #{type}"
 
     # The face list's rows (§18.6): each face with its picture's weight and slant, the
     # node's own face marked.
@@ -1305,7 +1386,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp as_text(%{type: :text}, {:ok, value}) when is_list(value) or is_struct(value, Var),
       do: {:ok, Text.unparse(List.wrap(value))}
 
+    # An extent is `auto` or `min, max`; a channel that is neither a name nor a number is
+    # its literal (#371).
+    defp as_text(%{type: :extent}, {:ok, value}), do: {:ok, extent_text(value)}
+
+    defp as_text(%{type: :channel}, {:ok, value}) when not (is_atom(value) or is_number(value)),
+      do: {:ok, inspect(value)}
+
     defp as_text(_spec, value), do: value
+
+    defp extent_text(:auto), do: "auto"
+    defp extent_text([lo, hi]), do: "#{bound_text(lo)}, #{bound_text(hi)}"
+    defp extent_text(other), do: inspect(other)
+
+    defp bound_text(:auto), do: "auto"
+    defp bound_text(%DateTime{} = at), do: DateTime.to_iso8601(at)
+    defp bound_text(n) when is_number(n), do: to_string(n)
+    defp bound_text(other), do: inspect(other)
 
     # A paint's well shows its gradient's first stop, under the paint's name (§18.6).
     defp well(:colour, {:paint, name}, theme, defs) do
@@ -1399,6 +1496,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(:colour, {:ok, _value}), do: nil
     defp shown(:textarea, {:ok, value}), do: inspect(value)
     defp shown({:select, _}, {:ok, value}), do: option(value)
+    defp shown({:columns, _}, {:ok, value}), do: to_string(value)
     defp shown({:pool, _}, {:ok, value}), do: option(value)
     defp shown({:items, _}, {:ok, _value}), do: nil
     defp shown(:items, {:ok, _value}), do: nil

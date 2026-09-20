@@ -3743,6 +3743,79 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "a channel picks from the source's columns (spec/14 §18.6, #371)" do
+    test "a select of the declared fields and the pool's columns, typed; a literal stays a text box" do
+      layers = [
+        {:chart,
+         %{
+           version: 1,
+           frame: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}},
+           sources: %{primary: %{fields: [:t, :v], types: %{t: :time}}},
+           marks: [%{type: :rect, data: :primary, channels: %{x0: :t, x1: :t, y0: 0, y1: :v}}]
+         }}
+      ]
+
+      rows = %{primary: [%{t: ~U[2024-01-01 00:00:00Z], v: 1, extra: "a"}]}
+      s = BuilderFixture.socket(layers, sources: rows)
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "marks[0].channels"}, s)
+      html = BuilderFixture.render(s)
+
+      [_, form] = String.split(html, ~s(data-builder-node="marks[0].channels"), parts: 2)
+      [form, _] = String.split(form, "</form>", parts: 2)
+
+      # x0 is a select over extra, t and v with their types, t on.
+      assert form =~ ~s(<select name="x0")
+      [_, x0] = String.split(form, ~s(<select name="x0"), parts: 2)
+      [x0, _] = String.split(x0, "</select>", parts: 2)
+
+      assert Regex.scan(~r/<option[^>]*value="([^"]*)"[^>]*>([^<]*)<\/option>/, x0)
+             |> Enum.map(fn [_, v, l] -> {v, l} end) ==
+               [{"", ""}, {"extra", "extra · text"}, {"t", "t · time"}, {"v", "v · number"}]
+
+      assert x0 =~ ~s(value="t" selected)
+
+      # y0 is the literal 0: a text box with the value as it is, never a select.
+      assert form =~ ~s(name="y0")
+      refute form =~ ~s(<select name="y0")
+      assert form =~ ~r/<input[^>]*name="y0"[^>]*value="0"/
+
+      # Picking a column writes the atom, as typing it does; a bare name types too.
+      {:noreply, s1} = Builder.handle_event("edit", %{"_target" => ["x0"], "x0" => "extra"}, s)
+      assert BuilderFixture.design(s1).marks |> hd() |> get_in([:channels, :x0]) == :extra
+      {:noreply, s2} = Builder.handle_event("edit", %{"_target" => ["y0"], "y0" => "v"}, s)
+      assert BuilderFixture.design(s2).marks |> hd() |> get_in([:channels, :y0]) == :v
+    end
+
+    test "with no data bound the channel is a text box that says so; an extent is auto or min, max" do
+      layers = [
+        {:chart,
+         %{
+           version: 1,
+           frame: %{kind: :cartesian, scales: %{y: %{kind: :linear, domain: [0, 100]}}},
+           marks: [%{type: :line, channels: %{x: :t}}]
+         }}
+      ]
+
+      s = BuilderFixture.socket(layers, sources: %{})
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "marks[0].channels"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~r/<input[^>]*name="x"[^>]*placeholder="bind data first"/
+      refute html =~ ~s(<select name="x")
+      refute html =~ ~s(<textarea name="x")
+
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "frame.scales.y"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~r/<input[^>]*name="domain"[^>]*value="0, 100"/
+      refute html =~ ~s(<textarea name="domain")
+
+      {:noreply, s1} =
+        Builder.handle_event("edit", %{"_target" => ["domain"], "domain" => "auto, 50"}, s)
+
+      assert get_in(BuilderFixture.design(s1), [:frame, :scales, :y, :domain]) == [:auto, 50]
+      assert BuilderFixture.render(s1) =~ ~r/name="domain"[^>]*value="auto, 50"/
+    end
+  end
+
   describe "the variables tab (spec/14 §18.13, #363)" do
     test "ends the node row, set off from the roots, badged with the variables still needing a value" do
       s = BuilderFixture.socket(BuilderFixture.parameterised())
