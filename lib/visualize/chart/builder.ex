@@ -55,6 +55,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart
 
     alias Visualize.Chart.Builder.{
+      Axes,
       Document,
       Editor,
       Fills,
@@ -606,6 +607,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               defs={@defs}
               target={@myself}
             />
+            <Axes.section :if={@context == :inspect and @axes_rows != []} rows={@axes_rows} target={@myself} />
             <Sources.panel
               :if={@context == :inspect and @data_page?}
               id={@id <> "-sources"}
@@ -1058,6 +1060,52 @@ if Code.ensure_loaded?(Phoenix.Component) do
                Signals.new(kind, fields, Map.take(had, [:window, :period, :min, :max, :seed]))
              )
            end)}
+      end
+    end
+
+    # -- axes ticked where their scale is (spec/14 §18.16, #373) --------------------------
+
+    # A side ticked adds `%{scale, side}` to the frame's axes in the frame's layer, the
+    # scale declared first when the frame lacks it; unticked, that axis leaves its layer.
+    def handle_event("toggle_axis", %{"scale" => scale, "side" => side}, socket) do
+      scale = String.to_atom(scale)
+      side = String.to_atom(side)
+      %{design: design} = editing(socket.assigns)
+      axes = design |> get_in([:frame, :axes]) |> List.wrap() |> Enum.with_index()
+
+      case Enum.find(axes, fn {axis, _i} -> axis[:scale] == scale and axis[:side] == side end) do
+        {axis, index} ->
+          {:noreply, axis_removed(socket, axis, index)}
+
+        nil ->
+          socket =
+            if Map.has_key?(get_in(design, [:frame, :scales]) || %{}, scale),
+              do: socket,
+              else:
+                update_layer(
+                  socket,
+                  [:frame, :scales],
+                  scale,
+                  {:ok, %{kind: :linear, domain: :auto}}
+                )
+
+          {:noreply, appended(socket, [:frame], :axes, %{scale: scale, side: side})}
+      end
+    end
+
+    def handle_event("toggle_grid", %{"scale" => scale}, socket) do
+      scale = String.to_atom(scale)
+      %{design: design} = editing(socket.assigns)
+      axes = design |> get_in([:frame, :axes]) |> List.wrap() |> Enum.with_index()
+
+      case Enum.find(axes, fn {axis, _i} -> axis[:scale] == scale end) do
+        nil ->
+          {:noreply, socket}
+
+        {axis, index} ->
+          on? = Map.get(axis, :grid, false) == true
+          parsed = if on?, do: :error, else: {:ok, true}
+          {:noreply, update_layer(socket, [:frame, :axes, index], :grid, parsed)}
       end
     end
 
@@ -2147,6 +2195,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         source_name: source_name(assigns, fetch),
         channel_columns: Scales.columns(design, pool(assigns)),
         data_page?: root(entry.label) == "sources" and kind == :composite,
+        axes_rows:
+          if(kind == :composite, do: axes_rows(design, entry, at(layer, entry.path)), else: []),
         data_rows: data_rows(design, assigns, owned),
         editing: at(layer, entry.path),
         errors: errors,
@@ -3177,6 +3227,86 @@ if Code.ensure_loaded?(Phoenix.Component) do
          |> Enum.reduce(socket, &edited(&2, entry, &1))
          |> derived_scales()}
       end
+    end
+
+    # The axes section's rows for the open node (#373): a mark's position scales, or a
+    # position scale's own row; nothing elsewhere.
+    defp axes_rows(design, %{kind: :mark}, mark) when is_map(mark),
+      do: Axes.rows(design, Scales.position_scales(design, mark))
+
+    defp axes_rows(design, %{kind: :scale, path: [:frame, :scales, name]}, _node)
+         when name in [:x, :y, :angle, :r],
+         do: Axes.rows(design, [name])
+
+    defp axes_rows(_design, _entry, _node), do: []
+
+    # An item appended to a list key in the layer the ownership rule names (§18.15).
+    defp appended(socket, path, key, item) do
+      %{uses: uses, selected: selected, store: store} = socket.assigns
+      fetch = Stack.fetch(store)
+
+      case owner_for(uses, fetch, path, key) || Stack.get(uses, selected) do
+        nil ->
+          socket
+
+        %Use{ref: ref} = use when ref != nil ->
+          assign(socket, :notice, locked_notice(socket.assigns, use))
+
+        use ->
+          local = Stack.local_path(use, fetch, path)
+          own = List.wrap(get_in(use.local, local ++ [key]) || [])
+
+          assign(
+            socket,
+            :uses,
+            Stack.update(uses, use.id, &Stack.write(&1, local, key, {:ok, own ++ [item]}))
+          )
+      end
+    end
+
+    # A composed axis taken out of the layer that gives it: an axis site leaves the stack;
+    # an entry of a layer's `frame.axes` leaves the list.
+    defp axis_removed(socket, axis, index) do
+      %{uses: uses, store: store} = socket.assigns
+      fetch = Stack.fetch(store)
+      placed = Stack.placed(uses, fetch)
+      leaves = Chart.explain(placed)
+
+      case owner_of(leaves, placed, uses, [:frame, :axes, index]) do
+        nil ->
+          socket
+
+        id ->
+          case Stack.get(uses, id) do
+            %Use{ref: ref} = use when ref != nil ->
+              assign(socket, :notice, locked_notice(socket.assigns, use))
+
+            %Use{local: %{axis: _}} = use ->
+              closed_site(socket, use)
+
+            use ->
+              own = List.wrap(get_in(use.local, [:frame, :axes]) || [])
+              rest = List.delete(own, axis)
+              parsed = if rest == [], do: :error, else: {:ok, rest}
+
+              assign(
+                socket,
+                :uses,
+                Stack.update(uses, use.id, &Stack.write(&1, [:frame], :axes, parsed))
+              )
+          end
+      end
+    end
+
+    # An axis site unticked leaves the stack; the selection falls back to the first layer.
+    defp closed_site(socket, %Use{id: id}) do
+      uses = Enum.reject(socket.assigns.uses, &(&1.id == id))
+
+      assign(socket,
+        uses: uses,
+        labels: Map.delete(socket.assigns.labels, id),
+        selected: selection(socket.assigns.selected, uses)
+      )
     end
 
     # The scales the bound channels need and the frame lacks, declared through the
