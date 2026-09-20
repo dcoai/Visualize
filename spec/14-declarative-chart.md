@@ -765,7 +765,7 @@ They agree exactly where the fragments are disjoint. Over two fragments that dec
 | `:unknown_key` | the key at the path is not in the node's schema |
 | `{:type, type}` | the value is not of the type (§1.4) |
 | `{:enum, allowed}` | the atom is not one of the allowed |
-| `{:undeclared, kind, name}` | a reference of `kind` (`:scale`, `:style`, `:source`, `:var`, `:field`, `:slot`) to a name nothing declares |
+| `{:undeclared, kind, name}` | a reference of `kind` (`:scale`, `:style`, `:source`, `:var`, `:field`, `:slot`) to a name nothing declares — checked against the design's declared set, which is **empty when the declaring map is absent** (#368): an axis on `x` in a frame with no `scales`, a mark's `data: :s` in a design with no `sources`, a `{:paint, g}` with no `defs` are this fault, not a raise at render. Only a fragment validated alone as its kind (§19.6) has nothing to look references up in, and there they are not checked |
 | `{:invalid_for, type}` | a channel, option or text part that the mark type, transform or label does not read |
 | `{:unsupported_version, v}` | §9 |
 | `{:json, message}` | `Visualize.Chart.from_json/1` could not parse the document |
