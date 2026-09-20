@@ -81,6 +81,8 @@ defmodule Visualize.Data.FFT do
 
     * `:samples` - the window length, a power of two; raises `ArgumentError` otherwise
     * `:window` - one of `windows/0` (default `:hann`)
+    * `:detrend` - subtract the window's mean before transforming, so an offset does not
+      leak from the DC line into its neighbours (default `false`)
 
       iex> every = 1 / 64
       iex> values = for i <- 0..63, do: :math.sin(2 * :math.pi() * 8 * i * every)
@@ -105,6 +107,7 @@ defmodule Visualize.Data.FFT do
       []
     else
       taken = values |> Enum.take(-samples) |> Enum.map(&(&1 * 1.0))
+      taken = if Keyword.get(opts, :detrend, false), do: detrended(taken), else: taken
       gain = window_gain(samples, kind)
 
       taken
@@ -163,6 +166,11 @@ defmodule Visualize.Data.FFT do
 
   defp largest_power_of_two(count) do
     1 |> Stream.iterate(&(&1 * 2)) |> Enum.take_while(&(&1 <= count)) |> List.last()
+  end
+
+  defp detrended(values) do
+    mean = Enum.sum(values) / length(values)
+    Enum.map(values, &(&1 - mean))
   end
 
   # The mean of the window, which the amplitudes are divided by so a sine's line reads

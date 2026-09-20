@@ -64,7 +64,11 @@ defmodule Visualize.Chart.Transform.Data do
     every = Map.get(node, :every) || median_gap(sampled, Map.get(node, :time)) || 1
 
     opts =
-      [samples: Map.get(node, :samples), window: Map.get(node, :window, :hann)]
+      [
+        samples: Map.get(node, :samples),
+        window: Map.get(node, :window, :hann),
+        detrend: Map.get(node, :detrend, false)
+      ]
       |> Enum.reject(fn {_k, v} -> v == nil end)
 
     sampled
