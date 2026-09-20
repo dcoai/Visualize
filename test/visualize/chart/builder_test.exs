@@ -30,6 +30,7 @@ defmodule Visualize.Chart.BuilderTest do
   doctest Visualize.Chart.Builder.Variables
   doctest Visualize.Chart.Builder.Scales
   doctest Visualize.Chart.Builder.Axes
+  doctest Visualize.Chart.Builder.Steps
   doctest Visualize.Chart.Builder.Fonts
 
   for name <- ~w(preview preview_errors builder builder_store)a do
@@ -1062,7 +1063,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert Enum.map(two.assigns.charts, & &1.name) == ["chart 1", "chart 2"]
       assert two.assigns.chart == 2
       assert [%{local: %{frame: %{}}, ref: nil}] = two.assigns.uses
-      assert BuilderFixture.layers(two) == [{"new frame", %{frame: %{}}}]
+      assert BuilderFixture.layers(two) == [{"new frame", %{frame: %{kind: :cartesian}}}]
 
       html = BuilderFixture.render(two)
 
@@ -2592,7 +2593,11 @@ defmodule Visualize.Chart.BuilderTest do
       # The source is declared in the selected layer with its columns typed (#369), one row
       # on the page tagged with its layer, and offered to a mark's data (§19.10).
       {_, house} = hd(BuilderFixture.layers(s))
-      assert house.sources.source_1 == %{fields: [:t, :value], types: %{t: :time, value: :number}}
+
+      assert house.sources.source_1 == %{
+               fields: [:t, :value],
+               types: %{t: :number, value: :number}
+             }
 
       assert html =~
                ~s(<section class="vis-builder-source" data-builder-source="source_1" data-builder-node="sources.source_1">)
@@ -2605,7 +2610,7 @@ defmodule Visualize.Chart.BuilderTest do
                ~r/<input type="hidden" name="column" value="t">\s*<input type="text" name="name" value="t"/
 
       assert row =~
-               ~r/name="column" value="t">\s*<select name="type"[^>]*>\s*<option value="">type<\/option>\s*<option value="time" selected>/
+               ~r/name="column" value="t">\s*<select name="type"[^>]*>\s*<option value="">type<\/option>\s*<option value="time">time<\/option>\s*<option value="number" selected>/
 
       assert row =~ ~s(<option value="sine" selected>sine</option>)
       assert row =~ ~s(name="source_1.window" value="24")
@@ -2641,7 +2646,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert house.sources.source_1 == %{
                fields: [:t, :cpu, :mem],
-               types: %{t: :time, cpu: :number, mem: :number}
+               types: %{t: :number, cpu: :number, mem: :number}
              }
 
       assert s.assigns.signals.source_1.fields == [:t, :cpu, :mem]
@@ -3443,7 +3448,7 @@ defmodule Visualize.Chart.BuilderTest do
       [{:house, house}, {:shared, shared}, _panel] = BuilderFixture.layers(s)
 
       assert house.sources == %{
-               source_1: %{fields: [:t, :value], types: %{t: :time, value: :number}}
+               source_1: %{fields: [:t, :value], types: %{t: :number, value: :number}}
              }
 
       assert shared.sources == %{primary: %{fields: [:t, :v]}}
@@ -3836,6 +3841,59 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       refute BuilderFixture.render(s3) =~ "through no scale"
+    end
+  end
+
+  describe "a new chart says what it still needs (spec/14 §18.4, #374)" do
+    defp step_words(html) do
+      Regex.scan(~r/class="vis-builder-step-button"[^>]*>\d · ([^<]*)</, html)
+      |> Enum.map(&List.last/1)
+    end
+
+    test "a new chart lists its steps, each a button that does or opens it; each clears as it is taken" do
+      s = BuilderFixture.socket(BuilderFixture.layers(), sources: %{})
+      {:noreply, s} = Builder.handle_event("add_chart", %{}, s)
+      html = BuilderFixture.render(s)
+
+      assert html =~ ~s(<ol class="vis-builder-steps">)
+
+      assert step_words(html) == [
+               "add data — the columns the chart draws",
+               "add a mark — a line, bars, points … over the data"
+             ]
+
+      assert html =~ ~s(phx-click="add_source" phx-target="-1")
+      assert html =~ ~s(phx-click="add_site" phx-value-kind="mark" phx-target="-1")
+      # Not a fault: no badge, no error list, Save sends.
+      refute html =~ "vis-builder-node-needs"
+      refute html =~ "vis-builder-errors"
+      {:noreply, _} = Builder.handle_event("save", %{}, s)
+      assert_received {:visualize_chart_saved, "b", _}
+
+      {:noreply, s1} = Builder.handle_event("add_source", %{}, s)
+
+      assert step_words(BuilderFixture.render(s1)) == [
+               "add a mark — a line, bars, points … over the data"
+             ]
+
+      {:noreply, s2} = Builder.handle_event("add_site", %{"kind" => "mark"}, s1)
+      html = BuilderFixture.render(s2)
+      assert step_words(html) == ["add axes — tick a side on the mark&#39;s page"]
+      assert html =~ ~s(phx-click="select_node" phx-value-node="marks[0]" phx-target="-1")
+
+      {:noreply, s3} =
+        Builder.handle_event("toggle_axis", %{"scale" => "x", "side" => "bottom"}, s2)
+
+      refute BuilderFixture.render(s3) =~ "vis-builder-steps"
+    end
+
+    test "a chart with data, a mark and an axis has none; an opened style has none" do
+      refute rendered(:builder) =~ "vis-builder-steps"
+
+      store = Visualize.Chart.BuilderTest.Styles
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: store)
+      {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "style:1"}, s)
+      refute BuilderFixture.render(opened) =~ "vis-builder-steps"
     end
   end
 

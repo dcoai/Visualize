@@ -34,12 +34,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "the open node's label, carried on the `<svg>` for the graph's hook (spec/14 §18.4)"
     )
 
+    attr(:steps, :list,
+      default: [],
+      doc:
+        "what the chart still needs, as `Visualize.Chart.Builder.Steps.steps/1` gives it (#374)"
+    )
+
+    attr(:target, :any, default: nil, doc: "the `phx-target` of a step's button")
+
     @doc """
     Renders the preview pane (spec/10 §15.3).
 
     `<div class="vis-builder-preview">` holding either the chart's markup or
     `<ul class="vis-builder-errors">` with one `<li class="vis-builder-error">` per fault.
-    Exactly one of the two is present. The chart is drawn with `paths: true`, so every
+    Exactly one of the two is present; beneath either, the steps the chart still has to take
+    as `<ol class="vis-builder-steps">`, each a button (spec/14 §18.4, #374). The chart is drawn with `paths: true`, so every
     node it draws carries `data-node`, and the `<svg>` carries `data-builder-selected`
     with the open node's label (spec/14 §18.4, §18.16).
     """
@@ -61,6 +70,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
           data-builder-selected={@selected}
           data-builder-frame={"#{@width} #{@height} #{@margin.top} #{@margin.right} #{@margin.bottom} #{@margin.left}"}
         >{@chart}</svg>
+        <ol :if={@steps != []} class="vis-builder-steps">
+          <li :for={{step, i} <- Enum.with_index(@steps, 1)} class="vis-builder-step">
+            <button
+              type="button"
+              class="vis-builder-step-button"
+              phx-click={step.event}
+              {for {key, value} <- step.values, do: {"phx-value-#{key}", value}}
+              phx-target={@target}
+            >{i} · {step.words}</button>
+          </li>
+        </ol>
       </div>
       """
     end

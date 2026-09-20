@@ -74,6 +74,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Scales,
       Sources,
       Stack,
+      Steps,
       Store,
       Styles,
       StyleStack,
@@ -451,6 +452,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 vars={@bindings}
                 theme={@theme}
                 selected={@entry.label}
+                steps={@steps}
+                target={@myself}
               />
               <p :if={!@preview?} class="vis-builder-context-note">
                 a {@kind} has no chart to look at; its form is in the inspector
@@ -758,8 +761,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # -- the charts (spec/14 §18.8, §19.9) ------------------------------------------------
 
     # A new chart is one frame layer: a chart minimally is a frame.
+    # A new chart is one cartesian frame: valid from its first moment (§18.8, #374).
     def handle_event("add_chart", _params, socket) do
-      use = %{Use.new(nil, []) | ref: nil, local: Stack.empty(:frame)}
+      use = %{Use.new(nil, []) | ref: nil, local: %{frame: %{kind: :cartesian}}}
       n = socket.assigns.next_chart
 
       {:noreply,
@@ -2197,6 +2201,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         data_page?: root(entry.label) == "sources" and kind == :composite,
         axes_rows:
           if(kind == :composite, do: axes_rows(design, entry, at(layer, entry.path)), else: []),
+        steps: if(kind == :composite, do: Steps.steps(design), else: []),
         data_rows: data_rows(design, assigns, owned),
         editing: at(layer, entry.path),
         errors: errors,
@@ -3049,14 +3054,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp mentions_source?(_other, _source), do: false
 
-    # A signal's first field is its time and the rest its numbers (spec/14 §2.3, #369).
-    defp declared_source(socket, name, %{fields: [time | numbers] = fields}) do
+    # A signal's fields are all numbers — its time is its tick, an integer (spec/08 §8.2,
+    # spec/14 §2.3, #369) — so a scale derived from them is linear, never a time scale
+    # that the tick cannot take.
+    defp declared_source(socket, name, %{fields: fields}) do
       %{design: design} = editing(socket.assigns)
 
       if Map.has_key?(Map.get(design, :sources, %{}), name) do
         socket
       else
-        types = Map.new([{time, :time} | Enum.map(numbers, &{&1, :number})])
+        types = Map.new(fields, &{&1, :number})
         update_layer(socket, [:sources], name, {:ok, %{fields: fields, types: types}})
       end
     end
