@@ -29,6 +29,7 @@ defmodule Visualize.Chart.BuilderTest do
   doctest Visualize.Chart.Builder.Picker
   doctest Visualize.Chart.Builder.Variables
   doctest Visualize.Chart.Builder.Scales
+  doctest Visualize.Chart.Builder.Axes
   doctest Visualize.Chart.Builder.Fonts
 
   for name <- ~w(preview preview_errors builder builder_store)a do
@@ -3835,6 +3836,147 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       refute BuilderFixture.render(s3) =~ "through no scale"
+    end
+  end
+
+  describe "axes are ticked where their scale is (spec/14 §18.16, #373)" do
+    defp axes_of(s), do: get_in(BuilderFixture.design(s), [:frame, :axes]) || []
+
+    test "a mark's page has a row per position scale; a tick adds the axis, another removes it" do
+      rows = %{
+        primary: [
+          %{t: ~U[2024-01-01 00:00:00Z], v: 1, k: :a},
+          %{t: ~U[2024-01-02 00:00:00Z], v: 2, k: :b}
+        ]
+      }
+
+      s = bare(%{t: :time, v: :number, k: :category}, rows)
+
+      {:noreply, s} =
+        Builder.handle_event("place", %{"component" => "mark:line", "region" => "plot"}, s)
+
+      html = BuilderFixture.render(s)
+
+      assert html =~ ~s(<details class="vis-builder-section vis-builder-axes" open>)
+
+      [_, section] =
+        String.split(html, ~s(class="vis-builder-section vis-builder-axes"), parts: 2)
+
+      [section, _] = String.split(section, "</details>", parts: 2)
+
+      assert Regex.scan(~r/data-builder-axes="(\w+)"/, section) |> Enum.map(&List.last/1) ==
+               ~w(x y)
+
+      assert section =~ ~r/phx-click="toggle_axis" phx-value-scale="x" phx-value-side="bottom"/
+      assert section =~ ~r/phx-value-scale="y" phx-value-side="right"/
+      refute section =~ "checked"
+      refute section =~ "toggle_grid"
+
+      {:noreply, s1} =
+        Builder.handle_event("toggle_axis", %{"scale" => "x", "side" => "bottom"}, s)
+
+      assert axes_of(s1) == [%{scale: :x, side: :bottom}]
+      # In the frame's layer, the chart, not the mark site (§18.15).
+      [chart, mark] = Enum.map(s1.assigns.uses, & &1.local)
+      assert chart.frame.axes == [%{scale: :x, side: :bottom}]
+      assert Map.keys(mark) == [:mark]
+
+      html = BuilderFixture.render(s1)
+
+      assert html =~
+               ~r/<input type="checkbox" checked phx-click="toggle_axis" phx-value-scale="x" phx-value-side="bottom"/
+
+      assert html =~ ~s(class="axis axis-bottom")
+      assert html =~ ~s(phx-value-node="frame.axes[0]")
+
+      {:noreply, s2} = Builder.handle_event("toggle_grid", %{"scale" => "x"}, s1)
+      assert axes_of(s2) == [%{scale: :x, side: :bottom, grid: true}]
+
+      assert BuilderFixture.render(s2) =~
+               ~r/<input type="checkbox" checked phx-click="toggle_grid" phx-value-scale="x"/
+
+      {:noreply, s3} = Builder.handle_event("toggle_grid", %{"scale" => "x"}, s2)
+      assert axes_of(s3) == [%{scale: :x, side: :bottom}]
+
+      {:noreply, s4} =
+        Builder.handle_event("toggle_axis", %{"scale" => "y", "side" => "left"}, s3)
+
+      {:noreply, s5} =
+        Builder.handle_event("toggle_axis", %{"scale" => "x", "side" => "bottom"}, s4)
+
+      assert axes_of(s5) == [%{scale: :y, side: :left}]
+    end
+
+    test "a scale the frame lacks is declared with the axis; a scale's page shows its row alone" do
+      layers = [
+        {:chart, %{version: 1, frame: %{kind: :cartesian, scales: %{y: %{kind: :linear}}}}}
+      ]
+
+      s = BuilderFixture.socket(layers, sources: %{})
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "frame.scales.y"}, s)
+      html = BuilderFixture.render(s)
+      assert Regex.scan(~r/data-builder-axes="(\w+)"/, html) |> Enum.map(&List.last/1) == ~w(y)
+
+      {:noreply, s1} =
+        Builder.handle_event("toggle_axis", %{"scale" => "y", "side" => "right"}, s)
+
+      assert axes_of(s1) == [%{scale: :y, side: :right}]
+
+      # No row on a frame's or a label's page.
+      {:noreply, frame} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
+      refute BuilderFixture.render(frame) =~ "vis-builder-axes"
+    end
+
+    test "an axis the design has shows ticked and unticks from its own layer; a placed axis site leaves the stack" do
+      s = BuilderFixture.socket(BuilderFixture.layers(), selected: 2, node_label: "marks[0]")
+      html = BuilderFixture.render(s)
+
+      assert html =~
+               ~r/<input type="checkbox" checked phx-click="toggle_axis" phx-value-scale="x" phx-value-side="bottom"/
+
+      assert html =~
+               ~r/<input type="checkbox" checked phx-click="toggle_axis" phx-value-scale="y" phx-value-side="left"/
+
+      {:noreply, s1} = Builder.handle_event("toggle_axis", %{"scale" => "y", "side" => "left"}, s)
+      [_house, {:shared, shared}, _panel] = BuilderFixture.layers(s1)
+      assert shared.frame.axes == [%{scale: :x, side: :bottom, ticks: 3}]
+
+      # An axis dropped on the graph is a site (§18.16): unticking it removes the site.
+      {:noreply, s2} =
+        Builder.handle_event("place", %{"component" => "axis", "region" => "top"}, s1)
+
+      assert length(s2.assigns.uses) == 4
+      assert Enum.any?(axes_of(s2), &(&1.scale == :x and &1.side == :top))
+      {:noreply, s2} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s2)
+      {:noreply, s3} = Builder.handle_event("toggle_axis", %{"scale" => "x", "side" => "top"}, s2)
+      assert length(s3.assigns.uses) == 3
+      refute Enum.any?(axes_of(s3), &(&1.side == :top))
+    end
+
+    test "a polar mark's rows are angle and r, one box each" do
+      layers = [
+        {:chart,
+         %{
+           version: 1,
+           frame: %{kind: :polar},
+           sources: %{p: %{fields: [:k, :v], types: %{k: :category, v: :number}}},
+           marks: [%{type: :rose, data: :p, channels: %{angle: :k, value: :v}}]
+         }}
+      ]
+
+      s = BuilderFixture.socket(layers, sources: %{})
+      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s)
+      html = BuilderFixture.render(s)
+
+      assert Regex.scan(~r/data-builder-axes="(\w+)"/, html) |> Enum.map(&List.last/1) ==
+               ~w(angle r)
+
+      assert html =~ ~r/phx-value-scale="angle" phx-value-side="bottom"[^>]*>\s*shown/
+
+      {:noreply, s1} =
+        Builder.handle_event("toggle_axis", %{"scale" => "angle", "side" => "bottom"}, s)
+
+      assert axes_of(s1) == [%{scale: :angle, side: :bottom}]
     end
   end
 

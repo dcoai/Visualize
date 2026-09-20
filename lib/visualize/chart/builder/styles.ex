@@ -2072,6 +2072,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       min-width: 0;
     }
 
+    /* Axes ticked where their scale is (spec/14 §18.16, #373): a row per scale, the boxes
+       inline, the link to the axis's page at the end. */
+    .vis-builder-axes-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 8px;
+    }
+
+    .vis-builder-axes-side {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+    }
+
+    .vis-builder-axes-link {
+      margin-left: auto;
+      padding: 1px 6px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: transparent;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+    }
+
     /* The data page (spec/14 §19.10, #372): a source per section — its name, its columns
        one to a line, its generator and numbers — the transport beneath. */
     .vis-builder-sources {

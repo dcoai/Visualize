@@ -125,6 +125,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    @doc """
+    The position scales a mark reads — `x`, `y`, `angle`, `r` — through its channels and
+    its `scales` renames, in channel order (spec/14 §18.16, #373).
+
+        iex> design = %{frame: %{kind: :cartesian}}
+        iex> Visualize.Chart.Builder.Scales.position_scales(design, %{type: :line, channels: %{y: :v, x: :t, series: :k}})
+        [:x, :y]
+        iex> Visualize.Chart.Builder.Scales.position_scales(%{frame: %{kind: :polar}}, %{type: :rose, channels: %{angle: :k, value: :v}})
+        [:angle, :r]
+    """
+    @spec position_scales(map(), map()) :: [atom()]
+    def position_scales(design, mark) when is_map(mark) do
+      kind = get_in(design, [:frame, :kind]) || :cartesian
+
+      for {channel, _value} <- mark |> Map.get(:channels, %{}) |> Enum.sort(),
+          scale = FrameScales.scale_for(kind, mark, channel),
+          scale in @position,
+          uniq: true,
+          do: scale
+    end
+
     @doc "The type the design declares for a source's field, else the type its rows suggest."
     @spec column_type(map(), pool_types(), atom(), atom()) :: atom() | nil
     def column_type(design, pool_types, source, field) do
