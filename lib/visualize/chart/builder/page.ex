@@ -53,6 +53,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:hidden, :list, default: [])
     attr(:columns, :map, default: %{})
     attr(:source_name, :any, default: nil)
+    attr(:channel_columns, :map, default: %{})
 
     attr(:owners, :map,
       default: %{},
@@ -119,6 +120,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 hidden={@hidden}
                 columns={@columns}
                 source_name={@source_name}
+                channel_columns={@channel_columns}
                 owners={@owners}
                 layer={@layer}
                 locked={@locked}
@@ -169,6 +171,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         hidden={@page.hidden}
         columns={@page.columns}
         source_name={@page.source_name}
+        channel_columns={@page.channel_columns}
         origins={origins(@page.owners, @path)}
         locked={locked?(@page, @path)}
         guessed={@page.guessed}

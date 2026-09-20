@@ -540,6 +540,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   hidden={if(@source_defaults, do: [], else: [:default])}
                   columns={@columns}
                   source_name={@source_name}
+                  channel_columns={@channel_columns}
                   owners={@page.owners}
                   layer={@page.layer}
                   locked={@page.locked}
@@ -574,6 +575,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 hidden={if(@source_defaults, do: [], else: [:default])}
                 columns={@columns}
                 source_name={@source_name}
+                channel_columns={@channel_columns}
                 owners={@page.owners}
                 layer={@page.layer}
                 locked={@page.locked}
@@ -2001,6 +2003,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         bound_pool: pool(assigns),
         columns: columns(pool(assigns)),
         source_name: source_name(assigns, fetch),
+        channel_columns: Scales.columns(design, pool(assigns)),
         editing: at(layer, entry.path),
         errors: errors,
         chart?: layer == design,

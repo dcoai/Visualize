@@ -93,6 +93,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end)
     end
 
+    @doc """
+    For every mark that binds a source, the columns a channel may pick (spec/14 §18.6,
+    #371): the source's declared `fields` and the pool's columns for it, sorted, each with
+    its type — the design's, else the rows' — keyed by the channels node's path.
+
+        iex> design = %{sources: %{s: %{fields: [:t, :v], types: %{t: :time}}},
+        ...>   marks: [%{type: :line, data: :s}, %{type: :line}]}
+        iex> Visualize.Chart.Builder.Scales.columns(design, %{s: [%{t: 1, v: 2, extra: "x"}]})
+        %{[:marks, 0, :channels] => [%{name: :extra, type: :text}, %{name: :t, type: :time}, %{name: :v, type: :number}]}
+    """
+    @spec columns(map(), map()) :: %{[term()] => [%{name: atom(), type: atom() | nil}]}
+    def columns(design, pool) when is_map(design) and is_map(pool) do
+      pool_types = pool_types(pool)
+
+      for {mark, i} <- Enum.with_index(List.wrap(Map.get(design, :marks, []))),
+          is_map(mark),
+          source = source_of(mark),
+          source != nil,
+          into: %{} do
+        declared =
+          case get_in(design, [:sources, source, :fields]) do
+            fields when is_list(fields) -> Enum.filter(fields, &is_atom/1)
+            _none -> []
+          end
+
+        names = Enum.uniq(declared ++ Map.keys(Map.get(pool_types, source, %{}))) |> Enum.sort()
+
+        {[:marks, i, :channels],
+         Enum.map(names, &%{name: &1, type: column_type(design, pool_types, source, &1)})}
+      end
+    end
+
     @doc "The type the design declares for a source's field, else the type its rows suggest."
     @spec column_type(map(), pool_types(), atom(), atom()) :: atom() | nil
     def column_type(design, pool_types, source, field) do
