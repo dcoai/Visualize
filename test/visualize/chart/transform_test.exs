@@ -37,6 +37,49 @@ defmodule Visualize.Chart.TransformTest do
       assert run(%{op: :bin, field: :v}, [%{v: nil}]) == []
     end
 
+    # A time series to its spectrum (spec/14 §5.4.1, spec/08 §9, #375): the interval read
+    # from the time column, the newest power of two of samples, `as` naming the columns.
+    test ":spectrum is Data.FFT.spectrum/3 over the sample column at the time column's gap" do
+      rows = for i <- 0..99, do: %{t: i / 50, v: 2 * :math.sin(2 * :math.pi() * 10 * i / 50)}
+      out = run(%{op: :spectrum, field: :v, time: :t}, rows)
+
+      # 64 samples of 100 at 50 Hz: 32 lines, 0.78125 Hz apart, the peak at 10 Hz reading 2.
+      assert length(out) == 32
+      assert Enum.map(out, &Enum.sort(Map.keys(&1))) |> Enum.uniq() == [[:frequency, :magnitude]]
+      assert_in_delta Enum.at(out, 1).frequency, 50 / 64, 1.0e-9
+      peak = Enum.max_by(out, & &1.magnitude)
+      assert_in_delta peak.frequency, 10.0, 0.4
+      assert_in_delta peak.magnitude, 2.0, 0.05
+
+      # `every` and `samples` given, three names under `as`, no window.
+      out =
+        run(
+          %{op: :spectrum, field: :v, every: 0.02, samples: 32, window: :none, as: [:f, :a, :p]},
+          rows
+        )
+
+      assert length(out) == 16
+      assert Map.keys(hd(out)) |> Enum.sort() == [:a, :f, :p]
+
+      # DateTimes read in seconds; a row without a numeric sample is left out; too few is [].
+      at = ~U[2024-01-01 00:00:00Z]
+      timed = for i <- 0..15, do: %{at: DateTime.add(at, i * 250, :millisecond), v: :math.sin(i)}
+      assert run(%{op: :spectrum, field: :v, time: :at}, timed) |> length() == 8
+
+      assert_in_delta run(%{op: :spectrum, field: :v, time: :at}, timed)
+                      |> Enum.at(1)
+                      |> Map.get(:frequency),
+                      1 / (16 * 0.25),
+                      1.0e-9
+
+      assert run(%{op: :spectrum, field: :v}, [%{v: 1}]) == []
+      assert run(%{op: :spectrum, field: :v}, [%{v: "x"}, %{v: 1}, %{v: 2}]) |> length() == 1
+
+      assert_raise ArgumentError, ~r/power of two/, fn ->
+        run(%{op: :spectrum, field: :v, samples: 12}, rows)
+      end
+    end
+
     test ":stack is Shape.Stack per series in key order, each row its datum plus the stack" do
       rows = run(%{op: :stack, fields: [:a, :b, :c], offset: :expand}, @rows)
 

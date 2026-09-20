@@ -5,7 +5,7 @@ defmodule Visualize.Chart.Transform.Data do
   # themselves.
 
   alias Visualize.Data
-  alias Visualize.Data.Table
+  alias Visualize.Data.{FFT, Table}
   alias Visualize.Shape.Stack
 
   @doc false
@@ -16,6 +16,7 @@ defmodule Visualize.Chart.Transform.Data do
   def run(:fold, node, rows), do: fold(node, rows)
   def run(:sum, node, rows), do: sum(node, rows)
   def run(:sort, node, rows), do: sort(node, rows)
+  def run(:spectrum, node, rows), do: spectrum(node, rows)
 
   # -- filter -----------------------------------------------------------------------------
 
@@ -49,6 +50,59 @@ defmodule Visualize.Chart.Transform.Data do
       Map.put(%{x0: bin.x0, x1: bin.x1, y0: 0, values: bin.values}, as, length(bin.values))
     end)
   end
+
+  # -- spectrum ---------------------------------------------------------------------------
+
+  # A time series to its frequency spectrum (spec/14 §5.4.1, spec/08 §9, #375): the sample
+  # interval from `every`, else the median gap of the time column, else 1; the rows with a
+  # numeric reading of `field`, newest last, through `Visualize.Data.FFT.spectrum/3`.
+  defp spectrum(node, rows) do
+    as = Map.get(node, :as, [:frequency, :magnitude])
+    {frequency, magnitude, phase} = spectrum_names(as)
+
+    sampled = Enum.filter(rows, &is_number(Table.get(&1, node.field)))
+    every = Map.get(node, :every) || median_gap(sampled, Map.get(node, :time)) || 1
+
+    opts =
+      [samples: Map.get(node, :samples), window: Map.get(node, :window, :hann)]
+      |> Enum.reject(fn {_k, v} -> v == nil end)
+
+    sampled
+    |> Enum.map(&Table.get(&1, node.field))
+    |> FFT.spectrum(every, opts)
+    |> Enum.map(fn line ->
+      row = %{frequency => line.frequency, magnitude => line.magnitude}
+      if phase, do: Map.put(row, phase, line.phase), else: row
+    end)
+  end
+
+  defp spectrum_names([f, m]), do: {f, m, nil}
+  defp spectrum_names([f, m, p | _]), do: {f, m, p}
+  defp spectrum_names(name) when is_atom(name), do: {name, :magnitude, nil}
+
+  # The median gap between consecutive readings of the time column: DateTimes in seconds,
+  # numbers as they are; nil without a column or with fewer than two readings.
+  defp median_gap(_rows, nil), do: nil
+
+  defp median_gap(rows, time) do
+    gaps =
+      rows
+      |> Enum.map(&Table.get(&1, time))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.map(fn [a, b] -> gap(a, b) end)
+      |> Enum.reject(&(is_nil(&1) or &1 <= 0))
+      |> Enum.sort()
+
+    case gaps do
+      [] -> nil
+      gaps -> Enum.at(gaps, div(length(gaps), 2))
+    end
+  end
+
+  defp gap(%DateTime{} = a, %DateTime{} = b), do: DateTime.diff(b, a, :microsecond) / 1_000_000
+  defp gap(a, b) when is_number(a) and is_number(b), do: b - a
+  defp gap(_a, _b), do: nil
 
   # -- stack ------------------------------------------------------------------------------
 

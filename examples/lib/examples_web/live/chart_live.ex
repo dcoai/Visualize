@@ -37,6 +37,7 @@ defmodule ExamplesWeb.ChartLive do
     "contour" => Examples.Charts.ContourPlot,
     "heatmap" => Examples.Charts.Heatmap,
     "hexbin" => Examples.Charts.HexbinChart,
+    "spectrum" => Examples.Charts.SpectrumChart,
     # Maps
     "world_map" => Examples.Charts.WorldMap,
     "globe" => Examples.Charts.Globe
@@ -51,7 +52,7 @@ defmodule ExamplesWeb.ChartLive do
     "scatter", "radial", "multi_line", "grouped_bar", "stacked_bar",
     "stacked_area", "streamgraph", "ridgeline", "bubble", "heatmap", "force", "contour",
     "sankey", "treemap", "circle_pack", "sunburst", "tree", "cluster", "chord",
-    "world_map", "globe", "hexbin"
+    "world_map", "globe", "hexbin", "spectrum"
   ]
 
   def mount(%{"chart" => chart_slug}, _session, socket) do
