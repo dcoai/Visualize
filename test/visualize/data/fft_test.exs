@@ -61,6 +61,15 @@ defmodule Visualize.Data.FFTTest do
         assert_in_delta peak.magnitude, 3.0, 0.01
       end
 
+      # An offset leaks from the DC line into its neighbours under a window; detrended, the
+      # tone alone stands.
+      offset = Enum.map(values, &(&1 + 40))
+      leaked = FFT.spectrum(offset, every)
+      assert Enum.at(leaked, 1).magnitude > 10
+      flat = FFT.spectrum(offset, every, detrend: true)
+      assert Enum.at(flat, 0).magnitude < 0.01 and Enum.at(flat, 1).magnitude < 0.01
+      assert_in_delta Enum.max_by(flat, & &1.magnitude).magnitude, 3.0, 0.01
+
       # The newest power of two: 300 values take the last 256.
       assert FFT.spectrum(Enum.take(values, 300), every) |> length() == 128
       assert FFT.spectrum([1.0], every) == []

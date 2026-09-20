@@ -75,6 +75,14 @@ defmodule Visualize.Chart.TransformTest do
       assert run(%{op: :spectrum, field: :v}, [%{v: 1}]) == []
       assert run(%{op: :spectrum, field: :v}, [%{v: "x"}, %{v: 1}, %{v: 2}]) |> length() == 1
 
+      # `detrend` takes the mean out first: an offset no longer leaks beside the DC line.
+      lifted = Enum.map(rows, &%{&1 | v: &1.v + 100})
+      leaked = run(%{op: :spectrum, field: :v, time: :t}, lifted)
+      assert Enum.at(leaked, 1).magnitude > 10
+      flat = run(%{op: :spectrum, field: :v, time: :t, detrend: true}, lifted)
+      assert Enum.at(flat, 1).magnitude < 0.01
+      assert_in_delta Enum.max_by(flat, & &1.magnitude).magnitude, 2.0, 0.05
+
       assert_raise ArgumentError, ~r/power of two/, fn ->
         run(%{op: :spectrum, field: :v, samples: 12}, rows)
       end
