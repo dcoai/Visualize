@@ -1599,7 +1599,9 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 | `:string`, `:name`, `:field`, `:size`, `:font`, `:slot`, `:text`, `{:ref, _}` | `:text` |
 | `:colour` | `:colour` — a well showing the colour (§19.10) |
 | `{:list, scalar}` — a list of fields, names, strings or numbers | `{:items, scalar}` — a list of items (below) |
-| every other type — `:channel`, `:field_ref`, `:extent`, `:anchor`, `:term`, `{:list, :term}`, `{:map, _}`, `{:node, _}` | `:textarea` |
+| `:channel` | `:text` (#371): a bare name is the field, a number the constant, anything else read as a literal; on a `channels` node whose mark binds a source the editor knows, the control is a **select of the source's columns** instead — the declared `fields` and the pool's columns for that source, sorted, a blank first option for *unbound*, each option `name · type` from the column's type (§2.3, else what its rows suggest) — shown when the channel's value is unbound or one of them, and the text box, with the value as it is, for a literal, a `{:field, …}` or a column the source lost; with no source bound the box says *bind data first* |
+| `:extent` | `:text` (#371): `auto`, or `min, max` where each is a number, an ISO 8601 date-time or `auto` — `0, 100`, `auto, 100`, `2024-01-01T00:00:00Z, 2024-12-31T00:00:00Z` — shown the same way (`auto`, `0, 100`); the literal forms (`[0, 100]`, a list of categories) still read, so nothing a design can hold is unreachable; anything else keeps the box red and the value unchanged |
+| every other type — `:field_ref`, `:anchor`, `:term`, `{:list, :term}`, `{:map, _}`, `{:node, _}` | `:textarea` |
 | `{:one_of, [first | _rest]}` | the widget of `first` |
 
 `Visualize.Chart.Builder.Editor.parse/2` reads a `{:one_of, …}` as its first alternative too, the one whose widget the control is, so what a person can type and what the reader accepts are the same thing.
@@ -1865,6 +1867,7 @@ An axis, a label and a mark are **sites** of their kind — inline, as a `+` sit
 | `Visualize.Chart.Builder.Scales.unscaled/2` | `unscaled(design, pool_types)`: the `{:unscaled, field}` faults of position channels the derivation could not type |
 | `Visualize.Chart.Builder.Scales.pool_types/1` | the types the pool's rows suggest, by source, over each source's first 200 rows |
 | `Visualize.Chart.Builder.Scales.column_type/4` | `column_type(design, pool_types, source, field)`: the type the design declares, else the one the rows suggest |
+| `Visualize.Chart.Builder.Scales.columns/2` | `columns(design, pool)`: for every mark that binds a source, the columns a channel may pick — declared fields and the pool's, each with its type — keyed by the channels node's path, `%{[:marks, i, :channels] => [%{name, type}]}` (#371) |
 | `Visualize.Chart.Builder.Place.moved/5` | a node kind and its body moved to a region at a point over the composed design: `{:ok, body}` with its placement key rewritten — `{:ok, body, sites}` when an axis's new orientation needs a scale the design lacks, the scale site to bring — `:same` when the region names what it already is, `:unmovable` for a kind with no placement |
 | `Visualize.Chart.Builder.Place.moved/4` | as `moved/5` over an empty design |
 | `Visualize.Chart.Builder.Place.movable?/1` | whether a drawn node's label names a movable node: an axis, the legend, a label |
