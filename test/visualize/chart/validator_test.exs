@@ -326,6 +326,40 @@ defmodule Visualize.Chart.ValidatorTest do
   end
 
   describe "references" do
+    # A declaring map the design never wrote is the empty set (D-113, #368): the reference
+    # is undeclared, not unchecked — and a design that validates draws.
+    test "into a declaring map the design does not have" do
+      design = %{
+        version: 1,
+        frame: %{kind: :cartesian, axes: [%{scale: :x, side: :bottom}]},
+        sources: %{s: %{fields: [:t, :value]}},
+        marks: [%{type: :line, data: :s, channels: %{x: :t, y: :value}}]
+      }
+
+      assert errors(design) == [{[:frame, :axes, 0, :scale], {:undeclared, :scale, :x}}]
+
+      no_sources = %{version: 1, frame: %{kind: :cartesian}, marks: [%{type: :line, data: :s}]}
+      assert errors(no_sources) == [{[:marks, 0, :data], {:undeclared, :source, :s}}]
+
+      no_styles = %{
+        version: 1,
+        frame: %{kind: :cartesian},
+        sources: %{s: %{fields: [:t]}},
+        marks: [%{type: :line, data: :s, style: :series}]
+      }
+
+      assert errors(no_styles) == [{[:marks, 0, :style], {:undeclared, :style, :series}}]
+
+      no_defs = %{version: 1, frame: %{kind: :cartesian}, styles: %{w: %{fill: {:paint, :g}}}}
+      assert errors(no_defs) == [{[:styles, :w, :fill], {:undeclared, :paint, :g}}]
+
+      no_vars = %{version: 1, frame: %{kind: :cartesian, size: Visualize.Chart.var(:size)}}
+      assert errors(no_vars) == [{[:frame, :size], {:undeclared, :var, :size}}]
+
+      # A fragment checked alone as its kind still has nothing to look a reference up in.
+      assert Validator.validate(%{axis: %{scale: :x, side: :bottom}}, :axis) == :ok
+    end
+
     test "scales" do
       for path <- [
             [:frame, :axes, 0, :scale],
