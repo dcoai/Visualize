@@ -2072,6 +2072,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
       min-width: 0;
     }
 
+    /* What a new chart still needs (spec/14 §18.4, #374): the steps beneath the preview,
+       each a button. */
+    .vis-builder-steps {
+      margin: 10px 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .vis-builder-step-button {
+      padding: 6px 10px;
+      border: 1px dashed var(--vis-builder-needs);
+      border-radius: var(--vis-builder-radius);
+      background: transparent;
+      color: var(--vis-builder-ink);
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .vis-builder-step-button:hover {
+      border-style: solid;
+    }
+
     /* Axes ticked where their scale is (spec/14 §18.16, #373): a row per scale, the boxes
        inline, the link to the axis's page at the end. */
     .vis-builder-axes-row {
