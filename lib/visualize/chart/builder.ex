@@ -176,6 +176,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          style_entry: nil,
          field: nil,
          adding: false,
+         menu: nil,
          context: :inspect,
          library_open: true,
          context_width: 400,
@@ -564,6 +565,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 >{top.name}<span :if={top.layer} class="vis-builder-section-layer">{top.layer}</span></summary>
                 <div :if={Page.styled?(top.kind)} class="vis-builder-section-select">
                   <span :if={top.label == @entry.label} class="vis-builder-section-selected-word">selected</span>
+                  <button :if={top.layer && MapSet.member?(@page.locked, top.layer)} type="button" class="vis-builder-section-select-button" phx-click="copy_node" phx-value-node={top.label} phx-target={@myself}>copy</button>
+                  <button :if={top.layer && MapSet.member?(@page.locked, top.layer)} type="button" class="vis-builder-section-select-button" phx-click="override_node" phx-value-node={top.label} phx-target={@myself}>override</button>
                   <button
                     :if={top.label != @entry.label}
                     type="button"
@@ -737,6 +740,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
             />
           </aside>
         </div>
+        <menu
+          :if={@menu}
+          id={@id <> "-menu"}
+          class="vis-builder-menu"
+          style={"left: #{@menu.x}px; top: #{@menu.y}px"}
+          phx-click-away="menu_close"
+          phx-window-keydown="menu_close"
+          phx-key="Escape"
+          phx-target={@myself}
+        >
+          <li :for={label <- @menu.nodes} class="vis-builder-menu-node">
+            <span :if={length(@menu.nodes) > 1} class="vis-builder-menu-label">{label}</span>
+            <button type="button" class="vis-builder-menu-item" phx-click="copy_node" phx-value-node={label} phx-target={@myself}>Copy</button>
+            <button type="button" class="vis-builder-menu-item" phx-click="override_node" phx-value-node={label} phx-target={@myself}>Override</button>
+            <button type="button" class="vis-builder-menu-item" phx-click="pick" phx-value-node={label} phx-target={@myself}>Open</button>
+          </li>
+        </menu>
         <div class="vis-builder-tray">
           <Palette.panel design={@design} open={@open_style} target={@myself} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
@@ -937,6 +957,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # provenance every write follows (§18.15) — selected first, then opened. A label the
     # composed design has no node for is a no-op.
     def handle_event("pick", %{"node" => label}, socket) do
+      socket = assign(socket, :menu, nil)
       %{uses: uses, store: store, stack_vars: vars} = socket.assigns
       fetch = Stack.fetch(store)
 
@@ -1140,6 +1161,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
            end)}
       end
     end
+
+    # -- copy and override, and the menu that offers them (spec/14 §18.16, #379) ----------
+
+    # A right-click on a drawn node, or on a layer row: the menu at the point, for the
+    # node or for the row's nodes.
+    def handle_event("menu", %{"node" => label} = params, socket) do
+      {:noreply,
+       assign(socket, :menu, %{nodes: [label], x: number(params["x"]), y: number(params["y"])})}
+    end
+
+    def handle_event("menu", %{"layer" => index} = params, socket) do
+      case Enum.at(socket.assigns.uses, position(index)) do
+        nil ->
+          {:noreply, socket}
+
+        use ->
+          labels = nodes_of(socket, use.id)
+
+          {:noreply,
+           assign(socket, :menu, %{nodes: labels, x: number(params["x"]), y: number(params["y"])})}
+      end
+    end
+
+    def handle_event("menu_close", _params, socket), do: {:noreply, assign(socket, :menu, nil)}
+
+    def handle_event("copy_node", %{"node" => label}, socket),
+      do: {:noreply, socket |> assign(:menu, nil) |> lifted(:copy, label)}
+
+    def handle_event("override_node", %{"node" => label}, socket),
+      do: {:noreply, socket |> assign(:menu, nil) |> lifted(:override, label)}
 
     # -- axes ticked where their scale is (spec/14 §18.16, #373) --------------------------
 
@@ -3587,6 +3638,105 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The placed node opened: the composed design's node of the site's kind that the site
     # owns (§18.15) — an axis that replaced one of its identity owns that one's node.
+    # The top-level nodes a use gives the chart, for a row's menu (spec/14 §18.17, #379).
+    defp nodes_of(socket, id) do
+      design = composed(socket)
+
+      nodes =
+        design |> Editor.nodes() |> Enum.filter(&(length(&1.path) <= 2 and &1.label != "design"))
+
+      owners = owned(socket.assigns, Stack.fetch(socket.assigns.store), nodes)
+
+      nodes
+      |> Enum.filter(&(Map.get(owners, &1.path) == id))
+      |> Enum.reject(fn node ->
+        Enum.any?(
+          nodes,
+          &(&1.label != node.label and String.starts_with?(node.label, &1.label <> ".") and
+              Map.get(owners, &1.path) == id)
+        )
+      end)
+      |> Enum.map(& &1.label)
+    end
+
+    # A copy or an override of a node (spec/14 §18.16, #379): the inline site
+    # `Stack.lifted/5` gives, inserted directly above the layer that owns the node, the
+    # owner masked where the site says, the new site selected and its node open.
+    defp lifted(socket, mode, label) do
+      %{uses: uses, labels: labels, store: store} = socket.assigns
+      fetch = Stack.fetch(store)
+      design = composed(socket)
+
+      with %{} = node <- Enum.find(Editor.nodes(design), &(&1.label == label)),
+           %{path: path} = node,
+           id when id != nil <- owned(socket.assigns, fetch, [node]) |> Map.get(path),
+           %Use{} = owner <- Stack.get(uses, id),
+           %{local: local, key: key, mask: mask, lifted: count} <-
+             Stack.lifted(
+               mode,
+               owner,
+               fetch,
+               Map.put(node, :body, at(design, path)),
+               taken(design, path)
+             ) do
+        use = %{Use.new(nil, uses) | ref: nil, local: local, key: key}
+        at = Stack.index_of(uses, owner.id) + 1
+
+        uses =
+          uses
+          |> List.insert_at(at, use)
+          |> then(fn uses ->
+            if mask,
+              do: Stack.update(uses, owner.id, &%{&1 | mask: List.wrap(&1.mask) ++ [mask]}),
+              else: uses
+          end)
+
+        word =
+          case {mode, count} do
+            {:copy, _} -> "copy of #{label}"
+            {:override, 1} -> "override of #{label}"
+            {:override, n} -> "override of #{Stack.label(labels, owner)}: #{root(label)} (#{n})"
+          end
+
+        socket
+        |> assign(
+          uses: uses,
+          labels: Map.put(labels, use.id, word),
+          selected: use.id,
+          notice: nil
+        )
+        |> opened_own(use, node)
+      else
+        _other -> assign(socket, :notice, "#{label} is not a node of the chart")
+      end
+    end
+
+    # The names a copy must not take: every mark id and every declared key of the kind.
+    defp taken(design, [:marks, _i]),
+      do: for(%{id: id} <- List.wrap(Map.get(design, :marks, [])), is_atom(id), do: id)
+
+    defp taken(design, [:styles, _]), do: Map.keys(Map.get(design, :styles, %{}))
+    defp taken(design, [:sources, _]), do: Map.keys(Map.get(design, :sources, %{}))
+    defp taken(design, [:vars, _]), do: Map.keys(Map.get(design, :vars, %{}))
+
+    defp taken(design, [:frame, :scales, _]),
+      do: Map.keys(get_in(design, [:frame, :scales]) || %{})
+
+    defp taken(_design, _path), do: []
+
+    # The copied node opened: the node of the same kind the new site owns, else the one it
+    # was copied from.
+    defp opened_own(socket, %Use{id: id}, %{kind: kind, label: was}) do
+      design = composed(socket)
+      nodes = design |> Editor.nodes() |> Enum.filter(&(&1.kind == kind))
+      owners = owned(socket.assigns, Stack.fetch(socket.assigns.store), nodes)
+
+      case Enum.find(nodes, &(Map.get(owners, &1.path) == id)) do
+        nil -> opened(socket, was)
+        node -> opened(socket, node.label)
+      end
+    end
+
     defp opened_placed(socket, _component, %Use{id: id, local: local}) do
       [{kind, body}] = Map.to_list(local)
       design = composed(socket)

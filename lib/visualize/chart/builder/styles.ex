@@ -79,6 +79,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       box-sizing: border-box;
     }
 
+    /* The root is the box the menu of #379 is placed in. */
+    .vis-builder {
+      position: relative;
+    }
+
     /* ── the chart bar and the New form ──────────────────────────────────────────── */
 
     .vis-builder-library,
@@ -2072,6 +2077,52 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     .vis-builder-step-button:hover {
       border-style: solid;
+    }
+
+    /* The menu of copy, override and open (spec/14 §18.16, #379): at the pointer, in the
+       builder's own box. */
+    .vis-builder-menu {
+      position: absolute;
+      z-index: 20;
+      margin: 0;
+      padding: 4px 0;
+      min-width: 140px;
+      list-style: none;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: var(--vis-builder-panel);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    }
+
+    .vis-builder-menu-node + .vis-builder-menu-node {
+      border-top: 1px solid var(--vis-builder-line);
+      margin-top: 4px;
+      padding-top: 4px;
+    }
+
+    .vis-builder-menu-label {
+      display: block;
+      padding: 2px 10px;
+      color: var(--vis-builder-muted);
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+    }
+
+    .vis-builder .vis-builder-menu-item {
+      display: block;
+      width: 100%;
+      padding: 4px 12px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--vis-builder-ink);
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .vis-builder .vis-builder-menu-item:hover {
+      background: var(--vis-builder-bg);
+      color: var(--vis-builder-accent);
     }
 
     /* A styled node is selected from its section (spec/14 §18.18, #378): the select bar

@@ -293,6 +293,146 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
+    The site that copies or overrides a node the use contributes (spec/14 §18.16, #379):
+    `%{local, key, mask, lifted}` — the inline site's local and key, the mask path to add
+    to the owner or `nil`, and how many members were lifted — or `:error` when the use does
+    not contribute the node. The node carries its `body` as the design composes it, since a
+    list member's index in the design is not its index in the owner's list. A `:copy` takes a fresh id or key, avoiding `taken`; an
+    `:override` keeps the node's identity and, for a node with none — a label, a mark with
+    no `id` — lifts the owner's whole list and masks it at the finest path the owner's
+    contribution has for it.
+
+        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frame: %{kind: :cartesian, axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]}}}
+        iex> node = %{kind: :axis, path: [:frame, :axes, 1], label: "frame.axes[1]", body: %{scale: :y, side: :left}}
+        iex> Visualize.Chart.Builder.Stack.lifted(:copy, use, fn _ -> :error end, node, [])
+        %{local: %{axis: %{scale: :y, side: :left}}, key: nil, mask: nil, lifted: 1}
+        iex> style = %Visualize.Chart.Use{id: {:use, 2}, ref: nil, key: :series, local: %{style: %{stroke: "#111"}}}
+        iex> Visualize.Chart.Builder.Stack.lifted(:copy, style, fn _ -> :error end, %{kind: :style, path: [:styles, :series], label: "styles.series"}, [:series, :series_2])
+        %{local: %{style: %{stroke: "#111"}}, key: :series_3, mask: nil, lifted: 1}
+        iex> labels = %Visualize.Chart.Use{id: {:use, 3}, ref: nil, local: %{labels: [%{anchor: :title, text: ["a"]}, %{anchor: :caption, text: ["b"]}]}}
+        iex> Visualize.Chart.Builder.Stack.lifted(:override, labels, fn _ -> :error end, %{kind: :label, path: [:labels, 1], label: "labels[1]", body: %{anchor: :caption, text: ["b"]}}, [])
+        %{local: %{labels: [%{anchor: :title, text: ["a"]}, %{anchor: :caption, text: ["b"]}]}, key: nil, mask: [:labels], lifted: 2}
+    """
+    @spec lifted(:copy | :override, Use.t(), (Fragment.id() -> {:ok, map()} | :error), map(), [
+            atom()
+          ]) ::
+            %{local: map(), key: atom() | nil, mask: [atom()] | nil, lifted: pos_integer()}
+            | :error
+    def lifted(mode, %Use{} = use, fetch, %{kind: kind, path: path} = node, taken) do
+      placed = contribution(use, fetch)
+
+      case member(placed, path, Map.get(node, :body)) do
+        nil ->
+          :error
+
+        body ->
+          key = keyed_name(path)
+
+          case {mode, identity?(kind, body)} do
+            {:copy, _} ->
+              %{
+                local: wrap(kind, path, fresh_id(kind, body, taken)),
+                key: fresh_key(key, taken),
+                mask: nil,
+                lifted: 1
+              }
+
+            {:override, true} ->
+              %{local: wrap(kind, path, body), key: key, mask: nil, lifted: 1}
+
+            # A site of the one kind is the whole of it: copied as it is, masked whole.
+            {:override, false} ->
+              case wrapped_site(use, fetch) do
+                {site_kind, site_body} ->
+                  %{local: %{site_kind => site_body}, key: key, mask: [site_kind], lifted: 1}
+
+                nil ->
+                  list_path = Enum.take_while(path, &is_atom/1)
+                  members = List.wrap(at(placed, list_path))
+
+                  %{
+                    local: put_in_local(%{}, list_path, members),
+                    key: key,
+                    mask: mask_path(list_path),
+                    lifted: length(members)
+                  }
+              end
+          end
+      end
+    end
+
+    defp wrapped_site(use, fetch), do: Fragment.wrapped(shown_fragment(use, fetch))
+
+    # The node in the owner's contribution: at its path, or — a member of a list, whose
+    # index in the design is not its index in the owner's list — the member equal to the
+    # design's body, else the one with its identity.
+    defp member(placed, path, body) do
+      case Enum.split_while(path, &is_atom/1) do
+        {_all, []} ->
+          at(placed, path)
+
+        {list_path, [_index | _rest]} ->
+          list = List.wrap(at(placed, list_path))
+
+          Enum.find(list, &(&1 == body)) ||
+            Enum.find(list, &(body != nil and same_identity?(&1, body))) ||
+            if(body == nil and length(list) == 1, do: hd(list))
+      end
+    end
+
+    defp same_identity?(%{id: id}, %{id: id}), do: true
+    defp same_identity?(%{scale: s, side: d}, %{scale: s, side: d}), do: true
+    defp same_identity?(_a, _b), do: false
+
+    # A node whose copy replaces the original in the cascade (spec/14 §8.2): an axis by
+    # scale and side, a mark by id, a keyed kind by key, the frame and its parts key by key.
+    defp identity?(:axis, %{scale: _, side: _}), do: true
+    defp identity?(:mark, %{id: _}), do: true
+    defp identity?(:mark, _body), do: false
+    defp identity?(:label, _body), do: false
+    defp identity?(_kind, _body), do: true
+
+    defp keyed_name([:styles, name]) when is_atom(name), do: name
+    defp keyed_name([:sources, name]) when is_atom(name), do: name
+    defp keyed_name([:vars, name]) when is_atom(name), do: name
+    defp keyed_name([:frame, :scales, name]) when is_atom(name), do: name
+    defp keyed_name(_path), do: nil
+
+    # The inline site's local for a node at a path: a site of the node's kind, a frame's
+    # part as a frame site carrying that part alone.
+    defp wrap(:frame, [:frame], body), do: %{frame: body}
+    defp wrap(_kind, [:frame, part], body) when is_atom(part), do: %{frame: %{part => body}}
+    defp wrap(kind, _path, body), do: %{kind => body}
+
+    defp fresh_id(:mark, %{id: id} = body, taken) when is_atom(id),
+      do: %{body | id: fresh(id, taken)}
+
+    defp fresh_id(_kind, body, _taken), do: body
+
+    defp fresh_key(nil, _taken), do: nil
+    defp fresh_key(key, taken), do: fresh(key, taken)
+
+    defp fresh(name, taken) do
+      2
+      |> Stream.iterate(&(&1 + 1))
+      |> Stream.map(&:"#{name}_#{&1}")
+      |> Enum.find(&(&1 not in taken))
+    end
+
+    defp put_in_local(local, [key], value), do: Map.put(local, key, value)
+
+    defp put_in_local(local, [key | rest], value),
+      do: Map.put(local, key, put_in_local(%{}, rest, value))
+
+    # A mask names a key, or a key of a node under one (spec/14 §19.5).
+    defp mask_path(path), do: Enum.take(path, 2)
+
+    defp at(map, []), do: map
+    defp at(map, [key | rest]) when is_map(map) and is_atom(key), do: at(Map.get(map, key), rest)
+    defp at(list, [i | rest]) when is_list(list) and is_integer(i), do: at(Enum.at(list, i), rest)
+    defp at(_other, _path), do: nil
+
+    @doc """
     The path a design path has inside a use: a site of one kind holds its body under the
     kind's key (spec/14 §19.3), so the design's `sources.primary` is a `source` site's
     `[:source]`, and a design-level site's path is its own (§18.15).

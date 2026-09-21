@@ -70,6 +70,8 @@ defmodule Visualize.Hooks.Builder do
         this.onDragLeave = this.handleDragLeave.bind(this);
         this.onClick = this.handleClick.bind(this);
         this.onKeyDown = this.handleKeyDown.bind(this);
+        this.onContextMenu = this.handleContextMenu.bind(this);
+        this.el.addEventListener('contextmenu', this.onContextMenu);
         this.el.addEventListener('keydown', this.onKeyDown);
         this.el.addEventListener('dragstart', this.onDragStart);
         this.el.addEventListener('dragover', this.onDragOver);
@@ -124,7 +126,43 @@ defmodule Visualize.Hooks.Builder do
 
       // With the graph focused, Shift+Arrow moves the open node to a margin and
       // Shift+Enter to the plot (spec/14 §18.16), when it is one that moves.
+      // The point of an event in the builder's own box, where the menu is placed
+      // (spec/14 §18.16, #379).
+      menuPoint(x, y) {
+        const root = this.el.closest('.vis-builder');
+        const rect = root ? root.getBoundingClientRect() : { left: 0, top: 0 };
+        return { x: Math.round(x - rect.left), y: Math.round(y - rect.top) };
+      },
+
+      // A right-click on a drawn node (scope graph) or on a layer row (the stack) opens
+      // the menu of #379 for it; anywhere else the browser's own menu stays.
+      handleContextMenu(e) {
+        if (!e.target || !e.target.closest) return;
+        if (this.scope === 'graph') {
+          const node = e.target.closest('[data-node]');
+          if (!node || !this.el.contains(node)) return;
+          e.preventDefault();
+          this.push('menu', { node: node.getAttribute('data-node'), ...this.menuPoint(e.clientX, e.clientY) });
+          return;
+        }
+        if (this.scope === null) {
+          const row = e.target.closest('[data-builder-layer]');
+          if (!row || !this.el.contains(row)) return;
+          e.preventDefault();
+          this.push('menu', { layer: row.getAttribute('data-builder-layer'), ...this.menuPoint(e.clientX, e.clientY) });
+        }
+      },
+
       handleKeyDown(e) {
+        // The row's keyboard twin of the menu: Shift+F10 or the Menu key, beside the row.
+        if (this.scope === null && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
+          const row = e.target && e.target.closest ? e.target.closest('[data-builder-layer]') : null;
+          if (!row || !this.el.contains(row)) return;
+          e.preventDefault();
+          const rect = row.getBoundingClientRect();
+          this.push('menu', { layer: row.getAttribute('data-builder-layer'), ...this.menuPoint(rect.left + 24, rect.bottom) });
+          return;
+        }
         if (this.scope !== 'graph' || !e.shiftKey) return;
         const regions = { ArrowUp: 'top', ArrowDown: 'bottom', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'plot' };
         const region = regions[e.key];
@@ -635,6 +673,7 @@ defmodule Visualize.Hooks.Builder do
         this.el.removeEventListener('dragend', this.onDragEnd);
         this.el.removeEventListener('dragleave', this.onDragLeave);
         this.el.removeEventListener('click', this.onClick);
+        this.el.removeEventListener('contextmenu', this.onContextMenu);
       }
     };
     """
