@@ -6,8 +6,8 @@ defmodule Examples.Charts.PolarTransformChart do
   A `:line` with a translucent `:area` under it wraps around the arc; a `:rule` per
   event is an indicator spoke across the band, labelled; a `:rule` at `y` is a threshold
   arc across the sweep; and `:rect`s whose `y` reads a `:band` scale through `scales:
-  %{r: :lane}` are bars arced around the outside, one lane each. The angle axis is the
-  arc at R and the `r` axis's spoke stands at −135°. Animated, the signal's phase drifts
+  %{r: :lane}` are bars arced just inside the axis, one lane each. The angle axis is the
+  outer ring at 0.86 R, its numbers outward, and the `r` axis's spoke stands at −135°. Animated, the signal's phase drifts
   and the events advance.
   """
 
@@ -44,10 +44,10 @@ defmodule Examples.Charts.PolarTransformChart do
         style(:task, fill: {:field, :lane}, opacity: 0.85),
         polar(width, height, margin: @margin),
         linear_scale(:angle, domain: [0, 100], start: -135, sweep: 270),
-        linear_scale(:r, domain: [0, 100], range: [outer * 0.28, outer * 0.62]),
-        band_scale(:lane, domain: @lanes, range: [outer * 0.78, outer * 0.96], padding: 0.25),
+        linear_scale(:r, domain: [0, 100], range: [outer * 0.24, outer * 0.58]),
+        band_scale(:lane, domain: @lanes, range: [outer * 0.66, outer * 0.82], padding: 0.25),
         ordinal_scale(:color, domain: @lanes, range: [:series_4, :series_2, :series_1]),
-        axis(:angle, :bottom, ticks: 10, radius: 0.66, grid: true),
+        axis(:angle, :bottom, ticks: 10, radius: 0.86, grid: true),
         axis(:r, :top, ticks: 4, at: -135, grid: true),
         # The line graph wraps around the arc, its area under it to the inner radius.
         area(:signal, %{x: :t, y: :v}, style: :under),
@@ -56,7 +56,7 @@ defmodule Examples.Charts.PolarTransformChart do
         rule(:events, %{x: :at}, style: :event, label: %{text: [{:field, :name}], style: :event_word}),
         # A threshold at a radius: an arc across the whole sweep.
         rule(:levels, %{y: :level}, style: :threshold),
-        # Bars arced around the outside: the angle their span, a lane each.
+        # Bars arced just inside the axis: the angle their span, a lane each.
         rect(:tasks, %{x0: :from, x1: :to, y0: :lane, y1: :lane, value: :lane},
           scales: %{r: :lane},
           style: :task
@@ -117,10 +117,10 @@ defmodule Examples.Charts.PolarTransformChart do
         # The sweep is the angle scale's: 270° from -135° over the time column (spec/14 §4.3).
         linear_scale(:angle, domain: [0, 100], start: -135, sweep: 270),
         # r over an annular band; a band scale for the bars' lanes outside it.
-        linear_scale(:r, domain: [0, 100], range: [60, 134]),
-        band_scale(:lane, domain: ~w(build test deploy), range: [168, 207], padding: 0.25),
+        linear_scale(:r, domain: [0, 100], range: [52, 125]),
+        band_scale(:lane, domain: ~w(build test deploy), range: [143, 177], padding: 0.25),
         ordinal_scale(:color, domain: ~w(build test deploy)),
-        axis(:angle, :bottom, ticks: 10, radius: 0.66, grid: true),
+        axis(:angle, :bottom, ticks: 10, radius: 0.86, grid: true),
         axis(:r, :top, ticks: 4, at: -135, grid: true),
         # In a polar frame x names angle and y names r: the line wraps around the arc,
         # the area fills to the inner radius (spec/14 §5.2).
