@@ -176,6 +176,8 @@ Effective accessors are `x0 || x`, `x1 || x`, `y0 || y`, `y1 || y`. `x/2` sets `
 | `:monotone_x` | — | — | Fritsch-Carlson monotone cubic in x |
 | `:monotone_y` | — | — | as `:monotone_x` with axes swapped |
 | `:natural` | — | — | natural cubic spline (see 5.6) |
+| `:cardinal_closed` | `:tension` | `0` | the cardinal spline as a closed loop (see 5.4, #393) |
+| `:basis_closed` | — | — | the B-spline as a closed loop (see 5.3, #393) |
 
 An unknown type fails to match. For every type, `[]` or a single point returns an empty path. `:basis`, `:cardinal`, `:catmull_rom`, `:monotone_x`, `:monotone_y`, and `:natural` fall back to `:linear` for two points.
 
@@ -186,6 +188,8 @@ An unknown type fails to match. For every type, `[]` or a single point returns a
 ### 5.3 Basis
 
 d3-shape's `curveBasis`: a uniform cubic B-spline whose ends are pulled to the data. For `n ≥ 3` points: `M p0`; `L (5p0 + p1)/6`; for each `i ≥ 2`, `C (2p_{i−2} + p_{i−1})/3, (p_{i−2} + 2p_{i−1})/3, (p_{i−2} + 4p_{i−1} + p_i)/6`; then `C (2p_{n−2} + p_{n−1})/3, (p_{n−2} + 2p_{n−1})/3, (p_{n−2} + 5p_{n−1})/6` and `L p_{n−1}`. That is `n − 1` curves, each starting where the previous command ended, with the path beginning and ending exactly on the first and last data points (D-33). Fewer than three points fall back to `:linear`.
+
+**Closed loops** (#393). `:basis_closed` is d3-shape's `curveBasisClosed`: the control points read cyclically — for `n ≥ 3` points, with `p_{−1} = p_{n−1}` and `p_n = p_0`, `M (p_{n−2} + 4p_{n−1} + p_0)/6` then for each `i` from `0` to `n − 1` `C (2p_{i−1} + p_i)/3, (p_{i−1} + 2p_i)/3, (p_{i−1} + 4p_i + p_{i+1})/6`, then `Z`: `n` curves and no straight lead-in or lead-out, so the loop is smooth through every point including the seam. `:cardinal_closed` is `curveCardinalClosed`: the windows of four slide cyclically — `[p_{n−1}, p_0, p_1, p_2]` through `[p_{n−2}, p_{n−1}, p_0, p_1]` — from `M p_0`, one `C … p_{i+2 mod n}` per window with the control points of 5.4, then `Z`. Fewer than three points fall back to `:linear` closed with `Z`.
 
 ### 5.4 Cardinal and Catmull-Rom
 
@@ -220,6 +224,8 @@ by the Thomas algorithm (forward elimination, back substitution). The second con
 | `Visualize.Shape.Curve.linear/1` | `M` first point, `L` each subsequent point. |
 | `Visualize.Shape.Curve.step/2` | Step path with position `t ∈ [0, 1]` as in 5.2. |
 | `Visualize.Shape.Curve.basis/1` | B-spline path as in 5.3. |
+| `Visualize.Shape.Curve.basis_closed/1` | The B-spline as a closed loop, as in 5.3 (#393). |
+| `Visualize.Shape.Curve.cardinal_closed/2` | The cardinal spline as a closed loop, as in 5.3 (#393). |
 | `Visualize.Shape.Curve.cardinal/2` | Cardinal spline with the given tension. |
 | `Visualize.Shape.Curve.catmull_rom/2` | Catmull-Rom spline with the given alpha. |
 | `Visualize.Shape.Curve.monotone_x/1` | Monotone cubic in x. |
