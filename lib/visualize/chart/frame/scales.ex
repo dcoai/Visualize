@@ -31,7 +31,28 @@ defmodule Visualize.Chart.Frame.Scales do
     value: :color,
     series: :color
   }
-  @polar %{angle: :angle, value: :r, inner: :r, outer: :r}
+  # In a polar frame the cartesian channels are the polar ones (spec/14 §4.3, #391): x
+  # names angle and y names r, so every mark is laid out in (angle, r) and bent (§5.2).
+  @polar %{
+    angle: :angle,
+    x: :angle,
+    x0: :angle,
+    x1: :angle,
+    start: :angle,
+    end: :angle,
+    value: :r,
+    inner: :r,
+    outer: :r,
+    y: :r,
+    y0: :r,
+    y1: :r,
+    median: :r,
+    inner_lo: :r,
+    inner_hi: :r,
+    outer_lo: :r,
+    outer_hi: :r,
+    series: :color
+  }
   @geo %{value: :color, series: :color}
 
   # The mark types whose `value` is a size or a share and names no scale (spec/14 §5.2).

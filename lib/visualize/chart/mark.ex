@@ -43,7 +43,7 @@ defmodule Visualize.Chart.Mark do
 
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Scales
-  alias Visualize.Chart.Mark.{Generic, Label, Shapes, Strokes}
+  alias Visualize.Chart.Mark.{Bend, Generic, Label, Shapes, Strokes}
   alias Visualize.Chart.{Style, Var}
   alias Visualize.Data.Table
   alias Visualize.IR.{Element, Transform}
@@ -52,6 +52,8 @@ defmodule Visualize.Chart.Mark do
   @shapes [:line, :area, :band, :rule, :x_band, :percentile_band, :rose, :symbol]
   @stroked [:line, :rule]
   @centred [:rose, :arc]
+  # Drawn as they are in a polar frame: polar already, or geometry in plot pixels (§5.2).
+  @unbent [:rose, :arc, :path]
 
   @typedoc """
   What the element builders see of a mark: the frame, the mark node, its rows, its
@@ -117,6 +119,7 @@ defmodule Visualize.Chart.Mark do
     }
 
     children = if type in @shapes, do: Shapes.elements(ctx), else: Generic.elements(ctx)
+    children = bent(children, ctx)
     elements = children |> Enum.map(&bind(&1, ctx)) |> Strokes.apply(ctx)
 
     Element.group(elements ++ Label.elements(children, ctx),
@@ -247,6 +250,26 @@ defmodule Visualize.Chart.Mark do
     |> Element.set_style(style |> Map.merge(paint) |> Map.merge(bound))
     |> datum_attrs(datum, ctx)
   end
+
+  # In a polar frame every ordinary mark is laid out in (angle, r) and bent around the
+  # arc (spec/14 §5.2, #391): its elements, its label anchors, and its bounds read as the
+  # sector's radii.
+  defp bent(children, %{frame: %{kind: :polar}, type: type}) when type not in @unbent do
+    Enum.map(children, fn child ->
+      child
+      |> Map.update!(:element, &Bend.bend/1)
+      |> Map.update(:anchor, nil, fn
+        {a, r} -> Bend.point({a, r})
+        other -> other
+      end)
+      |> then(fn
+        %{bounds: {_x, y, _w, h}} = c -> c |> Map.delete(:bounds) |> Map.put(:radii, {y, y + h})
+        c -> c
+      end)
+    end)
+  end
+
+  defp bent(children, _ctx), do: children
 
   defp centre(group, %{type: type, frame: %{kind: kind, plot: plot}})
        when type in @centred and kind != :polar do

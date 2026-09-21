@@ -236,6 +236,34 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   # -- rule and x-band: the generator's own label ----------------------------------------
 
+  # In a polar frame a rule spans the r band — a spoke — or, given `y`, stands at that
+  # radius across the sweep: a line in (angle, r) that the bend makes an arc (§5.2, #391).
+  defp rule(%{frame: %{kind: :polar}} = ctx) do
+    {r0, r1} = radii(ctx)
+    {a0, a1} = sweep(ctx)
+
+    if Channels.has?(ctx, :y) do
+      rows = ctx |> Channels.pixels() |> Channels.placed([:y])
+
+      Enum.map(rows, fn row ->
+        line = Element.line(a0, row.y, a1, row.y, stroke_style(ctx, row.datum))
+        %{element: line, datum: row.datum, style: %{}, anchor: nil}
+      end)
+    else
+      rows = ctx |> Channels.pixels() |> Channels.placed([:x])
+
+      elements =
+        Rule.new()
+        |> Rule.x(:x)
+        |> Rule.y0(r0)
+        |> Rule.y1(r1)
+        |> Rule.label(label_accessor(ctx))
+        |> Rule.generate(rows)
+
+      rule_children(elements, rows, ctx)
+    end
+  end
+
   defp rule(ctx) do
     rows = ctx |> Channels.pixels() |> Channels.placed([:x])
 
@@ -247,6 +275,10 @@ defmodule Visualize.Chart.Mark.Shapes do
       |> Rule.label(label_accessor(ctx))
       |> Rule.generate(rows)
 
+    rule_children(elements, rows, ctx)
+  end
+
+  defp rule_children(elements, rows, ctx) do
     Enum.zip_with(elements, rows, fn group, row ->
       [line | text] = group.children
       line = Element.set_style(line, stroke_style(ctx, row.datum))
@@ -262,13 +294,14 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   defp x_band(ctx) do
     rows = ctx |> Channels.pixels() |> Channels.placed([:x0, :x1])
+    {y0, y1} = if ctx.frame.kind == :polar, do: radii(ctx), else: {0, ctx.frame.plot.height}
 
     elements =
       XBand.new()
       |> XBand.x0(:x0)
       |> XBand.x1(:x1)
-      |> XBand.y0(0)
-      |> XBand.y1(ctx.frame.plot.height)
+      |> XBand.y0(y0)
+      |> XBand.y1(y1)
       |> XBand.label(label_accessor(ctx))
       |> XBand.generate(rows)
 
@@ -421,4 +454,20 @@ defmodule Visualize.Chart.Mark.Shapes do
   # The plot's outer radius `R` (spec/14 §5.3).
   @spec outer_radius(map()) :: number()
   def outer_radius(%{frame: %{plot: plot}}), do: min(plot.width, plot.height) / 2
+
+  # The r scale's range, the band a polar mark spans: `[0, R]` when the frame has none.
+  defp radii(%{frame: frame} = ctx) do
+    case Map.get(frame.scales, :r) do
+      %{range: [r0, r1]} -> {min(r0, r1), max(r0, r1)}
+      _none -> {0, outer_radius(ctx)}
+    end
+  end
+
+  # The angle scale's range, the sweep: the full turn when the frame has none.
+  defp sweep(%{frame: frame}) do
+    case Map.get(frame.scales, :angle) do
+      %{range: [a0, a1]} -> {a0, a1}
+      _none -> {0, 2 * :math.pi()}
+    end
+  end
 end
