@@ -3860,6 +3860,213 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  describe "copy and override, and the menu (spec/14 §18.16, §18.17, #379)" do
+    alias Visualize.Chart.BuilderTest.Recording
+
+    # A chart of a chart layer (sources and a mark), a referenced frame with two axes and
+    # three labels, and a referenced style the mark reads.
+    setup do
+      Recording.seed(%{
+        {:frame, 7} => %{
+          name: "Frame::two",
+          fragment: %{
+            frame: %{
+              kind: :cartesian,
+              scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
+              axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, ticks: 3}]
+            }
+          }
+        },
+        {:style, 8} => %{name: "Styles::thin", fragment: %{style: %{stroke_width: 1}}},
+        {:label, 9} => %{
+          name: "Labels::title",
+          fragment: %{label: %{anchor: :title, text: ["one"]}}
+        }
+      })
+
+      layers = [
+        {:chart,
+         %{
+           version: 1,
+           sources: %{s: %{fields: [:t, :v]}},
+           marks: [%{id: :m, type: :line, data: :s, channels: %{x: :t, y: :v}, style: :series}],
+           labels: [%{anchor: :caption, text: ["two"]}, %{anchor: :subtitle, text: ["three"]}]
+         }}
+      ]
+
+      s =
+        BuilderFixture.socket(layers,
+          store: Recording,
+          sources: %{s: [%{t: 1, v: 2}, %{t: 2, v: 3}]}
+        )
+
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"name" => "frame:7", "at" => 1, "as" => "link"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"name" => "style:8", "at" => 2, "as" => "link"}, s)
+
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      {:noreply, s} = Builder.handle_event("set_key", %{"key" => "series", "key.other" => ""}, s)
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"name" => "label:9", "at" => 3, "as" => "link"}, s)
+
+      %{socket: s}
+    end
+
+    test "copy on a referenced axis: an inline axis site above the frame's layer, selected; moved, both draw",
+         %{socket: s} do
+      assert length(s.assigns.uses) == 4
+      {:noreply, s1} = Builder.handle_event("copy_node", %{"node" => "frame.axes[1]"}, s)
+      assert length(s1.assigns.uses) == 5
+      # Directly above the frame's layer (index 1), not at the end.
+      copy = Enum.at(s1.assigns.uses, 2)
+      assert copy.ref == nil and copy.local == %{axis: %{scale: :y, side: :left, ticks: 3}}
+      assert Enum.at(s1.assigns.uses, 1).mask == []
+      assert s1.assigns.selected == copy.id
+      assert s1.assigns.labels[copy.id] == "copy of frame.axes[1]"
+      assert s1.assigns.node_label =~ ~r/^frame\.axes\[\d\]$/
+      # The copy stands in for the original until moved: one left axis, then two y axes.
+      html = BuilderFixture.render(s1)
+      assert length(Regex.scan(~r/class="axis axis-left"/, html)) == 1
+
+      {:noreply, s2} =
+        Builder.handle_event("edit", %{"_target" => ["side"], "side" => "right"}, s1)
+
+      html = BuilderFixture.render(s2)
+      assert html =~ ~s(class="axis axis-right") and html =~ ~s(class="axis axis-left")
+      # The entry is untouched.
+      assert Recording.get({:frame, 7}, nil)
+             |> elem(1)
+             |> Map.fetch!(:fragment)
+             |> get_in([:frame, :axes])
+             |> length() == 2
+    end
+
+    test "override on a referenced axis keeps its identity and masks nothing; the edit lands in the copy",
+         %{socket: s} do
+      {:noreply, s1} = Builder.handle_event("override_node", %{"node" => "frame.axes[1]"}, s)
+      copy = Enum.at(s1.assigns.uses, 2)
+      assert copy.local == %{axis: %{scale: :y, side: :left, ticks: 3}}
+      assert Enum.at(s1.assigns.uses, 1).mask == []
+      assert s1.assigns.labels[copy.id] == "override of frame.axes[1]"
+      {:noreply, s2} = Builder.handle_event("edit", %{"_target" => ["ticks"], "ticks" => "8"}, s1)
+      assert Enum.at(s2.assigns.uses, 2).local.axis.ticks == 8
+      html = BuilderFixture.render(s2)
+      assert length(Regex.scan(~r/class="axis axis-left"/, html)) == 1
+
+      assert get_in(BuilderFixture.design(s2), [:frame, :axes])
+             |> Enum.filter(&(&1.side == :left))
+             |> hd()
+             |> Map.get(:ticks) == 8
+    end
+
+    test "a keyed kind: override keeps the key and masks it at the site; copy takes a fresh key",
+         %{socket: s} do
+      {:noreply, o} = Builder.handle_event("override_node", %{"node" => "styles.series"}, s)
+      copy = Enum.at(o.assigns.uses, 3)
+      assert copy.key == :series and copy.local == %{style: %{stroke_width: 1}}
+      assert Enum.at(o.assigns.uses, 2).mask == []
+
+      {:noreply, c} = Builder.handle_event("copy_node", %{"node" => "styles.series"}, s)
+      copy = Enum.at(c.assigns.uses, 3)
+      assert copy.key == :series_2
+      assert Map.keys(BuilderFixture.design(c).styles) |> Enum.sort() == [:series, :series_2]
+    end
+
+    test "a label has no identity: override lifts the site whole and masks it; copy draws beside; an id-ed mark copies with a fresh id",
+         %{socket: s} do
+      # labels[0] is the referenced label site's; overriding it masks that site's label.
+      {:noreply, o} = Builder.handle_event("override_node", %{"node" => "labels[2]"}, s)
+      [_, _, _, ref, copy] = o.assigns.uses
+      assert ref.ref == {:label, 9} and ref.mask == [[:label]]
+      assert copy.local == %{label: %{anchor: :title, text: ["one"]}}
+      assert o.assigns.labels[copy.id] == "override of labels[2]"
+      assert length(BuilderFixture.design(o).labels) == 3
+
+      # The chart layer's two labels: overriding one lifts both and masks `labels` there.
+      {:noreply, o2} = Builder.handle_event("override_node", %{"node" => "labels[1]"}, s)
+      [chart, lifted | _] = o2.assigns.uses
+      assert chart.mask == [[:labels]]
+
+      assert lifted.local == %{
+               labels: [%{anchor: :caption, text: ["two"]}, %{anchor: :subtitle, text: ["three"]}]
+             }
+
+      assert o2.assigns.labels[lifted.id] == "override of chart: labels (2)"
+      assert length(BuilderFixture.design(o2).labels) == 3
+
+      {:noreply, c} = Builder.handle_event("copy_node", %{"node" => "labels[2]"}, s)
+      assert length(BuilderFixture.design(c).labels) == 4
+
+      {:noreply, m} = Builder.handle_event("copy_node", %{"node" => "marks[0]"}, s)
+
+      assert Enum.at(m.assigns.uses, 1).local == %{
+               mark: %{id: :m_2, type: :line, data: :s, channels: %{x: :t, y: :v}, style: :series}
+             }
+
+      assert length(BuilderFixture.design(m).marks) == 2
+    end
+
+    test "the menu opens at the point for a node or a row, closes, and the locked note and select bar carry the actions",
+         %{socket: s} do
+      {:noreply, m} =
+        Builder.handle_event("menu", %{"node" => "frame.axes[1]", "x" => 120, "y" => 80}, s)
+
+      html = BuilderFixture.render(m)
+
+      assert html =~
+               ~s(<menu id="b-menu" class="vis-builder-menu" style="left: 120px; top: 80px" phx-click-away="menu_close" phx-window-keydown="menu_close" phx-key="Escape")
+
+      assert html =~ ~s(phx-click="copy_node" phx-value-node="frame.axes[1]")
+      assert html =~ ~s(phx-click="override_node" phx-value-node="frame.axes[1]")
+      assert html =~ ~s(phx-click="pick" phx-value-node="frame.axes[1]")
+      refute html =~ "vis-builder-menu-label"
+
+      # A row: the referenced frame's site gives one node, the frame.
+      {:noreply, r} = Builder.handle_event("menu", %{"layer" => "1", "x" => 10, "y" => 20}, s)
+      assert r.assigns.menu.nodes == ["frame"]
+      # The chart layer gives several roots.
+      {:noreply, r0} = Builder.handle_event("menu", %{"layer" => "0", "x" => 10, "y" => 20}, s)
+
+      assert Enum.sort(r0.assigns.menu.nodes) == [
+               "labels[0]",
+               "labels[1]",
+               "marks[0]",
+               "sources.s"
+             ]
+
+      assert BuilderFixture.render(r0) =~ ~s(<span class="vis-builder-menu-label">marks[0]</span>)
+
+      {:noreply, closed} = Builder.handle_event("menu_close", %{}, m)
+      assert closed.assigns.menu == nil
+      {:noreply, acted} = Builder.handle_event("copy_node", %{"node" => "frame.axes[1]"}, m)
+      assert acted.assigns.menu == nil
+
+      # The locked form's note carries the two; so does a locked section's select bar.
+      {:noreply, axis} = Builder.handle_event("select_node", %{"node" => "frame.axes[1]"}, s)
+      html = BuilderFixture.render(axis)
+
+      [_, note] =
+        String.split(html, ~s(class="vis-builder-context-note vis-builder-locked-note"), parts: 2)
+
+      assert note =~ ~s(phx-click="copy_node" phx-value-node="frame.axes[1]")
+      assert note =~ ~s(phx-click="override_node" phx-value-node="frame.axes[1]")
+
+      {:noreply, frame} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
+      html = BuilderFixture.render(frame)
+
+      assert html =~
+               ~s(class="vis-builder-section-select-button" phx-click="override_node" phx-value-node="frame.axes[0]")
+
+      # A node the chart lacks is a notice.
+      {:noreply, none} = Builder.handle_event("copy_node", %{"node" => "marks[9]"}, s)
+      assert none.assigns.notice == "marks[9] is not a node of the chart"
+    end
+  end
+
   describe "a styled node is selected from its section, and its stack sits there (spec/14 §18.18, #378)" do
     defp two_labels do
       [

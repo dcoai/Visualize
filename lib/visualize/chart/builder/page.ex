@@ -115,6 +115,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
               >{child.name}<span :if={tag(child, @owners, @path)} class="vis-builder-section-layer">{tag(child, @owners, @path)}</span></summary>
               <div :if={styled?(child.kind)} class="vis-builder-section-select">
                 <span :if={child.label == @selected_node} class="vis-builder-section-selected-word">selected</span>
+                <button :if={locked?(assigns, child.path)} type="button" class="vis-builder-section-select-button" phx-click="copy_node" phx-value-node={child.label} phx-target={@target}>copy</button>
+                <button :if={locked?(assigns, child.path)} type="button" class="vis-builder-section-select-button" phx-click="override_node" phx-value-node={child.label} phx-target={@target}>override</button>
                 <button
                   :if={child.label != @selected_node}
                   type="button"

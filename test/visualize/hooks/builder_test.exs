@@ -10,7 +10,7 @@ defmodule Visualize.Hooks.BuilderTest do
 
   alias Visualize.Hooks
 
-  @listeners ~w(dragstart dragover drop dragend click)
+  @listeners ~w(dragstart dragover drop dragend click contextmenu)
 
   test "the hook is one export and joins the bundle once (D-48)" do
     js = Hooks.js_code()
@@ -27,6 +27,23 @@ defmodule Visualize.Hooks.BuilderTest do
     end
 
     assert js =~ "bind(this)"
+  end
+
+  # The menu of #379 (spec/14 §18.16, §18.17): a right-click on a drawn node or a layer row
+  # pushes `menu` with the target and the point in the builder's own box; anywhere else the
+  # browser's menu stays. The row's keyboard twin is Shift+F10 or the Menu key.
+  test "a right-click on a node or a row pushes the menu at the point; the keyboard twin too" do
+    js = Hooks.Builder.js_hook()
+    assert js =~ "handleContextMenu(e)"
+
+    assert js =~
+             "this.push('menu', { node: node.getAttribute('data-node'), ...this.menuPoint(e.clientX, e.clientY) })"
+
+    assert js =~
+             "this.push('menu', { layer: row.getAttribute('data-builder-layer'), ...this.menuPoint(e.clientX, e.clientY) })"
+
+    assert js =~ "e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')"
+    assert js =~ "this.el.closest('.vis-builder')"
   end
 
   test "a drop pushes the move and makes none: the server owns the list" do

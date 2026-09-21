@@ -991,6 +991,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <input :if={@label} type="hidden" name="_node" value={@label} />
           <p :if={@locked} class="vis-builder-context-note vis-builder-locked-note">
             from the library — open it to edit
+            <button :if={@label} type="button" class="vis-builder-section-select-button" phx-click="copy_node" phx-value-node={@label} phx-target={@target}>copy</button>
+            <button :if={@label} type="button" class="vis-builder-section-select-button" phx-click="override_node" phx-value-node={@label} phx-target={@target}>override</button>
           </p>
           <fieldset class={"vis-builder-form-body" <> if(@locked, do: " vis-builder-form-locked", else: "")} disabled={@locked}>
           <%= for {group, fields} <- @blocks do %>
