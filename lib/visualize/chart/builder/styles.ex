@@ -791,6 +791,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       margin-left: 10px;
     }
 
+    /* The colour toggle beside it (#366): pressed while the picker is up. */
+    .vis-builder-node-colour[aria-pressed="true"] {
+      color: var(--vis-builder-accent);
+    }
+
     .vis-builder-node-badge {
       position: absolute;
       top: 1px;
@@ -1505,34 +1510,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     .vis-builder .vis-builder-add-kind {
       padding: 2px 8px;
       font-size: 11px;
-    }
-
-    /* The context's icon row: layer, colour, font, variables (spec/14 §19.10). */
-    .vis-builder-context-icons {
-      position: sticky;
-      top: 0;
-      z-index: 1;
-      display: flex;
-      gap: 4px;
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--vis-builder-line);
-      background: var(--vis-builder-panel);
-    }
-
-    .vis-builder .vis-builder-context-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 28px;
-      padding: 0;
-      color: var(--vis-builder-muted);
-    }
-
-    .vis-builder .vis-builder-context-icon-on {
-      border-color: var(--vis-builder-accent);
-      color: var(--vis-builder-accent);
-      background: var(--vis-builder-bg);
     }
 
     .vis-builder-hues {
