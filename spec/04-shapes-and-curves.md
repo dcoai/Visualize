@@ -60,6 +60,7 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.x_band/0` | `Shape.XBand.new/0`. |
 | `Visualize.Shape.percentile_band/0` | `Shape.PercentileBand.new/0`. |
 | `Visualize.Shape.rose/0` | `Shape.Rose.new/0`. |
+| `Visualize.Shape.needle/0` | `Shape.Needle.new/0`. |
 | `Visualize.Shape.x/2` | `Line.x/2`, `Area.x/2`, `Rule.x/2`, or `PercentileBand.x/2`. |
 | `Visualize.Shape.y/2` | `Line.y/2`, `Area.y/2`, or `Band.y/2`. |
 | `Visualize.Shape.x0/2` | `Area.x0/2`, `Band.x0/2`, or `XBand.x0/2`. |
@@ -68,8 +69,8 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.y1/2` | `Area.y1/2`, `Rule.y1/2`, or `XBand.y1/2`. |
 | `Visualize.Shape.height/2` | `Band.height/2`. |
 | `Visualize.Shape.fill/2` | `Band.fill/2` or `XBand.fill/2`. |
-| `Visualize.Shape.scale/2` | `Rule.scale/2`, `XBand.scale/2`, or `Rose.scale/2`. |
-| `Visualize.Shape.angle/2` | `Rose.angle/2`. |
+| `Visualize.Shape.scale/2` | `Rule.scale/2`, `XBand.scale/2`, `Rose.scale/2` or `Needle.scale/2`. |
+| `Visualize.Shape.angle/2` | `Rose.angle/2` or `Needle.angle/2`. |
 | `Visualize.Shape.width/2` | `Rose.width/2`. |
 | `Visualize.Shape.label/2` | `Rule.label/2` or `XBand.label/2`. |
 | `Visualize.Shape.median/2` | `PercentileBand.median/2`. |
