@@ -248,8 +248,9 @@ defmodule Visualize.Chart.BuilderTest do
 
       html = at_node("marks[0]")
 
+      # The mark's section is `panel`'s (muted) and, being the open node, selected (#378).
       assert html =~
-               ~s(class="vis-builder-section vis-builder-section-top vis-builder-section-other")
+               ~s(class="vis-builder-section vis-builder-section-top vis-builder-section-other vis-builder-section-selected")
 
       # The frame is `shared`'s at the top (its scales and axes) and `house` gives its size:
       # the size section carries no tag of its own but its keys say where they come from.
@@ -3856,6 +3857,99 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       refute BuilderFixture.render(s3) =~ "through no scale"
+    end
+  end
+
+  describe "a styled node is selected from its section, and its stack sits there (spec/14 §18.18, #378)" do
+    defp two_labels do
+      [
+        {:chart,
+         %{
+           version: 1,
+           frame: %{
+             kind: :cartesian,
+             scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
+             axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}],
+             legend: %{scale: :color}
+           },
+           sources: %{s: %{fields: [:t, :v]}},
+           marks: [
+             %{type: :line, data: :s, channels: %{x: :t, y: :v}},
+             %{type: :line, data: :s, channels: %{x: :t, y: :v}}
+           ],
+           labels: [%{anchor: :title, text: ["one"]}, %{anchor: :caption, text: ["two"]}]
+         }}
+      ]
+    end
+
+    defp section_of(html, label) do
+      [_, rest] = String.split(html, ~s(phx-value-section="#{label}"), parts: 2)
+      rest
+    end
+
+    test "each label's section has a select bar; selecting one puts the stack in that section alone" do
+      s = BuilderFixture.socket(two_labels(), sources: %{s: [%{t: 1, v: 2}]})
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "labels"}, s)
+      html = BuilderFixture.render(s)
+
+      # The root opens on the first label: its section is selected, the other offers select.
+      assert html =~ ~s(vis-builder-section-selected)
+      assert html =~ ~s(<span class="vis-builder-section-selected-word">selected</span>)
+      assert html =~ ~s(phx-click="select_node" phx-value-node="labels[1]")
+      refute html =~ ~s(phx-click="select_node" phx-value-node="labels[0]")
+      assert length(Regex.scan(~r/id="b-style-stack"/, html)) == 1
+      assert section_of(html, "labels[0]") =~ ~s(id="b-style-stack")
+
+      {:noreply, s1} = Builder.handle_event("select_node", %{"node" => "labels[1]"}, s)
+      html = BuilderFixture.render(s1)
+      assert html =~ ~s(phx-click="select_node" phx-value-node="labels[0]")
+      refute html =~ ~s(phx-click="select_node" phx-value-node="labels[1]")
+      assert length(Regex.scan(~r/id="b-style-stack"/, html)) == 1
+      second = section_of(html, "labels[1]")
+      assert second =~ ~s(<span class="vis-builder-section-selected-word">selected</span>)
+      assert second =~ ~s(id="b-style-stack")
+
+      refute section_of(html, "labels[0]")
+             |> String.split(~s(phx-value-section="labels[1]"))
+             |> hd() =~ ~s(id="b-style-stack")
+
+      # An entry opened: the style editor sits with the stack, in the section.
+      {:noreply, s2} = Builder.handle_event("select_style_entry", %{"index" => "0"}, s1)
+      html = BuilderFixture.render(s2)
+      assert section_of(html, "labels[1]") =~ ~s(vis-builder-style-panel)
+      assert length(Regex.scan(~r/vis-builder-style-panel"/, html)) == 1
+    end
+
+    test "an axis and the legend select from the frame's page; a mark from the marks page; the graph's pick too" do
+      s = BuilderFixture.socket(two_labels(), sources: %{s: [%{t: 1, v: 2}]})
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frame"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(phx-click="select_node" phx-value-node="frame.axes[1]")
+      assert html =~ ~s(phx-click="select_node" phx-value-node="frame.legend")
+      # The frame itself has no style: no bar on its own sections, no stack anywhere.
+      refute html =~ ~s(phx-value-node="frame.size")
+      refute html =~ ~s(id="b-style-stack")
+
+      {:noreply, axis} = Builder.handle_event("select_node", %{"node" => "frame.axes[1]"}, s)
+      html = BuilderFixture.render(axis)
+      assert section_of(html, "frame.axes[1]") =~ ~s(id="b-style-stack")
+      assert length(Regex.scan(~r/id="b-style-stack"/, html)) == 1
+
+      {:noreply, legend} = Builder.handle_event("select_node", %{"node" => "frame.legend"}, s)
+      html = BuilderFixture.render(legend)
+      assert section_of(html, "frame.legend") =~ ~s(id="b-style-stack")
+
+      {:noreply, marks} = Builder.handle_event("select_root", %{"root" => "marks"}, s)
+      html = BuilderFixture.render(marks)
+      assert html =~ ~s(phx-click="select_node" phx-value-node="marks[1]")
+      {:noreply, mark} = Builder.handle_event("select_node", %{"node" => "marks[1]"}, marks)
+      html = BuilderFixture.render(mark)
+      assert section_of(html, "marks[1]") =~ ~s(id="b-style-stack")
+      assert length(Regex.scan(~r/id="b-style-stack"/, html)) == 1
+
+      {:noreply, picked} = Builder.handle_event("pick", %{"node" => "labels[1]"}, s)
+      assert picked.assigns.node_label == "labels[1]"
+      assert section_of(BuilderFixture.render(picked), "labels[1]") =~ ~s(id="b-style-stack")
     end
   end
 

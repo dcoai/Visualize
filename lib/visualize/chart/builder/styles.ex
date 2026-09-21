@@ -2074,6 +2074,40 @@ if Code.ensure_loaded?(Phoenix.Component) do
       border-style: solid;
     }
 
+    /* A styled node is selected from its section (spec/14 §18.18, #378): the select bar
+       under the title, the selected section outlined. */
+    .vis-builder-section-select {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px 4px;
+      font-size: 11px;
+      color: var(--vis-builder-muted);
+    }
+
+    .vis-builder-section-select-button {
+      padding: 1px 8px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: transparent;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+    }
+
+    .vis-builder-section-select-button:hover {
+      border-color: var(--vis-builder-accent);
+      color: var(--vis-builder-accent);
+    }
+
+    .vis-builder-section-selected-word {
+      color: var(--vis-builder-accent);
+      font-weight: 600;
+    }
+
+    .vis-builder-section-selected {
+      border-left: 2px solid var(--vis-builder-accent);
+    }
+
     /* Axes ticked where their scale is (spec/14 §18.16, #373): a row per scale, the boxes
        inline, the link to the axis's page at the end. */
     .vis-builder-axes-row {

@@ -21,6 +21,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @facets [:binding, :channel, :geometry, :style, :content]
 
+    @styled [:mark, :label, :axis, :legend]
+
+    @doc "Whether a node kind carries a style stack, so its section selects it (spec/14 §18.18)."
+    @spec styled?(atom()) :: boolean()
+    def styled?(kind), do: kind in @styled
+
     attr(:id, :string, required: true, doc: "the page's id; sub-sections extend it")
     attr(:kind, :atom, required: true, doc: "the node kind")
     attr(:node, :map, required: true, doc: "the node's value")
@@ -75,6 +81,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:target, :any, default: nil)
     attr(:depth, :integer, default: 0)
 
+    slot(:style_for,
+      doc:
+        "rendered with the selected node's label inside its section, after its form: the style stack and editor of a styled node (spec/14 §18.18, #378)"
+    )
+
     @doc "Renders a node as a page of sections, its sub-nodes as sub-sections."
     def page(assigns) do
       assigns = assign(assigns, sections: sections(assigns))
@@ -94,7 +105,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             >{section.name}</summary>
             <.form_for :if={section.keys != []} page={assigns} kind={@kind} node={@node} path={@path} label={@label} only={section.keys} suffix={section.name} />
             <.form_for :for={form <- section.forms} page={assigns} kind={form.kind} node={form.node} path={form.path} label={form.label} />
-            <details :for={child <- section.children} class={child_class(child, @owners, @layer)} open={not MapSet.member?(@collapsed, child.label)}>
+            <details :for={child <- section.children} class={child_class(child, @owners, @layer, @selected_node)} open={not MapSet.member?(@collapsed, child.label)}>
               <summary
                 class="vis-builder-section-title vis-builder-subsection-title"
                 title={child.title}
@@ -102,6 +113,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-value-section={child.label}
                 phx-target={@target}
               >{child.name}<span :if={tag(child, @owners, @path)} class="vis-builder-section-layer">{tag(child, @owners, @path)}</span></summary>
+              <div :if={styled?(child.kind)} class="vis-builder-section-select">
+                <span :if={child.label == @selected_node} class="vis-builder-section-selected-word">selected</span>
+                <button
+                  :if={child.label != @selected_node}
+                  type="button"
+                  class="vis-builder-section-select-button"
+                  title={"open #{child.label} — its form and its style"}
+                  phx-click="select_node"
+                  phx-value-node={child.label}
+                  phx-target={@target}
+                >select — edit its style</button>
+              </div>
               <.page
                 id={@id <> "-" <> slug(child.label)}
                 kind={child.kind}
@@ -127,7 +150,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 guessed={@guessed}
                 target={@target}
                 depth={@depth + 1}
-              />
+              >
+                <:style_for :let={label}>{render_slot(@style_for, label)}</:style_for>
+              </.page>
+              <%= if styled?(child.kind) and child.label == @selected_node do %>
+                {render_slot(@style_for, child.label)}
+              <% end %>
             </details>
           </details>
         <% end %>
@@ -386,12 +414,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp section_class(_section), do: "vis-builder-section"
 
     # A sub-section of a layer other than the selected one is drawn muted (§18.15).
-    defp child_class(child, owners, layer) do
-      case Map.get(owners, child.path) do
-        nil -> "vis-builder-section vis-builder-subsection"
-        ^layer -> "vis-builder-section vis-builder-subsection"
-        _other -> "vis-builder-section vis-builder-subsection vis-builder-section-other"
-      end
+    defp child_class(child, owners, layer, selected) do
+      base =
+        case Map.get(owners, child.path) do
+          nil -> "vis-builder-section vis-builder-subsection"
+          ^layer -> "vis-builder-section vis-builder-subsection"
+          _other -> "vis-builder-section vis-builder-subsection vis-builder-section-other"
+        end
+
+      if child.label == selected, do: base <> " vis-builder-section-selected", else: base
     end
 
     defp slug(label), do: label |> String.replace(~r/[^A-Za-z0-9]+/, "-") |> String.trim("-")

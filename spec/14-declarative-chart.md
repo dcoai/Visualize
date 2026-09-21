@@ -1978,7 +1978,7 @@ Focus follows a moved layer because the rows are re-rendered by position: the bu
 
 ### 18.18 The style stack at a site
 
-§3.6 gives every style site a stack; this is the control over it. `Visualize.Chart.Builder.StyleStack.panel/1` renders the stack of the open node's `style` key: one row per entry, in resolution order — the first applied first, the last winning — because that is the order the cascade is defined in and a panel that reversed it would teach the opposite of §3.6.
+§3.6 gives every style site a stack; this is the control over it. **A node with a style is selected from its section** (#378): every sub-section of a page whose node kind carries a `style` key — a mark, a label, an axis, the legend — opens with a **select bar** (`vis-builder-section-select`): unselected, a button *select — edit its style* that opens the node (`select_node`); selected, the word *selected*, and the section carries `vis-builder-section-selected`. The bar is inside the section, so a summary keeps its one click and `<details>` its native toggle. **The stack sits in the selected node's section**: `Visualize.Chart.Builder.Page.page/1` takes a `style_for` slot, rendered with the node's label after the selected node's form, and the builder fills it with the stack and the style editor for that node; a page that is one node — a mark opened from the graph, an axis from the axes section's link — has the stack after its form as before. The stack is nowhere else; the column's foot no longer holds it. `Visualize.Chart.Builder.StyleStack.panel/1` renders the stack of the open node's `style` key: one row per entry, in resolution order — the first applied first, the last winning — because that is the order the cascade is defined in and a panel that reversed it would teach the opposite of §3.6.
 
 | Function | Contract |
 |---|---|
@@ -2340,7 +2340,8 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | `Visualize.Chart.Builder.Glyphs.icon/1` | the inline SVG of a control's icon — `:eye`, `:eye_off`, `:lock` for the layer row (§18.8); `:colour` and `:variables` for the node row's last two buttons; a root's name for the node row (§18.13), any other root as its first letter in a ring |
 | `Visualize.Chart.Builder.Glyphs.glyph/2` | the inline SVG for one value of a drawn key, or `nil` |
 | `Visualize.Chart.Builder.Masks.keyed?/1` | whether a contribution is of a kind the document keys by name, so the panel offers the key control |
-| `Visualize.Chart.Builder.Page.page/1` | a root tab's node as a page of sections (§18.15): facet sections with the node keys' sub-sections inside, the frame's page as a frame, every form aimed at its node |
+| `Visualize.Chart.Builder.Page.styled?/1` | whether a node kind carries a style stack — a mark, a label, an axis, the legend — so its section opens with the select bar (§18.18, #378) |
+| `Visualize.Chart.Builder.Page.page/1` | a root tab's node as a page of sections (§18.15): facet sections with the node keys' sub-sections inside, the frame's page as a frame, every form aimed at its node; a styled node's section opens with its select bar and holds the `style_for` slot when selected (§18.18, #378) |
 | `Visualize.Chart.Builder.Page.sections/1` | the sections of a node's page — per facet the value keys and the child nodes; a frame's kind, size, binding and parts |
 | `Visualize.Chart.Builder.Editor.form_body/1` | one node's form alone: the fields of one facet, or of the listed keys, carrying the node's label (`_node`, `data-builder-node`) |
 | `Visualize.Chart.Builder.Sources.panel/1` | the data page (#372): one row per source of the composed design — name, columns with types, generator or the host's rows — with +, ×, play and pause, the tick's period |
