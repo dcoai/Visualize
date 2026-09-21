@@ -263,6 +263,46 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp default({key, value}, socket), do: assign_new(socket, key, fn -> value end)
 
+    # The style stack and, with an entry open, the style editor of the selected node
+    # (spec/14 §18.18, #378): rendered where the node is — in its section, or after a
+    # page that is the node — never at the column's foot.
+    attr(:id, :string, required: true)
+    attr(:style_site, :any, required: true)
+    attr(:style_entry, :any, required: true)
+    attr(:design, :map, required: true)
+    attr(:refs, :map, required: true)
+    attr(:theme, :any, required: true)
+    attr(:defs, :map, required: true)
+    attr(:target, :any, required: true)
+
+    defp style_panels(assigns) do
+      ~H"""
+      <StyleStack.panel
+        :if={@style_site}
+        id={@id <> "-style-stack"}
+        value={@style_site.value}
+        fallback={@style_site.fallback}
+        design={@design}
+        open={@style_entry}
+        target={@target}
+      />
+      <Editor.panel
+        :if={@style_site && @style_entry}
+        id={@id <> "-style-editor"}
+        class="vis-builder-style-panel"
+        kind={:style}
+        node={StyleStack.resolved(@design, @style_site.stack)}
+        origins={StyleStack.origins(@design, @style_site.stack)}
+        strip={false}
+        event="edit_style"
+        refs={@refs}
+        theme={@theme}
+        defs={@defs}
+        target={@target}
+      />
+      """
+    end
+
     @impl true
     def render(assigns) do
       assigns = assign(assigns, editing(assigns))
@@ -512,7 +552,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <details
                 :for={top <- @page.tops}
                 :if={@page.sections? and not @data_page?}
-                class={"vis-builder-section vis-builder-section-top" <> if(top.needs > 0, do: " vis-builder-section-needs", else: "") <> if(top.other?, do: " vis-builder-section-other", else: "")}
+                class={"vis-builder-section vis-builder-section-top" <> if(top.needs > 0, do: " vis-builder-section-needs", else: "") <> if(top.other?, do: " vis-builder-section-other", else: "") <> if(top.label == @entry.label, do: " vis-builder-section-selected", else: "")}
                 open={not MapSet.member?(@collapsed, top.label)}
               >
                 <summary
@@ -522,6 +562,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   phx-value-section={top.label}
                   phx-target={@myself}
                 >{top.name}<span :if={top.layer} class="vis-builder-section-layer">{top.layer}</span></summary>
+                <div :if={Page.styled?(top.kind)} class="vis-builder-section-select">
+                  <span :if={top.label == @entry.label} class="vis-builder-section-selected-word">selected</span>
+                  <button
+                    :if={top.label != @entry.label}
+                    type="button"
+                    class="vis-builder-section-select-button"
+                    title={"open #{top.label} — its form and its style"}
+                    phx-click="select_node"
+                    phx-value-node={top.label}
+                    phx-target={@myself}
+                  >select — edit its style</button>
+                </div>
                 <Page.page
                   id={@id <> "-page-" <> top.slug}
                   kind={top.kind}
@@ -546,6 +598,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   layer={@page.layer}
                   locked={@page.locked}
                   guessed={@guessed}
+                  target={@myself}
+                >
+                  <:style_for :let={_label}>
+                    <.style_panels
+                      id={@id}
+                      style_site={@style_site}
+                      style_entry={@style_entry}
+                      design={@design}
+                      refs={@refs}
+                      theme={@colour.theme}
+                      defs={@defs}
+                      target={@myself}
+                    />
+                  </:style_for>
+                </Page.page>
+                <.style_panels
+                  :if={Page.styled?(top.kind) and top.label == @entry.label}
+                  id={@id}
+                  style_site={@style_site}
+                  style_entry={@style_entry}
+                  design={@design}
+                  refs={@refs}
+                  theme={@colour.theme}
+                  defs={@defs}
                   target={@myself}
                 />
               </details>
@@ -582,31 +658,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 locked={@page.locked}
                 guessed={@guessed}
                 target={@myself}
+              >
+                <:style_for :let={_label}>
+                  <.style_panels
+                    id={@id}
+                    style_site={@style_site}
+                    style_entry={@style_entry}
+                    design={@design}
+                    refs={@refs}
+                    theme={@colour.theme}
+                    defs={@defs}
+                    target={@myself}
+                  />
+                </:style_for>
+              </Page.page>
+              <.style_panels
+                :if={not @page.sections? and not @data_page? and @page.single.label == @entry.label}
+                id={@id}
+                style_site={@style_site}
+                style_entry={@style_entry}
+                design={@design}
+                refs={@refs}
+                theme={@colour.theme}
+                defs={@defs}
+                target={@myself}
               />
             </div>
-            <StyleStack.panel
-              :if={@context == :inspect and @style_site}
-              id={@id <> "-style-stack"}
-              value={@style_site.value}
-              fallback={@style_site.fallback}
-              design={@design}
-              open={@style_entry}
-              target={@myself}
-            />
-            <Editor.panel
-              :if={@context == :inspect && @style_site && @style_entry}
-              id={@id <> "-style-editor"}
-              class="vis-builder-style-panel"
-              kind={:style}
-              node={StyleStack.resolved(@design, @style_site.stack)}
-              origins={StyleStack.origins(@design, @style_site.stack)}
-              strip={false}
-              event="edit_style"
-              refs={@refs}
-              theme={@colour.theme}
-              defs={@defs}
-              target={@myself}
-            />
             <Axes.section :if={@context == :inspect and @axes_rows != []} rows={@axes_rows} target={@myself} />
             <Sources.panel
               :if={@context == :inspect and @data_page?}
