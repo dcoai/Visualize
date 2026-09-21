@@ -108,7 +108,7 @@ defmodule Visualize.Chart.SchemaTest do
              :end_angle
            ]
 
-    assert Schema.options(:line) == []
+    assert Schema.options(:line) == [:closed]
     assert_raise ArgumentError, fn -> Schema.channels(:nope) end
 
     channel_keys = Enum.map(Schema.describe(:channels), & &1.key)

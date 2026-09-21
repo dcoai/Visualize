@@ -1214,6 +1214,76 @@ defmodule Visualize.Chart.MarkTest do
       assert_in_delta :math.sqrt(tx * tx + ty * ty), 150, 1.0e-3
     end
 
+    test "the radar: chords over a categorical angle, closed on a full turn, series layered in order; step_after as arcs (#393)" do
+      six = ~w(a b c d e f)
+
+      radar = fn mark, extra ->
+        frame =
+          @polar
+          |> put_in([:scales, :angle], %{kind: :band, domain: six})
+          |> put_in([:scales, :r], %{kind: :linear, domain: [0, 10]})
+
+        chart = chart(mark, Map.merge(%{frame: frame}, extra))
+        rows = for {k, i} <- Enum.with_index(six), s <- ["p", "q"], do: %{k: k, v: 2 + i, s: s}
+        frame = Frame.new(chart, sources: %{primary: rows})
+        {frame, Mark.generate(frame, hd(chart.marks), sources: %{primary: rows})}
+      end
+
+      {frame, lines} =
+        radar.(%{type: :line, channels: %{x: :k, y: :v, series: :s}, style: :faint}, %{
+          styles: %{faint: %{stroke_width: 1}}
+        })
+
+      [p, q] = lines.children
+      assert p.attrs == %{"data-series": "p"} or p.attrs["data-series"] == "p"
+      %Element{path: %Path{commands: commands}} = p
+      # Six chords and the closing one back to the first point: seven L after the M.
+      assert Enum.map(commands, &elem(&1, 0)) == [:M | List.duplicate(:L, 6)]
+      {:M, mx, my} = hd(commands)
+      assert {:L, ^mx, ^my} = List.last(commands)
+      band = Frame.scale(frame, :angle)
+
+      first =
+        Bend.point({Scale.apply(band, "a") + Scale.Band.bandwidth(band) / 2, radius_of(frame, 2)})
+
+      assert {mx, my} == first
+      assert q.attrs["data-series"] == "q"
+
+      # Not closed when asked: the twelve rows (two per category), no return.
+      {_frame, open} =
+        radar.(%{type: :line, channels: %{x: :k, y: :v}, options: %{closed: false}}, %{})
+
+      [path] = open.children
+      assert length(path.path.commands) == 12
+
+      # The area's volumes, one per series in series order, each closed.
+      {_frame, areas} = radar.(%{type: :area, channels: %{x: :k, y: :v, series: :s}}, %{})
+      [pa, qa] = areas.children
+      assert pa.attrs["data-series"] == "p" and qa.attrs["data-series"] == "q"
+      assert List.last(pa.path.commands) == :Z
+      assert Enum.count(pa.path.commands, &match?({:L, _, _}, &1)) >= 7
+
+      # A closed curve closes itself: no row appended, n curves and a Z.
+      {_frame, smooth} =
+        radar.(%{type: :line, channels: %{x: :k, y: :v}, style: :loop}, %{
+          styles: %{loop: %{curve: :cardinal_closed}}
+        })
+
+      [loop] = smooth.children
+      # Twelve curves sampled at eight points or more, then the close; no chord.
+      assert Enum.count(loop.path.commands, &match?({:L, _, _}, &1)) >= 96
+      assert List.last(loop.path.commands) == :Z
+
+      # step_after steps along an arc: many sampled points at each radius.
+      {_frame, stepped} =
+        radar.(%{type: :line, channels: %{x: :k, y: :v}, style: :arcs}, %{
+          styles: %{arcs: %{curve: :step_after}}
+        })
+
+      [arcs] = stepped.children
+      assert length(arcs.path.commands) > 6 * 10
+    end
+
     test "the bend is a pure function of the elements: relative commands, curves and rects" do
       bent =
         Bend.bend(%Element{

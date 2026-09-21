@@ -254,10 +254,13 @@ defmodule Visualize.Chart.Mark do
   # In a polar frame every ordinary mark is laid out in (angle, r) and bent around the
   # arc (spec/14 §5.2, #391): its elements, its label anchors, and its bounds read as the
   # sector's radii.
-  defp bent(children, %{frame: %{kind: :polar}, type: type}) when type not in @unbent do
+  defp bent(children, %{frame: %{kind: :polar} = frame, type: type}) when type not in @unbent do
+    # Over a categorical angle a straight segment is a chord (§5.2, #393).
+    opts = [chords: match?(%Visualize.Scale.Band{}, Map.get(frame.scales, :angle))]
+
     Enum.map(children, fn child ->
       child
-      |> Map.update!(:element, &Bend.bend/1)
+      |> Map.update!(:element, &Bend.bend(&1, opts))
       |> Map.update(:anchor, nil, fn
         {a, r} -> Bend.point({a, r})
         other -> other

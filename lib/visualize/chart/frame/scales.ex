@@ -212,7 +212,10 @@ defmodule Visualize.Chart.Frame.Scales do
   defp build(name, node, values, plot, theme, axes) do
     kind = get(node, :kind)
     domain = domain(kind, name, get(node, :domain), values)
-    range = range(kind, name, sweep(name, node, get(node, :range)), plot, theme, axes)
+
+    range =
+      range(kind, name, sweep(name, node, get(node, :range)), plot, theme, axes)
+      |> ring(kind, name, domain)
 
     kind
     |> construct(node, range)
@@ -236,6 +239,25 @@ defmodule Visualize.Chart.Frame.Scales do
   end
 
   defp sweep(_name, _node, range), do: range
+
+  # A categorical angle (spec/14 §4.3, #393): the range widened by half a step at each
+  # end so the band centres span the sweep — on a full turn the step is `sweep / n` and
+  # the ring closes with the last category one step before the first; on a partial
+  # sweep `sweep / (n − 1)`, the categories ends-inclusive.
+  defp ring([a0, a1], :band, :angle, domain) when is_list(domain) and domain != [] do
+    n = length(domain)
+    sweep = a1 - a0
+
+    if abs(sweep) >= 2 * :math.pi() - 1.0e-9 do
+      step = sweep / n
+      [a0 - step / 2, a1 - step / 2]
+    else
+      step = sweep / max(1, n - 1)
+      [a0 - step / 2, a1 + step / 2]
+    end
+  end
+
+  defp ring(range, _kind, _name, _domain), do: range
 
   defp construct(:linear, _node, _range), do: Scale.linear()
   defp construct(:log, node, _range), do: Scale.log(get(node, :base))

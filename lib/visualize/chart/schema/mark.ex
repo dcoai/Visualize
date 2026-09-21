@@ -6,8 +6,8 @@ defmodule Visualize.Chart.Schema.Mark do
 
   # Type, required channels, optional channels, option keys (spec/14 §5.2-5.3).
   @marks [
-    {:line, [:x, :y], [:series], []},
-    {:area, [:x, :y], [:x0, :x1, :y0, :y1, :series], []},
+    {:line, [:x, :y], [:series], [:closed]},
+    {:area, [:x, :y], [:x0, :x1, :y0, :y1, :series], [:closed]},
     {:band, [:x0, :x1], [:y], [:height]},
     {:rule, [], [:x, :y], []},
     {:x_band, [:x0, :x1], [], []},
@@ -56,7 +56,8 @@ defmodule Visualize.Chart.Schema.Mark do
     :end_angle,
     :tail,
     :hub,
-    :cap
+    :cap,
+    :closed
   ]
 
   # Op, required keys, optional keys (spec/14 §5.4).
@@ -222,12 +223,15 @@ defmodule Visualize.Chart.Schema.Mark do
     for key <- [:x, :y], do: spec(key, :field, :channel)
   end
 
-  # Every option is a number but a needle's cap, an enum (spec/14 §5.3, #392).
+  # Every option is a number but a needle's cap, an enum (spec/14 §5.3, #392), and a
+  # line's or an area's closed, a boolean (#393).
   def describe(:options) do
     for key <- @option_keys do
-      if key == :cap,
-        do: spec(key, {:enum, @caps}, :geometry, default: :point),
-        else: spec(key, :number, :geometry)
+      case key do
+        :cap -> spec(key, {:enum, @caps}, :geometry, default: :point)
+        :closed -> spec(key, :boolean, :geometry)
+        _number -> spec(key, :number, :geometry)
+      end
     end
   end
 

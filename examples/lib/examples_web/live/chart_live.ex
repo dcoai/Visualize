@@ -24,6 +24,7 @@ defmodule ExamplesWeb.ChartLive do
     "bubble" => Examples.Charts.BubbleChart,
     "radial" => Examples.Charts.RadialBarChart,
     "gauge" => Examples.Charts.GaugeChart,
+    "radar" => Examples.Charts.RadarChart,
     # Hierarchical Layouts
     "treemap" => Examples.Charts.TreemapChart,
     "circle_pack" => Examples.Charts.CirclePacking,
@@ -50,7 +51,7 @@ defmodule ExamplesWeb.ChartLive do
 
   @animatable_charts [
     "bar", "horizontal_bar", "line", "area", "pie", "donut",
-    "scatter", "radial", "gauge", "multi_line", "grouped_bar", "stacked_bar",
+    "scatter", "radial", "gauge", "radar", "multi_line", "grouped_bar", "stacked_bar",
     "stacked_area", "streamgraph", "ridgeline", "bubble", "heatmap", "force", "contour",
     "sankey", "treemap", "circle_pack", "sunburst", "tree", "cluster", "chord",
     "world_map", "globe", "hexbin", "spectrum"

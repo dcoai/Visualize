@@ -241,6 +241,53 @@ defmodule Visualize.Chart.FrameTest do
     end
   end
 
+  describe "a categorical angle (spec/14 §4.3, #393)" do
+    test "a band on angle is widened by half a step: six categories 60° apart on a full turn, the ring closed; 36° apart ends-inclusive on a half turn" do
+      six = ~w(a b c d e f)
+      full = polar(%{angle: %{kind: :band, domain: six}, r: %{kind: :linear}}, [])
+      band = Frame.scale(full, :angle)
+      [a0, a1] = band.range
+      assert_in_delta a0, -:math.pi() / 6, 1.0e-9
+      assert_in_delta a1, 2 * :math.pi() - :math.pi() / 6, 1.0e-9
+      centres = for k <- six, do: Scale.apply(band, k) + Scale.Band.bandwidth(band) / 2
+      assert_in_delta hd(centres), 0, 1.0e-9
+      assert_in_delta Enum.at(centres, 1), :math.pi() / 3, 1.0e-9
+      assert_in_delta List.last(centres), 5 * :math.pi() / 3, 1.0e-9
+
+      half =
+        polar(
+          %{angle: %{kind: :band, domain: six, start: -90, sweep: 180}, r: %{kind: :linear}},
+          []
+        )
+
+      band = Frame.scale(half, :angle)
+      centres = for k <- six, do: Scale.apply(band, k) + Scale.Band.bandwidth(band) / 2
+      assert_in_delta hd(centres), -:math.pi() / 2, 1.0e-9
+      assert_in_delta List.last(centres), :math.pi() / 2, 1.0e-9
+      assert_in_delta Enum.at(centres, 1) - hd(centres), :math.pi() / 5, 1.0e-9
+
+      # The axis ticks every category at its centre: the first straight up at R.
+      svg =
+        chart(
+          %{
+            kind: :polar,
+            size: %{width: 300, height: 300},
+            margin: %{top: 0, right: 0, bottom: 0, left: 0},
+            scales: %{angle: %{kind: :band, domain: six}, r: %{kind: :linear}},
+            axes: [%{scale: :angle, side: :bottom, grid: true}]
+          },
+          %{marks: []}
+        )
+        |> Frame.new()
+        |> Frame.render()
+
+      assert svg =~
+               ~s|<line stroke="var(--vis-axis, #666666)" x1="0.0" x2="0.0" y1="-150.0" y2="-156.0"/><text dy="0.32em" fill="var(--vis-text, #333333)" x="0.0" y="-159.0">a</text>|
+
+      assert length(Regex.scan(~r/class="tick"/, svg)) == 6
+    end
+  end
+
   describe "precedence" do
     test "an explicit domain beats inference and a half-fixed extent fixes one end" do
       scales = %{x: %{kind: :linear, domain: [0, 100]}, y: %{kind: :linear, domain: [0, :auto]}}
