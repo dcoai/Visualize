@@ -43,6 +43,7 @@ defmodule Visualize.Chart.Mark.Shapes do
     ctx
     |> Channels.pixels()
     |> series(ctx)
+    |> closed(ctx)
     |> Enum.flat_map(fn {value, rows, j} ->
       path =
         Line.new()
@@ -107,6 +108,7 @@ defmodule Visualize.Chart.Mark.Shapes do
       })
     end)
     |> series(ctx)
+    |> closed(ctx)
     |> Enum.map(fn {value, rows, j} ->
       path =
         Area.new()
@@ -125,6 +127,55 @@ defmodule Visualize.Chart.Mark.Shapes do
         last_point(rows, :x1, :y1)
       )
     end)
+  end
+
+  # A closed loop (spec/14 §5.2, #393): the first row appended after the last at its angle
+  # plus the sweep, so the closing segment runs forward round the ring — by the `closed`
+  # option, else on a full turn over a categorical angle; a closed curve closes itself.
+  defp closed(series, ctx) do
+    if closed?(ctx) and not closed_curve?(ctx) do
+      turn = turn(ctx)
+
+      Enum.map(series, fn
+        {value, [first | _] = rows, j} -> {value, rows ++ [wrapped(first, turn)], j}
+        empty -> empty
+      end)
+    else
+      series
+    end
+  end
+
+  defp closed?(%{frame: frame} = ctx) do
+    case option(ctx, :closed, nil) do
+      nil ->
+        frame.kind == :polar and match?(%Visualize.Scale.Band{}, Map.get(frame.scales, :angle)) and
+          full_turn?(ctx)
+
+      closed ->
+        closed == true
+    end
+  end
+
+  defp closed_curve?(%{style_node: style_node}),
+    do: Map.get(style_node, :curve) in [:cardinal_closed, :basis_closed]
+
+  defp full_turn?(ctx) do
+    {a0, a1} = sweep(ctx)
+    abs(a1 - a0) >= 2 * :math.pi() - 1.0e-9
+  end
+
+  # What the closing row's angle advances by: the sweep in a polar frame, nothing else.
+  defp turn(%{frame: %{kind: :polar}} = ctx) do
+    {a0, a1} = sweep(ctx)
+    a1 - a0
+  end
+
+  defp turn(_ctx), do: 0
+
+  defp wrapped(row, turn) do
+    for key <- [:x, :x0, :x1], is_number(Map.get(row, key)), reduce: row do
+      acc -> Map.update!(acc, key, &(&1 + turn))
+    end
   end
 
   # An optional edge channel: its pixel when the mark declares it, else the fallback.

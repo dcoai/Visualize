@@ -19,6 +19,8 @@ defmodule Visualize.Shape.Curve do
           | :monotone_x
           | :monotone_y
           | :natural
+          | :cardinal_closed
+          | :basis_closed
 
   @doc """
   Generates path commands for a list of points using the specified curve type.
@@ -38,6 +40,11 @@ defmodule Visualize.Shape.Curve do
 
   def generate(:catmull_rom, points, opts),
     do: catmull_rom(points, Keyword.get(opts, :alpha, 0.5))
+
+  def generate(:basis_closed, points, _opts), do: basis_closed(points)
+
+  def generate(:cardinal_closed, points, opts),
+    do: cardinal_closed(points, Keyword.get(opts, :tension, 0))
 
   def generate(:monotone_x, points, _opts), do: monotone_x(points)
   def generate(:monotone_y, points, _opts), do: monotone_y(points)
@@ -119,6 +126,69 @@ defmodule Visualize.Shape.Curve do
       (py + 5 * qy) / 6
     )
     |> Path.line_to(qx, qy)
+  end
+
+  @doc "The B-spline as a closed loop (spec/04 §5.3, #393): d3-shape's curveBasisClosed"
+  @spec basis_closed([point()]) :: Path.t()
+  def basis_closed(points) when length(points) < 3, do: points |> linear() |> Path.close()
+
+  def basis_closed(points) do
+    n = length(points)
+    at = fn i -> Enum.at(points, Integer.mod(i, n)) end
+    {sx, sy} = knot(at.(n - 2), at.(n - 1), at.(0))
+    path = Path.new() |> Path.move_to(sx, sy)
+
+    0..(n - 1)
+    |> Enum.reduce(path, fn i, acc ->
+      {ax, ay} = at.(i - 1)
+      {bx, by} = at.(i)
+      {kx, ky} = knot(at.(i - 1), at.(i), at.(i + 1))
+
+      Path.curve_to(
+        acc,
+        (2 * ax + bx) / 3,
+        (2 * ay + by) / 3,
+        (ax + 2 * bx) / 3,
+        (ay + 2 * by) / 3,
+        kx,
+        ky
+      )
+    end)
+    |> Path.close()
+  end
+
+  # The B-spline's knot between three control points.
+  defp knot({ax, ay}, {bx, by}, {cx, cy}), do: {(ax + 4 * bx + cx) / 6, (ay + 4 * by + cy) / 6}
+
+  @doc "The cardinal spline as a closed loop (spec/04 §5.3, #393): d3-shape's curveCardinalClosed"
+  @spec cardinal_closed([point()], number()) :: Path.t()
+  def cardinal_closed(points, _tension) when length(points) < 3,
+    do: points |> linear() |> Path.close()
+
+  def cardinal_closed([{x0, y0} | _] = points, tension) do
+    k = (1 - tension) / 6
+    n = length(points)
+    at = fn i -> Enum.at(points, Integer.mod(i, n)) end
+    path = Path.new() |> Path.move_to(x0, y0)
+
+    0..(n - 1)
+    |> Enum.reduce(path, fn i, acc ->
+      {x0, y0} = at.(i - 1)
+      {x1, y1} = at.(i)
+      {x2, y2} = at.(i + 1)
+      {x3, y3} = at.(i + 2)
+
+      Path.curve_to(
+        acc,
+        x1 + k * (x2 - x0),
+        y1 + k * (y2 - y0),
+        x2 + k * (x1 - x3),
+        y2 + k * (y1 - y3),
+        x2,
+        y2
+      )
+    end)
+    |> Path.close()
   end
 
   @doc "Cardinal spline interpolation"

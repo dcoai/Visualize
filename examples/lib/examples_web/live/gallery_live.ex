@@ -19,6 +19,7 @@ defmodule ExamplesWeb.GalleryLive do
     {Examples.Charts.BubbleChart, "bubble"},
     {Examples.Charts.RadialBarChart, "radial"},
     {Examples.Charts.GaugeChart, "gauge"},
+    {Examples.Charts.RadarChart, "radar"},
     # Hierarchical Layouts
     {Examples.Charts.TreemapChart, "treemap"},
     {Examples.Charts.CirclePacking, "circle_pack"},

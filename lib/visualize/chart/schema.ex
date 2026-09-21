@@ -99,7 +99,9 @@ defmodule Visualize.Chart.Schema do
     :catmull_rom,
     :monotone_x,
     :monotone_y,
-    :natural
+    :natural,
+    :cardinal_closed,
+    :basis_closed
   ]
   @symbol_types [:circle, :cross, :diamond, :square, :star, :triangle, :wye]
   @weights [:light, :normal, :medium, :bold]

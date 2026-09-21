@@ -259,7 +259,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   defp polar_grid(frame, %{grid: true, scale: :angle}, axis) do
     {r0, r1} = radii(frame)
 
-    for v <- tick_values(axis), {ux, uy} = unit(Scale.apply(axis.scale, v)) do
+    for v <- tick_values(axis), {ux, uy} = unit(Axis.tick_position(axis, v)) do
       {x0, y0} = inner_end(r0, ux, uy)
       Element.line(x0, y0, crisp(r1 * ux), crisp(r1 * uy))
     end
@@ -366,7 +366,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     pad = axis.tick_padding
 
     ticks =
-      for v <- tick_values(axis), {ux, uy} = unit(Scale.apply(axis.scale, v)) do
+      for v <- tick_values(axis), {ux, uy} = unit(Axis.tick_position(axis, v)) do
         line =
           Element.line(
             crisp(r * ux),

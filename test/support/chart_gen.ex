@@ -423,6 +423,7 @@ defmodule Visualize.ChartGen do
     optional_map(
       Map.new(Schema.options(type), fn
         :cap -> {:cap, member_of([:point, :round, :flat])}
+        :closed -> {:closed, boolean()}
         key -> {key, number()}
       end)
     )

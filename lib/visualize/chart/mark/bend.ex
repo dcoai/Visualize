@@ -35,40 +35,49 @@ defmodule Visualize.Chart.Mark.Bend do
   plane about the centre.
   """
   @spec bend(Element.t()) :: Element.t()
-  def bend(%Element{type: :group, children: children} = group) do
-    %{group | children: Enum.map(children, &bend/1)} |> bend_transform()
+  def bend(%Element{} = element), do: bend(element, [])
+
+  @doc """
+  As `bend/1` with options: `chords: true` joins the ends of a straight segment with one
+  line instead of sampling it along the arc — a categorical angle's polygon (spec/14
+  §5.2, #393); a horizontal run (`H`, a step curve's tread) is still sampled, since a run
+  at one radius is an arc.
+  """
+  @spec bend(Element.t(), keyword()) :: Element.t()
+  def bend(%Element{type: :group, children: children} = group, opts) do
+    %{group | children: Enum.map(children, &bend(&1, opts))} |> bend_transform()
   end
 
-  def bend(%Element{type: :path, path: %Path{} = path} = element) do
-    %{element | path: %{path | commands: commands(path.commands)}} |> bend_transform()
+  def bend(%Element{type: :path, path: %Path{} = path} = element, opts) do
+    %{element | path: %{path | commands: commands(path.commands, opts)}} |> bend_transform()
   end
 
-  def bend(%Element{type: :line, attrs: %{x1: x1, y1: y1, x2: x2, y2: y2}} = element) do
+  def bend(%Element{type: :line, attrs: %{x1: x1, y1: y1, x2: x2, y2: y2}} = element, opts) do
     {mx, my} = point({x1, y1})
-    commands = [{:M, mx, my} | segment({x1, y1}, {x2, y2})]
+    commands = [{:M, mx, my} | segment({x1, y1}, {x2, y2}, opts)]
 
     %{element | type: :path, path: %Path{commands: commands}}
     |> Map.update!(:attrs, &Map.drop(&1, [:x1, :y1, :x2, :y2]))
     |> bend_transform()
   end
 
-  def bend(%Element{type: :rect, attrs: %{x: x, y: y, width: w, height: h}} = element) do
+  def bend(%Element{type: :rect, attrs: %{x: x, y: y, width: w, height: h}} = element, _opts) do
     %{element | type: :path, path: %Path{commands: sector(x, x + w, y, y + h)}}
     |> Map.update!(:attrs, &Map.drop(&1, [:x, :y, :width, :height, :rx, :ry]))
     |> bend_transform()
   end
 
-  def bend(%Element{type: :circle, attrs: %{cx: cx, cy: cy} = attrs} = element) do
+  def bend(%Element{type: :circle, attrs: %{cx: cx, cy: cy} = attrs} = element, _opts) do
     {x, y} = point({cx, cy})
     %{element | attrs: %{attrs | cx: x, cy: y}} |> bend_transform()
   end
 
-  def bend(%Element{type: :text, attrs: %{x: x, y: y} = attrs} = element) do
+  def bend(%Element{type: :text, attrs: %{x: x, y: y} = attrs} = element, _opts) do
     {bx, by} = point({x, y})
     %{element | attrs: %{attrs | x: bx, y: by}} |> bend_transform()
   end
 
-  def bend(%Element{} = element), do: bend_transform(element)
+  def bend(%Element{} = element, _opts), do: bend_transform(element)
 
   # A translate in the element's transform is a point of the layout: bent as one.
   defp bend_transform(%Element{transform: %Transform{operations: ops} = t} = element) do
@@ -91,97 +100,101 @@ defmodule Visualize.Chart.Mark.Bend do
 
   # Every command made absolute, sampled where it draws, and bent; the current point is
   # kept in (angle, r) so a relative command and a sample both have their origin.
-  defp commands(commands) do
+  defp commands(commands, opts) do
     {bent, _state} =
       Enum.flat_map_reduce(commands, {nil, nil, nil}, fn command, {current, start, control} ->
-        command(command, current, start, control)
+        command(command, current, start, control, opts)
       end)
 
     bent
   end
 
   # Each clause: the bent commands, and the new {current, subpath start, last control}.
-  defp command({:M, x, y}, _current, _start, _control) do
+  defp command({:M, x, y}, _current, _start, _control, _opts) do
     {bx, by} = point({x, y})
     {[{:M, bx, by}], {{x, y}, {x, y}, nil}}
   end
 
-  defp command({:m, dx, dy}, nil, start, control), do: command({:M, dx, dy}, nil, start, control)
+  defp command({:m, dx, dy}, nil, start, control, opts),
+    do: command({:M, dx, dy}, nil, start, control, opts)
 
-  defp command({:m, dx, dy}, {cx, cy}, start, control),
-    do: command({:M, cx + dx, cy + dy}, {cx, cy}, start, control)
+  defp command({:m, dx, dy}, {cx, cy}, start, control, opts),
+    do: command({:M, cx + dx, cy + dy}, {cx, cy}, start, control, opts)
 
-  defp command({:L, x, y}, current, start, _control) do
-    {segment(current || {x, y}, {x, y}), {{x, y}, start, nil}}
+  defp command({:L, x, y}, current, start, _control, opts) do
+    {segment(current || {x, y}, {x, y}, opts), {{x, y}, start, nil}}
   end
 
-  defp command({:l, dx, dy}, {cx, cy} = current, start, control),
-    do: command({:L, cx + dx, cy + dy}, current, start, control)
+  defp command({:l, dx, dy}, {cx, cy} = current, start, control, opts),
+    do: command({:L, cx + dx, cy + dy}, current, start, control, opts)
 
-  defp command({:H, x}, {_cx, cy} = current, start, control),
-    do: command({:L, x, cy}, current, start, control)
+  # A horizontal run is a run at one radius — an arc, sampled even where straight
+  # segments are chords (a step curve's treads, spec/14 §5.2, #393).
+  defp command({:H, x}, {_cx, cy} = current, start, control, opts),
+    do: command({:L, x, cy}, current, start, control, Keyword.put(opts, :chords, false))
 
-  defp command({:h, dx}, {cx, cy} = current, start, control),
-    do: command({:L, cx + dx, cy}, current, start, control)
+  defp command({:h, dx}, {cx, cy} = current, start, control, opts),
+    do: command({:L, cx + dx, cy}, current, start, control, Keyword.put(opts, :chords, false))
 
-  defp command({:V, y}, {cx, _cy} = current, start, control),
-    do: command({:L, cx, y}, current, start, control)
+  defp command({:V, y}, {cx, _cy} = current, start, control, opts),
+    do: command({:L, cx, y}, current, start, control, opts)
 
-  defp command({:v, dy}, {cx, cy} = current, start, control),
-    do: command({:L, cx, cy + dy}, current, start, control)
+  defp command({:v, dy}, {cx, cy} = current, start, control, opts),
+    do: command({:L, cx, cy + dy}, current, start, control, opts)
 
-  defp command({:C, x1, y1, x2, y2, x, y}, current, start, _control) do
+  defp command({:C, x1, y1, x2, y2, x, y}, current, start, _control, _opts) do
     {sampled(current, {x, y}, &cubic(current, {x1, y1}, {x2, y2}, {x, y}, &1)),
      {{x, y}, start, {x2, y2}}}
   end
 
-  defp command({:c, x1, y1, x2, y2, x, y}, {cx, cy} = current, start, control),
+  defp command({:c, x1, y1, x2, y2, x, y}, {cx, cy} = current, start, control, opts),
     do:
       command(
         {:C, cx + x1, cy + y1, cx + x2, cy + y2, cx + x, cy + y},
         current,
         start,
-        control
+        control,
+        opts
       )
 
   # A smooth cubic's first control point reflects the previous one about the current point.
-  defp command({:S, x2, y2, x, y}, {cx, cy} = current, start, control) do
+  defp command({:S, x2, y2, x, y}, {cx, cy} = current, start, control, opts) do
     {x1, y1} = reflect(control, {cx, cy})
-    command({:C, x1, y1, x2, y2, x, y}, current, start, control)
+    command({:C, x1, y1, x2, y2, x, y}, current, start, control, opts)
   end
 
-  defp command({:s, x2, y2, x, y}, {cx, cy} = current, start, control),
-    do: command({:S, cx + x2, cy + y2, cx + x, cy + y}, current, start, control)
+  defp command({:s, x2, y2, x, y}, {cx, cy} = current, start, control, opts),
+    do: command({:S, cx + x2, cy + y2, cx + x, cy + y}, current, start, control, opts)
 
-  defp command({:Q, x1, y1, x, y}, current, start, _control) do
+  defp command({:Q, x1, y1, x, y}, current, start, _control, _opts) do
     {sampled(current, {x, y}, &quadratic(current, {x1, y1}, {x, y}, &1)),
      {{x, y}, start, {x1, y1}}}
   end
 
-  defp command({:q, x1, y1, x, y}, {cx, cy} = current, start, control),
-    do: command({:Q, cx + x1, cy + y1, cx + x, cy + y}, current, start, control)
+  defp command({:q, x1, y1, x, y}, {cx, cy} = current, start, control, opts),
+    do: command({:Q, cx + x1, cy + y1, cx + x, cy + y}, current, start, control, opts)
 
-  defp command({:T, x, y}, {cx, cy} = current, start, control) do
+  defp command({:T, x, y}, {cx, cy} = current, start, control, opts) do
     {x1, y1} = reflect(control, {cx, cy})
-    command({:Q, x1, y1, x, y}, current, start, control)
+    command({:Q, x1, y1, x, y}, current, start, control, opts)
   end
 
-  defp command({:t, x, y}, {cx, cy} = current, start, control),
-    do: command({:T, cx + x, cy + y}, current, start, control)
+  defp command({:t, x, y}, {cx, cy} = current, start, control, opts),
+    do: command({:T, cx + x, cy + y}, current, start, control, opts)
 
   # An arc in (angle, r) is sampled as the chord it subtends: its parametrisation is not
   # worth keeping through a bend that will curve it again.
-  defp command({:A, _rx, _ry, _rot, _large, _sweep, x, y}, current, start, control),
-    do: command({:L, x, y}, current, start, control)
+  defp command({:A, _rx, _ry, _rot, _large, _sweep, x, y}, current, start, control, opts),
+    do: command({:L, x, y}, current, start, control, opts)
 
-  defp command({:a, rx, ry, rot, large, sweep, dx, dy}, {cx, cy} = current, start, control),
-    do: command({:A, rx, ry, rot, large, sweep, cx + dx, cy + dy}, current, start, control)
+  defp command({:a, rx, ry, rot, large, sweep, dx, dy}, {cx, cy} = current, start, control, opts),
+    do: command({:A, rx, ry, rot, large, sweep, cx + dx, cy + dy}, current, start, control, opts)
 
-  defp command(:Z, _current, start, _control), do: {[:Z], {start, start, nil}}
+  defp command(:Z, _current, start, _control, _opts), do: {[:Z], {start, start, nil}}
 
   # A straight segment in (angle, r): `L` commands at no more than 2° apart, bent.
-  defp segment({a0, r0}, {a1, r1}) do
-    n = max(1, ceil(abs(a1 - a0) / @step))
+  defp segment({a0, r0}, {a1, r1}, opts) do
+    n = if Keyword.get(opts, :chords, false), do: 1, else: max(1, ceil(abs(a1 - a0) / @step))
 
     for i <- 1..n//1 do
       t = i / n
