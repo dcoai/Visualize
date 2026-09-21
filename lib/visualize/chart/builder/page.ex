@@ -69,8 +69,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:layer, :any, default: nil, doc: "the selected layer's label")
 
     attr(:locked, :any,
-      default: MapSet.new(),
-      doc: "the labels of the layers that are the library's, read-only here (§18.15)"
+      default: %{},
+      doc:
+        "the labels of the sites that are the library's, read-only here, each to its row (§18.15, #381)"
     )
 
     attr(:guessed, :any,
@@ -204,6 +205,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         channel_columns={@page.channel_columns}
         origins={origins(@page.owners, @path)}
         locked={locked?(@page, @path)}
+        unlock={unlock_of(@page, @path)}
         guessed={@page.guessed}
         target={@page.target}
       />
@@ -212,9 +214,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A form is read-only when the layer its writes would go to is the library's: the
     # node's owner, else the selected layer, where anything new is made (§18.15).
-    defp locked?(%{owners: owners, layer: layer, locked: locked}, path) do
-      MapSet.member?(locked, Map.get(owners, path) || layer)
-    end
+    defp locked?(page, path), do: unlock_of(page, path) != nil
+
+    # The row of the locked owner, for *unlock* on the note (§18.8, #381); `nil` where the
+    # owner is the chart's own.
+    defp unlock_of(%{owners: owners, layer: layer, locked: locked}, path),
+      do: Map.get(locked, Map.get(owners, path) || layer)
 
     # A key another layer than the node's owner gives is badged with that layer (§18.15):
     # the field says where its value comes from, which is where an edit of it goes.

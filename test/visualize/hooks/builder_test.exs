@@ -52,7 +52,7 @@ defmodule Visualize.Hooks.BuilderTest do
     assert js =~ "intoAt(e)"
     assert js =~ "row.getAttribute('data-builder-into')"
     assert js =~ "this.push('reorder', { from: this.from, into: into })"
-    assert js =~ "this.push('insert', { name: stored, into: into, as: this.dropAs(e) })"
+    assert js =~ "this.push('insert', { name: stored, into: into })"
   end
 
   test "a drop pushes the move and makes none: the server owns the list" do

@@ -176,6 +176,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          style_entry: nil,
          field: nil,
          menu: nil,
+         reverting: nil,
          context: :inspect,
          library_open: true,
          context_width: 400,
@@ -183,7 +184,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
          guessed: MapSet.new(),
          expanded_layers: MapSet.new(),
          expanded_sites: MapSet.new(),
-         added_sites: [],
          mask_layers: MapSet.new(),
          expanded: MapSet.new(),
          find: "",
@@ -413,7 +413,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   hidden={@hidden_index}
                   selected={@selected_index}
                   disabled={@disabled}
-                  locked={@locked}
                   expanded={@expanded_index}
                   placed={@placed_layers}
                   masks={@layer_masks}
@@ -555,8 +554,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 >{top.name}<span :if={top.layer} class="vis-builder-section-layer">{top.layer}</span></summary>
                 <div :if={Page.styled?(top.kind)} class="vis-builder-section-select">
                   <span :if={top.label == @entry.label} class="vis-builder-section-selected-word">selected</span>
-                  <button :if={top.layer && MapSet.member?(@page.locked, top.layer)} type="button" class="vis-builder-section-select-button" phx-click="copy_node" phx-value-node={top.label} phx-target={@myself}>copy</button>
-                  <button :if={top.layer && MapSet.member?(@page.locked, top.layer)} type="button" class="vis-builder-section-select-button" phx-click="override_node" phx-value-node={top.label} phx-target={@myself}>override</button>
+                  <button :if={top.layer && Map.has_key?(@page.locked, top.layer)} type="button" class="vis-builder-section-select-button" phx-click="copy_node" phx-value-node={top.label} phx-target={@myself}>copy</button>
+                  <button :if={top.layer && Map.has_key?(@page.locked, top.layer)} type="button" class="vis-builder-section-select-button" phx-click="override_node" phx-value-node={top.label} phx-target={@myself}>override</button>
                   <button
                     :if={top.label != @entry.label}
                     type="button"
@@ -620,7 +619,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               </details>
               <div
                 :if={not @page.sections? and not @data_page? and @page.single.layer}
-                class={"vis-builder-page-head" <> if(@page.single.other?, do: " vis-builder-section-other", else: "") <> if(MapSet.member?(@page.locked, @page.single.layer), do: " vis-builder-page-locked", else: "")}
+                class={"vis-builder-page-head" <> if(@page.single.other?, do: " vis-builder-section-other", else: "") <> if(Map.has_key?(@page.locked, @page.single.layer), do: " vis-builder-page-locked", else: "")}
                 title={"#{@page.single.label} — in #{@page.single.layer}"}
               >
                 <span class="vis-builder-section-layer">{@page.single.layer}</span>
@@ -715,6 +714,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
               free={@site.free}
               keyless={@site.use.id in @keyless}
               pool={@pool}
+              index={@selected_index}
+              reverting={@reverting == @site.use.id}
               target={@myself}
             />
             <Variables.panel
@@ -740,6 +741,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           phx-key="Escape"
           phx-target={@myself}
         >
+          <li :if={@menu[:site] && @menu.site.items != []} class="vis-builder-menu-site">
+            <button :for={{event, word} <- @menu.site.items} type="button" class="vis-builder-menu-item" phx-click={event} phx-value-index={@menu.site.index} phx-target={@myself}>{word}</button>
+          </li>
           <li :for={label <- @menu.nodes} class="vis-builder-menu-node">
             <span :if={length(@menu.nodes) > 1} class="vis-builder-menu-label">{label}</span>
             <button type="button" class="vis-builder-menu-item" phx-click="copy_node" phx-value-node={label} phx-target={@myself}>Copy</button>
@@ -1170,11 +1174,117 @@ if Code.ensure_loaded?(Phoenix.Component) do
           labels = nodes_of(socket, use.id)
 
           {:noreply,
-           assign(socket, :menu, %{nodes: labels, x: number(params["x"]), y: number(params["y"])})}
+           assign(socket, :menu, %{
+             nodes: labels,
+             site: site_items(socket.assigns, use, index),
+             x: number(params["x"]),
+             y: number(params["y"])
+           })}
       end
     end
 
-    def handle_event("menu_close", _params, socket), do: {:noreply, assign(socket, :menu, nil)}
+    def handle_event("menu_close", _params, socket),
+      do: {:noreply, assign(socket, menu: nil, reverting: nil)}
+
+    # -- linked, unlocked, locked again, reverted (spec/14 §18.8, §19.3, #381) -----------
+
+    # Unlock: the entry's body copied into the site's local, the ref remembered as its
+    # origin, the site's form open; a composite becomes a group of copies of its sites.
+    def handle_event("unlock_site", %{"index" => index}, socket) do
+      %{uses: uses, labels: labels, store: store, signals: signals} = socket.assigns
+
+      with %Use{ref: ref} = use when ref != nil <- row_use(uses, index),
+           {:ok, entry} <- Store.get(store, ref) do
+        {unlocked, inner, entry_signals} =
+          Stack.unlocked(use, entry, Stack.fetch(store), names(store))
+
+        {issued, _among} =
+          Enum.map_reduce(inner, uses, fn {site, name}, among ->
+            issued = %{site | id: Use.new(nil, among).id}
+            {{issued, name}, among ++ [issued]}
+          end)
+
+        unlocked =
+          case issued do
+            [] -> unlocked
+            _ -> put_in(unlocked.local.composite.uses, Enum.map(issued, &elem(&1, 0)))
+          end
+
+        socket
+        |> assign(
+          uses: Stack.update(uses, use.id, fn _ -> unlocked end),
+          labels:
+            Enum.reduce(issued, labels, fn {site, name}, acc -> Map.put(acc, site.id, name) end),
+          signals: Map.merge(entry_signals, signals),
+          menu: nil,
+          reverting: nil,
+          notice: nil
+        )
+        |> select(index)
+        |> then(&{:noreply, &1})
+      else
+        %Use{} ->
+          {:noreply, assign(socket, :notice, "#{row_name(socket, index)} is not linked")}
+
+        :error ->
+          {:noreply, assign(socket, :notice, "#{row_name(socket, index)}'s entry is gone")}
+
+        nil ->
+          {:noreply, socket}
+      end
+    end
+
+    # Lock again: the ref restored from the origin, the local kept over it.
+    def handle_event("lock_site", %{"index" => index}, socket) do
+      case row_use(socket.assigns.uses, index) do
+        %Use{origin: origin} = use when origin != nil ->
+          {:noreply,
+           assign(socket,
+             uses: Stack.update(socket.assigns.uses, use.id, &Stack.locked/1),
+             menu: nil,
+             reverting: nil,
+             notice: nil
+           )}
+
+        %Use{} ->
+          {:noreply, assign(socket, :notice, "#{row_name(socket, index)} has nothing to link to")}
+
+        nil ->
+          {:noreply, socket}
+      end
+    end
+
+    # Revert: armed by the first click, done by the second (§18.8).
+    def handle_event("revert_site", %{"index" => index}, socket) do
+      case row_use(socket.assigns.uses, index) do
+        %Use{} = use ->
+          cond do
+            not revertable?(use) ->
+              {:noreply,
+               assign(socket, :notice, "#{row_name(socket, index)} is as the library has it")}
+
+            socket.assigns.reverting == use.id ->
+              {:noreply,
+               assign(socket,
+                 uses: Stack.update(socket.assigns.uses, use.id, &Stack.reverted/1),
+                 menu: nil,
+                 reverting: nil,
+                 notice: nil
+               )}
+
+            true ->
+              {:noreply,
+               assign(socket,
+                 reverting: use.id,
+                 notice:
+                   "revert #{row_name(socket, index)}? again — discards #{edited(use)} edited keys"
+               )}
+          end
+
+        nil ->
+          {:noreply, socket}
+      end
+    end
 
     def handle_event("copy_node", %{"node" => label}, socket),
       do: {:noreply, socket |> assign(:menu, nil) |> lifted(:copy, label)}
@@ -1362,6 +1472,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
         "o" ->
           handle_event("open_layer", %{"index" => index}, socket)
 
+        # `l` unlocks a linked site or locks an unlocked one; `r` arms and reverts (#381).
+        "l" ->
+          case row_use(socket.assigns.uses, index) do
+            %Use{ref: nil, origin: nil} -> {:noreply, socket}
+            %Use{ref: nil} -> handle_event("lock_site", %{"index" => index}, socket)
+            _linked -> handle_event("unlock_site", %{"index" => index}, socket)
+          end
+
+        "r" ->
+          handle_event("revert_site", %{"index" => index}, socket)
+
         # Right and Left open and close what the row declares, as a tree's do (§18.8).
         "ArrowRight" ->
           if at in expanded_index(socket.assigns),
@@ -1403,12 +1524,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         enter when enter in ["Enter", " "] ->
           handle_event("add_layer", %{"name" => name}, socket)
 
-        # `i` copies and `I` links, as a drop and an Alt-drop do (spec/14 §18.17).
-        insert when insert in ["Insert", "i"] ->
-          handle_event("insert", %{"name" => name, "as" => "copy"}, socket)
-
-        "I" ->
-          handle_event("insert", %{"name" => name, "as" => "link"}, socket)
+        # Insert, `i` and `I` all insert it linked, as a drop does (spec/14 §18.17, #381).
+        insert when insert in ["Insert", "i", "I"] ->
+          handle_event("insert", %{"name" => name}, socket)
 
         _other ->
           {:noreply, socket}
@@ -1579,19 +1697,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # A fragment dragged out of the library lands at the position it was dropped at, as a
-    # use referring to it (spec/14 §18.17, §19.3).
-    # A library entry into the stack (spec/14 §18.17): a copy unless a link is asked for;
-    # at the gap given, or above the selected layer when the drop was on the graph.
+    # A library entry into the stack (spec/14 §18.17, #381): a use referring to it, linked
+    # and locked; at the gap given, into the container's row, or above the selected layer.
     def handle_event("insert", %{"name" => submitted} = params, socket) do
       at = drop_target(socket, params)
-      link? = Map.get(params, "as") == "link"
 
       case fetch(socket.assigns.store, submitted) do
         {:ok, entry} ->
           case admits(socket.assigns.open, entry) do
-            :ok when link? -> {:noreply, linked(socket, entry, at)}
-            :ok -> {:noreply, copied(socket, entry, at)}
+            :ok -> {:noreply, linked(socket, entry, at)}
             {:refused, notice} -> {:noreply, assign(socket, :notice, notice)}
           end
 
@@ -1811,16 +1925,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    def handle_event("place", %{"name" => submitted} = params, socket) do
+    def handle_event("place", %{"name" => submitted}, socket) do
       case fetch(socket.assigns.store, submitted) do
         {:ok, entry} ->
           case admits(socket.assigns.open, entry) do
+            # Linked, as every drop is (#381): the entry's placement is the library's, so
+            # nothing is snapped; unlock it to move it.
             :ok ->
-              {region, _point} = where(socket, params, nil)
-              link? = Map.get(params, "as") == "link"
-              at = {:after, socket.assigns.selected}
-              socket = if link?, do: linked(socket, entry, at), else: copied(socket, entry, at)
-              {:noreply, if(link?, do: socket, else: snapped(socket, region))}
+              {:noreply, linked(socket, entry, {:after, socket.assigns.selected})}
 
             {:refused, notice} ->
               {:noreply, assign(socket, :notice, notice)}
@@ -2338,7 +2450,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         chart_rows: chart_rows(assigns),
         selected_index: Stack.index_of(assigns.uses, assigns.selected),
         disabled: disabled(assigns.uses),
-        locked: locked(assigns.uses),
         expanded_index: expanded_index(assigns),
         placed_layers: placed_layers(assigns),
         layer_masks: layer_masks(assigns),
@@ -2378,8 +2489,47 @@ if Code.ensure_loaded?(Phoenix.Component) do
           count: length(Stack.children(use)),
           open?: MapSet.member?(open, use.id),
           kind: site_kind(use),
-          id: use.id
+          id: use.id,
+          state: Stack.linkage(use)
         }
+      end
+    end
+
+    # The site's own items of the row's menu (§18.8, #381): what its linkage allows.
+    defp site_items(assigns, %Use{} = use, index) do
+      lock =
+        case Stack.linkage(use) do
+          :inline -> []
+          :unlocked -> [{"lock_site", "Lock"}]
+          _linked -> [{"unlock_site", "Unlock"}]
+        end
+
+      revert =
+        cond do
+          not revertable?(use) ->
+            []
+
+          assigns.reverting == use.id ->
+            [{"revert_site", "revert — discards #{edited(use)} edited keys"}]
+
+          true ->
+            [{"revert_site", "Revert to original"}]
+        end
+
+      %{index: position(index), items: lock ++ revert}
+    end
+
+    # A site is reverted when it has an origin, or a ref with a local (§18.8).
+    defp revertable?(%Use{origin: origin}) when origin != nil, do: true
+    defp revertable?(%Use{ref: ref, local: local}), do: ref != nil and map_size(local) > 0
+
+    # The keys a revert discards: those of the site's local.
+    defp edited(%Use{local: local}), do: map_size(local)
+
+    defp row_name(%{assigns: %{uses: uses, labels: labels}}, index) do
+      case row_use(uses, index) do
+        nil -> "the row"
+        use -> Stack.label(labels, use)
       end
     end
 
@@ -2567,14 +2717,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp disabled(uses) do
       for %{use: use, index: index} <- Stack.all(uses),
           not Stack.enabled?(use),
-          into: MapSet.new(),
-          do: index
-    end
-
-    # The positions whose site references a library entry: locked in the chart (§18.8).
-    defp locked(uses) do
-      for %{use: use, index: index} <- Stack.all(uses),
-          Stack.locked?(use),
           into: MapSet.new(),
           do: index
     end
@@ -2875,6 +3017,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           # Selecting a site opens the site's context (spec/14 §19.10).
           assign(socket,
             selected: use.id,
+            reverting: nil,
             node_label: "design",
             facet: nil,
             style_entry: nil,
@@ -3283,9 +3426,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       selected = Stack.get(uses, assigns.selected)
       layer_label = selected && Stack.label(labels, selected)
-      # The labels of the library's layers: read-only in the chart (§18.8, §18.15).
+      # The labels of the library's sites, anywhere in the tree, each with its row — the
+      # index unlock takes: read-only in the chart (§18.8, §18.15, #381).
       locked =
-        for use <- uses, Stack.locked?(use), into: MapSet.new(), do: Stack.label(labels, use)
+        for %{use: use, index: index} <- Stack.all(uses),
+            Stack.locked?(use),
+            into: %{},
+            do: {Stack.label(labels, use), index}
 
       tops =
         case Enum.find(under, &(length(&1.path) == 1)) do
@@ -3851,21 +3998,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp root_of(:scale), do: "frame"
     defp root_of(_kind), do: "design"
 
-    # A library entry copied onto the graph takes its placement from the region (§18.16):
-    # the copy's sites are the ones just inserted at `at`.
-    # The sites a copy just issued, placed in the region of the drop (#380: by id, wherever
-    # they landed in the tree).
-    defp snapped(socket, region) do
-      Enum.reduce(socket.assigns.added_sites, socket, fn id, acc ->
-        update(acc, :uses, fn uses ->
-          Stack.update(uses, id, fn
-            %Use{ref: nil} = use -> %{use | local: Place.placed(use.local, region)}
-            use -> use
-          end)
-        end)
-      end)
-    end
-
     defp locked_notice(%{labels: labels}, use),
       do: "#{Stack.label(labels, use)} is from the library — open it to edit"
 
@@ -4013,54 +4145,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
           labels: Map.put(labels, use.id, entry.name),
           selected: socket.assigns.selected || use.id,
           added: entry.id,
-          notice: nil
-        )
-      else
-        assign(socket, :notice, "#{entry.name} cannot go into a layer from the library")
-      end
-    end
-
-    # A copy: the entry's body as an inline site — a composite as a group holding copies
-    # of its sites, with the composite's own vars, its signals joining the chart's; any
-    # other body as one object — each issued an id among the tree it joins (§18.17, #380).
-    defp copied(socket, entry, at) do
-      %{uses: uses, labels: labels, store: store, signals: signals} = socket.assigns
-      {sites, entry_vars, entry_signals} = Stack.copies(entry, Stack.fetch(store), names(store))
-
-      {issued, among} =
-        Enum.map_reduce(sites, uses, fn {use, name}, among ->
-          issued = %{use | id: Use.new(nil, among).id}
-          {{issued, name}, among ++ [issued]}
-        end)
-
-      inner = Enum.map(issued, &elem(&1, 0))
-
-      {inserted, labelled} =
-        case entry do
-          %{kind: :composite} ->
-            group = %{
-              Use.new(nil, among)
-              | ref: nil,
-                local: %{composite: %{uses: inner, vars: entry_vars}}
-            }
-
-            {group, [{group, entry.name || "group"} | issued]}
-
-          _object ->
-            {hd(inner), issued}
-        end
-
-      uses = dropped(uses, at, inserted)
-
-      if Stack.get(uses, inserted.id) do
-        assign(socket,
-          uses: uses,
-          labels:
-            Enum.reduce(labelled, labels, fn {use, name}, acc -> Map.put(acc, use.id, name) end),
-          signals: Map.merge(entry_signals, signals),
-          selected: socket.assigns.selected || inserted.id,
-          added: entry.id,
-          added_sites: Enum.map(inner, & &1.id),
           notice: nil
         )
       else

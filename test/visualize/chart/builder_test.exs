@@ -590,18 +590,18 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, at_top} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
 
-      # A copied composite is a group holding its objects (#380): the group, then its frame.
-      assert BuilderFixture.names(at_top) == ["baseline", "frame", :house, :shared, :panel]
+      # A dropped composite is one referenced site (#381): one row, locked.
+      assert BuilderFixture.names(at_top) == ["baseline", :house, :shared, :panel]
 
       {:noreply, midway} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 2}, s)
 
-      assert BuilderFixture.names(midway) == [:house, :shared, "baseline", "frame", :panel]
+      assert BuilderFixture.names(midway) == [:house, :shared, "baseline", :panel]
 
       {:noreply, at_end} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, s)
 
-      assert BuilderFixture.names(at_end) == [:house, :shared, :panel, "baseline", "frame"]
+      assert BuilderFixture.names(at_end) == [:house, :shared, :panel, "baseline"]
     end
 
     test "a position outside the stack is clamped, because a client's number is not trusted",
@@ -609,10 +609,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, under} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => -5}, s)
 
-      assert BuilderFixture.names(under) == ["baseline", "frame", :house, :shared, :panel]
+      assert BuilderFixture.names(under) == ["baseline", :house, :shared, :panel]
 
       {:noreply, over} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 99}, s)
-      assert BuilderFixture.names(over) == [:house, :shared, :panel, "baseline", "frame"]
+      assert BuilderFixture.names(over) == [:house, :shared, :panel, "baseline"]
     end
 
     test "the selection and the disabled set follow the insert", %{socket: s} do
@@ -622,9 +622,9 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.disabled(s) == MapSet.new([1])
 
       {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
-      assert BuilderFixture.names(s) == ["baseline", "frame", :house, :shared, :panel]
-      assert BuilderFixture.selected(s) == 4
-      assert BuilderFixture.disabled(s) == MapSet.new([3])
+      assert BuilderFixture.names(s) == ["baseline", :house, :shared, :panel]
+      assert BuilderFixture.selected(s) == 3
+      assert BuilderFixture.disabled(s) == MapSet.new([2])
     end
 
     test "an insert below the selection leaves it where it is", %{socket: s} do
@@ -642,7 +642,7 @@ defmodule Visualize.Chart.BuilderTest do
     test "an insert survives the next host render", %{host: host, socket: s} do
       {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 1}, s)
       {:ok, s} = Builder.update(host, s)
-      assert BuilderFixture.names(s) == [:house, "baseline", "frame", :shared, :panel]
+      assert BuilderFixture.names(s) == [:house, "baseline", :shared, :panel]
     end
   end
 
@@ -1120,13 +1120,22 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.selected(closed) == BuilderFixture.selected(s)
     end
 
-    test "a drop copies a composite as its sites, each holding what its use contributed; a link references it (spec/14 §18.17)",
+    test "a drop references a composite; unlocked, it is a group of copies of its sites, each holding what its use contributed (spec/14 §18.8, §18.17, #381)",
          %{socket: s} do
-      {:noreply, copied} =
+      # A drop is a link (#381): one referenced site for the whole composite, locked.
+      {:noreply, linked} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
 
-      # A copied composite is a group holding copies of its sites (#380): the group named
-      # for the entry, the referenced site for its entry, the local one for the composite.
+      assert BuilderFixture.names(linked) == ["Charts::pair", :house, :shared, :panel]
+      assert %Use{ref: {:composite, 1}, origin: nil} = hd(linked.assigns.uses)
+      assert Stack.linkage(hd(linked.assigns.uses)) == :linked
+      assert linked.assigns.stack_vars == %{}
+
+      # Unlocked, the site is a group holding copies of the entry's sites (#380): the group
+      # named for the entry, the referenced site for its entry, the local one for the
+      # composite; the entry remembered as the group's origin.
+      {:noreply, copied} = Builder.handle_event("unlock_site", %{"index" => "0"}, linked)
+
       assert BuilderFixture.names(copied) == [
                "Charts::pair",
                "Frame::wide",
@@ -1138,6 +1147,8 @@ defmodule Visualize.Chart.BuilderTest do
 
       [group | rest] = copied.assigns.uses
       assert Stack.group?(group)
+      assert group.origin == {:composite, 1}
+      assert Stack.linkage(group) == :unlocked
       [wide, pair] = Stack.children(group)
       assert %Use{ref: nil, local: %{frame: %{size: %{width: 900}}}} = wide
       assert %Use{ref: nil, local: %{version: 1}} = pair
@@ -1147,10 +1158,12 @@ defmodule Visualize.Chart.BuilderTest do
       assert copied.assigns.stack_vars == %{}
       assert BuilderFixture.design(copied).vars == %{unit: %{default: "%"}}
       assert copied.assigns.notice == nil
+      assert BuilderFixture.selected(copied) == 0
 
       # Editing the copy never reaches the library: the entry is what it was.
       # The copy is put on top, so it owns `frame.size` and the edit lands in it (§18.15).
       {:noreply, top} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, s)
+      {:noreply, top} = Builder.handle_event("unlock_site", %{"index" => "3"}, top)
 
       assert BuilderFixture.names(top) == [
                :house,
@@ -1172,14 +1185,6 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert %Use{ref: nil, local: %{frame: %{size: %{width: 500}}}} =
                edited.assigns.uses |> Enum.at(3) |> Stack.children() |> hd()
-
-      # A link is the reference site as before, one use for the whole composite.
-      {:noreply, linked} =
-        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0, "as" => "link"}, s)
-
-      assert BuilderFixture.names(linked) == ["Charts::pair", :house, :shared, :panel]
-      assert %Use{ref: {:composite, 1}} = hd(linked.assigns.uses)
-      assert linked.assigns.stack_vars == %{}
     end
 
     test "a drop on the graph lands above the selected layer: insert without a position", %{
@@ -1187,22 +1192,21 @@ defmodule Visualize.Chart.BuilderTest do
     } do
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
 
-      {:noreply, dropped} =
-        Builder.handle_event("insert", %{"name" => "frame:1", "as" => "copy"}, s)
+      {:noreply, dropped} = Builder.handle_event("insert", %{"name" => "frame:1"}, s)
 
       assert BuilderFixture.names(dropped) == [:house, :shared, "Frame::wide", :panel]
-
-      assert %Use{ref: nil, local: %{frame: %{size: %{width: 900}}}} =
-               Enum.at(dropped.assigns.uses, 2)
+      assert %Use{ref: {:frame, 1}, local: local} = Enum.at(dropped.assigns.uses, 2)
+      assert local == %{}
     end
 
-    test "the hook sends a link for an Alt-drop and accepts a library drag on the graph (spec/10 §16.3)" do
+    test "the hook's drops carry no copy-or-link choice, and it accepts a library drag on the graph (spec/10 §16.3, #381)" do
       js = Visualize.Hooks.Builder.js_hook()
-      assert js =~ "return e.altKey ? 'link' : 'copy';"
-      assert js =~ "this.push('insert', { name: stored, at: at, as: this.dropAs(e) });"
+      refute js =~ "dropAs"
+      refute js =~ "altKey"
+      assert js =~ "this.push('insert', { name: stored, at: at });"
 
       assert js =~
-               "if (name !== null) this.push('place', { name: name, as: this.dropAs(e), x: point.x, y: point.y });"
+               "if (name !== null) this.push('place', { name: name, x: point.x, y: point.y });"
 
       assert js =~ "if (this.from !== null) return !graph;"
     end
@@ -1225,7 +1229,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-click="open_layer" phx-value-index="3")
 
       assert html =~
-               "Frame::wide, object 4 of 4: Enter to edit, arrows to move, Right to show what it declares, drag to reorder, from the library: o to open"
+               "Frame::wide, object 4 of 4: Enter to edit, arrows to move, Right to show what it declares, drag to reorder, from the library: o to open, l to unlock"
 
       assert length(Regex.scan(~r/vis-builder-layer-lock"/, html)) == 1
 
@@ -1277,6 +1281,180 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, same} = Builder.handle_event("open_layer", %{"index" => "0"}, s)
       assert same.assigns.open == s.assigns.open
       refute BuilderFixture.render(s) =~ ~s(phx-click="open_layer" phx-value-index="0")
+    end
+
+    test "unlock copies the entry into the site, lock keeps the local over the link, revert takes it back (spec/14 §18.8, §19.3, #381)",
+         %{socket: s} do
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "frame:1", "at" => 3}, s)
+      linked = Enum.at(s.assigns.uses, 3)
+      assert Stack.linkage(linked) == :linked
+      before = BuilderFixture.design(s)
+
+      # The row's menu offers Unlock and nothing to revert; the context panel the same.
+      {:noreply, menu} = Builder.handle_event("menu", %{"layer" => "3", "x" => 5, "y" => 6}, s)
+      assert menu.assigns.menu.site == %{index: 3, items: [{"unlock_site", "Unlock"}]}
+      menu_html = BuilderFixture.render(menu)
+      assert menu_html =~ ~s(class="vis-builder-menu-site")
+
+      assert menu_html =~
+               ~s(phx-click="unlock_site" phx-value-index="3" phx-target="-1">Unlock</button>)
+
+      # Unlock: the ref becomes the origin, the body the local, the chart unchanged, the
+      # site selected with its form open and editable; the row wears the open lock.
+      {:noreply, u} = Builder.handle_event("unlock_site", %{"index" => "3"}, s)
+      unlocked = Enum.at(u.assigns.uses, 3)
+
+      assert %Use{ref: nil, origin: {:frame, 1}, local: %{frame: %{size: %{width: 900}}}} =
+               unlocked
+
+      assert Stack.linkage(unlocked) == :unlocked
+      assert BuilderFixture.design(u) == before
+      assert BuilderFixture.selected(u) == 3
+      assert u.assigns.menu == nil
+      html = BuilderFixture.render(u)
+
+      assert html =~
+               ~s(class="vis-builder-layer vis-builder-layer-selected vis-builder-layer-unlocked" style="--vis-builder-depth: 0" data-builder-layer="3")
+
+      assert html =~ ~s(class="vis-builder-layer-lock vis-builder-layer-lock-open")
+      assert html =~ ~s(phx-click="lock_site" phx-value-index="3")
+      assert html =~ "unlocked from the library: l to lock"
+      assert html =~ ~s(<span class="vis-builder-context-state">unlocked from the library</span>)
+      assert html =~ ~s(phx-click="lock_site" phx-value-index="3" phx-target="-1">lock</button>)
+      assert html =~ ~s(phx-target="-1">revert to original</button>)
+      refute html =~ "vis-builder-layer-locked"
+
+      {:noreply, u} = Builder.handle_event("select_node", %{"node" => "frame.size"}, u)
+      refute BuilderFixture.render(u) =~ "vis-builder-form-locked"
+
+      {:noreply, edited} =
+        Builder.handle_event("edit", %{"_target" => ["width"], "width" => "500"}, u)
+
+      assert %Use{local: %{frame: %{size: %{width: 500}}}} = Enum.at(edited.assigns.uses, 3)
+      assert BuilderFixture.design(edited).frame.size.width == 500
+      # The entry is what it was.
+      assert {:ok, %{fragment: %{frame: %{size: %{width: 900}}}}} =
+               Recording.get({:frame, 1}, %{})
+
+      # Locked again: the ref is back, the local kept over it, the form disabled; the row
+      # says so, and the menu offers Unlock and Revert.
+      {:noreply, l} = Builder.handle_event("lock_site", %{"index" => "3"}, edited)
+      relocked = Enum.at(l.assigns.uses, 3)
+
+      assert %Use{ref: {:frame, 1}, origin: nil, local: %{frame: %{size: %{width: 500}}}} =
+               relocked
+
+      assert Stack.linkage(relocked) == :edited
+      assert BuilderFixture.design(l).frame.size.width == 500
+      html = BuilderFixture.render(l)
+      assert html =~ "vis-builder-layer-locked vis-builder-layer-edited"
+      assert html =~ "from the library with local changes: o to open, l to unlock"
+
+      assert html =~
+               "Open Frame::wide — from the library, with local changes, edited by opening it"
+
+      assert html =~ "vis-builder-form-locked"
+
+      assert html =~
+               ~s(phx-click="unlock_site" phx-value-index="3" phx-target="-1">unlock</button>)
+
+      {:noreply, menu} = Builder.handle_event("menu", %{"layer" => "3", "x" => 5, "y" => 6}, l)
+
+      assert menu.assigns.menu.site.items == [
+               {"unlock_site", "Unlock"},
+               {"revert_site", "Revert to original"}
+             ]
+
+      # A change to the entry shows through under the local.
+      Recording.seed(%{
+        {:frame, 1} => %{
+          name: "Frame::wide",
+          fragment: %{frame: %{size: %{width: 900, height: 300}}}
+        }
+      })
+
+      {:noreply, l} = Builder.handle_event("select_layer", %{"index" => "3"}, l)
+      assert BuilderFixture.design(l).frame.size == %{width: 500, height: 300}
+
+      # Revert is armed by the first click and done by the second; the local goes, the
+      # site's own mask stays.
+      {:noreply, l} =
+        Builder.handle_event(
+          "mask",
+          %{"_target" => ["frame.margin"], "_index" => "3", "frame.margin" => "true"},
+          l
+        )
+
+      {:noreply, armed} = Builder.handle_event("revert_site", %{"index" => "3"}, l)
+      assert armed.assigns.reverting == Enum.at(l.assigns.uses, 3).id
+      assert armed.assigns.notice == "revert Frame::wide? again — discards 1 edited keys"
+      assert Enum.at(armed.assigns.uses, 3) == Enum.at(l.assigns.uses, 3)
+
+      {:noreply, menu} =
+        Builder.handle_event("menu", %{"layer" => "3", "x" => 5, "y" => 6}, armed)
+
+      assert {"revert_site", "revert — discards 1 edited keys"} in menu.assigns.menu.site.items
+
+      {:noreply, reverted} = Builder.handle_event("revert_site", %{"index" => "3"}, armed)
+
+      assert %Use{ref: {:frame, 1}, origin: nil, local: local, mask: [[:frame, :margin]]} =
+               Enum.at(reverted.assigns.uses, 3)
+
+      assert local == %{}
+      assert reverted.assigns.reverting == nil
+      assert BuilderFixture.design(reverted).frame.size == %{width: 900, height: 300}
+
+      # Selecting another row disarms it.
+      {:noreply, armed} = Builder.handle_event("revert_site", %{"index" => "3"}, l)
+      {:noreply, disarmed} = Builder.handle_event("select_layer", %{"index" => "0"}, armed)
+      assert disarmed.assigns.reverting == nil
+
+      # Reverting an unlocked site restores the link too, and unlock survives Save's form.
+      {:noreply, armed} = Builder.handle_event("revert_site", %{"index" => "3"}, edited)
+      {:noreply, back} = Builder.handle_event("revert_site", %{"index" => "3"}, armed)
+      assert %Use{ref: {:frame, 1}, origin: nil, local: none} = Enum.at(back.assigns.uses, 3)
+      assert none == %{}
+
+      # An inline site has no lock item and nothing to revert; a site with no origin cannot lock.
+      {:noreply, menu} = Builder.handle_event("menu", %{"layer" => "0", "x" => 5, "y" => 6}, s)
+      assert menu.assigns.menu.site.items == []
+      {:noreply, same} = Builder.handle_event("lock_site", %{"index" => "0"}, s)
+      assert same.assigns.uses == s.assigns.uses
+      assert same.assigns.notice == "house has nothing to link to"
+      {:noreply, same} = Builder.handle_event("revert_site", %{"index" => "0"}, s)
+      assert same.assigns.notice == "house is as the library has it"
+      refute BuilderFixture.render(s) =~ "vis-builder-context-actions"
+
+      # The keys: `l` unlocks and locks, `r` arms and reverts.
+      {:noreply, by_l} = Builder.handle_event("layer_key", %{"key" => "l", "index" => "3"}, s)
+      assert Stack.linkage(Enum.at(by_l.assigns.uses, 3)) == :unlocked
+      {:noreply, by_l} = Builder.handle_event("layer_key", %{"key" => "l", "index" => "3"}, by_l)
+      assert Stack.linkage(Enum.at(by_l.assigns.uses, 3)) == :edited
+      {:noreply, by_r} = Builder.handle_event("layer_key", %{"key" => "r", "index" => "3"}, by_l)
+      assert by_r.assigns.reverting != nil
+      {:noreply, by_r} = Builder.handle_event("layer_key", %{"key" => "r", "index" => "3"}, by_r)
+      assert Stack.linkage(Enum.at(by_r.assigns.uses, 3)) == :linked
+      {:noreply, same} = Builder.handle_event("layer_key", %{"key" => "l", "index" => "0"}, s)
+      assert same.assigns.uses == s.assigns.uses
+    end
+
+    test "the JSON form carries origin, and flatten ignores it (spec/14 §19.3, §19.6, #381)" do
+      use = %{Use.new({:frame, 1}) | origin: nil}
+      unlocked = %{use | ref: nil, origin: {:frame, 1}, local: %{frame: %{size: %{width: 5}}}}
+      encoded = Visualize.Chart.Codec.encode(%{composite: %{uses: [unlocked], vars: %{}}})
+
+      assert %{"composite" => %{"uses" => [%{"$use" => %{"origin" => %{"$id" => ["frame", 1]}}}]}} =
+               encoded
+
+      assert Visualize.Chart.Codec.decode(encoded) == %{composite: %{uses: [unlocked], vars: %{}}}
+
+      fetch = fn {:frame, 1} -> {:ok, %{frame: %{size: %{width: 900}}}} end
+
+      assert {:ok, %{frame: %{size: %{width: 5}}}, _} =
+               Visualize.Chart.Composite.flatten(
+                 %{composite: %{uses: [unlocked], vars: %{}}},
+                 fetch
+               )
     end
 
     test "a section another, locked layer owns is read-only from any selection", %{socket: s} do
@@ -1416,7 +1594,7 @@ defmodule Visualize.Chart.BuilderTest do
       refute BuilderFixture.render(s) =~ "add_site"
     end
 
-    test "a library entry dropped on the graph is its copy, snapped where the region names a place",
+    test "a library entry dropped on the graph is linked above the selected layer, its placement the library's (#381)",
          %{socket: s} do
       Recording.seed(%{
         {:axis, 1} => %{name: "Axes::y", fragment: %{axis: %{scale: :y, side: :left, ticks: 3}}}
@@ -1425,22 +1603,22 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} =
         Builder.handle_event("place", %{"name" => "axis:1", "x" => 395, "y" => 100}, s)
 
-      assert %Use{ref: nil, local: %{axis: %{scale: :y, side: :right, ticks: 3}}} =
-               Enum.at(s1.assigns.uses, 1)
+      # Linked, so nothing is snapped: the entry says where the axis stands.
+      assert %Use{ref: {:axis, 1}, local: local} = Enum.at(s1.assigns.uses, 1)
+      assert local == %{}
 
-      {:noreply, s2} =
-        Builder.handle_event("place", %{"name" => "axis:1", "x" => 200, "y" => 100}, s)
+      assert BuilderFixture.design(s1).frame.axes |> Enum.map(& &1.side) |> Enum.sort() == [
+               :bottom,
+               :left
+             ]
 
-      assert %Use{ref: nil, local: %{axis: %{side: :left}}} = Enum.at(s2.assigns.uses, 1)
+      # Unlocked, it is the chart's, and a move on the graph takes it to the other side.
+      {:noreply, s2} = Builder.handle_event("unlock_site", %{"index" => "1"}, s1)
 
-      {:noreply, s3} =
-        Builder.handle_event(
-          "place",
-          %{"name" => "axis:1", "as" => "link", "x" => 395, "y" => 100},
-          s
-        )
+      assert %Use{ref: nil, origin: {:axis, 1}, local: %{axis: %{side: :left}}} =
+               Enum.at(s2.assigns.uses, 1)
 
-      assert %Use{ref: {:axis, 1}} = Enum.at(s3.assigns.uses, 1)
+      assert BuilderFixture.design(s2) == BuilderFixture.design(s1)
     end
 
     test "the Components section and the hook's drop (spec/10 §16.3)", %{socket: s} do
@@ -3482,23 +3660,18 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-keydown="fragment_key")
 
       assert html =~
-               ": Enter to open, Insert to copy above the selected layer (I to link), drag into the stack or onto the chart (Alt to link)\""
+               ": Enter to open, Insert to add it linked above the selected layer, drag into the stack or onto the chart\""
 
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
 
-      {:noreply, added} =
-        Builder.handle_event("fragment_key", %{"key" => "Insert", "name" => "composite:1"}, s)
+      # Insert, i and I all insert it linked, as a drop does (#381).
+      for key <- ["Insert", "i", "I"] do
+        {:noreply, linked} =
+          Builder.handle_event("fragment_key", %{"key" => key, "name" => "composite:1"}, s)
 
-      # A copied composite is a group of its objects (#380).
-      assert BuilderFixture.names(added) == [:house, :shared, "baseline", "frame", :panel]
-      assert %Use{ref: nil} = group = Enum.at(added.assigns.uses, 2)
-      assert Stack.group?(group)
-
-      {:noreply, linked} =
-        Builder.handle_event("fragment_key", %{"key" => "I", "name" => "composite:1"}, s)
-
-      assert BuilderFixture.names(linked) == [:house, :shared, "baseline", :panel]
-      assert %Use{ref: {:composite, 1}} = Enum.at(linked.assigns.uses, 2)
+        assert BuilderFixture.names(linked) == [:house, :shared, "baseline", :panel]
+        assert %Use{ref: {:composite, 1}} = Enum.at(linked.assigns.uses, 2)
+      end
 
       {:noreply, opened} =
         Builder.handle_event("fragment_key", %{"key" => "Enter", "name" => "composite:1"}, s)
@@ -5035,10 +5208,19 @@ defmodule Visualize.Chart.BuilderTest do
       # A composite entry opens as its sites: the baseline is one inline frame site.
       assert BuilderFixture.layers(opened) == [{"local", %{frame: %{kind: :cartesian}}}]
 
-      # A drop is a copy: a group holding the site's own body, and nothing the store adds
-      # (spec/14 §18.17, #380); the group flattens to what its object says.
-      {:noreply, added} =
+      # A drop is a link (#381), resolved through the store, flattened.
+      {:noreply, linked} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, socket)
+
+      assert BuilderFixture.layers(linked) ==
+               layers ++ [{"baseline", %{version: 1, frame: %{kind: :cartesian}}}]
+
+      assert %Use{ref: {:composite, 1}} = List.last(linked.assigns.uses)
+      assert linked.assigns.notice == nil
+
+      # Unlocked, it is a group holding the site's own body, and nothing the store adds
+      # (spec/14 §18.17, #380); the group flattens to what its object says.
+      {:noreply, added} = Builder.handle_event("unlock_site", %{"index" => "3"}, linked)
 
       # The group reads as what it flattens to, a design-level composite's version with it.
       assert BuilderFixture.layers(added) ==
@@ -5046,21 +5228,9 @@ defmodule Visualize.Chart.BuilderTest do
 
       group = List.last(added.assigns.uses)
       assert Stack.group?(group)
+      assert group.origin == {:composite, 1}
       assert [%Use{ref: nil, local: %{frame: %{kind: :cartesian}}}] = Stack.children(group)
       assert added.assigns.notice == nil
-
-      # A link resolves through the store, flattened.
-      {:noreply, linked} =
-        Builder.handle_event(
-          "insert",
-          %{"name" => "composite:1", "at" => 3, "as" => "link"},
-          socket
-        )
-
-      assert BuilderFixture.layers(linked) ==
-               layers ++ [{"baseline", %{version: 1, frame: %{kind: :cartesian}}}]
-
-      assert %Use{ref: {:composite, 1}} = List.last(linked.assigns.uses)
     end
 
     test "a name the store does not hold is a notice and changes no layer" do

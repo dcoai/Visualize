@@ -70,7 +70,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     The inline SVG of a control's icon — `:eye` and `:eye_off` for the layer toggle, `:lock`
-    for a library layer (spec/14 §18.8), `:inspect`, `:colour` and `:variables` for the
+    for a library layer and `:lock_open` for one unlocked from it (spec/14 §18.8), `:inspect`, `:colour` and `:variables` for the
     panel row, and a root's name (a string) for the node row (§18.13, #314) — in
     `currentColor`, 18px, hidden from readers since the control names itself.
 
@@ -78,7 +78,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         true
     """
     @spec icon(atom() | String.t()) :: String.t()
-    def icon(name) when name in [:eye, :eye_off, :lock, :inspect, :colour, :variables] do
+    def icon(name)
+        when name in [:eye, :eye_off, :lock, :lock_open, :inspect, :colour, :variables] do
       ~s|<svg class="vis-builder-icon vis-builder-icon-#{name}" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">#{icon_inner(name)}</svg>|
     end
 
@@ -101,6 +102,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp icon_inner(:lock),
       do:
         ~s|<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11 V7 a4 4 0 0 1 8 0 V11"/>|
+
+    # The shackle swung open: a site unlocked from its entry (§18.8, #381).
+    defp icon_inner(:lock_open),
+      do:
+        ~s|<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11 V7 a4 4 0 0 1 8 0 V8"/>|
 
     # The panel row (§19.10).
     defp icon_inner(:inspect),

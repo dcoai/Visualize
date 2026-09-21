@@ -31,9 +31,9 @@ defmodule Visualize.Hooks.Builder do
   ## Events
 
   - `reorder` with `%{"from" => integer, "to" => integer}` on a drop between two positions
-  - `insert` with `%{"name" => string, "at" => integer, "as" => "copy" | "link"}` on a
-    library entry dropped into the stack — `"link"` when Alt was held — and without `at`
-    on one dropped onto the graph in scope `graph` (spec/14 §18.17)
+  - `insert` with `%{"name" => string, "at" => integer}` on a library entry dropped
+    between rows of the stack, or with `"into" => string` on one dropped on a container's
+    row — linked, as every drop is (spec/14 §18.17, #381)
   - `inspect` with `%{"path" => string, "layer" => string}` on a click on a row
   - `drop_colour` with `%{"field" => string, "colour" => string, "edit" => string}` when a
     patch of the colour chooser is dropped on a colour well (spec/14 §19.10)
@@ -475,11 +475,6 @@ defmodule Visualize.Hooks.Builder do
         return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
       },
 
-      // A drop is a copy unless Alt asks for a link (spec/14 §18.17).
-      dropAs(e) {
-        return e.altKey ? 'link' : 'copy';
-      },
-
       // Where the drop lands, as a position BETWEEN layers: 0 above the first, n below the
       // last. One rule for both drags, and the only one that can name either end — the
       // pointer is compared with each row's midpoint, so there is no row it must be inside.
@@ -553,7 +548,7 @@ defmodule Visualize.Hooks.Builder do
             return;
           }
           const name = this.dragged(e);
-          if (name !== null) this.push('place', { name: name, as: this.dropAs(e), x: point.x, y: point.y });
+          if (name !== null) this.push('place', { name: name, x: point.x, y: point.y });
           return;
         }
 
@@ -564,7 +559,7 @@ defmodule Visualize.Hooks.Builder do
             this.push('reorder', { from: this.from, into: into });
           } else {
             const stored = this.dragged(e);
-            if (stored !== null) this.push('insert', { name: stored, into: into, as: this.dropAs(e) });
+            if (stored !== null) this.push('insert', { name: stored, into: into });
           }
           return;
         }
@@ -581,7 +576,7 @@ defmodule Visualize.Hooks.Builder do
 
         const stored = this.dragged(e);
         if (stored === null) return;
-        this.push('insert', { name: stored, at: at, as: this.dropAs(e) });
+        this.push('insert', { name: stored, at: at });
       },
 
       // The group whose row's middle third the pointer is over, by its id, or null.
