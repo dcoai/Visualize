@@ -154,6 +154,93 @@ defmodule Visualize.Chart.FrameTest do
     end
   end
 
+  describe "the polar axes follow their scales' ranges (spec/14 §4.3, §4.4, §4.6, #390)" do
+    defp polar(scales, axes) do
+      chart(
+        %{
+          kind: :polar,
+          size: %{width: 300, height: 300},
+          margin: %{top: 0, right: 0, bottom: 0, left: 0},
+          scales: scales,
+          axes: axes
+        },
+        %{marks: [%{type: :rose, data: :primary, channels: %{angle: :n, value: :v}}]}
+      )
+      |> Frame.new(sources: %{primary: @rows})
+    end
+
+    defp polar_svg(scales, axes),
+      do: polar(scales, axes) |> Frame.render(sources: %{primary: @rows})
+
+    test "start and sweep realise the angle range in radians; a list range wins; a full turn is the default" do
+      quarter = %{
+        angle: %{kind: :linear, domain: [0, 100], start: -90, sweep: 90},
+        r: %{kind: :linear}
+      }
+
+      [a0, a1] = Frame.scale(polar(quarter, []), :angle).range
+      assert_in_delta a0, -:math.pi() / 2, 1.0e-9
+      assert_in_delta a1, 0, 1.0e-9
+
+      back = %{angle: %{kind: :linear, domain: [0, 100], sweep: -90}, r: %{kind: :linear}}
+      [b0, b1] = Frame.scale(polar(back, []), :angle).range
+      assert b0 == 0
+      assert_in_delta b1, -:math.pi() / 2, 1.0e-9
+
+      listed = %{angle: %{kind: :linear, start: 45, range: [1, 2]}, r: %{kind: :linear}}
+      assert Frame.scale(polar(listed, []), :angle).range == [1, 2]
+
+      plain = %{angle: %{kind: :linear}, r: %{kind: :linear}}
+      assert Frame.scale(polar(plain, []), :angle).range == [0, 2 * :math.pi()]
+    end
+
+    test "the angle axis is an arc over the sweep at its radius, a circle on a full turn; the r grid arcs too" do
+      # A speedometer: 240° from -120°, the axis at 0.8 R, the r grid over the sweep.
+      scales = %{
+        angle: %{kind: :linear, domain: [0, 100], start: -120, sweep: 240},
+        r: %{kind: :linear, domain: [0, 10], range: [30, 150]}
+      }
+
+      svg =
+        polar_svg(scales, [
+          %{scale: :angle, side: :bottom, ticks: 2, radius: 0.8, grid: true},
+          %{scale: :r, side: :top, ticks: 2, grid: true, at: 120}
+        ])
+
+      # The domain line: from -120° to 120° at 120 (0.8 × 150), the large arc, clockwise.
+      assert svg =~
+               ~s|<path d="M-103.923,60A120,120,0,1,1,103.923,60" stroke="var(--vis-axis, #666666)"/>|
+
+      refute svg =~ ~s|<circle cx="0" cy="0" r="120|
+      # The angle grid's spokes run over the r band, 30 to 150.
+      assert svg =~ ~s|<line x1="-25.98075" x2="-129.90375" y1="15.0" y2="75.0"/>|
+      # The r grid at 10 is an arc at 150 over the sweep, not a ring.
+      assert svg =~ ~s|<path d="M-129.9038,75A150,150,0,1,1,129.9038,75" fill="none"/>|
+      # The r spoke stands at 120° and runs from the inner radius to the outer.
+      assert svg =~
+               ~s|<line stroke="var(--vis-axis, #666666)" x1="25.98075" x2="129.90375" y1="15.0" y2="75.0"/>|
+
+      # A quarter turn is a small arc; a full turn is the circle it was.
+      quarter =
+        polar_svg(%{angle: %{kind: :linear, start: -90, sweep: 90}, r: %{kind: :linear}}, [
+          %{scale: :angle, side: :bottom, ticks: 2}
+        ])
+
+      assert quarter =~ ~s|<path d="M-150,0A150,150,0,0,1,0,-150"|
+
+      full =
+        polar_svg(%{angle: %{kind: :linear}, r: %{kind: :linear}}, [
+          %{scale: :angle, side: :bottom, ticks: 2},
+          %{scale: :r, side: :top, grid: true}
+        ])
+
+      assert full =~ ~s|<circle cx="0" cy="0" r="150.0" stroke=|
+      [grid | _] = String.split(full, ~s|<g class="mark|)
+      refute grid =~ "<path"
+      assert grid =~ ~s|<circle cx="0" cy="0" fill="none" r="150.0"/>|
+    end
+  end
+
   describe "precedence" do
     test "an explicit domain beats inference and a half-fixed extent fixes one end" do
       scales = %{x: %{kind: :linear, domain: [0, 100]}, y: %{kind: :linear, domain: [0, :auto]}}

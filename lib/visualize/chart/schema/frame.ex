@@ -71,7 +71,9 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:align, :number, :geometry, default: 0.5),
       spec(:round, :boolean, :geometry, default: false),
       spec(:unknown, :term, :geometry),
-      spec(:transition, {:node, :transition}, :geometry)
+      spec(:transition, {:node, :transition}, :geometry),
+      spec(:start, :number, :geometry, default: 0, range: {-360, 360, 5}),
+      spec(:sweep, :number, :geometry, default: 360, range: {-360, 360, 5})
     ]
   end
 
@@ -85,6 +87,8 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:unit, :string, :content),
       spec(:grid, :boolean, :geometry, default: false),
       spec(:offset, :number, :geometry, default: 0),
+      spec(:radius, :number, :geometry, range: {0, 1, 0.05}),
+      spec(:at, :number, :geometry, range: {-180, 180, 5}),
       spec(
         :style,
         style_stack(),

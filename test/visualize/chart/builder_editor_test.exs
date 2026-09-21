@@ -396,7 +396,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         |> Regex.scan(html)
         |> Enum.map(fn [_, key] -> key end)
 
-      assert keys == ~w(scale side ticks grid offset)
+      assert keys == ~w(scale side ticks grid offset radius at)
       assert html =~ ~s(<input type="text" name="scale" value="x">)
       # A side is a drawn enum (§18.6): the chosen one is the checked glyph.
       assert html =~

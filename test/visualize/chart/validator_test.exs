@@ -274,6 +274,29 @@ defmodule Visualize.Chart.ValidatorTest do
       assert errors(design) == [{[:marks, 0, :options, :radius], {:invalid_for, :line}}]
     end
 
+    test "the angle scale's sweep is a turn at most and never nothing; an axis's radius is positive (#390)" do
+      base = design_with_mark(:line)
+
+      scale = fn node ->
+        put_at(base, [:frame, :scales, :angle], Map.merge(%{kind: :linear}, node))
+      end
+
+      assert errors(scale.(%{sweep: 0})) == [{[:frame, :scales, :angle, :sweep], :sweep}]
+      assert errors(scale.(%{sweep: 400})) == [{[:frame, :scales, :angle, :sweep], :sweep}]
+      assert Validator.validate(scale.(%{start: -120, sweep: 240})) == :ok
+      assert Validator.validate(scale.(%{sweep: -360})) == :ok
+
+      axis = fn node ->
+        put_at(scale.(%{}), [:frame, :axes], [Map.merge(%{scale: :angle, side: :bottom}, node)])
+      end
+
+      assert errors(axis.(%{radius: 0})) == [{[:frame, :axes, 0, :radius], :radius}]
+      assert Validator.validate(axis.(%{radius: 0.8, at: 45})) == :ok
+
+      assert Validator.format({[:frame, :scales, :angle, :sweep], :sweep}) ==
+               "frame.scales.angle.sweep: must be within a turn, and not zero"
+    end
+
     test "an arc needs value, or both start and end (D-69)" do
       arc = fn channels -> put_at(design_with_mark(:arc), [:marks, 0, :channels], channels) end
       assert Validator.validate(arc.(%{start: :t, end: :t})) == :ok

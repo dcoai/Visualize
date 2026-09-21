@@ -186,7 +186,7 @@ defmodule Visualize.Chart.Frame.Scales do
   defp build(name, node, values, plot, theme, axes) do
     kind = get(node, :kind)
     domain = domain(kind, name, get(node, :domain), values)
-    range = range(kind, name, get(node, :range), plot, theme, axes)
+    range = range(kind, name, sweep(name, node, get(node, :range)), plot, theme, axes)
 
     kind
     |> construct(node, range)
@@ -197,6 +197,19 @@ defmodule Visualize.Chart.Frame.Scales do
   end
 
   defp get(node, key), do: Map.get(node, key, Schema.default(:scale, key))
+
+  # An `angle` scale with a start or a sweep has its range said in degrees (§4.3, #390);
+  # a list range wins, and any other scale's start and sweep say nothing.
+  defp sweep(:angle, node, :auto) do
+    start = get(node, :start)
+    sweep = get(node, :sweep)
+
+    if start == 0 and sweep == 360,
+      do: :auto,
+      else: [start * :math.pi() / 180, (start + sweep) * :math.pi() / 180]
+  end
+
+  defp sweep(_name, _node, range), do: range
 
   defp construct(:linear, _node, _range), do: Scale.linear()
   defp construct(:log, node, _range), do: Scale.log(get(node, :base))
@@ -343,6 +356,7 @@ defmodule Visualize.Chart.Frame.Scales do
 
   defp range(_kind, :x, :auto, plot, _theme, _axes), do: [0, plot.width]
   defp range(_kind, :y, :auto, plot, _theme, _axes), do: [plot.height, 0]
+  # The angle scale's range is its sweep from its start, degrees to radians (§4.3, #390).
   defp range(_kind, :angle, :auto, _plot, _theme, _axes), do: [0, 2 * :math.pi()]
   defp range(_kind, :r, :auto, plot, _theme, _axes), do: [0, min(plot.width, plot.height) / 2]
 
