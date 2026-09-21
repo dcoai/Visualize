@@ -44,10 +44,10 @@ defmodule Examples.Charts.PolarTransformChart do
         style(:task, fill: {:field, :lane}, opacity: 0.85),
         polar(width, height, margin: @margin),
         linear_scale(:angle, domain: [0, 100], start: -135, sweep: 270),
-        linear_scale(:r, domain: [0, 100], range: [outer * 0.3, outer * 0.78]),
-        band_scale(:lane, domain: @lanes, range: [outer * 0.84, outer], padding: 0.25),
+        linear_scale(:r, domain: [0, 100], range: [outer * 0.28, outer * 0.62]),
+        band_scale(:lane, domain: @lanes, range: [outer * 0.78, outer * 0.96], padding: 0.25),
         ordinal_scale(:color, domain: @lanes, range: [:series_4, :series_2, :series_1]),
-        axis(:angle, :bottom, ticks: 10, radius: 0.8, grid: true),
+        axis(:angle, :bottom, ticks: 10, radius: 0.66, grid: true),
         axis(:r, :top, ticks: 4, at: -135, grid: true),
         # The line graph wraps around the arc, its area under it to the inner radius.
         area(:signal, %{x: :t, y: :v}, style: :under),
@@ -117,10 +117,10 @@ defmodule Examples.Charts.PolarTransformChart do
         # The sweep is the angle scale's: 270° from -135° over the time column (spec/14 §4.3).
         linear_scale(:angle, domain: [0, 100], start: -135, sweep: 270),
         # r over an annular band; a band scale for the bars' lanes outside it.
-        linear_scale(:r, domain: [0, 100], range: [65, 168]),
-        band_scale(:lane, domain: ~w(build test deploy), range: [181, 216], padding: 0.25),
+        linear_scale(:r, domain: [0, 100], range: [60, 134]),
+        band_scale(:lane, domain: ~w(build test deploy), range: [168, 207], padding: 0.25),
         ordinal_scale(:color, domain: ~w(build test deploy)),
-        axis(:angle, :bottom, ticks: 10, radius: 0.8, grid: true),
+        axis(:angle, :bottom, ticks: 10, radius: 0.66, grid: true),
         axis(:r, :top, ticks: 4, at: -135, grid: true),
         # In a polar frame x names angle and y names r: the line wraps around the arc,
         # the area fills to the inner radius (spec/14 §5.2).
