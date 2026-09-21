@@ -208,7 +208,7 @@ defmodule Visualize.Chart.BuilderTest do
       # Neither the design's own root nor vars is a root tab (§18.13): a declaration is
       # the variable panel's, and the panel opens from the tab that ends the row (#363).
       # The sources root wears the word *data* (#372); its value stays the design key.
-      assert tabs(html, "vis-builder-node") == ~w(frame data styles marks labels variables)
+      assert tabs(html, "vis-builder-node") == ~w(frame data styles marks labels variables colour)
 
       assert html =~
                ~s(title="data of the chart" aria-label="data" data-builder-bind-root="sources" phx-click="select_root" phx-value-root="sources")
@@ -2787,41 +2787,56 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
-  describe "the context's icon row (spec/14 §19.10)" do
+  describe "the context's panels: inspect by selection, colour by its toggle, variables by its tab (spec/14 §19.10, #366)" do
     setup do
       s = BuilderFixture.socket(BuilderFixture.layers(), store: Visualize.Chart.BuilderTest.Refs)
       {:noreply, s} = Builder.handle_event("select_node", %{"node" => "styles.series"}, s)
       %{socket: s}
     end
 
-    test "two icons and the variables tab, one open; inspect is the default", %{socket: s} do
+    test "no icon row and no inspect button; the colour toggle opens the picker and, pressed again, the form",
+         %{socket: s} do
       html = BuilderFixture.render(s)
-      assert html =~ ~s(<nav class="vis-builder-context-icons" aria-label="context panels">)
+      refute html =~ "vis-builder-context-icons"
+      refute html =~ ~s(phx-value-panel="inspect")
 
-      for panel <- ~w(inspect colour variables) do
-        assert html =~ ~s(phx-click="context" phx-value-panel="#{panel}")
-      end
+      # The node row ends with the variables tab and the colour toggle.
+      assert tabs(html, "vis-builder-node") == ~w(frame data styles marks labels variables colour)
 
-      # The icon row is the two modes of the selected node; variables is the node row's
-      # last tab (#363).
-      [_, icons] = String.split(html, ~s(class="vis-builder-context-icons"), parts: 2)
-      refute icons =~ ~s(phx-value-panel="variables")
-      assert Regex.scan(~r/class="vis-builder-context-icon[ "]/, icons) |> length() == 2
+      assert html =~
+               ~s(class="vis-builder-node vis-builder-node-colour" title="colour — the picker for the selected node" aria-label="colour" aria-pressed="false" phx-click="context" phx-value-panel="colour")
 
-      # The signals and the font panel are under their roots now (#314): no panel of theirs,
-      # and a stale click on one is a no-op.
+      # The signals and the font panel are under their roots now (#314): a stale click on
+      # one is a no-op.
       for panel <- ~w(sources font) do
         refute html =~ ~s(phx-value-panel="#{panel}")
         {:noreply, same} = Builder.handle_event("context", %{"panel" => panel}, s)
         assert same.assigns.context == :inspect
       end
 
-      assert html =~
-               ~s(class="vis-builder-context-icon vis-builder-context-icon-on" title="inspect")
-
       assert html =~ ~s(class="vis-builder-layer-context")
       refute html =~ ~s(class="vis-builder-picker")
       refute html =~ ~s(class="vis-builder-variables")
+
+      # Pressed: the picker in place of the page, the root still open, the toggle pressed
+      # and now offering the way back.
+      {:noreply, colour} = Builder.handle_event("context", %{"panel" => "colour"}, s)
+      assert colour.assigns.context == :colour
+      html = BuilderFixture.render(colour)
+      assert html =~ ~s(class="vis-builder-picker")
+      refute html =~ ~s(class="vis-builder-layer-context")
+      assert html =~ ~r/vis-builder-node-open[^>]*aria-label="styles"/
+
+      assert html =~
+               ~s(class="vis-builder-node vis-builder-node-colour vis-builder-node-open" title="colour — back to the node&#39;s form" aria-label="colour" aria-pressed="true" phx-click="context" phx-value-panel="inspect")
+
+      {:noreply, back} = Builder.handle_event("context", %{"panel" => "inspect"}, colour)
+      assert back.assigns.context == :inspect
+      assert BuilderFixture.render(back) =~ ~s(class="vis-builder-layer-context")
+
+      # A colour field still opens the picker; the variables tab its panel.
+      {:noreply, field} = Builder.handle_event("select_field", %{"field" => "stroke"}, s)
+      assert field.assigns.context == :colour
 
       {:noreply, vars} = Builder.handle_event("context", %{"panel" => "variables"}, s)
       html = BuilderFixture.render(vars)
@@ -4118,7 +4133,8 @@ defmodule Visualize.Chart.BuilderTest do
       [_, nodes] = String.split(html, ~s(class="vis-builder-nodes"), parts: 2)
       [nodes, _] = String.split(nodes, "</nav>", parts: 2)
 
-      assert List.last(tabs(nodes, "vis-builder-node")) == "variables"
+      # The variables tab and the colour toggle end the row (#366).
+      assert Enum.take(tabs(nodes, "vis-builder-node"), -2) == ~w(variables colour)
 
       # `ticks` and `unit` have defaults; `accent` has neither a default nor a binding.
       unbound = Variables.unbound(BuilderFixture.layers(s), BuilderFixture.design(s), %{})

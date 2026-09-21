@@ -84,8 +84,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart.{Composite, Fragment, Schema, Use, Validator, Var}
     alias Visualize.{Signals, Theme}
 
-    # The context's panels, one open at a time (spec/14 §19.10): two from the icon row, the
-    # third from the tab that ends the node row (§18.13, #363).
+    # The context's panels, one open at a time (spec/14 §19.10): inspect by every selection,
+    # colour by its toggle and variables by its tab at the end of the node row (§18.13).
     @panels [:inspect, :colour, :variables]
 
     @doc false
@@ -497,19 +497,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-value-panel="variables"
                 phx-target={@myself}
               >{Phoenix.HTML.raw(Glyphs.icon(:variables))}<span :if={@variables_tab.needs > 0} class="vis-builder-node-badge">{@variables_tab.needs}</span></button>
-            </nav>
-            <nav class="vis-builder-context-icons" aria-label="context panels">
               <button
-                :for={{panel, icon, word} <- context_icons()}
                 type="button"
-                class={"vis-builder-context-icon" <> if(@context == panel, do: " vis-builder-context-icon-on", else: "")}
-                title={word}
-                aria-label={word}
-                aria-pressed={to_string(@context == panel)}
+                class={"vis-builder-node vis-builder-node-colour" <> if(@context == :colour, do: " vis-builder-node-open", else: "")}
+                title={if(@context == :colour, do: "colour — back to the node's form", else: "colour — the picker for the selected node")}
+                aria-label="colour"
+                aria-pressed={to_string(@context == :colour)}
                 phx-click="context"
-                phx-value-panel={panel}
+                phx-value-panel={if(@context == :colour, do: "inspect", else: "colour")}
                 phx-target={@myself}
-              >{Phoenix.HTML.raw(icon)}</button>
+              >{Phoenix.HTML.raw(Glyphs.icon(:colour))}</button>
             </nav>
             <div :if={@context == :inspect} class="vis-builder-inspect">
               <details
@@ -1169,8 +1166,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The icon row and the variables tab: which of the context's panels is open (spec/14
-    # §19.10, §18.13).
+    # The colour toggle and the variables tab: which of the context's panels is open
+    # (spec/14 §19.10, §18.13).
     def handle_event("context", %{"panel" => panel}, socket) do
       case Enum.find(@panels, &(to_string(&1) == panel)) do
         nil -> {:noreply, socket}
@@ -2344,13 +2341,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
         _other ->
           socket.assigns.context
       end
-    end
-
-    # The panel row: the two panels that are modes of the selected node (spec/14 §19.10,
-    # #314, #363). The signals stand under the sources root and the font panel under
-    # styles, so neither is a panel of its own; variables opens from the node row's tab.
-    defp context_icons do
-      for panel <- [:inspect, :colour], do: {panel, Glyphs.icon(panel), to_string(panel)}
     end
 
     # Every "#rrggbb" the design's styles carry, once each, in order of first use.
