@@ -93,8 +93,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
         for %Use{} = use <- uses do
           {body, name} =
             case use.ref do
+              # A site the composite declares in place is named for its kind inside the
+              # group the copy makes (#380), or for the composite when it has several.
               nil ->
-                {use.local, own}
+                case Map.keys(use.local) do
+                  [kind] when kind in [:frame, :theme, :meta] ->
+                    {use.local, to_string(kind)}
+
+                  _keys ->
+                    case Fragment.wrapped(use.local) do
+                      {kind, _body} -> {use.local, to_string(kind)}
+                      nil -> {use.local, own}
+                    end
+                end
 
               ref ->
                 case resolve.(ref) do
@@ -215,13 +226,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Enum.reduce(uses, {[], []}, fn use, {layers, missing} ->
         case Use.resolve(shown(use), flattening(fetch)) do
           {:ok, fragment} ->
-            {layers ++ [{label(labels, use), fragment}], missing}
+            {layers ++ [{label(labels, use), flat(fragment, fetch)}], missing}
 
           {:missing, ref, fragment} ->
-            {layers ++ [{label(labels, use), fragment}], missing ++ [{use.id, ref}]}
+            {layers ++ [{label(labels, use), flat(fragment, fetch)}], missing ++ [{use.id, ref}]}
         end
       end)
     end
+
+    # An inline group's body is what it flattens to (#380), as a referenced composite's is
+    # through `flattening/1`; anything else is itself.
+    defp flat(%{composite: %{uses: uses}} = fragment, fetch) when is_list(uses) do
+      case Composite.flatten(fragment, fetch) do
+        {:ok, design, _report} -> design
+        {:error, _cycle} -> %{}
+      end
+    end
+
+    defp flat(fragment, _fetch), do: fragment
 
     defp shown(%Use{mask: :all} = use), do: %{use | mask: []}
     defp shown(use), do: use
@@ -261,16 +283,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec placed([Use.t()], (Fragment.id() -> {:ok, map()} | :error)) :: [{Use.id(), map()}]
     def placed(uses, fetch) do
-      for use <- uses,
-          enabled?(use),
-          {:ok, layer} <- [Composite.place(shown_fragment(use, fetch), use)],
-          do: {use.id, layer}
+      Enum.flat_map(uses, fn use ->
+        cond do
+          not enabled?(use) ->
+            []
+
+          # An inline group is its objects, each attributed to itself (#380); the group's
+          # own vars are placed as the group's.
+          group?(use) ->
+            vars = get_in(use.local, [:composite, :vars]) || %{}
+            own = if map_size(vars) == 0, do: [], else: [{use.id, %{vars: vars}}]
+            own ++ placed(children(use), fetch)
+
+          true ->
+            case Composite.place(shown_fragment(use, fetch), use) do
+              {:ok, layer} -> [{use.id, layer}]
+              :keyless -> []
+            end
+        end
+      end)
     end
 
     defp shown_fragment(use, fetch) do
       case Use.resolve(shown(use), flattening(fetch)) do
-        {:ok, fragment} -> fragment
-        {:missing, _ref, fragment} -> fragment
+        {:ok, fragment} -> flat(fragment, fetch)
+        {:missing, _ref, fragment} -> flat(fragment, fetch)
       end
     end
 
@@ -527,21 +564,166 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    @doc "The position of a use in the stack, or `nil`."
+    # -- the tree (spec/14 §18.8, #380) ------------------------------------------------------
+
+    @typedoc "A row of the tree: the site, its depth, its parent's id and its flat position."
+    @type row :: %{
+            use: Use.t(),
+            depth: non_neg_integer(),
+            parent: Use.id() | nil,
+            index: non_neg_integer()
+          }
+
+    @doc "Whether a use is a container: an inline composite — a layer or a group."
+    @spec group?(Use.t()) :: boolean()
+    def group?(%Use{ref: nil, local: %{composite: %{uses: uses}}}) when is_list(uses), do: true
+    def group?(%Use{}), do: false
+
+    @doc "The sites an inline group holds; `[]` for an object or a referenced site."
+    @spec children(Use.t()) :: [Use.t()]
+    def children(%Use{ref: nil, local: %{composite: %{uses: uses}}}) when is_list(uses), do: uses
+    def children(%Use{}), do: []
+
+    @doc """
+    Every site of the tree, depth first, as rows — the flat order the panel draws and a
+    flat position names.
+
+        iex> inner = [%Visualize.Chart.Use{id: {:use, 3}, ref: nil, local: %{style: %{}}}]
+        iex> uses = [%Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{composite: %{uses: inner, vars: %{}}}}, %Visualize.Chart.Use{id: {:use, 2}, ref: nil, local: %{mark: %{}}}]
+        iex> for row <- Visualize.Chart.Builder.Stack.all(uses), do: {row.use.id, row.depth, row.parent, row.index}
+        [{{:use, 1}, 0, nil, 0}, {{:use, 3}, 1, {:use, 1}, 1}, {{:use, 2}, 0, nil, 2}]
+    """
+    @spec all([Use.t()]) :: [row()]
+    def all(uses) do
+      uses
+      |> rows(0, nil)
+      |> Enum.with_index(fn row, index -> Map.put(row, :index, index) end)
+    end
+
+    defp rows(uses, depth, parent) do
+      Enum.flat_map(uses, fn use ->
+        [%{use: use, depth: depth, parent: parent} | rows(children(use), depth + 1, use.id)]
+      end)
+    end
+
+    @doc "The flat position of a use in the tree, or `nil`."
     @spec index_of([Use.t()], Use.id() | nil) :: non_neg_integer() | nil
     def index_of(_uses, nil), do: nil
-    def index_of(uses, id), do: Enum.find_index(uses, &(&1.id == id))
 
-    @doc "The use with an id, or `nil`."
+    def index_of(uses, id) do
+      case Enum.find(all(uses), &(&1.use.id == id)) do
+        nil -> nil
+        row -> row.index
+      end
+    end
+
+    @doc "The use with an id anywhere in the tree, or `nil`."
     @spec get([Use.t()], Use.id() | nil) :: Use.t() | nil
     def get(_uses, nil), do: nil
-    def get(uses, id), do: Enum.find(uses, &(&1.id == id))
 
-    @doc "The stack with one use replaced by a function of it; a missing id changes nothing."
+    def get(uses, id) do
+      case Enum.find(all(uses), &(&1.use.id == id)) do
+        nil -> nil
+        row -> row.use
+      end
+    end
+
+    @doc "The id of the group holding a use, or `nil` at the top."
+    @spec parent_of([Use.t()], Use.id()) :: Use.id() | nil
+    def parent_of(uses, id) do
+      case Enum.find(all(uses), &(&1.use.id == id)) do
+        nil -> nil
+        row -> row.parent
+      end
+    end
+
+    @doc "The tree with one use, anywhere, replaced by a function of it; a missing id changes nothing."
     @spec update([Use.t()], Use.id(), (Use.t() -> Use.t())) :: [Use.t()]
     def update(uses, id, fun) do
-      Enum.map(uses, fn use -> if use.id == id, do: fun.(use), else: use end)
+      Enum.map(uses, fn use ->
+        if use.id == id do
+          fun.(use)
+        else
+          case children(use) do
+            [] -> use
+            inner -> with_children(use, update(inner, id, fun))
+          end
+        end
+      end)
     end
+
+    defp with_children(%Use{local: %{composite: composite} = local} = use, inner),
+      do: %{use | local: %{local | composite: %{composite | uses: inner}}}
+
+    @doc "The tree without a use (and what it holds); a missing id changes nothing."
+    @spec remove([Use.t()], Use.id()) :: [Use.t()]
+    def remove(uses, id) do
+      uses
+      |> Enum.reject(&(&1.id == id))
+      |> Enum.map(fn use ->
+        case children(use) do
+          [] -> use
+          inner -> with_children(use, remove(inner, id))
+        end
+      end)
+    end
+
+    @doc """
+    A use inserted as the sibling after another — at the top, at the end, for `nil` — or,
+    with `{:into, id}`, appended inside that group.
+    """
+    @spec insert([Use.t()], Use.id() | nil | {:into, Use.id()}, Use.t()) :: [Use.t()]
+    def insert(uses, nil, use), do: uses ++ [use]
+
+    def insert(uses, {:into, id}, use) do
+      update(uses, id, fn group -> with_children(group, children(group) ++ [use]) end)
+    end
+
+    def insert(uses, after_id, use) do
+      case Enum.find_index(uses, &(&1.id == after_id)) do
+        nil ->
+          Enum.map(uses, fn site ->
+            case children(site) do
+              [] -> site
+              inner -> with_children(site, insert(inner, after_id, use))
+            end
+          end)
+
+        index ->
+          List.insert_at(uses, index + 1, use)
+      end
+    end
+
+    @doc """
+    A use inserted before the row at a flat position, in that row's own container — at
+    the end of the top past the last row (spec/14 §18.17, #380).
+    """
+    @spec insert_at([Use.t()], non_neg_integer(), Use.t()) :: [Use.t()]
+    def insert_at(uses, at, use) when at < 0, do: insert_at(uses, 0, use)
+
+    def insert_at(uses, at, use) do
+      case Enum.at(all(uses), at) do
+        nil ->
+          uses ++ [use]
+
+        %{parent: nil, use: target} ->
+          List.insert_at(uses, Enum.find_index(uses, &(&1.id == target.id)), use)
+
+        %{parent: parent, use: target} ->
+          update(uses, parent, fn group ->
+            inner = children(group)
+
+            with_children(
+              group,
+              List.insert_at(inner, Enum.find_index(inner, &(&1.id == target.id)), use)
+            )
+          end)
+      end
+    end
+
+    @doc "A group's local: an inline composite with no objects."
+    @spec group() :: map()
+    def group, do: %{composite: %{uses: [], vars: %{}}}
 
     @doc """
     A write into a use's `local` at a path (spec/14 §19.3): a `{:ok, value}` sets the key,
@@ -573,14 +755,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp update_node(map, [key | rest], fun) when is_map(map),
       do: Map.put(map, key, update_node(Map.get(map, key), rest, fun))
 
-    @doc "A move within the stack: list surgery, and nothing to remap (§19.3)."
+    @doc """
+    A move within the tree by flat positions (§19.3, #380): the row at `from` — a group
+    with everything it holds — taken out, then put before the row that stands at `to`
+    once it is out, in that row's own container; past the last row, at the end of the top.
+    A row cannot land inside what it holds, since those rows are out with it.
+    """
     @spec move([Use.t()], non_neg_integer(), non_neg_integer()) :: [Use.t()]
     def move(uses, from, to) when from != to and from >= 0 and to >= 0 do
-      if from < length(uses) and to < length(uses) do
-        {use, rest} = List.pop_at(uses, from)
-        List.insert_at(rest, to, use)
-      else
-        uses
+      rows = all(uses)
+
+      case Enum.at(rows, from) do
+        nil ->
+          uses
+
+        %{use: moved} ->
+          rest = remove(uses, moved.id)
+          target = Enum.at(all(rest), to)
+
+          cond do
+            target == nil ->
+              rest ++ [moved]
+
+            target.parent == nil ->
+              List.insert_at(rest, Enum.find_index(rest, &(&1.id == target.use.id)), moved)
+
+            true ->
+              update(rest, target.parent, fn group ->
+                inner = children(group)
+
+                with_children(
+                  group,
+                  List.insert_at(inner, Enum.find_index(inner, &(&1.id == target.use.id)), moved)
+                )
+              end)
+          end
       end
     end
 

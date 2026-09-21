@@ -32,7 +32,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart.Builder.Glyphs
 
     attr(:id, :string, required: true, doc: "the hook element's id")
-    attr(:layers, :list, required: true, doc: "the layers in precedence order, the higher last")
+
+    attr(:rows, :list,
+      required: true,
+      doc:
+        "the tree's rows by flat position — name, depth, parent, group?, count, open?, kind, id (spec/14 §18.8, #380)"
+    )
+
+    attr(:hidden, :any, default: nil, doc: "the positions under a closed group, a `MapSet`")
     attr(:selected, :integer, default: 0, doc: "the position of the layer being edited")
     attr(:disabled, :any, default: nil, doc: "the positions dropped from the stack, a `MapSet`")
 
@@ -79,9 +86,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       >
         <li
           :for={entry <- @entries}
+          :if={not entry.hidden?}
           id={@id <> "-row-" <> to_string(entry.index)}
           class={entry.class}
+          style={"--vis-builder-depth: #{entry.depth}"}
           data-builder-layer={entry.index}
+          data-builder-parent={entry.parent}
+          data-builder-into={entry.into}
           draggable="true"
           role="button"
           tabindex="0"
@@ -92,6 +103,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
           phx-value-index={entry.index}
           phx-target={@target}
         >
+          <button
+            :if={entry.group?}
+            type="button"
+            draggable="false"
+            class="vis-builder-site-toggle"
+            title={(entry.open? && "collapse " <> entry.name) || "expand " <> entry.name}
+            aria-label={(entry.open? && "collapse " <> entry.name) || "expand " <> entry.name}
+            aria-expanded={to_string(entry.open?)}
+            phx-click="toggle_site"
+            phx-value-index={entry.index}
+            phx-target={@target}
+          >{if entry.open?, do: "▾", else: "▸"}</button>
+          <span :if={not entry.group? and entry.kind} class="vis-builder-site-kind" title={to_string(entry.kind)}>{Phoenix.HTML.raw(Glyphs.icon(entry.kind))}</span>
           <button
             type="button"
             draggable="false"
@@ -104,6 +128,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             phx-target={@target}
           >{if entry.expanded?, do: "⌄", else: "›"}</button>
           <span class="vis-builder-layer-name">{entry.name}</span>
+          <span :if={entry.group?} class="vis-builder-site-count" title={"#{entry.count} inside"}>{entry.count}</span>
           <button
             :if={entry.locked?}
             type="button"
@@ -232,56 +257,85 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp class(nil), do: "vis-builder-layers"
     defp class(extra), do: "vis-builder-layers " <> extra
 
-    # One entry per layer: its name as `Visualize.Chart.explain/1` names it, its classes and
-    # what its toggle now offers.
-    defp entries(%{layers: layers, selected: selected, disabled: disabled} = assigns) do
+    # One entry per row of the tree (#380): its name, depth and role, its classes and what
+    # its toggle now offers; a row under a closed group is not drawn.
+    defp entries(%{rows: rows, selected: selected, disabled: disabled} = assigns) do
       off = disabled || MapSet.new()
       held = assigns.locked || MapSet.new()
       open = assigns.expanded || MapSet.new()
+      hidden = assigns.hidden || MapSet.new()
       placed = assigns.placed || []
 
-      count = length(layers)
+      count = length(rows)
 
-      for {layer, index} <- Enum.with_index(layers) do
-        name = name(layer, index)
+      for {row, index} <- Enum.with_index(rows) do
+        name = row.name
 
         %{
           index: index,
           name: name,
-          class: classes(index == selected, index in off, index in held),
+          depth: row.depth,
+          parent: row.parent && encode_id(row.parent),
+          group?: row.group?,
+          count: row.count,
+          open?: row.open?,
+          kind: if(row.group?, do: nil, else: kind_word(row.kind)),
+          into: if(row.group? and index not in held, do: encode_id(row.id)),
+          hidden?: index in hidden,
+          class: classes(index == selected, index in off, index in held, row.group?),
           toggle: if(index in off, do: "Enable", else: "Disable"),
           eye: if(index in off, do: :eye_off, else: :eye),
           locked?: index in held,
           expanded?: index in open,
           declared: if(index in open, do: declared(Enum.at(placed, index) || %{}), else: []),
           mask: Map.get(assigns.masks || %{}, index),
-          says: says(name, index, count, index == selected, index in off, index in held)
+          says: says(name, row, index, count, index == selected, index in off, index in held)
         }
       end
     end
 
+    defp encode_id({:use, n}), do: to_string(n)
+
+    # An object's kind as the root word its glyph is drawn for (§18.13); a layer of several
+    # roots (a host-seeded one) wears none.
+    defp kind_word(:mark), do: "marks"
+    defp kind_word(:style), do: "styles"
+    defp kind_word(:label), do: "labels"
+    defp kind_word(:source), do: "sources"
+    defp kind_word(:gradient), do: "defs"
+    defp kind_word(:scale), do: "scales"
+    defp kind_word(:axis), do: "axes"
+    defp kind_word(:var), do: "vars"
+    defp kind_word(kind) when kind in [:theme, :frame], do: to_string(kind)
+    defp kind_word(_other), do: nil
+
     # What the row is and what its keys do, for hover and for what is announced (§18.17);
     # a library layer says it is one, and that `o` opens it (§18.8).
-    defp says(name, index, count, selected?, disabled?, locked?) do
+    defp says(name, row, index, count, selected?, disabled?, locked?) do
       state =
         [selected? && "selected", disabled? && "disabled"]
         |> Enum.filter(& &1)
         |> Enum.join(", ")
 
-      "#{name}, layer #{index + 1} of #{count}" <>
+      role =
+        cond do
+          row.group? and row.depth == 0 -> "layer"
+          row.group? -> "group"
+          true -> "object"
+        end
+
+      "#{name}, #{role} #{index + 1} of #{count}" <>
         if(state == "", do: "", else: ", " <> state) <>
         ": Enter to edit, arrows to move, Right to show what it declares, drag to reorder" <>
         if(locked?, do: ", from the library: o to open", else: "")
     end
 
-    defp name({name, _layer}, _index), do: to_string(name)
-    defp name(_layer, index), do: to_string(index)
-
-    defp classes(selected?, disabled?, locked?) do
+    defp classes(selected?, disabled?, locked?, group?) do
       ["vis-builder-layer"]
       |> then(&if selected?, do: &1 ++ ["vis-builder-layer-selected"], else: &1)
       |> then(&if disabled?, do: &1 ++ ["vis-builder-layer-disabled"], else: &1)
       |> then(&if locked?, do: &1 ++ ["vis-builder-layer-locked"], else: &1)
+      |> then(&if group?, do: &1 ++ ["vis-builder-layer-group"], else: &1)
       |> Enum.join(" ")
     end
   end
