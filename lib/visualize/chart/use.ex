@@ -64,11 +64,19 @@ defmodule Visualize.Chart.Use do
   def new(ref, among \\ []) do
     highest =
       among
-      |> Enum.map(fn %__MODULE__{id: {:use, n}} -> n end)
+      |> Enum.flat_map(&ids/1)
       |> Enum.max(fn -> 0 end)
 
     %__MODULE__{id: {:use, highest + 1}, ref: ref}
   end
+
+  # Every id a site carries: its own and, for an inline composite, those inside it
+  # (spec/14 §18.8, #380), so ids are unique across a whole tree.
+  defp ids(%__MODULE__{id: {:use, n}, ref: nil, local: %{composite: %{uses: uses}}})
+       when is_list(uses),
+       do: [n | Enum.flat_map(uses, &ids/1)]
+
+  defp ids(%__MODULE__{id: {:use, n}}), do: [n]
 
   @doc """
   A fragment with its variables substituted (spec/14 §19.4, D-102).

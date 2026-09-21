@@ -21,6 +21,7 @@ defmodule Visualize.Chart.BuilderTest do
   alias Visualize.Chart.Builder.Glyphs
   alias Visualize.Chart.Builder.Palette
   alias Visualize.Chart.Builder.Preview
+  alias Visualize.Chart.Builder.Stack
   alias Visualize.Chart.Builder.StyleStack
   alias Visualize.Chart.Builder.Variables
   alias Visualize.Chart.Use
@@ -439,7 +440,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-click="select_layer" phx-keydown="layer_key" phx-value-index="0")
 
       assert html =~
-               ~s(title="house, layer 1 of 3, selected: Enter to edit, arrows to move, Right to show what it declares, drag to reorder")
+               ~s(title="house, object 1 of 3, selected: Enter to edit, arrows to move, Right to show what it declares, drag to reorder")
 
       # The one button left names itself, and is not a drag source: a control inside a
       # draggable row swallows its own click otherwise (spec/14 §18.8).
@@ -589,17 +590,18 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, at_top} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
 
-      assert BuilderFixture.names(at_top) == ["baseline", :house, :shared, :panel]
+      # A copied composite is a group holding its objects (#380): the group, then its frame.
+      assert BuilderFixture.names(at_top) == ["baseline", "frame", :house, :shared, :panel]
 
       {:noreply, midway} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 2}, s)
 
-      assert BuilderFixture.names(midway) == [:house, :shared, "baseline", :panel]
+      assert BuilderFixture.names(midway) == [:house, :shared, "baseline", "frame", :panel]
 
       {:noreply, at_end} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, s)
 
-      assert BuilderFixture.names(at_end) == [:house, :shared, :panel, "baseline"]
+      assert BuilderFixture.names(at_end) == [:house, :shared, :panel, "baseline", "frame"]
     end
 
     test "a position outside the stack is clamped, because a client's number is not trusted",
@@ -607,10 +609,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, under} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => -5}, s)
 
-      assert BuilderFixture.names(under) == ["baseline", :house, :shared, :panel]
+      assert BuilderFixture.names(under) == ["baseline", "frame", :house, :shared, :panel]
 
       {:noreply, over} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 99}, s)
-      assert BuilderFixture.names(over) == [:house, :shared, :panel, "baseline"]
+      assert BuilderFixture.names(over) == [:house, :shared, :panel, "baseline", "frame"]
     end
 
     test "the selection and the disabled set follow the insert", %{socket: s} do
@@ -620,9 +622,9 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.disabled(s) == MapSet.new([1])
 
       {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
-      assert BuilderFixture.names(s) == ["baseline", :house, :shared, :panel]
-      assert BuilderFixture.selected(s) == 3
-      assert BuilderFixture.disabled(s) == MapSet.new([2])
+      assert BuilderFixture.names(s) == ["baseline", "frame", :house, :shared, :panel]
+      assert BuilderFixture.selected(s) == 4
+      assert BuilderFixture.disabled(s) == MapSet.new([3])
     end
 
     test "an insert below the selection leaves it where it is", %{socket: s} do
@@ -640,7 +642,7 @@ defmodule Visualize.Chart.BuilderTest do
     test "an insert survives the next host render", %{host: host, socket: s} do
       {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 1}, s)
       {:ok, s} = Builder.update(host, s)
-      assert BuilderFixture.names(s) == [:house, "baseline", :shared, :panel]
+      assert BuilderFixture.names(s) == [:house, "baseline", "frame", :shared, :panel]
     end
   end
 
@@ -1123,7 +1125,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, copied} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
 
+      # A copied composite is a group holding copies of its sites (#380): the group named
+      # for the entry, the referenced site for its entry, the local one for the composite.
       assert BuilderFixture.names(copied) == [
+               "Charts::pair",
                "Frame::wide",
                "Charts::pair",
                :house,
@@ -1131,19 +1136,32 @@ defmodule Visualize.Chart.BuilderTest do
                :panel
              ]
 
-      [wide, pair | rest] = copied.assigns.uses
+      [group | rest] = copied.assigns.uses
+      assert Stack.group?(group)
+      [wide, pair] = Stack.children(group)
       assert %Use{ref: nil, local: %{frame: %{size: %{width: 900}}}} = wide
       assert %Use{ref: nil, local: %{version: 1}} = pair
-      assert length(Enum.uniq(Enum.map([wide, pair | rest], & &1.id))) == 5
-      # The composite's own vars join the chart's.
-      assert copied.assigns.stack_vars == %{unit: %{default: "%"}}
+      assert length(Enum.uniq(Enum.map([group, wide, pair | rest], & &1.id))) == 6
+      # The composite's own vars are the group's, declared by it in the design.
+      assert get_in(group.local, [:composite, :vars]) == %{unit: %{default: "%"}}
+      assert copied.assigns.stack_vars == %{}
+      assert BuilderFixture.design(copied).vars == %{unit: %{default: "%"}}
       assert copied.assigns.notice == nil
 
       # Editing the copy never reaches the library: the entry is what it was.
       # The copy is put on top, so it owns `frame.size` and the edit lands in it (§18.15).
       {:noreply, top} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, s)
-      assert BuilderFixture.names(top) == [:house, :shared, :panel, "Frame::wide", "Charts::pair"]
-      {:noreply, s2} = Builder.handle_event("select_layer", %{"index" => "3"}, top)
+
+      assert BuilderFixture.names(top) == [
+               :house,
+               :shared,
+               :panel,
+               "Charts::pair",
+               "Frame::wide",
+               "Charts::pair"
+             ]
+
+      {:noreply, s2} = Builder.handle_event("select_layer", %{"index" => "4"}, top)
       {:noreply, s2} = Builder.handle_event("select_node", %{"node" => "frame.size"}, s2)
 
       {:noreply, edited} =
@@ -1153,7 +1171,7 @@ defmodule Visualize.Chart.BuilderTest do
                Recording.get({:frame, 1}, %{})
 
       assert %Use{ref: nil, local: %{frame: %{size: %{width: 500}}}} =
-               Enum.at(edited.assigns.uses, 3)
+               edited.assigns.uses |> Enum.at(3) |> Stack.children() |> hd()
 
       # A link is the reference site as before, one use for the whole composite.
       {:noreply, linked} =
@@ -1198,7 +1216,8 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render(s)
 
       # The row: locked class, the lock button that opens it, the title saying so.
-      assert html =~ ~s(class="vis-builder-layer vis-builder-layer-locked" data-builder-layer="3")
+      assert html =~
+               ~s(class="vis-builder-layer vis-builder-layer-locked" style="--vis-builder-depth: 0" data-builder-layer="3")
 
       assert html =~
                ~s(class="vis-builder-layer-lock" title="Open Frame::wide — from the library, edited by opening it")
@@ -1206,7 +1225,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-click="open_layer" phx-value-index="3")
 
       assert html =~
-               "Frame::wide, layer 4 of 4: Enter to edit, arrows to move, Right to show what it declares, drag to reorder, from the library: o to open"
+               "Frame::wide, object 4 of 4: Enter to edit, arrows to move, Right to show what it declares, drag to reorder, from the library: o to open"
 
       assert length(Regex.scan(~r/vis-builder-layer-lock"/, html)) == 1
 
@@ -1371,26 +1390,30 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.design(placed).frame.legend == %{scale: :c, position: :top_right}
     end
 
-    test "the + menu and the palette's keys place a component in its home region", %{socket: s} do
+    test "the palette's keys place a component in its home region (the + menu of kinds is gone, #380)",
+         %{socket: s} do
       # An x axis at the bottom replaces shared's, so it is placed above shared.
-      {:noreply, added} = Builder.handle_event("add_site", %{"kind" => "axis"}, s)
+      {:noreply, added} =
+        Builder.handle_event("component_key", %{"key" => "Insert", "component" => "axis"}, s)
+
       assert %Use{local: %{axis: %{scale: :x, side: :bottom}}} = Enum.at(added.assigns.uses, 2)
       assert added.assigns.node_label =~ ~r/^frame\.axes\[\d\]$/
 
-      {:noreply, added} = Builder.handle_event("add_site", %{"kind" => "label"}, s)
+      {:noreply, added} =
+        Builder.handle_event("component_key", %{"key" => "Insert", "component" => "label"}, s)
+
       assert %Use{local: %{label: %{anchor: {:axis, :x}}}} = Enum.at(added.assigns.uses, 1)
 
-      {:noreply, added} = Builder.handle_event("add_site", %{"kind" => "mark"}, s)
-      assert %Use{local: %{mark: %{type: :line}}} = Enum.at(added.assigns.uses, 1)
+      {:noreply, added} =
+        Builder.handle_event("component_key", %{"key" => "Insert", "component" => "mark:line"}, s)
 
-      # Any other kind is the empty site it was.
-      {:noreply, added} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
-      assert %Use{local: %{style: %{}}} = Enum.at(added.assigns.uses, 1)
+      assert %Use{local: %{mark: %{type: :line}}} = Enum.at(added.assigns.uses, 1)
 
       {:noreply, keyed} =
         Builder.handle_event("component_key", %{"key" => "Insert", "component" => "title"}, s)
 
       assert %Use{local: %{label: %{anchor: :title}}} = Enum.at(keyed.assigns.uses, 1)
+      refute BuilderFixture.render(s) =~ "add_site"
     end
 
     test "a library entry dropped on the graph is its copy, snapped where the region names a place",
@@ -1478,11 +1501,20 @@ defmodule Visualize.Chart.BuilderTest do
                Enum.at(s4.assigns.uses, 1)
 
       # `+ mark` guesses the same; a chart with no source places the type alone.
-      {:noreply, s5} = Builder.handle_event("add_site", %{"kind" => "mark"}, s)
+      {:noreply, s5} =
+        Builder.handle_event("component_key", %{"key" => "Insert", "component" => "mark:line"}, s)
+
       assert %Use{local: %{mark: %{type: :line, data: :primary}}} = Enum.at(s5.assigns.uses, 1)
 
       bare = BuilderFixture.socket([{:base, %{frame: %{kind: :cartesian}}}])
-      {:noreply, s6} = Builder.handle_event("add_site", %{"kind" => "mark"}, bare)
+
+      {:noreply, s6} =
+        Builder.handle_event(
+          "component_key",
+          %{"key" => "Insert", "component" => "mark:line"},
+          bare
+        )
+
       assert %Use{local: %{mark: %{type: :line}}} = Enum.at(s6.assigns.uses, 1)
       assert s6.assigns.guessed == MapSet.new()
     end
@@ -1735,7 +1767,7 @@ defmodule Visualize.Chart.BuilderTest do
       refute BuilderFixture.render(closed) =~ "vis-builder-layer-detail"
 
       # An empty site declares nothing yet.
-      {:noreply, empty} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+      empty = BuilderFixture.with_object(s, :style)
       {:noreply, empty} = Builder.handle_event("toggle_layer_detail", %{"index" => "1"}, empty)
       assert BuilderFixture.render(empty) =~ "declares nothing yet"
     end
@@ -2094,7 +2126,7 @@ defmodule Visualize.Chart.BuilderTest do
           sources: %{primary: BuilderFixture.sources().primary, other: [%{b: 1, a: 2}]}
         )
 
-      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
+      s = BuilderFixture.with_object(s, :source)
       html = BuilderFixture.render(s)
 
       # A list of the pool's names in ls order with none first, and a box beneath for a
@@ -2178,7 +2210,7 @@ defmodule Visualize.Chart.BuilderTest do
                :primary
 
       # A style site still types its name, with no list.
-      {:noreply, style} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+      style = BuilderFixture.with_object(s, :style)
       style_html = BuilderFixture.render(style)
       assert style_html =~ ~s(type="text" name="key" class="vis-builder-declared-name")
       refute style_html =~ ~s(class="vis-builder-pool")
@@ -2193,7 +2225,7 @@ defmodule Visualize.Chart.BuilderTest do
     test "selecting a layer opens the layer's context, and a host may hide a source's default" do
       pool = %{primary: BuilderFixture.sources().primary, other: [%{b: 1, a: 2}]}
       s = BuilderFixture.socket(BuilderFixture.layers(), sources: pool)
-      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
+      s = BuilderFixture.with_object(s, :source)
       assert s.assigns.context == :inspect
 
       # A colour picked leaves the context on the chooser; selecting the site brings the
@@ -2739,7 +2771,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("rename_source", %{"source" => "source_1", "name" => "signal_1"}, s)
 
       # The declared-as list offers the signal beside the host's pool.
-      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
+      s = BuilderFixture.with_object(s, :source)
       html = BuilderFixture.render(s)
       assert html =~ ~s(<input type="radio" name="key" value="signal_1">)
       assert html =~ ~s(<input type="radio" name="key" value="primary">)
@@ -2756,7 +2788,10 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The signal draws: a mark over it renders, and the tick moves the rows.
       {:noreply, s} = Builder.handle_event("select_chart", %{"chart" => "1"}, s)
-      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "mark"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("component_key", %{"key" => "Insert", "component" => "mark:line"}, s)
+
       {:noreply, s} = Builder.handle_event("edit", %{"_target" => ["type"], "type" => "line"}, s)
 
       {:noreply, s} =
@@ -3240,42 +3275,146 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
-  describe "the + on the Layers title (spec/14 §18.8)" do
-    test "opens a menu of the single kinds, and adds an empty site below the selection" do
+  describe "the + on the selected chart's row, and the tree (spec/14 §18.8, #380)" do
+    test "+ adds an empty layer after the selected site's layer, selected and open; no kind is asked" do
       s = BuilderFixture.socket(BuilderFixture.layers())
       html = BuilderFixture.render(s)
 
       assert html =~
-               ~s(class="vis-builder-add" title="add an empty site below the selected layer")
+               ~s(class="vis-builder-add" title="add an empty layer: drag objects into it from the library" aria-label="add a layer" phx-click="new_layer")
 
       refute html =~ "vis-builder-add-menu"
-
-      {:noreply, s} = Builder.handle_event("adding", %{}, s)
-      html = BuilderFixture.render(s)
-      assert html =~ ~s(<div class="vis-builder-add-menu" role="menu")
-      assert html =~ ~s(phx-click="add_site" phx-value-kind="style")
-      refute html =~ ~s(phx-value-kind="composite")
-      refute html =~ ~s(phx-value-kind="design")
+      refute html =~ "add_site"
 
       {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
-      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
-      assert BuilderFixture.names(s) == [:house, :shared, "new style", :panel]
+      {:noreply, s} = Builder.handle_event("new_layer", %{}, s)
+      assert BuilderFixture.names(s) == [:house, :shared, "layer 1", :panel]
       assert BuilderFixture.selected(s) == 2
-      assert Enum.at(s.assigns.uses, 2).local == %{style: %{}}
-      assert s.assigns.adding == false
+      layer = Enum.at(s.assigns.uses, 2)
+      assert Stack.group?(layer) and Stack.children(layer) == []
+      assert MapSet.member?(s.assigns.expanded_sites, layer.id)
 
-      # Keyless, so not placed until named — the honest state (§19.3).
-      assert BuilderFixture.render(s) =~ "not placed: new style"
+      html = BuilderFixture.render(s)
+      # A group row: its toggle, its count, a drop target; an object row: its kind's glyph.
+      assert html =~
+               ~s(class="vis-builder-layer vis-builder-layer-selected vis-builder-layer-group" style="--vis-builder-depth: 0" data-builder-layer="2" data-builder-into="#{elem(layer.id, 1)}")
 
-      {:noreply, refused} = Builder.handle_event("add_site", %{"kind" => "composite"}, s)
-      assert refused.assigns.notice == "composite is not a kind a site can be"
+      assert html =~ ~s(phx-click="toggle_site" phx-value-index="2")
+      assert html =~ ~s(<span class="vis-builder-site-count" title="0 inside">0</span>)
+      assert html =~ ~s(aria-label="layer 1, layer 3 of 4, selected: Enter to edit)
+
+      # The fixture's bare sites are layers of one object, drawn as objects with no glyph of a kind.
+      assert html =~ ~s(aria-label="house, object 1 of 4: Enter to edit)
+
+      {:noreply, s2} = Builder.handle_event("new_layer", %{}, s)
+      assert BuilderFixture.names(s2) == [:house, :shared, "layer 1", "layer 2", :panel]
     end
 
-    test "with nothing selected the site is appended" do
+    test "with nothing selected the layer is appended" do
       s = BuilderFixture.socket([])
-      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "frame"}, s)
-      assert BuilderFixture.names(s) == ["new frame"]
+      {:noreply, s} = Builder.handle_event("new_layer", %{}, s)
+      assert BuilderFixture.names(s) == ["layer 1"]
       assert BuilderFixture.selected(s) == 0
+    end
+
+    test "objects dropped on a layer's row land inside it; between rows at that position; a group draws as a tree" do
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: Visualize.Chart.BuilderTest.Refs)
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      {:noreply, s} = Builder.handle_event("new_layer", %{}, s)
+      [_, _, _, layer] = s.assigns.uses
+      into = to_string(elem(layer.id, 1))
+
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"name" => "style:1", "into" => into, "as" => "link"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"name" => "scale:4", "into" => into, "as" => "link"}, s)
+
+      layer = Stack.get(s.assigns.uses, layer.id)
+      assert Enum.map(Stack.children(layer), & &1.ref) == [{:style, 1}, {:scale, 4}]
+
+      assert BuilderFixture.names(s) == [
+               :house,
+               :shared,
+               :panel,
+               "layer 1",
+               "Styles::thick",
+               "Scales::hour"
+             ]
+
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(<span class="vis-builder-site-count" title="2 inside">2</span>)
+
+      assert html =~
+               ~s(style="--vis-builder-depth: 1" data-builder-layer="4" data-builder-parent="#{into}")
+
+      assert html =~ ~s(class="vis-builder-site-kind" title="styles")
+      assert html =~ ~s(class="vis-builder-site-kind" title="scales")
+
+      # Between rows: before the row at that flat position, in its container.
+      {:noreply, s} =
+        Builder.handle_event("insert", %{"name" => "source:2", "at" => 5, "as" => "link"}, s)
+
+      layer = Stack.get(s.assigns.uses, layer.id)
+      assert Enum.map(Stack.children(layer), & &1.ref) == [{:style, 1}, {:source, 2}, {:scale, 4}]
+
+      # Collapsed, the rows under it are not drawn; the flat positions keep counting.
+      {:noreply, closed} = Builder.handle_event("toggle_site", %{"index" => "3"}, s)
+      html = BuilderFixture.render(closed)
+      refute html =~ ~s(data-builder-layer="4")
+      assert html =~ ~s(phx-click="toggle_site" phx-value-index="3")
+      assert html =~ "▸"
+
+      # A row dropped on a group's row moves into it; a group never into itself.
+      {:noreply, moved} = Builder.handle_event("reorder", %{"from" => 0, "into" => into}, s)
+
+      assert BuilderFixture.names(moved) == [
+               :shared,
+               :panel,
+               "layer 1",
+               "Styles::thick",
+               "Sources::alt",
+               "Scales::hour",
+               :house
+             ]
+
+      {:noreply, same} = Builder.handle_event("reorder", %{"from" => 3, "into" => into}, s)
+      assert same.assigns.uses == s.assigns.uses
+
+      # Moving by position across the tree: out at 0, then before the row standing at 4
+      # once it is out — Sources::alt — inside the layer.
+      {:noreply, m} = Builder.handle_event("reorder", %{"from" => 0, "to" => 4}, s)
+
+      assert BuilderFixture.names(m) == [
+               :shared,
+               :panel,
+               "layer 1",
+               "Styles::thick",
+               :house,
+               "Sources::alt",
+               "Scales::hour"
+             ]
+
+      assert Stack.parent_of(m.assigns.uses, hd(s.assigns.uses).id) == layer.id
+
+      # An object inside a layer is the design's, attributed to the object (§18.15): keyed,
+      # the linked style declares styles.thick, and an edit aimed at it is refused as locked.
+      {:noreply, k} = Builder.handle_event("select_layer", %{"index" => "4"}, s)
+
+      {:noreply, k} =
+        Builder.handle_event(
+          "set_key",
+          %{"_target" => ["key.other"], "key" => "", "key.other" => "thick"},
+          k
+        )
+
+      assert BuilderFixture.design(k).styles.thick == %{stroke_width: 5}
+      {:noreply, k} = Builder.handle_event("select_node", %{"node" => "styles.thick"}, k)
+
+      {:noreply, refused} =
+        Builder.handle_event("edit", %{"_target" => ["opacity"], "opacity" => "0.5"}, k)
+
+      assert refused.assigns.notice == "Styles::thick is from the library — open it to edit"
     end
   end
 
@@ -3306,10 +3445,10 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render(s)
 
       assert html =~
-               ~s(id="b-layers-row-0" class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="0" draggable="true" role="button" tabindex="0")
+               ~s(id="b-layers-row-0" class="vis-builder-layer vis-builder-layer-selected" style="--vis-builder-depth: 0" data-builder-layer="0" draggable="true" role="button" tabindex="0")
 
       assert html =~
-               ~s(aria-label="house, layer 1 of 3, selected: Enter to edit, arrows to move, Right to show what it declares, drag to reorder")
+               ~s(aria-label="house, object 1 of 3, selected: Enter to edit, arrows to move, Right to show what it declares, drag to reorder")
 
       assert html =~ ~s(phx-keydown="layer_key")
     end
@@ -3350,8 +3489,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, added} =
         Builder.handle_event("fragment_key", %{"key" => "Insert", "name" => "composite:1"}, s)
 
-      assert BuilderFixture.names(added) == [:house, :shared, "baseline", :panel]
-      assert %Use{ref: nil} = Enum.at(added.assigns.uses, 2)
+      # A copied composite is a group of its objects (#380).
+      assert BuilderFixture.names(added) == [:house, :shared, "baseline", "frame", :panel]
+      assert %Use{ref: nil} = group = Enum.at(added.assigns.uses, 2)
+      assert Stack.group?(group)
 
       {:noreply, linked} =
         Builder.handle_event("fragment_key", %{"key" => "I", "name" => "composite:1"}, s)
@@ -3431,7 +3572,7 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "a keyed site is written at its own path", %{socket: s} do
-      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "source"}, s)
+      s = BuilderFixture.with_object(s, :source)
       {:noreply, s} = Builder.handle_event("set_key", %{"key" => "other", "key.other" => ""}, s)
       site = Visualize.Chart.Builder.Stack.get(s.assigns.uses, s.assigns.selected)
       assert site.key == :other
@@ -3479,7 +3620,7 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "a site the design has no node of shows its own form, untagged", %{socket: s} do
-      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+      s = BuilderFixture.with_object(s, :style)
       html = BuilderFixture.render(s)
       refute html =~ "vis-builder-section-layer"
       assert html =~ ~s(<input type="hidden" name="_node" value="style">)
@@ -3527,7 +3668,7 @@ defmodule Visualize.Chart.BuilderTest do
          %{socket: s} do
       # A new, keyless style site shows its own form; the frame is `house`'s and `shared`'s,
       # and `shared` is the higher.
-      {:noreply, s} = Builder.handle_event("add_site", %{"kind" => "style"}, s)
+      s = BuilderFixture.with_object(s, :style)
 
       assert BuilderFixture.render(s) =~
                ~s(title="frame — this site declares none; opens the layer that does")
@@ -4179,7 +4320,10 @@ defmodule Visualize.Chart.BuilderTest do
              ]
 
       assert html =~ ~s(phx-click="add_source" phx-target="-1")
-      assert html =~ ~s(phx-click="add_site" phx-value-kind="mark" phx-target="-1")
+
+      assert html =~
+               ~s(phx-click="place" phx-value-component="mark:line" phx-value-region="plot" phx-target="-1")
+
       # Not a fault: no badge, no error list, Save sends.
       refute html =~ "vis-builder-node-needs"
       refute html =~ "vis-builder-errors"
@@ -4192,7 +4336,13 @@ defmodule Visualize.Chart.BuilderTest do
                "add a mark — a line, bars, points … over the data"
              ]
 
-      {:noreply, s2} = Builder.handle_event("add_site", %{"kind" => "mark"}, s1)
+      {:noreply, s2} =
+        Builder.handle_event(
+          "component_key",
+          %{"key" => "Insert", "component" => "mark:line"},
+          s1
+        )
+
       html = BuilderFixture.render(s2)
       assert step_words(html) == ["add axes — tick a side on the mark&#39;s page"]
       assert html =~ ~s(phx-click="select_node" phx-value-node="marks[0]" phx-target="-1")
@@ -4740,11 +4890,11 @@ defmodule Visualize.Chart.BuilderTest do
         end
 
       {:noreply, with_signal} = Builder.handle_event("add_source", %{}, s)
-      {:noreply, adding} = Builder.handle_event("adding", %{}, s)
+      {:noreply, layered} = Builder.handle_event("new_layer", %{}, s)
       {:noreply, expanded} = Builder.handle_event("expand_variable", %{"name" => "unit"}, s)
 
       htmls =
-        Enum.map(states ++ [with_signal, adding, expanded], &BuilderFixture.render/1) ++
+        Enum.map(states ++ [with_signal, layered, expanded], &BuilderFixture.render/1) ++
           Enum.map(Keyword.keys(BuilderFixture.cases()), &rendered/1)
 
       forms = htmls |> Enum.flat_map(&forms_in/1) |> Enum.uniq()
@@ -4885,14 +5035,18 @@ defmodule Visualize.Chart.BuilderTest do
       # A composite entry opens as its sites: the baseline is one inline frame site.
       assert BuilderFixture.layers(opened) == [{"local", %{frame: %{kind: :cartesian}}}]
 
-      # A drop is a copy: the site's own body, and nothing the store adds (spec/14 §18.17).
+      # A drop is a copy: a group holding the site's own body, and nothing the store adds
+      # (spec/14 §18.17, #380); the group flattens to what its object says.
       {:noreply, added} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, socket)
 
+      # The group reads as what it flattens to, a design-level composite's version with it.
       assert BuilderFixture.layers(added) ==
-               layers ++ [{"baseline", %{frame: %{kind: :cartesian}}}]
+               layers ++ [{"baseline", %{version: 1, frame: %{kind: :cartesian}}}]
 
-      assert %Use{ref: nil, local: %{frame: %{kind: :cartesian}}} = List.last(added.assigns.uses)
+      group = List.last(added.assigns.uses)
+      assert Stack.group?(group)
+      assert [%Use{ref: nil, local: %{frame: %{kind: :cartesian}}}] = Stack.children(group)
       assert added.assigns.notice == nil
 
       # A link resolves through the store, flattened.

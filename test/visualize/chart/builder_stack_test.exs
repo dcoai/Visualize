@@ -36,9 +36,14 @@ defmodule Visualize.Chart.Builder.StackTest do
       assert names == ~w(house shared panel)
     end
 
-    test "a layer with no name is its position, as explain/1 names it" do
-      html =
-        render_component(&Layers.panel/1, %{id: "l", layers: [%{version: 1}, %{theme: :dark}]})
+    test "a layer with no name is its position, as seed/1 and explain/1 name it" do
+      {uses, labels} = Visualize.Chart.Builder.Stack.seed([%{version: 1}, %{theme: :dark}])
+
+      rows =
+        for {use, row} <- Enum.zip(uses, BuilderFixture.rows()),
+            do: %{row | name: Visualize.Chart.Builder.Stack.label(labels, use)}
+
+      html = render_component(&Layers.panel/1, %{id: "l", rows: rows})
 
       assert html =~ ~s(<span class="vis-builder-layer-name">0</span>)
       assert html =~ ~s(<span class="vis-builder-layer-name">1</span>)
@@ -48,10 +53,10 @@ defmodule Visualize.Chart.Builder.StackTest do
       html = rendered(:layers_disabled)
 
       assert html =~
-               ~s(class="vis-builder-layer vis-builder-layer-disabled" data-builder-layer="0")
+               ~s(class="vis-builder-layer vis-builder-layer-disabled" style="--vis-builder-depth: 0" data-builder-layer="0")
 
       assert html =~
-               ~s(class="vis-builder-layer vis-builder-layer-selected" data-builder-layer="2")
+               ~s(class="vis-builder-layer vis-builder-layer-selected" style="--vis-builder-depth: 0" data-builder-layer="2")
 
       # The toggle is an eye (spec/14 §18.8): struck for a disabled layer, open otherwise;
       # the word stays the button's text.
@@ -79,7 +84,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       targeted =
         render_component(&Layers.panel/1, %{
           id: "l",
-          layers: BuilderFixture.layers(),
+          rows: BuilderFixture.rows(),
           target: "c1"
         })
 

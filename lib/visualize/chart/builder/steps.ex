@@ -59,8 +59,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         ),
         if(marks == [],
           do:
-            step([:marks], "add a mark — a line, bars, points … over the data", "add_site", %{
-              "kind" => "mark"
+            step([:marks], "add a mark — a line, bars, points … over the data", "place", %{
+              "component" => "mark:line",
+              "region" => "plot"
             }),
           else: []
         ),

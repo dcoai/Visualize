@@ -271,6 +271,16 @@ defmodule Visualize.Chart.Composite do
   # flattened first — through the trail, so a chain that returns to an id is a cycle. A
   # body the store no longer holds is a mask of everything: the site stands for its local
   # node alone, and the id is reported.
+  # An inline composite — a group of the builder's tree (#380) — flattens in place, its
+  # own mask and bindings over the flat result as a referenced composite's are.
+  defp layer(%Use{ref: nil, local: %{composite: %{uses: uses}} = local} = use, fetch, trail)
+       when is_list(uses) do
+    case flatten(local, fetch, trail) do
+      {:ok, flat, %{missing: nested}} -> {:ok, Use.over(%{use | local: %{}}, flat), nested}
+      {:error, _} = error -> error
+    end
+  end
+
   defp layer(%Use{ref: nil} = use, _fetch, _trail), do: {:ok, Use.over(use, %{}), []}
 
   defp layer(%Use{ref: ref} = use, fetch, trail) do

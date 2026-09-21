@@ -557,6 +557,18 @@ defmodule Visualize.Hooks.Builder do
           return;
         }
 
+        // A drop on the middle of a group's row lands inside it (spec/14 §18.17, #380).
+        const into = this.intoAt(e);
+        if (into !== null) {
+          if (this.from !== null) {
+            this.push('reorder', { from: this.from, into: into });
+          } else {
+            const stored = this.dragged(e);
+            if (stored !== null) this.push('insert', { name: stored, into: into, as: this.dropAs(e) });
+          }
+          return;
+        }
+
         const at = this.insertionPoint(e);
 
         // A move within the stack. `at` is a gap in the list as it stands; once the dragged
@@ -570,6 +582,17 @@ defmodule Visualize.Hooks.Builder do
         const stored = this.dragged(e);
         if (stored === null) return;
         this.push('insert', { name: stored, at: at, as: this.dropAs(e) });
+      },
+
+      // The group whose row's middle third the pointer is over, by its id, or null.
+      intoAt(e) {
+        for (const row of this.layers()) {
+          const into = row.getAttribute('data-builder-into');
+          if (!into) continue;
+          const box = row.getBoundingClientRect();
+          if (e.clientY >= box.top + box.height / 3 && e.clientY <= box.bottom - box.height / 3) return into;
+        }
+        return null;
       },
 
       insertAtCaret(box, text) {

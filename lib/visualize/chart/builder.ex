@@ -175,7 +175,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
          library_view: :group,
          style_entry: nil,
          field: nil,
-         adding: false,
          menu: nil,
          context: :inspect,
          library_open: true,
@@ -183,6 +182,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
          collapsed: MapSet.new(),
          guessed: MapSet.new(),
          expanded_layers: MapSet.new(),
+         expanded_sites: MapSet.new(),
+         added_sites: [],
          mask_layers: MapSet.new(),
          expanded: MapSet.new(),
          find: "",
@@ -390,10 +391,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
                     :if={row.selected?}
                     type="button"
                     class="vis-builder-add"
-                    title="add an empty site below the selected layer"
-                    aria-label="add a site"
-                    aria-expanded={to_string(@adding)}
-                    phx-click="adding"
+                    title="add an empty layer: drag objects into it from the library"
+                    aria-label="add a layer"
+                    phx-click="new_layer"
                     phx-target={@myself}
                   >+</button>
                   <button
@@ -406,21 +406,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
                     phx-target={@myself}
                   >×</button>
                 </div>
-                <div :if={row.selected? and @adding} class="vis-builder-add-menu" role="menu" aria-label="a kind to add">
-                  <button
-                    :for={kind <- Stack.kinds() -- [:composite]}
-                    type="button"
-                    class="vis-builder-add-kind"
-                    role="menuitem"
-                    phx-click="add_site"
-                    phx-value-kind={kind}
-                    phx-target={@myself}
-                  >{kind}</button>
-                </div>
                 <Layers.panel
                   :if={row.selected? and row.expanded}
                   id={@id <> "-layers"}
-                  layers={@layers}
+                  rows={@tree_rows}
+                  hidden={@hidden_index}
                   selected={@selected_index}
                   disabled={@disabled}
                   locked={@locked}
@@ -973,7 +963,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         node ->
           owner = socket.assigns |> owned(fetch, [node]) |> Map.get(node.path)
-          at = Enum.find_index(uses, &(&1.id == owner))
+          at = Stack.index_of(uses, owner)
           socket = if at, do: select(socket, at), else: socket
           {:noreply, opened(socket, label)}
       end
@@ -1172,7 +1162,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def handle_event("menu", %{"layer" => index} = params, socket) do
-      case Enum.at(socket.assigns.uses, position(index)) do
+      case row_use(socket.assigns.uses, index) do
         nil ->
           {:noreply, socket}
 
@@ -1356,7 +1346,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # select, the arrows move and focus follows the row to where the layer went.
     def handle_event("layer_key", %{"key" => key, "index" => index}, socket) do
       at = position(index)
-      count = length(socket.assigns.uses)
+      count = length(Stack.all(socket.assigns.uses))
 
       case key do
         enter when enter in ["Enter", " "] ->
@@ -1392,7 +1382,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # chart level, as the library click opens it, and saving it reaches every chart that
     # references it. A layer with no reference has nothing to open.
     def handle_event("open_layer", %{"index" => index}, socket) do
-      case Enum.at(socket.assigns.uses, position(index)) do
+      case row_use(socket.assigns.uses, index) do
         %Use{ref: ref} when ref != nil ->
           case Store.get(socket.assigns.store, ref) do
             {:ok, entry} ->
@@ -1427,7 +1417,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A row opens or closes on what its layer declares (spec/14 §18.8).
     def handle_event("toggle_layer_mask", %{"index" => index}, socket) do
-      case Enum.at(socket.assigns.uses, position(index)) do
+      case row_use(socket.assigns.uses, index) do
         nil ->
           {:noreply, socket}
 
@@ -1442,7 +1432,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def handle_event("toggle_layer_detail", %{"index" => index}, socket) do
-      case Enum.at(socket.assigns.uses, position(index)) do
+      case row_use(socket.assigns.uses, index) do
         nil ->
           {:noreply, socket}
 
@@ -1460,14 +1450,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # (spec/14 §18.8) — the frame's page for the frame and what it holds, a root's own for
     # the rest, the variables panel for vars.
     def handle_event("open_declared", %{"index" => index, "kind" => kind}, socket) do
-      at = position(index)
-
-      case Enum.at(socket.assigns.uses, at) do
+      case row_use(socket.assigns.uses, index) do
         nil ->
           {:noreply, socket}
 
         _use ->
-          socket = select(socket, at)
+          socket = select(socket, position(index))
 
           # A kind opens as its root tab does (§18.13): the frame's tab holds the frame's parts,
           # the scales and the axes; vars are the variables panel.
@@ -1488,7 +1476,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def handle_event("toggle_layer", %{"index" => index}, socket) do
-      case Enum.at(socket.assigns.uses, position(index)) do
+      case row_use(socket.assigns.uses, index) do
         nil ->
           {:noreply, socket}
 
@@ -1500,6 +1488,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("reorder", %{"scope" => "style", "from" => from, "to" => to}, socket) do
       {:noreply, restacked(socket, &shift(&1, position(from), position(to)))}
+    end
+
+    # A row dropped on a group's row moves into it, at the end; never into itself or what
+    # it holds, never into a referenced group (spec/14 §18.17, #380).
+    def handle_event("reorder", %{"from" => from, "into" => into}, socket) do
+      %{uses: uses} = socket.assigns
+
+      case {row_use(uses, from), Stack.get(uses, decode_id(into))} do
+        {%Use{id: id} = moved, %Use{ref: nil, id: group}} ->
+          if id == group or under?(uses, group, id) do
+            {:noreply, socket}
+          else
+            {:noreply,
+             assign(
+               socket,
+               :uses,
+               uses |> Stack.remove(id) |> Stack.insert({:into, group}, moved)
+             )}
+          end
+
+        _other ->
+          {:noreply, socket}
+      end
     end
 
     def handle_event("reorder", %{"from" => from, "to" => to}, socket) do
@@ -1573,12 +1584,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A library entry into the stack (spec/14 §18.17): a copy unless a link is asked for;
     # at the gap given, or above the selected layer when the drop was on the graph.
     def handle_event("insert", %{"name" => submitted} = params, socket) do
-      at =
-        case Map.get(params, "at") do
-          nil -> (Stack.index_of(socket.assigns.uses, socket.assigns.selected) || -1) + 1
-          given -> position(given)
-        end
-
+      at = drop_target(socket, params)
       link? = Map.get(params, "as") == "link"
 
       case fetch(socket.assigns.store, submitted) do
@@ -1743,44 +1749,39 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The + on the Layers title: a menu of the single kinds, and an empty inline site of the
     # chosen one directly below the selected layer, selected and opened (spec/14 §18.8).
-    def handle_event("adding", _params, socket) do
-      {:noreply, update(socket, :adding, &(not &1))}
+    # A + on the selected chart's row adds an empty layer (spec/14 §18.8, #380): a group
+    # with no objects, after the selected site's layer, selected; nothing asks for a kind.
+    def handle_event("new_layer", _params, socket) do
+      %{uses: uses, labels: labels, selected: selected} = socket.assigns
+      use = %{Use.new(nil, uses) | ref: nil, local: Stack.group()}
+      top = top_of(uses, selected)
+      n = uses |> Stack.all() |> Enum.count(&Stack.group?(&1.use)) |> Kernel.+(1)
+
+      {:noreply,
+       assign(socket,
+         uses: Stack.insert(uses, top, use),
+         labels: Map.put(labels, use.id, "layer #{n}"),
+         selected: use.id,
+         expanded_sites: MapSet.put(socket.assigns.expanded_sites, use.id),
+         node_label: "design",
+         facet: nil,
+         field: nil,
+         context: :inspect,
+         notice: nil
+       )}
     end
 
-    def handle_event("add_site", %{"kind" => submitted}, socket) do
-      case Enum.find(Stack.kinds() -- [:composite], &(to_string(&1) == submitted)) do
+    # A group's row opens or closes on what it holds (spec/14 §18.8).
+    def handle_event("toggle_site", %{"index" => index}, socket) do
+      case row_use(socket.assigns.uses, index) do
         nil ->
+          {:noreply, socket}
+
+        %Use{id: id} ->
           {:noreply,
-           assign(socket, notice: "#{submitted} is not a kind a site can be", adding: false)}
-
-        # An axis, a label and a mark are placed as a drop in their home region would
-        # place them (spec/14 §18.16); any other kind is the empty site it was.
-        :axis ->
-          {:noreply, placed(socket, :axis, Place.home(:axis), {0, 0})}
-
-        :label ->
-          {:noreply, placed(socket, :label, Place.home(:label), {0, 0})}
-
-        :mark ->
-          {:noreply, placed(socket, {:mark, :line}, Place.home({:mark, :line}), {0, 0})}
-
-        kind ->
-          %{uses: uses, labels: labels, selected: selected} = socket.assigns
-          use = %{Use.new(nil, uses) | ref: nil, local: Stack.empty(kind)}
-          at = (Stack.index_of(uses, selected) || length(uses) - 1) + 1
-
-          {:noreply,
-           assign(socket,
-             uses: List.insert_at(uses, at, use),
-             labels: Map.put(labels, use.id, "new #{kind}"),
-             selected: use.id,
-             node_label: "design",
-             facet: nil,
-             field: nil,
-             context: :inspect,
-             adding: false,
-             notice: nil
-           )}
+           update(socket, :expanded_sites, fn open ->
+             if MapSet.member?(open, id), do: MapSet.delete(open, id), else: MapSet.put(open, id)
+           end)}
       end
     end
 
@@ -1817,9 +1818,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             :ok ->
               {region, _point} = where(socket, params, nil)
               link? = Map.get(params, "as") == "link"
-              at = (Stack.index_of(socket.assigns.uses, socket.assigns.selected) || -1) + 1
+              at = {:after, socket.assigns.selected}
               socket = if link?, do: linked(socket, entry, at), else: copied(socket, entry, at)
-              {:noreply, if(link?, do: socket, else: snapped(socket, entry, at, region))}
+              {:noreply, if(link?, do: socket, else: snapped(socket, region))}
 
             {:refused, notice} ->
               {:noreply, assign(socket, :notice, notice)}
@@ -2034,7 +2035,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       at =
         case Map.fetch(params, "_index") do
-          {:ok, index} -> Enum.at(uses, position(index)) |> then(&(&1 && &1.id))
+          {:ok, index} -> row_use(uses, index) |> then(&(&1 && &1.id))
           :error -> socket.assigns.selected
         end
 
@@ -2059,9 +2060,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # the one surface that writes `Use.vars`.
     def handle_event("bind_site", %{"site" => site, "_target" => [target]} = params, socket) do
       %{uses: uses, labels: labels, store: store} = socket.assigns
-      index = position(site)
 
-      with %Use{} = use <- Enum.at(uses, index),
+      with %Use{} = use <- row_use(uses, site),
            {name, control} <- control(target),
            %{free: free} <- Enum.find(Stack.sites([use], labels, Stack.fetch(store)), & &1),
            %{} = var <- Enum.find(free, &(to_string(&1.name) == name)) do
@@ -2341,7 +2341,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         locked: locked(assigns.uses),
         expanded_index: expanded_index(assigns),
         placed_layers: placed_layers(assigns),
-        layer_masks: layer_masks(assigns)
+        layer_masks: layer_masks(assigns),
+        tree_rows: tree_rows(assigns),
+        hidden_index: hidden_index(assigns)
       }
     end
 
@@ -2351,17 +2353,58 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp layer_masks(%{uses: uses, mask_layers: open, store: store}) do
       fetch = Stack.fetch(store)
 
-      for {use, index} <- Enum.with_index(uses), MapSet.member?(open, use.id), into: %{} do
+      for %{use: use, index: index} <- Stack.all(uses), MapSet.member?(open, use.id), into: %{} do
         {index, %{rows: Masks.rows(Stack.unmasked(use, fetch), use), all?: use.mask == :all}}
       end
     end
 
     # The positions whose rows are open on what they declare (spec/14 §18.8).
     defp expanded_index(%{uses: uses, expanded_layers: open}) do
-      uses
-      |> Enum.with_index()
-      |> Enum.filter(fn {use, _index} -> MapSet.member?(open, use.id) end)
-      |> MapSet.new(fn {_use, index} -> index end)
+      for %{use: use, index: index} <- Stack.all(uses),
+          MapSet.member?(open, use.id),
+          into: MapSet.new(),
+          do: index
+    end
+
+    # The rows of the tree (spec/14 §18.8, #380): every site by flat position with its
+    # depth, its name, whether it is a group and what it holds, whether it is open.
+    defp tree_rows(%{uses: uses, labels: labels, expanded_sites: open}) do
+      for %{use: use, depth: depth, parent: parent} <- Stack.all(uses) do
+        %{
+          name: Stack.label(labels, use),
+          depth: depth,
+          parent: parent,
+          group?: Stack.group?(use),
+          count: length(Stack.children(use)),
+          open?: MapSet.member?(open, use.id),
+          kind: site_kind(use),
+          id: use.id
+        }
+      end
+    end
+
+    # A row of a group hides its rows while the group is closed: the flat positions of
+    # every site under a closed group.
+    defp hidden_index(%{uses: uses, expanded_sites: open}) do
+      rows = Stack.all(uses)
+
+      closed =
+        for %{use: use} <- rows, Stack.group?(use), not MapSet.member?(open, use.id), do: use.id
+
+      hidden = fn row, hidden ->
+        row.parent != nil and (row.parent in closed or MapSet.member?(hidden, row.parent))
+      end
+
+      rows
+      |> Enum.reduce(MapSet.new(), fn row, acc ->
+        if hidden.(row, acc), do: MapSet.put(acc, row.use.id), else: acc
+      end)
+      |> then(fn ids ->
+        for %{use: use, index: index} <- rows,
+            MapSet.member?(ids, use.id),
+            into: MapSet.new(),
+            do: index
+      end)
     end
 
     # Each layer's own contribution placed where the design keeps its kind, by position,
@@ -2369,7 +2412,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # composite is what it flattens to, as the stack reads it (#283).
     defp placed_layers(%{uses: uses, store: store}) do
       fetch = Stack.fetch(store)
-      for use <- uses, do: Stack.contribution(use, fetch)
+      for %{use: use} <- Stack.all(uses), do: Stack.contribution(use, fetch)
     end
 
     # The selected site for its context: what it contributes before its mask, and what it
@@ -2522,18 +2565,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp disabled(uses) do
-      uses
-      |> Enum.with_index()
-      |> Enum.reject(fn {use, _index} -> Stack.enabled?(use) end)
-      |> MapSet.new(fn {_use, index} -> index end)
+      for %{use: use, index: index} <- Stack.all(uses),
+          not Stack.enabled?(use),
+          into: MapSet.new(),
+          do: index
     end
 
     # The positions whose site references a library entry: locked in the chart (§18.8).
     defp locked(uses) do
-      uses
-      |> Enum.with_index()
-      |> Enum.filter(fn {use, _index} -> Stack.locked?(use) end)
-      |> MapSet.new(fn {_use, index} -> index end)
+      for %{use: use, index: index} <- Stack.all(uses),
+          Stack.locked?(use),
+          into: MapSet.new(),
+          do: index
     end
 
     # A composite or a design is applied, so its faults are the design's; any other kind is
@@ -2793,6 +2836,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- writes --------------------------------------------------------------------------
 
+    # Whether a site stands under another, at any depth.
+    defp under?(uses, ancestor, id) do
+      case Stack.parent_of(uses, ancestor) do
+        nil -> false
+        ^id -> true
+        parent -> under?(uses, parent, id)
+      end
+    end
+
+    # The site at a flat position of the tree (spec/14 §18.8, #380), or nil.
+    defp row_use(uses, index) do
+      case Enum.at(Stack.all(uses), position(index)) do
+        nil -> nil
+        row -> row.use
+      end
+    end
+
     # A position arrives as a string from a `phx-value-index` and as a number from the hook.
     defp position(index) when is_integer(index), do: index
 
@@ -2807,7 +2867,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # Selecting a layer closes an opened entry: the two are one editing target.
     defp select(socket, index) do
-      case Enum.at(socket.assigns.uses, index) do
+      case row_use(socket.assigns.uses, index) do
         nil ->
           socket
 
@@ -2980,10 +3040,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
             true ->
               site = %{Use.new(nil, uses) | ref: nil, local: %{gradient: gradient}, key: name}
-              at = (Stack.index_of(uses, selected) || length(uses) - 1) + 1
 
               assign(socket,
-                uses: List.insert_at(uses, at, site),
+                uses: Stack.insert(uses, selected, site),
                 labels: Map.put(labels, site.id, "gradient #{name}")
               )
           end
@@ -3284,7 +3343,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp owner_of(_leaves, _placed, _uses, []), do: nil
 
     defp owner_of(leaves, placed, uses, path) do
-      order = uses |> Enum.map(& &1.id) |> Enum.with_index() |> Map.new()
+      # The tree's flat order (#380): an object inside a group stands where its row does.
+      order = uses |> Stack.all() |> Map.new(&{&1.use.id, &1.index})
 
       carried =
         if Enum.all?(path, &is_atom/1),
@@ -3513,14 +3573,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
           id -> Stack.index_of(uses, id) || 0
         end
 
-      {issued, _} =
-        Enum.map_reduce(sites, uses, fn site, among ->
-          use = %{Use.new(nil, among) | ref: nil, local: %{site.kind => site.body}, key: site.key}
-          {use, among ++ [use]}
+      # Beneath the owner: each before the row that stands at its position (#380).
+      {uses, issued} =
+        Enum.reduce(sites, {uses, []}, fn site, {uses, issued} ->
+          use = %{Use.new(nil, uses) | ref: nil, local: %{site.kind => site.body}, key: site.key}
+          {Stack.insert_at(uses, owner + length(issued), use), issued ++ [use]}
         end)
 
       assign(socket,
-        uses: List.flatten(List.insert_at(uses, owner, issued)),
+        uses: uses,
         labels: Enum.reduce(issued, labels, &Map.put(&2, &1.id, "new #{site_kind(&1)}"))
       )
     end
@@ -3576,29 +3637,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case Place.node(component, region, design, point) do
         {:sites, sites} ->
           %{uses: uses, labels: labels, selected: selected} = socket.assigns
-          above_selected = (Stack.index_of(uses, selected) || length(uses) - 1) + 1
-          at = max(above_selected, above_replaced(socket, design, sites))
+          # After the selected site, or after the layer whose axis the drop replaces when
+          # that stands higher (§8.2); each issued site after the one before it (#380).
+          after_id = highest_of(uses, [selected | replaced_owners(socket, design, sites)])
 
-          {issued, _} =
-            Enum.map_reduce(sites, uses, fn site, among ->
+          {uses, issued} =
+            Enum.reduce(sites, {uses, []}, fn site, {uses, issued} ->
               use = %{
-                Use.new(nil, among)
+                Use.new(nil, uses)
                 | ref: nil,
                   local: %{site.kind => site.body},
                   key: site.key
               }
 
-              {use, among ++ [use]}
+              previous = if issued == [], do: after_id, else: List.last(issued).id
+              {Stack.insert(uses, previous, use), issued ++ [use]}
             end)
 
           last = List.last(issued)
 
           socket
           |> assign(
-            uses: List.flatten(List.insert_at(uses, at, issued)),
+            uses: uses,
             labels: Enum.reduce(issued, labels, &Map.put(&2, &1.id, "new #{site_kind(&1)}")),
             selected: last.id,
-            adding: false,
             notice: nil
           )
           |> opened_placed(component, last)
@@ -3607,20 +3669,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:legend, node} ->
           socket
           |> update_layer([:frame], :legend, {:ok, node})
-          |> assign(adding: false, notice: nil)
+          |> assign(notice: nil)
           |> opened("frame.legend")
 
         {:error, :no_scale} ->
-          assign(socket, notice: "a legend needs a colour scale", adding: false)
+          assign(socket, notice: "a legend needs a colour scale")
       end
     end
 
+    defp site_kind(%Use{ref: {kind, _n}}) when is_atom(kind), do: kind
     defp site_kind(%Use{local: local}), do: local |> Map.keys() |> List.first()
 
     # The gap above the layer that owns an axis the placed one replaces — its `{scale,
     # side}` is an axis's identity in the cascade — or 0 when nothing is replaced.
-    defp above_replaced(socket, design, sites) do
-      %{uses: uses, store: store} = socket.assigns
+    # The owners of the axes a placed axis replaces — the same scale and side (§8.2).
+    defp replaced_owners(socket, design, sites) do
+      %{store: store} = socket.assigns
       axes = design |> Editor.nodes() |> Enum.filter(&(&1.kind == :axis))
       owners = owned(socket.assigns, Stack.fetch(store), axes)
 
@@ -3630,10 +3694,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
         for node <- axes,
             match?(%{scale: ^scale, side: ^side}, at(design, node.path)),
             owner = Map.get(owners, node.path),
-            index = Stack.index_of(uses, owner),
-            do: index + 1
+            owner != nil,
+            do: owner
       end)
-      |> Enum.max(fn -> 0 end)
+    end
+
+    # The top-level site holding a site — the layer a selection stands in — or nil.
+    defp top_of(_uses, nil), do: nil
+
+    defp top_of(uses, id) do
+      case Stack.parent_of(uses, id) do
+        nil -> if Stack.get(uses, id), do: id
+        parent -> top_of(uses, parent)
+      end
+    end
+
+    # The id standing highest in the tree's flat order, or nil for none.
+    defp highest_of(uses, ids) do
+      ids
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&{Stack.index_of(uses, &1), &1})
+      |> Enum.reject(fn {index, _} -> index == nil end)
+      |> Enum.max_by(&elem(&1, 0), fn -> {nil, nil} end)
+      |> elem(1)
     end
 
     # The placed node opened: the composed design's node of the site's kind that the site
@@ -3680,11 +3763,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
                taken(design, path)
              ) do
         use = %{Use.new(nil, uses) | ref: nil, local: local, key: key}
-        at = Stack.index_of(uses, owner.id) + 1
 
         uses =
           uses
-          |> List.insert_at(at, use)
+          |> Stack.insert(owner.id, use)
           |> then(fn uses ->
             if mask,
               do: Stack.update(uses, owner.id, &%{&1 | mask: List.wrap(&1.mask) ++ [mask]}),
@@ -3771,19 +3853,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A library entry copied onto the graph takes its placement from the region (§18.16):
     # the copy's sites are the ones just inserted at `at`.
-    defp snapped(socket, entry, at, region) do
-      {sites, _vars, _signals} =
-        Stack.copies(entry, Stack.fetch(socket.assigns.store), names(socket.assigns.store))
-
-      count = length(sites)
-
-      update(socket, :uses, fn uses ->
-        uses
-        |> Enum.with_index()
-        |> Enum.map(fn {use, i} ->
-          if i >= at and i < at + count and use.ref == nil,
-            do: %{use | local: Place.placed(use.local, region)},
-            else: use
+    # The sites a copy just issued, placed in the region of the drop (#380: by id, wherever
+    # they landed in the tree).
+    defp snapped(socket, region) do
+      Enum.reduce(socket.assigns.added_sites, socket, fn id, acc ->
+        update(acc, :uses, fn uses ->
+          Stack.update(uses, id, fn
+            %Use{ref: nil} = use -> %{use | local: Place.placed(use.local, region)}
+            use -> use
+          end)
         end)
       end)
     end
@@ -3896,47 +3974,98 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A use referring to the entry, at the position it was dropped at; the label is the
     # entry's name (spec/14 §19.3).
+    # Where a drop lands in the tree (spec/14 §18.17, #380): inside a group's row, before
+    # the row at a flat position, or after the selected site when the drop said nothing.
+    defp drop_target(socket, params) do
+      cond do
+        into = Map.get(params, "into") -> {:into, Stack.get(socket.assigns.uses, decode_id(into))}
+        (at = Map.get(params, "at")) != nil -> {:at, position(at)}
+        true -> {:after, socket.assigns.selected}
+      end
+    end
+
+    defp decode_id(value) when is_binary(value) do
+      case Integer.parse(value) do
+        {n, ""} -> {:use, n}
+        _other -> nil
+      end
+    end
+
+    defp decode_id(_other), do: nil
+
+    # A use put where a drop target says; a target inside a referenced group is refused.
+    defp dropped(uses, {:into, %Use{ref: nil, id: id}}, use),
+      do: Stack.insert(uses, {:into, id}, use)
+
+    defp dropped(uses, {:into, _locked_or_missing}, _use), do: uses
+    defp dropped(uses, {:at, at}, use), do: Stack.insert_at(uses, at, use)
+    defp dropped(uses, {:after, id}, use), do: Stack.insert(uses, id, use)
+
     # A link: the reference site of §19.3, for a layer that is to follow the library.
     defp linked(socket, entry, at) do
       %{uses: uses, labels: labels} = socket.assigns
       use = Use.new(entry.id, uses)
+      uses = dropped(uses, at, use)
 
-      assign(socket,
-        uses: List.insert_at(uses, clamp(at, uses), use),
-        labels: Map.put(labels, use.id, entry.name),
-        selected: socket.assigns.selected || use.id,
-        added: entry.id,
-        notice: nil
-      )
+      if Stack.get(uses, use.id) do
+        assign(socket,
+          uses: uses,
+          labels: Map.put(labels, use.id, entry.name),
+          selected: socket.assigns.selected || use.id,
+          added: entry.id,
+          notice: nil
+        )
+      else
+        assign(socket, :notice, "#{entry.name} cannot go into a layer from the library")
+      end
     end
 
-    # A copy: the entry's body as inline sites — a composite as its sites — each issued an
-    # id among the stack it joins, inserted in order at the gap; the composite's vars and
-    # signals join the chart's where it does not declare them (spec/14 §18.17).
+    # A copy: the entry's body as an inline site — a composite as a group holding copies
+    # of its sites, with the composite's own vars, its signals joining the chart's; any
+    # other body as one object — each issued an id among the tree it joins (§18.17, #380).
     defp copied(socket, entry, at) do
-      %{uses: uses, labels: labels, store: store, stack_vars: vars, signals: signals} =
-        socket.assigns
-
+      %{uses: uses, labels: labels, store: store, signals: signals} = socket.assigns
       {sites, entry_vars, entry_signals} = Stack.copies(entry, Stack.fetch(store), names(store))
 
-      {issued, _} =
+      {issued, among} =
         Enum.map_reduce(sites, uses, fn {use, name}, among ->
           issued = %{use | id: Use.new(nil, among).id}
           {{issued, name}, among ++ [issued]}
         end)
 
-      inserted = Enum.map(issued, &elem(&1, 0))
+      inner = Enum.map(issued, &elem(&1, 0))
 
-      assign(socket,
-        uses: List.flatten(List.insert_at(uses, clamp(at, uses), inserted)),
-        labels:
-          Enum.reduce(issued, labels, fn {use, name}, acc -> Map.put(acc, use.id, name) end),
-        stack_vars: Map.merge(entry_vars, vars),
-        signals: Map.merge(entry_signals, signals),
-        selected: socket.assigns.selected || (List.first(inserted) && List.first(inserted).id),
-        added: entry.id,
-        notice: nil
-      )
+      {inserted, labelled} =
+        case entry do
+          %{kind: :composite} ->
+            group = %{
+              Use.new(nil, among)
+              | ref: nil,
+                local: %{composite: %{uses: inner, vars: entry_vars}}
+            }
+
+            {group, [{group, entry.name || "group"} | issued]}
+
+          _object ->
+            {hd(inner), issued}
+        end
+
+      uses = dropped(uses, at, inserted)
+
+      if Stack.get(uses, inserted.id) do
+        assign(socket,
+          uses: uses,
+          labels:
+            Enum.reduce(labelled, labels, fn {use, name}, acc -> Map.put(acc, use.id, name) end),
+          signals: Map.merge(entry_signals, signals),
+          selected: socket.assigns.selected || inserted.id,
+          added: entry.id,
+          added_sites: Enum.map(inner, & &1.id),
+          notice: nil
+        )
+      else
+        assign(socket, :notice, "#{entry.name} cannot go into a layer from the library")
+      end
     end
 
     # The highest layer whose fragment declares a style of that name, or `nil`.

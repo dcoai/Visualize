@@ -48,6 +48,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       --vis-builder-warn-bg: #fef3f2;
       --vis-builder-radius: 6px;
       --vis-builder-gap: 12px;
+      --vis-builder-depth: 0;
       --vis-builder-sidebar: 208px;
       --vis-builder-library: 216px;
       --vis-builder-context: 240px;
@@ -1504,17 +1505,42 @@ if Code.ensure_loaded?(Phoenix.Component) do
       line-height: 1;
     }
 
-    .vis-builder-add-menu {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--vis-builder-line);
+    /* The tree (spec/14 §18.8, #380): depth as indentation, a group's toggle and count,
+       an object's kind glyph. */
+    .vis-builder-layer {
+      padding-left: calc(8px + var(--vis-builder-depth, 0) * 16px);
     }
 
-    .vis-builder .vis-builder-add-kind {
-      padding: 2px 8px;
+    .vis-builder .vis-builder-site-toggle {
+      width: 18px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--vis-builder-muted);
       font-size: 11px;
+    }
+
+    .vis-builder-site-kind {
+      display: inline-flex;
+      align-items: center;
+      color: var(--vis-builder-muted);
+    }
+
+    .vis-builder-site-kind svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .vis-builder-site-count {
+      padding: 0 5px;
+      border-radius: 8px;
+      background: var(--vis-builder-bg);
+      color: var(--vis-builder-muted);
+      font-size: 10px;
+    }
+
+    .vis-builder-layer-group > .vis-builder-layer-name {
+      font-weight: 600;
     }
 
     .vis-builder-hues {

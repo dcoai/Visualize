@@ -70,6 +70,24 @@ defmodule Visualize.BuilderFixture do
   end
 
   @doc false
+  # The tree's rows for the fixture layers as the panel takes them (spec/14 §18.8, #380):
+  # three objects at the top, none a group.
+  def rows do
+    for {name, _fragment} <- layers() do
+      %{
+        name: to_string(name),
+        depth: 0,
+        parent: nil,
+        group?: false,
+        count: 0,
+        open?: false,
+        kind: nil,
+        id: nil
+      }
+    end
+  end
+
+  @doc false
   # A stack that does not apply: the panel layer without the two layers under it, so its
   # mark names a source and a style nothing declares — the normal state of a design being
   # built, and what the preview lists by path.
@@ -178,10 +196,9 @@ defmodule Visualize.BuilderFixture do
            styles: false
          }},
       editor_design: {&Editor.panel/1, %{kind: :design, node: layer(:house), path: []}},
-      layers: {&Layers.panel/1, %{id: "b-layers", layers: layers()}},
+      layers: {&Layers.panel/1, %{id: "b-layers", rows: rows()}},
       layers_disabled:
-        {&Layers.panel/1,
-         %{id: "b-layers", layers: layers(), selected: 2, disabled: MapSet.new([0])}},
+        {&Layers.panel/1, %{id: "b-layers", rows: rows(), selected: 2, disabled: MapSet.new([0])}},
       inspector: {&Inspector.panel/1, %{id: "b-inspector", layers: layers()}},
       inspector_overrides: {&Inspector.panel/1, %{id: "b-inspector", layers: overriding()}},
       params: {&Params.panel/1, %{layers: parameterised()}},
@@ -354,7 +371,8 @@ defmodule Visualize.BuilderFixture do
   @doc "The disabled positions, as a set."
   def disabled(%Socket{assigns: assigns}) do
     assigns.uses
-    |> Enum.with_index()
+    |> Stack.all()
+    |> Enum.map(&{&1.use, &1.index})
     |> Enum.reject(fn {use, _i} -> Stack.enabled?(use) end)
     |> MapSet.new(fn {_use, i} -> i end)
   end
@@ -368,8 +386,29 @@ defmodule Visualize.BuilderFixture do
   end
 
   @doc "The layer names, as strings, in stack order."
+  # The names of every row of the tree, in flat order (spec/14 §18.8, #380).
   def names(%Socket{assigns: assigns}) do
-    Enum.map(assigns.uses, &atomised(Stack.label(assigns.labels, &1)))
+    for %{use: use} <- Stack.all(assigns.uses), do: atomised(Stack.label(assigns.labels, use))
+  end
+
+  @doc """
+  An empty object of a kind put after the selected site, as a library drop of an empty
+  fragment would put it (spec/14 §18.17): what the `+` menu of #209 did, for tests that
+  need a site of a kind without a store.
+  """
+  def with_object(%Socket{assigns: assigns} = socket, kind, label \\ nil) do
+    use = %{Visualize.Chart.Use.new(nil, assigns.uses) | ref: nil, local: Stack.empty(kind)}
+
+    Phoenix.Component.assign(socket,
+      uses: Stack.insert(assigns.uses, assigns.selected, use),
+      labels: Map.put(assigns.labels, use.id, label || "new #{kind}"),
+      selected: use.id,
+      node_label: "design",
+      facet: nil,
+      field: nil,
+      context: :inspect,
+      notice: nil
+    )
   end
 
   @doc "The `style` value at the selected layer's first mark."

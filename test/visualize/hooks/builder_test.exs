@@ -46,6 +46,15 @@ defmodule Visualize.Hooks.BuilderTest do
     assert js =~ "this.el.closest('.vis-builder')"
   end
 
+  # A drop on the middle third of a group's row lands inside it (spec/14 §18.17, #380).
+  test "a drop on a group's row pushes into, a move or an insert" do
+    js = Hooks.Builder.js_hook()
+    assert js =~ "intoAt(e)"
+    assert js =~ "row.getAttribute('data-builder-into')"
+    assert js =~ "this.push('reorder', { from: this.from, into: into })"
+    assert js =~ "this.push('insert', { name: stored, into: into, as: this.dropAs(e) })"
+  end
+
   test "a drop pushes the move and makes none: the server owns the list" do
     js = Hooks.Builder.js_hook()
     assert js =~ "this.push('reorder', { from: this.from, to: to })"
