@@ -45,6 +45,8 @@ defmodule Visualize.Chart.Validator do
           | {:cycle, [term()]}
           | {:template, :unterminated | {:hole, String.t()}}
           | :many_kinds
+          | :sweep
+          | :radius
 
   @type error :: {path(), reason()}
 
@@ -287,6 +289,15 @@ defmodule Visualize.Chart.Validator do
         name not in fields,
         do: {path ++ [:types, name], {:undeclared, :field, name}}
   end
+
+  # The angle scale's sweep is a turn at most and never nothing; an axis's radius is
+  # positive (spec/14 §4.3, §4.4, #390).
+  defp held(:scale, %{sweep: sweep}, path)
+       when is_number(sweep) and (sweep == 0 or abs(sweep) > 360),
+       do: [{path ++ [:sweep], :sweep}]
+
+  defp held(:axis, %{radius: radius}, path) when is_number(radius) and radius <= 0,
+    do: [{path ++ [:radius], :radius}]
 
   defp held(_kind, _map, _path), do: []
 
@@ -587,6 +598,8 @@ defmodule Visualize.Chart.Validator do
 
   # -- formatting -----------------------------------------------------------------------
 
+  defp words(:sweep), do: "must be within a turn, and not zero"
+  defp words(:radius), do: "must be positive"
   defp words(:required), do: "is required"
   defp words(:unknown_key), do: "is not a key of this node"
   defp words({:type, type}), do: "must be #{type_words(type)}"

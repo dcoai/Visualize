@@ -9,7 +9,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Position
   alias Visualize.Chart.{Schema, Style}
-  alias Visualize.IR.{Element, Transform}
+  alias Visualize.IR.{Element, Path, Transform}
 
   @stroke_keys [
     :stroke,
@@ -254,26 +254,92 @@ defmodule Visualize.Chart.Frame.Furniture do
   defp direction(:bottom), do: {0, 1}
   defp direction(:left), do: {-1, 0}
 
-  # The grid of a polar axis: spokes for the angle scale, rings for the radius.
+  # The grid of a polar axis (spec/14 §4.6, #390): spokes over the radius band for the
+  # angle scale, arcs over the sweep for the radius.
   defp polar_grid(frame, %{grid: true, scale: :angle}, axis) do
-    r = outer_radius(frame)
+    {r0, r1} = radii(frame)
 
     for v <- tick_values(axis), {ux, uy} = unit(Scale.apply(axis.scale, v)) do
-      Element.line(0, 0, crisp(r * ux), crisp(r * uy))
+      {x0, y0} = inner_end(r0, ux, uy)
+      Element.line(x0, y0, crisp(r1 * ux), crisp(r1 * uy))
     end
   end
 
-  defp polar_grid(_frame, %{grid: true, scale: :r}, axis) do
+  defp polar_grid(frame, %{grid: true, scale: :r}, axis) do
+    {a0, a1} = sweep(frame)
+
     for v <- tick_values(axis), r = crisp(Scale.apply(axis.scale, v)), r > 0 do
-      Element.circle(0, 0, r, %{fill: :none})
+      arc(r, a0, a1, %{fill: :none})
     end
   end
 
   defp polar_grid(_frame, _node, _axis), do: []
 
+  # The angle scale's range: the sweep from its start, in radians (§4.3), the full turn
+  # when the frame declares none.
+  defp sweep(frame) do
+    case Map.get(frame.scales, :angle) do
+      %{range: [a0, a1]} -> {a0, a1}
+      _none -> {0, 2 * :math.pi()}
+    end
+  end
+
+  # The r scale's range: the band the plot occupies, `[0, R]` when the frame declares none.
+  defp radii(frame) do
+    case Map.get(frame.scales, :r) do
+      %{range: [r0, r1]} -> {min(r0, r1), max(r0, r1)}
+      _none -> {0, outer_radius(frame)}
+    end
+  end
+
+  # A spoke's inner end: the centre itself, printed as the integer it was, when the
+  # band starts there — the full-turn output stays byte for byte.
+  defp inner_end(r0, _ux, _uy) when r0 == 0, do: {0, 0}
+  defp inner_end(r0, ux, uy), do: {crisp(r0 * ux), crisp(r0 * uy)}
+
+  # Whether a sweep is a full turn (or more): drawn as a circle, byte for byte the ring.
+  defp full_turn?(a0, a1), do: abs(a1 - a0) >= 2 * :math.pi() - 1.0e-9
+
+  # The arc of a sweep at a radius: a circle on a full turn, else one `A` command from
+  # the start to the end, the large-arc flag set past a half turn, clockwise as the sweep
+  # runs (§4.6, #390).
+  defp arc(r, a0, a1, style) do
+    if full_turn?(a0, a1) do
+      Element.circle(0, 0, r, style)
+    else
+      {x0, y0} = unit(a0)
+      {x1, y1} = unit(a1)
+      large = if abs(a1 - a0) > :math.pi(), do: 1, else: 0
+      direction = if a1 > a0, do: 1, else: 0
+
+      Path.new()
+      |> Path.move_to(crisp(r * x0), crisp(r * y0))
+      |> Path.arc_to(r, r, 0, large, direction, crisp(r * x1), crisp(r * y1))
+      |> Element.path(style)
+    end
+  end
+
+  # An angle axis's radius (§4.4): a fraction of R when at most 1, else user units, R
+  # when absent.
+  defp axis_radius(frame, node) do
+    case Map.get(node, :radius) do
+      nil -> outer_radius(frame)
+      fraction when fraction <= 1 -> outer_radius(frame) * fraction
+      units -> units
+    end
+  end
+
+  # An r axis's direction: `at` degrees clockwise from 12 o'clock wins over `side`.
+  defp spoke_direction(node) do
+    case Map.get(node, :at) do
+      nil -> direction(node.side)
+      degrees -> unit(degrees * :math.pi() / 180)
+    end
+  end
+
   defp polar_axis(frame, node, axis, mode) do
     style = Style.resolve(style(frame, Map.get(node, :style, :axis)), frame.theme, mode)
-    text_anchor = if node.scale == :angle, do: :middle, else: spoke_anchor(direction(node.side))
+    text_anchor = if node.scale == :angle, do: :middle, else: spoke_anchor(spoke_direction(node))
 
     group_style =
       %{fill: :none, text_anchor: text_anchor} |> Map.merge(Map.take(style, @group_keys))
@@ -283,7 +349,7 @@ defmodule Visualize.Chart.Frame.Furniture do
 
     {domain, ticks} =
       case node.scale do
-        :angle -> ring(frame, axis, stroke, fill)
+        :angle -> ring(frame, node, axis, stroke, fill)
         :r -> spoke(frame, node, axis, stroke, fill)
       end
 
@@ -293,8 +359,9 @@ defmodule Visualize.Chart.Frame.Furniture do
     )
   end
 
-  defp ring(frame, axis, stroke, fill) do
-    r = outer_radius(frame)
+  defp ring(frame, node, axis, stroke, fill) do
+    r = axis_radius(frame, node)
+    {a0, a1} = sweep(frame)
     inner = axis.tick_size_inner
     pad = axis.tick_padding
 
@@ -322,12 +389,12 @@ defmodule Visualize.Chart.Frame.Furniture do
         Element.group([line, label], style: %{class: "tick"})
       end
 
-    {Element.circle(0, 0, r, stroke), ticks}
+    {arc(r, a0, a1, stroke), ticks}
   end
 
   defp spoke(frame, node, axis, stroke, fill) do
-    r = outer_radius(frame)
-    {ux, uy} = direction(node.side)
+    {r0, r1} = radii(frame)
+    {ux, uy} = spoke_direction(node)
     {px, py} = {-uy, ux}
     inner = axis.tick_size_inner
     pad = axis.tick_padding
@@ -348,7 +415,8 @@ defmodule Visualize.Chart.Frame.Furniture do
         Element.group([line, label], style: %{class: "tick"})
       end
 
-    {Element.line(0, 0, crisp(r * ux), crisp(r * uy), stroke), ticks}
+    {x0, y0} = inner_end(r0, ux, uy)
+    {Element.line(x0, y0, crisp(r1 * ux), crisp(r1 * uy), stroke), ticks}
   end
 
   defp spoke_anchor(direction) do
