@@ -418,7 +418,15 @@ defmodule Visualize.ChartGen do
     with_var([member_of(fields), number(), field_ref(fields)], vars)
   end
 
-  defp options(type), do: optional_map(Map.new(Schema.options(type), &{&1, number()}))
+  # Every option is a number but a needle's cap, an enum (spec/14 §5.3, #392).
+  defp options(type) do
+    optional_map(
+      Map.new(Schema.options(type), fn
+        :cap -> {:cap, member_of([:point, :round, :flat])}
+        key -> {key, number()}
+      end)
+    )
+  end
 
   defp mark_label(fields, vars, styles) do
     node(%{text: text(vars, fields)}, %{
