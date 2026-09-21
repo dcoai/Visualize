@@ -395,6 +395,13 @@ defmodule Visualize.ChartGen do
     end)
   end
 
+  # A rule stands at `x`, or at a radius `y` in a polar frame (spec/14 §5.2, #391): the
+  # generator gives it `x`, since the validator holds a rule without `y` to it.
+  defp channels(:rule, fields, vars) do
+    value = channel_value(fields, vars)
+    node(%{x: value}, %{y: value})
+  end
+
   defp channels(type, fields, vars) do
     %{required: required, optional: optional} = Schema.channels(type)
     value = channel_value(fields, vars)

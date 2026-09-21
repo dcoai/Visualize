@@ -15,6 +15,7 @@ defmodule Visualize.Chart.MarkTest do
   alias Visualize.Shape.{Arc, Area, Band, Line, PercentileBand, Pie, Rose, Rule, Symbol, XBand}
 
   doctest Mark
+  doctest Visualize.Chart.Mark.Bend
 
   @rows for {v, i} <- Enum.with_index([4, 9, 2, 7]),
             do: %{t: i, v: v, lo: v - 1, hi: v + 1, lo2: v - 2, hi2: v + 2, k: "k#{rem(i, 2)}"}
@@ -1005,6 +1006,213 @@ defmodule Visualize.Chart.MarkTest do
       assert_raise ArgumentError, ~r/variable :unit is unresolved/, fn ->
         Mark.generate(frame, hd(chart.marks), sources: @sources)
       end
+    end
+  end
+
+  describe "polar is a coordinate transform (spec/14 §4.3, §5.2, #391)" do
+    alias Visualize.Chart.Mark.Bend
+
+    # A polar frame of a 240° sweep from −120°, r over 30..150; x names angle, y names r.
+    @polar %{
+      kind: :polar,
+      size: %{width: 300, height: 300},
+      margin: %{top: 0, right: 0, bottom: 0, left: 0},
+      scales: %{
+        angle: %{kind: :linear, domain: [0, 3], start: -120, sweep: 240},
+        r: %{kind: :linear, domain: [0, 10], range: [30, 150]},
+        color: %{kind: :ordinal}
+      }
+    }
+
+    defp polar(mark, extra \\ %{}) do
+      chart = chart(mark, Map.merge(%{frame: @polar}, extra))
+      frame = Frame.new(chart, sources: @sources)
+      {frame, Mark.generate(frame, hd(chart.marks), sources: @sources)}
+    end
+
+    defp angle_of(frame, t), do: Scale.apply(Frame.scale(frame, :angle), t)
+    defp radius_of(frame, v), do: Scale.apply(Frame.scale(frame, :r), v)
+
+    # Every point of a path's `M`/`L` commands.
+    defp points(%Element{path: %Path{commands: commands}}) do
+      for {c, x, y} <- commands, c in [:M, :L], do: {x, y}
+    end
+
+    test "a line over (t, v) wraps around the arc: every point at r(v)'s radius, within the sweep" do
+      {frame, group} = polar(%{type: :line, channels: %{x: :t, y: :v}})
+      [path] = group.children
+      points = points(path)
+      # Sampled at ≤ 2°: three segments over 240° give at least 120 points.
+      assert length(points) >= 120
+
+      # The first point is (t = 0, v = 4) bent; the last (t = 3, v = 7); everything lies
+      # between the inner and outer radii and inside the sweep.
+      {a0, r0} = {angle_of(frame, 0), radius_of(frame, 4)}
+      assert hd(points) == Bend.point({a0, r0})
+      assert List.last(points) == Bend.point({angle_of(frame, 3), radius_of(frame, 7)})
+
+      for {x, y} <- points do
+        r = :math.sqrt(x * x + y * y)
+        assert r >= 30 - 1.0e-6 and r <= 150 + 1.0e-6
+        angle = :math.atan2(x, -y)
+        assert angle >= -2 * :math.pi() / 3 - 1.0e-6 and angle <= 2 * :math.pi() / 3 + 1.0e-6
+      end
+
+      # A curve is interpolated in (angle, r) before it bends: still within the band.
+      {_frame, curved} =
+        polar(%{type: :line, channels: %{x: :t, y: :v}, style: :bent}, %{
+          styles: %{bent: %{curve: :monotone_x}}
+        })
+
+      [curve] = curved.children
+
+      for {x, y} <- points(curve) do
+        assert :math.sqrt(x * x + y * y) <= 150 + 1.0e-6
+      end
+    end
+
+    test "a rule at x is a spoke over the r band, at y an arc at that radius; an x-band a wedge" do
+      {frame, group} = polar(%{type: :rule, channels: %{x: :t}})
+      assert length(group.children) == 4
+      [first | _] = group.children
+      [line | _] = first.children
+      [{x0, y0} = inner, {x1, y1} = outer | _] = points(line)
+      a = angle_of(frame, 0)
+      assert inner == Bend.point({a, 30})
+      assert outer == Bend.point({a, 150})
+      assert_in_delta :math.sqrt(x0 * x0 + y0 * y0), 30, 1.0e-6
+      assert_in_delta :math.sqrt(x1 * x1 + y1 * y1), 150, 1.0e-6
+
+      {frame, arcs} = polar(%{type: :rule, channels: %{y: :v}})
+      [ring | _] = arcs.children
+      r = radius_of(frame, 4)
+
+      for {x, y} <- points(ring), do: assert_in_delta(:math.sqrt(x * x + y * y), r, 1.0e-6)
+      assert length(points(ring)) >= 120
+      assert hd(points(ring)) == Bend.point({angle_of(frame, 0), r})
+
+      {_frame, wedges} = polar(%{type: :x_band, channels: %{x0: :t, x1: :hi}})
+      [wedge | _] = wedges.children
+      [sector | _] = wedge.children
+      assert %Element{type: :path, path: %Path{commands: commands}} = sector
+      assert Enum.count(commands, &match?({:A, _, _, _, _, _, _, _}, &1)) == 2
+      assert List.last(commands) == :Z
+    end
+
+    test "a rect with a band on y is an arced bar, with a band on x a sector; a circle stays a dot" do
+      bars =
+        polar(%{type: :rect, channels: %{x0: :t, x1: :hi, y0: :lo, y1: :lo}}, %{
+          frame:
+            put_in(@polar, [:scales, :r], %{kind: :band, domain: [3, 8, 1, 6], range: [30, 150]})
+        })
+
+      {frame, group} = bars
+      [bar | _] = group.children
+
+      %Element{
+        type: :path,
+        path: %Path{
+          commands: [
+            {:M, _, _},
+            {:A, ro, ro, 0, _, 1, _, _},
+            {:L, _, _},
+            {:A, ri, ri, 0, _, 0, _, _},
+            :Z
+          ]
+        }
+      } = bar
+
+      band = Frame.scale(frame, :r)
+      assert ri < ro
+      assert_in_delta ro - ri, Scale.Band.bandwidth(band), 1.0e-6
+
+      {frame, dots} = polar(%{type: :circle, channels: %{x: :t, y: :v}})
+      [dot | _] = dots.children
+      assert dot.type == :circle
+      assert dot.attrs.r == 3
+      assert {dot.attrs.cx, dot.attrs.cy} == Bend.point({angle_of(frame, 0), radius_of(frame, 4)})
+
+      {_frame, symbols} = polar(%{type: :symbol, channels: %{x: :t, y: :v}})
+      [symbol | _] = symbols.children
+      assert %Visualize.IR.Transform{operations: [{:translate, tx, ty}]} = symbol.transform
+      assert {tx, ty} == Bend.point({angle_of(frame, 0), radius_of(frame, 4)})
+    end
+
+    test "an arc's start and end read through the angle scale when the frame declares one, raw radians otherwise" do
+      {frame, scaled} = polar(%{type: :arc, channels: %{start: :t, end: :hi}})
+      [first | _] = scaled.children
+      assert first.style == %{}
+      {a0, _} = {angle_of(frame, 0), nil}
+      # The centroid's angle is between start (t = 0) and end (hi = 5) as the scale maps them.
+      %Element{path: %Path{commands: [{:M, mx, my} | _]}} = first
+      assert_in_delta :math.atan2(mx, -my), a0, 1.0e-6
+
+      raw_frame = %{
+        kind: :polar,
+        size: %{width: 300, height: 300},
+        margin: %{top: 0, right: 0, bottom: 0, left: 0}
+      }
+
+      chart = chart(%{type: :arc, channels: %{start: :t, end: :hi}}, %{frame: raw_frame})
+      frame = Frame.new(chart, sources: @sources)
+      raw = Mark.generate(frame, hd(chart.marks), sources: @sources)
+      [first_raw | _] = raw.children
+      %Element{path: %Path{commands: [{:M, rx, ry} | _]}} = first_raw
+      # t = 0 radians: straight up.
+      assert_in_delta :math.atan2(rx, -ry), 0, 1.0e-6
+    end
+
+    test "a mark's inline label anchors at the bent point, outward from the sector's radii" do
+      {frame, group} =
+        polar(%{
+          type: :rect,
+          channels: %{x0: :t, x1: :hi, y0: :lo, y1: :v},
+          label: %{text: [{:field, :k}], anchor: :outward}
+        })
+
+      texts = Enum.filter(group.children, &(&1.type == :text))
+      assert length(texts) == 4
+      [text | _] = texts
+      # Beyond the outer radius (v = 4 → r(4)), along the sector's centre ray.
+      r = :math.sqrt(text.attrs.x * text.attrs.x + text.attrs.y * text.attrs.y)
+      assert r > radius_of(frame, 4)
+    end
+
+    test "the bend is a pure function of the elements: relative commands, curves and rects" do
+      bent =
+        Bend.bend(%Element{
+          type: :path,
+          path: %Path{
+            commands: [{:M, 0, 10}, {:l, :math.pi() / 2, 0}, {:c, 0, 5, 0.5, 5, 0.5, 5}, :Z]
+          }
+        })
+
+      assert [{:M, +0.0, -10.0} | rest] = bent.path.commands
+      assert List.last(rest) == :Z
+      # 45 samples over the quarter turn, then at least 8 for the curve.
+      assert length(rest) >= 45 + 8 + 1
+      rect = Bend.bend(Element.rect(0, 10, :math.pi() / 2, 5))
+      assert rect.type == :path
+      assert rect.attrs == %{}
+
+      assert rect.path.commands == [
+               {:M, 0.0, -15.0},
+               {:A, 15, 15, 0, 0, 1, 15.0, 0.0},
+               {:L, 10.0, 0.0},
+               {:A, 10, 10, 0, 0, 0, 0.0, -10.0},
+               :Z
+             ]
+
+      wedge = Bend.bend(Element.rect(0, 0, :math.pi(), 5))
+
+      assert wedge.path.commands == [
+               {:M, 0.0, -5.0},
+               {:A, 5, 5, 0, 0, 1, 0.0, 5.0},
+               {:L, 0, 0},
+               :Z
+             ]
+
+      assert Bend.bend(Element.text("t", x: :math.pi() / 2, y: 4)).attrs == %{x: 4.0, y: 0.0}
     end
   end
 end

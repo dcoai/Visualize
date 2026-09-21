@@ -9,7 +9,7 @@ defmodule Visualize.Chart.Schema.Mark do
     {:line, [:x, :y], [:series], []},
     {:area, [:x, :y], [:x0, :x1, :y0, :y1, :series], []},
     {:band, [:x0, :x1], [:y], [:height]},
-    {:rule, [:x], [], []},
+    {:rule, [], [:x, :y], []},
     {:x_band, [:x0, :x1], [], []},
     {:percentile_band, [:x, :median], [:inner_lo, :inner_hi, :outer_lo, :outer_hi], []},
     {:rose, [:angle], [:value], [:width, :inner_radius, :outer_radius, :pad_angle]},

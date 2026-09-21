@@ -394,6 +394,11 @@ defmodule Visualize.Chart.Validator do
     end
   end
 
+  # A rule stands at `x`, or — in a polar frame — at a radius `y` (spec/14 §5.2, #391).
+  defp required(:channels, :rule, %{channel_keys: keys}) do
+    if :y in keys, do: [], else: [:x]
+  end
+
   defp required(:channels, type, _ctx), do: Schema.channels(type).required
   defp required(:options, _type, _ctx), do: []
 
