@@ -18,6 +18,7 @@ defmodule ExamplesWeb.GalleryLive do
     {Examples.Charts.ScatterPlot, "scatter"},
     {Examples.Charts.BubbleChart, "bubble"},
     {Examples.Charts.RadialBarChart, "radial"},
+    {Examples.Charts.GaugeChart, "gauge"},
     # Hierarchical Layouts
     {Examples.Charts.TreemapChart, "treemap"},
     {Examples.Charts.CirclePacking, "circle_pack"},

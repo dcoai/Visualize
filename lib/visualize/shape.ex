@@ -40,6 +40,7 @@ defmodule Visualize.Shape do
     Area,
     Band,
     Line,
+    Needle,
     PercentileBand,
     Pie,
     Rose,
@@ -89,6 +90,9 @@ defmodule Visualize.Shape do
   @doc "Creates a new rose generator (spec/04 §15)"
   defdelegate rose(), to: Rose, as: :new
 
+  @doc "Creates a new needle generator (spec/04 §16)"
+  defdelegate needle(), to: Needle, as: :new
+
   # Common configuration functions that work across generators
 
   @doc "Sets the x accessor"
@@ -133,9 +137,11 @@ defmodule Visualize.Shape do
   def scale(%Rule{} = shape, scale), do: Rule.scale(shape, scale)
   def scale(%XBand{} = shape, scale), do: XBand.scale(shape, scale)
   def scale(%Rose{} = shape, scale), do: Rose.scale(shape, scale)
+  def scale(%Needle{} = shape, scale), do: Needle.scale(shape, scale)
 
   @doc "Sets the sector-centre accessor (for roses), in the scale's domain units"
   def angle(%Rose{} = shape, accessor), do: Rose.angle(shape, accessor)
+  def angle(%Needle{} = shape, accessor), do: Needle.angle(shape, accessor)
 
   @doc "Sets the sector-width accessor (for roses), in the scale's domain units"
   def width(%Rose{} = shape, accessor), do: Rose.width(shape, accessor)

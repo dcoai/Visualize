@@ -49,11 +49,11 @@ defmodule Visualize.Chart.Mark do
   alias Visualize.IR.{Element, Transform}
   alias Visualize.Theme
 
-  @shapes [:line, :area, :band, :rule, :x_band, :percentile_band, :rose, :symbol]
+  @shapes [:line, :area, :band, :rule, :x_band, :percentile_band, :rose, :symbol, :needle]
   @stroked [:line, :rule]
-  @centred [:rose, :arc]
+  @centred [:rose, :arc, :needle]
   # Drawn as they are in a polar frame: polar already, or geometry in plot pixels (§5.2).
-  @unbent [:rose, :arc, :path]
+  @unbent [:rose, :arc, :path, :needle]
 
   @typedoc """
   What the element builders see of a mark: the frame, the mark node, its rows, its

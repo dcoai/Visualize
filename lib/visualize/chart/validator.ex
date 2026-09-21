@@ -125,6 +125,7 @@ defmodule Visualize.Chart.Validator do
     %{
       context(%{})
       | scales: :unknown,
+        frame_kind: :unknown,
         styles: :unknown,
         paints: :unknown,
         sources: :unknown,
@@ -197,6 +198,7 @@ defmodule Visualize.Chart.Validator do
   defp context(map) do
     %{
       scales: declared(nested(map, [:frame, :scales])),
+      frame_kind: nested(map, [:frame, :kind]),
       styles: union(declared(map[:styles]), Schema.builtin_styles()),
       paints: declared(map[:defs] || %{}),
       sources: source_fields(map[:sources]),
@@ -278,11 +280,11 @@ defmodule Visualize.Chart.Validator do
         check_key(kind, s, Map.fetch!(map, s.key), path ++ [s.key], ctx)
       end
 
-    unknown ++ missing ++ List.flatten(present) ++ held(kind, map, path)
+    unknown ++ missing ++ List.flatten(present) ++ held(kind, map, path, ctx)
   end
 
   # What a node's keys owe each other: a source's `types` names only its `fields` (§2.3).
-  defp held(:source, %{fields: fields, types: types}, path)
+  defp held(:source, %{fields: fields, types: types}, path, _ctx)
        when is_list(fields) and is_map(types) do
     for {name, _type} <- types,
         name?(name),
@@ -290,16 +292,21 @@ defmodule Visualize.Chart.Validator do
         do: {path ++ [:types, name], {:undeclared, :field, name}}
   end
 
+  # A needle is a polar frame's mark (spec/14 §5.2, #392): elsewhere its type is invalid.
+  defp held(:mark, %{type: :needle}, path, %{frame_kind: kind})
+       when kind not in [:polar, :unknown],
+       do: [{path ++ [:type], {:invalid_for, :needle}}]
+
   # The angle scale's sweep is a turn at most and never nothing; an axis's radius is
   # positive (spec/14 §4.3, §4.4, #390).
-  defp held(:scale, %{sweep: sweep}, path)
+  defp held(:scale, %{sweep: sweep}, path, _ctx)
        when is_number(sweep) and (sweep == 0 or abs(sweep) > 360),
        do: [{path ++ [:sweep], :sweep}]
 
-  defp held(:axis, %{radius: radius}, path) when is_number(radius) and radius <= 0,
+  defp held(:axis, %{radius: radius}, path, _ctx) when is_number(radius) and radius <= 0,
     do: [{path ++ [:radius], :radius}]
 
-  defp held(_kind, _map, _path), do: []
+  defp held(_kind, _map, _path, _ctx), do: []
 
   defp enter(:mark, map, ctx) do
     type = map[:type]

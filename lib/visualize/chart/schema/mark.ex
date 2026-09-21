@@ -14,6 +14,7 @@ defmodule Visualize.Chart.Schema.Mark do
     {:percentile_band, [:x, :median], [:inner_lo, :inner_hi, :outer_lo, :outer_hi], []},
     {:rose, [:angle], [:value], [:width, :inner_radius, :outer_radius, :pad_angle]},
     {:symbol, [:x, :y], [:value], []},
+    {:needle, [:x], [:y], [:inner_radius, :width, :tail, :hub, :cap]},
     {:arc, [:value], [:start, :end, :inner, :outer],
      [:inner_radius, :outer_radius, :corner_radius, :pad_angle, :start_angle, :end_angle]},
     {:path, [:path], [], []},
@@ -52,7 +53,10 @@ defmodule Visualize.Chart.Schema.Mark do
     :corner_radius,
     :pad_angle,
     :start_angle,
-    :end_angle
+    :end_angle,
+    :tail,
+    :hub,
+    :cap
   ]
 
   # Op, required keys, optional keys (spec/14 §5.4).
@@ -104,6 +108,7 @@ defmodule Visualize.Chart.Schema.Mark do
     :inward
   ]
   @rotate {:one_of, [:number, {:enum, [:tangent, :radial]}]}
+  @caps [:point, :round, :flat]
 
   @doc false
   def rotate_type, do: @rotate
@@ -217,8 +222,13 @@ defmodule Visualize.Chart.Schema.Mark do
     for key <- [:x, :y], do: spec(key, :field, :channel)
   end
 
+  # Every option is a number but a needle's cap, an enum (spec/14 §5.3, #392).
   def describe(:options) do
-    for key <- @option_keys, do: spec(key, :number, :geometry)
+    for key <- @option_keys do
+      if key == :cap,
+        do: spec(key, {:enum, @caps}, :geometry, default: :point),
+        else: spec(key, :number, :geometry)
+    end
   end
 
   # The fields a mark carries on its elements for `TooltipHook` (spec/14 §5.7, D-75).

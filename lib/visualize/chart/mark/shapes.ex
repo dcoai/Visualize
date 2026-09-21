@@ -10,7 +10,7 @@ defmodule Visualize.Chart.Mark.Shapes do
   alias Visualize.Chart.Style
   alias Visualize.IR.{Element, Transform}
   alias Visualize.Scale
-  alias Visualize.Shape.{Arc, Area, Band, Line, PercentileBand, Rose, Rule, Symbol, XBand}
+  alias Visualize.Shape.{Arc, Area, Band, Line, Needle, PercentileBand, Rose, Rule, Symbol, XBand}
   alias Visualize.Theme
 
   @stroke_keys [
@@ -32,6 +32,7 @@ defmodule Visualize.Chart.Mark.Shapes do
   def elements(%{type: :percentile_band} = ctx), do: percentile_band(ctx)
   def elements(%{type: :rose} = ctx), do: rose(ctx)
   def elements(%{type: :symbol} = ctx), do: symbol(ctx)
+  def elements(%{type: :needle} = ctx), do: needle(ctx)
 
   # -- line and area: one path per series ------------------------------------------------
 
@@ -442,6 +443,55 @@ defmodule Visualize.Chart.Mark.Shapes do
       element = Element.path(path) |> Element.set_transform(Transform.translate(row.x, row.y))
       %{element: element, datum: row.datum, style: %{}, anchor: {row.x, row.y}}
     end)
+  end
+
+  # -- needle ----------------------------------------------------------------------------
+
+  # A pointer from the hub to the value's angle (spec/14 §5.2, #392): the angle already
+  # in radians through the frame's scale, the length through `r` or the outer radius; the
+  # pointer and its hub as one group per row, the label at the tip.
+  defp needle(ctx) do
+    inner = option(ctx, :inner_radius, 0)
+    width = option(ctx, :width, 6)
+    tail = option(ctx, :tail, 0)
+    hub = option(ctx, :hub, width)
+    cap = option(ctx, :cap, :point)
+    {_r0, r1} = radii(ctx)
+    rows = ctx |> Channels.pixels() |> Channels.placed([:x])
+
+    generator =
+      Needle.new()
+      |> Needle.angle(:x)
+      |> Needle.length(fn row -> Map.get(row, :y) || r1 end)
+      |> Needle.inner_radius(inner)
+      |> Needle.width(width)
+      |> Needle.tail(tail)
+      |> Needle.hub(hub)
+      |> Needle.cap(cap)
+
+    paths = Needle.generate_path(generator, rows)
+
+    Enum.zip_with(paths, rows, fn path, row ->
+      length = Map.get(row, :y) || r1
+
+      %{
+        element:
+          Element.group([Element.path(path), Element.path(Needle.hub_path(generator, row))],
+            style: %{class: "needle"}
+          ),
+        datum: row.datum,
+        style: %{},
+        anchor: {crisp(length * :math.sin(row.x)), crisp(-length * :math.cos(row.x))},
+        radii: {inner, length}
+      }
+    end)
+  end
+
+  defp crisp(x) do
+    case Float.round(x * 1.0, 6) do
+      r when r == 0 -> 0.0
+      r -> r
+    end
   end
 
   # -- helpers ---------------------------------------------------------------------------

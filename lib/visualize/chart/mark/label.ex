@@ -72,7 +72,7 @@ defmodule Visualize.Chart.Mark.Label do
     style_node =
       Style.node(frame.styles, Map.get(label, :style, Schema.default(:mark_label, :style)))
 
-    anchor = Map.get(label, :anchor, Schema.default(:mark_label, :anchor))
+    anchor = Map.get(label, :anchor, default_anchor(ctx))
     dx = Map.get(label, :dx, 0)
     dy = Map.get(label, :dy, 0)
     centre = centre(ctx)
@@ -151,7 +151,11 @@ defmodule Visualize.Chart.Mark.Label do
 
   # The centre a polar anchor and a polar rotation are about (spec/14 §5.5): the group's
   # origin for a centred mark or in a polar frame, the plot's middle otherwise.
-  @centred [:rose, :arc]
+  @centred [:rose, :arc, :needle]
+  # A needle's label sits beyond its tip (spec/14 §5.2, #392); every other mark's above.
+  defp default_anchor(%{type: :needle}), do: :outward
+  defp default_anchor(_ctx), do: Schema.default(:mark_label, :anchor)
+
   defp centre(%{type: type, frame: %{kind: kind, plot: plot}}) do
     if type in @centred or kind == :polar, do: {0, 0}, else: {plot.width / 2, plot.height / 2}
   end

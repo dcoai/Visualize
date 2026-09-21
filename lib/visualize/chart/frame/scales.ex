@@ -126,6 +126,11 @@ defmodule Visualize.Chart.Frame.Scales do
   @spec scale_for(atom(), map(), atom()) :: atom() | nil
   def scale_for(_kind, %{type: type}, :value) when type in @unscaled_value, do: nil
 
+  # A rect's `value` reaches the colour scale in every frame (spec/14 §4.3): in a polar
+  # frame `value` is the rose's radius, not the rect's.
+  def scale_for(:polar, %{type: :rect} = mark, :value),
+    do: Map.get(Map.get(mark, :scales, %{}), :color, :color)
+
   def scale_for(kind, mark, channel) do
     case Map.get(channel_scales(kind), channel) do
       nil -> nil
