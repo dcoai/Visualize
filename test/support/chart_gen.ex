@@ -304,13 +304,19 @@ defmodule Visualize.ChartGen do
 
   # -- marks and labels ---------------------------------------------------------------
 
-  defp marks(sources, vars, styles, _frame) do
-    list_of(mark(sources, vars, styles), max_length: 3)
+  # A needle is a polar frame's mark (spec/14 §5.2, #392): drawn only there.
+  defp marks(sources, vars, styles, frame) do
+    types =
+      if frame.kind == :polar,
+        do: Schema.mark_types(),
+        else: Schema.mark_types() -- [:needle]
+
+    list_of(mark(sources, vars, styles, types), max_length: 3)
   end
 
-  defp mark(sources, vars, styles) do
+  defp mark(sources, vars, styles, types) do
     gen all(
-          type <- member_of(Schema.mark_types()),
+          type <- member_of(types),
           name <- member_of(Map.keys(sources)),
           data <- one_of([constant(name), data_node(name)]),
           fields = mark_fields(data, sources),
@@ -412,7 +418,15 @@ defmodule Visualize.ChartGen do
     with_var([member_of(fields), number(), field_ref(fields)], vars)
   end
 
-  defp options(type), do: optional_map(Map.new(Schema.options(type), &{&1, number()}))
+  # Every option is a number but a needle's cap, an enum (spec/14 §5.3, #392).
+  defp options(type) do
+    optional_map(
+      Map.new(Schema.options(type), fn
+        :cap -> {:cap, member_of([:point, :round, :flat])}
+        key -> {key, number()}
+      end)
+    )
+  end
 
   defp mark_label(fields, vars, styles) do
     node(%{text: text(vars, fields)}, %{

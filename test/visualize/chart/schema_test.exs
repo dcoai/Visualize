@@ -71,6 +71,7 @@ defmodule Visualize.Chart.SchemaTest do
              :percentile_band,
              :rose,
              :symbol,
+             :needle,
              :arc,
              :path,
              :rect,

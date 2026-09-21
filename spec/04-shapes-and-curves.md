@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, `Shape.Symbol`, the element-producing marks `Shape.Band`, `Shape.Rule`, and `Shape.XBand` (sections 11–13), the composed mark `Shape.PercentileBand` (section 14), and the polar mark `Shape.Rose` (section 15); `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialised as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
+Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, `Shape.Symbol`, the element-producing marks `Shape.Band`, `Shape.Rule`, and `Shape.XBand` (sections 11–13), the composed mark `Shape.PercentileBand` (section 14), and the polar marks `Shape.Rose` (section 15) and `Shape.Needle` (section 16); `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialised as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
 
 ## 1. Common Model
 
@@ -60,6 +60,7 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.x_band/0` | `Shape.XBand.new/0`. |
 | `Visualize.Shape.percentile_band/0` | `Shape.PercentileBand.new/0`. |
 | `Visualize.Shape.rose/0` | `Shape.Rose.new/0`. |
+| `Visualize.Shape.needle/0` | `Shape.Needle.new/0`. |
 | `Visualize.Shape.x/2` | `Line.x/2`, `Area.x/2`, `Rule.x/2`, or `PercentileBand.x/2`. |
 | `Visualize.Shape.y/2` | `Line.y/2`, `Area.y/2`, or `Band.y/2`. |
 | `Visualize.Shape.x0/2` | `Area.x0/2`, `Band.x0/2`, or `XBand.x0/2`. |
@@ -68,8 +69,8 @@ Facade setters dispatch on the struct type and fail to match (`FunctionClauseErr
 | `Visualize.Shape.y1/2` | `Area.y1/2`, `Rule.y1/2`, or `XBand.y1/2`. |
 | `Visualize.Shape.height/2` | `Band.height/2`. |
 | `Visualize.Shape.fill/2` | `Band.fill/2` or `XBand.fill/2`. |
-| `Visualize.Shape.scale/2` | `Rule.scale/2`, `XBand.scale/2`, or `Rose.scale/2`. |
-| `Visualize.Shape.angle/2` | `Rose.angle/2`. |
+| `Visualize.Shape.scale/2` | `Rule.scale/2`, `XBand.scale/2`, `Rose.scale/2` or `Needle.scale/2`. |
+| `Visualize.Shape.angle/2` | `Rose.angle/2` or `Needle.angle/2`. |
 | `Visualize.Shape.width/2` | `Rose.width/2`. |
 | `Visualize.Shape.label/2` | `Rule.label/2` or `XBand.label/2`. |
 | `Visualize.Shape.median/2` | `PercentileBand.median/2`. |
@@ -563,3 +564,32 @@ A rose — a wind rose, a compass rose, an hour-of-day clock — is one sector p
 | `Visualize.Shape.Rose.pad_angle/2` | Sets the pad angle accessor, radians, applied as in 6.2. |
 | `Visualize.Shape.Rose.generate/2` | Returns the list of SVG path-data strings, one per datum. |
 | `Visualize.Shape.Rose.generate_path/2` | Returns the list of `IR.Path`, one per datum, as in 15.2. |
+
+## 16. `Visualize.Shape.Needle`
+
+### 16.1 Struct
+
+`%Visualize.Shape.Needle{angle: nil, length: nil, scale: nil, inner_radius: 0, width: 6, tail: 0, hub: nil, cap: :point}`. `new/0` sets `angle` to `elem(d, 0)` and `length` to `elem(d, 1)`, so `{bearing, radius}` tuples are valid data.
+
+### 16.2 Semantics
+
+A needle — a gauge's pointer, a compass needle — is one filled pointer per datum from the hub to its angle (#392). `angle/2` is an accessor (1.1) in the *domain* units of the radial scale given to `scale/2`, radians without one; `length/2`, `inner_radius/2`, `width/2` and `tail/2` are pixel accessors; `hub/2` is the hub circle's radius, `width` when `nil`; `cap/2` is `:point`, `:round` or `:flat`.
+
+`generate_path/2` returns one `IR.Path` per datum, in data order: with `a` the angle clockwise from 12 o'clock (6.2's convention), `u = (sin a, −cos a)` the ray and `p = (cos a, sin a)` across it, the path runs from the base corner `inner_radius · u − tail · u + (width / 2) · p`, round the tail end, to the base's other corner `… − (width / 2) · p`, then to the tip: a `:point` cap meets at `length · u`; a `:flat` cap draws the base's width across at `length`; a `:round` cap draws a half circle of `width / 2` about `length · u`. The path closes. `hub_path/2` is the hub circle's path about the origin, radius `hub`. `generate/2` returns the pointer paths serialised as SVG path-data strings. An empty data list yields `[]`.
+
+### 16.3 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Shape.Needle.new/0` | Returns a needle generator reading tuple elements 0 and 1 as angle and length. |
+| `Visualize.Shape.Needle.angle/2` | Sets the angle accessor, in the scale's domain units (radians without a scale). |
+| `Visualize.Shape.Needle.length/2` | Sets the tip's radius accessor, in pixels. |
+| `Visualize.Shape.Needle.scale/2` | Sets the radial scale the angles map through; `nil` means radians. |
+| `Visualize.Shape.Needle.inner_radius/2` | Sets where the pointer starts, in pixels (default `0`). |
+| `Visualize.Shape.Needle.width/2` | Sets the base width accessor, in pixels (default `6`). |
+| `Visualize.Shape.Needle.tail/2` | Sets how far the pointer extends behind the hub, in pixels (default `0`). |
+| `Visualize.Shape.Needle.hub/2` | Sets the hub circle's radius; `nil` means the width. |
+| `Visualize.Shape.Needle.cap/2` | Sets the tip: `:point`, `:round` or `:flat`. |
+| `Visualize.Shape.Needle.generate/2` | Returns the list of SVG path-data strings, one pointer per datum. |
+| `Visualize.Shape.Needle.generate_path/2` | Returns the list of `IR.Path`, one pointer per datum, as in 16.2. |
+| `Visualize.Shape.Needle.hub_path/2` | Returns the hub circle's `IR.Path` for a datum, radius `hub`. |

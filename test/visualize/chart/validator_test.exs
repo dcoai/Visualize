@@ -202,7 +202,13 @@ defmodule Visualize.Chart.ValidatorTest do
         assert type, "no mark type reads #{kind}.#{spec.key}"
         path = [:marks, 0, kind, spec.key]
         design = put_at(design_with_mark(type), path, {:bad})
-        assert {path, {:type, spec.type}} in errors(design)
+
+        # A needle's cap is the one enum among the options (#392): a wrong value is
+        # reported as one.
+        case spec.type do
+          {:enum, values} -> assert {path, {:enum, values}} in errors(design)
+          type -> assert {path, {:type, type}} in errors(design)
+        end
       end
     end
 
@@ -295,6 +301,19 @@ defmodule Visualize.Chart.ValidatorTest do
 
       assert Validator.format({[:frame, :scales, :angle, :sweep], :sweep}) ==
                "frame.scales.angle.sweep: must be within a turn, and not zero"
+    end
+
+    test "a needle is a polar frame's mark; elsewhere its type is invalid for it (#392)" do
+      design = design_with_mark(:needle)
+      assert errors(design) == [{[:marks, 0, :type], {:invalid_for, :needle}}]
+      assert Validator.validate(put_in(design, [:frame, :kind], :polar)) == :ok
+      # A fragment of one mark has no frame to ask: allowed.
+      assert Validator.validate(%{mark: hd(design.marks)}, :mark) == :ok
+
+      capped =
+        put_in(design, [:frame, :kind], :polar) |> put_at([:marks, 0, :options, :cap], :square)
+
+      assert errors(capped) == [{[:marks, 0, :options, :cap], {:enum, [:point, :round, :flat]}}]
     end
 
     test "an arc needs value, or both start and end (D-69)" do

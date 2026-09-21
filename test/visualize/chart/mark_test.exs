@@ -1178,6 +1178,42 @@ defmodule Visualize.Chart.MarkTest do
       assert r > radius_of(frame, 4)
     end
 
+    test "a needle points from the hub to the value's angle, its label beyond the tip; three rows three needles (#392)" do
+      {frame, group} =
+        polar(%{
+          type: :needle,
+          channels: %{x: :t, y: :v},
+          options: %{width: 8, tail: 10, hub: 5, cap: :round},
+          label: %{text: [{:field, :k}]}
+        })
+
+      needles = Enum.filter(group.children, &(&1.type == :group))
+      assert length(needles) == 4
+      [first | _] = needles
+      assert first.style == %{class: "needle"}
+      [pointer, hub] = first.children
+      # The pointer's tip is at (angle(0), r(4)); the hub is a circle of 5 about the origin.
+      %Element{path: %Path{commands: commands}} = pointer
+      a = angle_of(frame, 0)
+      r = radius_of(frame, 4)
+      assert Enum.count(commands, &match?({:A, h, h, _, _, _, _, _} when h == 4, &1)) == 1
+      # The round cap's corner: at the length, half the width across the ray.
+      assert {:L, lx, ly} = Enum.at(commands, 2)
+      assert_in_delta :math.sqrt(lx * lx + ly * ly), :math.sqrt(r * r + 16), 1.0e-3
+      assert_in_delta :math.atan2(lx, -ly), a, 0.1
+      assert %Element{path: %Path{commands: [{:M, -5.0, +0.0} | _]}} = hub
+
+      # The label sits outward of the tip by default.
+      [text | _] = Enum.filter(group.children, &(&1.type == :text))
+      assert :math.sqrt(text.attrs.x * text.attrs.x + text.attrs.y * text.attrs.y) > r
+
+      # Without y the needle reaches the outer radius; the group is not bent again.
+      {_frame, long} = polar(%{type: :needle, channels: %{x: :t}})
+      [%{children: [pointer | _]} | _] = long.children
+      %Element{path: %Path{commands: [_, _, {:L, tx, ty} | _]}} = pointer
+      assert_in_delta :math.sqrt(tx * tx + ty * ty), 150, 1.0e-3
+    end
+
     test "the bend is a pure function of the elements: relative commands, curves and rects" do
       bent =
         Bend.bend(%Element{
