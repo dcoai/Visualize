@@ -20,6 +20,7 @@ defmodule ExamplesWeb.GalleryLive do
     {Examples.Charts.RadialBarChart, "radial"},
     {Examples.Charts.GaugeChart, "gauge"},
     {Examples.Charts.RadarChart, "radar"},
+    {Examples.Charts.PolarTransformChart, "polar"},
     # Hierarchical Layouts
     {Examples.Charts.TreemapChart, "treemap"},
     {Examples.Charts.CirclePacking, "circle_pack"},
