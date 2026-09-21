@@ -31,6 +31,10 @@ defmodule Visualize.Hooks.Builder do
   ## Events
 
   - `reorder` with `%{"from" => integer, "to" => integer}` on a drop between two positions
+  - `select_layer` with `%{"index" => string, "extend" => "range" | "toggle"}` on a Shift-
+    or Ctrl-click on a row, `layer_key` with `"shift" => true` on Shift+ArrowUp/Down, and
+    `group_sites` / `ungroup_site` with the row on Ctrl+G / Ctrl+Shift+G (spec/14 §18.8,
+    #382)
   - `insert` with `%{"name" => string, "at" => integer}` on a library entry dropped
     between rows of the stack, or with `"into" => string` on one dropped on a container's
     row — linked, as every drop is (spec/14 §18.17, #381)
@@ -154,13 +158,32 @@ defmodule Visualize.Hooks.Builder do
       },
 
       handleKeyDown(e) {
-        // The row's keyboard twin of the menu: Shift+F10 or the Menu key, beside the row.
-        if (this.scope === null && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
+        if (this.scope === null) {
           const row = e.target && e.target.closest ? e.target.closest('[data-builder-layer]') : null;
           if (!row || !this.el.contains(row)) return;
-          e.preventDefault();
-          const rect = row.getBoundingClientRect();
-          this.push('menu', { layer: row.getAttribute('data-builder-layer'), ...this.menuPoint(rect.left + 24, rect.bottom) });
+          const index = row.getAttribute('data-builder-layer');
+          // The row's keyboard twin of the menu: Shift+F10 or the Menu key, beside the row.
+          if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+            e.preventDefault();
+            const rect = row.getBoundingClientRect();
+            this.push('menu', { layer: index, ...this.menuPoint(rect.left + 24, rect.bottom) });
+            return;
+          }
+          // Shift+arrows extend the selection (spec/14 §18.8, #382): the row's own binding
+          // cannot see the modifier, so the hook pushes the key with it and stops the
+          // event before the binding hears it.
+          if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.push('layer_key', { key: e.key, index: index, shift: true });
+            return;
+          }
+          // Ctrl+G groups the selection, Ctrl+Shift+G ungroups the row.
+          if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.push(e.shiftKey ? 'ungroup_site' : 'group_sites', { index: index });
+          }
           return;
         }
         if (this.scope !== 'graph' || !e.shiftKey) return;
@@ -648,6 +671,17 @@ defmodule Visualize.Hooks.Builder do
 
       handleClick(e) {
         if (!e.target || !e.target.closest) return;
+        // A Shift- or Ctrl-click on a row extends or toggles the selection (spec/14 §18.8,
+        // #382); the row's own click, which would select it alone, is stopped here.
+        if (this.scope === null && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+          const row = e.target.closest('[data-builder-layer]');
+          if (!row || !this.el.contains(row)) return;
+          if (e.target.closest('button, input, label, form')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          this.push('select_layer', { index: row.getAttribute('data-builder-layer'), extend: e.shiftKey ? 'range' : 'toggle' });
+          return;
+        }
         // The graph (spec/14 §18.16): the nearest drawn node under the pointer is picked;
         // the server selects its owning layer and opens it, and the re-render outlines it.
         if (this.scope === 'graph') {

@@ -1292,7 +1292,12 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The row's menu offers Unlock and nothing to revert; the context panel the same.
       {:noreply, menu} = Builder.handle_event("menu", %{"layer" => "3", "x" => 5, "y" => 6}, s)
-      assert menu.assigns.menu.site == %{index: 3, items: [{"unlock_site", "Unlock"}]}
+
+      assert menu.assigns.menu.site == %{
+               index: 3,
+               items: [{"group_sites", "Group"}, {"unlock_site", "Unlock"}]
+             }
+
       menu_html = BuilderFixture.render(menu)
       assert menu_html =~ ~s(class="vis-builder-menu-site")
 
@@ -1361,6 +1366,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, menu} = Builder.handle_event("menu", %{"layer" => "3", "x" => 5, "y" => 6}, l)
 
       assert menu.assigns.menu.site.items == [
+               {"group_sites", "Group"},
                {"unlock_site", "Unlock"},
                {"revert_site", "Revert to original"}
              ]
@@ -1417,7 +1423,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       # An inline site has no lock item and nothing to revert; a site with no origin cannot lock.
       {:noreply, menu} = Builder.handle_event("menu", %{"layer" => "0", "x" => 5, "y" => 6}, s)
-      assert menu.assigns.menu.site.items == []
+      assert menu.assigns.menu.site.items == [{"group_sites", "Group"}]
       {:noreply, same} = Builder.handle_event("lock_site", %{"index" => "0"}, s)
       assert same.assigns.uses == s.assigns.uses
       assert same.assigns.notice == "house has nothing to link to"
@@ -4171,6 +4177,319 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       refute BuilderFixture.render(s3) =~ "through no scale"
+    end
+  end
+
+  describe "many rows selected, grouped, copied and saved (spec/14 §18.8, §18.17, §19.6, #382)" do
+    setup do
+      # A layer of three objects: an axis, a label and a mark, in that order; the store
+      # records what is put, so a saved group can be read back.
+      Visualize.Chart.BuilderTest.Recording.seed(%{
+        {:composite, 1} => %{
+          name: "baseline",
+          fragment: %{
+            composite: %{uses: [%Use{id: {:use, 1}, ref: nil, local: %{version: 1}}], vars: %{}}
+          }
+        }
+      })
+
+      socket =
+        BuilderFixture.socket(BuilderFixture.layers(),
+          store: Visualize.Chart.BuilderTest.Recording
+        )
+
+      {:noreply, socket} = Builder.handle_event("new_layer", %{}, socket)
+      layer = Stack.get(socket.assigns.uses, socket.assigns.selected)
+
+      socket =
+        Enum.reduce(
+          [{:axis, "an axis"}, {:label, "a label"}, {:mark, "a mark"}],
+          socket,
+          fn {kind, name}, s ->
+            use = %{Use.new(nil, s.assigns.uses) | ref: nil, local: Stack.empty(kind)}
+
+            Phoenix.Component.assign(s,
+              uses: Stack.insert(s.assigns.uses, {:into, layer.id}, use),
+              labels: Map.put(s.assigns.labels, use.id, name)
+            )
+          end
+        )
+
+      %{socket: socket, layer: layer}
+    end
+
+    test "Shift-click ranges and Ctrl-click toggles within one container; a row elsewhere is refused",
+         %{socket: s, layer: layer} do
+      at = Stack.index_of(s.assigns.uses, layer.id)
+      names = BuilderFixture.names(s)
+      assert Enum.slice(names, at, 4) == ["layer 1", "an axis", "a label", "a mark"]
+
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "#{at + 1}"}, s)
+
+      {:noreply, ranged} =
+        Builder.handle_event("select_layer", %{"index" => "#{at + 3}", "extend" => "range"}, s)
+
+      chosen =
+        for %{use: use, index: i} <- Stack.all(ranged.assigns.uses),
+            MapSet.member?(ranged.assigns.selection, use.id),
+            do: i
+
+      assert chosen == [at + 1, at + 2, at + 3]
+      assert BuilderFixture.selected(ranged) == at + 1
+      html = BuilderFixture.render(ranged)
+
+      assert html =~
+               ~s(class="vis-builder-layer vis-builder-layer-selected" style="--vis-builder-depth: 1" data-builder-layer="#{at + 1}")
+
+      assert html =~
+               ~s(class="vis-builder-layer vis-builder-layer-chosen" style="--vis-builder-depth: 1" data-builder-layer="#{at + 2}")
+
+      assert length(Regex.scan(~r/vis-builder-layer-chosen/, html)) == 2
+
+      {:noreply, toggled} =
+        Builder.handle_event(
+          "select_layer",
+          %{"index" => "#{at + 2}", "extend" => "toggle"},
+          ranged
+        )
+
+      refute BuilderFixture.render(toggled) =~
+               ~s(vis-builder-layer-chosen" style="--vis-builder-depth: 1" data-builder-layer="#{at + 2}")
+
+      assert BuilderFixture.render(toggled) =~
+               ~s(vis-builder-layer-chosen" style="--vis-builder-depth: 1" data-builder-layer="#{at + 3}")
+
+      # The anchor cannot be toggled away; a plain click makes the selection one row.
+      {:noreply, kept} =
+        Builder.handle_event(
+          "select_layer",
+          %{"index" => "#{at + 1}", "extend" => "toggle"},
+          toggled
+        )
+
+      assert BuilderFixture.selected(kept) == at + 1
+      {:noreply, one} = Builder.handle_event("select_layer", %{"index" => "#{at + 2}"}, kept)
+      assert one.assigns.selection == MapSet.new()
+      refute BuilderFixture.render(one) =~ "vis-builder-layer-chosen"
+
+      # Across containers: refused, the selection as it was.
+      {:noreply, refused} =
+        Builder.handle_event("select_layer", %{"index" => "0", "extend" => "range"}, ranged)
+
+      assert refused.assigns.notice == "select within one layer or group"
+      assert refused.assigns.selection == ranged.assigns.selection
+
+      # Shift+ArrowDown extends by a row at the far edge; Shift+ArrowUp shrinks it back.
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "#{at + 1}"}, s)
+
+      {:noreply, down} =
+        Builder.handle_event(
+          "layer_key",
+          %{"key" => "ArrowDown", "index" => "#{at + 1}", "shift" => true},
+          s
+        )
+
+      assert down.assigns.selection ==
+               MapSet.new([
+                 Enum.at(Stack.all(s.assigns.uses), at + 1).use.id,
+                 Enum.at(Stack.all(s.assigns.uses), at + 2).use.id
+               ])
+
+      {:noreply, down} =
+        Builder.handle_event(
+          "layer_key",
+          %{"key" => "ArrowDown", "index" => "#{at + 2}", "shift" => true},
+          down
+        )
+
+      assert MapSet.size(down.assigns.selection) == 3
+      # Past the container's last row nothing changes.
+      {:noreply, same} =
+        Builder.handle_event(
+          "layer_key",
+          %{"key" => "ArrowDown", "index" => "#{at + 3}", "shift" => true},
+          down
+        )
+
+      assert same.assigns.selection == down.assigns.selection
+    end
+
+    test "group wraps the selection at the first one's position; ungroup splices it back; the preview is unchanged",
+         %{socket: s, layer: layer} do
+      at = Stack.index_of(s.assigns.uses, layer.id)
+      before = BuilderFixture.design(s)
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "#{at + 2}"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("select_layer", %{"index" => "#{at + 3}", "extend" => "range"}, s)
+
+      {:noreply, grouped} = Builder.handle_event("group_sites", %{"index" => "#{at + 2}"}, s)
+      names = BuilderFixture.names(grouped)
+      assert Enum.slice(names, at, 5) == ["layer 1", "an axis", "group 2", "a label", "a mark"]
+      group = Stack.get(grouped.assigns.uses, grouped.assigns.selected)
+      assert Stack.group?(group)
+      assert Stack.parent_of(grouped.assigns.uses, group.id) == layer.id
+
+      assert Enum.map(Stack.children(group), &grouped.assigns.labels[&1.id]) == [
+               "a label",
+               "a mark"
+             ]
+
+      assert MapSet.member?(grouped.assigns.expanded_sites, group.id)
+      assert grouped.assigns.selection == MapSet.new()
+      assert BuilderFixture.design(grouped) == before
+      html = BuilderFixture.render(grouped)
+
+      assert html =~
+               ~s(vis-builder-layer-group" style="--vis-builder-depth: 1" data-builder-layer="#{at + 2}")
+
+      assert html =~ ~s(style="--vis-builder-depth: 2" data-builder-layer="#{at + 3}")
+
+      # The row's menu and the context panel: ungroup, copy, save as.
+      {:noreply, menu} =
+        Builder.handle_event("menu", %{"layer" => "#{at + 2}", "x" => 1, "y" => 1}, grouped)
+
+      assert menu.assigns.menu.site.items == [
+               {"group_sites", "Group"},
+               {"ungroup_site", "Ungroup"},
+               {"copy_site", "Copy"},
+               {"save_site_as", "Save as …"}
+             ]
+
+      assert html =~ ~s(phx-submit="save_site")
+      assert html =~ ~s(<input type="hidden" name="index" value="#{at + 2}">)
+
+      {:noreply, ungrouped} =
+        Builder.handle_event("ungroup_site", %{"index" => "#{at + 2}"}, grouped)
+
+      assert BuilderFixture.names(ungrouped) == BuilderFixture.names(s)
+      assert BuilderFixture.selected(ungrouped) == at + 2
+      assert MapSet.size(ungrouped.assigns.selection) == 2
+      assert BuilderFixture.design(ungrouped) == before
+      refute Map.has_key?(ungrouped.assigns.labels, group.id)
+
+      # A row not among the selected groups alone; a selection across layers is refused.
+      {:noreply, alone} = Builder.handle_event("group_sites", %{"index" => "0"}, s)
+      assert BuilderFixture.names(alone) |> hd() == "group 2"
+      assert Stack.children(hd(alone.assigns.uses)) |> length() == 1
+
+      {:noreply, s2} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
+
+      axis = Enum.at(Stack.all(s2.assigns.uses), at + 1).use
+
+      s2 =
+        Phoenix.Component.assign(s2, :selection, MapSet.new([hd(s2.assigns.uses).id, axis.id]))
+
+      {:noreply, refused} = Builder.handle_event("group_sites", %{"index" => "0"}, s2)
+      assert refused.assigns.notice == "select within one layer or group"
+      assert refused.assigns.uses == s2.assigns.uses
+
+      # Ungrouping an object, or a referenced group, is refused with its notice.
+      {:noreply, not_group} = Builder.handle_event("ungroup_site", %{"index" => "#{at + 1}"}, s)
+      assert not_group.assigns.notice == "an axis is not a group"
+
+      {:noreply, linked} =
+        Builder.handle_event("insert", %{"name" => "composite:1", "at" => 0}, s)
+
+      {:noreply, locked} = Builder.handle_event("ungroup_site", %{"index" => "0"}, linked)
+      assert locked.assigns.notice == "unlock baseline first"
+      assert locked.assigns.uses == linked.assigns.uses
+    end
+
+    test "copy on a group's row doubles it with everything in it; save as writes a composite and the row becomes its reference",
+         %{socket: s, layer: layer} do
+      at = Stack.index_of(s.assigns.uses, layer.id)
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "#{at + 1}"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("select_layer", %{"index" => "#{at + 2}", "extend" => "range"}, s)
+
+      {:noreply, s} = Builder.handle_event("group_sites", %{"index" => "#{at + 1}"}, s)
+      group = Stack.get(s.assigns.uses, s.assigns.selected)
+
+      {:noreply, copied} = Builder.handle_event("copy_site", %{"index" => "#{at + 1}"}, s)
+      names = BuilderFixture.names(copied)
+
+      assert Enum.slice(names, at, 8) == [
+               "layer 1",
+               "group 2",
+               "an axis",
+               "a label",
+               "copy of group 2",
+               "an axis",
+               "a label",
+               "a mark"
+             ]
+
+      copy = Stack.get(copied.assigns.uses, copied.assigns.selected)
+      assert copy.id != group.id
+      assert Stack.parent_of(copied.assigns.uses, copy.id) == layer.id
+      ids = for %{use: use} <- Stack.all(copied.assigns.uses), do: use.id
+      assert length(ids) == length(Enum.uniq(ids))
+
+      assert Enum.map(Stack.children(copy), & &1.local) ==
+               Enum.map(Stack.children(group), & &1.local)
+
+      # Save as: the entry holds the group's sites; the row is now a locked reference,
+      # labelled with the name, the inner labels gone; unlock makes it a group again.
+      {:noreply, blank} =
+        Builder.handle_event("save_site", %{"index" => "#{at + 1}", "name" => "  "}, s)
+
+      assert blank.assigns.notice == "a saved group needs a name"
+
+      {:noreply, saved} =
+        Builder.handle_event(
+          "save_site",
+          %{"index" => "#{at + 1}", "name" => "Groups::axis-label"},
+          s
+        )
+
+      assert saved.assigns.notice == nil
+      site = Enum.at(Stack.all(saved.assigns.uses), at + 1).use
+      assert %Use{ref: {:composite, _} = id, local: local} = site
+      assert local == %{}
+      assert saved.assigns.labels[site.id] == "Groups::axis-label"
+      assert Stack.linkage(site) == :linked
+
+      assert Enum.slice(BuilderFixture.names(saved), at, 3) == [
+               "layer 1",
+               "Groups::axis-label",
+               "a mark"
+             ]
+
+      assert {:ok, entry} = Visualize.Chart.BuilderTest.Recording.get(id, %{})
+      assert entry.kind == :composite
+      assert entry.name == "Groups::axis-label"
+
+      assert %{composite: %{uses: [%Use{local: %{axis: _}}, %Use{local: %{label: _}}], vars: %{}}} =
+               entry.fragment
+
+      assert BuilderFixture.design(saved) == BuilderFixture.design(s)
+
+      {:noreply, back} = Builder.handle_event("unlock_site", %{"index" => "#{at + 1}"}, saved)
+      again = Enum.at(Stack.all(back.assigns.uses), at + 1).use
+      assert Stack.group?(again)
+      assert again.origin == id
+      assert length(Stack.children(again)) == 2
+
+      # Save as on the menu selects the row and focuses the name field; an object cannot save.
+      {:noreply, focused} = Builder.handle_event("save_site_as", %{"index" => "#{at + 1}"}, s)
+      assert BuilderFixture.selected(focused) == at + 1
+
+      {:noreply, refused} =
+        Builder.handle_event("save_site", %{"index" => "#{at + 4}", "name" => "x"}, s)
+
+      assert refused.assigns.notice == "a mark is not a group"
+    end
+
+    test "the hook reads the modifiers a binding cannot: Shift/Ctrl-click, Shift+arrows, Ctrl+G" do
+      js = Visualize.Hooks.Builder.js_hook()
+
+      assert js =~
+               "this.push('select_layer', { index: row.getAttribute('data-builder-layer'), extend: e.shiftKey ? 'range' : 'toggle' });"
+
+      assert js =~ "this.push('layer_key', { key: e.key, index: index, shift: true });"
+      assert js =~ "this.push(e.shiftKey ? 'ungroup_site' : 'group_sites', { index: index });"
     end
   end
 

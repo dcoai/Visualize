@@ -41,6 +41,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:hidden, :any, default: nil, doc: "the positions under a closed group, a `MapSet`")
     attr(:selected, :integer, default: 0, doc: "the position of the layer being edited")
+
+    attr(:chosen, :any,
+      default: nil,
+      doc: "the positions selected beside the anchor, a `MapSet` (spec/14 §18.8, #382)"
+    )
+
     attr(:disabled, :any, default: nil, doc: "the positions dropped from the stack, a `MapSet`")
 
     attr(:expanded, :any,
@@ -267,6 +273,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # its toggle now offers; a row under a closed group is not drawn.
     defp entries(%{rows: rows, selected: selected, disabled: disabled} = assigns) do
       off = disabled || MapSet.new()
+      chosen = assigns.chosen || MapSet.new()
       open = assigns.expanded || MapSet.new()
       hidden = assigns.hidden || MapSet.new()
       placed = assigns.placed || []
@@ -289,7 +296,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           kind: if(row.group?, do: nil, else: kind_word(row.kind)),
           into: if(row.group? and not locked?, do: encode_id(row.id)),
           hidden?: index in hidden,
-          class: classes(index == selected, index in off, state, row.group?),
+          class: classes(index == selected, index in chosen, index in off, state, row.group?),
           toggle: if(index in off, do: "Enable", else: "Disable"),
           eye: if(index in off, do: :eye_off, else: :eye),
           locked?: locked?,
@@ -344,9 +351,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
     end
 
-    defp classes(selected?, disabled?, state, group?) do
+    defp classes(selected?, chosen?, disabled?, state, group?) do
       ["vis-builder-layer"]
       |> then(&if selected?, do: &1 ++ ["vis-builder-layer-selected"], else: &1)
+      |> then(&if chosen?, do: &1 ++ ["vis-builder-layer-chosen"], else: &1)
       |> then(&if disabled?, do: &1 ++ ["vis-builder-layer-disabled"], else: &1)
       |> then(&if state in [:linked, :edited], do: &1 ++ ["vis-builder-layer-locked"], else: &1)
       |> then(&if state == :edited, do: &1 ++ ["vis-builder-layer-edited"], else: &1)

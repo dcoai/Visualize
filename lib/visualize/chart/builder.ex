@@ -177,6 +177,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          field: nil,
          menu: nil,
          reverting: nil,
+         selection: MapSet.new(),
          context: :inspect,
          library_open: true,
          context_width: 400,
@@ -412,6 +413,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   rows={@tree_rows}
                   hidden={@hidden_index}
                   selected={@selected_index}
+                  chosen={@chosen_index}
                   disabled={@disabled}
                   expanded={@expanded_index}
                   placed={@placed_layers}
@@ -716,6 +718,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               pool={@pool}
               index={@selected_index}
               reverting={@reverting == @site.use.id}
+              store?={@store != nil}
               target={@myself}
             />
             <Variables.panel
@@ -1448,12 +1451,183 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- the stack -----------------------------------------------------------------------
 
+    # A Shift-click extends the selection to the row, a Ctrl-click toggles it — within
+    # the anchor's container (spec/14 §18.8, #382); a plain click makes it the one row.
+    def handle_event("select_layer", %{"index" => index, "extend" => how}, socket)
+        when how in ["range", "toggle"] do
+      {:noreply, extended(socket, position(index), how)}
+    end
+
     def handle_event("select_layer", %{"index" => index}, socket) do
       {:noreply, select(socket, position(index))}
     end
 
+    # -- many rows: group, ungroup, copy a group, save a group (spec/14 §18.8, #382) ------
+
+    # The selection — or the row alone, when it is not among the selected — wrapped in a
+    # new group at the first one's position, expanded and selected.
+    def handle_event("group_sites", %{"index" => index}, socket) do
+      %{uses: uses, labels: labels} = socket.assigns
+
+      case row_use(uses, index) do
+        nil ->
+          {:noreply, socket}
+
+        %Use{id: id} ->
+          chosen = chosen(socket.assigns)
+          ids = if MapSet.member?(chosen, id), do: MapSet.to_list(chosen), else: [id]
+          group = %{Use.new(nil, uses) | ref: nil, local: Stack.group()}
+          n = uses |> Stack.all() |> Enum.count(&Stack.group?(&1.use)) |> Kernel.+(1)
+
+          case Stack.grouped(uses, ids, group) do
+            {:ok, grouped} ->
+              {:noreply,
+               socket
+               |> assign(
+                 uses: grouped,
+                 labels: Map.put(labels, group.id, "group #{n}"),
+                 expanded_sites: MapSet.put(socket.assigns.expanded_sites, group.id),
+                 menu: nil,
+                 notice: nil
+               )
+               |> select(Stack.index_of(grouped, group.id))}
+
+            :error ->
+              {:noreply, assign(socket, menu: nil, notice: "select within one layer or group")}
+          end
+      end
+    end
+
+    # A group's sites spliced back at its position, selected; a referenced group is the
+    # library's inside and is refused.
+    def handle_event("ungroup_site", %{"index" => index}, socket) do
+      %{uses: uses, labels: labels} = socket.assigns
+
+      case row_use(uses, index) do
+        %Use{ref: nil} = use ->
+          if Stack.group?(use) do
+            inner = Stack.children(use)
+            spliced = Stack.ungrouped(uses, use.id)
+
+            socket =
+              assign(socket,
+                uses: spliced,
+                labels: Map.delete(labels, use.id),
+                expanded_sites: MapSet.delete(socket.assigns.expanded_sites, use.id),
+                menu: nil,
+                notice: nil
+              )
+
+            case inner do
+              [] ->
+                {:noreply, select(socket, position(index))}
+
+              [first | _] ->
+                {:noreply,
+                 socket
+                 |> select(Stack.index_of(spliced, first.id))
+                 |> assign(:selection, MapSet.new(Enum.map(inner, & &1.id)))}
+            end
+          else
+            {:noreply,
+             assign(socket, menu: nil, notice: "#{row_name(socket, index)} is not a group")}
+          end
+
+        %Use{} ->
+          {:noreply, assign(socket, menu: nil, notice: "unlock #{row_name(socket, index)} first")}
+
+        nil ->
+          {:noreply, socket}
+      end
+    end
+
+    # A copy of a group and everything in it, fresh ids throughout, directly after it.
+    def handle_event("copy_site", %{"index" => index}, socket) do
+      %{uses: uses, labels: labels} = socket.assigns
+
+      case row_use(uses, index) do
+        nil ->
+          {:noreply, socket}
+
+        %Use{} = use ->
+          {copy, pairs} = Stack.duplicated(uses, use)
+          inserted = Stack.insert(uses, use.id, copy)
+
+          labels =
+            Enum.reduce(pairs, labels, fn {new, old}, acc ->
+              case Map.fetch(acc, old) do
+                {:ok, name} when new == copy.id -> Map.put(acc, new, "copy of #{name}")
+                {:ok, name} -> Map.put(acc, new, name)
+                :error -> acc
+              end
+            end)
+
+          {:noreply,
+           socket
+           |> assign(uses: inserted, labels: labels, menu: nil, notice: nil)
+           |> select(Stack.index_of(inserted, copy.id))}
+      end
+    end
+
+    # *Save as …* on the menu: the row selected, and the context panel's name field focused.
+    def handle_event("save_site_as", %{"index" => index}, socket) do
+      {:noreply,
+       socket
+       |> assign(:menu, nil)
+       |> select(position(index))
+       |> push_event("vis:focus", %{id: "#{socket.assigns.id}-masks-save-name"})}
+    end
+
+    # A group's structure written to the store as a composite entry of the name, and the
+    # row made a reference to it (spec/14 §18.8, §19.6, #382).
+    def handle_event("save_site", %{"index" => index, "name" => name}, socket) do
+      %{uses: uses, labels: labels, store: store} = socket.assigns
+      trimmed = String.trim(name)
+
+      case row_use(uses, index) do
+        %Use{ref: nil, local: %{composite: composite}} = use when is_map(composite) ->
+          cond do
+            is_nil(store) ->
+              {:noreply, assign(socket, :notice, "no store is configured")}
+
+            trimmed == "" ->
+              {:noreply, assign(socket, :notice, "a saved group needs a name")}
+
+            true ->
+              fragment = %{
+                composite: %{uses: Stack.children(use), vars: Map.get(composite, :vars, %{})}
+              }
+
+              entry = %{id: nil, name: trimmed, kind: :composite, fragment: fragment}
+
+              saved(socket, Store.put(store, entry), fn s, id ->
+                inner = for %{use: held} <- Stack.all(Stack.children(use)), do: held.id
+
+                assign(s,
+                  uses: Stack.update(uses, use.id, &%{&1 | ref: id, local: %{}}),
+                  labels: labels |> Map.drop(inner) |> Map.put(use.id, trimmed),
+                  expanded_sites: MapSet.delete(s.assigns.expanded_sites, use.id),
+                  selection: MapSet.new()
+                )
+              end)
+              |> then(&{:noreply, &1})
+          end
+
+        %Use{} ->
+          {:noreply, assign(socket, :notice, "#{row_name(socket, index)} is not a group")}
+
+        nil ->
+          {:noreply, socket}
+      end
+    end
+
     # The keyboard has every gesture the pointer has (spec/14 §18.17): Enter and Space
     # select, the arrows move and focus follows the row to where the layer went.
+    def handle_event("layer_key", %{"key" => key, "index" => index, "shift" => true}, socket)
+        when key in ["ArrowUp", "ArrowDown"] do
+      {:noreply, extended_by_key(socket, position(index), key)}
+    end
+
     def handle_event("layer_key", %{"key" => key, "index" => index}, socket) do
       at = position(index)
       count = length(Stack.all(socket.assigns.uses))
@@ -2449,6 +2623,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         preview?: kind == :composite,
         chart_rows: chart_rows(assigns),
         selected_index: Stack.index_of(assigns.uses, assigns.selected),
+        chosen_index: chosen_index(assigns),
         disabled: disabled(assigns.uses),
         expanded_index: expanded_index(assigns),
         placed_layers: placed_layers(assigns),
@@ -2516,7 +2691,123 @@ if Code.ensure_loaded?(Phoenix.Component) do
             [{"revert_site", "Revert to original"}]
         end
 
-      %{index: position(index), items: lock ++ revert}
+      chosen = chosen(assigns)
+
+      grouping =
+        cond do
+          Stack.group?(use) ->
+            [
+              {"group_sites", "Group"},
+              {"ungroup_site", "Ungroup"},
+              {"copy_site", "Copy"},
+              {"save_site_as", "Save as …"}
+            ]
+
+          use.ref != nil and match?({:composite, _}, use.ref) ->
+            [{"group_sites", "Group"}, {"copy_site", "Copy"}]
+
+          true ->
+            [{"group_sites", "Group"}]
+        end
+
+      grouping =
+        if MapSet.size(chosen) > 1 and MapSet.member?(chosen, use.id),
+          do:
+            Enum.map(grouping, fn
+              {"group_sites", _} -> {"group_sites", "Group #{MapSet.size(chosen)} selected"}
+              item -> item
+            end),
+          else: grouping
+
+      %{index: position(index), items: grouping ++ lock ++ revert}
+    end
+
+    # The flat positions of the rows selected beside the anchor, for the panel.
+    defp chosen_index(assigns) do
+      chosen = chosen(assigns)
+
+      for %{use: use, index: index} <- Stack.all(assigns.uses),
+          MapSet.member?(chosen, use.id),
+          use.id != assigns.selected,
+          into: MapSet.new(),
+          do: index
+    end
+
+    # The rows selected (spec/14 §18.8, #382): the ids still in the tree, the anchor among
+    # them whatever the set says, so a stale id is never a selection.
+    defp chosen(%{uses: uses, selected: selected, selection: selection}) do
+      ids = for %{use: use} <- Stack.all(uses), into: MapSet.new(), do: use.id
+
+      selection
+      |> MapSet.intersection(ids)
+      |> then(&if selected, do: MapSet.put(&1, selected), else: &1)
+    end
+
+    # The selection extended to a row — the range from the anchor, or the row toggled —
+    # within the anchor's container; a row elsewhere is refused (§18.8, #382).
+    defp extended(socket, at, how) do
+      %{uses: uses, selected: selected} = socket.assigns
+
+      case {row_use(uses, at), Stack.get(uses, selected)} do
+        {nil, _} ->
+          socket
+
+        {use, nil} ->
+          select(socket, at) |> assign(:selection, MapSet.new([use.id]))
+
+        {use, anchor} ->
+          case {how, Stack.between(uses, anchor.id, use.id)} do
+            {"range", {:ok, ids}} ->
+              assign(socket, selection: MapSet.new(ids), notice: nil)
+
+            {"toggle", {:ok, _ids}} ->
+              chosen = chosen(socket.assigns)
+
+              toggled =
+                if MapSet.member?(chosen, use.id) and use.id != anchor.id,
+                  do: MapSet.delete(chosen, use.id),
+                  else: MapSet.put(chosen, use.id)
+
+              assign(socket, selection: toggled, notice: nil)
+
+            {_how, :error} ->
+              assign(socket, :notice, "select within one layer or group")
+          end
+      end
+    end
+
+    # Shift+Arrow: the range grown by one row at the edge away from the anchor.
+    defp extended_by_key(socket, at, key) do
+      %{uses: uses, selected: selected} = socket.assigns
+      rows = Stack.all(uses)
+
+      case Stack.get(uses, selected) do
+        nil ->
+          socket
+
+        anchor ->
+          chosen = chosen(socket.assigns)
+          indexes = for row <- rows, MapSet.member?(chosen, row.use.id), do: row.index
+          anchor_at = Stack.index_of(uses, anchor.id)
+
+          edge =
+            case key do
+              "ArrowUp" -> min(Enum.min(indexes, fn -> anchor_at end), at) - 1
+              "ArrowDown" -> max(Enum.max(indexes, fn -> anchor_at end), at) + 1
+            end
+
+          case Enum.at(rows, edge) do
+            nil ->
+              socket
+
+            _row when edge < 0 ->
+              socket
+
+            row ->
+              extended(socket, row.index, "range")
+              |> push_event("vis:focus", %{id: "#{socket.assigns.id}-layers-row-#{edge}"})
+          end
+      end
     end
 
     # A site is reverted when it has an origin, or a ref with a local (§18.8).
@@ -3017,6 +3308,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           # Selecting a site opens the site's context (spec/14 §19.10).
           assign(socket,
             selected: use.id,
+            selection: MapSet.new(),
             reverting: nil,
             node_label: "design",
             facet: nil,
@@ -3104,7 +3396,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
         chart ->
           socket
           |> assign(Map.take(chart, @chart_state))
-          |> assign(chart: id, node_label: "design", facet: nil, style_entry: nil, field: nil)
+          |> assign(
+            chart: id,
+            selection: MapSet.new(),
+            node_label: "design",
+            facet: nil,
+            style_entry: nil,
+            field: nil
+          )
           |> update(:charts, fn charts ->
             Enum.map(charts, &if(&1.id == id, do: %{&1 | expanded: true}, else: &1))
           end)
