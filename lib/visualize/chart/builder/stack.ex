@@ -772,6 +772,142 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
+    The ids from an anchor to a sibling, in tree order — the range a Shift+click selects
+    (spec/14 §18.8, #382) — or `:error` when the two are not siblings.
+
+        iex> alias Visualize.Chart.{Builder.Stack, Use}
+        iex> uses = for n <- 1..3, do: %Use{id: {:use, n}, ref: nil, local: %{mark: %{}}}
+        iex> Stack.between(uses, {:use, 3}, {:use, 1})
+        {:ok, [{:use, 1}, {:use, 2}, {:use, 3}]}
+        iex> Stack.between([%Use{id: {:use, 4}, ref: nil, local: %{composite: %{uses: uses, vars: %{}}}}], {:use, 4}, {:use, 1})
+        :error
+    """
+    @spec between([Use.t()], Use.id(), Use.id()) :: {:ok, [Use.id()]} | :error
+    def between(uses, anchor, id) do
+      case siblings(uses, [anchor, id]) do
+        {:ok, container} ->
+          ids = Enum.map(container, & &1.id)
+          [from, to] = Enum.sort([anchor, id], &(index_in(ids, &1) <= index_in(ids, &2)))
+          {:ok, Enum.slice(ids, index_in(ids, from)..index_in(ids, to))}
+
+        :error ->
+          :error
+      end
+    end
+
+    @doc """
+    Sibling sites wrapped in a group at the first one's position, in their tree order
+    (spec/14 §18.8, #382); `:error` when the ids are not siblings, or none.
+
+        iex> alias Visualize.Chart.{Builder.Stack, Use}
+        iex> uses = for n <- 1..3, do: %Use{id: {:use, n}, ref: nil, local: %{mark: %{}}}
+        iex> group = %{Use.new(nil, uses) | local: Stack.group()}
+        iex> {:ok, grouped} = Stack.grouped(uses, [{:use, 3}, {:use, 2}], group)
+        iex> Enum.map(grouped, & &1.id)
+        [{:use, 1}, {:use, 4}]
+        iex> grouped |> List.last() |> Stack.children() |> Enum.map(& &1.id)
+        [{:use, 2}, {:use, 3}]
+    """
+    @spec grouped([Use.t()], [Use.id()], Use.t()) :: {:ok, [Use.t()]} | :error
+    def grouped(_uses, [], _group), do: :error
+
+    def grouped(uses, ids, group) do
+      case siblings(uses, ids) do
+        {:ok, container} ->
+          {inside, rest} = Enum.split_with(container, &(&1.id in ids))
+          first = Enum.find_index(container, &(&1.id in ids))
+          filled = with_children(group, inside)
+          {:ok, replaced(uses, container, List.insert_at(rest, first, filled))}
+
+        :error ->
+          :error
+      end
+    end
+
+    @doc """
+    An inline group's sites spliced in at its position, the group gone (spec/14 §18.8,
+    #382); any other site leaves the tree unchanged.
+    """
+    @spec ungrouped([Use.t()], Use.id()) :: [Use.t()]
+    def ungrouped(uses, id) do
+      Enum.flat_map(uses, fn use ->
+        cond do
+          use.id == id and group?(use) -> children(use)
+          children(use) == [] -> [use]
+          true -> [with_children(use, ungrouped(children(use), id))]
+        end
+      end)
+    end
+
+    @doc """
+    A copy of a site and what it holds, every id fresh among the tree, with the
+    `{copy, original}` id pairs so labels follow (spec/14 §18.8, #382).
+
+        iex> alias Visualize.Chart.{Builder.Stack, Use}
+        iex> inner = [%Use{id: {:use, 2}, ref: nil, local: %{mark: %{}}}]
+        iex> group = %Use{id: {:use, 1}, ref: nil, local: %{composite: %{uses: inner, vars: %{}}}}
+        iex> {copy, pairs} = Stack.duplicated([group], group)
+        iex> {copy.id, Enum.map(Stack.children(copy), & &1.id), pairs}
+        {{:use, 3}, [{:use, 4}], [{{:use, 3}, {:use, 1}}, {{:use, 4}, {:use, 2}}]}
+    """
+    @spec duplicated([Use.t()], Use.t()) :: {Use.t(), [{Use.id(), Use.id()}]}
+    def duplicated(uses, %Use{} = use) do
+      {copy, {_among, pairs}} = fresh_copy(use, {uses, []})
+      {copy, Enum.reverse(pairs)}
+    end
+
+    defp fresh_copy(%Use{} = use, {among, pairs}) do
+      copy = %{use | id: Use.new(nil, among).id}
+      among = among ++ [copy]
+      pairs = [{copy.id, use.id} | pairs]
+
+      case children(use) do
+        [] ->
+          {copy, {among, pairs}}
+
+        inner ->
+          {inner_copies, state} = Enum.map_reduce(inner, {among, pairs}, &fresh_copy/2)
+          {with_children(copy, inner_copies), state}
+      end
+    end
+
+    # The container holding every id — the top, or a group's children — or `:error`.
+    defp siblings(uses, ids) do
+      rows = all(uses)
+
+      parents =
+        for id <- ids, row = Enum.find(rows, &(&1.use.id == id)), uniq: true, do: row.parent
+
+      case parents do
+        [nil] when ids != [] ->
+          if(Enum.all?(ids, &get(uses, &1)), do: {:ok, uses}, else: :error)
+
+        [parent] when parent != nil ->
+          {:ok, children(get(uses, parent))}
+
+        _other ->
+          :error
+      end
+    end
+
+    # The tree with one container's list replaced by another: the top, or a group's.
+    defp replaced(uses, container, list) do
+      if uses == container do
+        list
+      else
+        Enum.map(uses, fn use ->
+          case children(use) do
+            [] -> use
+            ^container -> with_children(use, list)
+            inner -> with_children(use, replaced(inner, container, list))
+          end
+        end)
+      end
+    end
+
+    defp index_in(ids, id), do: Enum.find_index(ids, &(&1 == id))
+
+    @doc """
     A use inserted before the row at a flat position, in that row's own container — at
     the end of the top past the last row (spec/14 §18.17, #380).
     """

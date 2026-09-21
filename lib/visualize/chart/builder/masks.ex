@@ -49,12 +49,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "whether a revert of this site is armed and the next click does it"
     )
 
+    attr(:store?, :boolean, default: false, doc: "whether a store is configured, for *save as*")
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
 
     @doc """
-    Renders the layer's context: its *declared as* key control, its lock actions, its
-    not-placed fault, and the free variables the site carries. Its mask is the layer
-    row's (§18.8).
+    Renders the layer's context: its *declared as* key control, its lock actions, the
+    *save as* form of an inline group (§18.8, #382), its not-placed fault, and the free
+    variables the site carries. Its mask is the layer row's (§18.8).
     """
     def panel(assigns) do
       assigns =
@@ -112,6 +114,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
             placeholder={if(@choices, do: "or a name the pool lacks", else: "a name")}
             aria-label={if(@choices, do: "a name the pool lacks", else: "declared as")}
           />
+        </form>
+        <form
+          :if={@store? and @index != nil and Stack.group?(@use)}
+          id={@id <> "-save"}
+          class="vis-builder-site-save"
+          phx-submit="save_site"
+          phx-target={@target}
+        >
+          <input type="hidden" name="index" value={@index} />
+          <label class="vis-builder-control-label" for={@id <> "-save-name"}>save as</label>
+          <input
+            id={@id <> "-save-name"}
+            type="text"
+            name="name"
+            class="vis-builder-name"
+            placeholder="Group:sub-group:name"
+            aria-label="save the group to the library as"
+          />
+          <button type="submit" class="vis-builder-put">Save to library</button>
         </form>
         <p :if={@keyless} class="vis-builder-context-fault">
           not placed: a {kind_word(@fragment)} needs a name to be declared under

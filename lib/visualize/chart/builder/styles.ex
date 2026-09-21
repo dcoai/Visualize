@@ -753,6 +753,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       vertical-align: super;
     }
 
+    /* A row selected beside the anchor (spec/14 §18.8, #382). */
+    .vis-builder .vis-builder-layer-chosen {
+      background: var(--vis-builder-panel);
+      box-shadow: inset 3px 0 0 var(--vis-builder-line);
+    }
+
+    .vis-builder .vis-builder-site-save {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin: 0 0 8px;
+    }
+
     .vis-builder .vis-builder-context-actions {
       display: flex;
       flex-wrap: wrap;
