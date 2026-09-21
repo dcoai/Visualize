@@ -74,15 +74,16 @@ defmodule Visualize.Chart.Codec do
 
   defp term(%Var{name: name}), do: %{"$var" => Atom.to_string(name)}
 
-  defp term(%Use{id: {:use, n}, ref: ref, mask: mask, vars: vars, local: local, key: key}) do
+  defp term(%Use{id: {:use, n}} = use) do
     %{
       "$use" => %{
         "id" => n,
-        "ref" => if(ref, do: term(ref)),
-        "mask" => if(mask == :all, do: "all", else: Enum.map(mask, &term/1)),
-        "vars" => term(vars),
-        "local" => term(local),
-        "key" => if(key, do: Atom.to_string(key))
+        "ref" => if(use.ref, do: term(use.ref)),
+        "mask" => if(use.mask == :all, do: "all", else: Enum.map(use.mask, &term/1)),
+        "vars" => term(use.vars),
+        "local" => term(use.local),
+        "key" => if(use.key, do: Atom.to_string(use.key)),
+        "origin" => if(use.origin, do: term(use.origin))
       }
     }
   end
@@ -206,7 +207,8 @@ defmodule Visualize.Chart.Codec do
       mask: use |> Map.get("mask", []) |> read_mask(),
       vars: use |> Map.get("vars", %{}) |> read_term(),
       local: use |> Map.get("local", %{}) |> read_term(),
-      key: use |> Map.get("key") |> read_key()
+      key: use |> Map.get("key") |> read_key(),
+      origin: use |> Map.get("origin") |> read_ref()
     }
   end
 

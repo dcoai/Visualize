@@ -958,6 +958,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "the node is the library's: the fields are disabled under a note (§18.15)"
     )
 
+    attr(:unlock, :any,
+      default: nil,
+      doc: "the row of the locked owner, which *unlock* on the note takes (§18.8, #381)"
+    )
+
     attr(:guessed, :any,
       default: MapSet.new(),
       doc: "the field labels — `marks[0].channels.x` — a placed mark guessed (§18.16)"
@@ -993,6 +998,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             from the library — open it to edit
             <button :if={@label} type="button" class="vis-builder-section-select-button" phx-click="copy_node" phx-value-node={@label} phx-target={@target}>copy</button>
             <button :if={@label} type="button" class="vis-builder-section-select-button" phx-click="override_node" phx-value-node={@label} phx-target={@target}>override</button>
+            <button :if={@unlock != nil} type="button" class="vis-builder-section-select-button" title="unlock — copy the entry into this chart and edit it here (spec/14 §18.8)" phx-click="unlock_site" phx-value-index={@unlock} phx-target={@target}>unlock</button>
           </p>
           <fieldset class={"vis-builder-form-body" <> if(@locked, do: " vis-builder-form-locked", else: "")} disabled={@locked}>
           <%= for {group, fields} <- @blocks do %>

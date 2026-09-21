@@ -15,6 +15,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
+    alias Visualize.Chart.Builder.Stack
     alias Visualize.Chart.{Fragment, Use}
 
     attr(:id, :string, required: true, doc: "the panel's id")
@@ -38,22 +39,45 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "the names of the host's sample sources, sorted (§19.10)"
     )
 
+    attr(:index, :any,
+      default: nil,
+      doc: "the site's row, which the lock actions take (§18.8, #381)"
+    )
+
+    attr(:reverting, :boolean,
+      default: false,
+      doc: "whether a revert of this site is armed and the next click does it"
+    )
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
 
     @doc """
-    Renders the layer's context: its *declared as* key control, its not-placed fault, and
-    the free variables the site carries. Its mask is the layer row's (§18.8).
+    Renders the layer's context: its *declared as* key control, its lock actions, its
+    not-placed fault, and the free variables the site carries. Its mask is the layer
+    row's (§18.8).
     """
     def panel(assigns) do
       assigns =
         assign(assigns,
           keyed?: keyed?(assigns.fragment),
-          choices: choices(assigns)
+          choices: choices(assigns),
+          actions: actions(assigns.use, assigns.reverting)
         )
 
       ~H"""
       <div id={@id} class="vis-builder-layer-context">
         <h3 class="vis-builder-context-title">{@label}</h3>
+        <p :if={@actions != [] and @index != nil} class="vis-builder-context-actions">
+          <span class="vis-builder-context-state">{state_word(@use)}</span>
+          <button
+            :for={{event, word} <- @actions}
+            type="button"
+            class="vis-builder-section-select-button"
+            phx-click={event}
+            phx-value-index={@index}
+            phx-target={@target}
+          >{word}</button>
+        </p>
         <form
           :if={@keyed?}
           id={@id <> "-declared"}
@@ -97,6 +121,35 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </p>
       </div>
       """
+    end
+
+    # The site's lock actions, by its linkage (spec/14 §18.8, #381): unlock for a linked
+    # site, lock for an unlocked one, revert where there is something to revert.
+    defp actions(%Use{} = use, reverting?) do
+      lock =
+        case Stack.linkage(use) do
+          :inline -> []
+          :unlocked -> [{"lock_site", "lock"}]
+          _linked -> [{"unlock_site", "unlock"}]
+        end
+
+      revert =
+        cond do
+          use.origin == nil and (use.ref == nil or map_size(use.local) == 0) -> []
+          reverting? -> [{"revert_site", "revert — discards #{map_size(use.local)} edited keys"}]
+          true -> [{"revert_site", "revert to original"}]
+        end
+
+      lock ++ revert
+    end
+
+    defp state_word(%Use{} = use) do
+      case Stack.linkage(use) do
+        :linked -> "linked to the library"
+        :edited -> "linked, with local changes"
+        :unlocked -> "unlocked from the library"
+        :inline -> ""
+      end
     end
 
     @doc """

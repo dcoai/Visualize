@@ -736,6 +736,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       color: var(--vis-builder-accent);
     }
 
+    /* A site locked again over local changes, and one unlocked from its entry: the open
+       lock reads muted, the edited lock carries a dot (§18.8, #381). */
+    .vis-builder .vis-builder-layer-unlocked .vis-builder-layer-lock-open {
+      color: var(--vis-builder-muted);
+    }
+
+    .vis-builder .vis-builder-layer-edited .vis-builder-layer-lock::after {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-left: 2px;
+      border-radius: 50%;
+      background: var(--vis-builder-accent);
+      vertical-align: super;
+    }
+
+    .vis-builder .vis-builder-context-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: var(--vis-builder-muted);
+    }
+
     .vis-builder .vis-builder-form-body {
       margin: 0;
       padding: 0;
@@ -2120,7 +2147,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
     }
 
-    .vis-builder-menu-node + .vis-builder-menu-node {
+    .vis-builder-menu-node + .vis-builder-menu-node,
+    .vis-builder-menu-site + .vis-builder-menu-node {
       border-top: 1px solid var(--vis-builder-line);
       margin-top: 4px;
       padding-top: 4px;

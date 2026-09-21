@@ -193,6 +193,83 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def locked?(%Use{ref: nil}), do: false
     def locked?(%Use{}), do: true
 
+    @doc """
+    A use's state toward the library (spec/14 §18.8, §19.3, #381): `:inline` with no ref and
+    no origin, `:linked` with a ref and no local, `:edited` with a ref over a local — locked
+    again after edits — and `:unlocked` with an origin and no ref.
+
+        iex> alias Visualize.Chart.{Builder.Stack, Use}
+        iex> Stack.linkage(Use.new({:style, 3}))
+        :linked
+        iex> Stack.linkage(%{Use.new({:style, 3}) | local: %{stroke: "#111"}})
+        :edited
+        iex> Stack.linkage(%{Use.new(nil) | origin: {:style, 3}})
+        :unlocked
+        iex> Stack.linkage(Use.new(nil))
+        :inline
+    """
+    @spec linkage(Use.t()) :: :inline | :linked | :edited | :unlocked
+    def linkage(%Use{ref: nil, origin: nil}), do: :inline
+    def linkage(%Use{ref: nil}), do: :unlocked
+    def linkage(%Use{local: local}) when map_size(local) == 0, do: :linked
+    def linkage(%Use{}), do: :edited
+
+    @doc """
+    A use unlocked from its entry (spec/14 §18.8, #381): the ref moved to `origin` and the
+    entry's body copied into `local` under whatever the site already held there; mask, vars
+    and key stay the site's, so the chart draws as it did. A composite entry unlocks to a
+    group of copies of its sites, as `copies/3` reads them, the composite's vars the
+    group's; the inner sites come with `nil` ids for the caller to issue, and their labels
+    and the entry's signals are returned beside the use.
+    """
+    @spec unlocked(
+            Use.t(),
+            %{kind: atom(), name: String.t() | nil, fragment: map()},
+            (Fragment.id() -> {:ok, map()} | :error),
+            (Fragment.id() -> String.t() | nil)
+          ) :: {Use.t(), [{Use.t(), String.t()}], map()}
+    def unlocked(%Use{ref: ref} = use, entry, fetch, name_of) when ref != nil do
+      {sites, vars, signals} = copies(entry, fetch, name_of)
+
+      local =
+        case entry do
+          %{kind: :composite} ->
+            %{composite: %{uses: Enum.map(sites, &elem(&1, 0)), vars: vars}}
+
+          _object ->
+            [{%Use{local: body}, _name}] = sites
+            Chart.stack([body, use.local])
+        end
+
+      labelled = if match?(%{kind: :composite}, entry), do: sites, else: []
+      {%{use | ref: nil, origin: ref, local: local}, labelled, signals}
+    end
+
+    @doc """
+    A use with an origin linked to it again, its local kept over the link (spec/14 §18.8,
+    #381); a use with no origin has nothing to link to and is unchanged.
+
+        iex> alias Visualize.Chart.{Builder.Stack, Use}
+        iex> use = %{Use.new(nil) | origin: {:style, 3}, local: %{stroke: "#111"}}
+        iex> Stack.locked(use) |> Map.take([:ref, :origin, :local])
+        %{ref: {:style, 3}, origin: nil, local: %{stroke: "#111"}}
+    """
+    @spec locked(Use.t()) :: Use.t()
+    def locked(%Use{origin: nil} = use), do: use
+    def locked(%Use{origin: origin} = use), do: %{use | ref: origin, origin: nil}
+
+    @doc """
+    A use as the library has it (spec/14 §18.8, #381): its local dropped, its ref restored
+    from its origin where it was unlocked, mask, vars and key kept — they are the site's.
+
+        iex> alias Visualize.Chart.{Builder.Stack, Use}
+        iex> use = %{Use.new(nil) | origin: {:style, 3}, local: %{stroke: "#111"}, mask: [:fill]}
+        iex> Stack.reverted(use) |> Map.take([:ref, :origin, :local, :mask])
+        %{ref: {:style, 3}, origin: nil, local: %{}, mask: [:fill]}
+    """
+    @spec reverted(Use.t()) :: Use.t()
+    def reverted(%Use{} = use), do: %{locked(use) | local: %{}}
+
     @doc "A use with its enabled state flipped: disabling is a mask of everything (§19.3)."
     @spec toggle(Use.t()) :: Use.t()
     def toggle(%Use{mask: :all} = use), do: %{use | mask: []}

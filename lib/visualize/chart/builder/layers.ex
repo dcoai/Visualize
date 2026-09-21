@@ -36,17 +36,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:rows, :list,
       required: true,
       doc:
-        "the tree's rows by flat position — name, depth, parent, group?, count, open?, kind, id (spec/14 §18.8, #380)"
+        "the tree's rows by flat position — name, depth, parent, group?, count, open?, kind, id, state (spec/14 §18.8, #380, #381)"
     )
 
     attr(:hidden, :any, default: nil, doc: "the positions under a closed group, a `MapSet`")
     attr(:selected, :integer, default: 0, doc: "the position of the layer being edited")
     attr(:disabled, :any, default: nil, doc: "the positions dropped from the stack, a `MapSet`")
-
-    attr(:locked, :any,
-      default: nil,
-      doc: "the positions whose site references a library entry, a `MapSet` (spec/14 §18.8)"
-    )
 
     attr(:expanded, :any,
       default: nil,
@@ -134,12 +129,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
             type="button"
             draggable="false"
             class="vis-builder-layer-lock"
-            title={"Open " <> entry.name <> " — from the library, edited by opening it"}
+            title={"Open " <> entry.name <> " — from the library" <> if(entry.state == :edited, do: ", with local changes", else: "") <> ", edited by opening it"}
             aria-label={"Open " <> entry.name}
             phx-click="open_layer"
             phx-value-index={entry.index}
             phx-target={@target}
           >{Phoenix.HTML.raw(Glyphs.icon(:lock))}</button>
+          <button
+            :if={entry.state == :unlocked}
+            type="button"
+            draggable="false"
+            class="vis-builder-layer-lock vis-builder-layer-lock-open"
+            title={"Lock " <> entry.name <> " — link it to the library again, keeping its changes"}
+            aria-label={"Lock " <> entry.name}
+            phx-click="lock_site"
+            phx-value-index={entry.index}
+            phx-target={@target}
+          >{Phoenix.HTML.raw(Glyphs.icon(:lock_open))}</button>
           <button
             type="button"
             draggable="false"
@@ -261,7 +267,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # its toggle now offers; a row under a closed group is not drawn.
     defp entries(%{rows: rows, selected: selected, disabled: disabled} = assigns) do
       off = disabled || MapSet.new()
-      held = assigns.locked || MapSet.new()
       open = assigns.expanded || MapSet.new()
       hidden = assigns.hidden || MapSet.new()
       placed = assigns.placed || []
@@ -270,6 +275,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       for {row, index} <- Enum.with_index(rows) do
         name = row.name
+        state = Map.get(row, :state, :inline)
+        locked? = state in [:linked, :edited]
 
         %{
           index: index,
@@ -280,16 +287,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
           count: row.count,
           open?: row.open?,
           kind: if(row.group?, do: nil, else: kind_word(row.kind)),
-          into: if(row.group? and index not in held, do: encode_id(row.id)),
+          into: if(row.group? and not locked?, do: encode_id(row.id)),
           hidden?: index in hidden,
-          class: classes(index == selected, index in off, index in held, row.group?),
+          class: classes(index == selected, index in off, state, row.group?),
           toggle: if(index in off, do: "Enable", else: "Disable"),
           eye: if(index in off, do: :eye_off, else: :eye),
-          locked?: index in held,
+          locked?: locked?,
+          state: state,
           expanded?: index in open,
           declared: if(index in open, do: declared(Enum.at(placed, index) || %{}), else: []),
           mask: Map.get(assigns.masks || %{}, index),
-          says: says(name, row, index, count, index == selected, index in off, index in held)
+          says: says(name, row, index, count, index == selected, index in off, state)
         }
       end
     end
@@ -310,9 +318,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp kind_word(_other), do: nil
 
     # What the row is and what its keys do, for hover and for what is announced (§18.17);
-    # a library layer says it is one, and that `o` opens it (§18.8).
-    defp says(name, row, index, count, selected?, disabled?, locked?) do
-      state =
+    # a library layer says it is one, and that `o` opens it and `l` unlocks it; an unlocked
+    # one that `l` locks it again (§18.8, #381).
+    defp says(name, row, index, count, selected?, disabled?, state) do
+      marks =
         [selected? && "selected", disabled? && "disabled"]
         |> Enum.filter(& &1)
         |> Enum.join(", ")
@@ -325,16 +334,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       "#{name}, #{role} #{index + 1} of #{count}" <>
-        if(state == "", do: "", else: ", " <> state) <>
+        if(marks == "", do: "", else: ", " <> marks) <>
         ": Enter to edit, arrows to move, Right to show what it declares, drag to reorder" <>
-        if(locked?, do: ", from the library: o to open", else: "")
+        case state do
+          :linked -> ", from the library: o to open, l to unlock"
+          :edited -> ", from the library with local changes: o to open, l to unlock"
+          :unlocked -> ", unlocked from the library: l to lock"
+          :inline -> ""
+        end
     end
 
-    defp classes(selected?, disabled?, locked?, group?) do
+    defp classes(selected?, disabled?, state, group?) do
       ["vis-builder-layer"]
       |> then(&if selected?, do: &1 ++ ["vis-builder-layer-selected"], else: &1)
       |> then(&if disabled?, do: &1 ++ ["vis-builder-layer-disabled"], else: &1)
-      |> then(&if locked?, do: &1 ++ ["vis-builder-layer-locked"], else: &1)
+      |> then(&if state in [:linked, :edited], do: &1 ++ ["vis-builder-layer-locked"], else: &1)
+      |> then(&if state == :edited, do: &1 ++ ["vis-builder-layer-edited"], else: &1)
+      |> then(&if state == :unlocked, do: &1 ++ ["vis-builder-layer-unlocked"], else: &1)
       |> then(&if group?, do: &1 ++ ["vis-builder-layer-group"], else: &1)
       |> Enum.join(" ")
     end

@@ -14,7 +14,8 @@ defmodule Visualize.Chart.Use do
         ref:   {:style, 11},             # which fragment (§19.2); nil for an inline-only site
         mask:  [:stroke],                # removed here, so a lower layer shows through (§19.5)
         vars:  %{color: var(:color_1)},  # what the fragment's variables mean here (§19.4)
-        local: %{opacity: 0.8}           # added or overridden here
+        local: %{opacity: 0.8},          # added or overridden here
+        origin: nil                      # the entry an unlocked site came from (#381)
       }
 
   A struct is a leaf of every walk (D-92), which is what keeps `Visualize.Chart.stack/1`
@@ -36,7 +37,7 @@ defmodule Visualize.Chart.Use do
   alias Visualize.Chart.Var
 
   @enforce_keys [:id, :ref]
-  defstruct id: nil, ref: nil, mask: [], vars: %{}, local: %{}, key: nil
+  defstruct id: nil, ref: nil, mask: [], vars: %{}, local: %{}, key: nil, origin: nil
 
   @typedoc "A site's own identity: unique within the composite that holds it."
   @type id :: {:use, pos_integer()}
@@ -50,7 +51,8 @@ defmodule Visualize.Chart.Use do
           mask: [path() | atom()],
           vars: %{atom() => term()},
           local: map(),
-          key: atom() | nil
+          key: atom() | nil,
+          origin: Chart.Fragment.id() | nil
         }
 
   @doc """

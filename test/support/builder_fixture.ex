@@ -82,7 +82,8 @@ defmodule Visualize.BuilderFixture do
         count: 0,
         open?: false,
         kind: nil,
-        id: nil
+        id: nil,
+        state: :inline
       }
     end
   end
