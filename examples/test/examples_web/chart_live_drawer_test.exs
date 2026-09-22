@@ -174,6 +174,42 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     refute h =~ "samples across"
   end
 
+  test "the data rate is live: a tick chart takes it at once, a streaming window keeps its instant and resyncs (#401)" do
+    # The slider is never disabled, running or not.
+    s = page("area")
+    {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
+    refute html(s) =~ ~s(class="perf-slider" disabled)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    s = settled(s)
+    refute html(s) =~ ~s(class="perf-slider" disabled)
+
+    # A tick chart takes the rate mid-run; nothing else changes.
+    {:noreply, s} = ChartLive.handle_event("run_data_rate", %{"data_rate" => "7"}, s)
+    assert s.assigns.run.data_rate == 7
+    assert s.assigns.run.running
+    assert s.assigns.run_scroll == nil
+    assert html(s) =~ "7 ticks/s"
+
+    # A streaming design: the window is retimed, its instant kept, and the next frame is
+    # a full redraw rather than a copy-shift at the old density.
+    t = page("scrolling_series")
+    {:noreply, t} = ChartLive.handle_event("drawer_toggle", %{}, t)
+    {:noreply, t} = ChartLive.handle_event("set_backend", %{"backend" => "incremental"}, t)
+    {:noreply, t} = ChartLive.handle_event("run_start", %{}, t)
+    t = settled(t)
+    t = Phoenix.Component.assign(t, run_scroll: Examples.Scroll.advance(t.assigns.run_scroll, 40))
+    %{origin: origin, samples_per_px: density} = t.assigns.run_scroll
+    assert origin > 0
+    t = update_in(t.assigns.run, &%{&1 | needs_full: false})
+
+    {:noreply, t} = ChartLive.handle_event("run_data_rate", %{"data_rate" => "60"}, t)
+    assert t.assigns.run.data_rate == 60
+    assert t.assigns.run_scroll.origin == origin
+    assert t.assigns.run_scroll.samples_per_px < density
+    assert t.assigns.run.needs_full
+    assert {_run, :full_redraw} = Run.decide(t.assigns.run, 1, true, {700, 1}, 0)
+  end
+
   test "a chart that animates by tick moves its data at the data rate, not the frame rate (#361)" do
     s = page("area")
     {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)

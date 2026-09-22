@@ -85,6 +85,14 @@ defmodule Examples.Run do
   @spec stop(t()) :: t()
   def stop(%__MODULE__{} = run), do: %{cancel(run) | running: false}
 
+  @doc """
+  The run whose next frame is a full redraw (spec/14 §12.6, #401): what a dropped scroll
+  frame raises, and what a density change needs — a column drawn at the old density means
+  a different span at the new one, so the canvas is repainted rather than copy-shifted.
+  """
+  @spec resync(t()) :: t()
+  def resync(%__MODULE__{} = run), do: %{run | needs_full: true}
+
   @doc "The run with a render in flight terminated; nothing else changes."
   @spec cancel(t()) :: t()
   def cancel(%__MODULE__{task: %Task{ref: ref, pid: pid}} = run) do

@@ -64,7 +64,7 @@ defmodule ExamplesWeb.PerformanceDrawer do
 
           <form phx-change="run_data_rate" class="perf-group perf-group-stream">
             <label class="perf-label" for="perf-rate">Data rate</label>
-            <input id="perf-rate" type="range" name="data_rate" min={@points.min} max={@points.max} step={@points.step} value={@run.data_rate} class="perf-slider" disabled={@run.running} />
+            <input id="perf-rate" type="range" name="data_rate" min={@points.min} max={@points.max} step={@points.step} value={@run.data_rate} class="perf-slider" />
             <span class="perf-value perf-rate-value"><%= @run.data_rate %> <%= @points.unit %></span>
             <span :if={@stream} class="perf-note"><%= @stream.samples_per_px %>/px · <%= @stream.count %> samples · <%= Float.round(@stream.span, 1) %> s across</span>
           </form>
