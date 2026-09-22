@@ -44,6 +44,24 @@ defmodule Examples.Scroll do
     |> Scale.Linear.range([0, w])
   end
 
+  @doc """
+  The window at another density, keeping its instant (spec/14 §12.6, #401): the origin is
+  in samples and is carried over, so the window still starts at the sample it did — the
+  rate may change mid-run without the chart jumping. The count follows the new density,
+  and the caller repaints in full, the copy-shift contract holding only while the density
+  is constant (spec/09 §5.3).
+
+      iex> scroll = Examples.Scroll.new(100, 4) |> Examples.Scroll.advance(25)
+      iex> scroll.origin
+      100
+      iex> retimed = Examples.Scroll.retimed(scroll, 2)
+      iex> {retimed.origin, retimed.samples_per_px, Examples.Scroll.count(retimed)}
+      {100, 2, 201}
+  """
+  @spec retimed(t(), pos_integer()) :: t()
+  def retimed(%__MODULE__{} = scroll, samples_per_px) when samples_per_px >= 1,
+    do: %{scroll | samples_per_px: samples_per_px}
+
   @doc "The samples a scroll of `px` pixels is."
   @spec samples(t(), non_neg_integer()) :: non_neg_integer()
   def samples(%__MODULE__{samples_per_px: d}, px), do: px * d

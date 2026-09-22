@@ -51,73 +51,109 @@ defmodule ExamplesWeb.ChartLive do
   def charts, do: @charts
 
   @animatable_charts [
-    "bar", "horizontal_bar", "line", "area", "pie", "donut",
-    "scatter", "radial", "gauge", "radar", "polar", "multi_line", "grouped_bar", "stacked_bar",
-    "stacked_area", "streamgraph", "ridgeline", "bubble", "heatmap", "force", "contour",
-    "sankey", "treemap", "circle_pack", "sunburst", "tree", "cluster", "chord",
-    "world_map", "globe", "hexbin", "spectrum"
+    "bar",
+    "horizontal_bar",
+    "line",
+    "area",
+    "pie",
+    "donut",
+    "scatter",
+    "radial",
+    "gauge",
+    "radar",
+    "polar",
+    "multi_line",
+    "grouped_bar",
+    "stacked_bar",
+    "stacked_area",
+    "streamgraph",
+    "ridgeline",
+    "bubble",
+    "heatmap",
+    "force",
+    "contour",
+    "sankey",
+    "treemap",
+    "circle_pack",
+    "sunburst",
+    "tree",
+    "cluster",
+    "chord",
+    "world_map",
+    "globe",
+    "hexbin",
+    "spectrum"
   ]
 
   def mount(%{"chart" => chart_slug}, _session, socket) do
     case Map.get(@charts, chart_slug) do
       nil ->
         {:ok, push_navigate(socket, to: "/")}
+
       module ->
         palettes = ColorPalettes.list_palettes()
         palette_info = ColorPalettes.palette_info()
 
-        {:ok, assign(socket,
-          module: module,
-          slug: chart_slug,
-          title: module.title(),
-          description: module.description(),
-          current_palette: :default,
-          palettes: palettes,
-          palette_info: palette_info,
-          animatable: chart_slug in @animatable_charts,
-          hex_radius: 20,
-          # The still chart (#362): the last frame rendered outside a run — on mount and on
-          # a palette, backend or hex-size change — in a task, with the design as data.
-          still_frame: nil,
-          still_state: nil,
-          still_design: nil,
-          still_task: nil,
-          # The performance drawer (spec/14 §12.6, #322): a run of this chart on a
-          # backend, its frame, the compiled chart's state, and Compare's rows.
-          drawer_open: false,
-          # A streaming design starts at 600 samples/s per series, as the High-Performance
-          # page did, with its window at that density from the moment the drawer opens
-          # (#359); any other chart has no rate and no window.
-          # Any other chart's rate is ticks per second of its animation, 20 by default, the
-          # page's own cadence (#361); the run's tick counter advances by its arrivals.
-          run: Run.new(target_fps: 60, data_rate: if(Frames.stream?(module), do: 600, else: 20), flow_control: true),
-          run_ticks: 0,
-          run_backend: :svg,
-          run_state: nil,
-          run_frame: nil,
-          run_mode: nil,
-          run_scroll: nil,
-          run_series: series(module),
-          compare: nil,
-          compare_task: nil
-        )
-        |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))
-        |> still()}
+        {:ok,
+         assign(socket,
+           module: module,
+           slug: chart_slug,
+           title: module.title(),
+           description: module.description(),
+           current_palette: :default,
+           palettes: palettes,
+           palette_info: palette_info,
+           animatable: chart_slug in @animatable_charts,
+           hex_radius: 20,
+           # The still chart (#362): the last frame rendered outside a run — on mount and on
+           # a palette, backend or hex-size change — in a task, with the design as data.
+           still_frame: nil,
+           still_state: nil,
+           still_design: nil,
+           still_task: nil,
+           # The performance drawer (spec/14 §12.6, #322): a run of this chart on a
+           # backend, its frame, the compiled chart's state, and Compare's rows.
+           drawer_open: false,
+           # A streaming design starts at 600 samples/s per series, as the High-Performance
+           # page did, with its window at that density from the moment the drawer opens
+           # (#359); any other chart has no rate and no window.
+           # Any other chart's rate is ticks per second of its animation, 20 by default, the
+           # page's own cadence (#361); the run's tick counter advances by its arrivals.
+           run:
+             Run.new(
+               target_fps: 60,
+               data_rate: if(Frames.stream?(module), do: 600, else: 20),
+               flow_control: true
+             ),
+           run_ticks: 0,
+           run_backend: :svg,
+           run_state: nil,
+           run_frame: nil,
+           run_mode: nil,
+           run_scroll: nil,
+           run_series: series(module),
+           compare: nil,
+           compare_task: nil
+         )
+         |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))
+         |> still()}
     end
   end
 
   def handle_event("change_palette", %{"palette" => palette_key}, socket) do
-    palette = case palette_key do
-      "default" -> :default
-      "sunrise" -> :sunrise
-      "winter" -> :winter
-      "sunset" -> :sunset
-      "fall" -> :fall
-      "spring" -> :spring
-      "summer" -> :summer
-      "dark" -> :dark
-      _ -> :default
-    end
+    palette =
+      case palette_key do
+        "default" -> :default
+        "sunrise" -> :sunrise
+        "winter" -> :winter
+        "sunset" -> :sunset
+        "fall" -> :fall
+        "spring" -> :spring
+        "summer" -> :summer
+        "dark" -> :dark
+        _ -> :default
+      end
+
     {:noreply, socket |> assign(current_palette: palette) |> still()}
   end
 
@@ -125,7 +161,8 @@ defmodule ExamplesWeb.ChartLive do
   def handle_event("toggle_animation", _params, %{assigns: %{run: %Run{running: true}}} = socket),
     do: handle_event("run_stop", %{}, socket)
 
-  def handle_event("toggle_animation", _params, socket), do: handle_event("run_start", %{}, socket)
+  def handle_event("toggle_animation", _params, socket),
+    do: handle_event("run_start", %{}, socket)
 
   def handle_event("change_hex_radius", %{"hex_radius" => radius_str}, socket) do
     radius = String.to_integer(radius_str)
@@ -141,7 +178,11 @@ defmodule ExamplesWeb.ChartLive do
     {:noreply, assign(socket, drawer_open: not socket.assigns.drawer_open)}
   end
 
-  def handle_event("run_backend", %{"backend" => backend}, %{assigns: %{run: %Run{running: false}}} = socket) do
+  def handle_event(
+        "run_backend",
+        %{"backend" => backend},
+        %{assigns: %{run: %Run{running: false}}} = socket
+      ) do
     backend = String.to_existing_atom(backend)
     true = backend in Frames.backends(socket.assigns.module)
     {:noreply, socket |> assign(run_backend: backend) |> still()}
@@ -166,7 +207,10 @@ defmodule ExamplesWeb.ChartLive do
 
     run =
       Run.start(
-        %{socket.assigns.run | flow_control: socket.assigns.run.flow_control and Frames.acks?(backend)},
+        %{
+          socket.assigns.run
+          | flow_control: socket.assigns.run.flow_control and Frames.acks?(backend)
+        },
         System.monotonic_time(:millisecond),
         System.monotonic_time(:microsecond)
       )
@@ -177,9 +221,30 @@ defmodule ExamplesWeb.ChartLive do
 
   # The data rate of a streaming design (#327): its density follows the rate, as the
   # High-Performance page's did — about five seconds of samples across the plot.
-  def handle_event("run_data_rate", %{"data_rate" => rate}, %{assigns: %{run: %Run{running: false}}} = socket) do
+  # The rate is live (spec/14 §12.6, #401): a chart that animates by tick takes it from
+  # the next tick, and a streaming design keeps its instant — the window is retimed to the
+  # new density with its origin carried over, and the next frame is a full redraw, since
+  # the copy-shift contract holds only while the density is constant.
+  def handle_event("run_data_rate", %{"data_rate" => rate}, socket) do
     socket = update(socket, :run, &%{&1 | data_rate: String.to_integer(rate)})
-    {:noreply, assign(socket, run_scroll: fresh_scroll(socket.assigns))}
+    %{run: run, run_scroll: scroll} = socket.assigns
+
+    case {run.running, scroll} do
+      {true, %Examples.Scroll{} = scroll} ->
+        {_x, _y, width, _h} = socket.assigns.module.plot()
+        density = Examples.Scroll.density(run.data_rate * 5, width)
+
+        {:noreply,
+         socket
+         |> assign(run_scroll: Examples.Scroll.retimed(scroll, density))
+         |> update(:run, &Run.resync/1)}
+
+      {true, _none} ->
+        {:noreply, socket}
+
+      {false, _} ->
+        {:noreply, assign(socket, run_scroll: fresh_scroll(socket.assigns))}
+    end
   end
 
   def handle_event("run_data_rate", _params, socket), do: {:noreply, socket}
@@ -196,7 +261,11 @@ defmodule ExamplesWeb.ChartLive do
 
     case Run.supervisor() do
       :ok ->
-        task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, fn -> {:compare, Compare.run(module, opts_for, 100)} end)
+        task =
+          Task.Supervisor.async_nolink(Examples.TaskSupervisor, fn ->
+            {:compare, Compare.run(module, opts_for, 100)}
+          end)
+
         {:noreply, assign(socket, compare_task: task, compare: nil)}
 
       {:error, message} ->
@@ -209,10 +278,12 @@ defmodule ExamplesWeb.ChartLive do
 
   # The hook's ack (spec/10 §8.2).
   def handle_event("frame_drawn", %{"seq" => seq, "drawn" => drawn}, socket) do
-    {:noreply, update(socket, :run, &Run.acked(&1, seq, drawn, System.monotonic_time(:millisecond)))}
+    {:noreply,
+     update(socket, :run, &Run.acked(&1, seq, drawn, System.monotonic_time(:millisecond)))}
   end
 
-  def handle_info(:run_tick, %{assigns: %{run: %Run{running: false}}} = socket), do: {:noreply, socket}
+  def handle_info(:run_tick, %{assigns: %{run: %Run{running: false}}} = socket),
+    do: {:noreply, socket}
 
   # A tick of the run: no data rate here, so every frame is the chart at its next
   # animation tick — a full render, decided by the run for flow control's sake.
@@ -263,14 +334,18 @@ defmodule ExamplesWeb.ChartLive do
 
       {:ok, run} ->
         now = System.monotonic_time(:millisecond)
-        {run, seq} = Run.sending(run, if(frame.incremental, do: incremental_mode(frame), else: :full_redraw))
+
+        {run, seq} =
+          Run.sending(run, if(frame.incremental, do: incremental_mode(frame), else: :full_redraw))
+
         run = Run.rendered(run, frame.bytes, now)
         mode = if frame.incremental, do: frame.incremental.mode, else: "full"
         socket = assign(socket, run: run, run_state: state, run_frame: frame, run_mode: mode)
 
         cond do
           frame.incremental ->
-            {:noreply, push_event(socket, "canvas_incremental", Map.put(frame.incremental, :seq, seq))}
+            {:noreply,
+             push_event(socket, "canvas_incremental", Map.put(frame.incremental, :seq, seq))}
 
           frame.canvas ->
             {:noreply, push_event(socket, "canvas_update", %{binary: frame.canvas, seq: seq})}
@@ -287,9 +362,14 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   # The still chart's frame (#362); a superseded one falls to the stale clause below.
-  def handle_info({ref, {:still, frame, state, design}}, %{assigns: %{still_task: %Task{ref: ref}}} = socket) do
+  def handle_info(
+        {ref, {:still, frame, state, design}},
+        %{assigns: %{still_task: %Task{ref: ref}}} = socket
+      ) do
     Process.demonitor(ref, [:flush])
-    {:noreply, assign(socket, still_frame: frame, still_state: state, still_design: design, still_task: nil)}
+
+    {:noreply,
+     assign(socket, still_frame: frame, still_state: state, still_design: design, still_task: nil)}
   end
 
   def handle_info({ref, _stale}, socket) when is_reference(ref) do
@@ -297,12 +377,24 @@ defmodule ExamplesWeb.ChartLive do
     {:noreply, socket}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %{assigns: %{still_task: %Task{ref: ref}}} = socket) do
-    {:noreply, assign(socket, still_task: nil, run: %{socket.assigns.run | error: inspect(reason)})}
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{assigns: %{still_task: %Task{ref: ref}}} = socket
+      ) do
+    {:noreply,
+     assign(socket, still_task: nil, run: %{socket.assigns.run | error: inspect(reason)})}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %{assigns: %{compare_task: %Task{ref: ref}}} = socket) do
-    {:noreply, assign(socket, compare_task: nil, compare: [], run: %{socket.assigns.run | error: inspect(reason)})}
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{assigns: %{compare_task: %Task{ref: ref}}} = socket
+      ) do
+    {:noreply,
+     assign(socket,
+       compare_task: nil,
+       compare: [],
+       run: %{socket.assigns.run | error: inspect(reason)}
+     )}
   end
 
   def handle_info({:DOWN, ref, :process, _pid, reason}, socket) do
@@ -332,7 +424,9 @@ defmodule ExamplesWeb.ChartLive do
         assign(socket, still_frame: frame, still_state: state, still_design: design)
 
       match?(:ok, Run.supervisor()) ->
-        if task = assigns.still_task, do: Task.Supervisor.terminate_child(Examples.TaskSupervisor, task.pid)
+        if task = assigns.still_task,
+          do: Task.Supervisor.terminate_child(Examples.TaskSupervisor, task.pid)
+
         assign(socket, still_task: Task.Supervisor.async_nolink(Examples.TaskSupervisor, render))
 
       true ->
@@ -356,7 +450,10 @@ defmodule ExamplesWeb.ChartLive do
 
   def terminate(_reason, socket) do
     Run.cancel(socket.assigns.run)
-    if task = socket.assigns[:compare_task], do: Task.Supervisor.terminate_child(Examples.TaskSupervisor, task.pid)
+
+    if task = socket.assigns[:compare_task],
+      do: Task.Supervisor.terminate_child(Examples.TaskSupervisor, task.pid)
+
     :ok
   end
 
@@ -365,6 +462,7 @@ defmodule ExamplesWeb.ChartLive do
   defp start_frame(socket, _mode \\ :full_redraw) do
     %{module: module, run_backend: backend, run_state: state} = socket.assigns
     opts = run_opts(socket.assigns, socket.assigns.run_ticks)
+
     render = fn ->
       {frame, state} = Frames.frame(module, opts, backend, state)
       {:frame, frame, state}
@@ -392,7 +490,11 @@ defmodule ExamplesWeb.ChartLive do
 
     assigns.current_palette
     |> build_chart_opts(tick, true, assigns.slug, assigns.hex_radius)
-    |> Keyword.merge(samples_per_px: scroll.samples_per_px, origin: scroll.origin, now: scroll.origin + count - 1)
+    |> Keyword.merge(
+      samples_per_px: scroll.samples_per_px,
+      origin: scroll.origin,
+      now: scroll.origin + count - 1
+    )
   end
 
   defp run_opts(assigns, tick) do
@@ -879,11 +981,12 @@ defmodule ExamplesWeb.ChartLive do
   defp build_chart_opts(palette, tick, animating, slug, hex_radius) do
     opts = [width: 700, height: 450, palette: palette]
 
-    opts = if animating do
-      Keyword.put(opts, :animation_tick, tick)
-    else
-      opts
-    end
+    opts =
+      if animating do
+        Keyword.put(opts, :animation_tick, tick)
+      else
+        opts
+      end
 
     if slug == "hexbin" do
       Keyword.put(opts, :hex_radius, hex_radius)
@@ -897,7 +1000,10 @@ defmodule ExamplesWeb.ChartLive do
   defp backend_word(:incremental), do: "Canvas-Incremental"
 
   defp backend_code_title(:svg), do: "The design (Build), then the SVG rendering"
-  defp backend_code_title(:canvas), do: "The design (Build), then the canvas rendering (the split)"
+
+  defp backend_code_title(:canvas),
+    do: "The design (Build), then the canvas rendering (the split)"
+
   defp backend_code_title(:incremental), do: "Canvas Incremental Rendering Code"
 
   defp backend_sample_code(:svg, module), do: module.sample_code()
@@ -906,7 +1012,6 @@ defmodule ExamplesWeb.ChartLive do
   # calls up to `{:ok, design}`, then the split.
   defp backend_sample_code(:canvas, module),
     do: design_build_code(module) <> "\n" <> hybrid_sample_code()
-
 
   defp backend_sample_code(:incremental, _module) do
     ~S"""
@@ -951,7 +1056,9 @@ defmodule ExamplesWeb.ChartLive do
   # line, which is where the SVG sample turns from the design to its rendering.
   @doc false
   def design_build_code(module) do
-    [build | _] = String.split(module.sample_code(), ~r/\n[^\n]*Visualize\.Chart\.apply\(/, parts: 2)
+    [build | _] =
+      String.split(module.sample_code(), ~r/\n[^\n]*Visualize\.Chart\.apply\(/, parts: 2)
+
     String.trim_trailing(build) <> "\n"
   end
 
@@ -980,7 +1087,6 @@ defmodule ExamplesWeb.ChartLive do
     </div>
     """
   end
-
 
   defp animation_sample_code(:svg) do
     ~S"""

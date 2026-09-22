@@ -5,6 +5,29 @@ defmodule Examples.ScrollTest do
   alias Examples.Scroll
   alias Visualize.Scale
 
+  doctest Examples.Scroll
+
+  test "a window retimed to another density keeps its instant (spec/14 §12.6, #401)" do
+    scroll = Scroll.new(700, 4) |> Scroll.advance(100)
+    assert scroll.origin == 400
+    assert Scroll.count(scroll) == 2801
+
+    # The origin is in samples, so the window still starts at sample 400 — the chart does
+    # not jump — while the count follows the new density.
+    faster = Scroll.retimed(scroll, 15)
+    assert faster.origin == 400
+    assert faster.samples_per_px == 15
+    assert Scroll.count(faster) == 10_501
+    assert faster.inner_width == scroll.inner_width
+
+    slower = Scroll.retimed(faster, 1)
+    assert slower.origin == 400 and Scroll.count(slower) == 701
+
+    # The x scale still spans the window, and a scroll is the new density's samples.
+    assert Scale.apply(Scroll.x_scale(faster), 0) == 0
+    assert Scroll.samples(faster, 3) == 45
+  end
+
   test "the density is the nearest whole number of samples per column, at least one" do
     assert Scroll.density(10, 700) == 1
     assert Scroll.density(700, 700) == 1
