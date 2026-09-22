@@ -29,6 +29,11 @@ defmodule ExamplesWeb.RoutesTest do
     end
   end
 
+  test "the demo routes redirect to the designs that replaced them (#327, #402)" do
+    assert redirected_to(build_conn() |> get("/high-performance")) == "/chart/scrolling_series"
+    assert redirected_to(build_conn() |> get("/incremental")) == "/chart/incremental_line"
+  end
+
   test "a chart page renders for every chart the gallery lists" do
     for {slug, _module} <- ExamplesWeb.ChartLive.charts() do
       assert build_conn() |> get("/chart/#{slug}") |> html_response(200) =~
