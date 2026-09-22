@@ -5,9 +5,9 @@ defmodule Examples.Charts.PolarTransformChart do
   time and sweeps 270° from −135° (§4.3); `r` is the signal's value over an annular band.
   A `:line` with a translucent `:area` under it wraps around the arc; a `:rule` per
   event is an indicator spoke across the band, labelled; a `:rule` at `y` is a threshold
-  arc across the sweep; and `:rect`s whose `y` reads a `:band` scale through `scales:
-  %{r: :lane}` are bars arced inside the axis, one lane each. The angle axis is the outer
-  ring at 0.8 R, its numbers outward, and the `r` axis's spoke stands at −135°. Animated, the signal's phase drifts
+  arc across the sweep; and `:rect`s with constant radii above the signal are bars arced
+  as one ring just inside the axis, coloured by lane. The angle axis sits at the top of
+  the `r` range, 0.8 R, its numbers outward, and the `r` axis's spoke stands at −135°. Animated, the signal's phase drifts
   and the events advance.
   """
 
@@ -44,8 +44,7 @@ defmodule Examples.Charts.PolarTransformChart do
         style(:task, fill: {:field, :lane}, opacity: 0.85),
         polar(width, height, margin: @margin),
         linear_scale(:angle, domain: [0, 100], start: -135, sweep: 270),
-        linear_scale(:r, domain: [0, 100], range: [outer * 0.22, outer * 0.54]),
-        band_scale(:lane, domain: @lanes, range: [outer * 0.6, outer * 0.76], padding: 0.25),
+        linear_scale(:r, domain: [0, 100], range: [outer * 0.28, outer * 0.8]),
         ordinal_scale(:color, domain: @lanes, range: [:series_4, :series_2, :series_1]),
         axis(:angle, :bottom, ticks: 10, radius: 0.8, grid: true),
         axis(:r, :top, ticks: 4, at: -135, grid: true),
@@ -56,11 +55,9 @@ defmodule Examples.Charts.PolarTransformChart do
         rule(:events, %{x: :at}, style: :event, label: %{text: [{:field, :name}], style: :event_word}),
         # A threshold at a radius: an arc across the whole sweep.
         rule(:levels, %{y: :level}, style: :threshold),
-        # Bars arced just inside the axis: the angle their span, a lane each.
-        rect(:tasks, %{x0: :from, x1: :to, y0: :lane, y1: :lane, value: :lane},
-          scales: %{r: :lane},
-          style: :task
-        )
+        # Bars arced as one ring just inside the axis: the angle their span, the radii
+        # constants in r's domain above the signal, coloured by lane.
+        rect(:tasks, %{x0: :from, x1: :to, y0: 91, y1: 99, value: :lane}, style: :task)
       ])
 
     {design,
@@ -116,9 +113,8 @@ defmodule Examples.Charts.PolarTransformChart do
         polar(480, 480, margin: %{top: 24, right: 24, bottom: 24, left: 24}),
         # The sweep is the angle scale's: 270° from -135° over the time column (spec/14 §4.3).
         linear_scale(:angle, domain: [0, 100], start: -135, sweep: 270),
-        # r over an annular band; a band scale for the bars' lanes outside it.
-        linear_scale(:r, domain: [0, 100], range: [48, 117]),
-        band_scale(:lane, domain: ~w(build test deploy), range: [130, 164], padding: 0.25),
+        # r over an annular band whose top the angle axis sits on.
+        linear_scale(:r, domain: [0, 100], range: [60, 173]),
         ordinal_scale(:color, domain: ~w(build test deploy)),
         axis(:angle, :bottom, ticks: 10, radius: 0.8, grid: true),
         axis(:r, :top, ticks: 4, at: -135, grid: true),
@@ -129,11 +125,8 @@ defmodule Examples.Charts.PolarTransformChart do
         # A rule at x is a spoke across the band; at y, an arc across the sweep.
         rule(:events, %{x: :at}, style: :event, label: %{text: [{:field, :name}]}),
         rule(:levels, %{y: :level}, style: :threshold),
-        # A rect with its y on a band scale (renamed from r) is a bar arced around the chart.
-        rect(:tasks, %{x0: :from, x1: :to, y0: :lane, y1: :lane, value: :lane},
-          scales: %{r: :lane},
-          style: :task
-        )
+        # A rect with x0/x1 on the angle and constant radii is a bar arced around the chart.
+        rect(:tasks, %{x0: :from, x1: :to, y0: 91, y1: 99, value: :lane}, style: :task)
       ])
 
     {:ok, applied} = Visualize.Chart.apply(design, sources: sources)
