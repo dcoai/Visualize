@@ -58,8 +58,8 @@ defmodule ExamplesWeb.PerformanceDrawer do
 
           <form phx-change="run_fps" class="perf-group">
             <label class="perf-label" for="perf-fps">Target FPS</label>
-            <input id="perf-fps" type="range" name="fps" min="10" max="2010" step="10" value={@run.target_fps} class="perf-slider" />
-            <span class="perf-value"><%= if @run.target_fps > 2000, do: "∞", else: @run.target_fps %></span>
+            <input id="perf-fps" type="range" name="fps" min="1" max={Examples.Run.max_fps() + 1} step="1" value={@run.target_fps} class="perf-slider" />
+            <span class="perf-value"><%= if Examples.Run.unlimited?(@run), do: "∞", else: @run.target_fps %></span>
           </form>
 
           <form phx-change="run_data_rate" class="perf-group perf-group-stream">
@@ -94,10 +94,10 @@ defmodule ExamplesWeb.PerformanceDrawer do
 
         <div class="perf-metrics">
           <.metric value={trunc(@run.fps)} label="FPS" />
-          <.metric value={if(@run.target_fps > 2000, do: "∞", else: @run.target_fps)} label="Target" />
+          <.metric value={if(Examples.Run.unlimited?(@run), do: "∞", else: @run.target_fps)} label="Target" />
           <.metric :if={@acks?} value={trunc(@run.client_fps)} label="Client FPS" />
           <.metric :if={@acks?} value={Run.in_flight(@run)} label="In flight" />
-          <.metric :if={@acks?} value={if(@run.target_fps > 2000, do: "—", else: "#{round(@run.lag)} ms")} label="Lag" />
+          <.metric :if={@acks?} value={if(Examples.Run.unlimited?(@run), do: "—", else: "#{round(@run.lag)} ms")} label="Lag" />
           <.metric :if={@acks?} value={@run.dropped} label="Dropped" />
           <.metric :if={@acks?} value={if(@run.ack_age, do: "#{@run.ack_age} ms", else: "none")} label="Last ack" />
           <.metric :if={@acks?} value={@run.stalls} label="Stalls" />

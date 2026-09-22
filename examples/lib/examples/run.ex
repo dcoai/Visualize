@@ -17,6 +17,8 @@ defmodule Examples.Run do
 
   @max_lag_ms 250
   @ack_timeout 2000
+  # The slider's cap (spec/14 §12.6, #400): a target above it is unlimited.
+  @max_fps 120
   @lag_alpha 2 / 31
   @history 120
 
@@ -103,7 +105,7 @@ defmodule Examples.Run do
   """
   @spec schedule(t(), integer()) :: {t(), non_neg_integer()}
   def schedule(%__MODULE__{target_fps: fps, next_due: due} = run, now_us) do
-    {next, delay} = if fps > 2000, do: {now_us, 0}, else: deadline(due, now_us, fps)
+    {next, delay} = if fps > @max_fps, do: {now_us, 0}, else: deadline(due, now_us, fps)
     {%{run | next_due: next}, delay}
   end
 
@@ -158,7 +160,8 @@ defmodule Examples.Run do
   or the empty `:none` update. The run returned has the hold, the drop and the lag's
   age applied.
   """
-  @spec decide(t(), non_neg_integer(), boolean(), {number(), number()}, integer()) :: {t(), mode()}
+  @spec decide(t(), non_neg_integer(), boolean(), {number(), number()}, integer()) ::
+          {t(), mode()}
   def decide(%__MODULE__{} = run, columns, incremental?, size, now_ms) do
     run = %{hold(run, now_ms) | ack_age: ack_age(run, now_ms)}
 
@@ -180,7 +183,16 @@ defmodule Examples.Run do
 
   @doc "The frames the lag budget allows in flight at the target rate — fifteen at 60 fps."
   @spec window(t()) :: pos_integer()
-  def window(%__MODULE__{target_fps: fps}), do: max(2, ceil(@max_lag_ms * min(fps, 2000) / 1000))
+  def window(%__MODULE__{target_fps: fps}),
+    do: max(2, ceil(@max_lag_ms * min(fps, @max_fps) / 1000))
+
+  @doc "The slider's cap: the highest target that is a rate; above it a run is unlimited."
+  @spec max_fps() :: pos_integer()
+  def max_fps, do: @max_fps
+
+  @doc "Whether the run's target is above the cap: frames as fast as they render, no lag read."
+  @spec unlimited?(t()) :: boolean()
+  def unlimited?(%__MODULE__{target_fps: fps}), do: fps > @max_fps
 
   defp holding?(run) do
     run.flow_control and run.acking != :no and in_flight(run) >= window(run)
@@ -340,6 +352,8 @@ defmodule Examples.Run do
   end
 
   # Held at an unlimited target, where a period has no meaning.
-  defp lag(%{target_fps: fps} = run) when fps > 2000, do: run.lag
-  defp lag(%{target_fps: fps, lag: lag} = run), do: lag + @lag_alpha * (in_flight(run) * 1000 / fps - lag)
+  defp lag(%{target_fps: fps} = run) when fps > @max_fps, do: run.lag
+
+  defp lag(%{target_fps: fps, lag: lag} = run),
+    do: lag + @lag_alpha * (in_flight(run) * 1000 / fps - lag)
 end
