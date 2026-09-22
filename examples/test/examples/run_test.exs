@@ -29,7 +29,12 @@ defmodule Examples.RunTest do
     assert {9_000, 0} = Run.deadline(0, 9_000, 500)
 
     # Unlimited: no wait, the deadline now.
-    assert {%Run{next_due: 5}, 0} = Run.schedule(Run.new(target_fps: 2010, next_due: 0), 5)
+    assert {%Run{next_due: 5}, 0} = Run.schedule(Run.new(target_fps: 121, next_due: 0), 5)
+
+    assert Run.unlimited?(Run.new(target_fps: 121)) and
+             not Run.unlimited?(Run.new(target_fps: 120))
+
+    assert Run.max_fps() == 120
     assert {%Run{next_due: next}, 17} = Run.schedule(Run.new(target_fps: 60, next_due: 0), 0)
     assert_in_delta next, 16_666.67, 0.01
   end
@@ -78,8 +83,8 @@ defmodule Examples.RunTest do
 
   test "the window is a lag budget (#310) and flow control holds at it; a dropped scroll resyncs with a full frame" do
     assert Run.window(Run.new(target_fps: 60)) == 15
-    assert Run.window(Run.new(target_fps: 500)) == 125
-    assert Run.window(Run.new(target_fps: 2010)) == 500
+    assert Run.window(Run.new(target_fps: 120)) == 30
+    assert Run.window(Run.new(target_fps: 121)) == 30
     assert Run.window(Run.new(target_fps: 10)) == 3
 
     run = started() |> sent(:full_redraw)
