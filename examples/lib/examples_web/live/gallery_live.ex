@@ -83,6 +83,10 @@ defmodule ExamplesWeb.GalleryLive do
           <span class="tool-icon">🚀</span>
           <span>Scrolling series (incremental, with a data rate)</span>
         </a>
+        <a href="/chart/incremental_line" class="tool-link" style="background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);">
+          <span class="tool-icon">📈</span>
+          <span>Incremental line (one line, copy and shift)</span>
+        </a>
         <a href="/performance" class="tool-link">
           <span class="tool-icon">⚡</span>
           <span>Performance Test — compare the backends on any chart</span>

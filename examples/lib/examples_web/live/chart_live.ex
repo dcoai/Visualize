@@ -13,6 +13,7 @@ defmodule ExamplesWeb.ChartLive do
     "stacked_bar" => Examples.Charts.StackedBarChart,
     "line" => Examples.Charts.LineChart,
     "scrolling_series" => Examples.Charts.ScrollingSeries,
+    "incremental_line" => Examples.Charts.IncrementalLine,
     "multi_line" => Examples.Charts.MultiLineChart,
     "area" => Examples.Charts.AreaChart,
     "stacked_area" => Examples.Charts.StackedAreaChart,

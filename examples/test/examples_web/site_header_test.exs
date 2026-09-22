@@ -12,7 +12,7 @@ defmodule ExamplesWeb.SiteHeaderTest do
     {"/performance", :performance},
     {"/chart/scrolling_series", :charts},
     {"/hybrid", :performance},
-    {"/incremental", :performance},
+    {"/chart/incremental_line", :charts},
     {"/interaction", :interaction},
     {"/builder", :builder}
   ]
