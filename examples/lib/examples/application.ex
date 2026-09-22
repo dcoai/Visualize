@@ -3,6 +3,9 @@ defmodule Examples.Application do
 
   @impl true
   def start(_type, _args) do
+    # The gallery's preview cache lives for the application (#397).
+    Examples.Previews.table()
+
     children = [
       {Phoenix.PubSub, name: Examples.PubSub},
       # A performance run's frames render here, off the view's process (#323)

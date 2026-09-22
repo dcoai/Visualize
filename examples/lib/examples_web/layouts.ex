@@ -75,6 +75,8 @@ defmodule ExamplesWeb.Layouts do
             border-bottom: 1px solid #eee;
           }
           .chart-preview svg { max-width: 100%; height: auto; }
+          .chart-preview-pending { width: 320px; max-width: 100%; height: 220px; border-radius: 6px; background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%); background-size: 200% 100%; animation: preview-pending 1.2s linear infinite; }
+          @keyframes preview-pending { from { background-position: 200% 0; } to { background-position: -200% 0; } }
           .chart-info { padding: 1rem 1.5rem; }
           .chart-info h3 { font-size: 1.1rem; color: #333; margin-bottom: 0.25rem; }
           .chart-info p { font-size: 0.85rem; color: #666; }
