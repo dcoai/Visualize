@@ -212,6 +212,18 @@ defmodule Visualize.Chart.ValidatorTest do
       end
     end
 
+    test "a channel may name its scale's own end, and only its two ends (#420)" do
+      design = design_with_mark(:area)
+
+      for which <- [:min, :max] do
+        assert Validator.validate(put_at(design, [:marks, 0, :channels, :y0], {:scale, which})) ==
+                 :ok
+      end
+
+      path = [:marks, 0, :channels, :y0]
+      assert {path, {:type, :channel}} in errors(put_at(design, path, {:scale, :middle}))
+    end
+
     test "every required key reports its absence" do
       for kind <- Schema.kinds(), spec <- Schema.describe(kind), spec.required do
         path = @paths[kind] ++ [spec.key]

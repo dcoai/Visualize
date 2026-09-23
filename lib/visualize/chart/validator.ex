@@ -486,6 +486,11 @@ defmodule Visualize.Chart.Validator do
   defp check(:channel, v, path, ctx) when is_atom(v), do: check(:field, v, path, ctx)
   defp check(:channel, {:field, _} = v, path, ctx), do: check(:field_ref, v, path, ctx)
 
+  # A channel naming its scale's own end (spec/14 §5.2, #420); any other `:scale` tuple is
+  # a typed fault rather than a silent pass.
+  defp check(:channel, {:scale, which}, _path, _ctx) when which in [:min, :max], do: []
+  defp check(:channel, {:scale, _other}, path, _ctx), do: [{path, {:type, :channel}}]
+
   defp check(:extent, :auto, _path, _ctx), do: []
 
   defp check(:extent, v, path, _ctx) when is_list(v) do
