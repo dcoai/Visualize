@@ -42,7 +42,7 @@ defmodule Visualize.Chart.Compiled do
   alias Visualize.Backend.{CanvasBinary, Hybrid}
   alias Visualize.{Chart, Render, Theme}
   alias Visualize.Chart.{Applied, Frame, Mark}
-  alias Visualize.Chart.Compiled.{Regions, Transition, Window}
+  alias Visualize.Chart.Compiled.{Motion, Regions, Transition, Window}
   alias Visualize.Chart.Frame.{Defs, Furniture}
   alias Visualize.IR.{Element, Transform}
 
@@ -63,7 +63,9 @@ defmodule Visualize.Chart.Compiled do
     :viewport,
     defs: [],
     transitions: %{},
-    eased: %{}
+    eased: %{},
+    motions: %{},
+    moving: %{}
   ]
 
   @typedoc "A render target of spec/14 §12.3."
@@ -108,7 +110,9 @@ defmodule Visualize.Chart.Compiled do
           plot: %{width: number(), height: number()},
           viewport: map() | nil,
           transitions: %{atom() => map()},
-          eased: %{atom() => map()}
+          eased: %{atom() => map()},
+          motions: %{non_neg_integer() => map()},
+          moving: %{non_neg_integer() => map()}
         }
 
   @doc false
@@ -142,7 +146,8 @@ defmodule Visualize.Chart.Compiled do
       margin: frame.margin,
       plot: frame.plot,
       viewport: window && Map.put(window, :full, stale?(chart, window.scale, targets)),
-      transitions: Transition.scales(chart, window && window.scale)
+      transitions: Transition.scales(chart, window && window.scale),
+      motions: Motion.marks(chart)
     }
 
     # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
@@ -231,8 +236,8 @@ defmodule Visualize.Chart.Compiled do
   @spec step(t(), map(), keyword()) :: {Element.t(), t()}
   def step(%__MODULE__{margin: margin} = compiled, sources, opts \\ []) when is_map(sources) do
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
-    {frame, compiled} = ease(compiled, frame, opts)
-    children = layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true)
+    {frame, moved, compiled} = ease(compiled, frame, sources, opts)
+    children = layer(compiled, drawn(compiled, frame, sources, hi, true, moved), :svg, true)
 
     group =
       Element.group(compiled.defs ++ children,
@@ -245,13 +250,15 @@ defmodule Visualize.Chart.Compiled do
 
   # The frame at its eased scales' shown domains, and the chart carrying the states on;
   # nothing to do for a chart with no transition.
-  defp ease(%{transitions: transitions} = compiled, frame, _opts) when map_size(transitions) == 0,
-    do: {frame, compiled}
+  defp ease(%{transitions: transitions, motions: motions} = compiled, frame, _sources, _opts)
+       when map_size(transitions) == 0 and map_size(motions) == 0,
+       do: {frame, %{}, compiled}
 
-  defp ease(%{transitions: transitions, eased: eased} = compiled, frame, opts) do
+  defp ease(compiled, frame, sources, opts) do
     at = Keyword.get_lazy(opts, :at, fn -> System.monotonic_time(:millisecond) end)
-    {frame, eased} = Transition.apply(frame, transitions, eased, at)
-    {frame, %{compiled | eased: eased}}
+    {frame, eased} = Transition.apply(frame, compiled.transitions, compiled.eased, at)
+    {moved, moving} = Motion.apply(compiled.motions, compiled.moving, sources, at)
+    {frame, moved, %{compiled | eased: eased, moving: moving}}
   end
 
   @doc "As `tick/3` with `[]` options."
@@ -278,7 +285,7 @@ defmodule Visualize.Chart.Compiled do
   @spec tick(t(), map(), keyword()) :: {payload(), t()}
   def tick(%__MODULE__{} = compiled, sources, opts) when is_map(sources) do
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
-    {frame, compiled} = ease(compiled, frame, opts)
+    {frame, moved, compiled} = ease(compiled, frame, sources, opts)
     format = format(compiled)
 
     # A scroll tick never builds the whole window (§12.5, #404): where the payload is the
@@ -286,7 +293,7 @@ defmodule Visualize.Chart.Compiled do
     # inline labels — and the whole window's geometry is the function below, which
     # `Window.scroll/6` calls in the full-redraw branch and nowhere else.
     scrolling? = compiled.viewport != nil and format == :binary_base64
-    drawn = drawn(compiled, frame, sources, hi, not scrolling?)
+    drawn = drawn(compiled, frame, sources, hi, not scrolling?, moved)
     svg = fragment(compiled, layer(compiled, drawn, :dynamic_svg, false))
 
     # A scroll strip is built over the strip's rows and their neighbours (§12.5, D-108).
@@ -295,7 +302,7 @@ defmodule Visualize.Chart.Compiled do
     end
 
     whole = fn ->
-      drawn = if scrolling?, do: drawn(compiled, frame, sources, hi, true), else: drawn
+      drawn = if scrolling?, do: drawn(compiled, frame, sources, hi, true, moved), else: drawn
       layer(compiled, drawn, :canvas, false)
     end
 
@@ -348,7 +355,9 @@ defmodule Visualize.Chart.Compiled do
   # Every region drawn for a tick: `%{region => %{svg: elements, canvas: elements}}`.
   # `canvas?` false draws a canvas-layer mark's SVG part alone, the geometry being the
   # scroll's to ask for (§12.5, #404).
-  defp drawn(%{regions: regions} = compiled, frame, sources, hi, canvas?) do
+  defp drawn(compiled, frame, sources, hi, canvas?, moved \\ %{})
+
+  defp drawn(%{regions: regions} = compiled, frame, sources, hi, canvas?, moved) do
     Map.new(regions, fn
       %{region: region, status: :static, static: elements} ->
         {region, %{svg: elements, canvas: []}}
@@ -362,7 +371,7 @@ defmodule Visualize.Chart.Compiled do
         if not canvas? and target != :svg and not Map.has_key?(mark, :label) do
           {region, %{svg: [], canvas: []}}
         else
-          sources = mark_sources(compiled, frame, mark, sources, hi)
+          sources = mark_sources(compiled, frame, mark, move(sources, moved, i), hi)
           {region, mark_output(target, mark, build, frame, sources, canvas?)}
         end
 
@@ -390,6 +399,15 @@ defmodule Visualize.Chart.Compiled do
       %{region: region} ->
         {region, %{svg: [], canvas: []}}
     end)
+  end
+
+  # A mark that eases draws its own rows at their shown values (spec/14 §12.5, #417): the
+  # substitution is per mark, so a source two marks share is not moved for both.
+  defp move(sources, moved, index) do
+    case moved do
+      %{^index => {name, rows}} -> Map.put(sources, name, rows)
+      _not_moving -> sources
+    end
   end
 
   defp mark_sources(%{viewport: nil}, _frame, _mark, sources, _hi), do: sources

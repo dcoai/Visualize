@@ -8,6 +8,11 @@ defmodule Examples.Charts.LoadGauge do
   §3.4). Animated, the three pointers chase each other as the load wanders: the one-minute
   needle swings, the fifteen-minute one drifts.
 
+  **The needles have mass** (#417): the mark's `transition` eases each row's `load` toward
+  its reading over 450 ms along `sin_in_out` — still at both ends, quickest in the middle,
+  the travel of a pointer rather than of a number — so a reading that arrives once every
+  three seconds is a sweep and not a jump.
+
   Its neighbour `Examples.Charts.LoadAge` draws the same three windows over the last three
   hours. They are two designs because a design has one frame (§4) and a dial and a plot
   cannot share it; `frames` will let them sit in one chart (#383).
@@ -54,7 +59,8 @@ defmodule Examples.Charts.LoadGauge do
         # Three rows, three needles, each its own length and colour (spec/14 §5.2).
         needle(:reading, %{x: :load, y: :length},
           options: %{width: 7, tail: 12, hub: 7},
-          style: :pointer
+          style: :pointer,
+          transition: %{duration: 450, easing: :sin_in_out}
         )
       ])
 
@@ -92,9 +98,11 @@ defmodule Examples.Charts.LoadGauge do
         axis(:angle, :bottom, ticks: 5, radius: 0.86, grid: true),
         legend(:color, position: :top_right, inside: false),
         # One row per window: three needles on the one dial, each its own length.
+        # The needle travels to its reading rather than appearing at it (spec/14 §12.5).
         needle(:reading, %{x: :load, y: :length},
           options: %{width: 7, tail: 12, hub: 7},
-          style: :pointer
+          style: :pointer,
+          transition: %{duration: 450, easing: :sin_in_out}
         )
       ])
 

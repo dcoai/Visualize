@@ -252,7 +252,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         iex> page = %{kind: :mark, node: %{type: :line, data: :p, channels: %{x: :t}, options: %{}}, path: [:marks, 0], label: "marks[0]", errors: []}
         iex> for s <- Enum.take(Visualize.Chart.Builder.Page.sections(page), 3), do: {s.name, s.keys, Enum.map(s.children, & &1.label)}
-        [{"binding", [:data], []}, {"channel", [:type, :scales, :offset], ["marks[0].channels"]}, {"geometry", [:render], ["marks[0].options"]}]
+        [{"binding", [:data], []}, {"channel", [:type, :scales, :offset], ["marks[0].channels"]}, {"geometry", [:render, :transition], ["marks[0].options"]}]
 
     A node key the node does not carry yet — the mark's `scales` above — stays a field, so
     the node can be given there; once it is, it is a sub-section.
