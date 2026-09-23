@@ -224,6 +224,11 @@ defmodule Visualize.Chart.Frame.Scales do
   defp values(_n, []), do: []
   defp values(n, _rows) when is_number(n), do: [n]
   defp values({:field, field}, rows), do: column(rows, field)
+
+  # A channel naming its scale's own end contributes nothing to that scale's domain
+  # (spec/14 §5.2, #420): it is read *from* the domain, so it cannot be an input to it.
+  defp values({:scale, _end}, _rows), do: []
+
   defp values(field, rows) when is_atom(field), do: column(rows, field)
 
   defp column(rows, field), do: rows |> Enum.map(&Table.get(&1, field)) |> Enum.reject(&is_nil/1)

@@ -552,6 +552,164 @@ defmodule Visualize.Chart.MarkTest do
     end
   end
 
+  describe "a channel names its scale's own end (spec/14 §5.2, #420)" do
+    # A y scale whose domain excludes zero: the plot is 200 high, so `y(50)` is 200 and
+    # `y(150)` is 0 — and data zero maps to 300, a hundred pixels below the plot.
+    defp offset_frame(scales) do
+      %{@frame | scales: Map.merge(%{x: %{kind: :linear, domain: [0, 3]}}, scales)}
+    end
+
+    defp offset_rows, do: for(r <- @rows, do: %{r | v: r.v * 10 + 60})
+
+    defp area_of(mark, frame, rows) do
+      chart =
+        Chart.from_map!(%{
+          version: 1,
+          sources: %{primary: %{fields: [:t, :v]}},
+          frame: frame,
+          marks: [Map.merge(%{data: :primary}, mark)]
+        })
+
+      sources = %{primary: rows}
+      group = Mark.generate(Frame.new(chart, sources: sources), hd(chart.marks), sources: sources)
+      [child] = group.children
+      d(child)
+    end
+
+    test "y0 reads the low end of the y domain, so the fill reaches the axis" do
+      frame = offset_frame(%{y: %{kind: :linear, domain: [50, 150]}})
+      rows = offset_rows()
+
+      drawn =
+        area_of(%{type: :area, channels: %{x: :t, y: :v, y0: {:scale, :min}}}, frame, rows)
+
+      scale = Scale.linear() |> Scale.domain([50, 150]) |> Scale.range([200, 0])
+
+      assert drawn ==
+               Area.new()
+               |> Area.x(fn d -> Scale.apply(x(), d[:t]) end)
+               |> Area.y0(200.0)
+               |> Area.y1(fn d -> Scale.apply(scale, d[:v]) end)
+               |> Area.generate(rows)
+
+      # :max is the other end — the top of the plot.
+      assert area_of(%{type: :area, channels: %{x: :t, y: :v, y0: {:scale, :max}}}, frame, rows) =~
+               "L0,0"
+    end
+
+    test "it follows an inferred domain, where a number could only name a fixed one" do
+      rows = offset_rows()
+      frame = offset_frame(%{y: %{kind: :linear, domain: :auto}})
+
+      drawn = area_of(%{type: :area, channels: %{x: :t, y: :v, y0: {:scale, :min}}}, frame, rows)
+
+      # The inferred domain is [80, 150]: its low end is the bottom of the plot, whatever
+      # the rows turn out to be.
+      assert drawn =~ "L0,200"
+      refute drawn =~ "L0,300"
+    end
+
+    test "on a band scale it is the first or the last category's band" do
+      frame = %{
+        @frame
+        | scales: %{
+            x: %{kind: :band, domain: :auto},
+            y: %{kind: :linear, domain: [0, 10]}
+          }
+      }
+
+      rows = [%{t: "a", v: 4}, %{t: "b", v: 9}, %{t: "c", v: 2}]
+
+      # Three bands over 300 pixels: the first starts at 0 and the last at 200, and an
+      # edge channel reads a band's start (§5.2).
+      assert area_of(%{type: :area, channels: %{x: :t, y: :v, x0: {:scale, :min}}}, frame, rows) =~
+               "L0,200"
+
+      assert area_of(%{type: :area, channels: %{x: :t, y: :v, x0: {:scale, :max}}}, frame, rows) =~
+               "L200,200"
+    end
+
+    test "it contributes nothing to the domain it reads, which would be circular" do
+      rows = offset_rows()
+      frame = offset_frame(%{y: %{kind: :linear, domain: :auto}})
+
+      chart =
+        Chart.from_map!(%{
+          version: 1,
+          sources: %{primary: %{fields: [:t, :v]}},
+          frame: frame,
+          marks: [
+            %{data: :primary, type: :area, channels: %{x: :t, y: :v, y0: {:scale, :min}}}
+          ]
+        })
+
+      # The domain is the rows' extent alone: the y0 channel is read from it, never into
+      # it, so it neither widens it nor raises on a value it has no column for.
+      assert Frame.new(chart, sources: %{primary: rows}).scales.y.domain ==
+               Enum.min_max(Enum.map(rows, & &1.v)) |> Tuple.to_list()
+    end
+  end
+
+  describe "an area's default baseline stays in the plot (spec/14 §5.2, #420)" do
+    test "a domain that excludes zero fills to the nearer edge, not off the plot" do
+      frame = %{@frame | scales: %{@frame.scales | y: %{kind: :linear, domain: [50, 150]}}}
+      rows = for r <- @rows, do: %{r | v: r.v * 10 + 60}
+
+      chart =
+        Chart.from_map!(%{
+          version: 1,
+          sources: %{primary: %{fields: [:t, :v]}},
+          frame: frame,
+          marks: [%{data: :primary, type: :area, channels: %{x: :t, y: :v}}]
+        })
+
+      sources = %{primary: rows}
+      group = Mark.generate(Frame.new(chart, sources: sources), hd(chart.marks), sources: sources)
+      [child] = group.children
+
+      # Data zero is 300 — a hundred pixels below a 200-high plot. Clamped, it is 200.
+      assert d(child) =~ "L0,200"
+      refute d(child) =~ ",300"
+    end
+
+    test "a domain that holds zero is the zero line, exactly as before" do
+      group = generate(%{type: :area, channels: %{x: :t, y: :v}})
+      [child] = group.children
+
+      assert d(child) ==
+               Area.new()
+               |> Area.x(px(:t))
+               |> Area.y0(Scale.apply(y(), 0))
+               |> Area.y1(py(:v))
+               |> Area.generate(@rows)
+    end
+
+    test "a baseline the design gives is placed as given: the ridgeline's partial fill" do
+      rows = [
+        %{t: 0, base: 2, top: 5},
+        %{t: 1, base: 2, top: 8},
+        %{t: 2, base: 2, top: 4}
+      ]
+
+      chart =
+        Chart.from_map!(%{
+          version: 1,
+          sources: %{primary: %{fields: [:t, :base, :top]}},
+          frame: %{@frame | scales: %{@frame.scales | x: %{kind: :linear, domain: [0, 2]}}},
+          marks: [%{data: :primary, type: :area, channels: %{x: :t, y: :top, y0: :base}}]
+        })
+
+      sources = %{primary: rows}
+      group = Mark.generate(Frame.new(chart, sources: sources), hd(chart.marks), sources: sources)
+      [child] = group.children
+
+      # The fill stops at the ridge's own base — 2 of a [0, 10] domain, y = 160 — and
+      # never reaches the plot's floor at 200.
+      assert d(child) =~ "L0,160"
+      refute d(child) =~ ",200"
+    end
+  end
+
   describe "a filled line is the area under it (spec/14 §5.6)" do
     test "a fill on a line draws the area to the baseline beneath an unfilled line" do
       styles = %{s: %{fill: "#abc", curve: :step_after}}

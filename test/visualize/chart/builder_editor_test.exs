@@ -256,6 +256,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
       assert Editor.parse(:channel, "0") == {:ok, 0}
       assert Editor.parse(:channel, "2.5") == {:ok, 2.5}
       assert Editor.parse(:channel, "{:field, :v}") == {:ok, {:field, :v}}
+      assert Editor.parse(:channel, "{:scale, :min}") == {:ok, {:scale, :min}}
       assert Editor.parse(:channel, "not a name") == :error
 
       assert Editor.parse(:extent, "auto") == {:ok, :auto}
@@ -331,6 +332,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         {:extent, [-1, 1]},
         {:anchor, {:axis, :y}},
         {:channel, {:field, :sha}},
+        {:channel, {:scale, :min}},
         {:term, %{a: 1, b: [true, false, nil]}},
         {{:node, :size}, %{width: 400, height: 200}},
         {{:list, :field}, [:t, :v]},

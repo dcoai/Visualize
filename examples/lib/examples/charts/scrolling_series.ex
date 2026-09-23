@@ -12,10 +12,11 @@ defmodule Examples.Charts.ScrollingSeries do
   sample index, so it is a function of `t` like the others and the scroll contract of
   spec/09 §5.3 holds without a stored line.
 
-  The area's `y0` is the `y` domain's **floor** (#419), so the fill is one volume under
-  the curve whose corners are the bottom of the plot. Without it an area fills to *data
-  zero* (spec/14 §5.2), which on a `[-100, 100]` domain is the middle of the plot — a band
-  that runs above the curve where it dips and below it where it rises.
+  The area's `y0` is `{:scale, :min}` — the low end of the `y` scale's own domain (#419,
+  #420) — so the fill is one volume under the curve whose corners are the bottom of the
+  plot, and the domain is named in one place rather than two. Without it an area fills to
+  *data zero* (spec/14 §5.2), which on a `[-100, 100]` domain is the middle of the plot: a
+  band that runs above the curve where it dips and below it where it rises.
   """
 
   import Visualize.Chart.Build
@@ -28,8 +29,6 @@ defmodule Examples.Charts.ScrollingSeries do
   @margin %{top: 40, right: 30, bottom: 50, left: 60}
   @inner_width @width - @margin.left - @margin.right
   @series [:area, :line_1, :line_2, :line_3, :line_4]
-  # The y domain's ends. The floor is the area's baseline as well as the scale's lower
-  # end, so the filled volume reaches the bottom corners of the plot (#419).
   @floor -100
   @ceiling 100
 
@@ -69,7 +68,12 @@ defmodule Examples.Charts.ScrollingSeries do
           title("Area + four lines, #{count * length(@series)} points in the window")
         ] ++
           for(name <- @series, do: source(name, [:t, :v])) ++
-          [area(:area, %{x: :t, y: :v, y0: @floor}, style: :area, render: :binary)] ++
+          [
+            area(:area, %{x: :t, y: :v, y0: {:scale, :min}},
+              style: :area,
+              render: :binary
+            )
+          ] ++
           for(name <- tl(@series), do: line(name, %{x: :t, y: :v}, style: :line, render: :binary))
       )
 
@@ -151,9 +155,9 @@ defmodule Examples.Charts.ScrollingSeries do
         axis(:x, :bottom, ticks: 10, grid: true),
         axis(:y, :left, ticks: 10, grid: true),
         source(:area, [:t, :v]), source(:line_1, [:t, :v]),
-        # y0 is the domain's floor, so the fill is a volume under the curve reaching the
-        # bottom of the plot; without it an area fills to data zero, here mid-plot.
-        area(:area, %{x: :t, y: :v, y0: -100}, style: :area, render: :binary),
+        # y0 is the y scale's own low end, so the fill is a volume under the curve reaching
+        # the bottom of the plot; without it an area fills to data zero, here mid-plot.
+        area(:area, %{x: :t, y: :v, y0: {:scale, :min}}, style: :area, render: :binary),
         line(:line_1, %{x: :t, y: :v}, style: :line, render: :binary)
       ])
 

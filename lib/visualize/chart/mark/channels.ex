@@ -28,7 +28,7 @@ defmodule Visualize.Chart.Mark.Channels do
 
     Enum.map(ctx.rows, fn row ->
       Enum.reduce(channels, %{datum: row}, fn {channel, spec}, acc ->
-        value = read(spec, row)
+        value = read(spec, row, frame, ctx.mark, channel)
 
         pixel =
           cond do
@@ -100,19 +100,56 @@ defmodule Visualize.Chart.Mark.Channels do
   end
 
   @doc false
-  # The pixel of the `y` scale's zero — an area's baseline — or `0` without a scale.
+  # An area's default baseline: the pixel of the `y` scale's zero, **clamped to that
+  # scale's range** (spec/14 §5.2, #420) — the zero line where zero is in view, the nearer
+  # edge of the plot where it is not, since a domain that excludes zero put the fill
+  # outside an unclipped plot. `0` without a scale. A baseline the design gives is a
+  # channel and is placed as given.
   @spec baseline(map()) :: number()
   def baseline(ctx) do
     case scale(ctx, :y) do
       nil -> 0
-      scale -> Scale.apply(scale, 0)
+      scale -> clamp(Scale.apply(scale, 0), Map.get(scale, :range))
     end
   end
 
-  defp read(%Var{name: name}, _row), do: Style.unresolved!(name)
-  defp read(n, _row) when is_number(n), do: n
-  defp read({:field, field}, row), do: Table.get(row, field)
-  defp read(field, row) when is_atom(field), do: Table.get(row, field)
+  defp clamp(pixel, range) when is_number(pixel) and is_list(range) do
+    case Enum.filter(range, &is_number/1) do
+      [] -> pixel
+      numbers -> numbers |> Enum.min_max() |> then(fn {lo, hi} -> min(max(pixel, lo), hi) end)
+    end
+  end
+
+  defp clamp(pixel, _range), do: pixel
+
+  defp read(%Var{name: name}, _row, _frame, _mark, _channel), do: Style.unresolved!(name)
+  defp read(n, _row, _frame, _mark, _channel) when is_number(n), do: n
+  defp read({:field, field}, row, _frame, _mark, _channel), do: Table.get(row, field)
+
+  # A channel may name its scale's own end (spec/14 §5.2, #420): the reading is the end of
+  # that scale's domain and is then mapped like any other, so it follows an inferred
+  # domain frame by frame and honours the mark's `scales` rename.
+  defp read({:scale, which}, _row, frame, mark, channel) when which in [:min, :max] do
+    case scale_named(frame, Scales.scale_for(frame.kind, mark, channel)) do
+      nil -> nil
+      scale -> domain_end(scale.domain, which)
+    end
+  end
+
+  defp read(field, row, _frame, _mark, _channel) when is_atom(field), do: Table.get(row, field)
+
+  # The ends of a domain: by value where it is numeric, by position where it is not — the
+  # first and the last member, which is the only order a categorical domain has.
+  defp domain_end([], _which), do: nil
+
+  defp domain_end(domain, which) do
+    if Enum.all?(domain, &is_number/1) do
+      {lo, hi} = Enum.min_max(domain)
+      if which == :min, do: lo, else: hi
+    else
+      if which == :min, do: List.first(domain), else: List.last(domain)
+    end
+  end
 
   defp map(_frame, _mark, _channel, nil), do: nil
 
