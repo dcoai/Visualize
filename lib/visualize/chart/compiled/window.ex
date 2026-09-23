@@ -123,38 +123,13 @@ defmodule Visualize.Chart.Compiled.Window do
         x0 = lo + rx / width * span
         x1 = lo + (rx + rw) / width * span
 
-        # The window's rows in reading order; the neighbours are the window's too.
-        read =
-          source
-          |> Table.rows()
-          |> Enum.flat_map(fn row ->
-            case Table.get(row, field) do
-              nil -> []
-              value -> [{units(value), row}]
-            end
-          end)
-          |> Enum.filter(fn {v, _} -> v >= lo and v <= top end)
-          |> Enum.sort_by(&elem(&1, 0))
+        # The window's rows in reading order; the neighbours are the window's too. One
+        # pass keeps them, their count, and whether they arrived ordered — a streaming
+        # source's do, and only an unordered one is sorted (spec/14 §12.5, #404).
+        {read, count, ordered?} = window_rows(source, field, lo, top)
+        read = if ordered?, do: read, else: Enum.sort_by(read, &elem(&1, 0))
 
-        first = Enum.find_index(read, fn {v, _} -> v >= x0 end)
-        last = read |> Enum.reverse() |> Enum.find_index(fn {v, _} -> v <= x1 end)
-
-        rows =
-          case {first, last} do
-            {nil, _} ->
-              []
-
-            {_, nil} ->
-              []
-
-            {first, last} ->
-              last = length(read) - 1 - last
-              from = max(0, first - @neighbours)
-              to = min(length(read) - 1, last + @neighbours)
-              if to < from, do: [], else: read |> Enum.slice(from..to) |> Enum.map(&elem(&1, 1))
-          end
-
-        Map.put(sources, name, rows)
+        Map.put(sources, name, span_rows(read, count, x0, x1))
 
       _ ->
         sources
@@ -162,6 +137,54 @@ defmodule Visualize.Chart.Compiled.Window do
   end
 
   def strip(_window, _frame, _mark, sources, _hi, _bounds), do: sources
+
+  # The window's rows in reading order as `{reading, row}`, their count, and whether the
+  # readings arrived ordered: one pass, nothing built for a row outside the window.
+  defp window_rows(source, field, lo, top) do
+    {read, count, ordered?, _last} =
+      source
+      |> Table.rows()
+      |> Enum.reduce({[], 0, true, nil}, fn row, {acc, count, ordered?, previous} ->
+        case Table.get(row, field) do
+          nil ->
+            {acc, count, ordered?, previous}
+
+          value ->
+            reading = units(value)
+
+            if reading >= lo and reading <= top do
+              {[{reading, row} | acc], count + 1,
+               ordered? and (previous == nil or previous <= reading), reading}
+            else
+              {acc, count, ordered?, previous}
+            end
+        end
+      end)
+
+    {Enum.reverse(read), count, ordered?}
+  end
+
+  # The rows between two readings, widened by `@neighbours` each side in reading order:
+  # one pass over the window's rows, taking from the first index kept to the last.
+  defp span_rows(read, count, x0, x1) do
+    {first, last} =
+      read
+      |> Enum.with_index()
+      |> Enum.reduce({nil, nil}, fn {{v, _row}, i}, {first, last} ->
+        {if(first == nil and v >= x0, do: i, else: first), if(v <= x1, do: i, else: last)}
+      end)
+
+    if first == nil or last == nil do
+      []
+    else
+      from = max(0, first - @neighbours)
+      to = min(count - 1, last + @neighbours)
+
+      if to < from,
+        do: [],
+        else: read |> Enum.slice(from..to) |> Enum.map(&elem(&1, 1))
+    end
+  end
 
   @doc false
   # The incremental payload of a tick over the canvas layer's element (in plot
@@ -171,12 +194,14 @@ defmodule Visualize.Chart.Compiled.Window do
   # over its bounds (D-108), `"none"` when it moved by less than one.
   @spec scroll(t(), Frame.t(), Element.t(), (tuple() -> [Element.t()]), term(), boolean()) ::
           {map(), t()}
-  def scroll(%{span: span} = window, frame, element, strip_fn, hi, full?) do
+  def scroll(%{span: span} = window, frame, whole_fn, strip_fn, hi, full?) do
     plot = frame.plot
 
+    # The whole window is a function the full-redraw branch calls and a scroll never does
+    # (spec/14 §12.5, #404): a scroll builds its strip and nothing else.
     build = fn _data, opts ->
       case Map.get(opts, :clip_region) do
-        nil -> element
+        nil -> whole_fn.()
         bounds -> Element.group(strip_fn.(bounds))
       end
     end

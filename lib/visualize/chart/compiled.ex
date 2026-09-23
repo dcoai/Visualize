@@ -151,7 +151,7 @@ defmodule Visualize.Chart.Compiled do
     # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
     # it declares and the filters any mark's effect needs, found over every mark rendered
     # once in `:css` here, so a `url(#id)` on either SVG layer resolves on the page.
-    static = layer(compiled, drawn(compiled, frame, sources, nil), :static, false)
+    static = layer(compiled, drawn(compiled, frame, sources, nil, true), :static, false)
     defs = Defs.defs(frame, :css, Element.group(static ++ all_marks(compiled, frame, sources)))
     compiled = %{compiled | defs: defs}
     %{compiled | static: root(compiled, defs ++ static)}
@@ -192,7 +192,7 @@ defmodule Visualize.Chart.Compiled do
   @spec render(t(), map()) :: map()
   def render(%__MODULE__{} = compiled, sources) when is_map(sources) do
     {frame, hi} = realise(compiled, sources, nil)
-    drawn = drawn(compiled, frame, sources, hi)
+    drawn = drawn(compiled, frame, sources, hi, true)
     canvas = layer(compiled, drawn, :canvas, false)
 
     %{
@@ -215,7 +215,7 @@ defmodule Visualize.Chart.Compiled do
   @spec svg(t(), map()) :: String.t()
   def svg(%__MODULE__{margin: margin} = compiled, sources) when is_map(sources) do
     {frame, hi} = realise(compiled, sources, nil)
-    children = layer(compiled, drawn(compiled, frame, sources, hi), :svg, true)
+    children = layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true)
 
     Element.group(compiled.defs ++ children,
       style: %{class: "frame"},
@@ -235,7 +235,7 @@ defmodule Visualize.Chart.Compiled do
   def step(%__MODULE__{margin: margin} = compiled, sources, opts \\ []) when is_map(sources) do
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
     {frame, compiled} = ease(compiled, frame, opts)
-    children = layer(compiled, drawn(compiled, frame, sources, hi), :svg, true)
+    children = layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true)
 
     group =
       Element.group(compiled.defs ++ children,
@@ -282,17 +282,27 @@ defmodule Visualize.Chart.Compiled do
   def tick(%__MODULE__{} = compiled, sources, opts) when is_map(sources) do
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
     {frame, compiled} = ease(compiled, frame, opts)
-    drawn = drawn(compiled, frame, sources, hi)
-    svg = fragment(compiled, layer(compiled, drawn, :dynamic_svg, false))
     format = format(compiled)
+
+    # A scroll tick never builds the whole window (§12.5, #404): where the payload is the
+    # incremental one, the canvas-layer marks are drawn for their SVG part alone — their
+    # inline labels — and the whole window's geometry is the function below, which
+    # `Window.scroll/6` calls in the full-redraw branch and nowhere else.
+    scrolling? = compiled.viewport != nil and format == :binary_base64
+    drawn = drawn(compiled, frame, sources, hi, not scrolling?)
+    svg = fragment(compiled, layer(compiled, drawn, :dynamic_svg, false))
 
     # A scroll strip is built over the strip's rows and their neighbours (§12.5, D-108).
     strip = fn bounds ->
       layer(compiled, drawn_strip(compiled, frame, sources, hi, bounds), :canvas, false)
     end
 
-    {canvas, incremental, window} =
-      canvas(compiled, frame, layer(compiled, drawn, :canvas, false), strip, hi)
+    whole = fn ->
+      drawn = if scrolling?, do: drawn(compiled, frame, sources, hi, true), else: drawn
+      layer(compiled, drawn, :canvas, false)
+    end
+
+    {canvas, incremental, window} = canvas(compiled, frame, whole, strip, hi)
 
     bytes =
       byte_size(svg) + byte_size(canvas) +
@@ -332,7 +342,9 @@ defmodule Visualize.Chart.Compiled do
   end
 
   # Every region drawn for a tick: `%{region => %{svg: elements, canvas: elements}}`.
-  defp drawn(%{regions: regions} = compiled, frame, sources, hi) do
+  # `canvas?` false draws a canvas-layer mark's SVG part alone, the geometry being the
+  # scroll's to ask for (§12.5, #404).
+  defp drawn(%{regions: regions} = compiled, frame, sources, hi, canvas?) do
     Map.new(regions, fn
       %{region: region, status: :static, static: elements} ->
         {region, %{svg: elements, canvas: []}}
@@ -341,7 +353,7 @@ defmodule Visualize.Chart.Compiled do
         mark = Enum.at(compiled.chart.marks, i)
         {target, _points} = Enum.at(compiled.targets, i)
         sources = mark_sources(compiled, frame, mark, sources, hi)
-        {region, mark_output(target, mark, build, frame, sources)}
+        {region, mark_output(target, mark, build, frame, sources, canvas?)}
 
       %{region: region, build: build} ->
         {region, %{svg: build.(frame, sources, :css), canvas: []}}
@@ -361,7 +373,7 @@ defmodule Visualize.Chart.Compiled do
           {region, %{svg: [], canvas: []}}
         else
           sources = Window.strip(window, frame, mark, sources, hi, bounds)
-          {region, %{mark_output(target, mark, build, frame, sources) | svg: []}}
+          {region, %{mark_output(target, mark, build, frame, sources, true) | svg: []}}
         end
 
       %{region: region} ->
@@ -374,14 +386,17 @@ defmodule Visualize.Chart.Compiled do
   defp mark_sources(%{viewport: window}, frame, mark, sources, hi),
     do: Window.sources(window, frame, mark, sources, hi)
 
-  defp mark_output(:svg, _mark, build, frame, sources) do
+  defp mark_output(:svg, _mark, build, frame, sources, _canvas?) do
     %{svg: build.(frame, sources, :css), canvas: []}
   end
 
   # A canvas-layer mark: its elements in literal style without text, and its inline
-  # label as SVG text (spec/14 §12.3).
-  defp mark_output(_canvas_or_binary, mark, build, frame, sources) do
-    canvas = frame |> build.(sources, :literal) |> Enum.map(&strip_text/1)
+  # label as SVG text (spec/14 §12.3); the geometry only when it is wanted (#404).
+  defp mark_output(_canvas_or_binary, mark, build, frame, sources, canvas?) do
+    canvas =
+      if canvas?,
+        do: frame |> build.(sources, :literal) |> Enum.map(&strip_text/1),
+        else: []
 
     svg =
       if Map.has_key?(mark, :label),
@@ -424,25 +439,30 @@ defmodule Visualize.Chart.Compiled do
 
   # The canvas layer of a tick: the whole layer per tick, or the incremental payload of a
   # viewport design with a binary layer (spec/14 §12.5).
-  defp canvas(%{viewport: nil}, _frame, [], _strip, _hi), do: {"", nil, nil}
-  defp canvas(%{viewport: window}, _frame, [], _strip, hi), do: {"", nil, %{window | hi: hi}}
-
-  defp canvas(%{viewport: window} = compiled, frame, elements, strip, hi) do
+  # `whole` is the whole window's canvas layer, a function: on the incremental path it is
+  # called only by the full-redraw branch (§12.5, #404), and everywhere else at once.
+  defp canvas(%{viewport: window} = compiled, frame, whole, strip, hi) do
     format = format(compiled)
 
     if window == nil or format != :binary_base64 do
-      string =
-        Hybrid.render_dynamic(
-          margin: compiled.margin,
-          dynamic: elements,
-          dynamic_style: %{},
-          canvas_format: format
-        )
+      case whole.() do
+        [] ->
+          {"", nil, window && %{window | hi: hi}}
 
-      {string, nil, window && %{window | hi: hi}}
+        elements ->
+          string =
+            Hybrid.render_dynamic(
+              margin: compiled.margin,
+              dynamic: elements,
+              dynamic_style: %{},
+              canvas_format: format
+            )
+
+          {string, nil, window && %{window | hi: hi}}
+      end
     else
       {payload, window} =
-        Window.scroll(window, frame, Element.group(elements), strip, hi, window.full)
+        Window.scroll(window, frame, fn -> Element.group(whole.()) end, strip, hi, window.full)
 
       {"", payload, window}
     end
