@@ -15,6 +15,14 @@ defmodule Examples.Charts.LoadAge do
   is evenly covered by a few hundred points rather than by the ten thousand a uniform
   second would need. The load is `Examples.Charts.Load`'s, the same three windows its
   neighbour `Examples.Charts.LoadGauge` puts on a dial.
+
+  **A point stands for a bucket, and is drawn as the bucket's mean** (#418). The slots are
+  a fifth of a second apart at the newest end and seven minutes apart at the oldest, so a
+  point sample there read one second of a span it claimed to summarise — and since the
+  clock advances three seconds a tick, it read a *different* second each tick and the aged
+  trace boiled instead of drifting. `Examples.Charts.Load.mean/3` averages the slot's own
+  span on an absolute-second stride; at the newest end, where the span is under a second,
+  that is the single reading it always was.
   """
 
   import Visualize.Chart.Build
@@ -68,19 +76,21 @@ defmodule Examples.Charts.LoadAge do
   """
   @spec ages() :: [number()]
   def ages do
-    decades = :math.log10(@oldest / @newest)
-    steps = round(decades * @per_decade)
-
-    for i <- 0..steps, do: @newest * :math.pow(10, i * decades / steps)
+    for i <- 0..steps(), do: @newest * :math.pow(10, i * decades() / steps())
   end
 
   defp rows(opts) do
     now = second(opts)
+    half = :math.pow(10, decades() / steps() / 2)
 
-    for {window, name} <- Load.windows(),
-        age <- ages(),
-        do: %{age: age, load: Load.at(window, now - age), window: name}
+    for {window, name} <- Load.windows(), age <- ages() do
+      %{age: age, load: Load.mean(window, now - age * half, now - age / half), window: name}
+    end
   end
+
+  # The span a slot covers: half a step either side of it, in the grid's own ratio.
+  defp decades, do: :math.log10(@oldest / @newest)
+  defp steps, do: round(decades() * @per_decade)
 
   # A tick is three seconds of the machine's day, as the gauge's is.
   defp second(opts), do: (opts[:animation_tick] || 0) * 3 + @oldest
@@ -106,12 +116,18 @@ defmodule Examples.Charts.LoadAge do
         line(:loads, %{x: :age, y: :load, series: :window}, style: :trace)
       ])
 
-    # Sampled geometrically by age, so the log axis is evenly covered.
+    # Sampled geometrically by age, so the log axis is evenly covered — and each point is
+    # the mean over the span its slot covers, since a slot is minutes wide at the old end.
     rows =
       for window <- ["1 min", "5 min", "15 min"],
           i <- 0..200,
           age = 5 * :math.pow(10, i * :math.log10(2160) / 200),
-          do: %{age: age, load: load_at(window, now - age), window: window}
+          half = :math.pow(10, :math.log10(2160) / 400),
+          do: %{
+            age: age,
+            load: load_over(window, now - age * half, now - age / half),
+            window: window
+          }
 
     {:ok, applied} = Visualize.Chart.apply(design, sources: %{loads: rows})
     Visualize.Chart.render(applied)
