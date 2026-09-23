@@ -626,6 +626,46 @@ defmodule Visualize.Chart.CompiledTest do
       assert jump.incremental.mode == "full"
     end
 
+    test "a scroll tick builds the strip and nothing else: its cost does not follow the window (#404)" do
+      # A window of 20,000 rows on 100 px: a scroll exposes 20 px, about 200 rows and six
+      # neighbours. Whatever the whole window costs to build, the scroll must not pay it.
+      big = %{@stream | frame: %{@stream.frame | viewport: %{scale: :x, span: 10_000}}}
+      sources = %{primary: rows(20_000)}
+      compiled = compile!(big, sources: sources)
+
+      {full, compiled} = Compiled.tick(compiled, sources, now: 10_000)
+      assert full.incremental.mode == "full"
+
+      {full_us, {_payload, compiled}} =
+        :timer.tc(fn -> Compiled.tick(compiled, sources, now: 19_000) end)
+
+      {scroll_us, {payload, _}} =
+        :timer.tc(fn -> Compiled.tick(compiled, sources, now: 19_200) end)
+
+      assert payload.incremental.mode == "scroll_x"
+      # The full redraw of that window is the cost of drawing 10,001 rows; the scroll is
+      # the cost of drawing about 200. A third is a generous bound — it was one to one
+      # when the tick built the whole window on every scroll.
+      assert scroll_us < full_us / 3,
+             "a scroll cost #{scroll_us} us against a full redraw's #{full_us} us"
+    end
+
+    test "the strip's rows are selected in one pass, and an unordered source is sorted (#404)" do
+      # The window is t ∈ [12, 22]; the 20 px strip at the right edge is t ∈ [20, 22].
+      sources = %{primary: rows(30)}
+      compiled = compile!(@stream, sources: sources)
+      {_first, compiled} = Compiled.tick(compiled, sources, now: 20)
+      {ordered, _} = Compiled.tick(compiled, sources, now: 22)
+
+      shuffled = %{primary: Enum.shuffle(sources.primary)}
+      compiled2 = compile!(@stream, sources: shuffled)
+      {_first, compiled2} = Compiled.tick(compiled2, shuffled, now: 20)
+      {unordered, _} = Compiled.tick(compiled2, shuffled, now: 22)
+
+      # However the rows arrive, the strip is the same picture.
+      assert ordered.incremental.binary == unordered.incremental.binary
+    end
+
     test "an inferred scale beside the window makes every tick a full redraw" do
       stale = put_in(@stream, [:frame, :scales, :y], %{kind: :linear})
       compiled = compile!(stale, sources: %{primary: rows(30)})
