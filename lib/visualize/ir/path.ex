@@ -57,6 +57,20 @@ defmodule Visualize.IR.Path do
   def new, do: %__MODULE__{}
 
   @doc """
+  A path of the commands given, in the order given (spec/02 §2.2, #414).
+
+  What a builder drawing one command per datum ends with: the appenders put a command at
+  the end of a list, which costs the list, so appending n commands one at a time costs a
+  square of n — a 50,000-point line took six seconds to build and sixteen milliseconds to
+  encode. A builder collects its commands and makes the path once.
+
+      iex> Visualize.IR.Path.from_commands([{:M, 0, 0}, {:L, 10, 5}])
+      %Visualize.IR.Path{commands: [{:M, 0, 0}, {:L, 10, 5}]}
+  """
+  @spec from_commands([command()]) :: t()
+  def from_commands(commands) when is_list(commands), do: %__MODULE__{commands: commands}
+
+  @doc """
   Move to absolute position.
   """
   @spec move_to(t(), number(), number()) :: t()

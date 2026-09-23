@@ -53,38 +53,27 @@ defmodule Visualize.Shape.Curve do
   @doc "Linear interpolation - straight lines between points"
   @spec linear([point()]) :: Path.t()
   def linear([{x0, y0} | rest]) do
-    path = Path.new() |> Path.move_to(x0, y0)
-
-    Enum.reduce(rest, path, fn {x, y}, acc ->
-      Path.line_to(acc, x, y)
-    end)
+    Path.from_commands([{:M, x0, y0} | for({x, y} <- rest, do: {:L, x, y})])
   end
 
   @doc "Step interpolation with configurable step position"
   @spec step([point()], number()) :: Path.t()
   def step([{x0, y0} | rest], t) do
-    path = Path.new() |> Path.move_to(x0, y0)
-
     # `x_pen` is where the pen sits horizontally; `x_prev` is the previous data point.
     # Consecutive horizontals merge, so a step path never carries a zero-length or
-    # redundant segment (the same output D3 produces).
-    {path, x_pen, x_last} =
-      Enum.reduce(rest, {path, x0, x0}, fn {x1, y1}, {acc, x_pen, x_prev} ->
+    # redundant segment (the same output D3 produces). The commands are collected in
+    # reverse and the path made once (#414).
+    {commands, x_pen, x_last} =
+      Enum.reduce(rest, {[{:M, x0, y0}], x0, x0}, fn {x1, y1}, {acc, x_pen, x_prev} ->
         x_mid = x_prev + (x1 - x_prev) * t
-
-        acc =
-          acc
-          |> horizontal_unless_same(x_pen, x_mid)
-          |> Path.vertical_to(y1)
-
-        {acc, x_mid, x1}
+        {[{:V, y1} | horizontal_unless_same(acc, x_pen, x_mid)], x_mid, x1}
       end)
 
-    horizontal_unless_same(path, x_pen, x_last)
+    Path.from_commands(Enum.reverse(horizontal_unless_same(commands, x_pen, x_last)))
   end
 
-  defp horizontal_unless_same(path, from, to) when from == to, do: path
-  defp horizontal_unless_same(path, _from, to), do: Path.horizontal_to(path, to)
+  defp horizontal_unless_same(commands, from, to) when from == to, do: commands
+  defp horizontal_unless_same(commands, _from, to), do: [{:H, to} | commands]
 
   @doc "Basis spline interpolation"
   @spec basis([point()]) :: Path.t()
@@ -96,36 +85,29 @@ defmodule Visualize.Shape.Curve do
   # `L (5p0 + p1)/6`, one `C` per point from the third on, a closing `C` to
   # `(p[n-2] + 5p[n-1])/6`, then `L p[n-1]` — n − 1 curves for n points (D-33).
   def basis([{x0, y0}, {x1, y1} | _] = points) do
-    path =
-      Path.new() |> Path.move_to(x0, y0) |> Path.line_to((5 * x0 + x1) / 6, (5 * y0 + y1) / 6)
+    commands = [{:L, (5 * x0 + x1) / 6, (5 * y0 + y1) / 6}, {:M, x0, y0}]
 
-    path =
+    commands =
       points
       |> Enum.chunk_every(3, 1, :discard)
-      |> Enum.reduce(path, fn [{ax, ay}, {bx, by}, {cx, cy}], acc ->
-        Path.curve_to(
-          acc,
-          (2 * ax + bx) / 3,
-          (2 * ay + by) / 3,
-          (ax + 2 * bx) / 3,
-          (ay + 2 * by) / 3,
-          (ax + 4 * bx + cx) / 6,
-          (ay + 4 * by + cy) / 6
-        )
+      |> Enum.reduce(commands, fn [{ax, ay}, {bx, by}, {cx, cy}], acc ->
+        [
+          {:C, (2 * ax + bx) / 3, (2 * ay + by) / 3, (ax + 2 * bx) / 3, (ay + 2 * by) / 3,
+           (ax + 4 * bx + cx) / 6, (ay + 4 * by + cy) / 6}
+          | acc
+        ]
       end)
 
     [{px, py}, {qx, qy}] = Enum.take(points, -2)
 
-    path
-    |> Path.curve_to(
-      (2 * px + qx) / 3,
-      (2 * py + qy) / 3,
-      (px + 2 * qx) / 3,
-      (py + 2 * qy) / 3,
-      (px + 5 * qx) / 6,
-      (py + 5 * qy) / 6
+    Path.from_commands(
+      Enum.reverse([
+        {:L, qx, qy},
+        {:C, (2 * px + qx) / 3, (2 * py + qy) / 3, (px + 2 * qx) / 3, (py + 2 * qy) / 3,
+         (px + 5 * qx) / 6, (py + 5 * qy) / 6}
+        | commands
+      ])
     )
-    |> Path.line_to(qx, qy)
   end
 
   @doc "The B-spline as a closed loop (spec/04 §5.3, #393): d3-shape's curveBasisClosed"
@@ -136,25 +118,19 @@ defmodule Visualize.Shape.Curve do
     n = length(points)
     at = fn i -> Enum.at(points, Integer.mod(i, n)) end
     {sx, sy} = knot(at.(n - 2), at.(n - 1), at.(0))
-    path = Path.new() |> Path.move_to(sx, sy)
 
     0..(n - 1)
-    |> Enum.reduce(path, fn i, acc ->
+    |> Enum.reduce([{:M, sx, sy}], fn i, acc ->
       {ax, ay} = at.(i - 1)
       {bx, by} = at.(i)
       {kx, ky} = knot(at.(i - 1), at.(i), at.(i + 1))
 
-      Path.curve_to(
-        acc,
-        (2 * ax + bx) / 3,
-        (2 * ay + by) / 3,
-        (ax + 2 * bx) / 3,
-        (ay + 2 * by) / 3,
-        kx,
-        ky
-      )
+      [
+        {:C, (2 * ax + bx) / 3, (2 * ay + by) / 3, (ax + 2 * bx) / 3, (ay + 2 * by) / 3, kx, ky}
+        | acc
+      ]
     end)
-    |> Path.close()
+    |> then(&Path.from_commands(Enum.reverse([:Z | &1])))
   end
 
   # The B-spline's knot between three control points.
@@ -169,26 +145,21 @@ defmodule Visualize.Shape.Curve do
     k = (1 - tension) / 6
     n = length(points)
     at = fn i -> Enum.at(points, Integer.mod(i, n)) end
-    path = Path.new() |> Path.move_to(x0, y0)
 
     0..(n - 1)
-    |> Enum.reduce(path, fn i, acc ->
+    |> Enum.reduce([{:M, x0, y0}], fn i, acc ->
       {x0, y0} = at.(i - 1)
       {x1, y1} = at.(i)
       {x2, y2} = at.(i + 1)
       {x3, y3} = at.(i + 2)
 
-      Path.curve_to(
-        acc,
-        x1 + k * (x2 - x0),
-        y1 + k * (y2 - y0),
-        x2 + k * (x1 - x3),
-        y2 + k * (y1 - y3),
-        x2,
-        y2
-      )
+      [
+        {:C, x1 + k * (x2 - x0), y1 + k * (y2 - y0), x2 + k * (x1 - x3), y2 + k * (y1 - y3), x2,
+         y2}
+        | acc
+      ]
     end)
-    |> Path.close()
+    |> then(&Path.from_commands(Enum.reverse([:Z | &1])))
   end
 
   @doc "Cardinal spline interpolation"
@@ -199,22 +170,18 @@ defmodule Visualize.Shape.Curve do
 
   def cardinal([{x0, y0} | _] = points, tension) do
     k = (1 - tension) / 6
-    path = Path.new() |> Path.move_to(x0, y0)
 
     points
     |> add_phantom_points()
     |> Enum.chunk_every(4, 1, :discard)
-    |> Enum.reduce(path, fn [{x0, y0}, {x1, y1}, {x2, y2}, {x3, y3}], acc ->
-      Path.curve_to(
-        acc,
-        x1 + k * (x2 - x0),
-        y1 + k * (y2 - y0),
-        x2 + k * (x1 - x3),
-        y2 + k * (y1 - y3),
-        x2,
-        y2
-      )
+    |> Enum.reduce([{:M, x0, y0}], fn [{x0, y0}, {x1, y1}, {x2, y2}, {x3, y3}], acc ->
+      [
+        {:C, x1 + k * (x2 - x0), y1 + k * (y2 - y0), x2 + k * (x1 - x3), y2 + k * (y1 - y3), x2,
+         y2}
+        | acc
+      ]
     end)
+    |> then(&Path.from_commands(Enum.reverse(&1)))
   end
 
   @doc "Catmull-Rom spline interpolation"
@@ -224,12 +191,10 @@ defmodule Visualize.Shape.Curve do
   end
 
   def catmull_rom([{x0, y0} | _] = points, alpha) do
-    path = Path.new() |> Path.move_to(x0, y0)
-
     points
     |> add_phantom_points()
     |> Enum.chunk_every(4, 1, :discard)
-    |> Enum.reduce(path, fn [{x0, y0}, {x1, y1}, {x2, y2}, {x3, y3}], acc ->
+    |> Enum.reduce([{:M, x0, y0}], fn [{x0, y0}, {x1, y1}, {x2, y2}, {x3, y3}], acc ->
       # Compute distances
       d1 = :math.sqrt(:math.pow(x1 - x0, 2) + :math.pow(y1 - y0, 2))
       d2 = :math.sqrt(:math.pow(x2 - x1, 2) + :math.pow(y2 - y1, 2))
@@ -262,8 +227,9 @@ defmodule Visualize.Shape.Curve do
         (t3 * t3 * y1 - t2 * t2 * y3 + (2 * t3 * t3 + 3 * t3 * t2 + t2 * t2) * y2) /
           (3 * t3 * (t3 + t2))
 
-      Path.curve_to(acc, cp1x, cp1y, cp2x, cp2y, x2, y2)
+      [{:C, cp1x, cp1y, cp2x, cp2y, x2, y2} | acc]
     end)
+    |> then(&Path.from_commands(Enum.reverse(&1)))
   end
 
   @doc "Monotone interpolation in x (preserves monotonicity)"
@@ -273,27 +239,17 @@ defmodule Visualize.Shape.Curve do
   end
 
   def monotone_x([{x0, y0} | _] = points) do
-    path = Path.new() |> Path.move_to(x0, y0)
-
     # Calculate tangents
     tangents = monotone_tangents(points, :x)
 
     points
     |> Enum.zip(tangents)
     |> Enum.chunk_every(2, 1, :discard)
-    |> Enum.reduce(path, fn [{{x0, y0}, t0}, {{x1, y1}, t1}], acc ->
+    |> Enum.reduce([{:M, x0, y0}], fn [{{x0, y0}, t0}, {{x1, y1}, t1}], acc ->
       dx = x1 - x0
-
-      Path.curve_to(
-        acc,
-        x0 + dx / 3,
-        y0 + t0 * dx / 3,
-        x1 - dx / 3,
-        y1 - t1 * dx / 3,
-        x1,
-        y1
-      )
+      [{:C, x0 + dx / 3, y0 + t0 * dx / 3, x1 - dx / 3, y1 - t1 * dx / 3, x1, y1} | acc]
     end)
+    |> then(&Path.from_commands(Enum.reverse(&1)))
   end
 
   @doc "Monotone interpolation in y (preserves monotonicity)"
@@ -309,26 +265,17 @@ defmodule Visualize.Shape.Curve do
   end
 
   defp monotone_x_swapped([{x0, y0} | _] = points) do
-    path = Path.new() |> Path.move_to(y0, x0)
-
     tangents = monotone_tangents(points, :x)
 
     points
     |> Enum.zip(tangents)
     |> Enum.chunk_every(2, 1, :discard)
-    |> Enum.reduce(path, fn [{{x0, y0}, t0}, {{x1, y1}, t1}], acc ->
+    |> Enum.reduce([{:M, y0, x0}], fn [{{x0, y0}, t0}, {{x1, y1}, t1}], acc ->
       dx = x1 - x0
       # Swap coordinates in the curve
-      Path.curve_to(
-        acc,
-        y0 + t0 * dx / 3,
-        x0 + dx / 3,
-        y1 - t1 * dx / 3,
-        x1 - dx / 3,
-        y1,
-        x1
-      )
+      [{:C, y0 + t0 * dx / 3, x0 + dx / 3, y1 - t1 * dx / 3, x1 - dx / 3, y1, x1} | acc]
     end)
+    |> then(&Path.from_commands(Enum.reverse(&1)))
   end
 
   @doc """
@@ -347,13 +294,12 @@ defmodule Visualize.Shape.Curve do
     {ax, bx} = points |> Enum.map(&elem(&1, 0)) |> control_points()
     {ay, by} = points |> Enum.map(&elem(&1, 1)) |> control_points()
 
-    path = Path.new() |> Path.move_to(x0, y0)
-
     [rest, ax, ay, bx, by]
     |> Enum.zip()
-    |> Enum.reduce(path, fn {{x, y}, cx1, cy1, cx2, cy2}, acc ->
-      Path.curve_to(acc, cx1, cy1, cx2, cy2, x, y)
+    |> Enum.reduce([{:M, x0, y0}], fn {{x, y}, cx1, cy1, cx2, cy2}, acc ->
+      [{:C, cx1, cy1, cx2, cy2, x, y} | acc]
     end)
+    |> then(&Path.from_commands(Enum.reverse(&1)))
   end
 
   # Helper to calculate monotone tangents
