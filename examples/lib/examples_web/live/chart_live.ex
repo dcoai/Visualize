@@ -26,6 +26,8 @@ defmodule ExamplesWeb.ChartLive do
     "radial" => Examples.Charts.RadialBarChart,
     "gauge" => Examples.Charts.GaugeChart,
     "radar" => Examples.Charts.RadarChart,
+    "load_gauge" => Examples.Charts.LoadGauge,
+    "load_age" => Examples.Charts.LoadAge,
     "polar" => Examples.Charts.PolarTransformChart,
     # Hierarchical Layouts
     "treemap" => Examples.Charts.TreemapChart,
@@ -63,6 +65,8 @@ defmodule ExamplesWeb.ChartLive do
     "gauge",
     "radar",
     "polar",
+    "load_gauge",
+    "load_age",
     "multi_line",
     "grouped_bar",
     "stacked_bar",
