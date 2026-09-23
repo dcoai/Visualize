@@ -64,6 +64,36 @@ defmodule Examples.Charts.IncrementalLineTest do
     assert Enum.count(kinds, &(&1 == :cubic_run)) == 1
   end
 
+  test "the window slides: rows/3 gives the rows rows/1 would build, without rebuilding them (#408)" do
+    scroll = IncrementalLine.scroll(samples_per_px: 4, origin: 0)
+    held = IncrementalLine.rows(scroll)
+
+    for px <- [1, 3, 25] do
+      advanced = Scroll.advance(scroll, px)
+      assert IncrementalLine.rows(advanced, px, held) == IncrementalLine.rows(advanced)
+    end
+
+    # Slid frame by frame, it stays the window rows/1 builds.
+    {slid, final} =
+      Enum.reduce(1..12, {held, scroll}, fn _, {rows, sc} ->
+        advanced = Scroll.advance(sc, 3)
+        {IncrementalLine.rows(advanced, 3, rows), advanced}
+      end)
+
+    assert slid == IncrementalLine.rows(final)
+    assert length(slid.signal) == Scroll.count(final)
+    # With nothing held, the whole window is built.
+    assert IncrementalLine.rows(final, 3, nil) == IncrementalLine.rows(final)
+  end
+
+  test "a design takes the rows a caller holds (#408)" do
+    scroll = IncrementalLine.scroll(samples_per_px: 2, origin: 40)
+    rows = IncrementalLine.rows(scroll)
+    opts = [samples_per_px: 2, origin: 40]
+    assert {design, ^rows} = IncrementalLine.design(opts ++ [rows: rows])
+    assert {^design, ^rows} = IncrementalLine.design(opts)
+  end
+
   test "the SVG and Canvas backends draw the window whole, as any design's" do
     {frame, _} = Frames.frame(IncrementalLine, [samples_per_px: 1], :svg, nil)
     assert frame.svg =~ "<svg" and frame.points == 741

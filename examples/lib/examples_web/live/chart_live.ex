@@ -127,6 +127,7 @@ defmodule ExamplesWeb.ChartLive do
                flow_control: true
              ),
            run_ticks: 0,
+           run_rows: nil,
            # A chart opens on the backend that makes it worth having (#407): Incremental
            # for a streaming design, Canvas for any other; SVG is a click away.
            run_backend: List.last(Frames.backends(module)),
@@ -138,7 +139,7 @@ defmodule ExamplesWeb.ChartLive do
            compare: nil,
            compare_task: nil
          )
-         |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))
+         |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns), run_rows: nil))
          |> still()}
     end
   end
@@ -205,7 +206,7 @@ defmodule ExamplesWeb.ChartLive do
   # compiled chart, once), and the first frame renders.
   def handle_event("run_start", _params, socket) do
     %{module: module, run_backend: backend} = socket.assigns
-    socket = assign(socket, run_scroll: fresh_scroll(socket.assigns))
+    socket = assign(socket, run_scroll: fresh_scroll(socket.assigns), run_rows: nil)
     state = Frames.prepare(module, run_opts(socket.assigns, 0), backend)
 
     run =
@@ -239,14 +240,14 @@ defmodule ExamplesWeb.ChartLive do
 
         {:noreply,
          socket
-         |> assign(run_scroll: Examples.Scroll.retimed(scroll, density))
+         |> assign(run_scroll: Examples.Scroll.retimed(scroll, density), run_rows: nil)
          |> update(:run, &Run.resync/1)}
 
       {true, _none} ->
         {:noreply, socket}
 
       {false, _} ->
-        {:noreply, assign(socket, run_scroll: fresh_scroll(socket.assigns))}
+        {:noreply, assign(socket, run_scroll: fresh_scroll(socket.assigns), run_rows: nil)}
     end
   end
 
@@ -293,7 +294,7 @@ defmodule ExamplesWeb.ChartLive do
   def handle_info(:run_tick, socket) do
     now = System.monotonic_time(:millisecond)
     socket = schedule_run(socket)
-    %{run_scroll: scroll, run_backend: backend} = socket.assigns
+    %{run_scroll: scroll, run_backend: backend, module: module} = socket.assigns
     density = if scroll, do: scroll.samples_per_px, else: 1
 
     case Run.tick(socket.assigns.run, now, density) do
@@ -315,7 +316,16 @@ defmodule ExamplesWeb.ChartLive do
             {:noreply, socket}
 
           scroll != nil ->
-            socket = assign(socket, run_scroll: Examples.Scroll.advance(scroll, columns))
+            # The window slides: its rows are the ones it held with the exposed samples
+            # appended (#408), never rebuilt.
+            advanced = Examples.Scroll.advance(scroll, columns)
+
+            socket =
+              assign(socket,
+                run_scroll: advanced,
+                run_rows: module.rows(advanced, columns, socket.assigns.run_rows)
+              )
+
             {:noreply, start_frame(socket, mode)}
 
           true ->
@@ -496,7 +506,8 @@ defmodule ExamplesWeb.ChartLive do
     |> Keyword.merge(
       samples_per_px: scroll.samples_per_px,
       origin: scroll.origin,
-      now: scroll.origin + count - 1
+      now: scroll.origin + count - 1,
+      rows: assigns.run_rows
     )
   end
 

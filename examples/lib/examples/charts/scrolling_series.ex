@@ -37,12 +37,14 @@ defmodule Examples.Charts.ScrollingSeries do
 
   @doc """
   The design and the rows of its window (spec/14 §16.1). Options: `samples_per_px`
-  (default 1), `origin` (default 0) — the window in `Examples.Scroll`'s terms — and the
-  usual `width`/`height` are the frame's own.
+  (default 1), `origin` (default 0) — the window in `Examples.Scroll`'s terms — `rows`,
+  the window's rows when the caller already holds them (#408), and the usual
+  `width`/`height` are the frame's own.
   """
   def design(opts \\ []) do
     scroll = scroll(opts)
     count = Scroll.count(scroll)
+    rows = opts[:rows] || rows(scroll)
 
     design =
       Design.fold(
@@ -62,7 +64,7 @@ defmodule Examples.Charts.ScrollingSeries do
           for(name <- tl(@series), do: line(name, %{x: :t, y: :v}, style: :line, render: :binary))
       )
 
-    {design, rows(scroll)}
+    {design, rows}
   end
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
@@ -78,6 +80,24 @@ defmodule Examples.Charts.ScrollingSeries do
 
     for name <- @series, into: %{} do
       {name, for(t <- origin..(origin + count - 1), do: %{t: t, v: value(name, t, count)})}
+    end
+  end
+
+  @doc """
+  The window's rows after a scroll of `px` columns, from the rows it held (#408): per
+  series the samples the scroll exposed appended and as many dropped from the front
+  (`Examples.Scroll.shift/4`). Every value is a function of its absolute sample and the
+  window's count, so this is the list `rows/1` builds while the density holds.
+  """
+  @spec rows(Scroll.t(), non_neg_integer(), map() | nil) :: map()
+  def rows(%Scroll{} = advanced, _px, nil), do: rows(advanced)
+
+  def rows(%Scroll{} = advanced, px, held) when is_map(held) do
+    count = Scroll.count(advanced)
+
+    for name <- @series, into: %{} do
+      {name,
+       Scroll.shift(advanced, held[name], px, fn t -> %{t: t, v: value(name, t, count)} end)}
     end
   end
 
