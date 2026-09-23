@@ -14,7 +14,7 @@ defmodule Examples.ChartsTest do
   """
   use ExUnit.Case, async: true
 
-  alias Examples.Charts.Design
+  alias Examples.Charts.{Design, Templates}
   alias Visualize.Chart
 
   # The families of #124 that have been through the layer, in the proposal's order:
@@ -136,6 +136,73 @@ defmodule Examples.ChartsTest do
       assert applied.chart.vars == %{}
     end
   end
+
+  # A chart that still names an absolute colour, with the issue that keeps it there
+  # (#421). The maps' ocean is a semantic backdrop the theme has no slot for — `:grid` is
+  # the graticule's own stroke and `:background` would make it vanish — which is #422.
+  @absolute_colours %{
+    Examples.Charts.WorldMap => "#422",
+    Examples.Charts.Globe => "#422"
+  }
+
+  # `#rgb`, `#rrggbb` and the functional forms; a named colour would slip through, and
+  # nothing in the gallery writes one.
+  @colour ~r/^(#[0-9a-fA-F]{3,8}|(rgb|hsl)a?\()/
+
+  describe "every chart draws in the theme (spec/14 §5.6, #421)" do
+    test "no design names an absolute colour, but for the gaps filed against it" do
+      # Every chart of the grid, not just the recorded ones: the two streaming designs
+      # are outside `charts/0`, and they are exactly where the literals were.
+      for module <- Templates.gallery_modules() do
+        {design, _sources} = module.design([])
+        found = literal_colours(design)
+
+        case Map.fetch(@absolute_colours, module) do
+          {:ok, issue} ->
+            refute found == [],
+                   "#{inspect(module)} names no absolute colour now: drop it from @absolute_colours"
+
+            {:docs_v1, _, _, _, %{"en" => doc}, _, _} = Code.fetch_docs(module)
+            assert doc =~ issue, "#{inspect(module)} must name the gap that keeps its literal"
+
+          :error ->
+            assert found == [],
+                   "#{inspect(module)} names #{inspect(found)} instead of a theme slot"
+        end
+      end
+    end
+
+    test "a streaming chart's paint follows the palette it is rendered under" do
+      for module <- [Examples.Charts.ScrollingSeries, Examples.Charts.IncrementalLine] do
+        light = svg_under(module, :default)
+        dark = svg_under(module, :dark)
+
+        # The slot reaches the SVG as its CSS variable, and the fallback differs by theme.
+        assert light =~ "var(--vis-series-1,"
+        assert dark =~ "var(--vis-series-1,"
+        refute light == dark
+        refute light =~ "#4e79a7"
+      end
+    end
+  end
+
+  defp svg_under(module, palette) do
+    {design, sources} = module.design([])
+    {:ok, chart} = Chart.from_map(design)
+    {:ok, applied} = Chart.apply(chart, sources: sources, theme: Design.theme(palette: palette))
+    Chart.render(applied)
+  end
+
+  # Every binary anywhere in the design that reads as a CSS colour.
+  defp literal_colours(term) when is_map(term),
+    do: term |> Map.values() |> Enum.flat_map(&literal_colours/1)
+
+  defp literal_colours(term) when is_list(term), do: Enum.flat_map(term, &literal_colours/1)
+
+  defp literal_colours(term) when is_binary(term),
+    do: if(Regex.match?(@colour, term), do: [term], else: [])
+
+  defp literal_colours(_term), do: []
 
   test "every chart renders exactly as recorded" do
     assert File.read!(@golden) == render()

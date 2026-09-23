@@ -58,7 +58,7 @@ defmodule Examples.Charts.ScrollingSeries do
       Design.fold(
         [
           chart(meta: %{name: title(), description: [description()]}),
-          style(:area, fill: "#4e79a7", fill_opacity: 0.7, stroke: "#4e79a7", stroke_width: 1),
+          style(:area, fill: :series_1, fill_opacity: 0.7, stroke: :series_1, stroke_width: 1),
           style(:line, stroke_width: 2),
           cartesian(@width, @height, margin: @margin, viewport: %{scale: :x, span: count - 1}),
           linear_scale(:x),
@@ -146,7 +146,7 @@ defmodule Examples.Charts.ScrollingSeries do
     {:ok, design} =
       Visualize.Chart.compose([
         chart(meta: %{name: "Scrolling series"}),
-        style(:area, fill: "#4e79a7", fill_opacity: 0.7, stroke: "#4e79a7"),
+        style(:area, fill: :series_1, fill_opacity: 0.7, stroke: :series_1),
         style(:line, stroke_width: 2),
         cartesian(900, 500, margin: %{top: 40, right: 30, bottom: 50, left: 60},
           viewport: %{scale: :x, span: 810}),

@@ -9,6 +9,11 @@ defmodule Examples.Charts.Globe do
   #349). The animation turns the projection's `rotate` — the globe spinning east with a
   slow nod — where the hand-written version rebuilt the projection each frame. Its dark
   page background and the highlight it painted on the glass are not the chart's.
+
+  Its ocean is the one absolute colour left in the gallery (#421): a map's ocean is a
+  backdrop the theme has no slot for — `:grid` is the graticule's own stroke and
+  `:background` would make it vanish — so it keeps `#a8d5e5` until #422 gives a theme
+  the word for a surface.
   """
 
   import Visualize.Chart.Build
