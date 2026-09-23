@@ -9,8 +9,11 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
   alias Examples.Run
   alias ExamplesWeb.ChartLive
 
-  defp page(slug) do
+  # A page opens on the backend the chart is worth running on (#407); a test that means
+  # SVG says so, as one that means Canvas or Incremental already did.
+  defp page(slug, backend \\ :svg) do
     {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => to_string(backend)}, s)
     s
   end
 
@@ -28,6 +31,32 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
   end
 
   defp pushed(s), do: for([n, p] <- Phoenix.LiveView.Utils.get_push_events(s), do: {n, p[:seq]})
+
+  test "a page opens on the backend the chart is worth running on (#407)" do
+    {:ok, streaming} =
+      ChartLive.mount(%{"chart" => "incremental_line"}, %{}, %Phoenix.LiveView.Socket{})
+
+    assert streaming.assigns.run_backend == :incremental
+
+    assert Examples.Frames.backends(Examples.Charts.IncrementalLine) == [
+             :svg,
+             :canvas,
+             :incremental
+           ]
+
+    {:ok, scrolling} =
+      ChartLive.mount(%{"chart" => "scrolling_series"}, %{}, %Phoenix.LiveView.Socket{})
+
+    assert scrolling.assigns.run_backend == :incremental
+
+    {:ok, still} = ChartLive.mount(%{"chart" => "line"}, %{}, %Phoenix.LiveView.Socket{})
+    assert still.assigns.run_backend == :canvas
+    assert Examples.Frames.backends(Examples.Charts.LineChart) == [:svg, :canvas]
+
+    # SVG is a click away, and the buttons still switch.
+    {:noreply, svg} = ChartLive.handle_event("set_backend", %{"backend" => "svg"}, still)
+    assert svg.assigns.run_backend == :svg
+  end
 
   test "the drawer is one collapsed line by default, and opens to the controls and metrics" do
     s = page("line")

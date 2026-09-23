@@ -127,7 +127,9 @@ defmodule ExamplesWeb.ChartLive do
                flow_control: true
              ),
            run_ticks: 0,
-           run_backend: :svg,
+           # A chart opens on the backend that makes it worth having (#407): Incremental
+           # for a streaming design, Canvas for any other; SVG is a click away.
+           run_backend: List.last(Frames.backends(module)),
            run_state: nil,
            run_frame: nil,
            run_mode: nil,
