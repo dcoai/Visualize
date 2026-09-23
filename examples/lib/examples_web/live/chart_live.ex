@@ -127,7 +127,6 @@ defmodule ExamplesWeb.ChartLive do
                flow_control: true
              ),
            run_ticks: 0,
-           run_rows: nil,
            # A chart opens on the backend that makes it worth having (#407): Incremental
            # for a streaming design, Canvas for any other; SVG is a click away.
            run_backend: List.last(Frames.backends(module)),
@@ -139,7 +138,7 @@ defmodule ExamplesWeb.ChartLive do
            compare: nil,
            compare_task: nil
          )
-         |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns), run_rows: nil))
+         |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))
          |> still()}
     end
   end
@@ -206,8 +205,12 @@ defmodule ExamplesWeb.ChartLive do
   # compiled chart, once), and the first frame renders.
   def handle_event("run_start", _params, socket) do
     %{module: module, run_backend: backend} = socket.assigns
-    socket = assign(socket, run_scroll: fresh_scroll(socket.assigns), run_rows: nil)
-    state = Frames.prepare(module, run_opts(socket.assigns, 0), backend)
+    socket = update(socket, :run, &Run.cancel/1)
+    socket = assign(socket, run_scroll: fresh_scroll(socket.assigns))
+    opts = run_opts(socket.assigns, 0)
+    # The view keeps the backend's state for its markup — the canvas's size and the static
+    # SVG — and the run's renderer keeps its own to draw with (#413).
+    state = Frames.prepare(module, opts, backend)
 
     run =
       Run.start(
@@ -219,8 +222,12 @@ defmodule ExamplesWeb.ChartLive do
         System.monotonic_time(:microsecond)
       )
 
+    run = Run.renderer(run, module, backend, opts)
     socket = assign(socket, run: run, run_state: state, run_frame: nil, run_ticks: 0)
-    {:noreply, socket |> start_frame() |> schedule_run()}
+
+    if run.running,
+      do: {:noreply, socket |> start_frame() |> schedule_run()},
+      else: {:noreply, socket}
   end
 
   # The data rate of a streaming design (#327): its density follows the rate, as the
@@ -240,14 +247,14 @@ defmodule ExamplesWeb.ChartLive do
 
         {:noreply,
          socket
-         |> assign(run_scroll: Examples.Scroll.retimed(scroll, density), run_rows: nil)
+         |> assign(run_scroll: Examples.Scroll.retimed(scroll, density))
          |> update(:run, &Run.resync/1)}
 
       {true, _none} ->
         {:noreply, socket}
 
       {false, _} ->
-        {:noreply, assign(socket, run_scroll: fresh_scroll(socket.assigns), run_rows: nil)}
+        {:noreply, assign(socket, run_scroll: fresh_scroll(socket.assigns))}
     end
   end
 
@@ -294,7 +301,7 @@ defmodule ExamplesWeb.ChartLive do
   def handle_info(:run_tick, socket) do
     now = System.monotonic_time(:millisecond)
     socket = schedule_run(socket)
-    %{run_scroll: scroll, run_backend: backend, module: module} = socket.assigns
+    %{run_scroll: scroll, run_backend: backend} = socket.assigns
     density = if scroll, do: scroll.samples_per_px, else: 1
 
     case Run.tick(socket.assigns.run, now, density) do
@@ -316,17 +323,9 @@ defmodule ExamplesWeb.ChartLive do
             {:noreply, socket}
 
           scroll != nil ->
-            # The window slides: its rows are the ones it held with the exposed samples
-            # appended (#408), never rebuilt.
-            advanced = Examples.Scroll.advance(scroll, columns)
-
-            socket =
-              assign(socket,
-                run_scroll: advanced,
-                run_rows: module.rows(advanced, columns, socket.assigns.run_rows)
-              )
-
-            {:noreply, start_frame(socket, mode)}
+            # The window slides; its rows are the renderer's, slid by these columns (#413).
+            socket = assign(socket, run_scroll: Examples.Scroll.advance(scroll, columns))
+            {:noreply, start_frame(socket, columns)}
 
           true ->
             # A chart that animates by tick: the run's tick advances by the arrivals at its
@@ -336,9 +335,9 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
-  # A frame's render is back: numbered, shown or pushed, and measured.
-  def handle_info({ref, {:frame, frame, state}}, socket) when is_reference(ref) do
-    case Run.result(socket.assigns.run, ref) do
+  # A frame's render is back from the run's renderer: numbered, shown or pushed, measured.
+  def handle_info({:frame, id, frame}, socket) do
+    case Run.result(socket.assigns.run, id) do
       :stale ->
         {:noreply, socket}
 
@@ -353,7 +352,7 @@ defmodule ExamplesWeb.ChartLive do
 
         run = Run.rendered(run, frame.bytes, now)
         mode = if frame.incremental, do: frame.incremental.mode, else: "full"
-        socket = assign(socket, run: run, run_state: state, run_frame: frame, run_mode: mode)
+        socket = assign(socket, run: run, run_frame: frame, run_mode: mode)
 
         cond do
           frame.incremental ->
@@ -470,18 +469,13 @@ defmodule ExamplesWeb.ChartLive do
     :ok
   end
 
-  # The frame at the run's next tick, rendering in a task over a snapshot: a streaming
-  # design's at its window, any other chart's at its next animation tick.
-  defp start_frame(socket, _mode \\ :full_redraw) do
-    %{module: module, run_backend: backend, run_state: state} = socket.assigns
-    opts = run_opts(socket.assigns, socket.assigns.run_ticks)
-
-    render = fn ->
-      {frame, state} = Frames.frame(module, opts, backend, state)
-      {:frame, frame, state}
-    end
-
-    update(socket, :run, &Run.rendering(&1, render))
+  # The frame at the run's next tick, asked of the run's renderer (#413): a streaming
+  # design's at its window — whose rows the renderer holds and slides by the columns the
+  # tick advanced — any other chart's at its next animation tick.
+  defp start_frame(socket, columns \\ 0) do
+    opts = run_opts(socket.assigns, socket.assigns.run_ticks) |> Keyword.delete(:rows)
+    {run, _id} = Run.asking(socket.assigns.run, opts, columns)
+    assign(socket, run: run)
   end
 
   defp schedule_run(socket) do
@@ -506,8 +500,7 @@ defmodule ExamplesWeb.ChartLive do
     |> Keyword.merge(
       samples_per_px: scroll.samples_per_px,
       origin: scroll.origin,
-      now: scroll.origin + count - 1,
-      rows: assigns.run_rows
+      now: scroll.origin + count - 1
     )
   end
 

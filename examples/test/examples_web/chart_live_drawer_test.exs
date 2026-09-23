@@ -23,14 +23,76 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
         ChartLive.render(Map.put(s.assigns, :__changed__, %{}))
       )
 
+  # A frame comes back from the run's renderer as `{:frame, id, frame}` (#413).
   defp settled(s) do
-    %Task{ref: ref} = s.assigns.run.task
-    assert_receive {^ref, result}, 10_000
-    {:noreply, s} = ChartLive.handle_info({ref, result}, s)
+    id = s.assigns.run.render_id
+    assert id != nil, "no frame is in flight"
+    assert_receive {:frame, ^id, frame}, 10_000
+    {:noreply, s} = ChartLive.handle_info({:frame, id, frame}, s)
     s
   end
 
   defp pushed(s), do: for([n, p] <- Phoenix.LiveView.Utils.get_push_events(s), do: {n, p[:seq]})
+
+  test "a run's frames come from one renderer, which Stop and terminate take down (#413)" do
+    s = page("incremental_line", :incremental)
+    {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+
+    renderer = s.assigns.run.renderer
+    assert is_pid(renderer) and Process.alive?(renderer)
+    monitor = Process.monitor(renderer)
+
+    # Several frames, all from the one process; the window's rows are its, never the
+    # view's — the view keeps the scroll alone.
+    s = settled(s)
+    assert s.assigns.run_frame.incremental.mode == "full"
+    refute Map.has_key?(s.assigns, :run_rows)
+
+    s =
+      Enum.reduce(1..3, s, fn _, s ->
+        s =
+          Phoenix.Component.assign(s,
+            run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 40}
+          )
+
+        {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+        if s.assigns.run.render_id, do: settled(s), else: s
+      end)
+
+    assert s.assigns.run.renderer == renderer
+    assert s.assigns.run_frame.incremental.mode in ["scroll_x", "none"]
+
+    # A frame answered for a render that is no longer in flight is nothing.
+    {:noreply, stale} = ChartLive.handle_info({:frame, :gone, s.assigns.run_frame}, s)
+    assert stale.assigns.run_frame == s.assigns.run_frame
+
+    {:noreply, stopped} = ChartLive.handle_event("run_stop", %{}, s)
+    assert stopped.assigns.run.renderer == nil
+    assert_receive {:DOWN, ^monitor, :process, ^renderer, _}, 5_000
+
+    # A run that ends with the view takes its renderer with it.
+    {:noreply, again} = ChartLive.handle_event("run_start", %{}, stopped)
+    second = again.assigns.run.renderer
+    assert is_pid(second) and second != renderer
+    monitor = Process.monitor(second)
+    ChartLive.terminate(:shutdown, again)
+    assert_receive {:DOWN, ^monitor, :process, ^second, _}, 5_000
+  end
+
+  test "a renderer that dies stops the run with the reason, not the view (#413)" do
+    s = page("incremental_line", :incremental)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    run = s.assigns.run
+    assert is_pid(run.renderer)
+
+    {:noreply, dead} =
+      ChartLive.handle_info({:DOWN, run.monitor, :process, run.renderer, {:badarg, []}}, s)
+
+    refute dead.assigns.run.running
+    assert dead.assigns.run.error =~ "badarg"
+    assert dead.assigns.run_frame == nil
+  end
 
   test "a page opens on the backend the chart is worth running on (#407)" do
     {:ok, streaming} =
@@ -80,16 +142,17 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
   test "an SVG run renders the chart at its animation tick in a task and shows the frame" do
     s = page("line")
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
-    assert %Run{running: true, task: %Task{}, flow_control: false} = s.assigns.run
+    assert %Run{running: true, flow_control: false} = s.assigns.run
+    assert is_pid(s.assigns.run.renderer)
     s = settled(s)
-    assert %Run{frame: 1, sent_seq: 1, task: nil} = s.assigns.run
+    assert %Run{frame: 1, sent_seq: 1, render_id: nil} = s.assigns.run
     assert s.assigns.run_frame.svg =~ "<svg"
     assert s.assigns.run_frame.points == 51
     assert html(s) =~ s.assigns.run_frame.svg
     assert pushed(s) == []
 
     {:noreply, s} = ChartLive.handle_info(:run_tick, s)
-    assert %Task{} = s.assigns.run.task
+    assert is_pid(s.assigns.run.renderer)
     s = settled(s)
     assert s.assigns.run.frame == 2
     assert_receive :run_tick, 1_000
@@ -266,7 +329,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
     ticks = still.assigns.run_ticks
     {:noreply, still} = ChartLive.handle_info(:run_tick, still)
-    assert still.assigns.run_ticks == ticks and still.assigns.run.task != nil
+    assert still.assigns.run_ticks == ticks and still.assigns.run.render_id != nil
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
     refute s.assigns.run.running
   end
@@ -311,13 +374,17 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert s.assigns.run_frame.svg =~ "<svg" and
              s.assigns.run_frame.svg =~ ~s(class="mark mark-area")
 
-    assert %{y: %{shown: [+0.0, _]}} = s.assigns.run_state.compiled.eased
+    # The easing lives in the run's renderer, which holds the compiled chart (#413).
+    assert %{y: %{shown: [+0.0, _]}} =
+             Examples.Renderer.state(s.assigns.run.renderer).compiled.eased
+
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
     refute s.assigns.run.running
 
-    # The page's Animate button is the same run (#362): one frame loop, in a task.
+    # The page's Animate button is the same run (#362): one frame loop, one renderer.
     {:noreply, s} = ChartLive.handle_event("toggle_animation", %{}, s)
-    assert %Run{running: true, task: %Task{}} = s.assigns.run
+    assert %Run{running: true} = s.assigns.run
+    assert is_pid(s.assigns.run.renderer)
     assert %{compiled: %Visualize.Chart.Compiled{}} = s.assigns.run_state
     s = settled(s)
     assert html(s) =~ ~s(class="mark mark-area") and html(s) =~ "Stop Animation"

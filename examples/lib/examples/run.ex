@@ -6,9 +6,9 @@ defmodule Examples.Run do
   A run ticks by deadline (`schedule/2`), accounts the samples due since the last tick as
   whole columns of the page's density (`tick/3`), decides what a frame goes as — strips,
   the empty `"none"` update, a full render, or held back by flow control (`decide/5`) —
-  numbers every frame it sends (`sending/1`), renders it in a task under
-  `Examples.TaskSupervisor`, one in flight, and measures the result (`rendering/2`,
-  `result/2`, `rendered/3`); the hook's acks (`acked/4`) bound the frames in flight to a
+  numbers every frame it sends (`sending/1`), renders it in the run's own renderer under
+  `Examples.RendererSupervisor`, one in flight, and measures the result (`renderer/4`,
+  `asking/3`, `result/2`, `rendered/3`); the hook's acks (`acked/4`) bound the frames in flight to a
   lag budget with a hold that fails open (`hold/2`); `stop/1` terminates a render in
   flight at once. A page owns the run in one assign and reads its metrics from it.
   """
@@ -58,7 +58,9 @@ defmodule Examples.Run do
             stalls: 0,
             ack_age: nil,
             # the render in flight
-            task: nil,
+            renderer: nil,
+            render_id: nil,
+            monitor: nil,
             render_started: nil,
             skipped: 0,
             error: nil
@@ -93,12 +95,12 @@ defmodule Examples.Run do
   @spec resync(t()) :: t()
   def resync(%__MODULE__{} = run), do: %{run | needs_full: true}
 
-  @doc "The run with a render in flight terminated; nothing else changes."
+  @doc "The run's renderer stopped and its monitor dropped; nothing else changes."
   @spec cancel(t()) :: t()
-  def cancel(%__MODULE__{task: %Task{ref: ref, pid: pid}} = run) do
-    Process.demonitor(ref, [:flush])
-    Task.Supervisor.terminate_child(Examples.TaskSupervisor, pid)
-    %{run | task: nil}
+  def cancel(%__MODULE__{renderer: pid, monitor: monitor} = run) when is_pid(pid) do
+    if monitor, do: Process.demonitor(monitor, [:flush])
+    Examples.Renderer.stop(pid)
+    %{run | renderer: nil, monitor: nil, render_id: nil}
   end
 
   def cancel(%__MODULE__{} = run), do: run
@@ -149,7 +151,7 @@ defmodule Examples.Run do
         measured_rate: rate_over(arrivals, now_ms)
     }
 
-    if run.task do
+    if run.render_id do
       {%{run | skipped: run.skipped + 1}, :skipped}
     else
       columns = div(run.pending, samples_per_px)
@@ -237,21 +239,42 @@ defmodule Examples.Run do
   end
 
   @doc """
-  A frame rendering in a task (#323): `fun` runs under `Examples.TaskSupervisor`,
-  unlinked. With no supervisor running the run fails open — stopped, its `error` saying
-  what to do — rather than raising in the view (#340).
+  The run's renderer, started for as long as the run lasts (#413): one process holds the
+  backend's state and the window's rows, so a frame costs the message and not a copy of
+  them (#323 is unchanged — no frame renders in the view's process). With no supervisor
+  running the run fails open — stopped, its `error` saying what to do — rather than
+  raising in the view (#340). The caller monitors what comes back.
   """
-  @spec rendering(t(), (-> term())) :: t()
-  def rendering(%__MODULE__{task: nil} = run, fun) do
-    case supervisor() do
-      :ok ->
-        task = Task.Supervisor.async_nolink(Examples.TaskSupervisor, fun)
-        %{run | task: task, render_started: System.monotonic_time(:microsecond)}
+  @spec renderer(t(), module(), atom(), keyword()) :: t()
+  def renderer(%__MODULE__{renderer: pid} = run, _module, _backend, _opts) when is_pid(pid),
+    do: run
 
-      {:error, message} ->
+  def renderer(%__MODULE__{} = run, module, backend, opts) do
+    case Examples.Renderer.start(module, backend, opts) do
+      {:ok, pid} ->
+        %{run | renderer: pid, monitor: Process.monitor(pid)}
+
+      {:error, message} when is_binary(message) ->
         %{run | running: false, error: message}
+
+      {:error, reason} ->
+        %{run | running: false, error: inspect(reason)}
     end
   end
+
+  @doc """
+  A frame asked of the run's renderer: its id, which the answer carries back, and the
+  clock the render time is read from. A run with no renderer, or one already rendering,
+  is unchanged and nothing is asked.
+  """
+  @spec asking(t(), keyword(), non_neg_integer()) :: {t(), term() | nil}
+  def asking(%__MODULE__{renderer: pid, render_id: nil} = run, opts, columns) when is_pid(pid) do
+    id = (run.sent_seq || 0) + run.dropped + run.skipped + System.unique_integer([:positive])
+    Examples.Renderer.frame(pid, id, opts, columns)
+    {%{run | render_id: id, render_started: System.monotonic_time(:microsecond)}, id}
+  end
+
+  def asking(%__MODULE__{} = run, _opts, _columns), do: {run, nil}
 
   @no_supervisor "the task supervisor is not running — the server was started before Examples.TaskSupervisor joined its supervision tree; restart the server (a recompile does not rebuild the tree)"
 
@@ -266,30 +289,27 @@ defmodule Examples.Run do
   end
 
   @doc """
-  A task's message: `{:ok, run}` for the render in flight, its monitor flushed, or
-  `:stale` for one that was cancelled — nothing to do with it.
+  A renderer's answer: `{:ok, run}` for the render in flight, or `:stale` for one that
+  was superseded — a frame asked before a Stop, a backend change or a new run.
   """
-  @spec result(t(), reference()) :: {:ok, t()} | :stale
-  def result(%__MODULE__{task: %Task{ref: ref}} = run, ref) do
-    Process.demonitor(ref, [:flush])
-    {:ok, %{run | task: nil}}
+  @spec result(t(), term()) :: {:ok, t()} | :stale
+  def result(%__MODULE__{render_id: id} = run, id) when id != nil do
+    {:ok, %{run | render_id: nil}}
   end
 
-  def result(%__MODULE__{}, ref) do
-    Process.demonitor(ref, [:flush])
-    :stale
-  end
+  def result(%__MODULE__{}, _id), do: :stale
 
-  @doc "The render in flight died: the run stops and says why; a stale DOWN is `:stale`."
+  @doc "The renderer died: the run stops and says why; a stale DOWN is `:stale`."
   @spec down(t(), reference(), term()) :: {:ok, t()} | :stale
-  def down(%__MODULE__{task: %Task{ref: ref}} = run, ref, reason) do
-    {:ok, %{run | task: nil, running: false, error: inspect(reason)}}
+  def down(%__MODULE__{monitor: monitor} = run, monitor, reason) when monitor != nil do
+    {:ok,
+     %{run | renderer: nil, monitor: nil, render_id: nil, running: false, error: inspect(reason)}}
   end
 
   def down(%__MODULE__{}, _ref, _reason), do: :stale
 
   @doc """
-  A frame sent at `now_ms`: its render time (from the task's start, or zero for a frame
+  A frame sent at `now_ms`: its render time (from the render's start, or zero for a frame
   that needed none), its payload, and the rolling metrics — the FPS over the last sixty
   frames and the lag as a moving average of `in flight × period` (#308).
   """
