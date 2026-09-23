@@ -130,13 +130,20 @@ defmodule Visualize.Chart.Compiled.Window do
         x0 = lo + rx / width * span
         x1 = lo + (rx + rw) / width * span
 
-        # The window's rows in reading order; the neighbours are the window's too. One
-        # pass keeps them, their count, and whether they arrived ordered — a streaming
-        # source's do, and only an unordered one is sorted (spec/14 §12.5, #404).
-        {read, count, ordered?} = window_rows(source, field, lo, top)
-        read = if ordered?, do: read, else: Enum.sort_by(read, &elem(&1, 0))
+        # One pass keeps the three rows before the strip, the rows within it and the
+        # three after — the neighbours are the window's too — and nothing else, while
+        # noting whether the readings arrived ordered (spec/14 §12.5, #404, #410). A
+        # source that did not arrive ordered is collected and sorted, and answers the
+        # same rows.
+        case walk(source, field, lo, top, x0, x1) do
+          {:ok, rows} ->
+            Map.put(sources, name, rows)
 
-        Map.put(sources, name, span_rows(read, count, x0, x1))
+          :unordered ->
+            {read, count, _} = window_rows(source, field, lo, top)
+            read = Enum.sort_by(read, &elem(&1, 0))
+            Map.put(sources, name, span_rows(read, count, x0, x1))
+        end
 
       _ ->
         sources
@@ -144,6 +151,50 @@ defmodule Visualize.Chart.Compiled.Window do
   end
 
   def strip(_window, _frame, _mark, sources, _hi, _bounds), do: sources
+
+  # One pass over a source whose readings arrive in order, keeping only the strip and its
+  # neighbours: `{:ok, rows}`, or `:unordered` the moment a reading goes backwards, which
+  # the caller answers by collecting and sorting the window (#410).
+  defp walk(source, field, lo, top, x0, x1) do
+    source
+    |> Table.rows()
+    |> Enum.reduce_while({[], [], [], nil}, fn row, {before, kept, after_, previous} ->
+      case Table.get(row, field) do
+        nil ->
+          {:cont, {before, kept, after_, previous}}
+
+        value ->
+          reading = units(value)
+
+          cond do
+            previous != nil and reading < previous ->
+              {:halt, :unordered}
+
+            reading < lo or reading > top ->
+              {:cont, {before, kept, after_, reading}}
+
+            reading < x0 ->
+              {:cont, {Enum.take([row | before], @neighbours), kept, after_, reading}}
+
+            reading <= x1 ->
+              {:cont, {before, [row | kept], after_, reading}}
+
+            length(after_) < @neighbours - 1 ->
+              {:cont, {before, kept, [row | after_], reading}}
+
+            true ->
+              {:halt, {before, kept, [row | after_], reading}}
+          end
+      end
+    end)
+    |> case do
+      :unordered ->
+        :unordered
+
+      {before, kept, after_, _previous} ->
+        {:ok, Enum.reverse(before) ++ Enum.reverse(kept) ++ Enum.reverse(after_)}
+    end
+  end
 
   # The window's rows in reading order as `{reading, row}`, their count, and whether the
   # readings arrived ordered: one pass, nothing built for a row outside the window.

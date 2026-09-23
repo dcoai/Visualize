@@ -357,8 +357,15 @@ defmodule Visualize.Chart.Compiled do
       %{region: {:mark, i} = region, build: build} ->
         mark = Enum.at(compiled.chart.marks, i)
         {target, _points} = Enum.at(compiled.targets, i)
-        sources = mark_sources(compiled, frame, mark, sources, hi)
-        {region, mark_output(target, mark, build, frame, sources, canvas?)}
+
+        # A canvas mark whose geometry is the scroll's to ask for and which carries no
+        # label draws nothing here, so its rows are not windowed either (#410).
+        if not canvas? and target != :svg and not Map.has_key?(mark, :label) do
+          {region, %{svg: [], canvas: []}}
+        else
+          sources = mark_sources(compiled, frame, mark, sources, hi)
+          {region, mark_output(target, mark, build, frame, sources, canvas?)}
+        end
 
       %{region: region, build: build} ->
         {region, %{svg: build.(frame, sources, :css), canvas: []}}
