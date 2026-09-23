@@ -48,11 +48,10 @@ defmodule Visualize.Chart.Compiled do
 
   @default_ceiling 1000
 
-  @enforce_keys [:chart, :theme, :sources, :layout, :regions, :targets, :ceiling]
+  @enforce_keys [:chart, :theme, :layout, :regions, :targets, :ceiling]
   defstruct [
     :chart,
     :theme,
-    :sources,
     :layout,
     :regions,
     :targets,
@@ -98,7 +97,6 @@ defmodule Visualize.Chart.Compiled do
   @type t :: %__MODULE__{
           chart: Chart.t(),
           theme: Theme.t(),
-          sources: %{atom() => term()},
           layout: layout(),
           regions: [map()],
           targets: [{target(), non_neg_integer()}],
@@ -136,7 +134,6 @@ defmodule Visualize.Chart.Compiled do
     compiled = %__MODULE__{
       chart: chart,
       theme: frame.theme,
-      sources: sources,
       layout: layout,
       regions: regions,
       targets: targets,
@@ -316,7 +313,9 @@ defmodule Visualize.Chart.Compiled do
       bytes: bytes
     }
 
-    {payload, %{compiled | sources: sources, viewport: window}}
+    # The tick's rows are the tick's: a compiled chart that kept them was 2.1 MB of what
+    # a renderer is handed every frame, and nothing ever read them back (#412).
+    {payload, %{compiled | viewport: window}}
   end
 
   # -- per tick -------------------------------------------------------------------------

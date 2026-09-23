@@ -794,11 +794,17 @@ defmodule Visualize.Chart.CompiledTest do
   end
 
   describe "the hybrid map without a viewport is stateless" do
-    test "tick/2 keeps the sources and nothing else" do
+    test "tick/2 keeps nothing of the tick, not even its rows (#412)" do
       compiled = compile!(design(@fixed), sources: %{primary: rows(3)})
       {_, ticked} = Compiled.tick(compiled, %{primary: rows(4)})
-      assert ticked.sources == %{primary: rows(4)}
-      assert %{ticked | sources: compiled.sources} == compiled
+      assert ticked == compiled
+      refute Map.has_key?(compiled, :sources)
+
+      # The rows a tick draws are the tick's, so a compiled chart does not grow by them —
+      # what crosses to a renderer is the chart, never the window (#412).
+      big = compile!(design(@fixed), sources: %{primary: rows(3)})
+      {_, after_big} = Compiled.tick(big, %{primary: rows(20_000)})
+      assert :erts_debug.flat_size(after_big) == :erts_debug.flat_size(big)
     end
   end
 
