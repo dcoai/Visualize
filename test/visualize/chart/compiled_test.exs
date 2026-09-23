@@ -666,6 +666,27 @@ defmodule Visualize.Chart.CompiledTest do
       assert ordered.incremental.binary == unordered.incremental.binary
     end
 
+    test "the window keeps no closure between ticks, so a run's state does not grow (#406)" do
+      sources = %{primary: rows(30)}
+      compiled = compile!(@stream, sources: sources)
+      {_first, compiled} = Compiled.tick(compiled, sources, now: 20)
+
+      # The state a tick stores is copied into the render task on every frame, so a
+      # closure kept in it grows a chain a link a frame and each frame copies twice what
+      # the last did — 13 ms a strip became 2,850 ms in eight.
+      {compiled, sizes} =
+        Enum.map_reduce(1..20, compiled, fn i, compiled ->
+          {_payload, compiled} = Compiled.tick(compiled, sources, now: 20 + i * 0.4)
+          {:erts_debug.flat_size(compiled.viewport.incremental), compiled}
+        end)
+        |> then(fn {sizes, compiled} -> {compiled, sizes} end)
+
+      assert compiled.viewport.drawn != nil
+
+      assert Enum.max(sizes) < Enum.min(sizes) * 1.1,
+             "the stored state grew over twenty ticks: #{inspect(sizes)}"
+    end
+
     test "an inferred scale beside the window makes every tick a full redraw" do
       stale = put_in(@stream, [:frame, :scales, :y], %{kind: :linear})
       compiled = compile!(stale, sources: %{primary: rows(30)})
