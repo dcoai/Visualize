@@ -705,6 +705,68 @@ defmodule Visualize.Chart.CompiledTest do
       assert scrolled.incremental.binary == second.incremental.binary
     end
 
+    test "the strip is found without building the window, and a 50,000-row scroll holds 60 FPS (#410)" do
+      # 50,000 rows over a 740 px plot, scrolled the two pixels a run at 60 FPS and 4,500
+      # samples a second gives it: the frame must cost that strip, not the window.
+      plot = %{
+        @stream.frame
+        | size: %{width: 800, height: 500},
+          viewport: %{scale: :x, span: 50_000}
+      }
+
+      big = %{@stream | frame: plot}
+      sources = %{primary: rows(60_000)}
+      compiled = compile!(big, sources: sources)
+      {_full, compiled} = Compiled.tick(compiled, sources, now: 50_000)
+
+      # The plot is 740 px wide over 50,000 units, so two pixels is 135 units.
+      {scroll_us, {payload, _}} =
+        :timer.tc(fn -> Compiled.tick(compiled, sources, now: 50_135) end)
+
+      assert payload.incremental.mode == "scroll_x"
+
+      # A full redraw of that window is the cost of drawing 50,000 rows; the scroll is
+      # the cost of drawing about 140. Measured against each other, the ratio holds
+      # whatever else the machine is doing — it was one to one when the strip was picked
+      # out of a window that had been built in full.
+      {full_us, _} =
+        :timer.tc(fn ->
+          Compiled.tick(%{compiled | viewport: %{compiled.viewport | drawn: nil}}, sources,
+            now: 50_135
+          )
+        end)
+
+      assert scroll_us < full_us / 4,
+             "a scroll over 50,000 rows cost #{div(scroll_us, 1000)} ms against a full redraw's #{div(full_us, 1000)} ms"
+    end
+
+    test "an unordered source answers the same strip as an ordered one, sorted (#410)" do
+      sources = %{primary: rows(30)}
+      compiled = compile!(@stream, sources: sources)
+      {_first, compiled} = Compiled.tick(compiled, sources, now: 20)
+      {ordered, _} = Compiled.tick(compiled, sources, now: 22)
+
+      shuffled = %{primary: Enum.shuffle(sources.primary)}
+      compiled2 = compile!(@stream, sources: shuffled)
+      {_first, compiled2} = Compiled.tick(compiled2, shuffled, now: 20)
+      {unordered, _} = Compiled.tick(compiled2, shuffled, now: 22)
+
+      assert ordered.incremental.binary == unordered.incremental.binary
+
+      # A strip that falls between two rows takes three each side, ordered or not.
+      sparse = %{primary: [%{t: 12, v: 1}, %{t: 13, v: 2}, %{t: 21.9, v: 3}, %{t: 22, v: 4}]}
+      compiled3 = compile!(@stream, sources: sparse)
+      {_first, compiled3} = Compiled.tick(compiled3, sparse, now: 20)
+      {gap, _} = Compiled.tick(compiled3, sparse, now: 22)
+      assert gap.incremental.mode == "scroll_x"
+
+      backwards = %{primary: Enum.reverse(sparse.primary)}
+      compiled4 = compile!(@stream, sources: backwards)
+      {_first, compiled4} = Compiled.tick(compiled4, backwards, now: 20)
+      {gap_back, _} = Compiled.tick(compiled4, backwards, now: 22)
+      assert gap.incremental.binary == gap_back.incremental.binary
+    end
+
     test "an inferred scale beside the window makes every tick a full redraw" do
       stale = put_in(@stream, [:frame, :scales, :y], %{kind: :linear})
       compiled = compile!(stale, sources: %{primary: rows(30)})
