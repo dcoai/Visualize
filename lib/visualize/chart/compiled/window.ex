@@ -211,14 +211,22 @@ defmodule Visualize.Chart.Compiled.Window do
 
     if window.drawn == nil or full? do
       {_event, payload, state} = Incremental.initial_render(state)
-      {payload, %{window | hi: hi, drawn: top, incremental: state}}
+      {payload, %{window | hi: hi, drawn: top, incremental: forget(state)}}
     else
       dx = round((top - window.drawn) * plot.width / span)
       {_event, payload, state} = Incremental.scroll(state, {dx, 0})
       drawn = if payload.mode == "full", do: top, else: window.drawn + dx * span / plot.width
-      {payload, %{window | hi: hi, drawn: drawn, incremental: state}}
+      {payload, %{window | hi: hi, drawn: drawn, incremental: forget(state)}}
     end
   end
+
+  # What the window keeps is the scroll's position and the canvas's, never the tick's own
+  # rendering (spec/14 §12.5, #406): a stored `build_element` captures the compiled chart,
+  # whose window holds the tick before's, so the state grows a link a frame and every
+  # frame copies it into the render task. Both are the tick's and are given afresh.
+  defp forget(state), do: %{state | build_element: &empty_element/2, data: []}
+
+  defp empty_element(_data, _opts), do: Element.group([])
 
   defp state(%{incremental: nil}, plot) do
     Incremental.new(
@@ -226,7 +234,7 @@ defmodule Visualize.Chart.Compiled.Window do
       data: [],
       x_accessor: fn _ -> 0 end,
       y_accessor: fn _ -> 0 end,
-      build_element: fn _data, _opts -> Element.group([]) end,
+      build_element: &empty_element/2,
       margin: %{top: 0, right: 0, bottom: 0, left: 0}
     )
   end
