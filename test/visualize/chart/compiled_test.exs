@@ -508,6 +508,99 @@ defmodule Visualize.Chart.CompiledTest do
     end
   end
 
+  describe "a mark's value eases (§12.5, #417)" do
+    # A line over fixed scales whose rows ease over 100 ms along the linear curve, so a
+    # shown value is a plain fraction of the travel.
+    defp moving(transition \\ %{duration: 100, easing: :linear}, channels \\ %{x: :t, y: :v}) do
+      design(@fixed, %{
+        marks: [%{type: :line, data: :primary, channels: channels, transition: transition}]
+      })
+    end
+
+    # Two rows: the first fixed at the origin, the second the one that moves.
+    defp pair(v), do: %{primary: [%{t: 0, v: 0}, %{t: 100, v: v}]}
+
+    # The plot is 240 x 150, so t = 100 draws at x = 240 and v = n at y = 150 - 15n.
+    defp moved(payload) do
+      [path] = Regex.run(~r/<path d="([^"]+)"/, payload.svg, capture: :all_but_first)
+      path
+    end
+
+    test "a row leaves its old value, is between the two mid-way, and reaches the new one" do
+      compiled = compile!(moving(), sources: pair(0), ceiling: 100)
+
+      # A value seen for the first time is shown as it is.
+      {first, compiled} = Compiled.tick(compiled, pair(0), at: 0)
+      assert compiled.moving[0][{1, :v}].shown == 0.0
+      assert moved(first) =~ "L240,150"
+
+      # It changes: the easing is retargeted and starts from where it stands.
+      {_, compiled} = Compiled.tick(compiled, pair(10), at: 0)
+      assert compiled.moving[0][{1, :v}] == %{from: 0.0, target: 10.0, since: 0, shown: 0.0}
+
+      {mid, compiled} = Compiled.tick(compiled, pair(10), at: 50)
+      assert compiled.moving[0][{1, :v}].shown == 5.0
+      assert moved(mid) =~ "L240,75"
+
+      {done, compiled} = Compiled.tick(compiled, pair(10), at: 100)
+      assert compiled.moving[0][{1, :v}].shown == 10.0
+      assert moved(done) =~ "L240,0"
+
+      # A row whose value has not changed stays where it is.
+      {_, compiled} = Compiled.tick(compiled, pair(10), at: 200)
+      assert compiled.moving[0][{1, :v}].shown == 10.0
+    end
+
+    test "identity is the row's position: an arrival starts at its value, a departure is forgotten" do
+      compiled = compile!(moving(), sources: pair(0), ceiling: 100)
+      {_, compiled} = Compiled.tick(compiled, pair(0), at: 0)
+
+      third = %{primary: [%{t: 0, v: 0}, %{t: 100, v: 0}, %{t: 50, v: 8}]}
+      {_, compiled} = Compiled.tick(compiled, third, at: 10)
+      assert compiled.moving[0][{2, :v}] == %{from: 8.0, target: 8.0, since: 10, shown: 8.0}
+
+      {_, compiled} = Compiled.tick(compiled, pair(0), at: 20)
+      refute Map.has_key?(compiled.moving[0], {2, :v})
+    end
+
+    test "a series channel and a constant do not tween" do
+      grouped =
+        Map.merge(moving(%{duration: 100, easing: :linear}, %{x: :t, y: :v, series: :g}), %{
+          sources: %{primary: %{fields: [:t, :v, :g]}}
+        })
+
+      compiled = compile!(grouped, sources: %{primary: [%{t: 0, v: 0, g: 1}]}, ceiling: 100)
+
+      assert compiled.motions[0].fields == [:t, :v]
+    end
+
+    test "a mark without a transition jumps as before, and render/2 is unchanged" do
+      plain = design(@fixed)
+      compiled = compile!(plain, sources: pair(0), ceiling: 100)
+      assert compiled.motions == %{}
+
+      {_, compiled} = Compiled.tick(compiled, pair(0), at: 0)
+      {jumped, compiled} = Compiled.tick(compiled, pair(10), at: 1)
+      assert moved(jumped) =~ "L240,0"
+      assert compiled.moving == %{}
+
+      # One frame has nowhere to move from: an applied chart renders as it always did.
+      {:ok, with_ease} = Chart.apply(moving(), sources: pair(10))
+      {:ok, without} = Chart.apply(plain, sources: pair(10))
+      assert Chart.render(with_ease) == Chart.render(without)
+    end
+
+    test "step/3 eases a mark as it eases a scale" do
+      compiled = compile!(moving(), sources: pair(0), ceiling: 100)
+      {_, compiled} = Compiled.step(compiled, pair(0), at: 0)
+      {_, compiled} = Compiled.step(compiled, pair(10), at: 0)
+      {group, compiled} = Compiled.step(compiled, pair(10), at: 50)
+
+      assert compiled.moving[0][{1, :v}].shown == 5.0
+      assert Visualize.Render.to_string(group, backend: :svg) =~ "L240,75"
+    end
+  end
+
   describe "the render target of a text mark (§12.3, #134)" do
     test "a :text mark is :svg whatever render says, since the binary stream carries no text" do
       design =

@@ -49,8 +49,9 @@ defmodule Examples.Charts.Design do
   end
 
   @doc """
-  Whether the module's design eases a moving scale — a `transition` on any scale (spec/14
-  §4.3, #360) — so a run of it keeps a compiled chart on SVG too.
+  Whether the module's design eases anything — a `transition` on a scale (spec/14 §4.3,
+  #360) or on a mark (§5.1, #417) — so a run of it keeps a compiled chart on SVG too, the
+  easing having nowhere else to live.
   """
   @spec transitions?(module()) :: boolean()
   def transitions?(module) do
@@ -58,7 +59,7 @@ defmodule Examples.Charts.Design do
 
     Enum.any?(Map.get(design.frame, :scales, %{}), fn {_name, scale} ->
       Map.has_key?(scale, :transition)
-    end)
+    end) or Enum.any?(Map.get(design, :marks, []), &Map.has_key?(&1, :transition))
   end
 
   @doc """
