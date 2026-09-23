@@ -13,6 +13,11 @@ defmodule Examples.Charts.WorldMap do
   map to an ellipse it drew by hand — a pseudo-cylindrical projection ends at the
   antimeridian, so the design clips nothing. The animation turns the projection's
   `rotate`, the map's centre moving west.
+
+  Its ocean is the one absolute colour left in the gallery (#421): a map's ocean is a
+  backdrop the theme has no slot for — `:grid` is the graticule's own stroke and
+  `:background` would make it vanish — so it keeps `#a8d5e5` until #422 gives a theme
+  the word for a surface.
   """
 
   import Visualize.Chart.Build

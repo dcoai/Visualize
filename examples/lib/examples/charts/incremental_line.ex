@@ -46,7 +46,7 @@ defmodule Examples.Charts.IncrementalLine do
     design =
       Design.fold([
         chart(meta: %{name: title(), description: [description()]}),
-        style(:trace, stroke: "#4e79a7", stroke_width: 2, curve: :monotone_x),
+        style(:trace, stroke: :series_1, stroke_width: 2, curve: :monotone_x),
         source(:signal, [:t, :v], types: %{t: :number, v: :number}),
         # A viewport on x: the compiled chart windows x to [hi − span, hi] every tick and
         # scrolls the binary canvas by the pixels the window moved (spec/14 §12.5).
@@ -109,7 +109,7 @@ defmodule Examples.Charts.IncrementalLine do
     {:ok, design} =
       Visualize.Chart.compose([
         chart(meta: %{name: "Incremental line"}),
-        style(:trace, stroke: "#4e79a7", stroke_width: 2, curve: :monotone_x),
+        style(:trace, stroke: :series_1, stroke_width: 2, curve: :monotone_x),
         source(:signal, [:t, :v]),
         cartesian(800, 500,
           margin: %{top: 20, right: 20, bottom: 30, left: 40},
