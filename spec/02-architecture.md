@@ -85,11 +85,12 @@ An element is `%Visualize.IR.Element{type, attrs, style, transform, children, co
 
 ### 2.2 `Visualize.IR.Path`
 
-A path is `%Visualize.IR.Path{commands, metadata}`; `metadata` is a free map for producers and is not serialised. Commands are tuples tagged with the SVG command letter — absolute upper-case, relative lower-case: `{:M|:m, x, y}`, `{:L|:l, x, y}`, `{:H|:h, x}`, `{:V|:v, y}`, `{:C|:c, x1, y1, x2, y2, x, y}`, `{:S|:s, x2, y2, x, y}`, `{:Q|:q, x1, y1, x, y}`, `{:T|:t, x, y}`, `{:A|:a, rx, ry, rotation, large_arc, sweep, x, y}` and the bare atom `:Z`. `large_arc` and `sweep` MUST be `0` or `1`. Builders append in call order.
+A path is `%Visualize.IR.Path{commands, metadata}`; `metadata` is a free map for producers and is not serialised. Commands are tuples tagged with the SVG command letter — absolute upper-case, relative lower-case: `{:M|:m, x, y}`, `{:L|:l, x, y}`, `{:H|:h, x}`, `{:V|:v, y}`, `{:C|:c, x1, y1, x2, y2, x, y}`, `{:S|:s, x2, y2, x, y}`, `{:Q|:q, x1, y1, x, y}`, `{:T|:t, x, y}`, `{:A|:a, rx, ry, rotation, large_arc, sweep, x, y}` and the bare atom `:Z`. `large_arc` and `sweep` MUST be `0` or `1`. Builders append in call order. **A path is built in time proportional to its commands** (#414): the appenders above put one command at the end of a list, which is the cost of the list, so a builder that draws one command per datum makes its commands in order and hands them to `from_commands/1` at the end — a path of 50,000 commands took six seconds to append one at a time and the drawing of a large chart was quadratic in its points.
 
 | Function | Contract |
 |---|---|
 | `Visualize.IR.Path.new/0` | An empty path. |
+| `Visualize.IR.Path.from_commands/1` | A path of the commands given, in the order given: what a builder that draws per datum ends with, so building costs the list and not a square of it (#414). |
 | `Visualize.IR.Path.move_to/3` | Appends `{:M, x, y}`. |
 | `Visualize.IR.Path.move_to_rel/3` | Appends `{:m, dx, dy}`. |
 | `Visualize.IR.Path.line_to/3` | Appends `{:L, x, y}`. |

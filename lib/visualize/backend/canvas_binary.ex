@@ -410,9 +410,7 @@ defmodule Visualize.Backend.CanvasBinary do
   defp polyline([]), do: Path.new()
 
   defp polyline([{x, y} | rest]) do
-    Enum.reduce(rest, Path.move_to(Path.new(), x, y), fn {px, py}, path ->
-      Path.line_to(path, px, py)
-    end)
+    Path.from_commands([{:M, x, y} | for({px, py} <- rest, do: {:L, px, py})])
   end
 
   # The two compact kinds cover the common cases exactly; everything else folds into one
