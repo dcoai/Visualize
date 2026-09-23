@@ -32,7 +32,12 @@ defmodule Examples.Charts.ScrollingSeriesTest do
   test "the compiled chart scrolls by exactly the columns the window moved, with the strip a fraction of the full redraw" do
     opts = [samples_per_px: 2, origin: 0]
     state = Frames.prepare(ScrollingSeries, opts, :incremental)
-    assert %{compiled: %Compiled{}, plot: %{width: 810, height: 410}, margin: %{left: 60, top: 40}} = state
+
+    assert %{
+             compiled: %Compiled{},
+             plot: %{width: 810, height: 410},
+             margin: %{left: 60, top: 40}
+           } = state
 
     scroll = ScrollingSeries.scroll(opts)
     count = Scroll.count(scroll)
@@ -53,6 +58,26 @@ defmodule Examples.Charts.ScrollingSeriesTest do
     assert bounds == {798.0, 0.0, 12.0, 410.0}
     assert length(for({:path32, _} <- records, do: 1)) == 4
     assert length(for({:path_cubic32, _} <- records, do: 1)) == 1
+  end
+
+  test "the window slides: rows/3 gives the rows rows/1 would build, per series (#408)" do
+    scroll = ScrollingSeries.scroll(samples_per_px: 2, origin: 0)
+    held = ScrollingSeries.rows(scroll)
+
+    for px <- [1, 4, 30] do
+      advanced = Scroll.advance(scroll, px)
+      assert ScrollingSeries.rows(advanced, px, held) == ScrollingSeries.rows(advanced)
+    end
+
+    {slid, final} =
+      Enum.reduce(1..8, {held, scroll}, fn _, {rows, sc} ->
+        advanced = Scroll.advance(sc, 5)
+        {ScrollingSeries.rows(advanced, 5, rows), advanced}
+      end)
+
+    assert slid == ScrollingSeries.rows(final)
+    assert Map.keys(slid) |> Enum.sort() == [:area, :line_1, :line_2, :line_3, :line_4]
+    assert ScrollingSeries.rows(final, 5, nil) == ScrollingSeries.rows(final)
   end
 
   test "the SVG and Canvas backends draw the window whole, as any design's" do

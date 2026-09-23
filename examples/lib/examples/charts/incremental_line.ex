@@ -35,11 +35,13 @@ defmodule Examples.Charts.IncrementalLine do
 
   @doc """
   The design and the rows of its window (spec/14 §16.1). Options: `samples_per_px`
-  (default 1) and `origin` (default 0) — the window in `Examples.Scroll`'s terms.
+  (default 1) and `origin` (default 0) — the window in `Examples.Scroll`'s terms — and
+  `rows`, the window's rows when the caller already holds them (#408).
   """
   def design(opts \\ []) do
     scroll = scroll(opts)
     count = Scroll.count(scroll)
+    rows = opts[:rows] || rows(scroll)
 
     design =
       Design.fold([
@@ -57,7 +59,7 @@ defmodule Examples.Charts.IncrementalLine do
         line(:signal, %{x: :t, y: :v}, style: :trace, render: :binary)
       ])
 
-    {design, rows(scroll)}
+    {design, rows}
   end
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
@@ -71,6 +73,19 @@ defmodule Examples.Charts.IncrementalLine do
   def rows(%Scroll{origin: origin} = scroll) do
     count = Scroll.count(scroll)
     %{signal: for(t <- origin..(origin + count - 1), do: %{t: t, v: value(t)})}
+  end
+
+  @doc """
+  The window's rows after a scroll of `px` columns, from the rows it held (#408): the
+  samples the scroll exposed appended and as many dropped from the front
+  (`Examples.Scroll.shift/4`). Every value is a function of its absolute sample, so this
+  is the list `rows/1` builds — 0.12 ms against 11.6 for a 22,201-row window.
+  """
+  @spec rows(Scroll.t(), non_neg_integer(), map() | nil) :: map()
+  def rows(%Scroll{} = advanced, _px, nil), do: rows(advanced)
+
+  def rows(%Scroll{} = advanced, px, %{signal: held}) do
+    %{signal: Scroll.shift(advanced, held, px, fn t -> %{t: t, v: value(t)} end)}
   end
 
   @doc """
