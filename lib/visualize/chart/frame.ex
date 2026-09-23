@@ -118,7 +118,19 @@ defmodule Visualize.Chart.Frame do
     facet = facet(kind, node, panels)
     scale_plot = if facet, do: panel_plot(plot, facet.columns, panels), else: plot
     ctx = context(scale_plot, projection)
-    scales = Scales.realise(chart, kind, scale_plot, theme, sources, styles, ctx)
+
+    scales =
+      Scales.realise(
+        chart,
+        kind,
+        scale_plot,
+        theme,
+        sources,
+        styles,
+        ctx,
+        Keyword.get(opts, :domains, %{})
+      )
+
     legend = Map.get(node, :legend)
     # A legend in a margin that cannot hold it is a fault here, not a clipped drawing (§4.5).
     Legend.check!(legend, scales, margin, styles, theme)

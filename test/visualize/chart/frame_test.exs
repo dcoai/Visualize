@@ -288,6 +288,36 @@ defmodule Visualize.Chart.FrameTest do
     end
   end
 
+  describe "only a scale that infers reads a column (spec/14 §4.3, #409)" do
+    test "a domain given by the caller stands in for the inference" do
+      scales = %{x: %{kind: :linear}, y: %{kind: :linear}}
+      marks = [%{type: :line, data: :primary, channels: %{x: :n, y: :v}}]
+      chart = chart(%{scales: scales}, %{marks: marks})
+
+      inferred = Frame.new(chart, sources: %{primary: @rows})
+      assert Frame.scale(inferred, :x).domain == [0, 3]
+
+      given = Frame.new(chart, sources: %{primary: @rows}, domains: %{x: [10, 20]})
+      assert Frame.scale(given, :x).domain == [10, 20]
+      # Every other scale is inferred as before.
+      assert Frame.scale(given, :y).domain == Frame.scale(inferred, :y).domain
+    end
+
+    test "a chart whose domains are all fixed does not walk its rows" do
+      scales = %{x: %{kind: :linear, domain: [0, 1]}, y: %{kind: :linear, domain: [0, 1]}}
+      marks = [%{type: :line, data: :primary, channels: %{x: :n, y: :v}}]
+      chart = chart(%{scales: scales}, %{marks: marks})
+      many = for t <- 1..200_000, do: %{n: t, v: rem(t, 97)}
+
+      {us, frame} = :timer.tc(fn -> Frame.new(chart, sources: %{primary: many}) end)
+      assert Frame.scale(frame, :x).domain == [0, 1]
+
+      # Gathering the columns of 200,000 rows for scales that cannot use them took tens of
+      # milliseconds; not gathering them takes about none.
+      assert us < 50_000, "realising a fixed-domain frame over 200,000 rows took #{us} us"
+    end
+  end
+
   describe "precedence" do
     test "an explicit domain beats inference and a half-fixed extent fixes one end" do
       scales = %{x: %{kind: :linear, domain: [0, 100]}, y: %{kind: :linear, domain: [0, :auto]}}
