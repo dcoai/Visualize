@@ -10,6 +10,8 @@ defmodule Examples.Application do
       {Phoenix.PubSub, name: Examples.PubSub},
       # A performance run's frames render here, off the view's process (#323)
       {Task.Supervisor, name: Examples.TaskSupervisor},
+      # One renderer per run, for as long as the run lasts (#413)
+      {DynamicSupervisor, name: Examples.RendererSupervisor, strategy: :one_for_one},
       ExamplesWeb.Endpoint
     ]
 

@@ -14,17 +14,30 @@ defmodule ExamplesWeb.SupervisorAbsentTest do
     # Take the supervisor down for the test and bring it back after: Examples.Supervisor
     # restarts it on demand, so terminate + restart is the tidy way.
     :ok = Supervisor.terminate_child(Examples.Supervisor, Examples.TaskSupervisor)
-    on_exit(fn -> {:ok, _} = Supervisor.restart_child(Examples.Supervisor, Examples.TaskSupervisor) end)
+    :ok = Supervisor.terminate_child(Examples.Supervisor, Examples.RendererSupervisor)
+
+    on_exit(fn ->
+      {:ok, _} = Supervisor.restart_child(Examples.Supervisor, Examples.TaskSupervisor)
+      {:ok, _} = Supervisor.restart_child(Examples.Supervisor, Examples.RendererSupervisor)
+    end)
+
     :ok
   end
 
-  test "Run.supervisor/0 says what to do, and rendering fails open" do
+  test "Run.supervisor/0 says what to do, and starting a renderer fails open" do
     assert {:error, message} = Run.supervisor()
     assert message =~ "restart the server"
-    run = Run.new() |> Run.start(0, 0) |> Run.rendering(fn -> :never end)
+    assert {:error, renderer_message} = Examples.Renderer.supervisor()
+    assert renderer_message =~ "restart the server"
+
+    run =
+      Run.new()
+      |> Run.start(0, 0)
+      |> Run.renderer(Examples.Charts.LineChart, :svg, [])
+
     refute run.running
-    assert run.error =~ "Examples.TaskSupervisor"
-    assert run.task == nil
+    assert run.error =~ "Examples.RendererSupervisor"
+    assert run.renderer == nil
   end
 
   test "Start and Compare on a chart page leave the view alive with the message in the drawer" do
@@ -35,7 +48,12 @@ defmodule ExamplesWeb.SupervisorAbsentTest do
     assert s.assigns.run.error =~ "restart the server"
     {:noreply, s} = ChartLive.handle_event("run_compare", %{}, s)
     assert s.assigns.compare_task == nil
-    html = Phoenix.LiveViewTest.rendered_to_string(ChartLive.render(Map.put(s.assigns, :__changed__, %{})))
+
+    html =
+      Phoenix.LiveViewTest.rendered_to_string(
+        ChartLive.render(Map.put(s.assigns, :__changed__, %{}))
+      )
+
     assert html =~ "the task supervisor is not running"
   end
 

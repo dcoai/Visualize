@@ -57,15 +57,42 @@ defmodule Examples.RunTest do
   end
 
   test "a tick during a render is skipped and its samples wait for the next frame (#323)" do
-    run = started()
-    run = Run.rendering(run, fn -> :frame end)
+    run = %{started() | renderer: self(), render_id: 7}
     assert {%Run{skipped: 1, pending: 9} = run, :skipped} = Run.tick(run, 16, 4)
-    %Task{ref: ref} = run.task
-    assert_receive {^ref, :frame}
-    assert {:ok, run} = Run.result(run, ref)
-    assert run.task == nil
+    assert {:ok, run} = Run.result(run, 7)
+    assert run.render_id == nil
     # The samples of the skipped tick and this one fill the frame's columns together.
     assert {%Run{pending: 3}, {:draw, 4}} = Run.tick(run, 32, 4)
+  end
+
+  test "a run holds one renderer for its frames, and asks it one at a time (#413)" do
+    module = Examples.Charts.IncrementalLine
+    opts = [samples_per_px: 1, origin: 0]
+    run = Run.renderer(started(), module, :incremental, opts)
+    assert is_pid(run.renderer) and Process.alive?(run.renderer)
+    assert is_reference(run.monitor)
+
+    {asked, id} = Run.asking(run, opts ++ [now: 740], 0)
+    assert id != nil and asked.render_id == id
+    assert_receive {:frame, ^id, %{incremental: %{mode: "full"}}}, 10_000
+
+    # One in flight: a second ask while the first is out changes nothing.
+    assert {^asked, nil} = Run.asking(asked, opts, 0)
+    assert {:ok, free} = Run.result(asked, id)
+    assert free.render_id == nil
+    assert :stale = Run.result(free, id)
+
+    # The same process draws the next frame, and Stop takes it down.
+    pid = free.renderer
+    {again, id2} = Run.asking(free, opts ++ [now: 760], 2)
+    assert_receive {:frame, ^id2, %{incremental: %{mode: "scroll_x"}}}, 10_000
+    assert again.renderer == pid
+
+    monitor = Process.monitor(pid)
+    stopped = Run.stop(again)
+    assert stopped.renderer == nil and stopped.render_id == nil
+    refute stopped.running
+    assert_receive {:DOWN, ^monitor, :process, ^pid, _}, 5_000
   end
 
   test "what a frame goes as: full first, then strips or the empty update; a full clears the need" do
@@ -145,22 +172,26 @@ defmodule Examples.RunTest do
     assert_in_delta acked.client_fps, 4.0, 1.0e-9
   end
 
-  test "stop terminates a render in flight; a stale result or DOWN is nothing; a dead render stops the run" do
-    run = started()
-    run = Run.rendering(run, fn -> Process.sleep(10_000) end)
-    %Task{ref: ref, pid: pid} = run.task
-    mon = Process.monitor(pid)
-    run = Run.stop(run)
-    refute run.running
-    assert run.task == nil
-    assert_receive {:DOWN, ^mon, :process, ^pid, _}, 5_000
-    assert :stale = Run.result(run, ref)
-    assert :stale = Run.down(run, ref, :shutdown)
+  test "stop takes the renderer down; a stale result or DOWN is nothing; a dead renderer stops the run" do
+    run =
+      Run.renderer(started(), Examples.Charts.IncrementalLine, :incremental, samples_per_px: 1)
 
-    dying = Run.rendering(started(), fn -> :ok end)
-    %Task{ref: ref} = dying.task
-    assert {:ok, dead} = Run.down(dying, ref, {:badarg, []})
+    pid = run.renderer
+    monitor = Process.monitor(pid)
+    stopped = Run.stop(run)
+    refute stopped.running
+    assert stopped.renderer == nil
+    assert_receive {:DOWN, ^monitor, :process, ^pid, _}, 5_000
+    assert :stale = Run.result(stopped, 1)
+    assert :stale = Run.down(stopped, make_ref(), :shutdown)
+
+    dying =
+      Run.renderer(started(), Examples.Charts.IncrementalLine, :incremental, samples_per_px: 1)
+
+    assert {:ok, dead} = Run.down(dying, dying.monitor, {:badarg, []})
     refute dead.running
     assert dead.error =~ "badarg"
+    assert dead.renderer == nil
+    Run.cancel(dying)
   end
 end
