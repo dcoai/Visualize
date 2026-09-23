@@ -29,6 +29,32 @@ defmodule Examples.Charts.ScrollingSeriesTest do
     assert Enum.at(rows.area, 250) == Enum.at(later.area, 50)
   end
 
+  test "the area is a volume under the curve, closing on the plot's bottom corners (#419)" do
+    {design, rows} = ScrollingSeries.design(samples_per_px: 8)
+    {:ok, chart} = Visualize.Chart.from_map(design)
+
+    {:ok, applied} =
+      Visualize.Chart.apply(chart, sources: rows, theme: Design.theme([]))
+
+    {_x, _y, width, height} = ScrollingSeries.plot()
+
+    [path] =
+      Regex.run(~r/<path d="(M[^"]+)"/U, Visualize.Chart.render(applied), capture: :all_but_first)
+
+    points =
+      for [_, x, y] <- Regex.scan(~r/[ML](-?[\d.]+),(-?[\d.]+)/, path),
+          do: {elem(Float.parse(x), 0), elem(Float.parse(y), 0)}
+
+    # The volume reaches the floor and never goes below it: the baseline is the domain's
+    # own end, not data zero — which on [-100, 100] would be half way up the plot.
+    assert Enum.max(Enum.map(points, &elem(&1, 1))) == height
+    refute Enum.any?(points, fn {_x, y} -> y > height end)
+
+    # It returns along the floor from the bottom-right corner to the bottom-left.
+    assert List.last(points) == {0.0, height * 1.0}
+    assert Enum.any?(points, &(&1 == {width * 1.0, height * 1.0}))
+  end
+
   test "the compiled chart scrolls by exactly the columns the window moved, with the strip a fraction of the full redraw" do
     opts = [samples_per_px: 2, origin: 0]
     state = Frames.prepare(ScrollingSeries, opts, :incremental)
