@@ -62,15 +62,25 @@ defmodule Visualize.Chart.Frame.Scales do
   # Every scale of the frame node realised: `%{name => struct}`.
   @spec realise(map(), atom(), map(), Theme.t(), map(), %{atom() => map()}, map()) ::
           %{atom() => struct()}
-  def realise(design, kind, plot, theme, sources, styles, ctx) do
+  def realise(design, kind, plot, theme, sources, styles, ctx, given \\ %{}) do
     frame = design.frame
-    columns = columns(design, kind, sources, styles, ctx)
     axes = Map.get(frame, :axes, [])
-
     nodes = Map.get(frame, :scales, %{})
+
+    # Only a scale that infers its domain reads a column (spec/14 §4.3, #409), and a
+    # domain the caller gives stands in for the inference.
+    inferring =
+      for {name, node} <- nodes,
+          not Map.has_key?(given, name),
+          infers?(Map.get(node, :domain, Schema.default(:scale, :domain))),
+          into: MapSet.new(),
+          do: name
+
+    columns = columns(design, kind, sources, styles, ctx, inferring)
 
     scales =
       Map.new(nodes, fn {name, node} ->
+        node = if extent = Map.get(given, name), do: Map.put(node, :domain, extent), else: node
         {name, build(name, node, Map.get(columns, name, []), plot, theme, axes)}
       end)
 
@@ -168,30 +178,41 @@ defmodule Visualize.Chart.Frame.Scales do
 
   # -- the bound columns per scale --------------------------------------------------
 
-  defp columns(design, kind, sources, styles, ctx) do
-    design.marks
-    |> Enum.flat_map(fn mark -> mark_columns(mark, kind, sources, styles, ctx) end)
-    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-    |> Map.new(fn {scale, columns} -> {scale, List.flatten(columns)} end)
+  defp columns(design, kind, sources, styles, ctx, inferring) do
+    if Enum.empty?(inferring) do
+      %{}
+    else
+      design.marks
+      |> Enum.flat_map(fn mark -> mark_columns(mark, kind, sources, styles, ctx, inferring) end)
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+      |> Map.new(fn {scale, columns} -> {scale, List.flatten(columns)} end)
+    end
   end
 
-  defp mark_columns(mark, kind, sources, styles, ctx) do
+  # Whether a domain is inferred: `:auto`, or an extent with `:auto` at an end.
+  defp infers?(:auto), do: true
+  defp infers?([lo, hi]), do: lo == :auto or hi == :auto
+  defp infers?(_extent), do: false
+
+  defp mark_columns(mark, kind, sources, styles, ctx, inferring) do
     rows = mark_rows(mark, sources, ctx)
 
     channels =
       for {channel, value} <- Map.get(mark, :channels, %{}),
           scale = scale_for(kind, mark, channel),
-          scale != nil,
+          scale in inferring,
           do: {scale, values(value, rows)}
 
     colours =
       for key <- [:fill, :stroke],
+          :color in inferring,
           {:field, field} <- [Map.get(Style.node(styles, Map.get(mark, :style)), key)],
           do: {:color, column(rows, field)}
 
     # An offset field's values are its offset scale's domain (spec/14 §4.3).
     offsets =
       for {family, field} <- Map.get(mark, :offset, %{}),
+          offset_scale(mark, family) in inferring,
           do: {offset_scale(mark, family), column(rows, field)}
 
     channels ++ colours ++ offsets

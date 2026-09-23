@@ -321,18 +321,23 @@ defmodule Visualize.Chart.Compiled do
 
   # -- per tick -------------------------------------------------------------------------
 
-  # The frame of a tick: realised over the sources, its viewport scale windowed.
+  # The frame of a tick: realised over the sources, its viewport scale windowed. With the
+  # window's upper end given — what a run passes every tick — the scale's domain is known
+  # before the frame is built, so it is given rather than inferred over the window's rows
+  # and then replaced (spec/14 §4.3, #409).
+  defp realise(%{chart: chart, theme: theme, viewport: nil}, sources, _now) do
+    {Frame.new(chart, sources: sources, theme: theme), nil}
+  end
+
+  defp realise(%{chart: chart, theme: theme, viewport: window}, sources, now) when now != nil do
+    frame = Frame.new(chart, sources: sources, theme: theme, domains: Window.domains(window, now))
+    {frame, now}
+  end
+
   defp realise(%{chart: chart, theme: theme, viewport: window}, sources, now) do
     frame = Frame.new(chart, sources: sources, theme: theme)
-
-    case window do
-      nil ->
-        {frame, nil}
-
-      window ->
-        {window_frame(window, chart, frame, sources, now),
-         Window.hi(window, chart, frame, sources, now)}
-    end
+    hi = Window.hi(window, chart, frame, sources, now)
+    {window_frame(window, chart, frame, sources, now), hi}
   end
 
   defp window_frame(nil, _chart, frame, _sources, _now), do: frame

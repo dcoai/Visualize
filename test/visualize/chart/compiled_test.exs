@@ -687,6 +687,24 @@ defmodule Visualize.Chart.CompiledTest do
              "the stored state grew over twenty ticks: #{inspect(sizes)}"
     end
 
+    test "a tick with the window's end given infers nothing, and draws what inferring drew (#409)" do
+      sources = %{primary: rows(30)}
+      compiled = compile!(@stream, sources: sources)
+
+      # The window's scale is `:auto` in the design; a tick that is told `now` gives the
+      # frame `[hi − span, hi]` rather than inferring it over the rows and replacing it.
+      {first, compiled} = Compiled.tick(compiled, sources, now: 20)
+      {second, _} = Compiled.tick(compiled, sources, now: 22)
+      assert first.incremental.mode == "full" and second.incremental.mode == "scroll_x"
+
+      # Without `now` the window's end is the newest datum, and the picture is the same.
+      by_data = compile!(@stream, sources: sources)
+      {full, by_data} = Compiled.tick(by_data, sources, now: 20)
+      assert full.incremental.binary == first.incremental.binary
+      {scrolled, _} = Compiled.tick(by_data, sources, now: 22)
+      assert scrolled.incremental.binary == second.incremental.binary
+    end
+
     test "an inferred scale beside the window makes every tick a full redraw" do
       stale = put_in(@stream, [:frame, :scales, :y], %{kind: :linear})
       compiled = compile!(stale, sources: %{primary: rows(30)})

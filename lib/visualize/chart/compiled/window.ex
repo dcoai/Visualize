@@ -55,6 +55,13 @@ defmodule Visualize.Chart.Compiled.Window do
   end
 
   @doc false
+  # The domains a tick gives `Visualize.Chart.Frame.new/2` when the window's upper end is
+  # known (spec/14 §4.3, #409): the viewport scale's window, which `apply/3` would set
+  # afterwards, so the rows are never walked to infer what is about to be replaced.
+  @spec domains(t(), term()) :: %{atom() => [term()]}
+  def domains(%{scale: name, span: span}, hi), do: %{name => [subtract(hi, span), hi]}
+
+  @doc false
   # The frame with the viewport scale's domain set to the window ending at `hi`.
   @spec apply(t(), Frame.t(), term()) :: Frame.t()
   def apply(_window, frame, nil), do: frame
