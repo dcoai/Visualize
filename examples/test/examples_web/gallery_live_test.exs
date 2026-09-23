@@ -31,6 +31,20 @@ defmodule ExamplesWeb.GalleryLiveTest do
     socket.assigns.charts
   end
 
+  test "every design of the gallery is a card in the grid, the streaming ones included (#403)" do
+    listed = for {module, _slug} <- charts(), into: MapSet.new(), do: module
+    assert MapSet.new(Examples.Charts.Templates.gallery_modules()) == listed
+    assert Examples.Charts.ScrollingSeries in listed
+    assert Examples.Charts.IncrementalLine in listed
+
+    html = build_conn() |> get("/") |> html_response(200)
+
+    for {module, slug} <- charts() do
+      assert html =~ ~s(href="/chart/#{slug}"), slug
+      assert html =~ module.title(), slug
+    end
+  end
+
   test "a dead render has a placeholder per chart and no chart document" do
     charts = charts()
     html = build_conn() |> get("/") |> html_response(200)

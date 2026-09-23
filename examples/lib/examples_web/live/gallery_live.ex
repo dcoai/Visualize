@@ -38,7 +38,10 @@ defmodule ExamplesWeb.GalleryLive do
     {Examples.Charts.SpectrumChart, "spectrum"},
     # Maps
     {Examples.Charts.WorldMap, "world_map"},
-    {Examples.Charts.Globe, "globe"}
+    {Examples.Charts.Globe, "globe"},
+    # Streaming: a viewport on x, so the drawer offers Incremental (#327, #402)
+    {Examples.Charts.ScrollingSeries, "scrolling_series"},
+    {Examples.Charts.IncrementalLine, "incremental_line"}
   ]
 
   @size {320, 220}
@@ -79,14 +82,6 @@ defmodule ExamplesWeb.GalleryLive do
     <ExamplesWeb.SiteHeader.header tab={:charts} />
     <main>
       <div class="tools-bar">
-        <a href="/chart/scrolling_series" class="tool-link" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-          <span class="tool-icon">🚀</span>
-          <span>Scrolling series (incremental, with a data rate)</span>
-        </a>
-        <a href="/chart/incremental_line" class="tool-link" style="background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);">
-          <span class="tool-icon">📈</span>
-          <span>Incremental line (one line, copy and shift)</span>
-        </a>
         <a href="/performance" class="tool-link">
           <span class="tool-icon">⚡</span>
           <span>Performance Test — compare the backends on any chart</span>
