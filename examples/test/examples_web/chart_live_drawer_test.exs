@@ -46,7 +46,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     # Several frames, all from the one process; the window's rows are its, never the
     # view's — the view keeps the scroll alone.
     s = settled(s)
-    assert s.assigns.run_frame.incremental.mode == "full"
+    assert plot(s.assigns.run_frame).incremental.mode == "full"
     refute Map.has_key?(s.assigns, :run_rows)
 
     s =
@@ -61,7 +61,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
       end)
 
     assert s.assigns.run.renderer == renderer
-    assert s.assigns.run_frame.incremental.mode in ["scroll_x", "none"]
+    assert plot(s.assigns.run_frame).incremental.mode in ["scroll_x", "none"]
 
     # A frame answered for a render that is no longer in flight is nothing.
     {:noreply, stale} = ChartLive.handle_info({:frame, :gone, s.assigns.run_frame}, s)
@@ -167,11 +167,11 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
     {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
-    assert %{compiled: %Visualize.Chart.Compiled{}, static: static} = s.assigns.run_state
+    assert %{compiled: [{_name, %Visualize.Chart.Compiled{}}], static: static} = s.assigns.run_state
     assert s.assigns.run.flow_control
     s = settled(s)
     assert pushed(s) == [{"canvas_update", 1}]
-    assert s.assigns.run_frame.canvas != nil and s.assigns.run_frame.svg == nil
+    assert plot(s.assigns.run_frame).canvas != nil and s.assigns.run_frame.svg == nil
     h = html(s)
     assert h =~ ~s(data-ack="frame_drawn")
     assert h =~ static
@@ -186,13 +186,53 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert s.assigns.run.frame == 2
   end
 
+  test "a design of several frames runs one canvas per frame, each with its own payload (#432)" do
+    s = page("context")
+    {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+
+    # Four compiled charts, in the order the frames draw.
+    assert length(s.assigns.run_state.compiled) == 4
+    s = settled(s)
+
+    plots = s.assigns.run_frame.plots
+    # In the order the frames draw: `z`, ties broken by name (spec/14 §4.2).
+    assert Enum.map(plots, & &1.name) == [:day, :hour, :recent, :year]
+    # Each plot draws its own window, so no two streams are the same.
+    assert plots |> Enum.map(& &1.canvas) |> Enum.uniq() |> length() == 4
+    # And each sits at its own quarter of the box.
+    assert Map.new(plots, &{&1.name, &1.box.x}) == %{year: 0, day: 225.0, hour: 450.0, recent: 675.0}
+
+    # One event per plot, each named by its frame, all of one sequence.
+    events = for([n, p] <- Phoenix.LiveView.Utils.get_push_events(s), do: {n, p[:frame], p[:seq]})
+
+    assert events == [
+             {"canvas_update", :day, 1},
+             {"canvas_update", :hour, 1},
+             {"canvas_update", :recent, 1},
+             {"canvas_update", :year, 1}
+           ]
+
+    h = html(s)
+    assert length(Regex.scan(~r/phx-hook="CanvasBinaryChart"/, h)) == 4
+    assert h =~ ~s(data-frame="recent")
+
+    # The four canvases ack the one frame; the first ack is the frame's and the rest say
+    # only that the client is alive (#432).
+    {:noreply, s} = ChartLive.handle_event("frame_drawn", %{"seq" => 1, "drawn" => 1}, s)
+    assert Run.in_flight(s.assigns.run) == 0
+    {:noreply, s} = ChartLive.handle_event("frame_drawn", %{"seq" => 1, "drawn" => 1}, s)
+    assert Run.in_flight(s.assigns.run) == 0
+    assert length(s.assigns.run.acks) == 1
+  end
+
   test "the last chart converted runs on the split like every other (#348)" do
     s = page("hexbin")
     {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
-    assert %{compiled: %Visualize.Chart.Compiled{}} = s.assigns.run_state
+    assert %{compiled: [{_name, %Visualize.Chart.Compiled{}}]} = s.assigns.run_state
     s = settled(s)
-    assert s.assigns.run_frame.canvas != nil
+    assert plot(s.assigns.run_frame).canvas != nil
     assert pushed(s) == [{"canvas_update", 1}]
   end
 
@@ -223,7 +263,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
     assert s.assigns.run.data_rate == 600 and s.assigns.run.flow_control
     s = settled(s)
-    assert s.assigns.run_frame.incremental.mode == "full"
+    assert plot(s.assigns.run_frame).incremental.mode == "full"
     assert pushed(s) == [{"canvas_incremental", 1}]
     h = html(s)
     assert h =~ ~s(phx-hook="CanvasIncrementalChart")
@@ -238,7 +278,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     origin = s.assigns.run_scroll.origin
     assert origin >= 8 and rem(origin, 4) == 0
     s = settled(s)
-    assert %{mode: "scroll_x", dx: dx} = s.assigns.run_frame.incremental
+    assert %{mode: "scroll_x", dx: dx} = plot(s.assigns.run_frame).incremental
     assert dx == div(origin, 4)
     assert pushed(s) == [{"canvas_incremental", 1}, {"canvas_incremental", 2}]
     assert s.assigns.run_frame.bytes < 30_000
@@ -370,15 +410,16 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     s = page("area")
     assert Examples.Charts.Design.transitions?(Examples.Charts.AreaChart)
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
-    assert %{compiled: %Visualize.Chart.Compiled{}} = s.assigns.run_state
+    assert %{compiled: [{_name, %Visualize.Chart.Compiled{}}]} = s.assigns.run_state
     s = settled(s)
 
     assert s.assigns.run_frame.svg =~ "<svg" and
              s.assigns.run_frame.svg =~ ~s(class="mark mark-area")
 
-    # The easing lives in the run's renderer, which holds the compiled chart (#413).
-    assert %{y: %{shown: [+0.0, _]}} =
-             Examples.Renderer.state(s.assigns.run.renderer).compiled.eased
+    # The easing lives in the run's renderer, which holds a compiled chart per frame
+    # (#413, #385); this design has one.
+    assert [{_name, %{eased: %{y: %{shown: [+0.0, _]}}}}] =
+             Examples.Renderer.state(s.assigns.run.renderer).compiled
 
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
     refute s.assigns.run.running
@@ -387,7 +428,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     {:noreply, s} = ChartLive.handle_event("toggle_animation", %{}, s)
     assert %Run{running: true} = s.assigns.run
     assert is_pid(s.assigns.run.renderer)
-    assert %{compiled: %Visualize.Chart.Compiled{}} = s.assigns.run_state
+    assert %{compiled: [{_name, %Visualize.Chart.Compiled{}}]} = s.assigns.run_state
     s = settled(s)
     assert html(s) =~ ~s(class="mark mark-area") and html(s) =~ "Stop Animation"
     {:noreply, s} = ChartLive.handle_event("toggle_animation", %{}, s)
@@ -403,13 +444,14 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     # A backend change renders the still frame for that backend: the split's layers.
     {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => "canvas"}, s)
     assert s.assigns.run_backend == :canvas
-    assert %{canvas: canvas, svg: nil} = s.assigns.still_frame
+    assert %{svg: nil} = s.assigns.still_frame
+    canvas = plot(s.assigns.still_frame).canvas
     assert is_binary(canvas) and s.assigns.still_state.static =~ "<svg"
     assert html(s) =~ ~s(phx-hook="CanvasBinaryChart")
 
     # A palette change re-renders it too; the page's backend buttons are the run's.
     {:noreply, s} = ChartLive.handle_event("change_palette", %{"palette" => "dark"}, s)
-    assert s.assigns.still_frame.dynamic_svg =~ "#e6e6e6"
+    assert plot(s.assigns.still_frame).dynamic_svg =~ "#e6e6e6"
     assert html(s) =~ ~s(phx-value-backend="svg")
     refute html(s) =~ "Canvas-Incremental"
     assert html(page("scrolling_series")) =~ "Canvas-Incremental"
@@ -423,4 +465,8 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
     assert redirected_to(conn) == "/chart/scrolling_series"
   end
+
+  # A frame carries one plot per frame of the design (spec/14 §12.1, #432); these have one.
+  defp plot(%{plots: [plot]}), do: plot
+
 end

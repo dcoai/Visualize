@@ -64,7 +64,7 @@ defmodule Examples.Charts.ScrollingSeriesTest do
     state = Frames.prepare(ScrollingSeries, opts, :incremental)
 
     assert %{
-             compiled: %Compiled{},
+             compiled: [{_name, %Compiled{}}],
              plot: %{width: 810, height: 410},
              margin: %{left: 60, top: 40}
            } = state
@@ -72,18 +72,18 @@ defmodule Examples.Charts.ScrollingSeriesTest do
     scroll = ScrollingSeries.scroll(opts)
     count = Scroll.count(scroll)
     {first, state} = Frames.frame(ScrollingSeries, opts ++ [now: count - 1], :incremental, state)
-    assert first.incremental.mode == "full" and first.points == 5 * count
+    assert only(first).incremental.mode == "full" and first.points == 5 * count
 
     # Twelve columns at two per pixel: the window on by 24 samples.
     scroll = Scroll.advance(scroll, 12)
     opts2 = [samples_per_px: 2, origin: scroll.origin, now: scroll.origin + count - 1]
     {second, _state} = Frames.frame(ScrollingSeries, opts2, :incremental, state)
-    assert %{mode: "scroll_x", dx: 12} = second.incremental
+    assert %{mode: "scroll_x", dx: 12} = only(second).incremental
     assert second.bytes < first.bytes / 8
 
     # The strip decodes to the plot's rightmost 12 px with five series in it.
     [{:incremental, :scroll_x, 12.0, +0.0, {+0.0, +0.0, 810.0, 410.0}, [{bounds, records}]}] =
-      second.incremental.binary |> Base.decode64!() |> Decoder.decode()
+      only(second).incremental.binary |> Base.decode64!() |> Decoder.decode()
 
     assert bounds == {798.0, 0.0, 12.0, 410.0}
     assert length(for({:path32, _} <- records, do: 1)) == 4
@@ -115,4 +115,8 @@ defmodule Examples.Charts.ScrollingSeriesTest do
     assert frame.svg =~ "<svg" and frame.points == 5 * 811
     assert Design.design?(ScrollingSeries)
   end
+
+  # A frame carries one plot per frame of the design (spec/14 §12.1, #432); these have one.
+  defp only(%{plots: [plot]}), do: plot
+
 end

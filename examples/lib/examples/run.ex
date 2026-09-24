@@ -333,8 +333,18 @@ defmodule Examples.Run do
     }
   end
 
-  @doc "The hook's ack (spec/10 §9.2): the last frame it drew and how many since its last ack."
+  @doc """
+  The hook's ack (spec/10 §9.2): the last frame it drew and how many since its last ack.
+
+  A design of several frames has a canvas each and each acks the frame it drew (#432), so
+  an ack for a sequence already acknowledged is another plot of a frame already counted:
+  it says the client is alive and nothing more. The first ack of a sequence is the frame's.
+  """
   @spec acked(t(), integer(), non_neg_integer(), integer()) :: t()
+  def acked(%__MODULE__{acked_seq: acked} = run, seq, _drawn, now_ms) when seq <= acked do
+    %{run | last_ack_at: now_ms, acking: :yes}
+  end
+
   def acked(%__MODULE__{} = run, seq, drawn, now_ms) do
     acks = Enum.take([{now_ms, drawn} | run.acks], @history)
 
