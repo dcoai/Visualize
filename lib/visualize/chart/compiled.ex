@@ -233,7 +233,9 @@ defmodule Visualize.Chart.Compiled do
   `Visualize.IR.Element.root/3`.
   """
   @spec step(t(), map(), keyword()) :: {Element.t(), t()}
-  def step(%__MODULE__{margin: margin} = compiled, sources, opts \\ []) when is_map(sources) do
+  def step(%__MODULE__{} = compiled, sources, opts \\ []) when is_map(sources) do
+    compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
+    margin = compiled.margin
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
     children = layer(compiled, drawn(compiled, frame, sources, hi, true, moved), :svg, true)
@@ -280,9 +282,13 @@ defmodule Visualize.Chart.Compiled do
       value the marks bind to the viewport scale
     * `:at` - the clock in milliseconds a scale's transition eases by (spec/14 §12.5);
       by default `System.monotonic_time(:millisecond)`
+    * `:frame` - the tick's own frame node (spec/14 §12.5, #424): when it differs from the
+      one the chart was compiled with, the frame is re-realised at it and the static
+      regions re-rendered, which is what a design animating through its frame needs
   """
   @spec tick(t(), map(), keyword()) :: {payload(), t()}
   def tick(%__MODULE__{} = compiled, sources, opts) when is_map(sources) do
+    compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
     format = format(compiled)
@@ -343,6 +349,47 @@ defmodule Visualize.Chart.Compiled do
     frame = Frame.new(chart, realise_opts(compiled, sources))
     hi = Window.hi(window, chart, frame, sources, now)
     {window_frame(window, chart, frame, sources, now), hi}
+  end
+
+  # The frame the tick gives, when it is not the one the chart was compiled with (spec/14
+  # §12.5, #424): the frame is re-realised at it and every static region re-rendered from
+  # that realisation, which is what a design animating through its *frame* — a `:geo`
+  # projection's rotation, a scale whose range follows the tick — needs in order to move
+  # on the canvas backends as it does on SVG.
+  #
+  # The regions, the targets and the defs are not recomputed: a region's status is
+  # structural, a target reads the frame only for its `kind` (§12.3), and the defs are the
+  # design's (§12.4). A frame whose *structure* moves is a different chart and the caller
+  # compiles it again.
+  defp retarget(compiled, nil, _sources), do: compiled
+
+  defp retarget(%{chart: chart} = compiled, node, sources) do
+    if node == Map.get(chart, :frame) do
+      compiled
+    else
+      compiled = %{compiled | chart: %{chart | frame: node}}
+      frame = Frame.new(compiled.chart, realise_opts(compiled, sources))
+
+      regions =
+        Enum.map(compiled.regions, fn
+          %{status: :static, build: build} = region ->
+            %{region | static: build.(frame, sources, :css)}
+
+          region ->
+            region
+        end)
+
+      compiled = %{
+        compiled
+        | regions: regions,
+          size: frame.size,
+          margin: frame.margin,
+          plot: frame.plot
+      }
+
+      static = layer(compiled, drawn(compiled, frame, sources, nil, true), :static, false)
+      %{compiled | static: root(compiled, compiled.defs ++ static)}
+    end
   end
 
   # A tick re-realises the frame, and must do it at the size the chart was compiled at
