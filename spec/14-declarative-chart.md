@@ -92,7 +92,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 ### 2.1 Keys
 
-**Implemented.** The `:design` node is the top level. `version` and `frame` are the only required keys.
+**Implemented.** The `:design` node is the top level. `version` and `frames` are the only required keys.
 
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
@@ -103,7 +103,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `theme` | `{:one_of, [:name, {:node, :theme}]}` | `:style` | `:default` | `:override` |
 | `styles` | `{:map, {:node, :style}}` | `:style` | `%{}` | `:union` |
 | `defs` | `{:map, {:node, :gradient}}` | `:style` | `%{}` | `:union` |
-| `frame` | `{:node, :frame}` | `:geometry` | required | `:override` |
+| `frames` | `{:map, {:node, :frame}}` | `:geometry` | required | `:union` |
 | `marks` | `{:list, {:node, :mark}}` | `:channel` | `[]` | `:concat` |
 | `labels` | `{:list, {:node, :label}}` | `:content` | `[]` | `:concat` |
 
@@ -259,7 +259,9 @@ It is **anonymous in the document**: an inline node is not a key of `design.styl
 
 ### 4.1 Keys
 
-**Implemented.** The frame node is the coordinate system and its furniture. `Visualize.Chart.Frame.new/2` realises a chart's frame into a `%Visualize.Chart.Frame{}` (§4.7) — every scale built once, the theme resolved — and `Visualize.Chart.Frame.generate/2` renders the furniture: grid, axes, legend and labels, the static part of a chart that a data change never touches (§12).
+**Implemented.** A frame is a coordinate system and its furniture, and **a design holds several, by name** (#383): `frames` is a map, so `frames.history` and `frames.now` are two plots of the same design over the same sources, placed by their boxes. `Visualize.Chart.Frame.new/2` realises **one** of them into a `%Visualize.Chart.Frame{}` (§4.7) — every scale built once, the theme resolved, over the marks and labels that say that frame — and `Visualize.Chart.Frame.generate/2` renders its furniture: grid, axes, legend and labels, the static part of a chart that a data change never touches (§12).
+
+A design with one frame names it whatever it likes; the migration of an older design names it `main` (§9).
 
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
@@ -271,10 +273,15 @@ It is **anonymous in the document**: an inline node is not a key of `design.styl
 | `projection` | `{:node, :projection}` | `:geometry` | `nil` | `:override` |
 | `facet` | `{:node, :facet}` | `:binding` | `nil` | `:override` |
 | `viewport` | `{:node, :viewport}` | `:geometry` | `nil` | `:override` |
+| `box` | `{:list, :number}` | `:geometry` | `[0, 0, 1, 1]` | `:override` |
+| `z` | `:integer` | `:geometry` | `0` | `:override` |
+| `background` | `:colour` | `:style` | `nil` | `:override` |
 
 ### 4.2 Size and margin
 
 **Implemented.** **A design records no size** (#383, #427). How big a chart is is a property of where it is *shown*, not of what it says, so the size comes in at render: `Visualize.Chart.apply/2` takes `size:` as `{width, height}` — the host's container — and `Visualize.Chart.Frame.new/2` takes the same option, `{600, 400}` by default so a static render still works and a design never carries one. The frame node therefore has no `size` key, and a design that still has one is the validator's unknown-key fault, which is what makes an unmigrated design fail loudly instead of drawing at a stale size.
+
+**A frame's `box` is its share of the design's** (#383): `[x, y, w, h]` as **fractions** of the box the render is given (§4.2's `size:`), so side by side is `[0, 0, 0.5, 1]` and `[0.5, 0, 0.5, 1]`, a gauge in the corner of a plot is `[0.72, 0.04, 0.24, 0.24]` over `[0, 0, 1, 1]`, and two boxes that overlap draw over one another. Fractions rather than pixels because the design records no size at all: the same design fills whatever container it is given, and the frames keep their proportions. A frame's own pixel box is `[x·W, y·H, w·W, h·H]` and its margins come out of that, so each frame has its own plot area and its own margins. `z` orders the drawing, ties broken by name, so an overlay says so rather than depending on declaration order; `background` is a colour painted under that frame's contents and nothing else, `nil` by default — a frame is transparent, so an overlay hides only what it paints.
 
 **Margins are pixels and do not scale.** `:margin` has `top`, `right`, `bottom` and `left`, each `:number`, `:geometry`, default `0`; the plot area is the given size less the margins, so it is the *plot* that flexes with the container while the tick text, the axis gutters and the fonts stay the size they were designed to be read at. The same design at two sizes therefore draws byte-identical furniture text and two different plot boxes. `Visualize.Chart.Schema.default/2` gives the frame's defaults so a consumer never repeats them, and the frame struct carries the plot area as `plot` (§4.7).
 
@@ -389,7 +396,9 @@ Every entry's group carries `data-series`, `to_string/1` of the entry's value �
 
 **Implemented.** `%Visualize.Chart.Frame{}` is the realised frame: `kind`; `size`, the `{width, height}` the caller gave as `size:` or the `{600, 400}` default (§4.2) — the design has none — and `margin` with the schema's defaults filled; `plot`, `%{width, height}` of the plot area; `scales`, the realised structs by name (§4.3); `projection`, a `%Visualize.Geo.Projection{}` in a `:geo` frame and `nil` otherwise; `panels`, the facet values of §4.6, `[]` in any other kind, and `facet`, `%{by, columns}` with the effective column count in a `:facet` frame and `nil` otherwise; `axes`, `legend`, `labels` and `marks` as the design gives them; `theme`, the `%Visualize.Theme{}` the design names — a built-in name or an inline `:theme` node — or the `theme:` option of `new/2`, which is taken for any name and required for one that is neither built-in nor inline; and `styles`, the declared styles over the built-in four (§3.3).
 
-`Visualize.Chart.Frame.generate/2` is the static furniture as one `Visualize.IR.Element` group with the margins applied, every theme slot resolved through `Visualize.Theme.resolve/3` in its `:resolve` mode (`:css` by default), and every text a string:
+**A design renders its frames in `z` order** (#383): one group per frame, `<g class="frame frame-<name>" transform="translate(x, y)" data-node="frames.<name>">` at the frame's own pixel box (§4.2), holding that frame's furniture, its marks and its labels; a `background` is a rect at the frame's box under them. Ties in `z` are broken by name, so the drawing order of a design is a property of the design and not of the order a map happens to enumerate in. `Visualize.Chart.Applied` holds `frames`, the realised frames by name, beside the chart and its sources.
+
+`Visualize.Chart.Frame.generate/2` is one frame's static furniture as one `Visualize.IR.Element` group with the margins applied, every theme slot resolved through `Visualize.Theme.resolve/3` in its `:resolve` mode (`:css` by default), and every text a string:
 
 ```
 group  style: %{class: "frame"}, transform: translate(margin.left, margin.top)
@@ -428,6 +437,9 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 | `transition` | `{:node, :transition}` | `:geometry` | `nil` | `:override` |
 | `tooltip` | `{:node, :tooltip}` | `:content` | `nil` | `:override` |
 | `id` | `:name` | `:content` | `nil` | `:override` |
+| `frame` | `{:ref, :frame}` | `:binding` | `nil` | `:override` |
+
+`frame` is the frame the mark is drawn in (#383), **required when the design has more than one** and the single frame's when it has one — the validator reports a mark without one in a multi-frame design as `:required` and a name the design does not declare as `{:undeclared, :frame, name}`. A scale name resolves **inside the mark's frame**, so `history` and `now` may both declare `x` or `r` and each mark reads its own; that is what makes two plots over one source two frames rather than two designs.
 
 `scales` is the mark's word on which scale a channel family reads through (§4.3). A `:mark_scales` node's keys are the scale names of the frame kinds' tables — `x`, `y`, `angle`, `r` and `color` — each `{:ref, :scale}`, `:channel`, `nil` by default, `:override`; a key the frame's kind does not use names nothing. `scales: %{x: :count}` sends the mark's `x`, `x0` and `x1` through the declared scale `count`, and every channel not renamed reads the scale of the kind's table as before. The name must be one the frame declares (`{:undeclared, :scale, name}` otherwise), so a mark still references scales by name and never by nesting (§1.2).
 
@@ -656,6 +668,9 @@ The group is returned untranslated. `Visualize.Chart.Frame.generate/2` places ev
 | `dy` | `:number` | `:geometry` | `0` | `:override` |
 | `rotate` | `{:one_of, [:number, {:enum, [:tangent, :radial]}]}` | `:geometry` | `nil` | `:override` |
 | `id` | `:name` | `:content` | `nil` | `:override` |
+| `frame` | `{:ref, :frame}` | `:binding` | `nil` | `:override` |
+
+`frame` is the frame the label belongs to (#383), on the same rule as a mark's (§5.1): required when the design has more than one, the single frame's when it has one. A label's `{:axis, s}` and `{:data, [x, y]}` anchors read **its own frame's** scales.
 
 `rotate` turns the text about its own position — degrees, or `:tangent`/`:radial` about the plot's middle with the upright flip — as a mark label's does (§5.5, #137); it composes with an axis title's own rotation.
 
@@ -848,6 +863,8 @@ Everything else — numbers, strings, booleans, lists, maps — is its JSON self
 **Implemented** (work item 6 of #53, D-66). `Visualize.Chart.compile/2` compiles a design the way HEEx compiles a template: the design is validated once, the theme and the styles are resolved, everything data-independent is drawn once, and the result is a `%Visualize.Chart.Compiled{}` with one closure per dynamic region taking the realised frame and the bound sources. Rendering a compiled chart per tick pays no validation and no static drawing.
 
 `compile/2` takes a `%Visualize.Chart.Applied{}` (§7.3), or a `%Visualize.Chart{}` or a design map, which go through `Visualize.Chart.apply/2` first with the same `sources:`, `vars:` and `theme:` options — so a compiled chart is always compiled *over a binding*, the one the render targets are chosen from (§12.3) — and returns `{:ok, compiled}` or the `{:error, errors}` of application. Its one option of its own is `ceiling:`, the point-count ceiling of §12.3, a positive integer, `1000` by default. The struct holds `chart`, the concrete `%Visualize.Chart{}`; `theme`, its `%Visualize.Theme{}`; `regions`, every region of §12.2 in the frame's drawing order, each static with its element drawn once or dynamic with its closure and its reason; `targets`, the target and the bound point count of every mark in design order (§12.3); `ceiling`; `static`, the static SVG string of §12.4, rendered once; `plot`, `margin` and `size` as the frame gives them; and `viewport`, `nil` or the window state of §12.5. A compiled chart is a value: recompile on a design change, not on a data change; one compiled chart serves every tick of one binding, and a slot rebound to another source is another compilation. It holds closures and data, so it has no map or JSON form, as the applied chart has none (§14.10); a macro or sigil that runs the compiler on a literal design at compile time is not built here and would need a data form of the regions.
+
+**A compiled chart is one frame** until #385. `Visualize.Chart.compile/2` over a design with more than one frame raises `ArgumentError` naming that proposal: the regions, the render targets and the incremental window are all per plot, and making them per frame is its own change. A design of one frame compiles exactly as it always did.
 
 ### 12.2 Regions: the static/dynamic split
 
