@@ -254,6 +254,43 @@ defmodule Visualize.Chart.BuildTest do
     test "the seed carries the current schema version" do
       assert chart() == %{version: Chart.Migration.current()}
     end
+
+    test "in_frame/2 puts a group of fragments in one named frame (#383)" do
+      fragments =
+        [chart(), source(:load, [:t, :v])] ++
+          in_frame(:history, [
+            cartesian(box: [0, 0, 1, 1]),
+            time_scale(:x),
+            axis(:x, :bottom),
+            line(:load, %{x: :t, y: :v}),
+            label(:title, ["Load"])
+          ]) ++
+          in_frame(:now, [
+            polar(box: [0.72, 0.04, 0.24, 0.24]),
+            linear_scale(:angle, domain: [0, 4]),
+            arc(:load, %{start: 0, end: :v})
+          ])
+
+      assert {:ok, design} = Chart.compose(fragments)
+      assert design.frames |> Map.keys() |> Enum.sort() == [:history, :now]
+      assert design.frames.history.box == [0, 0, 1, 1]
+      assert design.frames.history.scales == %{x: %{kind: :time}}
+      assert design.frames.now.scales == %{angle: %{kind: :linear, domain: [0, 4]}}
+      # A mark and a label say the frame their group was put in.
+      assert Enum.map(design.marks, & &1.frame) == [:history, :now]
+      assert Enum.map(design.labels, & &1.frame) == [:history]
+    end
+
+    test "in_frame/2 keeps a frame a mark already says, and refuses a fragment of two frames" do
+      [mark] = in_frame(:now, [line(:load, %{x: :t, y: :v}, frame: :history)])
+      assert hd(mark.marks).frame == :history
+
+      two = %{frames: %{a: %{kind: :cartesian}, b: %{kind: :polar}}}
+
+      assert_raise ArgumentError, ~r/takes a fragment of one frame; this one has 2/, fn ->
+        in_frame(:now, [two])
+      end
+    end
   end
 
   # -- the thirteen stored designs (test/support/designs/) --------------------------------

@@ -594,30 +594,15 @@ defmodule Visualize.Chart do
   # taken and the two translations composed — a frame is one group, not two nested ones
   # that share a class.
   defp frame_group(%Frame{} = frame, draw) do
-    [x, y, w, h] = frame.box
+    [x, y, _w, _h] = frame.box
     {width, height} = {frame.size.width, frame.size.height}
-    %Element{children: inner} = Frame.generate(frame, draw)
+    %Element{children: children} = Frame.generate(frame, draw)
     margin = frame.margin
-
-    children =
-      case frame.background do
-        nil -> inner
-        paint -> [background(w * width, h * height, margin, paint) | inner]
-      end
 
     Element.group(children,
       style: %{class: "frame frame-#{frame.name}"},
       attrs: %{"data-node" => "frames.#{frame.name}"},
       transform: Transform.translate(x * width + margin.left, y * height + margin.top)
-    )
-  end
-
-  # The frame's own box, painted under its contents: the group is translated by the
-  # margins, so the rect starts back at the box's corner.
-  defp background(width, height, margin, paint) do
-    Element.new(:rect,
-      attrs: %{x: -margin.left, y: -margin.top, width: width, height: height},
-      style: %{fill: paint}
     )
   end
 

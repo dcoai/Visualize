@@ -5,10 +5,13 @@ defmodule Examples.Charts.SpectrumChart do
   upper panel as an area under a line, and its spectrum in the lower panel, the three
   tones divided out as three peaks.
 
-  The two panels are the layer's own means (spec/14 §4.3): two pairs of position scales,
-  `x`/`y` for the signal with `y` ranging over the upper half of the plot and `fx`/`fy`
-  for the spectrum with `fy` over the lower half, the spectrum's marks reading the second
-  pair through their `scales` renames, an axis per scale, each spanning its own range. The
+  **The two panels are two frames** (#383, #429): `signal` over the upper half of the box
+  and `spectrum` over the lower, each with its own `x` and `y` — two scales called `x`,
+  one per frame, which is what a scale name belonging to its frame is for (spec/14 §4.3).
+  It was one frame holding two panels until frames were a map: a second pair of scales,
+  `fx`/`fy`, whose explicit ranges were half the plot each, with the spectrum's marks
+  reading them through their `scales` renames (#376). Nothing in it carries a range now;
+  the boxes say where each panel is and the scales say what they mean. The
   spectrum is the `:spectrum` step over the same source (256 samples, so the lines are
   sharp) with `detrend: true` — the `+50` offset would otherwise be a DC line dwarfing the
   tones and leaking into the bins beside it — followed by a `:filter` that drops the DC
@@ -19,9 +22,11 @@ defmodule Examples.Charts.SpectrumChart do
 
   alias Examples.Charts.Design
 
-  @margin %{top: 30, right: 20, bottom: 40, left: 50}
+  # Each frame takes half the box; the gap between the two plots is the signal's bottom
+  # margin and the spectrum's top.
+  @signal_margin %{top: 30, right: 20, bottom: 7, left: 50}
+  @spectrum_margin %{top: 7, right: 20, bottom: 40, left: 50}
   @samples 256
-  @gap 14
 
   # The three tones in cycles per sample, and the amplitude each reads at its peak.
   @peaks [
@@ -35,43 +40,39 @@ defmodule Examples.Charts.SpectrumChart do
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    {_width, height} = Design.size(__MODULE__, opts)
-    plot = height - @margin.top - @margin.bottom
-    half = div(plot, 2)
-
     design =
-      Design.fold([
-        chart(meta: %{name: title(), description: [description()]}),
-        source(:points, [:t, :y], types: %{t: :number, y: :number}),
-        source(:peaks, [:f, :m, :name], types: %{f: :number, m: :number, name: :text}),
-        style(:area, fill: :series_1, opacity: 0.25, curve: :monotone_x),
-        style(:edge, stroke: :series_1, stroke_width: 2, curve: :monotone_x),
-        style(:spectrum, fill: :series_2, opacity: 0.35, curve: :monotone_x),
-        style(:peak, stroke: :series_2, stroke_width: 2, curve: :monotone_x),
-        style(:name, fill: :text, font_size: 11, text_anchor: :middle),
-        cartesian(margin: @margin),
-        # The signal's scales, the upper half of the plot.
-        linear_scale(:x),
-        linear_scale(:y, domain: [0, 100], range: [half - @gap, 0]),
-        # The spectrum's scales, the lower half: frequency in cycles per sample to Nyquist.
-        linear_scale(:fx, domain: [0, 0.5]),
-        linear_scale(:fy, domain: [0, 36], range: [plot, half + @gap]),
-        axis(:x, :top, ticks: 8),
-        axis(:y, :left, ticks: 4),
-        axis(:fx, :bottom, ticks: 10, unit: " c/s"),
-        axis(:fy, :left, ticks: 3),
-        area(:points, %{x: :t, y: :y}, style: :area),
-        line(:points, %{x: :t, y: :y}, style: :edge),
-        area(spectrum_of(:points), %{x: :frequency, y: :magnitude},
-          style: :spectrum,
-          scales: %{x: :fx, y: :fy}
-        ),
-        line(spectrum_of(:points), %{x: :frequency, y: :magnitude},
-          style: :peak,
-          scales: %{x: :fx, y: :fy}
-        ),
-        text(:peaks, %{x: :f, y: :m, value: :name}, style: :name, scales: %{x: :fx, y: :fy})
-      ])
+      Design.fold(
+        [
+          chart(meta: %{name: title(), description: [description()]}),
+          source(:points, [:t, :y], types: %{t: :number, y: :number}),
+          source(:peaks, [:f, :m, :name], types: %{f: :number, m: :number, name: :text}),
+          style(:area, fill: :series_1, opacity: 0.25, curve: :monotone_x),
+          style(:edge, stroke: :series_1, stroke_width: 2, curve: :monotone_x),
+          style(:spectrum, fill: :series_2, opacity: 0.35, curve: :monotone_x),
+          style(:peak, stroke: :series_2, stroke_width: 2, curve: :monotone_x),
+          style(:name, fill: :text, font_size: 11, text_anchor: :middle)
+        ] ++
+          in_frame(:signal, [
+            cartesian(box: [0, 0, 1, 0.5], margin: @signal_margin),
+            linear_scale(:x),
+            linear_scale(:y, domain: [0, 100]),
+            axis(:x, :top, ticks: 8),
+            axis(:y, :left, ticks: 4),
+            area(:points, %{x: :t, y: :y}, style: :area),
+            line(:points, %{x: :t, y: :y}, style: :edge)
+          ]) ++
+          in_frame(:spectrum, [
+            # Frequency in cycles per sample, to Nyquist.
+            cartesian(box: [0, 0.5, 1, 0.5], margin: @spectrum_margin),
+            linear_scale(:x, domain: [0, 0.5]),
+            linear_scale(:y, domain: [0, 36]),
+            axis(:x, :bottom, ticks: 10, unit: " c/s"),
+            axis(:y, :left, ticks: 3),
+            area(spectrum_of(:points), %{x: :frequency, y: :magnitude}, style: :spectrum),
+            line(spectrum_of(:points), %{x: :frequency, y: :magnitude}, style: :peak),
+            text(:peaks, %{x: :f, y: :m, value: :name}, style: :name)
+          ])
+      )
 
     {design, %{points: rows(opts), peaks: @peaks}}
   end
@@ -114,29 +115,35 @@ defmodule Examples.Charts.SpectrumChart do
     ~S"""
     import Visualize.Chart.Build
 
-    # Two panels in one frame: the signal's y ranges over the upper half of the plot, the
-    # spectrum's fy over the lower half, and the spectrum's marks read fx/fy through
-    # their `scales` renames.
+    # Two panels are two frames: the signal over the upper half of the box, the spectrum
+    # over the lower. Each declares its own x and y, so nothing needs a range or a rename.
     spectrum = from(:points) |> spectrum(:y, time: :t, samples: 256, detrend: true) |> filter(:frequency, test: :gt, value: 0)
 
     {:ok, design} =
-      Visualize.Chart.compose([
-        chart(meta: %{name: "Spectrum"}),
-        source(:points, [:t, :y], types: %{t: :number, y: :number}),
-        style(:area, fill: :series_1, opacity: 0.25, curve: :monotone_x),
-        style(:spectrum, fill: :series_2, opacity: 0.35, curve: :monotone_x),
-        cartesian(margin: %{top: 30, right: 20, bottom: 40, left: 50}),
-        linear_scale(:x),
-        linear_scale(:y, domain: [0, 100], range: [151, 0]),
-        linear_scale(:fx, domain: [0, 0.5]),
-        linear_scale(:fy, domain: [0, 36], range: [330, 179]),
-        axis(:x, :top, ticks: 8),
-        axis(:y, :left, ticks: 4),
-        axis(:fx, :bottom, ticks: 10, unit: " c/s"),
-        axis(:fy, :left, ticks: 3),
-        area(:points, %{x: :t, y: :y}, style: :area),
-        area(spectrum, %{x: :frequency, y: :magnitude}, style: :spectrum, scales: %{x: :fx, y: :fy})
-      ])
+      Visualize.Chart.compose(
+        [
+          chart(meta: %{name: "Spectrum"}),
+          source(:points, [:t, :y], types: %{t: :number, y: :number}),
+          style(:area, fill: :series_1, opacity: 0.25, curve: :monotone_x),
+          style(:spectrum, fill: :series_2, opacity: 0.35, curve: :monotone_x)
+        ] ++
+          in_frame(:signal, [
+            cartesian(box: [0, 0, 1, 0.5], margin: %{top: 30, right: 20, bottom: 7, left: 50}),
+            linear_scale(:x),
+            linear_scale(:y, domain: [0, 100]),
+            axis(:x, :top, ticks: 8),
+            axis(:y, :left, ticks: 4),
+            area(:points, %{x: :t, y: :y}, style: :area)
+          ]) ++
+          in_frame(:spectrum, [
+            cartesian(box: [0, 0.5, 1, 0.5], margin: %{top: 7, right: 20, bottom: 40, left: 50}),
+            linear_scale(:x, domain: [0, 0.5]),
+            linear_scale(:y, domain: [0, 36]),
+            axis(:x, :bottom, ticks: 10, unit: " c/s"),
+            axis(:y, :left, ticks: 3),
+            area(spectrum, %{x: :frequency, y: :magnitude}, style: :spectrum)
+          ])
+      )
 
     # The area chart's signal: three sines and an offset.
     points =

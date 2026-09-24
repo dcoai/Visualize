@@ -35,8 +35,10 @@ defmodule ExamplesWeb.PerformanceLiveTest do
     %Task{ref: ref} = s.assigns.task
     assert_receive {^ref, {:all, all} = result}, 120_000
     {:noreply, s} = Page.handle_info({ref, result}, s)
-    designs = length(s.assigns.charts)
-    assert length(all) >= designs * 2
+    # One row per chart and backend: a design of several frames offers SVG alone until
+    # #385 (spec/14 §12.1), a streaming one offers three, every other one two.
+    backends = Enum.sum(for c <- s.assigns.charts, do: length(Examples.Frames.backends(c.module)))
+    assert length(all) == backends
     assert Enum.any?(all, &(&1.slug == "scrolling_series" and &1.backend == :incremental))
     assert html(s) =~ "Every design, 20 ticks per backend"
   end

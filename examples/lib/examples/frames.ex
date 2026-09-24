@@ -24,10 +24,25 @@ defmodule Examples.Frames do
           points: non_neg_integer() | nil
         }
 
-  @doc "The backends a chart offers: SVG and Canvas for every chart, Incremental for a streaming design (#327)."
+  @doc """
+  The backends a chart offers: SVG and Canvas for every chart, Incremental for a streaming
+  design (#327) — and **SVG alone for a design of several frames**, which a compiled chart
+  cannot hold until #385 (spec/14 §12.1, #429).
+  """
   @spec backends(module()) :: [backend()]
   def backends(module) do
-    if stream?(module), do: [:svg, :canvas, :incremental], else: [:svg, :canvas]
+    cond do
+      frames(module) > 1 -> [:svg]
+      stream?(module) -> [:svg, :canvas, :incremental]
+      true -> [:svg, :canvas]
+    end
+  end
+
+  @doc "How many frames a chart's design holds (spec/14 §2.1, #383)."
+  @spec frames(module()) :: non_neg_integer()
+  def frames(module) do
+    {design, _sources} = module.design([])
+    design |> Map.get(:frames, %{}) |> map_size()
   end
 
   @doc "Whether a chart module streams: a design with a viewport that says `stream?/0`."
