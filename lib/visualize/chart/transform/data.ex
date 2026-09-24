@@ -4,19 +4,142 @@ defmodule Visualize.Chart.Transform.Data do
   # `:stack` over `Visualize.Shape.Stack`, `:filter`, `:sum` and `:sort` over the rows
   # themselves.
 
+  alias Visualize.Chart.Schema
   alias Visualize.Data
   alias Visualize.Data.{FFT, Table}
   alias Visualize.Shape.Stack
 
+  # A window's units, each the seconds it names: an extent of time, never a calendar
+  # walk, so a :day is 86,400 seconds and a :year 365 of those (spec/14 §5.4.1).
+  @units %{
+    second: 1,
+    minute: 60,
+    hour: 3_600,
+    day: 86_400,
+    week: 604_800,
+    year: 31_536_000
+  }
+
   @doc false
-  @spec run(atom(), map(), [map()]) :: [map()]
-  def run(:filter, node, rows), do: filter(node, rows)
-  def run(:bin, node, rows), do: bin(node, rows)
-  def run(:stack, node, rows), do: stack(node, rows)
-  def run(:fold, node, rows), do: fold(node, rows)
-  def run(:sum, node, rows), do: sum(node, rows)
-  def run(:sort, node, rows), do: sort(node, rows)
-  def run(:spectrum, node, rows), do: spectrum(node, rows)
+  @spec run(atom(), map(), [map()], map()) :: [map()]
+  def run(op, node, rows, ctx \\ %{})
+
+  def run(:filter, node, rows, _ctx), do: filter(node, rows)
+  def run(:bin, node, rows, _ctx), do: bin(node, rows)
+  def run(:stack, node, rows, _ctx), do: stack(node, rows)
+  def run(:fold, node, rows, _ctx), do: fold(node, rows)
+  def run(:sum, node, rows, _ctx), do: sum(node, rows)
+  def run(:sort, node, rows, _ctx), do: sort(node, rows)
+  def run(:spectrum, node, rows, _ctx), do: spectrum(node, rows)
+  def run(:take, node, rows, _ctx), do: take(node, rows)
+  def run(:window, node, rows, ctx), do: window(node, rows, ctx)
+
+  # -- take and window (spec/14 §5.4.1, #426) ---------------------------------------------
+
+  # The last, or the first, `n` rows in order; `n` at or above the count is every row.
+  defp take(node, rows) do
+    n = Map.fetch!(node, :n)
+
+    (is_integer(n) and n >= 0) ||
+      raise ArgumentError,
+            "transform :take needs a non-negative n, got #{inspect(n)} (spec/14 §5.4.1)"
+
+    case Map.get(node, :side, Schema.default(:transform, :side)) do
+      :end -> Enum.take(rows, -n)
+      :start -> Enum.take(rows, n)
+    end
+  end
+
+  # The rows whose reading lies in the half-open span `[now − from, now − to)`, so two
+  # windows that share a bound do not share a row. An absent bound is open at that end.
+  defp window(node, rows, ctx) do
+    field = Map.fetch!(node, :field)
+    read = for row <- rows, reading = Table.get(row, field), do: {row, seconds!(reading, field)}
+
+    case read do
+      [] ->
+        []
+
+      read ->
+        now = now(Map.get(ctx, :now), read, field)
+        lo = lower(Map.get(node, :from), now)
+        hi = upper(Map.get(node, :to), now)
+
+        for {row, at} <- read, at_or_after?(at, lo), within?(at, hi), do: row
+    end
+  end
+
+  # The instant the durations are measured back from: the caller's `now:` when it gave
+  # one — a live dashboard means the wall clock — else the newest reading of the column,
+  # which is what a test and a static render mean.
+  defp now(nil, read, _field), do: read |> Enum.map(&elem(&1, 1)) |> Enum.max()
+  defp now(given, _read, field), do: seconds!(given, field)
+
+  # There is no natural oldest instant, so an absent `from` is genuinely open; there is a
+  # natural newest one, so an absent `to` closes the window at `now` **inclusively** — the
+  # newest reading belongs to the last window. A `to` that is given is exclusive, which is
+  # what keeps two adjacent windows from sharing a row.
+  defp lower(nil, _now), do: :open
+  defp lower(duration, now), do: now - duration!(duration)
+
+  defp upper(nil, now), do: {:through, now}
+  defp upper(duration, now), do: {:below, now - duration!(duration)}
+
+  defp at_or_after?(_at, :open), do: true
+  defp at_or_after?(at, lo), do: at >= lo
+
+  defp within?(at, {:through, hi}), do: at <= hi
+  defp within?(at, {:below, hi}), do: at < hi
+
+  defp duration!([n, unit]) when is_number(n) do
+    case Map.fetch(@units, unit) do
+      {:ok, seconds} ->
+        n * seconds
+
+      :error ->
+        raise ArgumentError,
+              "transform :window: #{inspect(unit)} is not one of " <>
+                "#{inspect(Map.keys(@units))} (spec/14 §5.4.1)"
+    end
+  end
+
+  defp duration!(other) do
+    raise ArgumentError,
+          "transform :window: a duration is [n, unit], got #{inspect(other)} (spec/14 §5.4.1)"
+  end
+
+  # A reading as seconds from the epoch, the forms §4.3 reads a `:time` domain in.
+  defp seconds!(%DateTime{} = at, _field), do: DateTime.to_unix(at, :microsecond) / 1_000_000
+
+  defp seconds!(%NaiveDateTime{} = at, _field),
+    do: NaiveDateTime.diff(at, ~N[1970-01-01 00:00:00], :microsecond) / 1_000_000
+
+  defp seconds!(%Date{} = at, _field), do: Date.diff(at, ~D[1970-01-01]) * 86_400.0
+  defp seconds!(n, _field) when is_number(n), do: n
+
+  defp seconds!(string, field) when is_binary(string) do
+    parsed =
+      with :error <- iso(DateTime.from_iso8601(string)),
+           :error <- iso(NaiveDateTime.from_iso8601(string)),
+           do: iso(Date.from_iso8601(string))
+
+    case parsed do
+      {:ok, at} -> seconds!(at, field)
+      :error -> not_temporal!(string, field)
+    end
+  end
+
+  defp seconds!(other, field), do: not_temporal!(other, field)
+
+  defp iso({:ok, at}), do: {:ok, at}
+  defp iso({:ok, at, _offset}), do: {:ok, at}
+  defp iso(_error), do: :error
+
+  defp not_temporal!(value, field) do
+    raise ArgumentError,
+          "transform :window: #{inspect(field)} reads #{inspect(value)}, which is not a " <>
+            "time (spec/14 §5.4.1)"
+  end
 
   # -- filter -----------------------------------------------------------------------------
 

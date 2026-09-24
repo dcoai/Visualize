@@ -242,6 +242,121 @@ defmodule Visualize.Chart.TransformTest do
     end
   end
 
+  describe ":take and :window (§5.4.1, #426)" do
+    # Eleven readings a minute apart, 0 .. 600 seconds.
+    defp minutes, do: for(i <- 0..10, do: %{t: i * 60, v: i})
+    defp ts(rows), do: Enum.map(rows, & &1.t)
+
+    test ":take is the last or the first n rows, and n beyond the count is every row" do
+      assert run(%{op: :take, n: 2}, minutes()) |> ts() == [540, 600]
+      assert run(%{op: :take, n: 2, side: :end}, minutes()) |> ts() == [540, 600]
+      assert run(%{op: :take, n: 3, side: :start}, minutes()) |> ts() == [0, 60, 120]
+      assert run(%{op: :take, n: 1}, minutes()) |> ts() == [600]
+      assert run(%{op: :take, n: 99}, minutes()) == minutes()
+      assert run(%{op: :take, n: 0}, minutes()) == []
+
+      assert_raise ArgumentError, ~r/non-negative n/, fn ->
+        run(%{op: :take, n: -1}, minutes())
+      end
+
+      assert_raise ArgumentError, ~r/:take needs :n/, fn -> run(%{op: :take}, minutes()) end
+    end
+
+    test "a given :to is exclusive, so adjacent windows partition the column" do
+      old = run(%{op: :window, field: :t, from: [10, :minute], to: [5, :minute]}, minutes())
+      recent = run(%{op: :window, field: :t, from: [5, :minute]}, minutes())
+
+      assert ts(old) == [0, 60, 120, 180, 240]
+      assert ts(recent) == [300, 360, 420, 480, 540, 600]
+      assert old ++ recent == minutes()
+    end
+
+    test "an absent :to closes at now inclusively, so the newest reading is in the window" do
+      assert run(%{op: :window, field: :t, from: [1, :minute]}, minutes()) |> ts() == [540, 600]
+
+      # With `now:` in the middle of the data, a future reading is not "the last minute".
+      assert run(%{op: :window, field: :t, from: [1, :minute]}, minutes(), now: 300) |> ts() ==
+               [240, 300]
+    end
+
+    test "an absent :from is open at the old end" do
+      assert run(%{op: :window, field: :t, to: [5, :minute]}, minutes()) |> ts() ==
+               [0, 60, 120, 180, 240]
+
+      assert run(%{op: :window, field: :t}, minutes()) == minutes()
+    end
+
+    test "now is the caller's when given and the newest reading otherwise" do
+      # Derived: the newest reading is 600, so the last minute is [540, 600].
+      assert run(%{op: :window, field: :t, from: [1, :minute]}, minutes()) |> ts() == [540, 600]
+
+      # Given: the same rows read as of 120 seconds.
+      assert run(%{op: :window, field: :t, from: [1, :minute]}, minutes(), now: 120) |> ts() ==
+               [60, 120]
+
+      # No row with a reading is no rows, whatever `now` is.
+      assert run(%{op: :window, field: :t, from: [1, :minute]}, [%{v: 1}]) == []
+    end
+
+    test "every unit is the seconds it names — an extent of time, not a calendar walk" do
+      day = for i <- 0..3, do: %{t: i * 86_400}
+      assert run(%{op: :window, field: :t, from: [1, :day]}, day) |> ts() == [172_800, 259_200]
+
+      assert run(%{op: :window, field: :t, from: [2, :day]}, day) |> ts() == [
+               86_400,
+               172_800,
+               259_200
+             ]
+
+      units = [second: 1, minute: 60, hour: 3_600, day: 86_400, week: 604_800, year: 31_536_000]
+
+      for {unit, seconds} <- units do
+        rows = [%{t: 0}, %{t: seconds}, %{t: 2 * seconds}]
+
+        assert run(%{op: :window, field: :t, from: [1, unit]}, rows) |> ts() == [
+                 seconds,
+                 2 * seconds
+               ]
+      end
+    end
+
+    test "a window reads the temporal forms a :time domain reads" do
+      at = fn s -> DateTime.add(~U[2026-01-01 00:00:00Z], s, :second) end
+      rows = for i <- 0..4, do: %{t: at.(i * 60)}
+      kept = run(%{op: :window, field: :t, from: [1, :minute]}, rows)
+      assert Enum.map(kept, & &1.t) == [at.(180), at.(240)]
+
+      naive = for i <- 0..4, do: %{t: NaiveDateTime.add(~N[2026-01-01 00:00:00], i * 60, :second)}
+      assert length(run(%{op: :window, field: :t, from: [1, :minute]}, naive)) == 2
+
+      iso = for i <- 0..4, do: %{t: DateTime.to_iso8601(at.(i * 60))}
+      assert length(run(%{op: :window, field: :t, from: [1, :minute]}, iso)) == 2
+
+      dates = for i <- 0..4, do: %{t: Date.add(~D[2026-01-01], i)}
+
+      assert run(%{op: :window, field: :t, from: [1, :day]}, dates) |> Enum.map(& &1.t) ==
+               [~D[2026-01-04], ~D[2026-01-05]]
+    end
+
+    test "a reading that is not a time, and a unit that is not one of the six, raise" do
+      assert_raise ArgumentError, ~r/not a time/, fn ->
+        run(%{op: :window, field: :v, from: [1, :minute]}, [%{v: "later"}])
+      end
+
+      assert_raise ArgumentError, ~r/:fortnight is not one of/, fn ->
+        run(%{op: :window, field: :t, from: [1, :fortnight]}, minutes())
+      end
+
+      assert_raise ArgumentError, ~r/a duration is \[n, unit\]/, fn ->
+        run(%{op: :window, field: :t, from: 60}, minutes())
+      end
+
+      assert_raise ArgumentError, ~r/:window needs :field/, fn ->
+        run(%{op: :window, from: [1, :minute]}, minutes())
+      end
+    end
+  end
+
   describe "hierarchies" do
     @tree [
       %{id: "root", parent: nil, w: 1},

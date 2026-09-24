@@ -297,6 +297,69 @@ defmodule Visualize.Chart.ApplyTest do
     end
   end
 
+  describe "now: and a windowed source (§5.4.1, #426)" do
+    # One source of eleven readings a minute apart, drawn by a line over a windowed
+    # pipeline: the y scale infers from the window, not from the source.
+    defp windowed(window) do
+      %{
+        version: 1,
+        sources: %{load: %{fields: [:t, :v]}},
+        frame: %{
+          kind: :cartesian,
+          scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}}
+        },
+        marks: [
+          %{
+            type: :line,
+            data: %{source: :load, transforms: [window]},
+            channels: %{x: :t, y: :v}
+          }
+        ]
+      }
+    end
+
+    defp rows, do: %{load: for(i <- 0..10, do: %{t: i * 60, v: i})}
+
+    test "a scale over a windowed source infers the window's extent, not the source's (D-62)" do
+      {:ok, whole} = Chart.apply(windowed(%{op: :window, field: :t}), sources: rows())
+      assert Frame.scale(whole.frame, :y).domain == [0, 10]
+
+      {:ok, recent} =
+        Chart.apply(windowed(%{op: :window, field: :t, from: [2, :minute]}), sources: rows())
+
+      # The last two minutes are v = 8, 9, 10 — the extent the axis is drawn at.
+      assert Frame.scale(recent.frame, :y).domain == [0, 10]
+      assert Frame.scale(recent.frame, :x).domain == [480, 600]
+    end
+
+    test "now: reaches the step, and without it the step takes the column's newest reading" do
+      design = windowed(%{op: :window, field: :t, from: [2, :minute]})
+
+      {:ok, derived} = Chart.apply(design, sources: rows())
+      assert Frame.scale(derived.frame, :x).domain == [480, 600]
+
+      {:ok, given} = Chart.apply(design, sources: rows(), now: 300)
+      assert Frame.scale(given.frame, :x).domain == [180, 300]
+
+      # The frame carries it, so a mark's own pipeline sees the same instant.
+      assert given.frame.now == 300
+
+      assert Enum.map(
+               Visualize.Chart.Mark.rows(given.frame, hd(given.chart.marks), given.sources),
+               & &1.t
+             ) ==
+               [180, 240, 300]
+    end
+
+    test ":take reads the newest row, which is what a gauge beside a history draws" do
+      design = windowed(%{op: :take, n: 1})
+      {:ok, applied} = Chart.apply(design, sources: rows())
+
+      assert Visualize.Chart.Mark.rows(applied.frame, hd(applied.chart.marks), applied.sources) ==
+               [%{t: 600, v: 10}]
+    end
+  end
+
   describe "the map, the frame and the render" do
     test "an invalid design map is its own errors" do
       assert Chart.apply(%{version: 1}) == {:error, [{[:frame], :required}]}

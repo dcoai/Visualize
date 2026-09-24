@@ -7,7 +7,8 @@ defmodule Visualize.Chart.Transform do
   `apply/3` runs the steps of a mark's `data.transforms` in order over its source's rows,
   each a pure function of the rows before it and its node, and yields the rows the mark
   draws. Its only context is the plot area (`size:`, the extent every layout defaults
-  to) and, in a `:geo` frame, the projection (`projection:`) — never a scale, which is
+  to), in a `:geo` frame the projection (`projection:`), and the instant a `:window`
+  step measures back from (`now:`) — never a scale, which is
   what lets `Visualize.Chart.Frame.new/2` run the pipeline before its scales exist and
   infer their domains from the transformed columns. A layout's rows carry their shape as
   a `Visualize.IR.Path` under `path`, which the `:path` mark draws as it is.
@@ -25,10 +26,15 @@ defmodule Visualize.Chart.Transform do
   alias Visualize.Data.Table
   alias Visualize.Geo.Projection
 
-  @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, and the bound sources for a graph's node table."
-  @type context :: %{size: [number()], projection: Projection.t() | nil, sources: map()}
+  @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, the bound sources for a graph's node table, and the instant a `:window` measures back from."
+  @type context :: %{
+          size: [number()],
+          projection: Projection.t() | nil,
+          sources: map(),
+          now: term() | nil
+        }
 
-  @data_ops [:filter, :bin, :stack, :fold, :sum, :sort, :spectrum]
+  @data_ops [:filter, :bin, :stack, :fold, :sum, :sort, :spectrum, :take, :window]
   @layout_ops [:tree, :cluster, :pack, :partition, :treemap, :chord, :sankey, :force]
   @geo_ops [:delaunay, :voronoi, :contour, :density, :hexbin, :projection]
 
@@ -42,6 +48,8 @@ defmodule Visualize.Chart.Transform do
     * `:projection` - the `%Visualize.Geo.Projection{}` a `:projection` step maps through
       (default `nil`)
     * `:sources` - the bound sources by name, for a graph step's `nodes` (default `%{}`)
+    * `:now` - the instant a `:window` step measures its durations back from (spec/14
+      §5.4.1); without it each such step takes the newest reading of its own column
 
   Raises `ArgumentError` for an op that is not one of spec/14 §5.4, a key an op requires
   and the node lacks, or a `:projection` step without a projection.
@@ -60,7 +68,8 @@ defmodule Visualize.Chart.Transform do
     %{
       size: Keyword.get(opts, :size, [1, 1]),
       projection: Keyword.get(opts, :projection),
-      sources: Keyword.get(opts, :sources, %{})
+      sources: Keyword.get(opts, :sources, %{}),
+      now: Keyword.get(opts, :now)
     }
   end
 
@@ -71,7 +80,7 @@ defmodule Visualize.Chart.Transform do
     required!(node, op)
 
     cond do
-      op in @data_ops -> Data.run(op, node, rows)
+      op in @data_ops -> Data.run(op, node, rows, ctx)
       op in @layout_ops -> Layout.run(op, node, rows, ctx)
       op in @geo_ops -> Geo.run(op, node, rows, ctx)
     end

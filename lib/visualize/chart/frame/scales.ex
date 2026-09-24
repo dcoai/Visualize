@@ -161,7 +161,8 @@ defmodule Visualize.Chart.Frame.Scales do
         Transform.apply(transforms(mark.data), rows,
           size: ctx.size,
           projection: ctx.projection,
-          sources: sources
+          sources: sources,
+          now: Map.get(ctx, :now)
         )
 
       :error ->
