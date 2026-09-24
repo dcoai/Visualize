@@ -226,6 +226,40 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert length(s.assigns.run.acks) == 1
   end
 
+  test "a run of several frames sums its metrics and breaks them down per plot (#433)" do
+    s = page("context")
+    {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
+    {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    s = settled(s)
+
+    # The frame's bytes are its plots', and the run's payload metric is the frame's.
+    plots = s.assigns.run_frame.plots
+    assert s.assigns.run_frame.bytes == Enum.sum(Enum.map(plots, & &1.bytes))
+    assert s.assigns.run.payload_size == s.assigns.run_frame.bytes
+
+    # And the drawer says which plot the sum is made of.
+    h = html(s)
+    assert h =~ ~s(<span class="perf-frames-label">Frames</span>)
+
+    for plot <- plots do
+      assert h =~ ~s(<span class="perf-frame-name">#{plot.name}</span>)
+    end
+
+    assert length(Regex.scan(~r/class="perf-frame"/, h)) == 4
+  end
+
+  test "a run of one frame has nothing to break down (#433)" do
+    s = page("line")
+    {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
+    {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    s = settled(s)
+
+    # The class appears in the drawer's own stylesheet; the element is what is not there.
+    refute html(s) =~ ~s(<span class="perf-frames-label">)
+  end
+
   test "the last chart converted runs on the split like every other (#348)" do
     s = page("hexbin")
     {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)

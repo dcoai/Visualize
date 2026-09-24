@@ -40,6 +40,13 @@ defmodule ExamplesWeb.PerformanceLiveTest do
     backends = Enum.sum(for c <- s.assigns.charts, do: length(Examples.Frames.backends(c.module)))
     assert length(all) == backends
     assert Enum.any?(all, &(&1.slug == "scrolling_series" and &1.backend == :incremental))
+    # A design of several frames is compared like any other, its cost the sum of its
+    # plots' (#433): three backends, since it streams nothing.
+    context = Enum.filter(all, &(&1.slug == "context"))
+    assert Enum.map(context, & &1.backend) == [:svg, :canvas]
+    assert Enum.all?(context, &(&1.avg_bytes > 0))
+    # The canvas row's static bytes are the frames' documents, all four of them.
+    assert Enum.find(context, &(&1.backend == :canvas)).static_bytes > 0
     assert html(s) =~ "Every design, 20 ticks per backend"
   end
 
