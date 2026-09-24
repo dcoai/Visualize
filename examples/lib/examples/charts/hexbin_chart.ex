@@ -41,13 +41,15 @@ defmodule Examples.Charts.HexbinChart do
             clustered ++ scattered
           )
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {700, 450}
+
   def title, do: "Hexbin Chart"
   def description, do: "Hexagonal binning for point density visualization"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 700
-    height = opts[:height] || 450
+    {width, height} = Design.size(__MODULE__, opts)
     radius = opts[:hex_radius] || 20
     points = points(opts[:animation_tick])
     {plot_width, plot_height} = Design.plot(width, height, @margin)
@@ -61,7 +63,7 @@ defmodule Examples.Charts.HexbinChart do
         chart(meta: %{name: title(), description: [description()]}),
         source(:points, [:x, :y, :px, :py]),
         style(:cell, fill: {:field, :count}, stroke: :axis, stroke_opacity: 0.5, stroke_width: 1),
-        cartesian(width, height, margin: @margin),
+        cartesian(margin: @margin),
         linear_scale(:x, domain: x_domain),
         linear_scale(:y, domain: y_domain),
         sequential_scale(:color, domain: [0, :auto]),
@@ -111,7 +113,7 @@ defmodule Examples.Charts.HexbinChart do
         # mapping the axes draw with, its pixel coordinates: a hexbin is laid in pixels.
         source(:points, [:x, :y, :px, :py]),
         style(:cell, fill: {:field, :count}, stroke: :axis, stroke_opacity: 0.5, stroke_width: 1),
-        cartesian(700, 450, margin: %{top: 40, right: 20, bottom: 40, left: 50}),
+        cartesian(margin: %{top: 40, right: 20, bottom: 40, left: 50}),
         linear_scale(:x, domain: [30, 670]),
         linear_scale(:y, domain: [10, 430]),
         sequential_scale(:color, domain: [0, :auto]),

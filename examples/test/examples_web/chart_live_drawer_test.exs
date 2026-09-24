@@ -234,10 +234,12 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
       Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 16})
 
     {:noreply, s} = ChartLive.handle_info(:run_tick, s)
-    assert s.assigns.run_scroll.origin >= 8 and rem(s.assigns.run_scroll.origin, 4) == 0
+    # The origin the frame was asked for: `settled/1` may let a later tick advance it.
+    origin = s.assigns.run_scroll.origin
+    assert origin >= 8 and rem(origin, 4) == 0
     s = settled(s)
     assert %{mode: "scroll_x", dx: dx} = s.assigns.run_frame.incremental
-    assert dx == div(s.assigns.run_scroll.origin, 4)
+    assert dx == div(origin, 4)
     assert pushed(s) == [{"canvas_incremental", 1}, {"canvas_incremental", 2}]
     assert s.assigns.run_frame.bytes < 30_000
 

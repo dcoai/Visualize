@@ -37,7 +37,6 @@ defmodule ExamplesWeb.InteractionLive do
     sources: %{primary: %{fields: [:hour, :series, :value]}},
     frame: %{
       kind: :cartesian,
-      size: %{width: @width, height: @height},
       margin: %{top: 30, right: 120, bottom: 40, left: 50},
       scales: %{
         x: %{kind: :linear, domain: [0, 23]},

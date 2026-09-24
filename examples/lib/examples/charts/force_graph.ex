@@ -61,9 +61,6 @@ defmodule Examples.Charts.ForceGraph do
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
-
     # Animated, the link distance breathes and the layout settles around it each frame.
     distance =
       case opts[:animation_tick] do
@@ -81,7 +78,7 @@ defmodule Examples.Charts.ForceGraph do
         style(:link, fill: :none, stroke: :axis, stroke_opacity: 0.6, stroke_width: 1.5),
         style(:node, fill: {:field, :group}, stroke: :background, stroke_width: 2),
         style(:id, extends: :label, fill: :background, font_size: 10, font_weight: :bold),
-        cartesian(width, height, margin: @zero_margin),
+        cartesian(margin: @zero_margin),
         ordinal_scale(:color, domain: [0, 1, 2, 3]),
         path(force(from(:links), [:source, :target], layout ++ [output: :links]), %{path: :path},
           style: :link
@@ -114,7 +111,7 @@ defmodule Examples.Charts.ForceGraph do
         style(:link, fill: :none, stroke: :axis, stroke_opacity: 0.6, stroke_width: 1.5),
         style(:node, fill: {:field, :group}, stroke: :background, stroke_width: 2),
         style(:id, extends: :label, fill: :background, font_size: 10, font_weight: :bold),
-        cartesian(600, 400, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        cartesian(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color, domain: [0, 1, 2, 3]),
         path(force(from(:links), [:source, :target], layout ++ [output: :links]),
           %{path: :path}, style: :link),

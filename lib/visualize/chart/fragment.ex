@@ -24,11 +24,8 @@ defmodule Visualize.Chart.Fragment do
       iex> Visualize.Chart.Fragment.kind(%{frame: %{axes: [%{scale: :x, side: :bottom}]}})
       :axis
 
-      iex> Visualize.Chart.Fragment.kind(%{frame: %{size: %{width: 1}, margin: %{top: 1}}})
-      :frame
-
-      iex> Visualize.Chart.Fragment.kind(%{frame: %{size: %{width: 1}}})
-      :size
+      iex> Visualize.Chart.Fragment.kind(%{frame: %{margin: %{top: 1}}})
+      :margin
 
       iex> Visualize.Chart.Fragment.kind(%{theme: :dark})
       :theme

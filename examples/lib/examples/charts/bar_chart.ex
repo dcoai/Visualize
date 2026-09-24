@@ -53,7 +53,7 @@ defmodule Examples.Charts.BarChart do
       Design.fold([
         chart(meta: %{name: title(), description: [description()]}),
         source(:letters, [:letter, :frequency]),
-        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        cartesian(margin: @margin),
         band_scale(:x, padding: 0.1),
         linear_scale(:y, domain: [0, :auto], nice: true, transition: %{duration: 300}),
         ordinal_scale(:color),
@@ -93,7 +93,7 @@ defmodule Examples.Charts.BarChart do
       Visualize.Chart.compose([
         chart(meta: %{name: "Bar Chart"}),
         source(:letters, [:letter, :frequency]),
-        cartesian(600, 400, margin: %{top: 20, right: 20, bottom: 30, left: 40}),
+        cartesian(margin: %{top: 20, right: 20, bottom: 30, left: 40}),
         band_scale(:x, padding: 0.1),
         linear_scale(:y, domain: [0, :auto], nice: true, transition: %{duration: 300}),
         ordinal_scale(:color),

@@ -22,14 +22,14 @@ defmodule Examples.Charts.RadarChart do
     %{name: "ranger", scores: [6, 5, 9, 6, 4, 6]}
   ]
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {420, 420}
+
   def title, do: "Radar"
   def description, do: "Three units over six attributes, layered on a closed ring"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 420
-    height = opts[:height] || 420
-
     design =
       Design.fold([
         chart(meta: %{name: title(), description: [description()]}),
@@ -39,7 +39,7 @@ defmodule Examples.Charts.RadarChart do
         style(:volume, fill_opacity: 0.3, stroke: :none),
         style(:edge, stroke_width: 2),
         style(:spoke, extends: :axis, font_size: 11),
-        polar(width, height, margin: @margin),
+        polar(margin: @margin),
         band_scale(:angle, domain: @categories),
         linear_scale(:r, domain: [0, 10]),
         ordinal_scale(:color, domain: Enum.map(@series, & &1.name)),
@@ -83,7 +83,7 @@ defmodule Examples.Charts.RadarChart do
         source(:scores, [:attribute, :score, :unit]),
         style(:volume, fill_opacity: 0.3, stroke: :none),
         style(:edge, stroke_width: 2),
-        polar(420, 420, margin: %{top: 30, right: 90, bottom: 30, left: 40}),
+        polar(margin: %{top: 30, right: 90, bottom: 30, left: 40}),
         # A band on angle: six categories 60° apart, the first at the top, the ring closed
         # (spec/14 §4.3).
         band_scale(:angle, domain: ~w(speed power range agility armour stealth)),

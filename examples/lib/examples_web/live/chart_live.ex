@@ -990,7 +990,9 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   defp build_chart_opts(palette, tick, animating, slug, hex_radius) do
-    opts = [width: 700, height: 450, palette: palette]
+    # A chart is drawn at its own size (`size/0`, spec/14 §4.2, #427): the page no
+    # longer imposes one, which a streaming design's window would disagree with.
+    opts = [palette: palette]
 
     opts =
       if animating do

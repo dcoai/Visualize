@@ -27,13 +27,15 @@ defmodule Examples.Charts.WorldMap do
   @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
   @ocean "#a8d5e5"
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {700, 400}
+
   def title, do: "World Map"
   def description, do: "Natural Earth projection with graticule"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 700
-    height = opts[:height] || 400
+    {width, _height} = Design.size(__MODULE__, opts)
     lon = if tick = opts[:animation_tick], do: rem(tick * 2, 360), else: 0
 
     design =
@@ -56,7 +58,7 @@ defmodule Examples.Charts.WorldMap do
           stroke: :background,
           stroke_width: 0.5
         ),
-        geo(width, height,
+        geo(
           margin: @zero_margin,
           projection: %{type: :natural_earth, scale: width / 5.5, rotate: [lon, 0, 0]}
         ),
@@ -104,7 +106,7 @@ defmodule Examples.Charts.WorldMap do
           stroke_width: {:field, :weight}, stroke_opacity: {:field, :opacity}),
         style(:land, fill: {:field, :name}, fill_opacity: 0.8, stroke: :background, stroke_width: 0.5),
         # The projection is the frame's (spec/14 §4.6).
-        geo(700, 400, margin: %{top: 0, right: 0, bottom: 0, left: 0},
+        geo(margin: %{top: 0, right: 0, bottom: 0, left: 0},
           projection: %{type: :natural_earth, scale: 700 / 5.5}),
         ordinal_scale(:color),
         # Each mark ends in a :projection step over its rows' geometry (§5.4.4): the

@@ -38,7 +38,7 @@ defmodule Examples.Charts.RidgelinePlot do
         source(:ridges, [:ridge, :x, :base, :top]),
         style(:ridge, fill_opacity: 0.85, curve: :basis),
         style(:crest, stroke_width: 1.5, curve: :basis),
-        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        cartesian(margin: @margin),
         linear_scale(:x, domain: [0, 100]),
         # Ridge heights: the last ridge's baseline is 0, the first ridge's top is the plot's.
         linear_scale(:y, domain: [0, (@ridges - 1) * (1 - @overlap) + 1]),
@@ -89,7 +89,7 @@ defmodule Examples.Charts.RidgelinePlot do
         source(:ridges, [:ridge, :x, :base, :top]),
         style(:ridge, fill_opacity: 0.85, curve: :basis),
         style(:crest, stroke_width: 1.5, curve: :basis),
-        cartesian(600, 400, margin: %{top: 20, right: 20, bottom: 30, left: 50}),
+        cartesian(margin: %{top: 20, right: 20, bottom: 30, left: 50}),
         linear_scale(:x, domain: [0, 100]),
         # Eight ridges overlapping by half: the plot is 4.5 ridge heights tall.
         linear_scale(:y, domain: [0, 4.5]),

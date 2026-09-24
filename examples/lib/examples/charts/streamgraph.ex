@@ -48,7 +48,7 @@ defmodule Examples.Charts.Streamgraph do
           stroke_width: 0.5,
           curve: :basis
         ),
-        cartesian(opts[:width] || 600, opts[:height] || 350, margin: @margin),
+        cartesian(margin: @margin),
         linear_scale(:x),
         linear_scale(:y),
         ordinal_scale(:color, domain: @keys),
@@ -103,7 +103,7 @@ defmodule Examples.Charts.Streamgraph do
         chart(meta: %{name: "Streamgraph"}),
         source(:months, [:month | keys]),
         style(:stream, fill_opacity: 0.8, stroke: {:field, :key}, stroke_width: 0.5, curve: :basis),
-        cartesian(600, 350, margin: %{top: 20, right: 100, bottom: 40, left: 40}),
+        cartesian(margin: %{top: 20, right: 100, bottom: 40, left: 40}),
         linear_scale(:x),
         linear_scale(:y),
         ordinal_scale(:color, domain: keys),

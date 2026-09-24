@@ -14,7 +14,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
-    alias Visualize.Chart.Schema
+    alias Visualize.Chart.{Frame, Schema}
 
     @typedoc "A region of the frame a drop lands in."
     @type region :: :plot | :top | :bottom | :left | :right
@@ -98,8 +98,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def home({:mark, _type}), do: :plot
 
     @doc """
-    A design's frame `size` and `margin` as the preview draws them: the design's own where
-    it says, the schema's defaults where it does not.
+    The `size` and `margin` the preview draws a design at: the size is the render's own
+    default, since a design records none (spec/14 §4.2), and the margin is the design's
+    over the schema's default.
 
         iex> Visualize.Chart.Builder.Place.geometry(%{})
         %{size: %{width: 600, height: 400}, margin: %{top: 20, right: 20, bottom: 30, left: 40}}
@@ -108,9 +109,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def geometry(design) do
       frame = if is_map(design), do: Map.get(design, :frame, %{}), else: %{}
       frame = if is_map(frame), do: frame, else: %{}
+      {width, height} = Frame.default_size()
 
       %{
-        size: Map.merge(Schema.default(:frame, :size), plain(Map.get(frame, :size))),
+        size: %{width: width, height: height},
         margin: Map.merge(Schema.default(:frame, :margin), plain(Map.get(frame, :margin)))
       }
     end

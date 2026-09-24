@@ -278,7 +278,7 @@ It is **anonymous in the document**: an inline node is not a key of `design.styl
 
 **Margins are pixels and do not scale.** `:margin` has `top`, `right`, `bottom` and `left`, each `:number`, `:geometry`, default `0`; the plot area is the given size less the margins, so it is the *plot* that flexes with the container while the tick text, the axis gutters and the fonts stay the size they were designed to be read at. The same design at two sizes therefore draws byte-identical furniture text and two different plot boxes. `Visualize.Chart.Schema.default/2` gives the frame's defaults so a consumer never repeats them, and the frame struct carries the plot area as `plot` (§4.7).
 
-`:size` remains a node kind — `width` and `height`, both `:number`, `:geometry`, required — because a transform step's `size` key (§5.4.2) and the compiled chart's own `size` (§12.1) still name a pair of pixels; it is no longer a key of the frame.
+The `:size` **node kind** goes with it: nothing in a design declares a pair of pixels any more. A transform step's `size` key (§5.4.2) is a `{:list, :number}` and the compiled chart's own `size` (§12.1) is the render's, neither of them a node.
 
 ### 4.3 Scales
 
@@ -938,7 +938,6 @@ import Visualize.Chart, only: [var: 1]
   },
   frame: %{
     kind: :cartesian,
-    size: %{width: 600, height: 300},
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{
       x: %{kind: :time, domain: :auto},
@@ -994,7 +993,7 @@ Visualize.Chart.compose([
   theme(:default),
   style(:series, stroke: var(:accent), stroke_width: 2, curve: :step_after),
   style(:muted, stroke: :axis, stroke_width: 1, opacity: 0.6),
-  cartesian(600, 300, margin: %{top: 20, right: 20, bottom: 30, left: 40}),
+  cartesian(margin: %{top: 20, right: 20, bottom: 30, left: 40}),
   time_scale(:x, domain: :auto),
   linear_scale(:y, domain: [0, :auto], nice: true),
   linear_scale(:count, domain: [0, :auto], range: [0, 120]),
@@ -1102,6 +1101,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 |---|---|
 | `Visualize.Chart.Frame.new/1` | As `new/2` with `[]` options: no source bound, every `:auto` domain the unit domain. |
 | `Visualize.Chart.Frame.new/2` | `new(chart, opts)`: the `%Visualize.Chart.Frame{}` of a `%Visualize.Chart{}`, every scale realised (§4.3) from `sources:` — a map from source name to anything `Visualize.Data.Table.rows/1` reads, `%{}` by default — and the theme resolved, `theme:` supplying a `%Visualize.Theme{}` that is taken for any theme name and required for one that is neither built-in nor inline (§4.7), `size:` the `{width, height}` the frame is realised at (`{600, 400}`, §4.2) and `now:` the instant a `:window` step measures back from (§5.4.1). Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, or a bound value a scale cannot take. |
+| `Visualize.Chart.Frame.default_size/0` | The `{width, height}` a frame is realised at when no `size:` is given: `{600, 400}` (§4.2). |
 | `Visualize.Chart.Frame.scales/1` | The realised scales by name (§4.3): the escape hatch. |
 | `Visualize.Chart.Frame.scale/2` | `scale(frame, name)`: one realised scale; `ArgumentError` when the frame declares no such scale. |
 | `Visualize.Chart.Frame.put_scale/3` | `put_scale(frame, name, scale)`: the frame with the realised scale replaced by the given struct; the override of §4.3. |

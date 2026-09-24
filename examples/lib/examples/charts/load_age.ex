@@ -34,13 +34,15 @@ defmodule Examples.Charts.LoadAge do
   @oldest 10_800
   @per_decade 60
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {720, 360}
+
   def title, do: "Load age"
   def description, do: "Three hours of load average on a logarithmic age axis"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 720
-    height = opts[:height] || 360
+    {width, _height} = Design.size(__MODULE__, opts)
     inner = width - @margin.left - @margin.right
 
     design =
@@ -50,7 +52,7 @@ defmodule Examples.Charts.LoadAge do
           types: %{age: :number, load: :number, window: :category}
         ),
         style(:trace, stroke_width: 2, curve: :monotone_x),
-        cartesian(width, height, margin: @margin),
+        cartesian(margin: @margin),
         # Age on a log axis, newest at the right: a reading drifts left as it ages.
         log_scale(:x, domain: [@newest, @oldest], range: [inner, 0]),
         linear_scale(:y, domain: [0, 4]),
@@ -104,7 +106,7 @@ defmodule Examples.Charts.LoadAge do
         chart(meta: %{name: "Load age"}),
         source(:loads, [:age, :load, :window]),
         style(:trace, stroke_width: 2, curve: :monotone_x),
-        cartesian(720, 360, margin: %{top: 30, right: 30, bottom: 45, left: 50}),
+        cartesian(margin: %{top: 30, right: 30, bottom: 45, left: 50}),
         # x is how long ago: five seconds at the right edge, three hours at the left, on a
         # log scale — the last minute takes a third of the plot, the third hour an inch.
         log_scale(:x, domain: [5, 10_800], range: [640, 0]),

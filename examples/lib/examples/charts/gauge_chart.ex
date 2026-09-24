@@ -19,13 +19,15 @@ defmodule Examples.Charts.GaugeChart do
     %{from: 85, to: 100, zone: "hot"}
   ]
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {400, 400}
+
   def title, do: "Gauge"
   def description, do: "A load reading on a 240° arc with a needle"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 400
-    height = opts[:height] || 400
+    {width, height} = Design.size(__MODULE__, opts)
     outer = min(width - @margin.left - @margin.right, height - @margin.top - @margin.bottom) / 2
     reading = reading(opts)
 
@@ -39,7 +41,7 @@ defmodule Examples.Charts.GaugeChart do
         style(:needle, fill: :text, stroke: :background, stroke_width: 1),
         style(:reading, extends: :label, font_size: 20, font_weight: :bold),
         style(:dial, extends: :axis),
-        polar(width, height, margin: @margin),
+        polar(margin: @margin),
         linear_scale(:angle, domain: [0, 100], start: -120, sweep: 240),
         linear_scale(:r, domain: [0, 1], range: [0, outer]),
         ordinal_scale(:color,
@@ -83,7 +85,7 @@ defmodule Examples.Charts.GaugeChart do
         style(:zone, fill: {:field, :zone}, opacity: 0.35),
         style(:fill, fill: :series_1, opacity: 0.8),
         style(:needle, fill: :text),
-        polar(400, 400, margin: %{top: 20, right: 20, bottom: 20, left: 20}),
+        polar(margin: %{top: 20, right: 20, bottom: 20, left: 20}),
         # The angle scale sweeps 240° from -120° over the reading's domain (spec/14 §4.3).
         linear_scale(:angle, domain: [0, 100], start: -120, sweep: 240),
         linear_scale(:r, domain: [0, 1], range: [0, 180]),

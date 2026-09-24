@@ -281,13 +281,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
           needs: 0
         },
         %{
-          key: "#{page.label}:size",
-          name: "size",
-          title: "the frame's size and margins",
+          key: "#{page.label}:margin",
+          name: "margin",
+          title: "the frame's margins — a design records no size (spec/14 §4.2)",
           bare: false,
           keys: [],
           forms:
-            for key <- [:size, :margin] do
+            for key <- [:margin] do
               %{
                 kind: key,
                 node: Map.get(node, key, %{}),

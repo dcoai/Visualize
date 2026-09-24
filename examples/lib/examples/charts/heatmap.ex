@@ -32,7 +32,7 @@ defmodule Examples.Charts.Heatmap do
         chart(meta: %{name: title(), description: [description()]}),
         source(:cells, [:day, :hour, :hour_end, :value]),
         style(:cell, stroke: :background, stroke_width: 1),
-        cartesian(opts[:width] || 600, opts[:height] || 300, margin: @margin),
+        cartesian(margin: @margin),
         linear_scale(:x, domain: [0, 24]),
         band_scale(:y, domain: @days),
         sequential_scale(:color, domain: [0, :auto]),
@@ -95,7 +95,7 @@ defmodule Examples.Charts.Heatmap do
         chart(meta: %{name: "Heatmap"}),
         source(:cells, [:day, :hour, :hour_end, :value]),
         style(:cell, stroke: :background, stroke_width: 1),
-        cartesian(600, 300, margin: %{top: 36, right: 30, bottom: 45, left: 60}),
+        cartesian(margin: %{top: 36, right: 30, bottom: 45, left: 60}),
         linear_scale(:x, domain: [0, 24]),
         band_scale(:y, domain: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
         # Background to the first series colour; a palette swap recolours the map.

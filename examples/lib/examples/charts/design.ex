@@ -22,6 +22,7 @@ defmodule Examples.Charts.Design do
 
   alias Examples.ColorPalettes
   alias Visualize.Chart
+  alias Visualize.Chart.Frame
 
   @hierarchy_fields [:id, :parent, :name, :value, :branch]
 
@@ -86,8 +87,24 @@ defmodule Examples.Charts.Design do
   @spec applied(module(), keyword()) :: Chart.Applied.t()
   def applied(module, opts) do
     {design, sources} = module.design(opts)
-    {:ok, applied} = Chart.apply(design, sources: sources, theme: theme(opts))
+
+    {:ok, applied} =
+      Chart.apply(design, sources: sources, theme: theme(opts), size: size(module, opts))
+
     applied
+  end
+
+  @doc """
+  The size a chart is drawn at: the caller's `width`/`height` where it gives them, else
+  the module's own `size/0` where it has one, else the render's default (spec/14 §4.2,
+  #427). A design records no size, so this is where the number comes from.
+  """
+  @spec size(module(), keyword()) :: {number(), number()}
+  def size(module, opts) do
+    {width, height} =
+      if function_exported?(module, :size, 0), do: module.size(), else: Frame.default_size()
+
+    {opts[:width] || width, opts[:height] || height}
   end
 
   @doc """

@@ -27,13 +27,15 @@ defmodule Examples.Charts.DonutChart do
     %{category: "Product E", revenue: 30_000}
   ]
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {400, 400}
+
   def title, do: "Donut Chart"
   def description, do: "Revenue by product category"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 400
-    height = opts[:height] || 400
+    {width, height} = Design.size(__MODULE__, opts)
     rows = rows(opts)
     outer = min(width, height) / 2 - 40
     total = rows |> Enum.map(& &1.revenue) |> Enum.sum()
@@ -45,7 +47,7 @@ defmodule Examples.Charts.DonutChart do
         style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 1),
         style(:total, extends: :label, font_size: 28, font_weight: :bold, text_anchor: :middle),
         style(:total_caption, extends: :label, font_size: 14, text_anchor: :middle),
-        polar(width + @legend_width, height, margin: @margin),
+        polar(margin: @margin),
         ordinal_scale(:color, domain: Enum.map(rows, & &1.category)),
 
         # Declared so the centre has coordinates; no axis draws either of them.
@@ -96,7 +98,7 @@ defmodule Examples.Charts.DonutChart do
         source(:slices, [:category, :revenue, :index]),
         style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 1),
         style(:total, extends: :label, font_size: 28, font_weight: :bold, text_anchor: :middle),
-        polar(520, 400, margin: %{top: 0, right: 120, bottom: 0, left: 0}),
+        polar(margin: %{top: 0, right: 120, bottom: 0, left: 0}),
         ordinal_scale(:color, domain: Enum.map(rows, & &1.category)),
 
         # Declared so the centre has coordinates; no axis draws either of them.

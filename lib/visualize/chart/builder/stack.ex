@@ -560,8 +560,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> Visualize.Chart.Builder.Stack.local_path(mark, fn _id -> :error end, [:marks, 3, :channels])
         [:mark, :channels]
         iex> house = %Visualize.Chart.Use{id: {:use, 3}, ref: nil, local: %{frame: %{kind: :cartesian}}}
-        iex> Visualize.Chart.Builder.Stack.local_path(house, fn _id -> :error end, [:frame, :size])
-        [:frame, :size]
+        iex> Visualize.Chart.Builder.Stack.local_path(house, fn _id -> :error end, [:frame, :margin])
+        [:frame, :margin]
     """
     @spec local_path(Use.t(), (Fragment.id() -> {:ok, map()} | :error), [term()]) :: [term()]
     def local_path(use, fetch, path) do

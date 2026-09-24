@@ -31,7 +31,6 @@ defmodule Visualize.BuilderFixture do
          styles: %{series: %{stroke: :series_1, stroke_width: 2}},
          frame: %{
            kind: :cartesian,
-           size: %{width: 400, height: 200},
            margin: %{top: 20, right: 20, bottom: 30, left: 40}
          }
        }},
@@ -238,7 +237,7 @@ defmodule Visualize.BuilderFixture do
       [
         {:override,
          %{
-           frame: %{size: %{width: 640}},
+           frame: %{margin: %{top: 640, bottom: 200}},
            styles: %{series: %{stroke: :series_2, stroke_width: 3}}
          }}
       ]

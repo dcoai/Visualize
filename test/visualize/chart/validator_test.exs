@@ -49,7 +49,6 @@ defmodule Visualize.Chart.ValidatorTest do
     },
     frame: %{
       kind: :cartesian,
-      size: %{width: 600, height: 300},
       margin: %{top: 20, right: 20, bottom: 30, left: 40},
       scales: %{
         x: %{kind: :time, domain: :auto},
@@ -109,7 +108,6 @@ defmodule Visualize.Chart.ValidatorTest do
     curve_opts: [:styles, :series, :curve_opts],
     label: [:labels, 0],
     frame: [:frame],
-    size: [:frame, :size],
     margin: [:frame, :margin],
     scale: [:frame, :scales, :y],
     axis: [:frame, :axes, 0],
@@ -407,8 +405,8 @@ defmodule Visualize.Chart.ValidatorTest do
       no_defs = %{version: 1, frame: %{kind: :cartesian}, styles: %{w: %{fill: {:paint, :g}}}}
       assert errors(no_defs) == [{[:styles, :w, :fill], {:undeclared, :paint, :g}}]
 
-      no_vars = %{version: 1, frame: %{kind: :cartesian, size: Visualize.Chart.var(:size)}}
-      assert errors(no_vars) == [{[:frame, :size], {:undeclared, :var, :size}}]
+      no_vars = %{version: 1, frame: %{kind: :cartesian, margin: Visualize.Chart.var(:size)}}
+      assert errors(no_vars) == [{[:frame, :margin], {:undeclared, :var, :size}}]
 
       # A fragment checked alone as its kind still has nothing to look a reference up in.
       assert Validator.validate(%{axis: %{scale: :x, side: :bottom}}, :axis) == :ok
@@ -470,7 +468,7 @@ defmodule Visualize.Chart.ValidatorTest do
             [:labels, 0, :text, 1],
             [:marks, 1, :label, :text, 0],
             [:marks, 2, :options],
-            [:frame, :size]
+            [:frame, :margin]
           ] do
         assert errors(put_at(@full, path, var(:nope))) == [{path, {:undeclared, :var, :nope}}]
       end

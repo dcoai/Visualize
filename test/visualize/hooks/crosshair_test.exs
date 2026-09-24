@@ -28,7 +28,6 @@ defmodule Visualize.Hooks.CrosshairTest do
         sources: %{primary: %{fields: [:t, :v, :k]}},
         frame: %{
           kind: kind,
-          size: %{width: 340, height: 220},
           margin: %{top: 10, right: 30, bottom: 10, left: 40},
           scales: %{
             x: %{kind: :linear, domain: [0, 3]},
@@ -39,7 +38,7 @@ defmodule Visualize.Hooks.CrosshairTest do
         marks: marks
       })
 
-    Frame.new(chart, sources: @sources)
+    Frame.new(chart, sources: @sources, size: {340, 220})
   end
 
   describe "attrs/3" do
@@ -106,7 +105,7 @@ defmodule Visualize.Hooks.CrosshairTest do
           },
           marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
         })
-        |> Frame.new(sources: @sources)
+        |> Frame.new(sources: @sources, size: {340, 220})
 
       assert_raise ArgumentError, ~r/facet/, fn -> Crosshair.attrs(facet, @sources) end
     end

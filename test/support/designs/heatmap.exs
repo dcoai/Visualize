@@ -5,7 +5,6 @@
   sources: %{heat: %{fields: [:hour, :day, :v]}},
   frame: %{
     kind: :cartesian,
-    size: %{width: 400, height: 200},
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{
       x: %{kind: :band, padding: 0.05},

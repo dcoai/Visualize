@@ -10,6 +10,7 @@ defmodule Visualize.Chart.Builder.PlaceTest do
 
   doctest Place
 
+  # A *geometry*, not a design frame: the preview's box and the design's margin.
   @frame %{size: %{width: 400, height: 200}, margin: %{top: 20, right: 20, bottom: 30, left: 40}}
   @design %{
     frame: Map.merge(@frame, %{scales: %{x: %{kind: :linear}, colour: %{kind: :ordinal}}})
@@ -67,10 +68,10 @@ defmodule Visualize.Chart.Builder.PlaceTest do
       assert anchors == [:subtitle, {:axis, :x}, {:axis, :y}, {:frame, :top_right}]
 
       assert {:sites, [%{body: %{anchor: {:frame, :top_left}}}]} =
-               Place.node(:label, :plot, @design, {50, 30})
+               Place.node(:label, :plot, @design, {56, 43})
 
       assert {:sites, [%{body: %{anchor: {:frame, :bottom_right}}}]} =
-               Place.node(:label, :plot, @design, {370, 160})
+               Place.node(:label, :plot, @design, {564, 347})
     end
 
     test "a legend takes the first ordinal scale and the nearest of the eight positions" do
@@ -80,16 +81,16 @@ defmodule Visualize.Chart.Builder.PlaceTest do
       assert Place.node(:legend, :left, @design, {0, 0}) ==
                {:legend, %{scale: :colour, position: :left}}
 
-      assert Place.node(:legend, :plot, @design, {50, 30}) ==
+      assert Place.node(:legend, :plot, @design, {56, 43}) ==
                {:legend, %{scale: :colour, position: :top_left}}
 
-      assert Place.node(:legend, :plot, @design, {210, 30}) ==
+      assert Place.node(:legend, :plot, @design, {310, 43}) ==
                {:legend, %{scale: :colour, position: :top}}
 
-      assert Place.node(:legend, :plot, @design, {370, 95}) ==
+      assert Place.node(:legend, :plot, @design, {564, 195}) ==
                {:legend, %{scale: :colour, position: :right}}
 
-      assert Place.node(:legend, :plot, @design, {370, 165}) ==
+      assert Place.node(:legend, :plot, @design, {564, 358}) ==
                {:legend, %{scale: :colour, position: :bottom_right}}
 
       assert Place.node(:legend, :plot, %{frame: %{scales: %{x: %{kind: :linear}}}}, {0, 0}) ==
@@ -141,8 +142,8 @@ defmodule Visualize.Chart.Builder.PlaceTest do
   end
 
   test "geometry/1 is the design's size and margin over the schema's defaults" do
-    assert Place.geometry(@design) == @frame
-    assert Place.geometry(%{frame: %{size: %{width: 900}}}).size == %{width: 900, height: 400}
+    assert Place.geometry(@design) == %{@frame | size: %{width: 600, height: 400}}
+    assert Place.geometry(%{frame: %{margin: %{top: 900}}}).size == %{width: 600, height: 400}
     assert Place.geometry(%{frame: %{margin: %{top: 5}}}).margin.top == 5
   end
 

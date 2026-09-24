@@ -37,7 +37,7 @@ defmodule Examples.Charts.MultiLineChart do
         # The source declares the column every row has; the fold lists the ones a row may.
         source(:series, [:x]),
         style(:wave, stroke_width: 2, curve: :monotone_x),
-        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        cartesian(margin: @margin),
         linear_scale(:x),
         linear_scale(:y, nice: true, transition: %{duration: 300}),
         ordinal_scale(:color),
@@ -99,7 +99,7 @@ defmodule Examples.Charts.MultiLineChart do
         chart(meta: %{name: "Multi-line Chart"}),
         source(:series, [:x]),
         style(:wave, stroke_width: 2, curve: :monotone_x),
-        cartesian(600, 400, margin: %{top: 20, right: 120, bottom: 30, left: 50}),
+        cartesian(margin: %{top: 20, right: 120, bottom: 30, left: 50}),
         linear_scale(:x),
         linear_scale(:y, nice: true, transition: %{duration: 300}),
         ordinal_scale(:color),

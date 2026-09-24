@@ -7,7 +7,6 @@
   vars: %{bins: %{default: 5}},
   frame: %{
     kind: :cartesian,
-    size: %{width: 400, height: 200},
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}},
     axes: [%{scale: :x, side: :bottom, ticks: 5}, %{scale: :y, side: :left, ticks: 4, grid: true}]

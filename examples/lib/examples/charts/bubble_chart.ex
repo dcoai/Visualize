@@ -59,7 +59,7 @@ defmodule Examples.Charts.BubbleChart do
         ),
         style(:name, extends: :label, font_size: 9, font_weight: :bold),
         style(:caption, extends: :label, font_size: 9, fill: :axis),
-        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        cartesian(margin: @margin),
         linear_scale(:x, domain: [0, 1500]),
         linear_scale(:y, domain: [0, 25]),
         ordinal_scale(:color, domain: @regions),
@@ -130,7 +130,7 @@ defmodule Examples.Charts.BubbleChart do
           stroke_width: 1
         ),
         style(:name, extends: :label, font_size: 9, font_weight: :bold),
-        cartesian(600, 400, margin: %{top: 30, right: 120, bottom: 50, left: 70}),
+        cartesian(margin: %{top: 30, right: 120, bottom: 50, left: 70}),
         linear_scale(:x, domain: [0, 1500]),
         linear_scale(:y, domain: [0, 25]),
         ordinal_scale(:color, domain: ["Americas", "Asia", "Europe", "Oceania"]),

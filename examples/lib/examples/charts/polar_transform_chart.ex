@@ -19,13 +19,15 @@ defmodule Examples.Charts.PolarTransformChart do
   @samples 120
   @lanes ~w(build test deploy)
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {480, 480}
+
   def title, do: "Polar transform"
   def description, do: "A wrapped line, indicator spokes, a threshold arc and arced bars"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 480
-    height = opts[:height] || 480
+    {width, height} = Design.size(__MODULE__, opts)
     outer = min(width - @margin.left - @margin.right, height - @margin.top - @margin.bottom) / 2
     tick = opts[:animation_tick] || 0
 
@@ -35,14 +37,16 @@ defmodule Examples.Charts.PolarTransformChart do
         source(:signal, [:t, :v], types: %{t: :number, v: :number}),
         source(:events, [:at, :name], types: %{at: :number, name: :text}),
         source(:levels, [:level], types: %{level: :number}),
-        source(:tasks, [:from, :to, :lane], types: %{from: :number, to: :number, lane: :category}),
+        source(:tasks, [:from, :to, :lane],
+          types: %{from: :number, to: :number, lane: :category}
+        ),
         style(:trace, stroke: :series_1, stroke_width: 2, curve: :monotone_x),
         style(:under, fill: :series_1, fill_opacity: 0.15, curve: :monotone_x),
         style(:event, stroke: :series_3, stroke_width: 1.5, stroke_dasharray: "4 3"),
         style(:event_word, extends: :label, font_size: 10, fill: :series_3),
         style(:threshold, stroke: :series_2, stroke_width: 1.5),
         style(:task, fill: {:field, :lane}, opacity: 0.85),
-        polar(width, height, margin: @margin),
+        polar(margin: @margin),
         linear_scale(:angle, domain: [0, 100], start: -135, sweep: 270),
         linear_scale(:r, domain: [0, 100], range: [outer * 0.28, outer * 0.8]),
         ordinal_scale(:color, domain: @lanes, range: [:series_4, :series_2, :series_1]),
@@ -52,7 +56,10 @@ defmodule Examples.Charts.PolarTransformChart do
         area(:signal, %{x: :t, y: :v}, style: :under),
         line(:signal, %{x: :t, y: :v}, style: :trace),
         # An indicator spoke per event, across the band, each named at its foot.
-        rule(:events, %{x: :at}, style: :event, label: %{text: [{:field, :name}], style: :event_word}),
+        rule(:events, %{x: :at},
+          style: :event,
+          label: %{text: [{:field, :name}], style: :event_word}
+        ),
         # A threshold at a radius: an arc across the whole sweep.
         rule(:levels, %{y: :level}, style: :threshold),
         # Bars arced as one ring just inside the axis: the angle their span, the radii
@@ -110,7 +117,7 @@ defmodule Examples.Charts.PolarTransformChart do
         style(:event, stroke: :series_3, stroke_dasharray: "4 3"),
         style(:threshold, stroke: :series_2),
         style(:task, fill: {:field, :lane}),
-        polar(480, 480, margin: %{top: 24, right: 24, bottom: 24, left: 24}),
+        polar(margin: %{top: 24, right: 24, bottom: 24, left: 24}),
         # The sweep is the angle scale's: 270° from -135° over the time column (spec/14 §4.3).
         linear_scale(:angle, domain: [0, 100], start: -135, sweep: 270),
         # r over an annular band whose top the angle axis sits on.

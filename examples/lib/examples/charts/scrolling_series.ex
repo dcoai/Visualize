@@ -32,6 +32,9 @@ defmodule Examples.Charts.ScrollingSeries do
   @floor -100
   @ceiling 100
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {900, 500}
+
   def title, do: "Scrolling series"
 
   def description,
@@ -60,7 +63,7 @@ defmodule Examples.Charts.ScrollingSeries do
           chart(meta: %{name: title(), description: [description()]}),
           style(:area, fill: :series_1, fill_opacity: 0.7, stroke: :series_1, stroke_width: 1),
           style(:line, stroke_width: 2),
-          cartesian(@width, @height, margin: @margin, viewport: %{scale: :x, span: count - 1}),
+          cartesian(margin: @margin, viewport: %{scale: :x, span: count - 1}),
           linear_scale(:x),
           linear_scale(:y, domain: [@floor, @ceiling]),
           axis(:x, :bottom, ticks: 10, grid: true),
@@ -148,7 +151,7 @@ defmodule Examples.Charts.ScrollingSeries do
         chart(meta: %{name: "Scrolling series"}),
         style(:area, fill: :series_1, fill_opacity: 0.7, stroke: :series_1),
         style(:line, stroke_width: 2),
-        cartesian(900, 500, margin: %{top: 40, right: 30, bottom: 50, left: 60},
+        cartesian(margin: %{top: 40, right: 30, bottom: 50, left: 60},
           viewport: %{scale: :x, span: 810}),
         linear_scale(:x),
         linear_scale(:y, domain: [-100, 100]),

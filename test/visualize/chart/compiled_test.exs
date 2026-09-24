@@ -27,7 +27,6 @@ defmodule Visualize.Chart.CompiledTest do
         sources: %{primary: %{fields: [:t, :v]}},
         frame: %{
           kind: :cartesian,
-          size: %{width: 300, height: 200},
           scales: scales,
           axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]
         },
@@ -42,7 +41,7 @@ defmodule Visualize.Chart.CompiledTest do
   @inferred %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}}
 
   defp compile!(design, opts) do
-    {:ok, compiled} = Chart.compile(design, opts)
+    {:ok, compiled} = Chart.compile(design, Keyword.put_new(opts, :size, {300, 200}))
     compiled
   end
 
@@ -139,7 +138,7 @@ defmodule Visualize.Chart.CompiledTest do
       applied = %Chart.Applied{
         chart: compiled.chart,
         sources: other,
-        frame: Frame.new(compiled.chart, sources: other)
+        frame: Frame.new(compiled.chart, sources: other, size: {300, 200})
       }
 
       assert Compiled.svg(compiled, other) == Chart.render(applied)
@@ -177,13 +176,13 @@ defmodule Visualize.Chart.CompiledTest do
       assert Compiled.targets(compile!(forced, sources: %{primary: rows(3)})) == [{:canvas, 3}]
 
       assert_raise ArgumentError, ~r/ceiling/, fn ->
-        Chart.compile(design(@fixed), sources: %{primary: rows(3)}, ceiling: 0)
+        Chart.compile(design(@fixed), sources: %{primary: rows(3)}, ceiling: 0, size: {300, 200})
       end
     end
 
     test "the errors of application are the compiler's" do
       assert {:error, [{[:sources, :primary], {:unbound, :source, :primary}}]} =
-               Chart.compile(design(@fixed))
+               Chart.compile(design(@fixed), size: {300, 200})
     end
   end
 
@@ -272,7 +271,6 @@ defmodule Visualize.Chart.CompiledTest do
         sources: %{primary: %{fields: [:bearing, :v]}},
         frame: %{
           kind: :polar,
-          size: %{width: 200, height: 200},
           scales: %{
             angle: %{kind: :radial, domain: [0, 360]},
             r: %{kind: :linear},
@@ -293,7 +291,6 @@ defmodule Visualize.Chart.CompiledTest do
         sources: %{primary: %{fields: [:lon, :lat]}},
         frame: %{
           kind: :geo,
-          size: %{width: 200, height: 100},
           projection: %{type: :equirectangular, scale: 30}
         },
         marks: [
@@ -311,7 +308,6 @@ defmodule Visualize.Chart.CompiledTest do
         sources: %{primary: %{fields: [:t, :v, :g]}},
         frame: %{
           kind: :facet,
-          size: %{width: 300, height: 200},
           facet: %{by: :g, columns: 2},
           scales: %{x: %{kind: :linear, domain: [0, 5]}, y: %{kind: :linear}},
           axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, grid: true}]
@@ -328,12 +324,12 @@ defmodule Visualize.Chart.CompiledTest do
       }
 
       for design <- [polar, geo, facet] do
-        {:ok, applied} = Chart.apply(design, sources: sources)
+        {:ok, applied} = Chart.apply(design, sources: sources, size: {300, 200})
         {:ok, compiled} = Chart.compile(applied)
         assert Compiled.svg(compiled, sources) == Chart.render(applied)
       end
 
-      {:ok, compiled} = Chart.compile(polar, sources: sources)
+      {:ok, compiled} = Chart.compile(polar, sources: sources, size: {300, 200})
 
       assert Compiled.regions(compiled) == [
                {:grid, {:dynamic, {:inferred, [:r]}}},
@@ -394,7 +390,7 @@ defmodule Visualize.Chart.CompiledTest do
       applied = compile!(painted(), sources: sources, ceiling: 100)
 
       assert Compiled.svg(applied, sources) ==
-               Chart.render(elem(Chart.apply(painted(), sources: sources), 1))
+               Chart.render(elem(Chart.apply(painted(), sources: sources, size: {300, 200}), 1))
     end
   end
 
@@ -585,8 +581,8 @@ defmodule Visualize.Chart.CompiledTest do
       assert compiled.moving == %{}
 
       # One frame has nowhere to move from: an applied chart renders as it always did.
-      {:ok, with_ease} = Chart.apply(moving(), sources: pair(10))
-      {:ok, without} = Chart.apply(plain, sources: pair(10))
+      {:ok, with_ease} = Chart.apply(moving(), sources: pair(10), size: {300, 200})
+      {:ok, without} = Chart.apply(plain, sources: pair(10), size: {300, 200})
       assert Chart.render(with_ease) == Chart.render(without)
     end
 
@@ -624,7 +620,6 @@ defmodule Visualize.Chart.CompiledTest do
       sources: %{primary: %{fields: [:t, :v]}},
       frame: %{
         kind: :cartesian,
-        size: %{width: 140, height: 100},
         margin: %{top: 0, right: 20, bottom: 0, left: 20},
         scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, 10]}},
         axes: [%{scale: :x, side: :bottom}],
@@ -634,7 +629,7 @@ defmodule Visualize.Chart.CompiledTest do
     }
 
     test "the window is [hi − span, hi] with hi the newest datum or the clock, and the marks draw within it" do
-      compiled = compile!(@stream, sources: %{primary: rows(30)})
+      compiled = compile!(@stream, size: {140, 100}, sources: %{primary: rows(30)})
 
       assert Compiled.dynamic_regions(compiled) == [
                {{:mark, 0}, :data},
@@ -661,7 +656,7 @@ defmodule Visualize.Chart.CompiledTest do
     end
 
     test "with a fake clock the canvas layer scrolls by the window's movement, then rests" do
-      compiled = compile!(@stream, sources: %{primary: rows(30)})
+      compiled = compile!(@stream, size: {140, 100}, sources: %{primary: rows(30)})
       sources = %{primary: rows(30)}
 
       {first, compiled} = Compiled.tick(compiled, sources, now: 20)
@@ -704,7 +699,7 @@ defmodule Visualize.Chart.CompiledTest do
       # 100 px scrolled 20 px carries 200 rows and six neighbours against 1,001.
       big = %{@stream | frame: %{@stream.frame | viewport: %{scale: :x, span: 1000}}}
       big_rows = rows(1400)
-      compiled_big = compile!(big, sources: %{primary: big_rows})
+      compiled_big = compile!(big, size: {140, 100}, sources: %{primary: big_rows})
       {full_big, compiled_big} = Compiled.tick(compiled_big, %{primary: big_rows}, now: 1000)
       {strip_big, _} = Compiled.tick(compiled_big, %{primary: big_rows}, now: 1200)
       assert strip_big.incremental.mode == "scroll_x" and strip_big.incremental.dx == 20
@@ -746,12 +741,12 @@ defmodule Visualize.Chart.CompiledTest do
     test "the strip's rows are selected in one pass, and an unordered source is sorted (#404)" do
       # The window is t ∈ [12, 22]; the 20 px strip at the right edge is t ∈ [20, 22].
       sources = %{primary: rows(30)}
-      compiled = compile!(@stream, sources: sources)
+      compiled = compile!(@stream, size: {140, 100}, sources: sources)
       {_first, compiled} = Compiled.tick(compiled, sources, now: 20)
       {ordered, _} = Compiled.tick(compiled, sources, now: 22)
 
       shuffled = %{primary: Enum.shuffle(sources.primary)}
-      compiled2 = compile!(@stream, sources: shuffled)
+      compiled2 = compile!(@stream, size: {140, 100}, sources: shuffled)
       {_first, compiled2} = Compiled.tick(compiled2, shuffled, now: 20)
       {unordered, _} = Compiled.tick(compiled2, shuffled, now: 22)
 
@@ -761,7 +756,7 @@ defmodule Visualize.Chart.CompiledTest do
 
     test "the window keeps no closure between ticks, so a run's state does not grow (#406)" do
       sources = %{primary: rows(30)}
-      compiled = compile!(@stream, sources: sources)
+      compiled = compile!(@stream, size: {140, 100}, sources: sources)
       {_first, compiled} = Compiled.tick(compiled, sources, now: 20)
 
       # The state a tick stores is copied into the render task on every frame, so a
@@ -782,7 +777,7 @@ defmodule Visualize.Chart.CompiledTest do
 
     test "a tick with the window's end given infers nothing, and draws what inferring drew (#409)" do
       sources = %{primary: rows(30)}
-      compiled = compile!(@stream, sources: sources)
+      compiled = compile!(@stream, size: {140, 100}, sources: sources)
 
       # The window's scale is `:auto` in the design; a tick that is told `now` gives the
       # frame `[hi − span, hi]` rather than inferring it over the rows and replacing it.
@@ -791,7 +786,7 @@ defmodule Visualize.Chart.CompiledTest do
       assert first.incremental.mode == "full" and second.incremental.mode == "scroll_x"
 
       # Without `now` the window's end is the newest datum, and the picture is the same.
-      by_data = compile!(@stream, sources: sources)
+      by_data = compile!(@stream, size: {140, 100}, sources: sources)
       {full, by_data} = Compiled.tick(by_data, sources, now: 20)
       assert full.incremental.binary == first.incremental.binary
       {scrolled, _} = Compiled.tick(by_data, sources, now: 22)
@@ -803,8 +798,7 @@ defmodule Visualize.Chart.CompiledTest do
       # samples a second gives it: the frame must cost that strip, not the window.
       plot = %{
         @stream.frame
-        | size: %{width: 800, height: 500},
-          viewport: %{scale: :x, span: 50_000}
+        | viewport: %{scale: :x, span: 50_000}
       }
 
       big = %{@stream | frame: plot}
@@ -835,12 +829,12 @@ defmodule Visualize.Chart.CompiledTest do
 
     test "an unordered source answers the same strip as an ordered one, sorted (#410)" do
       sources = %{primary: rows(30)}
-      compiled = compile!(@stream, sources: sources)
+      compiled = compile!(@stream, size: {140, 100}, sources: sources)
       {_first, compiled} = Compiled.tick(compiled, sources, now: 20)
       {ordered, _} = Compiled.tick(compiled, sources, now: 22)
 
       shuffled = %{primary: Enum.shuffle(sources.primary)}
-      compiled2 = compile!(@stream, sources: shuffled)
+      compiled2 = compile!(@stream, size: {140, 100}, sources: shuffled)
       {_first, compiled2} = Compiled.tick(compiled2, shuffled, now: 20)
       {unordered, _} = Compiled.tick(compiled2, shuffled, now: 22)
 
@@ -848,13 +842,13 @@ defmodule Visualize.Chart.CompiledTest do
 
       # A strip that falls between two rows takes three each side, ordered or not.
       sparse = %{primary: [%{t: 12, v: 1}, %{t: 13, v: 2}, %{t: 21.9, v: 3}, %{t: 22, v: 4}]}
-      compiled3 = compile!(@stream, sources: sparse)
+      compiled3 = compile!(@stream, size: {140, 100}, sources: sparse)
       {_first, compiled3} = Compiled.tick(compiled3, sparse, now: 20)
       {gap, _} = Compiled.tick(compiled3, sparse, now: 22)
       assert gap.incremental.mode == "scroll_x"
 
       backwards = %{primary: Enum.reverse(sparse.primary)}
-      compiled4 = compile!(@stream, sources: backwards)
+      compiled4 = compile!(@stream, size: {140, 100}, sources: backwards)
       {_first, compiled4} = Compiled.tick(compiled4, backwards, now: 20)
       {gap_back, _} = Compiled.tick(compiled4, backwards, now: 22)
       assert gap.incremental.binary == gap_back.incremental.binary
