@@ -2,12 +2,12 @@
 # series is a slot filled by the pool's `series` when nothing binds `primary`; the title
 # and the unit are variables with defaults.
 %{
-  version: 1,
+  version: 2,
   meta: %{name: "line"},
   sources: %{primary: %{fields: [:t, :v], default: :series}, events: %{fields: [:at, :sha]}},
   vars: %{title: %{default: "Weight"}, unit: %{default: "kg"}},
   styles: %{series: %{stroke_width: 1.5}, muted: %{stroke: :axis, opacity: 0.6}},
-  frame: %{
+  frames: %{main: %{
     kind: :cartesian,
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{x: %{kind: :time}, y: %{kind: :linear, domain: [0, :auto], nice: true}},
@@ -15,7 +15,7 @@
       %{scale: :x, side: :bottom, ticks: 4, format: "%H:%M"},
       %{scale: :y, side: :left, ticks: 4, grid: true}
     ]
-  },
+  }},
   marks: [
     %{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :series},
     %{

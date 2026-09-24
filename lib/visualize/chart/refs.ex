@@ -31,11 +31,11 @@ defmodule Visualize.Chart.Refs do
   that were missing.
 
       iex> lib = %{{:style, 1} => %{style: %{stroke_width: 5}}, {:scale, 4} => %{scale: %{kind: :linear}}}
-      iex> design = %{frame: %{axes: [%{scale: {:scale, 4}, side: :left}]}, marks: [%{id: :m, style: [{:style, 1}, %{opacity: 0.5}], scales: %{x: {:scale, 9}}}]}
+      iex> design = %{frames: %{main: %{axes: [%{scale: {:scale, 4}, side: :left}]}}, marks: [%{id: :m, style: [{:style, 1}, %{opacity: 0.5}], scales: %{x: {:scale, 9}}}]}
       iex> {resolved, missing} = Visualize.Chart.Refs.resolve(design, &Map.fetch(lib, &1))
-      iex> hd(resolved.frame.axes).scale
+      iex> hd(resolved.frames.main.axes).scale
       :"scale:4"
-      iex> resolved.frame.scales
+      iex> resolved.frames.main.scales
       %{"scale:4": %{kind: :linear}}
       iex> hd(resolved.marks).style
       [%{stroke_width: 5}, %{opacity: 0.5}]

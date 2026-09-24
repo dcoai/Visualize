@@ -1,16 +1,16 @@
 # metresis `histogram`: the distribution within the window — a bin transform under a rect;
 # the bin count is a variable.
 %{
-  version: 1,
+  version: 2,
   meta: %{name: "histogram"},
   sources: %{samples: %{fields: [:w]}},
   vars: %{bins: %{default: 5}},
-  frame: %{
+  frames: %{main: %{
     kind: :cartesian,
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}},
     axes: [%{scale: :x, side: :bottom, ticks: 5}, %{scale: :y, side: :left, ticks: 4, grid: true}]
-  },
+  }},
   marks: [
     %{
       type: :rect,

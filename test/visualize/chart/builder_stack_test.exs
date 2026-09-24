@@ -37,7 +37,7 @@ defmodule Visualize.Chart.Builder.StackTest do
     end
 
     test "a layer with no name is its position, as seed/1 and explain/1 name it" do
-      {uses, labels} = Visualize.Chart.Builder.Stack.seed([%{version: 1}, %{theme: :dark}])
+      {uses, labels} = Visualize.Chart.Builder.Stack.seed([%{version: 2}, %{theme: :dark}])
 
       rows =
         for {use, row} <- Enum.zip(uses, BuilderFixture.rows()),
@@ -123,14 +123,14 @@ defmodule Visualize.Chart.Builder.StackTest do
       end
 
       assert_raise ArgumentError, ~r/layer "1" is nil/, fn ->
-        Visualize.Chart.Builder.Stack.seed([%{frame: %{}}, nil])
+        Visualize.Chart.Builder.Stack.seed([%{frames: %{main: %{}}}, nil])
       end
     end
   end
 
   describe "the events (spec/14 §18.8, §18.10)" do
     test "selecting a layer opens its root node" do
-      socket = BuilderFixture.socket(BuilderFixture.layers(), node_label: "frame.margin")
+      socket = BuilderFixture.socket(BuilderFixture.layers(), node_label: "frames.main.margin")
       {:noreply, chosen} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
       {:noreply, absent} = Builder.handle_event("select_layer", %{"index" => "9"}, socket)
 

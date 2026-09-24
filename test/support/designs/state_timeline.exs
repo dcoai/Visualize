@@ -1,7 +1,7 @@
 # metresis `state_timeline`: which state, for how long — a band per interval, filled by
 # state; the band's options are one variable standing for the whole node.
 %{
-  version: 1,
+  version: 2,
   meta: %{name: "state_timeline"},
   sources: %{states: %{fields: [:t0, :t1, :state]}},
   vars: %{band: %{default: %{height: 50}}},
@@ -9,7 +9,7 @@
     by_state: %{fill: {:field, :state}, stroke: :background},
     over: %{fill: :background, font_size: :font_size, font_family: :font_family}
   },
-  frame: %{
+  frames: %{main: %{
     kind: :cartesian,
     margin: %{top: 20, right: 20, bottom: 30, left: 20},
     scales: %{
@@ -18,7 +18,7 @@
     },
     axes: [%{scale: :x, side: :bottom, ticks: 6, format: "%H:%M"}],
     legend: %{scale: :color, position: :top}
-  },
+  }},
   marks: [
     %{
       type: :band,

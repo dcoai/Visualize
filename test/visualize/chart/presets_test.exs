@@ -133,8 +133,8 @@ defmodule Visualize.Chart.PresetsTest do
     assert Presets.defaults(:pie_chart).colors == :category10
 
     design = Presets.bar_chart(%{data: [], x: & &1.name, y: & &1.value})
-    assert design.frame.margin == %{top: 20, right: 20, bottom: 30, left: 40}
-    assert design.frame.scales.x == %{kind: :band, padding: 0.1}
+    assert design.frames.main.margin == %{top: 20, right: 20, bottom: 30, left: 40}
+    assert design.frames.main.scales.x == %{kind: :band, padding: 0.1}
 
     for f <- [&Presets.defaults/1, &Presets.design(&1, %{}), &Presets.sources(&1, %{})] do
       assert_raise ArgumentError, ~r/not a preset/, fn -> f.(:no_such_chart) end
@@ -142,7 +142,7 @@ defmodule Visualize.Chart.PresetsTest do
   end
 
   test "the x scale of a series chart follows the first datum (spec/10 §2.2)" do
-    line = fn data -> Presets.line_chart(%{data: data, x: & &1.x, y: & &1.y}).frame.scales.x end
+    line = fn data -> Presets.line_chart(%{data: data, x: & &1.x, y: & &1.y}).frames.main.scales.x end
     assert line.([%{x: @t0, y: 1}]) == %{kind: :time}
     assert line.([%{x: ~D[2024-01-01], y: 1}]) == %{kind: :time}
     assert line.([%{x: 3, y: 1}]) == %{kind: :linear}
@@ -159,7 +159,7 @@ defmodule Visualize.Chart.PresetsTest do
 
     pie = Presets.pie_chart(assigns().pie_chart)
     assert pie.meta == %{name: "Pie"}
-    assert pie.frame.kind == :polar
+    assert pie.frames.main.kind == :polar
 
     assert [%{options: %{outer_radius: 190.0, inner_radius: 0, pad_angle: 0.02}, label: label}] =
              pie.marks
@@ -173,7 +173,7 @@ defmodule Visualize.Chart.PresetsTest do
 
     stacked = Presets.stacked_bar_chart(assigns().stacked_bar_chart)
 
-    assert stacked.frame.scales.color == %{
+    assert stacked.frames.main.scales.color == %{
              kind: :ordinal,
              domain: [:apples, :pears],
              range: :category10
@@ -220,7 +220,7 @@ defmodule Visualize.Chart.PresetsTest do
 
     sunburst = Presets.sunburst_chart(assigns().sunburst_chart)
     assert sunburst.meta == %{description: ["Rings"]}
-    assert sunburst.frame.scales.color.domain == [0, 1]
+    assert sunburst.frames.main.scales.color.domain == [0, 1]
 
     assert [%{channels: arc_channels, label: arc_label, data: %{transforms: steps}}] =
              sunburst.marks
@@ -294,7 +294,7 @@ defmodule Visualize.Chart.PresetsTest do
     a = %{data: @categories, x: & &1.name, y: & &1.value}
     design = Presets.bar_chart(a)
     fields = design.sources.data.fields ++ [:region]
-    facet = Map.merge(design.frame, %{kind: :facet, facet: %{by: :region, columns: 2}})
+    facet = Map.merge(design.frames.main, %{kind: :facet, facet: %{by: :region, columns: 2}})
     design = %{design | frame: facet, sources: %{data: %{fields: fields}}}
     chart = Chart.from_map!(design)
 

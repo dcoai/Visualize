@@ -170,6 +170,17 @@ defmodule Visualize.Chart.Stack do
     end
   end
 
+  # A `:deep` name map cascades member by member: a frame the higher layer also declares
+  # merges key by key, as a singular `frame` node did (spec/14 §8.2, #383).
+  defp rule(:deep, type, va, vb, path) when is_map(va) and is_map(vb) do
+    with true <- node_map?(va) and node_map?(vb),
+         kind when kind != nil <- node_kind(element_type(type)) do
+      deep(kind, va, vb, path)
+    else
+      _other -> {vb, leaves(type, vb, path)}
+    end
+  end
+
   defp rule(_merge, type, va, vb, path) do
     with true <- node_map?(va) and node_map?(vb),
          kind when kind != nil <- node_kind(type) do
@@ -177,6 +188,24 @@ defmodule Visualize.Chart.Stack do
     else
       _other -> {vb, leaves(type, vb, path)}
     end
+  end
+
+  defp deep(kind, va, vb, path) do
+    (Map.keys(va) ++ Map.keys(vb))
+    |> Enum.uniq()
+    |> Enum.reduce({%{}, []}, fn name, {acc, set} ->
+      case {Map.fetch(va, name), Map.fetch(vb, name)} do
+        {{:ok, x}, {:ok, y}} ->
+          {v, s} = node(kind, x, y, path ++ [name])
+          {Map.put(acc, name, v), set ++ s}
+
+        {{:ok, x}, :error} ->
+          {Map.put(acc, name, x), set}
+
+        {:error, {:ok, y}} ->
+          {Map.put(acc, name, y), set ++ leaves({:node, kind}, y, path ++ [name])}
+      end
+    end)
   end
 
   defp union(entry_type, va, vb, path) do

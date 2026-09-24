@@ -30,13 +30,13 @@ defmodule Visualize.Chart.FrameGoldenTest do
 
   def design(:cartesian) do
     %{
-      version: 1,
+      version: 2,
       sources: %{primary: %{fields: [:t, :v, :region]}},
       styles: %{
         by_region: %{stroke: {:field, :region}},
         faint: %{stroke: "#f00", stroke_dasharray: [2, 2]}
       },
-      frame: %{
+      frames: %{main: %{
         kind: :cartesian,
         margin: %{top: 30, right: 20, bottom: 30, left: 40},
         scales: %{
@@ -50,7 +50,7 @@ defmodule Visualize.Chart.FrameGoldenTest do
           %{scale: :y, side: :right, ticks: [2, 5], format: ".1f", style: :faint}
         ],
         legend: %{scale: :color, position: :top_right, title: ["region"]}
-      },
+      }},
       marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :by_region}],
       labels: [
         %{anchor: :title, text: ["Cartesian"]},
@@ -67,9 +67,9 @@ defmodule Visualize.Chart.FrameGoldenTest do
 
   def design(:polar) do
     %{
-      version: 1,
+      version: 2,
       sources: %{primary: %{fields: [:bearing, :v]}},
-      frame: %{
+      frames: %{main: %{
         kind: :polar,
         margin: %{top: 30, right: 30, bottom: 30, left: 30},
         scales: %{
@@ -80,7 +80,7 @@ defmodule Visualize.Chart.FrameGoldenTest do
           %{scale: :angle, side: :bottom, ticks: 4, grid: true},
           %{scale: :r, side: :top, ticks: 3, grid: true}
         ]
-      },
+      }},
       marks: [%{type: :rose, data: :primary, channels: %{angle: :bearing, value: :v}}],
       labels: [%{anchor: :title, text: ["Polar"]}, %{anchor: {:data, [90, 9]}, text: ["east"]}]
     }
@@ -88,16 +88,16 @@ defmodule Visualize.Chart.FrameGoldenTest do
 
   def design(:geo) do
     %{
-      version: 1,
+      version: 2,
       sources: %{primary: %{fields: [:lon, :lat, :v]}},
       styles: %{by_v: %{fill: {:field, :v}}},
-      frame: %{
+      frames: %{main: %{
         kind: :geo,
         margin: %{top: 20, right: 0, bottom: 0, left: 0},
         projection: %{type: :equirectangular, scale: 60},
         scales: %{color: %{kind: :sequential, domain: [0, :auto]}},
         legend: %{scale: :color, position: :bottom, title: ["v"]}
-      },
+      }},
       marks: [%{type: :circle, data: :primary, channels: %{x: :lon, y: :lat}, style: :by_v}],
       labels: [%{anchor: :title, text: ["Geo"]}, %{anchor: {:data, [0, 0]}, text: ["origin"]}]
     }
@@ -105,9 +105,9 @@ defmodule Visualize.Chart.FrameGoldenTest do
 
   def design(:facet) do
     %{
-      version: 1,
+      version: 2,
       sources: %{primary: %{fields: [:t, :v, :region]}},
-      frame: %{
+      frames: %{main: %{
         kind: :facet,
         margin: %{top: 20, right: 10, bottom: 30, left: 40},
         facet: %{by: :region, columns: 2},
@@ -116,7 +116,7 @@ defmodule Visualize.Chart.FrameGoldenTest do
           %{scale: :x, side: :bottom, ticks: 3},
           %{scale: :y, side: :left, ticks: 3, grid: true}
         ]
-      },
+      }},
       marks: [%{type: :line, data: :primary, channels: %{x: :v, y: :v}}],
       labels: [%{anchor: {:axis, :y}, text: ["value"]}]
     }

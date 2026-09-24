@@ -39,7 +39,12 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:legend, {:node, :legend}, :geometry),
       spec(:projection, {:node, :projection}, :geometry),
       spec(:facet, {:node, :facet}, :binding),
-      spec(:viewport, {:node, :viewport}, :geometry)
+      spec(:viewport, {:node, :viewport}, :geometry),
+      # A frame's share of the design's box, its drawing order and what it paints
+      # under itself (spec/14 §4.1, §4.2, #383).
+      spec(:box, {:list, :number}, :geometry, default: [0, 0, 1, 1]),
+      spec(:z, :integer, :geometry, default: 0),
+      spec(:background, :colour, :style)
     ]
   end
 

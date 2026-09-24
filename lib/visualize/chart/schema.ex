@@ -29,7 +29,7 @@ defmodule Visualize.Chart.Schema do
   @type facet :: :binding | :channel | :geometry | :style | :content
 
   @typedoc "How two fragments combine under a key (spec/14 §1.5)."
-  @type merge :: :concat | :union | :override
+  @type merge :: :concat | :union | :deep | :override
 
   @typedoc "A node kind of the design map (spec/14 §1.2)."
   @type kind :: atom()
@@ -278,7 +278,7 @@ defmodule Visualize.Chart.Schema do
       spec(:theme, {:one_of, [:name, {:node, :theme}]}, :style, default: :default),
       spec(:styles, {:map, {:node, :style}}, :style, default: %{}, merge: :union),
       spec(:defs, {:map, {:node, :gradient}}, :style, default: %{}, merge: :union),
-      spec(:frame, {:node, :frame}, :geometry, required: true),
+      spec(:frames, {:map, {:node, :frame}}, :geometry, required: true, merge: :deep),
       spec(:marks, {:list, {:node, :mark}}, :channel, default: [], merge: :concat),
       spec(:labels, {:list, {:node, :label}}, :content, default: [], merge: :concat)
     ]
@@ -393,7 +393,8 @@ defmodule Visualize.Chart.Schema do
       spec(:dx, :number, :geometry, default: 0),
       spec(:dy, :number, :geometry, default: 0),
       spec(:rotate, Mark.rotate_type(), :geometry),
-      spec(:id, :name, :content)
+      spec(:id, :name, :content),
+      spec(:frame, {:ref, :frame}, :binding)
     ]
   end
 end

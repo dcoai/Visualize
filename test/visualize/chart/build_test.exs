@@ -66,9 +66,9 @@ defmodule Visualize.Chart.BuildTest do
 
     test "the keys a node does know are kept as given" do
       assert axis(:x, :bottom, ticks: 6, format: "%H:%M", grid: true) == %{
-               frame: %{
+               frames: %{main: %{
                  axes: [%{scale: :x, side: :bottom, ticks: 6, format: "%H:%M", grid: true}]
-               }
+               }}
              }
     end
   end
@@ -232,7 +232,7 @@ defmodule Visualize.Chart.BuildTest do
 
     test "scales union and axes concatenate whatever the order of the fragments" do
       fragments = [scale(:x, :time), axis(:x, :bottom), cartesian(), axis(:y, :left)]
-      assert {:ok, %{frame: frame}} = Chart.compose(fragments)
+      assert {:ok, %{frames: %{main: frame}}} = Chart.compose(fragments)
       assert frame.kind == :cartesian
       assert frame.scales == %{x: %{kind: :time}}
       assert frame.axes == [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
@@ -240,10 +240,10 @@ defmodule Visualize.Chart.BuildTest do
 
     test "a facet frame lifts by and columns into its facet node" do
       assert facet(by: :region, columns: 2) == %{
-               frame: %{
+               frames: %{main: %{
                  kind: :facet,
                  facet: %{by: :region, columns: 2}
-               }
+               }}
              }
     end
 

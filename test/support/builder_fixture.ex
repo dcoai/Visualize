@@ -26,24 +26,24 @@ defmodule Visualize.BuilderFixture do
     [
       {:house,
        %{
-         version: 1,
+         version: 2,
          theme: :default,
          styles: %{series: %{stroke: :series_1, stroke_width: 2}},
-         frame: %{
+         frames: %{main: %{
            kind: :cartesian,
            margin: %{top: 20, right: 20, bottom: 30, left: 40}
-         }
+         }}
        }},
       {:shared,
        %{
          sources: %{primary: %{fields: [:t, :v]}},
-         frame: %{
+         frames: %{main: %{
            scales: %{
              x: %{kind: :linear, domain: :auto},
              y: %{kind: :linear, domain: [0, :auto]}
            },
            axes: [%{scale: :x, side: :bottom, ticks: 3}, %{scale: :y, side: :left, ticks: 3}]
-         }
+         }}
        }},
       {:panel,
        %{
@@ -95,8 +95,8 @@ defmodule Visualize.BuilderFixture do
     [
       {:panel,
        %{
-         version: 1,
-         frame: %{kind: :cartesian},
+         version: 2,
+         frames: %{main: %{kind: :cartesian}},
          marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :series}]
        }}
     ]
@@ -133,7 +133,7 @@ defmodule Visualize.BuilderFixture do
          fragment: %{
            composite: %{
              uses: [
-               %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frame: %{kind: :cartesian}}}
+               %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frames: %{main: %{kind: :cartesian}}}}
              ],
              vars: %{}
            }
@@ -237,7 +237,7 @@ defmodule Visualize.BuilderFixture do
       [
         {:override,
          %{
-           frame: %{margin: %{top: 640, bottom: 200}},
+           frames: %{main: %{margin: %{top: 640, bottom: 200}}},
            styles: %{series: %{stroke: :series_2, stroke_width: 3}}
          }}
       ]
@@ -254,7 +254,7 @@ defmodule Visualize.BuilderFixture do
          %{
            vars: %{accent: %{}, ticks: %{default: 3}},
            styles: %{series: %{stroke: :series_1, stroke_width: 2}},
-           frame: %{axes: [%{scale: :x, side: :bottom, ticks: Chart.var(:ticks)}]},
+           frames: %{main: %{axes: [%{scale: :x, side: :bottom, ticks: Chart.var(:ticks)}]}},
            marks: [
              %{
                id: :series,

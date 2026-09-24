@@ -10,20 +10,20 @@ defmodule Visualize.Chart.ExplainTest do
 
   alias Visualize.Chart
 
-  @theme {:theme, %{version: 1, theme: :default, styles: %{series: %{stroke_width: 1}}}}
+  @theme {:theme, %{version: 2, theme: :default, styles: %{series: %{stroke_width: 1}}}}
   @frame {:frame,
           %{
-            frame: %{
+            frames: %{main: %{
               kind: :cartesian,
               margin: %{top: 800, bottom: 400},
               axes: [%{scale: :x, side: :bottom, ticks: 6}]
-            },
+            }},
             marks: [%{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}}]
           }}
   @house {:house, %{theme: :dark, styles: %{series: %{stroke: :series_2, stroke_width: 2}}}}
   @panel {:panel,
           %{
-            frame: %{margin: %{top: 600}},
+            frames: %{main: %{margin: %{top: 600}}},
             marks: [%{id: :series, type: :area, data: :p, channels: %{x: :t, y: :v}}]
           }}
 
@@ -53,10 +53,10 @@ defmodule Visualize.Chart.ExplainTest do
                overrode: [:theme]
              }
 
-      assert entry(entries, [:frame, :margin, :top]).layer == :panel
-      assert entry(entries, [:frame, :margin, :top]).overrode == [:frame]
-      assert entry(entries, [:frame, :margin, :bottom]).layer == :frame
-      assert entry(entries, [:frame, :margin, :bottom]).overrode == []
+      assert entry(entries, [:frames, :main, :margin, :top]).layer == :panel
+      assert entry(entries, [:frames, :main, :margin, :top]).overrode == [:frames]
+      assert entry(entries, [:frames, :main, :margin, :bottom]).layer == :frame
+      assert entry(entries, [:frames, :main, :margin, :bottom]).overrode == []
       assert entry(entries, [:version]).layer == :theme
     end
 
@@ -67,10 +67,10 @@ defmodule Visualize.Chart.ExplainTest do
                path: [:marks, 0, :type],
                value: :area,
                layer: :panel,
-               overrode: [:frame]
+               overrode: [:frames]
              }
 
-      assert entry(entries, [:marks, 0, :channels, :x]).overrode == [:frame]
+      assert entry(entries, [:marks, 0, :channels, :x]).overrode == [:frames]
       assert Enum.count(entries, &(hd(&1.path) == :marks)) == 5
     end
 
@@ -88,19 +88,19 @@ defmodule Visualize.Chart.ExplainTest do
     end
 
     test "a value a whole replacement discarded has no path and so no entry" do
-      lower = %{frame: %{axes: [%{scale: :x, side: :bottom, ticks: 6}]}}
-      higher = %{frame: %{axes: [%{scale: :x, side: :bottom, grid: true}]}}
+      lower = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom, ticks: 6}]}}}
+      higher = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom, grid: true}]}}}
       entries = Chart.explain([lower, higher])
 
-      assert entry(entries, [:frame, :axes, 0, :ticks]) == nil
-      assert entry(entries, [:frame, :axes, 0, :grid]).layer == 1
-      assert entry(entries, [:frame, :axes, 0, :scale]).overrode == [0]
+      assert entry(entries, [:frames, :main, :axes, 0, :ticks]) == nil
+      assert entry(entries, [:frames, :main, :axes, 0, :grid]).layer == 1
+      assert entry(entries, [:frames, :main, :axes, 0, :scale]).overrode == [0]
     end
   end
 
   describe "explain/1, the layers it takes" do
     test "a layer without a name is its zero-based position" do
-      assert Chart.explain([%{version: 1}, %{version: 2}]) == [
+      assert Chart.explain([%{version: 2}, %{version: 2}]) == [
                %{path: [:version], value: 2, layer: 1, overrode: [0]}
              ]
     end
@@ -111,10 +111,10 @@ defmodule Visualize.Chart.ExplainTest do
     end
 
     test "a chart struct is a layer, named or not" do
-      chart = Chart.from_map!(%{version: 1, frame: %{kind: :cartesian}})
+      chart = Chart.from_map!(%{version: 2, frames: %{main: %{kind: :cartesian}}})
 
       assert Chart.explain([chart]) == Chart.explain([{0, chart}])
-      assert entry(Chart.explain([chart]), [:frame, :kind]).value == :cartesian
+      assert entry(Chart.explain([chart]), [:frames, :main, :kind]).value == :cartesian
     end
 
     test "no layers is no entries" do
@@ -156,7 +156,7 @@ defmodule Visualize.Chart.ExplainTest do
       theme: member_of([:default, :dark]),
       styles: names([:series, :muted], style()),
       vars: names([:unit, :n], fixed_map(%{default: integer()})),
-      frame: frame(),
+      frames: fixed_map(%{main: frame()}),
       marks: list_of(mark(), max_length: 3)
     })
   end

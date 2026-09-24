@@ -36,14 +36,14 @@ defmodule Visualize.ChartGen do
           meta <- meta(vars)
         ) do
       %{
-        version: 1,
+        version: 2,
         meta: meta,
         sources: sources,
         vars: vars,
         theme: theme,
         styles: styles,
         defs: defs,
-        frame: frame,
+        frames: %{main: frame},
         marks: marks,
         labels: labels
       }

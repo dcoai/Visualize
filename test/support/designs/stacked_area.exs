@@ -1,9 +1,9 @@
 # metresis `stacked_area`: three series stacked by a transform, one area per series.
 %{
-  version: 1,
+  version: 2,
   meta: %{name: "stacked_area"},
   sources: %{series: %{fields: [:t, :a, :b, :c]}},
-  frame: %{
+  frames: %{main: %{
     kind: :cartesian,
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{
@@ -16,7 +16,7 @@
       %{scale: :y, side: :left, ticks: 4}
     ],
     legend: %{scale: :color, position: :top_left}
-  },
+  }},
   marks: [
     %{
       type: :area,

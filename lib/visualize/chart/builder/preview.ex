@@ -96,7 +96,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # (spec/14 §4.7, §18.16).
     defp draw(%{design: design, sources: sources, vars: vars, theme: theme}) do
       case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
-        {:ok, %{frame: %{size: size, margin: margin}} = applied} ->
+        {:ok, %{frames: %{main: %{size: size, margin: margin}}} = applied} ->
           %{
             chart: Phoenix.HTML.raw(Chart.render(applied, paths: true)),
             errors: [],

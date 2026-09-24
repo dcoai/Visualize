@@ -43,7 +43,7 @@ defmodule Visualize.Chart.Frame.Furniture do
 
     rings =
       for {node, i} <- polar,
-          do: frame |> polar_axis(node, mode) |> Frame.stamp([:frame, :axes, i], paths?)
+          do: frame |> polar_axis(node, mode) |> Frame.stamp([:frames, frame.name, :axes, i], paths?)
 
     [centred(frame, polar_grid(frame, mode) ++ marks ++ rings)] ++
       grid(%{frame | axes: Enum.map(other, &elem(&1, 0))}, mode) ++
@@ -53,7 +53,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   # The indexed axis nodes drawn and placed, each stamped with its path when asked.
   defp axes(frame, indexed, mode, paths?) do
     for {node, i} <- indexed,
-        do: frame |> place_axis(node, mode) |> Frame.stamp([:frame, :axes, i], paths?)
+        do: frame |> place_axis(node, mode) |> Frame.stamp([:frames, frame.name, :axes, i], paths?)
   end
 
   @doc false

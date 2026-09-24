@@ -1,9 +1,9 @@
 # metresis `bar`: a tally over discrete buckets.
 %{
-  version: 1,
+  version: 2,
   meta: %{name: "bar"},
   sources: %{categories: %{fields: [:cat, :n]}},
-  frame: %{
+  frames: %{main: %{
     kind: :cartesian,
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{
@@ -11,7 +11,7 @@
       y: %{kind: :linear, domain: [0, :auto], nice: true}
     },
     axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, ticks: 4, grid: true}]
-  },
+  }},
   marks: [
     %{
       type: :rect,

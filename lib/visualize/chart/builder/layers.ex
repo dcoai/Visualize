@@ -29,6 +29,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
+    alias Visualize.Chart.Fragment
+
     alias Visualize.Chart.Builder.Glyphs
 
     attr(:id, :string, required: true, doc: "the hook element's id")
@@ -234,14 +236,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `theme`, `sources`, `vars`, `styles`, `defs`, `frame`, `scales`, `axes`, `marks`,
     `labels` — only those it declares; the details are the inspector's.
 
-        iex> Visualize.Chart.Builder.Layers.declared(%{styles: %{series: %{stroke: :red}}, frame: %{scales: %{x: %{kind: :linear}}, axes: [%{scale: :x, side: :bottom}]}})
+        iex> Visualize.Chart.Builder.Layers.declared(%{styles: %{series: %{stroke: :red}}, frames: %{main: %{scales: %{x: %{kind: :linear}}, axes: [%{scale: :x, side: :bottom}]}}})
         [:styles, :scales, :axes]
         iex> Visualize.Chart.Builder.Layers.declared(%{})
         []
     """
     @spec declared(map()) :: [atom()]
     def declared(fragment) when is_map(fragment) do
-      frame = node_or_empty(Map.get(fragment, :frame))
+      frame = node_or_empty(get_in(fragment, Fragment.frame_path(fragment)))
       for kind <- @roots, declares?(kind, fragment, frame), do: kind
     end
 

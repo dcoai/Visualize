@@ -166,7 +166,8 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:render, {:enum, [:auto, :svg, :canvas, :binary]}, :geometry, default: :auto),
       spec(:transition, {:node, :transition}, :geometry),
       spec(:tooltip, {:node, :tooltip}, :content),
-      spec(:id, :name, :content)
+      spec(:id, :name, :content),
+      spec(:frame, {:ref, :frame}, :binding)
     ]
   end
 

@@ -59,7 +59,7 @@ defmodule Visualize.Chart.Frame.Legend do
         style: Map.put(group_style, :class, "legend"),
         transform: Transform.translate(x, y)
       )
-      |> Frame.stamp([:frame, :legend], paths?)
+      |> Frame.stamp([:frames, frame.name, :legend], paths?)
     ]
   end
 

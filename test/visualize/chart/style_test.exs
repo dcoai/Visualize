@@ -99,9 +99,9 @@ defmodule Visualize.Chart.StyleTest do
     defp frame(scales) do
       Frame.new(
         Chart.from_map!(%{
-          version: 1,
+          version: 2,
           sources: %{primary: %{fields: [:k, :w]}},
-          frame: %{kind: :cartesian, scales: scales}
+          frames: %{main: %{kind: :cartesian, scales: scales}}
         })
       )
     end

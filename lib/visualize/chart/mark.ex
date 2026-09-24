@@ -20,13 +20,13 @@ defmodule Visualize.Chart.Mark do
 
       iex> chart =
       ...>   Visualize.Chart.from_map!(%{
-      ...>     version: 1,
+      ...>     version: 2,
       ...>     sources: %{primary: %{fields: [:t, :v]}},
-      ...>     frame: %{
+      ...>     frames: %{main: %{
       ...>       kind: :cartesian,
       ...>       margin: %{top: 0, right: 0, bottom: 0, left: 0},
       ...>       scales: %{x: %{kind: :linear}, y: %{kind: :linear}}
-      ...>     },
+      ...>     }},
       ...>     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...>   })
       iex> sources = %{primary: [%{t: 0, v: 0}, %{t: 1, v: 1}]}

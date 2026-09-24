@@ -240,15 +240,15 @@ defmodule Visualize.AxisFormatTest do
 
     test "an axis with format: :duration prints its ticks by magnitude" do
       design = %{
-        version: 1,
+        version: 2,
         sources: %{s: %{fields: [:t, :v]}},
-        frame: %{
+        frames: %{main: %{
           kind: :cartesian,
           scales: %{x: %{kind: :linear, domain: [0, 7200]}, y: %{kind: :linear, domain: [0, 1]}},
           axes: [
             %{scale: :x, side: :bottom, ticks: [0, 1800, 3600, 5400, 7200], format: :duration}
           ]
-        },
+        }},
         marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]
       }
 

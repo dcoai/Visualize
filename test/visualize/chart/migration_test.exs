@@ -7,12 +7,12 @@ defmodule Visualize.Chart.MigrationTest do
   alias Visualize.Chart.Migration
 
   test "the current version passes through unchanged" do
-    design = %{version: Migration.current(), frame: %{kind: :cartesian}}
+    design = %{version: Migration.current(), frames: %{main: %{kind: :cartesian}}}
     assert Migration.migrate(design) == {:ok, design}
   end
 
   test "a version this library does not write is an error at [:version]" do
-    assert Migration.migrate(%{version: 2}) == {:error, [{[:version], {:unsupported_version, 2}}]}
+    assert Migration.migrate(%{version: 3}) == {:error, [{[:version], {:unsupported_version, 3}}]}
     assert Migration.migrate(%{version: 0}) == {:error, [{[:version], {:unsupported_version, 0}}]}
     assert Migration.migrate(%{version: "1"}) == {:error, [{[:version], {:type, :integer}}]}
     assert Migration.migrate(%{}) == {:error, [{[:version], :required}]}

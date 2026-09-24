@@ -18,7 +18,7 @@ defmodule Visualize.Chart.Presets do
       ...>     x: & &1.name,
       ...>     y: & &1.value
       ...>   })
-      iex> design.frame.scales
+      iex> design.frames.main.scales
       %{x: %{kind: :band, padding: 0.1}, y: %{kind: :linear, domain: [0, :auto]}}
       iex> hd(design.marks).channels
       %{x0: :x, x1: :x, y0: 0, y1: :y}

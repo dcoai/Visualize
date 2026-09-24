@@ -70,7 +70,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
     end
 
     test "a key the fragment does not carry has no node" do
-      labels = Enum.map(Editor.nodes(%{version: 1}), & &1.label)
+      labels = Enum.map(Editor.nodes(%{version: 2}), & &1.label)
       assert labels == ["design"]
     end
 
@@ -160,7 +160,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         render_component(&Editor.panel/1, %{
           kind: :scale,
           node: %{kind: :linear},
-          path: [:frame, :scales, :x]
+          path: [:frames, :main, :scales, :x]
         })
 
       assert html =~ ~s(<select name="kind">)

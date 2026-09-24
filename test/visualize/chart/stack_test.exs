@@ -14,15 +14,15 @@ defmodule Visualize.Chart.StackTest do
 
   alias Visualize.Chart
 
-  @theme %{version: 1, theme: :default, styles: %{series: %{stroke_width: 1}}}
+  @theme %{version: 2, theme: :default, styles: %{series: %{stroke_width: 1}}}
   @frame %{
-    version: 1,
-    frame: %{
+    version: 2,
+    frames: %{main: %{
       kind: :cartesian,
       margin: %{top: 10, right: 10, bottom: 30, left: 40},
       scales: %{x: %{kind: :time}, y: %{kind: :linear}},
       axes: [%{scale: :x, side: :bottom, ticks: 6}]
-    }
+    }}
   }
   @house %{
     theme: :dark,
@@ -30,10 +30,10 @@ defmodule Visualize.Chart.StackTest do
   }
   @panel %{
     sources: %{primary: %{fields: [:t, :v]}},
-    frame: %{
+    frames: %{main: %{
       scales: %{y: %{kind: :linear, domain: [0, :auto]}},
       axes: [%{scale: :y, side: :left, grid: true}]
-    },
+    }},
     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :series}],
     labels: [%{anchor: :title, text: ["Uptime"]}]
   }
@@ -45,11 +45,11 @@ defmodule Visualize.Chart.StackTest do
       assert design.theme == :dark
       assert design.styles.series == %{stroke: :series_2, stroke_width: 2}
       assert design.styles.muted == %{opacity: 0.5}
-      assert design.frame.kind == :cartesian
-      assert design.frame.margin == @frame.frame.margin
-      assert Map.keys(design.frame.scales) |> Enum.sort() == [:x, :y]
-      assert design.frame.scales.y == %{kind: :linear, domain: [0, :auto]}
-      assert Enum.map(design.frame.axes, & &1.scale) == [:x, :y]
+      assert design.frames.main.kind == :cartesian
+      assert design.frames.main.margin == @frame.frames.main.margin
+      assert Map.keys(design.frames.main.scales) |> Enum.sort() == [:x, :y]
+      assert design.frames.main.scales.y == %{kind: :linear, domain: [0, :auto]}
+      assert Enum.map(design.frames.main.axes, & &1.scale) == [:x, :y]
       assert design.marks == @panel.marks
 
       rows = %{t: [~U[2026-01-01 00:00:00Z], ~U[2026-01-02 00:00:00Z]], v: [3, 9]}
@@ -79,7 +79,7 @@ defmodule Visualize.Chart.StackTest do
     test "a chart struct is taken as its map" do
       # The house declares the style the panel's mark reads; without it the design is not
       # one (D-113), and from_map!/1 says so.
-      chart = Chart.from_map!(Chart.stack([@frame, @house, @panel, %{version: 1}]))
+      chart = Chart.from_map!(Chart.stack([@frame, @house, @panel, %{version: 2}]))
 
       assert Chart.stack([@house, chart]) == Chart.stack(@house, Chart.to_map(chart))
     end
@@ -92,8 +92,8 @@ defmodule Visualize.Chart.StackTest do
 
   describe "stack/2, key by key" do
     test "a scalar is the higher layer's" do
-      assert Chart.stack(%{version: 1, theme: :default}, %{theme: :dark}) ==
-               %{version: 1, theme: :dark}
+      assert Chart.stack(%{version: 2, theme: :default}, %{theme: :dark}) ==
+               %{version: 2, theme: :dark}
     end
 
     test "a union name both layers declare is the higher layer's entry, taken whole" do
@@ -123,16 +123,17 @@ defmodule Visualize.Chart.StackTest do
     end
 
     test "a node both layers give as a map cascades key by key" do
-      assert Chart.stack(%{frame: %{kind: :polar, margin: %{top: 10}}}, %{
-               frame: %{margin: %{top: 30}}
-             }) == %{frame: %{kind: :polar, margin: %{top: 30}}}
+      assert Chart.stack(%{frames: %{main: %{kind: :polar, margin: %{top: 10}}}}, %{
+               frames: %{main: %{margin: %{top: 30}}}
+             }) == %{frames: %{main: %{kind: :polar, margin: %{top: 30}}}}
     end
 
     test "a node either layer gives as anything else is the higher layer's whole" do
       var = Chart.var(:frame)
 
-      assert Chart.stack(%{frame: %{kind: :polar}}, %{frame: var}) == %{frame: var}
-      assert Chart.stack(%{frame: var}, %{frame: %{kind: :polar}}) == %{frame: %{kind: :polar}}
+      assert Chart.stack(%{frames: %{main: %{kind: :polar}}}, %{frames: var}) == %{frames: var}
+      assert Chart.stack(%{frames: var}, %{frames: %{main: %{kind: :polar}}}) ==
+               %{frames: %{main: %{kind: :polar}}}
       assert Chart.stack(%{styles: var}, %{styles: %{a: %{}}}) == %{styles: %{a: %{}}}
       assert Chart.stack(%{styles: %{a: %{}}}, %{styles: var}) == %{styles: var}
       assert Chart.stack(%{theme: :dark}, %{theme: %{name: :house}}) == %{theme: %{name: :house}}
@@ -145,7 +146,7 @@ defmodule Visualize.Chart.StackTest do
             {%{sources: %{p: %{fields: [:t]}}}, %{sources: v}, [:sources]},
             {%{vars: %{unit: %{default: "%"}}}, %{vars: v}, [:vars]},
             {%{styles: %{series: %{stroke_width: 2}}}, %{styles: v}, [:styles]},
-            {%{frame: %{scales: %{x: %{kind: :time}}}}, %{frame: %{scales: v}}, [:frame, :scales]}
+            {%{frames: %{main: %{scales: %{x: %{kind: :time}}}}}, %{frames: %{main: %{scales: v}}}, [:frames, :main, :scales]}
           ] do
         assert Chart.stack(declared, variable) == variable
         assert Chart.stack(variable, declared) == declared
@@ -169,12 +170,12 @@ defmodule Visualize.Chart.StackTest do
       assert Chart.stack(a, Chart.stack(b, c)) == %{vars: %{n: %{default: 0}}}
 
       # The same holds for a node key, where the rule is to recurse rather than unite.
-      f = %{frame: %{kind: :polar}}
+      f = %{frames: %{main: %{kind: :polar}}}
       g = %{frame: Chart.var(:f)}
-      h = %{frame: %{margin: %{top: 1}}}
+      h = %{frames: %{main: %{margin: %{top: 1}}}}
 
-      assert Chart.stack([f, g, h]) == %{frame: %{margin: %{top: 1}}}
-      assert Chart.stack(f, Chart.stack(g, h)) == %{frame: %{kind: :polar, margin: %{top: 1}}}
+      assert Chart.stack([f, g, h]) == %{frames: %{main: %{margin: %{top: 1}}}}
+      assert Chart.stack(f, Chart.stack(g, h)) == %{frames: %{main: %{kind: :polar, margin: %{top: 1}}}}
     end
 
     test "a key the schema does not know is the higher layer's" do
@@ -230,22 +231,22 @@ defmodule Visualize.Chart.StackTest do
 
     test "two axes for the same scale and side collapse to the higher layer's" do
       lower = %{
-        frame: %{axes: [%{scale: :x, side: :bottom, ticks: 6}, %{scale: :y, side: :left}]}
+        frames: %{main: %{axes: [%{scale: :x, side: :bottom, ticks: 6}, %{scale: :y, side: :left}]}}
       }
 
-      higher = %{frame: %{axes: [%{scale: :x, side: :bottom, grid: true, style: :heavy}]}}
+      higher = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom, grid: true, style: :heavy}]}}}
 
-      assert Chart.stack(lower, higher).frame.axes == [
+      assert Chart.stack(lower, higher).frames.main.axes == [
                %{scale: :x, side: :bottom, grid: true, style: :heavy},
                %{scale: :y, side: :left}
              ]
     end
 
     test "an axis on another side is another axis" do
-      lower = %{frame: %{axes: [%{scale: :x, side: :bottom}]}}
-      higher = %{frame: %{axes: [%{scale: :x, side: :top}]}}
+      lower = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom}]}}}
+      higher = %{frames: %{main: %{axes: [%{scale: :x, side: :top}]}}}
 
-      assert length(Chart.stack(lower, higher).frame.axes) == 2
+      assert length(Chart.stack(lower, higher).frames.main.axes) == 2
     end
 
     test "identity matches within one key: a mark and a label may share an id" do
@@ -295,9 +296,9 @@ defmodule Visualize.Chart.StackTest do
 
     test "a design carrying id round-trips through the map and the JSON forms" do
       design = %{
-        version: 1,
+        version: 2,
         sources: %{p: %{fields: [:t, :v]}},
-        frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}},
+        frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
         marks: [%{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}}],
         labels: [%{id: :head, anchor: :title, text: ["Uptime"]}]
       }
@@ -324,24 +325,24 @@ defmodule Visualize.Chart.StackTest do
 
     test "a higher layer restyles the shared frame's x-axis rather than drawing a second" do
       frame = %{
-        version: 1,
+        version: 2,
         sources: %{p: %{fields: [:t, :v]}},
-        frame: %{
+        frames: %{main: %{
           kind: :cartesian,
           scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
           axes: [%{scale: :x, side: :bottom, ticks: 3}, %{scale: :y, side: :left}]
-        },
+        }},
         marks: [%{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}}]
       }
 
       panel = %{
         styles: %{heavy: %{stroke_width: 3}},
-        frame: %{axes: [%{scale: :x, side: :bottom, ticks: 3, grid: true, style: :heavy}]},
+        frames: %{main: %{axes: [%{scale: :x, side: :bottom, ticks: 3, grid: true, style: :heavy}]}},
         marks: [%{id: :series, type: :area, data: :p, channels: %{x: :t, y: :v}}]
       }
 
       design = Chart.stack([frame, panel])
-      assert length(design.frame.axes) == 2
+      assert length(design.frames.main.axes) == 2
       assert Enum.map(design.marks, & &1.type) == [:area]
 
       assert {:ok, applied} = Chart.apply(design, sources: %{p: %{t: [1, 2], v: [3, 9]}})
@@ -402,7 +403,7 @@ defmodule Visualize.Chart.StackTest do
       sources: declaration([:primary, :other], fixed_map(%{fields: constant([:t, :v])})),
       styles: declaration(@style_names, style()),
       vars: declaration([:unit, :n], fixed_map(%{default: integer()})),
-      frame: frame(),
+      frames: fixed_map(%{main: frame()}),
       marks: list_of(mark(), max_length: 3),
       labels: list_of(label(), max_length: 3)
     })

@@ -12,7 +12,7 @@ defmodule Visualize.ChartTest do
 
   doctest Var
 
-  @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :defs, :frame, :marks, :labels]
+  @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :defs, :frames, :marks, :labels]
 
   describe "from_map/1 and to_map/1" do
     property "every generated design validates and round-trips exactly" do
@@ -26,11 +26,11 @@ defmodule Visualize.ChartTest do
     end
 
     test "absent design-level keys take the schema's defaults" do
-      {:ok, chart} = Chart.from_map(%{version: 1, frame: %{kind: :cartesian}})
+      {:ok, chart} = Chart.from_map(%{version: 2, frames: %{main: %{kind: :cartesian}}})
       assert chart.marks == []
       assert chart.theme == :default
 
-      for key <- @design_keys -- [:version, :frame] do
+      for key <- @design_keys -- [:version, :frames] do
         assert Map.fetch!(chart, key) == Schema.default(:design, key)
       end
 
@@ -40,18 +40,18 @@ defmodule Visualize.ChartTest do
 
     test "nested nodes are stored as written, without defaults filled in" do
       frame = %{kind: :cartesian, scales: %{x: %{kind: :linear}}}
-      {:ok, chart} = Chart.from_map(%{version: 1, frame: frame})
-      assert chart.frame == frame
+      {:ok, chart} = Chart.from_map(%{version: 2, frames: %{main: frame}})
+      assert chart.frames.main == frame
     end
 
     test "an invalid design is every error by path" do
-      assert Chart.from_map(%{version: 1, frame: %{kind: :cartesian}, marks: [%{}]}) ==
+      assert Chart.from_map(%{version: 2, frames: %{main: %{kind: :cartesian}}, marks: [%{}]}) ==
                {:error, [{[:marks, 0, :data], :required}, {[:marks, 0, :type], :required}]}
     end
 
     test "from_map!/1 raises with the formatted errors" do
-      assert_raise ArgumentError, ~r/frame: is required/, fn ->
-        Chart.from_map!(%{version: 1})
+      assert_raise ArgumentError, ~r/frames: is required/, fn ->
+        Chart.from_map!(%{version: 2})
       end
     end
   end
@@ -68,20 +68,20 @@ defmodule Visualize.ChartTest do
     test "tagged terms take the forms of spec/14 §11.2" do
       chart =
         Chart.from_map!(%{
-          version: 1,
+          version: 2,
           sources: %{p: %{fields: [:t, :v, :sha]}},
           vars: %{unit: %{default: :pct}},
           styles: %{
             s: %{stroke: {:series, 3}, fill: {:field, :sha}, opacity: 0.5},
             t: %{fill: :none}
           },
-          frame: %{
+          frames: %{main: %{
             kind: :cartesian,
             scales: %{
               x: %{kind: :time, domain: [~U[2026-09-08 00:00:00Z], :auto]},
               y: %{kind: :linear, unknown: nil}
             }
-          },
+          }},
           marks: [%{type: :line, data: :p, channels: %{x: :t, y: :v}, style: :s}],
           labels: [%{anchor: {:axis, :y}, text: ["unit: ", Chart.var(:unit)]}]
         })
@@ -95,10 +95,10 @@ defmodule Visualize.ChartTest do
       assert decoded["styles"]["s"]["opacity"] == 0.5
       assert decoded["styles"]["t"]["fill"] == "none"
 
-      assert decoded["frame"]["scales"]["x"]["domain"] ==
+      assert decoded["frames"]["main"]["scales"]["x"]["domain"] ==
                [%{"$time" => "2026-09-08T00:00:00Z"}, "auto"]
 
-      assert decoded["frame"]["scales"]["y"]["unknown"] == nil
+      assert decoded["frames"]["main"]["scales"]["y"]["unknown"] == nil
 
       # A text is its string, the hole spelt as it is written (§7.1): no tagged term.
       assert decoded["labels"] == [
@@ -114,7 +114,7 @@ defmodule Visualize.ChartTest do
     end
 
     test "a document that parses but does not validate reports by path" do
-      assert Chart.from_json(~s({"version": 1, "frame": {"kind": "cartesian"}, "marks": 3})) ==
+      assert Chart.from_json(~s({"version": 2, "frames": {"main": {"kind": "cartesian"}}, "marks": 3})) ==
                {:error, [{[:marks], {:type, {:list, {:node, :mark}}}}]}
     end
   end
@@ -122,10 +122,10 @@ defmodule Visualize.ChartTest do
   describe "generate/2 and render/2 with root: (spec/14 §4.7, #131)" do
     defp applied(meta) do
       design = %{
-        version: 1,
+        version: 2,
         meta: meta,
         sources: %{s: %{fields: [:x, :y]}},
-        frame: %{kind: :cartesian},
+        frames: %{main: %{kind: :cartesian}},
         marks: [%{type: :line, data: :s, channels: %{x: :x, y: :y}}]
       }
 

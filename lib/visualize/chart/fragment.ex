@@ -21,10 +21,10 @@ defmodule Visualize.Chart.Fragment do
       iex> Visualize.Chart.Fragment.kind(%{styles: %{series: %{stroke_width: 5}}})
       :style
 
-      iex> Visualize.Chart.Fragment.kind(%{frame: %{axes: [%{scale: :x, side: :bottom}]}})
+      iex> Visualize.Chart.Fragment.kind(%{frames: %{main: %{axes: [%{scale: :x, side: :bottom}]}}})
       :axis
 
-      iex> Visualize.Chart.Fragment.kind(%{frame: %{margin: %{top: 1}}})
+      iex> Visualize.Chart.Fragment.kind(%{frames: %{main: %{margin: %{top: 1}}}})
       :margin
 
       iex> Visualize.Chart.Fragment.kind(%{theme: :dark})
@@ -33,7 +33,7 @@ defmodule Visualize.Chart.Fragment do
       iex> Visualize.Chart.Fragment.kind(%{composite: %{uses: []}})
       :composite
 
-      iex> Visualize.Chart.Fragment.kind(%{version: 1, theme: :dark, frame: %{}})
+      iex> Visualize.Chart.Fragment.kind(%{version: 2, theme: :dark, frames: %{main: %{}}})
       nil
 
       iex> Visualize.Chart.Fragment.refs(%{style: [{:style, 11}, %{fill: {:style, 3}}]})
@@ -60,6 +60,29 @@ defmodule Visualize.Chart.Fragment do
 
   @typedoc "An id: the kind of thing, and a number its store never repeats (§19.2)."
   @type id :: {atom(), pos_integer()}
+
+  @doc """
+  The path of a design's frame, and its name (spec/14 §2.1, #383): a design holds its
+  frames by name, so the builder addresses `frames.<name>` where it used to address
+  `frame`. A design with one frame gives that one, whatever it is called; an empty or
+  many-framed fragment gives `:main`, the name a migrated design takes (§9).
+
+      iex> Visualize.Chart.Fragment.frame_path(%{frames: %{history: %{kind: :cartesian}}})
+      [:frames, :history]
+
+      iex> Visualize.Chart.Fragment.frame_path(%{})
+      [:frames, :main]
+  """
+  @spec frame_path(map()) :: [atom()]
+  def frame_path(design), do: [:frames, frame_name(design)]
+
+  @doc "The name of a design's frame; `:main` when it has none or several."
+  @spec frame_name(term()) :: atom()
+  def frame_name(%{frames: frames}) when is_map(frames) and map_size(frames) == 1 do
+    frames |> Map.keys() |> hd()
+  end
+
+  def frame_name(_design), do: :main
 
   @doc """
   The kind a singular wrapper key names — `:style` for `style:` — or `nil` for any other

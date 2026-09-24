@@ -26,9 +26,9 @@ defmodule Visualize.Chart.FrameTest do
     Chart.from_map!(
       Map.merge(
         %{
-          version: 1,
+          version: 2,
           sources: %{primary: %{fields: [:t, :v, :n, :k]}},
-          frame: Map.merge(%{kind: :cartesian}, frame)
+          frames: %{main: Map.merge(%{kind: :cartesian}, frame)}
         },
         extra
       )
@@ -536,10 +536,10 @@ defmodule Visualize.Chart.FrameTest do
       assert a != b
 
       design = %{
-        version: 1,
+        version: 2,
         defs: @defs,
         styles: %{wash: %{fill: {:paint, :nope}}},
-        frame: %{kind: :cartesian}
+        frames: %{main: %{kind: :cartesian}}
       }
 
       assert Visualize.Chart.Validator.validate(design) ==
@@ -799,9 +799,9 @@ defmodule Visualize.Chart.FrameTest do
   describe "byte identity with hand-built furniture" do
     test "a cartesian frame with two axes and a legend is the hand-built axes and legend" do
       design = %{
-        version: 1,
+        version: 2,
         sources: %{primary: %{fields: [:t, :v, :k]}},
-        frame: %{
+        frames: %{main: %{
           kind: :cartesian,
           margin: %{top: 20, right: 20, bottom: 30, left: 40},
           scales: %{
@@ -814,7 +814,7 @@ defmodule Visualize.Chart.FrameTest do
             %{scale: :y, side: :left, ticks: 5}
           ],
           legend: %{scale: :color, position: :top_right}
-        },
+        }},
         marks: [
           %{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :by_k}
         ],
@@ -964,9 +964,9 @@ defmodule Visualize.Chart.FrameTest do
       [grid | _] = Enum.reject(group.children, &(&1.type == :defs))
       assert grid.style.class == "grid" and grid.attrs["data-node"] == nil
 
-      assert svg =~ ~s(<g class="frame" data-node="frame" transform=)
+      assert svg =~ ~s(<g class="frame" data-node="frames.main" transform=)
       assert svg =~ ~s(<g class="mark mark-line" data-node="marks[0]")
-      assert svg =~ ~s(<g class="axis axis-bottom" data-node="frame.axes[0]")
+      assert svg =~ ~s(<g class="axis axis-bottom" data-node="frames.main.axes[0]")
       assert svg =~ ~s(<g class="legend" data-node="frame.legend")
       assert svg =~ ~s(<text class="label" data-node="labels[0]")
     end
@@ -979,7 +979,7 @@ defmodule Visualize.Chart.FrameTest do
       # The furniture alone, and the applied chart through Visualize.Chart.render/2, likewise.
       refute Frame.render(frame) =~ "data-node"
       refute Frame.render(frame, paths: true) =~ ~r/data-node="marks/
-      assert Frame.render(frame, paths: true) =~ ~s(data-node="frame.axes[1]")
+      assert Frame.render(frame, paths: true) =~ ~s(data-node="frames.main.axes[1]")
     end
 
     test "Visualize.Chart.render/2 passes the option through" do

@@ -154,14 +154,14 @@ defmodule Visualize.Chart.TransformTest do
 
       # A line over the fold draws one path per folded column, and a variable chooses the set.
       design = %{
-        version: 1,
+        version: 2,
         # The source declares the columns every row has; the fold lists the ones a row may.
         sources: %{wide: %{fields: [:hour]}},
         vars: %{metrics: %{default: [:cpu, :mem, :disk]}},
-        frame: %{
+        frames: %{main: %{
           kind: :cartesian,
           scales: %{x: %{kind: :linear}, y: %{kind: :linear}, color: %{kind: :ordinal}}
-        },
+        }},
         marks: [
           %{
             type: :line,

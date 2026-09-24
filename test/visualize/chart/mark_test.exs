@@ -35,9 +35,9 @@ defmodule Visualize.Chart.MarkTest do
     Chart.from_map!(
       Map.merge(
         %{
-          version: 1,
+          version: 2,
           sources: %{primary: %{fields: [:t, :v, :lo, :hi, :lo2, :hi2, :k, :s]}},
-          frame: @frame,
+          frames: %{main: @frame},
           marks: [Map.merge(%{data: :primary}, mark)]
         },
         extra
@@ -204,7 +204,7 @@ defmodule Visualize.Chart.MarkTest do
         options: %{width: 1, pad_angle: 0.05}
       }
 
-      group = generate(mark, %{frame: polar})
+      group = generate(mark, %{frames: %{main: polar}})
       angle = Scale.radial() |> Scale.domain([0, 4]) |> Scale.range([0, 2 * :math.pi()])
       r = Scale.linear() |> Scale.domain([0, 10]) |> Scale.range([0, 100])
 
@@ -331,12 +331,12 @@ defmodule Visualize.Chart.MarkTest do
       frame = Map.put(@frame, :scales, band)
 
       [rect | _] =
-        generate(%{type: :rect, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}}, %{frame: frame}).children
+        generate(%{type: :rect, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}}, %{frames: %{main: frame}}).children
 
       assert rect.attrs.x == 0 and rect.attrs.width == 150.0
 
       [point | _] =
-        generate(%{type: :symbol, channels: %{x: :k, y: :v}}, %{frame: frame}).children
+        generate(%{type: :symbol, channels: %{x: :k, y: :v}}, %{frames: %{main: frame}}).children
 
       assert point.transform == Visualize.IR.Transform.translate(75.0, 120.0)
     end
@@ -356,7 +356,7 @@ defmodule Visualize.Chart.MarkTest do
       chart =
         chart(
           %{type: :rect, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}, offset: %{x: :s}},
-          %{frame: Map.put(@frame, :scales, scales)}
+          %{frames: %{main: Map.put(@frame, :scales, scales)}}
         )
 
       frame = Frame.new(chart, sources: %{primary: rows}, size: {300, 200})
@@ -399,7 +399,7 @@ defmodule Visualize.Chart.MarkTest do
 
       chart2 =
         chart(%{type: :rect, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}, offset: %{x: :s}}, %{
-          frame: Map.put(@frame, :scales, lacking)
+          frames: %{main: Map.put(@frame, :scales, lacking)}
         })
 
       frame2 = Frame.new(chart2, sources: %{primary: rows}, size: {300, 200})
@@ -413,7 +413,7 @@ defmodule Visualize.Chart.MarkTest do
       frame = Map.put(@frame, :scales, band)
 
       assert length(
-               generate(%{type: :symbol, channels: %{x: :k, y: :v}}, %{frame: frame}).children
+               generate(%{type: :symbol, channels: %{x: :k, y: :v}}, %{frames: %{main: frame}}).children
              ) == 2
 
       rows = [%{t: 0, v: 1}, %{t: 1, v: nil}, %{t: 2, v: 3}, %{t: 3, v: 4}]
@@ -426,7 +426,7 @@ defmodule Visualize.Chart.MarkTest do
 
     test "a channel naming no declared scale is read as pixels, a constant as itself" do
       chart =
-        chart(%{type: :circle, channels: %{x: :t, y: 50}}, %{frame: Map.put(@frame, :scales, %{})})
+        chart(%{type: :circle, channels: %{x: :t, y: 50}}, %{frames: %{main: Map.put(@frame, :scales, %{})}})
 
       frame = Frame.new(chart, sources: @sources, size: {300, 200})
       [circle | _] = Mark.generate(frame, hd(chart.marks), sources: @sources).children
@@ -439,7 +439,7 @@ defmodule Visualize.Chart.MarkTest do
       chart =
         chart(
           %{type: :rect, channels: %{x0: 0, x1: :v, y0: :t, y1: :t}, scales: %{x: :count}},
-          %{frame: Map.put(@frame, :scales, scales)}
+          %{frames: %{main: Map.put(@frame, :scales, scales)}}
         )
 
       frame = Frame.new(chart, sources: @sources, size: {300, 200})
@@ -470,7 +470,7 @@ defmodule Visualize.Chart.MarkTest do
 
       chart =
         chart(%{type: :rect, data: data, channels: %{x0: :x0, x1: :x1, y0: :y0, y1: :count}}, %{
-          frame: frame
+          frames: %{main: frame}
         })
 
       frame = Frame.new(chart, sources: @sources, size: {300, 200})
@@ -518,7 +518,7 @@ defmodule Visualize.Chart.MarkTest do
                |> Line.generate(Enum.filter(@rows, &(&1.k == "k0")))
 
       frame = Map.put(@frame, :scales, Map.delete(@frame.scales, :color))
-      group = generate(%{type: :area, channels: %{x: :t, y: :v, series: :k}}, %{frame: frame})
+      group = generate(%{type: :area, channels: %{x: :t, y: :v, series: :k}}, %{frames: %{main: frame}})
 
       assert Enum.map(group.children, & &1.style.fill) == [
                "var(--vis-series-1, #3b6fa8)",
@@ -562,9 +562,9 @@ defmodule Visualize.Chart.MarkTest do
     defp area_of(mark, frame, rows) do
       chart =
         Chart.from_map!(%{
-          version: 1,
+          version: 2,
           sources: %{primary: %{fields: [:t, :v]}},
-          frame: frame,
+          frames: %{main: frame},
           marks: [Map.merge(%{data: :primary}, mark)]
         })
 
@@ -638,9 +638,9 @@ defmodule Visualize.Chart.MarkTest do
 
       chart =
         Chart.from_map!(%{
-          version: 1,
+          version: 2,
           sources: %{primary: %{fields: [:t, :v]}},
-          frame: frame,
+          frames: %{main: frame},
           marks: [
             %{data: :primary, type: :area, channels: %{x: :t, y: :v, y0: {:scale, :min}}}
           ]
@@ -660,9 +660,9 @@ defmodule Visualize.Chart.MarkTest do
 
       chart =
         Chart.from_map!(%{
-          version: 1,
+          version: 2,
           sources: %{primary: %{fields: [:t, :v]}},
-          frame: frame,
+          frames: %{main: frame},
           marks: [%{data: :primary, type: :area, channels: %{x: :t, y: :v}}]
         })
 
@@ -701,9 +701,9 @@ defmodule Visualize.Chart.MarkTest do
 
       chart =
         Chart.from_map!(%{
-          version: 1,
+          version: 2,
           sources: %{primary: %{fields: [:t, :base, :top]}},
-          frame: %{@frame | scales: %{@frame.scales | x: %{kind: :linear, domain: [0, 2]}}},
+          frames: %{main: %{@frame | scales: %{@frame.scales | x: %{kind: :linear, domain: [0, 2]}}}},
           marks: [%{data: :primary, type: :area, channels: %{x: :t, y: :top, y0: :base}}]
         })
 
@@ -915,9 +915,9 @@ defmodule Visualize.Chart.MarkTest do
 
     test "the node validates: an undeclared field is reported, and it round-trips the map" do
       design = %{
-        version: 1,
+        version: 2,
         sources: %{primary: %{fields: [:t, :v]}},
-        frame: @frame,
+        frames: %{main: @frame},
         marks: [
           %{
             type: :circle,
@@ -1012,7 +1012,7 @@ defmodule Visualize.Chart.MarkTest do
       labels = fn label ->
         generate(
           %{type: :rose, channels: %{angle: :t, value: :v}, options: %{width: 1}, label: label},
-          %{frame: polar}
+          %{frames: %{main: polar}}
         ).children
         |> Enum.filter(&(&1.type == :text))
       end
@@ -1114,7 +1114,7 @@ defmodule Visualize.Chart.MarkTest do
       axes = [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]
 
       chart =
-        chart(%{type: :line, channels: %{x: :t, y: :v}}, %{frame: Map.put(@frame, :axes, axes)})
+        chart(%{type: :line, channels: %{x: :t, y: :v}}, %{frames: %{main: Map.put(@frame, :axes, axes)}})
 
       frame = Frame.new(chart, sources: @sources, size: {300, 200})
 
@@ -1140,7 +1140,7 @@ defmodule Visualize.Chart.MarkTest do
         scales: %{x: %{kind: :linear, domain: [0, 3]}, y: %{kind: :linear, domain: [0, 10]}}
       }
 
-      chart = chart(%{type: :circle, channels: %{x: :t, y: :v}}, %{frame: facet})
+      chart = chart(%{type: :circle, channels: %{x: :t, y: :v}}, %{frames: %{main: facet}})
       frame = Frame.new(chart, sources: @sources, size: {300, 200})
       [panel0, panel1] = Frame.generate(frame, sources: @sources).children
       [mark0, _title] = panel0.children
@@ -1193,7 +1193,7 @@ defmodule Visualize.Chart.MarkTest do
     }
 
     defp polar(mark, extra \\ %{}) do
-      chart = chart(mark, Map.merge(%{frame: @polar}, extra))
+      chart = chart(mark, Map.merge(%{frames: %{main: @polar}}, extra))
       frame = Frame.new(chart, sources: @sources, size: {300, 200})
       {frame, Mark.generate(frame, hd(chart.marks), sources: @sources)}
     end
@@ -1390,7 +1390,7 @@ defmodule Visualize.Chart.MarkTest do
           |> put_in([:scales, :angle], %{kind: :band, domain: six})
           |> put_in([:scales, :r], %{kind: :linear, domain: [0, 10]})
 
-        chart = chart(mark, Map.merge(%{frame: frame}, extra))
+        chart = chart(mark, Map.merge(%{frames: %{main: frame}}, extra))
         rows = for {k, i} <- Enum.with_index(six), s <- ["p", "q"], do: %{k: k, v: 2 + i, s: s}
         frame = Frame.new(chart, sources: %{primary: rows}, size: {300, 200})
         {frame, Mark.generate(frame, hd(chart.marks), sources: %{primary: rows})}

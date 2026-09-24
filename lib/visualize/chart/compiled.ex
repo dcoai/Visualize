@@ -22,13 +22,13 @@ defmodule Visualize.Chart.Compiled do
   ## Examples
 
       iex> design = %{
-      ...>   version: 1,
+      ...>   version: 2,
       ...>   sources: %{primary: %{fields: [:t, :v]}},
-      ...>   frame: %{
+      ...>   frames: %{main: %{
       ...>     kind: :cartesian,
       ...>     scales: %{x: %{kind: :linear, domain: [0, 10]}, y: %{kind: :linear}},
       ...>     axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, grid: true}]
-      ...>   },
+      ...>   }},
       ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...> }
       iex> {:ok, compiled} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}})
@@ -118,6 +118,11 @@ defmodule Visualize.Chart.Compiled do
   # The compiled chart of an applied one (spec/14 §12.1); `Visualize.Chart.compile/2`.
   @spec new(Applied.t(), keyword()) :: t()
   def new(%Applied{chart: chart, sources: sources, frame: frame}, opts) do
+    map_size(chart.frames) == 1 ||
+      raise ArgumentError,
+            "a compiled chart is one frame until #385: this design has " <>
+              "#{map_size(chart.frames)} (#{inspect(Map.keys(chart.frames))}) (spec/14 §12.1)"
+
     ceiling = ceiling!(Keyword.get(opts, :ceiling, @default_ceiling))
     window = Window.new(chart)
     {layout, regions} = Regions.build(chart, window && window.scale)
@@ -364,10 +369,12 @@ defmodule Visualize.Chart.Compiled do
   defp retarget(compiled, nil, _sources), do: compiled
 
   defp retarget(%{chart: chart} = compiled, node, sources) do
-    if node == Map.get(chart, :frame) do
+    [{name, current}] = Enum.to_list(chart.frames)
+
+    if node == current do
       compiled
     else
-      compiled = %{compiled | chart: %{chart | frame: node}}
+      compiled = %{compiled | chart: %{chart | frames: %{name => node}}}
       frame = Frame.new(compiled.chart, realise_opts(compiled, sources))
 
       regions =

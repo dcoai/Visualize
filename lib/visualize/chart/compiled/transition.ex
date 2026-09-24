@@ -25,7 +25,8 @@ defmodule Visualize.Chart.Compiled.Transition do
   # The scales a compiled chart eases: those with a `transition` node, a moving domain and
   # a numeric kind, as `%{name => transition node}`.
   @spec scales(Chart.t(), atom() | nil) :: %{atom() => map()}
-  def scales(%Chart{frame: node} = chart, viewport) do
+  def scales(%Chart{} = chart, viewport) do
+    node = chart.frames |> Map.values() |> hd()
     for {name, scale} <- Map.get(node, :scales, %{}),
         transition = Map.get(scale, :transition),
         is_map(transition),

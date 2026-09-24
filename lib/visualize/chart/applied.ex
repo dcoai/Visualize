@@ -15,11 +15,12 @@ defmodule Visualize.Chart.Applied do
   alias Visualize.Chart.Frame
 
   @enforce_keys [:chart, :sources, :frame]
-  defstruct [:chart, :sources, :frame]
+  defstruct [:chart, :sources, :frame, frames: %{}]
 
   @type t :: %__MODULE__{
           chart: Chart.t(),
           sources: %{atom() => term()},
-          frame: Frame.t()
+          frame: Frame.t(),
+          frames: %{atom() => Frame.t()}
         }
 end

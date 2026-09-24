@@ -854,7 +854,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A new chart is one frame layer: a chart minimally is a frame.
     # A new chart is one cartesian frame: valid from its first moment (§18.8, #374).
     def handle_event("add_chart", _params, socket) do
-      use = %{Use.new(nil, []) | ref: nil, local: %{frame: %{kind: :cartesian}}}
+      use = %{Use.new(nil, []) | ref: nil, local: %{frames: %{main: %{kind: :cartesian}}}}
       n = socket.assigns.next_chart
 
       {:noreply,
@@ -1303,7 +1303,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       scale = String.to_atom(scale)
       side = String.to_atom(side)
       %{design: design} = editing(socket.assigns)
-      axes = design |> get_in([:frame, :axes]) |> List.wrap() |> Enum.with_index()
+      axes = design |> get_in(Fragment.frame_path(design) ++ [:axes]) |> List.wrap() |> Enum.with_index()
 
       case Enum.find(axes, fn {axis, _i} -> axis[:scale] == scale and axis[:side] == side end) do
         {axis, index} ->
@@ -1311,7 +1311,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         nil ->
           socket =
-            if Map.has_key?(get_in(design, [:frame, :scales]) || %{}, scale),
+            if Map.has_key?(get_in(design, Fragment.frame_path(design) ++ [:scales]) || %{}, scale),
               do: socket,
               else:
                 update_layer(
@@ -1321,14 +1321,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   {:ok, %{kind: :linear, domain: :auto}}
                 )
 
-          {:noreply, appended(socket, [:frame], :axes, %{scale: scale, side: side})}
+          {:noreply, appended(socket, [:frames], :axes, %{scale: scale, side: side})}
       end
     end
 
     def handle_event("toggle_grid", %{"scale" => scale}, socket) do
       scale = String.to_atom(scale)
       %{design: design} = editing(socket.assigns)
-      axes = design |> get_in([:frame, :axes]) |> List.wrap() |> Enum.with_index()
+      axes = design |> get_in(Fragment.frame_path(design) ++ [:axes]) |> List.wrap() |> Enum.with_index()
 
       case Enum.find(axes, fn {axis, _i} -> axis[:scale] == scale end) do
         nil ->
@@ -2886,7 +2886,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       %{
         style: Palette.names(design) ++ ids.(:style),
-        scale: Map.keys(get_in(design, [:frame, :scales]) || %{}) ++ ids.(:scale),
+        scale: Map.keys(get_in(design, Fragment.frame_path(design) ++ [:scales]) || %{}) ++ ids.(:scale),
         source: Map.keys(Map.get(design, :sources, %{})) ++ ids.(:source)
       }
     end
@@ -3105,7 +3105,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           &(&1 in ["design", "vars", "meta"])
         )
 
-      Enum.filter(roots, &(&1 == "frame")) ++ Enum.reject(roots, &(&1 == "frame"))
+      Enum.filter(roots, &(&1 == "frames")) ++ Enum.reject(roots, &(&1 == "frames"))
     end
 
     # A node the layer does not carry yet but a page shows a form for — the frame's meta
@@ -3155,6 +3155,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The word a root wears: `sources` is *data* to a person (#372); the design key and the
     # event value stay the key.
     defp root_word("sources"), do: "data"
+    # A design holds its frames by name (#383); the tab is still the word a person reads.
+    defp root_word("frames"), do: "frame"
     defp root_word(root), do: root
 
     defp tab_title(root, here?, chart?, count) do
@@ -3865,7 +3867,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp axes_rows(design, %{kind: :mark}, mark) when is_map(mark),
       do: Axes.rows(design, Scales.position_scales(design, mark))
 
-    defp axes_rows(design, %{kind: :scale, path: [:frame, :scales, name]}, _node)
+    defp axes_rows(design, %{kind: :scale, path: [:frames, _frame, :scales, name]}, _node)
          when name in [:x, :y, :angle, :r],
          do: Axes.rows(design, [name])
 
@@ -3923,7 +3925,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               assign(
                 socket,
                 :uses,
-                Stack.update(uses, use.id, &Stack.write(&1, [:frame], :axes, parsed))
+                Stack.update(uses, use.id, &Stack.write(&1, [:frames], :axes, parsed))
               )
           end
       end
@@ -4114,7 +4116,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         {:legend, node} ->
           socket
-          |> update_layer([:frame], :legend, {:ok, node})
+          |> update_layer([:frames], :legend, {:ok, node})
           |> assign(notice: nil)
           |> opened("frame.legend")
 
@@ -4248,7 +4250,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp taken(design, [:vars, _]), do: Map.keys(Map.get(design, :vars, %{}))
 
     defp taken(design, [:frame, :scales, _]),
-      do: Map.keys(get_in(design, [:frame, :scales]) || %{})
+      do: Map.keys(get_in(design, Fragment.frame_path(design) ++ [:scales]) || %{})
 
     defp taken(_design, _path), do: []
 
@@ -4322,7 +4324,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end)
     end
 
-    # The proper prefixes of a path, nearest first: `[:frame, :scales]` → `[[:frame]]`.
+    # The proper prefixes of a path, nearest first: `[:frame, :scales]` → `[[:frames]]`.
     defp ancestors(path) do
       for n <- (length(path) - 1)..1//-1, do: Enum.take(path, n)
     end

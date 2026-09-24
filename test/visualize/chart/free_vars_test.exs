@@ -55,7 +55,7 @@ defmodule Visualize.Chart.FreeVarsTest do
         styles: %{s: %{stroke: Chart.var(:colour), curve_opts: Chart.var(:opts)}},
         marks: [%{type: :line, data: :p, style: Chart.var(:style), options: Chart.var(:options)}],
         labels: [%{anchor: :title, text: ["a ", Chart.var(:part)]}],
-        frame: %{scales: %{x: %{kind: :linear, domain: Chart.var(:domain)}}},
+        frames: %{main: %{scales: %{x: %{kind: :linear, domain: Chart.var(:domain)}}}},
         sources: %{p: %{fields: [:t], default: Chart.var(:pool)}}
       }
 
@@ -108,9 +108,9 @@ defmodule Visualize.Chart.FreeVarsTest do
 
       chart =
         Chart.from_map!(%{
-          version: 1,
+          version: 2,
           vars: %{unit: %{default: "%"}},
-          frame: %{kind: :cartesian},
+          frames: %{main: %{kind: :cartesian}},
           labels: [%{anchor: :title, text: [Chart.var(:unit)]}]
         })
 
@@ -128,17 +128,17 @@ defmodule Visualize.Chart.FreeVarsTest do
 
     test "no variables is no entries" do
       assert Chart.free_vars([]) == []
-      assert Chart.free_vars(%{version: 1, frame: %{kind: :cartesian}}) == []
+      assert Chart.free_vars(%{version: 2, frames: %{main: %{kind: :cartesian}}}) == []
     end
   end
 
   describe "free_vars/1 lists exactly what apply/2 demands" do
     @design %{
-      version: 1,
+      version: 2,
       vars: %{unit: %{}, accent: %{default: :series_2}},
       sources: %{p: %{fields: [:t, :v]}},
       styles: %{s: %{stroke: Chart.var(:accent)}},
-      frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}},
+      frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
       marks: [%{type: :line, data: :p, channels: %{x: :t, y: :v}, style: :s}],
       labels: [%{anchor: :title, text: ["Uptime in ", Chart.var(:unit)]}]
     }
@@ -162,9 +162,9 @@ defmodule Visualize.Chart.FreeVarsTest do
 
   describe "the var-to-var error (spec/14 §7.1)" do
     @design %{
-      version: 1,
+      version: 2,
       vars: %{unit: %{}, other: %{}},
-      frame: %{kind: :cartesian},
+      frames: %{main: %{kind: :cartesian}},
       labels: [
         %{anchor: :title, text: ["a ", Chart.var(:unit)]},
         %{anchor: :caption, text: [Chart.var(:unit)]}
@@ -196,10 +196,10 @@ defmodule Visualize.Chart.FreeVarsTest do
 
     test "a variable nested inside a bound value is the validator's undeclared" do
       design = %{
-        version: 1,
+        version: 2,
         vars: %{opts: %{}},
         styles: %{s: Chart.var(:opts)},
-        frame: %{kind: :cartesian}
+        frames: %{main: %{kind: :cartesian}}
       }
 
       assert Chart.apply(design, vars: %{opts: %{stroke: Chart.var(:deep)}}) ==

@@ -4,13 +4,16 @@ defmodule Visualize.Chart.Migration do
 
   `current/0` is the version this library writes. `migrate/1` steps an older design
   forward one version at a time through the migration registered for each step, so a
-  stored design never goes stale; no migration is registered yet, and the hook exists so
-  that the first schema change ships with its step rather than with a breaking change.
+  stored design never goes stale. Version 2 is the first step: a design holds its frames
+  by name (spec/14 §2.1, §4.1, #383), so a version 1 design's singular `frame` becomes
+  `frames: %{main: …}` and the `size` it may still carry is dropped, the render giving one
+  now (§4.2, #427). A stored version 1 design therefore keeps working through
+  `Visualize.Chart.from_map/1`, which migrates before it validates.
   """
 
   alias Visualize.Chart.{Schema, Text, Validator}
 
-  @current 1
+  @current 2
 
   @doc "The schema version this library writes: `#{@current}`."
   @spec current() :: pos_integer()
@@ -43,8 +46,21 @@ defmodule Visualize.Chart.Migration do
   def migrate(_), do: {:error, [{[], {:type, {:node, :design}}}]}
 
   # One clause per registered migration, from a version to the next, each pure and
-  # yielding the map at `from + 1`. Version 1 has none: the first schema change adds
-  # `defp step(map, 1)` above this clause, which no reachable call meets.
+  # yielding the map at `from + 1`.
+
+  # 1 -> 2: `frame` becomes `frames: %{main: …}` and a frame's `size` is dropped, the
+  # render giving one (spec/14 §2.1, §4.2, #383, #427). A design with no frame at all is
+  # still invalid; the validator says so after the migration, at `[:frames]`.
+  defp step(map, 1) do
+    map = Map.put(map, :version, 2)
+
+    case Map.pop(map, :frame) do
+      {nil, map} -> map
+      {frame, map} when is_map(frame) -> Map.put(map, :frames, %{main: Map.delete(frame, :size)})
+      {_other, map} -> map
+    end
+  end
+
   defp step(map, from) do
     raise ArgumentError, "no migration from version #{from} for #{inspect(map)}"
   end
@@ -55,8 +71,8 @@ defmodule Visualize.Chart.Migration do
   interpolation (spec/14 §7.1), walking the map by the schema so a text is known to be
   one. Every other value passes through as it is.
 
-      iex> Visualize.Chart.Migration.canonical(%{version: 1, labels: [%{anchor: :title, text: ["u: ", Visualize.Chart.var(:unit)]}]})
-      %{version: 1, labels: [%{anchor: :title, text: "u: \#{var(:unit)}"}]}
+      iex> Visualize.Chart.Migration.canonical(%{version: 2, labels: [%{anchor: :title, text: ["u: ", Visualize.Chart.var(:unit)]}]})
+      %{version: 2, labels: [%{anchor: :title, text: "u: \#{var(:unit)}"}]}
   """
   @spec canonical(map()) :: map()
   def canonical(map) when is_map(map), do: node(:design, map)

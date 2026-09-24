@@ -53,6 +53,19 @@ defmodule Visualize.Chart.Compose do
     if node_map?(va) and node_map?(vb), do: union(va, vb, path), else: whole(va, vb, path)
   end
 
+  # A `:deep` name map unites, and a name both fragments declare **merges as a node**
+  # rather than conflicting (spec/14 §8.1, #383): a frame is assembled from fragments —
+  # `cartesian/1`, `axis/3`, `legend/2`, `scale/3` each declare part of one — exactly as
+  # they did when a design had a single `frame`.
+  defp rule(:deep, type, va, vb, path) when is_map(va) and is_map(vb) do
+    with true <- node_map?(va) and node_map?(vb),
+         kind when kind != nil <- node_kind(type) do
+      deep(kind, va, vb, path)
+    else
+      _other -> whole(va, vb, path)
+    end
+  end
+
   defp rule(_merge, type, va, vb, path) when is_map(va) and is_map(vb) do
     with true <- node_map?(va) and node_map?(vb),
          kind when kind != nil <- node_kind(type) do
@@ -63,6 +76,24 @@ defmodule Visualize.Chart.Compose do
   end
 
   defp rule(_merge, _type, _va, vb, _path), do: {vb, []}
+
+  defp deep(kind, va, vb, path) do
+    keys = Enum.uniq(Map.keys(va) ++ Map.keys(vb))
+
+    Enum.reduce(keys, {%{}, []}, fn name, {acc, errors} ->
+      case {Map.fetch(va, name), Map.fetch(vb, name)} do
+        {{:ok, x}, {:ok, y}} ->
+          {v, e} = node(kind, x, y, path ++ [name])
+          {Map.put(acc, name, v), errors ++ e}
+
+        {{:ok, x}, :error} ->
+          {Map.put(acc, name, x), errors}
+
+        {:error, {:ok, y}} ->
+          {Map.put(acc, name, y), errors}
+      end
+    end)
+  end
 
   defp union(va, vb, path) do
     keys = Enum.uniq(Map.keys(va) ++ Map.keys(vb))
@@ -85,6 +116,7 @@ defmodule Visualize.Chart.Compose do
 
   defp node_map?(v), do: is_map(v) and not is_struct(v)
 
+  defp node_kind({:map, inner}), do: node_kind(inner)
   defp node_kind({:node, kind}), do: kind
   defp node_kind({:one_of, types}), do: Enum.find_value(types, &node_kind/1)
   defp node_kind(_type), do: nil

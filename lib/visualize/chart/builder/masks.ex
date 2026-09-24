@@ -180,7 +180,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> Visualize.Chart.Builder.Masks.keyed?(%{style: %{stroke: "#111"}})
         true
 
-        iex> Visualize.Chart.Builder.Masks.keyed?(%{frame: %{}})
+        iex> Visualize.Chart.Builder.Masks.keyed?(%{frames: %{main: %{}}})
         false
     """
     @spec keyed?(map()) :: boolean()
@@ -224,13 +224,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The paths a site's contribution can mask: every top-level key, and the keys of each
     node under one, as `Visualize.Chart.Use.mask/2` takes them (spec/14 §19.5).
 
-        iex> Visualize.Chart.Builder.Masks.paths(%{theme: :dark, frame: %{legend: %{}, margin: %{}}})
-        [[:frame], [:frame, :legend], [:frame, :margin], [:theme]]
+        iex> Visualize.Chart.Builder.Masks.paths(%{theme: :dark, frames: %{main: %{legend: %{}, margin: %{}}}})
+        [[:frames], [:frames, :main], [:frames, :main, :legend], [:frames, :main, :margin], [:theme]]
     """
     @spec paths(map()) :: [[atom()]]
     def paths(fragment) when is_map(fragment) do
       fragment
       |> Enum.flat_map(fn
+        # `frames` is a map *of* frames, so its parts are one level deeper: a mask names
+        # `frames.main.margin`, not `frames.main` (spec/14 §2.1, #383).
+        {:frames = key, value} when is_map(value) and not is_struct(value) ->
+          inner =
+            Enum.flat_map(value, fn {name, node} ->
+              parts = if is_map(node), do: for({p, _} <- node, is_atom(p), do: [key, name, p]), else: []
+              [[key, name] | parts]
+            end)
+
+          [[key] | inner]
+
         {key, value} when is_map(value) and not is_struct(value) ->
           [[key] | for({inner, _} <- value, is_atom(inner), do: [key, inner])]
 
@@ -262,10 +273,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     §18.8, #316): its name (the keys joined by `.`, which is the checkbox's name), whether
     `use` masks it, and the class and title that say so.
 
-        iex> use = %Visualize.Chart.Use{id: 1, ref: nil, mask: [[:frame, :margin]]}
-        iex> rows = Visualize.Chart.Builder.Masks.rows(%{frame: %{margin: %{top: 1}}}, use)
+        iex> use = %Visualize.Chart.Use{id: 1, ref: nil, mask: [[:frames, :main, :margin]]}
+        iex> rows = Visualize.Chart.Builder.Masks.rows(%{frames: %{main: %{margin: %{top: 1}}}}, use)
         iex> Enum.map(rows, &{&1.name, &1.masked})
-        [{"frame", false}, {"frame.margin", true}]
+        [{"frames.main", false}, {"frames.main.margin", true}]
     """
     @spec rows(map(), Use.t()) :: [map()]
     def rows(fragment, %Use{mask: mask}) do

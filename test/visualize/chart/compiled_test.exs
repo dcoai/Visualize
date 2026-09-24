@@ -23,13 +23,13 @@ defmodule Visualize.Chart.CompiledTest do
   defp design(scales, extra \\ %{}) do
     Map.merge(
       %{
-        version: 1,
+        version: 2,
         sources: %{primary: %{fields: [:t, :v]}},
-        frame: %{
+        frames: %{main: %{
           kind: :cartesian,
           scales: scales,
           axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]
-        },
+        }},
         marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}],
         labels: [%{anchor: :title, text: ["Compiled"]}]
       },
@@ -75,12 +75,12 @@ defmodule Visualize.Chart.CompiledTest do
       scales = Map.put(@fixed, :color, %{kind: :ordinal})
 
       extra = %{
-        frame: %{
+        frames: %{main: %{
           kind: :cartesian,
           scales: scales,
           legend: %{scale: :color},
           axes: []
-        },
+        }},
         marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v, series: :v}}],
         labels: [%{anchor: {:data, [1, 1]}, text: ["here"]}]
       }
@@ -92,7 +92,7 @@ defmodule Visualize.Chart.CompiledTest do
                {:legend, {:inferred, [:color]}}
              ]
 
-      inferred = put_in(extra, [:frame, :scales, :y], %{kind: :linear})
+      inferred = put_in(extra, [:frames, :main, :scales, :y], %{kind: :linear})
       compiled = compile!(design(scales, inferred), sources: %{primary: rows(3)})
       assert {:labels, {:inferred, [:y]}} in Compiled.dynamic_regions(compiled)
     end
@@ -100,12 +100,12 @@ defmodule Visualize.Chart.CompiledTest do
     test "a facet's panels are one dynamic region" do
       extra = %{
         sources: %{primary: %{fields: [:t, :v, :g]}},
-        frame: %{
+        frames: %{main: %{
           kind: :facet,
           facet: %{by: :g},
           scales: @fixed,
           axes: [%{scale: :y, side: :left}]
-        }
+        }}
       }
 
       rows = for {r, i} <- Enum.with_index(rows(4)), do: Map.put(r, :g, rem(i, 2))
@@ -267,9 +267,9 @@ defmodule Visualize.Chart.CompiledTest do
 
     test "a polar frame with an outer axis, a geo frame and a facet frame reassemble too" do
       polar = %{
-        version: 1,
+        version: 2,
         sources: %{primary: %{fields: [:bearing, :v]}},
-        frame: %{
+        frames: %{main: %{
           kind: :polar,
           scales: %{
             angle: %{kind: :radial, domain: [0, 360]},
@@ -281,18 +281,18 @@ defmodule Visualize.Chart.CompiledTest do
             %{scale: :r, side: :top, ticks: 3, grid: true},
             %{scale: :z, side: :left, grid: true}
           ]
-        },
+        }},
         marks: [%{type: :rose, data: :primary, channels: %{angle: :bearing, value: :v}}],
         labels: [%{anchor: {:data, [90, 3]}, text: ["east"]}]
       }
 
       geo = %{
-        version: 1,
+        version: 2,
         sources: %{primary: %{fields: [:lon, :lat]}},
-        frame: %{
+        frames: %{main: %{
           kind: :geo,
           projection: %{type: :equirectangular, scale: 30}
-        },
+        }},
         marks: [
           %{
             type: :circle,
@@ -304,14 +304,14 @@ defmodule Visualize.Chart.CompiledTest do
       }
 
       facet = %{
-        version: 1,
+        version: 2,
         sources: %{primary: %{fields: [:t, :v, :g]}},
-        frame: %{
+        frames: %{main: %{
           kind: :facet,
           facet: %{by: :g, columns: 2},
           scales: %{x: %{kind: :linear, domain: [0, 5]}, y: %{kind: :linear}},
           axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, grid: true}]
-        },
+        }},
         marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       }
 
@@ -616,15 +616,15 @@ defmodule Visualize.Chart.CompiledTest do
 
   describe "the viewport (§12.5)" do
     @stream %{
-      version: 1,
+      version: 2,
       sources: %{primary: %{fields: [:t, :v]}},
-      frame: %{
+      frames: %{main: %{
         kind: :cartesian,
         margin: %{top: 0, right: 20, bottom: 0, left: 20},
         scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, 10]}},
         axes: [%{scale: :x, side: :bottom}],
         viewport: %{scale: :x, span: 10}
-      },
+      }},
       marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, render: :binary}]
     }
 
@@ -701,7 +701,7 @@ defmodule Visualize.Chart.CompiledTest do
       # measurements in the same run, never an absolute bound — timing bounds in this
       # suite have flaked under parallel load before.
       cost = fn span, rows ->
-        design = %{@stream | frame: %{@stream.frame | viewport: %{scale: :x, span: span}}}
+        design = %{@stream | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: span}}}}
         compiled = compile!(design, size: {140, 100}, sources: %{primary: rows})
         {_full, compiled} = Compiled.tick(compiled, %{primary: rows}, now: span)
 
@@ -725,7 +725,7 @@ defmodule Visualize.Chart.CompiledTest do
 
       # At scale the strip is a fraction of the full redraw: a thousand-row window on
       # 100 px scrolled 20 px carries 200 rows and six neighbours against 1,001.
-      big = %{@stream | frame: %{@stream.frame | viewport: %{scale: :x, span: 1000}}}
+      big = %{@stream | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: 1000}}}}
       big_rows = rows(1400)
       compiled_big = compile!(big, size: {140, 100}, sources: %{primary: big_rows})
       {full_big, compiled_big} = Compiled.tick(compiled_big, %{primary: big_rows}, now: 1000)
@@ -745,7 +745,7 @@ defmodule Visualize.Chart.CompiledTest do
     test "a scroll tick builds the strip and nothing else: its cost does not follow the window (#404)" do
       # A window of 20,000 rows on 100 px: a scroll exposes 20 px, about 200 rows and six
       # neighbours. Whatever the whole window costs to build, the scroll must not pay it.
-      big = %{@stream | frame: %{@stream.frame | viewport: %{scale: :x, span: 10_000}}}
+      big = %{@stream | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: 10_000}}}}
       sources = %{primary: rows(20_000)}
       compiled = compile!(big, sources: sources)
 
@@ -825,7 +825,7 @@ defmodule Visualize.Chart.CompiledTest do
       # 50,000 rows over a 740 px plot, scrolled the two pixels a run at 60 FPS and 4,500
       # samples a second gives it: the frame must cost that strip, not the window.
       plot = %{
-        @stream.frame
+        @stream.frames.main
         | viewport: %{scale: :x, span: 50_000}
       }
 
@@ -883,7 +883,7 @@ defmodule Visualize.Chart.CompiledTest do
     end
 
     test "an inferred scale beside the window makes every tick a full redraw" do
-      stale = put_in(@stream, [:frame, :scales, :y], %{kind: :linear})
+      stale = put_in(@stream, [:frames, :main, :scales, :y], %{kind: :linear})
       compiled = compile!(stale, sources: %{primary: rows(30)})
       {_, compiled} = Compiled.tick(compiled, %{primary: rows(30)}, now: 20)
       {payload, _} = Compiled.tick(compiled, %{primary: rows(30)}, now: 22)
@@ -893,7 +893,7 @@ defmodule Visualize.Chart.CompiledTest do
     test "a time scale windows in seconds" do
       design =
         @stream
-        |> put_in([:frame, :scales, :x], %{kind: :time})
+        |> put_in([:frames, :main, :scales, :x], %{kind: :time})
         |> put_in([:marks], [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}])
 
       rows = for i <- 0..5, do: %{t: DateTime.add(@t0, i * 60, :second), v: i}

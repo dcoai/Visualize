@@ -23,25 +23,25 @@ defmodule Visualize.Chart.ComposeTest do
     ]
   }
   @house %{
-    version: 1,
+    version: 2,
     theme: :dark,
     styles: %{series: %{stroke_width: 2}, muted: %{opacity: 0.5}},
-    frame: %{
+    frames: %{main: %{
       kind: :cartesian,
       margin: %{top: 10, right: 10, bottom: 30, left: 40},
       scales: %{x: %{kind: :time}},
       axes: [%{scale: :x, side: :bottom, ticks: 6}]
-    }
+    }}
   }
   @chart %{
-    version: 1,
+    version: 2,
     sources: %{primary: %{fields: [:t, :v]}},
     styles: %{accent: %{stroke: :series_2}},
-    frame: %{
+    frames: %{main: %{
       kind: :cartesian,
       scales: %{y: %{kind: :linear, domain: [0, :auto]}},
       axes: [%{scale: :y, side: :left, grid: true}]
-    },
+    }},
     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :accent}],
     labels: [%{anchor: :title, text: ["Uptime"]}]
   }
@@ -53,19 +53,19 @@ defmodule Visualize.Chart.ComposeTest do
       assert Enum.map(design.labels, & &1.anchor) == [:caption, {:frame, :top_right}, :title]
       assert Map.keys(design.styles) |> Enum.sort() == [:accent, :muted, :series]
       assert design.theme == :dark
-      assert design.frame.margin == @house.frame.margin
-      assert Map.keys(design.frame.scales) |> Enum.sort() == [:x, :y]
-      assert Enum.map(design.frame.axes, & &1.scale) == [:x, :y]
+      assert design.frames.main.margin == @house.frames.main.margin
+      assert Map.keys(design.frames.main.scales) |> Enum.sort() == [:x, :y]
+      assert Enum.map(design.frames.main.axes, & &1.scale) == [:x, :y]
       assert design.marks == @chart.marks
       assert {:ok, _} = Chart.from_map(design)
     end
 
     test "a union name declared differently is a conflict at its path, every one reported" do
-      a = %{styles: %{series: %{stroke_width: 2}}, frame: %{scales: %{x: %{kind: :time}}}}
-      b = %{styles: %{series: %{stroke_width: 3}}, frame: %{scales: %{x: %{kind: :linear}}}}
+      a = %{styles: %{series: %{stroke_width: 2}}, frames: %{main: %{scales: %{x: %{kind: :time}}}}}
+      b = %{styles: %{series: %{stroke_width: 3}}, frames: %{main: %{scales: %{x: %{kind: :linear}}}}}
 
       assert Chart.compose(a, b) ==
-               {:error, [{[:frame, :scales, :x], :conflict}, {[:styles, :series], :conflict}]}
+               {:error, [{[:frames, :main, :scales, :x], :conflict}, {[:styles, :series], :conflict}]}
 
       assert Chart.compose([a, b]) == Chart.compose(a, b)
     end
@@ -76,14 +76,14 @@ defmodule Visualize.Chart.ComposeTest do
     end
 
     test "a key one fragment alone carries is taken as it is" do
-      assert Chart.compose(%{version: 1}, %{marks: []}) == {:ok, %{version: 1, marks: []}}
+      assert Chart.compose(%{version: 2}, %{marks: []}) == {:ok, %{version: 2, marks: []}}
       assert Chart.compose(%{}, @chart) == {:ok, @chart}
       assert Chart.compose(@chart, %{}) == {:ok, @chart}
     end
 
     test "a node given as anything but a map by either side is the later's whole" do
       var = Chart.var(:frame)
-      assert Chart.compose(%{frame: %{kind: :polar}}, %{frame: var}) == {:ok, %{frame: var}}
+      assert Chart.compose(%{frames: %{main: %{kind: :polar}}}, %{frames: var}) == {:ok, %{frames: var}}
 
       assert Chart.compose(%{theme: :dark}, %{theme: %{name: :house}}) ==
                {:ok, %{theme: %{name: :house}}}
@@ -106,7 +106,7 @@ defmodule Visualize.Chart.ComposeTest do
                {:error, [{[:styles], :conflict}]}
 
       assert Chart.compose(%{styles: sheet}, %{styles: sheet}) == {:ok, %{styles: sheet}}
-      assert Chart.compose(%{styles: sheet}, %{version: 1}) == {:ok, %{styles: sheet, version: 1}}
+      assert Chart.compose(%{styles: sheet}, %{version: 2}) == {:ok, %{styles: sheet, version: 2}}
     end
 
     test "every union key reads a whole-node variable the same way, at its own path" do
@@ -116,7 +116,7 @@ defmodule Visualize.Chart.ComposeTest do
             {%{sources: %{p: %{fields: [:t]}}}, %{sources: v}, [:sources]},
             {%{vars: %{unit: %{default: "%"}}}, %{vars: v}, [:vars]},
             {%{styles: %{series: %{stroke_width: 2}}}, %{styles: v}, [:styles]},
-            {%{frame: %{scales: %{x: %{kind: :time}}}}, %{frame: %{scales: v}}, [:frame, :scales]}
+            {%{frames: %{main: %{scales: %{x: %{kind: :time}}}}}, %{frames: %{main: %{scales: v}}}, [:frames, :main, :scales]}
           ] do
         assert Chart.compose(variable, declared) == {:error, [{path, :conflict}]}
         assert Chart.compose(declared, variable) == {:error, [{path, :conflict}]}
@@ -208,7 +208,7 @@ defmodule Visualize.Chart.ComposeTest do
       sources: declaration([:primary, :other], fixed_map(%{fields: constant([:t, :v])})),
       styles: declaration(@style_names, style()),
       vars: declaration([:unit, :n], fixed_map(%{default: integer()})),
-      frame: frame(),
+      frames: fixed_map(%{main: frame()}),
       marks: list_of(mark(), max_length: 3),
       labels: list_of(label(), max_length: 3)
     })
@@ -224,10 +224,10 @@ defmodule Visualize.Chart.ComposeTest do
           assert Map.get(merged, :theme) == later(a, b, :theme)
           assert Map.get(merged, :version) == later(a, b, :version)
 
-          if is_map(a[:frame]) and is_map(b[:frame]) do
-            assert Map.get(merged.frame, :size) == later(a.frame, b.frame, :size)
-            assert Map.get(merged.frame, :kind) == later(a.frame, b.frame, :kind)
-            assert Map.get(merged.frame, :axes) == concat(a.frame, b.frame, :axes)
+          if is_map(a[:frames]) and is_map(b[:frames]) do
+            assert Map.get(merged.frames.main, :size) == later(a.frames.main, b.frames.main, :size)
+            assert Map.get(merged.frames.main, :kind) == later(a.frames.main, b.frames.main, :kind)
+            assert Map.get(merged.frames.main, :axes) == concat(a.frames.main, b.frames.main, :axes)
           else
             assert Map.get(merged, :frame) == later(a, b, :frame)
           end

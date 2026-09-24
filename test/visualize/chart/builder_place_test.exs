@@ -13,7 +13,7 @@ defmodule Visualize.Chart.Builder.PlaceTest do
   # A *geometry*, not a design frame: the preview's box and the design's margin.
   @frame %{size: %{width: 400, height: 200}, margin: %{top: 20, right: 20, bottom: 30, left: 40}}
   @design %{
-    frame: Map.merge(@frame, %{scales: %{x: %{kind: :linear}, colour: %{kind: :ordinal}}})
+    frames: %{main: Map.merge(@frame, %{scales: %{x: %{kind: :linear}, colour: %{kind: :ordinal}}})}
   }
 
   describe "region/2" do
@@ -93,7 +93,7 @@ defmodule Visualize.Chart.Builder.PlaceTest do
       assert Place.node(:legend, :plot, @design, {564, 358}) ==
                {:legend, %{scale: :colour, position: :bottom_right}}
 
-      assert Place.node(:legend, :plot, %{frame: %{scales: %{x: %{kind: :linear}}}}, {0, 0}) ==
+      assert Place.node(:legend, :plot, %{frames: %{main: %{scales: %{x: %{kind: :linear}}}}}, {0, 0}) ==
                {:error, :no_scale}
     end
 
@@ -143,8 +143,8 @@ defmodule Visualize.Chart.Builder.PlaceTest do
 
   test "geometry/1 is the design's size and margin over the schema's defaults" do
     assert Place.geometry(@design) == %{@frame | size: %{width: 600, height: 400}}
-    assert Place.geometry(%{frame: %{margin: %{top: 900}}}).size == %{width: 600, height: 400}
-    assert Place.geometry(%{frame: %{margin: %{top: 5}}}).margin.top == 5
+    assert Place.geometry(%{frames: %{main: %{margin: %{top: 900}}}}).size == %{width: 600, height: 400}
+    assert Place.geometry(%{frames: %{main: %{margin: %{top: 5}}}}).margin.top == 5
   end
 
   test "the palette's rows name every component and every mark type" do

@@ -147,12 +147,12 @@ defmodule Visualize.Chart.Composite do
   the result is the document again, `version` aside, which flatten writes. Each site comes
   with a label a person reads.
 
-      iex> document = %{version: 1, theme: :dark, styles: %{series: %{stroke: "#111"}},
-      ...>   frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}}, axes: [%{scale: :x, side: :bottom}]},
+      iex> document = %{version: 2, theme: :dark, styles: %{series: %{stroke: "#111"}},
+      ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}}, axes: [%{scale: :x, side: :bottom}]}},
       ...>   marks: [%{id: :m, type: :line}]}
       iex> {uses, labels} = Visualize.Chart.Composite.decompose(document)
       iex> Enum.map(uses, &{&1.id, Map.keys(&1.local), &1.key})
-      [{{:use, 1}, [:theme], nil}, {{:use, 2}, [:frame], nil}, {{:use, 3}, [:style], :series}, {{:use, 4}, [:scale], :x}, {{:use, 5}, [:axis], nil}, {{:use, 6}, [:mark], nil}]
+      [{{:use, 1}, [:theme], nil}, {{:use, 2}, [:frames], nil}, {{:use, 3}, [:style], :series}, {{:use, 4}, [:scale], :x}, {{:use, 5}, [:axis], nil}, {{:use, 6}, [:mark], nil}]
       iex> labels[{:use, 3}]
       "style series"
   """
@@ -229,8 +229,8 @@ defmodule Visualize.Chart.Composite do
       iex> Visualize.Chart.Composite.place(%{scale: %{kind: :linear}}, %Visualize.Chart.Use{id: {:use, 1}, ref: nil})
       :keyless
 
-      iex> Visualize.Chart.Composite.place(%{theme: :dark, frame: %{}}, %Visualize.Chart.Use{id: {:use, 1}, ref: nil})
-      {:ok, %{theme: :dark, frame: %{}}}
+      iex> Visualize.Chart.Composite.place(%{theme: :dark, frames: %{main: %{}}}, %Visualize.Chart.Use{id: {:use, 1}, ref: nil})
+      {:ok, %{theme: :dark, frames: %{main: %{}}}}
   """
   @spec place(map(), Use.t()) :: {:ok, map()} | :keyless
   def place(contribution, %Use{key: key}) do
@@ -242,7 +242,7 @@ defmodule Visualize.Chart.Composite do
         {:ok, %{styles: %{key => body}}}
 
       {:scale, body} ->
-        {:ok, %{frame: %{scales: %{key => body}}}}
+        {:ok, %{frames: %{main: %{scales: %{key => body}}}}}
 
       {:source, body} ->
         {:ok, %{sources: %{key => body}}}
@@ -260,7 +260,7 @@ defmodule Visualize.Chart.Composite do
         {:ok, %{labels: [body]}}
 
       {:axis, body} ->
-        {:ok, %{frame: %{axes: [body]}}}
+        {:ok, %{frames: %{main: %{axes: [body]}}}}
 
       _other ->
         {:ok, contribution}
