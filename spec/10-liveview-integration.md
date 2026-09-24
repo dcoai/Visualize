@@ -417,7 +417,7 @@ Attach as for `CanvasChart` (7.2). On `mounted()` the hook also creates an offsc
 
 ### 10.2 `ResizeHook` behaviour
 
-Attach with `phx-hook="ResizeHook"` and an `id` on the container whose size the chart should follow — the element CSS sizes, not the `<svg>` inside it, which the server re-renders at the pushed size. Data attributes read on `mounted()`:
+Attach with `phx-hook="ResizeHook"` and an `id` on the container whose size the chart should follow — the element CSS sizes, not the `<svg>` inside it, which the server re-renders at the pushed size. **This is the ordinary path for a declarative chart** (spec/14 §4.2, #427): a design records no size, so the pushed size is what `Visualize.Chart.apply/2` is given as `size:`. Before the first push the chart renders at the documented default `{600, 400}` — a disconnected mount has no container to measure and must still draw — and the first measured render replaces it. Data attributes read on `mounted()`:
 
 | Attribute | Default | Meaning |
 |---|---|---|
