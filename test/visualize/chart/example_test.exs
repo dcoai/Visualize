@@ -82,7 +82,7 @@ defmodule Visualize.Chart.ExampleTest do
     canvas = Chart.render(applied, backend: :canvas)
     assert canvas =~ "ctx." and not (canvas =~ "var(")
 
-    {:ok, compiled} = Chart.compile(applied)
+    {:ok, %{main: compiled}} = Chart.compile(applied)
     assert Enum.all?(Compiled.targets(compiled), &match?({:svg, _}, &1))
     assert Compiled.svg(compiled, applied.sources) == Chart.render(applied)
   end

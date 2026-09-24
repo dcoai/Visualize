@@ -9,7 +9,7 @@ defmodule Visualize.Chart.FrameTest do
   use ExUnit.Case, async: true
 
   alias Visualize.{Axis, Chart, Render, Scale, Theme}
-  alias Visualize.Chart.Frame
+  alias Visualize.Chart.{Compiled, Frame}
   alias Visualize.Chart.Frame.Legend
 
   doctest Frame
@@ -1308,10 +1308,26 @@ defmodule Visualize.Chart.FrameTest do
                )
     end
 
-    test "a compiled chart is one frame until #385" do
-      assert_raise ArgumentError, ~r/one frame until #385/, fn ->
-        Chart.compile(@two, sources: %{primary: @rows})
-      end
+    test "a design compiles to one compiled chart per frame, each its own plot (#385)" do
+      sources = %{primary: @rows}
+      {:ok, frames} = Chart.compile(@two, sources: sources, size: @size)
+
+      assert frames |> Map.keys() |> Enum.sort() == [:history, :now]
+
+      # Each is one plot: its own box in pixels, its own plot area, its own marks.
+      assert frames.history.box == %{x: 0, y: 0, width: 0.75 * 300, height: 200}
+      assert frames.now.box == %{x: 0.75 * 300, y: 0, width: 0.25 * 300, height: 200}
+      assert frames.history.plot == %{width: 0.75 * 300 - 50, height: 170}
+      assert Enum.map(frames.history.chart.marks, & &1.type) == [:line]
+      assert Enum.map(frames.now.chart.marks, & &1.type) == [:symbol]
+      assert Map.keys(frames.now.chart.frames) == [:now]
+
+      # And each draws what that frame draws alone, byte for byte.
+      alone = %{@two | frames: %{history: @two.frames.history}, marks: [hd(@two.marks)]}
+      {:ok, %{history: only}} = Chart.compile(alone, sources: sources, size: @size)
+
+      assert Compiled.svg(frames.history, sources) == Compiled.svg(only, sources)
+      assert Compiled.static(frames.history) == Compiled.static(only)
     end
 
     test "a version 1 design migrates to one frame named main, without its size" do

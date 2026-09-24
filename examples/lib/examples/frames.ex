@@ -64,7 +64,7 @@ defmodule Examples.Frames do
   @spec prepare(module(), keyword(), backend()) :: map() | nil
   def prepare(module, opts, backend) when backend in [:canvas, :incremental] do
     applied = Design.applied(module, opts)
-    {:ok, compiled} = Chart.compile(applied, ceiling: 1)
+    compiled = one!(applied, ceiling: 1)
 
     %{
       compiled: compiled,
@@ -81,9 +81,17 @@ defmodule Examples.Frames do
   def prepare(module, opts, :svg) do
     if Design.transitions?(module) do
       applied = Design.applied(module, opts)
-      {:ok, compiled} = Chart.compile(applied, ceiling: 1_000_000_000)
-      %{compiled: compiled}
+      %{compiled: one!(applied, ceiling: 1_000_000_000)}
     end
+  end
+
+  # A design compiles to one compiled chart per frame (spec/14 §12.1, #385). These
+  # backends draw one plot until #432, and `backends/1` offers them only for a design of
+  # one frame, so this takes the one.
+  defp one!(applied, opts) do
+    {:ok, frames} = Chart.compile(applied, opts)
+    [compiled] = Map.values(frames)
+    compiled
   end
 
   @doc "The static SVG a prepared state carries, or an empty string."

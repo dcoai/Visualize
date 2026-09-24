@@ -31,7 +31,7 @@ defmodule Visualize.Chart.Compiled do
       ...>   }},
       ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...> }
-      iex> {:ok, compiled} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}})
+      iex> {:ok, %{main: compiled}} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}})
       iex> Visualize.Chart.Compiled.dynamic_regions(compiled)
       [{:grid, {:inferred, [:y]}}, {{:mark, 0}, :data}, {{:axis, 1}, {:inferred, [:y]}}]
       iex> Visualize.Chart.Compiled.targets(compiled)
@@ -60,6 +60,7 @@ defmodule Visualize.Chart.Compiled do
     :size,
     :margin,
     :plot,
+    :box,
     :viewport,
     defs: [],
     transitions: %{},
@@ -107,6 +108,7 @@ defmodule Visualize.Chart.Compiled do
           defs: [Element.t()],
           margin: %{top: number(), right: number(), bottom: number(), left: number()},
           plot: %{width: number(), height: number()},
+          box: %{x: number(), y: number(), width: number(), height: number()},
           viewport: map() | nil,
           transitions: %{atom() => map()},
           eased: %{atom() => map()},
@@ -115,14 +117,16 @@ defmodule Visualize.Chart.Compiled do
         }
 
   @doc false
-  # The compiled chart of an applied one (spec/14 §12.1); `Visualize.Chart.compile/2`.
-  @spec new(Applied.t(), keyword()) :: t()
-  def new(%Applied{chart: chart, sources: sources, frame: frame}, opts) do
-    map_size(chart.frames) == 1 ||
-      raise ArgumentError,
-            "a compiled chart is one frame until #385: this design has " <>
-              "#{map_size(chart.frames)} (#{inspect(Map.keys(chart.frames))}) (spec/14 §12.1)"
-
+  # One frame of an applied chart, compiled (spec/14 §12.1, #385);
+  # `Visualize.Chart.compile/2` calls it once per frame.
+  #
+  # Everything below reads `chart`, which is the design **restricted to this frame** — its
+  # `frames` the one frame, its `marks` and `labels` the ones that say it — so the regions,
+  # the window and the transitions never ask how many frames a design has.
+  @spec new(Applied.t(), atom(), keyword()) :: t()
+  def new(%Applied{sources: sources} = applied, name, opts) do
+    frame = frame!(applied, name)
+    chart = restrict(applied.chart, frame)
     ceiling = ceiling!(Keyword.get(opts, :ceiling, @default_ceiling))
     window = Window.new(chart)
     {layout, regions} = Regions.build(chart, window && window.scale)
@@ -149,6 +153,7 @@ defmodule Visualize.Chart.Compiled do
       size: frame.size,
       margin: frame.margin,
       plot: frame.plot,
+      box: box(frame),
       viewport: window && Map.put(window, :full, stale?(chart, window.scale, targets)),
       transitions: Transition.scales(chart, window && window.scale),
       motions: Motion.marks(chart)
@@ -161,6 +166,28 @@ defmodule Visualize.Chart.Compiled do
     defs = Defs.defs(frame, :css, Element.group(static ++ all_marks(compiled, frame, sources)))
     compiled = %{compiled | defs: defs}
     %{compiled | static: root(compiled, defs ++ static)}
+  end
+
+  # The realised frame of this name; an `%Applied{}` assembled by hand carries one frame
+  # and no `frames`, as `Visualize.Chart.generate/2` reads it.
+  defp frame!(%Applied{frames: frames, frame: frame}, name) do
+    case frames do
+      %{^name => realised} -> realised
+      _absent -> frame
+    end
+  end
+
+  # The design this plot draws: the one frame, and the marks and labels that say it — which
+  # the realised frame already holds, filtered (spec/14 §4.7, §5.1).
+  defp restrict(%Chart{} = chart, %Frame{name: name} = frame) do
+    node = Map.get(chart.frames, name) || chart.frames |> Map.values() |> hd()
+    %{chart | frames: %{name => node}, marks: frame.marks, labels: frame.labels}
+  end
+
+  # The frame's own pixel box within the render's size (spec/14 §4.2): where a page puts
+  # this plot's canvas, and what its static document is translated by.
+  defp box(%Frame{box: [x, y, w, h], size: size}) do
+    %{x: x * size.width, y: y * size.height, width: w * size.width, height: h * size.height}
   end
 
   defp all_marks(%{regions: regions}, frame, sources) do
@@ -219,13 +246,13 @@ defmodule Visualize.Chart.Compiled do
   when every mark targets `:svg`.
   """
   @spec svg(t(), map()) :: String.t()
-  def svg(%__MODULE__{margin: margin} = compiled, sources) when is_map(sources) do
+  def svg(%__MODULE__{} = compiled, sources) when is_map(sources) do
     {frame, hi} = realise(compiled, sources, nil)
     children = layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true)
 
     Element.group(compiled.defs ++ children,
       style: %{class: "frame"},
-      transform: Transform.translate(margin.left, margin.top)
+      transform: placed(compiled)
     )
     |> Render.to_string(backend: :svg)
   end
@@ -240,7 +267,6 @@ defmodule Visualize.Chart.Compiled do
   @spec step(t(), map(), keyword()) :: {Element.t(), t()}
   def step(%__MODULE__{} = compiled, sources, opts \\ []) when is_map(sources) do
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
-    margin = compiled.margin
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
     children = layer(compiled, drawn(compiled, frame, sources, hi, true, moved), :svg, true)
@@ -248,11 +274,17 @@ defmodule Visualize.Chart.Compiled do
     group =
       Element.group(compiled.defs ++ children,
         style: %{class: "frame"},
-        transform: Transform.translate(margin.left, margin.top)
+        transform: placed(compiled)
       )
 
     {group, compiled}
   end
+
+  # Where this plot's group sits: its margins, out of its own box (spec/14 §4.2) — the
+  # design's own translate for a frame that fills the box, as every single-frame design's
+  # does.
+  defp placed(%{margin: margin, box: box}),
+    do: Transform.translate(margin.left + box.x, margin.top + box.y)
 
   # The frame at its eased scales' shown domains, and the chart carrying the states on;
   # nothing to do for a chart with no transition.
@@ -558,8 +590,16 @@ defmodule Visualize.Chart.Compiled do
   defp fragment(_compiled, []), do: ""
   defp fragment(compiled, elements), do: root(compiled, elements)
 
-  defp root(%{size: size, margin: margin}, elements) do
-    Hybrid.render_static(width: size.width, height: size.height, margin: margin, static: elements)
+  # A page-ready document at the design's size, this frame's group translated by its box
+  # and its margins (spec/14 §12.4, §4.2): the frames of a design stack, each transparent
+  # where it draws nothing, and a design of one frame at `[0, 0, 1, 1]` is what it was.
+  defp root(%{size: size, margin: margin, box: box}, elements) do
+    Hybrid.render_static(
+      width: size.width,
+      height: size.height,
+      margin: %{margin | left: margin.left + box.x, top: margin.top + box.y},
+      static: elements
+    )
   end
 
   defp format(%{targets: targets}) do

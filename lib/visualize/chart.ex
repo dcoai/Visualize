@@ -495,7 +495,11 @@ defmodule Visualize.Chart do
   @doc """
   The design compiled for rendering per tick (spec/14 §12): the split into static and
   dynamic regions computed from the design, a render target per mark chosen from the
-  bound data, and a `Visualize.Chart.Compiled` that draws only what moves.
+  bound data, and a `Visualize.Chart.Compiled` per frame that draws only what moves.
+
+  The result is **one compiled chart per frame**, by name (§12.1, #385) — a design of one
+  frame is a map of one, so a caller has one shape to read whatever the design holds.
+  Each is compiled over its own realised frame and the marks and labels that say it.
 
   An applied chart is compiled as it is; a chart or a design map is applied first with
   the `sources:`, `vars:` and `theme:` options of `apply/2`, and its errors are this
@@ -510,7 +514,7 @@ defmodule Visualize.Chart do
       ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear, domain: [0, 10]}, y: %{kind: :linear, domain: [0, 10]}}}},
       ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...> }
-      iex> {:ok, compiled} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}}, ceiling: 1)
+      iex> {:ok, %{main: compiled}} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}}, ceiling: 1)
       iex> Visualize.Chart.Compiled.dynamic_regions(compiled)
       [{{:mark, 0}, :data}]
       iex> Visualize.Chart.Compiled.targets(compiled)
@@ -518,10 +522,12 @@ defmodule Visualize.Chart do
 
   """
   @spec compile(Applied.t() | t() | map(), keyword()) ::
-          {:ok, Compiled.t()} | {:error, [Validator.error(), ...]}
+          {:ok, %{atom() => Compiled.t()}} | {:error, [Validator.error(), ...]}
   def compile(design, opts \\ [])
 
-  def compile(%Applied{} = applied, opts), do: {:ok, Compiled.new(applied, opts)}
+  def compile(%Applied{frames: frames} = applied, opts) do
+    {:ok, Map.new(frames, fn {name, _frame} -> {name, Compiled.new(applied, name, opts)} end)}
+  end
 
   def compile(design, opts) do
     with {:ok, applied} <-
