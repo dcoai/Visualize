@@ -260,6 +260,58 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     refute html(s) =~ ~s(<span class="perf-frames-label">)
   end
 
+  test "the page measures itself: a resize re-renders at the new width, the chart's aspect (#434)" do
+    s = page("line")
+    # A chart with no `size/0` is drawn at the render's default (spec/14 §4.2).
+    {width, height} = Visualize.Chart.Frame.default_size()
+
+    # Before any measurement the chart is at that size.
+    assert html(s) =~ ~s(width="#{width}")
+
+    # The socket is not connected here, so the still frame renders in place (#362).
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 900, "height" => 77}, s)
+
+    # The width is the container's; the height is that width at the chart's aspect, never
+    # the container's — a container sized by its content cannot also size it.
+    assert s.assigns.width == 900
+    h = html(s)
+    assert h =~ ~s(width="900")
+    assert h =~ ~s(height="#{round(900 * height / width)}")
+    refute h =~ ~s(height="77")
+
+    # The container carries the hook that measures it.
+    assert h =~ ~s(phx-hook="ResizeHook")
+    assert h =~ ~s(data-resize-event="resize")
+
+    # The same width again changes nothing.
+    assert {:noreply, ^s} = ChartLive.handle_event("resize", %{"width" => 900, "height" => 77}, s)
+  end
+
+  test "a resize during a run keeps its tick, its rows and its easing (#434)" do
+    s = page("scrolling_series", :incremental)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    s = settled(s)
+    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    s = settled(s)
+
+    ticks = s.assigns.run_ticks
+    origin = s.assigns.run_scroll.origin
+
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 980, "height" => 400}, s)
+
+    # A resize is geometry: the run goes on at its own tick, over its own window.
+    assert s.assigns.run.running
+    assert s.assigns.run_ticks == ticks
+    assert s.assigns.run_scroll.origin == origin
+    assert s.assigns.width == 980
+
+    # And its renderer draws at the new width from the next frame.
+    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    s = settled(s)
+    [{_name, compiled}] = Examples.Renderer.state(s.assigns.run.renderer).compiled
+    assert compiled.size.width == 980
+  end
+
   test "the last chart converted runs on the split like every other (#348)" do
     s = page("hexbin")
     {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)
@@ -452,8 +504,15 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
     # The easing lives in the run's renderer, which holds a compiled chart per frame
     # (#413, #385); this design has one.
-    assert [{_name, %{eased: %{y: %{shown: [+0.0, _]}}}}] =
+    assert [{_name, %{eased: %{y: %{shown: [+0.0, _] = shown}}}}] =
              Examples.Renderer.state(s.assigns.run.renderer).compiled
+
+    # A resize recompiles at the new width and **carries the easing** (#434): the scale
+    # goes on from where it stood rather than jumping back to its target.
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 820, "height" => 300}, s)
+    [{_name, resized}] = Examples.Renderer.state(s.assigns.run.renderer).compiled
+    assert resized.size.width == 820
+    assert resized.eased.y.shown == shown
 
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
     refute s.assigns.run.running

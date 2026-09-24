@@ -61,6 +61,18 @@ defmodule Examples.Renderer do
     GenServer.cast(renderer, {:frame, id, opts, columns})
   end
 
+  @doc """
+  Re-prepares the backend's state at `opts` — a new size, a new density — keeping the
+  window's rows and **carrying the easing** (spec/14 §12.5, #434).
+
+  A compiled chart's plot is part of its state, so a chart drawn at another size is
+  compiled again; `Visualize.Chart.Compiled.carry/2` keeps each frame's eased scales and
+  mark motions, so a transition goes on from where it stood. A cast, like `frame/4`, so a
+  resize never blocks the view.
+  """
+  @spec resize(pid(), keyword()) :: :ok
+  def resize(renderer, opts), do: GenServer.cast(renderer, {:resize, opts})
+
   @doc "Stops a renderer; a pid that is gone is `:ok` too."
   @spec stop(pid() | nil) :: :ok
   def stop(nil), do: :ok
@@ -95,6 +107,12 @@ defmodule Examples.Renderer do
     {frame, render_state} = Frames.frame(state.module, opts, state.backend, state.state)
     send(state.owner, {:frame, id, frame})
     {:noreply, %{state | state: render_state, rows: rows}}
+  end
+
+  @impl true
+  def handle_cast({:resize, opts}, state) do
+    fresh = Frames.prepare(state.module, opts, state.backend)
+    {:noreply, %{state | state: Frames.carry(state.state, fresh)}}
   end
 
   @doc """

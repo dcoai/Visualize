@@ -112,6 +112,30 @@ defmodule Examples.Frames do
     |> Enum.map(fn {name, frame} -> {name, frame} end)
   end
 
+  @doc """
+  A freshly prepared state carrying the easing of the one it replaces (spec/14 §12.5,
+  #434): a resize is a recompilation, and a scale mid-transition goes on from where it
+  stood rather than jumping back to its target. Frame by frame, by name; a frame the
+  fresh state does not have is dropped, and a state with no compiled chart — the SVG
+  backend's, for a design that eases nothing — is the fresh one.
+  """
+  @spec carry(map() | nil, map() | nil) :: map() | nil
+  def carry(%{compiled: was}, %{compiled: fresh} = state) when is_list(was) and is_list(fresh) do
+    previous = Map.new(was)
+
+    carried =
+      for {name, one} <- fresh do
+        case previous do
+          %{^name => before} -> {name, Compiled.carry(before, one)}
+          _absent -> {name, one}
+        end
+      end
+
+    %{state | compiled: carried}
+  end
+
+  def carry(_was, state), do: state
+
   @doc "The static SVG a prepared state carries, or an empty string."
   @spec static(map() | nil) :: String.t()
   def static(%{static: static}), do: static
