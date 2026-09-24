@@ -69,6 +69,8 @@ defmodule Visualize.Chart.Schema.Mark do
     {:fold, [:fields], [:as]},
     {:sum, [:field], [:by, :as]},
     {:sort, [:field], [:order]},
+    {:take, [:n], [:side]},
+    {:window, [:field], [:from, :to]},
     {:spectrum, [:field], [:time, :every, :samples, :window, :detrend, :as]},
     {:tree, [], @hierarchy_keys ++ [:orientation, :link]},
     {:cluster, [], @hierarchy_keys ++ [:orientation, :link]},
@@ -203,7 +205,11 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:every, :number, :geometry),
       spec(:samples, :integer, :geometry),
       spec(:window, {:enum, [:hann, :hamming, :none]}, :geometry, default: :hann),
-      spec(:detrend, :boolean, :geometry, default: false)
+      spec(:detrend, :boolean, :geometry, default: false),
+      spec(:n, :integer, :geometry),
+      spec(:side, {:enum, [:end, :start]}, :geometry, default: :end),
+      spec(:from, {:list, :term}, :geometry),
+      spec(:to, {:list, :term}, :geometry)
     ]
   end
 

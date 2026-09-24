@@ -382,8 +382,17 @@ defmodule Visualize.ChartGen do
       tile: member_of([:squarify, :binary, :slice, :dice, :slice_dice]),
       bandwidth: number(),
       output:
-        member_of([:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges, :points])
+        member_of([:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges, :points]),
+      n: integer(0..10),
+      side: member_of([:end, :start]),
+      from: duration(),
+      to: duration()
     }
+  end
+
+  # A `:window` bound is `[n, unit]` (spec/14 §5.4.1, #426).
+  defp duration do
+    fixed_list([integer(1..10), member_of([:second, :minute, :hour, :day, :week, :year])])
   end
 
   # An arc's `start` and `end` come as a pair, drawn together or not at all (spec/14 §5.2,

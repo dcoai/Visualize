@@ -257,6 +257,8 @@ defmodule Visualize.Chart do
       reads (default `%{}`)
     * `:vars` - a map from variable name to value (default `%{}`)
     * `:theme` - a `%Visualize.Theme{}`, as `Visualize.Chart.Frame.new/2` takes it
+    * `:now` - the instant a `:window` step measures its durations back from (spec/14
+      §5.4.1); without it each such step takes the newest reading of its own column
 
   Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does, for a value a scale
   cannot take or a theme name it cannot resolve.
@@ -290,7 +292,7 @@ defmodule Visualize.Chart do
     with {:ok, chart} <- Template.resolve(chart, vars),
          {:ok, sources} <- Template.bind(chart, pool),
          :ok <- Validator.validate(to_map(chart)) do
-      frame = Frame.new(chart, [sources: sources] ++ Keyword.take(opts, [:theme]))
+      frame = Frame.new(chart, [sources: sources] ++ Keyword.take(opts, [:theme, :now]))
       {:ok, %Applied{chart: chart, sources: sources, frame: frame}}
     end
   end

@@ -60,7 +60,8 @@ defmodule Visualize.Chart.Frame do
             theme: nil,
             styles: %{},
             design_styles: %{},
-            defs: %{}
+            defs: %{},
+            now: nil
 
   @typedoc "A frame kind of spec/14 §4.1."
   @type kind :: :cartesian | :polar | :geo | :facet
@@ -81,7 +82,8 @@ defmodule Visualize.Chart.Frame do
           theme: Theme.t(),
           styles: %{atom() => map()},
           design_styles: %{atom() => map()},
-          defs: %{atom() => map()}
+          defs: %{atom() => map()},
+          now: term() | nil
         }
 
   @doc """
@@ -93,6 +95,8 @@ defmodule Visualize.Chart.Frame do
       reads; the columns `:auto` domains are inferred from (default `%{}`)
     * `:theme` - a `%Visualize.Theme{}`; taken for any theme name the design gives, and
       required for one that is neither built-in nor inline
+    * `:now` - the instant a `:window` step measures its durations back from (spec/14
+      §5.4.1); without it each such step takes the newest reading of its own column
 
   Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, a
   bound value a scale cannot take, or a legend in a margin that cannot hold it (spec/14
@@ -111,13 +115,14 @@ defmodule Visualize.Chart.Frame do
       height: size.height - margin.top - margin.bottom
     }
 
+    now = Keyword.get(opts, :now)
     theme = theme(chart.theme, Keyword.get(opts, :theme))
     styles = Style.all(chart.styles)
     projection = projection(kind, node, plot)
-    panels = panels(kind, node, chart, sources, context(plot, projection))
+    panels = panels(kind, node, chart, sources, context(plot, projection, now))
     facet = facet(kind, node, panels)
     scale_plot = if facet, do: panel_plot(plot, facet.columns, panels), else: plot
-    ctx = context(scale_plot, projection)
+    ctx = context(scale_plot, projection, now)
 
     scales =
       Scales.realise(
@@ -151,7 +156,8 @@ defmodule Visualize.Chart.Frame do
       theme: theme,
       styles: styles,
       design_styles: chart.styles,
-      defs: chart.defs
+      defs: chart.defs,
+      now: now
     }
   end
 
@@ -270,7 +276,8 @@ defmodule Visualize.Chart.Frame do
   # -- construction ---------------------------------------------------------------------
 
   # What a mark's pipeline sees of the frame (spec/14 §5.4).
-  defp context(plot, projection), do: %{size: [plot.width, plot.height], projection: projection}
+  defp context(plot, projection, now),
+    do: %{size: [plot.width, plot.height], projection: projection, now: now}
 
   defp margin(%Var{name: name}), do: Style.unresolved!(name)
 

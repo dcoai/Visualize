@@ -137,7 +137,7 @@ defmodule Visualize.Chart.Mark do
   @spec rows(Frame.t(), map(), map()) :: [map()]
   def rows(%Frame{} = frame, mark, sources) do
     plot = frame.plot
-    ctx = %{size: [plot.width, plot.height], projection: frame.projection}
+    ctx = %{size: [plot.width, plot.height], projection: frame.projection, now: frame.now}
     Scales.mark_rows(mark, sources, ctx)
   end
 
