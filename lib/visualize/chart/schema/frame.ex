@@ -31,7 +31,6 @@ defmodule Visualize.Chart.Schema.Frame do
   def describe(:frame) do
     [
       spec(:kind, {:enum, @frame_kinds}, :geometry, required: true),
-      spec(:size, {:node, :size}, :geometry, default: %{width: 600, height: 400}),
       spec(:margin, {:node, :margin}, :geometry,
         default: %{top: 20, right: 20, bottom: 30, left: 40}
       ),
@@ -41,13 +40,6 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:projection, {:node, :projection}, :geometry),
       spec(:facet, {:node, :facet}, :binding),
       spec(:viewport, {:node, :viewport}, :geometry)
-    ]
-  end
-
-  def describe(:size) do
-    [
-      spec(:width, :number, :geometry, required: true, range: {100, 2000, 10}),
-      spec(:height, :number, :geometry, required: true, range: {100, 2000, 10})
     ]
   end
 

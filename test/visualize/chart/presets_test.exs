@@ -133,7 +133,6 @@ defmodule Visualize.Chart.PresetsTest do
     assert Presets.defaults(:pie_chart).colors == :category10
 
     design = Presets.bar_chart(%{data: [], x: & &1.name, y: & &1.value})
-    assert design.frame.size == %{width: 600, height: 400}
     assert design.frame.margin == %{top: 20, right: 20, bottom: 30, left: 40}
     assert design.frame.scales.x == %{kind: :band, padding: 0.1}
 
@@ -330,7 +329,9 @@ defmodule Visualize.Chart.PresetsTest do
     defp layer(name, a) do
       chart = Chart.from_map!(Presets.design(name, a))
       sources = Presets.sources(name, a)
-      Frame.render(Frame.new(chart, sources: sources), sources: sources)
+      defaults = Presets.defaults(name)
+      size = {Map.get(a, :width, defaults.width), Map.get(a, :height, defaults.height)}
+      Frame.render(Frame.new(chart, sources: sources, size: size), sources: sources)
     end
 
     # Every `<tag …>` of an SVG string as a map of its attributes, in document order.

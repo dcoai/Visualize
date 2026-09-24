@@ -35,8 +35,7 @@ defmodule Examples.Charts.SpectrumChart do
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
+    {_width, height} = Design.size(__MODULE__, opts)
     plot = height - @margin.top - @margin.bottom
     half = div(plot, 2)
 
@@ -50,7 +49,7 @@ defmodule Examples.Charts.SpectrumChart do
         style(:spectrum, fill: :series_2, opacity: 0.35, curve: :monotone_x),
         style(:peak, stroke: :series_2, stroke_width: 2, curve: :monotone_x),
         style(:name, fill: :text, font_size: 11, text_anchor: :middle),
-        cartesian(width, height, margin: @margin),
+        cartesian(margin: @margin),
         # The signal's scales, the upper half of the plot.
         linear_scale(:x),
         linear_scale(:y, domain: [0, 100], range: [half - @gap, 0]),
@@ -126,7 +125,7 @@ defmodule Examples.Charts.SpectrumChart do
         source(:points, [:t, :y], types: %{t: :number, y: :number}),
         style(:area, fill: :series_1, opacity: 0.25, curve: :monotone_x),
         style(:spectrum, fill: :series_2, opacity: 0.35, curve: :monotone_x),
-        cartesian(600, 400, margin: %{top: 30, right: 20, bottom: 40, left: 50}),
+        cartesian(margin: %{top: 30, right: 20, bottom: 40, left: 50}),
         linear_scale(:x),
         linear_scale(:y, domain: [0, 100], range: [151, 0]),
         linear_scale(:fx, domain: [0, 0.5]),

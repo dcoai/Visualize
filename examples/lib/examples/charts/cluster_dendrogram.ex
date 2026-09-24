@@ -74,13 +74,15 @@ defmodule Examples.Charts.ClusterDendrogram do
     ]
   }
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {700, 400}
+
   def title, do: "Cluster Dendrogram"
   def description, do: "Tree of life classification"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 700
-    height = opts[:height] || 400
+    {width, height} = Design.size(__MODULE__, opts)
     tree = opts[:data] || @data
     {plot_width, plot_height} = Design.plot(width, height, @margin)
 
@@ -99,7 +101,7 @@ defmodule Examples.Charts.ClusterDendrogram do
         style(:leaf, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
         style(:clade_name, extends: :label, fill: :axis, font_size: 9),
         style(:leaf_name, extends: :label, font_size: 9),
-        cartesian(width, height, margin: @margin),
+        cartesian(margin: @margin),
         ordinal_scale(:color, domain: Enum.to_list(0..(length(tree[:children] || []) - 1)//1)),
         path(links, %{path: :path}, style: :link),
         # The clades named to the left of their circle, the leaves to the right.
@@ -150,7 +152,7 @@ defmodule Examples.Charts.ClusterDendrogram do
         style(:leaf, fill: {:field, :branch}, stroke: :background),
         style(:clade_name, extends: :label, fill: :axis, font_size: 9),
         style(:leaf_name, extends: :label, font_size: 9),
-        cartesian(700, 400, margin: %{top: 20, right: 120, bottom: 20, left: 60}),
+        cartesian(margin: %{top: 20, right: 120, bottom: 20, left: 60}),
         ordinal_scale(:color, domain: [0, 1, 2]),
         # The dendrogram's elbows (spec/14 §5.4.2), then the nodes with x from the
         # layout's y and their names to the left of a clade and the right of a leaf.

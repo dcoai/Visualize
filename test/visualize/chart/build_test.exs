@@ -231,7 +231,7 @@ defmodule Visualize.Chart.BuildTest do
     end
 
     test "scales union and axes concatenate whatever the order of the fragments" do
-      fragments = [scale(:x, :time), axis(:x, :bottom), cartesian(400, 200), axis(:y, :left)]
+      fragments = [scale(:x, :time), axis(:x, :bottom), cartesian(), axis(:y, :left)]
       assert {:ok, %{frame: frame}} = Chart.compose(fragments)
       assert frame.kind == :cartesian
       assert frame.scales == %{x: %{kind: :time}}
@@ -239,10 +239,9 @@ defmodule Visualize.Chart.BuildTest do
     end
 
     test "a facet frame lifts by and columns into its facet node" do
-      assert facet(600, 400, by: :region, columns: 2) == %{
+      assert facet(by: :region, columns: 2) == %{
                frame: %{
                  kind: :facet,
-                 size: %{width: 600, height: 400},
                  facet: %{by: :region, columns: 2}
                }
              }
@@ -264,7 +263,7 @@ defmodule Visualize.Chart.BuildTest do
       var(:unit, "kg"),
       style(:series, stroke_width: 1.5),
       style(:muted, stroke: :axis, opacity: 0.6),
-      cartesian(400, 200, margin: @margin),
+      cartesian(margin: @margin),
       time_scale(:x),
       linear_scale(:y, domain: [0, :auto], nice: true),
       axis(:x, :bottom, ticks: 4, format: "%H:%M"),
@@ -284,7 +283,7 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "step"}),
       source(:series, [:t, :mood]),
       style(:series, stroke_width: 1.5, curve: :step_after),
-      cartesian(400, 200, margin: %{top: 20, right: 20, bottom: 30, left: 50}),
+      cartesian(margin: %{top: 20, right: 20, bottom: 30, left: 50}),
       time_scale(:x),
       band_scale(:y, domain: ["down", "base", "up"]),
       axis(:x, :bottom, ticks: 4, format: "%H:%M"),
@@ -299,7 +298,7 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "area"}),
       source(:series, [:t, :v]),
       style(:series, fill_opacity: 0.4, stroke: :series_1),
-      cartesian(400, 200, margin: @margin),
+      cartesian(margin: @margin),
       time_scale(:x),
       linear_scale(:y, domain: [0, :auto], nice: true),
       axis(:x, :bottom, ticks: 4, format: "%H:%M"),
@@ -313,7 +312,7 @@ defmodule Visualize.Chart.BuildTest do
     [
       chart(meta: %{name: "stacked_area"}),
       source(:series, [:t, :a, :b, :c]),
-      cartesian(400, 200, margin: @margin),
+      cartesian(margin: @margin),
       time_scale(:x),
       linear_scale(:y, domain: [0, :auto], nice: true),
       ordinal_scale(:color),
@@ -329,7 +328,7 @@ defmodule Visualize.Chart.BuildTest do
     [
       chart(meta: %{name: "bar"}),
       source(:categories, [:cat, :n]),
-      cartesian(400, 200, margin: @margin),
+      cartesian(margin: @margin),
       band_scale(:x, domain: :auto, padding: 0.2),
       linear_scale(:y, domain: [0, :auto], nice: true),
       axis(:x, :bottom),
@@ -345,7 +344,7 @@ defmodule Visualize.Chart.BuildTest do
     [
       chart(meta: %{name: "stacked_bar"}),
       source(:categories, [:cat, :a, :b, :c]),
-      cartesian(400, 200, margin: @margin),
+      cartesian(margin: @margin),
       band_scale(:x, padding: 0.2),
       linear_scale(:y, domain: [0, :auto], nice: true),
       ordinal_scale(:color),
@@ -370,7 +369,7 @@ defmodule Visualize.Chart.BuildTest do
       var(:band, %{height: 50}),
       style(:by_state, fill: {:field, :state}, stroke: :background),
       style(:over, fill: :background, font_size: :font_size, font_family: :font_family),
-      cartesian(400, 100, margin: %{top: 20, right: 20, bottom: 30, left: 20}),
+      cartesian(margin: %{top: 20, right: 20, bottom: 30, left: 20}),
       time_scale(:x),
       ordinal_scale(:color, domain: ["ok", "degraded", "down"]),
       axis(:x, :bottom, ticks: 6, format: "%H:%M"),
@@ -389,7 +388,7 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "status_strip"}),
       source(:flags, [:t0, :t1, :ok]),
       style(:flag, fill: {:field, :ok}),
-      cartesian(400, 60, margin: %{top: 10, right: 10, bottom: 30, left: 10}),
+      cartesian(margin: %{top: 10, right: 10, bottom: 30, left: 10}),
       time_scale(:x),
       ordinal_scale(:color, domain: ["pass", "fail"], range: ["#3f8a37", "#c8373b"]),
       axis(:x, :bottom, ticks: 6, format: "%H:%M"),
@@ -405,7 +404,7 @@ defmodule Visualize.Chart.BuildTest do
       var(:delta, "+1.5 vs last week"),
       style(:spark, stroke: :series_1, stroke_width: 1),
       style(:big, fill: :text, font_size: :title_size, font_weight: :bold),
-      cartesian(200, 100, margin: %{top: 40, right: 10, bottom: 10, left: 10}),
+      cartesian(margin: %{top: 40, right: 10, bottom: 10, left: 10}),
       time_scale(:x),
       linear_scale(:y, domain: [0, :auto]),
       line(:series, %{x: :t, y: :v}, style: :spark),
@@ -418,7 +417,7 @@ defmodule Visualize.Chart.BuildTest do
     [
       chart(meta: %{name: "heatmap"}),
       source(:heat, [:hour, :day, :v]),
-      cartesian(400, 200, margin: @margin),
+      cartesian(margin: @margin),
       band_scale(:x, padding: 0.05),
       band_scale(:y, padding: 0.05),
       sequential_scale(:color, domain: [0, :auto]),
@@ -435,7 +434,7 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "histogram"}),
       source(:samples, [:w]),
       var(:bins, 5),
-      cartesian(400, 200, margin: @margin),
+      cartesian(margin: @margin),
       linear_scale(:x),
       linear_scale(:y, domain: [0, :auto]),
       axis(:x, :bottom, ticks: 5),
@@ -456,7 +455,7 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "scatter"}),
       source(:samples, [:w, :s]),
       style(:dot, symbol: :circle, symbol_size: 40, fill_opacity: 0.7),
-      cartesian(400, 200, margin: @margin),
+      cartesian(margin: @margin),
       linear_scale(:x, nice: true),
       linear_scale(:y, nice: true),
       axis(:x, :bottom, ticks: 5, grid: true),
@@ -473,7 +472,7 @@ defmodule Visualize.Chart.BuildTest do
       chart(meta: %{name: "rose"}),
       source(:wind, [:bearing, :count]),
       style(:petal, fill: :series_1, stroke: :background),
-      polar(300, 300, margin: %{top: 30, right: 30, bottom: 30, left: 30}),
+      polar(margin: %{top: 30, right: 30, bottom: 30, left: 30}),
       radial_scale(:angle, domain: [0, 360]),
       sqrt_scale(:r, domain: [0, :auto]),
       axis(:angle, :bottom, ticks: 8, grid: true),

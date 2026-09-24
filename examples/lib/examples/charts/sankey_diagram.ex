@@ -34,13 +34,15 @@ defmodule Examples.Charts.SankeyDiagram do
     {"Transport", "Industry", 15, 5.0, 6}
   ]
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {700, 400}
+
   def title, do: "Sankey Diagram"
   def description, do: "Energy flow from sources to end use"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 700
-    height = opts[:height] || 400
+    {_width, _height} = Design.size(__MODULE__, opts)
     flows = rows(opts)
     # The nodes in the layout's own order: every source, then every target, as first met.
     names = Enum.uniq(Enum.map(flows, & &1.source) ++ Enum.map(flows, & &1.target))
@@ -57,7 +59,7 @@ defmodule Examples.Charts.SankeyDiagram do
         style(:ribbon, fill: {:field, :source}, fill_opacity: 0.4, stroke: :none),
         style(:node, fill: {:field, :id}, stroke: :text, stroke_width: 0.5),
         style(:name, extends: :label, font_size: 11),
-        cartesian(width, height, margin: @margin),
+        cartesian(margin: @margin),
         ordinal_scale(:color, domain: names),
         path(links, %{path: :path}, style: :ribbon),
         # Every node named to the right of its bar — but the last column, which nothing
@@ -108,7 +110,7 @@ defmodule Examples.Charts.SankeyDiagram do
         style(:ribbon, fill: {:field, :source}, fill_opacity: 0.4, stroke: :none),
         style(:node, fill: {:field, :id}, stroke: :text, stroke_width: 0.5),
         style(:name, extends: :label, font_size: 11),
-        cartesian(700, 400, margin: %{top: 25, right: 90, bottom: 25, left: 60}),
+        cartesian(margin: %{top: 25, right: 90, bottom: 25, left: 60}),
         ordinal_scale(:color, domain: ["Coal", "Natural Gas", "Oil", "Nuclear", "Solar",
           "Electricity", "Heating", "Transport", "Industry", "Homes"]),
         # The ribbons are ready paths (spec/14 §5.4.3); the nodes read their own edges,

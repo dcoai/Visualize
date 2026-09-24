@@ -23,13 +23,15 @@ defmodule Examples.Charts.RadialBarChart do
     %{name: "Sunday", value: 35}
   ]
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {400, 400}
+
   def title, do: "Radial Bar Chart"
   def description, do: "Weekly activity levels"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 400
-    height = opts[:height] || 400
+    {width, height} = Design.size(__MODULE__, opts)
     outer = min(width, height) / 2 - 40
     rows = rows(opts)
     avg = Float.round(Enum.sum(Enum.map(rows, & &1.value)) / length(rows), 1)
@@ -42,13 +44,19 @@ defmodule Examples.Charts.RadialBarChart do
         style(:day, extends: :label, font_size: 11),
         style(:average, extends: :title, font_size: 24, text_anchor: :middle),
         style(:average_word, extends: :label, font_size: 12, fill: :axis, text_anchor: :middle),
-        polar(width, height, margin: @zero_margin),
+        polar(margin: @zero_margin),
         radial_scale(:angle, domain: [0, length(rows)]),
         linear_scale(:r, domain: [0, 100], range: [50, outer]),
         sequential_scale(:color, domain: [0, :auto]),
         rose(:days, %{angle: :index, value: :value},
           options: %{width: 1, inner_radius: 50, pad_angle: 0.1},
-          label: %{text: [{:field, :name}], anchor: :outward, dr: 11, rotate: :radial, style: :day},
+          label: %{
+            text: [{:field, :name}],
+            anchor: :outward,
+            dr: 11,
+            rotate: :radial,
+            style: :day
+          },
           style: :bar
         ),
         label({:data, [0, 0]}, [to_string(avg)], style: :average, dy: -5),
@@ -90,7 +98,7 @@ defmodule Examples.Charts.RadialBarChart do
         source(:days, [:name, :value, :index]),
         style(:bar, fill: {:field, :value}, stroke: :background),
         style(:day, extends: :label, font_size: 11),
-        polar(400, 400, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        polar(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         radial_scale(:angle, domain: [0, 7]),
         linear_scale(:r, domain: [0, 100], range: [50, 160]),
         sequential_scale(:color, domain: [0, :auto]),

@@ -26,14 +26,15 @@ defmodule Examples.Charts.LoadGauge do
   # The outermost needle is the longest: the shortest window swings the most.
   @lengths %{one: 0.62, five: 0.5, fifteen: 0.38}
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {420, 420}
+
   def title, do: "Load gauge"
   def description, do: "Three load averages as three needles on one dial"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 420
-    height = opts[:height] || 420
-    outer = min(width - @margin.left - @margin.right, height - @margin.top - @margin.bottom) / 2
+    {_width, _height} = Design.size(__MODULE__, opts)
 
     design =
       Design.fold([
@@ -45,9 +46,10 @@ defmodule Examples.Charts.LoadGauge do
         style(:rim, fill: :grid, opacity: 0.45, stroke: :none),
         style(:pointer, fill: {:field, :window}, stroke: :background, stroke_width: 1),
         style(:dial, extends: :axis, font_size: 11),
-        polar(width, height, margin: @margin),
+        polar(margin: @margin),
         linear_scale(:angle, domain: [0, 4], start: -120, sweep: 240),
-        linear_scale(:r, domain: [0, 1], range: [0, outer]),
+        # `r`'s auto range is already [0, min(w, h) / 2] of the plot (spec/14 §4.3).
+        linear_scale(:r, domain: [0, 1]),
         ordinal_scale(:color,
           domain: Enum.map(Load.windows(), &elem(&1, 1)),
           range: [:series_1, :series_2, :series_3]
@@ -90,7 +92,7 @@ defmodule Examples.Charts.LoadGauge do
         source(:reading, [:window, :load, :length]),
         # Each needle takes its colour from its row through the colour scale (§3.4).
         style(:pointer, fill: {:field, :window}, stroke: :background, stroke_width: 1),
-        polar(420, 420, margin: %{top: 30, right: 90, bottom: 30, left: 40}),
+        polar(margin: %{top: 30, right: 90, bottom: 30, left: 40}),
         # 240° of dial from −120°, over a load of 0 to 4 (spec/14 §4.3).
         linear_scale(:angle, domain: [0, 4], start: -120, sweep: 240),
         linear_scale(:r, domain: [0, 1], range: [0, 150]),

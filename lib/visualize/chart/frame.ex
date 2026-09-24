@@ -23,13 +23,12 @@ defmodule Visualize.Chart.Frame do
       ...>     sources: %{primary: %{fields: [:t, :v]}},
       ...>     frame: %{
       ...>       kind: :cartesian,
-      ...>       size: %{width: 300, height: 200},
       ...>       scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}},
       ...>       axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, grid: true}]
       ...>     },
       ...>     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...>   })
-      iex> frame = Visualize.Chart.Frame.new(chart, sources: %{primary: %{t: [1, 2, 3], v: [4, 9, 2]}})
+      iex> frame = Visualize.Chart.Frame.new(chart, sources: %{primary: %{t: [1, 2, 3], v: [4, 9, 2]}}, size: {300, 200})
       iex> Visualize.Chart.Frame.scale(frame, :x).domain
       [1, 3]
       iex> Visualize.Chart.Frame.scale(frame, :y).domain
@@ -86,6 +85,14 @@ defmodule Visualize.Chart.Frame do
           now: term() | nil
         }
 
+  # The size a frame is realised at when the caller gives none (spec/14 §4.2): a static
+  # render still works, and a design never carries one.
+  @default_size {600, 400}
+
+  @doc "The size a frame is realised at when no `size:` is given (spec/14 §4.2)."
+  @spec default_size() :: {number(), number()}
+  def default_size, do: @default_size
+
   @doc """
   The frame of a chart, every scale realised and the theme resolved (spec/14 §4.7).
 
@@ -95,6 +102,8 @@ defmodule Visualize.Chart.Frame do
       reads; the columns `:auto` domains are inferred from (default `%{}`)
     * `:theme` - a `%Visualize.Theme{}`; taken for any theme name the design gives, and
       required for one that is neither built-in nor inline
+    * `:size` - the `{width, height}` the frame is realised at (default `{600, 400}`,
+      spec/14 §4.2); a design records none
     * `:now` - the instant a `:window` step measures its durations back from (spec/14
       §5.4.1); without it each such step takes the newest reading of its own column
 
@@ -107,7 +116,7 @@ defmodule Visualize.Chart.Frame do
     sources = Keyword.get(opts, :sources, %{})
     node = chart.frame
     kind = node.kind
-    size = Map.get(node, :size, Schema.default(:frame, :size))
+    size = size(Keyword.get(opts, :size, @default_size))
     margin = margin(Map.get(node, :margin, Schema.default(:frame, :margin)))
 
     plot = %{
@@ -278,6 +287,16 @@ defmodule Visualize.Chart.Frame do
   # What a mark's pipeline sees of the frame (spec/14 §5.4).
   defp context(plot, projection, now),
     do: %{size: [plot.width, plot.height], projection: projection, now: now}
+
+  defp size({width, height}) when is_number(width) and is_number(height),
+    do: %{width: width, height: height}
+
+  defp size(%{width: width, height: height}), do: %{width: width, height: height}
+
+  defp size(other) do
+    raise ArgumentError,
+          "size: is {width, height} in pixels, got #{inspect(other)} (spec/14 §4.2)"
+  end
 
   defp margin(%Var{name: name}), do: Style.unresolved!(name)
 

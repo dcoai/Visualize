@@ -38,7 +38,7 @@ defmodule Examples.Charts.StackedBarChart do
         chart(meta: %{name: title(), description: [description()]}),
         source(:devices, [:year | @keys]),
         style(:segment, fill: {:field, :key}),
-        cartesian(opts[:width] || 500, opts[:height] || 350, margin: @margin),
+        cartesian(margin: @margin),
         band_scale(:x, padding: 0.2),
         linear_scale(:y, domain: [0, :auto], transition: %{duration: 300}),
         ordinal_scale(:color, domain: @keys),
@@ -92,7 +92,7 @@ defmodule Examples.Charts.StackedBarChart do
 
         # A {:field, f} on a colour key is read per element, through the `color` scale.
         style(:segment, fill: {:field, :key}),
-        cartesian(500, 350, margin: %{top: 30, right: 100, bottom: 50, left: 50}),
+        cartesian(margin: %{top: 30, right: 100, bottom: 50, left: 50}),
         band_scale(:x, padding: 0.2),
         linear_scale(:y, domain: [0, :auto], transition: %{duration: 300}),
         ordinal_scale(:color, domain: keys),

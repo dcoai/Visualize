@@ -64,7 +64,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       }
 
       literal = %{labels: [%{id: :title, anchor: :title, text: ["Uptime"]}]}
-      widened = %{vars: %{wide: %{}}, frame: %{size: %{width: Chart.var(:wide)}}}
+      widened = %{vars: %{wide: %{}}, frame: %{margin: %{top: Chart.var(:wide)}}}
 
       open = render_component(&Params.panel/1, %{layers: [base, titled]})
       closed = render_component(&Params.panel/1, %{layers: [base, titled, literal]})

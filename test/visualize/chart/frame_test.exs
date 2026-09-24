@@ -19,13 +19,16 @@ defmodule Visualize.Chart.FrameTest do
   @rows for {v, h} <- Enum.with_index([4, 9, 2, 7]),
             do: %{t: DateTime.add(@t0, h * 3600, :second), v: v, n: h, k: "c#{rem(h, 2)}"}
 
+  # The size the suite's fixtures were written against; a design records none (§4.2).
+  @size {300, 200}
+
   defp chart(frame, extra \\ %{}) do
     Chart.from_map!(
       Map.merge(
         %{
           version: 1,
           sources: %{primary: %{fields: [:t, :v, :n, :k]}},
-          frame: Map.merge(%{kind: :cartesian, size: %{width: 300, height: 200}}, frame)
+          frame: Map.merge(%{kind: :cartesian}, frame)
         },
         extra
       )
@@ -35,7 +38,7 @@ defmodule Visualize.Chart.FrameTest do
   defp line(channels), do: %{type: :line, data: :primary, channels: channels}
 
   defp frame(scales, marks, sources \\ %{primary: @rows}) do
-    Frame.new(chart(%{scales: scales}, %{marks: marks}), sources: sources)
+    Frame.new(chart(%{scales: scales}, %{marks: marks}), sources: sources, size: @size)
   end
 
   describe "inference" do
@@ -103,7 +106,8 @@ defmodule Visualize.Chart.FrameTest do
               styles: styles
             }
           ),
-          sources: %{primary: @rows}
+          sources: %{primary: @rows},
+          size: @size
         )
 
       assert Frame.scale(frame, :x).domain == [0, 10]
@@ -147,7 +151,7 @@ defmodule Visualize.Chart.FrameTest do
           marks: [%{type: :rose, data: :primary, channels: %{angle: :n, value: :v}}]
         })
 
-      frame = Frame.new(chart, sources: %{primary: @rows})
+      frame = Frame.new(chart, sources: %{primary: @rows}, size: @size)
       assert Frame.scale(frame, :angle).domain == [0, 3]
       assert Frame.scale(frame, :r).domain == [2, 9]
       assert Frame.scale(frame, :r).range == [0, 75.0]
@@ -159,18 +163,17 @@ defmodule Visualize.Chart.FrameTest do
       chart(
         %{
           kind: :polar,
-          size: %{width: 300, height: 300},
           margin: %{top: 0, right: 0, bottom: 0, left: 0},
           scales: scales,
           axes: axes
         },
         %{marks: [%{type: :rose, data: :primary, channels: %{angle: :n, value: :v}}]}
       )
-      |> Frame.new(sources: %{primary: @rows})
+      |> Frame.new(sources: %{primary: @rows}, size: {300, 300})
     end
 
     defp polar_svg(scales, axes),
-      do: polar(scales, axes) |> Frame.render(sources: %{primary: @rows})
+      do: polar(scales, axes) |> Frame.render(sources: %{primary: @rows}, size: @size)
 
     test "start and sweep realise the angle range in radians; a list range wins; a full turn is the default" do
       quarter = %{
@@ -271,14 +274,13 @@ defmodule Visualize.Chart.FrameTest do
         chart(
           %{
             kind: :polar,
-            size: %{width: 300, height: 300},
             margin: %{top: 0, right: 0, bottom: 0, left: 0},
             scales: %{angle: %{kind: :band, domain: six}, r: %{kind: :linear}},
             axes: [%{scale: :angle, side: :bottom, grid: true}]
           },
           %{marks: []}
         )
-        |> Frame.new()
+        |> Frame.new(size: {300, 300})
         |> Frame.render()
 
       assert svg =~
@@ -294,10 +296,10 @@ defmodule Visualize.Chart.FrameTest do
       marks = [%{type: :line, data: :primary, channels: %{x: :n, y: :v}}]
       chart = chart(%{scales: scales}, %{marks: marks})
 
-      inferred = Frame.new(chart, sources: %{primary: @rows})
+      inferred = Frame.new(chart, sources: %{primary: @rows}, size: @size)
       assert Frame.scale(inferred, :x).domain == [0, 3]
 
-      given = Frame.new(chart, sources: %{primary: @rows}, domains: %{x: [10, 20]})
+      given = Frame.new(chart, sources: %{primary: @rows}, domains: %{x: [10, 20]}, size: @size)
       assert Frame.scale(given, :x).domain == [10, 20]
       # Every other scale is inferred as before.
       assert Frame.scale(given, :y).domain == Frame.scale(inferred, :y).domain
@@ -309,7 +311,7 @@ defmodule Visualize.Chart.FrameTest do
       chart = chart(%{scales: scales}, %{marks: marks})
       many = for t <- 1..200_000, do: %{n: t, v: rem(t, 97)}
 
-      {us, frame} = :timer.tc(fn -> Frame.new(chart, sources: %{primary: many}) end)
+      {us, frame} = :timer.tc(fn -> Frame.new(chart, sources: %{primary: many}, size: @size) end)
       assert Frame.scale(frame, :x).domain == [0, 1]
 
       # Gathering the columns of 200,000 rows for scales that cannot use them took tens of
@@ -353,14 +355,18 @@ defmodule Visualize.Chart.FrameTest do
 
       base = %{scales: %{x: %{kind: :linear, domain: [0, 100]}}}
 
-      assert count.(Frame.new(chart(Map.put(base, :axes, axes.([0, 50]))))) == 2
-      assert count.(Frame.new(chart(Map.put(base, :axes, axes.(3))))) == 3
+      assert count.(Frame.new(chart(Map.put(base, :axes, axes.([0, 50]))), size: @size)) == 2
+      assert count.(Frame.new(chart(Map.put(base, :axes, axes.(3))), size: @size)) == 3
 
       assert count.(
-               Frame.new(chart(Map.put(base, :axes, axes.(%{count: 3, values: [1, 2, 3, 4]}))))
+               Frame.new(chart(Map.put(base, :axes, axes.(%{count: 3, values: [1, 2, 3, 4]}))),
+                 size: @size
+               )
              ) == 4
 
-      assert count.(Frame.new(chart(Map.put(base, :axes, [%{scale: :x, side: :bottom}])))) == 11
+      assert count.(
+               Frame.new(chart(Map.put(base, :axes, [%{scale: :x, side: :bottom}])), size: @size)
+             ) == 11
     end
   end
 
@@ -374,7 +380,9 @@ defmodule Visualize.Chart.FrameTest do
         other: %{kind: :linear}
       }
 
-      frame = Frame.new(chart(%{scales: scales, axes: [%{scale: :other, side: :right}]}))
+      frame =
+        Frame.new(chart(%{scales: scales, axes: [%{scale: :other, side: :right}]}), size: @size)
+
       assert Frame.scale(frame, :x).range == [0, 240]
       assert Frame.scale(frame, :y).range == [150, 0]
       assert Frame.scale(frame, :color).range == Enum.map(1..10, &:"series_#{&1}")
@@ -389,7 +397,7 @@ defmodule Visualize.Chart.FrameTest do
         d: %{kind: :linear, range: [5, 6]}
       }
 
-      frame = Frame.new(chart(%{scales: scales}))
+      frame = Frame.new(chart(%{scales: scales}), size: @size)
       assert Frame.scale(frame, :c).range == Scale.Color.scheme(:category10)
       assert Frame.scale(frame, :d).range == [5, 6]
     end
@@ -401,16 +409,19 @@ defmodule Visualize.Chart.FrameTest do
 
       assert_raise ArgumentError, ~r/variable :unit is unresolved/, fn ->
         chart(%{}, %{vars: %{unit: %{}}, labels: [%{anchor: :title, text: [var]}]})
-        |> Frame.new()
+        |> Frame.new(size: @size)
         |> Frame.generate()
       end
 
       assert_raise ArgumentError, ~r/theme :house is neither built-in/, fn ->
-        Frame.new(chart(%{}, %{theme: :house}))
+        Frame.new(chart(%{}, %{theme: :house}), size: @size)
       end
 
       assert %Frame{theme: %Theme{name: :house}} =
-               Frame.new(chart(%{}, %{theme: :house}), theme: Theme.new(name: :house))
+               Frame.new(chart(%{}, %{theme: :house}),
+                 theme: Theme.new(name: :house),
+                 size: @size
+               )
 
       assert_raise ArgumentError, ~r/scale :x \(time\) cannot take "soon"/, fn ->
         frame(%{x: %{kind: :time}}, [line(%{x: :t, y: :v})], %{primary: [%{t: "soon", v: 1}]})
@@ -421,7 +432,7 @@ defmodule Visualize.Chart.FrameTest do
       end
 
       assert_raise ArgumentError, ~r/declares no scale :z/, fn ->
-        Frame.scale(Frame.new(chart(%{})), :z)
+        Frame.scale(Frame.new(chart(%{}), size: @size), :z)
       end
     end
   end
@@ -452,8 +463,11 @@ defmodule Visualize.Chart.FrameTest do
     end
 
     test "the defs come first, before the grid, with the gradients in the words' geometry" do
-      frame = Frame.new(painted(@defs), sources: %{primary: @rows})
-      %Element{children: [defs, grid | _]} = Frame.generate(frame, sources: %{primary: @rows})
+      frame = Frame.new(painted(@defs), sources: %{primary: @rows}, size: @size)
+
+      %Element{children: [defs, grid | _]} =
+        Frame.generate(frame, sources: %{primary: @rows}, size: @size)
+
       assert defs.type == :defs and grid.style.class == "grid"
       [fade, glow] = defs.children
       prefix = Visualize.Chart.Frame.Defs.prefix(@defs)
@@ -488,16 +502,16 @@ defmodule Visualize.Chart.FrameTest do
              }
 
       # A design with no paints emits no defs.
-      plain = Frame.new(painted(%{}, "#abc"))
+      plain = Frame.new(painted(%{}, "#abc"), size: @size)
       %Element{children: [first | _]} = Frame.generate(plain)
       assert first.type != :defs
     end
 
     test "a fill that is a paint is url(#id) in css and the first stop's colour in literal" do
-      frame = Frame.new(painted(@defs), sources: %{primary: @rows})
+      frame = Frame.new(painted(@defs), sources: %{primary: @rows}, size: @size)
       prefix = Visualize.Chart.Frame.Defs.prefix(@defs)
 
-      css = Frame.generate(frame, sources: %{primary: @rows})
+      css = Frame.generate(frame, sources: %{primary: @rows}, size: @size)
       mark = Enum.find(css.children, &(&1.style[:class] == "mark mark-area"))
       assert mark.style.fill == "url(#vis-paint-#{prefix}-fade)"
 
@@ -549,7 +563,7 @@ defmodule Visualize.Chart.FrameTest do
           labels: labels
         })
 
-      tree = chart |> Frame.new() |> Frame.generate()
+      tree = chart |> Frame.new(size: @size) |> Frame.generate()
       # The labels are drawn in the order they are declared.
       [title, caption, subtitle] = Enum.filter(tree.children, &(&1.style[:class] == "label"))
 
@@ -575,7 +589,7 @@ defmodule Visualize.Chart.FrameTest do
       # A canvas draws the literal tree, one fillText per line.
       js =
         chart
-        |> Frame.new()
+        |> Frame.new(size: @size)
         |> Frame.generate(resolve: :literal)
         |> Visualize.Backend.Canvas.render_element()
         |> IO.iodata_to_binary()
@@ -617,7 +631,7 @@ defmodule Visualize.Chart.FrameTest do
 
       texts = fn c ->
         c
-        |> Frame.new()
+        |> Frame.new(size: @size)
         |> Frame.generate()
         |> Map.fetch!(:children)
         |> Enum.filter(&(&1.style[:class] == "label"))
@@ -637,7 +651,7 @@ defmodule Visualize.Chart.FrameTest do
       assert y0.transform.operations == [{:rotate, -90}]
       assert y1.transform.operations == [{:rotate, -90}, {:rotate, -45, y1.attrs.x, y1.attrs.y}]
       # None of the four reaches the element as an attribute.
-      svg = styled |> Frame.new() |> Frame.generate() |> Render.to_string()
+      svg = styled |> Frame.new(size: @size) |> Frame.generate() |> Render.to_string()
       refute svg =~ "margin-x" or svg =~ "text-angle" or svg =~ "vertical-align"
       assert svg =~ ~s|transform="rotate(-90) rotate(-45,-75,-25)"|
     end
@@ -654,7 +668,7 @@ defmodule Visualize.Chart.FrameTest do
 
       texts =
         chart(%{scales: scales}, %{labels: labels})
-        |> Frame.new()
+        |> Frame.new(size: @size)
         |> Frame.generate()
         |> Map.fetch!(:children)
         |> Enum.filter(&(&1.style[:class] == "label"))
@@ -684,8 +698,8 @@ defmodule Visualize.Chart.FrameTest do
 
       tree =
         chart(%{scales: scales, axes: axes}, %{styles: styles, marks: [mark]})
-        |> Frame.new(sources: %{primary: @rows})
-        |> Frame.generate(sources: %{primary: @rows})
+        |> Frame.new(sources: %{primary: @rows}, size: @size)
+        |> Frame.generate(sources: %{primary: @rows}, size: @size)
 
       group = Enum.find(tree.children, &(&1.style[:class] == "mark mark-circle"))
       [circle | _] = group.children
@@ -722,8 +736,8 @@ defmodule Visualize.Chart.FrameTest do
       chart =
         chart(%{scales: scales}, %{styles: styles, marks: [mark.(:a), mark.(:b), mark.(:c)]})
 
-      frame = Frame.new(chart, sources: %{primary: @rows})
-      tree = Frame.generate(frame, sources: %{primary: @rows})
+      frame = Frame.new(chart, sources: %{primary: @rows}, size: @size)
+      tree = Frame.generate(frame, sources: %{primary: @rows}, size: @size)
 
       [defs | _] = tree.children
       assert defs.type == :defs
@@ -773,8 +787,8 @@ defmodule Visualize.Chart.FrameTest do
 
       svg =
         plain
-        |> Frame.new(sources: %{primary: @rows})
-        |> Frame.generate(sources: %{primary: @rows})
+        |> Frame.new(sources: %{primary: @rows}, size: @size)
+        |> Frame.generate(sources: %{primary: @rows}, size: @size)
         |> Render.to_string()
 
       refute svg =~ "<defs>"
@@ -789,7 +803,6 @@ defmodule Visualize.Chart.FrameTest do
         sources: %{primary: %{fields: [:t, :v, :k]}},
         frame: %{
           kind: :cartesian,
-          size: %{width: 600, height: 300},
           margin: %{top: 20, right: 20, bottom: 30, left: 40},
           scales: %{
             x: %{kind: :time, domain: :auto},
@@ -808,7 +821,7 @@ defmodule Visualize.Chart.FrameTest do
         styles: %{by_k: %{stroke: {:field, :k}}}
       }
 
-      frame = Frame.new(Chart.from_map!(design), sources: %{primary: @rows})
+      frame = Frame.new(Chart.from_map!(design), sources: %{primary: @rows}, size: {600, 300})
       theme = Theme.default()
 
       x_scale =
@@ -886,7 +899,7 @@ defmodule Visualize.Chart.FrameTest do
         %{scale: :y, side: :left, ticks: 2, grid: true}
       ]
 
-      frame = Frame.new(chart(%{scales: scales, axes: axes}))
+      frame = Frame.new(chart(%{scales: scales, axes: axes}), size: @size)
       %Element{children: [grid | _]} = Frame.generate(frame)
 
       assert grid.style == %{class: "grid", stroke: "var(--vis-grid, #e0e0e0)"}
@@ -927,7 +940,7 @@ defmodule Visualize.Chart.FrameTest do
           styles: %{by_k: %{stroke: {:field, :k}}}
         }
       )
-      |> Frame.new(sources: sources)
+      |> Frame.new(sources: sources, size: @size)
     end
 
     defp nodes(svg), do: Regex.scan(~r/data-node="([^"]+)"/, svg) |> Enum.map(&Enum.at(&1, 1))
@@ -960,7 +973,7 @@ defmodule Visualize.Chart.FrameTest do
 
     test "without the option the markup is byte for byte what it was" do
       frame = addressed()
-      before = Frame.render(frame, sources: %{primary: @rows})
+      before = Frame.render(frame, sources: %{primary: @rows}, size: @size)
       refute before =~ "data-node"
       assert Frame.render(frame, sources: %{primary: @rows}, paths: false) == before
       # The furniture alone, and the applied chart through Visualize.Chart.render/2, likewise.
@@ -975,7 +988,7 @@ defmodule Visualize.Chart.FrameTest do
           marks: [%{type: :line, data: :primary, channels: %{x: :n, y: :v}}]
         })
 
-      {:ok, applied} = Chart.apply(chart, sources: %{primary: @rows})
+      {:ok, applied} = Chart.apply(chart, sources: %{primary: @rows}, size: @size)
       refute Chart.render(applied) =~ "data-node"
       assert nodes(Chart.render(applied, paths: true)) == ["frame", "marks[0]"]
     end
@@ -991,7 +1004,7 @@ defmodule Visualize.Chart.FrameTest do
           },
           %{marks: [%{type: :circle, data: :primary, channels: %{x: :n, y: :v}}]}
         )
-        |> Frame.new(sources: %{primary: @rows})
+        |> Frame.new(sources: %{primary: @rows}, size: @size)
 
       svg = Frame.render(facet, sources: %{primary: @rows}, paths: true)
       assert nodes(svg) == ["frame", "marks[0]", "frame.axes[0]", "marks[0]", "frame.axes[0]"]
@@ -1009,7 +1022,7 @@ defmodule Visualize.Chart.FrameTest do
           },
           %{marks: [%{type: :rose, data: :primary, channels: %{angle: :n, value: :v}}]}
         )
-        |> Frame.new(sources: %{primary: @rows})
+        |> Frame.new(sources: %{primary: @rows}, size: @size)
 
       svg = Frame.render(polar, sources: %{primary: @rows}, paths: true)
       # The ring and the spoke are drawn inside the centred group, the cartesian axis
@@ -1034,7 +1047,6 @@ defmodule Visualize.Chart.FrameTest do
     defp unit_frame(axis, legend \\ %{}) do
       chart(
         %{
-          size: %{width: 400, height: 300},
           margin: %{top: 50, right: 100, bottom: 50, left: 50},
           scales: %{
             x: %{kind: :linear, domain: [0, 100]},
@@ -1046,7 +1058,7 @@ defmodule Visualize.Chart.FrameTest do
         },
         %{marks: [%{type: :line, data: :primary, channels: %{x: :n, y: :v}}]}
       )
-      |> Frame.new(sources: %{primary: @rows})
+      |> Frame.new(sources: %{primary: @rows}, size: {400, 300})
     end
 
     defp tick_labels(frame) do
@@ -1073,7 +1085,6 @@ defmodule Visualize.Chart.FrameTest do
     defp legend_frame(legend, margin \\ %{top: 100, right: 100, bottom: 100, left: 100}) do
       chart(
         %{
-          size: %{width: 400, height: 300},
           margin: margin,
           scales: %{x: %{kind: :linear}, y: %{kind: :linear}, color: %{kind: :ordinal}},
           legend: Map.merge(%{scale: :color}, legend)
@@ -1083,7 +1094,7 @@ defmodule Visualize.Chart.FrameTest do
           styles: %{by_k: %{stroke: {:field, :k}}}
         }
       )
-      |> Frame.new(sources: %{primary: @rows})
+      |> Frame.new(sources: %{primary: @rows}, size: {400, 300})
     end
 
     defp legend_at(frame) do

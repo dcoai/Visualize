@@ -24,14 +24,13 @@ defmodule Visualize.Chart.Mark do
       ...>     sources: %{primary: %{fields: [:t, :v]}},
       ...>     frame: %{
       ...>       kind: :cartesian,
-      ...>       size: %{width: 300, height: 200},
       ...>       margin: %{top: 0, right: 0, bottom: 0, left: 0},
       ...>       scales: %{x: %{kind: :linear}, y: %{kind: :linear}}
       ...>     },
       ...>     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...>   })
       iex> sources = %{primary: [%{t: 0, v: 0}, %{t: 1, v: 1}]}
-      iex> frame = Visualize.Chart.Frame.new(chart, sources: sources)
+      iex> frame = Visualize.Chart.Frame.new(chart, sources: sources, size: {300, 200})
       iex> group = Visualize.Chart.Mark.generate(frame, hd(chart.marks), sources: sources)
       iex> group.style
       %{class: "mark mark-line", fill: :none, stroke: "var(--vis-series-1, #3b6fa8)"}

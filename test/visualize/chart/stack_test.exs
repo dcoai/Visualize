@@ -19,7 +19,6 @@ defmodule Visualize.Chart.StackTest do
     version: 1,
     frame: %{
       kind: :cartesian,
-      size: %{width: 800, height: 400},
       margin: %{top: 10, right: 10, bottom: 30, left: 40},
       scales: %{x: %{kind: :time}, y: %{kind: :linear}},
       axes: [%{scale: :x, side: :bottom, ticks: 6}]
@@ -32,7 +31,6 @@ defmodule Visualize.Chart.StackTest do
   @panel %{
     sources: %{primary: %{fields: [:t, :v]}},
     frame: %{
-      size: %{width: 600, height: 300},
       scales: %{y: %{kind: :linear, domain: [0, :auto]}},
       axes: [%{scale: :y, side: :left, grid: true}]
     },
@@ -48,7 +46,6 @@ defmodule Visualize.Chart.StackTest do
       assert design.styles.series == %{stroke: :series_2, stroke_width: 2}
       assert design.styles.muted == %{opacity: 0.5}
       assert design.frame.kind == :cartesian
-      assert design.frame.size == %{width: 600, height: 300}
       assert design.frame.margin == @frame.frame.margin
       assert Map.keys(design.frame.scales) |> Enum.sort() == [:x, :y]
       assert design.frame.scales.y == %{kind: :linear, domain: [0, :auto]}
@@ -126,9 +123,9 @@ defmodule Visualize.Chart.StackTest do
     end
 
     test "a node both layers give as a map cascades key by key" do
-      assert Chart.stack(%{frame: %{kind: :polar, size: %{width: 10, height: 20}}}, %{
-               frame: %{size: %{width: 30}}
-             }) == %{frame: %{kind: :polar, size: %{width: 30, height: 20}}}
+      assert Chart.stack(%{frame: %{kind: :polar, margin: %{top: 10}}}, %{
+               frame: %{margin: %{top: 30}}
+             }) == %{frame: %{kind: :polar, margin: %{top: 30}}}
     end
 
     test "a node either layer gives as anything else is the higher layer's whole" do
@@ -174,10 +171,10 @@ defmodule Visualize.Chart.StackTest do
       # The same holds for a node key, where the rule is to recurse rather than unite.
       f = %{frame: %{kind: :polar}}
       g = %{frame: Chart.var(:f)}
-      h = %{frame: %{size: %{width: 1}}}
+      h = %{frame: %{margin: %{top: 1}}}
 
-      assert Chart.stack([f, g, h]) == %{frame: %{size: %{width: 1}}}
-      assert Chart.stack(f, Chart.stack(g, h)) == %{frame: %{kind: :polar, size: %{width: 1}}}
+      assert Chart.stack([f, g, h]) == %{frame: %{margin: %{top: 1}}}
+      assert Chart.stack(f, Chart.stack(g, h)) == %{frame: %{kind: :polar, margin: %{top: 1}}}
     end
 
     test "a key the schema does not know is the higher layer's" do
@@ -331,7 +328,6 @@ defmodule Visualize.Chart.StackTest do
         sources: %{p: %{fields: [:t, :v]}},
         frame: %{
           kind: :cartesian,
-          size: %{width: 400, height: 200},
           scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
           axes: [%{scale: :x, side: :bottom, ticks: 3}, %{scale: :y, side: :left}]
         },

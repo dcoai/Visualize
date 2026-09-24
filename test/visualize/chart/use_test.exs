@@ -21,7 +21,7 @@ defmodule Visualize.Chart.UseTest do
     {:style, 2} => %{stroke_width: 5, opacity: 0.5},
     {:design, 1} => %{styles: %{s: %{fill: var(:color)}}},
     {:theme, 1} => %{theme: :dark},
-    {:frame, 1} => %{frame: %{size: %{width: 640, height: 320}, margin: %{top: 24}}},
+    {:frame, 1} => %{frame: %{kind: :cartesian, margin: %{top: 24}}},
     {:composite, 1} => %{
       composite: %{
         uses: [
@@ -156,14 +156,14 @@ defmodule Visualize.Chart.UseTest do
 
       assert {:ok, flat, %{missing: []}} = Chart.flatten(composite, &fetch/1)
       assert flat.theme == :dark
-      assert flat.frame.size.width == 640
+      assert flat.frame.margin.top == 24
       assert flat.vars == %{unit: %{default: "%"}}
       refute Map.has_key?(flat, :composite)
     end
 
     test "a mask at a site removes from that site's contribution only" do
       assert {:ok, flat, _} = Chart.flatten(@library[{:composite, 1}], &fetch/1)
-      assert Map.has_key?(flat.frame, :size)
+      assert Map.has_key?(flat.frame, :kind)
       refute Map.has_key?(flat.frame, :margin)
     end
 
@@ -205,7 +205,7 @@ defmodule Visualize.Chart.UseTest do
       {:mark, 1} => %{
         mark: %{id: :m, type: :line, data: :primary, channels: %{x: :hour, y: :value}}
       },
-      {:frame, 1} => %{frame: %{kind: :cartesian, size: %{width: 640, height: 320}}},
+      {:frame, 1} => %{frame: %{kind: :cartesian}},
       {:style, 2} => %{
         composite: %{
           uses: [
@@ -299,7 +299,6 @@ defmodule Visualize.Chart.UseTest do
         vars: %{unit: %{default: "%"}},
         frame: %{
           kind: :cartesian,
-          size: %{width: 640, height: 320},
           scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
           axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
         },

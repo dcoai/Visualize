@@ -34,7 +34,11 @@ defmodule Examples.Charts.ScrollingSeriesTest do
     {:ok, chart} = Visualize.Chart.from_map(design)
 
     {:ok, applied} =
-      Visualize.Chart.apply(chart, sources: rows, theme: Design.theme([]))
+      Visualize.Chart.apply(chart,
+        sources: rows,
+        theme: Design.theme([]),
+        size: Design.size(ScrollingSeries, [])
+      )
 
     {_x, _y, width, height} = ScrollingSeries.plot()
 

@@ -66,13 +66,15 @@ defmodule Examples.Charts.TreeLayout do
     ]
   }
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {700, 400}
+
   def title, do: "Tree Layout"
   def description, do: "Organization hierarchy"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 700
-    height = opts[:height] || 400
+    {_width, _height} = Design.size(__MODULE__, opts)
     tree = opts[:data] || @data
 
     layout = [id: :id, by: :parent]
@@ -87,7 +89,7 @@ defmodule Examples.Charts.TreeLayout do
         style(:manager, fill: :series_1, stroke: :background, stroke_width: 2),
         style(:report, fill: :background, stroke: :series_1, stroke_width: 2),
         style(:name, extends: :label, font_size: 10),
-        cartesian(width, height, margin: @margin),
+        cartesian(margin: @margin),
         path(links, %{path: :path}, style: :link),
         # Those with reports named above their circle, the leaves below theirs.
         circle(filter(nodes, :height, test: :gt, value: 0), %{x: :x, y: :y, value: :r},
@@ -132,7 +134,7 @@ defmodule Examples.Charts.TreeLayout do
         style(:manager, fill: :series_1, stroke: :background, stroke_width: 2),
         style(:report, fill: :background, stroke: :series_1, stroke_width: 2),
         style(:name, extends: :label, font_size: 10),
-        cartesian(700, 400, margin: %{top: 40, right: 40, bottom: 40, left: 40}),
+        cartesian(margin: %{top: 40, right: 40, bottom: 40, left: 40}),
         # The links are ready cubics, stroked and unfilled; the nodes' x and y are pixels
         # (spec/14 §5.4.2).
         path(links, %{path: :path}, style: :link),

@@ -51,7 +51,6 @@ defmodule Visualize.Chart.Builder.EditorTest do
                "vars.unit",
                "styles.series",
                "frame",
-               "frame.size",
                "frame.margin",
                "frame.scales.x",
                "frame.scales.y",
@@ -377,7 +376,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
     end
 
     test "a facet the node kind does not carry falls back to its first" do
-      open = render_component(&Editor.panel/1, %{kind: :size, node: %{}, facet: :style})
+      open = render_component(&Editor.panel/1, %{kind: :margin, node: %{}, facet: :style})
       assert open =~ ~s(phx-value-facet="geometry")
       assert open =~ ~s(class="vis-builder-tab vis-builder-tab-open")
       refute open =~ ~s(phx-value-facet="style")

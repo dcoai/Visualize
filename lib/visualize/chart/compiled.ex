@@ -105,7 +105,6 @@ defmodule Visualize.Chart.Compiled do
           ceiling: pos_integer(),
           static: String.t(),
           defs: [Element.t()],
-          size: %{width: number(), height: number()},
           margin: %{top: number(), right: number(), bottom: number(), left: number()},
           plot: %{width: number(), height: number()},
           viewport: map() | nil,
@@ -331,20 +330,25 @@ defmodule Visualize.Chart.Compiled do
   # window's upper end given — what a run passes every tick — the scale's domain is known
   # before the frame is built, so it is given rather than inferred over the window's rows
   # and then replaced (spec/14 §4.3, #409).
-  defp realise(%{chart: chart, theme: theme, viewport: nil}, sources, _now) do
-    {Frame.new(chart, sources: sources, theme: theme), nil}
+  defp realise(%{chart: chart, viewport: nil} = compiled, sources, _now) do
+    {Frame.new(chart, realise_opts(compiled, sources)), nil}
   end
 
-  defp realise(%{chart: chart, theme: theme, viewport: window}, sources, now) when now != nil do
-    frame = Frame.new(chart, sources: sources, theme: theme, domains: Window.domains(window, now))
-    {frame, now}
+  defp realise(%{chart: chart, viewport: window} = compiled, sources, now) when now != nil do
+    opts = [domains: Window.domains(window, now)] ++ realise_opts(compiled, sources)
+    {Frame.new(chart, opts), now}
   end
 
-  defp realise(%{chart: chart, theme: theme, viewport: window}, sources, now) do
-    frame = Frame.new(chart, sources: sources, theme: theme)
+  defp realise(%{chart: chart, viewport: window} = compiled, sources, now) do
+    frame = Frame.new(chart, realise_opts(compiled, sources))
     hi = Window.hi(window, chart, frame, sources, now)
     {window_frame(window, chart, frame, sources, now), hi}
   end
+
+  # A tick re-realises the frame, and must do it at the size the chart was compiled at
+  # (spec/14 §4.2, #427): a design records none, so the compiled chart is where it lives.
+  defp realise_opts(%{theme: theme, size: size}, sources),
+    do: [sources: sources, theme: theme, size: {size.width, size.height}]
 
   defp window_frame(nil, _chart, frame, _sources, _now), do: frame
 

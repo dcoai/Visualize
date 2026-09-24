@@ -37,7 +37,7 @@ defmodule Examples.Charts.ScatterPlot do
         chart(meta: %{name: title(), description: [description()]}),
         source(:points, [:x, :y, :r, :category]),
         style(:point, fill: {:field, :category}, opacity: 0.7),
-        cartesian(opts[:width] || 600, opts[:height] || 400, margin: @margin),
+        cartesian(margin: @margin),
         linear_scale(:x, domain: [0, 100]),
         linear_scale(:y, domain: [0, 100]),
         ordinal_scale(:color, domain: @categories),
@@ -90,7 +90,7 @@ defmodule Examples.Charts.ScatterPlot do
 
         # A {:field, f} on a colour key goes through the `color` scale, per element.
         style(:point, fill: {:field, :category}, opacity: 0.7),
-        cartesian(600, 400, margin: %{top: 20, right: 20, bottom: 40, left: 50}),
+        cartesian(margin: %{top: 20, right: 20, bottom: 40, left: 50}),
         linear_scale(:x, domain: [0, 100]),
         linear_scale(:y, domain: [0, 100]),
         ordinal_scale(:color, domain: ["A", "B", "C"]),

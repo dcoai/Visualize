@@ -35,7 +35,7 @@ defmodule Visualize.Chart.Build do
       ...>   Visualize.Chart.compose([
       ...>     chart(meta: %{name: "Uptime"}),
       ...>     source(:primary, [:t, :v]),
-      ...>     cartesian(400, 200),
+      ...>     cartesian(),
       ...>     time_scale(:x),
       ...>     linear_scale(:y, domain: [0, :auto]),
       ...>     axis(:x, :bottom, ticks: 4),
@@ -158,53 +158,53 @@ defmodule Visualize.Chart.Build do
 
   # -- the frame (spec/14 §16.3) ----------------------------------------------------------
 
-  @doc "As `cartesian/3` with no options."
-  @spec cartesian(number(), number()) :: fragment()
-  def cartesian(width, height), do: cartesian(width, height, [])
+  @doc "As `cartesian/1` with no options."
+  @spec cartesian() :: fragment()
+  def cartesian, do: cartesian([])
 
   @doc """
-  A `:cartesian` frame of the given size (spec/14 §4.1).
+  A `:cartesian` frame (spec/14 §4.1).
 
-  `opts` are the frame's remaining keys; its scales, axes and legend are their own
-  fragments (`scale/3`, `axis/3`, `legend/2`).
+  `opts` are the frame's keys; its scales, axes and legend are their own fragments
+  (`scale/3`, `axis/3`, `legend/2`). A frame carries no size — the render gives it (§4.2).
   """
-  @spec cartesian(number(), number(), opts()) :: fragment()
-  def cartesian(width, height, opts), do: frame(:cartesian, width, height, opts)
+  @spec cartesian(opts()) :: fragment()
+  def cartesian(opts), do: frame(:cartesian, opts)
 
-  @doc "As `polar/3` with no options."
-  @spec polar(number(), number()) :: fragment()
-  def polar(width, height), do: polar(width, height, [])
+  @doc "As `polar/1` with no options."
+  @spec polar() :: fragment()
+  def polar, do: polar([])
 
-  @doc "A `:polar` frame of the given size (spec/14 §4.6): `angle` and `r` are its scales."
-  @spec polar(number(), number(), opts()) :: fragment()
-  def polar(width, height, opts), do: frame(:polar, width, height, opts)
+  @doc "A `:polar` frame (spec/14 §4.6): `angle` and `r` are its scales."
+  @spec polar(opts()) :: fragment()
+  def polar(opts), do: frame(:polar, opts)
 
-  @doc "As `geo/3` with no options."
-  @spec geo(number(), number()) :: fragment()
-  def geo(width, height), do: geo(width, height, [])
+  @doc "As `geo/1` with no options."
+  @spec geo() :: fragment()
+  def geo, do: geo([])
 
   @doc """
-  A `:geo` frame of the given size (spec/14 §4.6).
+  A `:geo` frame (spec/14 §4.6).
 
   The projection is the frame's `projection:` key, a `:projection` node.
   """
-  @spec geo(number(), number(), opts()) :: fragment()
-  def geo(width, height, opts), do: frame(:geo, width, height, opts)
+  @spec geo(opts()) :: fragment()
+  def geo(opts), do: frame(:geo, opts)
 
-  @doc "As `facet/3` with no options."
-  @spec facet(number(), number()) :: fragment()
-  def facet(width, height), do: facet(width, height, [])
+  @doc "As `facet/1` with no options."
+  @spec facet() :: fragment()
+  def facet, do: facet([])
 
   @doc """
-  A `:facet` frame of the given size (spec/14 §4.6).
+  A `:facet` frame (spec/14 §4.6).
 
   `by:` and `columns:`, the keys of the `:facet` node, are lifted into the frame's `facet`
   key: a `:facet` frame and its `facet` node name the same thing.
   """
-  @spec facet(number(), number(), opts()) :: fragment()
-  def facet(width, height, opts) do
+  @spec facet(opts()) :: fragment()
+  def facet(opts) do
     {facet, rest} = opts |> Map.new() |> Map.split([:by, :columns])
-    frame(:facet, width, height, if(facet == %{}, do: rest, else: Map.put(rest, :facet, facet)))
+    frame(:facet, if(facet == %{}, do: rest, else: Map.put(rest, :facet, facet)))
   end
 
   @doc "As `scale/3` with no options."
@@ -287,10 +287,7 @@ defmodule Visualize.Chart.Build do
 
   # -- the schema's word on every key -----------------------------------------------------
 
-  defp frame(kind, width, height, opts) do
-    base = %{kind: kind, size: %{width: width, height: height}}
-    %{frame: node(:frame, base, opts)}
-  end
+  defp frame(kind, opts), do: %{frame: node(:frame, %{kind: kind}, opts)}
 
   defp step(source, base, opts) when is_atom(source), do: step(from(source), base, opts)
 

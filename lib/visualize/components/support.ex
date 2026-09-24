@@ -39,7 +39,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       theme = theme(assigns.theme)
       sources = Presets.sources(name, assigns)
       chart = Chart.from_map!(Presets.design(name, assigns))
-      frame = Frame.new(chart, sources: sources, theme: theme)
+      # A component keeps its `width`/`height` assigns (spec/10 §1.2); the design records
+      # no size (spec/14 §4.2, #427), so they are the realisation's.
+      size = {assigns.width, assigns.height}
+      frame = Frame.new(chart, sources: sources, theme: theme, size: size)
 
       %{
         frame: frame,

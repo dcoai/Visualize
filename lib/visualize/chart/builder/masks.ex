@@ -224,8 +224,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The paths a site's contribution can mask: every top-level key, and the keys of each
     node under one, as `Visualize.Chart.Use.mask/2` takes them (spec/14 §19.5).
 
-        iex> Visualize.Chart.Builder.Masks.paths(%{theme: :dark, frame: %{size: %{}, margin: %{}}})
-        [[:frame], [:frame, :margin], [:frame, :size], [:theme]]
+        iex> Visualize.Chart.Builder.Masks.paths(%{theme: :dark, frame: %{legend: %{}, margin: %{}}})
+        [[:frame], [:frame, :legend], [:frame, :margin], [:theme]]
     """
     @spec paths(map()) :: [[atom()]]
     def paths(fragment) when is_map(fragment) do
@@ -262,10 +262,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     §18.8, #316): its name (the keys joined by `.`, which is the checkbox's name), whether
     `use` masks it, and the class and title that say so.
 
-        iex> use = %Visualize.Chart.Use{id: 1, ref: nil, mask: [[:frame, :size]]}
-        iex> rows = Visualize.Chart.Builder.Masks.rows(%{frame: %{size: %{width: 1}}}, use)
+        iex> use = %Visualize.Chart.Use{id: 1, ref: nil, mask: [[:frame, :margin]]}
+        iex> rows = Visualize.Chart.Builder.Masks.rows(%{frame: %{margin: %{top: 1}}}, use)
         iex> Enum.map(rows, &{&1.name, &1.masked})
-        [{"frame", false}, {"frame.size", true}]
+        [{"frame", false}, {"frame.margin", true}]
     """
     @spec rows(map(), Use.t()) :: [map()]
     def rows(fragment, %Use{mask: mask}) do

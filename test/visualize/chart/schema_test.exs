@@ -28,7 +28,7 @@ defmodule Visualize.Chart.SchemaTest do
   test "kinds/0 starts with the design and has no duplicates" do
     assert hd(Schema.kinds()) == :design
     assert Enum.uniq(Schema.kinds()) == Schema.kinds()
-    assert length(Schema.kinds()) == 30
+    assert length(Schema.kinds()) == 29
   end
 
   test "keys/1 and keys/2 are how style is known" do
@@ -47,7 +47,6 @@ defmodule Visualize.Chart.SchemaTest do
   test "key/2 and default/2" do
     assert Schema.key(:mark, :render).default == :auto
     assert Schema.key(:mark, :nope) == nil
-    assert Schema.default(:frame, :size) == %{width: 600, height: 400}
     assert Schema.default(:design, :version) == nil
     assert Schema.default(:axis, :style) == :axis
     assert Schema.default(:ticks, :size_inner) == 6

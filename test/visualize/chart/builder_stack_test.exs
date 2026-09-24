@@ -130,7 +130,7 @@ defmodule Visualize.Chart.Builder.StackTest do
 
   describe "the events (spec/14 §18.8, §18.10)" do
     test "selecting a layer opens its root node" do
-      socket = BuilderFixture.socket(BuilderFixture.layers(), node_label: "frame.size")
+      socket = BuilderFixture.socket(BuilderFixture.layers(), node_label: "frame.margin")
       {:noreply, chosen} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
       {:noreply, absent} = Builder.handle_event("select_layer", %{"index" => "9"}, socket)
 

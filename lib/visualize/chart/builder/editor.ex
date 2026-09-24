@@ -54,11 +54,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     ## Examples
 
-        iex> fragment = %{version: 1, frame: %{kind: :cartesian, size: %{width: 400}}}
+        iex> fragment = %{version: 1, frame: %{kind: :cartesian}}
         iex> Enum.map(Visualize.Chart.Builder.Editor.nodes(fragment), & &1.label)
-        ["design", "frame", "frame.size"]
+        ["design", "frame"]
         iex> Enum.map(Visualize.Chart.Builder.Editor.nodes(fragment), & &1.kind)
-        [:design, :frame, :size]
+        [:design, :frame]
 
     """
     @spec nodes(map()) :: [node_entry(), ...]
@@ -131,7 +131,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:select, [:top, :bottom]}
         iex> Visualize.Chart.Builder.Editor.widget({:ref, :style})
         :text
-        iex> Visualize.Chart.Builder.Editor.widget({:node, :size})
+        iex> Visualize.Chart.Builder.Editor.widget({:node, :margin})
         :textarea
 
     """

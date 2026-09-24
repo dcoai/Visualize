@@ -38,7 +38,6 @@ defmodule Visualize.Chart.FrameGoldenTest do
       },
       frame: %{
         kind: :cartesian,
-        size: %{width: 400, height: 240},
         margin: %{top: 30, right: 20, bottom: 30, left: 40},
         scales: %{
           x: %{kind: :time},
@@ -72,7 +71,6 @@ defmodule Visualize.Chart.FrameGoldenTest do
       sources: %{primary: %{fields: [:bearing, :v]}},
       frame: %{
         kind: :polar,
-        size: %{width: 300, height: 300},
         margin: %{top: 30, right: 30, bottom: 30, left: 30},
         scales: %{
           angle: %{kind: :radial, domain: [0, 360]},
@@ -95,7 +93,6 @@ defmodule Visualize.Chart.FrameGoldenTest do
       styles: %{by_v: %{fill: {:field, :v}}},
       frame: %{
         kind: :geo,
-        size: %{width: 400, height: 200},
         margin: %{top: 20, right: 0, bottom: 0, left: 0},
         projection: %{type: :equirectangular, scale: 60},
         scales: %{color: %{kind: :sequential, domain: [0, :auto]}},
@@ -112,7 +109,6 @@ defmodule Visualize.Chart.FrameGoldenTest do
       sources: %{primary: %{fields: [:t, :v, :region]}},
       frame: %{
         kind: :facet,
-        size: %{width: 400, height: 200},
         margin: %{top: 20, right: 10, bottom: 30, left: 40},
         facet: %{by: :region, columns: 2},
         scales: %{x: %{kind: :linear, domain: [0, 3]}, y: %{kind: :linear, domain: [0, :auto]}},

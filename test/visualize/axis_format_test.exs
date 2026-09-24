@@ -244,7 +244,6 @@ defmodule Visualize.AxisFormatTest do
         sources: %{s: %{fields: [:t, :v]}},
         frame: %{
           kind: :cartesian,
-          size: %{width: 300, height: 200},
           scales: %{x: %{kind: :linear, domain: [0, 7200]}, y: %{kind: :linear, domain: [0, 1]}},
           axes: [
             %{scale: :x, side: :bottom, ticks: [0, 1800, 3600, 5400, 7200], format: :duration}
@@ -254,7 +253,10 @@ defmodule Visualize.AxisFormatTest do
       }
 
       {:ok, applied} =
-        Visualize.Chart.apply(design, sources: %{s: [%{t: 0, v: 0}, %{t: 7200, v: 1}]})
+        Visualize.Chart.apply(design,
+          sources: %{s: [%{t: 0, v: 0}, %{t: 7200, v: 1}]},
+          size: {300, 200}
+        )
 
       svg = Visualize.Chart.render(applied)
 

@@ -199,7 +199,7 @@ defmodule Visualize.Chart.Presets do
         [
           style(:line, stroke: stroke, stroke_width: a.stroke_width, curve: a.curve),
           style(:point, fill: stroke),
-          cartesian(a.width, a.height, margin: margin(a)),
+          cartesian(margin: margin(a)),
           x_scale(a),
           linear_scale(:y),
           axis(:x, :bottom),
@@ -218,7 +218,7 @@ defmodule Visualize.Chart.Presets do
       seed(a, [:x, :y]) ++
         [
           style(:bar, fill: colour(a.fill, :series_1)),
-          cartesian(a.width, a.height, margin: margin(a)),
+          cartesian(margin: margin(a)),
           band_scale(:x, padding: a.padding),
           linear_scale(:y, domain: [0, :auto]),
           axis(:x, :bottom),
@@ -239,7 +239,7 @@ defmodule Visualize.Chart.Presets do
       seed(a, [:x, :y]) ++
         [
           style(:bar, fill: colour(a.fill, :series_1)),
-          cartesian(a.width, a.height, margin: margin(a)),
+          cartesian(margin: margin(a)),
           linear_scale(:x, domain: [0, :auto]),
           band_scale(:y, padding: a.padding, range: [0, height]),
           axis(:x, :bottom),
@@ -269,7 +269,7 @@ defmodule Visualize.Chart.Presets do
         [
           style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 2),
           style(:slice_label, fill: :background, font_size: :label_size),
-          polar(a.width, a.height, margin: @zero_margin),
+          polar(margin: @zero_margin),
           ordinal_scale(:color, range: a.colors),
           arc(:data, %{value: :value}, opts)
         ]
@@ -285,7 +285,7 @@ defmodule Visualize.Chart.Presets do
       seed(a, [:x, :y, :r]) ++
         [
           style(:point, fill: colour(a.fill, :series_1), opacity: 0.7),
-          cartesian(a.width, a.height, margin: margin(a)),
+          cartesian(margin: margin(a)),
           linear_scale(:x),
           linear_scale(:y),
           axis(:x, :bottom),
@@ -313,7 +313,7 @@ defmodule Visualize.Chart.Presets do
             stroke_width: a.stroke_width,
             curve: a.curve
           ),
-          cartesian(a.width, a.height, margin: margin(a)),
+          cartesian(margin: margin(a)),
           x_scale(a),
           linear_scale(:y, domain: [0, :auto]),
           axis(:x, :bottom),
@@ -334,7 +334,7 @@ defmodule Visualize.Chart.Presets do
       seed(a, [:x | keys]) ++
         [
           style(:segment, fill: {:field, :key}),
-          cartesian(a.width, a.height, margin: margin(a)),
+          cartesian(margin: margin(a)),
           band_scale(:x, padding: a.padding),
           linear_scale(:y, domain: [0, :auto]),
           ordinal_scale(:color, domain: keys, range: a.colors),
@@ -372,7 +372,7 @@ defmodule Visualize.Chart.Presets do
             stroke: colour(a.node_stroke, :series_1),
             stroke_width: 2
           ),
-          cartesian(a.width, a.height, margin: margin(a)),
+          cartesian(margin: margin(a)),
           path(tree(from(:data), layout ++ [output: :links]), %{path: :path}, style: :link),
           circle(tree(from(:data), layout ++ [output: :nodes]), channels,
             options: %{radius: a.node_radius},
@@ -398,7 +398,7 @@ defmodule Visualize.Chart.Presets do
       seed(a, @hierarchy_fields) ++
         [
           style(:cell, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
-          cartesian(a.width, a.height, margin: margin(a)),
+          cartesian(margin: margin(a)),
           branch_scale(a),
           rect(data, %{x0: :x0, x1: :x1, y0: :y0, y1: :y1}, style: :cell)
         ]
@@ -424,7 +424,7 @@ defmodule Visualize.Chart.Presets do
         [
           style(:arc, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
           style(:arc_label, fill: :background, font_size: :label_size),
-          polar(a.width, a.height, margin: @zero_margin),
+          polar(margin: @zero_margin),
           branch_scale(a),
           arc(data, %{start: :x0, end: :x1, inner: :y0, outer: :y1},
             label: %{text: [{:field, :label}], anchor: :middle, style: :arc_label},

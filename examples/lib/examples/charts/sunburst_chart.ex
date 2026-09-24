@@ -62,13 +62,15 @@ defmodule Examples.Charts.SunburstChart do
     ]
   }
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {500, 500}
+
   def title, do: "Sunburst Chart"
   def description, do: "Radial hierarchical partition"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 500
-    height = opts[:height] || 500
+    {width, height} = Design.size(__MODULE__, opts)
     tree = nodes(opts)
     branches = length(children(tree))
 
@@ -95,7 +97,7 @@ defmodule Examples.Charts.SunburstChart do
           font_size: 10,
           font_weight: :bold
         ),
-        polar(width, height, margin: @zero_margin),
+        polar(margin: @zero_margin),
         ordinal_scale(:color, domain: Enum.to_list(0..(branches - 1)//1)),
         arc(data, %{start: :x0, end: :x1, inner: :y0, outer: :y1},
           label: %{text: [{:field, :name}], anchor: :middle, fit: :truncate, style: :sector_label},
@@ -188,7 +190,7 @@ defmodule Examples.Charts.SunburstChart do
         source(:nodes, [:id, :parent, :name, :value, :branch]),
         style(:sector, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
         style(:sector_label, extends: :label, fill: :background, font_size: 10, font_weight: :bold),
-        polar(500, 500, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        polar(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color, domain: [0, 1, 2, 3]),
 
         # `start`/`end` and `inner`/`outer` are the sector's own angles and radii: no pie.

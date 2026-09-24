@@ -6,7 +6,6 @@
   styles: %{petal: %{fill: :series_1, stroke: :background}},
   frame: %{
     kind: :polar,
-    size: %{width: 300, height: 300},
     margin: %{top: 30, right: 30, bottom: 30, left: 30},
     scales: %{angle: %{kind: :radial, domain: [0, 360]}, r: %{kind: :sqrt, domain: [0, :auto]}},
     axes: [

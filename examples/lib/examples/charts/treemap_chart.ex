@@ -93,8 +93,7 @@ defmodule Examples.Charts.TreemapChart do
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
+    {_width, _height} = Design.size(__MODULE__, opts)
     tree = opts[:data] || @data
     branches = length(tree[:children] || [])
 
@@ -110,7 +109,7 @@ defmodule Examples.Charts.TreemapChart do
         source(:nodes, Design.hierarchy_fields()),
         style(:cell, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
         style(:cell_label, extends: :label, fill: :background, font_size: 10),
-        cartesian(width, height, margin: @zero_margin),
+        cartesian(margin: @zero_margin),
         ordinal_scale(:color, domain: Enum.to_list(0..(branches - 1)//1)),
         rect(leaves, %{x0: :x0, x1: :x1, y0: :y0, y1: :y1},
           label: %{text: [{:field, :name}], anchor: :middle, fit: :truncate, style: :cell_label},
@@ -151,7 +150,7 @@ defmodule Examples.Charts.TreemapChart do
         source(:nodes, [:id, :parent, :name, :value, :branch]),
         style(:cell, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
         style(:cell_label, extends: :label, fill: :background, font_size: 10),
-        cartesian(600, 400, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        cartesian(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         # One colour per child of the root; every cell takes its branch's (D-46).
         ordinal_scale(:color, domain: [0, 1, 2, 3, 4, 5, 6, 7]),
         # The squarified layout, then the leaves alone (spec/14 §5.4.2).

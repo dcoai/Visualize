@@ -66,7 +66,6 @@ defmodule Visualize.Chart.Schema do
   ]
   @frame_kinds [
     :frame,
-    :size,
     :margin,
     :scale,
     :axis,

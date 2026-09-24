@@ -6,7 +6,6 @@
   styles: %{flag: %{fill: {:field, :ok}}},
   frame: %{
     kind: :cartesian,
-    size: %{width: 400, height: 60},
     margin: %{top: 10, right: 10, bottom: 30, left: 10},
     scales: %{
       x: %{kind: :time},

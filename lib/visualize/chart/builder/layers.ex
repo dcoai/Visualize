@@ -227,15 +227,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       :marks,
       :labels
     ]
-    @frame_parts [:size, :margin, :legend, :projection, :facet, :viewport]
+    @frame_parts [:margin, :legend, :projection, :facet, :viewport]
 
     @doc """
     The kinds a placed fragment declares (spec/14 §18.8), in the schema's order — `meta`,
     `theme`, `sources`, `vars`, `styles`, `defs`, `frame`, `scales`, `axes`, `marks`,
     `labels` — only those it declares; the details are the inspector's.
 
-        iex> Visualize.Chart.Builder.Layers.declared(%{styles: %{series: %{stroke: :red}}, frame: %{size: %{width: 1}, scales: %{x: %{kind: :linear}}, axes: [%{scale: :x, side: :bottom}]}})
-        [:styles, :frame, :scales, :axes]
+        iex> Visualize.Chart.Builder.Layers.declared(%{styles: %{series: %{stroke: :red}}, frame: %{scales: %{x: %{kind: :linear}}, axes: [%{scale: :x, side: :bottom}]}})
+        [:styles, :scales, :axes]
         iex> Visualize.Chart.Builder.Layers.declared(%{})
         []
     """

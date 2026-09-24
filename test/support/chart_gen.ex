@@ -215,12 +215,11 @@ defmodule Visualize.ChartGen do
   defp frame(vars) do
     gen all(
           kind <- member_of([:cartesian, :polar, :geo, :facet]),
-          size <- fixed_map(%{width: integer(100..1000), height: integer(100..1000)}),
           base <- optional_map(%{margin: margin(), projection: projection(), facet: facet()}),
           scales <- optional_map(Map.new(@scale_names, &{&1, scale()})),
           furniture <- furniture(Map.keys(scales), vars)
         ) do
-      Map.merge(%{kind: kind, size: size, scales: scales}, Map.merge(base, furniture))
+      Map.merge(%{kind: kind, scales: scales}, Map.merge(base, furniture))
     end
   end
 

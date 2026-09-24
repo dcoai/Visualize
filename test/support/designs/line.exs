@@ -9,7 +9,6 @@
   styles: %{series: %{stroke_width: 1.5}, muted: %{stroke: :axis, opacity: 0.6}},
   frame: %{
     kind: :cartesian,
-    size: %{width: 400, height: 200},
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{x: %{kind: :time}, y: %{kind: :linear, domain: [0, :auto], nice: true}},
     axes: [

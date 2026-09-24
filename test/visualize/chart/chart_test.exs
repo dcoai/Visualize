@@ -125,11 +125,13 @@ defmodule Visualize.ChartTest do
         version: 1,
         meta: meta,
         sources: %{s: %{fields: [:x, :y]}},
-        frame: %{kind: :cartesian, size: %{width: 300, height: 200}},
+        frame: %{kind: :cartesian},
         marks: [%{type: :line, data: :s, channels: %{x: :x, y: :y}}]
       }
 
-      {:ok, applied} = Chart.apply(design, sources: %{s: [%{x: 1, y: 2}, %{x: 2, y: 3}]})
+      {:ok, applied} =
+        Chart.apply(design, sources: %{s: [%{x: 1, y: 2}, %{x: 2, y: 3}]}, size: {300, 200})
+
       applied
     end
 

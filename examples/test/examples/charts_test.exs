@@ -240,8 +240,7 @@ defmodule Examples.ChartsTest do
 
   test "the width and height options reach the frame, and the frame's size is the document's" do
     for module <- charts() do
-      {design, _sources} = module.design(width: 320, height: 220)
-      %{size: %{width: width, height: height}} = design.frame
+      {width, height} = Design.size(module, width: 320, height: 220)
       svg = module.render(width: 320, height: 220)
 
       # A chart may widen its own frame to reserve a margin — the donut does, for its

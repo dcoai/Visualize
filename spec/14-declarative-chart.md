@@ -264,7 +264,6 @@ It is **anonymous in the document**: an inline node is not a key of `design.styl
 | Key | Type | Facet | Default | Merge |
 |---|---|---|---|---|
 | `kind` | `{:enum, [:cartesian, :polar, :geo, :facet]}` | `:geometry` | required | `:override` |
-| `size` | `{:node, :size}` | `:geometry` | `%{width: 600, height: 400}` | `:override` |
 | `margin` | `{:node, :margin}` | `:geometry` | `%{top: 20, right: 20, bottom: 30, left: 40}` | `:override` |
 | `scales` | `{:map, {:node, :scale}}` | `:geometry` | `%{}` | `:union` |
 | `axes` | `{:list, {:node, :axis}}` | `:geometry` | `[]` | `:concat` |
@@ -275,7 +274,11 @@ It is **anonymous in the document**: an inline node is not a key of `design.styl
 
 ### 4.2 Size and margin
 
-**Implemented.** `:size` has `width` and `height`, both `:number`, `:geometry`, required. `:margin` has `top`, `right`, `bottom` and `left`, each `:number`, `:geometry`, default `0`. The plot area is the size less the margins; `Visualize.Chart.Schema.default/2` gives the frame's defaults so a consumer never repeats them, and the frame struct carries the plot area as `plot` (§4.7).
+**Implemented.** **A design records no size** (#383, #427). How big a chart is is a property of where it is *shown*, not of what it says, so the size comes in at render: `Visualize.Chart.apply/2` takes `size:` as `{width, height}` — the host's container — and `Visualize.Chart.Frame.new/2` takes the same option, `{600, 400}` by default so a static render still works and a design never carries one. The frame node therefore has no `size` key, and a design that still has one is the validator's unknown-key fault, which is what makes an unmigrated design fail loudly instead of drawing at a stale size.
+
+**Margins are pixels and do not scale.** `:margin` has `top`, `right`, `bottom` and `left`, each `:number`, `:geometry`, default `0`; the plot area is the given size less the margins, so it is the *plot* that flexes with the container while the tick text, the axis gutters and the fonts stay the size they were designed to be read at. The same design at two sizes therefore draws byte-identical furniture text and two different plot boxes. `Visualize.Chart.Schema.default/2` gives the frame's defaults so a consumer never repeats them, and the frame struct carries the plot area as `plot` (§4.7).
+
+The `:size` **node kind** goes with it: nothing in a design declares a pair of pixels any more. A transform step's `size` key (§5.4.2) is a `{:list, :number}` and the compiled chart's own `size` (§12.1) is the render's, neither of them a node.
 
 ### 4.3 Scales
 
@@ -384,7 +387,7 @@ Every entry's group carries `data-series`, `to_string/1` of the entry's value �
 
 ### 4.7 The frame struct and its rendering
 
-**Implemented.** `%Visualize.Chart.Frame{}` is the realised frame: `kind`; `size` and `margin` with the schema's defaults filled; `plot`, `%{width, height}` of the plot area; `scales`, the realised structs by name (§4.3); `projection`, a `%Visualize.Geo.Projection{}` in a `:geo` frame and `nil` otherwise; `panels`, the facet values of §4.6, `[]` in any other kind, and `facet`, `%{by, columns}` with the effective column count in a `:facet` frame and `nil` otherwise; `axes`, `legend`, `labels` and `marks` as the design gives them; `theme`, the `%Visualize.Theme{}` the design names — a built-in name or an inline `:theme` node — or the `theme:` option of `new/2`, which is taken for any name and required for one that is neither built-in nor inline; and `styles`, the declared styles over the built-in four (§3.3).
+**Implemented.** `%Visualize.Chart.Frame{}` is the realised frame: `kind`; `size`, the `{width, height}` the caller gave as `size:` or the `{600, 400}` default (§4.2) — the design has none — and `margin` with the schema's defaults filled; `plot`, `%{width, height}` of the plot area; `scales`, the realised structs by name (§4.3); `projection`, a `%Visualize.Geo.Projection{}` in a `:geo` frame and `nil` otherwise; `panels`, the facet values of §4.6, `[]` in any other kind, and `facet`, `%{by, columns}` with the effective column count in a `:facet` frame and `nil` otherwise; `axes`, `legend`, `labels` and `marks` as the design gives them; `theme`, the `%Visualize.Theme{}` the design names — a built-in name or an inline `:theme` node — or the `theme:` option of `new/2`, which is taken for any name and required for one that is neither built-in nor inline; and `styles`, the declared styles over the built-in four (§3.3).
 
 `Visualize.Chart.Frame.generate/2` is the static furniture as one `Visualize.IR.Element` group with the margins applied, every theme slot resolved through `Visualize.Theme.resolve/3` in its `:resolve` mode (`:css` by default), and every text a string:
 
@@ -711,7 +714,7 @@ An axis title follows the side of the first axis that names its scale; with no a
 
 ### 7.3 Application
 
-**Implemented** (work item 5 of #53, D-65). `Visualize.Chart.apply/2` takes a design — a `%Visualize.Chart{}`, or a design map that goes through `Visualize.Chart.from_map/1` first, so an invalid map is its errors — and the options `sources:` (the pool, a map from name to source, `%{}`), `vars:` (a map from variable name to value, `%{}`), `theme:` (a `%Visualize.Theme{}`, as `Visualize.Chart.Frame.new/2` takes it) and `now:` (the instant a `:window` step measures its durations back from, §5.4.1; absent, each such step takes the newest reading of its own column), and returns `{:ok, applied}` or `{:error, errors}` — the errors of §10.1 by path, ordered by path — in three steps. Each step reports every fault it finds and a step with faults stops before the next, so resolution faults are never mixed with binding faults, nor either with the validator's.
+**Implemented** (work item 5 of #53, D-65). `Visualize.Chart.apply/2` takes a design — a `%Visualize.Chart{}`, or a design map that goes through `Visualize.Chart.from_map/1` first, so an invalid map is its errors — and the options `sources:` (the pool, a map from name to source, `%{}`), `vars:` (a map from variable name to value, `%{}`), `theme:` (a `%Visualize.Theme{}`, as `Visualize.Chart.Frame.new/2` takes it), `size:` (the host's container as `{width, height}`, `{600, 400}` by default, §4.2) and `now:` (the instant a `:window` step measures its durations back from, §5.4.1; absent, each such step takes the newest reading of its own column), and returns `{:ok, applied}` or `{:error, errors}` — the errors of §10.1 by path, ordered by path — in three steps. Each step reports every fault it finds and a step with faults stops before the next, so resolution faults are never mixed with binding faults, nor either with the validator's.
 
 1. **Variables resolve.** Every `%Visualize.Chart.Var{}` in the design — a value, a text part, a whole node — is replaced by the value `vars:` gives its name, else by the declared `default` (§2.4); a variable with neither is `{:unresolved, :var, name}` at the path of its use, and every use is reported; a variable whose value — from `vars:` or from its own declared default — is itself a `%Visualize.Chart.Var{}` is `{:var_binding, name}` at every path where it stood, since resolution is single level (§7.1) and a second pass would let a stored design bind a variable to a variable and never settle. A name in `vars:` that no declaration carries is `{:undeclared, :var, name}` at `[:vars, name]`. In a text a resolved part that is a number or an atom is written with `to_string/1`, so `["n = ", var(:n)]` with `n: 3` reads `["n = ", "3"]`; every other value stands as it is, where the validator types it. The `vars` declarations are dropped: the concrete chart has none and no variable anywhere in it, which is what `Visualize.Chart.Frame.new/2` requires (§4.7).
 2. **Slots bind.** Each slot of `sources` (§2.3) binds to the pool's entry under its own name, else under its `default`; a slot with neither is `{:unbound, :source, name}` at `[:sources, name]`. Pool entries that no slot names are ignored, so one pool serves many designs. A bound source is anything `Visualize.Data.Table.rows/1` reads and is kept as given — the frame reads it through `rows/1` as it does any source, and a rank-1 `Nx` tensor stays a tensor for the dense path (D-52). Every field the slot declares MUST be a key of some row of the bound source, in either spelling; a field no row carries is `{:missing_field, field}` at `[:sources, name]`, one error per field, which is the "made for `{a, b, c}`" contract failing loudly (§7.2). A source with no rows binds without a check. A field a channel, a text or a transform reads is checked against the slot's declaration by the validator (§5.4), so a field the design reads and the source lacks is caught at one or the other.
@@ -935,7 +938,6 @@ import Visualize.Chart, only: [var: 1]
   },
   frame: %{
     kind: :cartesian,
-    size: %{width: 600, height: 300},
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{
       x: %{kind: :time, domain: :auto},
@@ -991,7 +993,7 @@ Visualize.Chart.compose([
   theme(:default),
   style(:series, stroke: var(:accent), stroke_width: 2, curve: :step_after),
   style(:muted, stroke: :axis, stroke_width: 1, opacity: 0.6),
-  cartesian(600, 300, margin: %{top: 20, right: 20, bottom: 30, left: 40}),
+  cartesian(margin: %{top: 20, right: 20, bottom: 30, left: 40}),
   time_scale(:x, domain: :auto),
   linear_scale(:y, domain: [0, :auto], nice: true),
   linear_scale(:count, domain: [0, :auto], range: [0, 120]),
@@ -1098,7 +1100,8 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | Function | Contract |
 |---|---|
 | `Visualize.Chart.Frame.new/1` | As `new/2` with `[]` options: no source bound, every `:auto` domain the unit domain. |
-| `Visualize.Chart.Frame.new/2` | `new(chart, opts)`: the `%Visualize.Chart.Frame{}` of a `%Visualize.Chart{}`, every scale realised (§4.3) from `sources:` — a map from source name to anything `Visualize.Data.Table.rows/1` reads, `%{}` by default — and the theme resolved, `theme:` supplying a `%Visualize.Theme{}` that is taken for any theme name and required for one that is neither built-in nor inline (§4.7). Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, or a bound value a scale cannot take. |
+| `Visualize.Chart.Frame.new/2` | `new(chart, opts)`: the `%Visualize.Chart.Frame{}` of a `%Visualize.Chart{}`, every scale realised (§4.3) from `sources:` — a map from source name to anything `Visualize.Data.Table.rows/1` reads, `%{}` by default — and the theme resolved, `theme:` supplying a `%Visualize.Theme{}` that is taken for any theme name and required for one that is neither built-in nor inline (§4.7), `size:` the `{width, height}` the frame is realised at (`{600, 400}`, §4.2) and `now:` the instant a `:window` step measures back from (§5.4.1). Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, or a bound value a scale cannot take. |
+| `Visualize.Chart.Frame.default_size/0` | The `{width, height}` a frame is realised at when no `size:` is given: `{600, 400}` (§4.2). |
 | `Visualize.Chart.Frame.scales/1` | The realised scales by name (§4.3): the escape hatch. |
 | `Visualize.Chart.Frame.scale/2` | `scale(frame, name)`: one realised scale; `ArgumentError` when the frame declares no such scale. |
 | `Visualize.Chart.Frame.put_scale/3` | `put_scale(frame, name, scale)`: the frame with the realised scale replaced by the given struct; the override of §4.3. |
@@ -1202,14 +1205,14 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Build.gradient/3` | `gradient(name, kind, opts)`: `%{defs: %{name => node}}`, a `:gradient` node of §2.7 — `kind` `:linear` or `:radial`, `opts` its remaining keys (`stops:` as a list of `%{offset, colour, opacity}` maps or `{offset, colour}` / `{offset, colour, opacity}` tuples, `angle:`, `centre:`, `radius:`), every key checked. |
 | `Visualize.Chart.Build.paint/1` | `paint(name)`: `{:paint, name}`, the value a `:colour` key takes to refer to a gradient (§3.2). |
 | `Visualize.Chart.Build.theme/1` | `theme(theme)`: `%{theme: theme}`, a theme name or an inline `:theme` node (§2.5). |
-| `Visualize.Chart.Build.cartesian/2` | As `cartesian/3` with `[]`. |
-| `Visualize.Chart.Build.cartesian/3` | `cartesian(width, height, opts)`: `%{frame: %{kind: :cartesian, size: %{width: width, height: height}}}`; `opts` are the frame's remaining keys (§4.1). |
-| `Visualize.Chart.Build.polar/2` | As `polar/3` with `[]`. |
-| `Visualize.Chart.Build.polar/3` | `polar(width, height, opts)`: as `cartesian/3` with `kind: :polar` (§4.6). |
-| `Visualize.Chart.Build.geo/2` | As `geo/3` with `[]`. |
-| `Visualize.Chart.Build.geo/3` | `geo(width, height, opts)`: as `cartesian/3` with `kind: :geo`; the projection is the frame's `projection:` key, a `:projection` node (§4.6). |
-| `Visualize.Chart.Build.facet/2` | As `facet/3` with `[]`. |
-| `Visualize.Chart.Build.facet/3` | `facet(width, height, opts)`: as `cartesian/3` with `kind: :facet`; `by:` and `columns:`, the keys of the `:facet` node, are lifted into the frame's `facet` key (§4.6). |
+| `Visualize.Chart.Build.cartesian/0` | As `cartesian/1` with `[]`. |
+| `Visualize.Chart.Build.cartesian/1` | `cartesian(opts)`: `%{frame: %{kind: :cartesian}}`; `opts` are the frame's remaining keys (§4.1). A frame carries no size — the render gives it (§4.2). |
+| `Visualize.Chart.Build.polar/0` | As `polar/1` with `[]`. |
+| `Visualize.Chart.Build.polar/1` | `polar(opts)`: as `cartesian/1` with `kind: :polar` (§4.6). |
+| `Visualize.Chart.Build.geo/0` | As `geo/1` with `[]`. |
+| `Visualize.Chart.Build.geo/1` | `geo(opts)`: as `cartesian/1` with `kind: :geo`; the projection is the frame's `projection:` key, a `:projection` node (§4.6). |
+| `Visualize.Chart.Build.facet/0` | As `facet/1` with `[]`. |
+| `Visualize.Chart.Build.facet/1` | `facet(opts)`: as `cartesian/1` with `kind: :facet`; `by:` and `columns:`, the keys of the `:facet` node, are lifted into the frame's `facet` key (§4.6). |
 | `Visualize.Chart.Build.scale/2` | As `scale/3` with `[]`. |
 | `Visualize.Chart.Build.scale/3` | `scale(name, kind, opts)`: `%{frame: %{scales: %{name => %{kind: kind}}}}`, one declared scale (§4.3); `opts` are the scale's remaining keys. |
 | `Visualize.Chart.Build.axis/2` | As `axis/3` with `[]`. |

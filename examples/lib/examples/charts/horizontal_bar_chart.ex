@@ -35,8 +35,7 @@ defmodule Examples.Charts.HorizontalBarChart do
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 600
-    height = opts[:height] || 400
+    {width, height} = Design.size(__MODULE__, opts)
     {_plot_width, plot_height} = Design.plot(width, height, @margin)
 
     # Both marks read the same pipeline, so the band's domain is the sorted order once.
@@ -46,7 +45,7 @@ defmodule Examples.Charts.HorizontalBarChart do
       Design.fold([
         chart(meta: %{name: title(), description: [description()]}),
         source(:countries, [:country, :population]),
-        cartesian(width, height, margin: @margin),
+        cartesian(margin: @margin),
         linear_scale(:x, domain: [0, :auto], nice: true),
         band_scale(:y, padding: 0.2, range: [0, plot_height]),
         ordinal_scale(:color),
@@ -90,7 +89,7 @@ defmodule Examples.Charts.HorizontalBarChart do
       Visualize.Chart.compose([
         chart(meta: %{name: "Horizontal Bar Chart"}),
         source(:countries, [:country, :population]),
-        cartesian(600, 400, margin: %{top: 20, right: 30, bottom: 40, left: 100}),
+        cartesian(margin: %{top: 20, right: 30, bottom: 40, left: 100}),
         linear_scale(:x, domain: [0, :auto], nice: true),
 
         # `:auto` on a band runs upward; the categories read downward, so the range is given.

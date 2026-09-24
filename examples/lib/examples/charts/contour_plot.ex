@@ -30,7 +30,7 @@ defmodule Examples.Charts.ContourPlot do
         chart(meta: %{name: title(), description: [description()]}),
         source(:grid, [:z]),
         style(:band, fill: {:field, :value}, stroke: :background, stroke_width: 0.3),
-        cartesian(opts[:width] || 500, opts[:height] || 400, margin: @margin),
+        cartesian(margin: @margin),
         sequential_scale(:color, domain: [0, :auto]),
         legend(:color, position: :right, inside: false, title: ["Height"]),
         # One ring per threshold, lowest first, so each band lies over the one beneath it.
@@ -93,7 +93,7 @@ defmodule Examples.Charts.ContourPlot do
         # The grid in row-major order, one height per cell.
         source(:grid, [:z]),
         style(:band, fill: {:field, :value}, stroke: :background, stroke_width: 0.3),
-        cartesian(500, 400, margin: %{top: 20, right: 80, bottom: 20, left: 20}),
+        cartesian(margin: %{top: 20, right: 80, bottom: 20, left: 20}),
         sequential_scale(:color, domain: [0, :auto]),
         legend(:color, position: :right, inside: false, title: ["Height"]),
         # Marching squares over a 50 × 40 grid (spec/14 §5.4.4): one ring per threshold,

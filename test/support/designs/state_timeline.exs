@@ -11,7 +11,6 @@
   },
   frame: %{
     kind: :cartesian,
-    size: %{width: 400, height: 100},
     margin: %{top: 20, right: 20, bottom: 30, left: 20},
     scales: %{
       x: %{kind: :time},

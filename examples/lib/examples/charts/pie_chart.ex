@@ -28,13 +28,15 @@ defmodule Examples.Charts.PieChart do
     %{name: "Other", value: 6.4}
   ]
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {400, 400}
+
   def title, do: "Pie Chart"
   def description, do: "Browser market share"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 400
-    height = opts[:height] || 400
+    {width, height} = Design.size(__MODULE__, opts)
 
     design =
       Design.fold([
@@ -47,7 +49,7 @@ defmodule Examples.Charts.PieChart do
           font_size: 12,
           font_weight: :bold
         ),
-        polar(width, height, margin: @zero_margin),
+        polar(margin: @zero_margin),
         ordinal_scale(:color),
         arc(:slices, %{value: :value},
           options: %{inner_radius: 0, outer_radius: min(width, height) / 2 - 40},
@@ -97,7 +99,7 @@ defmodule Examples.Charts.PieChart do
         source(:slices, [:name, :value, :index]),
         style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 2),
         style(:slice_label, extends: :label, fill: :background, font_size: 12, font_weight: :bold),
-        polar(400, 400, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        polar(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color),
 
         # An :arc whose `value` is a share runs Visualize.Shape.Pie itself.

@@ -23,6 +23,9 @@ defmodule Examples.Charts.IncrementalLine do
   @margin %{top: 20, right: 20, bottom: 30, left: 40}
   @inner_width @width - @margin.left - @margin.right
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {800, 500}
+
   def title, do: "Incremental line"
 
   def description, do: "One line streaming through a viewport, drawn by copy and shift"
@@ -50,7 +53,7 @@ defmodule Examples.Charts.IncrementalLine do
         source(:signal, [:t, :v], types: %{t: :number, v: :number}),
         # A viewport on x: the compiled chart windows x to [hi − span, hi] every tick and
         # scrolls the binary canvas by the pixels the window moved (spec/14 §12.5).
-        cartesian(@width, @height, margin: @margin, viewport: %{scale: :x, span: count - 1}),
+        cartesian(margin: @margin, viewport: %{scale: :x, span: count - 1}),
         linear_scale(:x),
         linear_scale(:y, domain: [0, 400]),
         axis(:x, :bottom, ticks: 10, grid: true),
@@ -111,7 +114,7 @@ defmodule Examples.Charts.IncrementalLine do
         chart(meta: %{name: "Incremental line"}),
         style(:trace, stroke: :series_1, stroke_width: 2, curve: :monotone_x),
         source(:signal, [:t, :v]),
-        cartesian(800, 500,
+        cartesian(
           margin: %{top: 20, right: 20, bottom: 30, left: 40},
           viewport: %{scale: :x, span: 740}
         ),

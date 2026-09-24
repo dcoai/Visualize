@@ -145,7 +145,6 @@ defmodule ExamplesWeb.BuilderLive do
         styles: %{series: %{stroke: :series_1, stroke_width: 2, curve: :monotone_x}},
         frame: %{
           kind: :cartesian,
-          size: %{width: 640, height: 320},
           margin: %{top: 24, right: 24, bottom: 32, left: 48}
         }
       }
@@ -199,7 +198,7 @@ defmodule ExamplesWeb.BuilderLive do
              ]
            }
          }},
-        {"Frame:size:wide", %{frame: %{size: %{width: 900, height: 320}}}},
+        {"Frame:margin:wide", %{frame: %{margin: %{top: 900, bottom: 320}}}},
         {"Frame:margin:roomy", %{frame: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}}},
         # Bodies, not declarations: the composite says the name a style is declared under
         # (spec/14 §19.3), so a body serves any chart, whatever it calls its style.

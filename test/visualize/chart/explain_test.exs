@@ -15,7 +15,7 @@ defmodule Visualize.Chart.ExplainTest do
           %{
             frame: %{
               kind: :cartesian,
-              size: %{width: 800, height: 400},
+              margin: %{top: 800, bottom: 400},
               axes: [%{scale: :x, side: :bottom, ticks: 6}]
             },
             marks: [%{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}}]
@@ -23,7 +23,7 @@ defmodule Visualize.Chart.ExplainTest do
   @house {:house, %{theme: :dark, styles: %{series: %{stroke: :series_2, stroke_width: 2}}}}
   @panel {:panel,
           %{
-            frame: %{size: %{width: 600}},
+            frame: %{margin: %{top: 600}},
             marks: [%{id: :series, type: :area, data: :p, channels: %{x: :t, y: :v}}]
           }}
 
@@ -53,10 +53,10 @@ defmodule Visualize.Chart.ExplainTest do
                overrode: [:theme]
              }
 
-      assert entry(entries, [:frame, :size, :width]).layer == :panel
-      assert entry(entries, [:frame, :size, :width]).overrode == [:frame]
-      assert entry(entries, [:frame, :size, :height]).layer == :frame
-      assert entry(entries, [:frame, :size, :height]).overrode == []
+      assert entry(entries, [:frame, :margin, :top]).layer == :panel
+      assert entry(entries, [:frame, :margin, :top]).overrode == [:frame]
+      assert entry(entries, [:frame, :margin, :bottom]).layer == :frame
+      assert entry(entries, [:frame, :margin, :bottom]).overrode == []
       assert entry(entries, [:version]).layer == :theme
     end
 
@@ -141,7 +141,7 @@ defmodule Visualize.Chart.ExplainTest do
   defp frame do
     optional_map(%{
       kind: member_of([:cartesian, :polar]),
-      size: fixed_map(%{width: integer(100..900), height: integer(100..900)}),
+      margin: fixed_map(%{top: integer(0..90), bottom: integer(0..90)}),
       scales: names([:x, :y], scale()),
       axes:
         list_of(fixed_map(%{scale: member_of([:x, :y]), side: member_of([:top, :left])}),

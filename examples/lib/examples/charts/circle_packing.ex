@@ -66,13 +66,15 @@ defmodule Examples.Charts.CirclePacking do
     ]
   }
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {500, 500}
+
   def title, do: "Circle Packing"
   def description, do: "Hierarchical data as nested circles"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 500
-    height = opts[:height] || 500
+    {_width, _height} = Design.size(__MODULE__, opts)
     tree = opts[:data] || @data
     branches = length(tree[:children] || [])
 
@@ -92,7 +94,7 @@ defmodule Examples.Charts.CirclePacking do
           font_size: 11,
           font_weight: :bold
         ),
-        cartesian(width, height, margin: @zero_margin),
+        cartesian(margin: @zero_margin),
         ordinal_scale(:color, domain: Enum.to_list(0..(branches - 1)//1)),
         # The enclosing circles under the leaves, each over its own centre and radius.
         circle(groups, %{x: :x, y: :y, value: :r}, style: :group),
@@ -138,7 +140,7 @@ defmodule Examples.Charts.CirclePacking do
         style(:group, fill: :grid, fill_opacity: 0.3, stroke: :axis),
         style(:leaf, fill: {:field, :branch}, stroke: :background),
         style(:leaf_label, extends: :label, fill: :background, font_size: 11, font_weight: :bold),
-        cartesian(500, 500, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        cartesian(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color, domain: [0, 1, 2, 3, 4]),
         # The enclosing circles, then the leaves over them; `value` is the radius (§5.2).
         circle(filter(packed, :height, test: :gt, value: 0), %{x: :x, y: :y, value: :r},

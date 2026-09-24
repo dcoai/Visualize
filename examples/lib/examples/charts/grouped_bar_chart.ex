@@ -21,20 +21,20 @@ defmodule Examples.Charts.GroupedBarChart do
   ]
   @series [:sales, :expenses, :profit]
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {500, 350}
+
   def title, do: "Grouped Bar Chart"
   def description, do: "Quarterly financial comparison"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 500
-    height = opts[:height] || 350
-
     design =
       Design.fold([
         chart(meta: %{name: title(), description: [description()]}),
         source(:quarters, [:category, :sales, :expenses, :profit]),
         style(:bar, fill: {:field, :series}),
-        cartesian(width, height, margin: @margin),
+        cartesian(margin: @margin),
         band_scale(:x, padding: 0.2),
         band_scale(:x_offset, padding: 0.05),
         linear_scale(:y, domain: [0, :auto], nice: true, transition: %{duration: 300}),
@@ -90,7 +90,7 @@ defmodule Examples.Charts.GroupedBarChart do
         chart(meta: %{name: "Grouped Bar Chart"}),
         source(:quarters, [:category, :sales, :expenses, :profit]),
         style(:bar, fill: {:field, :series}),
-        cartesian(500, 350, margin: %{top: 30, right: 100, bottom: 50, left: 60}),
+        cartesian(margin: %{top: 30, right: 100, bottom: 50, left: 60}),
         band_scale(:x, padding: 0.2),
         # The band within the band: its range is the quarter band's width (spec/14 §4.3).
         band_scale(:x_offset, padding: 0.05),

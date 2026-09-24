@@ -23,13 +23,15 @@ defmodule Examples.Charts.Globe do
   @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
   @ocean "#a8d5e5"
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {500, 450}
+
   def title, do: "Globe"
   def description, do: "Rotating orthographic projection"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 500
-    height = opts[:height] || 450
+    {width, height} = Design.size(__MODULE__, opts)
     radius = min(width, height) / 2 - 20
 
     {lon, lat} =
@@ -58,7 +60,7 @@ defmodule Examples.Charts.Globe do
           stroke: :background,
           stroke_width: 0.5
         ),
-        geo(width, height,
+        geo(
           margin: @zero_margin,
           projection: %{type: :orthographic, scale: radius, rotate: [lon, lat, 0]}
         ),
@@ -106,7 +108,7 @@ defmodule Examples.Charts.Globe do
           stroke_width: {:field, :weight}, stroke_opacity: {:field, :opacity}),
         style(:land, fill: {:field, :name}, fill_opacity: 0.9, stroke: :background, stroke_width: 0.5),
         # The orthographic clips the far hemisphere itself; rotate turns the globe.
-        geo(500, 450, margin: %{top: 0, right: 0, bottom: 0, left: 0},
+        geo(margin: %{top: 0, right: 0, bottom: 0, left: 0},
           projection: %{type: :orthographic, scale: 205, rotate: [0, -20, 0]}),
         ordinal_scale(:color),
         # The Sphere is the visible disc; each other mark ends in a :projection step over

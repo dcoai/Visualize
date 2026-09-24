@@ -24,13 +24,15 @@ defmodule Examples.Charts.ChordDiagram do
     [500, 800, 600, 400, 2000]
   ]
 
+  @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
+  def size, do: {500, 500}
+
   def title, do: "Chord Diagram"
   def description, do: "Inter-regional migration flows"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    width = opts[:width] || 500
-    height = opts[:height] || 500
+    {width, height} = Design.size(__MODULE__, opts)
     radius = min(width, height) / 2 - 40
     size = [2 * radius, 2 * radius]
 
@@ -39,17 +41,31 @@ defmodule Examples.Charts.ChordDiagram do
         chart(meta: %{name: title(), description: [description()]}),
         source(:flows, [:from, :to, :value]),
         style(:group, fill: {:field, :id}, stroke: :background, stroke_width: 1),
-        style(:ribbon, fill: {:field, :source}, fill_opacity: 0.6, stroke: {:field, :source}, stroke_width: 0.5),
+        style(:ribbon,
+          fill: {:field, :source},
+          fill_opacity: 0.6,
+          stroke: {:field, :source},
+          stroke_width: 0.5
+        ),
         style(:region, extends: :label, font_size: 11),
-        cartesian(width, height, margin: @zero_margin),
+        cartesian(margin: @zero_margin),
         ordinal_scale(:color),
-        path(chord(:flows, [:from, :to], :value, padding: 0.05, output: :chords, size: size), %{path: :path},
+        path(
+          chord(:flows, [:from, :to], :value, padding: 0.05, output: :chords, size: size),
+          %{path: :path},
           style: :ribbon
         ),
-        arc(chord(:flows, [:from, :to], :value, padding: 0.05, size: size),
+        arc(
+          chord(:flows, [:from, :to], :value, padding: 0.05, size: size),
           %{value: :value, start: :start_angle, end: :end_angle},
           options: %{inner_radius: radius - 20, outer_radius: radius},
-          label: %{text: [{:field, :id}], anchor: :outward, dr: 6, rotate: :radial, style: :region},
+          label: %{
+            text: [{:field, :id}],
+            anchor: :outward,
+            dr: 6,
+            rotate: :radial,
+            style: :region
+          },
           style: :group
         )
       ])
@@ -95,7 +111,7 @@ defmodule Examples.Charts.ChordDiagram do
         style(:group, fill: {:field, :id}, stroke: :background),
         style(:ribbon, fill: {:field, :source}, fill_opacity: 0.6),
         style(:region, extends: :label, font_size: 11),
-        cartesian(500, 500, margin: %{top: 0, right: 0, bottom: 0, left: 0}),
+        cartesian(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color),
         # The ribbons: the :chord transform's chords, each a ready path.
         path(chord(:flows, [:from, :to], :value, padding: 0.05, output: :chords, size: [420, 420]),

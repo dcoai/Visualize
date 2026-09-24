@@ -257,6 +257,8 @@ defmodule Visualize.Chart do
       reads (default `%{}`)
     * `:vars` - a map from variable name to value (default `%{}`)
     * `:theme` - a `%Visualize.Theme{}`, as `Visualize.Chart.Frame.new/2` takes it
+    * `:size` - the host's container as `{width, height}` (default `{600, 400}`, spec/14
+      §4.2); a design records no size
     * `:now` - the instant a `:window` step measures its durations back from (spec/14
       §5.4.1); without it each such step takes the newest reading of its own column
 
@@ -292,7 +294,7 @@ defmodule Visualize.Chart do
     with {:ok, chart} <- Template.resolve(chart, vars),
          {:ok, sources} <- Template.bind(chart, pool),
          :ok <- Validator.validate(to_map(chart)) do
-      frame = Frame.new(chart, [sources: sources] ++ Keyword.take(opts, [:theme, :now]))
+      frame = Frame.new(chart, [sources: sources] ++ Keyword.take(opts, [:theme, :now, :size]))
       {:ok, %Applied{chart: chart, sources: sources, frame: frame}}
     end
   end
@@ -347,11 +349,11 @@ defmodule Visualize.Chart do
   ## Examples
 
       iex> theme = %{version: 1, theme: :default, frame: %{kind: :cartesian}}
-      iex> house = %{theme: :dark, frame: %{size: %{width: 800, height: 400}}}
-      iex> panel = %{frame: %{size: %{width: 600, height: 300}}}
+      iex> house = %{theme: :dark, frame: %{margin: %{top: 800, bottom: 400}}}
+      iex> panel = %{frame: %{margin: %{top: 600, bottom: 300}}}
       iex> design = Visualize.Chart.stack([theme, house, panel])
-      iex> {design.theme, design.frame.kind, design.frame.size}
-      {:dark, :cartesian, %{width: 600, height: 300}}
+      iex> {design.theme, design.frame.kind, design.frame.margin}
+      {:dark, :cartesian, %{top: 600, bottom: 300}}
 
   """
   @spec stack([layer()]) :: map()
@@ -412,12 +414,12 @@ defmodule Visualize.Chart do
 
   ## Examples
 
-      iex> house = %{theme: :dark, frame: %{size: %{width: 800, height: 400}}}
-      iex> panel = %{frame: %{size: %{width: 600}}}
+      iex> house = %{theme: :dark, frame: %{margin: %{top: 800, bottom: 400}}}
+      iex> panel = %{frame: %{margin: %{top: 600}}}
       iex> Visualize.Chart.explain([{:house, house}, {:panel, panel}])
       [
-        %{path: [:frame, :size, :height], value: 400, layer: :house, overrode: []},
-        %{path: [:frame, :size, :width], value: 600, layer: :panel, overrode: [:house]},
+        %{path: [:frame, :margin, :bottom], value: 400, layer: :house, overrode: []},
+        %{path: [:frame, :margin, :top], value: 600, layer: :panel, overrode: [:house]},
         %{path: [:theme], value: :dark, layer: :house, overrode: []}
       ]
 
@@ -504,7 +506,8 @@ defmodule Visualize.Chart do
   def compile(%Applied{} = applied, opts), do: {:ok, Compiled.new(applied, opts)}
 
   def compile(design, opts) do
-    with {:ok, applied} <- __MODULE__.apply(design, Keyword.take(opts, [:sources, :vars, :theme])) do
+    with {:ok, applied} <-
+           __MODULE__.apply(design, Keyword.take(opts, [:sources, :vars, :theme, :size, :now])) do
       compile(applied, opts)
     end
   end

@@ -6,7 +6,6 @@
   styles: %{dot: %{symbol: :circle, symbol_size: 40, fill_opacity: 0.7}},
   frame: %{
     kind: :cartesian,
-    size: %{width: 400, height: 200},
     margin: %{top: 20, right: 20, bottom: 30, left: 40},
     scales: %{x: %{kind: :linear, nice: true}, y: %{kind: :linear, nice: true}},
     axes: [

@@ -28,7 +28,6 @@ defmodule Visualize.Chart.ComposeTest do
     styles: %{series: %{stroke_width: 2}, muted: %{opacity: 0.5}},
     frame: %{
       kind: :cartesian,
-      size: %{width: 800, height: 400},
       margin: %{top: 10, right: 10, bottom: 30, left: 40},
       scales: %{x: %{kind: :time}},
       axes: [%{scale: :x, side: :bottom, ticks: 6}]
@@ -40,7 +39,6 @@ defmodule Visualize.Chart.ComposeTest do
     styles: %{accent: %{stroke: :series_2}},
     frame: %{
       kind: :cartesian,
-      size: %{width: 600, height: 300},
       scales: %{y: %{kind: :linear, domain: [0, :auto]}},
       axes: [%{scale: :y, side: :left, grid: true}]
     },
@@ -55,7 +53,6 @@ defmodule Visualize.Chart.ComposeTest do
       assert Enum.map(design.labels, & &1.anchor) == [:caption, {:frame, :top_right}, :title]
       assert Map.keys(design.styles) |> Enum.sort() == [:accent, :muted, :series]
       assert design.theme == :dark
-      assert design.frame.size == %{width: 600, height: 300}
       assert design.frame.margin == @house.frame.margin
       assert Map.keys(design.frame.scales) |> Enum.sort() == [:x, :y]
       assert Enum.map(design.frame.axes, & &1.scale) == [:x, :y]
