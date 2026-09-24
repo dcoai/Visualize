@@ -80,8 +80,9 @@ defmodule Examples.Frames do
   @spec frame(module(), keyword(), backend(), map() | nil) :: {frame(), map() | nil}
   # A design that eases a scale steps its compiled chart (#360); any other renders whole.
   def frame(module, opts, :svg, %{compiled: compiled} = state) do
-    {_design, sources} = module.design(opts)
-    {svg, compiled} = Design.step(module, compiled, sources, Keyword.take(opts, [:now, :at]))
+    {design, sources} = module.design(opts)
+    step_opts = [frame: design.frame] ++ Keyword.take(opts, [:now, :at])
+    {svg, compiled} = Design.step(module, compiled, sources, step_opts)
     {svg_frame(svg, sources), %{state | compiled: compiled}}
   end
 
@@ -94,8 +95,10 @@ defmodule Examples.Frames do
   # window's upper end is the run's and not the rows' (spec/14 §12.5).
   def frame(module, opts, backend, %{compiled: compiled} = state)
       when backend in [:canvas, :incremental] do
-    {_design, sources} = module.design(opts)
-    tick_opts = if now = opts[:now], do: [now: now], else: []
+    {design, sources} = module.design(opts)
+    compiled = recompiled(compiled, design, module, opts)
+    # The tick's own frame, so a design that animates through it moves here too (#424).
+    tick_opts = [frame: design.frame] ++ if(now = opts[:now], do: [now: now], else: [])
     {payload, compiled} = Compiled.tick(compiled, sources, tick_opts)
 
     {%{
@@ -106,6 +109,19 @@ defmodule Examples.Frames do
        bytes: payload.bytes,
        points: rows(sources)
      }, %{state | compiled: compiled}}
+  end
+
+  # A design whose *marks* move between ticks is a different chart, and the caller
+  # compiles it again (spec/14 §12.5, #424): the region builders close over the mark
+  # nodes and the render targets are counted from them, so a tick cannot swap them. The
+  # force graph animates the link distance of its `:force` step, which is a mark's
+  # transform; its frame never moves, so `tick/3`'s `frame:` cannot reach it.
+  defp recompiled(compiled, design, module, opts) do
+    if design.marks == compiled.chart.marks do
+      compiled
+    else
+      prepare(module, opts, :canvas).compiled
+    end
   end
 
   defp svg_frame(svg, sources) do

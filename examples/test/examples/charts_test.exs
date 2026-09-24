@@ -14,6 +14,7 @@ defmodule Examples.ChartsTest do
   """
   use ExUnit.Case, async: true
 
+  alias Examples.Frames
   alias Examples.Charts.{Design, Templates}
   alias Visualize.Chart
 
@@ -148,6 +149,36 @@ defmodule Examples.ChartsTest do
   # `#rgb`, `#rrggbb` and the functional forms; a named colour would slip through, and
   # nothing in the gallery writes one.
   @colour ~r/^(#[0-9a-fA-F]{3,8}|(rgb|hsl)a?\()/
+
+  test "no chart animates on one backend and stands still on another (#424)" do
+    # The guard this class needed and did not have: the force graph, the world map and
+    # the globe all emitted a byte-identical canvas payload on every tick while animating
+    # correctly on SVG, because the compiled chart is built once and only the rows were
+    # re-read. A design animating through its *frame* is now ticked with it; one animating
+    # through a *mark* — the force graph's link distance — is a different chart and the
+    # caller compiles it again.
+    for module <- Templates.gallery_modules(), not Frames.stream?(module) do
+      svg = Frames.prepare(module, [], :svg)
+      {a_svg, svg} = Frames.frame(module, [animation_tick: 1], :svg, svg)
+      {b_svg, _} = Frames.frame(module, [animation_tick: 20], :svg, svg)
+
+      canvas = Frames.prepare(module, [], :canvas)
+      {a_canvas, canvas} = Frames.frame(module, [animation_tick: 1], :canvas, canvas)
+      {b_canvas, _} = Frames.frame(module, [animation_tick: 20], :canvas, canvas)
+
+      # A hybrid frame is its canvas stream *and* its SVG layer: a mark under the
+      # compile ceiling draws as SVG, so the canvas alone is not the picture.
+      still_svg? = a_svg.svg == b_svg.svg
+
+      still_canvas? =
+        {a_canvas.canvas, a_canvas.dynamic_svg} == {b_canvas.canvas, b_canvas.dynamic_svg}
+
+      assert still_svg? == still_canvas?,
+             "#{inspect(module)} moves on one backend and not the other: " <>
+               "svg #{if still_svg?, do: "still", else: "moves"}, " <>
+               "canvas #{if still_canvas?, do: "still", else: "moves"}"
+    end
+  end
 
   describe "every chart draws in the theme (spec/14 §5.6, #421)" do
     test "no design names an absolute colour, but for the gaps filed against it" do
