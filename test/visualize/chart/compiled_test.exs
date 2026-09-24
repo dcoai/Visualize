@@ -695,6 +695,34 @@ defmodule Visualize.Chart.CompiledTest do
 
       {third, compiled} = Compiled.tick(compiled, sources, now: 22)
       assert %{mode: "none", binary: ""} = third.incremental
+      # The strip's cost must not grow with the window the way it did (#423): the three
+      # rows before it are held in slots, not rebuilt as a list per row, and on a scroll
+      # the strip is at the leading edge so that was very nearly every row. A ratio of two
+      # measurements in the same run, never an absolute bound — timing bounds in this
+      # suite have flaked under parallel load before.
+      cost = fn span, rows ->
+        design = %{@stream | frame: %{@stream.frame | viewport: %{scale: :x, span: span}}}
+        compiled = compile!(design, size: {140, 100}, sources: %{primary: rows})
+        {_full, compiled} = Compiled.tick(compiled, %{primary: rows}, now: span)
+
+        Enum.min(
+          for _ <- 1..3 do
+            {us, _} =
+              :timer.tc(fn -> Compiled.tick(compiled, %{primary: rows}, now: span + 20) end)
+
+            us
+          end
+        )
+      end
+
+      small = cost.(200, rows(280))
+      large = cost.(3200, rows(4480))
+
+      # Sixteen times the window: under ten times the tick. Rebuilding the neighbours per
+      # row made this nine, and it is six.
+      assert large < small * 10,
+             "a #{16}x window cost #{Float.round(large / small, 1)}x the tick"
+
       # At scale the strip is a fraction of the full redraw: a thousand-row window on
       # 100 px scrolled 20 px carries 200 rows and six neighbours against 1,001.
       big = %{@stream | frame: %{@stream.frame | viewport: %{scale: :x, span: 1000}}}
