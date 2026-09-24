@@ -354,27 +354,16 @@ defmodule ExamplesWeb.ChartLive do
 
       {:ok, run} ->
         now = System.monotonic_time(:millisecond)
-
-        {run, seq} =
-          Run.sending(run, if(frame.incremental, do: incremental_mode(frame), else: :full_redraw))
-
+        {run, seq} = Run.sending(run, mode_of(frame))
         run = Run.rendered(run, frame.bytes, now)
-        mode = if frame.incremental, do: frame.incremental.mode, else: "full"
-        socket = assign(socket, run: run, run_frame: frame, run_mode: mode)
+        socket = assign(socket, run: run, run_frame: frame, run_mode: words(frame))
 
-        cond do
-          frame.incremental ->
-            {:noreply,
-             push_event(socket, "canvas_incremental", Map.put(frame.incremental, :seq, seq))}
-
-          frame.canvas ->
-            {:noreply, push_event(socket, "canvas_update", %{binary: frame.canvas, seq: seq})}
-
-          true ->
-            {:noreply, socket}
-        end
+        # One event per plot, each named by its frame (spec/10 §9.2, #432): a design of
+        # several frames has a canvas each, and a hook draws only what is its own.
+        {:noreply, Enum.reduce(frame.plots, socket, &pushed(&2, &1, seq))}
     end
   end
+
 
   def handle_info({ref, {:compare, rows}}, %{assigns: %{compare_task: %Task{ref: ref}}} = socket) do
     Process.demonitor(ref, [:flush])
@@ -464,9 +453,56 @@ defmodule ExamplesWeb.ChartLive do
       else: build_chart_opts(assigns.current_palette, 0, false, assigns.slug, assigns.hex_radius)
   end
 
-  defp incremental_mode(%{incremental: %{mode: "full"}}), do: :full_redraw
-  defp incremental_mode(%{incremental: %{mode: "none"}}), do: :none
-  defp incremental_mode(_frame), do: :scroll_x
+  defp pushed(socket, %{incremental: record} = plot, seq) when is_map(record) do
+    push_event(socket, "canvas_incremental", Map.merge(record, %{seq: seq, frame: plot.name}))
+  end
+
+  defp pushed(socket, %{canvas: canvas} = plot, seq) when is_binary(canvas) do
+    push_event(socket, "canvas_update", %{binary: canvas, seq: seq, frame: plot.name})
+  end
+
+  defp pushed(socket, _plot, _seq), do: socket
+
+  # The frame's mode for flow control and for the drawer: the strongest of its plots', a
+  # full redraw of any plot being a full frame.
+  defp mode_of(%{plots: plots}) do
+    modes = for %{incremental: record} <- plots, is_map(record), do: incremental_mode(record)
+
+    cond do
+      modes == [] -> :full_redraw
+      :full_redraw in modes -> :full_redraw
+      :scroll_x in modes -> :scroll_x
+      true -> :none
+    end
+  end
+
+  defp words(%{plots: plots}) do
+    case for(%{incremental: record} <- plots, is_map(record), do: record.mode) do
+      [] -> "full"
+      modes -> if "full" in modes, do: "full", else: hd(modes)
+    end
+  end
+
+  # An incremental canvas is the plot area alone, since the copy-and-shift contract moves
+  # pixels within one plot (spec/09 §5.3, D-106); a binary canvas is the frame's whole box.
+  defp canvas_size(%{incremental: record, plot: plot}, key) when is_map(record),
+    do: Map.fetch!(plot, key)
+
+  defp canvas_size(%{box: box}, key), do: Map.fetch!(box, key)
+
+  defp canvas_at(%{incremental: record, box: box, margin: margin}, key) when is_map(record) do
+    case key do
+      :top -> box.y + margin.top
+      :left -> box.x + margin.left
+    end
+  end
+
+  defp canvas_at(%{box: box}, :top), do: box.y
+  defp canvas_at(%{box: box}, :left), do: box.x
+
+  defp incremental_mode(%{mode: "full"}), do: :full_redraw
+  defp incremental_mode(%{mode: "none"}), do: :none
+  defp incremental_mode(_record), do: :scroll_x
 
   def terminate(_reason, socket) do
     Run.cancel(socket.assigns.run)
@@ -678,29 +714,31 @@ defmodule ExamplesWeb.ChartLive do
               <p class="chart-pending">rendering…</p>
             <% frame.svg -> %>
               <%= Phoenix.HTML.raw(frame.svg) %>
-            <% frame.incremental -> %>
-              <%!-- The incremental canvas is the plot area, at the margin's offset (spec/14 §12.5). --%>
-              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(state, :width)}px; height: #{run_size(state, :height)}px;"}>
-                <div id="incremental-chart" phx-hook="CanvasIncrementalChart" phx-update="ignore" data-ack="frame_drawn" data-ack-interval="50" data-width={state.plot.width} data-height={state.plot.height} style={"position: absolute; top: #{state.margin.top}px; left: #{state.margin.left}px; z-index: 1;"}>
-                  <canvas width={state.plot.width} height={state.plot.height} style="display: block;"></canvas>
-                </div>
-                <div class="hybrid-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(Frames.static(state)) %>
-                </div>
-                <div :if={frame.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(frame.dynamic_svg) %>
-                </div>
-              </div>
             <% true -> %>
+              <%!-- One canvas per plot at its own box (spec/14 §12.1, #432): an incremental
+                    canvas is the plot area at the box's margin offset, a binary one the whole
+                    box; the frames' static documents stack over them. --%>
               <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(state, :width)}px; height: #{run_size(state, :height)}px;"}>
-                <div id="canvas-chart" phx-hook="CanvasBinaryChart" phx-update="ignore" data-ack="frame_drawn" data-ack-interval="50" data-binary={frame.canvas} data-width={run_size(state, :width)} data-height={run_size(state, :height)} style="position: absolute; top: 0; left: 0; z-index: 1;">
-                  <canvas width={run_size(state, :width)} height={run_size(state, :height)} style="display: block;"></canvas>
+                <div
+                  :for={plot <- frame.plots}
+                  id={"plot-#{plot.name}"}
+                  phx-hook={if plot.incremental, do: "CanvasIncrementalChart", else: "CanvasBinaryChart"}
+                  phx-update="ignore"
+                  data-ack="frame_drawn"
+                  data-ack-interval="50"
+                  data-frame={plot.name}
+                  data-binary={plot.canvas}
+                  data-width={canvas_size(plot, :width)}
+                  data-height={canvas_size(plot, :height)}
+                  style={"position: absolute; top: #{canvas_at(plot, :top)}px; left: #{canvas_at(plot, :left)}px; z-index: 1;"}
+                >
+                  <canvas width={canvas_size(plot, :width)} height={canvas_size(plot, :height)} style="display: block;"></canvas>
                 </div>
                 <div class="hybrid-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
                   <%= Phoenix.HTML.raw(Frames.static(state)) %>
                 </div>
-                <div :if={frame.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(frame.dynamic_svg) %>
+                <div :for={plot <- frame.plots} :if={plot.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(plot.dynamic_svg) %>
                 </div>
               </div>
           <% end %>

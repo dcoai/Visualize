@@ -66,23 +66,37 @@ defmodule Examples.Charts.Design do
   end
 
   @doc """
-  One SVG frame of a compiled chart at its eased scales, as the gallery's document, and
-  the compiled chart after it (spec/14 §12.5, #360): `Visualize.Chart.Compiled.step/3`
-  inside the accessible root the module's title and description name.
+  One SVG frame of a design's compiled charts at their eased scales, as the gallery's
+  document, and the compiled charts after it (spec/14 §12.5, #360, #432):
+  `Visualize.Chart.Compiled.step/3` per frame — each group already placed at its box
+  (§12.1) — inside the accessible root the module's title and description name.
+
+  `compiled` is the `{name, compiled}` list `Examples.Frames.prepare/3` keeps, in the
+  order the frames draw; `opts` are the tick's, `now:` and `at:` among them.
   """
-  @spec step(module(), Chart.Compiled.t(), map(), keyword()) :: {String.t(), Chart.Compiled.t()}
-  def step(module, compiled, sources, opts) do
-    {group, compiled} = Chart.Compiled.step(compiled, sources, opts)
+  @spec step(module(), [{atom(), Chart.Compiled.t()}], map(), map(), keyword()) ::
+          {String.t(), [{atom(), Chart.Compiled.t()}]}
+  def step(module, compiled, design, sources, opts) do
+    tick = Keyword.take(opts, [:now, :at])
+
+    {groups, stepped} =
+      Enum.map_reduce(compiled, [], fn {name, one}, acc ->
+        node = get_in(design, [:frames, name])
+        {group, one} = Chart.Compiled.step(one, sources, [frame: node] ++ tick)
+        {group, [{name, one} | acc]}
+      end)
+
+    [{_name, first} | _] = compiled
 
     svg =
-      Visualize.IR.Element.root(compiled.size.width, compiled.size.height,
+      Visualize.IR.Element.root(first.size.width, first.size.height,
         title: module.title(),
         description: module.description(),
-        children: [group]
+        children: groups
       )
       |> Visualize.Render.to_string()
 
-    {svg, compiled}
+    {svg, Enum.reverse(stepped)}
   end
 
   @doc "The module's design applied over its rows, with the `palette` option as the theme."
@@ -126,33 +140,55 @@ defmodule Examples.Charts.Design do
 
   @doc """
   The module's design as the hybrid split of spec/14 §12 (#268): the furniture as the
-  compiled chart's static SVG and every mark of more than a point on the binary canvas —
+  compiled charts' static SVG and every mark of more than a point on the binary canvas —
   `canvas` base64 for the `CanvasBinaryChart` hook, `""` when no mark goes there — with
-  the frame's size, for the page to layer the two.
+  the design's size, for the page to layer the two.
+
+  A design of several frames has one plot per frame (§12.1, #432), and `plots` carries
+  them in drawing order with the geometry each canvas is placed by; `static` is the
+  frames' documents stacked and `canvas` the first plot's, so a page that draws one
+  canvas reads what it always did.
   """
   @spec hybrid(module(), keyword()) :: %{
           static: String.t(),
           canvas: String.t(),
           dynamic_svg: String.t(),
+          plots: [map()],
           width: number(),
           height: number()
         }
   def hybrid(module, opts) do
     applied = applied(module, opts)
-    # One compiled chart per frame (spec/14 §12.1, #385); the hybrid split draws one plot
-    # until #432, and it is offered only for a design of one frame.
     {:ok, frames} = Chart.compile(applied, ceiling: 1)
-    [compiled] = Map.values(frames)
-    {payload, _compiled} = Visualize.Chart.Compiled.tick(compiled, applied.sources)
+
+    plots =
+      for {name, _realised} <- ordered(applied) do
+        compiled = Map.fetch!(frames, name)
+        {payload, _compiled} = Visualize.Chart.Compiled.tick(compiled, applied.sources)
+
+        %{
+          name: name,
+          static: Visualize.Chart.Compiled.static(compiled),
+          canvas: payload.canvas,
+          dynamic_svg: payload.svg,
+          box: compiled.box,
+          plot: compiled.plot,
+          margin: compiled.margin
+        }
+      end
 
     %{
-      static: Visualize.Chart.Compiled.static(compiled),
-      canvas: payload.canvas,
-      dynamic_svg: payload.svg,
+      static: Enum.map_join(plots, "", & &1.static),
+      canvas: plots |> hd() |> Map.fetch!(:canvas),
+      dynamic_svg: Enum.map_join(plots, "", & &1.dynamic_svg),
+      plots: plots,
       width: applied.frame.size.width,
       height: applied.frame.size.height
     }
   end
+
+  # The design's frames in the order they draw: `z`, ties by name (spec/14 §4.2).
+  defp ordered(applied), do: Enum.sort_by(applied.frames, fn {name, f} -> {f.z, to_string(name)} end)
 
   @doc """
   The columns of `nodes/1`'s rows: what a hierarchy chart's source declares.

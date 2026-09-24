@@ -114,10 +114,6 @@ defmodule Examples.ChartsTest do
 
   def charts, do: @golden_charts ++ @seeded_charts
 
-  # The charts a compiled chart can hold: a design of several frames is SVG alone until
-  # #385 (spec/14 §12.1, #429), so the canvas guards below have nothing to compile for it.
-  def compiled_charts, do: Enum.filter(charts(), &(:canvas in Frames.backends(&1)))
-
   def render, do: Enum.map_join(@golden_charts, "", &"#{inspect(&1)} #{&1.render([])}\n")
 
   def write!, do: File.write!(@golden, render())
@@ -165,11 +161,7 @@ defmodule Examples.ChartsTest do
     # re-read. A design animating through its *frame* is now ticked with it; one animating
     # through a *mark* — the force graph's link distance — is a different chart and the
     # caller compiles it again.
-    # A design of several frames offers SVG alone until #385 (spec/14 §12.1), so there is
-    # no second backend to compare it with.
-    for module <- Templates.gallery_modules(),
-        not Frames.stream?(module),
-        :canvas in Frames.backends(module) do
+    for module <- Templates.gallery_modules(), not Frames.stream?(module) do
       svg = Frames.prepare(module, [], :svg)
       {a_svg, svg} = Frames.frame(module, [animation_tick: 1], :svg, svg)
       {b_svg, _} = Frames.frame(module, [animation_tick: 20], :svg, svg)
@@ -182,8 +174,7 @@ defmodule Examples.ChartsTest do
       # compile ceiling draws as SVG, so the canvas alone is not the picture.
       still_svg? = a_svg.svg == b_svg.svg
 
-      still_canvas? =
-        {a_canvas.canvas, a_canvas.dynamic_svg} == {b_canvas.canvas, b_canvas.dynamic_svg}
+      still_canvas? = plots(a_canvas) == plots(b_canvas)
 
       assert still_svg? == still_canvas?,
              "#{inspect(module)} moves on one backend and not the other: " <>
@@ -310,7 +301,7 @@ defmodule Examples.ChartsTest do
   end
 
   test "every chart renders on a canvas with literal paints and no CSS reference" do
-    for module <- compiled_charts() do
+    for module <- charts() do
       binary = Base.decode64!(Design.canvas(module, []))
       assert byte_size(binary) > 0
       assert :binary.match(binary, "var(") == :nomatch
@@ -321,34 +312,43 @@ defmodule Examples.ChartsTest do
   # SVG, the marks on the binary canvas — so the axes a whole-chart binary stream drops
   # (spec/09 §4.4) are drawn.
   test "every design's hybrid draws its furniture as SVG over a binary canvas of its marks" do
-    for module <- compiled_charts() do
+    for module <- charts() do
       hybrid = Design.hybrid(module, [])
-      axes = Design.applied(module, []).frame.axes || []
+      applied = Design.applied(module, [])
+      axes = Enum.flat_map(applied.frames, fn {_name, frame} -> frame.axes || [] end)
 
       assert hybrid.static =~ "<svg"
       assert hybrid.width > 0 and hybrid.height > 0
+      # One plot per frame, in drawing order (spec/14 §12.1, #432).
+      assert length(hybrid.plots) == map_size(applied.frames)
 
       # The furniture is SVG — static where its scales are fixed, in the tick's SVG layer
-      # where a domain is :auto (spec/14 §12.2); the page draws both over the canvas.
+      # where a domain is :auto (spec/14 §12.2); the page draws both over the canvases.
       furniture = hybrid.static <> hybrid.dynamic_svg
       assert length(Regex.scan(~r/class="axis /, furniture)) == length(axes)
 
-      # The marks are on the canvas — literal paints, no CSS reference — or, for a facet
-      # frame, in the SVG layer (§12.3).
-      if hybrid.canvas != "" do
-        binary = Base.decode64!(hybrid.canvas)
-        assert byte_size(binary) > 0
-        assert :binary.match(binary, "var(") == :nomatch
-        # Every mark on the canvas draws: a fill or a stroke record per mark, the paint
-        # that sits on the mark's group reaching its elements (spec/09 §4.4, #231).
-        records = Visualize.Backend.CanvasBinary.Decoder.decode(binary)
-        draws = Enum.count(records, &(&1 in [:fill, :stroke]))
-        assert draws > 0, "#{inspect(module)} draws nothing on the canvas"
-      else
-        assert hybrid.dynamic_svg =~ ~s(class="mark )
+      # Each plot's marks are on its own canvas — literal paints, no CSS reference — or,
+      # for a facet frame, in its SVG layer (§12.3).
+      for plot <- hybrid.plots do
+        if plot.canvas != "" do
+          binary = Base.decode64!(plot.canvas)
+          assert byte_size(binary) > 0
+          assert :binary.match(binary, "var(") == :nomatch
+          # Every mark on the canvas draws: a fill or a stroke record per mark, the paint
+          # that sits on the mark's group reaching its elements (spec/09 §4.4, #231).
+          records = Visualize.Backend.CanvasBinary.Decoder.decode(binary)
+          draws = Enum.count(records, &(&1 in [:fill, :stroke]))
+          assert draws > 0, "#{inspect(module)} draws nothing on the canvas of #{plot.name}"
+        else
+          assert plot.dynamic_svg =~ ~s(class="mark ),
+                 "#{inspect(module)}: #{plot.name} draws nothing at all"
+        end
       end
     end
   end
+
+  # What a canvas frame carries per plot: the stream and the SVG layer over it.
+  defp plots(frame), do: for(plot <- frame.plots, do: {plot.canvas, plot.dynamic_svg})
 
   test "sample_code/0 is the design a reader would write" do
     for module <- charts() do

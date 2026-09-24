@@ -5,37 +5,47 @@ defmodule Examples.Frames do
 
   Two backends: `:svg`, the chart rendered whole; `:canvas`, the split — compiled once
   (`prepare/3`), ticked per frame with `render: :binary` (every chart of the gallery is a
-  design, #335). A frame is `%{svg, canvas,
-  dynamic_svg, bytes, points}`: the SVG to show or nil, the base64 stream to push or nil,
-  a tick's SVG-layer marks, the bytes the frame cost, and the rows it drew.
+  design, #335).
+
+  A design has **one plot per frame** (spec/14 §12.1, #385, #432), so a frame of a run is
+  `%{svg, plots, bytes, points}`: the SVG to show or nil, one entry per plot — its name,
+  its base64 stream or its incremental record, its SVG-layer marks and the geometry the
+  page places its canvas by — and the bytes and rows of the whole frame. A design of one
+  frame has one plot, so the page has one shape to draw whatever the design holds.
   """
 
   alias Examples.Charts.Design
   alias Visualize.Chart
-  alias Visualize.Chart.{Compiled, Fragment}
+  alias Visualize.Chart.Compiled
 
   @type backend :: :svg | :canvas | :incremental
-  @type frame :: %{
-          svg: String.t() | nil,
+
+  @typedoc "One plot of a frame: what to push for it, and where its canvas goes."
+  @type plot :: %{
+          name: atom(),
           canvas: String.t() | nil,
           incremental: map() | nil,
           dynamic_svg: String.t(),
+          box: %{x: number(), y: number(), width: number(), height: number()},
+          plot: %{width: number(), height: number()},
+          margin: %{top: number(), right: number(), bottom: number(), left: number()}
+        }
+
+  @type frame :: %{
+          svg: String.t() | nil,
+          plots: [plot()],
           bytes: non_neg_integer(),
           points: non_neg_integer() | nil
         }
 
   @doc """
   The backends a chart offers: SVG and Canvas for every chart, Incremental for a streaming
-  design (#327) — and **SVG alone for a design of several frames**, which a compiled chart
-  cannot hold until #385 (spec/14 §12.1, #429).
+  design (#327) — whatever the number of frames, since a design draws one plot per frame
+  (spec/14 §12.1, #432).
   """
   @spec backends(module()) :: [backend()]
   def backends(module) do
-    cond do
-      frames(module) > 1 -> [:svg]
-      stream?(module) -> [:svg, :canvas, :incremental]
-      true -> [:svg, :canvas]
-    end
+    if stream?(module), do: [:svg, :canvas, :incremental], else: [:svg, :canvas]
   end
 
   @doc "How many frames a chart's design holds (spec/14 §2.1, #383)."
@@ -64,15 +74,17 @@ defmodule Examples.Frames do
   @spec prepare(module(), keyword(), backend()) :: map() | nil
   def prepare(module, opts, backend) when backend in [:canvas, :incremental] do
     applied = Design.applied(module, opts)
-    compiled = one!(applied, ceiling: 1)
+    compiled = compiled!(applied, ceiling: 1)
 
     %{
       compiled: compiled,
-      static: Compiled.static(compiled),
+      # Each plot's static document is the design's size with that frame's group at its
+      # box (spec/14 §12.4), so the frames' documents stack in `z` order.
+      static: Enum.map_join(compiled, "", fn {_name, one} -> Compiled.static(one) end),
       width: applied.frame.size.width,
       height: applied.frame.size.height,
-      plot: compiled.plot,
-      margin: compiled.margin
+      plot: applied.frame.plot,
+      margin: applied.frame.margin
     }
   end
 
@@ -81,17 +93,23 @@ defmodule Examples.Frames do
   def prepare(module, opts, :svg) do
     if Design.transitions?(module) do
       applied = Design.applied(module, opts)
-      %{compiled: one!(applied, ceiling: 1_000_000_000)}
+      %{compiled: compiled!(applied, ceiling: 1_000_000_000)}
     end
   end
 
-  # A design compiles to one compiled chart per frame (spec/14 §12.1, #385). These
-  # backends draw one plot until #432, and `backends/1` offers them only for a design of
-  # one frame, so this takes the one.
-  defp one!(applied, opts) do
+  # One compiled chart per frame (spec/14 §12.1, #385), in the order the frames draw —
+  # `z`, ties by name (§4.2) — so the plots' canvases and static documents stack as the
+  # design says.
+  defp compiled!(applied, opts) do
     {:ok, frames} = Chart.compile(applied, opts)
-    [compiled] = Map.values(frames)
-    compiled
+
+    for {name, _compiled} <- order(applied), into: [], do: {name, Map.fetch!(frames, name)}
+  end
+
+  defp order(applied) do
+    applied.frames
+    |> Enum.sort_by(fn {name, frame} -> {frame.z, to_string(name)} end)
+    |> Enum.map(fn {name, frame} -> {name, frame} end)
   end
 
   @doc "The static SVG a prepared state carries, or an empty string."
@@ -104,8 +122,7 @@ defmodule Examples.Frames do
   # A design that eases a scale steps its compiled chart (#360); any other renders whole.
   def frame(module, opts, :svg, %{compiled: compiled} = state) do
     {design, sources} = module.design(opts)
-    step_opts = [frame: tick_frame(design)] ++ Keyword.take(opts, [:now, :at])
-    {svg, compiled} = Design.step(module, compiled, sources, step_opts)
+    {svg, compiled} = Design.step(module, compiled, design, sources, opts)
     {svg_frame(svg, sources), %{state | compiled: compiled}}
   end
 
@@ -120,23 +137,35 @@ defmodule Examples.Frames do
       when backend in [:canvas, :incremental] do
     {design, sources} = module.design(opts)
     compiled = recompiled(compiled, design, module, opts)
-    # The tick's own frame, so a design that animates through it moves here too (#424).
-    tick_opts = [frame: tick_frame(design)] ++ if(now = opts[:now], do: [now: now], else: [])
-    {payload, compiled} = Compiled.tick(compiled, sources, tick_opts)
+    now = if now = opts[:now], do: [now: now], else: []
+
+    {plots, compiled} =
+      Enum.map_reduce(compiled, [], fn {name, one}, acc ->
+        # The tick's own frame, so a design that animates through it moves here too (#424).
+        {payload, one} = Compiled.tick(one, sources, [frame: node(design, name)] ++ now)
+
+        {%{
+           name: name,
+           canvas: payload.canvas,
+           incremental: payload.incremental,
+           dynamic_svg: payload.svg,
+           bytes: payload.bytes,
+           box: one.box,
+           plot: one.plot,
+           margin: one.margin
+         }, [{name, one} | acc]}
+      end)
 
     {%{
        svg: nil,
-       canvas: payload.canvas,
-       incremental: payload.incremental,
-       dynamic_svg: payload.svg,
-       bytes: payload.bytes,
+       plots: plots,
+       bytes: Enum.sum(Enum.map(plots, & &1.bytes)),
        points: rows(sources)
-     }, %{state | compiled: compiled}}
+     }, %{state | compiled: Enum.reverse(compiled)}}
   end
 
-  # A compiled chart is one frame until #385, so the tick's frame is that one frame's
-  # node (spec/14 §12.1): the design's single frame, whatever it is named.
-  defp tick_frame(design), do: get_in(design, Fragment.frame_path(design))
+  # The design's node for one frame: what `tick/3` re-realises the frame at (#424).
+  defp node(design, name), do: get_in(design, [:frames, name])
 
   # A design whose *marks* move between ticks is a different chart, and the caller
   # compiles it again (spec/14 §12.5, #424): the region builders close over the mark
@@ -144,7 +173,9 @@ defmodule Examples.Frames do
   # force graph animates the link distance of its `:force` step, which is a mark's
   # transform; its frame never moves, so `tick/3`'s `frame:` cannot reach it.
   defp recompiled(compiled, design, module, opts) do
-    if design.marks == compiled.chart.marks do
+    drawn = Enum.flat_map(compiled, fn {_name, one} -> one.chart.marks end)
+
+    if design.marks == drawn do
       compiled
     else
       prepare(module, opts, :canvas).compiled
@@ -152,14 +183,7 @@ defmodule Examples.Frames do
   end
 
   defp svg_frame(svg, sources) do
-    %{
-      svg: svg,
-      canvas: nil,
-      incremental: nil,
-      dynamic_svg: "",
-      bytes: byte_size(svg),
-      points: rows(sources)
-    }
+    %{svg: svg, plots: [], bytes: byte_size(svg), points: rows(sources)}
   end
 
   defp rows(sources) when is_map(sources) do

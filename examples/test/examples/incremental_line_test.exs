@@ -36,7 +36,7 @@ defmodule Examples.Charts.IncrementalLineTest do
     state = Frames.prepare(IncrementalLine, opts, :incremental)
 
     assert %{
-             compiled: %Compiled{},
+             compiled: [{_name, %Compiled{}}],
              plot: %{width: 740, height: 450},
              margin: %{left: 40, top: 20}
            } = state
@@ -44,18 +44,18 @@ defmodule Examples.Charts.IncrementalLineTest do
     scroll = IncrementalLine.scroll(opts)
     count = Scroll.count(scroll)
     {first, state} = Frames.frame(IncrementalLine, opts ++ [now: count - 1], :incremental, state)
-    assert first.incremental.mode == "full" and first.points == count
+    assert only(first).incremental.mode == "full" and first.points == count
 
     # Ten columns at two samples per pixel: the window on by 20 samples.
     scroll = Scroll.advance(scroll, 10)
     opts2 = [samples_per_px: 2, origin: scroll.origin, now: scroll.origin + count - 1]
     {second, _state} = Frames.frame(IncrementalLine, opts2, :incremental, state)
-    assert %{mode: "scroll_x", dx: 10} = second.incremental
+    assert %{mode: "scroll_x", dx: 10} = only(second).incremental
     assert second.bytes < first.bytes / 8
 
     # The strip decodes to the plot's rightmost 10 px with the line in it.
     [{:incremental, :scroll_x, 10.0, +0.0, {+0.0, +0.0, 740.0, 450.0}, [{bounds, records}]}] =
-      second.incremental.binary |> Base.decode64!() |> Decoder.decode()
+      only(second).incremental.binary |> Base.decode64!() |> Decoder.decode()
 
     assert bounds == {730.0, 0.0, 10.0, 450.0}
     # The monotone line decodes as one cubic run, stroked: the strip is the line alone.
@@ -100,7 +100,11 @@ defmodule Examples.Charts.IncrementalLineTest do
 
     state = Frames.prepare(IncrementalLine, [samples_per_px: 1], :canvas)
     {canvas, _} = Frames.frame(IncrementalLine, [samples_per_px: 1], :canvas, state)
-    assert is_binary(canvas.canvas) and canvas.svg == nil
+    assert is_binary(only(canvas).canvas) and canvas.svg == nil
     assert Frames.static(state) =~ "<svg"
   end
+
+  # A frame carries one plot per frame of the design (spec/14 §12.1, #432); these have one.
+  defp only(%{plots: [plot]}), do: plot
+
 end

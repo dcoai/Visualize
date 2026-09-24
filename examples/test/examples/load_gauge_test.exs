@@ -14,8 +14,9 @@ defmodule Examples.LoadGaugeTest do
     Enum.map(rows, & &1.load)
   end
 
-  # The one mark that eases, and what it shows each row's load at.
-  defp shown(%{compiled: compiled}) do
+  # The one mark that eases, and what it shows each row's load at. A run keeps one
+  # compiled chart per frame (spec/14 §12.1, #385); this design has one.
+  defp shown(%{compiled: [{_name, compiled}]}) do
     [{_index, rows}] = Map.to_list(compiled.moving)
 
     rows

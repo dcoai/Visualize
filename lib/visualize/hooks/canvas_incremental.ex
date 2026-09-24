@@ -52,10 +52,18 @@ defmodule Visualize.Hooks.CanvasIncremental do
         this.ackDrawn = 0;
         this.ackTimer = null;
 
+        // A design has one canvas per frame (spec/14 §12.1, #432): data-frame names this
+        // one's, and a payload for another frame is not this canvas's to draw.
+        this.frame = this.el.dataset.frame || null;
+
         this.handleEvent("canvas_incremental", (payload) => {
+          if (!this.mine(payload)) return;
           this.handleIncremental(payload);
           if (payload.seq !== undefined) this.acknowledge(payload.seq);
         });
+      },
+      mine(payload) {
+        return this.frame === null || payload.frame === undefined || payload.frame === this.frame;
       },
       destroyed() {
         if (this.ackTimer !== null) clearTimeout(this.ackTimer);

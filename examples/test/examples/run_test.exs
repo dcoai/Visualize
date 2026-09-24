@@ -74,7 +74,7 @@ defmodule Examples.RunTest do
 
     {asked, id} = Run.asking(run, opts ++ [now: 740], 0)
     assert id != nil and asked.render_id == id
-    assert_receive {:frame, ^id, %{incremental: %{mode: "full"}}}, 10_000
+    assert_receive {:frame, ^id, %{plots: [%{incremental: %{mode: "full"}}]}}, 10_000
 
     # One in flight: a second ask while the first is out changes nothing.
     assert {^asked, nil} = Run.asking(asked, opts, 0)
@@ -85,7 +85,7 @@ defmodule Examples.RunTest do
     # The same process draws the next frame, and Stop takes it down.
     pid = free.renderer
     {again, id2} = Run.asking(free, opts ++ [now: 760], 2)
-    assert_receive {:frame, ^id2, %{incremental: %{mode: "scroll_x"}}}, 10_000
+    assert_receive {:frame, ^id2, %{plots: [%{incremental: %{mode: "scroll_x"}}]}}, 10_000
     assert again.renderer == pid
 
     monitor = Process.monitor(pid)

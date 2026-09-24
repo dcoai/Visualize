@@ -461,13 +461,21 @@ defmodule Visualize.Hooks.CanvasBinary do
         this.ackDrawn = 0;
         this.ackTimer = null;
 
+        // A design has one canvas per frame (spec/14 §12.1, #432): data-frame names this
+        // one's, and a payload for another frame is not this canvas's to draw.
+        this.frame = this.el.dataset.frame || null;
+
         this.handleEvent("canvas_update", (payload) => {
+          if (!this.mine(payload)) return;
           this.el.dataset.binary = payload.binary;
           this.render();
           if (payload.seq !== undefined) this.acknowledge(payload.seq);
         });
 
         this.render();
+      },
+      mine(payload) {
+        return this.frame === null || payload.frame === undefined || payload.frame === this.frame;
       },
       destroyed() {
         if (this.ackTimer !== null) clearTimeout(this.ackTimer);
