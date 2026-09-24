@@ -211,6 +211,38 @@ defmodule Visualize.Chart.Compiled do
   @spec targets(t()) :: [{target(), non_neg_integer()}]
   def targets(%__MODULE__{targets: targets}), do: targets
 
+  @doc """
+  A freshly compiled chart carrying the easing of the one it replaces (spec/14 §12.5,
+  #434).
+
+  A compiled chart's `plot` is part of its state, so a chart drawn at a new size is a new
+  compilation — and a scale that was mid-transition when the size changed should go on
+  from where it stood rather than jump back to its target. The eased scale states and the
+  mark motions of `previous` are kept for the scales and marks `fresh` still has; anything
+  else is dropped, since a state for a scale the design no longer eases would never be
+  read again.
+
+      iex> design = %{version: 2, sources: %{s: %{fields: [:t, :v]}},
+      ...>   frames: %{main: %{kind: :cartesian, scales: %{
+      ...>     x: %{kind: :linear, domain: [0, 10]},
+      ...>     y: %{kind: :linear, transition: %{duration: 300}}}}},
+      ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]}
+      iex> rows = %{s: [%{t: 1, v: 3}, %{t: 2, v: 9}]}
+      iex> {:ok, %{main: first}} = Visualize.Chart.compile(design, sources: rows)
+      iex> {_group, first} = Visualize.Chart.Compiled.step(first, rows, at: 0)
+      iex> {:ok, %{main: wider}} = Visualize.Chart.compile(design, sources: rows, size: {900, 400})
+      iex> Visualize.Chart.Compiled.carry(first, wider).eased == first.eased
+      true
+  """
+  @spec carry(t(), t()) :: t()
+  def carry(%__MODULE__{} = previous, %__MODULE__{} = fresh) do
+    %{
+      fresh
+      | eased: Map.take(previous.eased, Map.keys(fresh.transitions)),
+        moving: Map.take(previous.moving, Map.keys(fresh.motions))
+    }
+  end
+
   @doc "The static SVG string, rendered once at compilation (spec/14 §12.4)."
   @spec static(t()) :: String.t()
   def static(%__MODULE__{static: static}), do: static

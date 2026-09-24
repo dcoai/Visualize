@@ -143,6 +143,10 @@ defmodule ExamplesWeb.ChartLive do
            run_mode: nil,
            run_scroll: nil,
            run_series: series(module),
+           # The page measures itself (spec/10 §10, #434): the container's width once the
+           # hook has pushed one, and the module's own size until then — a disconnected
+           # mount has nothing to measure and must still draw.
+           width: nil,
            compare: nil,
            compare_task: nil
          )
@@ -150,6 +154,22 @@ defmodule ExamplesWeb.ChartLive do
          |> still()}
     end
   end
+
+  # The container's width (spec/10 §10, #434). The height is the chart's own aspect, not
+  # the container's: a container sized by its content would observe the chart's height and
+  # never settle. A resize is geometry — the rows, the tick counter and a streaming
+  # window's origin are untouched — so a run re-prepares its renderer at the new size and
+  # goes on, the easing carried (spec/14 §12.5).
+  def handle_event("resize", %{"width" => width}, socket) when is_integer(width) and width > 0 do
+    if width == socket.assigns.width do
+      {:noreply, socket}
+    else
+      socket = assign(socket, width: width)
+      {:noreply, socket |> resized() |> still()}
+    end
+  end
+
+  def handle_event("resize", _params, socket), do: {:noreply, socket}
 
   def handle_event("change_palette", %{"palette" => palette_key}, socket) do
     palette =
@@ -444,13 +464,24 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
+  # A run goes on across a resize: its renderer re-prepares at the new size and carries
+  # the easing, and the run's counters and window are untouched (#434).
+  defp resized(%{assigns: %{run: %Run{running: true, renderer: renderer}}} = socket)
+       when is_pid(renderer) do
+    Examples.Renderer.resize(renderer, run_opts(socket.assigns, socket.assigns.run_ticks))
+    socket
+  end
+
+  defp resized(socket), do: socket
+
   # A chart that has not run is at rest; one that has stays at the run's tick.
   defp still_opts(%{run_ticks: ticks} = assigns) when ticks > 0, do: run_opts(assigns, ticks)
 
   defp still_opts(assigns) do
     if assigns.run_scroll,
       do: run_opts(assigns, 0),
-      else: build_chart_opts(assigns.current_palette, 0, false, assigns.slug, assigns.hex_radius)
+      else:
+        build_chart_opts(assigns.current_palette, 0, false, assigns.slug, assigns.hex_radius, assigns.width)
   end
 
   defp pushed(socket, %{incremental: record} = plot, seq) when is_map(record) do
@@ -540,7 +571,7 @@ defmodule ExamplesWeb.ChartLive do
     count = Examples.Scroll.count(scroll)
 
     assigns.current_palette
-    |> build_chart_opts(tick, true, assigns.slug, assigns.hex_radius)
+    |> build_chart_opts(tick, true, assigns.slug, assigns.hex_radius, assigns.width)
     |> Keyword.merge(
       samples_per_px: scroll.samples_per_px,
       origin: scroll.origin,
@@ -549,7 +580,7 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   defp run_opts(assigns, tick) do
-    build_chart_opts(assigns.current_palette, tick, true, assigns.slug, assigns.hex_radius)
+    build_chart_opts(assigns.current_palette, tick, true, assigns.slug, assigns.hex_radius, assigns.width)
   end
 
   # The series a streaming design binds — the sources of its design — for the drawer's
@@ -720,7 +751,18 @@ defmodule ExamplesWeb.ChartLive do
           <% end %>
         </div>
 
-        <div class="chart-container" style={"background-color: #{ColorPalettes.background(@current_palette)}"}>
+        <%!-- The page measures itself (spec/10 §10, #434): the container's width is what
+              the chart is drawn at, so what a person sees is what a host's container
+              would show. The height is the chart's own aspect — a container sized by its
+              content cannot also size it. --%>
+        <div
+          id="chart-box"
+          phx-hook="ResizeHook"
+          data-resize-event="resize"
+          data-resize-debounce="150"
+          class="chart-container"
+          style={"background-color: #{ColorPalettes.background(@current_palette)}"}
+        >
           <%!-- One frame loop (spec/14 §12.6, #362): the run's frame while a run is going, the still one
                 otherwise — SVG whole, or the canvas under the compiled chart's static furniture. --%>
           <% {frame, state} = if(@run.running and @run_frame, do: {@run_frame, @run_state}, else: {@still_frame, @still_state}) %>
@@ -1047,10 +1089,10 @@ defmodule ExamplesWeb.ChartLive do
     """
   end
 
-  defp build_chart_opts(palette, tick, animating, slug, hex_radius) do
-    # A chart is drawn at its own size (`size/0`, spec/14 §4.2, #427): the page no
-    # longer imposes one, which a streaming design's window would disagree with.
-    opts = [palette: palette]
+  defp build_chart_opts(palette, tick, animating, slug, hex_radius, width) do
+    # A design records no size (spec/14 §4.2, #427): the page gives one, the width its
+    # container measured and the height that width at the chart's own aspect (#434).
+    opts = [palette: palette] ++ measured(width, slug)
 
     opts =
       if animating do
@@ -1064,6 +1106,16 @@ defmodule ExamplesWeb.ChartLive do
     else
       opts
     end
+  end
+
+  # The measured width, and the height that width takes at the chart's own aspect: a
+  # design records no size and the page gives one (spec/14 §4.2, spec/10 §10, #434).
+  defp measured(nil, _slug), do: []
+
+  defp measured(width, slug) do
+    module = @charts[slug]
+    {w, h} = if function_exported?(module, :size, 0), do: module.size(), else: {600, 400}
+    [width: width, height: round(width * h / w)]
   end
 
   defp backend_word(:svg), do: "SVG"
