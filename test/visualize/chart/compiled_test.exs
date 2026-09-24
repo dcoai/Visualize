@@ -42,8 +42,11 @@ defmodule Visualize.Chart.CompiledTest do
   @fixed %{x: %{kind: :linear, domain: [0, 100]}, y: %{kind: :linear, domain: [0, 10]}}
   @inferred %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}}
 
+  # Every design here has one frame; `compile/2` answers one compiled chart per frame
+  # (spec/14 §12.1, #385), so this takes the one.
   defp compile!(design, opts) do
-    {:ok, compiled} = Chart.compile(design, Keyword.put_new(opts, :size, {300, 200}))
+    {:ok, frames} = Chart.compile(design, Keyword.put_new(opts, :size, {300, 200}))
+    [compiled] = Map.values(frames)
     compiled
   end
 
@@ -265,7 +268,7 @@ defmodule Visualize.Chart.CompiledTest do
     test "every stored design reassembles to Chart.render byte for byte" do
       for name <- Designs.names() do
         applied = Designs.apply(name)
-        {:ok, compiled} = Chart.compile(applied)
+        {:ok, %{main: compiled}} = Chart.compile(applied)
         assert Enum.all?(Compiled.targets(compiled), &match?({:svg, _}, &1)), "#{name}"
         assert Compiled.svg(compiled, applied.sources) == Chart.render(applied), "#{name}"
       end
@@ -337,11 +340,11 @@ defmodule Visualize.Chart.CompiledTest do
 
       for design <- [polar, geo, facet] do
         {:ok, applied} = Chart.apply(design, sources: sources, size: {300, 200})
-        {:ok, compiled} = Chart.compile(applied)
+        {:ok, %{main: compiled}} = Chart.compile(applied)
         assert Compiled.svg(compiled, sources) == Chart.render(applied)
       end
 
-      {:ok, compiled} = Chart.compile(polar, sources: sources, size: {300, 200})
+      {:ok, %{main: compiled}} = Chart.compile(polar, sources: sources, size: {300, 200})
 
       assert Compiled.regions(compiled) == [
                {:grid, {:dynamic, {:inferred, [:r]}}},

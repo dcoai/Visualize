@@ -139,7 +139,10 @@ defmodule Examples.Charts.Design do
         }
   def hybrid(module, opts) do
     applied = applied(module, opts)
-    {:ok, compiled} = Chart.compile(applied, ceiling: 1)
+    # One compiled chart per frame (spec/14 §12.1, #385); the hybrid split draws one plot
+    # until #432, and it is offered only for a design of one frame.
+    {:ok, frames} = Chart.compile(applied, ceiling: 1)
+    [compiled] = Map.values(frames)
     {payload, _compiled} = Visualize.Chart.Compiled.tick(compiled, applied.sources)
 
     %{

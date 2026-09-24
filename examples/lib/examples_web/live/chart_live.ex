@@ -1086,7 +1086,7 @@ defmodule ExamplesWeb.ChartLive do
     # legend, labels — as SVG, the marks on a binary canvas beneath it.
 
     {:ok, applied} = Visualize.Chart.apply(design, sources: sources)
-    {:ok, compiled} = Visualize.Chart.compile(applied, ceiling: 1)
+    {:ok, %{main: compiled}} = Visualize.Chart.compile(applied, ceiling: 1)
     static = Visualize.Chart.Compiled.static(compiled)          # the furniture, once
     {tick, compiled} = Visualize.Chart.Compiled.tick(compiled, applied.sources)
     # tick.canvas — the marks as a base64 binary stream for the hook
@@ -1146,7 +1146,7 @@ defmodule ExamplesWeb.ChartLive do
     # The furniture (axes, grid, legend) is rendered once as SVG; a tick pushes only
     # the marks, as a binary stream, to the CanvasBinaryChart hook (spec/14 §12).
 
-    {:ok, compiled} = Visualize.Chart.compile(applied, ceiling: 1)
+    {:ok, %{main: compiled}} = Visualize.Chart.compile(applied, ceiling: 1)
     static = Visualize.Chart.Compiled.static(compiled)
 
     def handle_info(:animate_tick, socket) do
