@@ -27,6 +27,11 @@ defmodule ExamplesWeb.PerformanceDrawer do
     doc: "the run's point metrics and the rate slider's unit and span (#361)"
   )
 
+  attr(:frames, :list,
+    default: [],
+    doc: "what each plot of the last frame cost, `%{name, bytes, mode}` (#433); [] for one plot"
+  )
+
   def performance(assigns) do
     assigns = assign(assigns, acks?: Frames.acks?(assigns.backend))
 
@@ -112,6 +117,17 @@ defmodule ExamplesWeb.PerformanceDrawer do
           <.metric value={@run.frame} label="Frame" />
         </div>
 
+        <%!-- A design of several frames draws a canvas each (spec/14 §12.1, #432): the
+              metrics above are the frame's, this is the plot each contributed (#433). --%>
+        <div :if={@frames != []} class="perf-frames">
+          <span class="perf-frames-label">Frames</span>
+          <span :for={plot <- @frames} class="perf-frame">
+            <span class="perf-frame-name"><%= plot.name %></span>
+            <span class="perf-frame-bytes"><%= Float.round(plot.bytes / 1024, 1) %> KB</span>
+            <span class="perf-frame-mode"><%= plot.mode %></span>
+          </span>
+        </div>
+
         <table :if={@compare} class="perf-compare">
           <caption>This chart, <%= @ticks %> ticks per backend, headless</caption>
           <thead>
@@ -176,6 +192,12 @@ defmodule ExamplesWeb.PerformanceDrawer do
     .perf-metric { display: flex; flex-direction: column; align-items: center; }
     .perf-metric-value { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
     .perf-metric-label { font-size: 0.7rem; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.03em; }
+    .perf-frames { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.75rem; margin-top: 0.5rem; font-size: 12px; color: #444; }
+    .perf-frames-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; color: #666; }
+    .perf-frame { display: inline-flex; align-items: baseline; gap: 0.35rem; padding: 0.15rem 0.45rem; border-radius: 4px; background: #f1f1f4; }
+    .perf-frame-name { font-weight: 600; }
+    .perf-frame-bytes { font-variant-numeric: tabular-nums; }
+    .perf-frame-mode { color: #666; }
     .perf-compare { width: 100%; margin-top: 0.75rem; border-collapse: collapse; font-size: 13px; }
     .perf-compare caption { text-align: left; color: #666; padding-bottom: 0.3rem; }
     .perf-compare th, .perf-compare td { padding: 0.35rem 0.5rem; border-bottom: 1px solid #eee; text-align: right; }

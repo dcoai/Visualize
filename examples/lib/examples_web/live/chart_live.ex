@@ -585,6 +585,21 @@ defmodule ExamplesWeb.ChartLive do
   # The point metrics of any run (#361): the rows the last frame drew, the rows the chart
   # holds, the points a second moves at the measured rate, the frame's mode — and the
   # slider's unit and span, samples for a streaming design, ticks for any other chart.
+  # What each plot of the last frame cost (spec/14 §12.6, #433): a design of several
+  # frames draws a canvas each, and the metrics above are their sum — this says which
+  # plot the sum is made of. One plot has nothing to break down.
+  defp frames_info(%{run_frame: %{plots: plots}}) when length(plots) > 1 do
+    for plot <- plots do
+      %{
+        name: plot.name,
+        bytes: plot.bytes,
+        mode: (plot.incremental && plot.incremental.mode) || "full"
+      }
+    end
+  end
+
+  defp frames_info(_assigns), do: []
+
   defp points_info(%{run: run, run_frame: frame, run_mode: mode} = assigns) do
     per_frame = (frame && frame.points) || 0
 
@@ -752,6 +767,7 @@ defmodule ExamplesWeb.ChartLive do
           comparing={@compare_task != nil}
           stream={stream_info(assigns)}
           points={points_info(assigns)}
+          frames={frames_info(assigns)}
         />
 
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@run_backend) %></h3>
