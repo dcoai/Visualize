@@ -37,14 +37,16 @@ defmodule Visualize.Chart.ApplyTest do
   defp design(overrides \\ %{}) do
     Map.merge(
       %{
-        version: 1,
+        version: 2,
         sources: %{primary: %{fields: [:t, :v], default: :uptime}},
         vars: %{unit: %{default: "%"}},
         styles: %{series: %{stroke_width: 2}},
-        frame: %{
-          kind: :cartesian,
-          scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}},
-          axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}},
+            axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
+          }
         },
         marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :series}],
         labels: [%{anchor: {:axis, :y}, text: ["unit: ", var(:unit)]}]
@@ -90,8 +92,8 @@ defmodule Visualize.Chart.ApplyTest do
       assert svg_b =~ ~s(class="mark mark-line") and svg_b =~ "Uptime — %"
       refute svg_a == svg_b
 
-      assert Frame.scale(a.frame, :y).domain == [0.0, 100.0]
-      assert Frame.scale(b.frame, :y).domain == [0.0, 90.0]
+      assert Frame.scale(a.frames.main, :y).domain == [0.0, 100.0]
+      assert Frame.scale(b.frames.main, :y).domain == [0.0, 90.0]
 
       canvas = Chart.render(b, backend: :canvas)
       assert canvas =~ "ctx." and not (canvas =~ "var(")
@@ -105,7 +107,7 @@ defmodule Visualize.Chart.ApplyTest do
         )
 
       assert applied.sources == %{primary: @rows}
-      assert Frame.scale(applied.frame, :y).domain == [0, 9]
+      assert Frame.scale(applied.frames.main, :y).domain == [0, 9]
     end
 
     test "pool entries no slot names are ignored" do
@@ -134,7 +136,7 @@ defmodule Visualize.Chart.ApplyTest do
       rows = Enum.map([1, 2], &%{"t" => &1, "v" => &1 * 2})
       {:ok, applied} = Chart.apply(design(), sources: %{primary: rows}, size: {300, 200})
       assert applied.sources.primary == rows
-      assert Frame.scale(applied.frame, :y).domain == [0, 4]
+      assert Frame.scale(applied.frames.main, :y).domain == [0, 4]
     end
   end
 
@@ -164,7 +166,7 @@ defmodule Visualize.Chart.ApplyTest do
 
     test "an empty source binds without a check" do
       assert {:ok, applied} = Chart.apply(design(), sources: %{primary: []}, size: {300, 200})
-      assert Frame.scale(applied.frame, :y).domain == [0, 1]
+      assert Frame.scale(applied.frames.main, :y).domain == [0, 1]
       assert Chart.render(applied) =~ ~s(class="mark mark-line")
     end
 
@@ -277,10 +279,12 @@ defmodule Visualize.Chart.ApplyTest do
             margin: %{}
           },
           styles: %{series: var(:style)},
-          frame: %{
-            kind: :cartesian,
-            margin: var(:margin),
-            scales: %{x: %{kind: :linear}, y: %{kind: :linear}}
+          frames: %{
+            main: %{
+              kind: :cartesian,
+              margin: var(:margin),
+              scales: %{x: %{kind: :linear}, y: %{kind: :linear}}
+            }
           }
         })
 
@@ -290,7 +294,7 @@ defmodule Visualize.Chart.ApplyTest do
         Chart.apply(design, sources: %{uptime: @rows}, vars: vars, size: {300, 200})
 
       assert applied.chart.styles.series == %{stroke: "red", stroke_width: 4}
-      assert applied.frame.plot == %{width: 290, height: 190}
+      assert applied.frames.main.plot == %{width: 290, height: 190}
       assert Chart.render(applied) =~ ~s(stroke="red")
     end
 
@@ -335,11 +339,13 @@ defmodule Visualize.Chart.ApplyTest do
     # pipeline: the y scale infers from the window, not from the source.
     defp windowed(window) do
       %{
-        version: 1,
+        version: 2,
         sources: %{load: %{fields: [:t, :v]}},
-        frame: %{
-          kind: :cartesian,
-          scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}}
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}}
+          }
         },
         marks: [
           %{
@@ -357,7 +363,7 @@ defmodule Visualize.Chart.ApplyTest do
       {:ok, whole} =
         Chart.apply(windowed(%{op: :window, field: :t}), sources: rows(), size: {300, 200})
 
-      assert Frame.scale(whole.frame, :y).domain == [0, 10]
+      assert Frame.scale(whole.frames.main, :y).domain == [0, 10]
 
       {:ok, recent} =
         Chart.apply(windowed(%{op: :window, field: :t, from: [2, :minute]}),
@@ -366,24 +372,24 @@ defmodule Visualize.Chart.ApplyTest do
         )
 
       # The last two minutes are v = 8, 9, 10 — the extent the axis is drawn at.
-      assert Frame.scale(recent.frame, :y).domain == [0, 10]
-      assert Frame.scale(recent.frame, :x).domain == [480, 600]
+      assert Frame.scale(recent.frames.main, :y).domain == [0, 10]
+      assert Frame.scale(recent.frames.main, :x).domain == [480, 600]
     end
 
     test "now: reaches the step, and without it the step takes the column's newest reading" do
       design = windowed(%{op: :window, field: :t, from: [2, :minute]})
 
       {:ok, derived} = Chart.apply(design, sources: rows(), size: {300, 200})
-      assert Frame.scale(derived.frame, :x).domain == [480, 600]
+      assert Frame.scale(derived.frames.main, :x).domain == [480, 600]
 
       {:ok, given} = Chart.apply(design, sources: rows(), now: 300, size: {300, 200})
-      assert Frame.scale(given.frame, :x).domain == [180, 300]
+      assert Frame.scale(given.frames.main, :x).domain == [180, 300]
 
       # The frame carries it, so a mark's own pipeline sees the same instant.
-      assert given.frame.now == 300
+      assert given.frames.main.now == 300
 
       assert Enum.map(
-               Visualize.Chart.Mark.rows(given.frame, hd(given.chart.marks), given.sources),
+               Visualize.Chart.Mark.rows(given.frames.main, hd(given.chart.marks), given.sources),
                & &1.t
              ) ==
                [180, 240, 300]
@@ -393,14 +399,18 @@ defmodule Visualize.Chart.ApplyTest do
       design = windowed(%{op: :take, n: 1})
       {:ok, applied} = Chart.apply(design, sources: rows(), size: {300, 200})
 
-      assert Visualize.Chart.Mark.rows(applied.frame, hd(applied.chart.marks), applied.sources) ==
+      assert Visualize.Chart.Mark.rows(
+               applied.frames.main,
+               hd(applied.chart.marks),
+               applied.sources
+             ) ==
                [%{t: 600, v: 10}]
     end
   end
 
   describe "the map, the frame and the render" do
     test "an invalid design map is its own errors" do
-      assert Chart.apply(%{version: 1}, size: {300, 200}) == {:error, [{[:frame], :required}]}
+      assert Chart.apply(%{version: 2}, size: {300, 200}) == {:error, [{[:frames], :required}]}
     end
 
     test "the theme option reaches the frame" do
@@ -410,13 +420,15 @@ defmodule Visualize.Chart.ApplyTest do
       {:ok, applied} =
         Chart.apply(design, sources: %{uptime: @rows}, theme: theme, size: {300, 200})
 
-      assert applied.frame.theme.name == :house
+      assert applied.frames.main.theme.name == :house
       assert Chart.render(applied, resolve: :literal) =~ "#123456"
     end
 
     test "a value a scale cannot take raises as the frame does" do
       design =
-        design(%{frame: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}})
+        design(%{
+          frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}}
+        })
 
       assert_raise ArgumentError, ~r/scale :x \(time\) cannot take 1/, fn ->
         Chart.apply(design, sources: %{uptime: @rows}, size: {300, 200})
@@ -427,10 +439,10 @@ defmodule Visualize.Chart.ApplyTest do
       {:ok, applied} = Chart.apply(design(), sources: %{uptime: @rows}, size: {300, 200})
 
       assert Chart.render(applied) ==
-               Frame.render(applied.frame, sources: %{primary: @rows})
+               Frame.render(applied.frames.main, sources: %{primary: @rows})
 
       assert Chart.render(applied, backend: :canvas) ==
-               Frame.render(applied.frame, sources: %{primary: @rows}, backend: :canvas)
+               Frame.render(applied.frames.main, sources: %{primary: @rows}, backend: :canvas)
     end
   end
 end

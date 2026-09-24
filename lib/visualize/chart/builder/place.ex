@@ -14,6 +14,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    alias Visualize.Chart.Fragment
+
     alias Visualize.Chart.{Frame, Schema}
 
     @typedoc "A region of the frame a drop lands in."
@@ -107,7 +109,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec geometry(map()) :: %{size: map(), margin: map()}
     def geometry(design) do
-      frame = if is_map(design), do: Map.get(design, :frame, %{}), else: %{}
+      frame = if is_map(design), do: get_in(design, Fragment.frame_path(design)) || %{}, else: %{}
       frame = if is_map(frame), do: frame, else: %{}
       {width, height} = Frame.default_size()
 
@@ -128,7 +130,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `{:legend, node}` for the frame's legend, or `{:error, :no_scale}` for a legend on a
     design with no ordinal scale.
 
-        iex> design = %{frame: %{scales: %{x: %{kind: :linear}}}}
+        iex> design = %{frames: %{main: %{scales: %{x: %{kind: :linear}}}}}
         iex> Visualize.Chart.Builder.Place.node(:axis, :bottom, design, {0, 0})
         {:sites, [%{kind: :axis, body: %{scale: :x, side: :bottom}, key: nil}]}
         iex> Visualize.Chart.Builder.Place.node(:axis, :left, design, {0, 0})
@@ -268,14 +270,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     Whether a drawn node's label names a node that is moved on the graph (spec/14 §18.16):
     an axis, the legend, a label. A mark's position is its data; the frame does not move.
 
-        iex> Visualize.Chart.Builder.Place.movable?("frame.axes[1]")
+        iex> Visualize.Chart.Builder.Place.movable?("frames.main.axes[1]")
         true
         iex> Visualize.Chart.Builder.Place.movable?("marks[0]")
         false
     """
     @spec movable?(String.t()) :: boolean()
-    def movable?("frame.axes[" <> _rest), do: true
-    def movable?("frame.legend"), do: true
+    # A frame's own furniture moves, whatever the frame is called (spec/14 §4.1, #383).
+    def movable?("frames." <> rest),
+      do: String.contains?(rest, ".axes[") or String.ends_with?(rest, ".legend")
+
     def movable?("labels[" <> _rest), do: true
     def movable?(_label), do: false
 
@@ -290,7 +294,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :top, {0, 0})
         {:ok, %{scale: :x, side: :top}}
-        iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :left, {0, 0}, %{frame: %{scales: %{x: %{}, y: %{}}}})
+        iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :left, {0, 0}, %{frames: %{main: %{scales: %{x: %{}, y: %{}}}}})
         {:ok, %{scale: :y, side: :left}}
         iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :left, {0, 0})
         {:ok, %{scale: :y, side: :left}, [%{kind: :scale, body: %{kind: :linear, domain: :auto}, key: :y}]}
@@ -360,7 +364,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       wanted = orientation(side)
 
       axes =
-        case get_in(design, [:frame, :axes]) do
+        case get_in(design, Fragment.frame_path(design) ++ [:axes]) do
           axes when is_list(axes) -> axes
           _none -> []
         end
@@ -378,7 +382,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # -- the design's word ----------------------------------------------------------------
 
     defp scale_declared?(design, name) do
-      scales = get_in(design, [:frame, :scales])
+      scales = get_in(design, Fragment.frame_path(design) ++ [:scales])
       is_map(scales) and Map.has_key?(scales, name)
     end
 
@@ -387,7 +391,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The first ordinal scale by name: the one a legend reads its entries from (§4.5).
     defp ordinal_scale(design) do
-      case get_in(design, [:frame, :scales]) do
+      case get_in(design, Fragment.frame_path(design) ++ [:scales]) do
         scales when is_map(scales) ->
           scales
           |> Enum.filter(fn {_name, node} ->

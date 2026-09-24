@@ -60,10 +60,20 @@ defmodule Visualize.Chart.Frame.Scales do
 
   @doc false
   # Every scale of the frame node realised: `%{name => struct}`.
-  @spec realise(map(), atom(), map(), Theme.t(), map(), %{atom() => map()}, map()) ::
+  @spec realise(
+          map(),
+          map(),
+          [map()],
+          atom(),
+          map(),
+          Theme.t(),
+          map(),
+          %{atom() => map()},
+          map(),
+          map()
+        ) ::
           %{atom() => struct()}
-  def realise(design, kind, plot, theme, sources, styles, ctx, given \\ %{}) do
-    frame = design.frame
+  def realise(design, frame, marks, kind, plot, theme, sources, styles, ctx, given \\ %{}) do
     axes = Map.get(frame, :axes, [])
     nodes = Map.get(frame, :scales, %{})
 
@@ -76,7 +86,7 @@ defmodule Visualize.Chart.Frame.Scales do
           into: MapSet.new(),
           do: name
 
-    columns = columns(design, kind, sources, styles, ctx, inferring)
+    columns = columns(marks, kind, sources, styles, ctx, inferring)
 
     scales =
       Map.new(nodes, fn {name, node} ->
@@ -179,11 +189,12 @@ defmodule Visualize.Chart.Frame.Scales do
 
   # -- the bound columns per scale --------------------------------------------------
 
-  defp columns(design, kind, sources, styles, ctx, inferring) do
+  # Only the frame's *own* marks infer its scales (spec/14 §5.1, #383).
+  defp columns(marks, kind, sources, styles, ctx, inferring) do
     if Enum.empty?(inferring) do
       %{}
     else
-      design.marks
+      marks
       |> Enum.flat_map(fn mark -> mark_columns(mark, kind, sources, styles, ctx, inferring) end)
       |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
       |> Map.new(fn {scale, columns} -> {scale, List.flatten(columns)} end)

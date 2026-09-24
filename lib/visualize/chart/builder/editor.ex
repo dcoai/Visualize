@@ -54,9 +54,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     ## Examples
 
-        iex> fragment = %{version: 1, frame: %{kind: :cartesian}}
+        iex> fragment = %{version: 2, frames: %{main: %{kind: :cartesian}}}
         iex> Enum.map(Visualize.Chart.Builder.Editor.nodes(fragment), & &1.label)
-        ["design", "frame"]
+        ["design", "frames.main"]
         iex> Enum.map(Visualize.Chart.Builder.Editor.nodes(fragment), & &1.kind)
         [:design, :frame]
 

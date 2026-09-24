@@ -1,16 +1,18 @@
 # metresis `bar`: a tally over discrete buckets.
 %{
-  version: 1,
+  version: 2,
   meta: %{name: "bar"},
   sources: %{categories: %{fields: [:cat, :n]}},
-  frame: %{
-    kind: :cartesian,
-    margin: %{top: 20, right: 20, bottom: 30, left: 40},
-    scales: %{
-      x: %{kind: :band, domain: :auto, padding: 0.2},
-      y: %{kind: :linear, domain: [0, :auto], nice: true}
-    },
-    axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, ticks: 4, grid: true}]
+  frames: %{
+    main: %{
+      kind: :cartesian,
+      margin: %{top: 20, right: 20, bottom: 30, left: 40},
+      scales: %{
+        x: %{kind: :band, domain: :auto, padding: 0.2},
+        y: %{kind: :linear, domain: [0, :auto], nice: true}
+      },
+      axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, ticks: 4, grid: true}]
+    }
   },
   marks: [
     %{

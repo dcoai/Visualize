@@ -19,7 +19,7 @@ defmodule Visualize.Chart.Frame.Legend do
   @left [:top_left, :bottom_left, :left]
 
   @doc false
-  # The legend group, or `[]` when the frame has no legend; stamped `frame.legend` when
+  # The legend group, or `[]` when the frame has no legend; stamped `frames.<name>.legend` when
   # `paths?` (spec/14 §4.7).
   @spec generate(map(), atom(), boolean()) :: [Element.t()]
   def generate(frame, mode, paths? \\ false)
@@ -59,7 +59,7 @@ defmodule Visualize.Chart.Frame.Legend do
         style: Map.put(group_style, :class, "legend"),
         transform: Transform.translate(x, y)
       )
-      |> Frame.stamp([:frame, :legend], paths?)
+      |> Frame.stamp([:frames, frame.name, :legend], paths?)
     ]
   end
 

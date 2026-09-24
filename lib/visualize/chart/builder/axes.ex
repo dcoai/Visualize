@@ -13,6 +13,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
+    alias Visualize.Chart.Fragment
+
     @sides %{x: [:bottom, :top], y: [:left, :right]}
 
     @typedoc "One row: the scale, its sides with the axis standing there, and its grid."
@@ -59,9 +61,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             :if={side.index != nil}
             type="button"
             class="vis-builder-axes-link"
-            title={"frame.axes[#{side.index}]: ticks, format, unit …"}
+            title={"frames.main.axes[#{side.index}]: ticks, format, unit …"}
             phx-click="select_node"
-            phx-value-node={"frame.axes[#{side.index}]"}
+            phx-value-node={"frames.main.axes[#{side.index}]"}
             phx-target={@target}
           >{side.word} axis …</button>
         </div>
@@ -75,7 +77,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `angle` (`bottom`) or `r` (`top`) — each with the index of the axis standing there in
     `frame.axes`, the first axis of the scale and whether it draws the grid.
 
-        iex> design = %{frame: %{axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]}}
+        iex> design = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]}}}
         iex> [x, y] = Visualize.Chart.Builder.Axes.rows(design, [:x, :y])
         iex> {x.grid, Enum.map(x.sides, &{&1.side, &1.index}), y.grid, Enum.map(y.sides, &{&1.side, &1.index})}
         {true, [bottom: 0, top: nil], false, [left: 1, right: nil]}
@@ -85,7 +87,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec rows(map(), [atom()]) :: [row()]
     def rows(design, scales) do
-      axes = design |> get_in([:frame, :axes]) |> List.wrap() |> Enum.with_index()
+      axes =
+        design
+        |> get_in(Fragment.frame_path(design) ++ [:axes])
+        |> List.wrap()
+        |> Enum.with_index()
 
       for scale <- scales do
         mine = for {%{scale: ^scale} = axis, i} <- axes, do: {axis, i}

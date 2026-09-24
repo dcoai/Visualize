@@ -45,9 +45,9 @@ defmodule Visualize.SignalsTest do
     signals = %{feed: Signals.new(:sine, [:hour, :value], window: 24)}
 
     design = %{
-      version: 1,
+      version: 2,
       sources: %{feed: %{fields: [:hour, :value]}},
-      frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}},
+      frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
       marks: [%{type: :line, data: :feed, channels: %{x: :hour, y: :value}}]
     }
 

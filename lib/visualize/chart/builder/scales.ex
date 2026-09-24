@@ -15,6 +15,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
 
     alias Visualize.Chart
+    alias Visualize.Chart.Fragment
     alias Visualize.Chart.Frame.Scales, as: FrameScales
     alias Visualize.Data.Table
 
@@ -32,13 +33,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     a number → `:sequential`. A channel with no evidence derives nothing; a scale already
     declared is never in the result.
 
-        iex> design = %{frame: %{kind: :cartesian},
+        iex> design = %{frames: %{main: %{kind: :cartesian}},
         ...>   sources: %{s: %{fields: [:t, :v, :k], types: %{t: :time, v: :number, k: :category}}},
         ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}},
         ...>           %{type: :rect, data: :s, channels: %{x0: :k, x1: :k, y0: 0, y1: :v, value: :k}}]}
         iex> Visualize.Chart.Builder.Scales.derive(design, %{})
         %{x: %{kind: :time, domain: :auto}, y: %{kind: :linear, domain: :auto}, color: %{kind: :ordinal, domain: :auto}}
-        iex> Visualize.Chart.Builder.Scales.derive(%{frame: %{kind: :cartesian}}, %{})
+        iex> Visualize.Chart.Builder.Scales.derive(%{frames: %{main: %{kind: :cartesian}}}, %{})
         %{}
     """
     @spec derive(map(), pool_types()) :: %{atom() => map()}
@@ -61,7 +62,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     could be read for: `{[:marks, i, :channels, ch], {:unscaled, field}}` each, the
     builder's needs (spec/14 §18.16).
 
-        iex> design = %{frame: %{kind: :cartesian}, sources: %{s: %{fields: [:t, :v]}},
+        iex> design = %{frames: %{main: %{kind: :cartesian}}, sources: %{s: %{fields: [:t, :v]}},
         ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]}
         iex> Visualize.Chart.Builder.Scales.unscaled(design, %{})
         [{[:marks, 0, :channels, :x], {:unscaled, :t}}, {[:marks, 0, :channels, :y], {:unscaled, :v}}]
@@ -129,15 +130,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The position scales a mark reads — `x`, `y`, `angle`, `r` — through its channels and
     its `scales` renames, in channel order (spec/14 §18.16, #373).
 
-        iex> design = %{frame: %{kind: :cartesian}}
+        iex> design = %{frames: %{main: %{kind: :cartesian}}}
         iex> Visualize.Chart.Builder.Scales.position_scales(design, %{type: :line, channels: %{y: :v, x: :t, series: :k}})
         [:x, :y]
-        iex> Visualize.Chart.Builder.Scales.position_scales(%{frame: %{kind: :polar}}, %{type: :rose, channels: %{angle: :k, value: :v}})
+        iex> Visualize.Chart.Builder.Scales.position_scales(%{frames: %{main: %{kind: :polar}}}, %{type: :rose, channels: %{angle: :k, value: :v}})
         [:angle, :r]
     """
     @spec position_scales(map(), map()) :: [atom()]
     def position_scales(design, mark) when is_map(mark) do
-      kind = get_in(design, [:frame, :kind]) || :cartesian
+      kind = get_in(design, Fragment.frame_path(design) ++ [:kind]) || :cartesian
 
       for {channel, _value} <- mark |> Map.get(:channels, %{}) |> Enum.sort(),
           scale = FrameScales.scale_for(kind, mark, channel),
@@ -155,7 +156,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # Every channel of every mark that names a scale: `{scale, type or nil, {path, value}}`,
     # in mark and channel order.
     defp evidence(design, pool_types) do
-      kind = get_in(design, [:frame, :kind]) || :cartesian
+      kind = get_in(design, Fragment.frame_path(design) ++ [:kind]) || :cartesian
       marks = List.wrap(Map.get(design, :marks, []))
 
       for {mark, i} <- Enum.with_index(marks),
@@ -189,7 +190,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp kind(_name, _type), do: nil
 
     defp declared(design) do
-      case get_in(design, [:frame, :scales]) do
+      case get_in(design, Fragment.frame_path(design) ++ [:scales]) do
         scales when is_map(scales) -> Map.keys(scales)
         _none -> []
       end

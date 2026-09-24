@@ -24,15 +24,17 @@ defmodule Visualize.Hooks.CrosshairTest do
   defp frame(marks, kind \\ :cartesian) do
     chart =
       Chart.from_map!(%{
-        version: 1,
+        version: 2,
         sources: %{primary: %{fields: [:t, :v, :k]}},
-        frame: %{
-          kind: kind,
-          margin: %{top: 10, right: 30, bottom: 10, left: 40},
-          scales: %{
-            x: %{kind: :linear, domain: [0, 3]},
-            y: %{kind: :linear, domain: [0, 10]},
-            color: %{kind: :ordinal}
+        frames: %{
+          main: %{
+            kind: kind,
+            margin: %{top: 10, right: 30, bottom: 10, left: 40},
+            scales: %{
+              x: %{kind: :linear, domain: [0, 3]},
+              y: %{kind: :linear, domain: [0, 10]},
+              color: %{kind: :ordinal}
+            }
           }
         },
         marks: marks
@@ -96,12 +98,14 @@ defmodule Visualize.Hooks.CrosshairTest do
 
       facet =
         Chart.from_map!(%{
-          version: 1,
+          version: 2,
           sources: %{primary: %{fields: [:t, :v, :k]}},
-          frame: %{
-            kind: :facet,
-            scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
-            facet: %{by: :k}
+          frames: %{
+            main: %{
+              kind: :facet,
+              scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
+              facet: %{by: :k}
+            }
           },
           marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
         })

@@ -39,7 +39,8 @@ defmodule Visualize.Chart.Compiled.Regions do
   @doc false
   # The layout and the regions of a chart, given the name of its viewport scale or `nil`.
   @spec build(Chart.t(), atom() | nil) :: {layout(), [t()]}
-  def build(%Chart{frame: node} = chart, viewport) do
+  def build(%Chart{} = chart, viewport) do
+    node = only_frame(chart)
     axes = Map.get(node, :axes, [])
     layout = layout(node.kind, chart, axes)
 
@@ -61,7 +62,9 @@ defmodule Visualize.Chart.Compiled.Regions do
   @spec moving?(Chart.t(), atom(), atom() | nil) :: boolean()
   def moving?(_chart, name, name), do: true
 
-  def moving?(%Chart{frame: node}, name, _viewport) do
+  def moving?(%Chart{} = chart, name, _viewport) do
+    node = only_frame(chart)
+
     case get_in(node, [:scales, name]) do
       nil -> false
       scale -> inferred?(Map.get(scale, :domain, :auto))
@@ -72,7 +75,9 @@ defmodule Visualize.Chart.Compiled.Regions do
   # The scales a mark reads, through its channels and a `{:field, f}` on a colour key of
   # its style (spec/14 §4.3).
   @spec mark_scales(Chart.t(), map()) :: [atom()]
-  def mark_scales(%Chart{frame: node, styles: styles}, mark) do
+  def mark_scales(%Chart{styles: styles} = chart, mark) do
+    node = only_frame(chart)
+
     channels =
       for {channel, _value} <- Map.get(mark, :channels, %{}),
           scale = Scales.scale_for(node.kind, mark, channel),
@@ -109,7 +114,8 @@ defmodule Visualize.Chart.Compiled.Regions do
       mark_regions(chart) ++ Enum.map(indexed, &{:axis, elem(&1, 1)}) ++ tail(chart)
   end
 
-  defp tail(%Chart{frame: node, labels: labels}) do
+  defp tail(%Chart{labels: labels} = chart) do
+    node = only_frame(chart)
     legend = if Map.get(node, :legend), do: [:legend], else: []
     labels = if labels == [], do: [], else: [:labels]
     legend ++ labels
@@ -135,29 +141,34 @@ defmodule Visualize.Chart.Compiled.Regions do
   defp status({:mark, _}, _chart, _axes, _viewport), do: {:dynamic, :data}
   defp status(:panels, _chart, _axes, _viewport), do: {:dynamic, :facet}
 
-  defp status(:grid, %{frame: %{kind: :polar}} = chart, axes, viewport) do
-    {polar, _} = split_axes(axes)
-    scales_status(chart, grid_scales(polar), viewport)
-  end
-
   defp status({:grid, :outer}, chart, axes, viewport) do
     {_, other} = split_axes(axes)
     scales_status(chart, grid_scales(other), viewport)
   end
 
   defp status(:grid, chart, axes, viewport) do
-    scales_status(chart, grid_scales(Enum.with_index(axes)), viewport)
+    scales =
+      if only_frame(chart).kind == :polar do
+        {polar, _} = split_axes(axes)
+        polar
+      else
+        Enum.with_index(axes)
+      end
+
+    scales_status(chart, grid_scales(scales), viewport)
   end
 
   defp status({:axis, i}, chart, axes, viewport) do
     scales_status(chart, [Enum.at(axes, i).scale], viewport)
   end
 
-  defp status(:legend, %{frame: node} = chart, _axes, viewport) do
-    scales_status(chart, [node.legend.scale], viewport)
+  defp status(:legend, chart, _axes, viewport) do
+    scales_status(chart, [only_frame(chart).legend.scale], viewport)
   end
 
-  defp status(:labels, %{frame: node, labels: labels} = chart, _axes, viewport) do
+  defp status(:labels, %{labels: labels} = chart, _axes, viewport) do
+    node = only_frame(chart)
+
     if Enum.any?(labels, &match?({:data, _}, &1.anchor)),
       do: scales_status(chart, position_scales(node), viewport),
       else: :static
@@ -230,4 +241,8 @@ defmodule Visualize.Chart.Compiled.Regions do
 
   defp builder(:labels, _kind, _axes),
     do: fn frame, _sources, mode -> Labels.generate(frame, mode) end
+
+  # A compiled chart is one frame until #385 (spec/14 §12.1): its node, whatever it is
+  # named. `Visualize.Chart.Compiled.new/2` refuses a design with more.
+  defp only_frame(%Chart{frames: frames}), do: frames |> Map.values() |> hd()
 end

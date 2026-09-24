@@ -9,6 +9,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    alias Visualize.Chart.Fragment
+
     alias Visualize.Chart.Builder.Scales
 
     @typedoc "One step: where it stands, its words, and the event that does or opens it."
@@ -23,20 +25,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The steps a composite still has to take, in the order a person meets them: no source
     declared, no mark, a mark reading a position scale while no axis measures any.
 
-        iex> Visualize.Chart.Builder.Steps.steps(%{frame: %{kind: :cartesian}}) |> Enum.map(& &1.path)
+        iex> Visualize.Chart.Builder.Steps.steps(%{frames: %{main: %{kind: :cartesian}}}) |> Enum.map(& &1.path)
         [[:sources], [:marks]]
-        iex> design = %{frame: %{kind: :cartesian}, sources: %{s: %{fields: [:t, :v]}},
+        iex> design = %{frames: %{main: %{kind: :cartesian}}, sources: %{s: %{fields: [:t, :v]}},
         ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]}
         iex> Visualize.Chart.Builder.Steps.steps(design) |> Enum.map(&{&1.path, &1.event})
-        [{[:frame, :axes], "select_node"}]
-        iex> Visualize.Chart.Builder.Steps.steps(put_in(design, [:frame, :axes], [%{scale: :x, side: :bottom}]))
+        [{[:frames, :main, :axes], "select_node"}]
+        iex> Visualize.Chart.Builder.Steps.steps(put_in(design, [:frames, :main, :axes], [%{scale: :x, side: :bottom}]))
         []
     """
     @spec steps(map()) :: [step()]
     def steps(design) when is_map(design) do
       sources = Map.get(design, :sources) || %{}
       marks = for mark <- List.wrap(Map.get(design, :marks, [])), is_map(mark), do: mark
-      axes = List.wrap(get_in(design, [:frame, :axes]))
+      axes = List.wrap(get_in(design, Fragment.frame_path(design) ++ [:axes]))
 
       measured = for %{scale: scale} <- axes, do: scale
 
@@ -67,9 +69,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
         ),
         case unmeasured do
           {_mark, i} ->
-            step([:frame, :axes], "add axes — tick a side on the mark's page", "select_node", %{
-              "node" => "marks[#{i}]"
-            })
+            step(
+              Fragment.frame_path(design) ++ [:axes],
+              "add axes — tick a side on the mark's page",
+              "select_node",
+              %{
+                "node" => "marks[#{i}]"
+              }
+            )
 
           nil ->
             []

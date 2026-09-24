@@ -28,7 +28,9 @@ defmodule Visualize.Chart.Compiled.Window do
   @doc false
   # The window of a chart with a viewport, or `nil`.
   @spec new(Chart.t()) :: t() | nil
-  def new(%Chart{frame: node}) do
+  def new(%Chart{} = chart) do
+    node = only_frame(chart)
+
     case Map.get(node, :viewport) do
       nil ->
         nil
@@ -343,4 +345,7 @@ defmodule Visualize.Chart.Compiled.Window do
     do: NaiveDateTime.add(t, -round(span * 1_000_000), :microsecond)
 
   defp subtract(value, _span), do: units(value)
+  # A compiled chart is one frame until #385 (spec/14 §12.1): its node, whatever it is
+  # named. `Visualize.Chart.Compiled.new/2` refuses a design with more.
+  defp only_frame(%Chart{frames: frames}), do: frames |> Map.values() |> hd()
 end

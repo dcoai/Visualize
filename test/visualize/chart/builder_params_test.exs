@@ -37,7 +37,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       assert names ==
                Enum.map(Chart.free_vars(BuilderFixture.parameterised()), &to_string(&1.name))
 
-      assert html =~ ~s(<span class="vis-builder-param-uses">frame.axes[0].ticks</span>)
+      assert html =~ ~s(<span class="vis-builder-param-uses">frames.main.axes[0].ticks</span>)
     end
 
     test "the widget is the one the first use's expectation asks for" do
@@ -56,7 +56,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
     end
 
     test "a variable a higher layer writes over disappears, and one it opens appears" do
-      base = %{version: 1, frame: %{kind: :cartesian}}
+      base = %{version: 2, frames: %{main: %{kind: :cartesian}}}
 
       titled = %{
         vars: %{unit: %{}},
@@ -64,7 +64,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       }
 
       literal = %{labels: [%{id: :title, anchor: :title, text: ["Uptime"]}]}
-      widened = %{vars: %{wide: %{}}, frame: %{margin: %{top: Chart.var(:wide)}}}
+      widened = %{vars: %{wide: %{}}, frames: %{main: %{margin: %{top: Chart.var(:wide)}}}}
 
       open = render_component(&Params.panel/1, %{layers: [base, titled]})
       closed = render_component(&Params.panel/1, %{layers: [base, titled, literal]})
@@ -76,7 +76,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
     end
 
     test "a stack with no free variable renders an empty form" do
-      html = render_component(&Params.panel/1, %{layers: [%{version: 1}]})
+      html = render_component(&Params.panel/1, %{layers: [%{version: 2}]})
 
       assert html =~
                ~s(<form class="vis-builder-params" phx-change="set_var" phx-submit="submitted">)

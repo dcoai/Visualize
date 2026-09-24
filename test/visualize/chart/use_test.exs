@@ -21,12 +21,12 @@ defmodule Visualize.Chart.UseTest do
     {:style, 2} => %{stroke_width: 5, opacity: 0.5},
     {:design, 1} => %{styles: %{s: %{fill: var(:color)}}},
     {:theme, 1} => %{theme: :dark},
-    {:frame, 1} => %{frame: %{kind: :cartesian, margin: %{top: 24}}},
+    {:frame, 1} => %{frames: %{main: %{kind: :cartesian, margin: %{top: 24}}}},
     {:composite, 1} => %{
       composite: %{
         uses: [
           Use.new({:theme, 1}),
-          %Use{id: {:use, 2}, ref: {:frame, 1}, mask: [[:frame, :margin]]}
+          %Use{id: {:use, 2}, ref: {:frame, 1}, mask: [[:frames, :main, :margin]]}
         ],
         vars: %{}
       }
@@ -127,9 +127,10 @@ defmodule Visualize.Chart.UseTest do
     test "a key, a path, and everything" do
       assert Chart.mask(%{a: 1, b: 2}, [:a]) == %{b: 2}
 
-      assert Chart.mask(%{frame: %{size: 1, margin: 2}}, [[:frame, :margin]]) == %{
-               frame: %{size: 1}
-             }
+      assert Chart.mask(%{frames: %{main: %{size: 1, margin: 2}}}, [[:frames, :main, :margin]]) ==
+               %{
+                 frames: %{main: %{size: 1}}
+               }
 
       assert Chart.mask(%{a: 1}, :all) == %{}
     end
@@ -139,7 +140,7 @@ defmodule Visualize.Chart.UseTest do
     end
 
     test "a masked key shows through from the layer below once stacked" do
-      lower = %{theme: :dark, version: 1}
+      lower = %{theme: :dark, version: 2}
       upper = Chart.mask(%{theme: :light, version: 2}, [:theme])
       assert Chart.stack([lower, upper]) == %{theme: :dark, version: 2}
     end
@@ -156,15 +157,15 @@ defmodule Visualize.Chart.UseTest do
 
       assert {:ok, flat, %{missing: []}} = Chart.flatten(composite, &fetch/1)
       assert flat.theme == :dark
-      assert flat.frame.margin.top == 24
+      assert flat.frames.main.margin.top == 24
       assert flat.vars == %{unit: %{default: "%"}}
       refute Map.has_key?(flat, :composite)
     end
 
     test "a mask at a site removes from that site's contribution only" do
       assert {:ok, flat, _} = Chart.flatten(@library[{:composite, 1}], &fetch/1)
-      assert Map.has_key?(flat.frame, :kind)
-      refute Map.has_key?(flat.frame, :margin)
+      assert Map.has_key?(flat.frames.main, :kind)
+      refute Map.has_key?(flat.frames.main, :margin)
     end
 
     test "composites nest, and the nested one's missing refs are reported" do
@@ -186,13 +187,13 @@ defmodule Visualize.Chart.UseTest do
     end
 
     test "a design that is not a composite flattens to itself" do
-      design = %{version: 1, frame: %{}}
+      design = %{version: 2, frames: %{main: %{}}}
       assert Chart.flatten(design, &fetch/1) == {:ok, design, %{missing: [], keyless: []}}
     end
 
     test "composite? tells the two apart" do
       assert Composite.composite?(@library[{:composite, 1}])
-      refute Composite.composite?(%{version: 1})
+      refute Composite.composite?(%{version: 2})
     end
   end
 
@@ -205,7 +206,7 @@ defmodule Visualize.Chart.UseTest do
       {:mark, 1} => %{
         mark: %{id: :m, type: :line, data: :primary, channels: %{x: :hour, y: :value}}
       },
-      {:frame, 1} => %{frame: %{kind: :cartesian}},
+      {:frame, 1} => %{frames: %{main: %{kind: :cartesian}}},
       {:style, 2} => %{
         composite: %{
           uses: [
@@ -236,9 +237,9 @@ defmodule Visualize.Chart.UseTest do
 
       assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(composite, &placed/1)
       assert flat.theme == :dark
-      assert flat.frame.kind == :cartesian
+      assert flat.frames.main.kind == :cartesian
       assert flat.styles == %{series: %{stroke_width: 5}}
-      assert flat.frame.scales == %{hour: %{kind: :linear, domain: :auto}}
+      assert flat.frames.main.scales == %{hour: %{kind: :linear, domain: :auto}}
       assert flat.sources == %{primary: %{fields: [:hour, :value]}}
       assert [%{id: :m}] = flat.marks
     end
@@ -291,16 +292,18 @@ defmodule Visualize.Chart.UseTest do
 
     test "a document decomposes into sites, one kind each, and flattens back to itself" do
       document = %{
-        version: 1,
+        version: 2,
         theme: :dark,
         meta: %{name: "Uptime"},
         styles: %{series: %{stroke: "#111"}, faint: %{opacity: 0.4}},
         sources: %{primary: %{fields: [:t, :v]}},
         vars: %{unit: %{default: "%"}},
-        frame: %{
-          kind: :cartesian,
-          scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
-          axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
+            axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
+          }
         },
         marks: [%{id: :m, type: :line, data: :primary, channels: %{x: :t, y: :v}}],
         labels: [%{id: :title, anchor: :title, text: ["Uptime"]}]
@@ -336,11 +339,12 @@ defmodule Visualize.Chart.UseTest do
     end
 
     test "a map that is many things is no kind of fragment" do
-      assert Fragment.kind(%{theme: :dark, frame: %{}}) == nil
-      assert Fragment.kind(%{version: 1}) == nil
+      assert Fragment.kind(%{theme: :dark, frames: %{main: %{}}}) == nil
+      assert Fragment.kind(%{version: 2}) == nil
       refute :design in Fragment.kinds()
 
-      assert {:error, [{[], :many_kinds}]} = Validator.validate(%{theme: :dark, frame: %{}}, nil)
+      assert {:error, [{[], :many_kinds}]} =
+               Validator.validate(%{theme: :dark, frames: %{main: %{}}}, nil)
 
       assert Validator.format({[], :many_kinds}) =~ "no kind of fragment"
     end
@@ -356,14 +360,14 @@ defmodule Visualize.Chart.UseTest do
   describe "the JSON form (spec/14 §11, §19.6)" do
     test "an id and a use round-trip through the codec, and never make an atom" do
       design = %{
-        version: 1,
-        frame: %{},
+        version: 2,
+        frames: %{main: %{}},
         composite: %{
           uses: [
             %Use{
               id: {:use, 7},
               ref: {:style, 11},
-              mask: [:stroke, [:frame, :margin]],
+              mask: [:stroke, [:frames, :main, :margin]],
               vars: %{color: var(:color_1)},
               local: %{opacity: 0.8}
             },
@@ -391,8 +395,8 @@ defmodule Visualize.Chart.UseTest do
   describe "the validator (spec/14 §19.2, D-100)" do
     test "an id of the right kind is accepted at a reference site" do
       design = %{
-        version: 1,
-        frame: %{scales: %{x: %{kind: :linear}}, axes: []},
+        version: 2,
+        frames: %{main: %{scales: %{x: %{kind: :linear}}, axes: []}},
         marks: [
           %{id: :m, type: :line, data: :primary, channels: %{x: :a, y: :b}, style: {:style, 11}}
         ],

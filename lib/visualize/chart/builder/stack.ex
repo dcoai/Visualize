@@ -97,7 +97,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               # group the copy makes (#380), or for the composite when it has several.
               nil ->
                 case Map.keys(use.local) do
-                  [kind] when kind in [:frame, :theme, :meta] ->
+                  [kind] when kind in [:frames, :theme, :meta] ->
                     {use.local, to_string(kind)}
 
                   _keys ->
@@ -351,12 +351,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     leaves it out.
 
         iex> uses = [
-        ...>   %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frame: %{kind: :cartesian}}},
+        ...>   %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frames: %{main: %{kind: :cartesian}}}},
         ...>   %Visualize.Chart.Use{id: {:use, 2}, ref: nil, key: :primary, local: %{source: %{fields: [:t]}}},
         ...>   %Visualize.Chart.Use{id: {:use, 3}, ref: nil, mask: :all, local: %{theme: :dark}}
         ...> ]
         iex> Visualize.Chart.Builder.Stack.placed(uses, fn _id -> :error end)
-        [{{:use, 1}, %{frame: %{kind: :cartesian}}}, {{:use, 2}, %{sources: %{primary: %{fields: [:t]}}}}]
+        [{{:use, 1}, %{frames: %{main: %{kind: :cartesian}}}}, {{:use, 2}, %{sources: %{primary: %{fields: [:t]}}}}]
     """
     @spec placed([Use.t()], (Fragment.id() -> {:ok, map()} | :error)) :: [{Use.id(), map()}]
     def placed(uses, fetch) do
@@ -396,7 +396,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, mask: :all, local: %{axis: %{scale: :x, side: :bottom}}}
         iex> Visualize.Chart.Builder.Stack.contribution(use, fn _id -> :error end)
-        %{frame: %{axes: [%{scale: :x, side: :bottom}]}}
+        %{frames: %{main: %{axes: [%{scale: :x, side: :bottom}]}}}
     """
     @spec contribution(Use.t(), (Fragment.id() -> {:ok, map()} | :error)) :: map()
     def contribution(%Use{} = use, fetch) do
@@ -416,8 +416,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     no `id` — lifts the owner's whole list and masks it at the finest path the owner's
     contribution has for it.
 
-        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frame: %{kind: :cartesian, axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]}}}
-        iex> node = %{kind: :axis, path: [:frame, :axes, 1], label: "frame.axes[1]", body: %{scale: :y, side: :left}}
+        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frames: %{main: %{kind: :cartesian, axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]}}}}
+        iex> node = %{kind: :axis, path: [:frames, :main, :axes, 1], label: "frames.main.axes[1]", body: %{scale: :y, side: :left}}
         iex> Visualize.Chart.Builder.Stack.lifted(:copy, use, fn _ -> :error end, node, [])
         %{local: %{axis: %{scale: :y, side: :left}}, key: nil, mask: nil, lifted: 1}
         iex> style = %Visualize.Chart.Use{id: {:use, 2}, ref: nil, key: :series, local: %{style: %{stroke: "#111"}}}
@@ -509,13 +509,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp keyed_name([:styles, name]) when is_atom(name), do: name
     defp keyed_name([:sources, name]) when is_atom(name), do: name
     defp keyed_name([:vars, name]) when is_atom(name), do: name
-    defp keyed_name([:frame, :scales, name]) when is_atom(name), do: name
+    defp keyed_name([:frames, _frame, :scales, name]) when is_atom(name), do: name
     defp keyed_name(_path), do: nil
 
     # The inline site's local for a node at a path: a site of the node's kind, a frame's
     # part as a frame site carrying that part alone.
-    defp wrap(:frame, [:frame], body), do: %{frame: body}
-    defp wrap(_kind, [:frame, part], body) when is_atom(part), do: %{frame: %{part => body}}
+    # A site's fragment carries the path it came from: a frame's own node, a part of one
+    # (`scales`, `axes`, …) under its name, or the kind's singular wrapper (spec/14 §19.2).
+    defp wrap(:frame, [:frames, frame], body), do: %{frames: %{frame => body}}
+    defp wrap(:frame, [:frames], body), do: %{frames: %{main: body}}
+
+    defp wrap(_kind, [:frames, frame, part], body) when is_atom(part),
+      do: %{frames: %{frame => %{part => body}}}
+
     defp wrap(kind, _path, body), do: %{kind => body}
 
     defp fresh_id(:mark, %{id: id} = body, taken) when is_atom(id),
@@ -559,9 +565,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> mark = %Visualize.Chart.Use{id: {:use, 2}, ref: nil, local: %{mark: %{type: :line}}}
         iex> Visualize.Chart.Builder.Stack.local_path(mark, fn _id -> :error end, [:marks, 3, :channels])
         [:mark, :channels]
-        iex> house = %Visualize.Chart.Use{id: {:use, 3}, ref: nil, local: %{frame: %{kind: :cartesian}}}
-        iex> Visualize.Chart.Builder.Stack.local_path(house, fn _id -> :error end, [:frame, :margin])
-        [:frame, :margin]
+        iex> house = %Visualize.Chart.Use{id: {:use, 3}, ref: nil, local: %{frames: %{main: %{kind: :cartesian}}}}
+        iex> Visualize.Chart.Builder.Stack.local_path(house, fn _id -> :error end, [:frames, :main, :margin])
+        [:frames, :main, :margin]
     """
     @spec local_path(Use.t(), (Fragment.id() -> {:ok, map()} | :error), [term()]) :: [term()]
     def local_path(use, fetch, path) do
@@ -572,8 +578,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {{:gradient, _}, [:defs, _key | rest]} -> [:gradient | rest]
         {{:mark, _}, [:marks, _index | rest]} -> [:mark | rest]
         {{:label, _}, [:labels, _index | rest]} -> [:label | rest]
-        {{:scale, _}, [:frame, :scales, _key | rest]} -> [:scale | rest]
-        {{:axis, _}, [:frame, :axes, _index | rest]} -> [:axis | rest]
+        {{:scale, _}, [:frames, _f, :scales, _key | rest]} -> [:scale | rest]
+        {{:axis, _}, [:frames, _f, :axes, _index | rest]} -> [:axis | rest]
         _own -> path
       end
     end
@@ -1032,7 +1038,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec empty(atom()) :: map()
     def empty(:composite), do: %{composite: %{uses: [], vars: %{}}}
     def empty(:theme), do: %{theme: %{}}
-    def empty(:frame), do: %{frame: %{}}
+    def empty(:frame), do: %{frames: %{main: %{}}}
 
     def empty(kind) when kind in [:style, :scale, :source, :axis, :mark, :label, :var],
       do: %{kind => %{}}

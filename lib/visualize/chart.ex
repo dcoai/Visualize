@@ -19,14 +19,14 @@ defmodule Visualize.Chart do
 
       iex> {:ok, chart} =
       ...>   Visualize.Chart.from_map(%{
-      ...>     version: 1,
+      ...>     version: 2,
       ...>     sources: %{primary: %{fields: [:t, :v]}},
-      ...>     frame: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}},
+      ...>     frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}},
       ...>     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...>   })
       iex> chart.marks
       [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
-      iex> Visualize.Chart.from_map(%{version: 1, frame: %{kind: :cartesian}, marks: [%{}]})
+      iex> Visualize.Chart.from_map(%{version: 2, frames: %{main: %{kind: :cartesian}}, marks: [%{}]})
       {:error, [{[:marks, 0, :data], :required}, {[:marks, 0, :type], :required}]}
 
   """
@@ -56,18 +56,29 @@ defmodule Visualize.Chart do
     Var
   }
 
-  alias Visualize.IR.Element
+  alias Visualize.IR.{Element, Transform}
 
-  @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :defs, :frame, :marks, :labels]
+  @design_keys [
+    :version,
+    :meta,
+    :sources,
+    :vars,
+    :theme,
+    :styles,
+    :defs,
+    :frames,
+    :marks,
+    :labels
+  ]
 
-  defstruct version: 1,
+  defstruct version: 2,
             meta: %{},
             sources: %{},
             vars: %{},
             theme: :default,
             styles: %{},
             defs: %{},
-            frame: nil,
+            frames: nil,
             marks: [],
             labels: []
 
@@ -79,7 +90,7 @@ defmodule Visualize.Chart do
           theme: atom() | map(),
           styles: %{atom() => map()},
           defs: %{atom() => map()},
-          frame: map() | nil,
+          frames: %{atom() => map()} | nil,
           marks: [map()],
           labels: [map()]
         }
@@ -268,10 +279,10 @@ defmodule Visualize.Chart do
   ## Examples
 
       iex> design = %{
-      ...>   version: 1,
+      ...>   version: 2,
       ...>   sources: %{primary: %{fields: [:t, :v], default: :uptime}},
       ...>   vars: %{unit: %{default: "%"}},
-      ...>   frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}},
+      ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
       ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}],
       ...>   labels: [%{anchor: {:axis, :y}, text: ["unit: ", Visualize.Chart.var(:unit)]}]
       ...> }
@@ -294,8 +305,15 @@ defmodule Visualize.Chart do
     with {:ok, chart} <- Template.resolve(chart, vars),
          {:ok, sources} <- Template.bind(chart, pool),
          :ok <- Validator.validate(to_map(chart)) do
-      frame = Frame.new(chart, [sources: sources] ++ Keyword.take(opts, [:theme, :now, :size]))
-      {:ok, %Applied{chart: chart, sources: sources, frame: frame}}
+      shared = [sources: sources] ++ Keyword.take(opts, [:theme, :now, :size])
+
+      frames =
+        Map.new(chart.frames, fn {name, _} ->
+          {name, Frame.new(chart, [frame: name] ++ shared)}
+        end)
+
+      frame = frames |> Map.values() |> Enum.min_by(& &1.name)
+      {:ok, %Applied{chart: chart, sources: sources, frame: frame, frames: frames}}
     end
   end
 
@@ -329,7 +347,7 @@ defmodule Visualize.Chart do
   ## Examples
 
       iex> house = %{styles: %{series: %{stroke_width: 2}}, labels: [%{anchor: :caption, text: ["© house"]}]}
-      iex> chart = %{version: 1, frame: %{kind: :cartesian}, labels: [%{anchor: :title, text: ["Uptime"]}]}
+      iex> chart = %{version: 2, frames: %{main: %{kind: :cartesian}}, labels: [%{anchor: :title, text: ["Uptime"]}]}
       iex> {:ok, design} = Visualize.Chart.compose(house, chart)
       iex> Enum.map(design.labels, & &1.anchor)
       [:caption, :title]
@@ -348,11 +366,11 @@ defmodule Visualize.Chart do
 
   ## Examples
 
-      iex> theme = %{version: 1, theme: :default, frame: %{kind: :cartesian}}
-      iex> house = %{theme: :dark, frame: %{margin: %{top: 800, bottom: 400}}}
-      iex> panel = %{frame: %{margin: %{top: 600, bottom: 300}}}
+      iex> theme = %{version: 2, theme: :default, frames: %{main: %{kind: :cartesian}}}
+      iex> house = %{theme: :dark, frames: %{main: %{margin: %{top: 800, bottom: 400}}}}
+      iex> panel = %{frames: %{main: %{margin: %{top: 600, bottom: 300}}}}
       iex> design = Visualize.Chart.stack([theme, house, panel])
-      iex> {design.theme, design.frame.kind, design.frame.margin}
+      iex> {design.theme, design.frames.main.kind, design.frames.main.margin}
       {:dark, :cartesian, %{top: 600, bottom: 300}}
 
   """
@@ -414,12 +432,12 @@ defmodule Visualize.Chart do
 
   ## Examples
 
-      iex> house = %{theme: :dark, frame: %{margin: %{top: 800, bottom: 400}}}
-      iex> panel = %{frame: %{margin: %{top: 600}}}
+      iex> house = %{theme: :dark, frames: %{main: %{margin: %{top: 800, bottom: 400}}}}
+      iex> panel = %{frames: %{main: %{margin: %{top: 600}}}}
       iex> Visualize.Chart.explain([{:house, house}, {:panel, panel}])
       [
-        %{path: [:frame, :margin, :bottom], value: 400, layer: :house, overrode: []},
-        %{path: [:frame, :margin, :top], value: 600, layer: :panel, overrode: [:house]},
+        %{path: [:frames, :main, :margin, :bottom], value: 400, layer: :house, overrode: []},
+        %{path: [:frames, :main, :margin, :top], value: 600, layer: :panel, overrode: [:house]},
         %{path: [:theme], value: :dark, layer: :house, overrode: []}
       ]
 
@@ -487,9 +505,9 @@ defmodule Visualize.Chart do
   ## Examples
 
       iex> design = %{
-      ...>   version: 1,
+      ...>   version: 2,
       ...>   sources: %{primary: %{fields: [:t, :v]}},
-      ...>   frame: %{kind: :cartesian, scales: %{x: %{kind: :linear, domain: [0, 10]}, y: %{kind: :linear, domain: [0, 10]}}},
+      ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear, domain: [0, 10]}, y: %{kind: :linear, domain: [0, 10]}}}},
       ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...> }
       iex> {:ok, compiled} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}}, ceiling: 1)
@@ -530,8 +548,8 @@ defmodule Visualize.Chart do
     * `:responsive` - the root's, as `Visualize.IR.Element.root/3` takes it
   """
   @spec generate(Applied.t(), keyword()) :: Element.t()
-  def generate(%Applied{chart: chart, frame: frame, sources: sources}, opts) do
-    group = Frame.generate(frame, Keyword.take(opts, [:resolve, :paths]) ++ [sources: sources])
+  def generate(%Applied{chart: chart, frame: frame, frames: frames, sources: sources}, opts) do
+    group = frames_group(realised(frames, frame), sources, opts)
 
     if Keyword.get(opts, :root, false) do
       meta = chart.meta || %{}
@@ -546,6 +564,61 @@ defmodule Visualize.Chart do
     else
       group
     end
+  end
+
+  # An `%Applied{}` assembled by hand — one frame realised through `Visualize.Chart.Frame.new/2`
+  # and no `frames` — draws that frame alone, so a caller that has one frame need not name it.
+  defp realised(frames, frame) when frames == %{} or is_nil(frames), do: %{frame.name => frame}
+  defp realised(frames, _frame), do: frames
+
+  # Every frame drawn at its own pixel box, in `z` order with ties broken by name
+  # (spec/14 §4.7, #383): one group per frame, the design's own group when there is only
+  # one so a single-frame design renders exactly what it always did.
+  defp frames_group(frames, sources, opts) do
+    draw = Keyword.take(opts, [:resolve, :paths]) ++ [sources: sources]
+
+    case Map.values(frames) do
+      [only] ->
+        Frame.generate(only, draw)
+
+      many ->
+        many
+        |> Enum.sort_by(&{&1.z, &1.name})
+        |> Enum.map(&frame_group(&1, draw))
+        |> Element.group()
+    end
+  end
+
+  # One group per frame, at the frame's own pixel box: `Visualize.Chart.Frame.generate/2`
+  # already returns a `class="frame"` group translated by the margins, so its children are
+  # taken and the two translations composed — a frame is one group, not two nested ones
+  # that share a class.
+  defp frame_group(%Frame{} = frame, draw) do
+    [x, y, w, h] = frame.box
+    {width, height} = {frame.size.width, frame.size.height}
+    %Element{children: inner} = Frame.generate(frame, draw)
+    margin = frame.margin
+
+    children =
+      case frame.background do
+        nil -> inner
+        paint -> [background(w * width, h * height, margin, paint) | inner]
+      end
+
+    Element.group(children,
+      style: %{class: "frame frame-#{frame.name}"},
+      attrs: %{"data-node" => "frames.#{frame.name}"},
+      transform: Transform.translate(x * width + margin.left, y * height + margin.top)
+    )
+  end
+
+  # The frame's own box, painted under its contents: the group is translated by the
+  # margins, so the rect starts back at the box's corner.
+  defp background(width, height, margin, paint) do
+    Element.new(:rect,
+      attrs: %{x: -margin.left, y: -margin.top, width: width, height: height},
+      style: %{fill: paint}
+    )
   end
 
   # A meta text as the root's string, `nil` when absent or empty; an applied chart has no

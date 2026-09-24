@@ -19,13 +19,13 @@ defmodule Visualize.Chart.Frame do
 
       iex> chart =
       ...>   Visualize.Chart.from_map!(%{
-      ...>     version: 1,
+      ...>     version: 2,
       ...>     sources: %{primary: %{fields: [:t, :v]}},
-      ...>     frame: %{
+      ...>     frames: %{main: %{
       ...>       kind: :cartesian,
       ...>       scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}},
       ...>       axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, grid: true}]
-      ...>     },
+      ...>     }},
       ...>     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...>   })
       iex> frame = Visualize.Chart.Frame.new(chart, sources: %{primary: %{t: [1, 2, 3], v: [4, 9, 2]}}, size: {300, 200})
@@ -60,7 +60,13 @@ defmodule Visualize.Chart.Frame do
             styles: %{},
             design_styles: %{},
             defs: %{},
-            now: nil
+            now: nil,
+            name: nil,
+            mark_paths: [],
+            label_paths: [],
+            box: [0, 0, 1, 1],
+            z: 0,
+            background: nil
 
   @typedoc "A frame kind of spec/14 §4.1."
   @type kind :: :cartesian | :polar | :geo | :facet
@@ -82,7 +88,13 @@ defmodule Visualize.Chart.Frame do
           styles: %{atom() => map()},
           design_styles: %{atom() => map()},
           defs: %{atom() => map()},
-          now: term() | nil
+          now: term() | nil,
+          name: atom() | nil,
+          mark_paths: [non_neg_integer()],
+          label_paths: [non_neg_integer()],
+          box: [number()],
+          z: integer(),
+          background: term() | nil
         }
 
   # The size a frame is realised at when the caller gives none (spec/14 §4.2): a static
@@ -114,14 +126,18 @@ defmodule Visualize.Chart.Frame do
   @spec new(Chart.t(), keyword()) :: t()
   def new(%Chart{} = chart, opts \\ []) do
     sources = Keyword.get(opts, :sources, %{})
-    node = chart.frame
+    {name, node} = frame_node(chart, Keyword.get(opts, :frame))
     kind = node.kind
     size = size(Keyword.get(opts, :size, @default_size))
     margin = margin(Map.get(node, :margin, Schema.default(:frame, :margin)))
 
+    # The frame's own pixel box is its fractions of the render's (spec/14 §4.2, #383), and
+    # its plot is that less its margins: `size` stays the design's, which is the root's.
+    [_bx, _by, bw, bh] = box = box(node)
+
     plot = %{
-      width: size.width - margin.left - margin.right,
-      height: size.height - margin.top - margin.bottom
+      width: bw * size.width - margin.left - margin.right,
+      height: bh * size.height - margin.top - margin.bottom
     }
 
     now = Keyword.get(opts, :now)
@@ -136,6 +152,8 @@ defmodule Visualize.Chart.Frame do
     scales =
       Scales.realise(
         chart,
+        node,
+        mine(chart.marks, name, chart),
         kind,
         scale_plot,
         theme,
@@ -160,8 +178,14 @@ defmodule Visualize.Chart.Frame do
       facet: facet,
       axes: Map.get(node, :axes, []),
       legend: legend,
-      labels: chart.labels,
-      marks: chart.marks,
+      labels: mine(chart.labels, name, chart),
+      marks: mine(chart.marks, name, chart),
+      name: name,
+      mark_paths: paths_of(chart.marks, name, chart),
+      label_paths: paths_of(chart.labels, name, chart),
+      box: box,
+      z: Map.get(node, :z, Schema.default(:frame, :z)),
+      background: Map.get(node, :background),
       theme: theme,
       styles: styles,
       design_styles: chart.styles,
@@ -209,19 +233,19 @@ defmodule Visualize.Chart.Frame do
       reads, as `new/2` takes; when given, the marks are drawn from them (spec/14 §5.6)
     * `:paths` - `true` for every design node's element to carry `data-node` with the
       node's path as `Visualize.Chart.Validator.format_path/1` spells it — `frame`,
-      `marks[0]`, `frame.axes[0]`, `frame.legend`, `labels[0]` — for a caller that must
+      `marks[0]`, `frames.main.axes[0]`, `frames.main.legend`, `labels[0]` — for a caller that must
       name what it drew, as the builder's graph does (spec/14 §4.7, D-105); `false`
       (default) leaves the markup as it is
 
   ## Examples
 
-      iex> chart = Visualize.Chart.from_map!(%{version: 1, sources: %{s: %{fields: [:x, :y]}},
-      ...>   frame: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}},
+      iex> chart = Visualize.Chart.from_map!(%{version: 2, sources: %{s: %{fields: [:x, :y]}},
+      ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
       ...>   marks: [%{type: :line, data: :s, channels: %{x: :x, y: :y}}]})
       iex> rows = [%{x: 0, y: 1}, %{x: 1, y: 2}]
       iex> group = Visualize.Chart.Frame.new(chart, sources: %{s: rows}) |> Visualize.Chart.Frame.generate(sources: %{s: rows}, paths: true)
       iex> {group.attrs["data-node"], Enum.map(group.children, & &1.attrs["data-node"])}
-      {"frame", ["marks[0]"]}
+      {"frames.main", ["marks[0]"]}
   """
   @spec generate(t(), keyword()) :: Element.t()
   def generate(%__MODULE__{} = frame, opts) do
@@ -238,7 +262,7 @@ defmodule Visualize.Chart.Frame do
         style: %{class: "frame"},
         transform: Transform.translate(frame.margin.left, frame.margin.top)
       )
-      |> stamp([:frame], paths?)
+      |> stamp([:frames, frame.name], paths?)
       |> Defs.resolve(frame, mode)
       |> Lines.split()
 
@@ -287,6 +311,57 @@ defmodule Visualize.Chart.Frame do
   # What a mark's pipeline sees of the frame (spec/14 §5.4).
   defp context(plot, projection, now),
     do: %{size: [plot.width, plot.height], projection: projection, now: now}
+
+  # Which frame `new/2` realises: the one `frame:` names, else the design's only one — a
+  # design with several and no name given is an authoring error, not a default (spec/14
+  # §4.1, #383).
+  defp frame_node(%Chart{frames: frames}, nil) when map_size(frames) == 1 do
+    frames |> Enum.to_list() |> hd()
+  end
+
+  defp frame_node(%Chart{frames: frames}, nil) do
+    raise ArgumentError,
+          "this design has #{map_size(frames)} frames (#{inspect(Map.keys(frames))}); " <>
+            "say which with frame: (spec/14 §4.1)"
+  end
+
+  defp frame_node(%Chart{frames: frames}, name) do
+    case Map.fetch(frames, name) do
+      {:ok, node} ->
+        {name, node}
+
+      :error ->
+        raise ArgumentError, "the design declares no frame #{inspect(name)} (spec/14 §4.1)"
+    end
+  end
+
+  # A mark or a label belongs to the frame it names, and to the only frame when it names
+  # none (spec/14 §5.1, §6.1).
+  defp mine(nodes, name, %Chart{frames: frames}) do
+    if map_size(frames) == 1 do
+      nodes
+    else
+      Enum.filter(nodes, &(Map.get(&1, :frame) == name))
+    end
+  end
+
+  # The design positions of the nodes this frame draws, so an element carries the path the
+  # design gives it and not the position within the frame (spec/14 §4.7, D-105).
+  defp paths_of(nodes, name, chart) do
+    mine = mine(nodes, name, chart)
+    for {node, i} <- Enum.with_index(nodes), node in mine, do: i
+  end
+
+  # A frame's pixel box is its fractions of the render's (spec/14 §4.2).
+  defp box(node) do
+    case Map.get(node, :box, Schema.default(:frame, :box)) do
+      [x, y, w, h] when is_number(x) and is_number(y) and is_number(w) and is_number(h) ->
+        [x, y, w, h]
+
+      other ->
+        raise ArgumentError, "box: is [x, y, w, h] in fractions, got #{inspect(other)}"
+    end
+  end
 
   defp size({width, height}) when is_number(width) and is_number(height),
     do: %{width: width, height: height}
@@ -424,7 +499,7 @@ defmodule Visualize.Chart.Frame do
     Enum.with_index(frame.marks, fn mark, i ->
       frame
       |> Mark.generate(mark, [sources: sources, resolve: mode, index: i + 1] ++ opts)
-      |> stamp([:marks, i], paths?)
+      |> stamp([:marks, Enum.at(frame.mark_paths, i, i)], paths?)
     end)
   end
 

@@ -11,8 +11,8 @@ defmodule Visualize.Chart.Validator do
 
   ## Examples
 
-      iex> Visualize.Chart.Validator.validate(%{version: 1})
-      {:error, [{[:frame], :required}]}
+      iex> Visualize.Chart.Validator.validate(%{version: 2})
+      {:error, [{[:frames], :required}]}
       iex> Visualize.Chart.Validator.format({[:marks, 1, :channels, :y], :required})
       "marks[1].channels.y: is required"
 
@@ -70,7 +70,7 @@ defmodule Visualize.Chart.Validator do
 
   A design is validated whole. A composite must be `%{composite: %{uses, vars}}` and nothing
   else, its uses sites. Any other kind is the singular body under its key — `%{style: %{…}}`,
-  `%{frame: %{…}}` — walked with that kind's schema and no design around it, so a reference
+  `%{frames: %{main: %{…}}}` — walked with that kind's schema and no design around it, so a reference
   to a scale, style, source, variable or field the fragment does not declare is not a fault:
   a fragment is a piece, and what it refers to is bound where it is composed. A fragment
   whose one key is not the kind's is refused as `{:type, {:node, kind}}`.
@@ -196,9 +196,17 @@ defmodule Visualize.Chart.Validator do
   # -- context: what the design declares -----------------------------------------------
 
   defp context(map) do
+    frames = if is_map(map[:frames]), do: map[:frames], else: %{}
+    one = if map_size(frames) == 1, do: frames |> Map.values() |> hd()
+
     %{
-      scales: declared(nested(map, [:frame, :scales])),
-      frame_kind: nested(map, [:frame, :kind]),
+      # A scale name resolves inside a mark's *own* frame (spec/14 §5.1, #383): the
+      # design-level context is the single frame's where there is one, and `enter(:mark)`
+      # narrows it to the frame the mark names where there are several.
+      frames: declared(map[:frames]),
+      frame_nodes: frames,
+      scales: declared(one && nested(one, [:scales])),
+      frame_kind: one && nested(one, [:kind]),
       styles: union(declared(map[:styles]), Schema.builtin_styles()),
       paints: declared(map[:defs] || %{}),
       sources: source_fields(map[:sources]),
@@ -311,15 +319,17 @@ defmodule Visualize.Chart.Validator do
   defp enter(:mark, map, ctx) do
     type = map[:type]
 
-    %{
-      ctx
-      | mark_type: if(type in Schema.mark_types(), do: type),
-        fields: mark_fields(map[:data], ctx),
-        datum?: true
-    }
+    ctx
+    |> in_frame(map[:frame])
+    |> Map.merge(%{
+      mark_type: if(type in Schema.mark_types(), do: type),
+      fields: mark_fields(map[:data], ctx),
+      datum?: true
+    })
   end
 
-  defp enter(:label, _map, ctx), do: %{ctx | datum?: false}
+  defp enter(:label, map, ctx), do: %{in_frame(ctx, map[:frame]) | datum?: false}
+
   defp enter(:channels, map, ctx), do: %{ctx | channel_keys: Map.keys(map)}
 
   defp enter(:transform, map, ctx) do
@@ -327,7 +337,24 @@ defmodule Visualize.Chart.Validator do
     %{ctx | op: if(op in Schema.transform_ops(), do: op), transform_keys: Map.keys(map)}
   end
 
+  # Inside a frame, a scale name is that frame's (spec/14 §4.3, #383): its axes and its
+  # legend read the scales it declares, whatever the design's other frames declare.
+  defp enter(:frame, map, ctx) do
+    %{ctx | scales: declared(map[:scales]), frame_kind: map[:kind]}
+  end
+
   defp enter(_kind, _map, ctx), do: ctx
+
+  # The scales and the kind a node's scale references resolve against: its own frame's
+  # where it names one, the design-level context's otherwise (spec/14 §5.1, §6.1).
+  defp in_frame(ctx, nil), do: ctx
+
+  defp in_frame(%{frame_nodes: frames} = ctx, name) when is_map_key(frames, name) do
+    node = Map.fetch!(frames, name)
+    %{ctx | scales: declared(nested(node, [:scales])), frame_kind: nested(node, [:kind])}
+  end
+
+  defp in_frame(ctx, _name), do: ctx
 
   defp mark_fields(name, ctx) when is_atom(name), do: fields_of(name, ctx)
 
@@ -365,6 +392,13 @@ defmodule Visualize.Chart.Validator do
     for s <- Schema.describe(:transform), s.key == :op or s.key in (required ++ optional) do
       %{s | required: s.key == :op or s.key in required, type: as_type(s, op)}
     end
+  end
+
+  # A mark or a label says its frame when the design holds more than one (spec/14 §5.1,
+  # §6.1, #383): with one frame there is nothing to say and the key means that frame.
+  defp specs(kind, %{frame_nodes: frames})
+       when kind in [:mark, :label] and is_map(frames) and map_size(frames) > 1 do
+    for s <- Schema.describe(kind), do: if(s.key == :frame, do: %{s | required: true}, else: s)
   end
 
   defp specs(kind, _ctx), do: Schema.describe(kind)
@@ -612,6 +646,7 @@ defmodule Visualize.Chart.Validator do
   defp plural(:var), do: :vars
   defp plural(:field), do: :fields
   defp plural(:slot), do: :slots
+  defp plural(:frame), do: :frames
 
   # -- formatting -----------------------------------------------------------------------
 

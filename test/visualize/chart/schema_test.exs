@@ -10,7 +10,7 @@ defmodule Visualize.Chart.SchemaTest do
   doctest Schema
 
   @facets [:binding, :channel, :geometry, :style, :content]
-  @merges [:concat, :union, :override]
+  @merges [:concat, :union, :deep, :override]
 
   test "every key of every kind carries a facet and a merge rule" do
     for kind <- Schema.kinds(), spec <- Schema.describe(kind) do

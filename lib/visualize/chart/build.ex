@@ -44,7 +44,7 @@ defmodule Visualize.Chart.Build do
       ...>   ])
       iex> design.marks
       [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
-      iex> design.frame.scales
+      iex> design.frames.main.scales
       %{x: %{kind: :time}, y: %{kind: :linear, domain: [0, :auto]}}
       iex> {:ok, _chart} = Visualize.Chart.from_map(design)
 
@@ -158,9 +158,9 @@ defmodule Visualize.Chart.Build do
 
   # -- the frame (spec/14 §16.3) ----------------------------------------------------------
 
-  @doc "As `cartesian/1` with no options."
+  @doc "As `cartesian/2` under the name `:main`, with no options."
   @spec cartesian() :: fragment()
-  def cartesian, do: cartesian([])
+  def cartesian, do: cartesian(:main, [])
 
   @doc """
   A `:cartesian` frame (spec/14 §4.1).
@@ -168,32 +168,50 @@ defmodule Visualize.Chart.Build do
   `opts` are the frame's keys; its scales, axes and legend are their own fragments
   (`scale/3`, `axis/3`, `legend/2`). A frame carries no size — the render gives it (§4.2).
   """
-  @spec cartesian(opts()) :: fragment()
-  def cartesian(opts), do: frame(:cartesian, opts)
+  @spec cartesian(atom() | opts()) :: fragment()
+  def cartesian(name) when is_atom(name), do: cartesian(name, [])
+  def cartesian(opts), do: cartesian(:main, opts)
+
+  @doc """
+  A named `:cartesian` frame (spec/14 §4.1): a design holds its frames by name, and a
+  design that declares one names it `:main` unless it says otherwise.
+  """
+  @spec cartesian(atom(), opts()) :: fragment()
+  def cartesian(name, opts), do: frame(name, :cartesian, opts)
 
   @doc "As `polar/1` with no options."
   @spec polar() :: fragment()
-  def polar, do: polar([])
+  def polar, do: polar(:main, [])
 
   @doc "A `:polar` frame (spec/14 §4.6): `angle` and `r` are its scales."
-  @spec polar(opts()) :: fragment()
-  def polar(opts), do: frame(:polar, opts)
+  @spec polar(atom() | opts()) :: fragment()
+  def polar(name) when is_atom(name), do: polar(name, [])
+  def polar(opts), do: polar(:main, opts)
+
+  @doc "A named `:polar` frame (spec/14 §4.1)."
+  @spec polar(atom(), opts()) :: fragment()
+  def polar(name, opts), do: frame(name, :polar, opts)
 
   @doc "As `geo/1` with no options."
   @spec geo() :: fragment()
-  def geo, do: geo([])
+  def geo, do: geo(:main, [])
 
   @doc """
   A `:geo` frame (spec/14 §4.6).
 
   The projection is the frame's `projection:` key, a `:projection` node.
   """
-  @spec geo(opts()) :: fragment()
-  def geo(opts), do: frame(:geo, opts)
+  @spec geo(atom() | opts()) :: fragment()
+  def geo(name) when is_atom(name), do: geo(name, [])
+  def geo(opts), do: geo(:main, opts)
+
+  @doc "A named `:geo` frame (spec/14 §4.1)."
+  @spec geo(atom(), opts()) :: fragment()
+  def geo(name, opts), do: frame(name, :geo, opts)
 
   @doc "As `facet/1` with no options."
   @spec facet() :: fragment()
-  def facet, do: facet([])
+  def facet, do: facet(:main, [])
 
   @doc """
   A `:facet` frame (spec/14 §4.6).
@@ -201,10 +219,15 @@ defmodule Visualize.Chart.Build do
   `by:` and `columns:`, the keys of the `:facet` node, are lifted into the frame's `facet`
   key: a `:facet` frame and its `facet` node name the same thing.
   """
-  @spec facet(opts()) :: fragment()
-  def facet(opts) do
+  @spec facet(atom() | opts()) :: fragment()
+  def facet(name) when is_atom(name), do: facet(name, [])
+  def facet(opts), do: facet(:main, opts)
+
+  @doc "A named `:facet` frame (spec/14 §4.6)."
+  @spec facet(atom(), opts()) :: fragment()
+  def facet(name, opts) do
     {facet, rest} = opts |> Map.new() |> Map.split([:by, :columns])
-    frame(:facet, if(facet == %{}, do: rest, else: Map.put(rest, :facet, facet)))
+    frame(name, :facet, if(facet == %{}, do: rest, else: Map.put(rest, :facet, facet)))
   end
 
   @doc "As `scale/3` with no options."
@@ -214,7 +237,7 @@ defmodule Visualize.Chart.Build do
   @doc "One declared scale of the frame (spec/14 §4.3); `opts` are its remaining keys."
   @spec scale(atom(), atom(), opts()) :: fragment()
   def scale(name, kind, opts) do
-    %{frame: %{scales: %{name => node(:scale, %{kind: kind}, opts)}}}
+    %{frames: %{main: %{scales: %{name => node(:scale, %{kind: kind}, opts)}}}}
   end
 
   @doc "As `axis/3` with no options."
@@ -224,7 +247,7 @@ defmodule Visualize.Chart.Build do
   @doc "One axis of the frame, drawing `scale` on `side` (spec/14 §4.4)."
   @spec axis(atom(), atom(), opts()) :: fragment()
   def axis(scale, side, opts) do
-    %{frame: %{axes: [node(:axis, %{scale: scale, side: side}, opts)]}}
+    %{frames: %{main: %{axes: [node(:axis, %{scale: scale, side: side}, opts)]}}}
   end
 
   @doc "As `legend/2` with no options."
@@ -233,7 +256,7 @@ defmodule Visualize.Chart.Build do
 
   @doc "The frame's legend, explaining `scale` (spec/14 §4.5)."
   @spec legend(atom(), opts()) :: fragment()
-  def legend(scale, opts), do: %{frame: %{legend: node(:legend, %{scale: scale}, opts)}}
+  def legend(scale, opts), do: %{frames: %{main: %{legend: node(:legend, %{scale: scale}, opts)}}}
 
   # -- marks and labels (spec/14 §16.4) ---------------------------------------------------
 
@@ -287,7 +310,7 @@ defmodule Visualize.Chart.Build do
 
   # -- the schema's word on every key -----------------------------------------------------
 
-  defp frame(kind, opts), do: %{frame: node(:frame, %{kind: kind}, opts)}
+  defp frame(name, kind, opts), do: %{frames: %{name => node(:frame, %{kind: kind}, opts)}}
 
   defp step(source, base, opts) when is_atom(source), do: step(from(source), base, opts)
 

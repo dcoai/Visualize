@@ -139,20 +139,20 @@ defmodule ExamplesWeb.BuilderLive do
 
     defp house,
       do: %{
-        version: 1,
+        version: 2,
         meta: %{name: "Uptime"},
         theme: :default,
         styles: %{series: %{stroke: :series_1, stroke_width: 2, curve: :monotone_x}},
-        frame: %{
+        frames: %{main: %{
           kind: :cartesian,
           margin: %{top: 24, right: 24, bottom: 32, left: 48}
-        }
+        }}
       }
 
     defp shared,
       do: %{
         sources: %{primary: %{fields: [:hour, :value]}},
-        frame: %{
+        frames: %{main: %{
           scales: %{
             hour: %{kind: :linear, domain: :auto},
             value: %{kind: :linear, domain: [0, :auto], nice: true}
@@ -161,7 +161,7 @@ defmodule ExamplesWeb.BuilderLive do
             %{scale: :hour, side: :bottom, ticks: 6},
             %{scale: :value, side: :left, ticks: 5, grid: true}
           ]
-        }
+        }}
       }
 
     defp panel,
@@ -188,18 +188,18 @@ defmodule ExamplesWeb.BuilderLive do
         {"Uptime::shared", composite(shared())},
         {"Uptime::panel", composite(panel())},
         {"Theme::dark", %{theme: :dark}},
-        {"Frame:axes:no grid", %{frame: %{axes: [%{scale: :value, side: :left, grid: false}]}}},
+        {"Frame:axes:no grid", %{frames: %{main: %{axes: [%{scale: :value, side: :left, grid: false}]}}}},
         {"Frame:axes:dense ticks",
          %{
-           frame: %{
+           frames: %{main: %{
              axes: [
                %{scale: :hour, side: :bottom, ticks: 12},
                %{scale: :value, side: :left, ticks: 10}
              ]
-           }
+           }}
          }},
-        {"Frame:margin:wide", %{frame: %{margin: %{top: 900, bottom: 320}}}},
-        {"Frame:margin:roomy", %{frame: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}}},
+        {"Frame:margin:wide", %{frames: %{main: %{margin: %{top: 900, bottom: 320}}}}},
+        {"Frame:margin:roomy", %{frames: %{main: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}}}},
         # Bodies, not declarations: the composite says the name a style is declared under
         # (spec/14 §19.3), so a body serves any chart, whatever it calls its style.
         {"Styles::thick line", %{style: %{stroke_width: 5}}},

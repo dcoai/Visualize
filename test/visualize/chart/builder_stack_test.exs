@@ -37,7 +37,7 @@ defmodule Visualize.Chart.Builder.StackTest do
     end
 
     test "a layer with no name is its position, as seed/1 and explain/1 name it" do
-      {uses, labels} = Visualize.Chart.Builder.Stack.seed([%{version: 1}, %{theme: :dark}])
+      {uses, labels} = Visualize.Chart.Builder.Stack.seed([%{version: 2}, %{theme: :dark}])
 
       rows =
         for {use, row} <- Enum.zip(uses, BuilderFixture.rows()),
@@ -98,7 +98,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       entries = Chart.explain(BuilderFixture.layers())
 
       assert length(Regex.scan(~r/class="vis-builder-entry"/, html)) == length(entries)
-      assert html =~ ~s(<td class="vis-builder-entry-path">frame.axes[0].scale</td>)
+      assert html =~ ~s(<td class="vis-builder-entry-path">frames.main.axes[0].scale</td>)
       assert html =~ ~s(<td class="vis-builder-entry-value">:x</td>)
       assert html =~ ~s(<td class="vis-builder-entry-layer">shared</td>)
     end
@@ -123,14 +123,14 @@ defmodule Visualize.Chart.Builder.StackTest do
       end
 
       assert_raise ArgumentError, ~r/layer "1" is nil/, fn ->
-        Visualize.Chart.Builder.Stack.seed([%{frame: %{}}, nil])
+        Visualize.Chart.Builder.Stack.seed([%{frames: %{main: %{}}}, nil])
       end
     end
   end
 
   describe "the events (spec/14 §18.8, §18.10)" do
     test "selecting a layer opens its root node" do
-      socket = BuilderFixture.socket(BuilderFixture.layers(), node_label: "frame.margin")
+      socket = BuilderFixture.socket(BuilderFixture.layers(), node_label: "frames.main.margin")
       {:noreply, chosen} = Builder.handle_event("select_layer", %{"index" => "2"}, socket)
       {:noreply, absent} = Builder.handle_event("select_layer", %{"index" => "9"}, socket)
 
@@ -148,7 +148,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       assert BuilderFixture.disabled(off) == MapSet.new([0])
       # Flatten writes the version a deployed design carries (§19.8); the house wrote it before.
       assert BuilderFixture.design(off) ==
-               Map.put(Chart.stack(Enum.drop(BuilderFixture.layers(), 1)), :version, 1)
+               Map.put(Chart.stack(Enum.drop(BuilderFixture.layers(), 1)), :version, 2)
 
       assert BuilderFixture.disabled(on) == MapSet.new()
     end

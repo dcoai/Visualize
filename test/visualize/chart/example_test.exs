@@ -64,9 +64,9 @@ defmodule Visualize.Chart.ExampleTest do
     assert {:ok, applied} = Chart.apply(example(), sources: sources(), vars: %{unit: "mg/hr"})
 
     # The histogram's bins line up with the line on `y`; its counts run along `count`.
-    assert Frame.scale(applied.frame, :count).domain == [0, 1]
-    assert Frame.scale(applied.frame, :count).range == [0, 120]
-    assert Frame.scale(applied.frame, :y).domain == [0.0, 100.0]
+    assert Frame.scale(applied.frames.main, :count).domain == [0, 1]
+    assert Frame.scale(applied.frames.main, :count).range == [0, 120]
+    assert Frame.scale(applied.frames.main, :y).domain == [0.0, 100.0]
 
     svg = Chart.render(applied)
     assert svg =~ ~s(class="mark mark-line")

@@ -26,9 +26,9 @@ defmodule Visualize.Chart.FrameTest do
     Chart.from_map!(
       Map.merge(
         %{
-          version: 1,
+          version: 2,
           sources: %{primary: %{fields: [:t, :v, :n, :k]}},
-          frame: Map.merge(%{kind: :cartesian}, frame)
+          frames: %{main: Map.merge(%{kind: :cartesian}, frame)}
         },
         extra
       )
@@ -536,10 +536,10 @@ defmodule Visualize.Chart.FrameTest do
       assert a != b
 
       design = %{
-        version: 1,
+        version: 2,
         defs: @defs,
         styles: %{wash: %{fill: {:paint, :nope}}},
-        frame: %{kind: :cartesian}
+        frames: %{main: %{kind: :cartesian}}
       }
 
       assert Visualize.Chart.Validator.validate(design) ==
@@ -799,21 +799,23 @@ defmodule Visualize.Chart.FrameTest do
   describe "byte identity with hand-built furniture" do
     test "a cartesian frame with two axes and a legend is the hand-built axes and legend" do
       design = %{
-        version: 1,
+        version: 2,
         sources: %{primary: %{fields: [:t, :v, :k]}},
-        frame: %{
-          kind: :cartesian,
-          margin: %{top: 20, right: 20, bottom: 30, left: 40},
-          scales: %{
-            x: %{kind: :time, domain: :auto},
-            y: %{kind: :linear, domain: [0, :auto], nice: true},
-            color: %{kind: :ordinal}
-          },
-          axes: [
-            %{scale: :x, side: :bottom, ticks: 6, format: "%H:%M"},
-            %{scale: :y, side: :left, ticks: 5}
-          ],
-          legend: %{scale: :color, position: :top_right}
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            margin: %{top: 20, right: 20, bottom: 30, left: 40},
+            scales: %{
+              x: %{kind: :time, domain: :auto},
+              y: %{kind: :linear, domain: [0, :auto], nice: true},
+              color: %{kind: :ordinal}
+            },
+            axes: [
+              %{scale: :x, side: :bottom, ticks: 6, format: "%H:%M"},
+              %{scale: :y, side: :left, ticks: 5}
+            ],
+            legend: %{scale: :color, position: :top_right}
+          }
         },
         marks: [
           %{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :by_k}
@@ -949,12 +951,12 @@ defmodule Visualize.Chart.FrameTest do
       svg = Frame.render(addressed(), sources: %{primary: @rows}, paths: true)
 
       assert nodes(svg) == [
-               "frame",
+               "frames.main",
                "marks[0]",
                "marks[1]",
-               "frame.axes[0]",
-               "frame.axes[1]",
-               "frame.legend",
+               "frames.main.axes[0]",
+               "frames.main.axes[1]",
+               "frames.main.legend",
                "labels[0]",
                "labels[1]"
              ]
@@ -964,10 +966,10 @@ defmodule Visualize.Chart.FrameTest do
       [grid | _] = Enum.reject(group.children, &(&1.type == :defs))
       assert grid.style.class == "grid" and grid.attrs["data-node"] == nil
 
-      assert svg =~ ~s(<g class="frame" data-node="frame" transform=)
+      assert svg =~ ~s(<g class="frame" data-node="frames.main" transform=)
       assert svg =~ ~s(<g class="mark mark-line" data-node="marks[0]")
-      assert svg =~ ~s(<g class="axis axis-bottom" data-node="frame.axes[0]")
-      assert svg =~ ~s(<g class="legend" data-node="frame.legend")
+      assert svg =~ ~s(<g class="axis axis-bottom" data-node="frames.main.axes[0]")
+      assert svg =~ ~s(<g class="legend" data-node="frames.main.legend")
       assert svg =~ ~s(<text class="label" data-node="labels[0]")
     end
 
@@ -979,7 +981,7 @@ defmodule Visualize.Chart.FrameTest do
       # The furniture alone, and the applied chart through Visualize.Chart.render/2, likewise.
       refute Frame.render(frame) =~ "data-node"
       refute Frame.render(frame, paths: true) =~ ~r/data-node="marks/
-      assert Frame.render(frame, paths: true) =~ ~s(data-node="frame.axes[1]")
+      assert Frame.render(frame, paths: true) =~ ~s(data-node="frames.main.axes[1]")
     end
 
     test "Visualize.Chart.render/2 passes the option through" do
@@ -990,7 +992,7 @@ defmodule Visualize.Chart.FrameTest do
 
       {:ok, applied} = Chart.apply(chart, sources: %{primary: @rows}, size: @size)
       refute Chart.render(applied) =~ "data-node"
-      assert nodes(Chart.render(applied, paths: true)) == ["frame", "marks[0]"]
+      assert nodes(Chart.render(applied, paths: true)) == ["frames.main", "marks[0]"]
     end
 
     test "a facet frame's copies of one mark carry one path, and a polar frame's axes keep their positions" do
@@ -1007,7 +1009,14 @@ defmodule Visualize.Chart.FrameTest do
         |> Frame.new(sources: %{primary: @rows}, size: @size)
 
       svg = Frame.render(facet, sources: %{primary: @rows}, paths: true)
-      assert nodes(svg) == ["frame", "marks[0]", "frame.axes[0]", "marks[0]", "frame.axes[0]"]
+
+      assert nodes(svg) == [
+               "frames.main",
+               "marks[0]",
+               "frames.main.axes[0]",
+               "marks[0]",
+               "frames.main.axes[0]"
+             ]
 
       polar =
         chart(
@@ -1028,11 +1037,11 @@ defmodule Visualize.Chart.FrameTest do
       # The ring and the spoke are drawn inside the centred group, the cartesian axis
       # after it — and each keeps the position the design gave it.
       assert nodes(svg) == [
-               "frame",
+               "frames.main",
                "marks[0]",
-               "frame.axes[1]",
-               "frame.axes[2]",
-               "frame.axes[0]"
+               "frames.main.axes[1]",
+               "frames.main.axes[2]",
+               "frames.main.axes[0]"
              ]
     end
 
@@ -1165,6 +1174,157 @@ defmodule Visualize.Chart.FrameTest do
       # Inside, the margin is no concern.
       assert %Frame{} =
                legend_frame(%{position: :right}, %{top: 4, right: 10, bottom: 20, left: 20})
+    end
+  end
+
+  describe "a design holds its frames by name (spec/14 §2.1, §4.1, §4.2, §4.7, #383)" do
+    @two %{
+      version: 2,
+      sources: %{primary: %{fields: [:t, :v, :n, :k]}},
+      frames: %{
+        history: %{
+          kind: :cartesian,
+          box: [0, 0, 0.75, 1],
+          margin: %{top: 10, right: 10, bottom: 20, left: 40},
+          scales: %{x: %{kind: :time}, y: %{kind: :linear, domain: [0, 10]}},
+          axes: [%{scale: :x, side: :bottom}]
+        },
+        now: %{
+          kind: :cartesian,
+          box: [0.75, 0, 0.25, 1],
+          z: 1,
+          background: "#eeeeee",
+          margin: %{top: 10, right: 10, bottom: 20, left: 10},
+          scales: %{x: %{kind: :linear, domain: [0, 1]}, y: %{kind: :linear, domain: [0, 10]}}
+        }
+      },
+      marks: [
+        %{type: :line, frame: :history, data: :primary, channels: %{x: :t, y: :v}},
+        %{type: :symbol, frame: :now, data: :primary, channels: %{x: 0.5, y: :v}}
+      ]
+    }
+
+    defp applied(design \\ @two) do
+      {:ok, applied} = Chart.apply(design, sources: %{primary: @rows}, size: @size)
+      applied
+    end
+
+    test "every frame is realised by name, its plot its own box less its own margins" do
+      applied = applied()
+
+      assert applied.frames |> Map.keys() |> Enum.sort() == [:history, :now]
+      # 300 x 200: the history takes three quarters of the width, the gauge the last quarter.
+      assert applied.frames.history.plot == %{width: 0.75 * 300 - 50, height: 200 - 30}
+      assert applied.frames.now.plot == %{width: 0.25 * 300 - 20, height: 200 - 30}
+      # `size` stays the render's: the box is a fraction of it, not a size of its own.
+      assert applied.frames.now.size == %{width: 300, height: 200}
+    end
+
+    test "each frame is one group at its own box, in z order, tagged with its name" do
+      svg = Chart.render(applied(), paths: true)
+
+      assert [history, now] =
+               Regex.scan(~r/data-node="frames\.(\w+)"/, svg) |> Enum.map(&List.last/1)
+
+      # `now` has the higher z, so it is drawn last whatever the map's order.
+      assert {history, now} == {"history", "now"}
+
+      assert svg =~
+               ~s|<g class="frame frame-history" data-node="frames.history" transform="translate(40,10)"|
+
+      # 0.75 x 300 = 225, and the left margin of 10 on top of it.
+      assert svg =~
+               ~s|<g class="frame frame-now" data-node="frames.now" transform="translate(235,10)"|
+
+      # The background is a rect back at the frame's own corner, under its contents.
+      assert svg =~ ~s|<rect fill="#eeeeee" height="200" width="75.0" x="-10" y="-10"/>|
+
+      # A mark carries the path the design gives it, not its position within the frame.
+      assert svg =~ ~s|<g class="mark mark-symbol" data-node="marks[1]"|
+
+      # A frame without a background paints nothing: the one rect is the gauge's.
+      assert length(Regex.scan(~r/<rect /, svg)) == 1
+    end
+
+    test "z orders the frames, whatever order they are declared or enumerated in" do
+      # `a` sorts first by name and is drawn last, because its z is higher.
+      design = %{
+        @two
+        | frames: %{
+            a: Map.merge(@two.frames.now, %{z: 2, background: "#111111"}),
+            b: Map.merge(@two.frames.history, %{z: 1, background: "#222222"})
+          },
+          marks: [
+            put_in(hd(@two.marks).frame, :b),
+            put_in(List.last(@two.marks).frame, :a)
+          ]
+      }
+
+      {:ok, applied} = Chart.apply(design, sources: %{primary: @rows}, size: @size)
+      svg = Chart.render(applied, paths: true)
+
+      assert Regex.scan(~r/data-node="frames\.(\w+)"/, svg) |> Enum.map(&List.last/1) == [
+               "b",
+               "a"
+             ]
+    end
+
+    test "the same design at another size keeps its margins and moves its boxes" do
+      {:ok, applied} = Chart.apply(@two, sources: %{primary: @rows}, size: {600, 400})
+
+      # The margins are pixels and do not scale (§4.2); the boxes are fractions and do.
+      assert applied.frames.history.margin == %{top: 10, right: 10, bottom: 20, left: 40}
+      assert applied.frames.history.plot == %{width: 0.75 * 600 - 50, height: 400 - 30}
+
+      assert Chart.render(applied, paths: true) =~
+               ~s|<g class="frame frame-now" data-node="frames.now" transform="translate(460,10)"|
+    end
+
+    test "a mark draws in the frame it names, through that frame's scales" do
+      applied = applied()
+
+      assert [%{type: :line}] = applied.frames.history.marks
+      assert [%{type: :symbol}] = applied.frames.now.marks
+      # Both frames declare `x`; each mark reads its own frame's.
+      assert applied.frames.history.scales.x.__struct__ == Visualize.Scale.Time
+      assert applied.frames.now.scales.x.__struct__ == Visualize.Scale.Linear
+    end
+
+    test "a mark says its frame when the design has more than one, and says one it declares" do
+      {:error, errors} =
+        Chart.apply(update_in(@two.marks, &[Map.delete(hd(&1), :frame) | tl(&1)]))
+
+      assert {[:marks, 0, :frame], :required} in errors
+
+      {:error, errors} = Chart.apply(put_in(@two.marks, [put_in(hd(@two.marks).frame, :nope)]))
+      assert {[:marks, 0, :frame], {:undeclared, :frame, :nope}} in errors
+
+      # One frame, and the key is the frame's: a design need not repeat itself.
+      one = %{@two | frames: %{history: @two.frames.history}, marks: [hd(@two.marks)]}
+
+      assert {:ok, _} =
+               Chart.apply(Map.update!(one, :marks, &[Map.delete(hd(&1), :frame)]),
+                 sources: %{primary: @rows}
+               )
+    end
+
+    test "a compiled chart is one frame until #385" do
+      assert_raise ArgumentError, ~r/one frame until #385/, fn ->
+        Chart.compile(@two, sources: %{primary: @rows})
+      end
+    end
+
+    test "a version 1 design migrates to one frame named main, without its size" do
+      old = %{
+        version: 1,
+        sources: %{primary: %{fields: [:t, :v]}},
+        frame: %{kind: :cartesian, size: %{width: 800, height: 300}, margin: %{top: 1}},
+        marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
+      }
+
+      chart = Chart.from_map!(old)
+      assert chart.version == 2
+      assert chart.frames == %{main: %{kind: :cartesian, margin: %{top: 1}}}
     end
   end
 end

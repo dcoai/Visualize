@@ -33,9 +33,9 @@ defmodule ExamplesWeb.InteractionLive do
   defp phase("gamma"), do: 2.4
 
   @design %{
-    version: 1,
+    version: 2,
     sources: %{primary: %{fields: [:hour, :series, :value]}},
-    frame: %{
+    frames: %{main: %{
       kind: :cartesian,
       margin: %{top: 30, right: 120, bottom: 40, left: 50},
       scales: %{
@@ -48,7 +48,7 @@ defmodule ExamplesWeb.InteractionLive do
         %{scale: :y, side: :left, ticks: 5, grid: true}
       ],
       legend: %{scale: :color, position: :top_right, title: ["series"]}
-    },
+    }},
     marks: [
       %{
         type: :line,
