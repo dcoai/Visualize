@@ -230,6 +230,65 @@ defmodule Visualize.Chart.Build do
     frame(name, :facet, if(facet == %{}, do: rest, else: Map.put(rest, :facet, facet)))
   end
 
+  @doc """
+  The fragments, each in the frame `name` (spec/14 §16.3, #383).
+
+  The frame functions take a name — `cartesian/2`, `polar/2` — but `scale/3`, `axis/3`,
+  `legend/2` and the generated scale functions declare the design's one frame, and a named
+  twin of each would double the builder's surface for no new meaning. This says it once:
+  each fragment's frame is renamed to `name`, and every mark and every label it carries is
+  given `frame: name` unless it already says one (spec/14 §5.1, §6.1). A list in and a list
+  out, so it stands in a fold where its fragments would.
+
+      iex> import Visualize.Chart.Build
+      iex> in_frame(:now, [polar(), linear_scale(:r, domain: [0, 4]), line(:load, %{x: :t, y: :v})])
+      [
+        %{frames: %{now: %{kind: :polar}}},
+        %{frames: %{now: %{scales: %{r: %{kind: :linear, domain: [0, 4]}}}}},
+        %{marks: [%{type: :line, data: :load, channels: %{x: :t, y: :v}, frame: :now}]}
+      ]
+
+  A fragment carrying more than one frame raises `ArgumentError`: this function says which
+  frame a thing belongs to, and a fragment already holding two has nothing to be told.
+  """
+  @spec in_frame(atom(), [fragment()]) :: [fragment()]
+  def in_frame(name, fragments) when is_atom(name) and is_list(fragments),
+    do: Enum.map(fragments, &framed(&1, name))
+
+  defp framed(fragment, name) when is_map(fragment) and not is_struct(fragment) do
+    fragment
+    |> renamed(name)
+    |> bound(:marks, name)
+    |> bound(:labels, name)
+  end
+
+  defp renamed(%{frames: frames} = fragment, name)
+       when is_map(frames) and not is_struct(frames) do
+    case Map.values(frames) do
+      [node] ->
+        %{fragment | frames: %{name => node}}
+
+      several ->
+        raise ArgumentError,
+              "in_frame(#{inspect(name)}, …) takes a fragment of one frame; this one has " <>
+                "#{length(several)} (#{inspect(Map.keys(frames))})"
+    end
+  end
+
+  defp renamed(fragment, _name), do: fragment
+
+  defp bound(fragment, key, name) do
+    case Map.fetch(fragment, key) do
+      {:ok, nodes} when is_list(nodes) -> %{fragment | key => Enum.map(nodes, &says(&1, name))}
+      _absent -> fragment
+    end
+  end
+
+  defp says(node, name) when is_map(node) and not is_struct(node),
+    do: Map.put_new(node, :frame, name)
+
+  defp says(node, _name), do: node
+
   @doc "As `scale/3` with no options."
   @spec scale(atom(), atom()) :: fragment()
   def scale(name, kind), do: scale(name, kind, [])

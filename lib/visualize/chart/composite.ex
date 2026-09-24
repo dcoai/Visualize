@@ -159,27 +159,36 @@ defmodule Visualize.Chart.Composite do
   """
   @spec decompose(map()) :: {[Use.t()], %{Use.id() => String.t()}}
   def decompose(document) when is_map(document) and not is_struct(document) do
-    # A design holds its frames by name (spec/14 §2.1, #383); one is decomposed into
-    # its own site plus a site per scale and per axis, as the singular frame was.
-    {frame_name, frame} =
+    # A design holds its frames by name (spec/14 §2.1, #383). **One** frame is decomposed
+    # into its own site plus a site per scale and per axis, as the singular frame was; a
+    # design of **several** is a site per frame, each whole, since a scale site is keyed by
+    # the scale's name alone and two frames may key one name (§4.3). Frames in the builder
+    # are #386.
+    frames =
       case Map.get(document, :frames, %{}) do
-        frames when is_map(frames) and map_size(frames) > 0 ->
-          frames |> Enum.sort_by(fn {name, _} -> to_string(name) end) |> hd()
+        frames when is_map(frames) and not is_struct(frames) ->
+          Enum.sort_by(frames, fn {name, _} -> to_string(name) end)
 
         _none ->
-          {:main, %{}}
+          []
+      end
+
+    parts =
+      case frames do
+        [{_name, frame}] when is_map(frame) -> frame
+        _several -> %{}
       end
 
     sites =
       one(:theme, document) ++
         one(:meta, document) ++
-        frame_site(frame_name, Map.drop(frame, [:scales, :axes])) ++
+        frame_sites(frames) ++
         keyed(:style, Map.get(document, :styles, %{})) ++
-        keyed(:scale, Map.get(frame, :scales, %{})) ++
+        keyed(:scale, Map.get(parts, :scales, %{})) ++
         keyed(:source, Map.get(document, :sources, %{})) ++
         keyed(:var, Map.get(document, :vars, %{})) ++
         keyed(:gradient, Map.get(document, :defs, %{})) ++
-        each(:axis, Map.get(frame, :axes, [])) ++
+        each(:axis, Map.get(parts, :axes, [])) ++
         each(:mark, Map.get(document, :marks, [])) ++
         each(:label, Map.get(document, :labels, []))
 
@@ -198,10 +207,16 @@ defmodule Visualize.Chart.Composite do
     end
   end
 
-  defp frame_site(_name, frame) when map_size(frame) == 0, do: []
+  # The one frame without the parts that became their own sites, or a site per frame.
+  defp frame_sites([{name, frame}]) when is_map(frame),
+    do: frame_site(name, Map.drop(frame, [:scales, :axes]))
 
-  defp frame_site(name, frame),
-    do: [{"frame", %{ref: nil, local: %{frames: %{name => frame}}}}]
+  defp frame_sites(several),
+    do: Enum.flat_map(several, fn {name, frame} -> frame_site(name, frame) end)
+
+  defp frame_site(_name, frame) when is_map(frame) and map_size(frame) == 0, do: []
+
+  defp frame_site(name, frame), do: [{"frame", %{ref: nil, local: %{frames: %{name => frame}}}}]
 
   defp keyed(kind, declared) when is_map(declared) do
     declared

@@ -14,7 +14,10 @@ defmodule Examples.Charts.LoadAge do
   The rows are sampled **geometrically by age** — about sixty a decade — so the log axis
   is evenly covered by a few hundred points rather than by the ten thousand a uniform
   second would need. The load is `Examples.Charts.Load`'s, the same three windows its
-  neighbour `Examples.Charts.LoadGauge` puts on a dial.
+  neighbour `Examples.Charts.LoadGauge` puts on a dial. `Examples.Charts.ContextChart`
+  answers the same question with four frames and four windows rather than one log axis
+  (#383, #429); both are here because they read differently, and this one scrolls without
+  ever moving its axis.
 
   **A point stands for a bucket, and is drawn as the bucket's mean** (#418). The slots are
   a fifth of a second apart at the newest end and seven minutes apart at the oldest, so a

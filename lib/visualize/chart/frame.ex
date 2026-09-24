@@ -254,7 +254,8 @@ defmodule Visualize.Chart.Frame do
     paths? = Keyword.get(opts, :paths, false)
 
     children =
-      furniture(frame, mode, sources, paths?) ++
+      background(frame, mode) ++
+        furniture(frame, mode, sources, paths?) ++
         Legend.generate(frame, mode, paths?) ++ Labels.generate(frame, mode, paths?)
 
     group =
@@ -268,6 +269,28 @@ defmodule Visualize.Chart.Frame do
 
     # The defs come first (spec/14 §2.7): the paints declared, the filters the tree uses.
     %{group | children: Defs.defs(frame, mode, group) ++ group.children}
+  end
+
+  # The frame's own box painted under its contents, `[]` when it declares no `background`
+  # (spec/14 §4.2, #383): the group is translated by the margins, so the rect starts back
+  # at the box's corner, and its colour resolves through the theme as any other does.
+  defp background(%__MODULE__{background: nil}, _mode), do: []
+
+  defp background(%__MODULE__{} = frame, mode) do
+    [_x, _y, w, h] = frame.box
+    margin = frame.margin
+
+    [
+      Element.new(:rect,
+        attrs: %{
+          x: -margin.left,
+          y: -margin.top,
+          width: w * frame.size.width,
+          height: h * frame.size.height
+        },
+        style: %{fill: Style.colour(frame.background, frame.theme, mode)}
+      )
+    ]
   end
 
   @doc "As `render/2` with `[]` options."

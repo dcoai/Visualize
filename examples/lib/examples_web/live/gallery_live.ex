@@ -39,9 +39,12 @@ defmodule ExamplesWeb.GalleryLive do
     # Maps
     {Examples.Charts.WorldMap, "world_map"},
     {Examples.Charts.Globe, "globe"},
-    # A machine's load, two ways (#415)
+    # A machine's load, two ways (#415), and one source in two frames (#429)
     {Examples.Charts.LoadGauge, "load_gauge"},
     {Examples.Charts.LoadAge, "load_age"},
+    {Examples.Charts.LoadChart, "load"},
+    # One source at four time scales, four frames across the box (#429)
+    {Examples.Charts.ContextChart, "context"},
     # Streaming: a viewport on x, so the drawer offers Incremental (#327, #402)
     {Examples.Charts.ScrollingSeries, "scrolling_series"},
     {Examples.Charts.IncrementalLine, "incremental_line"}

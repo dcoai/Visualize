@@ -14,8 +14,11 @@ defmodule Examples.Charts.LoadGauge do
   three seconds is a sweep and not a jump.
 
   Its neighbour `Examples.Charts.LoadAge` draws the same three windows over the last three
-  hours. They are two designs because a design has one frame (§4) and a dial and a plot
-  cannot share it; `frames` will let them sit in one chart (#383).
+  hours. They were two designs because a design had one frame and a dial and a plot could
+  not share it; a design holds its frames by name now (§4.1, #383), and
+  `Examples.Charts.LoadChart` is one source drawn both ways in one chart. These two stay
+  as they are: three needles on one dial and three hours on a log axis are each a chart in
+  their own right, and this one is the dial said in full.
   """
 
   import Visualize.Chart.Build

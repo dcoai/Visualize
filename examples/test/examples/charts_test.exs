@@ -41,6 +41,8 @@ defmodule Examples.ChartsTest do
     Examples.Charts.PolarTransformChart,
     Examples.Charts.LoadGauge,
     Examples.Charts.LoadAge,
+    Examples.Charts.LoadChart,
+    Examples.Charts.ContextChart,
     Examples.Charts.SunburstChart,
     Examples.Charts.ChordDiagram,
     Examples.Charts.TreemapChart,
@@ -77,6 +79,8 @@ defmodule Examples.ChartsTest do
     Examples.Charts.PolarTransformChart,
     Examples.Charts.LoadGauge,
     Examples.Charts.LoadAge,
+    Examples.Charts.LoadChart,
+    Examples.Charts.ContextChart,
     Examples.Charts.ChordDiagram,
     Examples.Charts.GroupedBarChart,
     Examples.Charts.TreemapChart,
@@ -109,6 +113,10 @@ defmodule Examples.ChartsTest do
   @golden "test/support/charts_golden.txt"
 
   def charts, do: @golden_charts ++ @seeded_charts
+
+  # The charts a compiled chart can hold: a design of several frames is SVG alone until
+  # #385 (spec/14 §12.1, #429), so the canvas guards below have nothing to compile for it.
+  def compiled_charts, do: Enum.filter(charts(), &(:canvas in Frames.backends(&1)))
 
   def render, do: Enum.map_join(@golden_charts, "", &"#{inspect(&1)} #{&1.render([])}\n")
 
@@ -157,7 +165,11 @@ defmodule Examples.ChartsTest do
     # re-read. A design animating through its *frame* is now ticked with it; one animating
     # through a *mark* — the force graph's link distance — is a different chart and the
     # caller compiles it again.
-    for module <- Templates.gallery_modules(), not Frames.stream?(module) do
+    # A design of several frames offers SVG alone until #385 (spec/14 §12.1), so there is
+    # no second backend to compare it with.
+    for module <- Templates.gallery_modules(),
+        not Frames.stream?(module),
+        :canvas in Frames.backends(module) do
       svg = Frames.prepare(module, [], :svg)
       {a_svg, svg} = Frames.frame(module, [animation_tick: 1], :svg, svg)
       {b_svg, _} = Frames.frame(module, [animation_tick: 20], :svg, svg)
@@ -298,7 +310,7 @@ defmodule Examples.ChartsTest do
   end
 
   test "every chart renders on a canvas with literal paints and no CSS reference" do
-    for module <- charts() do
+    for module <- compiled_charts() do
       binary = Base.decode64!(Design.canvas(module, []))
       assert byte_size(binary) > 0
       assert :binary.match(binary, "var(") == :nomatch
@@ -309,7 +321,7 @@ defmodule Examples.ChartsTest do
   # SVG, the marks on the binary canvas — so the axes a whole-chart binary stream drops
   # (spec/09 §4.4) are drawn.
   test "every design's hybrid draws its furniture as SVG over a binary canvas of its marks" do
-    for module <- charts() do
+    for module <- compiled_charts() do
       hybrid = Design.hybrid(module, [])
       axes = Design.applied(module, []).frame.axes || []
 
@@ -342,7 +354,9 @@ defmodule Examples.ChartsTest do
     for module <- charts() do
       code = module.sample_code()
       assert code =~ "import Visualize.Chart.Build"
-      assert code =~ "Visualize.Chart.compose(["
+      # A design of several frames folds a list built with `in_frame/2`, so the bracket
+      # need not follow the call on the same line (#429).
+      assert code =~ "Visualize.Chart.compose("
       assert code =~ "Visualize.Chart.render(applied)"
     end
   end
