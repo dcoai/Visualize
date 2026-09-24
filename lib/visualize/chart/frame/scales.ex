@@ -60,7 +60,18 @@ defmodule Visualize.Chart.Frame.Scales do
 
   @doc false
   # Every scale of the frame node realised: `%{name => struct}`.
-  @spec realise(map(), map(), [map()], atom(), map(), Theme.t(), map(), %{atom() => map()}, map(), map()) ::
+  @spec realise(
+          map(),
+          map(),
+          [map()],
+          atom(),
+          map(),
+          Theme.t(),
+          map(),
+          %{atom() => map()},
+          map(),
+          map()
+        ) ::
           %{atom() => struct()}
   def realise(design, frame, marks, kind, plot, theme, sources, styles, ctx, given \\ %{}) do
     axes = Map.get(frame, :axes, [])

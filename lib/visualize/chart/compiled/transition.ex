@@ -27,6 +27,7 @@ defmodule Visualize.Chart.Compiled.Transition do
   @spec scales(Chart.t(), atom() | nil) :: %{atom() => map()}
   def scales(%Chart{} = chart, viewport) do
     node = chart.frames |> Map.values() |> hd()
+
     for {name, scale} <- Map.get(node, :scales, %{}),
         transition = Map.get(scale, :transition),
         is_map(transition),

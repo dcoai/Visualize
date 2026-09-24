@@ -30,6 +30,7 @@ defmodule Visualize.Chart.Compiled.Window do
   @spec new(Chart.t()) :: t() | nil
   def new(%Chart{} = chart) do
     node = only_frame(chart)
+
     case Map.get(node, :viewport) do
       nil ->
         nil

@@ -26,22 +26,26 @@ defmodule Visualize.Chart.ComposeTest do
     version: 2,
     theme: :dark,
     styles: %{series: %{stroke_width: 2}, muted: %{opacity: 0.5}},
-    frames: %{main: %{
-      kind: :cartesian,
-      margin: %{top: 10, right: 10, bottom: 30, left: 40},
-      scales: %{x: %{kind: :time}},
-      axes: [%{scale: :x, side: :bottom, ticks: 6}]
-    }}
+    frames: %{
+      main: %{
+        kind: :cartesian,
+        margin: %{top: 10, right: 10, bottom: 30, left: 40},
+        scales: %{x: %{kind: :time}},
+        axes: [%{scale: :x, side: :bottom, ticks: 6}]
+      }
+    }
   }
   @chart %{
     version: 2,
     sources: %{primary: %{fields: [:t, :v]}},
     styles: %{accent: %{stroke: :series_2}},
-    frames: %{main: %{
-      kind: :cartesian,
-      scales: %{y: %{kind: :linear, domain: [0, :auto]}},
-      axes: [%{scale: :y, side: :left, grid: true}]
-    }},
+    frames: %{
+      main: %{
+        kind: :cartesian,
+        scales: %{y: %{kind: :linear, domain: [0, :auto]}},
+        axes: [%{scale: :y, side: :left, grid: true}]
+      }
+    },
     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :accent}],
     labels: [%{anchor: :title, text: ["Uptime"]}]
   }
@@ -61,11 +65,19 @@ defmodule Visualize.Chart.ComposeTest do
     end
 
     test "a union name declared differently is a conflict at its path, every one reported" do
-      a = %{styles: %{series: %{stroke_width: 2}}, frames: %{main: %{scales: %{x: %{kind: :time}}}}}
-      b = %{styles: %{series: %{stroke_width: 3}}, frames: %{main: %{scales: %{x: %{kind: :linear}}}}}
+      a = %{
+        styles: %{series: %{stroke_width: 2}},
+        frames: %{main: %{scales: %{x: %{kind: :time}}}}
+      }
+
+      b = %{
+        styles: %{series: %{stroke_width: 3}},
+        frames: %{main: %{scales: %{x: %{kind: :linear}}}}
+      }
 
       assert Chart.compose(a, b) ==
-               {:error, [{[:frames, :main, :scales, :x], :conflict}, {[:styles, :series], :conflict}]}
+               {:error,
+                [{[:frames, :main, :scales, :x], :conflict}, {[:styles, :series], :conflict}]}
 
       assert Chart.compose([a, b]) == Chart.compose(a, b)
     end
@@ -82,9 +94,6 @@ defmodule Visualize.Chart.ComposeTest do
     end
 
     test "a node given as anything but a map by either side is the later's whole" do
-      var = Chart.var(:frame)
-      assert Chart.compose(%{frames: %{main: %{kind: :polar}}}, %{frames: var}) == {:ok, %{frames: var}}
-
       assert Chart.compose(%{theme: :dark}, %{theme: %{name: :house}}) ==
                {:ok, %{theme: %{name: :house}}}
 
@@ -109,14 +118,16 @@ defmodule Visualize.Chart.ComposeTest do
       assert Chart.compose(%{styles: sheet}, %{version: 2}) == {:ok, %{styles: sheet, version: 2}}
     end
 
-    test "every union key reads a whole-node variable the same way, at its own path" do
+    test "every name-map key reads a whole-node variable the same way, at its own path" do
       v = Chart.var(:v)
 
       for {declared, variable, path} <- [
             {%{sources: %{p: %{fields: [:t]}}}, %{sources: v}, [:sources]},
             {%{vars: %{unit: %{default: "%"}}}, %{vars: v}, [:vars]},
             {%{styles: %{series: %{stroke_width: 2}}}, %{styles: v}, [:styles]},
-            {%{frames: %{main: %{scales: %{x: %{kind: :time}}}}}, %{frames: %{main: %{scales: v}}}, [:frames, :main, :scales]}
+            {%{frames: %{main: %{scales: %{x: %{kind: :time}}}}},
+             %{frames: %{main: %{scales: v}}}, [:frames, :main, :scales]},
+            {%{frames: %{main: %{kind: :polar}}}, %{frames: v}, [:frames]}
           ] do
         assert Chart.compose(variable, declared) == {:error, [{path, :conflict}]}
         assert Chart.compose(declared, variable) == {:error, [{path, :conflict}]}
@@ -225,9 +236,14 @@ defmodule Visualize.Chart.ComposeTest do
           assert Map.get(merged, :version) == later(a, b, :version)
 
           if is_map(a[:frames]) and is_map(b[:frames]) do
-            assert Map.get(merged.frames.main, :size) == later(a.frames.main, b.frames.main, :size)
-            assert Map.get(merged.frames.main, :kind) == later(a.frames.main, b.frames.main, :kind)
-            assert Map.get(merged.frames.main, :axes) == concat(a.frames.main, b.frames.main, :axes)
+            assert Map.get(merged.frames.main, :size) ==
+                     later(a.frames.main, b.frames.main, :size)
+
+            assert Map.get(merged.frames.main, :kind) ==
+                     later(a.frames.main, b.frames.main, :kind)
+
+            assert Map.get(merged.frames.main, :axes) ==
+                     concat(a.frames.main, b.frames.main, :axes)
           else
             assert Map.get(merged, :frame) == later(a, b, :frame)
           end

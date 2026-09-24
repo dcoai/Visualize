@@ -331,7 +331,9 @@ defmodule Visualize.Chart.MarkTest do
       frame = Map.put(@frame, :scales, band)
 
       [rect | _] =
-        generate(%{type: :rect, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}}, %{frames: %{main: frame}}).children
+        generate(%{type: :rect, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}}, %{
+          frames: %{main: frame}
+        }).children
 
       assert rect.attrs.x == 0 and rect.attrs.width == 150.0
 
@@ -426,7 +428,9 @@ defmodule Visualize.Chart.MarkTest do
 
     test "a channel naming no declared scale is read as pixels, a constant as itself" do
       chart =
-        chart(%{type: :circle, channels: %{x: :t, y: 50}}, %{frames: %{main: Map.put(@frame, :scales, %{})}})
+        chart(%{type: :circle, channels: %{x: :t, y: 50}}, %{
+          frames: %{main: Map.put(@frame, :scales, %{})}
+        })
 
       frame = Frame.new(chart, sources: @sources, size: {300, 200})
       [circle | _] = Mark.generate(frame, hd(chart.marks), sources: @sources).children
@@ -518,7 +522,9 @@ defmodule Visualize.Chart.MarkTest do
                |> Line.generate(Enum.filter(@rows, &(&1.k == "k0")))
 
       frame = Map.put(@frame, :scales, Map.delete(@frame.scales, :color))
-      group = generate(%{type: :area, channels: %{x: :t, y: :v, series: :k}}, %{frames: %{main: frame}})
+
+      group =
+        generate(%{type: :area, channels: %{x: :t, y: :v, series: :k}}, %{frames: %{main: frame}})
 
       assert Enum.map(group.children, & &1.style.fill) == [
                "var(--vis-series-1, #3b6fa8)",
@@ -703,7 +709,9 @@ defmodule Visualize.Chart.MarkTest do
         Chart.from_map!(%{
           version: 2,
           sources: %{primary: %{fields: [:t, :base, :top]}},
-          frames: %{main: %{@frame | scales: %{@frame.scales | x: %{kind: :linear, domain: [0, 2]}}}},
+          frames: %{
+            main: %{@frame | scales: %{@frame.scales | x: %{kind: :linear, domain: [0, 2]}}}
+          },
           marks: [%{data: :primary, type: :area, channels: %{x: :t, y: :top, y0: :base}}]
         })
 
@@ -1114,7 +1122,9 @@ defmodule Visualize.Chart.MarkTest do
       axes = [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]
 
       chart =
-        chart(%{type: :line, channels: %{x: :t, y: :v}}, %{frames: %{main: Map.put(@frame, :axes, axes)}})
+        chart(%{type: :line, channels: %{x: :t, y: :v}}, %{
+          frames: %{main: Map.put(@frame, :axes, axes)}
+        })
 
       frame = Frame.new(chart, sources: @sources, size: {300, 200})
 
@@ -1270,8 +1280,10 @@ defmodule Visualize.Chart.MarkTest do
     test "a rect with a band on y is an arced bar, with a band on x a sector; a circle stays a dot" do
       bars =
         polar(%{type: :rect, channels: %{x0: :t, x1: :hi, y0: :lo, y1: :lo}}, %{
-          frame:
-            put_in(@polar, [:scales, :r], %{kind: :band, domain: [3, 8, 1, 6], range: [30, 150]})
+          frames: %{
+            main:
+              put_in(@polar, [:scales, :r], %{kind: :band, domain: [3, 8, 1, 6], range: [30, 150]})
+          }
         })
 
       {frame, group} = bars
@@ -1320,7 +1332,9 @@ defmodule Visualize.Chart.MarkTest do
         margin: %{top: 0, right: 0, bottom: 0, left: 0}
       }
 
-      chart = chart(%{type: :arc, channels: %{start: :t, end: :hi}}, %{frame: raw_frame})
+      chart =
+        chart(%{type: :arc, channels: %{start: :t, end: :hi}}, %{frames: %{main: raw_frame}})
+
       frame = Frame.new(chart, sources: @sources, size: {300, 200})
       raw = Mark.generate(frame, hd(chart.marks), sources: @sources)
       [first_raw | _] = raw.children

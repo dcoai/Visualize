@@ -98,7 +98,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       entries = Chart.explain(BuilderFixture.layers())
 
       assert length(Regex.scan(~r/class="vis-builder-entry"/, html)) == length(entries)
-      assert html =~ ~s(<td class="vis-builder-entry-path">frame.axes[0].scale</td>)
+      assert html =~ ~s(<td class="vis-builder-entry-path">frames.main.axes[0].scale</td>)
       assert html =~ ~s(<td class="vis-builder-entry-value">:x</td>)
       assert html =~ ~s(<td class="vis-builder-entry-layer">shared</td>)
     end
@@ -148,7 +148,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       assert BuilderFixture.disabled(off) == MapSet.new([0])
       # Flatten writes the version a deployed design carries (§19.8); the house wrote it before.
       assert BuilderFixture.design(off) ==
-               Map.put(Chart.stack(Enum.drop(BuilderFixture.layers(), 1)), :version, 1)
+               Map.put(Chart.stack(Enum.drop(BuilderFixture.layers(), 1)), :version, 2)
 
       assert BuilderFixture.disabled(on) == MapSet.new()
     end

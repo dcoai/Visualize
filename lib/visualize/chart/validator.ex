@@ -320,7 +320,7 @@ defmodule Visualize.Chart.Validator do
     type = map[:type]
 
     ctx
-    |> in_frame(map[:frames])
+    |> in_frame(map[:frame])
     |> Map.merge(%{
       mark_type: if(type in Schema.mark_types(), do: type),
       fields: mark_fields(map[:data], ctx),
@@ -328,13 +328,19 @@ defmodule Visualize.Chart.Validator do
     })
   end
 
-  defp enter(:label, map, ctx), do: %{in_frame(ctx, map[:frames]) | datum?: false}
+  defp enter(:label, map, ctx), do: %{in_frame(ctx, map[:frame]) | datum?: false}
 
   defp enter(:channels, map, ctx), do: %{ctx | channel_keys: Map.keys(map)}
 
   defp enter(:transform, map, ctx) do
     op = map[:op]
     %{ctx | op: if(op in Schema.transform_ops(), do: op), transform_keys: Map.keys(map)}
+  end
+
+  # Inside a frame, a scale name is that frame's (spec/14 §4.3, #383): its axes and its
+  # legend read the scales it declares, whatever the design's other frames declare.
+  defp enter(:frame, map, ctx) do
+    %{ctx | scales: declared(map[:scales]), frame_kind: map[:kind]}
   end
 
   defp enter(_kind, _map, ctx), do: ctx
@@ -349,7 +355,6 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp in_frame(ctx, _name), do: ctx
-
 
   defp mark_fields(name, ctx) when is_atom(name), do: fields_of(name, ctx)
 
@@ -387,6 +392,13 @@ defmodule Visualize.Chart.Validator do
     for s <- Schema.describe(:transform), s.key == :op or s.key in (required ++ optional) do
       %{s | required: s.key == :op or s.key in required, type: as_type(s, op)}
     end
+  end
+
+  # A mark or a label says its frame when the design holds more than one (spec/14 §5.1,
+  # §6.1, #383): with one frame there is nothing to say and the key means that frame.
+  defp specs(kind, %{frame_nodes: frames})
+       when kind in [:mark, :label] and is_map(frames) and map_size(frames) > 1 do
+    for s <- Schema.describe(kind), do: if(s.key == :frame, do: %{s | required: true}, else: s)
   end
 
   defp specs(kind, _ctx), do: Schema.describe(kind)

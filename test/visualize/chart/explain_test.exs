@@ -13,11 +13,13 @@ defmodule Visualize.Chart.ExplainTest do
   @theme {:theme, %{version: 2, theme: :default, styles: %{series: %{stroke_width: 1}}}}
   @frame {:frame,
           %{
-            frames: %{main: %{
-              kind: :cartesian,
-              margin: %{top: 800, bottom: 400},
-              axes: [%{scale: :x, side: :bottom, ticks: 6}]
-            }},
+            frames: %{
+              main: %{
+                kind: :cartesian,
+                margin: %{top: 800, bottom: 400},
+                axes: [%{scale: :x, side: :bottom, ticks: 6}]
+              }
+            },
             marks: [%{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}}]
           }}
   @house {:house, %{theme: :dark, styles: %{series: %{stroke: :series_2, stroke_width: 2}}}}
@@ -54,7 +56,7 @@ defmodule Visualize.Chart.ExplainTest do
              }
 
       assert entry(entries, [:frames, :main, :margin, :top]).layer == :panel
-      assert entry(entries, [:frames, :main, :margin, :top]).overrode == [:frames]
+      assert entry(entries, [:frames, :main, :margin, :top]).overrode == [:frame]
       assert entry(entries, [:frames, :main, :margin, :bottom]).layer == :frame
       assert entry(entries, [:frames, :main, :margin, :bottom]).overrode == []
       assert entry(entries, [:version]).layer == :theme
@@ -67,10 +69,10 @@ defmodule Visualize.Chart.ExplainTest do
                path: [:marks, 0, :type],
                value: :area,
                layer: :panel,
-               overrode: [:frames]
+               overrode: [:frame]
              }
 
-      assert entry(entries, [:marks, 0, :channels, :x]).overrode == [:frames]
+      assert entry(entries, [:marks, 0, :channels, :x]).overrode == [:frame]
       assert Enum.count(entries, &(hd(&1.path) == :marks)) == 5
     end
 

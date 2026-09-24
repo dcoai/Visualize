@@ -270,14 +270,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     Whether a drawn node's label names a node that is moved on the graph (spec/14 §18.16):
     an axis, the legend, a label. A mark's position is its data; the frame does not move.
 
-        iex> Visualize.Chart.Builder.Place.movable?("frame.axes[1]")
+        iex> Visualize.Chart.Builder.Place.movable?("frames.main.axes[1]")
         true
         iex> Visualize.Chart.Builder.Place.movable?("marks[0]")
         false
     """
     @spec movable?(String.t()) :: boolean()
-    def movable?("frame.axes[" <> _rest), do: true
-    def movable?("frame.legend"), do: true
+    # A frame's own furniture moves, whatever the frame is called (spec/14 §4.1, #383).
+    def movable?("frames." <> rest),
+      do: String.contains?(rest, ".axes[") or String.ends_with?(rest, ".legend")
+
     def movable?("labels[" <> _rest), do: true
     def movable?(_label), do: false
 

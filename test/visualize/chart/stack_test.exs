@@ -17,12 +17,14 @@ defmodule Visualize.Chart.StackTest do
   @theme %{version: 2, theme: :default, styles: %{series: %{stroke_width: 1}}}
   @frame %{
     version: 2,
-    frames: %{main: %{
-      kind: :cartesian,
-      margin: %{top: 10, right: 10, bottom: 30, left: 40},
-      scales: %{x: %{kind: :time}, y: %{kind: :linear}},
-      axes: [%{scale: :x, side: :bottom, ticks: 6}]
-    }}
+    frames: %{
+      main: %{
+        kind: :cartesian,
+        margin: %{top: 10, right: 10, bottom: 30, left: 40},
+        scales: %{x: %{kind: :time}, y: %{kind: :linear}},
+        axes: [%{scale: :x, side: :bottom, ticks: 6}]
+      }
+    }
   }
   @house %{
     theme: :dark,
@@ -30,10 +32,12 @@ defmodule Visualize.Chart.StackTest do
   }
   @panel %{
     sources: %{primary: %{fields: [:t, :v]}},
-    frames: %{main: %{
-      scales: %{y: %{kind: :linear, domain: [0, :auto]}},
-      axes: [%{scale: :y, side: :left, grid: true}]
-    }},
+    frames: %{
+      main: %{
+        scales: %{y: %{kind: :linear, domain: [0, :auto]}},
+        axes: [%{scale: :y, side: :left, grid: true}]
+      }
+    },
     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :series}],
     labels: [%{anchor: :title, text: ["Uptime"]}]
   }
@@ -132,8 +136,10 @@ defmodule Visualize.Chart.StackTest do
       var = Chart.var(:frame)
 
       assert Chart.stack(%{frames: %{main: %{kind: :polar}}}, %{frames: var}) == %{frames: var}
+
       assert Chart.stack(%{frames: var}, %{frames: %{main: %{kind: :polar}}}) ==
                %{frames: %{main: %{kind: :polar}}}
+
       assert Chart.stack(%{styles: var}, %{styles: %{a: %{}}}) == %{styles: %{a: %{}}}
       assert Chart.stack(%{styles: %{a: %{}}}, %{styles: var}) == %{styles: var}
       assert Chart.stack(%{theme: :dark}, %{theme: %{name: :house}}) == %{theme: %{name: :house}}
@@ -146,7 +152,8 @@ defmodule Visualize.Chart.StackTest do
             {%{sources: %{p: %{fields: [:t]}}}, %{sources: v}, [:sources]},
             {%{vars: %{unit: %{default: "%"}}}, %{vars: v}, [:vars]},
             {%{styles: %{series: %{stroke_width: 2}}}, %{styles: v}, [:styles]},
-            {%{frames: %{main: %{scales: %{x: %{kind: :time}}}}}, %{frames: %{main: %{scales: v}}}, [:frames, :main, :scales]}
+            {%{frames: %{main: %{scales: %{x: %{kind: :time}}}}},
+             %{frames: %{main: %{scales: v}}}, [:frames, :main, :scales]}
           ] do
         assert Chart.stack(declared, variable) == variable
         assert Chart.stack(variable, declared) == declared
@@ -171,11 +178,14 @@ defmodule Visualize.Chart.StackTest do
 
       # The same holds for a node key, where the rule is to recurse rather than unite.
       f = %{frames: %{main: %{kind: :polar}}}
-      g = %{frame: Chart.var(:f)}
+      g = %{frames: Chart.var(:f)}
       h = %{frames: %{main: %{margin: %{top: 1}}}}
 
       assert Chart.stack([f, g, h]) == %{frames: %{main: %{margin: %{top: 1}}}}
-      assert Chart.stack(f, Chart.stack(g, h)) == %{frames: %{main: %{kind: :polar, margin: %{top: 1}}}}
+
+      assert Chart.stack(f, Chart.stack(g, h)) == %{
+               frames: %{main: %{kind: :polar, margin: %{top: 1}}}
+             }
     end
 
     test "a key the schema does not know is the higher layer's" do
@@ -231,10 +241,14 @@ defmodule Visualize.Chart.StackTest do
 
     test "two axes for the same scale and side collapse to the higher layer's" do
       lower = %{
-        frames: %{main: %{axes: [%{scale: :x, side: :bottom, ticks: 6}, %{scale: :y, side: :left}]}}
+        frames: %{
+          main: %{axes: [%{scale: :x, side: :bottom, ticks: 6}, %{scale: :y, side: :left}]}
+        }
       }
 
-      higher = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom, grid: true, style: :heavy}]}}}
+      higher = %{
+        frames: %{main: %{axes: [%{scale: :x, side: :bottom, grid: true, style: :heavy}]}}
+      }
 
       assert Chart.stack(lower, higher).frames.main.axes == [
                %{scale: :x, side: :bottom, grid: true, style: :heavy},
@@ -327,17 +341,21 @@ defmodule Visualize.Chart.StackTest do
       frame = %{
         version: 2,
         sources: %{p: %{fields: [:t, :v]}},
-        frames: %{main: %{
-          kind: :cartesian,
-          scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
-          axes: [%{scale: :x, side: :bottom, ticks: 3}, %{scale: :y, side: :left}]
-        }},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
+            axes: [%{scale: :x, side: :bottom, ticks: 3}, %{scale: :y, side: :left}]
+          }
+        },
         marks: [%{id: :series, type: :line, data: :p, channels: %{x: :t, y: :v}}]
       }
 
       panel = %{
         styles: %{heavy: %{stroke_width: 3}},
-        frames: %{main: %{axes: [%{scale: :x, side: :bottom, ticks: 3, grid: true, style: :heavy}]}},
+        frames: %{
+          main: %{axes: [%{scale: :x, side: :bottom, ticks: 3, grid: true, style: :heavy}]}
+        },
         marks: [%{id: :series, type: :area, data: :p, channels: %{x: :t, y: :v}}]
       }
 
@@ -424,10 +442,13 @@ defmodule Visualize.Chart.StackTest do
   # regrouping (spec/14 §8.2, D-92). The generator produces them, so the associativity
   # property asks for the layers where every mergeable key is a map.
   defp unions_are_maps?(fragment) do
-    scales = fragment |> Map.get(:frame, %{}) |> Map.get(:scales, %{})
+    frames = Map.get(fragment, :frames, %{})
 
-    Enum.all?([:sources, :styles, :vars], &(not is_struct(Map.get(fragment, &1, %{})))) and
-      not is_struct(scales)
+    scales =
+      for {_name, frame} <- (is_struct(frames) && %{}) || frames, do: Map.get(frame, :scales, %{})
+
+    Enum.all?([:sources, :styles, :vars, :frames], &(not is_struct(Map.get(fragment, &1, %{})))) and
+      Enum.all?(scales, &(not is_struct(&1)))
   end
 
   property "one layer is itself and the empty fragment is the identity" do
@@ -517,7 +538,7 @@ defmodule Visualize.Chart.StackTest do
       [:marks, :labels],
       &(shared_ids(a, b, &1) == [] and unique_ids?(a, &1) and unique_ids?(b, &1))
     ) and
-      Enum.all?([:sources, :styles, :vars, :theme, :version, :frame], fn key ->
+      Enum.all?([:sources, :styles, :vars, :theme, :version, :frames], fn key ->
         not (Map.has_key?(a, key) and Map.has_key?(b, key))
       end)
   end

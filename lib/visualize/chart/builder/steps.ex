@@ -69,9 +69,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
         ),
         case unmeasured do
           {_mark, i} ->
-            step(Fragment.frame_path(design) ++ [:axes], "add axes — tick a side on the mark's page", "select_node", %{
-              "node" => "marks[#{i}]"
-            })
+            step(
+              Fragment.frame_path(design) ++ [:axes],
+              "add axes — tick a side on the mark's page",
+              "select_node",
+              %{
+                "node" => "marks[#{i}]"
+              }
+            )
 
           nil ->
             []

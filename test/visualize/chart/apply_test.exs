@@ -41,11 +41,13 @@ defmodule Visualize.Chart.ApplyTest do
         sources: %{primary: %{fields: [:t, :v], default: :uptime}},
         vars: %{unit: %{default: "%"}},
         styles: %{series: %{stroke_width: 2}},
-        frames: %{main: %{
-          kind: :cartesian,
-          scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}},
-          axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
-        }},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}},
+            axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
+          }
+        },
         marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :series}],
         labels: [%{anchor: {:axis, :y}, text: ["unit: ", var(:unit)]}]
       },
@@ -277,11 +279,13 @@ defmodule Visualize.Chart.ApplyTest do
             margin: %{}
           },
           styles: %{series: var(:style)},
-          frames: %{main: %{
-            kind: :cartesian,
-            margin: var(:margin),
-            scales: %{x: %{kind: :linear}, y: %{kind: :linear}}
-          }}
+          frames: %{
+            main: %{
+              kind: :cartesian,
+              margin: var(:margin),
+              scales: %{x: %{kind: :linear}, y: %{kind: :linear}}
+            }
+          }
         })
 
       vars = %{margin: %{top: 5, right: 5, bottom: 5, left: 5}}
@@ -337,10 +341,12 @@ defmodule Visualize.Chart.ApplyTest do
       %{
         version: 2,
         sources: %{load: %{fields: [:t, :v]}},
-        frames: %{main: %{
-          kind: :cartesian,
-          scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}}
-        }},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, :auto]}}
+          }
+        },
         marks: [
           %{
             type: :line,
@@ -393,7 +399,11 @@ defmodule Visualize.Chart.ApplyTest do
       design = windowed(%{op: :take, n: 1})
       {:ok, applied} = Chart.apply(design, sources: rows(), size: {300, 200})
 
-      assert Visualize.Chart.Mark.rows(applied.frames.main, hd(applied.chart.marks), applied.sources) ==
+      assert Visualize.Chart.Mark.rows(
+               applied.frames.main,
+               hd(applied.chart.marks),
+               applied.sources
+             ) ==
                [%{t: 600, v: 10}]
     end
   end
@@ -416,7 +426,9 @@ defmodule Visualize.Chart.ApplyTest do
 
     test "a value a scale cannot take raises as the frame does" do
       design =
-        design(%{frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}}})
+        design(%{
+          frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}}
+        })
 
       assert_raise ArgumentError, ~r/scale :x \(time\) cannot take 1/, fn ->
         Chart.apply(design, sources: %{uptime: @rows}, size: {300, 200})

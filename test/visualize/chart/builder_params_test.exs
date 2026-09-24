@@ -37,7 +37,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       assert names ==
                Enum.map(Chart.free_vars(BuilderFixture.parameterised()), &to_string(&1.name))
 
-      assert html =~ ~s(<span class="vis-builder-param-uses">frame.axes[0].ticks</span>)
+      assert html =~ ~s(<span class="vis-builder-param-uses">frames.main.axes[0].ticks</span>)
     end
 
     test "the widget is the one the first use's expectation asks for" do

@@ -23,7 +23,9 @@ defmodule Visualize.Chart.Refs do
   @type missing :: [{[atom() | non_neg_integer()], Fragment.id()}]
 
   # Where a name-keyed kind is declared in a design, and the kinds resolved here at all.
-  @namespaces %{scale: [:frame, :scales], source: [:sources]}
+  # A scale is declared in the design's frame (§2.1, #383), which is named, so the path
+  # is read from the design rather than written here.
+  @namespaces %{source: [:sources]}
   @resolved [:style, :scale, :source]
 
   @doc """
@@ -48,11 +50,15 @@ defmodule Visualize.Chart.Refs do
 
     design =
       Enum.reduce(declared, resolved, fn {kind, key, body}, acc ->
-        update_in(acc, Enum.map(@namespaces[kind], &Access.key(&1, %{})), &Map.put(&1, key, body))
+        path = namespace(kind, acc)
+        update_in(acc, Enum.map(path, &Access.key(&1, %{})), &Map.put(&1, key, body))
       end)
 
     {design, Enum.reverse(missing)}
   end
+
+  defp namespace(:scale, design), do: Fragment.frame_path(design) ++ [:scales]
+  defp namespace(kind, _design), do: @namespaces[kind]
 
   # The walk carries what it declares and what it could not find. A struct is a leaf; a
   # tagged id is resolved where it stands; everything else is walked.

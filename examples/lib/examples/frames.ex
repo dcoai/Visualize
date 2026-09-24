@@ -12,7 +12,7 @@ defmodule Examples.Frames do
 
   alias Examples.Charts.Design
   alias Visualize.Chart
-  alias Visualize.Chart.Compiled
+  alias Visualize.Chart.{Compiled, Fragment}
 
   @type backend :: :svg | :canvas | :incremental
   @type frame :: %{
@@ -81,7 +81,7 @@ defmodule Examples.Frames do
   # A design that eases a scale steps its compiled chart (#360); any other renders whole.
   def frame(module, opts, :svg, %{compiled: compiled} = state) do
     {design, sources} = module.design(opts)
-    step_opts = [frame: design.frame] ++ Keyword.take(opts, [:now, :at])
+    step_opts = [frame: tick_frame(design)] ++ Keyword.take(opts, [:now, :at])
     {svg, compiled} = Design.step(module, compiled, sources, step_opts)
     {svg_frame(svg, sources), %{state | compiled: compiled}}
   end
@@ -98,7 +98,7 @@ defmodule Examples.Frames do
     {design, sources} = module.design(opts)
     compiled = recompiled(compiled, design, module, opts)
     # The tick's own frame, so a design that animates through it moves here too (#424).
-    tick_opts = [frame: design.frame] ++ if(now = opts[:now], do: [now: now], else: [])
+    tick_opts = [frame: tick_frame(design)] ++ if(now = opts[:now], do: [now: now], else: [])
     {payload, compiled} = Compiled.tick(compiled, sources, tick_opts)
 
     {%{
@@ -110,6 +110,10 @@ defmodule Examples.Frames do
        points: rows(sources)
      }, %{state | compiled: compiled}}
   end
+
+  # A compiled chart is one frame until #385, so the tick's frame is that one frame's
+  # node (spec/14 §12.1): the design's single frame, whatever it is named.
+  defp tick_frame(design), do: get_in(design, Fragment.frame_path(design))
 
   # A design whose *marks* move between ticks is a different chart, and the caller
   # compiles it again (spec/14 §12.5, #424): the region builders close over the mark

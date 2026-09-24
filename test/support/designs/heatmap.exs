@@ -3,17 +3,19 @@
   version: 2,
   meta: %{name: "heatmap"},
   sources: %{heat: %{fields: [:hour, :day, :v]}},
-  frames: %{main: %{
-    kind: :cartesian,
-    margin: %{top: 20, right: 20, bottom: 30, left: 40},
-    scales: %{
-      x: %{kind: :band, padding: 0.05},
-      y: %{kind: :band, padding: 0.05},
-      color: %{kind: :sequential, domain: [0, :auto]}
-    },
-    axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}],
-    legend: %{scale: :color, position: :top_right}
-  }},
+  frames: %{
+    main: %{
+      kind: :cartesian,
+      margin: %{top: 20, right: 20, bottom: 30, left: 40},
+      scales: %{
+        x: %{kind: :band, padding: 0.05},
+        y: %{kind: :band, padding: 0.05},
+        color: %{kind: :sequential, domain: [0, :auto]}
+      },
+      axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}],
+      legend: %{scale: :color, position: :top_right}
+    }
+  },
   marks: [
     %{type: :rect, data: :heat, channels: %{x0: :hour, x1: :hour, y0: :day, y1: :day, value: :v}}
   ],

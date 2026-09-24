@@ -127,9 +127,10 @@ defmodule Visualize.Chart.UseTest do
     test "a key, a path, and everything" do
       assert Chart.mask(%{a: 1, b: 2}, [:a]) == %{b: 2}
 
-      assert Chart.mask(%{frames: %{main: %{size: 1, margin: 2}}}, [[:frames, :main, :margin]]) == %{
-               frames: %{main: %{size: 1}}
-             }
+      assert Chart.mask(%{frames: %{main: %{size: 1, margin: 2}}}, [[:frames, :main, :margin]]) ==
+               %{
+                 frames: %{main: %{size: 1}}
+               }
 
       assert Chart.mask(%{a: 1}, :all) == %{}
     end
@@ -297,11 +298,13 @@ defmodule Visualize.Chart.UseTest do
         styles: %{series: %{stroke: "#111"}, faint: %{opacity: 0.4}},
         sources: %{primary: %{fields: [:t, :v]}},
         vars: %{unit: %{default: "%"}},
-        frames: %{main: %{
-          kind: :cartesian,
-          scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
-          axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
-        }},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
+            axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
+          }
+        },
         marks: [%{id: :m, type: :line, data: :primary, channels: %{x: :t, y: :v}}],
         labels: [%{id: :title, anchor: :title, text: ["Uptime"]}]
       }
@@ -340,7 +343,8 @@ defmodule Visualize.Chart.UseTest do
       assert Fragment.kind(%{version: 2}) == nil
       refute :design in Fragment.kinds()
 
-      assert {:error, [{[], :many_kinds}]} = Validator.validate(%{theme: :dark, frames: %{main: %{}}}, nil)
+      assert {:error, [{[], :many_kinds}]} =
+               Validator.validate(%{theme: :dark, frames: %{main: %{}}}, nil)
 
       assert Validator.format({[], :many_kinds}) =~ "no kind of fragment"
     end

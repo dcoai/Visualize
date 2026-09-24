@@ -121,8 +121,8 @@ defmodule Visualize.Chart.Use do
       iex> Visualize.Chart.Use.mask(%{stroke: "#111", stroke_width: 5}, [:stroke])
       %{stroke_width: 5}
 
-      iex> Visualize.Chart.Use.mask(%{frames: %{main: %{size: %{}, margin: %{}}}}, [[:frame, :margin]])
-      %{frames: %{main: %{size: %{}}}}
+      iex> Visualize.Chart.Use.mask(%{frames: %{main: %{legend: %{}, margin: %{}}}}, [[:frames, :main, :margin]])
+      %{frames: %{main: %{legend: %{}}}}
 
       iex> Visualize.Chart.Use.mask(%{a: 1}, :all)
       %{}

@@ -58,7 +58,9 @@ defmodule Examples.Charts.Design do
   def transitions?(module) do
     {design, _sources} = module.design([])
 
-    Enum.any?(Map.get(design.frame, :scales, %{}), fn {_name, scale} ->
+    frame = get_in(design, Visualize.Chart.Fragment.frame_path(design)) || %{}
+
+    Enum.any?(Map.get(frame, :scales, %{}), fn {_name, scale} ->
       Map.has_key?(scale, :transition)
     end) or Enum.any?(Map.get(design, :marks, []), &Map.has_key?(&1, :transition))
   end

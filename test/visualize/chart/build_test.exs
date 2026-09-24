@@ -66,9 +66,11 @@ defmodule Visualize.Chart.BuildTest do
 
     test "the keys a node does know are kept as given" do
       assert axis(:x, :bottom, ticks: 6, format: "%H:%M", grid: true) == %{
-               frames: %{main: %{
-                 axes: [%{scale: :x, side: :bottom, ticks: 6, format: "%H:%M", grid: true}]
-               }}
+               frames: %{
+                 main: %{
+                   axes: [%{scale: :x, side: :bottom, ticks: 6, format: "%H:%M", grid: true}]
+                 }
+               }
              }
     end
   end
@@ -240,10 +242,12 @@ defmodule Visualize.Chart.BuildTest do
 
     test "a facet frame lifts by and columns into its facet node" do
       assert facet(by: :region, columns: 2) == %{
-               frames: %{main: %{
-                 kind: :facet,
-                 facet: %{by: :region, columns: 2}
-               }}
+               frames: %{
+                 main: %{
+                   kind: :facet,
+                   facet: %{by: :region, columns: 2}
+                 }
+               }
              }
     end
 

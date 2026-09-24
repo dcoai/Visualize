@@ -30,8 +30,9 @@ defmodule Visualize.Chart.Composite do
   # The kinds a document keys by name (§19.3).
   @named [:style, :scale, :source, :var, :gradient]
 
-  # The document version flatten writes: a design is the deployed tier (§19.8).
-  @version 1
+  # The document version flatten writes: a design is the deployed tier (§19.8), and the
+  # tier is written at the version this library writes (§9).
+  @version Visualize.Chart.Migration.current()
 
   @typedoc """
   What `flatten/2` reports beside the design: every ref no store could find — a site's,
@@ -158,12 +159,21 @@ defmodule Visualize.Chart.Composite do
   """
   @spec decompose(map()) :: {[Use.t()], %{Use.id() => String.t()}}
   def decompose(document) when is_map(document) and not is_struct(document) do
-    frame = Map.get(document, :frame, %{})
+    # A design holds its frames by name (spec/14 §2.1, #383); one is decomposed into
+    # its own site plus a site per scale and per axis, as the singular frame was.
+    {frame_name, frame} =
+      case Map.get(document, :frames, %{}) do
+        frames when is_map(frames) and map_size(frames) > 0 ->
+          frames |> Enum.sort_by(fn {name, _} -> to_string(name) end) |> hd()
+
+        _none ->
+          {:main, %{}}
+      end
 
     sites =
       one(:theme, document) ++
         one(:meta, document) ++
-        frame_site(Map.drop(frame, [:scales, :axes])) ++
+        frame_site(frame_name, Map.drop(frame, [:scales, :axes])) ++
         keyed(:style, Map.get(document, :styles, %{})) ++
         keyed(:scale, Map.get(frame, :scales, %{})) ++
         keyed(:source, Map.get(document, :sources, %{})) ++
@@ -188,8 +198,10 @@ defmodule Visualize.Chart.Composite do
     end
   end
 
-  defp frame_site(frame) when map_size(frame) == 0, do: []
-  defp frame_site(frame), do: [{"frame", %{ref: nil, local: %{frame: frame}}}]
+  defp frame_site(_name, frame) when map_size(frame) == 0, do: []
+
+  defp frame_site(name, frame),
+    do: [{"frame", %{ref: nil, local: %{frames: %{name => frame}}}}]
 
   defp keyed(kind, declared) when is_map(declared) do
     declared

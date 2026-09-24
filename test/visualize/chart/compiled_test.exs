@@ -25,11 +25,13 @@ defmodule Visualize.Chart.CompiledTest do
       %{
         version: 2,
         sources: %{primary: %{fields: [:t, :v]}},
-        frames: %{main: %{
-          kind: :cartesian,
-          scales: scales,
-          axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]
-        }},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: scales,
+            axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]
+          }
+        },
         marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}],
         labels: [%{anchor: :title, text: ["Compiled"]}]
       },
@@ -75,12 +77,14 @@ defmodule Visualize.Chart.CompiledTest do
       scales = Map.put(@fixed, :color, %{kind: :ordinal})
 
       extra = %{
-        frames: %{main: %{
-          kind: :cartesian,
-          scales: scales,
-          legend: %{scale: :color},
-          axes: []
-        }},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: scales,
+            legend: %{scale: :color},
+            axes: []
+          }
+        },
         marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v, series: :v}}],
         labels: [%{anchor: {:data, [1, 1]}, text: ["here"]}]
       }
@@ -100,12 +104,14 @@ defmodule Visualize.Chart.CompiledTest do
     test "a facet's panels are one dynamic region" do
       extra = %{
         sources: %{primary: %{fields: [:t, :v, :g]}},
-        frames: %{main: %{
-          kind: :facet,
-          facet: %{by: :g},
-          scales: @fixed,
-          axes: [%{scale: :y, side: :left}]
-        }}
+        frames: %{
+          main: %{
+            kind: :facet,
+            facet: %{by: :g},
+            scales: @fixed,
+            axes: [%{scale: :y, side: :left}]
+          }
+        }
       }
 
       rows = for {r, i} <- Enum.with_index(rows(4)), do: Map.put(r, :g, rem(i, 2))
@@ -269,19 +275,21 @@ defmodule Visualize.Chart.CompiledTest do
       polar = %{
         version: 2,
         sources: %{primary: %{fields: [:bearing, :v]}},
-        frames: %{main: %{
-          kind: :polar,
-          scales: %{
-            angle: %{kind: :radial, domain: [0, 360]},
-            r: %{kind: :linear},
-            z: %{kind: :linear, domain: [0, 1]}
-          },
-          axes: [
-            %{scale: :angle, side: :bottom, ticks: 4, grid: true},
-            %{scale: :r, side: :top, ticks: 3, grid: true},
-            %{scale: :z, side: :left, grid: true}
-          ]
-        }},
+        frames: %{
+          main: %{
+            kind: :polar,
+            scales: %{
+              angle: %{kind: :radial, domain: [0, 360]},
+              r: %{kind: :linear},
+              z: %{kind: :linear, domain: [0, 1]}
+            },
+            axes: [
+              %{scale: :angle, side: :bottom, ticks: 4, grid: true},
+              %{scale: :r, side: :top, ticks: 3, grid: true},
+              %{scale: :z, side: :left, grid: true}
+            ]
+          }
+        },
         marks: [%{type: :rose, data: :primary, channels: %{angle: :bearing, value: :v}}],
         labels: [%{anchor: {:data, [90, 3]}, text: ["east"]}]
       }
@@ -289,10 +297,12 @@ defmodule Visualize.Chart.CompiledTest do
       geo = %{
         version: 2,
         sources: %{primary: %{fields: [:lon, :lat]}},
-        frames: %{main: %{
-          kind: :geo,
-          projection: %{type: :equirectangular, scale: 30}
-        }},
+        frames: %{
+          main: %{
+            kind: :geo,
+            projection: %{type: :equirectangular, scale: 30}
+          }
+        },
         marks: [
           %{
             type: :circle,
@@ -306,12 +316,14 @@ defmodule Visualize.Chart.CompiledTest do
       facet = %{
         version: 2,
         sources: %{primary: %{fields: [:t, :v, :g]}},
-        frames: %{main: %{
-          kind: :facet,
-          facet: %{by: :g, columns: 2},
-          scales: %{x: %{kind: :linear, domain: [0, 5]}, y: %{kind: :linear}},
-          axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, grid: true}]
-        }},
+        frames: %{
+          main: %{
+            kind: :facet,
+            facet: %{by: :g, columns: 2},
+            scales: %{x: %{kind: :linear, domain: [0, 5]}, y: %{kind: :linear}},
+            axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, grid: true}]
+          }
+        },
         marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       }
 
@@ -618,13 +630,15 @@ defmodule Visualize.Chart.CompiledTest do
     @stream %{
       version: 2,
       sources: %{primary: %{fields: [:t, :v]}},
-      frames: %{main: %{
-        kind: :cartesian,
-        margin: %{top: 0, right: 20, bottom: 0, left: 20},
-        scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, 10]}},
-        axes: [%{scale: :x, side: :bottom}],
-        viewport: %{scale: :x, span: 10}
-      }},
+      frames: %{
+        main: %{
+          kind: :cartesian,
+          margin: %{top: 0, right: 20, bottom: 0, left: 20},
+          scales: %{x: %{kind: :linear}, y: %{kind: :linear, domain: [0, 10]}},
+          axes: [%{scale: :x, side: :bottom}],
+          viewport: %{scale: :x, span: 10}
+        }
+      },
       marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}, render: :binary}]
     }
 
@@ -701,7 +715,11 @@ defmodule Visualize.Chart.CompiledTest do
       # measurements in the same run, never an absolute bound — timing bounds in this
       # suite have flaked under parallel load before.
       cost = fn span, rows ->
-        design = %{@stream | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: span}}}}
+        design = %{
+          @stream
+          | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: span}}}
+        }
+
         compiled = compile!(design, size: {140, 100}, sources: %{primary: rows})
         {_full, compiled} = Compiled.tick(compiled, %{primary: rows}, now: span)
 
@@ -725,7 +743,11 @@ defmodule Visualize.Chart.CompiledTest do
 
       # At scale the strip is a fraction of the full redraw: a thousand-row window on
       # 100 px scrolled 20 px carries 200 rows and six neighbours against 1,001.
-      big = %{@stream | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: 1000}}}}
+      big = %{
+        @stream
+        | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: 1000}}}
+      }
+
       big_rows = rows(1400)
       compiled_big = compile!(big, size: {140, 100}, sources: %{primary: big_rows})
       {full_big, compiled_big} = Compiled.tick(compiled_big, %{primary: big_rows}, now: 1000)
@@ -745,7 +767,11 @@ defmodule Visualize.Chart.CompiledTest do
     test "a scroll tick builds the strip and nothing else: its cost does not follow the window (#404)" do
       # A window of 20,000 rows on 100 px: a scroll exposes 20 px, about 200 rows and six
       # neighbours. Whatever the whole window costs to build, the scroll must not pay it.
-      big = %{@stream | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: 10_000}}}}
+      big = %{
+        @stream
+        | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: 10_000}}}
+      }
+
       sources = %{primary: rows(20_000)}
       compiled = compile!(big, sources: sources)
 
@@ -824,12 +850,11 @@ defmodule Visualize.Chart.CompiledTest do
     test "the strip is found without building the window, and a 50,000-row scroll holds 60 FPS (#410)" do
       # 50,000 rows over a 740 px plot, scrolled the two pixels a run at 60 FPS and 4,500
       # samples a second gives it: the frame must cost that strip, not the window.
-      plot = %{
-        @stream.frames.main
-        | viewport: %{scale: :x, span: 50_000}
+      big = %{
+        @stream
+        | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: 50_000}}}
       }
 
-      big = %{@stream | frame: plot}
       sources = %{primary: rows(60_000)}
       compiled = compile!(big, sources: sources)
       {_full, compiled} = Compiled.tick(compiled, sources, now: 50_000)

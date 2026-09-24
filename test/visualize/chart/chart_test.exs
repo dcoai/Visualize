@@ -12,7 +12,18 @@ defmodule Visualize.ChartTest do
 
   doctest Var
 
-  @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :defs, :frames, :marks, :labels]
+  @design_keys [
+    :version,
+    :meta,
+    :sources,
+    :vars,
+    :theme,
+    :styles,
+    :defs,
+    :frames,
+    :marks,
+    :labels
+  ]
 
   describe "from_map/1 and to_map/1" do
     property "every generated design validates and round-trips exactly" do
@@ -75,13 +86,15 @@ defmodule Visualize.ChartTest do
             s: %{stroke: {:series, 3}, fill: {:field, :sha}, opacity: 0.5},
             t: %{fill: :none}
           },
-          frames: %{main: %{
-            kind: :cartesian,
-            scales: %{
-              x: %{kind: :time, domain: [~U[2026-09-08 00:00:00Z], :auto]},
-              y: %{kind: :linear, unknown: nil}
+          frames: %{
+            main: %{
+              kind: :cartesian,
+              scales: %{
+                x: %{kind: :time, domain: [~U[2026-09-08 00:00:00Z], :auto]},
+                y: %{kind: :linear, unknown: nil}
+              }
             }
-          }},
+          },
           marks: [%{type: :line, data: :p, channels: %{x: :t, y: :v}, style: :s}],
           labels: [%{anchor: {:axis, :y}, text: ["unit: ", Chart.var(:unit)]}]
         })
@@ -114,7 +127,9 @@ defmodule Visualize.ChartTest do
     end
 
     test "a document that parses but does not validate reports by path" do
-      assert Chart.from_json(~s({"version": 2, "frames": {"main": {"kind": "cartesian"}}, "marks": 3})) ==
+      assert Chart.from_json(
+               ~s({"version": 2, "frames": {"main": {"kind": "cartesian"}}, "marks": 3})
+             ) ==
                {:error, [{[:marks], {:type, {:list, {:node, :mark}}}}]}
     end
   end

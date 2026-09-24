@@ -61,9 +61,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             :if={side.index != nil}
             type="button"
             class="vis-builder-axes-link"
-            title={"frame.axes[#{side.index}]: ticks, format, unit …"}
+            title={"frames.main.axes[#{side.index}]: ticks, format, unit …"}
             phx-click="select_node"
-            phx-value-node={"frame.axes[#{side.index}]"}
+            phx-value-node={"frames.main.axes[#{side.index}]"}
             phx-target={@target}
           >{side.word} axis …</button>
         </div>
@@ -87,7 +87,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec rows(map(), [atom()]) :: [row()]
     def rows(design, scales) do
-      axes = design |> get_in(Fragment.frame_path(design) ++ [:axes]) |> List.wrap() |> Enum.with_index()
+      axes =
+        design
+        |> get_in(Fragment.frame_path(design) ++ [:axes])
+        |> List.wrap()
+        |> Enum.with_index()
 
       for scale <- scales do
         mine = for {%{scale: ^scale} = axis, i} <- axes, do: {axis, i}

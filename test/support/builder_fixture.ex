@@ -29,21 +29,25 @@ defmodule Visualize.BuilderFixture do
          version: 2,
          theme: :default,
          styles: %{series: %{stroke: :series_1, stroke_width: 2}},
-         frames: %{main: %{
-           kind: :cartesian,
-           margin: %{top: 20, right: 20, bottom: 30, left: 40}
-         }}
+         frames: %{
+           main: %{
+             kind: :cartesian,
+             margin: %{top: 20, right: 20, bottom: 30, left: 40}
+           }
+         }
        }},
       {:shared,
        %{
          sources: %{primary: %{fields: [:t, :v]}},
-         frames: %{main: %{
-           scales: %{
-             x: %{kind: :linear, domain: :auto},
-             y: %{kind: :linear, domain: [0, :auto]}
-           },
-           axes: [%{scale: :x, side: :bottom, ticks: 3}, %{scale: :y, side: :left, ticks: 3}]
-         }}
+         frames: %{
+           main: %{
+             scales: %{
+               x: %{kind: :linear, domain: :auto},
+               y: %{kind: :linear, domain: [0, :auto]}
+             },
+             axes: [%{scale: :x, side: :bottom, ticks: 3}, %{scale: :y, side: :left, ticks: 3}]
+           }
+         }
        }},
       {:panel,
        %{
@@ -133,7 +137,11 @@ defmodule Visualize.BuilderFixture do
          fragment: %{
            composite: %{
              uses: [
-               %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frames: %{main: %{kind: :cartesian}}}}
+               %Visualize.Chart.Use{
+                 id: {:use, 1},
+                 ref: nil,
+                 local: %{frames: %{main: %{kind: :cartesian}}}
+               }
              ],
              vars: %{}
            }

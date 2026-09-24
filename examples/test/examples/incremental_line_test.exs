@@ -19,7 +19,7 @@ defmodule Examples.Charts.IncrementalLineTest do
     assert IncrementalLine.plot() == {40, 20, 740, 450}
 
     {design, rows} = IncrementalLine.design(samples_per_px: 2, origin: 100)
-    assert design.frame.viewport == %{scale: :x, span: 1480}
+    assert design.frames.main.viewport == %{scale: :x, span: 1480}
     assert Map.keys(rows) == [:signal]
     assert length(rows.signal) == 1481
     assert hd(rows.signal).t == 100 and List.last(rows.signal).t == 1580

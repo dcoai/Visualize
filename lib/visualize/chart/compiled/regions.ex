@@ -64,6 +64,7 @@ defmodule Visualize.Chart.Compiled.Regions do
 
   def moving?(%Chart{} = chart, name, _viewport) do
     node = only_frame(chart)
+
     case get_in(node, [:scales, name]) do
       nil -> false
       scale -> inferred?(Map.get(scale, :domain, :auto))
@@ -76,6 +77,7 @@ defmodule Visualize.Chart.Compiled.Regions do
   @spec mark_scales(Chart.t(), map()) :: [atom()]
   def mark_scales(%Chart{styles: styles} = chart, mark) do
     node = only_frame(chart)
+
     channels =
       for {channel, _value} <- Map.get(mark, :channels, %{}),
           scale = Scales.scale_for(node.kind, mark, channel),
@@ -239,6 +241,7 @@ defmodule Visualize.Chart.Compiled.Regions do
 
   defp builder(:labels, _kind, _axes),
     do: fn frame, _sources, mode -> Labels.generate(frame, mode) end
+
   # A compiled chart is one frame until #385 (spec/14 §12.1): its node, whatever it is
   # named. `Visualize.Chart.Compiled.new/2` refuses a design with more.
   defp only_frame(%Chart{frames: frames}), do: frames |> Map.values() |> hd()

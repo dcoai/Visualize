@@ -311,7 +311,7 @@ defmodule Examples.ChartsTest do
   test "every design's hybrid draws its furniture as SVG over a binary canvas of its marks" do
     for module <- charts() do
       hybrid = Design.hybrid(module, [])
-      axes = Design.applied(module, []).chart.frame |> Map.get(:axes, [])
+      axes = Design.applied(module, []).frame.axes || []
 
       assert hybrid.static =~ "<svg"
       assert hybrid.width > 0 and hybrid.height > 0

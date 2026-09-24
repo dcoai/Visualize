@@ -459,7 +459,11 @@ defmodule Visualize.Hooks.Builder do
       // Whether a drawn node's label is one that moves (spec/14 §18.16): an axis, the
       // legend, a label. A mark's position is its data; the frame does not move.
       movable(label) {
-        return label.startsWith('frame.axes[') || label === 'frame.legend' || label.startsWith('labels[');
+        if (label.startsWith('frames.')) {
+          const rest = label.slice('frames.'.length);
+          return rest.includes('.axes[') || rest.endsWith('.legend');
+        }
+        return label.startsWith('labels[');
       },
 
       // The region a chart point falls in, from the frame the render carries on the <svg>

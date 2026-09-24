@@ -9,11 +9,13 @@
     spark: %{stroke: :series_1, stroke_width: 1},
     big: %{fill: :text, font_size: :title_size, font_weight: :bold}
   },
-  frames: %{main: %{
-    kind: :cartesian,
-    margin: %{top: 40, right: 10, bottom: 10, left: 10},
-    scales: %{x: %{kind: :time}, y: %{kind: :linear, domain: [0, :auto]}}
-  }},
+  frames: %{
+    main: %{
+      kind: :cartesian,
+      margin: %{top: 40, right: 10, bottom: 10, left: 10},
+      scales: %{x: %{kind: :time}, y: %{kind: :linear, domain: [0, :auto]}}
+    }
+  },
   marks: [%{type: :line, data: :series, channels: %{x: :t, y: :v}, style: :spark}],
   labels: [
     %{anchor: {:frame, :top_left}, text: [Visualize.Chart.var(:value)], style: :big, dy: -30},

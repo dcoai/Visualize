@@ -58,7 +58,18 @@ defmodule Visualize.Chart do
 
   alias Visualize.IR.{Element, Transform}
 
-  @design_keys [:version, :meta, :sources, :vars, :theme, :styles, :defs, :frames, :marks, :labels]
+  @design_keys [
+    :version,
+    :meta,
+    :sources,
+    :vars,
+    :theme,
+    :styles,
+    :defs,
+    :frames,
+    :marks,
+    :labels
+  ]
 
   defstruct version: 2,
             meta: %{},
@@ -67,7 +78,7 @@ defmodule Visualize.Chart do
             theme: :default,
             styles: %{},
             defs: %{},
-            frames: %{},
+            frames: nil,
             marks: [],
             labels: []
 
@@ -79,7 +90,7 @@ defmodule Visualize.Chart do
           theme: atom() | map(),
           styles: %{atom() => map()},
           defs: %{atom() => map()},
-          frames: %{atom() => map()},
+          frames: %{atom() => map()} | nil,
           marks: [map()],
           labels: [map()]
         }
@@ -295,7 +306,12 @@ defmodule Visualize.Chart do
          {:ok, sources} <- Template.bind(chart, pool),
          :ok <- Validator.validate(to_map(chart)) do
       shared = [sources: sources] ++ Keyword.take(opts, [:theme, :now, :size])
-      frames = Map.new(chart.frames, fn {name, _} -> {name, Frame.new(chart, [frame: name] ++ shared)} end)
+
+      frames =
+        Map.new(chart.frames, fn {name, _} ->
+          {name, Frame.new(chart, [frame: name] ++ shared)}
+        end)
+
       frame = frames |> Map.values() |> Enum.min_by(& &1.name)
       {:ok, %Applied{chart: chart, sources: sources, frame: frame, frames: frames}}
     end
@@ -354,7 +370,7 @@ defmodule Visualize.Chart do
       iex> house = %{theme: :dark, frames: %{main: %{margin: %{top: 800, bottom: 400}}}}
       iex> panel = %{frames: %{main: %{margin: %{top: 600, bottom: 300}}}}
       iex> design = Visualize.Chart.stack([theme, house, panel])
-      iex> {design.theme, design.frame.kind, design.frame.margin}
+      iex> {design.theme, design.frames.main.kind, design.frames.main.margin}
       {:dark, :cartesian, %{top: 600, bottom: 300}}
 
   """
@@ -420,8 +436,8 @@ defmodule Visualize.Chart do
       iex> panel = %{frames: %{main: %{margin: %{top: 600}}}}
       iex> Visualize.Chart.explain([{:house, house}, {:panel, panel}])
       [
-        %{path: [:frame, :margin, :bottom], value: 400, layer: :house, overrode: []},
-        %{path: [:frame, :margin, :top], value: 600, layer: :panel, overrode: [:house]},
+        %{path: [:frames, :main, :margin, :bottom], value: 400, layer: :house, overrode: []},
+        %{path: [:frames, :main, :margin, :top], value: 600, layer: :panel, overrode: [:house]},
         %{path: [:theme], value: :dark, layer: :house, overrode: []}
       ]
 
@@ -533,7 +549,7 @@ defmodule Visualize.Chart do
   """
   @spec generate(Applied.t(), keyword()) :: Element.t()
   def generate(%Applied{chart: chart, frame: frame, frames: frames, sources: sources}, opts) do
-    group = frames_group(frames || %{frame.name => frame}, sources, opts)
+    group = frames_group(realised(frames, frame), sources, opts)
 
     if Keyword.get(opts, :root, false) do
       meta = chart.meta || %{}
@@ -549,6 +565,11 @@ defmodule Visualize.Chart do
       group
     end
   end
+
+  # An `%Applied{}` assembled by hand — one frame realised through `Visualize.Chart.Frame.new/2`
+  # and no `frames` — draws that frame alone, so a caller that has one frame need not name it.
+  defp realised(frames, frame) when frames == %{} or is_nil(frames), do: %{frame.name => frame}
+  defp realised(frames, _frame), do: frames
 
   # Every frame drawn at its own pixel box, in `z` order with ties broken by name
   # (spec/14 §4.7, #383): one group per frame, the design's own group when there is only

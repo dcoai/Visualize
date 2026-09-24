@@ -62,6 +62,8 @@ defmodule Visualize.Chart.Frame do
             defs: %{},
             now: nil,
             name: nil,
+            mark_paths: [],
+            label_paths: [],
             box: [0, 0, 1, 1],
             z: 0,
             background: nil
@@ -88,6 +90,8 @@ defmodule Visualize.Chart.Frame do
           defs: %{atom() => map()},
           now: term() | nil,
           name: atom() | nil,
+          mark_paths: [non_neg_integer()],
+          label_paths: [non_neg_integer()],
           box: [number()],
           z: integer(),
           background: term() | nil
@@ -177,6 +181,8 @@ defmodule Visualize.Chart.Frame do
       labels: mine(chart.labels, name, chart),
       marks: mine(chart.marks, name, chart),
       name: name,
+      mark_paths: paths_of(chart.marks, name, chart),
+      label_paths: paths_of(chart.labels, name, chart),
       box: box,
       z: Map.get(node, :z, Schema.default(:frame, :z)),
       background: Map.get(node, :background),
@@ -227,7 +233,7 @@ defmodule Visualize.Chart.Frame do
       reads, as `new/2` takes; when given, the marks are drawn from them (spec/14 §5.6)
     * `:paths` - `true` for every design node's element to carry `data-node` with the
       node's path as `Visualize.Chart.Validator.format_path/1` spells it — `frame`,
-      `marks[0]`, `frame.axes[0]`, `frame.legend`, `labels[0]` — for a caller that must
+      `marks[0]`, `frames.main.axes[0]`, `frames.main.legend`, `labels[0]` — for a caller that must
       name what it drew, as the builder's graph does (spec/14 §4.7, D-105); `false`
       (default) leaves the markup as it is
 
@@ -321,8 +327,11 @@ defmodule Visualize.Chart.Frame do
 
   defp frame_node(%Chart{frames: frames}, name) do
     case Map.fetch(frames, name) do
-      {:ok, node} -> {name, node}
-      :error -> raise ArgumentError, "the design declares no frame #{inspect(name)} (spec/14 §4.1)"
+      {:ok, node} ->
+        {name, node}
+
+      :error ->
+        raise ArgumentError, "the design declares no frame #{inspect(name)} (spec/14 §4.1)"
     end
   end
 
@@ -334,6 +343,13 @@ defmodule Visualize.Chart.Frame do
     else
       Enum.filter(nodes, &(Map.get(&1, :frame) == name))
     end
+  end
+
+  # The design positions of the nodes this frame draws, so an element carries the path the
+  # design gives it and not the position within the frame (spec/14 §4.7, D-105).
+  defp paths_of(nodes, name, chart) do
+    mine = mine(nodes, name, chart)
+    for {node, i} <- Enum.with_index(nodes), node in mine, do: i
   end
 
   # A frame's pixel box is its fractions of the render's (spec/14 §4.2).
@@ -483,7 +499,7 @@ defmodule Visualize.Chart.Frame do
     Enum.with_index(frame.marks, fn mark, i ->
       frame
       |> Mark.generate(mark, [sources: sources, resolve: mode, index: i + 1] ++ opts)
-      |> stamp([:marks, i], paths?)
+      |> stamp([:marks, Enum.at(frame.mark_paths, i, i)], paths?)
     end)
   end
 

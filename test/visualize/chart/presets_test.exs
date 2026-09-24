@@ -142,7 +142,10 @@ defmodule Visualize.Chart.PresetsTest do
   end
 
   test "the x scale of a series chart follows the first datum (spec/10 §2.2)" do
-    line = fn data -> Presets.line_chart(%{data: data, x: & &1.x, y: & &1.y}).frames.main.scales.x end
+    line = fn data ->
+      Presets.line_chart(%{data: data, x: & &1.x, y: & &1.y}).frames.main.scales.x
+    end
+
     assert line.([%{x: @t0, y: 1}]) == %{kind: :time}
     assert line.([%{x: ~D[2024-01-01], y: 1}]) == %{kind: :time}
     assert line.([%{x: 3, y: 1}]) == %{kind: :linear}
@@ -295,7 +298,7 @@ defmodule Visualize.Chart.PresetsTest do
     design = Presets.bar_chart(a)
     fields = design.sources.data.fields ++ [:region]
     facet = Map.merge(design.frames.main, %{kind: :facet, facet: %{by: :region, columns: 2}})
-    design = %{design | frame: facet, sources: %{data: %{fields: fields}}}
+    design = %{design | frames: %{main: facet}, sources: %{data: %{fields: fields}}}
     chart = Chart.from_map!(design)
 
     rows =

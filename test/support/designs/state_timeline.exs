@@ -9,16 +9,18 @@
     by_state: %{fill: {:field, :state}, stroke: :background},
     over: %{fill: :background, font_size: :font_size, font_family: :font_family}
   },
-  frames: %{main: %{
-    kind: :cartesian,
-    margin: %{top: 20, right: 20, bottom: 30, left: 20},
-    scales: %{
-      x: %{kind: :time},
-      color: %{kind: :ordinal, domain: ["ok", "degraded", "down"]}
-    },
-    axes: [%{scale: :x, side: :bottom, ticks: 6, format: "%H:%M"}],
-    legend: %{scale: :color, position: :top}
-  }},
+  frames: %{
+    main: %{
+      kind: :cartesian,
+      margin: %{top: 20, right: 20, bottom: 30, left: 20},
+      scales: %{
+        x: %{kind: :time},
+        color: %{kind: :ordinal, domain: ["ok", "degraded", "down"]}
+      },
+      axes: [%{scale: :x, side: :bottom, ticks: 6, format: "%H:%M"}],
+      legend: %{scale: :color, position: :top}
+    }
+  },
   marks: [
     %{
       type: :band,

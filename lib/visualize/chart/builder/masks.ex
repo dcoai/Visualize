@@ -236,7 +236,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:frames = key, value} when is_map(value) and not is_struct(value) ->
           inner =
             Enum.flat_map(value, fn {name, node} ->
-              parts = if is_map(node), do: for({p, _} <- node, is_atom(p), do: [key, name, p]), else: []
+              parts =
+                if is_map(node), do: for({p, _} <- node, is_atom(p), do: [key, name, p]), else: []
+
               [[key, name] | parts]
             end)
 
@@ -276,7 +278,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> use = %Visualize.Chart.Use{id: 1, ref: nil, mask: [[:frames, :main, :margin]]}
         iex> rows = Visualize.Chart.Builder.Masks.rows(%{frames: %{main: %{margin: %{top: 1}}}}, use)
         iex> Enum.map(rows, &{&1.name, &1.masked})
-        [{"frames.main", false}, {"frames.main.margin", true}]
+        [{"frames", false}, {"frames.main", false}, {"frames.main.margin", true}]
     """
     @spec rows(map(), Use.t()) :: [map()]
     def rows(fragment, %Use{mask: mask}) do

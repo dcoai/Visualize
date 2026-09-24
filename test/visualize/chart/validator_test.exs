@@ -47,28 +47,30 @@ defmodule Visualize.Chart.ValidatorTest do
         angle: 180
       }
     },
-    frames: %{main: %{
-      kind: :cartesian,
-      margin: %{top: 20, right: 20, bottom: 30, left: 40},
-      scales: %{
-        x: %{kind: :time, domain: :auto},
-        y: %{
-          kind: :linear,
-          domain: [0, :auto],
-          nice: true,
-          transition: %{duration: 300, easing: :cubic_in_out, shrink_after: 0}
+    frames: %{
+      main: %{
+        kind: :cartesian,
+        margin: %{top: 20, right: 20, bottom: 30, left: 40},
+        scales: %{
+          x: %{kind: :time, domain: :auto},
+          y: %{
+            kind: :linear,
+            domain: [0, :auto],
+            nice: true,
+            transition: %{duration: 300, easing: :cubic_in_out, shrink_after: 0}
+          },
+          color: %{kind: :ordinal, range: :category10}
         },
-        color: %{kind: :ordinal, range: :category10}
-      },
-      axes: [
-        %{scale: :x, side: :bottom, ticks: %{count: 6, size_inner: 4}, format: "%H:%M"},
-        %{scale: :y, side: :left, ticks: 5, grid: true}
-      ],
-      legend: %{scale: :color, position: :top_right, title: ["colour"]},
-      projection: %{type: :mercator, scale: 100, translate: [1, 2]},
-      facet: %{by: :sha, columns: 2},
-      viewport: %{scale: :x, span: 60}
-    }},
+        axes: [
+          %{scale: :x, side: :bottom, ticks: %{count: 6, size_inner: 4}, format: "%H:%M"},
+          %{scale: :y, side: :left, ticks: 5, grid: true}
+        ],
+        legend: %{scale: :color, position: :top_right, title: ["colour"]},
+        projection: %{type: :mercator, scale: 100, translate: [1, 2]},
+        facet: %{by: :sha, columns: 2},
+        viewport: %{scale: :x, span: 60}
+      }
+    },
     marks: [
       %{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :series, render: :svg},
       %{
@@ -154,7 +156,13 @@ defmodule Visualize.Chart.ValidatorTest do
   defp design_with_mark(type) do
     channels = Map.new(Schema.channels(type).required, &{&1, :t})
     mark = %{type: type, data: :primary, channels: channels}
-    %{version: 2, sources: %{primary: %{fields: [:t]}}, frames: %{main: %{kind: :cartesian}}, marks: [mark]}
+
+    %{
+      version: 2,
+      sources: %{primary: %{fields: [:t]}},
+      frames: %{main: %{kind: :cartesian}},
+      marks: [mark]
+    }
   end
 
   test "the fixture covers every node kind and validates" do
@@ -298,19 +306,25 @@ defmodule Visualize.Chart.ValidatorTest do
       end
 
       assert errors(scale.(%{sweep: 0})) == [{[:frames, :main, :scales, :angle, :sweep], :sweep}]
-      assert errors(scale.(%{sweep: 400})) == [{[:frames, :main, :scales, :angle, :sweep], :sweep}]
+
+      assert errors(scale.(%{sweep: 400})) == [
+               {[:frames, :main, :scales, :angle, :sweep], :sweep}
+             ]
+
       assert Validator.validate(scale.(%{start: -120, sweep: 240})) == :ok
       assert Validator.validate(scale.(%{sweep: -360})) == :ok
 
       axis = fn node ->
-        put_at(scale.(%{}), [:frames, :main, :axes], [Map.merge(%{scale: :angle, side: :bottom}, node)])
+        put_at(scale.(%{}), [:frames, :main, :axes], [
+          Map.merge(%{scale: :angle, side: :bottom}, node)
+        ])
       end
 
       assert errors(axis.(%{radius: 0})) == [{[:frames, :main, :axes, 0, :radius], :radius}]
       assert Validator.validate(axis.(%{radius: 0.8, at: 45})) == :ok
 
       assert Validator.format({[:frames, :main, :scales, :angle, :sweep], :sweep}) ==
-               "frame.scales.angle.sweep: must be within a turn, and not zero"
+               "frames.main.scales.angle.sweep: must be within a turn, and not zero"
     end
 
     test "a needle is a polar frame's mark; elsewhere its type is invalid for it (#392)" do
@@ -321,7 +335,8 @@ defmodule Visualize.Chart.ValidatorTest do
       assert Validator.validate(%{mark: hd(design.marks)}, :mark) == :ok
 
       capped =
-        put_in(design, [:frames, :main, :kind], :polar) |> put_at([:marks, 0, :options, :cap], :square)
+        put_in(design, [:frames, :main, :kind], :polar)
+        |> put_at([:marks, 0, :options, :cap], :square)
 
       assert errors(capped) == [{[:marks, 0, :options, :cap], {:enum, [:point, :round, :flat]}}]
     end
@@ -341,7 +356,8 @@ defmodule Visualize.Chart.ValidatorTest do
     end
 
     test "an extent carries :auto only as one of two bounds" do
-      assert Validator.validate(put_at(@full, [:frames, :main, :scales, :y, :domain], [:auto, 5])) == :ok
+      assert Validator.validate(put_at(@full, [:frames, :main, :scales, :y, :domain], [:auto, 5])) ==
+               :ok
 
       assert errors(put_at(@full, [:frames, :main, :scales, :y, :domain], [1, :auto, 5])) ==
                [{[:frames, :main, :scales, :y, :domain], {:type, :extent}}]
@@ -368,7 +384,12 @@ defmodule Visualize.Chart.ValidatorTest do
     end
 
     test "slots resolve against the default theme when none is named" do
-      design = %{version: 2, frames: %{main: %{kind: :cartesian}}, styles: %{s: %{opacity: :none}}}
+      design = %{
+        version: 2,
+        frames: %{main: %{kind: :cartesian}},
+        styles: %{s: %{opacity: :none}}
+      }
+
       assert errors(design) == [{[:styles, :s, :opacity], {:undeclared, :slot, :none}}]
     end
 
@@ -390,7 +411,12 @@ defmodule Visualize.Chart.ValidatorTest do
 
       assert errors(design) == [{[:frames, :main, :axes, 0, :scale], {:undeclared, :scale, :x}}]
 
-      no_sources = %{version: 2, frames: %{main: %{kind: :cartesian}}, marks: [%{type: :line, data: :s}]}
+      no_sources = %{
+        version: 2,
+        frames: %{main: %{kind: :cartesian}},
+        marks: [%{type: :line, data: :s}]
+      }
+
       assert errors(no_sources) == [{[:marks, 0, :data], {:undeclared, :source, :s}}]
 
       no_styles = %{
@@ -402,10 +428,19 @@ defmodule Visualize.Chart.ValidatorTest do
 
       assert errors(no_styles) == [{[:marks, 0, :style], {:undeclared, :style, :series}}]
 
-      no_defs = %{version: 2, frames: %{main: %{kind: :cartesian}}, styles: %{w: %{fill: {:paint, :g}}}}
+      no_defs = %{
+        version: 2,
+        frames: %{main: %{kind: :cartesian}},
+        styles: %{w: %{fill: {:paint, :g}}}
+      }
+
       assert errors(no_defs) == [{[:styles, :w, :fill], {:undeclared, :paint, :g}}]
 
-      no_vars = %{version: 2, frames: %{main: %{kind: :cartesian, margin: Visualize.Chart.var(:size)}}}
+      no_vars = %{
+        version: 2,
+        frames: %{main: %{kind: :cartesian, margin: Visualize.Chart.var(:size)}}
+      }
+
       assert errors(no_vars) == [{[:frames, :main, :margin], {:undeclared, :var, :size}}]
 
       # A fragment checked alone as its kind still has nothing to look a reference up in.
@@ -538,10 +573,10 @@ defmodule Visualize.Chart.ValidatorTest do
       assert Validator.format({[], {:type, {:node, :design}}}) == "design: must be a design node"
 
       assert Validator.format({[:frames, :main, :kind], {:enum, [:cartesian, :polar]}}) ==
-               "frame.kind: must be one of :cartesian, :polar"
+               "frames.main.kind: must be one of :cartesian, :polar"
 
       assert Validator.format({[:version], {:unsupported_version, 2}}) ==
-               "version: version 2 is not supported; the current version is 1"
+               "version: version 2 is not supported; the current version is 2"
 
       assert Validator.format({[:marks, 0, :options, :radius], {:invalid_for, :line}}) ==
                "marks[0].options.radius: is not read by :line"
