@@ -203,6 +203,7 @@ defmodule Visualize.Chart.Validator do
       # A scale name resolves inside a mark's *own* frame (spec/14 §5.1, #383): the
       # design-level context is the single frame's where there is one, and `enter(:mark)`
       # narrows it to the frame the mark names where there are several.
+      layout: if(is_map(map[:layout]), do: map[:layout], else: nil),
       frames: declared(map[:frames]),
       frame_nodes: frames,
       scales: declared(one && nested(one, [:scales])),
@@ -298,6 +299,25 @@ defmodule Visualize.Chart.Validator do
         name?(name),
         name not in fields,
         do: {path ++ [:types, name], {:undeclared, :field, name}}
+  end
+
+  # A layout's weights are positive: a cell of no width is not a cell (spec/14 §2.8, #384).
+  defp held(:layout, map, path, _ctx) do
+    for key <- [:columns, :rows],
+        weights = Map.get(map, key),
+        is_list(weights),
+        not Enum.all?(weights, &(is_number(&1) and &1 > 0)),
+        do: {path ++ [key], {:weight, key}}
+  end
+
+  # A frame says where it goes once (spec/14 §4.2, §2.8, #384): its box, or its cell on
+  # the design's grid, and a cell stays inside that grid.
+  defp held(:frame, %{box: _box, cell: _cell}, path, _ctx), do: [{path, :both}]
+
+  defp held(:frame, %{cell: cell} = frame, path, ctx) when is_list(cell) do
+    if inside?(cell, Map.get(frame, :span), ctx.layout),
+      do: [],
+      else: [{path ++ [:cell], :outside}]
   end
 
   # A needle is a polar frame's mark (spec/14 §5.2, #392): elsewhere its type is invalid.
@@ -678,6 +698,29 @@ defmodule Visualize.Chart.Validator do
     end
   end
 
+  # Whether a cell, with its span, lies inside the grid the design declares. A design
+  # with no `layout` has one cell, which is the default grid (spec/14 §2.8).
+  defp inside?(cell, span, layout) do
+    layout = layout || %{}
+    columns = length(sizes(layout, :columns))
+    rows = length(sizes(layout, :rows))
+
+    with [c, r] when is_integer(c) and is_integer(r) <- cell,
+         [dc, dr] <- span || [1, 1],
+         true <- is_integer(dc) and is_integer(dr) and dc > 0 and dr > 0 do
+      c >= 0 and r >= 0 and c + dc <= columns and r + dr <= rows
+    else
+      _other -> false
+    end
+  end
+
+  defp sizes(layout, key) do
+    case Map.get(layout, key, [1]) do
+      weights when is_list(weights) and weights != [] -> weights
+      _other -> [1]
+    end
+  end
+
   defp undeclared(kind, name, path, true), do: [{path, {:undeclared, kind, name}}]
   defp undeclared(_kind, _name, _path, false), do: []
 
@@ -691,6 +734,10 @@ defmodule Visualize.Chart.Validator do
   defp plural(:frame), do: :frames
 
   # -- formatting -----------------------------------------------------------------------
+
+  defp words({:weight, key}), do: "every #{key} weight is a positive number"
+  defp words(:both), do: "says both box and cell: a frame says where it goes once"
+  defp words(:outside), do: "is outside the design's layout grid"
 
   defp words({:cycle, kind, name}),
     do: "#{kind} #{inspect(name)} is adopted in a circle: a chain of frames returns to it"

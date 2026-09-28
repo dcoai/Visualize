@@ -135,7 +135,7 @@ defmodule Visualize.Chart.Frame do
 
     # The frame's own pixel box is its fractions of the render's (spec/14 §4.2, #383), and
     # its plot is that less its margins: `size` stays the design's, which is the root's.
-    [_bx, _by, bw, bh] = box = box(node)
+    [_bx, _by, bw, bh] = box = box(node, chart.layout, size)
 
     plot = %{
       width: bw * size.width - margin.left - margin.right,
@@ -379,14 +379,59 @@ defmodule Visualize.Chart.Frame do
   end
 
   # A frame's pixel box is its fractions of the render's (spec/14 §4.2).
-  defp box(node) do
-    case Map.get(node, :box, Schema.default(:frame, :box)) do
-      [x, y, w, h] when is_number(x) and is_number(y) and is_number(w) and is_number(h) ->
+  defp box(node, layout, size) do
+    case {Map.get(node, :cell), Map.get(node, :box, Schema.default(:frame, :box))} do
+      {cell, _box} when is_list(cell) ->
+        cell(cell, Map.get(node, :span) || [1, 1], layout || %{}, size)
+
+      {_none, [x, y, w, h]}
+      when is_number(x) and is_number(y) and is_number(w) and is_number(h) ->
         [x, y, w, h]
 
-      other ->
+      {_none, other} ->
         raise ArgumentError, "box: is [x, y, w, h] in fractions, got #{inspect(other)}"
     end
+  end
+
+  # A cell of the design's grid as a box (spec/14 §2.8, #384): the weights are normalised
+  # over their sum, so `[4, 3, 2, 1]` and `[8, 6, 4, 2]` are one layout, and the `gap`
+  # comes out of the cells — half at each edge a cell shares with another — rather than
+  # out of the grid's outer edges.
+  defp cell([column, row], [across, down], layout, size)
+       when is_integer(column) and is_integer(row) and is_integer(across) and is_integer(down) do
+    columns = weights(layout, :columns)
+    rows = weights(layout, :rows)
+    gap = Map.get(layout, :gap, Schema.default(:layout, :gap)) || 0
+
+    {x, w} = share(columns, column, across, gap / size.width)
+    {y, h} = share(rows, row, down, gap / size.height)
+    [x, y, w, h]
+  end
+
+  defp cell(cell, span, _layout, _size) do
+    raise ArgumentError,
+          "cell: is [column, row] with span [across, down], got #{inspect({cell, span})} " <>
+            "(spec/14 §2.8)"
+  end
+
+  defp weights(layout, key) do
+    case Map.get(layout, key, Schema.default(:layout, key)) do
+      weights when is_list(weights) and weights != [] -> weights
+      _other -> [1]
+    end
+  end
+
+  # The share of the box the cells `at … at + count - 1` take, less half the gap at each
+  # edge they share with a neighbour: `{offset, size}` in fractions.
+  defp share(weights, at, count, gap) do
+    total = Enum.sum(weights)
+    before = weights |> Enum.take(at) |> Enum.sum()
+    taken = weights |> Enum.slice(at, count) |> Enum.sum()
+
+    lead = if at == 0, do: 0.0, else: gap / 2
+    trail = if at + count >= length(weights), do: 0.0, else: gap / 2
+
+    {before / total + lead, taken / total - lead - trail}
   end
 
   defp size({width, height}) when is_number(width) and is_number(height),

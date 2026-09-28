@@ -1452,4 +1452,82 @@ defmodule Visualize.Chart.FrameTest do
       assert Compiled.svg(ticked, other) =~ "20"
     end
   end
+
+  describe "a layout of weights places the frames (spec/14 §2.8, §4.2, #384)" do
+    defp grid(layout, frames, opts \\ []) do
+      design = %{
+        version: 2,
+        sources: %{s: %{fields: [:t, :v]}},
+        layout: layout,
+        frames:
+          Map.new(frames, fn {name, node} -> {name, Map.put_new(node, :kind, :cartesian)} end),
+        marks: [
+          %{type: :line, frame: frames |> Map.keys() |> hd(), data: :s, channels: %{x: :t, y: :v}}
+        ]
+      }
+
+      case Chart.apply(design, [sources: %{s: [%{t: 0, v: 1}]}, size: @size] ++ opts) do
+        {:ok, applied} -> Map.new(applied.frames, fn {name, frame} -> {name, frame.box} end)
+        {:error, errors} -> errors
+      end
+    end
+
+    test "a row of weights resolves to the fractions written by hand" do
+      cells =
+        grid(%{columns: [1, 1]}, %{
+          left: %{cell: [0, 0]},
+          right: %{cell: [1, 0]}
+        })
+
+      assert cells == %{left: [0.0, 0.0, 0.5, 1.0], right: [0.5, 0.0, 0.5, 1.0]}
+    end
+
+    test "a weight is not a fraction: two layouts in the same proportions are one layout" do
+      frames = %{a: %{cell: [0, 0]}, b: %{cell: [1, 0]}, c: %{cell: [2, 0]}, d: %{cell: [3, 0]}}
+      assert grid(%{columns: [4, 3, 2, 1]}, frames) == grid(%{columns: [8, 6, 4, 2]}, frames)
+    end
+
+    test "a span covers its cells and the gap between them" do
+      # Two columns of one row each, and a frame over both: its box is the pair's.
+      pair = grid(%{columns: [1, 1]}, %{both: %{cell: [0, 0], span: [2, 1]}})
+      assert pair == %{both: [0.0, 0.0, 1.0, 1.0]}
+
+      # With a gap, the spanning frame keeps the gap that falls inside it.
+      gapped = grid(%{columns: [1, 1], gap: 30}, %{both: %{cell: [0, 0], span: [2, 1]}})
+      assert gapped == %{both: [0.0, 0.0, 1.0, 1.0]}
+
+      # And a frame in one cell gives up half the gap at the edge it shares (300 wide).
+      halves = grid(%{columns: [1, 1], gap: 30}, %{a: %{cell: [0, 0]}, b: %{cell: [1, 0]}})
+      assert halves == %{a: [0.0, 0.0, 0.45, 1.0], b: [0.55, 0.0, 0.45, 1.0]}
+    end
+
+    test "rows and columns place a frame in both directions" do
+      cells =
+        grid(%{columns: [1, 1], rows: [3, 1]}, %{
+          top: %{cell: [0, 0], span: [2, 1]},
+          low: %{cell: [1, 1]}
+        })
+
+      assert cells == %{top: [0.0, 0.0, 1.0, 0.75], low: [0.5, 0.75, 0.5, 0.25]}
+    end
+
+    test "a frame says where it goes once, inside a grid of positive weights" do
+      both = grid(%{columns: [1, 1]}, %{a: %{cell: [0, 0], box: [0, 0, 1, 1]}})
+      assert {[:frames, :a], :both} in both
+
+      outside = grid(%{columns: [1, 1]}, %{a: %{cell: [2, 0]}})
+      assert {[:frames, :a, :cell], :outside} in outside
+
+      past = grid(%{columns: [1, 1]}, %{a: %{cell: [1, 0], span: [2, 1]}})
+      assert {[:frames, :a, :cell], :outside} in past
+
+      zero = grid(%{columns: [1, 0]}, %{a: %{cell: [0, 0]}})
+      assert {[:layout, :columns], {:weight, :columns}} in zero
+    end
+
+    test "a design with no layout, and a frame with no cell, are what they were" do
+      assert grid(%{}, %{a: %{box: [0, 0, 0.5, 1]}}) == %{a: [0, 0, 0.5, 1]}
+      assert grid(%{}, %{a: %{cell: [0, 0]}}) == %{a: [0.0, 0.0, 1.0, 1.0]}
+    end
+  end
 end

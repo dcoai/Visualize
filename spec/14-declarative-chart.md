@@ -105,7 +105,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `theme` | `{:one_of, [:name, {:node, :theme}]}` | `:style` | `:default` | `:override` |
 | `styles` | `{:map, {:node, :style}}` | `:style` | `%{}` | `:union` |
 | `defs` | `{:map, {:node, :gradient}}` | `:style` | `%{}` | `:union` |
-| `layout` | `{:node, :layout}` | `:geometry` | `nil` | `:override` |
+| `layout` | `{:node, :layout}` | `:geometry` | `%{}` | `:override` |
 | `frames` | `{:map, {:node, :frame}}` | `:geometry` | required | `:deep` |
 | `marks` | `{:list, {:node, :mark}}` | `:channel` | `[]` | `:concat` |
 | `labels` | `{:list, {:node, :label}}` | `:content` | `[]` | `:concat` |
@@ -1274,6 +1274,7 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Build.gradient/2` | As `gradient/3` with `[]`. |
 | `Visualize.Chart.Build.gradient/3` | `gradient(name, kind, opts)`: `%{defs: %{name => node}}`, a `:gradient` node of §2.7 — `kind` `:linear` or `:radial`, `opts` its remaining keys (`stops:` as a list of `%{offset, colour, opacity}` maps or `{offset, colour}` / `{offset, colour, opacity}` tuples, `angle:`, `centre:`, `radius:`), every key checked. |
 | `Visualize.Chart.Build.paint/1` | `paint(name)`: `{:paint, name}`, the value a `:colour` key takes to refer to a gradient (§3.2). |
+| `Visualize.Chart.Build.layout/1` | `layout(opts)`: `%{layout: node}`, the grid of §2.8 — `columns`, `rows`, `gap` — that a frame's `cell` places it on. |
 | `Visualize.Chart.Build.theme/1` | `theme(theme)`: `%{theme: theme}`, a theme name or an inline `:theme` node (§2.5). |
 | `Visualize.Chart.Build.cartesian/0` | As `cartesian/1` with `[]`. |
 | `Visualize.Chart.Build.cartesian/1` | `cartesian(opts)`: `%{frames: %{main: %{kind: :cartesian}}}`; `opts` are the frame's remaining keys (§4.1). A frame carries no size — the render gives it (§4.2). |

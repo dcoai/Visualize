@@ -47,6 +47,7 @@ defmodule Visualize.Chart.ValidatorTest do
         angle: 180
       }
     },
+    layout: %{columns: [1], rows: [1], gap: 4},
     frames: %{
       main: %{
         kind: :cartesian,
@@ -109,6 +110,7 @@ defmodule Visualize.Chart.ValidatorTest do
     stop: [:defs, :fade, :stops, 0],
     curve_opts: [:styles, :series, :curve_opts],
     label: [:labels, 0],
+    layout: [:layout],
     frame: [:frames, :main],
     margin: [:frames, :main, :margin],
     scale: [:frames, :main, :scales, :y],

@@ -152,6 +152,16 @@ defmodule Visualize.Chart.Build do
   @spec paint(atom()) :: {:paint, atom()}
   def paint(name) when is_atom(name), do: {:paint, name}
 
+  @doc """
+  The grid the design's frames are placed on (spec/14 §2.8, #384): `columns` and `rows`
+  as weights, `gap` in pixels between cells. A frame takes its place with `cell:`.
+
+      iex> Visualize.Chart.Build.layout(columns: [4, 3, 2, 1], gap: 8)
+      %{layout: %{columns: [4, 3, 2, 1], gap: 8}}
+  """
+  @spec layout(opts()) :: fragment()
+  def layout(opts), do: %{layout: node(:layout, %{}, opts)}
+
   @doc "The design's theme: a name, or an inline `:theme` node (spec/14 §2.5)."
   @spec theme(atom() | map()) :: fragment()
   def theme(theme), do: %{theme: theme}

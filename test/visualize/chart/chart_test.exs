@@ -20,6 +20,7 @@ defmodule Visualize.ChartTest do
     :theme,
     :styles,
     :defs,
+    :layout,
     :frames,
     :marks,
     :labels

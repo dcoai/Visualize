@@ -182,6 +182,7 @@ defmodule Visualize.Chart.Composite do
     sites =
       one(:theme, document) ++
         one(:meta, document) ++
+        one(:layout, document) ++
         frame_sites(frames) ++
         keyed(:style, Map.get(document, :styles, %{})) ++
         keyed(:scale, Map.get(parts, :scales, %{})) ++
@@ -200,8 +201,12 @@ defmodule Visualize.Chart.Composite do
     end)
   end
 
+  # A node that declares nothing is no site: a document read from `to_map/1` carries every
+  # design key, and an empty `meta` or `layout` is the schema's default rather than
+  # something a person wrote (spec/14 §2.1, §18.12).
   defp one(key, document) do
     case Map.fetch(document, key) do
+      {:ok, value} when value == %{} -> []
       {:ok, value} -> [{to_string(key), %{ref: nil, local: %{key => value}}}]
       :error -> []
     end
