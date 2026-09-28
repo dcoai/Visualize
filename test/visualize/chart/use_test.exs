@@ -207,6 +207,45 @@ defmodule Visualize.Chart.UseTest do
         mark: %{id: :m, type: :line, data: :primary, channels: %{x: :hour, y: :value}}
       },
       {:frame, 1} => %{frames: %{main: %{kind: :cartesian}}},
+      # A saved chart: one frame and the mark that draws in it (#384).
+      {:composite, 1} => %{
+        composite: %{
+          uses: [
+            %Use{
+              id: {:use, 1},
+              ref: nil,
+              local: %{
+                frames: %{dial: %{kind: :polar, scales: %{angle: %{kind: :linear}}}},
+                marks: [%{id: :needle, type: :needle, data: :reading, channels: %{x: :v}}]
+              }
+            }
+          ],
+          vars: %{}
+        }
+      },
+      # A saved pair of frames, the second adopting the first's scale (§4.3).
+      {:composite, 2} => %{
+        composite: %{
+          uses: [
+            %Use{
+              id: {:use, 1},
+              ref: nil,
+              local: %{
+                frames: %{
+                  history: %{kind: :cartesian, scales: %{y: %{kind: :linear}}},
+                  now: %{kind: :cartesian, scales: %{y: {:frame, :history, :y}}}
+                },
+                marks: [
+                  %{id: :line, type: :line, frame: :history, data: :d, channels: %{x: :t, y: :v}},
+                  %{id: :dot, type: :symbol, frame: :now, data: :d, channels: %{x: :t, y: :v}}
+                ],
+                labels: [%{anchor: :title, text: ["now"], frame: :now}]
+              }
+            }
+          ],
+          vars: %{}
+        }
+      },
       {:style, 2} => %{
         composite: %{
           uses: [
@@ -219,6 +258,76 @@ defmodule Visualize.Chart.UseTest do
     }
 
     defp placed(id), do: Map.fetch(@placed, id)
+
+    test "a composite under a key lands its frames as that key, its marks retargeted (#384)" do
+      one = %{
+        composite: %{
+          uses: [%Use{id: {:use, 1}, ref: {:composite, 1}, key: :gauge}],
+          vars: %{}
+        }
+      }
+
+      assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(one, &placed/1)
+      # One frame lands as the key itself, not as `gauge_dial`.
+      assert Map.keys(flat.frames) == [:gauge]
+      assert flat.frames.gauge.kind == :polar
+      # The mark said no frame — its frame was implicit in a composite of one — and says
+      # this one now, since the host may have others.
+      # The mark's id is the key's too, so two copies of a saved chart are two marks
+      # rather than one merged by identity (§8.2).
+      assert [%{id: :gauge_needle, frame: :gauge}] = flat.marks
+    end
+
+    test "a composite of several frames keeps its own names apart under the key (#384)" do
+      pair = %{
+        composite: %{
+          uses: [%Use{id: {:use, 1}, ref: {:composite, 2}, key: :load}],
+          vars: %{}
+        }
+      }
+
+      assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(pair, &placed/1)
+      assert flat.frames |> Map.keys() |> Enum.sort() == [:load_history, :load_now]
+      # The adoption follows the rename: the pair still shares one axis.
+      assert flat.frames.load_now.scales.y == {:frame, :load_history, :y}
+      # Every mark and label is retargeted to where its frame landed.
+      assert Enum.map(flat.marks, & &1.frame) == [:load_history, :load_now]
+      assert Enum.map(flat.labels, & &1.frame) == [:load_now]
+    end
+
+    test "two sites of one composite under two keys are four frames that do not collide (#384)" do
+      twice = %{
+        composite: %{
+          uses: [
+            %Use{id: {:use, 1}, ref: {:composite, 2}, key: :a},
+            %Use{id: {:use, 2}, ref: {:composite, 2}, key: :b}
+          ],
+          vars: %{}
+        }
+      }
+
+      assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(twice, &placed/1)
+
+      assert flat.frames |> Map.keys() |> Enum.sort() ==
+               [:a_history, :a_now, :b_history, :b_now]
+
+      assert flat.marks |> Enum.map(& &1.frame) |> Enum.sort() ==
+               [:a_history, :a_now, :b_history, :b_now]
+
+      assert flat.marks |> Enum.map(& &1.id) |> Enum.sort() ==
+               [:a_dot, :a_line, :b_dot, :b_line]
+    end
+
+    test "a keyless composite keeps its own frame names (#384)" do
+      keyless = %{
+        composite: %{uses: [%Use{id: {:use, 1}, ref: {:composite, 1}}], vars: %{}}
+      }
+
+      assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(keyless, &placed/1)
+      assert Map.keys(flat.frames) == [:dial]
+      assert [%{id: :needle} = mark] = flat.marks
+      refute Map.has_key?(mark, :frame)
+    end
 
     test "every site lands where the design keeps its kind, a name-keyed one under its key" do
       composite = %{
