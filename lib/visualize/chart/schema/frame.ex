@@ -34,7 +34,12 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:margin, {:node, :margin}, :geometry,
         default: %{top: 20, right: 20, bottom: 30, left: 40}
       ),
-      spec(:scales, {:map, {:node, :scale}}, :geometry, default: %{}, merge: :union),
+      # A scale is this frame's node, or another frame's scale adopted by name
+      # (spec/14 §4.3, #384): `{:frame, f, s}`, which shares that scale's domain.
+      spec(:scales, {:map, {:one_of, [{:node, :scale}, :adopted]}}, :geometry,
+        default: %{},
+        merge: :union
+      ),
       spec(:axes, {:list, {:node, :axis}}, :geometry, default: [], merge: :concat),
       spec(:legend, {:node, :legend}, :geometry),
       spec(:projection, {:node, :projection}, :geometry),

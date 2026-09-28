@@ -66,8 +66,16 @@ defmodule Visualize.Chart.Compiled.Regions do
     node = only_frame(chart)
 
     case get_in(node, [:scales, name]) do
-      nil -> false
-      scale -> inferred?(Map.get(scale, :domain, :auto))
+      nil ->
+        false
+
+      # A scale adopted from another frame is resolved when the design is applied and
+      # given to every tick (spec/14 §4.3, #384): within this chart it does not move.
+      {:frame, _frame, _scale} ->
+        false
+
+      scale ->
+        inferred?(Map.get(scale, :domain, :auto))
     end
   end
 

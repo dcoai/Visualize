@@ -299,6 +299,23 @@ defmodule Visualize.Chart.Build do
     %{frames: %{main: %{scales: %{name => node(:scale, %{kind: kind}, opts)}}}}
   end
 
+  @doc "As `adopt/3` reading the same name in the other frame (spec/14 §4.3)."
+  @spec adopt(atom(), atom()) :: fragment()
+  def adopt(name, frame), do: adopt(name, frame, name)
+
+  @doc """
+  A scale adopted from another frame (spec/14 §4.3, #384): this frame reads `frame`'s
+  `scale` under `name`, so the node is said once and the domain is shared, while the
+  range stays this frame's own.
+
+      iex> import Visualize.Chart.Build
+      iex> in_frame(:day, [adopt(:y, :year)])
+      [%{frames: %{day: %{scales: %{y: {:frame, :year, :y}}}}}]
+  """
+  @spec adopt(atom(), atom(), atom()) :: fragment()
+  def adopt(name, frame, scale) when is_atom(name) and is_atom(frame) and is_atom(scale),
+    do: %{frames: %{main: %{scales: %{name => {:frame, frame, scale}}}}}
+
   @doc "As `axis/3` with no options."
   @spec axis(atom(), atom()) :: fragment()
   def axis(scale, side), do: axis(scale, side, [])

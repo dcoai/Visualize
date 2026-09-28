@@ -56,6 +56,8 @@ defmodule Visualize.Chart do
     Var
   }
 
+  alias Visualize.Chart.Frame.Scales
+
   alias Visualize.IR.{Element, Transform}
 
   @design_keys [
@@ -306,11 +308,7 @@ defmodule Visualize.Chart do
          {:ok, sources} <- Template.bind(chart, pool),
          :ok <- Validator.validate(to_map(chart)) do
       shared = [sources: sources] ++ Keyword.take(opts, [:theme, :now, :size])
-
-      frames =
-        Map.new(chart.frames, fn {name, _} ->
-          {name, Frame.new(chart, [frame: name] ++ shared)}
-        end)
+      frames = realise_frames(chart, shared)
 
       frame = frames |> Map.values() |> Enum.min_by(& &1.name)
       {:ok, %Applied{chart: chart, sources: sources, frame: frame, frames: frames}}
@@ -319,6 +317,47 @@ defmodule Visualize.Chart do
 
   def apply(map, opts) when is_map(map) do
     with {:ok, chart} <- from_map(map), do: __MODULE__.apply(chart, opts)
+  end
+
+  # Every frame realised, and a scale adopted from another frame realised again over one
+  # domain (spec/14 §4.3, #384). Two passes, because a shared domain is inferred over the
+  # channels of every frame taking part and a frame is realised over its own marks: the
+  # first pass gives each its own extent, and the second gives every frame of a group the
+  # union of them through the `domains:` option, which skips the inference.
+  defp realise_frames(%__MODULE__{} = chart, shared) do
+    frames =
+      Map.new(chart.frames, fn {name, _} -> {name, Frame.new(chart, [frame: name] ++ shared)} end)
+
+    case Scales.adoptions(chart) do
+      groups when map_size(groups) == 0 ->
+        frames
+
+      groups ->
+        given = united(groups, frames)
+
+        Map.new(frames, fn {name, frame} ->
+          case Map.fetch(given, name) do
+            {:ok, domains} -> {name, Frame.new(chart, [frame: name, domains: domains] ++ shared)}
+            :error -> {name, frame}
+          end
+        end)
+    end
+  end
+
+  # The domain of each adoption group, by the frame and the name each member reads it as.
+  defp united(groups, frames) do
+    for {_owner, members} <- groups,
+        domains = for({f, s} <- members, scale = scale(frames, f, s), do: scale.domain),
+        domains != [],
+        united = Scales.unite(domains),
+        {frame, name} <- members,
+        reduce: %{} do
+      acc -> Map.update(acc, frame, %{name => united}, &Map.put(&1, name, united))
+    end
+  end
+
+  defp scale(frames, frame, name) do
+    with %Frame{scales: scales} <- Map.get(frames, frame), do: Map.get(scales, name)
   end
 
   @doc """

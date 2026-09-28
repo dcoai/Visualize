@@ -29,6 +29,9 @@ defmodule Visualize.Chart.Compiled.Transition do
     node = chart.frames |> Map.values() |> hd()
 
     for {name, scale} <- Map.get(node, :scales, %{}),
+        # A scale adopted from another frame eases nothing here: its domain is given, not
+        # inferred, so it does not move within this chart (spec/14 §4.3, #384).
+        is_map(scale),
         transition = Map.get(scale, :transition),
         is_map(transition),
         Map.fetch!(scale, :kind) in @numeric,

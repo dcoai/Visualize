@@ -350,7 +350,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A key whose type admits a node.
     defp node?({:node, _}), do: true
-    defp node?({:map, {:node, _}}), do: true
+    defp node?({:map, inner}), do: node?(inner)
     defp node?({:list, {:node, _}}), do: true
     defp node?({:one_of, alts}), do: Enum.any?(alts, &node?/1)
     defp node?(_type), do: false
@@ -378,11 +378,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp descend({:node, kind}, value, path) when is_map(value) and not is_struct(value),
       do: [child(kind, value, path)]
 
-    defp descend({:map, {:node, kind}}, value, path)
+    # A map of nodes, or of nodes and something else — a frame's `scales`, whose entry may
+    # be a scale adopted from another frame (spec/14 §4.3, #384).
+    defp descend({:map, inner}, value, path)
          when is_map(value) and not is_struct(value) do
       value
       |> Enum.sort_by(fn {name, _} -> to_string(name) end)
-      |> Enum.map(fn {name, node} -> child(kind, node, path ++ [name]) end)
+      |> Enum.flat_map(fn {name, node} -> descend(inner, node, path ++ [name]) end)
     end
 
     defp descend({:list, {:node, kind}}, value, path) when is_list(value) do

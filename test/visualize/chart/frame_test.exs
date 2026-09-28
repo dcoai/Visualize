@@ -1343,4 +1343,113 @@ defmodule Visualize.Chart.FrameTest do
       assert chart.frames == %{main: %{kind: :cartesian, margin: %{top: 1}}}
     end
   end
+
+  describe "a frame adopts another frame's scale (spec/14 §4.3, #384)" do
+    @shared %{
+      version: 2,
+      sources: %{low: %{fields: [:t, :v]}, high: %{fields: [:t, :v]}},
+      frames: %{
+        year: %{
+          kind: :cartesian,
+          box: [0, 0, 0.5, 1],
+          margin: %{top: 10, right: 10, bottom: 20, left: 40},
+          scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
+          axes: [%{scale: :y, side: :left}]
+        },
+        day: %{
+          kind: :cartesian,
+          box: [0.5, 0, 0.5, 1],
+          margin: %{top: 10, right: 10, bottom: 20, left: 40},
+          scales: %{x: %{kind: :linear}, y: {:frame, :year, :y}},
+          axes: [%{scale: :y, side: :left}]
+        }
+      },
+      marks: [
+        %{type: :line, frame: :year, data: :low, channels: %{x: :t, y: :v}},
+        %{type: :line, frame: :day, data: :high, channels: %{x: :t, y: :v}}
+      ]
+    }
+
+    @rows_low [%{t: 0, v: 1}, %{t: 1, v: 3}]
+    @rows_high [%{t: 0, v: 8}, %{t: 1, v: 20}]
+    @both %{low: @rows_low, high: @rows_high}
+
+    test "one domain over every frame taking part, each at its own range" do
+      {:ok, applied} = Chart.apply(@shared, sources: @both, size: @size)
+
+      # The union of [1, 3] and [8, 20], drawn by both.
+      assert applied.frames.year.scales.y.domain == [1, 20]
+      assert applied.frames.day.scales.y.domain == [1, 20]
+      assert applied.frames.year.domains == %{y: [1, 20]}
+
+      # The range is each frame's own pixels; here both halves are full height.
+      assert applied.frames.day.scales.y.range == applied.frames.year.scales.y.range
+      # The adopting frame's x is its own and is not shared.
+      assert applied.frames.day.scales.x.domain == [0, 1]
+
+      # Both axes draw the same domain: the same tick labels in each frame's group.
+      # `day` draws first, ties in `z` being broken by name (§4.2).
+      svg = Chart.render(applied, paths: true)
+      [_, rest] = String.split(svg, ~s(data-node="frames.day"), parts: 2)
+      [day, year] = String.split(rest, ~s(data-node="frames.year"), parts: 2)
+      assert ticks(day) == ticks(year)
+      assert "20" in ticks(day)
+    end
+
+    defp ticks(svg), do: Regex.scan(~r/<text[^>]*>([^<]+)<\/text>/, svg) |> Enum.map(&List.last/1)
+
+    test "a chain resolves to the scale at its end" do
+      chain =
+        put_in(@shared, [:frames, :hour], %{
+          kind: :cartesian,
+          box: [0, 0, 1, 1],
+          scales: %{x: %{kind: :linear}, y: {:frame, :day, :y}}
+        })
+        |> Map.update!(
+          :marks,
+          &(&1 ++ [%{type: :line, frame: :hour, data: :low, channels: %{x: :t, y: :v}}])
+        )
+
+      {:ok, applied} = Chart.apply(chain, sources: @both, size: @size)
+
+      for name <- [:year, :day, :hour] do
+        assert applied.frames[name].scales.y.domain == [1, 20], "#{name}"
+      end
+    end
+
+    test "a cycle, an unknown frame and an unknown scale are faults" do
+      cycle = put_in(@shared, [:frames, :year, :scales, :y], {:frame, :day, :y})
+      assert {:error, errors} = Chart.apply(cycle, sources: @both)
+      assert {[:frames, :day, :scales, :y], {:cycle, :scale, :y}} in errors
+
+      nope = put_in(@shared, [:frames, :day, :scales, :y], {:frame, :nope, :y})
+      assert {:error, errors} = Chart.apply(nope, sources: @both)
+      assert {[:frames, :day, :scales, :y], {:undeclared, :frame, :nope}} in errors
+
+      missing = put_in(@shared, [:frames, :day, :scales, :y], {:frame, :year, :z})
+      assert {:error, errors} = Chart.apply(missing, sources: @both)
+      assert {[:frames, :day, :scales, :y], {:undeclared, :scale, :z}} in errors
+    end
+
+    test "a compiled chart per frame holds the shared domain, and a tick does not move it" do
+      {:ok, applied} = Chart.apply(@shared, sources: @both, size: @size)
+      {:ok, frames} = Chart.compile(applied)
+
+      # Each compiled chart is one frame and reaches for no other: the adoption is the
+      # owner's node at the resolved domain, and the owner's own is fixed at it too.
+      for name <- [:year, :day] do
+        assert frames[name].chart.frames[name].scales.y == %{kind: :linear, domain: [1, 20]},
+               "#{name}"
+
+        # A given domain does not move, so the axis is static furniture.
+        assert {{:axis, 0}, :static} in Compiled.regions(frames[name])
+      end
+
+      # And a tick over other rows keeps it: the shared extent is the binding's, not the
+      # frame's own (spec/14 §12.1).
+      other = %{low: [%{t: 0, v: 0.5}], high: [%{t: 0, v: 0.5}]}
+      {_payload, ticked} = Compiled.tick(frames.day, other)
+      assert Compiled.svg(ticked, other) =~ "20"
+    end
+  end
 end

@@ -525,6 +525,18 @@ defmodule Visualize.Chart.Validator do
   defp check(:channel, {:scale, which}, _path, _ctx) when which in [:min, :max], do: []
   defp check(:channel, {:scale, _other}, path, _ctx), do: [{path, {:type, :channel}}]
 
+  # A scale adopted from another frame (spec/14 §4.3, #384): the frame is declared, it
+  # declares the scale, and the chain of adoptions ends at a node rather than returning.
+  defp check(:adopted, {:frame, frame, scale} = value, path, ctx) do
+    cond do
+      not (name?(frame) and name?(scale)) -> [{path, {:type, :adopted}}]
+      ctx.frame_nodes == %{} -> []
+      true -> adopted(frame, scale, path, ctx, MapSet.new([source(path, value)]))
+    end
+  end
+
+  defp check(:adopted, _value, path, _ctx), do: [{path, {:type, :adopted}}]
+
   defp check(:extent, :auto, _path, _ctx), do: []
 
   defp check(:extent, v, path, _ctx) when is_list(v) do
@@ -618,6 +630,36 @@ defmodule Visualize.Chart.Validator do
 
   # -- references -----------------------------------------------------------------------
 
+  # Where an adoption stands: the frame it is written in and the name it is written
+  # under, so a scale adopting itself is a cycle and not an unknown name.
+  defp source([:frames, frame | rest], _value) when is_atom(frame) do
+    case List.last(rest) do
+      name when is_atom(name) -> {frame, name}
+      _other -> nil
+    end
+  end
+
+  defp source(_path, {:frame, frame, scale}), do: {frame, scale}
+
+  defp adopted(frame, scale, path, ctx, seen) do
+    cond do
+      {frame, scale} in seen ->
+        [{path, {:cycle, :scale, scale}}]
+
+      not Map.has_key?(ctx.frame_nodes, frame) ->
+        [{path, {:undeclared, :frame, frame}}]
+
+      true ->
+        scales = nested(Map.fetch!(ctx.frame_nodes, frame), [:scales]) || %{}
+
+        case Map.fetch(scales, scale) do
+          :error -> [{path, {:undeclared, :scale, scale}}]
+          {:ok, {:frame, f, s}} -> adopted(f, s, path, ctx, MapSet.put(seen, {frame, scale}))
+          {:ok, _node} -> []
+        end
+    end
+  end
+
   defp ref(:slot, {:series, _}, _path, _ctx), do: []
 
   defp ref(kind, name, path, ctx) do
@@ -649,6 +691,9 @@ defmodule Visualize.Chart.Validator do
   defp plural(:frame), do: :frames
 
   # -- formatting -----------------------------------------------------------------------
+
+  defp words({:cycle, kind, name}),
+    do: "#{kind} #{inspect(name)} is adopted in a circle: a chain of frames returns to it"
 
   defp words(:sweep), do: "must be within a turn, and not zero"
   defp words(:radius), do: "must be positive"

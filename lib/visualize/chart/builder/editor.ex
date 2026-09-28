@@ -85,7 +85,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp descend({:node, kind}, value, path) when is_map(value) and not is_struct(value),
       do: walk(value, kind, path)
 
-    defp descend({:map, {:node, _} = inner}, value, path)
+    # A map of nodes, or of nodes and something else — a frame's `scales`, whose entry may
+    # be a scale adopted from another frame (spec/14 §4.3, #384). An entry that is not a
+    # node descends to nothing, as any value does.
+    defp descend({:map, inner}, value, path)
          when is_map(value) and not is_struct(value) do
       value
       |> Enum.sort_by(fn {name, _node} -> to_string(name) end)
