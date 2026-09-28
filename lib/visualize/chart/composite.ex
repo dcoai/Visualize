@@ -263,6 +263,10 @@ defmodule Visualize.Chart.Composite do
 
       iex> Visualize.Chart.Composite.place(%{theme: :dark, frames: %{main: %{}}}, %Visualize.Chart.Use{id: {:use, 1}, ref: nil})
       {:ok, %{theme: :dark, frames: %{main: %{}}}}
+
+      iex> composite = %{frames: %{main: %{kind: :polar}}, marks: [%{type: :arc, data: :d}]}
+      iex> Visualize.Chart.Composite.place(composite, %Visualize.Chart.Use{id: {:use, 1}, ref: nil, key: :gauge})
+      {:ok, %{frames: %{gauge: %{kind: :polar}}, marks: [%{type: :arc, data: :d, frame: :gauge}]}}
   """
   @spec place(map(), Use.t()) :: {:ok, map()} | :keyless
   def place(contribution, %Use{key: key}) do
@@ -295,7 +299,94 @@ defmodule Visualize.Chart.Composite do
         {:ok, %{frames: %{main: %{axes: [body]}}}}
 
       _other ->
-        {:ok, contribution}
+        {:ok, framed(contribution, key)}
+    end
+  end
+
+  # A composite placed under a key lands its frames as that key (spec/14 §19.6, #384): a
+  # composite of one frame is `frames.<key>` and one of several `frames.<key>_<name>`, so
+  # two copies of a saved chart in one design never collide. Its marks and labels are
+  # retargeted to the names its frames landed under — a mark that said no frame in a
+  # composite of one is given that one, since the frame it belonged to was implicit there
+  # and is not here — and an adoption inside it follows the rename (§4.3).
+  defp framed(contribution, key) when is_atom(key) and not is_nil(key) do
+    case Map.get(contribution, :frames) do
+      frames when is_map(frames) and map_size(frames) > 0 ->
+        names = renames(frames, key)
+
+        contribution
+        |> Map.put(:frames, Map.new(frames, &renamed_frame(&1, names)))
+        |> retargeted(:marks, names, key)
+        |> retargeted(:labels, names, key)
+
+      _none ->
+        contribution
+    end
+  end
+
+  defp framed(contribution, _key), do: contribution
+
+  defp renames(frames, key) when map_size(frames) == 1 do
+    [{name, _node}] = Map.to_list(frames)
+    %{name => key}
+  end
+
+  defp renames(frames, key), do: Map.new(frames, fn {name, _} -> {name, :"#{key}_#{name}"} end)
+
+  defp renamed_frame({name, node}, names) do
+    {Map.fetch!(names, name), renamed_scales(node, names)}
+  end
+
+  defp renamed_scales(node, names) when is_map(node) and not is_struct(node) do
+    case Map.get(node, :scales) do
+      scales when is_map(scales) ->
+        Map.put(node, :scales, Map.new(scales, &renamed_scale(&1, names)))
+
+      _absent ->
+        node
+    end
+  end
+
+  defp renamed_scales(node, _names), do: node
+
+  defp renamed_scale({name, {:frame, frame, scale}}, names),
+    do: {name, {:frame, Map.get(names, frame, frame), scale}}
+
+  defp renamed_scale(pair, _names), do: pair
+
+  defp retargeted(contribution, list_key, names, key) do
+    case Map.get(contribution, list_key) do
+      nodes when is_list(nodes) ->
+        Map.put(contribution, list_key, Enum.map(nodes, &retarget(&1, names, key)))
+
+      _absent ->
+        contribution
+    end
+  end
+
+  defp retarget(node, names, key) when is_map(node) and not is_struct(node) do
+    node
+    |> framed_node(names)
+    |> keyed_id(key)
+  end
+
+  defp retarget(node, _names, _key), do: node
+
+  defp framed_node(node, names) do
+    case {Map.get(node, :frame), map_size(names)} do
+      {nil, 1} -> Map.put(node, :frame, names |> Map.values() |> hd())
+      {nil, _several} -> node
+      {frame, _} -> Map.put(node, :frame, Map.get(names, frame, frame))
+    end
+  end
+
+  # A mark's or a label's `id` is its identity in the cascade (spec/14 §8.2), so two
+  # copies of one saved chart under two keys would merge into one. Under a key the id is
+  # that key's, as the frame's name is: two gauges, two needles.
+  defp keyed_id(node, key) do
+    case Map.get(node, :id) do
+      nil -> node
+      id -> Map.put(node, :id, :"#{key}_#{id}")
     end
   end
 
