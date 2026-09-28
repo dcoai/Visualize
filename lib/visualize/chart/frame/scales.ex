@@ -75,7 +75,11 @@ defmodule Visualize.Chart.Frame.Scales do
           %{atom() => struct()}
   def realise(design, frame, marks, kind, plot, theme, sources, styles, ctx, given \\ %{}) do
     axes = Map.get(frame, :axes, [])
-    nodes = Map.get(frame, :scales, %{})
+    # A scale adopted from another frame is that frame's node, read here (spec/14 §4.3,
+    # #384): the node is said once and its domain is shared, while the range below is
+    # this frame's own, since a range is pixels and each frame has its own plot.
+    nodes =
+      Map.new(Map.get(frame, :scales, %{}), fn {name, node} -> {name, node(node, design)} end)
 
     # Only a scale that infers its domain reads a column (spec/14 §4.3, #409), and a
     # domain the caller gives stands in for the inference.
@@ -112,6 +116,105 @@ defmodule Visualize.Chart.Frame.Scales do
       end
     end)
   end
+
+  @doc false
+  # The node a scale entry stands for: its own, or the one at the end of its chain of
+  # adoptions (spec/14 §4.3). The validator refuses a chain that does not end at a node,
+  # so one that reaches nothing here is a chart built past it.
+  @spec node(map() | tuple(), map()) :: map()
+  def node({:frame, frame, scale} = adoption, design) do
+    case design |> Map.get(:frames, %{}) |> Map.get(frame, %{}) |> nested_scales() do
+      %{^scale => next} ->
+        node(next, design)
+
+      _absent ->
+        raise ArgumentError,
+              "#{inspect(adoption)} adopts a scale no frame declares (spec/14 §4.3)"
+    end
+  end
+
+  def node(node, _design) when is_map(node), do: node
+
+  defp nested_scales(frame) when is_map(frame), do: Map.get(frame, :scales, %{})
+  defp nested_scales(_frame), do: %{}
+
+  @doc false
+  # Every adoption group of a design (spec/14 §4.3, #384): the declared scale a chain
+  # ends at, and every `{frame, name}` that reads it — the owner's own entry included.
+  # Only a group whose node infers its domain is here: a fixed domain is already shared
+  # by every frame that adopts the node, there being one node.
+  @spec adoptions(map()) :: %{{atom(), atom()} => [{atom(), atom()}]}
+  def adoptions(design) do
+    frames = Map.get(design, :frames, %{})
+
+    groups =
+      for {frame, node} <- frames,
+          {name, entry} <- Map.get(node, :scales, %{}),
+          match?({:frame, _f, _s}, entry),
+          owner = owner(entry, frames),
+          owner != nil,
+          reduce: %{} do
+        acc -> Map.update(acc, owner, [{frame, name}], &[{frame, name} | &1])
+      end
+
+    for {{frame, name} = owner, adopters} <- groups,
+        node =
+          get_in(frames, [Access.key(frame, %{}), Access.key(:scales, %{}), Access.key(name)]),
+        is_map(node),
+        infers?(Map.get(node, :domain, Schema.default(:scale, :domain))),
+        into: %{},
+        do: {owner, Enum.sort([owner | adopters])}
+  end
+
+  # The declared scale a chain of adoptions ends at, or `nil` for a chain that ends
+  # nowhere — which the validator has already reported.
+  defp owner({:frame, frame, name}, frames) do
+    case frames |> Map.get(frame, %{}) |> nested_scales() |> Map.get(name) do
+      {:frame, _f, _s} = next -> owner(next, frames)
+      node when is_map(node) -> {frame, name}
+      _absent -> nil
+    end
+  end
+
+  @doc false
+  # One domain over the realised scales of an adoption group (spec/14 §4.3): the extent
+  # of a continuous scale's, and the categories of a discrete one's in order of first
+  # appearance. A group whose scales disagree in shape keeps the first, which cannot
+  # happen for scales built from one node.
+  @spec unite([term()]) :: term()
+  def unite([first | _] = domains) do
+    if Enum.all?(domains, &extent?/1), do: extent(domains), else: categories(domains, first)
+  end
+
+  defp extent?([lo, hi]), do: comparable?(lo) and comparable?(hi)
+  defp extent?(_domain), do: false
+
+  defp comparable?(value) when is_number(value), do: true
+  defp comparable?(%DateTime{}), do: true
+  defp comparable?(%NaiveDateTime{}), do: true
+  defp comparable?(%Date{}), do: true
+  defp comparable?(_value), do: false
+
+  defp extent(domains) do
+    [
+      domains |> Enum.map(&Enum.at(&1, 0)) |> Enum.reduce(&lower/2),
+      domains |> Enum.map(&Enum.at(&1, 1)) |> Enum.reduce(&higher/2)
+    ]
+  end
+
+  defp lower(a, b), do: if(before?(a, b), do: a, else: b)
+  defp higher(a, b), do: if(before?(a, b), do: b, else: a)
+
+  defp before?(%module{} = a, %module{} = b) when module in [DateTime, NaiveDateTime, Date],
+    do: module.compare(a, b) == :lt
+
+  defp before?(a, b), do: a < b
+
+  defp categories(domains, first) when is_list(first) do
+    domains |> Enum.filter(&is_list/1) |> Enum.concat() |> Enum.uniq()
+  end
+
+  defp categories(_domains, first), do: first
 
   # The offset scales the marks name, each with the scale its family maps to: `{name, outer}`.
   defp offsets(design, kind) do

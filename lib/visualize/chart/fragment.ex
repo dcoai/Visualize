@@ -181,6 +181,15 @@ defmodule Visualize.Chart.Fragment do
     end
   end
 
+  # A map whose entries may be a node or something else — a frame's `scales`, an entry of
+  # which may be a scale adopted from another frame (spec/14 §4.3, #384).
+  defp descend(kind, {:map, {:one_of, _} = inner}, value) when is_map(value) do
+    case Map.values(value) do
+      [only] -> descend(kind, inner, only)
+      _several -> node_kind(inner) || kind
+    end
+  end
+
   defp descend(_kind, {:list, {:node, inner}}, [only]), do: walk(inner, only)
   defp descend(_kind, {:list, {:node, inner}}, value) when is_list(value), do: inner
 
@@ -192,6 +201,13 @@ defmodule Visualize.Chart.Fragment do
   end
 
   defp descend(kind, _type, _value), do: kind
+
+  defp node_kind({:one_of, alternatives}) do
+    Enum.find_value(alternatives, fn
+      {:node, kind} -> kind
+      _other -> nil
+    end)
+  end
 
   @doc """
   Every id a fragment refers to, once each, sorted (§19.7). Sorted rather than in the order

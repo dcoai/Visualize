@@ -1266,6 +1266,8 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Build.in_frame/2` | `in_frame(name, fragments)`: the fragments, each in the frame `name` (§16.3, #383) — each fragment's frame renamed to `name`, and every mark and label it carries given `frame: name` unless it says one. A list in, a list out, so it stands where its fragments would. A fragment carrying more than one frame raises `ArgumentError`. |
 | `Visualize.Chart.Build.scale/2` | As `scale/3` with `[]`. |
 | `Visualize.Chart.Build.scale/3` | `scale(name, kind, opts)`: `%{frames: %{main: %{scales: %{name => %{kind: kind}}}}}`, one declared scale of the `main` frame (§4.3); `opts` are the scale's remaining keys. |
+| `Visualize.Chart.Build.adopt/2` | As `adopt/3` reading the same name in the other frame. |
+| `Visualize.Chart.Build.adopt/3` | `adopt(name, frame, scale)`: `%{frames: %{main: %{scales: %{name => {:frame, frame, scale}}}}}`, a scale adopted from another frame (§4.3, #384) — `in_frame/2` puts it in the frame that reads it. |
 | `Visualize.Chart.Build.axis/2` | As `axis/3` with `[]`. |
 | `Visualize.Chart.Build.axis/3` | `axis(scale, side, opts)`: `%{frames: %{main: %{axes: [%{scale: scale, side: side}]}}}`, one axis of the `main` frame (§4.4); `opts` are its remaining keys. |
 | `Visualize.Chart.Build.legend/1` | As `legend/2` with `[]`. |
@@ -1500,6 +1502,8 @@ legend(:color, position: :top_right)
 ```
 
 The four kinds are `cartesian/1`, `polar/1`, `geo/1` and `facet/1`, each taking the frame's keys as options; a frame carries no size, the render giving one (§4.2). `geo/1` takes its projection as the frame's `projection:` key. `facet/1` is the one place an option is not a key of the node the function builds: `by:` and `columns:` are the keys of the `:facet` node (§4.6) and are lifted into the frame's `facet` key, because a `:facet` frame and its `facet` node name the same thing and `facet(facet: %{by: :region})` would say it twice. Scales union, axes concatenate and every other frame key is the last fragment's (§1.5), so `scale/3` and `axis/3` may precede or follow the kind.
+
+`adopt/2` and `adopt/3` write the adoption of §4.3 — `adopt(:y, :year)` is `{:frame, :year, :y}` under `y` — so a row of frames says its shared axis once.
 
 **A design of several frames is built with `in_frame/2`** (#383). The frame functions take a name — `cartesian/2`, `polar/2`, `geo/2`, `facet/2` — but `scale/3`, `axis/3`, `legend/2` and every generated scale function (`time_scale/2`, `linear_scale/2`, …) declare the design's one frame, `main`, and giving each of them a named twin would double the builder's surface for no new meaning. `in_frame(name, fragments)` is that meaning said once: **the fragments, each in the frame `name`** — a fragment's frame renamed, and every mark and every label it carries given `frame: name` unless it already says one (§5.1, §6.1). It takes a list and returns a list, so it composes into the fold where the fragments would have stood:
 

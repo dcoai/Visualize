@@ -43,7 +43,7 @@ defmodule Visualize.Chart.Compiled do
   alias Visualize.{Chart, Render, Theme}
   alias Visualize.Chart.{Applied, Frame, Mark}
   alias Visualize.Chart.Compiled.{Motion, Regions, Transition, Window}
-  alias Visualize.Chart.Frame.{Defs, Furniture}
+  alias Visualize.Chart.Frame.{Defs, Furniture, Scales}
   alias Visualize.IR.{Element, Transform}
 
   @default_ceiling 1000
@@ -181,7 +181,37 @@ defmodule Visualize.Chart.Compiled do
   # the realised frame already holds, filtered (spec/14 §4.7, §5.1).
   defp restrict(%Chart{} = chart, %Frame{name: name} = frame) do
     node = Map.get(chart.frames, name) || chart.frames |> Map.values() |> hd()
-    %{chart | frames: %{name => node}, marks: frame.marks, labels: frame.labels}
+
+    %{
+      chart
+      | frames: %{name => resolved(node, chart, frame.domains)},
+        marks: frame.marks,
+        labels: frame.labels
+    }
+  end
+
+  # A scale adopted from another frame becomes that frame's node, and **every scale the
+  # application resolved a domain for — the adopters' and the owner's — is fixed at it**
+  # (spec/14 §4.3, §12.1, #384). This chart then holds one frame and reaches for no
+  # other, and the shared domain cannot drift: a compiled chart is compiled over a
+  # binding, and the other frames' rows are not in it to be read again.
+  defp resolved(node, chart, domains) do
+    case Map.get(node, :scales) do
+      scales when is_map(scales) ->
+        Map.put(node, :scales, Map.new(scales, &scale(&1, chart, domains)))
+
+      _absent ->
+        node
+    end
+  end
+
+  defp scale({name, entry}, chart, domains) do
+    node = Scales.node(entry, chart)
+
+    case Map.fetch(domains, name) do
+      {:ok, extent} -> {name, Map.put(node, :domain, extent)}
+      :error -> {name, node}
+    end
   end
 
   # The frame's own pixel box within the render's size (spec/14 §4.2): where a page puts
@@ -315,6 +345,35 @@ defmodule Visualize.Chart.Compiled do
   # Where this plot's group sits: its margins, out of its own box (spec/14 §4.2) — the
   # design's own translate for a frame that fills the box, as every single-frame design's
   # does.
+  # The tick's node says `{:frame, …}` wherever the design does, and this chart holds one
+  # frame: the scale the application resolved is carried over from the node the chart was
+  # compiled with, rather than looked up in frames that are not here (spec/14 §4.3, §12.1).
+  defp carried(node, current) do
+    case Map.get(node, :scales) do
+      scales when is_map(scales) ->
+        Map.put(node, :scales, Map.new(scales, &carried_scale(&1, current)))
+
+      _absent ->
+        node
+    end
+  end
+
+  defp carried_scale({name, {:frame, _f, _s} = adoption}, current) do
+    case get_in(current, [:scales, name]) do
+      resolved when is_map(resolved) ->
+        {name, resolved}
+
+      _absent ->
+        raise ArgumentError,
+              "a tick gave a frame carrying #{inspect(adoption)} that the compiled chart " <>
+                "does not hold: a scale adopted from another frame is resolved when the " <>
+                "design is applied (spec/14 §4.3), so a chart that gains one is compiled " <>
+                "again (§12.5)"
+    end
+  end
+
+  defp carried_scale(pair, _current), do: pair
+
   defp placed(%{margin: margin, box: box}),
     do: Transform.translate(margin.left + box.x, margin.top + box.y)
 
@@ -434,6 +493,7 @@ defmodule Visualize.Chart.Compiled do
 
   defp retarget(%{chart: chart} = compiled, node, sources) do
     [{name, current}] = Enum.to_list(chart.frames)
+    node = carried(node, current)
 
     if node == current do
       compiled

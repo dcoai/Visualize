@@ -15,9 +15,11 @@ defmodule Examples.Charts.ContextChart do
   Each frame declares its own `x` — four scales called `x`, one per frame, which is what
   a scale name belonging to its frame is for (§4.3) — over the extent of its own window,
   since a scale infers its domain from the rows its frame's marks read *after* their
-  transforms (D-62). The `y` is the same load ceiling in all four, so the traces are
-  comparable across the seams; only the leftmost frame draws its axis, the other three
-  carrying the grid alone.
+  transforms (D-62). The `y` is the **one** scale, said once: the `year` frame declares
+  it and the other three **adopt** it (`{:frame, :year, :y}`, §4.3, #384), so its domain
+  is inferred over all four windows and every frame draws that extent at its own size.
+  The traces are therefore comparable across the seams without a ceiling written by
+  hand; only the leftmost frame draws the axis, the other three carrying the grid alone.
 
   The rows are sampled **geometrically by age**, as `Examples.Charts.LoadAge` samples
   (#418): a year at one reading a second is thirty million rows and a year at one reading
@@ -34,7 +36,9 @@ defmodule Examples.Charts.ContextChart do
   @newest 5
   @oldest 31_536_000
   @per_decade 45
-  @ceiling 4
+  # The frame whose `y` the other three adopt (spec/14 §4.3, #384): the load axis is
+  # declared once, over the whole year, and shared.
+  @owner :year
 
   # The four frames, left to right: the name, the window's ends as `:window` durations,
   # the words over it and the tick format its span reads by.
@@ -83,7 +87,10 @@ defmodule Examples.Charts.ContextChart do
         margin: %{top: 26, right: 12, bottom: 32, left: if(leftmost?, do: 44, else: 14)}
       ),
       time_scale(:x),
-      linear_scale(:y, domain: [0, @ceiling]),
+      # One load axis across the four frames: the `year` frame declares it and the other
+      # three adopt it, so its domain is inferred over every window and each draws the
+      # same extent at its own size (spec/14 §4.3, #384).
+      scale_of(name),
       axis(:x, :bottom, ticks: 3, format: format),
       # The load is the same in all four, so only the leftmost frame says what it is; the
       # other three carry the grid at the same ticks and nothing else.
@@ -93,6 +100,10 @@ defmodule Examples.Charts.ContextChart do
       label({:frame, :top_left}, [words], style: :span)
     ])
   end
+
+  # The owner declares the load axis, zero-based so the volume reads; the rest adopt it.
+  defp scale_of(@owner), do: linear_scale(:y, domain: [0, :auto], nice: true)
+  defp scale_of(_name), do: adopt(:y, @owner)
 
   # The window step over the one source: the rows whose reading lies in the frame's span.
   defp window_of(from, nil), do: window(from(:load), :t, from: from)

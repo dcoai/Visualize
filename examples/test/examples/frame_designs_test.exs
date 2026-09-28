@@ -92,13 +92,25 @@ defmodule Examples.FrameDesignsTest do
       assert DateTime.compare(recent_end, newest) == :eq
     end
 
-    test "every frame draws the same load ceiling, and only the leftmost says so" do
+    test "the four frames read against one load axis, declared once (#384)" do
       applied = applied(ContextChart)
+      {design, _sources} = ContextChart.design([])
 
-      for {_name, frame} <- applied.frames, do: assert(frame.scales.y.domain == [0, 4])
+      # The `year` frame declares the load axis; the other three adopt it (spec/14 §4.3).
+      assert %{kind: :linear} = design.frames.year.scales.y
+
+      for name <- [:day, :hour, :recent] do
+        assert design.frames[name].scales.y == {:frame, :year, :y}, "#{name}"
+      end
+
+      # One domain, inferred over all four windows and drawn by all four.
+      [domain] = applied.frames |> Map.values() |> Enum.map(& &1.scales.y.domain) |> Enum.uniq()
+      assert [lo, hi] = domain
+      assert lo == 0.0 and hi > 1
 
       # Four x axes and four y axes are drawn; the three ghosts carry the grid alone, so
       # only one y axis prints its tick labels.
+
       svg = ContextChart.render([])
       assert length(Regex.scan(~r/class="axis axis-bottom"/, svg)) == 4
       assert length(Regex.scan(~r/class="axis axis-left"/, svg)) == 4
