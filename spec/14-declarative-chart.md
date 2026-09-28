@@ -105,6 +105,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `theme` | `{:one_of, [:name, {:node, :theme}]}` | `:style` | `:default` | `:override` |
 | `styles` | `{:map, {:node, :style}}` | `:style` | `%{}` | `:union` |
 | `defs` | `{:map, {:node, :gradient}}` | `:style` | `%{}` | `:union` |
+| `layout` | `{:node, :layout}` | `:geometry` | `nil` | `:override` |
 | `frames` | `{:map, {:node, :frame}}` | `:geometry` | required | `:deep` |
 | `marks` | `{:list, {:node, :mark}}` | `:channel` | `[]` | `:concat` |
 | `labels` | `{:list, {:node, :label}}` | `:content` | `[]` | `:concat` |
@@ -161,6 +162,18 @@ A field name is an atom in the map form even for a source whose columns are stri
 A `:stop` node is `offset` (`:number`, required, `0` to `1`), `colour` (`:colour`, required — a literal, a slot or a variable, resolved as any colour is), and `opacity` (`:size`, default `1`, range `{0, 1, 0.05}`); every key `:style` and `:override`.
 
 A gradient's units are the shape's bounding box (`objectBoundingBox`), so one gradient fits any mark. From the angle θ a linear gradient's line runs from `(½ − ½ sin θ, ½ + ½ cos θ)` to `(½ + ½ sin θ, ½ − ½ cos θ)`; a radial one is centred at `centre` with `radius`, its focus at the centre. `Visualize.Chart.Frame.generate/2` emits one `defs` element **first** in the frame's group, before the grid, holding every gradient of the design as a `Visualize.IR.Element.linear_gradient/2` or `radial_gradient/2` with its stops, each under the id `vis-paint-<h>-<name>` where `<h>` is the lower-case base-36 `:erlang.phash2/1` of the design's `defs`, so two charts on one page collide only when their paints are the same; a design with no paints emits no `defs`. The same `defs` holds one **filter** per `{effect, radius}` pair any style in the tree uses (§3.1): `<filter id="vis-effect-shadow-3">` with a `feDropShadow` of `dx`, `dy` and `stdDeviation` the radius (`flood-opacity` 0.35), or `<filter id="vis-effect-blur-3">` with a `feGaussianBlur` of `stdDeviation` the radius; a design whose styles use no effect declares none. The defs are static furniture (§12.2): they never change with the data.
+
+### 2.8 Layout
+
+**Implemented** (#384). `layout` is the grid a design's frames are placed on, so "attached to the right of that one" is a layout rather than arithmetic (§4.2). Every key is `:geometry` and `:override`.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `columns` | `{:list, :number}` | `[1]` | the column widths as **weights**, normalised over their sum |
+| `rows` | `{:list, :number}` | `[1]` | the row heights, likewise |
+| `gap` | `:number` | `0` | pixels between cells, taken out of the cells and not out of the grid's outer edges |
+
+A design with no `layout` places its frames by their boxes alone. A weight that is not positive is a fault (`{:weight, :columns}` or `{:weight, :rows}` at the design's path), since a cell of no width is not a cell. The grid fills the box the render is given: a frame in cell `[c, r]` spanning `[dc, dr]` takes the columns `c … c + dc − 1` and the rows `r … r + dr − 1`, and its box is their share of the whole less the gap.
 
 ## 3. The style grammar
 
@@ -276,6 +289,8 @@ A design with one frame names it whatever it likes; the migration of an older de
 | `facet` | `{:node, :facet}` | `:binding` | `nil` | `:override` |
 | `viewport` | `{:node, :viewport}` | `:geometry` | `nil` | `:override` |
 | `box` | `{:list, :number}` | `:geometry` | `[0, 0, 1, 1]` | `:override` |
+| `cell` | `{:list, :integer}` | `:geometry` | `nil` | `:override` |
+| `span` | `{:list, :integer}` | `:geometry` | `nil` | `:override` |
 | `z` | `:integer` | `:geometry` | `0` | `:override` |
 | `background` | `:colour` | `:style` | `nil` | `:override` |
 
@@ -284,6 +299,12 @@ A design with one frame names it whatever it likes; the migration of an older de
 **Implemented.** **A design records no size** (#383, #427). How big a chart is is a property of where it is *shown*, not of what it says, so the size comes in at render: `Visualize.Chart.apply/2` takes `size:` as `{width, height}` — the host's container — and `Visualize.Chart.Frame.new/2` takes the same option, `{600, 400}` by default so a static render still works and a design never carries one. The frame node therefore has no `size` key, and a design that still has one is the validator's unknown-key fault, which is what makes an unmigrated design fail loudly instead of drawing at a stale size.
 
 **A frame's `box` is its share of the design's** (#383): `[x, y, w, h]` as **fractions** of the box the render is given (§4.2's `size:`), so side by side is `[0, 0, 0.5, 1]` and `[0.5, 0, 0.5, 1]`, a gauge in the corner of a plot is `[0.72, 0.04, 0.24, 0.24]` over `[0, 0, 1, 1]`, and two boxes that overlap draw over one another. Fractions rather than pixels because the design records no size at all: the same design fills whatever container it is given, and the frames keep their proportions. A frame's own pixel box is `[x·W, y·H, w·W, h·H]` and its margins come out of that, so each frame has its own plot area and its own margins. `z` orders the drawing, ties broken by name, so an overlay says so rather than depending on declaration order; `background` is a colour painted under that frame's contents and nothing else, `nil` by default — a frame is transparent, so an overlay hides only what it paints.
+
+**A grid of weights says where a frame goes, in place of arithmetic** (#384). The design's `layout` is a `:layout` node — `columns` and `rows`, each `{:list, :number}` of **weights** and `[1]` by default, and `gap`, a `:number` of pixels between cells, `0` by default — and a frame writes `cell: [column, row]` in place of `box`, with `span: [columns, rows]` (`[1, 1]` by default) for one that covers more than one cell. `columns: [4, 3, 2, 1]` is four columns in those proportions, so *Context*'s four windows are cells `0..3` of one row and no fraction is computed by hand.
+
+A weight is not a fraction: the weights are **normalised over their sum**, so `[4, 3, 2, 1]` and `[8, 6, 4, 2]` are the same layout. A weight that is not positive is a fault — a frame with no width is not a frame — as is a `cell` outside the grid, a `span` that runs past its edge, and a frame that gives **both** `box` and `cell`, which are two ways of saying one thing.
+
+**A cell resolves to a box in one place**: `Visualize.Chart.Frame.new/2`, where a frame's box is read (§4.7). The design keeps what its author wrote — `from_map/1` and `to_map/1` are inverses and a stored design says `cell`, not the arithmetic — and everything downstream reads the realised frame's `box`, so nothing else learns about cells. The `gap` comes out of the cells' own boxes and not out of the grid's outer edges: a row of cells with a gap still spans the whole box, and each frame's plot is that much narrower. A design with no `layout` and a frame with no `cell` are what they were.
 
 The gallery draws what the boxes are for (#429): *Load* is one load source read twice — a history line over `[0, 0, 1, 1]` and a gauge of its newest reading (`:take`, §5.4.1) over `[0.72, 0.04, 0.24, 0.24]`, an overlay with its own background — and *Context* is one source at four time scales, four `:window` steps in four frames attached left to right, so a year and the last fifteen minutes are legible in one picture.
 
@@ -826,6 +847,9 @@ They agree exactly where the fragments are disjoint. Over two fragments that dec
 | `{:undeclared, kind, name}` | a reference of `kind` (`:scale`, `:style`, `:source`, `:var`, `:field`, `:slot`) to a name nothing declares — checked against the design's declared set, which is **empty when the declaring map is absent** (#368): an axis on `x` in a frame with no `scales`, a mark's `data: :s` in a design with no `sources`, a `{:paint, g}` with no `defs` are this fault, not a raise at render. Only a fragment validated alone as its kind (§19.6) has nothing to look references up in, and there they are not checked |
 | `{:invalid_for, type}` | a channel, option or text part that the mark type, transform or label does not read |
 | `{:cycle, :scale, name}` | a scale adopted from another frame whose chain of adoptions returns to it (§4.3): the fault is at the path of the scale that closes the cycle |
+| `{:weight, key}` | a `layout` weight that is not positive (§2.8): a cell of no width or height is not a cell |
+| `:both` | a frame that gives both `box` and `cell` (§4.2): two ways of saying where it goes |
+| `:outside` | a frame whose `cell`, with its `span`, runs past the grid (§2.8) |
 | `{:unsupported_version, v}` | §9 |
 | `{:json, message}` | `Visualize.Chart.from_json/1` could not parse the document |
 | `{:missing_dependency, :jason}` | the JSON functions were called without `Jason` (§11) |
