@@ -48,6 +48,9 @@ defmodule Visualize.Chart.Schema.Frame do
       # A frame's share of the design's box, its drawing order and what it paints
       # under itself (spec/14 §4.1, §4.2, #383).
       spec(:box, {:list, :number}, :geometry, default: [0, 0, 1, 1]),
+      # Where the frame sits on the design's grid, in place of its box (§2.8, #384).
+      spec(:cell, {:list, :integer}, :geometry),
+      spec(:span, {:list, :integer}, :geometry),
       spec(:z, :integer, :geometry, default: 0),
       spec(:background, :colour, :style)
     ]

@@ -200,8 +200,11 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert Enum.map(plots, & &1.name) == [:day, :hour, :recent, :year]
     # Each plot draws its own window, so no two streams are the same.
     assert plots |> Enum.map(& &1.canvas) |> Enum.uniq() |> length() == 4
-    # And each sits at its own quarter of the box.
-    assert Map.new(plots, &{&1.name, &1.box.x}) == %{year: 0, day: 225.0, hour: 450.0, recent: 675.0}
+    # And each sits at its own cell of the design's grid, left to right (#384).
+    assert %{year: +0.0, day: day, hour: hour, recent: recent} =
+             Map.new(plots, &{&1.name, &1.box.x})
+
+    assert day < hour and hour < recent
 
     # One event per plot, each named by its frame, all of one sequence.
     events = for([n, p] <- Phoenix.LiveView.Utils.get_push_events(s), do: {n, p[:frame], p[:seq]})

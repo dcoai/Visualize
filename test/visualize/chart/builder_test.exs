@@ -430,10 +430,10 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, socket} = Builder.handle_event("import", %{"document" => document}, socket)
       assert hd(BuilderFixture.names(socket)) == "theme"
-      assert length(BuilderFixture.names(socket)) == 12
+      assert length(BuilderFixture.names(socket)) == 11
 
       {:ok, socket} = Builder.update(host, socket)
-      assert length(BuilderFixture.names(socket)) == 12
+      assert length(BuilderFixture.names(socket)) == 11
     end
   end
 

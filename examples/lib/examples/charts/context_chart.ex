@@ -9,8 +9,12 @@ defmodule Examples.Charts.ContextChart do
   `window(:t, from: [1, :year], to: [24, :hour])` and its three neighbours — and the
   windows are disjoint and contiguous by the step's own rule: a given `to` is exclusive,
   an absent one closes at `now` inclusively, so no reading is drawn twice and the newest
-  is drawn once. Each frame takes a quarter of the box, so the year is in view and the
-  last fifteen minutes are as legible as it is.
+  is drawn once.
+
+  The four sit in the **cells of a grid** (§2.8, #384): `columns: [4, 3, 2, 2]` with a
+  gap, so the older spans have the room they need and the recent ones stay legible, and
+  the design computes no fractions. A weight is not a fraction — the four are normalised
+  over their sum — so the layout is read as proportions and edited as proportions.
 
   Each frame declares its own `x` — four scales called `x`, one per frame, which is what
   a scale name belonging to its frame is for (§4.3) — over the extent of its own window,
@@ -40,6 +44,11 @@ defmodule Examples.Charts.ContextChart do
   # declared once, over the whole year, and shared.
   @owner :year
 
+  # The grid the four frames sit on (spec/14 §2.8, #384): the older the span, the less
+  # room it needs, so the widths are weights and no fraction is computed here.
+  @columns [4, 3, 2, 2]
+  @gap 10
+
   # The four frames, left to right: the name, the window's ends as `:window` durations,
   # the words over it and the tick format its span reads by.
   @frames [
@@ -61,6 +70,7 @@ defmodule Examples.Charts.ContextChart do
       Design.fold(
         [
           chart(meta: %{name: title(), description: [description()]}),
+          layout(columns: @columns, gap: @gap),
           source(:load, [:t, :v], types: %{t: :time, v: :number}),
           style(:trace, stroke: :series_1, stroke_width: 1.5, curve: :monotone_x),
           style(:volume, fill: :series_1, opacity: 0.18, curve: :monotone_x),
@@ -83,7 +93,7 @@ defmodule Examples.Charts.ContextChart do
 
     in_frame(name, [
       cartesian(
-        box: [index * 0.25, 0, 0.25, 1],
+        cell: [index, 0],
         margin: %{top: 26, right: 12, bottom: 32, left: if(leftmost?, do: 44, else: 14)}
       ),
       time_scale(:x),

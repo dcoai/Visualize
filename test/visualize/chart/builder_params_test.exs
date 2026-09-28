@@ -152,7 +152,6 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       # back to the document.
       assert BuilderFixture.names(opened) == [
                "theme",
-               "meta",
                "frame",
                "style series",
                "scale x",
@@ -165,8 +164,12 @@ defmodule Visualize.Chart.Builder.ParamsTest do
                "label 1"
              ]
 
-      # An empty `defs` declares no paint and so has no site (§2.7).
-      assert BuilderFixture.design(opened) == Map.delete(Chart.to_map(chart), :defs)
+      # A node that declares nothing has no site: an empty `defs` (§2.7), an empty
+      # `meta` (§2.2) and an empty `layout` (§2.8) are the schema's defaults, which
+      # `to_map/1` writes and a person did not.
+      assert BuilderFixture.design(opened) ==
+               Chart.to_map(chart) |> Map.drop([:defs, :meta, :layout])
+
       assert BuilderFixture.selected(opened) == 0
       assert BuilderFixture.disabled(opened) == MapSet.new()
       assert opened.assigns.bindings == %{}

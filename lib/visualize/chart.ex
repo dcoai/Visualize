@@ -68,6 +68,7 @@ defmodule Visualize.Chart do
     :theme,
     :styles,
     :defs,
+    :layout,
     :frames,
     :marks,
     :labels
@@ -80,6 +81,7 @@ defmodule Visualize.Chart do
             theme: :default,
             styles: %{},
             defs: %{},
+            layout: %{},
             frames: nil,
             marks: [],
             labels: []
@@ -92,6 +94,7 @@ defmodule Visualize.Chart do
           theme: atom() | map(),
           styles: %{atom() => map()},
           defs: %{atom() => map()},
+          layout: map(),
           frames: %{atom() => map()} | nil,
           marks: [map()],
           labels: [map()]

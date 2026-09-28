@@ -77,13 +77,19 @@ defmodule Examples.FrameDesignsTest do
         assert DateTime.compare(older_end, newer_start) == :lt
       end
 
-      # Left to right, a quarter of the box each, in order.
-      assert for(name <- names, do: applied.frames[name].box) == [
-               [0.0, 0, 0.25, 1],
-               [0.25, 0, 0.25, 1],
-               [0.5, 0, 0.25, 1],
-               [0.75, 0, 0.25, 1]
-             ]
+      # Left to right on the grid, in order, each box after the one before it (#384).
+      boxes = for name <- names, do: applied.frames[name].box
+      assert [[+0.0, _, _, _] | _] = boxes
+
+      for [[x, _, w, _], [next, _, _, _]] <- Enum.chunk_every(boxes, 2, 1, :discard) do
+        assert next > x + w
+      end
+
+      # The widths are the layout's weights, `[4, 3, 2, 2]`, less the gaps.
+      assert [wide, narrower, narrow, last] = for([_, _, w, _] <- boxes, do: w)
+      assert wide > narrower and narrower > narrow
+      # The last two weights are equal; the last has no trailing gap, so it is a shade wider.
+      assert_in_delta narrow, last, 0.01
 
       # The newest reading is in the last window and in no other.
       {_design, sources} = ContextChart.design([])
