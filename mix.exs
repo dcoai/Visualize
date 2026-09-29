@@ -68,7 +68,7 @@ defmodule Visualize.MixProject do
       # so nothing here reaches a consumer of visualize.
       {:surfex,
        git: "git@gitlab.conet.yarina.org:dco-tek/surfex.git",
-       tag: "v0.1.0",
+       tag: "v0.4.0",
        only: [:dev, :test],
        runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
