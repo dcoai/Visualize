@@ -23,7 +23,7 @@ defmodule Visualize.Specs.ForceSimulation do
   with no client acting, a target below `alpha_min` leads to a stopped simulation.
   """
 
-  use TLA.Spec
+  use ExTLA.Spec
 
   constant(:guarded_deferred_start, default: true)
   constant(:restart_keeps_stopped, default: true)

@@ -7,12 +7,12 @@ defmodule Visualize.Specs.ForceSimulationTest do
   """
   use ExUnit.Case, async: true
 
-  import TLA.Spec.Test
+  import ExTLA.Spec.Test
 
   alias Visualize.Specs.ForceSimulation
 
-  # `TLA.ModelChecker.run/2` and `assert_spec/2` take a complete assignment; the module's
-  # `default:` values apply to `mix tla.check` only.
+  # `ExTLA.ModelChecker.run/2` and `assert_spec/2` take a complete assignment; the module's
+  # `default:` values apply to `mix extla.check` only.
   @defaults %{
     guarded_deferred_start: true,
     restart_keeps_stopped: true,
@@ -39,31 +39,31 @@ defmodule Visualize.Specs.ForceSimulationTest do
   describe "the defects, found by the checker" do
     test "an unguarded deferred start arms a second timer" do
       result =
-        TLA.ModelChecker.run(ForceSimulation, %{
+        ExTLA.ModelChecker.run(ForceSimulation, %{
           constants: constants(%{guarded_deferred_start: false})
         })
 
       assert result.status == :violation
       # Both timer invariants break in the same state; the trace shows the second timer.
-      assert TLA.Trace.format(result.violation) =~ ~r/live\s+= 2   ← changed/
+      assert ExTLA.Trace.format(result.violation) =~ ~r/live\s+= 2   ← changed/
     end
 
     test "restart on a stopped simulation starts it" do
       result =
-        TLA.ModelChecker.run(ForceSimulation, %{
+        ExTLA.ModelChecker.run(ForceSimulation, %{
           constants: constants(%{restart_keeps_stopped: false})
         })
 
       assert result.status == :violation
-      assert TLA.Trace.format(result.violation) =~ "restart_never_starts"
+      assert ExTLA.Trace.format(result.violation) =~ "restart_never_starts"
     end
 
     test "untagged ticks let a stale tick start a second chain" do
       result =
-        TLA.ModelChecker.run(ForceSimulation, %{constants: constants(%{tagged_ticks: false})})
+        ExTLA.ModelChecker.run(ForceSimulation, %{constants: constants(%{tagged_ticks: false})})
 
       assert result.status == :violation
-      assert TLA.Trace.format(result.violation) =~ ~r/live\s+= 2   ← changed/
+      assert ExTLA.Trace.format(result.violation) =~ ~r/live\s+= 2   ← changed/
     end
   end
 end
