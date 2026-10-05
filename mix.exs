@@ -75,24 +75,25 @@ defmodule Visualize.MixProject do
       # Property tests over the scale protocol (spec/03 §1.3; test/visualize/scale/).
       {:stream_data, "~> 1.4", only: [:dev, :test]},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      # `mix vis.verify` (spec/12 §5): the model of the force simulation. A sibling checkout
-      # when there is one, git otherwise, which is what CI sees.
+      # `mix vis.verify` (spec/12 §5): the model of the force simulation. Pinned by tag, with
+      # the lock entry committed, so CI and every workstation build the same extla (#441).
       {:extla, extla_source() ++ [only: [:dev, :test], runtime: false]}
     ]
   end
 
+  # A local extla checkout is an explicit opt-in (`EXTLA_PATH=../extla`), never inferred
+  # from a sibling directory: that is how an unannounced rename reached the build.
   defp extla_source do
-    if File.dir?("../extla") do
-      [path: "../extla"]
-    else
-      [git: "git@gitlab.conet.yarina.org:dco-tek/extla.git", branch: "main"]
+    case System.get_env("EXTLA_PATH") do
+      nil -> [git: "git@gitlab.conet.yarina.org:dco-tek/extla.git", tag: "v0.4.0"]
+      path -> [path: path]
     end
   end
 
   # Every model, checked one at a time. `Mix.Task.rerun/2`, not a list alias: Mix remembers
   # a task by name and silently skips it the second time.
   @models ~w(Visualize.Specs.ForceSimulation)
-  defp verify_models(_args), do: Enum.each(@models, &Mix.Task.rerun("tla.check", [&1]))
+  defp verify_models(_args), do: Enum.each(@models, &Mix.Task.rerun("extla.check", [&1]))
 
   # The specification, the surface golden and the changelog ship with the package: they are
   # the contract a consumer holds the library to, and the record of what an upgrade brings,
