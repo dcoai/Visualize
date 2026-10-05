@@ -8,19 +8,17 @@
 # `--exclude examples` in the library jobs: the examples member is pulled and pushed by
 # the job that builds it, from examples/ (#342, #343).
 #
-# v0.7.0 (#440) is the release v0.6.0's comment promised: the key's inputs are **Mix's
-# own** (schema v3). Children, the `only:` rule and the build options a declaration
-# carries — `env:`, `compile:`, `system_env:`, none of which was in the key — come from
-# the converge `mix deps` runs, so the hand-written graph and env walk are gone. The
-# toolchain fingerprint is complete with it: the ERTS, the architecture and the compiler
-# environment are in every key, and a dependency with a native build also keys on the OS
-# release and the C compiler. That is what the standing `depdep.rebuilt_after_restore` of
-# 1 measured here — one object restored and rebuilt by Mix anyway — was asking for.
+# v0.9.0 (#446) makes a restore land where **this** build looks. An object carries the
+# pusher's build path (`_build/sqlite/test` from metresis, say), and extracting it in place
+# put the tree where this project's Mix never reads it, so Mix called the build outdated
+# and recompiled it: a hit that was not one (depdep #131, behind #122 and #110). Extraction
+# is now staged and moved to this member's own build path. Keys are unchanged (schema v3,
+# as v0.7.0 set them in #440), so there is **no refill**: objects already in the store
+# become usable.
 #
-# **Every object path changed, so the first pipeline on this pin is cold**: a full set of
-# misses, a longer compile job, and a `--push` that refills the store. The second is warm.
-# The refill is the point as much as the fix: objects pushed by this version carry compile
-# times, which is what makes `depdep.saved` and `depdep.compile_carried` mean anything.
+# A restore Mix still refuses is counted as a miss and recompiled, and the summary ends
+# `rebuilt N`. If N is not 0, `--explain-rebuilt` (v0.8.0) names which input the manifest
+# disagrees on; #430 is the standing case (extla).
 #
 # Depdep lives in a private project, so the URL has to carry credentials, and what is
 # available differs between a developer's machine and a CI container: a developer has an
@@ -32,6 +30,6 @@ url =
     token -> "https://gitlab-ci-token:#{token}@gitlab.conet.yarina.org/dco-tek/depdep.git"
   end
 
-Mix.install([{:depdep, git: url, tag: "v0.7.0"}])
+Mix.install([{:depdep, git: url, tag: "v0.9.0"}])
 
 Depdep.CLI.main(System.argv())
