@@ -65,6 +65,26 @@ defmodule Visualize.Chart.Migration do
     raise ArgumentError, "no migration from version #{from} for #{inspect(map)}"
   end
 
+  @doc """
+  The type a key had in an earlier version, for a key of a `kind` node that the current
+  schema no longer has; `nil` for any other key.
+
+  The codec reads a document by the current schema, so a key only an earlier version had
+  would be read untyped and its values left as strings. This is what it reads such a key
+  by instead, so a document from that version is typed before `migrate/1` reshapes it
+  (spec/14 §9, #479). Each entry belongs to the step that removed the key: version 1's
+  design-level `frame` is one `:frame` node, which the 1 → 2 step moves to `frames.main`.
+
+      iex> Visualize.Chart.Migration.legacy_type(:design, :frame)
+      {:node, :frame}
+
+      iex> Visualize.Chart.Migration.legacy_type(:design, :frames)
+      nil
+  """
+  @spec legacy_type(atom(), atom()) :: Schema.type() | nil
+  def legacy_type(:design, :frame), do: {:node, :frame}
+  def legacy_type(_kind, _key), do: nil
+
   @doc ~S"""
   The design in the shape this library writes, within the current version: a `:text`
   given as a list of parts — the form an earlier draft wrote — becomes the string with

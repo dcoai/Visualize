@@ -69,6 +69,12 @@ release it merely follows.
   (`Duplicate id found … vis-glyph-linear`). They are now translucent bands and squares,
   with no paint server and no filter. The glyph test also walks the four drawn keys it
   had skipped (`fill_style`, `effect`, `vertical_align`, `stroke_style`).
+- **A version 1 design read from JSON migrates** (#479). The codec typed every key by the
+  current schema, so a v1 design's `frame` kept string values and failed validation once
+  migrated to `frames.main`. JSON-stored designs from before #383 therefore couldn't be
+  read, contradicting §9. `Migration.legacy_type/2` gives a removed key its old type, and
+  the codec reads by it, so the document is typed before it is migrated. §14.4 also
+  corrects `current/0` to `2`.
 
 ## [0.1.0] — 2026-09-09
 
