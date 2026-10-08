@@ -1584,6 +1584,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-weight: 600;
     }
 
+    /* A referenced group's inside (spec/14 §18.8, #388): the entry's sites drawn in the
+       group's row, muted and locked, each tagged with the entry's name — not rows of the
+       tree, so every gesture on one is the group's. */
+    .vis-builder .vis-builder-site-inside {
+      flex: 1 0 100%;
+      margin: 2px 0 0;
+      padding: 0;
+      list-style: none;
+      color: var(--vis-builder-muted);
+      font-size: 12px;
+    }
+
+    .vis-builder .vis-builder-site-inside-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 0 2px calc(18px + var(--vis-builder-depth, 0) * 16px);
+    }
+
+    .vis-builder .vis-builder-site-tag {
+      padding: 0 5px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: 8px;
+      font-size: 10px;
+    }
+
+    .vis-builder .vis-builder-site-inside-lock svg {
+      width: 12px;
+      height: 12px;
+    }
+
     .vis-builder-hues {
       display: grid;
       grid-template-columns: repeat(12, 1fr);

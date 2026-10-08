@@ -1815,6 +1815,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
              )}
           end
 
+        # A referenced group's inside is the library's (§18.8, #388): refused as any
+        # write into it is.
+        {%Use{}, %Use{ref: ref} = locked} when ref != nil ->
+          {:noreply, assign(socket, :notice, locked_notice(socket.assigns, locked))}
+
         _other ->
           {:noreply, socket}
       end
@@ -2670,18 +2675,40 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The rows of the tree (spec/14 §18.8, #380): every site by flat position with its
     # depth, its name, whether it is a group and what it holds, whether it is open.
-    defp tree_rows(%{uses: uses, labels: labels, expanded_sites: open}) do
-      for %{use: use, depth: depth, parent: parent} <- Stack.all(uses) do
+    # A referenced group (#388) is a container too: its count is its entry's sites, and
+    # its `inside` the rows of that entry, drawn in its row since they have no flat
+    # position of their own — every gesture on one is the group's.
+    defp tree_rows(%{uses: uses, labels: labels, expanded_sites: open, store: store}) do
+      fetch = Stack.fetch(store)
+      name_of = names(store)
+      rows = Stack.all(uses, fetch)
+      held = rows |> Enum.reject(&(&1.owner == nil)) |> Enum.group_by(& &1.owner)
+
+      for %{use: use, depth: depth, parent: parent, owner: nil} <- rows do
+        referenced = Stack.inside(use, fetch)
+        label = Stack.label(labels, use)
+        entry = (use.ref && name_of.(use.ref)) || label
+
         %{
-          name: Stack.label(labels, use),
+          name: label,
           depth: depth,
           parent: parent,
-          group?: Stack.group?(use),
-          count: length(Stack.children(use)),
+          group?: Stack.group?(use) or referenced != nil,
+          count: length(referenced || Stack.children(use)),
           open?: MapSet.member?(open, use.id),
           kind: site_kind(use),
           id: use.id,
-          state: Stack.linkage(use)
+          state: Stack.linkage(use),
+          inside:
+            for row <- Map.get(held, use.id, []) do
+              %{
+                name: Stack.inner_label(row.use, name_of, entry),
+                depth: row.depth,
+                group?: Stack.group?(row.use) or Stack.inside(row.use, fetch) != nil,
+                kind: site_kind(row.use),
+                tag: entry
+              }
+            end
         }
       end
     end
@@ -4466,6 +4493,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp dropped(uses, {:after, id}, use), do: Stack.insert(uses, id, use)
 
     # A link: the reference site of §19.3, for a layer that is to follow the library.
+    # A drop into a referenced group is refused as any write into it is: its inside is
+    # the library's (§18.8, #388).
+    defp linked(socket, _entry, {:into, %Use{ref: ref} = locked}) when ref != nil,
+      do: assign(socket, :notice, locked_notice(socket.assigns, locked))
+
     defp linked(socket, entry, at) do
       %{uses: uses, labels: labels} = socket.assigns
       use = Use.new(entry.id, uses)
