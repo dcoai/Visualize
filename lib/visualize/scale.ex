@@ -192,4 +192,12 @@ defmodule Visualize.Scale do
   def clamp(scale, clamp?) do
     scale.__struct__.clamp(scale, clamp?)
   end
+
+  @doc """
+  Sets a time scale's display zone, an IANA name or `nil` for UTC (spec/03 §7.4); see
+  `Visualize.Scale.Time.zone/2`. Not part of the protocol: a zone means something only to
+  a time scale, so any other scale is a `FunctionClauseError`.
+  """
+  @spec zone(Time.t(), Calendar.time_zone() | nil) :: Time.t()
+  def zone(%Time{} = scale, zone), do: Time.zone(scale, zone)
 end

@@ -7,19 +7,34 @@ defmodule Visualize.Scale.Time do
   so that about `count` ticks fit the domain, and every tick sits on a boundary of that
   interval — a whole multiple of the seconds below a day, midnight, Monday, the first of
   the month, or 1 January — inside the domain.
+
+  ## Display zone
+
+  `zone/2` gives the scale an IANA zone (spec/03 §7.4, D-115). Values are still Unix
+  seconds, so `apply/2` and every position are unchanged; the boundaries are read in the
+  zone's local calendar instead of UTC — local midnights, local Mondays, the 1st of a local
+  month — and sub-day ticks are the real instants whose local time is aligned, so the hour
+  a transition repeats is ticked twice and the hour it skips not at all. `ticks/2`,
+  `nice/1` and `invert/2` return `DateTime` values in the zone. The zone is read through
+  the host's `Calendar.TimeZoneDatabase`; a name it cannot show raises `ArgumentError`.
   """
 
   @behaviour Visualize.Scale.Behaviour
 
   defstruct domain: nil,
             range: [0, 1],
-            clamp?: false
+            clamp?: false,
+            zone: nil
 
   @type t :: %__MODULE__{
           domain: [DateTime.t() | Date.t() | NaiveDateTime.t()] | nil,
           range: [number()],
-          clamp?: boolean()
+          clamp?: boolean(),
+          zone: Calendar.time_zone() | nil
         }
+
+  @typedoc "Why the host's time zone database cannot show a zone."
+  @type zone_error :: :time_zone_not_found | :utc_only_time_zone_database
 
   @typedoc "A tick interval: a unit and how many of it make one step."
   @type interval ::
@@ -76,6 +91,48 @@ defmodule Visualize.Scale.Time do
     %{scale | clamp?: clamp?}
   end
 
+  @doc """
+  Sets the display zone: an IANA name such as `"America/New_York"`, or `nil` for UTC
+  (spec/03 §7.4).
+
+  Raises `ArgumentError` naming the zone when the host's `Calendar.TimeZoneDatabase` does
+  not know it, or when the host has configured none — never a silent fallback to UTC.
+  """
+  @spec zone(t(), Calendar.time_zone() | nil) :: t()
+  def zone(%__MODULE__{} = scale, nil), do: %{scale | zone: nil}
+
+  def zone(%__MODULE__{} = scale, zone) when is_binary(zone) do
+    case check_zone(zone) do
+      :ok -> %{scale | zone: zone}
+      {:error, reason} -> raise ArgumentError, zone_message(zone, reason)
+    end
+  end
+
+  @doc """
+  Whether the host's time zone database can show `zone`: `:ok`, or the database's reason,
+  `{:error, :time_zone_not_found}` or `{:error, :utc_only_time_zone_database}` (a host
+  with no database configured).
+  """
+  @spec check_zone(Calendar.time_zone()) :: :ok | {:error, zone_error()}
+  def check_zone(zone) when is_binary(zone) do
+    case DateTime.shift_zone(~U[2000-01-01 00:00:00Z], zone) do
+      {:ok, _shifted} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  A time value as the scale shows it: a `DateTime` in the scale's zone, the value reduced
+  as `apply/2` reduces it (a `NaiveDateTime` read as UTC, a `Date` as midnight UTC). A
+  scale without a zone returns the value unchanged.
+  """
+  @spec local(t(), DateTime.t() | Date.t() | NaiveDateTime.t()) ::
+          DateTime.t() | Date.t() | NaiveDateTime.t()
+  def local(%__MODULE__{zone: nil}, value), do: value
+
+  def local(%__MODULE__{zone: zone}, value),
+    do: value |> ensure_datetime() |> DateTime.shift_zone!(zone)
+
   @doc "Applies the scale to a time value"
   @impl true
   @spec apply(t(), DateTime.t() | Date.t() | NaiveDateTime.t()) :: float()
@@ -90,46 +147,50 @@ defmodule Visualize.Scale.Time do
     r0 + t * (r1 - r0)
   end
 
-  @doc "Inverts the scale to get a DateTime"
+  @doc "Inverts the scale to get a DateTime, in the scale's zone (UTC without one)"
   @impl true
   @spec invert(t(), number()) :: DateTime.t()
-  def invert(%__MODULE__{domain: [d0, d1], range: [r0, r1]}, value) do
+  def invert(%__MODULE__{domain: [d0, d1], range: [r0, r1], zone: zone}, value) do
     t0 = to_unix(d0)
     t1 = to_unix(d1)
 
     t = Visualize.Scale.Behaviour.normalize(value, r0, r1)
     unix = t0 + t * (t1 - t0)
 
-    DateTime.from_unix!(round(unix))
+    unix |> round() |> instant(zone)
   end
 
   @doc """
-  Generates tick values: every boundary of the chosen interval inside the domain, as UTC
-  `DateTime` values. A descending domain yields the same ticks descending.
+  Generates tick values: every boundary of the chosen interval inside the domain, as
+  `DateTime` values in the scale's zone (UTC without one), the boundaries read in that
+  zone's local calendar. A descending domain yields the same ticks descending.
   """
   @impl true
   @spec ticks(t(), integer()) :: [DateTime.t()]
-  def ticks(%__MODULE__{domain: [d0, d1]}, count) do
+  def ticks(%__MODULE__{domain: [d0, d1], zone: zone}, count) do
     t0 = ensure_datetime(d0)
     t1 = ensure_datetime(d1)
 
     case DateTime.compare(t0, t1) do
-      :gt -> boundaries(t1, t0, count) |> Enum.reverse()
-      _ -> boundaries(t0, t1, count)
+      :gt -> boundaries(t1, t0, count, zone) |> Enum.reverse()
+      _ -> boundaries(t0, t1, count, zone)
     end
   end
 
   @doc "Extends the domain outward to the boundaries of the interval ten ticks would use"
   @impl true
   @spec nice(t()) :: t()
-  def nice(%__MODULE__{domain: [d0, d1]} = scale) do
+  def nice(%__MODULE__{domain: [d0, d1], zone: zone} = scale) do
     t0 = ensure_datetime(d0)
     t1 = ensure_datetime(d1)
     interval = choose_interval(abs(to_unix(t1) - to_unix(t0)), 10)
 
     case DateTime.compare(t0, t1) do
-      :gt -> %{scale | domain: [ceil_to_interval(t0, interval), floor_to_interval(t1, interval)]}
-      _ -> %{scale | domain: [floor_to_interval(t0, interval), ceil_to_interval(t1, interval)]}
+      :gt ->
+        %{scale | domain: [ceil_to(t0, interval, zone), floor_to(t1, interval, zone)]}
+
+      _ ->
+        %{scale | domain: [floor_to(t0, interval, zone), ceil_to(t1, interval, zone)]}
     end
   end
 
@@ -154,15 +215,15 @@ defmodule Visualize.Scale.Time do
 
   # -- ticks -------------------------------------------------------------------------------
 
-  defp boundaries(t0, t1, count) do
+  defp boundaries(t0, t1, count, zone) do
     interval = choose_interval(to_unix(t1) - to_unix(t0), count)
-    collect(ceil_to_interval(t0, interval), t1, interval, [])
+    collect(ceil_to(t0, interval, zone), t1, interval, zone, [])
   end
 
-  defp collect(current, stop, interval, acc) do
+  defp collect(current, stop, interval, zone, acc) do
     case DateTime.compare(current, stop) do
       :gt -> Enum.reverse(acc)
-      _ -> collect(step(current, interval), stop, interval, [current | acc])
+      _ -> collect(step(current, interval, zone), stop, interval, zone, [current | acc])
     end
   end
 
@@ -204,62 +265,78 @@ defmodule Visualize.Scale.Time do
 
   # -- snapping ----------------------------------------------------------------------------
 
-  defp floor_to_interval(dt, {unit, n}) when unit in [:second, :minute, :hour] do
+  # Every function here takes the scale's zone. `nil` is UTC, exactly as before zones
+  # existed (spec/03 §7.3.2); a zone reads the same boundaries in its local calendar
+  # (§7.4): calendar units on local dates at local midnight, sub-day units at the real
+  # instants whose local time is aligned.
+
+  defp floor_to(dt, {unit, n}, nil) when unit in [:second, :minute, :hour] do
     secs = n * unit_seconds(unit)
     DateTime.from_unix!(Integer.floor_div(to_unix(dt), secs) * secs)
   end
 
-  defp floor_to_interval(dt, {:day, n}) do
-    date = DateTime.to_date(dt)
-    midnight(%{date | day: div(date.day - 1, n) * n + 1})
+  defp floor_to(dt, {unit, n}, zone) when unit in [:second, :minute, :hour] do
+    dt |> to_unix() |> local_floor(n * unit_seconds(unit), zone) |> instant(zone)
   end
 
-  defp floor_to_interval(dt, {:week, 1}) do
-    dt |> DateTime.to_date() |> Date.beginning_of_week(:monday) |> midnight()
+  defp floor_to(dt, {:day, n}, zone) do
+    date = local_date(dt, zone)
+    midnight(%{date | day: div(date.day - 1, n) * n + 1}, zone)
   end
 
-  defp floor_to_interval(dt, {:month, n}) do
-    date = DateTime.to_date(dt)
-    midnight(%{date | month: div(date.month - 1, n) * n + 1, day: 1})
+  defp floor_to(dt, {:week, 1}, zone) do
+    dt |> local_date(zone) |> Date.beginning_of_week(:monday) |> midnight(zone)
   end
 
-  defp floor_to_interval(dt, {:year, n}) do
-    date = DateTime.to_date(dt)
-    midnight(%{date | year: Integer.floor_div(date.year, n) * n, month: 1, day: 1})
+  defp floor_to(dt, {:month, n}, zone) do
+    date = local_date(dt, zone)
+    midnight(%{date | month: div(date.month - 1, n) * n + 1, day: 1}, zone)
+  end
+
+  defp floor_to(dt, {:year, n}, zone) do
+    date = local_date(dt, zone)
+    midnight(%{date | year: Integer.floor_div(date.year, n) * n, month: 1, day: 1}, zone)
   end
 
   # The boundary at or after `dt`: the floor when `dt` already sits on one, else one step on.
-  defp ceil_to_interval(dt, interval) do
-    floored = floor_to_interval(dt, interval)
+  defp ceil_to(dt, interval, zone) do
+    floored = floor_to(dt, interval, zone)
 
-    if DateTime.compare(floored, dt) == :eq, do: floored, else: step(floored, interval)
+    if DateTime.compare(floored, dt) == :eq, do: floored, else: step(floored, interval, zone)
   end
 
   # The next boundary after an aligned `dt`.
-  defp step(dt, {unit, n}) when unit in [:second, :minute, :hour] do
+  defp step(dt, {unit, n}, nil) when unit in [:second, :minute, :hour] do
     DateTime.add(dt, n * unit_seconds(unit), :second)
   end
 
-  defp step(dt, {:day, n}) do
-    date = DateTime.to_date(dt)
+  defp step(dt, {unit, n}, zone) when unit in [:second, :minute, :hour] do
+    dt |> to_unix() |> Kernel.+(1) |> local_ceil(n * unit_seconds(unit), zone) |> instant(zone)
+  end
+
+  defp step(dt, {:day, n}, zone) do
+    date = local_date(dt, zone)
     day = date.day + n
 
     if day <= Date.days_in_month(date) do
-      midnight(%{date | day: day})
+      midnight(%{date | day: day}, zone)
     else
-      midnight(%{shift_months(date, 1) | day: 1})
+      midnight(%{shift_months(date, 1) | day: 1}, zone)
     end
   end
 
-  defp step(dt, {:week, 1}), do: DateTime.add(dt, 7 * 86_400, :second)
+  defp step(dt, {:week, 1}, nil), do: DateTime.add(dt, 7 * 86_400, :second)
 
-  defp step(dt, {:month, n}) do
-    dt |> DateTime.to_date() |> shift_months(n) |> midnight()
+  # A local week is seven local days, which across a transition is not 604 800 seconds.
+  defp step(dt, {:week, 1}, zone), do: dt |> local_date(zone) |> Date.add(7) |> midnight(zone)
+
+  defp step(dt, {:month, n}, zone) do
+    dt |> local_date(zone) |> shift_months(n) |> midnight(zone)
   end
 
-  defp step(dt, {:year, n}) do
-    date = DateTime.to_date(dt)
-    midnight(%{date | year: date.year + n})
+  defp step(dt, {:year, n}, zone) do
+    date = local_date(dt, zone)
+    midnight(%{date | year: date.year + n}, zone)
   end
 
   # Calendar month arithmetic with the day clamped to the target month's length, so
@@ -270,11 +347,86 @@ defmodule Visualize.Scale.Time do
     %{target | day: min(date.day, Date.days_in_month(%{target | day: 1}))}
   end
 
-  defp midnight(%Date{} = date), do: DateTime.new!(date, ~T[00:00:00])
+  # The date a boundary is counted on: the value's own date without a zone (a `DateTime`
+  # in another zone keeps its own date, as it always has), the local date with one.
+  defp local_date(dt, nil), do: DateTime.to_date(dt)
+  defp local_date(dt, zone), do: dt |> DateTime.shift_zone!(zone) |> DateTime.to_date()
+
+  # The first instant of a local day: its midnight, or — when a transition skips midnight —
+  # the instant the day resumes; a repeated midnight is the earlier of the two.
+  defp midnight(%Date{} = date, nil), do: DateTime.new!(date, ~T[00:00:00])
+
+  defp midnight(%Date{} = date, zone) do
+    case DateTime.new(date, ~T[00:00:00], zone) do
+      {:ok, dt} -> dt
+      {:ambiguous, first, _second} -> first
+      {:gap, _before, resumed} -> resumed
+    end
+  end
+
+  defp instant(unix, nil), do: DateTime.from_unix!(unix)
+  defp instant(unix, zone), do: unix |> DateTime.from_unix!() |> DateTime.shift_zone!(zone)
+
+  # -- sub-day boundaries in a zone ---------------------------------------------------------
+
+  # A sub-day boundary of `secs` in a zone is an instant `t` whose local time
+  # `t + offset(t)` is a multiple of `secs` (every sub-day step divides a day, so the
+  # multiple is aligned to local midnight). Within one offset the boundaries are evenly
+  # spaced; where the offset changes the search restarts at the change, so a repeated
+  # local hour is found twice and a skipped one never. The database reports the offset at
+  # an instant, not where it changes, so a change is found by bisection.
+
+  # The first boundary at or after `t`.
+  defp local_ceil(t, secs, zone) do
+    offset = offset(t, zone)
+    candidate = t + Integer.mod(-(t + offset), secs)
+
+    if offset(candidate, zone) == offset,
+      do: candidate,
+      else: local_ceil(change(t, candidate, offset, zone), secs, zone)
+  end
+
+  # The last boundary at or before `t`.
+  defp local_floor(t, secs, zone) do
+    offset = offset(t, zone)
+    candidate = t - Integer.mod(t + offset, secs)
+    before = offset(candidate, zone)
+
+    if before == offset,
+      do: candidate,
+      else: local_floor(change(candidate, t, before, zone) - 1, secs, zone)
+  end
+
+  # The first instant in `(a, b]` whose offset is not `offset`, the offset at `a`; the
+  # offset at `b` differs, so there is one.
+  defp change(a, b, _offset, _zone) when b - a <= 1, do: b
+
+  defp change(a, b, offset, zone) do
+    mid = Integer.floor_div(a + b, 2)
+
+    if offset(mid, zone) == offset,
+      do: change(mid, b, offset, zone),
+      else: change(a, mid, offset, zone)
+  end
+
+  defp offset(unix, zone) do
+    local = instant(unix, zone)
+    local.utc_offset + local.std_offset
+  end
 
   defp unit_seconds(:second), do: 1
   defp unit_seconds(:minute), do: 60
   defp unit_seconds(:hour), do: 3600
+
+  defp zone_message(zone, :utc_only_time_zone_database) do
+    "time zone #{inspect(zone)} cannot be shown: no time zone database is configured " <>
+      "(Calendar.UTCOnlyTimeZoneDatabase); configure one with " <>
+      "Calendar.put_time_zone_database/1 or config :elixir, :time_zone_database"
+  end
+
+  defp zone_message(zone, reason) do
+    "time zone #{inspect(zone)} cannot be shown: #{inspect(reason)}"
+  end
 
   # -- value types -------------------------------------------------------------------------
 
@@ -285,7 +437,7 @@ defmodule Visualize.Scale.Time do
 
   defp ensure_datetime(%DateTime{} = dt), do: dt
   defp ensure_datetime(%NaiveDateTime{} = ndt), do: DateTime.from_naive!(ndt, "Etc/UTC")
-  defp ensure_datetime(%Date{} = d), do: midnight(d)
+  defp ensure_datetime(%Date{} = d), do: midnight(d, nil)
 
   defp clamp_value(value, min_val, max_val) do
     value |> max(min_val) |> min(max_val)

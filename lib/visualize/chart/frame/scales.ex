@@ -405,7 +405,7 @@ defmodule Visualize.Chart.Frame.Scales do
   defp construct(:power, node, _range), do: Power.exponent(Scale.power(), get(node, :exponent))
   defp construct(:sqrt, _node, _range), do: Scale.sqrt()
   defp construct(:symlog, node, _range), do: Symlog.constant(Scale.symlog(), get(node, :constant))
-  defp construct(:time, _node, _range), do: Scale.time()
+  defp construct(:time, node, _range), do: Scale.zone(Scale.time(), get(node, :zone))
   defp construct(:radial, _node, _range), do: Scale.radial()
 
   defp construct(:ordinal, node, _range),

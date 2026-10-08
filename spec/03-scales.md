@@ -81,6 +81,7 @@ The table records what each module defines.
 | `Visualize.Scale.padding/2` | Dispatches to the scale module's `padding/2`; meaningful only for `Band`. |
 | `Visualize.Scale.bandwidth/1` | Dispatches to the scale module's `bandwidth/1`; `0` for every scale but `Band`. |
 | `Visualize.Scale.clamp/2` | Dispatches to the scale module's `clamp/2` with a boolean. |
+| `Visualize.Scale.zone/2` | Delegates to `Visualize.Scale.Time.zone/2` (7.4). Not part of the protocol: a zone means something only to a time scale, so any other scale is a `FunctionClauseError`, not an identity. |
 
 ## 3. `Visualize.Scale.Linear`
 
@@ -219,13 +220,13 @@ The transform is `S(x) = sign(x) · ln(1 + |x| / c)` with inverse `S⁻¹(y) = s
 
 ### 7.1 Struct
 
-`%Visualize.Scale.Time{domain: nil, range: [0, 1], clamp?: false}`. The domain MUST be set before use.
+`%Visualize.Scale.Time{domain: nil, range: [0, 1], clamp?: false, zone: nil}`. The domain MUST be set before use. `zone` is the display zone of 7.4, an IANA name such as `"America/New_York"`, or `nil` for UTC.
 
 ### 7.2 Accepted Value Types
 
 Domain bounds and `apply/2` arguments MAY be any of `DateTime`, `Date`, `NaiveDateTime`, mixed freely. Each is reduced to Unix seconds: `DateTime` via `DateTime.to_unix/1`; `NaiveDateTime` as if UTC; `Date` as midnight UTC (`days since 1970-01-01 × 86400`). Sub-second precision is discarded.
 
-`invert/2`, `ticks/2`, and `nice/1` always produce **UTC `DateTime`** values, whatever the domain's type. `invert/2` rounds to the nearest whole second.
+`invert/2`, `ticks/2`, and `nice/1` produce `DateTime` values in the scale's zone — **UTC** when it has none — whatever the domain's type. `invert/2` rounds to the nearest whole second. The reduction above does not depend on the zone: a `NaiveDateTime` is still read as UTC and a `Date` as midnight UTC, so a zone changes where ticks fall and how values print, never where a value is drawn.
 
 ### 7.3 Semantics
 
@@ -259,21 +260,43 @@ Because neighbouring rows differ by at most `4.3×`, the number of ticks is with
 
 `floor(t)` is the latest boundary at or before `t`; `ceil(t)` is `floor(t)` when `t` is already a boundary, else the boundary that follows. Stepping from a boundary to the next: sub-day intervals add `n` units of seconds; `{:day, n}` adds `n` days, or moves to the 1st of the next month when that would pass the month's end; `{:week, 1}` adds seven days; `{:month, n}` adds `n` calendar months; `{:year, k}` adds `k` years. Month arithmetic clamps the day to the target month's length (31 January + 1 month is the last day of February), so no step constructs an invalid date; ticks themselves always land on the 1st.
 
-### 7.4 Functions
+The table and the steps above describe a scale without a zone. A zoned scale reads every boundary in its zone's local calendar instead (7.4).
+
+### 7.4 Display Zone
+
+`zone(scale, name)` sets the zone the scale's ticks are counted in and its values are shown in (#447). The name is an IANA time zone, looked up in the host's configured `Calendar.TimeZoneDatabase` through `DateTime.shift_zone/3` and `DateTime.new/4`; the library takes no time zone dependency (D-115). `zone(scale, nil)` removes it.
+
+**Storage does not change.** Values are reduced to Unix seconds exactly as in 7.2, so `apply/2` is the same function with or without a zone and a position stays linear in real time: a 25-hour day is drawn 25/24 as wide as a 24-hour one. The interval of 7.3.1 is chosen from the span in real seconds, as before.
+
+**Boundaries are local.** With a zone, the boundary column of 7.3.1 is read in the zone's local calendar — the wall-clock time `DateTime.shift_zone/3` gives each instant:
+
+- `{:second, n}`, `{:minute, n}`, `{:hour, n}`: every **real instant** whose local time has the second, the minute, or the minute and second at zero and the field (second, minute or hour of the local day) a multiple of `n`. Across a transition back, the repeated local hour yields its boundaries twice, at distinct instants, in instant order (`01:00 EDT`, then `01:00 EST`); across a transition forward, the boundaries of the skipped local hour do not exist and are absent. In a zone whose offset is not a whole hour (`Asia/Kolkata`, `+05:30`; `Asia/Kathmandu`, `+05:45`) the hour boundaries are the local hours, not the UTC ones.
+- `{:day, n}`, `{:week, 1}`, `{:month, n}`, `{:year, k}`: the **local midnight** of every boundary date, the dates chosen by the date arithmetic of 7.3.2 applied to local dates (a local Monday, the 1st of a local month, 1 January of a local year). A day containing a transition is 23 or 25 hours long and its ticks are spaced accordingly. A local midnight that a transition skips is the first instant of that day; one a transition repeats is the earlier instant.
+
+`floor`, `ceil` and the step of 7.3.2 follow the same reading, so `nice/1` extends the domain to local boundaries. `ticks/2` returns `DateTime` values in the zone, `nice/1` sets the domain to them, and `invert/2` returns a `DateTime` in the zone. Without a zone each of these is byte for byte what 7.2 and 7.3 say: UTC boundaries and UTC `DateTime` values.
+
+**The zone is refused loudly.** `zone/2` checks the name against the host's database at the call and raises `ArgumentError` naming the zone and the reason — `:time_zone_not_found` for a name the database does not know, `:utc_only_time_zone_database` for a host with no database configured, where every zone but `Etc/UTC` is unknowable. There is no fallback to UTC: a host that asked for New York and silently got UTC would draw every day tick four or five hours from midnight. `check_zone/1` returns the same answer as a value, which is what the declarative layer's validator reports ([14-declarative-chart](14-declarative-chart.md) §4.3, §10.1).
+
+`local(scale, value)` is a value as the scale shows it: a time value reduced as in 7.2 and shifted to the zone, or the value itself when the scale has none. An axis that formats explicit tick values passes them through it, so its labels read local time like the ticks it computes ([05-axes-and-formatting](05-axes-and-formatting.md) §2.8).
+
+### 7.5 Functions
 
 | Function | Contract |
 |---|---|
-| `Visualize.Scale.Time.new/0` | Returns the default struct with `domain: nil`. |
+| `Visualize.Scale.Time.new/0` | Returns the default struct with `domain: nil` and no zone. |
 | `Visualize.Scale.Time.domain/2` | Sets the domain; a two-element list of `DateTime`, `Date`, or `NaiveDateTime`. |
 | `Visualize.Scale.Time.range/2` | Sets the range (two-element list of numbers). |
 | `Visualize.Scale.Time.clamp/2` | Sets `clamp?`. |
 | `Visualize.Scale.Time.apply/2` | Maps a time value to the range as in 7.3; returns a float. |
-| `Visualize.Scale.Time.invert/2` | Maps a range value to a UTC `DateTime` at whole-second precision. |
-| `Visualize.Scale.Time.ticks/2` | Every boundary of the chosen interval inside the domain (7.3); a list of UTC `DateTime`. |
-| `Visualize.Scale.Time.nice/1` | Extends the domain outward to the boundaries of the count-10 interval; the domain becomes UTC `DateTime` values. |
+| `Visualize.Scale.Time.invert/2` | Maps a range value to a `DateTime` in the scale's zone (UTC without one) at whole-second precision. |
+| `Visualize.Scale.Time.ticks/2` | Every boundary of the chosen interval inside the domain (7.3), in the zone's local calendar when it has one (7.4); a list of `DateTime` in the scale's zone, UTC without one. |
+| `Visualize.Scale.Time.nice/1` | Extends the domain outward to the boundaries of the count-10 interval (local boundaries with a zone, 7.4); the domain becomes `DateTime` values in the scale's zone, UTC without one. |
 | `Visualize.Scale.Time.interval/2` | The `{unit, n}` interval `count` ticks would use over a span of seconds (7.3.1). |
 | `Visualize.Scale.Time.padding/2` | Identity. |
 | `Visualize.Scale.Time.bandwidth/1` | Returns `0`. |
+| `Visualize.Scale.Time.zone/2` | Sets the display zone (7.4), an IANA name or `nil`; raises `ArgumentError` naming the zone when the host's time zone database does not know it or the host has none. |
+| `Visualize.Scale.Time.check_zone/1` | `:ok`, or `{:error, :time_zone_not_found}` / `{:error, :utc_only_time_zone_database}`: whether the host's time zone database can show a name (7.4). |
+| `Visualize.Scale.Time.local/2` | A time value as the scale shows it: a `DateTime` in the scale's zone, or the value unchanged when the scale has none (7.4). |
 
 ## 8. `Visualize.Scale.Ordinal`
 

@@ -78,7 +78,9 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:unknown, :term, :geometry),
       spec(:transition, {:node, :transition}, :geometry),
       spec(:start, :number, :geometry, default: 0, range: {-360, 360, 5}),
-      spec(:sweep, :number, :geometry, default: 360, range: {-360, 360, 5})
+      spec(:sweep, :number, :geometry, default: 360, range: {-360, 360, 5}),
+      # A time scale's display zone, an IANA name; `nil` is UTC (spec/03 §7.4, #447).
+      spec(:zone, :string, :geometry)
     ]
   end
 

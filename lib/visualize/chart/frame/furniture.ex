@@ -138,7 +138,10 @@ defmodule Visualize.Chart.Frame.Furniture do
     Axis.tick_format(axis, fn v -> if is_number(v), do: Format.duration(v), else: to_string(v) end)
   end
 
-  defp format(axis, %Scale.Time{}, spec), do: Axis.tick_format(axis, &Format.time(&1, spec))
+  # A tick of a zoned time scale prints its local wall clock, whether the scale computed it
+  # or the design gave it (spec/05 §2.8, #447); without a zone `local/2` is the identity.
+  defp format(axis, %Scale.Time{} = scale, spec),
+    do: Axis.tick_format(axis, &Format.time(Scale.Time.local(scale, &1), spec))
 
   defp format(axis, _scale, spec) do
     formatter = Format.formatter(spec)
