@@ -1508,10 +1508,14 @@ import Visualize.Chart, only: [var: 1]
     chart(meta: %{name: "Uptime"}),
     source(:primary, [:t, :v], default: :gitlab_uptime),
     var(:unit, "%"),
+    var(:accent, "#1f77b4"),
     theme(:default),
-    style(:series, stroke: var(:accent), stroke_width: 2, curve: :step_after)
+    style(:series, stroke: var(:accent), stroke_width: 2, curve: :step_after),
+    cartesian()
   ])
 ```
+
+The `cartesian()` fragment is the frame (§16.3) that makes the declarations a design: every design has one (§4), and `{:ok, design}` here validates (§10), which `test/visualize/chart/spec_examples_test.exs` holds (spec/12 §6). A variable used, as `var(:accent)` is in the style, is declared beside it, since an undeclared one does not validate (§7.1).
 
 `Visualize.Chart.Build.var/2` and `Visualize.Chart.var/1` are different functions and are not confusable: the first *declares* a variable and its default under `vars` (§2.4) and belongs to the builder; the second *builds* the `%Visualize.Chart.Var{}` term that uses one (§7.1) and belongs to the chart. They differ in module and in arity, so a module that imports both reads `var(:unit, "%")` for the declaration and `var(:unit)` for the use, and neither import shadows the other.
 
