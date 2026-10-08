@@ -725,9 +725,27 @@ defmodule Visualize.Chart.Compiled do
   defp target(_kind, :auto, _points, _ceiling),
     do: if(CanvasBinary.available?(), do: :binary, else: :canvas)
 
-  # Whether the canvas layer's old pixels go stale between ticks: a canvas mark reads a
-  # scale other than the viewport's whose domain moves (spec/14 §12.5).
+  # The scale kinds a window slides by a translation of its units (spec/14 §12.5, #416):
+  # the only kinds a copy-shift is right for. An allowlist, not an exclusion, so a kind
+  # added later redraws in full until it is shown to be one.
+  @translations [:linear, :time]
+
+  # Whether the canvas layer's old pixels go stale between ticks: the windowed scale is
+  # not a translation, so no single dx moves the drawn pixels right, or a canvas mark
+  # reads a scale other than the viewport's whose domain moves (spec/14 §12.5).
   defp stale?(chart, viewport, targets) do
+    not translation?(chart, viewport) or moving_beside?(chart, viewport, targets)
+  end
+
+  # A scale adopted from another frame has no kind here to prove it one, so it fails safe.
+  defp translation?(chart, viewport) do
+    case get_in(chart.frames |> Map.values() |> hd(), [:scales, viewport]) do
+      %{kind: kind} -> kind in @translations
+      _adopted_or_absent -> false
+    end
+  end
+
+  defp moving_beside?(chart, viewport, targets) do
     chart.marks
     |> Enum.zip(targets)
     |> Enum.any?(fn {mark, {target, _}} ->
