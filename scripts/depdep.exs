@@ -24,7 +24,17 @@
 #
 # A restore Mix still refuses is counted as a miss and recompiled, and the summary ends
 # `rebuilt N`. If N is not 0, `--explain-rebuilt` (v0.8.0) names which input the manifest
-# disagrees on; #430 is the standing case (extla).
+# disagrees on.
+#
+# extla is an ordinary unit of the store, not excluded the way `examples` is: it is a git
+# dependency at a pinned tag (#441), so the commit is its content identity across
+# checkouts. #430 asked whether it was restorable at all, because v0.7.0 refused it on
+# every run; it was the two causes above, and on v0.10.0 it restores and holds (#452,
+# pipeline 4490: `missing 0`, nothing rebuilt).
+#
+# A `compile` or `test` job served by the GitLab runner's own cache (keyed on mix.lock,
+# local to each runner) reports `already present` and never touches the store. Only a job
+# that missed that cache measures a restore, so read `rebuilt N` from those.
 #
 # Depdep lives in a private project, so the URL has to carry credentials, and what is
 # available differs between a developer's machine and a CI container: a developer has an
