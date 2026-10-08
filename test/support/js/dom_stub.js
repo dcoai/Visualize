@@ -160,15 +160,16 @@ const Stub = (() => {
       if (width !== undefined) el.appendChild(new Canvas(width, height));
       return el;
     },
-    // An element as a page renders it: its attributes, `class` read into classList and
-    // each `data-*` into dataset, as a browser reflects them, then its children.
-    node(tag, attributes = {}, children = []) {
+    // An element as a page renders it, by its HTML attribute names (#468): its attributes,
+    // `class` read into classList and each `data-*` into dataset, as a browser reflects
+    // them, then its children. `node/2` below builds a bare element from a dataset.
+    markup(tag, attributes = {}, children = []) {
       const el = new Element(tag);
       for (const [name, value] of Object.entries(attributes)) {
         el.setAttribute(name, value);
         if (name === 'class') el.className = String(value);
         if (name.startsWith('data-')) {
-          el.dataset[name.slice(5).replace(/-([a-z])/g, (_m, c) => c.toUpperCase())] = String(value);
+          el.dataset[datasetKey(name)] = String(value);
         }
       }
       children.forEach((child) => el.appendChild(child));

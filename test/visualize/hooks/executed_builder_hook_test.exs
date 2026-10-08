@@ -62,11 +62,11 @@ defmodule Visualize.Hooks.ExecutedBuilderHookTest do
   defp drag(rows, from, over, dy \\ 2) do
     scenario = """
     const rows = #{Jason.encode!(rows)}.map((attributes, i) => {
-      const row = Stub.node('li', attributes, [Stub.node('span', {class: 'vis-builder-layer-name'})]);
+      const row = Stub.markup('li', attributes, [Stub.markup('span', {class: 'vis-builder-layer-name'})]);
       row.rect = {top: i * #{@row_height}, left: 0, width: 200, height: #{@row_height}};
       return row;
     });
-    const list = Stub.node('ol', {class: 'vis-builder-layers', 'data-builder-stack': 'true'}, rows);
+    const list = Stub.markup('ol', {class: 'vis-builder-layers', 'data-builder-stack': 'true'}, rows);
     const hook = Stub.mount(BuilderHook, list);
     const transfer = {types: [], setData() {}, getData() { return ''; }};
     const source = rows[#{from}].children[0];
@@ -124,9 +124,11 @@ defmodule Visualize.Hooks.ExecutedBuilderHookTest do
 
     test "a group dropped directly below its own last row pushes nothing, open or closed" do
       # Open: the gap below shared (drawn third) is the top of panel's row (drawn fourth).
-      assert {[], _report} = drag(rows(grouped()), 0, 3)
+      # The gap is marked on panel's row, so nothing pushed is the no-op and not a hook that
+      # read no rows.
+      assert {[], %{"marked" => 3}} = drag(rows(grouped()), 0, 3)
       # Closed: the gap below the group's row is the top of panel's row (drawn second).
-      assert {[], _report} = drag(rows(closed(grouped())), 0, 1)
+      assert {[], %{"marked" => 1}} = drag(rows(closed(grouped())), 0, 1)
     end
 
     test "a group dragged past the next row moves by the rows it holds" do
