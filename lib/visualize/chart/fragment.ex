@@ -41,7 +41,11 @@ defmodule Visualize.Chart.Fragment do
 
   """
 
-  alias Visualize.Chart.Schema
+  alias Visualize.Chart.{Codec, Schema}
+
+  # Jason is optional (spec/14 §11.1, D-50): as in `Visualize.Chart`, the calls in
+  # `to_json/1` and `from_json/1` stay direct and a missing Jason is answered at runtime.
+  @compile {:no_warn_undefined, Jason}
 
   # A library body names its kind with a singular key and nothing else (§19.2). `theme` and
   # `frame` are not here because they are design keys already, and the schema's own walk
@@ -248,6 +252,46 @@ defmodule Visualize.Chart.Fragment do
   def relocate(fragment, table) do
     {rewritten, missed} = rewrite(fragment, table, [])
     {rewritten, missed |> Enum.uniq() |> Enum.sort()}
+  end
+
+  @doc """
+  A fragment of any kind as the JSON of §11 and §19.7 (#465): use sites as `$use`, ids as
+  `$id`, variables as `$var`. It is not validated as a design — a fragment may be partial —
+  so a host that keeps its library in a database can write whatever `Store.put/2` hands it.
+  `{:error, {:missing_dependency, :jason}}` without Jason, as `Visualize.Chart.to_json/1`.
+
+      iex> {:ok, json} = Visualize.Chart.Fragment.to_json(%{style: %{stroke_width: 5}})
+      iex> Visualize.Chart.Fragment.from_json(json)
+      {:ok, %{style: %{stroke_width: 5}}}
+  """
+  @spec to_json(map()) :: {:ok, String.t()} | {:error, {:missing_dependency, :jason}}
+  def to_json(fragment) when is_map(fragment) and not is_struct(fragment) do
+    if Code.ensure_loaded?(Jason) do
+      {:ok, json} = fragment |> Codec.encode() |> Jason.encode()
+      {:ok, json}
+    else
+      {:error, {:missing_dependency, :jason}}
+    end
+  end
+
+  @doc """
+  The fragment `to_json/1` wrote (#465): tagged terms back as `%Visualize.Chart.Use{}`,
+  ids, variables and atoms. An id whose kind is not one a fragment can have is left as it
+  was read, so no atom is made from a document's kind. `{:error, {:json, message}}` for text
+  that is not JSON. `from_json(to_json(f))` is `f`.
+  """
+  @spec from_json(String.t()) ::
+          {:ok, map()} | {:error, {:json, String.t()} | {:missing_dependency, :jason}}
+  def from_json(json) when is_binary(json) do
+    if Code.ensure_loaded?(Jason) do
+      case Jason.decode(json) do
+        {:ok, term} when is_map(term) -> {:ok, Codec.decode(term)}
+        {:ok, other} -> {:error, {:json, "a fragment is an object, got #{inspect(other)}"}}
+        {:error, error} -> {:error, {:json, Exception.message(error)}}
+      end
+    else
+      {:error, {:missing_dependency, :jason}}
+    end
   end
 
   defp rewrite({kind, n} = id, table, missed) when is_atom(kind) and is_integer(n) and n > 0 do
