@@ -3,8 +3,15 @@
 The gallery, the performance view, the client-side interactions and the chart builder,
 as a Phoenix LiveView app over the library one directory up.
 
-    mix deps.get
-    mix phx.server          # http://localhost:4000
+    ./run.sh                # http://127.0.0.1:4080
+
+`run.sh` fetches and compiles the dependencies, then runs `mix phx.server`. Its one optional
+argument says where to listen: `./run.sh 4020` (a port), `./run.sh 0.0.0.0` (an address) or
+`./run.sh 0.0.0.0:4020` (both); an IPv6 literal goes in brackets, `./run.sh [::1]:4020`. It
+sets `VISUALIZE_IP` and `VISUALIZE_PORT`, which `config/dev.exs` reads, so a bare
+`mix phx.server` listens on the same default. An address other than loopback exposes an
+unauthenticated development server to whatever can route to it, and `run.sh` says so when it
+starts.
 
 ## Restart, don't just recompile, after a supervision-tree change
 
