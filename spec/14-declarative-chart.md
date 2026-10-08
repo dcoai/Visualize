@@ -1816,7 +1816,7 @@ A key a fragment does not carry has no node, because a fragment is not a whole d
 | `orientation` | bars standing, or lying |
 | `kind` of a frame | cartesian axes, a polar ring, a globe, a facet grid |
 
-Every other enum stays a select of its words; `Glyphs.glyph/2` is total over the drawn keys' values, which a test walks.
+Every other enum stays a select of its words; `Glyphs.glyph/2` is total over the drawn keys' values, which a test walks. **A glyph carries no id** (#471): it is drawn once per choice and per open row, and an id must be unique in the HTML document its inline SVG sits in, so a picture that needs a gradient or a blur draws it with translucent bands and squares rather than a paint server or a filter, which would need an id to be referred to.
 
 **A text field is a text field.** A `:text` (§7.1) is a box holding the string with its holes — `Uptime for #{var(:host)}` — whichever form the layer holds it in, and `parse/2` keeps what was typed: a hole that does not read is the validator's fault under the field, not a refusal at the box. A variable reaches a text as text among text: a chip dropped on the box is inserted at the caret as `#{var(:name)}` by `Visualize.Hooks.Builder` — the browser is the only party that knows the caret — and the box's own change writes the string; `bind_field` on a text key does nothing, since a text is never bound whole. `meta.name` is a `:text`, so a title can carry a variable in its middle.
 

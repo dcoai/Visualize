@@ -190,13 +190,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
         :shadow ->
           ~s|<rect x="8" y="8" width="12" height="12" fill="currentColor" opacity="0.35"/><rect x="5" y="5" width="12" height="12" fill="currentColor"/>|
 
+        # A soft edge: the square inside two wider, fainter ones. No filter, so no id.
         :blur ->
-          ~s|<defs><filter id="vis-glyph-blur"><feGaussianBlur stdDeviation="1.5"/></filter></defs><rect x="6" y="6" width="12" height="12" fill="currentColor" filter="url(#vis-glyph-blur)"/>|
+          ~s|<rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity="0.15"/><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" opacity="0.35"/><rect x="7" y="7" width="10" height="10" fill="currentColor"/>|
       end
     end
 
     # A fill style (§18.6): no paint, a solid, a gradient down the square, one out from
-    # its centre. The gradient ids repeat across glyphs and are identical, which SVG allows.
+    # its centre. A gradient is drawn as translucent bands, not a paint server: a glyph is
+    # shown once per choice in one HTML document, so an id would repeat (#471).
     defp picture(:fill_style, style) when style in [:none, :solid, :linear, :radial] do
       case style do
         :none ->
@@ -206,10 +208,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
           ~s|<rect x="5" y="5" width="14" height="14" fill="currentColor"/>|
 
         :linear ->
-          ~s|<defs><linearGradient id="vis-glyph-linear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></linearGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-linear)" stroke="currentColor" stroke-width="1"/>|
+          bands([0.9, 0.75, 0.6, 0.45, 0.3, 0.2, 0.1], fn i -> {5, 5 + i * 2, 14, 2} end)
 
         :radial ->
-          ~s|<defs><radialGradient id="vis-glyph-radial"><stop offset="0" stop-color="currentColor" stop-opacity="0.9"/><stop offset="1" stop-color="currentColor" stop-opacity="0.1"/></radialGradient></defs><rect x="5" y="5" width="14" height="14" fill="url(#vis-glyph-radial)" stroke="currentColor" stroke-width="1"/>|
+          bands([0.2, 0.25, 0.3, 0.4], fn i -> {5 + i * 2, 5 + i * 2, 14 - i * 4, 14 - i * 4} end)
       end
     end
 
@@ -350,6 +352,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
         ~s|<g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></g>|
 
     defp picture(_key, _value), do: nil
+
+    # Rectangles at falling or rising opacity inside the square's outline: a gradient
+    # drawn without a paint server, so with no id (#471).
+    defp bands(opacities, rect) do
+      fills =
+        opacities
+        |> Enum.with_index()
+        |> Enum.map_join(fn {opacity, i} ->
+          {x, y, w, h} = rect.(i)
+
+          ~s|<rect x="#{x}" y="#{y}" width="#{w}" height="#{h}" fill="currentColor" opacity="#{opacity}"/>|
+        end)
+
+      fills <>
+        ~s|<rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/>|
+    end
 
     defp dot(nil), do: nil
 
