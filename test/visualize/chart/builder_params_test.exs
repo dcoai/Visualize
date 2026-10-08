@@ -169,7 +169,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       # `meta` (§2.2) and an empty `layout` (§2.8) are the schema's defaults, which
       # `to_map/1` writes and a person did not.
       assert BuilderFixture.design(opened) ==
-               Chart.to_map(chart) |> Map.drop([:defs, :meta, :layout])
+               Chart.to_map(chart) |> Map.drop([:defs, :meta, :layout, :interaction])
 
       assert BuilderFixture.selected(opened) == 0
       assert BuilderFixture.disabled(opened) == MapSet.new()

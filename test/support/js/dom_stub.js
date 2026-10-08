@@ -21,27 +21,68 @@ const Stub = (() => {
     });
   }
 
-  class Element {
+  // `data-vis-sync-x` as the browser's dataset spells it: `visSyncX`.
+  const datasetKey = (name) => name.slice(5).replace(/-([a-z])/g, (_m, c) => c.toUpperCase());
+
+  // A listener table, for an element and for `document` (#466).
+  class Target {
+    constructor() { this.listeners = {}; }
+    addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); }
+    removeEventListener(type, fn) {
+      this.listeners[type] = (this.listeners[type] || []).filter((f) => f !== fn);
+    }
+    fire(type, event) { (this.listeners[type] || []).slice().forEach((fn) => fn(event)); }
+  }
+
+  class Element extends Target {
     constructor(tagName, dataset = {}) {
+      super();
       this.tagName = tagName.toUpperCase();
       this.dataset = {...dataset};
       this.attributes = {};
       this.children = [];
       this.style = {};
       this.parentNode = null;
+      this.rect = {left: 0, top: 0, width: 0, height: 0};
+      this.offsetWidth = 0;
+      this.offsetHeight = 0;
     }
-    querySelector(selector) {
-      const match = selector.startsWith('.')
-        ? (c) => c.className === selector.slice(1)
-        : (c) => c.tagName === selector.toUpperCase();
-      return this.children.find(match) || null;
+    // `.class`, a tag name, or `[attribute]`.
+    matches(selector) {
+      if (selector.startsWith('.')) return this.className === selector.slice(1);
+      if (selector.startsWith('[')) return this.hasAttribute(selector.slice(1, -1));
+      return this.tagName === selector.toUpperCase();
     }
+    // Every descendant in document order.
+    descendants() { return this.children.flatMap((c) => [c, ...c.descendants()]); }
+    querySelector(selector) { return this.descendants().find((c) => c.matches(selector)) || null; }
+    querySelectorAll(selector) { return this.descendants().filter((c) => c.matches(selector)); }
+    closest(selector) {
+      for (let node = this; node instanceof Element; node = node.parentNode) {
+        if (node.matches(selector)) return node;
+      }
+      return null;
+    }
+    contains(other) {
+      for (let node = other; node; node = node.parentNode) if (node === this) return true;
+      return false;
+    }
+    get parentElement() { return this.parentNode instanceof Element ? this.parentNode : null; }
     appendChild(child) { child.parentNode = this; this.children.push(child); return child; }
+    removeChild(child) { child.remove(); return child; }
     remove() {
       if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this);
+      this.parentNode = null;
     }
+    getBoundingClientRect() { return {...this.rect}; }
     setAttribute(name, value) { this.attributes[name] = String(value); }
-    getAttribute(name) { return name in this.attributes ? this.attributes[name] : null; }
+    // A `data-*` attribute the element was built with reads through its dataset, as in a browser.
+    getAttribute(name) {
+      if (name in this.attributes) return this.attributes[name];
+      if (name.startsWith('data-') && datasetKey(name) in this.dataset) return this.dataset[datasetKey(name)];
+      return null;
+    }
+    hasAttribute(name) { return this.getAttribute(name) !== null; }
     removeAttribute(name) { delete this.attributes[name]; }
   }
 
@@ -66,8 +107,26 @@ const Stub = (() => {
     toJSON() { return this.id; }
   }
 
-  globalThis.document = {
+  // `document` is an event target too: the sync bus dispatches on it (spec/10 §4.3), and
+  // every dispatch is recorded with its detail's x and the source element's id.
+  const doc = new Target();
+  Object.assign(doc, {
+    body: new Element('body'),
+    documentElement: {clientWidth: 1280, clientHeight: 800},
     createElement: (tag) => tag === 'canvas' ? new Canvas() : new Element(tag),
+    createElementNS: (_ns, tag) => new Element(tag),
+    dispatchEvent(event) {
+      const detail = event.detail || {};
+      log.push({on: 'document', kind: 'event', name: event.type,
+                payload: {x: detail.x, source: detail.source ? detail.source.id : null}});
+      doc.fire(event.type, event);
+      return true;
+    },
+  });
+  globalThis.document = doc;
+  globalThis.window = {scrollX: 0, scrollY: 0};
+  globalThis.CustomEvent = class CustomEvent {
+    constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
   };
   globalThis.setTimeout = (fn, ms) => { timers.set(++timerIds, {fn, at: now + ms}); return timerIds; };
   globalThis.clearTimeout = (id) => { timers.delete(id); };
@@ -94,6 +153,12 @@ const Stub = (() => {
       return instance;
     },
     deliver(instance, name, payload) { instance.handlers[name](payload); },
+    // A bare element, for a chart's markup inside a hook element.
+    node(tag, dataset = {}) { return new Element(tag, dataset); },
+    // A pointer event on an element: its listeners called with the event, target the element.
+    fire(el, type, event = {}) { el.fire(type, {target: el, ...event}); },
+    // How many listeners `document` holds for an event name.
+    listeners(name) { return (doc.listeners[name] || []).length; },
     // Runs every timer due by now + ms, in time order, as the clock reaches it.
     advance(ms) {
       const until = now + ms;

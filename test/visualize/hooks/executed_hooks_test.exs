@@ -10,6 +10,9 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
   import Visualize.JsHooks, only: [run: 1, after_mark: 2, calls: 2]
 
   alias Visualize.Backend.{CanvasBinary, CanvasIncremental}
+  alias Visualize.Chart
+  alias Visualize.Chart.Frame
+  alias Visualize.Hooks.Crosshair
   alias Visualize.IR.{Element, Path}
 
   @moduletag :js
@@ -307,5 +310,205 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
 
       refute Enum.any?(log, &(&1["kind"] == "push"))
     end
+  end
+
+  describe "a sync group shares hover (#466, spec/10 §4.3)" do
+    # The crosshair's attributes of a real design, applied at a size, as a hook's dataset:
+    # the arrays, the plot, the size and the group's mapping, all from the server.
+    defp member(size, opts \\ []) do
+      domain = Keyword.get(opts, :domain, [0, 100])
+      [lo, hi] = domain
+      rows = for t <- lo..hi//div(hi - lo, 10), do: %{t: t, v: t * 2}
+
+      design = %{
+        version: 2,
+        interaction: %{sync: Keyword.get(opts, :group, "dash")},
+        sources: %{s: %{fields: [:t, :v]}},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :linear, domain: domain}, y: %{kind: :linear}}
+          }
+        },
+        marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]
+      }
+
+      {:ok, applied} = Chart.apply(design, sources: %{s: rows}, size: size)
+
+      applied.frame
+      |> Crosshair.attrs(applied.sources)
+      |> Map.put("data-crosshair-event", "hover")
+      |> dataset()
+    end
+
+    # The browser's dataset of a map of `data-*` attributes: `data-vis-sync-x` is `visSyncX`.
+    defp dataset(attrs) do
+      Map.new(attrs, fn {"data-" <> name, value} ->
+        [first | rest] = String.split(name, "-")
+        {Enum.join([first | Enum.map(rest, &String.capitalize/1)]), value}
+      end)
+    end
+
+    # Every crosshair is mounted through a spy that records which charts handled a
+    # received hover, so an echo would show.
+    @prelude """
+    const synced = [];
+    const Spy = Object.create(CrosshairHook);
+    Spy.syncTo = function (value) {
+      synced.push(this.tag || this.el.id);
+      return CrosshairHook.syncTo.call(this, value);
+    };
+    function mount(id, dataset, left, cssWidth) {
+      const el = Stub.element(dataset);
+      el.id = id;
+      const [w, h] = dataset.size.split(',').map(Number);
+      el.rect = {left, top: 0, width: cssWidth || w, height: h};
+      return Stub.mount(Spy, el);
+    }
+    const at = (hook) => ({x1: hook.rule.getAttribute('x1'), display: hook.overlay.style.display});
+    """
+
+    defp events(entries), do: for(%{"kind" => "event"} = e <- entries, do: e)
+
+    test "three charts of different widths put their crosshairs at the same domain x" do
+      tooltip = Frame.sync_attrs(applied_frame({600, 200})) |> dataset()
+
+      assert {:ok, %{"log" => log, "report" => report}} =
+               run("""
+               #{@prelude}
+               const a = mount('a', #{js(member({600, 200}))}, 0);
+               const b = mount('b', #{js(member({300, 200}))}, 700, 450);
+               const c = mount('c', #{js(member({900, 200}))}, 1200);
+               const far = mount('far', #{js(member({600, 200}, domain: [200, 300]))}, 2200);
+               const other = mount('other', #{js(member({600, 200}, group: "other"))}, 3000);
+
+               // A tooltip whose chart markup carries the group, one dot per datum.
+               const tipEl = Stub.element({});
+               tipEl.id = 'tip';
+               tipEl.rect = {left: 4000, top: 50, width: 600, height: 200};
+               const svg = tipEl.appendChild(Stub.node('svg', #{js(tooltip)}));
+               const dots = [];
+               for (let t = 0; t <= 100; t += 10) {
+                 const dot = svg.appendChild(Stub.node('circle', {datum: 't v', datumT: String(t), datumV: String(2 * t)}));
+                 dot.rect = {left: 4000 + 40 + t * 5.4 - 3, top: 150, width: 6, height: 6};
+                 dots.push(dot);
+               }
+               const tip = Stub.mount(TooltipHook, tipEl);
+               const tipShown = () => ({text: tip.tip.textContent || null, display: tip.tip.style.display});
+
+               Stub.mark('hover');
+               // 50 on a: chart x 40 + 270 of a 600-wide chart.
+               Stub.fire(a.el, 'mousemove', {clientX: 310, clientY: 100});
+               const hovered = {a: at(a), b: at(b), c: at(c), far: at(far), other: at(other), tip: tipShown()};
+               const syncedOnHover = synced.splice(0);
+
+               Stub.mark('leave');
+               Stub.fire(a.el, 'mouseleave');
+               const left = {a: at(a), b: at(b), c: at(c), tip: tipShown()};
+
+               Stub.mark('tooltip hover');
+               // 30 on the tooltip's chart: 40 + 162 of its 600.
+               Stub.fire(tipEl, 'mousemove', {clientX: 4202, clientY: 150, pageX: 4202, pageY: 150, target: dots[3]});
+               const fromTip = {a: at(a), b: at(b), c: at(c)};
+
+               Stub.done({hovered, syncedOnHover, left, fromTip});
+               """)
+
+      assert %{
+               "hovered" => hovered,
+               "syncedOnHover" => synced,
+               "left" => left,
+               "fromTip" => from_tip
+             } = report
+
+      # 50 of [0, 100] is half of each plot: 540, 240 (shown at 450 CSS px) and 840 wide.
+      assert %{"x1" => "270", "display" => "block"} = hovered["a"]
+      assert %{"x1" => "120", "display" => "block"} = hovered["b"]
+      assert %{"x1" => "420", "display" => "block"} = hovered["c"]
+      assert %{"text" => "t: 50\nv: 100", "display" => "block"} = hovered["tip"]
+
+      # A member whose domain does not hold 50 draws nothing; another group is untouched.
+      assert %{"x1" => nil, "display" => "none"} = hovered["far"]
+      assert %{"x1" => nil, "display" => "none"} = hovered["other"]
+
+      # The chart under the pointer never handles its own echo, and the other group never hears.
+      assert Enum.sort(synced) == ["b", "c", "far"]
+
+      # One hover is one event on the bus in domain units, and one push, from its origin.
+      hover = after_mark(log, "hover")
+
+      assert [%{"name" => "vis:sync:dash", "payload" => %{"x" => 50, "source" => "a"}}] =
+               events(hover)
+
+      assert [%{"kind" => "push", "name" => "hover", "payload" => %{"index" => 5}}] =
+               Enum.filter(hover, &(&1["kind"] == "push"))
+
+      # Leaving clears every member.
+      assert [%{"payload" => %{"x" => nil, "source" => "a"}}] = events(after_mark(log, "leave"))
+      for chart <- ~w(a b c), do: assert(%{"display" => "none"} = left[chart])
+      assert %{"display" => "none"} = left["tip"]
+
+      # A tooltip publishes too: 30 on its chart moves every crosshair to 30.
+      assert [%{"payload" => %{"x" => 30, "source" => "tip"}}] =
+               events(after_mark(log, "tooltip hover"))
+
+      assert %{"a" => %{"x1" => "162"}, "b" => %{"x1" => "72"}, "c" => %{"x1" => "252"}} =
+               from_tip
+    end
+
+    test "destroyed() removes the listener, a remount hears once, and updated() moves it" do
+      assert {:ok, %{"log" => log, "report" => report}} =
+               run("""
+               #{@prelude}
+               const name = 'vis:sync:dash';
+               const a = mount('a', #{js(member({600, 200}))}, 0);
+               const first = mount('b', #{js(member({300, 200}))}, 700);
+               first.tag = 'b1';
+               const tip = Stub.mount(TooltipHook, Stub.element(#{js(member({600, 200}))}));
+
+               const counts = {mounted: Stub.listeners(name)};
+               first.destroyed();
+               counts.destroyed = Stub.listeners(name);
+               const second = Stub.mount(Spy, first.el);
+               second.tag = 'b2';
+               counts.remounted = Stub.listeners(name);
+
+               Stub.mark('hover');
+               Stub.fire(a.el, 'mousemove', {clientX: 310, clientY: 100});
+               Stub.mark('after');
+               const handled = synced.splice(0);
+
+               second.el.dataset.visSync = 'elsewhere';
+               second.updated();
+               counts.moved = [Stub.listeners(name), Stub.listeners('vis:sync:elsewhere')];
+
+               for (const hook of [a, second, tip]) hook.destroyed();
+               counts.gone = [Stub.listeners(name), Stub.listeners('vis:sync:elsewhere')];
+               Stub.done({counts, handled, overlays: document.body.children.length});
+               """)
+
+      # a, b and the tooltip; one fewer once b is destroyed, and one again on its remount.
+      assert %{"mounted" => 3, "destroyed" => 2, "remounted" => 3} = report["counts"]
+
+      # The destroyed mount hears nothing; the remount handles the one event once.
+      assert report["handled"] == ["b2"]
+      assert [_one] = events(after_mark(log, "hover"))
+
+      # A new group moves the listener; everything destroyed leaves none, and nothing drawn.
+      assert report["counts"]["moved"] == [2, 1]
+      assert report["counts"]["gone"] == [0, 0]
+      assert report["overlays"] == 0
+    end
+  end
+
+  defp applied_frame(size) do
+    design = %{
+      version: 2,
+      interaction: %{sync: "dash"},
+      frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear, domain: [0, 100]}}}}
+    }
+
+    {:ok, applied} = Chart.apply(design, size: size)
+    applied.frame
   end
 end

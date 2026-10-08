@@ -183,6 +183,7 @@ defmodule Visualize.Chart.Composite do
       one(:theme, document) ++
         one(:meta, document) ++
         one(:layout, document) ++
+        one(:interaction, document) ++
         frame_sites(frames) ++
         keyed(:style, Map.get(document, :styles, %{})) ++
         keyed(:scale, Map.get(parts, :scales, %{})) ++

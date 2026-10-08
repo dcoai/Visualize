@@ -162,6 +162,16 @@ defmodule Visualize.Chart.Build do
   @spec layout(opts()) :: fragment()
   def layout(opts), do: %{layout: node(:layout, %{}, opts)}
 
+  @doc """
+  How the chart behaves beside others on a page (spec/14 §2.9, #466): `sync:` names the
+  group whose charts share hover, `frame:` the frame whose `x` it reads.
+
+      iex> Visualize.Chart.Build.interaction(sync: "dash-42")
+      %{interaction: %{sync: "dash-42"}}
+  """
+  @spec interaction(opts()) :: fragment()
+  def interaction(opts), do: %{interaction: node(:interaction, %{}, opts)}
+
   @doc "The design's theme: a name, or an inline `:theme` node (spec/14 §2.5)."
   @spec theme(atom() | map()) :: fragment()
   def theme(theme), do: %{theme: theme}

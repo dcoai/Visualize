@@ -20,7 +20,11 @@ defmodule Visualize.Hooks.TooltipTest do
 
   test "five listeners are bound once, kept, and removed with the same references (D-47)" do
     js = Tooltip.js_hook()
-    assert length(Regex.scan(~r/\.bind\(this\)/, js)) == 5
+    # The five pointer listeners and the sync bus's one (spec/10 §4.3), which the bus adds
+    # and removes on `document`.
+    assert length(Regex.scan(~r/\.bind\(this\)/, js)) == 6
+    assert js =~ "this.onSync = this.handleSync.bind(this);"
+    assert js =~ "VisualizeSync.detach(this);"
 
     for name <- @listeners do
       assert js =~ ~r/this\.el\.addEventListener\('#{name}', this\.on\w+[,)]/

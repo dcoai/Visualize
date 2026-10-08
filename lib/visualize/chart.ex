@@ -69,6 +69,7 @@ defmodule Visualize.Chart do
     :styles,
     :defs,
     :layout,
+    :interaction,
     :frames,
     :marks,
     :labels
@@ -82,6 +83,7 @@ defmodule Visualize.Chart do
             styles: %{},
             defs: %{},
             layout: %{},
+            interaction: %{},
             frames: nil,
             marks: [],
             labels: []
@@ -95,6 +97,7 @@ defmodule Visualize.Chart do
           styles: %{atom() => map()},
           defs: %{atom() => map()},
           layout: map(),
+          interaction: map(),
           frames: %{atom() => map()} | nil,
           marks: [map()],
           labels: [map()]
@@ -649,7 +652,7 @@ defmodule Visualize.Chart do
 
     Element.group(children,
       style: %{class: "frame frame-#{frame.name}"},
-      attrs: %{"data-node" => "frames.#{frame.name}"},
+      attrs: Map.put(Frame.sync_attrs(frame), "data-node", "frames.#{frame.name}"),
       transform: Transform.translate(x * width + margin.left, y * height + margin.top)
     )
   end

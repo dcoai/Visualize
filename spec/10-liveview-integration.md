@@ -278,7 +278,7 @@ The host application writes the bundle (`install!/0`, or `File.write!/2` of `js_
 - `x` is the pointer's x in the domain units of `data-vis-sync-x`: the number itself for a linear scale, milliseconds since the Unix epoch for a time scale. `null` clears the group.
 - `source` is the hook element that published it.
 
-**Publishing.** A member publishes on a pointer move over its own element. The chart x is `(clientX − rect.left) · width / rect.width`, with `rect` the hook element's bounding rectangle, and the value is `d0 + (chartX − x0) / (x1 − x0) · (d1 − d0)`. `mouseleave` and `touchend` publish `x: null`, and so does the crosshair when the pointer leaves the plot area.
+**Publishing.** A member publishes on a pointer move over its own element. The chart x is `(clientX − rect.left) · width / rect.width`, with `rect` the hook element's bounding rectangle, and the value is `d0 + (chartX − x0) / (x1 − x0) · (d1 − d0)`. `mouseleave` and `touchend` publish `x: null`, and so does the crosshair when the pointer leaves the plot area. A clear is published once, after a hover the chart published, so a pointer moving through a margin does not flood the bus.
 
 **Receiving.** A member ignores an event whose `source` is its own element, contains it, or is contained by it. Such an event comes from the same chart, from itself or from the other hook on it, and the chart has already drawn from its own pointer. Any other member does this:
 

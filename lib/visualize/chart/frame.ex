@@ -67,7 +67,8 @@ defmodule Visualize.Chart.Frame do
             label_paths: [],
             box: [0, 0, 1, 1],
             z: 0,
-            background: nil
+            background: nil,
+            sync: nil
 
   @typedoc "A frame kind of spec/14 §4.1."
   @type kind :: :cartesian | :polar | :geo | :facet
@@ -96,7 +97,8 @@ defmodule Visualize.Chart.Frame do
           label_paths: [non_neg_integer()],
           box: [number()],
           z: integer(),
-          background: term() | nil
+          background: term() | nil,
+          sync: String.t() | nil
         }
 
   # The size a frame is realised at when the caller gives none (spec/14 §4.2): a static
@@ -189,6 +191,7 @@ defmodule Visualize.Chart.Frame do
       box: box,
       z: Map.get(node, :z, Schema.default(:frame, :z)),
       background: Map.get(node, :background),
+      sync: sync_group(chart, name),
       theme: theme,
       styles: styles,
       design_styles: chart.styles,
@@ -264,6 +267,7 @@ defmodule Visualize.Chart.Frame do
     group =
       Element.group(children,
         style: %{class: "frame"},
+        attrs: sync_attrs(frame),
         transform: Transform.translate(frame.margin.left, frame.margin.top)
       )
       |> stamp([:frames, frame.name], paths?)
@@ -294,6 +298,57 @@ defmodule Visualize.Chart.Frame do
         style: %{fill: Style.colour(frame.background, frame.theme, mode)}
       )
     ]
+  end
+
+  @doc """
+  The attributes of a sync group for the frame it reads (spec/14 §2.9, D-116):
+  `data-vis-sync`, the group, and `data-vis-sync-x`, `d0,d1,x0,x1,width` — the `x`
+  scale's domain (milliseconds since the Unix epoch for a time scale), the chart pixels of
+  its ends and the chart's width — which is all the hooks need to map a shared x through
+  this frame's own scale. `%{}` for a frame that is no group's.
+
+      iex> chart = Visualize.Chart.from_map!(%{version: 2,
+      ...>   interaction: %{sync: "dash"},
+      ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear, domain: [0, 100]}}}}})
+      iex> Visualize.Chart.Frame.new(chart, size: {300, 200}) |> Visualize.Chart.Frame.sync_attrs()
+      %{"data-vis-sync" => "dash", "data-vis-sync-x" => "0,100,40,280,300"}
+  """
+  @spec sync_attrs(t()) :: %{String.t() => String.t()}
+  def sync_attrs(%__MODULE__{sync: nil}), do: %{}
+
+  def sync_attrs(%__MODULE__{sync: group} = frame) do
+    %{domain: [d0, d1], range: [r0, r1]} = scale(frame, :x)
+    [bx | _] = frame.box
+    offset = bx * frame.size.width + frame.margin.left
+    numbers = [domain_unit(d0), domain_unit(d1), r0 + offset, r1 + offset, frame.size.width]
+
+    %{
+      "data-vis-sync" => group,
+      "data-vis-sync-x" => Enum.map_join(numbers, ",", &Visualize.IR.Path.format_number/1)
+    }
+  end
+
+  # A value of the x domain in the bus's unit: a number as it is, a time in milliseconds
+  # since the Unix epoch, JavaScript's own unit (D-116).
+  defp domain_unit(%DateTime{} = t), do: DateTime.to_unix(t, :millisecond)
+
+  defp domain_unit(%NaiveDateTime{} = t),
+    do: t |> DateTime.from_naive!("Etc/UTC") |> domain_unit()
+
+  defp domain_unit(%Date{} = d), do: Date.diff(d, ~D[1970-01-01]) * 86_400_000
+  defp domain_unit(n) when is_number(n), do: n
+
+  # The group when this frame is the one it reads: the frame `interaction.frame` names, else
+  # the design's first by name (spec/14 §2.9).
+  defp sync_group(%Chart{interaction: interaction, frames: frames}, name) do
+    case interaction do
+      %{sync: group} when is_binary(group) ->
+        if (Map.get(interaction, :frame) || frames |> Map.keys() |> Enum.min()) == name,
+          do: group
+
+      _none ->
+        nil
+    end
   end
 
   @doc "As `render/2` with `[]` options."
