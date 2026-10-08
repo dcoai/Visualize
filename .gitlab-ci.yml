@@ -9,7 +9,7 @@
 # which the examples job pulls and pushes itself (#342, #343). Without the DEPDEP_*
 # variables depdep is a no-op that exits 0.
 #
-# The private git dependencies (surfex, extla, depdep itself) are reached with the job token
+# The private git dependencies (extla and depdep itself; surfex comes from Hex) are reached with the job token
 # through the two `insteadOf` rewrites below. This only works because dco-tek/visualize is
 # on each producer's inbound job-token allowlist (Settings → CI/CD → Token Access), which is
 # per project and not inherited from the group; the failure mode is `HTTP Basic: Access
