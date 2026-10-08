@@ -213,7 +213,8 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       assert html =~
                ~s(<form id="vis-builder-params-site-2" class="vis-builder-site" phx-change="bind_site")
 
-      refute Regex.match?(~r/<form (?![^>]*\bid=)[^>]*phx-change/, html)
+      assert BuilderFixture.forms_without_id(html) == []
+      assert BuilderFixture.duplicate_ids(html) == []
     end
 
     test "an explicit id wins" do

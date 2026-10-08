@@ -49,7 +49,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <p :if={@keys == []} class="vis-builder-context-note">
           open a style — a mark's, a label's, or the theme — to set its font
         </p>
-        <form :if={@keys != []} class="vis-builder-fonts" phx-change="edit" phx-target={@target} phx-submit="submitted">
+        <form :if={@keys != []} id={@id <> "-form"} class="vis-builder-fonts" phx-change="edit" phx-target={@target} phx-submit="submitted">
           <div :if={:font_family in @keys} class="vis-builder-faces" role="radiogroup" aria-label="font family">
             <label
               :for={family <- faces(Map.get(@node, :font_family))}

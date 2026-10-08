@@ -357,7 +357,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-target={@myself}
               >+</button>
             </h2>
-            <form :if={@store} class="vis-builder-new" phx-submit="new_fragment" phx-target={@myself}>
+            <form :if={@store} id={@id <> "-new-form"} class="vis-builder-new" phx-submit="new_fragment" phx-target={@myself}>
               <label class="vis-builder-control-label" for={@id <> "-new-kind"}>New</label>
               <select id={@id <> "-new-kind"} name="kind" class="vis-builder-new-kind">
                 <option :for={kind <- Stack.kinds()} value={kind}>{kind}</option>
@@ -443,7 +443,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </aside>
           <main class="vis-builder-main">
             <div class="vis-builder-chart-bar">
-              <form :if={@store} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
+              <form :if={@store} id={@id <> "-keep-form"} class="vis-builder-keep" phx-submit="put_design" phx-target={@myself}>
                 <input
                   id={@id <> "-keep"}
                   type="text"
@@ -755,9 +755,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </li>
         </menu>
         <div class="vis-builder-tray">
-          <Palette.panel design={@design} open={@open_style} target={@myself} />
+          <Palette.panel id={@id <> "-palette"} design={@design} open={@open_style} target={@myself} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
-          <Document.panel design={@design} kind={@kind} target={@myself} />
+          <Document.panel id={@id <> "-document"} design={@design} kind={@kind} target={@myself} />
         </div>
       </div>
       """

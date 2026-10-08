@@ -20,6 +20,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
+    attr(:id, :string,
+      default: "vis-builder-palette",
+      doc: "the palette's id, and the stem of its add form's"
+    )
+
     attr(:design, :map, required: true, doc: "the stacked design whose styles are the palette")
     attr(:open, :atom, default: nil, doc: "the style the editor is on, marked in the list")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the palette's events")
@@ -35,7 +40,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns = assign(assigns, :styles, styles(assigns.design))
 
       ~H"""
-      <div class={class(@class)}>
+      <div id={@id} class={class(@class)}>
         <h2 class="vis-builder-tray-title">Styles</h2>
         <ul :if={@styles != []} class="vis-builder-palette-list">
           <li :for={style <- @styles} class={entry(style.name == @open)}>
@@ -55,7 +60,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <p :if={@styles == []} class="vis-builder-palette-empty">
           No layer declares a style yet.
         </p>
-        <form class="vis-builder-palette-new" phx-submit="add_style" phx-target={@target}>
+        <form id={@id <> "-new"} class="vis-builder-palette-new" phx-submit="add_style" phx-target={@target}>
           <input
             type="text"
             name="name"

@@ -48,7 +48,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         data-builder-target={@target}
         data-builder-scope="variables"
       >
-        <form class="vis-builder-find" phx-change="find_variable" phx-target={@target} phx-submit="submitted">
+        <form id={@id <> "-find"} class="vis-builder-find" phx-change="find_variable" phx-target={@target} phx-submit="submitted">
           <input
             type="search"
             name="find"
@@ -59,7 +59,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           />
         </form>
         <ul class="vis-builder-chips-list">
-          <li :for={row <- @rows} class={"vis-builder-variable" <> if(row.expanded?, do: " vis-builder-variable-open", else: "")}>
+          <li :for={{row, n} <- Enum.with_index(@rows)} class={"vis-builder-variable" <> if(row.expanded?, do: " vis-builder-variable-open", else: "")}>
             <div class="vis-builder-variable-row">
               <span
                 class={"vis-builder-var-chip" <> if(row.found?, do: " vis-builder-var-chip-found", else: "")}
@@ -93,13 +93,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   >{use.label} → {use.path}</button>
                 </li>
               </ul>
-              <form class="vis-builder-variable-default" phx-change="set_default" phx-target={@target} phx-submit="submitted">
+              <form id={"#{@id}-var-#{n}-default"} class="vis-builder-variable-default" phx-change="set_default" phx-target={@target} phx-submit="submitted">
                 <label class="vis-builder-picker-row">
                   <span class="vis-builder-control-label">default</span>
                   <input type="text" name={row.name} value={row.default} placeholder="none" phx-debounce="300" />
                 </label>
               </form>
-              <form class="vis-builder-variable-value" phx-change="set_var" phx-target={@target} phx-submit="submitted">
+              <form id={"#{@id}-var-#{n}-value"} class="vis-builder-variable-value" phx-change="set_var" phx-target={@target} phx-submit="submitted">
                 <label class="vis-builder-picker-row">
                   <span class="vis-builder-control-label">value in the preview</span>
                   <input type="text" name={row.name} value={row.value} placeholder={row.default} />
@@ -107,6 +107,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               </form>
               <form
                 :for={site <- row.sites}
+                id={"#{@id}-var-#{n}-site-#{site.index}"}
                 class="vis-builder-site"
                 phx-change="bind_site"
                 phx-target={@target}
@@ -138,6 +139,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </ul>
         <p :if={@rows == []} class="vis-builder-context-note">no variables yet</p>
         <form
+          id={@id <> "-create"}
           class="vis-builder-create"
           phx-submit="create_variable"
           phx-target={@target}

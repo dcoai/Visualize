@@ -128,7 +128,10 @@ defmodule Visualize.Chart.BuilderTest do
       assert title =~ ~s(phx-click="add_chart")
 
       [form, _charts] = String.split(rest, ~s(<ol class="vis-builder-charts">), parts: 2)
-      assert form =~ ~s(<form class="vis-builder-new" phx-submit="new_fragment" phx-target="-1">)
+
+      assert form =~
+               ~s(<form id="builder-new-form" class="vis-builder-new" phx-submit="new_fragment" phx-target="-1">)
+
       assert form =~ ~s(<button type="submit" class="vis-builder-new-submit">New</button>)
 
       # Without a store there is nothing to make a fragment in, and no form.
@@ -487,7 +490,7 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "the palette lists what the stack declares, not what the selected layer does" do
       html = rendered(:builder)
-      assert html =~ ~s(<div class="vis-builder-palette">)
+      assert html =~ ~s(<div id="builder-palette" class="vis-builder-palette">)
       assert html =~ ~s(<span class="vis-builder-palette-name">series</span>)
 
       # The list is read from the stacked design, so it is exactly Palette.names/1 of it.
@@ -2161,7 +2164,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("toggle_layer_mask", %{"index" => "0"}, open)
       html = BuilderFixture.render(s)
       assert html =~ "⌄ Mask</button>"
-      assert html =~ ~s(<form class="vis-builder-masks" phx-change="mask")
+
+      assert html =~
+               ~s(<form id="b-layers-row-0-mask" class="vis-builder-masks" phx-change="mask")
+
       assert html =~ ~s(<input type="hidden" name="_index" value="0">)
       assert html =~ ~s(name="frames.main.margin" value="true">)
       refute html =~ ~s(name="frames.main.margin" value="true" checked>)
@@ -3225,7 +3231,7 @@ defmodule Visualize.Chart.BuilderTest do
       # A font key leaves inspect where it is: the font panel is under the styles root (#314).
       assert s.assigns.context == :inspect
       html = BuilderFixture.render(s)
-      assert html =~ ~s(<form class="vis-builder-fonts" phx-change="edit")
+      assert html =~ ~s(<form id="b-fonts-form" class="vis-builder-fonts" phx-change="edit")
       assert html =~ ~s(class="vis-builder-face" style="font-family: Georgia")
       assert html =~ ~s(name="font_size.range")
       refute html =~ ~s(name="font_weight")
@@ -5340,7 +5346,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("expand_variable", %{"name" => "ticks"}, s)
 
       assert BuilderFixture.render(s) =~
-               ~s(<form class="vis-builder-variable-default" phx-change="set_default")
+               ~s(<form id="b-variables-var-1-default" class="vis-builder-variable-default" phx-change="set_default")
 
       # The params layer declares it under vars: the write lands there, no site is added.
       {:noreply, s} =
@@ -5473,12 +5479,13 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
-  describe "every form intercepts its submit (spec/14 §18.7, #274)" do
+  describe "every form intercepts its submit and carries an id (spec/14 §18.15, #274, #461)" do
     # The builder in every state that renders a form: each context panel, a mark's page
-    # with its style stack, a source's page, the parameters form, and the store's toolbar.
+    # with its style stack, a source's page, a layer's mask, the variables expanded to their
+    # site rows, the parameters form, and the store's toolbar — each html one page.
     defp forms_in(html), do: Regex.scan(~r/<form\b[^>]*>/, html) |> List.flatten()
 
-    test "a form without phx-submit fails here rather than reloading a page in a browser" do
+    defp pages do
       s = BuilderFixture.socket(BuilderFixture.layers(), store: BuilderFixture.Library)
 
       states =
@@ -5494,18 +5501,92 @@ defmodule Visualize.Chart.BuilderTest do
         end
 
       {:noreply, with_signal} = Builder.handle_event("add_source", %{}, s)
+
+      {:noreply, with_signal} =
+        Builder.handle_event("select_node", %{"node" => "sources"}, with_signal)
+
       {:noreply, layered} = Builder.handle_event("new_layer", %{}, s)
       {:noreply, expanded} = Builder.handle_event("expand_variable", %{"name" => "unit"}, s)
+      {:noreply, masked} = Builder.handle_event("toggle_layer_detail", %{"index" => "0"}, s)
+      {:noreply, masked} = Builder.handle_event("toggle_layer_mask", %{"index" => "0"}, masked)
+      {:noreply, masked} = Builder.handle_event("toggle_layer_mask", %{"index" => "2"}, masked)
 
-      htmls =
-        Enum.map(states ++ [with_signal, layered, expanded], &BuilderFixture.render/1) ++
-          Enum.map(Keyword.keys(BuilderFixture.cases()), &rendered/1)
+      # A group of two sites, selected: the masks panel's *save as* form.
+      {:noreply, grouped} =
+        Builder.handle_event("select_layer", %{"index" => "1", "extend" => "range"}, s)
 
-      forms = htmls |> Enum.flat_map(&forms_in/1) |> Enum.uniq()
+      {:noreply, grouped} = Builder.handle_event("group_sites", %{"index" => "0"}, grouped)
+
+      # A keyless style site, selected: the masks panel's *declared as* form.
+      keyed =
+        BuilderFixture.socket(BuilderFixture.layers(), store: Visualize.Chart.BuilderTest.Styles)
+
+      {:noreply, keyed} = Builder.handle_event("insert", %{"name" => "style:1", "at" => 3}, keyed)
+      {:noreply, keyed} = Builder.handle_event("select_layer", %{"index" => "3"}, keyed)
+
+      variables =
+        Enum.reduce(
+          ["accent", "ticks", "unit"],
+          BuilderFixture.socket(BuilderFixture.parameterised(),
+            context: :variables,
+            store: BuilderFixture.Library
+          ),
+          fn name, s ->
+            {:noreply, s} = Builder.handle_event("expand_variable", %{"name" => name}, s)
+            s
+          end
+        )
+
+      Enum.map(
+        states ++ [with_signal, layered, expanded, masked, grouped, keyed, variables],
+        &BuilderFixture.render/1
+      ) ++ Enum.map(Keyword.keys(BuilderFixture.cases()), &rendered/1)
+    end
+
+    test "a form without phx-submit fails here rather than reloading a page in a browser" do
+      forms = pages() |> Enum.flat_map(&forms_in/1) |> Enum.uniq()
       assert forms != []
 
       for form <- forms do
         assert form =~ ~s(phx-submit="), "a form a browser would submit as a GET: " <> form
+      end
+    end
+
+    # LiveView recovers a form after a crash or reconnect only by its id and patches by id,
+    # and its own warnings never reach this suite (render_component/2 output is not parsed
+    # by them), so these hold the rule (spec/10 §15.3).
+    test "every rendered form carries an id, and no id is on a page twice" do
+      pages = pages()
+
+      for html <- pages do
+        assert BuilderFixture.forms_without_id(html) == []
+        assert BuilderFixture.duplicate_ids(html) == []
+      end
+
+      # The states reach every form the source writes with a literal class, so a new
+      # form is rendered here — and needs an id — rather than slipping past.
+      rendered = pages |> Enum.flat_map(&forms_in/1) |> MapSet.new(&form_class/1)
+
+      for {path, tag} <- BuilderFixture.source_forms(),
+          class = form_class(tag),
+          class != nil do
+        assert class in rendered, "#{path}: no state renders <form class=\"#{class}\">"
+      end
+    end
+
+    test "every form the library's source writes carries an id" do
+      forms = BuilderFixture.source_forms()
+      assert length(forms) > 20
+
+      for {path, tag} <- forms do
+        assert tag =~ ~r/\sid=/, "#{path}: a form without an id: " <> tag
+      end
+    end
+
+    defp form_class(tag) do
+      case Regex.run(~r/\sclass="([^" ]+)/, tag) do
+        [_, class] -> class
+        nil -> nil
       end
     end
 
