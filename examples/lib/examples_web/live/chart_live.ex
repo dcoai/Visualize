@@ -159,9 +159,12 @@ defmodule ExamplesWeb.ChartLive do
   # the container's: a container sized by its content would observe the chart's height and
   # never settle. A resize is geometry — the rows, the tick counter and a streaming
   # window's origin are untouched — so a run re-prepares its renderer at the new size and
-  # goes on, the easing carried (spec/14 §12.5).
+  # goes on, the easing carried (spec/14 §12.5). The chart is capped at its design size
+  # (#457), so a width past the cap draws nothing new.
   def handle_event("resize", %{"width" => width}, socket) when is_integer(width) and width > 0 do
-    if width == socket.assigns.width do
+    %{width: was, slug: slug} = socket.assigns
+
+    if measured(width, slug) == measured(was, slug) do
       {:noreply, socket}
     else
       socket = assign(socket, width: width)
@@ -397,8 +400,15 @@ defmodule ExamplesWeb.ChartLive do
       ) do
     Process.demonitor(ref, [:flush])
 
-    {:noreply,
-     assign(socket, still_frame: frame, still_state: state, still_design: design, still_task: nil)}
+    socket =
+      assign(socket,
+        still_frame: frame,
+        still_state: state,
+        still_design: design,
+        still_task: nil
+      )
+
+    {:noreply, still_pushed(socket, frame)}
   end
 
   def handle_info({ref, _stale}, socket) when is_reference(ref) do
@@ -493,6 +503,22 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   defp pushed(socket, _plot, _seq), do: socket
+
+  # An incremental canvas draws only what is pushed to it (spec/10 §9.2), so the still
+  # frame is pushed too when no run is drawing (spec/14 §12.6, #457): each plot's record,
+  # a fresh window's `"full"`, with no `seq` — it is no frame of a run, and not acked. A
+  # binary canvas reads its `data-binary` from the markup and an SVG frame has no plots.
+  defp still_pushed(%{assigns: %{run: %Run{running: true}}} = socket, _frame), do: socket
+
+  defp still_pushed(socket, %{plots: plots}) do
+    Enum.reduce(plots, socket, fn
+      %{incremental: record} = plot, socket when is_map(record) ->
+        push_event(socket, "canvas_incremental", Map.put(record, :frame, plot.name))
+
+      _plot, socket ->
+        socket
+    end)
+  end
 
   # The frame's mode for flow control and for the drawer: the strongest of its plots', a
   # full redraw of any plot being a full frame.
@@ -1108,14 +1134,14 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
-  # The measured width, and the height that width takes at the chart's own aspect: a
-  # design records no size and the page gives one (spec/14 §4.2, spec/10 §10, #434).
+  # The measured width capped at the chart's design width, and the height at its aspect:
+  # a design records no size and the page gives one (spec/14 §4.2, spec/10 §10.2, #434),
+  # never larger than the design (#457).
   defp measured(nil, _slug), do: []
 
   defp measured(width, slug) do
-    module = @charts[slug]
-    {w, h} = if function_exported?(module, :size, 0), do: module.size(), else: {600, 400}
-    [width: width, height: round(width * h / w)]
+    {w, h} = Examples.Charts.Design.fitted(@charts[slug], width)
+    [width: w, height: h]
   end
 
   defp backend_word(:svg), do: "SVG"

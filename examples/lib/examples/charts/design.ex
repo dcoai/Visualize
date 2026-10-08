@@ -118,9 +118,23 @@ defmodule Examples.Charts.Design do
   @spec size(module(), keyword()) :: {number(), number()}
   def size(module, opts) do
     {width, height} =
-      if function_exported?(module, :size, 0), do: module.size(), else: Frame.default_size()
+      if Code.ensure_loaded?(module) and function_exported?(module, :size, 0),
+        do: module.size(),
+        else: Frame.default_size()
 
     {opts[:width] || width, opts[:height] || height}
+  end
+
+  @doc """
+  The size the gallery draws a chart at in a container `width` wide: that width, capped at
+  the module's design width, and the height at the design's aspect (spec/10 §10.2, #457).
+  A narrow container shrinks a chart; a wide one never grows it past its design.
+  """
+  @spec fitted(module(), pos_integer()) :: {pos_integer(), pos_integer()}
+  def fitted(module, width) when is_integer(width) and width > 0 do
+    {design_w, design_h} = size(module, [])
+    capped = min(width, design_w)
+    {capped, round(capped * design_h / design_w)}
   end
 
   @doc """
