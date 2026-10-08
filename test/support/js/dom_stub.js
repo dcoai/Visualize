@@ -86,6 +86,30 @@ const Stub = (() => {
     }
     get parentElement() { return this.parentNode instanceof Element ? this.parentNode : null; }
     appendChild(child) { child.parentNode = this; this.children.push(child); return child; }
+    insertBefore(child, ref) {
+      child.remove();
+      const at = this.children.indexOf(ref);
+      child.parentNode = this;
+      this.children.splice(at < 0 ? this.children.length : at, 0, child);
+      return child;
+    }
+    // An <svg> maps a client point into its user units as a browser does: through its
+    // `viewBox` onto the bounding rectangle the scenario sets, the rectangle's own size
+    // without one (#467). Only an SVG has the two methods, as in a browser.
+    createSVGPoint() {
+      if (this.tagName !== 'SVG') throw new Error('dom_stub: createSVGPoint on a ' + this.tagName);
+      return {x: 0, y: 0, matrixTransform(m) { return {x: m.a * this.x + m.e, y: m.d * this.y + m.f}; }};
+    }
+    getScreenCTM() {
+      if (this.tagName !== 'SVG') throw new Error('dom_stub: getScreenCTM on a ' + this.tagName);
+      const {left, top, width, height} = this.rect;
+      const box = (this.getAttribute('viewBox') || `0 0 ${width} ${height}`).split(/[\s,]+/).map(Number);
+      const m = {a: width / box[2], d: height / box[3]};
+      m.e = left - box[0] * m.a;
+      m.f = top - box[1] * m.d;
+      m.inverse = () => ({a: 1 / m.a, d: 1 / m.d, e: -m.e / m.a, f: -m.f / m.d});
+      return m;
+    }
     removeChild(child) { child.remove(); return child; }
     remove() {
       if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this);
@@ -128,7 +152,8 @@ const Stub = (() => {
   }
 
   // `document` is an event target too: the sync bus dispatches on it (spec/10 §4.3), and
-  // every dispatch is recorded with its detail's x and the source element's id.
+  // every dispatch is recorded with its detail — a hover's x, a brush's extent — and the
+  // source element's id.
   const doc = new Target();
   Object.assign(doc, {
     body: new Element('body'),
@@ -138,7 +163,7 @@ const Stub = (() => {
     dispatchEvent(event) {
       const detail = event.detail || {};
       log.push({on: 'document', kind: 'event', name: event.type,
-                payload: {x: detail.x, source: detail.source ? detail.source.id : null}});
+                payload: {...detail, source: detail.source ? detail.source.id : null}});
       doc.fire(event.type, event);
       return true;
     },

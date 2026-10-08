@@ -109,7 +109,7 @@ defmodule Visualize.Hooks.BrushTest do
       js = Brush.js_hook()
       {mounted, _} = section(js, "mounted() {", "getSVGPoint(")
 
-      for handler <- @document_handlers ++ ~w(MouseDown TouchStart Clear) do
+      for handler <- @document_handlers ++ ~w(MouseDown TouchStart Clear Sync) do
         assert mounted =~ "this.on#{handler} = this.handle#{handler}.bind(this);"
       end
 
@@ -117,9 +117,9 @@ defmodule Visualize.Hooks.BrushTest do
         assert mounted =~ ~r/document\.addEventListener\('[a-z]+', this\.on#{handler}[,)]/
       end
 
-      # The only binds are the seven stored ones: none inline in an addEventListener call.
+      # The only binds are the eight stored ones: none inline in an addEventListener call.
       refute mounted =~ "addEventListener('mousemove', this.handleMouseMove"
-      assert length(Regex.scan(~r/\.bind\(this\)/, mounted)) == 7
+      assert length(Regex.scan(~r/\.bind\(this\)/, mounted)) == 8
     end
 
     test "destroyed removes exactly the stored document references, binding nothing" do
