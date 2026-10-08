@@ -72,6 +72,8 @@ defmodule Visualize.Chart.Schema.Mark do
     {:take, [:n], [:side]},
     {:window, [:field], [:from, :to]},
     {:spectrum, [:field], [:time, :every, :samples, :window, :detrend, :as]},
+    {:lttb, [:fields, :n], []},
+    {:m4, [:fields, :width], []},
     {:tree, [], @hierarchy_keys ++ [:orientation, :link]},
     {:cluster, [], @hierarchy_keys ++ [:orientation, :link]},
     {:pack, [], @hierarchy_keys ++ [:padding]},
@@ -112,6 +114,7 @@ defmodule Visualize.Chart.Schema.Mark do
   ]
   @rotate {:one_of, [:number, {:enum, [:tangent, :radial]}]}
   @caps [:point, :round, :flat]
+  @count_or_plot {:one_of, [:integer, {:enum, [:plot]}]}
 
   @doc false
   def rotate_type, do: @rotate
@@ -207,7 +210,10 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:samples, :integer, :geometry),
       spec(:window, {:enum, [:hann, :hamming, :none]}, :geometry, default: :hann),
       spec(:detrend, :boolean, :geometry, default: false),
-      spec(:n, :integer, :geometry),
+      # A count, or `:plot` — the plot area's width in pixels, read when the step runs
+      # (spec/14 §5.4.1, #448); `:take` is held to the integer by the validator.
+      spec(:n, @count_or_plot, :geometry),
+      spec(:width, @count_or_plot, :geometry),
       spec(:side, {:enum, [:end, :start]}, :geometry, default: :end),
       spec(:from, {:list, :term}, :geometry),
       spec(:to, {:list, :term}, :geometry)

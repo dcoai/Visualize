@@ -34,7 +34,7 @@ defmodule Visualize.Chart.Transform do
           now: term() | nil
         }
 
-  @data_ops [:filter, :bin, :stack, :fold, :sum, :sort, :spectrum, :take, :window]
+  @data_ops [:filter, :bin, :stack, :fold, :sum, :sort, :spectrum, :take, :window, :lttb, :m4]
   @layout_ops [:tree, :cluster, :pack, :partition, :treemap, :chord, :sankey, :force]
   @geo_ops [:delaunay, :voronoi, :contour, :density, :hexbin, :projection]
 
@@ -43,7 +43,8 @@ defmodule Visualize.Chart.Transform do
 
   ## Options
 
-    * `:size` - the `[width, height]` the layouts and the geo algorithms default to
+    * `:size` - the `[width, height]` the layouts and the geo algorithms default to, and
+      whose width an `:lttb` step's `n: :plot` and an `:m4` step's `width: :plot` read
       (default `[1, 1]`)
     * `:projection` - the `%Visualize.Geo.Projection{}` a `:projection` step maps through
       (default `nil`)

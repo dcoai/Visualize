@@ -2,7 +2,7 @@ defmodule Visualize.Chart.Transform.Data do
   @moduledoc false
   # The data steps of a mark's pipeline (spec/14 §5.4.1): `:bin` over `Visualize.Data.bin/2`,
   # `:stack` over `Visualize.Shape.Stack`, `:filter`, `:sum` and `:sort` over the rows
-  # themselves.
+  # themselves, and `:lttb` and `:m4` over `Visualize.Data.lttb/3` and `m4/3` (#448).
 
   alias Visualize.Chart.Schema
   alias Visualize.Data
@@ -33,6 +33,77 @@ defmodule Visualize.Chart.Transform.Data do
   def run(:spectrum, node, rows, _ctx), do: spectrum(node, rows)
   def run(:take, node, rows, _ctx), do: take(node, rows)
   def run(:window, node, rows, ctx), do: window(node, rows, ctx)
+  def run(:lttb, node, rows, ctx), do: lttb(node, rows, ctx)
+  def run(:m4, node, rows, ctx), do: m4(node, rows, ctx)
+
+  # -- lttb and m4 (spec/14 §5.4.1, #448) -------------------------------------------------
+
+  # Shape-preserving downsampling over `Visualize.Data.lttb/3` and `m4/3`: whole rows kept,
+  # each run of gap rows kept as its first so `defined/2` still breaks the path.
+  defp lttb(node, rows, ctx) do
+    n = count!(:lttb, :n, Map.fetch!(node, :n), ctx)
+
+    n >= 3 ||
+      raise ArgumentError,
+            "transform :lttb keeps its two ends and a point between, so n is at least 3, " <>
+              "got #{n} (spec/14 §5.4.1)"
+
+    Data.lttb(rows, n, reader(:lttb, node))
+  end
+
+  defp m4(node, rows, ctx) do
+    width = count!(:m4, :width, Map.fetch!(node, :width), ctx)
+
+    width >= 1 ||
+      raise ArgumentError,
+            "transform :m4 needs at least one pixel column, got width #{width} (spec/14 §5.4.1)"
+
+    Data.m4(rows, width, reader(:m4, node))
+  end
+
+  # A count as given, or `:plot` — the plot area's width in whole pixels, the frame's
+  # geometry the step binds to (spec/14 §5.4.1).
+  defp count!(_op, _key, n, _ctx) when is_integer(n), do: n
+
+  defp count!(_op, _key, :plot, ctx) do
+    [width, _height] = Map.get(ctx, :size, [1, 1])
+    ceil(width)
+  end
+
+  defp count!(op, key, other, _ctx) do
+    raise ArgumentError,
+          "transform #{inspect(op)}: #{inspect(key)} is an integer or :plot, got " <>
+            "#{inspect(other)} (spec/14 §5.4.1)"
+  end
+
+  # The `{x, y}` a downsampling reads from a row: `x` a number or a time in seconds, as
+  # `:window` reads one, `y` a number, and `nil` either way a gap.
+  defp reader(op, node) do
+    {x, y} = xy!(op, Map.fetch!(node, :fields))
+
+    fn row ->
+      {x_reading(Table.get(row, x), x, op), y_reading(Table.get(row, y), y, op)}
+    end
+  end
+
+  defp xy!(_op, [x, y]), do: {x, y}
+
+  defp xy!(op, other) do
+    raise ArgumentError,
+          "transform #{inspect(op)}: fields is [x, y], got #{inspect(other)} (spec/14 §5.4.1)"
+  end
+
+  defp x_reading(nil, _field, _op), do: nil
+  defp x_reading(reading, field, op), do: seconds!(reading, field, op)
+
+  defp y_reading(nil, _field, _op), do: nil
+  defp y_reading(reading, _field, _op) when is_number(reading), do: reading
+
+  defp y_reading(reading, field, op) do
+    raise ArgumentError,
+          "transform #{inspect(op)}: #{inspect(field)} reads #{inspect(reading)}, which is " <>
+            "not a number (spec/14 §5.4.1)"
+  end
 
   # -- take and window (spec/14 §5.4.1, #426) ---------------------------------------------
 
@@ -54,7 +125,11 @@ defmodule Visualize.Chart.Transform.Data do
   # windows that share a bound do not share a row. An absent bound is open at that end.
   defp window(node, rows, ctx) do
     field = Map.fetch!(node, :field)
-    read = for row <- rows, reading = Table.get(row, field), do: {row, seconds!(reading, field)}
+
+    read =
+      for row <- rows,
+          reading = Table.get(row, field),
+          do: {row, seconds!(reading, field, :window)}
 
     case read do
       [] ->
@@ -73,7 +148,7 @@ defmodule Visualize.Chart.Transform.Data do
   # one — a live dashboard means the wall clock — else the newest reading of the column,
   # which is what a test and a static render mean.
   defp now(nil, read, _field), do: read |> Enum.map(&elem(&1, 1)) |> Enum.max()
-  defp now(given, _read, field), do: seconds!(given, field)
+  defp now(given, _read, field), do: seconds!(given, field, :window)
 
   # There is no natural oldest instant, so an absent `from` is genuinely open; there is a
   # natural newest one, so an absent `to` closes the window at `now` **inclusively** — the
@@ -109,35 +184,35 @@ defmodule Visualize.Chart.Transform.Data do
   end
 
   # A reading as seconds from the epoch, the forms §4.3 reads a `:time` domain in.
-  defp seconds!(%DateTime{} = at, _field), do: DateTime.to_unix(at, :microsecond) / 1_000_000
+  defp seconds!(%DateTime{} = at, _field, _op), do: DateTime.to_unix(at, :microsecond) / 1_000_000
 
-  defp seconds!(%NaiveDateTime{} = at, _field),
+  defp seconds!(%NaiveDateTime{} = at, _field, _op),
     do: NaiveDateTime.diff(at, ~N[1970-01-01 00:00:00], :microsecond) / 1_000_000
 
-  defp seconds!(%Date{} = at, _field), do: Date.diff(at, ~D[1970-01-01]) * 86_400.0
-  defp seconds!(n, _field) when is_number(n), do: n
+  defp seconds!(%Date{} = at, _field, _op), do: Date.diff(at, ~D[1970-01-01]) * 86_400.0
+  defp seconds!(n, _field, _op) when is_number(n), do: n
 
-  defp seconds!(string, field) when is_binary(string) do
+  defp seconds!(string, field, op) when is_binary(string) do
     parsed =
       with :error <- iso(DateTime.from_iso8601(string)),
            :error <- iso(NaiveDateTime.from_iso8601(string)),
            do: iso(Date.from_iso8601(string))
 
     case parsed do
-      {:ok, at} -> seconds!(at, field)
-      :error -> not_temporal!(string, field)
+      {:ok, at} -> seconds!(at, field, op)
+      :error -> not_temporal!(string, field, op)
     end
   end
 
-  defp seconds!(other, field), do: not_temporal!(other, field)
+  defp seconds!(other, field, op), do: not_temporal!(other, field, op)
 
   defp iso({:ok, at}), do: {:ok, at}
   defp iso({:ok, at, _offset}), do: {:ok, at}
   defp iso(_error), do: :error
 
-  defp not_temporal!(value, field) do
+  defp not_temporal!(value, field, op) do
     raise ArgumentError,
-          "transform :window: #{inspect(field)} reads #{inspect(value)}, which is not a " <>
+          "transform #{inspect(op)}: #{inspect(field)} reads #{inspect(value)}, which is not a " <>
             "time (spec/14 §5.4.1)"
   end
 

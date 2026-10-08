@@ -436,6 +436,8 @@ defmodule Visualize.Chart.Validator do
   # `as` is a pair of names for a fold and one name for every other op (spec/14 §5.4).
   defp as_type(%{key: :as}, :fold), do: {:list, :name}
   defp as_type(%{key: :as}, _op), do: :name
+  # `n` is a count or the plot's width for `:lttb`, and only a count for `:take`.
+  defp as_type(%{key: :n}, :take), do: :integer
   defp as_type(%{type: type}, _op), do: type
 
   defp allowed(:channels, type) do

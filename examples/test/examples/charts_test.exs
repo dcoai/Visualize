@@ -57,6 +57,7 @@ defmodule Examples.ChartsTest do
     Examples.Charts.Streamgraph,
     Examples.Charts.HexbinChart,
     Examples.Charts.SpectrumChart,
+    Examples.Charts.Downsampling,
     Examples.Charts.WorldMap,
     Examples.Charts.Globe
   ]
@@ -98,12 +99,16 @@ defmodule Examples.ChartsTest do
   ]
 
   # Converted, but asserted on rather than recorded: seeded at compile time, or — the
-  # force graph — a layout a golden would pin across any change to the simulation (#127).
+  # force graph — a layout a golden would pin across any change to the simulation (#127),
+  # or — downsampling — deterministic but drawing a 50,000-row line whole, close to a
+  # megabyte of SVG a golden line would carry; its reductions are asserted on below and
+  # in the library's own acceptance test (#448).
   @seeded_charts [
     Examples.Charts.StackedAreaChart,
     Examples.Charts.ScatterPlot,
     Examples.Charts.Streamgraph,
-    Examples.Charts.ForceGraph
+    Examples.Charts.ForceGraph,
+    Examples.Charts.Downsampling
   ]
 
   # Left imperative, each with the filed gap named in its `@moduledoc`: none, since #348
@@ -248,7 +253,8 @@ defmodule Examples.ChartsTest do
       {design, sources} = module.design([])
 
       assert svg =~ ~s(<svg )
-      assert svg =~ ~s(class="frame")
+      # One frame is `class="frame"`; a frame of several is `class="frame frame-<name>"`.
+      assert svg =~ ~s(class="frame)
 
       for %{type: type} <- design.marks do
         assert svg =~ ~s(class="mark mark-#{type}"), "#{inspect(module)} drew no #{type}"

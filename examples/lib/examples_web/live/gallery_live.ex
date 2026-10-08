@@ -45,6 +45,8 @@ defmodule ExamplesWeb.GalleryLive do
     {Examples.Charts.LoadChart, "load"},
     # One source at four time scales, four frames across the box (#429)
     {Examples.Charts.ContextChart, "context"},
+    # 50,000 rows reduced to the plot's width, :m4 and :lttb (#448)
+    {Examples.Charts.Downsampling, "downsampling"},
     # Streaming: a viewport on x, so the drawer offers Incremental (#327, #402)
     {Examples.Charts.ScrollingSeries, "scrolling_series"},
     {Examples.Charts.IncrementalLine, "incremental_line"}
