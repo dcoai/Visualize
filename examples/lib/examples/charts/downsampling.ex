@@ -55,6 +55,13 @@ defmodule Examples.Charts.Downsampling do
   @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
   def size, do: {760, 520}
 
+  @doc """
+  The chart's cost class (spec/14 §12.6, #469): heavy, since its first frame draws the
+  50,000 rows unreduced — the before of the before/after is the point — and costs about
+  twenty times any other chart's still render.
+  """
+  def cost, do: :heavy
+
   def title, do: "Downsampling"
   def description, do: "50,000 rows whole, then reduced per pixel by :m4 and :lttb"
 
