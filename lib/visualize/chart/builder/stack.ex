@@ -91,31 +91,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       sites =
         for %Use{} = use <- uses do
-          {body, name} =
+          body =
             case use.ref do
-              # A site the composite declares in place is named for its kind inside the
-              # group the copy makes (#380), or for the composite when it has several.
               nil ->
-                case Map.keys(use.local) do
-                  [kind] when kind in [:frames, :theme, :meta] ->
-                    {use.local, to_string(kind)}
-
-                  _keys ->
-                    case Fragment.wrapped(use.local) do
-                      {kind, _body} -> {use.local, to_string(kind)}
-                      nil -> {use.local, own}
-                    end
-                end
+                use.local
 
               ref ->
                 case resolve.(ref) do
-                  {:ok, fragment} -> {Chart.stack([fragment, use.local]), name_of.(ref)}
-                  :error -> {use.local, nil}
+                  {:ok, fragment} -> Chart.stack([fragment, use.local])
+                  :error -> use.local
                 end
             end
 
           {%Use{id: nil, ref: nil, local: body, mask: use.mask, vars: use.vars, key: use.key},
-           name || "#{elem(use.ref, 0)} #{elem(use.ref, 1)}"}
+           inner_label(use, name_of, own)}
         end
 
       {sites, Map.get(composite, :vars, %{}), Map.get(composite, :signals, %{})}
@@ -124,6 +113,39 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def copies(%{kind: kind, name: name, fragment: fragment}, _fetch, _name_of) do
       {[{%Use{id: nil, ref: nil, local: fragment}, name || "new #{kind}"}], %{}, %{}}
     end
+
+    @doc """
+    The name a site of a composite is shown by (spec/14 §18.8, §18.17): a referenced
+    site by its entry's name — its id when the store has none — and a site the composite
+    declares in place by its kind (#380), or by `own`, the composite's name, when it
+    declares several. A copy's sites are labelled so, and so are a referenced group's rows.
+
+        iex> name_of = fn {:style, 1} -> "Styles::thick"; _id -> nil end
+        iex> Visualize.Chart.Builder.Stack.inner_label(%Visualize.Chart.Use{id: {:use, 1}, ref: {:style, 1}}, name_of, "pair")
+        "Styles::thick"
+        iex> Visualize.Chart.Builder.Stack.inner_label(%Visualize.Chart.Use{id: {:use, 1}, ref: {:frame, 9}}, name_of, "pair")
+        "frame 9"
+        iex> Visualize.Chart.Builder.Stack.inner_label(%Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{mark: %{type: :line}}}, name_of, "pair")
+        "mark"
+        iex> Visualize.Chart.Builder.Stack.inner_label(%Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{version: 2}}, name_of, "pair")
+        "pair"
+    """
+    @spec inner_label(Use.t(), (Fragment.id() -> String.t() | nil), String.t()) :: String.t()
+    def inner_label(%Use{ref: nil, local: local}, _name_of, own) do
+      case Map.keys(local) do
+        [kind] when kind in [:frames, :theme, :meta] ->
+          to_string(kind)
+
+        _keys ->
+          case Fragment.wrapped(local) do
+            {kind, _body} -> to_string(kind)
+            nil -> own
+          end
+      end
+    end
+
+    def inner_label(%Use{ref: {kind, n} = ref}, name_of, _own),
+      do: name_of.(ref) || "#{kind} #{n}"
 
     @doc """
     An entry as a stack (spec/14 §19.9): a composite's sites, labelled by the store's
@@ -649,12 +671,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- the tree (spec/14 §18.8, #380) ------------------------------------------------------
 
-    @typedoc "A row of the tree: the site, its depth, its parent's id and its flat position."
+    @typedoc """
+    A row of the tree: the site, its depth, its parent's id, its flat position and its
+    `owner` — `nil` for a site of the tree, the referenced site's id for a row of a
+    referenced group's inside (§18.8, #388), whose `index` is the owner's.
+    """
     @type row :: %{
             use: Use.t(),
             depth: non_neg_integer(),
             parent: Use.id() | nil,
-            index: non_neg_integer()
+            index: non_neg_integer(),
+            owner: Use.id() | nil
           }
 
     @doc "Whether a use is a container: an inline composite — a layer or a group."
@@ -680,13 +707,76 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def all(uses) do
       uses
       |> rows(0, nil)
-      |> Enum.with_index(fn row, index -> Map.put(row, :index, index) end)
+      |> Enum.with_index(fn row, index -> Map.merge(row, %{index: index, owner: nil}) end)
     end
 
     defp rows(uses, depth, parent) do
       Enum.flat_map(uses, fn use ->
         [%{use: use, depth: depth, parent: parent} | rows(children(use), depth + 1, use.id)]
       end)
+    end
+
+    @doc """
+    The rows of `all/1` with each referenced group's inside beneath its row (spec/14
+    §18.8, #388): the sites its entry holds, through the fetch, depth first — a group the
+    entry holds followed by what it holds, a composite it references by that entry's
+    sites. Those sites are the library's and their ids the entry's, not the tree's, so
+    they have no flat position of their own: each row carries `owner`, the referenced
+    site's id, and the owner's flat position as its `index`, so a gesture on one is a
+    gesture on the group, and a flat position still indexes `all/1`. A row directly
+    under the owner names it as its parent; one deeper names the entry's site holding it.
+    An entry met again below itself is not opened twice.
+
+        iex> pair = %{composite: %{uses: [%Visualize.Chart.Use{id: {:use, 1}, ref: {:frame, 1}}, %Visualize.Chart.Use{id: {:use, 2}, ref: nil, local: %{mark: %{}}}], vars: %{}}}
+        iex> fetch = fn {:composite, 1} -> {:ok, pair}; _id -> :error end
+        iex> uses = [%Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{style: %{}}}, %Visualize.Chart.Use{id: {:use, 2}, ref: {:composite, 1}}]
+        iex> for row <- Visualize.Chart.Builder.Stack.all(uses, fetch), do: {row.use.id, row.depth, row.index, row.owner}
+        [{{:use, 1}, 0, 0, nil}, {{:use, 2}, 0, 1, nil}, {{:use, 1}, 1, 1, {:use, 2}}, {{:use, 2}, 1, 1, {:use, 2}}]
+    """
+    @spec all([Use.t()], (Fragment.id() -> {:ok, map()} | :error)) :: [row()]
+    def all(uses, fetch) do
+      uses
+      |> all()
+      |> Enum.flat_map(fn row ->
+        case inside(row.use, fetch) do
+          nil -> [row]
+          held -> [row | held_rows(held, row.depth + 1, row.use.id, row, fetch, [row.use.ref])]
+        end
+      end)
+    end
+
+    defp held_rows(uses, depth, parent, owner, fetch, seen) do
+      Enum.flat_map(uses, fn use ->
+        row = %{use: use, depth: depth, parent: parent, index: owner.index, owner: owner.use.id}
+
+        [
+          row
+          | held_rows(held(use, fetch, seen), depth + 1, use.id, owner, fetch, [use.ref | seen])
+        ]
+      end)
+    end
+
+    # What a site of an entry holds, as the tree reads it: an inline group's sites, or the
+    # sites of the composite it references — once along any one path.
+    defp held(%Use{ref: nil} = use, _fetch, _seen), do: children(use)
+
+    defp held(%Use{ref: ref} = use, fetch, seen) do
+      if ref in seen, do: [], else: inside(use, fetch) || []
+    end
+
+    @doc """
+    The sites a referenced composite's entry holds (spec/14 §18.8, #388) — the library's,
+    read-only in the chart — or `nil` for a use that is not a reference to a composite or
+    whose entry the fetch cannot find.
+    """
+    @spec inside(Use.t(), (Fragment.id() -> {:ok, map()} | :error)) :: [Use.t()] | nil
+    def inside(%Use{ref: nil}, _fetch), do: nil
+
+    def inside(%Use{ref: ref}, fetch) do
+      case fetch.(ref) do
+        {:ok, %{composite: %{uses: uses}}} when is_list(uses) -> uses
+        _other -> nil
+      end
     end
 
     @doc "The flat position of a use in the tree, or `nil`."

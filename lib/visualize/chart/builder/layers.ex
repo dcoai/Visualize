@@ -38,7 +38,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:rows, :list,
       required: true,
       doc:
-        "the tree's rows by flat position — name, depth, parent, group?, count, open?, kind, id, state (spec/14 §18.8, #380, #381)"
+        "the tree's rows by flat position — name, depth, parent, group?, count, open?, kind, id, state, and a referenced group's `inside` (spec/14 §18.8, #380, #381, #388)"
     )
 
     attr(:hidden, :any, default: nil, doc: "the positions under a closed group, a `MapSet`")
@@ -212,6 +212,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <p :if={entry.expanded? and entry.declared == []} class="vis-builder-layer-detail vis-builder-declared-none">
             declares nothing yet
           </p>
+          <ul
+            :if={entry.open? and entry.inside != []}
+            class="vis-builder-site-inside"
+            title={"from the library: " <> entry.name <> " is read-only here — selecting selects it, o opens it"}
+          >
+            <li
+              :for={inner <- entry.inside}
+              class="vis-builder-site-inside-row"
+              style={"--vis-builder-depth: #{inner.depth}"}
+            >
+              <span :if={inner.group?} class="vis-builder-site-toggle">▾</span>
+              <span :if={not inner.group? and inner.kind} class="vis-builder-site-kind" title={to_string(inner.kind)}>{Phoenix.HTML.raw(Glyphs.icon(inner.kind))}</span>
+              <span class="vis-builder-layer-name">{inner.name}</span>
+              <span class="vis-builder-site-tag" title={"from " <> inner.tag}>{inner.tag}</span>
+              <span class="vis-builder-site-inside-lock">{Phoenix.HTML.raw(Glyphs.icon(:lock))}</span>
+            </li>
+          </ul>
         </li>
       </ol>
       """
@@ -307,10 +324,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
           expanded?: index in open,
           declared: if(index in open, do: declared(Enum.at(placed, index) || %{}), else: []),
           mask: Map.get(assigns.masks || %{}, index),
+          inside: inside(row),
           says: says(name, row, index, count, index == selected, index in off, state)
         }
       end
     end
+
+    # A referenced group's inside (#388): the entry's sites, drawn in the group's row and
+    # indented from it, since they have no flat position of their own.
+    defp inside(%{inside: inside, depth: depth}) do
+      for inner <- inside do
+        %{
+          name: inner.name,
+          depth: inner.depth - depth - 1,
+          group?: inner.group?,
+          kind: if(inner.group?, do: nil, else: kind_word(inner.kind)),
+          tag: inner.tag
+        }
+      end
+    end
+
+    defp inside(_row), do: []
 
     defp encode_id({:use, n}), do: to_string(n)
 

@@ -22,6 +22,14 @@ release it merely follows.
   `resolve/3` gives `var(--vis-surface, …)` on SVG and the literal on canvas, and an inline
   `:theme` node takes a `surface` key. A theme from `new/1` that names none takes the light
   value, as it does for every field it leaves out.
+- **A referenced group expands in the builder's tree** (#388): a library composite dropped
+  linked now carries the ▸ and the count of its entry's sites, and opened draws them beneath
+  its row — muted, locked, each tagged with the entry's name. They are the library's, so
+  they take no flat position of their own: a click, a drag or the menu on one is the
+  group's, and a drop into the group is refused with *name is from the library — open it to
+  edit*. `Visualize.Chart.Builder.Stack.all/2` (the tree's rows with each referenced
+  group's inside, through a fetch, each naming its `owner`), `inside/2` and
+  `inner_label/3` are new.
 
 ## [0.1.0] — 2026-09-09
 
