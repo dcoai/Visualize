@@ -15,6 +15,23 @@ defmodule Examples.Compare do
           static_bytes: non_neg_integer()
         }
 
+  @type cost :: :light | :heavy
+
+  @doc """
+  A chart's cost class (spec/14 §12.6, #469): `:heavy` for a chart module whose
+  `cost/0` says so — a chart whose purpose is to be expensive, as *Downsampling*'s
+  unreduced 50,000 rows are — and `:light` for every other. The comparison still runs a
+  heavy chart; the class is what the suite reads, so it compares the light charts in
+  full, holds a heavy one comparable at one tick, and holds each class's still render to
+  its own budget.
+  """
+  @spec cost(module()) :: cost()
+  def cost(module) do
+    if Code.ensure_loaded?(module) and function_exported?(module, :cost, 0),
+      do: module.cost(),
+      else: :light
+  end
+
   @doc """
   One row per backend of `module`: `ticks` frames at `opts_for.(tick)`, each timed, the
   compiled chart of the canvas prepared once outside the timing (it is compiled once per
@@ -27,7 +44,9 @@ defmodule Examples.Compare do
 
       {{times, bytes}, _state} =
         Enum.map_reduce(0..(ticks - 1), state, fn tick, state ->
-          {us, {frame, state}} = :timer.tc(fn -> Frames.frame(module, opts_for.(tick), backend, state) end)
+          {us, {frame, state}} =
+            :timer.tc(fn -> Frames.frame(module, opts_for.(tick), backend, state) end)
+
           {{us, frame.bytes}, state}
         end)
         |> then(fn {pairs, state} -> {Enum.unzip(pairs), state} end)
