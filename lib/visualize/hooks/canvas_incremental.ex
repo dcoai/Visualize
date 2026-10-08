@@ -8,6 +8,11 @@ defmodule Visualize.Hooks.CanvasIncremental do
   delta and replays each exposed region of the `0x60` record clipped to its bounds
   (spec/09 §5.5); a `"none"` payload is ignored.
 
+  The canvas and its offscreen copy buffer follow the element's `data-width` ×
+  `data-height` at every draw (spec/10 §9.2, #456). A size change clears the canvas, so
+  no scroll payload is drawn after one until a `"full"` payload has been — the full
+  record a producer sends after a resize (spec/14 §12.5).
+
   ## Usage
 
       <div id="chart" phx-hook="CanvasIncrementalChart" phx-update="ignore"
@@ -38,11 +43,15 @@ defmodule Visualize.Hooks.CanvasIncremental do
         this.canvas = this.el.querySelector('canvas') || this.createCanvas();
         this.ctx = this.canvas.getContext('2d');
 
-        // Offscreen buffer for the copy-shift
+        // Offscreen buffer for the copy-shift, the canvas's size (spec/10 §9.2).
         this.offscreen = document.createElement('canvas');
+        this.offscreenCtx = this.offscreen.getContext('2d');
+        this.sizeToElement();
         this.offscreen.width = this.canvas.width;
         this.offscreen.height = this.canvas.height;
-        this.offscreenCtx = this.offscreen.getContext('2d');
+        // Whether a resize cleared the canvas since the last full record: a scroll record
+        // cannot be applied to it until a full one has been drawn.
+        this.stale = false;
 
         // Acknowledge frames when asked (spec/10 §9.2, D-107): data-ack names the event,
         // data-ack-interval the most often it is pushed, in ms.
@@ -86,7 +95,9 @@ defmodule Visualize.Hooks.CanvasIncremental do
         this.pushEvent(this.ackEvent, { seq: this.ackSeq, drawn: this.ackDrawn, at: performance.now() });
         this.ackDrawn = 0;
       },
-      updated() {},
+      updated() {
+        this.sizeToElement();
+      },
       createCanvas() {
         const canvas = document.createElement('canvas');
         canvas.width = parseInt(this.el.dataset.width) || 800;
@@ -96,12 +107,34 @@ defmodule Visualize.Hooks.CanvasIncremental do
         return canvas;
       },
 
+      // The canvas's drawing size is the element's data-width x data-height at every draw
+      // (spec/10 §9.2, #456), and the offscreen buffer the copy goes through follows it.
+      // A size change clears the canvas, so it is stale until a full record is drawn.
+      // Returns whether the size changed.
+      sizeToElement() {
+        const width = parseInt(this.el.dataset.width, 10);
+        const height = parseInt(this.el.dataset.height, 10);
+        if (!(width > 0 && height > 0)) return false;
+        if (this.canvas.width === width && this.canvas.height === height) return false;
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.offscreen.width = width;
+        this.offscreen.height = height;
+        this.stale = true;
+        return true;
+      },
+
       handleIncremental({binary, dx, dy, mode}) {
+        this.sizeToElement();
         if (mode === 'none') return;
+        // A scroll copies pixels a resize has cleared: wait for the full record the
+        // producer sends after a size change (spec/14 §12.5).
+        if (mode !== 'full' && this.stale) return;
         try {
           const bytes = decodeBase64(binary);
           if (mode === 'full') {
             this.fullRender(bytes);
+            this.stale = false;
           } else {
             this.incrementalRender(bytes, dx, dy);
           }

@@ -672,6 +672,28 @@ defmodule Visualize.Chart.CompiledTest do
       assert Enum.any?(records, &match?({:path32, points} when length(points) == 11, &1))
     end
 
+    test "a resize starts the stream again from a full record: the window is not carried (#456)" do
+      sources = %{primary: rows(30)}
+      compiled = compile!(@stream, size: {140, 100}, sources: sources)
+      {_first, compiled} = Compiled.tick(compiled, sources, now: 20)
+      {second, compiled} = Compiled.tick(compiled, sources, now: 22)
+      assert second.incremental.mode == "scroll_x"
+
+      # The chart compiled again at a new size, the easing carried: the canvas the hook
+      # resized is blank, so the next payload repaints it whole rather than scrolling
+      # pixels laid out for the old plot (spec/10 §9.2, spec/14 §12.5).
+      wider = Compiled.carry(compiled, compile!(@stream, size: {280, 200}, sources: sources))
+      {after_resize, wider} = Compiled.tick(wider, sources, now: 24)
+      assert %{mode: "full", dx: 0, dy: 0} = after_resize.incremental
+
+      assert [{:full_redraw, _viewport, _records}] =
+               after_resize.incremental.binary |> Base.decode64!() |> Decoder.decode()
+
+      # …and the stream scrolls again from there, at the new plot's scale.
+      {next, _wider} = Compiled.tick(wider, sources, now: 25)
+      assert next.incremental.mode == "scroll_x"
+    end
+
     test "with a fake clock the canvas layer scrolls by the window's movement, then rests" do
       compiled = compile!(@stream, size: {140, 100}, sources: %{primary: rows(30)})
       sources = %{primary: rows(30)}

@@ -167,7 +167,10 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
     {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => "canvas"}, s)
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
-    assert %{compiled: [{_name, %Visualize.Chart.Compiled{}}], static: static} = s.assigns.run_state
+
+    assert %{compiled: [{_name, %Visualize.Chart.Compiled{}}], static: static} =
+             s.assigns.run_state
+
     assert s.assigns.run.flow_control
     s = settled(s)
     assert pushed(s) == [{"canvas_update", 1}]
@@ -313,6 +316,42 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     s = settled(s)
     [{_name, compiled}] = Examples.Renderer.state(s.assigns.run.renderer).compiled
     assert compiled.size.width == 980
+  end
+
+  test "after a resize mid-run the next incremental payload is full, at the size the element now carries (#456)" do
+    s = page("scrolling_series", :incremental)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    s = settled(s)
+
+    s =
+      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 40})
+
+    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    s = settled(s)
+    %{incremental: before, plot: was} = plot(s.assigns.run_frame)
+    assert before.mode in ["scroll_x", "none"]
+
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 980, "height" => 400}, s)
+
+    # The hook resizes its canvas to the element's data-width x data-height, which clears
+    # it, and draws no scroll until a full record (spec/10 §9.2): the renderer's chart is
+    # compiled again with its window afresh, so the next payload is that full record.
+    s =
+      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 40})
+
+    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    s = settled(s)
+    %{incremental: record, plot: area} = plot(s.assigns.run_frame)
+    assert record.mode == "full"
+
+    assert [{:full_redraw, _viewport, _records}] =
+             record.binary |> Base.decode64!() |> Visualize.Backend.CanvasBinary.Decoder.decode()
+
+    # The element the payload goes to carries the new plot's size.
+    h = html(s)
+    assert h =~ ~s(data-width="#{area.width}")
+    assert h =~ ~s(data-height="#{area.height}")
+    assert area.width != was.width
   end
 
   test "the last chart converted runs on the split like every other (#348)" do
@@ -564,5 +603,4 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
   # A frame carries one plot per frame of the design (spec/14 §12.1, #432); these have one.
   defp plot(%{plots: [plot]}), do: plot
-
 end

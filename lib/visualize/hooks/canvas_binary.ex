@@ -22,6 +22,10 @@ defmodule Visualize.Hooks.CanvasBinary do
   reader taking the coordinate width, and the cubic run (D-74) has its own — and an unknown
   byte throws rather than
   desynchronise silently. A full-matrix transform (`0xFF`) composes with `ctx.transform`.
+
+  The canvas's drawing size is the element's `data-width` × `data-height` at every draw
+  (spec/10 §8.2, #456): a size change re-sizes the canvas, which clears it, and redraws
+  the current `data-binary` even when it is the value last drawn.
   """
 
   @doc """
@@ -504,7 +508,22 @@ defmodule Visualize.Hooks.CanvasBinary do
         this.el.appendChild(canvas);
         return canvas;
       },
+      // The canvas's drawing size is the element's data-width x data-height at every draw
+      // (spec/10 §8.2, #456): a page that measures itself re-renders at a new size, and a
+      // canvas sized once at mount draws the stream off its edges. Returns whether the
+      // size changed, which clears the canvas.
+      sizeToElement() {
+        const width = parseInt(this.el.dataset.width, 10);
+        const height = parseInt(this.el.dataset.height, 10);
+        if (!(width > 0 && height > 0)) return false;
+        if (this.canvas.width === width && this.canvas.height === height) return false;
+        this.canvas.width = width;
+        this.canvas.height = height;
+        return true;
+      },
       render() {
+        // A resize cleared the canvas, so the same data is drawn again.
+        if (this.sizeToElement()) this.lastData = null;
         const base64Data = this.el.dataset.binary;
         if (!base64Data || base64Data === this.lastData) return;
         this.lastData = base64Data;

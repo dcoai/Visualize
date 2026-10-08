@@ -181,6 +181,60 @@ defmodule Visualize.Hooks.CanvasHooksTest do
              "this.pushEvent(this.ackEvent, { seq: this.ackSeq, drawn: this.ackDrawn, at: performance.now() });"
   end
 
+  describe "the canvas follows its element's size (spec/10 §8.2, §9.2, #456)" do
+    # The size read from the data attributes as integers, a missing or non-positive one
+    # leaving the canvas alone, and the canvas set only when it differs.
+    defp sizes_to_element(hook) do
+      assert hook =~ "const width = parseInt(this.el.dataset.width, 10);"
+      assert hook =~ "const height = parseInt(this.el.dataset.height, 10);"
+      assert hook =~ "if (!(width > 0 && height > 0)) return false;"
+
+      assert hook =~
+               "if (this.canvas.width === width && this.canvas.height === height) return false;"
+
+      assert hook =~ ~r/this\.canvas\.width = width;\s+this\.canvas\.height = height;/
+    end
+
+    test "CanvasBinaryChart sizes the canvas before every render and redraws the same data after a resize" do
+      hook = Hooks.CanvasBinary.js_hook()
+      sizes_to_element(hook)
+      # Every draw goes through render() — mounted, updated and canvas_update — and render
+      # sizes first: a size change forgets the last data, so the skip cannot suppress the
+      # redraw of the canvas the resize cleared.
+      assert hook =~
+               ~r/render\(\) \{\s+(\/\/[^\n]*\n\s+)*if \(this\.sizeToElement\(\)\) this\.lastData = null;\s+const base64Data = this\.el\.dataset\.binary;\s+if \(!base64Data \|\| base64Data === this\.lastData\) return;/
+
+      assert hook =~ ~r/updated\(\) \{\s+this\.render\(\);/
+      assert hook =~ ~r/this\.el\.dataset\.binary = payload\.binary;\s+this\.render\(\);/
+    end
+
+    test "CanvasIncrementalChart sizes the canvas and its offscreen buffer at mount, on updated and before a payload" do
+      hook = Hooks.CanvasIncremental.js_hook()
+      sizes_to_element(hook)
+
+      assert hook =~
+               ~r/this\.canvas\.height = height;\s+this\.offscreen\.width = width;\s+this\.offscreen\.height = height;\s+this\.stale = true;\s+return true;/
+
+      # At mount the buffer is made first, so sizing can resize it; it starts the canvas's size.
+      assert hook =~
+               ~r/this\.offscreenCtx = this\.offscreen\.getContext\('2d'\);\s+this\.sizeToElement\(\);\s+this\.offscreen\.width = this\.canvas\.width;/
+
+      assert hook =~ ~r/updated\(\) \{\s+this\.sizeToElement\(\);\s+\}/
+
+      assert hook =~
+               ~r/handleIncremental\(\{binary, dx, dy, mode\}\) \{\s+this\.sizeToElement\(\);/
+    end
+
+    test "CanvasIncrementalChart draws no scroll onto a canvas a resize cleared, until a full record" do
+      hook = Hooks.CanvasIncremental.js_hook()
+      assert hook =~ "this.stale = false;"
+      assert hook =~ "if (mode !== 'full' && this.stale) return;"
+      assert hook =~ ~r/this\.fullRender\(bytes\);\s+this\.stale = false;/
+      # A held-back scroll is still handled, so still acknowledged.
+      assert hook =~ ~r/this\.handleIncremental\(payload\);\s+if \(payload\.seq !== undefined\)/
+    end
+  end
+
   test "CanvasBinaryChart reads data-binary and canvas_update events" do
     hook = Hooks.CanvasBinary.js_hook()
     assert hook =~ "this.handleEvent(\"canvas_update\""
