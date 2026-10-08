@@ -178,7 +178,7 @@ A design with no `layout` places its frames by their boxes alone. A weight that 
 
 ### 2.9 Interaction
 
-**Implemented** (#466). `interaction` says how the chart behaves on the page beside other charts. Its one behaviour is the **sync group**: charts that name the same group share hover, so pointing at one moves the crosshair and the tooltip of every other (spec/10 §4.3). What travels between them is the x value in **domain** units, never a pixel, so members of different widths and margins line up on the same instant. Every key is `:binding` and `:override`.
+**Implemented** (#466, #467). `interaction` says how the chart behaves on the page beside other charts. Its one behaviour is the **sync group**: charts that name the same group share hover, so pointing at one moves the crosshair and the tooltip of every other (spec/10 §4.3), and share the brush, so a window brushed on one shows as a band on every other while only the chart brushed tells its server (spec/10 §6.4). What travels between them is the x value, or the brushed x extent, in **domain** units, never a pixel, so members of different widths and margins line up on the same instant. Every key is `:binding` and `:override`.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
