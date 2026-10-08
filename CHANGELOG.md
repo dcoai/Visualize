@@ -63,6 +63,12 @@ release it merely follows.
   left out what its uses referenced, and an import left it pointing at the source store's
   entries. The two id walks now read a use's parts. Every other walk still stops at a
   struct (D-92).
+- **A glyph carries no id** (#471). The `:linear` and `:radial` fill-style pictures and the
+  `:blur` effect drew an inline `<defs>` with a fixed id. The editor shows a glyph once
+  per choice and per open row, so a page repeated the id, which LiveView refuses
+  (`Duplicate id found … vis-glyph-linear`). They are now translucent bands and squares,
+  with no paint server and no filter. The glyph test also walks the four drawn keys it
+  had skipped (`fill_style`, `effect`, `vertical_align`, `stroke_style`).
 
 ## [0.1.0] — 2026-09-09
 

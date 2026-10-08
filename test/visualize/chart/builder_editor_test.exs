@@ -87,6 +87,10 @@ defmodule Visualize.Chart.Builder.EditorTest do
 
     test "every value of every drawn key has a picture, and an undrawn key has none" do
       drawn = [
+        fill_style: [:none, :solid, :linear, :radial],
+        effect: [:none, :shadow, :blur],
+        vertical_align: [:top, :middle, :baseline, :bottom],
+        stroke_style: [:single, :double, :inside, :outside],
         stroke_linejoin: [:miter, :round, :bevel],
         stroke_linecap: [:butt, :round, :square],
         curve: Schema.curve_types(),
@@ -113,6 +117,10 @@ defmodule Visualize.Chart.Builder.EditorTest do
         assert Glyphs.drawn?(key)
         svg = Glyphs.glyph(key, value)
         assert is_binary(svg) and svg =~ "<svg", "#{key} #{value} has no picture"
+
+        # Drawn once per choice and per open row, in one HTML document: an id
+        # would repeat, so a glyph carries none (#471).
+        refute svg =~ ~r/\bid=|url\(#/, "#{key} #{value} carries an id"
       end
 
       refute Glyphs.drawn?(:op)

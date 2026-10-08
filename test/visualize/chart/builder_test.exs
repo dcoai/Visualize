@@ -41,6 +41,16 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
+  # An id is unique in the document the builder renders into, which a LiveView page
+  # enforces: a glyph drawn once per choice must carry none (spec/14 §18.6, #471).
+  test "no rendered builder page repeats an id" do
+    for {name, c} <- BuilderFixture.cases() do
+      ids = Regex.scan(~r/\sid="([^"]+)"/, BuilderFixture.render_case(c), capture: :all_but_first)
+      repeated = ids |> List.flatten() |> Enum.frequencies() |> Enum.filter(&(elem(&1, 1) > 1))
+      assert repeated == [], "#{name} repeats #{inspect(repeated)}"
+    end
+  end
+
   describe "the preview (spec/14 §18.4)" do
     test "a design that applies is drawn, with no error list" do
       html = rendered(:preview)
