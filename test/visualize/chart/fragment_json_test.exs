@@ -1,0 +1,98 @@
+defmodule Visualize.Chart.FragmentJsonTest do
+  @moduledoc """
+  The public JSON codec for fragments (spec/14 §19.7, #465): a host that keeps its library
+  in a database writes what `Store.put/2` hands it and reads back the same fragment —
+  every kind, and a composite with every part of its use sites filled — without a design's
+  validation in the way, since a fragment may be partial.
+  """
+  use ExUnit.Case, async: true
+
+  import Visualize.Chart, only: [var: 1]
+
+  alias Visualize.Chart.{Composite, Fragment, Use}
+
+  defp round_trip(fragment) do
+    assert {:ok, json} = Fragment.to_json(fragment)
+    assert is_binary(json)
+    assert {:ok, back} = Fragment.from_json(json)
+    back
+  end
+
+  test "a fragment of each singular kind round-trips" do
+    for fragment <- [
+          %{style: %{stroke: "#111", stroke_width: 2, curve: :step_after, fill: var(:color)}},
+          %{theme: :dark},
+          %{frames: %{main: %{kind: :cartesian, margin: %{top: 24, left: 40}}}},
+          %{frames: %{main: %{scales: %{y: %{kind: :linear, domain: [0, :auto], nice: true}}}}},
+          %{marks: [%{type: :line, data: :series, channels: %{x: :t, y: :v}, style: :series}]},
+          %{sources: %{series: %{fields: [:t, :v]}}},
+          %{vars: %{color: %{default: :series_1}}}
+        ] do
+      assert round_trip(fragment) == fragment, inspect(fragment)
+      assert Fragment.kind(round_trip(fragment)) == Fragment.kind(fragment)
+    end
+  end
+
+  test "a composite keeps every part of every use site: ref, mask, vars, local, key, origin" do
+    composite = %{
+      composite: %{
+        uses: [
+          Use.new({:theme, 3}),
+          %Use{
+            id: {:use, 2},
+            ref: {:style, 11},
+            mask: [:stroke, [:frames, :main, :margin]],
+            vars: %{color: var(:color_1)},
+            local: %{opacity: 0.8, curve: :monotone_x},
+            key: :series
+          },
+          %Use{id: {:use, 3}, ref: nil, local: %{stroke_width: 3}, origin: {:style, 4}},
+          %Use{id: {:use, 4}, ref: {:composite, 2}, mask: :all, key: :gauge}
+        ],
+        vars: %{color_1: %{default: :series_1}}
+      }
+    }
+
+    assert round_trip(composite) == composite
+    assert Composite.composite?(round_trip(composite))
+  end
+
+  test "a document decomposed into sites round-trips, and still flattens back to itself" do
+    document = %{
+      version: Visualize.Chart.Migration.current(),
+      theme: :dark,
+      styles: %{series: %{stroke_width: 2}},
+      frames: %{
+        main: %{
+          kind: :cartesian,
+          scales: %{x: %{kind: :time}, y: %{kind: :linear}},
+          axes: [%{scale: :x, side: :bottom}]
+        }
+      },
+      marks: [%{type: :line, data: :rows, channels: %{x: :t, y: :v}, style: :series}],
+      sources: %{rows: %{fields: [:t, :v]}}
+    }
+
+    {uses, _labels} = Composite.decompose(document)
+    composite = %{composite: %{uses: uses, vars: %{}}}
+
+    back = round_trip(composite)
+    assert back == composite
+
+    assert {:ok, flat, %{missing: [], keyless: []}} =
+             Composite.flatten(back, fn _id -> :error end)
+
+    assert Map.drop(flat, [:version]) == Map.drop(document, [:version])
+  end
+
+  test "an id whose kind no fragment has is left as it was read — no atom from a document" do
+    json = ~s({"composite": {"uses": [], "ref": {"$id": ["no_such_kind_465", 1]}}})
+    assert {:ok, %{composite: %{ref: ref}}} = Fragment.from_json(json)
+    assert ref == %{"$id" => ["no_such_kind_465", 1]}
+    assert_raise ArgumentError, fn -> String.to_existing_atom("no_such_kind_465") end
+  end
+
+  test "text that is not JSON is an error, not a crash" do
+    assert {:error, _reason} = Fragment.from_json("{not json")
+  end
+end

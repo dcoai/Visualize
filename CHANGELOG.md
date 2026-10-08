@@ -40,6 +40,12 @@ release it merely follows.
   group. The validator refuses any other kind as `{:sync, :x_scale, kind}`.
   `Visualize.Chart.Build.interaction/1` writes the key. A chart's `to_map/1` and JSON
   now carry `interaction` (default `%{}`).
+- **A public JSON codec for fragments** (#465). `Visualize.Chart.Fragment.to_json/1` and
+  `from_json/1` write and read any fragment, a composite of use sites holding ids included,
+  in the JSON form spec/14 §19.7 specifies (`$use`, `$id`). It is not validated as a design,
+  since a fragment may be partial. A store that keeps its library in a database can now
+  persist what `Store.put/2` hands it. `Chart.from_json/1` validates a whole design and so
+  refuses a composite, and the codec under both was private.
 
 ## [0.1.0] — 2026-09-09
 
