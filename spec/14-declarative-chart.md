@@ -2401,6 +2401,8 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Validator.validate/2` | per-kind validity (§19.8): a fragment read as a kind — a design whole, a composite as sites, any other kind as the body under its key with that kind's schema, no key required and no reference looked up, since a fragment is a piece |
 | `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each, sorted — the order a map is walked is the runtime's, not a promise |
 | `Visualize.Chart.Fragment.relocate/2` | a fragment with its ids rewritten through a table, and the ids the table did not carry |
+| `Visualize.Chart.Fragment.to_json/1` | a fragment of any kind — a composite holding uses and ids included — as the JSON of §11 and §19.7, `{:ok, json}`; not validated as a design, since a fragment may be partial (#465), so a host that keeps its library in a database writes what `put/2` hands it |
+| `Visualize.Chart.Fragment.from_json/1` | the inverse: tagged terms back as `%Use{}`, ids, variables and atoms, an id whose kind is not one a fragment can have left as it was read (no atom from a document); `{:error, …}` for text that is not JSON. `from_json(to_json(f))` is `f` (#465) |
 
 | Function | Contract |
 |---|---|
