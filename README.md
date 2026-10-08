@@ -50,7 +50,7 @@ import Visualize.Chart.Build
 rows = [%{date: ~D[2024-01-01], value: 10}, %{date: ~D[2024-01-02], value: 25}]
 {:ok, applied} = Visualize.Chart.apply(design, sources: %{days: rows}, size: {500, 300})
 
-Visualize.Chart.render(applied)                     # SVG markup
+Visualize.Chart.render(applied, root: true)         # an <svg> document
 Visualize.Chart.render(applied, backend: :canvas)   # Canvas 2D commands
 ```
 

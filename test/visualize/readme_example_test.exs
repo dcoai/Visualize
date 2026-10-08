@@ -33,10 +33,10 @@ defmodule Visualize.ReadmeExampleTest do
 
     # The SVG render before it is not the block's value, so it is asked of what it bound.
     applied = Keyword.fetch!(binding, :applied)
-    svg = Visualize.Chart.render(applied)
-    # SVG markup: the frame's group, which is what `render/1` gives without `root: true`
-    # (spec/14 §4.7), with the line the design declares inside it.
-    assert String.starts_with?(svg, ~s(<g class="frame"))
+    svg = Visualize.Chart.render(applied, root: true)
+    # The README promises a whole document (`root: true`, spec/14 §4.7), with the line the
+    # design declares inside it.
+    assert String.starts_with?(svg, "<svg")
     assert svg =~ ~s(class="mark mark-line")
     assert Visualize.Chart.render(applied, backend: :canvas) == canvas
   end
