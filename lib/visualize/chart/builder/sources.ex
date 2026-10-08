@@ -46,8 +46,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <p :if={@rows == []} class="vis-builder-context-note">
           no data yet — a source is the columns the chart draws, generated while it is designed or bound by the host
         </p>
-        <section :for={row <- @rows} class="vis-builder-source" data-builder-source={row.name} data-builder-node={"sources." <> row.name}>
-          <form class="vis-builder-source-name" phx-change="rename_source" phx-target={@target} phx-submit="submitted">
+        <section :for={{row, n} <- Enum.with_index(@rows)} class="vis-builder-source" data-builder-source={row.name} data-builder-node={"sources." <> row.name}>
+          <form id={"#{@id}-source-#{n}-name"} class="vis-builder-source-name" phx-change="rename_source" phx-target={@target} phx-submit="submitted">
             <input type="hidden" name="source" value={row.name} />
             <input
               type="text"
@@ -69,9 +69,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             >×</button>
           </form>
           <ol class="vis-builder-columns">
-            <li :for={column <- row.columns} class="vis-builder-column">
+            <li :for={{column, m} <- Enum.with_index(row.columns)} class="vis-builder-column">
               <span :if={column.var} class="vis-builder-var-chip vis-builder-var-chip-bound">var(:{column.var})</span>
-              <form :if={!column.var} class="vis-builder-column-name" phx-change="rename_column" phx-target={@target} phx-submit="submitted">
+              <form :if={!column.var} id={"#{@id}-source-#{n}-column-#{m}-name"} class="vis-builder-column-name" phx-change="rename_column" phx-target={@target} phx-submit="submitted">
                 <input type="hidden" name="source" value={row.name} />
                 <input type="hidden" name="column" value={column.name} />
                 <input
@@ -82,7 +82,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   phx-debounce="blur"
                 />
               </form>
-              <form :if={!column.var} class="vis-builder-column-type" phx-change="set_column_type" phx-target={@target} phx-submit="submitted">
+              <form :if={!column.var} id={"#{@id}-source-#{n}-column-#{m}-type"} class="vis-builder-column-type" phx-change="set_column_type" phx-target={@target} phx-submit="submitted">
                 <input type="hidden" name="source" value={row.name} />
                 <input type="hidden" name="column" value={column.name} />
                 <select name="type" aria-label={"the type of #{column.name}"}>
@@ -115,13 +115,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
               phx-target={@target}
             >+ {pick}</button>
           </div>
-          <form class="vis-builder-column-add" phx-submit="add_column" phx-target={@target}>
+          <form id={"#{@id}-source-#{n}-add-column"} class="vis-builder-column-add" phx-submit="add_column" phx-target={@target}>
             <input type="hidden" name="source" value={row.name} />
             <span class="vis-builder-item-add" data-builder-bind="fields">
               <input type="text" name="name" class="vis-builder-item-box" placeholder="+ add a column" aria-label={"a column to add to #{row.name}"} />
             </span>
           </form>
-          <form class="vis-builder-generator" phx-change="set_generator" phx-target={@target} phx-submit="submitted">
+          <form id={"#{@id}-source-#{n}-generator"} class="vis-builder-generator" phx-change="set_generator" phx-target={@target} phx-submit="submitted">
             <input type="hidden" name="source" value={row.name} />
             <label class="vis-builder-field">
               <span class="vis-builder-key">while designing</span>
@@ -133,7 +133,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <span :if={row.signal == nil and row.host_rows > 0} class="vis-builder-item-text">{row.host_rows} rows from the host</span>
             <span :if={row.signal == nil and row.host_rows == 0} class="vis-builder-item-text">no rows — pick a generator</span>
           </form>
-          <form :if={row.signal} class="vis-builder-signals" phx-change="edit_signal" phx-target={@target} phx-submit="submitted">
+          <form :if={row.signal} id={"#{@id}-source-#{n}-signal"} class="vis-builder-signals" phx-change="edit_signal" phx-target={@target} phx-submit="submitted">
             <div class="vis-builder-signal-numbers">
               <label :for={{key, value} <- row.signal.numbers} class="vis-builder-field">
                 <span class="vis-builder-key">{key}</span>
@@ -141,7 +141,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               </label>
             </div>
           </form>
-          <form :if={@defaults?} class="vis-builder-source-default" phx-change="set_default_source" phx-target={@target} phx-submit="submitted">
+          <form :if={@defaults?} id={"#{@id}-source-#{n}-default"} class="vis-builder-source-default" phx-change="set_default_source" phx-target={@target} phx-submit="submitted">
             <input type="hidden" name="source" value={row.name} />
             <label class="vis-builder-field">
               <span class="vis-builder-key">from the host</span>
@@ -169,7 +169,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             aria-pressed={to_string(@playing)}
           >{if @playing, do: "pause", else: "play"}</button>
           <span class="vis-builder-item-text">tick {@tick}</span>
-          <form class="vis-builder-tick-period" phx-change="tick_ms" phx-target={@target} phx-submit="submitted">
+          <form id={@id <> "-tick"} class="vis-builder-tick-period" phx-change="tick_ms" phx-target={@target} phx-submit="submitted">
             <label class="vis-builder-control-label" for={@id <> "-ms"}>every</label>
             <input id={@id <> "-ms"} type="number" name="ms" value={@tick_ms} min="50" step="50" />
             <span class="vis-builder-item-text">ms</span>

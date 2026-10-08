@@ -183,6 +183,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </p>
             <form
               :if={entry.mask && !entry.mask.all? && entry.mask.rows != []}
+              id={@id <> "-row-" <> to_string(entry.index) <> "-mask"}
               class="vis-builder-masks"
               phx-change="mask"
               phx-target={@target}

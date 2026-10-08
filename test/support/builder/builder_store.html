@@ -43,7 +43,7 @@
         Charts
         <button type="button" class="vis-builder-add" title="add a chart: one frame layer to start" aria-label="add a chart" phx-click="add_chart" phx-target="-1">+</button>
       </h2>
-      <form class="vis-builder-new" phx-submit="new_fragment" phx-target="-1">
+      <form id="builder-new-form" class="vis-builder-new" phx-submit="new_fragment" phx-target="-1">
         <label class="vis-builder-control-label" for="builder-new-kind">New</label>
         <select id="builder-new-kind" name="kind" class="vis-builder-new-kind">
           <option value="composite">composite</option><option value="theme">theme</option><option value="style">style</option><option value="frame">frame</option><option value="scale">scale</option><option value="axis">axis</option><option value="source">source</option><option value="var">var</option><option value="gradient">gradient</option><option value="mark">mark</option><option value="label">label</option>
@@ -105,7 +105,7 @@
     </aside>
     <main class="vis-builder-main">
       <div class="vis-builder-chart-bar">
-        <form class="vis-builder-keep" phx-submit="put_design" phx-target="-1">
+        <form id="builder-keep-form" class="vis-builder-keep" phx-submit="put_design" phx-target="-1">
           <input id="builder-keep" type="text" name="name" class="vis-builder-name" value="" placeholder="Group:sub-group:name" aria-label="save the chart as">
           <button type="submit" class="vis-builder-put">Save to library</button>
         </form>
@@ -1081,7 +1081,7 @@
       
       <div id="builder-fonts" class="vis-builder-fonts-panel">
   
-  <form class="vis-builder-fonts" phx-change="edit" phx-target="-1" phx-submit="submitted">
+  <form id="builder-fonts-form" class="vis-builder-fonts" phx-change="edit" phx-target="-1" phx-submit="submitted">
     <div class="vis-builder-faces" role="radiogroup" aria-label="font family">
       <label class="vis-builder-face" style="font-family: system-ui">
         <input type="radio" name="font_family" value="system-ui" aria-label="system-ui">
@@ -1174,7 +1174,7 @@
   </div>
   
   <div class="vis-builder-tray">
-    <div class="vis-builder-palette">
+    <div id="builder-palette" class="vis-builder-palette">
   <h2 class="vis-builder-tray-title">Styles</h2>
   <ul class="vis-builder-palette-list">
     <li class="vis-builder-palette-entry vis-builder-palette-entry-open">
@@ -1186,7 +1186,7 @@
     </li>
   </ul>
   
-  <form class="vis-builder-palette-new" phx-submit="add_style" phx-target="-1">
+  <form id="builder-palette-new" class="vis-builder-palette-new" phx-submit="add_style" phx-target="-1">
     <input type="text" name="name" value="" class="vis-builder-palette-input" placeholder="new style">
     <button type="submit" class="vis-builder-palette-add">Add style</button>
   </form>
@@ -1341,10 +1341,10 @@
     </tr>
   </tbody>
 </table>
-    <div class="vis-builder-document">
+    <div id="builder-document" class="vis-builder-document">
   <textarea class="vis-builder-export" readonly>{&quot;defs&quot;:{},&quot;frames&quot;:{&quot;main&quot;:{&quot;axes&quot;:[{&quot;scale&quot;:&quot;x&quot;,&quot;side&quot;:&quot;bottom&quot;,&quot;ticks&quot;:3},{&quot;scale&quot;:&quot;y&quot;,&quot;side&quot;:&quot;left&quot;,&quot;ticks&quot;:3}],&quot;kind&quot;:&quot;cartesian&quot;,&quot;margin&quot;:{&quot;bottom&quot;:30,&quot;left&quot;:40,&quot;right&quot;:20,&quot;top&quot;:20},&quot;scales&quot;:{&quot;x&quot;:{&quot;domain&quot;:&quot;auto&quot;,&quot;kind&quot;:&quot;linear&quot;},&quot;y&quot;:{&quot;domain&quot;:[0,&quot;auto&quot;],&quot;kind&quot;:&quot;linear&quot;}}}},&quot;labels&quot;:[{&quot;anchor&quot;:&quot;title&quot;,&quot;text&quot;:&quot;Uptime — #{var(:unit)}&quot;}],&quot;layout&quot;:{},&quot;marks&quot;:[{&quot;channels&quot;:{&quot;x&quot;:&quot;t&quot;,&quot;y&quot;:&quot;v&quot;},&quot;data&quot;:&quot;primary&quot;,&quot;id&quot;:&quot;series&quot;,&quot;style&quot;:&quot;series&quot;,&quot;type&quot;:&quot;line&quot;}],&quot;meta&quot;:{},&quot;sources&quot;:{&quot;primary&quot;:{&quot;fields&quot;:[&quot;t&quot;,&quot;v&quot;]}},&quot;styles&quot;:{&quot;series&quot;:{&quot;stroke&quot;:&quot;series_1&quot;,&quot;stroke_width&quot;:2}},&quot;theme&quot;:&quot;default&quot;,&quot;vars&quot;:{&quot;unit&quot;:{&quot;default&quot;:&quot;%&quot;}},&quot;version&quot;:2}</textarea>
   
-  <form class="vis-builder-import" phx-submit="import" phx-target="-1">
+  <form id="builder-document-import" class="vis-builder-import" phx-submit="import" phx-target="-1">
     <textarea name="document"></textarea>
     <button type="submit" class="vis-builder-import-submit">Import</button>
   </form>

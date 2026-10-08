@@ -186,7 +186,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             ><span class="vis-builder-action-label">Remove</span></button>
           </li>
         </ol>
-        <form class="vis-builder-style-add" phx-submit="add_style_entry" phx-target={@target}>
+        <form id={@id <> "-add"} class="vis-builder-style-add" phx-submit="add_style_entry" phx-target={@target}>
           <select name="name" class="vis-builder-style-choice">
             <option :for={name <- @choices} value={name}>{name}</option>
           </select>

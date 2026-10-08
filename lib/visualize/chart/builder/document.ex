@@ -22,6 +22,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart
     alias Visualize.Chart.Validator
 
+    attr(:id, :string,
+      default: "vis-builder-document",
+      doc: "the panel's id, and the stem of its import form's"
+    )
+
     attr(:design, :map, required: true, doc: "the stacked design to encode")
     attr(:kind, :atom, default: :composite, doc: "what the stack is of: a composite, or one kind")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the form's events")
@@ -36,12 +41,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns = assign(assigns, encoded(assigns.design, assigns.kind))
 
       ~H"""
-      <div class={class(@class)}>
+      <div id={@id} class={class(@class)}>
         <textarea :if={@document} class="vis-builder-export" readonly>{@document}</textarea>
         <ul :if={@errors != []} class="vis-builder-errors">
           <li :for={line <- @errors} class="vis-builder-error">{line}</li>
         </ul>
-        <form class="vis-builder-import" phx-submit="import" phx-target={@target}>
+        <form id={@id <> "-import"} class="vis-builder-import" phx-submit="import" phx-target={@target}>
           <textarea name="document"></textarea>
           <button type="submit" class="vis-builder-import-submit">Import</button>
         </form>

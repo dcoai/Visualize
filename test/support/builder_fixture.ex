@@ -290,6 +290,56 @@ defmodule Visualize.BuilderFixture do
   @doc false
   def render_case({component, assigns}), do: render_component(component, assigns)
 
+  # -- every form carries an id (spec/10 §15.3, #444, #461) --------------------------------
+  #
+  # LiveView's own check — "Detected a form with phx-change but missing id", and its
+  # duplicate-id check — runs only as `Phoenix.LiveViewTest` parses a page driven through
+  # `live/2` or `live_isolated/3`. `render_component/2` returns a string nothing parses, so
+  # the library's suite can never see either warning; these hold the rules instead.
+
+  @doc false
+  # The opening tags of the rendered forms that LiveView recovers or submits and that carry
+  # no id.
+  def forms_without_id(html) do
+    for [tag] <- Regex.scan(~r/<form\b[^>]*>/, html),
+        tag =~ ~r/\sphx-(change|submit)="/,
+        not (tag =~ ~r/\sid="[^"]+"/),
+        do: tag
+  end
+
+  @doc false
+  # Every id that appears more than once in one rendered page.
+  def duplicate_ids(html) do
+    ~r/\sid="([^"]*)"/
+    |> Regex.scan(html, capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.frequencies()
+    |> Enum.filter(fn {_id, count} -> count > 1 end)
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.sort()
+  end
+
+  @doc false
+  # The opening tag of every `<form` the library's source writes in a template, read up to
+  # the `>` that closes it outside any `{…}` expression, with its file — so a form no
+  # rendered state reaches is held too. A form named in a doc (after a backtick) is not one.
+  def source_forms(root \\ "lib") do
+    for path <- Path.wildcard(Path.join(root, "**/*.ex")),
+        source = File.read!(path),
+        {at, _} <- :binary.matches(source, "<form"),
+        :binary.at(source, at + 5) in [?\s, ?\n],
+        at == 0 or :binary.at(source, at - 1) != ?`,
+        tag = open_tag(binary_part(source, at, byte_size(source) - at), 0, ""),
+        do: {path, tag}
+  end
+
+  defp open_tag(<<?>, _::binary>>, 0, acc), do: acc <> ">"
+  defp open_tag(<<?{, rest::binary>>, depth, acc), do: open_tag(rest, depth + 1, acc <> "{")
+  defp open_tag(<<?}, rest::binary>>, depth, acc), do: open_tag(rest, depth - 1, acc <> "}")
+
+  defp open_tag(<<c::utf8, rest::binary>>, depth, acc),
+    do: open_tag(rest, depth, acc <> <<c::utf8>>)
+
   @doc false
   def golden(name), do: File.read!(Path.join(@dir, "#{name}.html"))
 
