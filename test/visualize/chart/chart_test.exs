@@ -21,6 +21,7 @@ defmodule Visualize.ChartTest do
     :styles,
     :defs,
     :layout,
+    :interaction,
     :frames,
     :marks,
     :labels

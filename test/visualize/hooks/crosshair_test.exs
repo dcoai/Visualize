@@ -131,7 +131,10 @@ defmodule Visualize.Hooks.CrosshairTest do
 
     test "four listeners are bound once, kept and removed with the same references (D-47)" do
       js = Crosshair.js_hook()
-      assert length(Regex.scan(~r/\.bind\(this\)/, js)) == 4
+      # The four pointer listeners and the sync bus's one (spec/10 §4.3).
+      assert length(Regex.scan(~r/\.bind\(this\)/, js)) == 5
+      assert js =~ "this.onSync = this.handleSync.bind(this);"
+      assert js =~ "VisualizeSync.detach(this);"
 
       for name <- ~w(mousemove mouseleave touchmove touchend) do
         assert js =~ ~r/this\.el\.addEventListener\('#{name}', this\.on\w+[,)]/
@@ -167,7 +170,8 @@ defmodule Visualize.Hooks.CrosshairTest do
       js = Crosshair.js_hook()
       assert js =~ "this.eventName = ds.crosshairEvent || null;"
       assert js =~ "this.color = ds.crosshairColor || '#666';"
-      assert js =~ "if (this.eventName && index !== this.lastIndex) {"
+      # A hover received from the sync group draws but never pushes (spec/10 §13.4).
+      assert js =~ "if (local && this.eventName && index !== this.lastIndex) {"
       assert js =~ "this.pushEvent(this.eventName, { index });"
       assert length(String.split(js, "pushEvent(")) == 2
     end

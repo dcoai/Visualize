@@ -48,6 +48,7 @@ defmodule Visualize.Chart.Validator do
           | :sweep
           | :radius
           | {:zone, String.t(), Visualize.Scale.Time.zone_error()}
+          | {:sync, :frame_kind | :x_scale, atom() | nil}
 
   @type error :: {path(), reason()}
 
@@ -311,6 +312,28 @@ defmodule Visualize.Chart.Validator do
         do: {path ++ [key], {:weight, key}}
   end
 
+  # A sync group reads a linear or a time x of a cartesian frame (spec/14 §2.9, D-116): the
+  # hooks map a shared value by linear interpolation, which is that scale and no other.
+  defp held(:interaction, %{sync: sync} = map, path, ctx) when is_binary(sync) do
+    frames = ctx.frame_nodes
+
+    case sync_frame(Map.get(map, :frame), frames) do
+      %{kind: :cartesian} = frame ->
+        case sync_x_kind(frame, frames, []) do
+          kind when kind in [:linear, :time] -> []
+          kind -> [{path ++ [:sync], {:sync, :x_scale, kind}}]
+        end
+
+      # A kind that is no frame kind is its own fault, reported on the frame.
+      %{kind: kind} ->
+        {:enum, kinds} = Schema.key(:frame, :kind).type
+        if kind in kinds, do: [{path ++ [:sync], {:sync, :frame_kind, kind}}], else: []
+
+      _none ->
+        []
+    end
+  end
+
   # A frame says where it goes once (spec/14 §4.2, §2.8, #384): its box, or its cell on
   # the design's grid, and a cell stays inside that grid.
   defp held(:frame, %{box: _box, cell: _cell}, path, _ctx), do: [{path, :both}]
@@ -346,6 +369,29 @@ defmodule Visualize.Chart.Validator do
     do: [{path ++ [:radius], :radius}]
 
   defp held(_kind, _map, _path, _ctx), do: []
+
+  # The frame a sync group reads: the one `frame` names, else the first by name — the frame
+  # `Visualize.Chart.Applied` holds as `frame`. A name no frame carries is the reference
+  # check's fault, not this one's.
+  defp sync_frame(nil, frames) when is_map(frames) and map_size(frames) > 0,
+    do: frames |> Enum.min_by(fn {name, _node} -> name end) |> elem(1)
+
+  defp sync_frame(name, frames) when is_map_key(frames, name), do: Map.fetch!(frames, name)
+  defp sync_frame(_name, _frames), do: nil
+
+  # The kind of a frame's `x`, read through any adoption to the node that declares it
+  # (spec/14 §4.3); `nil` for none, and for a cycle, which is reported where it closes.
+  defp sync_x_kind(frame, frames, seen),
+    do: scale_kind(nested(frame, [:scales, :x]), frames, seen)
+
+  defp scale_kind({:frame, f, s} = ref, frames, seen) do
+    if ref in seen,
+      do: nil,
+      else: scale_kind(nested(Map.get(frames, f), [:scales, s]), frames, [ref | seen])
+  end
+
+  defp scale_kind(%{kind: kind}, _frames, _seen), do: kind
+  defp scale_kind(_other, _frames, _seen), do: nil
 
   defp enter(:mark, map, ctx) do
     type = map[:type]
@@ -754,6 +800,17 @@ defmodule Visualize.Chart.Validator do
 
   defp words({:cycle, kind, name}),
     do: "#{kind} #{inspect(name)} is adopted in a circle: a chain of frames returns to it"
+
+  defp words({:sync, :frame_kind, kind}),
+    do: "joins a sync group over a #{inspect(kind)} frame; only a cartesian frame's x syncs"
+
+  defp words({:sync, :x_scale, nil}),
+    do: "joins a sync group over a frame with no x scale; a linear or time x is what syncs"
+
+  defp words({:sync, :x_scale, kind}) do
+    "joins a sync group over a #{inspect(kind)} x scale; only a linear or time x syncs, " <>
+      "since the hooks map a shared x by linear interpolation (spec/14 §2.9)"
+  end
 
   defp words(:sweep), do: "must be within a turn, and not zero"
   defp words(:radius), do: "must be positive"

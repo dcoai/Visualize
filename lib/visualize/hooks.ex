@@ -19,6 +19,10 @@ defmodule Visualize.Hooks do
   - `BuilderHook` — a layer of the chart builder dragged into place, an inspector row
     clicked (`Visualize.Hooks.Builder`)
 
+  `TooltipHook` and `CrosshairHook` share hover across the charts of a sync group over
+  one bus, `VisualizeSync` (`Visualize.Hooks.Sync`), which the bundle defines before them
+  and does not export.
+
   ## Installation
 
   1. Write the JavaScript file:
@@ -135,6 +139,7 @@ defmodule Visualize.Hooks do
     Crosshair,
     Legend,
     Resize,
+    Sync,
     Tooltip,
     Zoom
   }
@@ -162,6 +167,8 @@ defmodule Visualize.Hooks do
     #{CanvasIncremental.js_hook()}
 
     #{Resize.js_hook()}
+
+    #{Sync.js_bus()}
 
     #{Tooltip.js_hook()}
 

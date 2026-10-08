@@ -63,7 +63,8 @@ defmodule Visualize.Chart.Schema do
     :label,
     :gradient,
     :stop,
-    :layout
+    :layout,
+    :interaction
   ]
   @frame_kinds [
     :frame,
@@ -282,6 +283,8 @@ defmodule Visualize.Chart.Schema do
       spec(:defs, {:map, {:node, :gradient}}, :style, default: %{}, merge: :union),
       # The grid the frames are placed on, in place of arithmetic (spec/14 §2.8, #384).
       spec(:layout, {:node, :layout}, :geometry, default: %{}),
+      # How the chart behaves beside others on a page: its sync group (spec/14 §2.9, #466).
+      spec(:interaction, {:node, :interaction}, :binding, default: %{}),
       spec(:frames, {:map, {:node, :frame}}, :geometry, required: true, merge: :deep),
       spec(:marks, {:list, {:node, :mark}}, :channel, default: [], merge: :concat),
       spec(:labels, {:list, {:node, :label}}, :content, default: [], merge: :concat)
@@ -293,6 +296,15 @@ defmodule Visualize.Chart.Schema do
       spec(:columns, {:list, :number}, :geometry, default: [1]),
       spec(:rows, {:list, :number}, :geometry, default: [1]),
       spec(:gap, :number, :geometry, default: 0)
+    ]
+  end
+
+  # A sync group shares hover in domain units; `frame` names the frame whose `x` it reads
+  # (spec/14 §2.9, D-116).
+  defp design_node(:interaction) do
+    [
+      spec(:sync, :string, :binding),
+      spec(:frame, {:ref, :frame}, :binding)
     ]
   end
 

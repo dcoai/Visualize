@@ -51,9 +51,9 @@ defmodule Visualize.Chart.ExampleTest do
     chart = Chart.from_map!(design)
     # A text is written as the string it is (§7.1), whatever form the design gave it; the
     # example declares no paints, and `to_map/1` writes the schema's default for them.
-    # The example declares no paints and no layout, and `to_map/1` writes the schema's
-    # default for each (§2.7, §2.8).
-    defaults = %{defs: %{}, layout: %{}}
+    # The example declares no paints, no layout and no interaction, and `to_map/1` writes
+    # the schema's default for each (§2.7, §2.8, §2.9).
+    defaults = %{defs: %{}, layout: %{}, interaction: %{}}
     assert Chart.to_map(chart) == Map.merge(Visualize.Chart.Migration.canonical(design), defaults)
     {:ok, json} = Chart.to_json(chart)
     assert Chart.from_json(json) == {:ok, chart}

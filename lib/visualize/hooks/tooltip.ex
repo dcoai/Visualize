@@ -9,6 +9,9 @@ defmodule Visualize.Hooks.Tooltip do
   placeholders; without one the tooltip lists `field: value` per line. A click pushes the
   fields to the LiveView only when a `data-tooltip-event` names the event.
 
+  In a sync group (spec/10 §4.3, §12.4) the hook publishes the pointer's x in domain units
+  on the group's bus, and shows the datum element nearest to another member's hover.
+
   ## Usage
 
       <svg id="chart" phx-hook="TooltipHook">
@@ -50,18 +53,25 @@ defmodule Visualize.Hooks.Tooltip do
         document.body.appendChild(this.tip);
 
         // Each handler is bound once and kept on the hook, so destroyed() removes the
-        // same references it added.
+        // same references it added; onSync is the sync bus's listener (spec/10 §4.3).
         this.onMouseMove = this.handleMouseMove.bind(this);
-        this.onMouseLeave = this.hide.bind(this);
+        this.onMouseLeave = this.leave.bind(this);
         this.onTouchMove = this.handleTouchMove.bind(this);
-        this.onTouchEnd = this.hide.bind(this);
+        this.onTouchEnd = this.leave.bind(this);
         this.onClick = this.handleClick.bind(this);
+        this.onSync = this.handleSync.bind(this);
+        VisualizeSync.attach(this);
 
         this.el.addEventListener('mousemove', this.onMouseMove);
         this.el.addEventListener('mouseleave', this.onMouseLeave);
         this.el.addEventListener('touchmove', this.onTouchMove, { passive: true });
         this.el.addEventListener('touchend', this.onTouchEnd);
         this.el.addEventListener('click', this.onClick);
+      },
+
+      // The sync group is re-read after every patch.
+      updated() {
+        VisualizeSync.attach(this);
       },
 
       // The datum element: the target's nearest ancestor-or-self carrying data-datum,
@@ -105,6 +115,7 @@ defmodule Visualize.Hooks.Tooltip do
 
       handleMouseMove(e) {
         this.show(e.target, e.pageX, e.pageY);
+        this.publish(e.clientX);
       },
 
       // A touch event's target is where the touch began, so the element under the
@@ -113,6 +124,59 @@ defmodule Visualize.Hooks.Tooltip do
         if (e.touches.length !== 1) return;
         const touch = e.touches[0];
         this.show(document.elementFromPoint(touch.clientX, touch.clientY), touch.pageX, touch.pageY);
+        this.publish(touch.clientX);
+      },
+
+      // In a sync group, the pointer's x in domain units on the group's bus (spec/10 §4.3).
+      publish(clientX) {
+        if (!this.sync) return;
+        const rect = this.el.getBoundingClientRect();
+        const chartX = (clientX - rect.left) * this.sync.width / rect.width;
+        VisualizeSync.publish(this.sync, this.el, VisualizeSync.toDomain(this.sync, chartX));
+        this.publishing = true;
+      },
+
+      // The pointer left: hidden here and, once after a hover this chart published, cleared
+      // on every member of the group.
+      leave() {
+        this.hide();
+        if (this.sync && this.publishing) VisualizeSync.publish(this.sync, this.el, null);
+        this.publishing = false;
+      },
+
+      // Another member's hover (spec/10 §12.4): the datum element whose centre is nearest
+      // the value's x through this chart's own mapping; hidden for a clear, a value outside
+      // the domain, or a chart with no datum element.
+      handleSync(e) {
+        if (VisualizeSync.own(this.el, e.detail.source)) return;
+        this.syncTo(e.detail.x);
+      },
+
+      syncTo(value) {
+        const chartX = this.sync ? VisualizeSync.toChart(this.sync, value) : null;
+        if (chartX === null) {
+          this.hide();
+          return;
+        }
+        const rect = this.el.getBoundingClientRect();
+        const clientX = rect.left + chartX * rect.width / this.sync.width;
+        let best = null;
+        let bestDistance = Infinity;
+        let bestBox = null;
+        this.el.querySelectorAll('[data-datum]').forEach((el) => {
+          const box = el.getBoundingClientRect();
+          const distance = Math.abs(box.left + box.width / 2 - clientX);
+          if (distance < bestDistance) {
+            best = el;
+            bestDistance = distance;
+            bestBox = box;
+          }
+        });
+        if (!best) {
+          this.hide();
+          return;
+        }
+        this.place(best, bestBox.left + bestBox.width / 2 + window.scrollX, bestBox.top + window.scrollY);
       },
 
       show(target, pageX, pageY) {
@@ -121,6 +185,11 @@ defmodule Visualize.Hooks.Tooltip do
           this.hide();
           return;
         }
+        this.place(el, pageX, pageY);
+      },
+
+      // The tooltip with the datum element's text, beside a page position.
+      place(el, pageX, pageY) {
         this.tip.textContent = this.text(el);
         this.tip.style.display = 'block';
         const width = this.tip.offsetWidth;
@@ -151,6 +220,7 @@ defmodule Visualize.Hooks.Tooltip do
         this.el.removeEventListener('touchmove', this.onTouchMove);
         this.el.removeEventListener('touchend', this.onTouchEnd);
         this.el.removeEventListener('click', this.onClick);
+        VisualizeSync.detach(this);
         if (this.tip.parentNode) this.tip.parentNode.removeChild(this.tip);
       }
     };

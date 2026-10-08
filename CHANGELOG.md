@@ -30,6 +30,16 @@ release it merely follows.
   edit*. `Visualize.Chart.Builder.Stack.all/2` (the tree's rows with each referenced
   group's inside, through a fetch, each naming its `owner`), `inside/2` and
   `inner_label/3` are new.
+- **Sync groups share hover** (#466). A design key, `interaction: %{sync: "<group>"}`, makes
+  charts on one page share a cursor. Hovering one moves the crosshair and the tooltip of
+  every other member to the same x in domain units, through each chart's own scale, so
+  members may differ in width and margin. No host JavaScript is needed: the frame renders
+  `data-vis-sync` and `data-vis-sync-x` (`Visualize.Chart.Frame.sync_attrs/1`,
+  also in `Visualize.Hooks.Crosshair.attrs/3`), and `TooltipHook` and `CrosshairHook`
+  exchange `vis:sync:<group>` events on `document`. Only a linear or time x can join a
+  group. The validator refuses any other kind as `{:sync, :x_scale, kind}`.
+  `Visualize.Chart.Build.interaction/1` writes the key. A chart's `to_map/1` and JSON
+  now carry `interaction` (default `%{}`).
 
 ## [0.1.0] — 2026-09-09
 

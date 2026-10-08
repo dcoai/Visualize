@@ -48,6 +48,7 @@ defmodule Visualize.Chart.ValidatorTest do
       }
     },
     layout: %{columns: [1], rows: [1], gap: 4},
+    interaction: %{sync: "dash", frame: :main},
     frames: %{
       main: %{
         kind: :cartesian,
@@ -111,6 +112,7 @@ defmodule Visualize.Chart.ValidatorTest do
     curve_opts: [:styles, :series, :curve_opts],
     label: [:labels, 0],
     layout: [:layout],
+    interaction: [:interaction],
     frame: [:frames, :main],
     margin: [:frames, :main, :margin],
     scale: [:frames, :main, :scales, :y],
@@ -632,6 +634,62 @@ defmodule Visualize.Chart.ValidatorTest do
     test "the reason reads as a line" do
       assert Validator.format({[:styles, :series], :cycle}) ==
                "styles.series: extends itself, directly or through a chain of `extends`"
+    end
+  end
+
+  describe "a sync group (spec/14 §2.9, #466)" do
+    defp synced(x, extra \\ %{}) do
+      Map.merge(
+        %{
+          version: 2,
+          interaction: %{sync: "dash"},
+          frames: %{main: %{kind: :cartesian, scales: x}}
+        },
+        extra
+      )
+    end
+
+    test "a linear or a time x joins a group" do
+      assert Validator.validate(synced(%{x: %{kind: :linear}})) == :ok
+      assert Validator.validate(synced(%{x: %{kind: :time}})) == :ok
+    end
+
+    test "a band or an ordinal x is refused, saying why" do
+      for kind <- [:band, :ordinal, :log] do
+        assert errors(synced(%{x: %{kind: kind}})) ==
+                 [{[:interaction, :sync], {:sync, :x_scale, kind}}]
+      end
+
+      assert Validator.format({[:interaction, :sync], {:sync, :x_scale, :band}}) =~
+               "interaction.sync: joins a sync group over a :band x scale; only a linear or time x syncs"
+    end
+
+    test "a frame with no x, or not cartesian, is refused" do
+      assert errors(synced(%{y: %{kind: :linear}})) ==
+               [{[:interaction, :sync], {:sync, :x_scale, nil}}]
+
+      polar = put_at(synced(%{x: %{kind: :linear}}), [:frames, :main, :kind], :polar)
+      assert errors(polar) == [{[:interaction, :sync], {:sync, :frame_kind, :polar}}]
+    end
+
+    test "the frame named, else the first by name, is the one read; an adopted x reads its owner" do
+      frames = %{
+        a: %{kind: :cartesian, scales: %{x: %{kind: :band}}},
+        b: %{kind: :cartesian, scales: %{x: {:frame, :c, :x}}},
+        c: %{kind: :cartesian, scales: %{x: %{kind: :time}}}
+      }
+
+      design = %{version: 2, interaction: %{sync: "dash"}, frames: frames}
+      assert errors(design) == [{[:interaction, :sync], {:sync, :x_scale, :band}}]
+      assert Validator.validate(put_at(design, [:interaction, :frame], :b)) == :ok
+
+      assert {[:interaction, :frame], {:undeclared, :frame, :nope}} in errors(
+               put_at(design, [:interaction, :frame], :nope)
+             )
+    end
+
+    test "no sync, no check" do
+      assert Validator.validate(%{version: 2, frames: %{main: %{kind: :polar}}}) == :ok
     end
   end
 end

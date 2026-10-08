@@ -19,6 +19,7 @@ Visualize reaches the browser through Phoenix LiveView in three ways: HEEx funct
 | `Visualize.Hooks.CanvasBinary` | always | `CanvasBinaryChart` JS and the shared binary decoder |
 | `Visualize.Hooks.CanvasIncremental` | always | `CanvasIncrementalChart` JS: scroll-and-copy updates |
 | `Visualize.Hooks.Resize` | always | `ResizeHook` JS: the container's size pushed to the LiveView once per settle |
+| `Visualize.Hooks.Sync` | always | `VisualizeSync` JS: the bus a sync group's tooltips and crosshairs share hover over (4.3) |
 | `Visualize.Hooks.Tooltip` | always | `TooltipHook` JS: a tooltip from the datum attributes of an element, with no round trip |
 | `Visualize.Hooks.Crosshair` | always | `CrosshairHook` JS and the server-side `attrs/3`: a rule and markers snapped to the data over SVG or canvas |
 | `Visualize.Hooks.Legend` | always | `LegendHook` JS: a legend entry hides and shows the series it names |
@@ -250,7 +251,8 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, then one `export default { … }` object listing the ten hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, the sync bus `VisualizeSync` (`Visualize.Hooks.Sync.js_bus/0`, 4.3), `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, then one `export default { … }` object listing the ten hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.Sync.js_bus/0` | Returns the source of `const VisualizeSync = {…}`, the bus of 4.3 that `TooltipHook` and `CrosshairHook` share. It is not exported: it is the hooks' own, and a host joins a group through a design key, not through it. |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
 | `Visualize.Hooks.transform_point/2` | Delegates to `Visualize.Hooks.Zoom.transform_point/2`. |
@@ -264,6 +266,42 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 ### 4.2 Installation contract
 
 The host application writes the bundle (`install!/0`, or `File.write!/2` of `js_code/0`), imports the hooks it uses (or the default export) from it, and registers them in the `hooks:` option of `LiveSocket`. `install!/0` is the supported programmatic path; no Mix task ships. The bundle is one ES module: the decoder functions the canvas hooks call are defined before them and exported, so a host MAY import `executeVisualizeBinary` for its own hooks. `test/visualize/hooks/canvas_hooks_test.exs` holds the bundle to this shape.
+
+### 4.3 The sync bus
+
+**Implemented** (#466, D-116). Charts in one **sync group** share hover. A design joins one with `interaction: %{sync: "<group>"}` ([14-declarative-chart](14-declarative-chart.md) §2.9), and the markup then carries `data-vis-sync` and `data-vis-sync-x`. `TooltipHook` (12.4) and `CrosshairHook` (13.4) honour them with no host JavaScript, through one bus defined once in the bundle, `VisualizeSync`. The bus is plain DOM `CustomEvent`s on `document`, with no library.
+
+**Membership.** A hook element is a member when it carries `data-vis-sync`, or else when its first descendant with `data-vis-sync` does. That element's `data-vis-sync-x` must hold five numbers, `d0,d1,x0,x1,width`: the x domain, the chart pixels of its two ends, and the chart's `viewBox` width. An element without them, or with a malformed `data-vis-sync-x`, is in no group and the hook behaves exactly as without the bus. A hook reads its membership on `mounted()` and again on `updated()`.
+
+**The event.** Its name is `vis:sync:<group>`, and its `detail` is `{x, source}`:
+
+- `x` is the pointer's x in the domain units of `data-vis-sync-x`: the number itself for a linear scale, milliseconds since the Unix epoch for a time scale. `null` clears the group.
+- `source` is the hook element that published it.
+
+**Publishing.** A member publishes on a pointer move over its own element. The chart x is `(clientX − rect.left) · width / rect.width`, with `rect` the hook element's bounding rectangle, and the value is `d0 + (chartX − x0) / (x1 − x0) · (d1 − d0)`. `mouseleave` and `touchend` publish `x: null`, and so does the crosshair when the pointer leaves the plot area. A clear is published once, after a hover the chart published, so a pointer moving through a margin does not flood the bus.
+
+**Receiving.** A member ignores an event whose `source` is its own element, contains it, or is contained by it. Such an event comes from the same chart, from itself or from the other hook on it, and the chart has already drawn from its own pointer. Any other member does this:
+
+- `null` hides what the hook drew for the group.
+- A value outside `[min(d0, d1), max(d0, d1)]` hides it too: a member whose domain does not contain the value draws nothing.
+- Any other value is mapped to the member's own chart x, `x0 + (x − d0) / (d1 − d0) · (x1 − x0)`, or the midpoint of `x0` and `x1` for a collapsed domain. The hook draws there.
+
+So members may differ in width, margin and domain. A received hover never publishes and never calls `pushEvent`: one hover is one event on the bus, and only the chart under the pointer talks to its server.
+
+**Lifecycle.** Each hook binds its listener once and keeps the reference (D-47). `updated()` moves the listener to the new event name when the group changed and removes it when the element left its group. `destroyed()` removes it. A remounted hook therefore listens once, and a destroyed one hears nothing.
+
+| Function of `VisualizeSync` | Does |
+|---|---|
+| `read(el)` | the membership of an element: `{group, d0, d1, x0, x1, width}`, or `null` |
+| `eventName(group)` | `'vis:sync:' + group` |
+| `toDomain(sync, chartX)` | the domain value at a chart x |
+| `toChart(sync, x)` | the chart x of a domain value, or `null` outside the domain or for `null` |
+| `publish(sync, source, x)` | dispatches the event on `document` |
+| `attach(hook)` | reads `hook.el`, keeps `hook.sync`, and moves the hook's `onSync` listener to the group's event |
+| `detach(hook)` | removes the listener |
+| `own(el, source)` | whether an event from `source` is the element's own echo |
+
+`test/visualize/hooks/executed_hooks_test.exs` executes all of this (spec/12 §6): three crosshairs of different widths in one group and a tooltip in it, a chart outside the group, a member whose domain does not hold the value, a clear, and teardown and remount.
 
 ## 5. Visualize.Hooks.Zoom
 
@@ -483,9 +521,13 @@ Attach with `phx-hook="TooltipHook"` and an `id` on the `<svg>`, or on any ances
 |---|---|---|
 | `data-tooltip-class` | `"vis-tooltip"` | the class of the tooltip element the hook creates, for a stylesheet |
 
-On `mounted()` the hook creates one `<div>` with that class, `position: absolute`, `pointer-events: none`, `white-space: pre` and `display: none`, appends it to `document.body`, and binds `mousemove`, `mouseleave`, `touchmove`, `touchend` and `click` on the element, each handler bound once and kept on the hook (D-47). On a move the *datum element* is the event target's nearest ancestor-or-self with `data-datum` (`closest`); none under the pointer hides the tooltip. Otherwise the text is built without a round trip: with a `data-tooltip-template` on the datum element or an ancestor of it — the nearest wins, searched no further than the hook element — every `{field}` becomes that field's `data-datum-<field>` value (`_` as `-`), `""` when the element has no such attribute; without a template, one line per field of `data-datum` in its order, `field: value`, joined with newlines. The text is set with `textContent`, never as markup, so a value is never interpreted. The tooltip is shown at 12 CSS pixels right of and below the pointer's page position, flipped to the left of the pointer when its width would cross the viewport's right edge and above it when its height would cross the bottom. A touch move uses its first touch; `touchend` and `mouseleave` hide.
+On `mounted()` the hook creates one `<div>` with that class, `position: absolute`, `pointer-events: none`, `white-space: pre` and `display: none`, appends it to `document.body`, and binds `mousemove`, `mouseleave`, `touchmove`, `touchend` and `click` on the element, each handler bound once and kept on the hook (D-47). On a move the *datum element* is the event target's nearest ancestor-or-self with `data-datum` (`closest`); none under the pointer hides the tooltip. Otherwise the text is built without a round trip: with a `data-tooltip-template` on the datum element or an ancestor of it — the nearest wins, searched no further than the hook element — every `{field}` becomes that field's `data-datum-<field>` value (`_` as `-`), `""` when the element has no such attribute; without a template, one line per field of `data-datum` in its order, `field: value`, joined with newlines. The text is set with `textContent`, never as markup, so a value is never interpreted. The tooltip is shown at 12 CSS pixels right of and below the pointer's page position, flipped to the left of the pointer when its width would cross the viewport's right edge and above it when its height would cross the bottom. A touch move uses its first touch; `touchend` and `mouseleave` hide. In a sync group (4.3) every move also publishes the pointer's x, and `touchend` and `mouseleave` publish a clear.
 
-A click on a datum element whose nearest `data-tooltip-event` is set pushes `pushEvent(event, fields)` with one key per field of `data-datum` and the attribute strings as values, arriving as `handle_event("point_click", %{"t" => "2024-01-01T00:00:00Z", "v" => "4"}, socket)` — strings, since the attributes are strings; the server parses what it needs. A click elsewhere, or without an event, pushes nothing. `destroyed()` removes the five listeners with the kept references and removes the tooltip element from the document. `test/visualize/hooks/tooltip_test.exs` holds the source to this shape.
+A click on a datum element whose nearest `data-tooltip-event` is set pushes `pushEvent(event, fields)` with one key per field of `data-datum` and the attribute strings as values, arriving as `handle_event("point_click", %{"t" => "2024-01-01T00:00:00Z", "v" => "4"}, socket)` — strings, since the attributes are strings; the server parses what it needs. A click elsewhere, or without an event, pushes nothing. `updated()` re-reads the sync group (4.3). `destroyed()` removes the five listeners with the kept references, and the bus listener, and removes the tooltip element from the document. `test/visualize/hooks/tooltip_test.exs` holds the source to this shape.
+
+### 12.4 In a sync group
+
+**Implemented** (#466). A tooltip in a sync group (4.3) shows the datum nearest to another member's hover. On a received value the hook finds the value's client x, `rect.left + chartX · rect.width / width`, with `rect` the hook element's bounding rectangle. It then takes the `[data-datum]` element under the hook element whose bounding rectangle has its horizontal centre nearest to that x, the first of two at the same distance. Its text is built as 12.3 builds it, and the tooltip is placed as for a pointer at that centre and at the element's top, in page coordinates. With no datum element, a `null`, or a value outside the member's domain, the tooltip is hidden. Over a canvas there is no datum element, so a synced tooltip there shows nothing, and the crosshair is what shows the hover (13.4).
 
 ## 13. Visualize.Hooks.Crosshair
 
@@ -495,7 +537,7 @@ A click on a datum element whose nearest `data-tooltip-event` is set pushes `pus
 |---|---|
 | `Visualize.Hooks.Crosshair.js_hook/0` | Returns the source of `export const CrosshairHook = {…}` (13.3). |
 | `Visualize.Hooks.Crosshair.attrs/2` | As `attrs/3` with no options: the first mark. |
-| `Visualize.Hooks.Crosshair.attrs/3` | `attrs(frame, sources, opts)`: the attributes of 13.2 for one mark of a realised `Visualize.Chart.Frame`, as a map from attribute name (string) to value (string), computed once on the server. `:mark` is the one-based position of the mark among the frame's marks (default `1`). Raises `ArgumentError` when the frame is a `:facet` or a `:polar` one — the crosshair is a cartesian interaction over one plot area — or when the mark has no `x` and `y` channels. |
+| `Visualize.Hooks.Crosshair.attrs/3` | `attrs(frame, sources, opts)`: the attributes of 13.2 for one mark of a realised `Visualize.Chart.Frame`, with the frame's sync attributes (`Visualize.Chart.Frame.sync_attrs/1`) merged in when it is the frame of a sync group (13.4), as a map from attribute name (string) to value (string), computed once on the server. `:mark` is the one-based position of the mark among the frame's marks (default `1`). Raises `ArgumentError` when the frame is a `:facet` or a `:polar` one — the crosshair is a cartesian interaction over one plot area — or when the mark has no `x` and `y` channels. |
 
 ### 13.2 The data arrays
 
@@ -507,6 +549,7 @@ The crosshair snaps to the data without a DOM: the server writes the mark's x pi
 | `data-ys` | a JSON array with one entry per series — the `series` channel's distinct values in order of first appearance, one unnamed series without the channel — each an array parallel to `data-xs` of the series' y pixel at that x, the first row's when the series has several there, `null` where it has none |
 | `data-plot` | `left,top,width,height`: the plot area inside the chart — the frame's margins and plot size — so the hook converts a pointer position into plot coordinates and spans the rule over the plot's height |
 | `data-size` | `width,height`: the frame's size, the chart's `viewBox`, so a CSS-scaled chart maps the pointer correctly; absent, the hook takes the container's own pixel size |
+| `data-vis-sync`, `data-vis-sync-x` | only for the frame a sync group reads: the group and its x mapping, `Visualize.Chart.Frame.sync_attrs/1` ([14-declarative-chart](14-declarative-chart.md) §2.9, 4.3) |
 
 Every number prints through `Visualize.IR.Path.format_number/1` (at most four decimals, never `-0`), and the arrays are built by the library, so the attributes need no JSON library. A chart of `n` distinct x values and `s` series costs `n` numbers plus `n × s` numbers once per render, whatever the render target.
 
@@ -521,7 +564,13 @@ Attach with `phx-hook="CrosshairHook"` and an `id` on a *container* holding the 
 | `data-crosshair-color` | `"#666"` | the rule's stroke, and the markers' fill for a series `data-crosshair-colors` does not cover |
 | `data-crosshair-colors` | unset | a JSON array of one fill per series of `data-ys`, in order |
 
-On `mounted()` the hook creates an overlay `<svg class="crosshair">` with `position: absolute` and `pointer-events: none`, appends it to `document.body` — never inside the container, so a LiveView patch of the chart neither removes it nor sees it — and inside it a group translated to the plot's origin holding a `<line class="crosshair-rule">` from `0` to the plot's height and one `<circle class="crosshair-marker" r="4">` per series of `data-ys`; the overlay is hidden until a move. It binds `mousemove`, `mouseleave`, `touchmove` and `touchend` on the container, each handler bound once and kept (D-47). On a move the hook reads the container's bounding rectangle, sizes and places the overlay over it with the chart's `viewBox` (`0 0 width height` of `data-size`, else the rectangle's size), converts the pointer into chart units by the ratio of the two, subtracts the plot's origin, and hides the overlay when the point is outside the plot area; otherwise it finds the nearest x by binary search over `data-xs` — the lower of two equidistant neighbours — moves the rule to it, moves each series' marker to its y there and hides a marker whose y is `null`, and, when `data-crosshair-event` is set and the index differs from the last pushed, pushes `pushEvent(event, {index})`, arriving as `handle_event("hover", %{"index" => 3}, socket)` with an integer. A touch move uses its first touch; `touchend` and `mouseleave` hide the overlay. `updated()` re-reads the four arrays and rebuilds the markers when the series count changed; `destroyed()` removes the four listeners with the kept references and the overlay from the document. `test/visualize/hooks/crosshair_test.exs` holds the source to this shape.
+On `mounted()` the hook creates an overlay `<svg class="crosshair">` with `position: absolute` and `pointer-events: none`, appends it to `document.body` — never inside the container, so a LiveView patch of the chart neither removes it nor sees it — and inside it a group translated to the plot's origin holding a `<line class="crosshair-rule">` from `0` to the plot's height and one `<circle class="crosshair-marker" r="4">` per series of `data-ys`; the overlay is hidden until a move. It binds `mousemove`, `mouseleave`, `touchmove` and `touchend` on the container, each handler bound once and kept (D-47). On a move the hook reads the container's bounding rectangle, sizes and places the overlay over it with the chart's `viewBox` (`0 0 width height` of `data-size`, else the rectangle's size), converts the pointer into chart units by the ratio of the two, subtracts the plot's origin, and hides the overlay when the point is outside the plot area (in a sync group publishing a clear, 4.3); otherwise, in a sync group, it publishes the pointer's x, and it finds the nearest x by binary search over `data-xs` — the lower of two equidistant neighbours — moves the rule to it, moves each series' marker to its y there and hides a marker whose y is `null`, and, when `data-crosshair-event` is set and the index differs from the last pushed, pushes `pushEvent(event, {index})`, arriving as `handle_event("hover", %{"index" => 3}, socket)` with an integer. A touch move uses its first touch; `touchend` and `mouseleave` hide the overlay and, in a sync group, publish a clear. `updated()` re-reads the four arrays and the sync group, and rebuilds the markers when the series count changed; `destroyed()` removes the four listeners with the kept references, and the bus listener, and the overlay from the document. `test/visualize/hooks/crosshair_test.exs` holds the source to this shape.
+
+### 13.4 In a sync group
+
+**Implemented** (#466). A crosshair in a sync group (4.3) draws another member's hover as if its own pointer stood at the same domain x. The received value's chart x, less the plot's left edge, is a plot x. The hook places the overlay over the container exactly as a move does, finds the nearest index of `data-xs` to that plot x with the same binary search, and moves the rule and every marker there. That is the nearest datum to the shared instant, through this chart's own scale. A `null`, or a value outside the member's domain, hides the overlay. A synced draw pushes no `data-crosshair-event`. That event is the chart's own hover, and a group of `n` charts sending `n` events for one movement is what the bus exists to avoid.
+
+`attrs/3` writes the frame's `data-vis-sync` and `data-vis-sync-x` on the container (13.2), so a crosshair over a canvas, whose static SVG may sit beside rather than around the drawing, still has them. A container without them is in a group when the chart markup inside it carries them.
 
 ## 14. Visualize.Hooks.Legend
 

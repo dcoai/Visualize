@@ -10,6 +10,11 @@ defmodule Visualize.Hooks.Crosshair do
   in an overlay it appends to `document.body`, so a LiveView patch of the chart never
   removes it, and re-reads the arrays on `updated()`.
 
+  In a sync group (spec/10 §4.3, §13.4) the hook publishes the pointer's x in domain units
+  on the group's bus and draws every other member's hover at the nearest x of its own
+  data; `attrs/3` adds the frame's `data-vis-sync` and `data-vis-sync-x` when the frame is
+  a group's (`Visualize.Chart.Frame.sync_attrs/1`).
+
   ## Usage
 
       <div id="chart" phx-hook="CrosshairHook" {@crosshair} data-crosshair-event="hover">
@@ -85,6 +90,7 @@ defmodule Visualize.Hooks.Crosshair do
         numbers([frame.margin.left, frame.margin.top, frame.plot.width, frame.plot.height]),
       "data-size" => numbers([frame.size.width, frame.size.height])
     }
+    |> Map.merge(Frame.sync_attrs(frame))
   end
 
   defp mark(frame, index) do
@@ -134,14 +140,15 @@ defmodule Visualize.Hooks.Crosshair do
         document.body.appendChild(this.overlay);
         this.markers = [];
         this.lastIndex = null;
-        this.read();
 
         // Each handler is bound once and kept on the hook, so destroyed() removes the
-        // same references it added.
+        // same references it added; onSync is the sync bus's listener (spec/10 §4.3).
         this.onMouseMove = this.handleMouseMove.bind(this);
-        this.onMouseLeave = this.hide.bind(this);
+        this.onMouseLeave = this.leave.bind(this);
         this.onTouchMove = this.handleTouchMove.bind(this);
-        this.onTouchEnd = this.hide.bind(this);
+        this.onTouchEnd = this.leave.bind(this);
+        this.onSync = this.handleSync.bind(this);
+        this.read();
 
         this.el.addEventListener('mousemove', this.onMouseMove);
         this.el.addEventListener('mouseleave', this.onMouseLeave);
@@ -168,6 +175,7 @@ defmodule Visualize.Hooks.Crosshair do
         this.color = ds.crosshairColor || '#666';
         this.colors = ds.crosshairColors ? JSON.parse(ds.crosshairColors) : [];
         this.build();
+        VisualizeSync.attach(this);
       },
 
       // The rule spans the plot's height; one marker per series, rebuilt when the
@@ -192,6 +200,15 @@ defmodule Visualize.Hooks.Crosshair do
       // The pointer in chart units: the container's rectangle scaled to the chart's
       // viewBox, with the overlay placed over that rectangle.
       chartPoint(clientX, clientY) {
+        const { rect, width, height } = this.place();
+        return {
+          x: (clientX - rect.left) * width / rect.width - this.plot.left,
+          y: (clientY - rect.top) * height / rect.height - this.plot.top
+        };
+      },
+
+      // The overlay sized and placed over the container, with the chart's viewBox.
+      place() {
         const rect = this.el.getBoundingClientRect();
         const width = this.size ? this.size[0] : rect.width;
         const height = this.size ? this.size[1] : rect.height;
@@ -200,10 +217,7 @@ defmodule Visualize.Hooks.Crosshair do
         this.overlay.style.top = (rect.top + window.scrollY) + 'px';
         this.overlay.style.width = rect.width + 'px';
         this.overlay.style.height = rect.height + 'px';
-        return {
-          x: (clientX - rect.left) * width / rect.width - this.plot.left,
-          y: (clientY - rect.top) * height / rect.height - this.plot.top
-        };
+        return { rect, width, height };
       },
 
       // The index of the nearest x by binary search, the lower of two equidistant ones.
@@ -233,10 +247,37 @@ defmodule Visualize.Hooks.Crosshair do
         if (this.xs.length === 0) return;
         const p = this.chartPoint(clientX, clientY);
         if (p.x < 0 || p.x > this.plot.width || p.y < 0 || p.y > this.plot.height) {
+          this.leave();
+          return;
+        }
+        if (this.sync) {
+          VisualizeSync.publish(this.sync, this.el, VisualizeSync.toDomain(this.sync, p.x + this.plot.left));
+          this.publishing = true;
+        }
+        this.draw(p.x, true);
+      },
+
+      // Another member's hover (spec/10 §13.4): drawn at the same domain x through this
+      // chart's own mapping, the overlay hidden for a clear or a value outside the domain.
+      handleSync(e) {
+        if (VisualizeSync.own(this.el, e.detail.source)) return;
+        this.syncTo(e.detail.x);
+      },
+
+      syncTo(value) {
+        const chartX = this.sync ? VisualizeSync.toChart(this.sync, value) : null;
+        if (chartX === null || this.xs.length === 0) {
           this.hide();
           return;
         }
-        const index = this.nearest(p.x);
+        this.place();
+        this.draw(chartX - this.plot.left, false);
+      },
+
+      // The rule and the markers at the nearest x to a plot x; only the chart's own
+      // pointer pushes the event.
+      draw(plotX, local) {
+        const index = this.nearest(plotX);
         const x = this.xs[index];
         this.rule.setAttribute('x1', x);
         this.rule.setAttribute('x2', x);
@@ -251,7 +292,7 @@ defmodule Visualize.Hooks.Crosshair do
           marker.setAttribute('cy', y);
         });
         this.overlay.style.display = 'block';
-        if (this.eventName && index !== this.lastIndex) {
+        if (local && this.eventName && index !== this.lastIndex) {
           this.lastIndex = index;
           this.pushEvent(this.eventName, { index });
         }
@@ -259,6 +300,14 @@ defmodule Visualize.Hooks.Crosshair do
 
       hide() {
         this.overlay.style.display = 'none';
+      },
+
+      // The pointer left: hidden here and, once after a hover this chart published, cleared
+      // on every member of the group.
+      leave() {
+        this.hide();
+        if (this.sync && this.publishing) VisualizeSync.publish(this.sync, this.el, null);
+        this.publishing = false;
       },
 
       updated() {
@@ -270,6 +319,7 @@ defmodule Visualize.Hooks.Crosshair do
         this.el.removeEventListener('mouseleave', this.onMouseLeave);
         this.el.removeEventListener('touchmove', this.onTouchMove);
         this.el.removeEventListener('touchend', this.onTouchEnd);
+        VisualizeSync.detach(this);
         if (this.overlay.parentNode) this.overlay.parentNode.removeChild(this.overlay);
       }
     };

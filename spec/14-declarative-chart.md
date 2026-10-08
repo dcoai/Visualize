@@ -26,7 +26,7 @@ The three nouns of the design are the *theme* (visual constants as named slots, 
 | Level | Nodes | Node kinds (§14.2) |
 |---|---|---|
 | 1 | the design | `:design` |
-| 2 | meta, sources, vars, theme, styles, defs, frames, marks, labels | `:meta`, `:source`, `:var`, `:theme`, `:style`, `:gradient`, `:frame`, `:mark`, `:label` |
+| 2 | meta, sources, vars, theme, styles, defs, layout, interaction, frames, marks, labels | `:meta`, `:source`, `:var`, `:theme`, `:style`, `:gradient`, `:layout`, `:interaction`, `:frame`, `:mark`, `:label` |
 | 3 | size, margin, scales, axes, legend, projection, facet, viewport; a mark's data, channels, scales, offset, options, inline label and tooltip; a style's curve options; a gradient's stops | `:size`, `:margin`, `:scale`, `:axis`, `:legend`, `:projection`, `:facet`, `:viewport`, `:data`, `:channels`, `:mark_scales`, `:mark_offset`, `:options`, `:mark_label`, `:tooltip`, `:curve_opts`, `:stop` |
 | 4 | tick specs; transforms; text parts | `:ticks`, `:transform`, and the `text` type of §1.4 |
 
@@ -106,6 +106,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `styles` | `{:map, {:node, :style}}` | `:style` | `%{}` | `:union` |
 | `defs` | `{:map, {:node, :gradient}}` | `:style` | `%{}` | `:union` |
 | `layout` | `{:node, :layout}` | `:geometry` | `%{}` | `:override` |
+| `interaction` | `{:node, :interaction}` | `:binding` | `%{}` | `:override` |
 | `frames` | `{:map, {:node, :frame}}` | `:geometry` | required | `:deep` |
 | `marks` | `{:list, {:node, :mark}}` | `:channel` | `[]` | `:concat` |
 | `labels` | `{:list, {:node, :label}}` | `:content` | `[]` | `:concat` |
@@ -174,6 +175,31 @@ A gradient's units are the shape's bounding box (`objectBoundingBox`), so one gr
 | `gap` | `:number` | `0` | pixels between cells, taken out of the cells and not out of the grid's outer edges |
 
 A design with no `layout` places its frames by their boxes alone. A weight that is not positive is a fault (`{:weight, :columns}` or `{:weight, :rows}` at the design's path), since a cell of no width is not a cell. The grid fills the box the render is given: a frame in cell `[c, r]` spanning `[dc, dr]` takes the columns `c … c + dc − 1` and the rows `r … r + dr − 1`, and its box is their share of the whole less the gap.
+
+### 2.9 Interaction
+
+**Implemented** (#466). `interaction` says how the chart behaves on the page beside other charts. Its one behaviour is the **sync group**: charts that name the same group share hover, so pointing at one moves the crosshair and the tooltip of every other (spec/10 §4.3). What travels between them is the x value in **domain** units, never a pixel, so members of different widths and margins line up on the same instant. Every key is `:binding` and `:override`.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `sync` | `:string` | `nil` | the group's name; `nil` joins no group |
+| `frame` | `{:ref, :frame}` | `nil` | the frame whose `x` scale the group reads; `nil` is the design's first frame by name, the frame `Visualize.Chart.Applied` holds as `frame` |
+
+**The group is rendered as data** (D-77, D-116). The sync frame's group in the markup carries two attributes, which do nothing without the hooks:
+
+| Attribute | Value |
+|---|---|
+| `data-vis-sync` | the group's name |
+| `data-vis-sync-x` | `d0,d1,x0,x1,width`: the realised `x` scale's domain, a number for `:linear` and milliseconds since the Unix epoch for `:time`; the pixels the two ends map to in the **chart's** coordinates, which is the scale's range plus the frame's box offset and left margin; and the chart's width, the `viewBox` width those pixels are in |
+
+`Visualize.Chart.Frame.sync_attrs/1` computes them from the realised frame: `%{}` for a frame that is not the sync frame of a group. `Visualize.Chart.Frame.generate/2` writes them on the frame's group, `Visualize.Chart.generate/2` keeps them on that frame's group in a design of several frames, and `Visualize.Hooks.Crosshair.attrs/3` adds them to the container's attributes (spec/10 §13.2). Every number prints through `Visualize.IR.Path.format_number/1`. The realised frame carries the group as `sync` (§4.7). A design without `sync` writes nothing, so its markup is the same byte for byte.
+
+**Only a linear or a time x joins a group.** The hooks map a value through `d0,d1,x0,x1` by linear interpolation, and that interpolation *is* the scale only for `:linear` and `:time`. A `:band` or `:ordinal` x has no value between its categories, and a `:log` or `:power` x is not linear in its pixels. With `sync` given, the validator therefore holds the sync frame (the one `frame` names, else the first by name) to two things, both reported at `[:interaction, :sync]`:
+
+- The frame is `:cartesian`. Any other kind is `{:sync, :frame_kind, kind}`.
+- Its `x` scale is `:linear` or `:time`, read through any adoption to the node that declares it (§4.3). Any other kind is `{:sync, :x_scale, kind}`, and a frame that declares no `x` is `{:sync, :x_scale, nil}`.
+
+A `frame` that names no frame of the design is `{:undeclared, :frame, name}`, as any frame reference is.
 
 ## 3. The style grammar
 
@@ -428,7 +454,7 @@ Every entry's group carries `data-series`, `to_string/1` of the entry's value �
 
 ### 4.7 The frame struct and its rendering
 
-**Implemented.** `%Visualize.Chart.Frame{}` is the realised frame: `kind`; `size`, the `{width, height}` the caller gave as `size:` or the `{600, 400}` default (§4.2) — the design has none — and `margin` with the schema's defaults filled; `plot`, `%{width, height}` of the plot area; `scales`, the realised structs by name (§4.3); `projection`, a `%Visualize.Geo.Projection{}` in a `:geo` frame and `nil` otherwise; `panels`, the facet values of §4.6, `[]` in any other kind, and `facet`, `%{by, columns}` with the effective column count in a `:facet` frame and `nil` otherwise; `domains`, the extents the frame was realised with rather than inferring — a shared scale's (§4.3) or a window's (§12.5) — `%{}` when it inferred everything; `axes`, `legend`, `labels` and `marks` as the design gives them; `theme`, the `%Visualize.Theme{}` the design names — a built-in name or an inline `:theme` node — or the `theme:` option of `new/2`, which is taken for any name and required for one that is neither built-in nor inline; and `styles`, the declared styles over the built-in four (§3.3).
+**Implemented.** `%Visualize.Chart.Frame{}` is the realised frame: `kind`; `size`, the `{width, height}` the caller gave as `size:` or the `{600, 400}` default (§4.2) — the design has none — and `margin` with the schema's defaults filled; `plot`, `%{width, height}` of the plot area; `scales`, the realised structs by name (§4.3); `projection`, a `%Visualize.Geo.Projection{}` in a `:geo` frame and `nil` otherwise; `panels`, the facet values of §4.6, `[]` in any other kind, and `facet`, `%{by, columns}` with the effective column count in a `:facet` frame and `nil` otherwise; `domains`, the extents the frame was realised with rather than inferring — a shared scale's (§4.3) or a window's (§12.5) — `%{}` when it inferred everything; `axes`, `legend`, `labels` and `marks` as the design gives them; `theme`, the `%Visualize.Theme{}` the design names — a built-in name or an inline `:theme` node — or the `theme:` option of `new/2`, which is taken for any name and required for one that is neither built-in nor inline; and `styles`, the declared styles over the built-in four (§3.3); and `sync`, the design's sync group when this frame is the one the group reads (§2.9), `nil` otherwise.
 
 **A design renders its frames in `z` order** (#383): one group per frame, `<g class="frame frame-<name>" transform="translate(x, y)" data-node="frames.<name>">` at the frame's own pixel box (§4.2), holding that frame's furniture, its marks and its labels; a `background` is a rect at the frame's box under them. Ties in `z` are broken by name, so the drawing order of a design is a property of the design and not of the order a map happens to enumerate in. `Visualize.Chart.Applied` holds `frames`, the realised frames by name, beside the chart and its sources.
 
@@ -855,6 +881,8 @@ They agree exactly where the fragments are disjoint. Over two fragments that dec
 | `{:invalid_for, type}` | a channel, option or text part that the mark type, transform or label does not read |
 | `{:cycle, :scale, name}` | a scale adopted from another frame whose chain of adoptions returns to it (§4.3): the fault is at the path of the scale that closes the cycle |
 | `{:weight, key}` | a `layout` weight that is not positive (§2.8): a cell of no width or height is not a cell |
+| `{:sync, :frame_kind, kind}` | `interaction.sync` given (§2.9) over a sync frame that is not `:cartesian`; at `[:interaction, :sync]` |
+| `{:sync, :x_scale, kind}` | `interaction.sync` given over a sync frame whose `x` scale, through any adoption, is not `:linear` or `:time` (`nil` when it declares no `x`): the hooks map a synced value by linear interpolation, which is no other scale (§2.9); at `[:interaction, :sync]` |
 | `{:zone, name, reason}` | a time scale's `zone` (§4.3) the host's `Calendar.TimeZoneDatabase` cannot show, at the path of the `zone` key: `reason` is `:time_zone_not_found` for a name the database does not know, `:utc_only_time_zone_database` for a host with no database configured, the answer of `Visualize.Scale.Time.check_zone/1`. The design does not validate rather than draw in UTC (spec/03 §7.4, D-115); the line names the zone and, for the second reason, says the host must configure a database |
 | `:both` | a frame that gives both `box` and `cell` (§4.2): two ways of saying where it goes |
 | `:outside` | a frame whose `cell`, with its `span`, runs past the grid (§2.8) |
@@ -1187,6 +1215,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.Frame.projection/1` | The `%Visualize.Geo.Projection{}` of a `:geo` frame (§4.6), `nil` for any other kind. |
 | `Visualize.Chart.Frame.generate/1` | As `generate/2` with `resolve: :css`. |
 | `Visualize.Chart.Frame.generate/2` | The `Visualize.IR.Element` group of §4.7: the static furniture, and every mark of the design between the grid and the axes when `sources:` is given, theme slots resolved in the `:resolve` mode; with `paths: true` every node's element carries `data-node` with its path. |
+| `Visualize.Chart.Frame.sync_attrs/1` | The attributes of a sync group (§2.9) for a realised frame, as a map from attribute name to string: `data-vis-sync`, the group, and `data-vis-sync-x`, `d0,d1,x0,x1,width` — the `x` scale's domain (milliseconds since the Unix epoch for a `:time` scale), the chart pixels of its ends and the chart's width. `%{}` when the frame's `sync` is `nil`. |
 | `Visualize.Chart.Frame.render/1` | As `render/2` with `[]` options. |
 | `Visualize.Chart.Frame.render/2` | `generate/2` rendered through `Visualize.Render.to_string/2`; `sources:` and `paths:` as `generate/2` takes them, `:resolve` defaulting to `Visualize.Theme.mode/1` of the `:backend`. |
 
@@ -1285,6 +1314,7 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Build.gradient/3` | `gradient(name, kind, opts)`: `%{defs: %{name => node}}`, a `:gradient` node of §2.7 — `kind` `:linear` or `:radial`, `opts` its remaining keys (`stops:` as a list of `%{offset, colour, opacity}` maps or `{offset, colour}` / `{offset, colour, opacity}` tuples, `angle:`, `centre:`, `radius:`), every key checked. |
 | `Visualize.Chart.Build.paint/1` | `paint(name)`: `{:paint, name}`, the value a `:colour` key takes to refer to a gradient (§3.2). |
 | `Visualize.Chart.Build.layout/1` | `layout(opts)`: `%{layout: node}`, the grid of §2.8 — `columns`, `rows`, `gap` — that a frame's `cell` places it on. |
+| `Visualize.Chart.Build.interaction/1` | `interaction(opts)`: `%{interaction: node}`, the `:interaction` node of §2.9 — `sync:` the group, `frame:` the frame whose `x` it reads. |
 | `Visualize.Chart.Build.theme/1` | `theme(theme)`: `%{theme: theme}`, a theme name or an inline `:theme` node (§2.5). |
 | `Visualize.Chart.Build.cartesian/0` | As `cartesian/1` with `[]`. |
 | `Visualize.Chart.Build.cartesian/1` | `cartesian(opts)`: `%{frames: %{main: %{kind: :cartesian}}}`; `opts` are the frame's remaining keys (§4.1). A frame carries no size — the render gives it (§4.2). |
@@ -1879,7 +1909,7 @@ A blank control removes the binding rather than setting it to nothing, so a vari
 
 **Export** is `Visualize.Chart.to_json/1` of the stacked design, and it therefore demands a *design*: the stack goes through `Visualize.Chart.from_map/1` first, and a fragment that does not validate is its errors, listed by path exactly as the preview lists them (§18.4). That is the honest failure — a half-built fragment has no JSON form because it has no version, no frame, or a reference to something nothing declares — and it is the same message a person is already reading in the preview.
 
-**Import** is `Visualize.Chart.from_json/1` of a pasted document, and a document that reads **replaces the stack with its sites**: `Visualize.Chart.Composite.decompose/1` turns the flat document into one site per root — its theme, its meta, its frame without the scales and axes, then one keyed site per style, scale, source and var, one site per mark, per label, per axis — in the order the document is read, so every row is one kind and `flatten/2` of what the import made is the document again (`version` aside, which Deploy writes). A document is a whole design, not a layer of somebody else's stack, so what was in the stack is replaced, not joined. A document that does not parse is `{:json, message}` at the design's path and a document that parses but does not validate is the validator's errors, both shown in the panel.
+**Import** is `Visualize.Chart.from_json/1` of a pasted document, and a document that reads **replaces the stack with its sites**: `Visualize.Chart.Composite.decompose/1` turns the flat document into one site per root — its theme, its meta, its layout, its interaction, its frame without the scales and axes, then one keyed site per style, scale, source and var, one site per mark, per label, per axis — in the order the document is read, so every row is one kind and `flatten/2` of what the import made is the document again (`version` aside, which Deploy writes). A document is a whole design, not a layer of somebody else's stack, so what was in the stack is replaced, not joined. A document that does not parse is `{:json, message}` at the design's path and a document that parses but does not validate is the validator's errors, both shown in the panel.
 
 Both are behind the optional `Jason` dependency (§11.1): without it each returns `{:missing_dependency, :jason}`, which the panel shows as its one error rather than as a crash, because a consumer without Jason has a builder that edits and previews and cannot import or export — which is exactly what the optional dependency means.
 

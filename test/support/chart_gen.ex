@@ -46,6 +46,8 @@ defmodule Visualize.ChartGen do
         # The grid a design's frames are placed on (spec/14 §2.8, #384); one cell here,
         # since the generator writes one frame and places it by its box.
         layout: %{},
+        # No sync group (spec/14 §2.9): the generator writes no interaction.
+        interaction: %{},
         frames: %{main: frame},
         marks: marks,
         labels: labels
