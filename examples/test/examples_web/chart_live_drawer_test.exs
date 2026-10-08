@@ -301,14 +301,15 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     s = settled(s)
 
     ticks = s.assigns.run_ticks
-    origin = s.assigns.run_scroll.origin
+    newest = s.assigns.run_scroll.origin + Examples.Scroll.count(s.assigns.run_scroll)
 
     {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 700, "height" => 400}, s)
 
-    # A resize is geometry: the run goes on at its own tick, over its own window.
+    # A resize is geometry: the run goes on at its own tick, and its window is the plot
+    # now drawn ending at the sample it ended at (#459).
     assert s.assigns.run.running
     assert s.assigns.run_ticks == ticks
-    assert s.assigns.run_scroll.origin == origin
+    assert s.assigns.run_scroll.origin + Examples.Scroll.count(s.assigns.run_scroll) == newest
     assert s.assigns.width == 700
 
     # And its renderer draws at the new width from the next frame.
@@ -352,6 +353,70 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert h =~ ~s(data-width="#{area.width}")
     assert h =~ ~s(data-height="#{area.height}")
     assert area.width != was.width
+  end
+
+  # A tick `ms` after the last, its frame settled when one was asked for.
+  defp ticked(s, ms) do
+    s =
+      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - ms})
+
+    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    if s.assigns.run.render_id, do: settled(s), else: s
+  end
+
+  for slug <- ["scrolling_series", "incremental_line"] do
+    test "#{slug} below its design width: the window is the drawn plot, and a tick scrolls by its columns (#459)" do
+      s = page(unquote(slug), :incremental)
+      {_x, _y, design_width, _h} = s.assigns.module.plot()
+      density = s.assigns.run_scroll.samples_per_px
+
+      # Narrower than the design, before the run and during it: each time the window is the
+      # plot the chart is drawn at, at the density it had — a shorter span, never a squeeze.
+      s = resized_to(s, 500)
+      assert_window(s, density)
+      {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+      s = settled(s)
+      %{plot: area} = plot(s.assigns.run_frame)
+      assert area.width < design_width
+      assert_window(s, density)
+
+      s = resized_to(s, 400)
+      assert_window(s, density)
+
+      # The first frame after the resize is full (#456); the ticks after it copy-shift by
+      # exactly the columns the window advanced, one sample column a pixel of the plot.
+      s = ticked(s, 40)
+      assert plot(s.assigns.run_frame).incremental.mode == "full"
+
+      for _ <- 1..3, reduce: s do
+        s ->
+          origin = s.assigns.run_scroll.origin
+          s = ticked(s, 40)
+          columns = div(s.assigns.run_scroll.origin - origin, density)
+          assert columns > 0
+          %{incremental: record, plot: area} = plot(s.assigns.run_frame)
+          assert record.mode == "scroll_x"
+          assert record.dx == columns
+          assert s.assigns.run_scroll.inner_width == area.width
+          s
+      end
+    end
+  end
+
+  defp resized_to(s, width) do
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => width, "height" => 0}, s)
+    s
+  end
+
+  # The page's window, the module's and the plot the chart is drawn at agree.
+  defp assert_window(s, density) do
+    %{module: module, run_scroll: scroll, width: width} = s.assigns
+    {w, h} = Examples.Charts.Design.fitted(module, width)
+    {_x, _y, inner, _h} = module.plot(width: w, height: h)
+    assert scroll.inner_width == inner
+    assert scroll.samples_per_px == density
+    opts = [width: w, height: h, samples_per_px: density, origin: scroll.origin]
+    assert Examples.Scroll.count(module.scroll(opts)) == Examples.Scroll.count(scroll)
   end
 
   test "the last chart converted runs on the split like every other (#348)" do

@@ -160,7 +160,9 @@ defmodule ExamplesWeb.ChartLive do
   # never settle. A resize is geometry — the rows, the tick counter and a streaming
   # window's origin are untouched — so a run re-prepares its renderer at the new size and
   # goes on, the easing carried (spec/14 §12.5). The chart is capped at its design size
-  # (#457), so a width past the cap draws nothing new.
+  # (#457), so a width past the cap draws nothing new. A streaming window is the plot the
+  # chart is drawn at (#459), so it is rebuilt at the new plot width first, keeping its
+  # density and its newest sample, and the run's next frame is full.
   def handle_event("resize", %{"width" => width}, socket) when is_integer(width) and width > 0 do
     %{width: was, slug: slug} = socket.assigns
 
@@ -168,7 +170,7 @@ defmodule ExamplesWeb.ChartLive do
       {:noreply, socket}
     else
       socket = assign(socket, width: width)
-      {:noreply, socket |> resized() |> still()}
+      {:noreply, socket |> rescrolled() |> resized() |> still()}
     end
   end
 
@@ -273,8 +275,7 @@ defmodule ExamplesWeb.ChartLive do
 
     case {run.running, scroll} do
       {true, %Examples.Scroll{} = scroll} ->
-        {_x, _y, width, _h} = socket.assigns.module.plot()
-        density = Examples.Scroll.density(run.data_rate * 5, width)
+        density = density(socket.assigns.module, run)
 
         {:noreply,
          socket
@@ -474,8 +475,20 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
+  # A streaming window over the plot at the page's new width (spec/14 §12.6, #459): the
+  # same density over the columns now drawn, its newest sample kept. A run repaints in full,
+  # the copy-shift holding only within one plot; the renderer rebuilds its rows, whose
+  # count is no longer the window's.
+  defp rescrolled(%{assigns: %{run_scroll: %Examples.Scroll{} = scroll} = assigns} = socket) do
+    socket = assign(socket, run_scroll: Examples.Scroll.resized(scroll, drawn_width(assigns)))
+    if assigns.run.running, do: update(socket, :run, &Run.resync/1), else: socket
+  end
+
+  defp rescrolled(socket), do: socket
+
   # A run goes on across a resize: its renderer re-prepares at the new size and carries
-  # the easing, and the run's counters and window are untouched (#434).
+  # the easing, and the run's counters are untouched (#434); its window is the plot drawn
+  # at the new size (#459).
   defp resized(%{assigns: %{run: %Run{running: true, renderer: renderer}}} = socket)
        when is_pid(renderer) do
     Examples.Renderer.resize(renderer, run_opts(socket.assigns, socket.assigns.run_ticks))
@@ -615,12 +628,26 @@ defmodule ExamplesWeb.ChartLive do
     if Frames.stream?(module), do: module.design([]) |> elem(1) |> map_size(), else: nil
   end
 
-  # A streaming design's window at the run's data rate: about five seconds across the plot.
-  defp fresh_scroll(%{module: module, run: run}) do
+  # A streaming design's window at the run's data rate: the plot the chart is drawn at, at
+  # the design's density — about five seconds across the design's plot — so a chart drawn
+  # narrower than its design shows a shorter span, never a squeeze (spec/14 §12.6, #459).
+  defp fresh_scroll(%{module: module, run: run} = assigns) do
     if Frames.stream?(module) do
-      {_x, _y, width, _h} = module.plot()
-      Examples.Scroll.new(width, Examples.Scroll.density(run.data_rate * 5, width))
+      Examples.Scroll.new(drawn_width(assigns), density(module, run))
     end
+  end
+
+  # The samples per pixel column of a streaming design at the run's data rate: about five
+  # seconds across the plot at the design's own size, whatever size it is drawn at.
+  defp density(module, run) do
+    {_x, _y, width, _h} = module.plot()
+    Examples.Scroll.density(run.data_rate * 5, width)
+  end
+
+  # The width of a streaming design's plot at the size the page draws the chart.
+  defp drawn_width(%{module: module, width: width, slug: slug}) do
+    {_x, _y, inner_width, _h} = module.plot(measured(width, slug))
+    inner_width
   end
 
   # The window a streaming design shows, for the drawer.
