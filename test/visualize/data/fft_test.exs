@@ -1,18 +1,15 @@
 defmodule Visualize.Data.FFTTest do
   @moduledoc """
   `Visualize.Data.FFT` (spec/08 §9, #375): the transform's properties — a tone peaks at its
-  bin, a constant is DC alone, Parseval holds — and its cost bounds.
+  bin, a constant is DC alone, Parseval holds — and its cost, by count.
   """
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   use ExUnitProperties
 
   alias Visualize.Data.FFT
+  alias Visualize.Work
 
   doctest FFT
-
-  defp best_of_three_ms(fun) do
-    Enum.min(for _ <- 1..3, do: elem(:timer.tc(fun), 0)) / 1000
-  end
 
   describe "fft/1" do
     property "a pure sine of k cycles over N samples peaks at bin k, and Parseval holds" do
@@ -77,12 +74,29 @@ defmodule Visualize.Data.FFTTest do
       assert_raise ArgumentError, ~r/window/, fn -> FFT.spectrum(values, every, window: :flat) end
     end
 
-    # Bounds, not benchmarks (spec/08 §9.2): a live spectrum costs milliseconds.
-    test "a 1024-point spectrum is under 5 ms and a 4096-point one under 20, best of three" do
-      for {n, bound} <- [{1024, 5}, {4096, 20}] do
+    # The cost's growth by count, not by clock (spec/08 §9.2, spec/12 §6, D-114): four
+    # times the samples is 4 · 12/10 = 4.8 times the work of an n log n transform and
+    # sixteen times a quadratic one's. It is 4.4.
+    test "four times the samples is under six times the work" do
+      values = fn n -> for i <- 0..(n - 1), do: :math.sin(i / 7) + rem(i * 7919, 101) / 100 end
+      {small, _} = Work.reductions(fn -> FFT.spectrum(values.(1024), 0.01) end)
+      {large, lines} = Work.reductions(fn -> FFT.spectrum(values.(4096), 0.01) end)
+
+      assert length(lines) == 2048
+
+      assert large < small * 6,
+             "4096 points cost #{Float.round(large / small, 2)}x 1024's reductions"
+    end
+
+    # A live spectrum costs milliseconds (spec/08 §9.2): stated, not gated — run with
+    # `mix test --only benchmark`.
+    @tag :benchmark
+    test "a 1024-point and a 4096-point spectrum, best of three" do
+      for n <- [1024, 4096] do
         values = for i <- 0..(n - 1), do: :math.sin(i / 7) + :rand.uniform()
-        ms = best_of_three_ms(fn -> FFT.spectrum(values, 0.01) end)
-        assert ms < bound, "#{n} points took #{ms} ms"
+        us = Enum.min(for _ <- 1..3, do: elem(:timer.tc(fn -> FFT.spectrum(values, 0.01) end), 0))
+        IO.puts("\n#{n}-point spectrum: #{Float.round(us / 1000, 2)} ms")
+        assert us > 0
       end
     end
   end

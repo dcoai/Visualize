@@ -179,7 +179,7 @@ Effective accessors are `x0 || x`, `x1 || x`, `y0 || y`, `y1 || y`. `x/2` sets `
 | `:cardinal_closed` | `:tension` | `0` | the cardinal spline as a closed loop (see 5.4, #393) |
 | `:basis_closed` | — | — | the B-spline as a closed loop (see 5.3, #393) |
 
-An unknown type fails to match. For every type, `[]` or a single point returns an empty path. `:basis`, `:cardinal`, `:catmull_rom`, `:monotone_x`, `:monotone_y`, and `:natural` fall back to `:linear` for two points.
+An unknown type fails to match. For every type, `[]` or a single point returns an empty path. `:basis`, `:cardinal`, `:catmull_rom`, `:monotone_x`, `:monotone_y`, and `:natural` fall back to `:linear` for two points. **Every type is built in work linear in its points** (#414, #462): a curve that reads its points by position — the cyclic windows of the closed loops (5.3), the second control coordinates of `:natural` (5.6) — reads a tuple made once, never `Enum.at/2` on the list, which is a walk per read and made those three quadratic: ten times the points was a hundred times the work. `test/visualize/ir/path_build_test.exs` holds every type to it by count ([12-testing-and-conformance](12-testing-and-conformance.md) §6).
 
 ### 5.2 Step Curves
 

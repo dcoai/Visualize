@@ -9,6 +9,7 @@ defmodule Visualize.IR.PathBuildTest do
 
   alias Visualize.IR.Path
   alias Visualize.Shape.Curve
+  alias Visualize.Work
 
   test "from_commands/1 is the list it is given, in order" do
     commands = [{:M, 0, 0}, {:L, 10, 5}, {:C, 1, 2, 3, 4, 5, 6}, :Z]
@@ -36,26 +37,34 @@ defmodule Visualize.IR.PathBuildTest do
     end
   end
 
-  test "a curve of fifty thousand points is built in time proportional to them" do
-    big = for i <- 1..50_000, do: {i, rem(i * 7, 97)}
-    {us, path} = :timer.tc(fn -> Curve.linear(big) end)
+  # Counted, not timed (spec/12 §6, D-114): the work of building, in reductions, at ten
+  # times the points is about ten times the work — a square of them would be a hundred.
+  test "a curve of fifty thousand points is built in work proportional to them" do
+    line = fn n -> for i <- 1..n, do: {i, rem(i * 7, 97)} end
+    {few, many} = {line.(5_000), line.(50_000)}
+    {small, _} = Work.reductions(fn -> Curve.linear(few) end)
+    {large, path} = Work.reductions(fn -> Curve.linear(many) end)
     assert Path.command_count(path) == 50_000
 
-    # Built in order this is milliseconds; appended one command at a time it was six
-    # seconds, the cost of a list per command. A second is a hundredfold of the one and a
-    # sixth of the other, so the bound holds whatever else the machine is doing.
-    assert us < 1_000_000, "50,000 points took #{div(us, 1000)} ms to build"
+    # Appended one command at a time this was quadratic — six seconds at 50,000 points,
+    # the cost of a list per command; built in order it is linear.
+    assert large < small * 20,
+           "ten times the points cost #{Float.round(large / small, 1)}x the reductions"
   end
 
-  test "every curve type builds the same path it always did, at ten thousand points" do
-    points = for i <- 1..10_000, do: {i, :math.sin(i / 50) * 40 + 50}
+  test "every curve type is built in work linear in its points" do
+    points = fn n -> for i <- 1..n, do: {i, :math.sin(i / 50) * 40 + 50} end
+    {thousand, ten_thousand} = {points.(1_000), points.(10_000)}
 
     for type <- Visualize.Chart.Schema.curve_types() do
-      {us, path} = :timer.tc(fn -> Curve.generate(type, points) end)
+      {small, _} = Work.reductions(fn -> Curve.generate(type, thousand) end)
+      {large, path} = Work.reductions(fn -> Curve.generate(type, ten_thousand) end)
       assert Path.command_count(path) > 0, "#{type} drew nothing"
 
-      assert us < 2_000_000,
-             "#{type} took #{div(us, 1000)} ms over 10,000 points"
+      # `:natural` and the closed loops read points with `Enum.at/2` and cost ninety to a
+      # hundred times the work here until #462; every type is ten to twelve now.
+      assert large < small * 20,
+             "#{type}: ten times the points cost #{Float.round(large / small, 1)}x the reductions"
     end
   end
 end

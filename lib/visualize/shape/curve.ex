@@ -116,7 +116,10 @@ defmodule Visualize.Shape.Curve do
 
   def basis_closed(points) do
     n = length(points)
-    at = fn i -> Enum.at(points, Integer.mod(i, n)) end
+    # Read by position from a tuple made once: `Enum.at/2` walks the list per read, which
+    # made the loop quadratic in its points (spec/04 §5.1, #462).
+    cyclic = List.to_tuple(points)
+    at = fn i -> elem(cyclic, Integer.mod(i, n)) end
     {sx, sy} = knot(at.(n - 2), at.(n - 1), at.(0))
 
     0..(n - 1)
@@ -144,7 +147,10 @@ defmodule Visualize.Shape.Curve do
   def cardinal_closed([{x0, y0} | _] = points, tension) do
     k = (1 - tension) / 6
     n = length(points)
-    at = fn i -> Enum.at(points, Integer.mod(i, n)) end
+    # Read by position from a tuple made once: `Enum.at/2` walks the list per read, which
+    # made the loop quadratic in its points (spec/04 §5.1, #462).
+    cyclic = List.to_tuple(points)
+    at = fn i -> elem(cyclic, Integer.mod(i, n)) end
 
     0..(n - 1)
     |> Enum.reduce([{:M, x0, y0}], fn i, acc ->
@@ -393,12 +399,16 @@ defmodule Visualize.Shape.Curve do
         [(ri - p_next) / bi | ps]
       end)
 
+    # The next segment's first control coordinate by position, from a tuple: `Enum.at/2`
+    # here walked the list per segment and made the spline quadratic (#462).
+    firsts = List.to_tuple(first)
+
     second =
       first
       |> Enum.with_index()
       |> Enum.map(fn
         {p, i} when i == n - 1 -> (elem(v, n) + p) / 2
-        {_p, i} -> 2 * elem(v, i + 1) - Enum.at(first, i + 1)
+        {_p, i} -> 2 * elem(v, i + 1) - elem(firsts, i + 1)
       end)
 
     {first, second}
