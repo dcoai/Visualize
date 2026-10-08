@@ -14,10 +14,10 @@ defmodule Examples.Charts.WorldMap do
   antimeridian, so the design clips nothing. The animation turns the projection's
   `rotate`, the map's centre moving west.
 
-  Its ocean is the one absolute colour left in the gallery (#421): a map's ocean is a
-  backdrop the theme has no slot for — `:grid` is the graticule's own stroke and
-  `:background` would make it vanish — so it keeps `#a8d5e5` until #422 gives a theme
-  the word for a surface.
+  Its ocean is the theme's `:surface` (#422), the plane the data is laid on: not the page
+  (`:background` would make it vanish), not a data colour (the land reads through the
+  series), and distinct from the `:grid` that strokes the graticule over it — so the map
+  follows the palette and the gallery names no absolute colour (#421).
   """
 
   import Visualize.Chart.Build
@@ -25,8 +25,6 @@ defmodule Examples.Charts.WorldMap do
   alias Examples.Charts.{Design, WorldGeography}
 
   @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
-  @ocean "#a8d5e5"
-
   @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
   def size, do: {700, 400}
 
@@ -44,7 +42,7 @@ defmodule Examples.Charts.WorldMap do
         source(:globe, [:shape]),
         source(:graticule, [:kind, :degree, :shape, :weight, :opacity]),
         source(:land, [:name, :shape]),
-        style(:ocean, fill: @ocean, stroke: :none),
+        style(:ocean, fill: :surface, stroke: :none),
         style(:rim, fill: :none, stroke: :axis, stroke_width: 1.5),
         style(:graticule,
           fill: :none,
@@ -100,7 +98,7 @@ defmodule Examples.Charts.WorldMap do
         source(:globe, [:shape]),
         source(:graticule, [:kind, :degree, :shape, :weight, :opacity]),
         source(:land, [:name, :shape]),
-        style(:ocean, fill: "#a8d5e5", stroke: :none),
+        style(:ocean, fill: :surface, stroke: :none),
         style(:rim, fill: :none, stroke: :axis, stroke_width: 1.5),
         style(:graticule, fill: :none, stroke: :grid,
           stroke_width: {:field, :weight}, stroke_opacity: {:field, :opacity}),

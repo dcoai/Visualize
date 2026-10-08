@@ -22,7 +22,8 @@ defmodule Examples.ColorPalettes do
       background: @light.background,
       text: @light.text,
       axis: @light.axis,
-      grid: @light.grid
+      grid: @light.grid,
+      surface: @light.surface
     },
 
     dark: %{
@@ -33,7 +34,8 @@ defmodule Examples.ColorPalettes do
       background: @dark.background,
       text: @dark.text,
       axis: @dark.axis,
-      grid: @dark.grid
+      grid: @dark.grid,
+      surface: @dark.surface
     },
 
     sunrise: %{
@@ -44,7 +46,8 @@ defmodule Examples.ColorPalettes do
       background: "#fff8f0",
       text: "#5c3d2e",
       axis: "#8b5a2b",
-      grid: "#ffecd2"
+      grid: "#ffecd2",
+      surface: "#fff2e2"
     },
 
     winter: %{
@@ -55,7 +58,8 @@ defmodule Examples.ColorPalettes do
       background: "#f5f7f9",
       text: "#2c3e50",
       axis: "#4a6278",
-      grid: "#dce4ea"
+      grid: "#dce4ea",
+      surface: "#ebf0f3"
     },
 
     sunset: %{
@@ -66,7 +70,8 @@ defmodule Examples.ColorPalettes do
       background: "#fef5f0",
       text: "#4a1942",
       axis: "#6d3461",
-      grid: "#f5dce8"
+      grid: "#f5dce8",
+      surface: "#faeaec"
     },
 
     fall: %{
@@ -77,7 +82,8 @@ defmodule Examples.ColorPalettes do
       background: "#fdf6e3",
       text: "#4a3728",
       axis: "#6d5039",
-      grid: "#efe0c9"
+      grid: "#efe0c9",
+      surface: "#f6ebd6"
     },
 
     spring: %{
@@ -88,7 +94,8 @@ defmodule Examples.ColorPalettes do
       background: "#f0fff0",
       text: "#2d5a3d",
       axis: "#4a7c59",
-      grid: "#d4f0d4"
+      grid: "#d4f0d4",
+      surface: "#e2f8e2"
     },
 
     summer: %{
@@ -99,7 +106,8 @@ defmodule Examples.ColorPalettes do
       background: "#f0fdf6",
       text: "#0d4a2d",
       axis: "#1a6b45",
-      grid: "#d4f5e4"
+      grid: "#d4f5e4",
+      surface: "#e2f9ed"
     }
   }
 
@@ -140,7 +148,8 @@ defmodule Examples.ColorPalettes do
       background: palette.background,
       text: palette.text,
       axis: palette.axis,
-      grid: palette.grid
+      grid: palette.grid,
+      surface: palette.surface
     )
   end
 

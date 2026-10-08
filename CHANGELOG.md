@@ -14,6 +14,15 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.1.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Added
+
+- **A theme's `:surface` slot** (#422): the plane a chart's data is laid on, between the
+  background and the grid — `#eef2f6` on `Visualize.Theme.default/0`, `#23272f` on
+  `dark/0`. It is a colour slot like any other: `slots/1` and `colour_slots/1` list it,
+  `resolve/3` gives `var(--vis-surface, …)` on SVG and the literal on canvas, and an inline
+  `:theme` node takes a `surface` key. A theme from `new/1` that names none takes the light
+  value, as it does for every field it leaves out.
+
 ## [0.1.0] — 2026-09-09
 
 `0.1.0` is the first tag. Until it, the only way to depend on this library was

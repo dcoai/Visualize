@@ -421,7 +421,7 @@ A source names its columns with atoms or strings and a caller writes accessors i
 
 ### 7.1 Struct and slots
 
-`%Visualize.Theme{name, series, axis, grid, text, background, font_family, font_size, label_size, title_size}`. `name` is an atom naming the theme (`:default`, `:dark`, or the consumer's own); `series` is a non-empty list of colour strings; `axis`, `grid`, `text` and `background` are colour strings; `font_family` is a CSS font-family string; the three sizes are numbers in user units (pixels).
+`%Visualize.Theme{name, series, axis, grid, text, background, surface, font_family, font_size, label_size, title_size}`. `name` is an atom naming the theme (`:default`, `:dark`, or the consumer's own); `series` is a non-empty list of colour strings; `axis`, `grid`, `text`, `background` and `surface` are colour strings; `font_family` is a CSS font-family string; the three sizes are numbers in user units (pixels).
 
 A *slot* names one value of a theme:
 
@@ -432,6 +432,7 @@ A *slot* names one value of a theme:
 | `:grid` | `grid` | grid lines, tree links, and any mark that sits behind the data |
 | `:text` | `text` | tick labels, axis titles and any label beside a mark |
 | `:background` | `background` | the colour the chart is drawn on: separators between marks, and a label drawn over a mark |
+| `:surface` | `surface` | the plane a chart's data is laid on, between the background and the grid: a map's ocean, and any field that is neither the page nor a data colour and has the grid drawn over it (#422) |
 | `:font_family` | `font_family` | every text |
 | `:font_size` | `font_size` | tick labels |
 | `:label_size` | `label_size` | mark labels and axis titles |
@@ -449,6 +450,7 @@ A *slot* names one value of a theme:
 | `grid` | `#e0e0e0` | `#33373f` |
 | `text` | `#333333` | `#e6e6e6` |
 | `background` | `#ffffff` | `#1b1e24` |
+| `surface` | `#eef2f6` | `#23272f` |
 | `font_family` | `sans-serif` | `sans-serif` |
 | `font_size` | `10` | `10` |
 | `label_size` | `12` | `12` |
@@ -456,7 +458,7 @@ A *slot* names one value of a theme:
 
 Both palettes are ten hues in the order of d3's `category10` — blue, orange, red, teal, green, yellow, purple, pink, brown, grey — each adjusted until it holds at least 3:1 (`Visualize.Color.contrast/2`, §1.5) against its own background; `text` holds at least 4.5:1 and `axis` at least 3:1. Neither palette is a d3 scheme, because every d3 categorical scheme has a colour under 2.1:1 on white (`category10`'s olive is 2.0:1), and a theme that promises contrast cannot ship one unchanged. 7.4 states the floors.
 
-`new/1` is `default/0` with the given keyword fields replaced; `merge/2` replaces the fields of any theme. An unknown field raises `KeyError`; an empty `series` raises `ArgumentError`.
+`surface` is a step off the background towards the grid — a cool grey on the light theme, a step above `#1b1e24` on the dark — so a field reads as a plane under the data without becoming a data colour. `new/1` is `default/0` with the given keyword fields replaced, so a host theme that names no `surface` takes the light one, as it takes every other field it leaves out; `merge/2` replaces the fields of any theme. An unknown field raises `KeyError`; an empty `series` raises `ArgumentError`.
 
 ### 7.3 Resolution
 
@@ -471,7 +473,7 @@ The reference carries its fallback rather than the root declaring the property (
 
 ### 7.4 Contrast
 
-A theme MUST hold, by `Visualize.Color.contrast/2` against its own `background`: `text` at least 4.5:1 (WCAG AA for text), `axis` at least 3:1 (WCAG non-text contrast), every `series` colour at least 3:1, and `grid` at least 1.2:1 — visible, and faint on purpose. Both built-in themes do; a theme from `new/1` is not checked, since a house palette is the consumer's choice. Across the colour schemes of `Visualize.Scale.Color.schemes/0`, every colour parses with `Visualize.Color.parse/1` and every scheme has at least one colour at 3:1 or better against the dark background and at 2.5:1 or better against the light one (`set2`, a pastel scheme, tops out at 2.6:1 on white), so any scheme has a usable colour on either theme; a scheme's lightest colours vanish on the light theme (`blues` opens at 1.04:1 on white) and its darkest on the dark (`blues` closes at 1.8:1 on `#1b1e24`), which is why the built-in themes carry their own palettes (7.2). `test/visualize/theme_contrast_test.exs` holds both themes and every scheme to this.
+A theme MUST hold, by `Visualize.Color.contrast/2` against its own `background`: `text` at least 4.5:1 (WCAG AA for text), `axis` at least 3:1 (WCAG non-text contrast), every `series` colour at least 3:1, and `grid` at least 1.2:1 — visible, and faint on purpose. `surface` MUST differ from `grid`: the grid is drawn over the surface (a map's graticule over its ocean), and a surface equal to it would swallow every line (#422). Both built-in themes do; a theme from `new/1` is not checked, since a house palette is the consumer's choice. Across the colour schemes of `Visualize.Scale.Color.schemes/0`, every colour parses with `Visualize.Color.parse/1` and every scheme has at least one colour at 3:1 or better against the dark background and at 2.5:1 or better against the light one (`set2`, a pastel scheme, tops out at 2.6:1 on white), so any scheme has a usable colour on either theme; a scheme's lightest colours vanish on the light theme (`blues` opens at 1.04:1 on white) and its darkest on the dark (`blues` closes at 1.8:1 on `#1b1e24`), which is why the built-in themes carry their own palettes (7.2). `test/visualize/theme_contrast_test.exs` holds both themes and every scheme to this.
 
 ### 7.5 Functions
 
@@ -482,7 +484,7 @@ A theme MUST hold, by `Visualize.Color.contrast/2` against its own `background`:
 | `Visualize.Theme.new/1` | `default/0` with the given keyword fields replaced (7.2). |
 | `Visualize.Theme.merge/2` | The theme with the given keyword fields replaced (7.2). |
 | `Visualize.Theme.slots/1` | The theme's slot names in the order of 7.1. |
-| `Visualize.Theme.colour_slots/1` | The theme's colour slots alone — the series, then axis, grid, text and background — for a control that offers a colour as a slot (spec/14 §19.10). |
+| `Visualize.Theme.colour_slots/1` | The theme's colour slots alone — the series, then axis, grid, text, background and surface — for a control that offers a colour as a slot (spec/14 §19.10). |
 | `Visualize.Theme.series_slot/2` | `series_slot(theme, i)`: the `:series_k` atom the positive index `i` cycles to (7.1). |
 | `Visualize.Theme.resolve/3` | The slot's value as a literal or as a CSS reference with the literal fallback (7.3). |
 | `Visualize.Theme.css_name/1` | The custom-property name of a slot atom (7.3). |
