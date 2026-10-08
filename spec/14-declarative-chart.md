@@ -2263,7 +2263,7 @@ The `{:ref, kind}` type (§1.4) admits three forms: a local key (an atom naming 
 
 ### 19.3 The use site
 
-A layer in a composite and an entry in a style stack are the same thing: a fragment **used at a position**. The site is a struct, so it is a leaf of every walk (D-92) and `Visualize.Chart.stack/1` never descends into it.
+A layer in a composite and an entry in a style stack are the same thing: a fragment **used at a position**. The site is a struct, so it is a leaf of every walk (D-92) and `Visualize.Chart.stack/1` never descends into it. The one exception is the walk for **ids** (`Visualize.Chart.Fragment.refs/1`, `Visualize.Chart.Fragment.relocate/2`): a site *holds* ids — its `ref`, its `origin`, and any inside its `local` and `vars` — so those two read a site's parts by name, as the site's own fields, rather than walking it as a map; without that, a composite would export without its dependencies and import still pointing at its source store's entries (#470). Every other walk keeps the rule.
 
 ```elixir
 %Visualize.Chart.Use{
@@ -2401,8 +2401,8 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Fragment.frame_path/1` | the path of a design's frame — `[:frames, name]` (§2.1, #383) — which is where the builder addresses one frame |
 | `Visualize.Chart.Fragment.frame_name/1` | the name of a design's frame: the one it declares, or `:main` when it declares none or several |
 | `Visualize.Chart.Validator.validate/2` | per-kind validity (§19.8): a fragment read as a kind — a design whole, a composite as sites, any other kind as the body under its key with that kind's schema, no key required and no reference looked up, since a fragment is a piece |
-| `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each, sorted — the order a map is walked is the runtime's, not a promise |
-| `Visualize.Chart.Fragment.relocate/2` | a fragment with its ids rewritten through a table, and the ids the table did not carry |
+| `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each, sorted — the order a map is walked is the runtime's, not a promise; a use site's `ref`, `origin`, `local` and `vars` included (§19.3, #470) |
+| `Visualize.Chart.Fragment.relocate/2` | a fragment with its ids rewritten through a table, and the ids the table did not carry; a use site's ids rewritten in place, the site still a `%Use{}` (§19.3, #470) |
 | `Visualize.Chart.Fragment.to_json/1` | a fragment of any kind — a composite holding uses and ids included — as the JSON of §11 and §19.7, `{:ok, json}`; not validated as a design, since a fragment may be partial (#465), so a host that keeps its library in a database writes what `put/2` hands it |
 | `Visualize.Chart.Fragment.from_json/1` | the inverse: tagged terms back as `%Use{}`, ids, variables and atoms, an id whose kind is not one a fragment can have left as it was read (no atom from a document); `{:error, …}` for text that is not JSON. `from_json(to_json(f))` is `f` (#465) |
 
