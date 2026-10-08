@@ -46,6 +46,8 @@ defmodule ExamplesWeb.ChartLive do
     "heatmap" => Examples.Charts.Heatmap,
     "hexbin" => Examples.Charts.HexbinChart,
     "spectrum" => Examples.Charts.SpectrumChart,
+    # Dense series reduced per pixel (#448)
+    "downsampling" => Examples.Charts.Downsampling,
     # Maps
     "world_map" => Examples.Charts.WorldMap,
     "globe" => Examples.Charts.Globe

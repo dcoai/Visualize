@@ -386,6 +386,7 @@ defmodule Visualize.ChartGen do
       output:
         member_of([:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges, :points]),
       n: integer(0..10),
+      width: one_of([integer(1..10), constant(:plot)]),
       side: member_of([:end, :start]),
       from: duration(),
       to: duration()
