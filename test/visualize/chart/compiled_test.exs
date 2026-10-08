@@ -940,6 +940,75 @@ defmodule Visualize.Chart.CompiledTest do
       assert payload.incremental.mode == "full"
     end
 
+    # A window on a scale that is not a translation of its units has no single dx: the
+    # copy-shift would stitch a strip onto stretched pixels (§12.5, #416).
+    defp windowed_on(kind), do: put_in(@stream, [:frames, :main, :scales, :x], %{kind: kind})
+
+    test "a :log viewport redraws in full every tick, and draws what a redraw of the window draws (#416)" do
+      design = windowed_on(:log)
+      sources = %{primary: rows(30, 1)}
+      compiled = compile!(design, size: {140, 100}, sources: sources)
+
+      # The windowed scale is named, as an inferred one beside the window is.
+      assert {{:axis, 0}, {:inferred, [:x]}} in Compiled.dynamic_regions(compiled)
+      assert compiled.viewport.full
+
+      {payloads, _compiled} =
+        Enum.map_reduce([20, 22, 22.5, 24], compiled, fn now, compiled ->
+          {payload, compiled} = Compiled.tick(compiled, sources, now: now)
+          {{now, payload}, compiled}
+        end)
+
+      for {now, payload} <- payloads do
+        assert %{mode: "full", dx: 0, dy: 0} = payload.incremental
+
+        assert [{:full_redraw, _viewport, _records}] =
+                 payload.incremental.binary |> Base.decode64!() |> Decoder.decode()
+
+        # The same window drawn by a chart that has drawn nothing before it.
+        fresh = compile!(design, size: {140, 100}, sources: sources)
+        {redraw, _} = Compiled.tick(fresh, sources, now: now)
+        assert payload.incremental.binary == redraw.incremental.binary
+      end
+    end
+
+    test "the kinds that scroll are an allowlist: :linear and :time scroll, every other kind redraws (#416)" do
+      sources = %{primary: rows(30, 1)}
+
+      scroll = fn kind ->
+        compiled = compile!(windowed_on(kind), size: {140, 100}, sources: sources)
+        {_first, compiled} = Compiled.tick(compiled, sources, now: 20)
+        {second, _} = Compiled.tick(compiled, sources, now: 22)
+        second.incremental.mode
+      end
+
+      assert scroll.(:linear) == "scroll_x"
+
+      for kind <- [:log, :power, :sqrt, :symlog] do
+        assert scroll.(kind) == "full", "a #{kind} viewport scrolled"
+      end
+
+      # A time window is a translation in seconds, and scrolls.
+      design =
+        @stream
+        |> put_in([:frames, :main, :scales, :x], %{kind: :time})
+        |> put_in([:frames, :main, :viewport, :span], 600)
+
+      rows = for i <- 0..30, do: %{t: DateTime.add(@t0, i * 60, :second), v: rem(i * 7, 10)}
+      compiled = compile!(design, size: {140, 100}, sources: %{primary: rows})
+      refute compiled.viewport.full
+
+      {first, compiled} =
+        Compiled.tick(compiled, %{primary: rows}, now: DateTime.add(@t0, 1200, :second))
+
+      assert first.incremental.mode == "full"
+
+      {second, _} =
+        Compiled.tick(compiled, %{primary: rows}, now: DateTime.add(@t0, 1320, :second))
+
+      assert %{mode: "scroll_x", dx: 20} = second.incremental
+    end
+
     test "a time scale windows in seconds" do
       design =
         @stream
