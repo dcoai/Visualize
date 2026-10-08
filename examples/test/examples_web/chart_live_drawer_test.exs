@@ -275,14 +275,14 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert html(s) =~ ~s(width="#{width}")
 
     # The socket is not connected here, so the still frame renders in place (#362).
-    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 900, "height" => 77}, s)
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 450, "height" => 77}, s)
 
     # The width is the container's; the height is that width at the chart's aspect, never
     # the container's — a container sized by its content cannot also size it.
-    assert s.assigns.width == 900
+    assert s.assigns.width == 450
     h = html(s)
-    assert h =~ ~s(width="900")
-    assert h =~ ~s(height="#{round(900 * height / width)}")
+    assert h =~ ~s(width="450")
+    assert h =~ ~s(height="#{round(450 * height / width)}")
     refute h =~ ~s(height="77")
 
     # The container carries the hook that measures it.
@@ -290,7 +290,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert h =~ ~s(data-resize-event="resize")
 
     # The same width again changes nothing.
-    assert {:noreply, ^s} = ChartLive.handle_event("resize", %{"width" => 900, "height" => 77}, s)
+    assert {:noreply, ^s} = ChartLive.handle_event("resize", %{"width" => 450, "height" => 77}, s)
   end
 
   test "a resize during a run keeps its tick, its rows and its easing (#434)" do
@@ -303,19 +303,19 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     ticks = s.assigns.run_ticks
     origin = s.assigns.run_scroll.origin
 
-    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 980, "height" => 400}, s)
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 700, "height" => 400}, s)
 
     # A resize is geometry: the run goes on at its own tick, over its own window.
     assert s.assigns.run.running
     assert s.assigns.run_ticks == ticks
     assert s.assigns.run_scroll.origin == origin
-    assert s.assigns.width == 980
+    assert s.assigns.width == 700
 
     # And its renderer draws at the new width from the next frame.
     {:noreply, s} = ChartLive.handle_info(:run_tick, s)
     s = settled(s)
     [{_name, compiled}] = Examples.Renderer.state(s.assigns.run.renderer).compiled
-    assert compiled.size.width == 980
+    assert compiled.size.width == 700
   end
 
   test "after a resize mid-run the next incremental payload is full, at the size the element now carries (#456)" do
@@ -331,7 +331,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     %{incremental: before, plot: was} = plot(s.assigns.run_frame)
     assert before.mode in ["scroll_x", "none"]
 
-    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 980, "height" => 400}, s)
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 700, "height" => 400}, s)
 
     # The hook resizes its canvas to the element's data-width x data-height, which clears
     # it, and draws no scroll until a full record (spec/10 §9.2): the renderer's chart is
@@ -551,9 +551,9 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
     # A resize recompiles at the new width and **carries the easing** (#434): the scale
     # goes on from where it stood rather than jumping back to its target.
-    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 820, "height" => 300}, s)
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 520, "height" => 300}, s)
     [{_name, resized}] = Examples.Renderer.state(s.assigns.run.renderer).compiled
-    assert resized.size.width == 820
+    assert resized.size.width == 520
     assert resized.eased.y.shown == shown
 
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
