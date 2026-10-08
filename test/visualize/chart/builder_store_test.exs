@@ -167,6 +167,33 @@ defmodule Visualize.Chart.Builder.StoreTest do
       assert moved.fragment == %{style: %{extends: {:style, 2}}}
     end
 
+    test "a composite of real use sites exports its closure and imports with its uses rewritten (#470)",
+         %{store: from} do
+      {:ok, base} = Store.put(from, entry("Styles::base", %{style: %{stroke_width: 1}}))
+
+      {:ok, comp} =
+        Store.put(
+          from,
+          entry("Composites::c", %{
+            composite: %{uses: [Visualize.Chart.Use.new(base)], vars: %{}}
+          })
+        )
+
+      bundle = Bundle.export(from, comp, :from)
+      assert Enum.map(bundle.entries, & &1.id) == [base, comp]
+
+      {:ok, agent} = Memory.start()
+      to = {Memory, {agent, :importer}}
+      {:ok, _} = Store.put(to, entry("Styles::existing", %{style: %{}}))
+
+      {:ok, result} = Store.import(to, bundle)
+      assert result.outside == []
+      new_base = Map.fetch!(result.ids, base)
+
+      {:ok, moved} = Store.get(to, Map.fetch!(result.ids, comp))
+      assert %{composite: %{uses: [%Visualize.Chart.Use{ref: ^new_base}]}} = moved.fragment
+    end
+
     test "a reference outside the bundle is left alone and reported", %{store: from} do
       {:ok, id} = Store.put(from, entry("Styles::a", %{style: %{extends: {:style, 40}}}))
       bundle = Bundle.export(from, id, :from)
@@ -205,6 +232,44 @@ defmodule Visualize.Chart.Builder.StoreTest do
     test "a struct is a leaf" do
       fragment = %{v: Visualize.Chart.var(:x), s: {:style, 1}}
       assert Fragment.refs(fragment) == [{:style, 1}]
+    end
+
+    test "a use site's ids are found: its ref, its origin, and any in its local and vars (#470)" do
+      composite = %{
+        composite: %{
+          uses: [
+            Visualize.Chart.Use.new({:style, 9}),
+            %Visualize.Chart.Use{
+              id: {:use, 2},
+              ref: nil,
+              origin: {:style, 4},
+              local: %{fill: {:style, 5}},
+              vars: %{c: {:theme, 6}}
+            }
+          ],
+          vars: %{}
+        }
+      }
+
+      assert Fragment.refs(composite) == [{:style, 4}, {:style, 5}, {:style, 9}, {:theme, 6}]
+    end
+
+    test "relocate rewrites a use site's ids in place, and the site stays a use (#470)" do
+      use = %Visualize.Chart.Use{
+        id: {:use, 1},
+        ref: {:style, 9},
+        origin: {:style, 4},
+        local: %{fill: {:style, 5}}
+      }
+
+      table = %{{:style, 9} => {:style, 1}, {:style, 4} => {:style, 2}}
+
+      {%{composite: %{uses: [moved]}}, missed} =
+        Fragment.relocate(%{composite: %{uses: [use], vars: %{}}}, table)
+
+      assert %Visualize.Chart.Use{ref: {:style, 1}, origin: {:style, 2}} = moved
+      assert moved.local == %{fill: {:style, 5}}
+      assert missed == [{:style, 5}]
     end
   end
 

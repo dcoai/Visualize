@@ -41,7 +41,7 @@ defmodule Visualize.Chart.Fragment do
 
   """
 
-  alias Visualize.Chart.{Codec, Schema}
+  alias Visualize.Chart.{Codec, Schema, Use}
 
   # Jason is optional (spec/14 §11.1, D-50): as in `Visualize.Chart`, the calls in
   # `to_json/1` and `from_json/1` stay direct and a missing Jason is answered at runtime.
@@ -230,6 +230,12 @@ defmodule Visualize.Chart.Fragment do
     if kind in kinds(), do: [id | acc], else: acc
   end
 
+  # A use site holds ids (spec/14 §19.3, #470): the one struct the id walks read, by its
+  # parts — never as a map — so a composite's references are seen. Any other struct is
+  # a leaf (D-92).
+  defp collect(%Use{ref: ref, origin: origin, local: local, vars: vars}, acc),
+    do: Enum.reduce([ref, origin, local, vars], acc, &collect/2)
+
   defp collect(%_{} = _struct, acc), do: acc
 
   defp collect(map, acc) when is_map(map),
@@ -300,6 +306,14 @@ defmodule Visualize.Chart.Fragment do
       Map.has_key?(table, id) -> {Map.fetch!(table, id), missed}
       true -> {id, [id | missed]}
     end
+  end
+
+  # A use site's ids are rewritten in place and it stays a use (#470).
+  defp rewrite(%Use{} = use, table, missed) do
+    Enum.reduce([:ref, :origin, :local, :vars], {use, missed}, fn field, {use, missed} ->
+      {value, missed} = rewrite(Map.fetch!(use, field), table, missed)
+      {Map.put(use, field, value), missed}
+    end)
   end
 
   defp rewrite(%_{} = struct, _table, missed), do: {struct, missed}
