@@ -921,6 +921,7 @@ The last four are reported by `Visualize.Chart.apply/2` and `Visualize.Chart.com
 | `{:paint, :area}` (a colour, §3.2) | `{"$paint": "area"}` |
 | `{:axis, :y}` | `{"$axis": "y"}` |
 | `{:frame, :top_left}` | `{"$frame": "top_left"}` |
+| `{:frame, :main, :x}`, a scale adopted from another frame (§4.3) | `{"$adopted": ["main", "x"]}`, the frame and the scale (#480) |
 | `{:data, [x, y]}` | `{"$data": [x, y]}`, the two values as terms |
 | `:none` as a colour | `"none"` |
 | `:auto` in an extent | `"auto"` (so a category spelled `"auto"` reads back as `:auto`) |

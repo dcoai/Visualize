@@ -75,6 +75,11 @@ release it merely follows.
   read, contradicting §9. `Migration.legacy_type/2` gives a removed key its old type, and
   the codec reads by it, so the document is typed before it is migrated. §14.4 also
   corrects `current/0` to `2`.
+- **An adopted scale has a JSON form** (#480). A frame adopting another frame's scale
+  (`{:frame, :main, :x}`, §4.3) had no JSON form, so `Chart.to_json/1` raised on any
+  design with an adoption. Such a design couldn't be stored by a host or the builder's
+  store. It encodes as `{"$adopted": ["main", "x"]}` and reads back. A tagged object is
+  never read as a node.
 
 ## [0.1.0] — 2026-09-09
 

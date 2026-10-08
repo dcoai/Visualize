@@ -67,6 +67,10 @@ defmodule Visualize.Chart.Codec do
   defp value(:anchor, {:axis, s}) when is_atom(s), do: %{"$axis" => Atom.to_string(s)}
   defp value(:anchor, {:frame, c}) when is_atom(c), do: %{"$frame" => Atom.to_string(c)}
   defp value(:anchor, {:data, [x, y]}), do: %{"$data" => [term(x), term(y)]}
+
+  defp value(:adopted, {:frame, f, s}) when is_atom(f) and is_atom(s),
+    do: %{"$adopted" => [Atom.to_string(f), Atom.to_string(s)]}
+
   defp value(_type, v), do: term(v)
 
   defp category(:auto), do: "auto"
@@ -175,6 +179,10 @@ defmodule Visualize.Chart.Codec do
   defp read(:text, v) when is_list(v), do: Enum.map(v, &read_term/1)
   defp read(:anchor, v) when is_binary(v), do: String.to_atom(v)
 
+  defp read(:adopted, %{"$adopted" => [f, s]} = v)
+       when map_size(v) == 1 and is_binary(f) and is_binary(s),
+       do: {:frame, String.to_atom(f), String.to_atom(s)}
+
   defp read(:anchor, %{"$axis" => s} = v) when map_size(v) == 1 and is_binary(s),
     do: {:axis, String.to_atom(s)}
 
@@ -251,7 +259,10 @@ defmodule Visualize.Chart.Codec do
   defp read_mask(paths) when is_list(paths), do: Enum.map(paths, &read_term/1)
 
   # The JSON shape of each alternative of a `{:one_of, types}`: strings stand for atoms.
-  defp json_shape?({:node, _}, v), do: is_map(v) and not is_struct(v)
+  # A tagged object is a term, never a node: an adopted scale (`$adopted`) sits where a
+  # scale node may, and must not be read as one (#480).
+  defp json_shape?({:node, _}, v), do: is_map(v) and not is_struct(v) and not tagged?(v)
+  defp json_shape?(:adopted, v), do: is_map(v) and is_map_key(v, "$adopted") and map_size(v) == 1
   defp json_shape?({:map, _}, v), do: is_map(v) and not is_struct(v)
   defp json_shape?({:list, _}, v), do: is_list(v)
   defp json_shape?(:text, v), do: is_list(v) or is_binary(v)
