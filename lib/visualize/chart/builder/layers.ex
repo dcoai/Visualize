@@ -94,6 +94,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           class={entry.class}
           style={"--vis-builder-depth: #{entry.depth}"}
           data-builder-layer={entry.index}
+          data-builder-end={entry.end}
           data-builder-parent={entry.parent}
           data-builder-into={entry.into}
           draggable="true"
@@ -299,6 +300,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       placed = assigns.placed || []
 
       count = length(rows)
+      ends = ends(rows)
 
       for {row, index} <- Enum.with_index(rows) do
         name = row.name
@@ -307,6 +309,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         %{
           index: index,
+          end: Enum.at(ends, index),
           name: name,
           depth: row.depth,
           parent: row.parent && encode_id(row.parent),
@@ -329,6 +332,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
         }
       end
     end
+
+    # Each row's end (spec/10 §16.2, #468): the flat position past everything it holds —
+    # the next row no deeper than it, or the row count — closed or not, so the hook reads
+    # a move's span and the end gap from the server and never counts drawn rows. One pass
+    # from the bottom, keeping the rows still open below.
+    defp ends(rows) do
+      count = length(rows)
+
+      rows
+      |> Enum.with_index()
+      |> Enum.reverse()
+      |> Enum.reduce({[], []}, fn {row, index}, {ends, below} ->
+        below = Enum.drop_while(below, fn {depth, _index} -> depth > row.depth end)
+        {[next(below, count) | ends], [{row.depth, index} | below]}
+      end)
+      |> elem(0)
+    end
+
+    defp next([{_depth, at} | _rest], _count), do: at
+    defp next([], count), do: count
 
     # A referenced group's inside (#388): the entry's sites, drawn in the group's row and
     # indented from it, since they have no flat position of their own.

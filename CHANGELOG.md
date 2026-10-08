@@ -41,6 +41,17 @@ release it merely follows.
   `Visualize.Chart.Build.interaction/1` writes the key. A chart's `to_map/1` and JSON
   now carry `interaction` (default `%{}`).
 
+### Fixed
+
+- **A drop below a closed group in the builder's stack lands where it was aimed** (#468).
+  `BuilderHook` counted the drawn rows to name a drop's position, while every flat position
+  the builder reads counts a closed group's rows too, so a drop between a closed group and
+  the row after it landed inside the group, and a group dropped directly below itself moved.
+  A stack row now carries `data-builder-end`, the flat position past everything it holds,
+  beside its `data-builder-layer`, and the hook reads both instead of counting: the gap
+  before a row is its position, the gap at the end the last row's end, and a move shifts by
+  the rows the dragged one lifts out.
+
 ## [0.1.0] — 2026-09-09
 
 `0.1.0` is the first tag. Until it, the only way to depend on this library was

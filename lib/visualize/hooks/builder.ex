@@ -23,8 +23,11 @@ defmodule Visualize.Hooks.Builder do
   Data attributes (spec/10 §16.2):
   - `data-builder-target` on the hook element - the `phx-target` the hook pushes to;
     absent, it pushes to the LiveView
-  - `data-builder-layer` on a layer and on an inspector row - the layer's zero-based
-    position
+  - `data-builder-layer` on a stack row - its flat position in the tree, a closed group's
+    rows counted though not drawn; on an inspector row - the position of the layer that
+    set the value
+  - `data-builder-end` on a stack row - the flat position past everything the row holds;
+    a drop's gap is read from these two and never counted from the drawn rows (#468)
   - `data-builder-path` on an inspector row - the entry's path, as
     `Visualize.Chart.Validator.format/1` spells one
 
@@ -67,6 +70,7 @@ defmodule Visualize.Hooks.Builder do
         // which one a reorder came from. Absent means the layer stack (spec/14 §18.18).
         this.scope = this.el.dataset.builderScope || null;
         this.from = null;
+        this.fromEnd = null;
         this.onDragStart = this.handleDragStart.bind(this);
         this.onDragOver = this.handleDragOver.bind(this);
         this.onDrop = this.handleDrop.bind(this);
@@ -262,8 +266,15 @@ defmodule Visualize.Hooks.Builder do
         return layer && this.el.contains(layer) ? layer : null;
       },
 
+      // A row's flat position, and the position past everything it holds (spec/10 §16.2):
+      // both the server's, read and never counted — a closed group's rows are counted by
+      // every flat position and drawn by nothing (#468, D-75).
       position(layer) {
         return parseInt(layer.getAttribute('data-builder-layer'), 10);
+      },
+
+      end(layer) {
+        return parseInt(layer.getAttribute('data-builder-end'), 10);
       },
 
       // A push from inside a node's form aims at that node (spec/14 §18.15).
@@ -366,6 +377,7 @@ defmodule Visualize.Hooks.Builder do
         const layer = this.layerAt(e);
         if (!layer) return;
         this.from = this.position(layer);
+        this.fromEnd = this.end(layer);
         if (e.dataTransfer) {
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', String(this.from));
@@ -502,16 +514,17 @@ defmodule Visualize.Hooks.Builder do
         return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
       },
 
-      // Where the drop lands, as a position BETWEEN layers: 0 above the first, n below the
-      // last. One rule for both drags, and the only one that can name either end — the
-      // pointer is compared with each row's midpoint, so there is no row it must be inside.
+      // Where the drop lands, as a gap BETWEEN rows named by a flat position (spec/14
+      // §18.17): the position of the first drawn row whose midpoint is below the pointer,
+      // or the last drawn row's end. One rule for both drags, and the only one that can
+      // name either end — there is no row the pointer must be inside.
       insertionPoint(e) {
         const layers = this.layers();
-        for (let i = 0; i < layers.length; i++) {
-          const box = layers[i].getBoundingClientRect();
-          if (e.clientY < box.top + box.height / 2) return i;
+        for (const row of layers) {
+          const box = row.getBoundingClientRect();
+          if (e.clientY < box.top + box.height / 2) return this.position(row);
         }
-        return layers.length;
+        return layers.length === 0 ? 0 : this.end(layers[layers.length - 1]);
       },
 
       layers() {
@@ -593,10 +606,11 @@ defmodule Visualize.Hooks.Builder do
 
         const at = this.insertionPoint(e);
 
-        // A move within the stack. `at` is a gap in the list as it stands; once the dragged
-        // layer is lifted out, every gap after it shifts down by one.
+        // A move within the stack. `at` is a gap in the list as it stands; the dragged row
+        // is lifted out with everything it holds, so every gap past them shifts down by
+        // that many, and a gap among them is where it already stands.
         if (this.from !== null) {
-          const to = at > this.from ? at - 1 : at;
+          const to = at >= this.fromEnd ? at - (this.fromEnd - this.from) : Math.min(at, this.from);
           if (to !== this.from) this.push('reorder', { from: this.from, to: to });
           return;
         }
@@ -627,23 +641,22 @@ defmodule Visualize.Hooks.Builder do
         box.dispatchEvent(new Event('input', { bubbles: true }));
       },
 
-      // The gap the drop would land in, drawn on the row below it, or under the last row
-      // when the gap is the end.
+      // The gap the drop would land in, drawn on the row whose position it is, or under
+      // the last row when the gap is the end.
       markPoint(at) {
         this.clearOver();
         const layers = this.layers();
         if (layers.length === 0) return;
 
-        if (at >= layers.length) {
-          layers[layers.length - 1].classList.add('vis-builder-layer-over-end');
-        } else {
-          layers[at].classList.add('vis-builder-layer-over');
-        }
+        const row = layers.find((layer) => this.position(layer) === at);
+        if (row) row.classList.add('vis-builder-layer-over');
+        else layers[layers.length - 1].classList.add('vis-builder-layer-over-end');
       },
 
       // A drag that ended anywhere leaves no marks, dropped or not.
       handleDragEnd() {
         this.from = null;
+        this.fromEnd = null;
         this.clearOver();
         this.el.querySelectorAll('.vis-builder-layer-dragging, .vis-builder-item-dragging')
           .forEach((node) => {

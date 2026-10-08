@@ -3575,7 +3575,7 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render(s)
       # A group row: its toggle, its count, a drop target; an object row: its kind's glyph.
       assert html =~
-               ~s(class="vis-builder-layer vis-builder-layer-selected vis-builder-layer-group" style="--vis-builder-depth: 0" data-builder-layer="2" data-builder-into="#{elem(layer.id, 1)}")
+               ~s(class="vis-builder-layer vis-builder-layer-selected vis-builder-layer-group" style="--vis-builder-depth: 0" data-builder-layer="2" data-builder-end="3" data-builder-into="#{elem(layer.id, 1)}")
 
       assert html =~ ~s(phx-click="toggle_site" phx-value-index="2")
       assert html =~ ~s(<span class="vis-builder-site-count" title="0 inside">0</span>)
@@ -3624,7 +3624,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<span class="vis-builder-site-count" title="2 inside">2</span>)
 
       assert html =~
-               ~s(style="--vis-builder-depth: 1" data-builder-layer="4" data-builder-parent="#{into}")
+               ~s(style="--vis-builder-depth: 1" data-builder-layer="4" data-builder-end="5" data-builder-parent="#{into}")
 
       assert html =~ ~s(class="vis-builder-site-kind" title="styles")
       assert html =~ ~s(class="vis-builder-site-kind" title="scales")
@@ -3723,7 +3723,7 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render(s)
 
       assert html =~
-               ~s(id="b-layers-row-0" class="vis-builder-layer vis-builder-layer-selected" style="--vis-builder-depth: 0" data-builder-layer="0" draggable="true" role="button" tabindex="0")
+               ~s(id="b-layers-row-0" class="vis-builder-layer vis-builder-layer-selected" style="--vis-builder-depth: 0" data-builder-layer="0" data-builder-end="1" draggable="true" role="button" tabindex="0")
 
       assert html =~
                ~s(aria-label="house, object 1 of 3, selected: Enter to edit, arrows to move, Right to show what it declares, drag to reorder")
