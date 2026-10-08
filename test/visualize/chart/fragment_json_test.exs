@@ -95,4 +95,41 @@ defmodule Visualize.Chart.FragmentJsonTest do
   test "text that is not JSON is an error, not a crash" do
     assert {:error, _reason} = Fragment.from_json("{not json")
   end
+
+  describe "an adopted scale (spec/14 §11, #480)" do
+    @shared %{
+      version: 2,
+      sources: %{a: %{fields: [:t, :v]}, b: %{fields: [:t, :v]}},
+      frames: %{
+        main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}},
+        right: %{
+          kind: :cartesian,
+          scales: %{x: {:frame, :main, :x}, y: %{kind: :linear}},
+          axes: [%{scale: :y, side: :right}]
+        }
+      },
+      marks: [
+        %{type: :line, data: :a, frame: :main, channels: %{x: :t, y: :v}},
+        %{type: :line, data: :b, frame: :right, channels: %{x: :t, y: :v}}
+      ]
+    }
+
+    test "a design whose frames share a scale round-trips through JSON and still shares it" do
+      {:ok, chart} = Visualize.Chart.from_map(@shared)
+      assert {:ok, json} = Visualize.Chart.to_json(chart)
+      assert json =~ ~s("$adopted":["main","x"])
+      assert {:ok, back} = Visualize.Chart.from_json(json)
+      assert back.frames.right.scales.x == {:frame, :main, :x}
+
+      sources = %{a: [%{t: 1, v: 1}, %{t: 2, v: 2}], b: [%{t: 5, v: 9}]}
+      {:ok, applied} = Visualize.Chart.apply(back, sources: sources)
+      assert Visualize.Chart.Frame.scale(applied.frames.right, :x).domain == [1, 5]
+    end
+
+    test "a fragment carrying an adoption round-trips too" do
+      fragment = %{frames: %{right: %{scales: %{x: {:frame, :main, :x}}}}}
+      assert {:ok, json} = Fragment.to_json(fragment)
+      assert Fragment.from_json(json) == {:ok, fragment}
+    end
+  end
 end
