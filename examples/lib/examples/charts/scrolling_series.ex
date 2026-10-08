@@ -27,13 +27,12 @@ defmodule Examples.Charts.ScrollingSeries do
   @width 900
   @height 500
   @margin %{top: 40, right: 30, bottom: 50, left: 60}
-  @inner_width @width - @margin.left - @margin.right
   @series [:area, :line_1, :line_2, :line_3, :line_4]
   @floor -100
   @ceiling 100
 
   @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
-  def size, do: {900, 500}
+  def size, do: {@width, @height}
 
   def title, do: "Scrolling series"
 
@@ -43,8 +42,16 @@ defmodule Examples.Charts.ScrollingSeries do
   @doc "A streaming design: the drawer offers Incremental and a data rate (spec/14 §12.6)."
   def stream?, do: true
 
-  @doc "The plot the viewport scrolls, `{x, y, width, height}` in the frame."
-  def plot, do: {@margin.left, @margin.top, @inner_width, @height - @margin.top - @margin.bottom}
+  @doc """
+  The plot the viewport scrolls, `{x, y, width, height}` in the frame, at the frame's
+  `width`/`height` in `opts` — the size the chart is drawn at — or the design's own
+  (spec/14 §12.6, #459).
+  """
+  def plot(opts \\ []) do
+    {width, height} = Design.size(__MODULE__, opts)
+    {inner_width, inner_height} = Design.plot(width, height, @margin)
+    {@margin.left, @margin.top, inner_width, inner_height}
+  end
 
   @doc """
   The design and the rows of its window (spec/14 §16.1). Options: `samples_per_px`
@@ -85,9 +92,13 @@ defmodule Examples.Charts.ScrollingSeries do
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-  @doc "The window's `Examples.Scroll` at `opts`."
+  @doc """
+  The window's `Examples.Scroll` at `opts`: the plot's columns at the size the chart is
+  drawn at (#459), so the viewport's span is whole samples per pixel of the plot drawn.
+  """
   def scroll(opts) do
-    %{Scroll.new(@inner_width, opts[:samples_per_px] || 1) | origin: opts[:origin] || 0}
+    {_x, _y, inner_width, _h} = plot(opts)
+    %{Scroll.new(inner_width, opts[:samples_per_px] || 1) | origin: opts[:origin] || 0}
   end
 
   @doc "The rows of every series over the window: `t` the absolute sample, `v` its value."

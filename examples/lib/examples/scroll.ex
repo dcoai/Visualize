@@ -62,6 +62,32 @@ defmodule Examples.Scroll do
   def retimed(%__MODULE__{} = scroll, samples_per_px) when samples_per_px >= 1,
     do: %{scroll | samples_per_px: samples_per_px}
 
+  @doc """
+  The window over another plot width, keeping its density and its newest sample
+  (spec/14 §12.6, #459): a chart drawn at a new size is a window of that many columns at
+  the same samples per pixel, so a narrower one shows a shorter span. The right edge is
+  where a stream's samples arrive, so the origin moves by the columns the width changed —
+  a narrower window drops its oldest samples — and is clamped at zero. The caller repaints
+  in full, the copy-shift holding only within one plot (spec/14 §12.5).
+
+      iex> scroll = Examples.Scroll.new(100, 4) |> Examples.Scroll.advance(25)
+      iex> narrow = Examples.Scroll.resized(scroll, 60)
+      iex> {narrow.origin, narrow.samples_per_px, Examples.Scroll.count(narrow)}
+      {260, 4, 241}
+      iex> narrow.origin + Examples.Scroll.count(narrow) == scroll.origin + Examples.Scroll.count(scroll)
+      true
+      iex> Examples.Scroll.resized(scroll, 200).origin
+      0
+  """
+  @spec resized(t(), pos_integer()) :: t()
+  def resized(
+        %__MODULE__{inner_width: w, samples_per_px: d, origin: origin} = scroll,
+        inner_width
+      )
+      when is_integer(inner_width) and inner_width > 0 do
+    %{scroll | inner_width: inner_width, origin: max(0, origin + (w - inner_width) * d)}
+  end
+
   @doc "The samples a scroll of `px` pixels is."
   @spec samples(t(), non_neg_integer()) :: non_neg_integer()
   def samples(%__MODULE__{samples_per_px: d}, px), do: px * d
