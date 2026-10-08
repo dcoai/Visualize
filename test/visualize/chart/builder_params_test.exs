@@ -79,7 +79,8 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       html = render_component(&Params.panel/1, %{layers: [%{version: 2}]})
 
       assert html =~
-               ~s(<form class="vis-builder-params" phx-change="set_var" phx-submit="submitted">)
+               ~s(<form id="vis-builder-params" class="vis-builder-params" phx-change="set_var" ) <>
+                 ~s(phx-submit="submitted">)
 
       refute html =~ "vis-builder-param-name"
     end
@@ -189,6 +190,45 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       assert Document.faults({:missing_dependency, :jason}) == [
                "design: the JSON codec needs Jason"
              ]
+    end
+  end
+
+  describe "the forms' ids (spec/10 §15.3, #444)" do
+    # LiveView recovers a form after a crash or reconnect only by its id.
+    test "the parameters form carries the panel's id, and each site form one derived from it" do
+      sites = [
+        %{index: 0, label: "base", free: [%{name: :unit}], vars: %{}},
+        %{index: 2, label: "titled", free: [%{name: :ticks}], vars: %{ticks: 6}}
+      ]
+
+      html =
+        render_component(&Params.panel/1, %{layers: BuilderFixture.parameterised(), sites: sites})
+
+      assert html =~
+               ~s(<form id="vis-builder-params" class="vis-builder-params" phx-change="set_var")
+
+      assert html =~
+               ~s(<form id="vis-builder-params-site-0" class="vis-builder-site" phx-change="bind_site")
+
+      assert html =~
+               ~s(<form id="vis-builder-params-site-2" class="vis-builder-site" phx-change="bind_site")
+
+      refute Regex.match?(~r/<form (?![^>]*\bid=)[^>]*phx-change/, html)
+    end
+
+    test "an explicit id wins" do
+      sites = [%{index: 1, label: "base", free: [%{name: :unit}], vars: %{}}]
+
+      html =
+        render_component(&Params.panel/1, %{
+          id: "host-params",
+          layers: BuilderFixture.parameterised(),
+          sites: sites
+        })
+
+      assert html =~ ~s(<form id="host-params" class="vis-builder-params")
+      assert html =~ ~s(<form id="host-params-site-1" class="vis-builder-site")
+      assert html =~ ~s(<datalist id="host-params-names">)
     end
   end
 

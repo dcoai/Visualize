@@ -499,6 +499,81 @@ defmodule Visualize.Chart.Builder.EditorTest do
     end
   end
 
+  describe "the form's id (spec/10 §15.3, #444)" do
+    # LiveView recovers a form after a crash or reconnect only by its id, and warns of a
+    # `phx-change` form without one.
+    test "is derived from the node's path, as a valid HTML id" do
+      html =
+        render_component(&Editor.panel/1, %{
+          kind: :mark,
+          node: BuilderFixture.mark(),
+          path: [:marks, 0]
+        })
+
+      assert form_ids(html) == ["vis-builder-editor-marks-0-form"]
+    end
+
+    test "is derived from the node's label when the form carries one" do
+      html =
+        render_component(&Editor.form_body/1, %{
+          kind: :axis,
+          node: %{},
+          path: [:frames, :main, :axes, 1],
+          label: "frames.main.axes[1]"
+        })
+
+      assert form_ids(html) == ["vis-builder-editor-frames-main-axes-1-form"]
+    end
+
+    test "is derived from the kind at the root path" do
+      html = render_component(&Editor.panel/1, %{kind: :mark, node: BuilderFixture.mark()})
+      assert form_ids(html) == ["vis-builder-editor-mark-form"]
+    end
+
+    test "two node forms on one page differ" do
+      ids =
+        for path <- [[:marks, 0], [:marks, 1], [:styles, :series]] do
+          html = render_component(&Editor.panel/1, %{kind: :mark, node: %{}, path: path})
+          [id] = form_ids(html)
+          id
+        end
+
+      assert length(Enum.uniq(ids)) == 3
+    end
+
+    test "an explicit id wins over the derived one" do
+      panel =
+        render_component(&Editor.panel/1, %{
+          id: "host-editor",
+          kind: :mark,
+          node: %{},
+          path: [:marks, 0]
+        })
+
+      body =
+        render_component(&Editor.form_body/1, %{
+          id: "host-body",
+          kind: :mark,
+          node: %{},
+          label: "marks[0]"
+        })
+
+      assert form_ids(panel) == ["host-editor-form"]
+      assert form_ids(body) == ["host-body-form"]
+    end
+
+    test "the events are unchanged" do
+      html = render_component(&Editor.panel/1, %{kind: :mark, node: %{}, path: [:marks, 0]})
+      assert html =~ ~s(class="vis-builder-form" phx-change="edit")
+    end
+  end
+
+  defp form_ids(html) do
+    ~r/<form id="([^"]*)" class="vis-builder-form"/
+    |> Regex.scan(html)
+    |> Enum.map(fn [_, id] -> id end)
+  end
+
   defp label(path) do
     Enum.reduce(path, "", fn
       index, acc when is_integer(index) -> "#{acc}[#{index}]"

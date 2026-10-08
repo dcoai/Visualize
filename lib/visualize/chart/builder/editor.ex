@@ -524,7 +524,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Enum.filter(@facets, fn facet -> Enum.any?(specs, &(&1.facet == facet)) end)
     end
 
-    attr(:id, :string, default: "vis-builder-editor", doc: "the panel's id")
+    attr(:id, :string,
+      default: nil,
+      doc: "the editor's id, which its form carries as `<id>-form`; nil derives it from the node"
+    )
+
     attr(:kind, :atom, required: true, doc: "the node kind being edited")
     attr(:node, :map, required: true, doc: "the node's current value")
     attr(:path, :list, default: [], doc: "where the node sits, for its keys' errors")
@@ -920,7 +924,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     listed keys — as the controls `widget/1` chose, carrying the node's label so an edit in
     it aims at the node (`_node`, `data-builder-node`, §18.16).
     """
-    attr(:id, :string, required: true)
+    attr(:id, :string,
+      default: nil,
+      doc: "the editor's id, which the form carries as `<id>-form`; nil derives it from the node"
+    )
+
     attr(:kind, :atom, required: true)
     attr(:node, :map, required: true)
     attr(:path, :list, default: [])
@@ -981,11 +989,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns =
         assigns
         |> assign(:open, open)
+        |> assign(:form_id, form_id(assigns))
         |> assign(:blocks, blocks(fields(specs, open, assigns)))
 
       ~H"""
         <form
-          id={@id <> "-form"}
+          id={@form_id}
           class="vis-builder-form"
           phx-change={@event}
           phx-hook="BuilderHook"
@@ -1134,6 +1143,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
       :target
     ]
     defp form_assigns(assigns), do: Map.take(assigns, @form_keys)
+
+    # The form's id (spec/10 §15.3, #444): LiveView recovers a form only by its id, so it is
+    # the caller's when given and otherwise the node's — its label, else its path, else (at
+    # the root) its kind — which tells two node forms on one page apart.
+    defp form_id(%{id: id}) when is_binary(id), do: id <> "-form"
+    defp form_id(assigns), do: "vis-builder-editor-" <> id_segment(node_name(assigns)) <> "-form"
+
+    defp node_name(%{label: label}) when is_binary(label), do: label
+    defp node_name(%{path: [_ | _] = path}), do: label(path)
+    defp node_name(%{kind: kind}), do: to_string(kind)
+
+    # A name as a run of an HTML id: letters and digits, every other run one `-`.
+    defp id_segment(name), do: name |> String.replace(~r/[^A-Za-z0-9]+/, "-") |> String.trim("-")
 
     defp class(nil), do: "vis-builder-editor"
     defp class(extra), do: "vis-builder-editor " <> extra
