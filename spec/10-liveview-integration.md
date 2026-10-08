@@ -578,7 +578,7 @@ The component's assigns are spec/14 §18.2, each declared with `attr/3` as every
 | `Visualize.Chart.Builder.Layers.panel/1` | `id` (`:string`, required — the hook element's), `layers` (`:list`, required), `selected` (`:integer`, `0`), `disabled` (`:any`, an empty `MapSet` — the positions dropped from the stack), `target` (`:any`, `nil`), `class` (`:string`, `nil`) |
 | `Visualize.Chart.Builder.Inspector.panel/1` | `id` (`:string`, required — the hook element's), `layers` (`:list`, required), `target` (`:any`, `nil`), `class` (`:string`, `nil`) |
 | `Visualize.Chart.Builder.Params.panel/1` | `id` (`:string`, `"vis-builder-params"` — the parameters form's id, the stem of its site forms' and its datalist's), `layers` (`:list`, required), `vars` (`:map`, `%{}` — the values now bound), `target` (`:any`, `nil`), `class` (`:string`, `nil`) |
-| `Visualize.Chart.Builder.Document.panel/1` | `design` (`:map`, required — the stacked design), `target` (`:any`, `nil`), `class` (`:string`, `nil`) |
+| `Visualize.Chart.Builder.Document.panel/1` | `id` (`:string`, `"vis-builder-document"` — the panel's id, the stem of its import form's), `design` (`:map`, required — the stacked design), `target` (`:any`, `nil`), `class` (`:string`, `nil`) |
 
 ### 15.3 The markup
 
@@ -594,7 +594,29 @@ The inspector is `<table class="vis-builder-inspector" id phx-hook="BuilderHook"
 
 The parameters form is `<form id class="vis-builder-params" phx-change="set_var">`, its id the `id` assign — `vis-builder-params` unless the host gives one, as it must where two panels share a page — for the same recovery as the editor's (#444); each site form below it, `<form class="vis-builder-site" phx-change="bind_site">`, carries `<id>-site-<index>`, `<index>` the site's position in the stack. The parameters form holds one `<label class="vis-builder-param">` per variable, also `vis-builder-param-required` where the variable has no default. Each holds `<span class="vis-builder-param-name">` with the variable's name, the control `Visualize.Chart.Builder.Editor.widget/1` chose with `name` the variable's name, the declared default as its `placeholder`, and `<span class="vis-builder-param-uses">` with the paths it stands at, comma-separated. A stack with no free variable renders the form empty.
 
-The import and export panel is `<div class="vis-builder-document">` holding `<textarea class="vis-builder-export" readonly>` with the JSON document — absent, and `<ul class="vis-builder-errors">` in its place, where the design does not encode — and `<form class="vis-builder-import" phx-submit="import">` with `<textarea name="document">` and a submit button.
+The import and export panel is `<div class="vis-builder-document">` holding `<textarea class="vis-builder-export" readonly>` with the JSON document — absent, and `<ul class="vis-builder-errors">` in its place, where the design does not encode — and `<form id class="vis-builder-import" phx-submit="import">`, its id `<id>-import`, with `<textarea name="document">` and a submit button.
+
+**Every form the builder renders carries an id** (#461, generalising #444). LiveView recovers a form's state after a crash or a reconnect only by its id, warns of a `phx-change` form without one, and patches the page by id, so an id must be unique on the page. The rule therefore holds for every `<form>` with `phx-change` or `phx-submit`, not only the editor's and the parameters': each id is **derived from the panel's own id** — the `id` assign, which a host may give and must where two panels share a page — with a suffix naming the form, and, for a form repeated per row, the row's position on the page, so two forms on one page never share one and the same state renders the same ids. The forms and their ids, `<id>` being the panel's:
+
+| Form | Id |
+|---|---|
+| the editor's node form, `vis-builder-form` | `<id>-form`, or derived from the node (above, #444) |
+| the parameters form, `vis-builder-params`, and its site forms | `<id>`, and `<id>-site-<index>` (above, #444) |
+| the import form, `vis-builder-import` | `<id>-import` |
+| the builder's *New* form, `vis-builder-new`, and its name form, `vis-builder-keep` | `<builder id>-new-form`, `<builder id>-keep-form` |
+| the palette's add form, `vis-builder-palette-new` | `<id>-new`, `id` defaulting to `vis-builder-palette` |
+| the style stack's add form, `vis-builder-style-add` | `<id>-add` |
+| the font form, `vis-builder-fonts` | `<id>-form` |
+| a layer's mask form, `vis-builder-masks` | `<id>-row-<position>-mask`, under the row `<id>-row-<position>` |
+| the masks panel's key and *save as* forms | `<id>-declared`, `<id>-save` |
+| the colour picker, `vis-builder-picker` | `<id>` |
+| the variable panel's find and create forms | `<id>-find`, `<id>-create` |
+| an expanded variable's default, value and site forms | `<id>-var-<n>-default`, `<id>-var-<n>-value`, `<id>-var-<n>-site-<index>`, `<n>` the variable's position in the list, `<index>` the site's in the stack |
+| a source's name, generator, signal and host-default forms, and its add-column form | `<id>-source-<n>-name`, `-generator`, `-signal`, `-default`, `-add-column`, `<n>` the source's position on the page |
+| a column's name and type forms | `<id>-source-<n>-column-<m>-name`, `-type`, `<m>` the column's position in the source |
+| the tick's period form, `vis-builder-tick-period` | `<id>-tick` |
+
+LiveView's own check runs only where `Phoenix.LiveViewTest` drives a page through `live/2` or `live_isolated/3`, as it parses the HTML; a component rendered with `render_component/2` is never parsed, so the library's suite, which renders every panel that way, never sees the warning. A test of the library's own therefore holds the rule: every `<form>` tag in the library's source carries an `id`, and the builder rendered in every state that renders a form has no form without an id and no id twice on a page.
 
 The preview pane is `<div class="vis-builder-preview">`. When the design applies it holds `<svg class="vis-builder-chart" width height role="img" viewBox="0 0 width height">` at the realised frame's own size, with the frame's group inside it: `Visualize.Chart.Frame.render/2` draws a group and the `<svg>` shell is the pane's, exactly as it is a component's (§1.2), and the markup is a string emitted through `Phoenix.HTML.raw/1` as §11.2 requires. Otherwise it holds `<ul class="vis-builder-errors">` with one `<li class="vis-builder-error">` per fault, in the validator's order. Exactly one of the two is present, so a test that asks whether the design applied asks for `vis-builder-errors`.
 
