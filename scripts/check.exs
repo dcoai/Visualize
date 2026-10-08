@@ -10,6 +10,7 @@ defmodule Visualize.Check do
     {"verify:api-surface", "dev", ~w(vis.surface --check)},
     {"verify:headings", "dev", ~w(vis.headings)},
     {"verify:models", "dev", ~w(vis.verify)},
+    {"verify:hooks", "test", ~w(test --warnings-as-errors --only js), ".", :node},
     {"consumer-compile", "prod", ~w(compile --force --warnings-as-errors)},
     {"consumer-compile", "prod", {"elixir", ~w(scripts/consumer_check.exs)}},
     {"examples:compile", "test", ~w(compile --warnings-as-errors), "examples"},
@@ -24,6 +25,16 @@ defmodule Visualize.Check do
   end
 
   defp job({name, env, args}), do: job({name, env, args, "."})
+
+  # A job that needs node runs when node is on the path; CI installs it (spec/12 §4), so a
+  # workstation without it skips the job and stays green.
+  defp job({name, env, args, dir, :node}) do
+    if System.find_executable("node") do
+      job({name, env, args, dir})
+    else
+      IO.puts("\n== #{name} ==\n#{name}: skipped: no node")
+    end
+  end
 
   # A job is `mix` with arguments, or `{command, arguments}` for a script run directly.
   defp job({name, env, {command, args}, dir}) do
