@@ -166,6 +166,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             :for={entry <- @entries}
             class={entry_class(entry, @open)}
             data-builder-layer={entry.index}
+            data-builder-end={entry.index + 1}
             draggable={not entry.default}
             title={title(entry)}
             phx-click="select_style_entry"

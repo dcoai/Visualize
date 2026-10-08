@@ -34,6 +34,21 @@ const Stub = (() => {
     fire(type, event) { (this.listeners[type] || []).slice().forEach((fn) => fn(event)); }
   }
 
+  // A selector list of compounds — `tag`, `.class`, `[attr]`, `tag[attr]` — which is every
+  // form the hooks query by; anything else throws rather than silently matching nothing.
+  function matcher(selector) {
+    const tests = selector.split(',').map((part) => {
+      const m = part.trim().match(/^([a-z0-9]*)((?:\.[\w-]+|\[[\w-]+\])*)$/i);
+      if (!m) throw new Error('dom_stub: unsupported selector ' + selector);
+      const tag = m[1].toUpperCase();
+      const classes = [...m[2].matchAll(/\.([\w-]+)/g)].map((c) => c[1]);
+      const attrs = [...m[2].matchAll(/\[([\w-]+)\]/g)].map((a) => a[1]);
+      return (el) => (tag === '' || el.tagName === tag) &&
+        classes.every((c) => el.classList.contains(c)) && attrs.every((a) => el.hasAttribute(a));
+    });
+    return (el) => tests.some((test) => test(el));
+  }
+
   class Element extends Target {
     constructor(tagName, dataset = {}) {
       super();
@@ -43,16 +58,18 @@ const Stub = (() => {
       this.children = [];
       this.style = {};
       this.parentNode = null;
+      this.classList = new Set();
+      this.classList.contains = this.classList.has;
+      this.classList.remove = this.classList.delete;
+      this.classList.toggle = (name, on) => (on ? this.classList.add(name) : this.classList.delete(name), on);
       this.rect = {left: 0, top: 0, width: 0, height: 0};
       this.offsetWidth = 0;
       this.offsetHeight = 0;
     }
-    // `.class`, a tag name, or `[attribute]`.
-    matches(selector) {
-      if (selector.startsWith('.')) return this.className === selector.slice(1);
-      if (selector.startsWith('[')) return this.hasAttribute(selector.slice(1, -1));
-      return this.tagName === selector.toUpperCase();
-    }
+    get className() { return [...this.classList].join(' '); }
+    set className(value) { this.classList.clear(); String(value).split(/\s+/).filter(Boolean).forEach((c) => this.classList.add(c)); }
+    // A selector list of compounds (`tag`, `.class`, `[attr]`, `tag[attr]`), by `matcher`.
+    matches(selector) { return matcher(selector)(this); }
     // Every descendant in document order.
     descendants() { return this.children.flatMap((c) => [c, ...c.descendants()]); }
     querySelector(selector) { return this.descendants().find((c) => c.matches(selector)) || null; }
@@ -74,7 +91,10 @@ const Stub = (() => {
       if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this);
       this.parentNode = null;
     }
-    getBoundingClientRect() { return {...this.rect}; }
+    getBoundingClientRect() {
+      const {top, left, width, height} = this.rect;
+      return {top, left, width, height, bottom: top + height, right: left + width};
+    }
     setAttribute(name, value) { this.attributes[name] = String(value); }
     // A `data-*` attribute the element was built with reads through its dataset, as in a browser.
     getAttribute(name) {
@@ -140,6 +160,21 @@ const Stub = (() => {
       if (width !== undefined) el.appendChild(new Canvas(width, height));
       return el;
     },
+    // An element as a page renders it, by its HTML attribute names (#468): its attributes,
+    // `class` read into classList and each `data-*` into dataset, as a browser reflects
+    // them, then its children. `node/2` below builds a bare element from a dataset.
+    markup(tag, attributes = {}, children = []) {
+      const el = new Element(tag);
+      for (const [name, value] of Object.entries(attributes)) {
+        el.setAttribute(name, value);
+        if (name === 'class') el.className = String(value);
+        if (name.startsWith('data-')) {
+          el.dataset[datasetKey(name)] = String(value);
+        }
+      }
+      children.forEach((child) => el.appendChild(child));
+      return el;
+    },
     // A hook instance as LiveView builds one: el, pushEvent and handleEvent, then mounted().
     mount(hook, el) {
       const handlers = {};
@@ -147,6 +182,7 @@ const Stub = (() => {
         el,
         handlers,
         pushEvent: (name, payload) => log.push({on: 'live', kind: 'push', name, payload}),
+        pushEventTo: (target, name, payload) => log.push({on: 'live', kind: 'push', name, payload, target}),
         handleEvent: (name, fn) => { handlers[name] = fn; },
       });
       instance.mounted();

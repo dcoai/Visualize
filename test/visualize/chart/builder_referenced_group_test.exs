@@ -190,8 +190,9 @@ defmodule Visualize.Chart.BuilderReferencedGroupTest do
       [pair | rest] = s.assigns.uses
       group = row(BuilderFixture.render(s), 0)
 
-      # The drag source is the group's <li>, carrying the group's position.
-      assert group =~ ~s(data-builder-layer="0" draggable="true")
+      # The drag source is the group's <li>, carrying the group's position; its inside is the
+      # library's and takes no flat position, so a move lifts out the one row (#468).
+      assert group =~ ~s(data-builder-layer="0" data-builder-end="1" draggable="true")
 
       {:noreply, moved} = Builder.handle_event("reorder", %{"from" => 0, "to" => 3}, s)
       assert moved.assigns.uses == rest ++ [pair]
