@@ -57,6 +57,12 @@ release it merely follows.
   beside its `data-builder-layer`, and the hook reads both instead of counting: the gap
   before a row is its position, the gap at the end the last row's end, and a move shifts by
   the rows the dragged one lifts out.
+- **A composite exports and imports with its references** (#470). `Fragment.refs/1` and
+  `relocate/2` treated every struct as a leaf, and a composite's sites are `%Use{}` structs
+  holding ids in `ref`, `origin`, `local` and `vars`. So `Bundle.export/3` of a composite
+  left out what its uses referenced, and an import left it pointing at the source store's
+  entries. The two id walks now read a use's parts. Every other walk still stops at a
+  struct (D-92).
 
 ## [0.1.0] — 2026-09-09
 
