@@ -3,7 +3,8 @@ defmodule Visualize.Theme do
   The colours, font and sizes a chart draws with (spec/08 §7).
 
   A theme is a struct of named *slots*: `:series_1` … `:series_n` for the categorical
-  colours, `:axis`, `:grid`, `:text` and `:background`, and `:font_family`, `:font_size`,
+  colours, `:axis`, `:grid`, `:text`, `:background` and `:surface` — the plane the data is laid
+  on, between the background and the grid — and `:font_family`, `:font_size`,
   `:label_size` and `:title_size`. Nothing in the library carries a colour literal;
   every axis, mark and component reads its values through `resolve/3`, in the mode its
   render target needs:
@@ -38,6 +39,7 @@ defmodule Visualize.Theme do
             grid: "#e0e0e0",
             text: "#333333",
             background: "#ffffff",
+            surface: "#eef2f6",
             font_family: "sans-serif",
             font_size: 10,
             label_size: 12,
@@ -56,13 +58,14 @@ defmodule Visualize.Theme do
           grid: String.t(),
           text: String.t(),
           background: String.t(),
+          surface: String.t(),
           font_family: String.t(),
           font_size: number(),
           label_size: number(),
           title_size: number()
         }
 
-  @colour_slots [:axis, :grid, :text, :background]
+  @colour_slots [:axis, :grid, :text, :background, :surface]
   @size_slots [:font_size, :label_size, :title_size]
   @fixed_slots @colour_slots ++ [:font_family] ++ @size_slots
 
@@ -79,7 +82,8 @@ defmodule Visualize.Theme do
       axis: "#a0a4ab",
       grid: "#33373f",
       text: "#e6e6e6",
-      background: "#1b1e24"
+      background: "#1b1e24",
+      surface: "#23272f"
     }
   end
 
@@ -109,7 +113,7 @@ defmodule Visualize.Theme do
     Enum.map(1..length(series)//1, &series_atom/1) ++ @fixed_slots
   end
 
-  @doc "The theme's colour slots — the series, then axis, grid, text and background (spec/08 §7.1)."
+  @doc "The theme's colour slots — the series, then axis, grid, text, background and surface (spec/08 §7.1)."
   @spec colour_slots(t()) :: [atom(), ...]
   def colour_slots(%__MODULE__{series: series}) do
     Enum.map(1..length(series)//1, &series_atom/1) ++ @colour_slots

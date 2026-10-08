@@ -3,10 +3,11 @@ defmodule Visualize.ThemeTest do
   use ExUnit.Case, async: true
 
   alias Visualize.{Backend, Theme}
+  alias Visualize.Chart.Style
 
   doctest Theme
 
-  @fixed ~w(axis grid text background font_family font_size label_size title_size)a
+  @fixed ~w(axis grid text background surface font_family font_size label_size title_size)a
 
   describe "slots" do
     test "series first, then the fixed slots, for both themes" do
@@ -65,6 +66,50 @@ defmodule Visualize.ThemeTest do
       assert Theme.mode(Backend.SVG) == :css
       assert Theme.mode(:canvas) == :literal
       assert Theme.mode(Backend.Canvas) == :literal
+    end
+  end
+
+  describe ":surface (#422)" do
+    @builtin [Theme.default(), Theme.dark()]
+
+    test "every built-in theme answers it, and lists it among its slots and colour slots" do
+      for theme <- @builtin do
+        assert is_binary(Theme.resolve(theme, :surface, :literal))
+        assert :surface in Theme.slots(theme)
+        assert :surface in Theme.colour_slots(theme)
+      end
+
+      assert Theme.default().surface == "#eef2f6"
+      assert Theme.dark().surface == "#23272f"
+    end
+
+    test "differs from :grid in both palettes, so the grid drawn over it stays visible" do
+      for theme <- @builtin do
+        refute String.downcase(theme.surface) == String.downcase(theme.grid),
+               "#{theme.name}: :surface swallows the :grid drawn over it"
+      end
+    end
+
+    test "a style naming it resolves to the variable on SVG and the literal on canvas" do
+      node = %{fill: :surface, stroke: {:series, 2}}
+
+      for theme <- @builtin do
+        assert Style.resolve(node, theme, Theme.mode(:svg)) == %{
+                 fill: "var(--vis-surface, #{theme.surface})",
+                 stroke: "var(--vis-series-2, #{Enum.at(theme.series, 1)})"
+               }
+
+        assert Style.resolve(node, theme, Theme.mode(:canvas)) == %{
+                 fill: theme.surface,
+                 stroke: Enum.at(theme.series, 1)
+               }
+      end
+    end
+
+    test "a host theme from new/1 that names none takes the light one, as any field" do
+      assert Theme.new(background: "#000000").surface == Theme.default().surface
+      assert Theme.new(surface: "#101010").surface == "#101010"
+      assert Theme.stylesheet(Theme.dark()) =~ "\n  --vis-surface: #23272f;\n"
     end
   end
 

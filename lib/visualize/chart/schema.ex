@@ -342,6 +342,7 @@ defmodule Visualize.Chart.Schema do
       spec(:grid, :string, :style, default: theme.grid),
       spec(:text, :string, :style, default: theme.text),
       spec(:background, :string, :style, default: theme.background),
+      spec(:surface, :string, :style, default: theme.surface),
       spec(:font_family, :string, :style, default: theme.font_family),
       spec(:font_size, :number, :style, default: theme.font_size, range: {6, 72, 1}),
       spec(:label_size, :number, :style, default: theme.label_size, range: {6, 72, 1}),

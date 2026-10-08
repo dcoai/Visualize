@@ -148,12 +148,10 @@ defmodule Examples.ChartsTest do
   end
 
   # A chart that still names an absolute colour, with the issue that keeps it there
-  # (#421). The maps' ocean is a semantic backdrop the theme has no slot for — `:grid` is
-  # the graticule's own stroke and `:background` would make it vanish — which is #422.
-  @absolute_colours %{
-    Examples.Charts.WorldMap => "#422",
-    Examples.Charts.Globe => "#422"
-  }
+  # (#421). Empty: the maps' ocean, the last entry, is the theme's `:surface` since #422.
+  # A future gap goes here with its issue, and the guard below fails the moment an
+  # entry stops needing its exemption.
+  @absolute_colours %{}
 
   # `#rgb`, `#rrggbb` and the functional forms; a named colour would slip through, and
   # nothing in the gallery writes one.
@@ -192,22 +190,27 @@ defmodule Examples.ChartsTest do
     test "no design names an absolute colour, but for the gaps filed against it" do
       # Every chart of the grid, not just the recorded ones: the two streaming designs
       # are outside `charts/0`, and they are exactly where the literals were.
-      for module <- Templates.gallery_modules() do
+      # Two passes rather than one lookup per chart: with the allowlist empty, the type
+      # checker proves a lookup's found branch unreachable and warns, and the guard must
+      # hold for an empty list as for a full one.
+      exempt = Map.keys(@absolute_colours)
+
+      for module <- Templates.gallery_modules(), module not in exempt do
         {design, _sources} = module.design([])
         found = literal_colours(design)
 
-        case Map.fetch(@absolute_colours, module) do
-          {:ok, issue} ->
-            refute found == [],
-                   "#{inspect(module)} names no absolute colour now: drop it from @absolute_colours"
+        assert found == [],
+               "#{inspect(module)} names #{inspect(found)} instead of a theme slot"
+      end
 
-            {:docs_v1, _, _, _, %{"en" => doc}, _, _} = Code.fetch_docs(module)
-            assert doc =~ issue, "#{inspect(module)} must name the gap that keeps its literal"
+      for {module, issue} <- @absolute_colours do
+        {design, _sources} = module.design([])
 
-          :error ->
-            assert found == [],
-                   "#{inspect(module)} names #{inspect(found)} instead of a theme slot"
-        end
+        refute literal_colours(design) == [],
+               "#{inspect(module)} names no absolute colour now: drop it from @absolute_colours"
+
+        {:docs_v1, _, _, _, %{"en" => doc}, _, _} = Code.fetch_docs(module)
+        assert doc =~ issue, "#{inspect(module)} must name the gap that keeps its literal"
       end
     end
 
@@ -222,6 +225,30 @@ defmodule Examples.ChartsTest do
         refute light == dark
         refute light =~ "#4e79a7"
       end
+    end
+
+    test "a map's ocean is the theme's :surface, and differs between light and dark (#422)" do
+      light = Visualize.Theme.default().surface
+      dark = Visualize.Theme.dark().surface
+
+      for module <- [Examples.Charts.WorldMap, Examples.Charts.Globe] do
+        light_svg = svg_under(module, :default)
+        dark_svg = svg_under(module, :dark)
+
+        assert light_svg =~ ~s{fill="var(--vis-surface, #{light})"}
+        assert dark_svg =~ ~s{fill="var(--vis-surface, #{dark})"}
+        refute light_svg =~ "#a8d5e5"
+        refute light_svg == dark_svg
+      end
+    end
+
+    test "every gallery palette gives a surface apart from its grid and its page" do
+      for key <- Examples.ColorPalettes.list_palettes() do
+        theme = Examples.ColorPalettes.theme(key)
+        refute theme.surface in [theme.grid, theme.background], "#{key}: surface #{theme.surface}"
+      end
+
+      assert Examples.ColorPalettes.theme(:dark).surface == Visualize.Theme.dark().surface
     end
   end
 
