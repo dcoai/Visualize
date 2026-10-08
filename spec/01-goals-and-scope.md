@@ -26,6 +26,8 @@ Nx MUST NOT be a required dependency; it is declared `optional: true`. The binar
 
 The library's `deps` MUST contain no required entries. Everything from projections to the force simulation is implemented in Elixir over the standard library and OTP.
 
+Time zones are the host's: a zoned time scale ([03-scales](03-scales.md) §7.4) reads the `Calendar.TimeZoneDatabase` the host configures, and the library ships none (D-115). The test suite needs one to test with, so `tz` is declared `only: :test`, which no consumer fetches.
+
 ### 1.6 `table` is optional
 
 The `table` package (the `Table.Reader` protocol) MUST NOT be a required dependency; it is declared `optional: true` (D-52). `Visualize.Data.Table.rows/1` reads Explorer frames and any other struct implementing the protocol only when it is present; lists, column maps and Nx tensors are read natively and work without it ([08-utilities](08-utilities.md) §6).

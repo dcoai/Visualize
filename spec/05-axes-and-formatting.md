@@ -234,6 +234,8 @@ Then, as d3's `format`: a negative whose formatted magnitude is all zeros shows 
 
 A `Date` has hour, minute, second and milliseconds `0`. Fields are printed as stored; no conversion between zones takes place.
 
+**Formatting in a scale's zone** (#447). `time/2` prints a `DateTime` in the zone it carries, so a zoned time scale's labels read local time without `time/2` knowing about scales: the scale's `ticks/2` and `invert/2` return `DateTime` values in its zone ([03-scales](03-scales.md) §7.4), and `%H`, `%d`, `%Z` and `%z` print that zone's wall clock, abbreviation and offset (`"%H:%M %Z"` gives `01:00 EDT` and then `01:00 EST` across the fall-back hour). A value that did not come from the scale — an explicit tick value, a UTC `DateTime` from the data — is shifted into the scale's zone by `Visualize.Scale.Time.local/2` before it is formatted, which is what the declarative layer's axis does for every tick of a time scale (spec/14 §4.4). A scale without a zone leaves every value as it is, so its labels are unchanged.
+
 ### 2.9 `duration/1`
 
 `duration(seconds)` prints a length of time in the unit its magnitude chooses (#191) — the one thing a fixed specifier cannot express. The units are `d` (86400 s), `h` (3600), `m` (60), `s` and `ms`. The largest unit the value reaches is taken: a whole count prints as it is (`45s`, `2m`, `1h`, `3d`); a count whose remainder is whole in the next finer unit prints both (`2m30s`, `1h30m`, `1d1h`) — among `d`, `h`, `m` and `s` only, seconds never pairing with milliseconds; any other prints the count to one decimal with a trailing zero trimmed (`1.5h` for 5430 s, `2.5s`, `0.5ms`). Below one second the unit is `ms`; zero is `0s`; a negative value is the positive one with a leading `−`. The value MUST be a number.
