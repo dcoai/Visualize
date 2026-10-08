@@ -104,6 +104,20 @@ verify:models:
   script:
     - mix vis.verify
 
+# The canvas hooks executed under node against a recording DOM stub (spec/12 §6, #458).
+# ExUnit drives the engine, so the job is the Elixir image with Debian's nodejs (18 on
+# bookworm, ES modules and atob included) added; `mix test` elsewhere excludes :js when
+# no node is on the path, and here `--only js` runs exactly those tests.
+verify:hooks:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: test
+  script:
+    - apt-get install -y -qq --no-install-recommends nodejs
+    - node --version
+    - mix test --warnings-as-errors --only js
+
 # What a consumer compiles: lib/ alone, with neither audit/, specs/, surfex nor extla, and
 # neither Phoenix nor Nx. This checkout's own prod build carries the optional deps, so the
 # proof is a throwaway project depending on visualize and on nothing else (spec/12 §4).
