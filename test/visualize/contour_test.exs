@@ -1,14 +1,15 @@
 defmodule Visualize.ContourTest do
   @moduledoc """
   The cost guards of spec/07 §6.3 and §7.2 (D-72): the default density grid is usable, and
-  the marching squares cost grows about linearly in the cells. Bounds, not benchmarks —
-  the module is synchronous so no other test shares the scheduler while it times.
+  the marching squares cost grows about linearly in the cells. Held by count, never by
+  clock (spec/12 §6, D-114, #271, #462): the time a run takes is a `:benchmark` test.
   """
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   use ExUnitProperties
 
   alias Visualize.Contour
   alias Visualize.Contour.Density
+  alias Visualize.Work
 
   doctest Contour
 
@@ -20,19 +21,49 @@ defmodule Visualize.ContourTest do
     %{x: 820, y: 60}
   ]
 
-  # Milliseconds of the best of three runs, so a scheduler hiccup cannot fail a bound.
-  defp best_of_three_ms(fun) do
-    Enum.min(for _ <- 1..3, do: elem(:timer.tc(fun), 0)) / 1000
+  # Forty reductions per padded cell per threshold: the grid a density traces is its
+  # plot over the cell size, plus one, padded by one each side.
+  defp density_budget(%Density{} = density) do
+    columns = div(density.width, density.cell_size) + 3
+    rows = div(density.height, density.cell_size) + 3
+    40 * columns * rows * density.thresholds
   end
 
   describe "the default density grid" do
-    test "traces twenty contours over a handful of points well inside a second" do
+    # Usable, stated as work (spec/07 §7.2, D-72): about fifteen reductions per padded
+    # cell per threshold. The list-walking grid D-72 replaced spent 371 million calls on a
+    # 51 × 51 grid, and two points on this one took 159 s.
+    test "traces twenty contours over a handful of points within a budget per cell" do
       density = Density.new()
-      {us, contours} = :timer.tc(fn -> Density.compute(density, @points) end)
+      {work, contours} = Work.reductions(fn -> Density.compute(density, @points) end)
 
       assert length(contours) == 20
       assert Enum.all?(contours, &(length(&1.coordinates) == length(@points)))
-      assert us < 1_000_000, "took #{div(us, 1000)} ms — before D-72 two points took 159 s"
+
+      budget = density_budget(density)
+      assert work < budget, "#{work} reductions against a budget of #{budget}"
+    end
+
+    # A point touches the cells of its footprint, never the whole grid (spec/07 §7.2):
+    # ten times the points is a small part of the grid's own cost.
+    test "ten times the points costs under one and a half times the work" do
+      points = fn n ->
+        for i <- 1..n, do: %{x: rem(i * 37, 900) + 30, y: rem(i * 53, 450) + 25}
+      end
+
+      {five, _} = Work.reductions(fn -> Density.compute(Density.new(), points.(5)) end)
+      {fifty, _} = Work.reductions(fn -> Density.compute(Density.new(), points.(50)) end)
+
+      assert fifty < five * 1.5,
+             "fifty points cost #{Float.round(fifty / five, 2)}x five points' reductions"
+    end
+
+    # The time it takes, stated rather than gated: `mix test --only benchmark`.
+    @tag :benchmark
+    test "the default grid's time over a handful of points" do
+      {us, contours} = :timer.tc(fn -> Density.compute(Density.new(), @points) end)
+      IO.puts("\ndefault density grid over #{length(@points)} points: #{div(us, 1000)} ms")
+      assert length(contours) == 20
     end
 
     test "every default-grid ring is closed and in pixel coordinates" do
@@ -76,15 +107,15 @@ defmodule Visualize.ContourTest do
       assert large.hops / small.hops < 4.5
     end
 
-    # A smoke, not a ratio (#271): the claim is *usable* — D-72's 159 s became milliseconds
-    # — so the bound is generous and absolute, and a shared box cannot trip it by noise.
-    test "a density on a plot-sized grid is milliseconds, not seconds" do
-      points = [%{x: 10, y: 10}, %{x: 30, y: 30}]
+    # *Usable* at another size, by the same budget as the default grid's (#271, #462).
+    test "a density on a plot-sized grid is within the budget per cell" do
+      density = Density.size(Density.new(), 400, 400)
 
-      large =
-        best_of_three_ms(fn -> Density.compute(Density.size(Density.new(), 400, 400), points) end)
+      {work, _} =
+        Work.reductions(fn -> Density.compute(density, [%{x: 10, y: 10}, %{x: 30, y: 30}]) end)
 
-      assert large < 2000, "400² took #{large} ms"
+      budget = density_budget(density)
+      assert work < budget, "400²: #{work} reductions against a budget of #{budget}"
     end
   end
 

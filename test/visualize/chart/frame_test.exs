@@ -14,6 +14,7 @@ defmodule Visualize.Chart.FrameTest do
 
   doctest Frame
   alias Visualize.IR.{Element, Transform}
+  alias Visualize.Work
 
   @t0 ~U[2024-01-01 00:00:00Z]
   @rows for {v, h} <- Enum.with_index([4, 9, 2, 7]),
@@ -309,14 +310,22 @@ defmodule Visualize.Chart.FrameTest do
       scales = %{x: %{kind: :linear, domain: [0, 1]}, y: %{kind: :linear, domain: [0, 1]}}
       marks = [%{type: :line, data: :primary, channels: %{x: :n, y: :v}}]
       chart = chart(%{scales: scales}, %{marks: marks})
+      few = for t <- 1..20, do: %{n: t, v: rem(t, 97)}
       many = for t <- 1..200_000, do: %{n: t, v: rem(t, 97)}
 
-      {us, frame} = :timer.tc(fn -> Frame.new(chart, sources: %{primary: many}, size: @size) end)
+      {few_work, _} =
+        Work.reductions(fn -> Frame.new(chart, sources: %{primary: few}, size: @size) end)
+
+      {many_work, frame} =
+        Work.reductions(fn -> Frame.new(chart, sources: %{primary: many}, size: @size) end)
+
       assert Frame.scale(frame, :x).domain == [0, 1]
 
-      # Gathering the columns of 200,000 rows for scales that cannot use them took tens of
-      # milliseconds; not gathering them takes about none.
-      assert us < 50_000, "realising a fixed-domain frame over 200,000 rows took #{us} us"
+      # Gathering the columns of 200,000 rows for scales that cannot use them is millions
+      # of reductions; not gathering them costs what twenty rows cost. Counted, not timed
+      # (spec/12 §6, D-114).
+      assert many_work < few_work * 2,
+             "a fixed-domain frame over 200,000 rows cost #{many_work} reductions against #{few_work} over 20"
     end
   end
 

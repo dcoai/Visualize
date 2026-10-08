@@ -13,11 +13,24 @@ defmodule Visualize.Chart.CompiledTest do
 
   doctest Compiled
   alias Visualize.Designs
+  alias Visualize.Work
 
   @t0 ~U[2026-09-08 00:00:00Z]
 
   defp rows(n, offset \\ 0) do
     for i <- 0..(n - 1), do: %{t: i + offset, v: rem(i * 7, 10)}
+  end
+
+  # The points of every path an incremental payload encodes: what the tick drew, from the
+  # full redraw's records or every exposed strip's.
+  defp path_points(payload) do
+    records =
+      case payload.incremental.binary |> Base.decode64!() |> Decoder.decode() do
+        [{:full_redraw, _viewport, records}] -> records
+        [{:incremental, _mode, _dx, _dy, _clip, strips}] -> Enum.flat_map(strips, &elem(&1, 1))
+      end
+
+    for {:path32, points} <- records, reduce: 0, do: (count -> count + length(points))
   end
 
   defp design(scales, extra \\ %{}) do
@@ -736,9 +749,8 @@ defmodule Visualize.Chart.CompiledTest do
       assert %{mode: "none", binary: ""} = third.incremental
       # The strip's cost must not grow with the window the way it did (#423): the three
       # rows before it are held in slots, not rebuilt as a list per row, and on a scroll
-      # the strip is at the leading edge so that was very nearly every row. A ratio of two
-      # measurements in the same run, never an absolute bound — timing bounds in this
-      # suite have flaked under parallel load before.
+      # the strip is at the leading edge so that was very nearly every row. Counted in
+      # reductions, not timed (spec/12 §6, D-114): a timed ratio flakes under load.
       cost = fn span, rows ->
         design = %{
           @stream
@@ -748,23 +760,19 @@ defmodule Visualize.Chart.CompiledTest do
         compiled = compile!(design, size: {140, 100}, sources: %{primary: rows})
         {_full, compiled} = Compiled.tick(compiled, %{primary: rows}, now: span)
 
-        Enum.min(
-          for _ <- 1..3 do
-            {us, _} =
-              :timer.tc(fn -> Compiled.tick(compiled, %{primary: rows}, now: span + 20) end)
+        {work, _} =
+          Work.reductions(fn -> Compiled.tick(compiled, %{primary: rows}, now: span + 20) end)
 
-            us
-          end
-        )
+        work
       end
 
       small = cost.(200, rows(280))
       large = cost.(3200, rows(4480))
 
-      # Sixteen times the window: under ten times the tick. Rebuilding the neighbours per
-      # row made this nine, and it is six.
-      assert large < small * 10,
-             "a #{16}x window cost #{Float.round(large / small, 1)}x the tick"
+      # Sixteen times the window: under twice the work of the tick. It is 1.7; rebuilding
+      # the neighbours as a list per row made it 2.5.
+      assert large < small * 2,
+             "a 16x window cost #{Float.round(large / small, 2)}x the tick's reductions"
 
       # At scale the strip is a fraction of the full redraw: a thousand-row window on
       # 100 px scrolled 20 px carries 200 rows and six neighbours against 1,001.
@@ -803,18 +811,26 @@ defmodule Visualize.Chart.CompiledTest do
       {full, compiled} = Compiled.tick(compiled, sources, now: 10_000)
       assert full.incremental.mode == "full"
 
-      {full_us, {_payload, compiled}} =
-        :timer.tc(fn -> Compiled.tick(compiled, sources, now: 19_000) end)
+      {full_work, {redraw, compiled}} =
+        Work.reductions(fn -> Compiled.tick(compiled, sources, now: 19_000) end)
 
-      {scroll_us, {payload, _}} =
-        :timer.tc(fn -> Compiled.tick(compiled, sources, now: 19_200) end)
+      {scroll_work, {payload, _}} =
+        Work.reductions(fn -> Compiled.tick(compiled, sources, now: 19_200) end)
 
+      assert redraw.incremental.mode == "full"
       assert payload.incremental.mode == "scroll_x"
-      # The full redraw of that window is the cost of drawing 10,001 rows; the scroll is
-      # the cost of drawing about 200. A third is a generous bound — it was one to one
-      # when the tick built the whole window on every scroll.
-      assert scroll_us < full_us / 3,
-             "a scroll cost #{scroll_us} us against a full redraw's #{full_us} us"
+
+      # What each encodes: the full redraw draws the window's 10,001 rows; the scroll
+      # draws the 190 rows under its strip and three neighbours each side.
+      assert path_points(redraw) == 10_001
+      assert path_points(payload) == 196
+
+      # And what each costs, counted (spec/12 §6, D-114): the scroll is a ninth of the
+      # redraw's reductions. A third is a generous bound — it was one to one when the
+      # tick built the whole window on every scroll. Timed, this ratio failed under load
+      # at 17 ms against 48 (#462).
+      assert scroll_work < full_work / 3,
+             "a scroll cost #{scroll_work} reductions against a full redraw's #{full_work}"
     end
 
     test "the strip's rows are selected in one pass, and an unordered source is sorted (#404)" do
@@ -872,7 +888,7 @@ defmodule Visualize.Chart.CompiledTest do
       assert scrolled.incremental.binary == second.incremental.binary
     end
 
-    test "the strip is found without building the window, and a 50,000-row scroll holds 60 FPS (#410)" do
+    test "the strip is found without building the window, and a 50,000-row scroll costs its strip (#410)" do
       # 50,000 rows over a 740 px plot, scrolled the two pixels a run at 60 FPS and 4,500
       # samples a second gives it: the frame must cost that strip, not the window.
       big = %{
@@ -885,24 +901,29 @@ defmodule Visualize.Chart.CompiledTest do
       {_full, compiled} = Compiled.tick(compiled, sources, now: 50_000)
 
       # The plot is 740 px wide over 50,000 units, so two pixels is 135 units.
-      {scroll_us, {payload, _}} =
-        :timer.tc(fn -> Compiled.tick(compiled, sources, now: 50_135) end)
+      {scroll_work, {payload, _}} =
+        Work.reductions(fn -> Compiled.tick(compiled, sources, now: 50_135) end)
 
       assert payload.incremental.mode == "scroll_x"
 
-      # A full redraw of that window is the cost of drawing 50,000 rows; the scroll is
-      # the cost of drawing about 140. Measured against each other, the ratio holds
-      # whatever else the machine is doing — it was one to one when the strip was picked
-      # out of a window that had been built in full.
-      {full_us, _} =
-        :timer.tc(fn ->
+      # A full redraw of that window draws its 50,001 rows; the scroll draws the strip's
+      # rows and their neighbours — it was one to one when the strip was picked out of a
+      # window that had been built in full.
+      {full_work, {redraw, _}} =
+        Work.reductions(fn ->
           Compiled.tick(%{compiled | viewport: %{compiled.viewport | drawn: nil}}, sources,
             now: 50_135
           )
         end)
 
-      assert scroll_us < full_us / 4,
-             "a scroll over 50,000 rows cost #{div(scroll_us, 1000)} ms against a full redraw's #{div(full_us, 1000)} ms"
+      assert redraw.incremental.mode == "full"
+      assert path_points(redraw) == 50_001
+      assert path_points(payload) == 196
+
+      # Counted, not timed (spec/12 §6, D-114): the scroll is a seventeenth of the
+      # redraw's reductions, against a bound of a quarter.
+      assert scroll_work < full_work / 4,
+             "a scroll over 50,000 rows cost #{scroll_work} reductions against a full redraw's #{full_work}"
     end
 
     test "an unordered source answers the same strip as an ordered one, sorted (#410)" do
