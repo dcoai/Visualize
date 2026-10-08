@@ -57,6 +57,11 @@ defmodule Visualize.MixProject do
       # Explorer frames in the `Data.Table` tests only; scripts/consumer_check.exs proves
       # neither Explorer nor `Table.Reader` reaches a consumer.
       {:explorer, "~> 0.12", only: :test},
+      # A time zone database for the zoned time scale's tests (spec/03 §7.5, #447). The library
+      # reads the host's `Calendar.TimeZoneDatabase` and takes no tz dependency (D-115); the
+      # tests configure this one in test/test_helper.exs. `only:` is load-bearing: test deps
+      # are not transitive, and scripts/consumer_check.exs proves `Tz` never reaches a consumer.
+      {:tz, "~> 0.28", only: :test},
       # The LiveView components (spec/10 §2-3) compile only when `Phoenix.Component` is
       # loaded. `optional:` is load-bearing, and `only:` would not do: Mix prunes the code
       # path to a dependency's declared deps while compiling it, so a guard over an

@@ -16,7 +16,7 @@ defmodule Visualize.ConsumerCheck do
              Visualize.Chart.Builder.Editor Visualize.Chart.Builder.Layers
              Visualize.Chart.Builder.Inspector Visualize.Chart.Builder.Params
              Visualize.Chart.Builder.Document
-             Visualize.Audit ExTLA.Spec Surfex.Golden)
+             Visualize.Audit ExTLA.Spec Surfex.Golden Tz.TimeZoneDatabase)
   @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Hooks.Builder
               Visualize.Backend.CanvasBinary)
 
@@ -32,7 +32,7 @@ defmodule Visualize.ConsumerCheck do
     mix(dir, ["run", "-e", probe()])
 
     File.rm_rf!(dir)
-    IO.puts("consumer build is lib/ only - no Phoenix, no Nx, no Jason, no table, no Explorer")
+    IO.puts("consumer build is lib/ only - no Phoenix, no Nx, no Jason, no table, no Explorer/tz")
   end
 
   defp mix_exs(root) do

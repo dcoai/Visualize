@@ -47,6 +47,7 @@ defmodule Visualize.Chart.Validator do
           | :many_kinds
           | :sweep
           | :radius
+          | {:zone, String.t(), Visualize.Scale.Time.zone_error()}
 
   @type error :: {path(), reason()}
 
@@ -330,6 +331,16 @@ defmodule Visualize.Chart.Validator do
   defp held(:scale, %{sweep: sweep}, path, _ctx)
        when is_number(sweep) and (sweep == 0 or abs(sweep) > 360),
        do: [{path ++ [:sweep], :sweep}]
+
+  # A time scale's zone is one the host's time zone database can show (spec/14 §4.3, §10.1,
+  # #447): a host without a database, or a name it does not know, is refused by name
+  # rather than drawn in UTC (D-115).
+  defp held(:scale, %{kind: :time, zone: zone}, path, _ctx) when is_binary(zone) do
+    case Visualize.Scale.Time.check_zone(zone) do
+      :ok -> []
+      {:error, reason} -> [{path ++ [:zone], {:zone, zone, reason}}]
+    end
+  end
 
   defp held(:axis, %{radius: radius}, path, _ctx) when is_number(radius) and radius <= 0,
     do: [{path ++ [:radius], :radius}]
@@ -746,6 +757,18 @@ defmodule Visualize.Chart.Validator do
 
   defp words(:sweep), do: "must be within a turn, and not zero"
   defp words(:radius), do: "must be positive"
+
+  defp words({:zone, zone, :utc_only_time_zone_database}) do
+    "time zone #{inspect(zone)} cannot be shown: the host has no time zone database " <>
+      "configured (Calendar.UTCOnlyTimeZoneDatabase)"
+  end
+
+  defp words({:zone, zone, :time_zone_not_found}),
+    do: "time zone #{inspect(zone)} is not known to the host's time zone database"
+
+  defp words({:zone, zone, reason}),
+    do: "time zone #{inspect(zone)} cannot be shown: #{inspect(reason)}"
+
   defp words(:required), do: "is required"
   defp words(:unknown_key), do: "is not a key of this node"
   defp words({:type, type}), do: "must be #{type_words(type)}"
