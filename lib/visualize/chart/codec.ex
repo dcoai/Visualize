@@ -9,7 +9,7 @@ defmodule Visualize.Chart.Codec do
   # its tagged term and read back as itself, and no map clause on either side descends
   # into one, so the walk cannot rebuild a struct as a plain map or a map as a struct.
 
-  alias Visualize.Chart.{Fragment, Schema, Use, Var}
+  alias Visualize.Chart.{Fragment, Migration, Schema, Use, Var}
   alias Visualize.Theme
 
   @fixed_slots Theme.default() |> Theme.slots() |> Enum.reject(&(&1 in [:series_1]))
@@ -109,12 +109,21 @@ defmodule Visualize.Chart.Codec do
   @doc false
   def decode(other), do: other
 
+  # A key only an earlier version had is read by the type it had there, so the migration
+  # that moves it gets typed values (spec/14 §9, #479); any other unknown key is a term.
+  defp read_legacy(kind, k, v) do
+    case Migration.legacy_type(kind, k) do
+      nil -> read_term(v)
+      type -> read(type, v)
+    end
+  end
+
   defp read_node(kind, map) do
     Map.new(map, fn {k, v} ->
       k = atom(k)
 
       case Schema.key(kind, k) do
-        nil -> {k, read_term(v)}
+        nil -> {k, read_legacy(kind, k, v)}
         spec -> {k, read(spec.type, v)}
       end
     end)
