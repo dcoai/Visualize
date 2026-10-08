@@ -27,7 +27,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     )
 
     attr(:vars, :map, default: %{}, doc: "the values now bound")
-    attr(:id, :string, default: "vis-builder-params", doc: "the panel's id, for its datalist")
+
+    attr(:id, :string,
+      default: "vis-builder-params",
+      doc: "the parameters form's id, and the stem of its site forms' and datalist's"
+    )
 
     attr(:sites, :list,
       default: [],
@@ -51,7 +55,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <div class="vis-builder-variables">
-      <form class={class(@class)} phx-change="set_var" phx-target={@target} phx-submit="submitted">
+      <form id={@id} class={class(@class)} phx-change="set_var" phx-target={@target} phx-submit="submitted">
         <label :for={param <- @params} class={param.class}>
           <span class="vis-builder-param-name">{param.name}</span>
           <input
@@ -93,6 +97,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       </form>
       <form
         :for={site <- @rows}
+        id={"#{@id}-site-#{site.index}"}
         class="vis-builder-site"
         phx-change="bind_site"
         phx-target={@target}
