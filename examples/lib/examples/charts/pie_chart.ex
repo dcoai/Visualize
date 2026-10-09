@@ -10,7 +10,10 @@ defmodule Examples.Charts.PieChart do
   The white slice separator is the theme's `background` rather than the literal `"white"`,
   so it follows a palette instead of fighting it. The slice's label sits at the arc's
   centroid, which is halfway out rather than the 0.6 of the radius the hand-built version
-  used; a mark label has no radial offset (#137).
+  used; a mark label has no radial offset (#137). Its ink is `:contrast` — the theme's text
+  or background, whichever reads on the slice under it (#486, D-123) — and a slice too
+  narrow for its name draws none (`fit: :hide`), so the small slices' names no longer run
+  over each other.
   """
 
   import Visualize.Chart.Build
@@ -45,7 +48,7 @@ defmodule Examples.Charts.PieChart do
         style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 2),
         style(:slice_label,
           extends: :label,
-          fill: :background,
+          fill: :contrast,
           font_size: 12,
           font_weight: :bold
         ),
@@ -53,7 +56,7 @@ defmodule Examples.Charts.PieChart do
         ordinal_scale(:color),
         arc(:slices, %{value: :value},
           options: %{inner_radius: 0, outer_radius: min(width, height) / 2 - 40},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :slice_label},
+          label: %{text: [{:field, :name}], anchor: :middle, fit: :hide, style: :slice_label},
           style: :slice
         )
       ])
@@ -98,14 +101,14 @@ defmodule Examples.Charts.PieChart do
         chart(meta: %{name: "Pie Chart"}),
         source(:slices, [:name, :value, :index]),
         style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 2),
-        style(:slice_label, extends: :label, fill: :background, font_size: 12, font_weight: :bold),
+        style(:slice_label, extends: :label, fill: :contrast, font_size: 12, font_weight: :bold),
         polar(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color),
 
         # An :arc whose `value` is a share runs Visualize.Shape.Pie itself.
         arc(:slices, %{value: :value},
           options: %{inner_radius: 0, outer_radius: 160},
-          label: %{text: [{:field, :name}], anchor: :middle, style: :slice_label},
+          label: %{text: [{:field, :name}], anchor: :middle, fit: :hide, style: :slice_label},
           style: :slice
         )
       ])

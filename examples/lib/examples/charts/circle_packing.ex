@@ -90,7 +90,7 @@ defmodule Examples.Charts.CirclePacking do
         style(:leaf, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
         style(:leaf_label,
           extends: :label,
-          fill: :background,
+          fill: :contrast,
           font_size: 11,
           font_weight: :bold
         ),
@@ -139,7 +139,7 @@ defmodule Examples.Charts.CirclePacking do
         source(:nodes, [:id, :parent, :name, :value, :branch]),
         style(:group, fill: :grid, fill_opacity: 0.3, stroke: :axis),
         style(:leaf, fill: {:field, :branch}, stroke: :background),
-        style(:leaf_label, extends: :label, fill: :background, font_size: 11, font_weight: :bold),
+        style(:leaf_label, extends: :label, fill: :contrast, font_size: 11, font_weight: :bold),
         cartesian(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color, domain: [0, 1, 2, 3, 4]),
         # The enclosing circles, then the leaves over them; `value` is the radius (§5.2).

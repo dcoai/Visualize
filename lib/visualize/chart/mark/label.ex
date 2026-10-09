@@ -3,12 +3,14 @@ defmodule Visualize.Chart.Mark.Label do
   # A mark's inline label (spec/14 §5.5): one text per element at its anchor point, in the
   # label's style, `{:field, f}` read from the datum.
 
-  alias Visualize.Chart.Frame.Position
+  alias Visualize.Chart.Frame.{Defs, Position}
   alias Visualize.Chart.Label.Polar
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.Chart.Text
+  alias Visualize.Color
   alias Visualize.Data.Table
   alias Visualize.IR.Element
+  alias Visualize.Theme
 
   @inset 4
   # Types whose generator draws its own label (spec/14 §5.5); a `:text` mark is its label.
@@ -49,7 +51,7 @@ defmodule Visualize.Chart.Mark.Label do
           element(
             ctx,
             point,
-            Map.take(child, [:bounds, :radii, :span, :extent]),
+            Map.take(child, [:bounds, :radii, :span, :extent, :under]),
             text(label.text, datum),
             "mark-label"
           ),
@@ -125,11 +127,89 @@ defmodule Visualize.Chart.Mark.Label do
         nil
 
       content ->
+        style = inked(style, style_node, Map.get(shape, :under), frame.theme)
+
         Element.new(:text, attrs: attrs, style: Map.merge(base, style), content: content)
         |> Polar.rotate(rotation)
         |> Position.apply(style_node, outward(anchor))
     end
   end
+
+  # Every colour key the label's style writes as `:contrast`, inked against the colour under
+  # the label rather than the background `Style.resolve/3` assumed (spec/14 §5.5, D-123).
+  defp inked(style, style_node, under, theme) do
+    Enum.reduce([:fill, :stroke], style, fn key, acc ->
+      if Map.get(style_node, key) == :contrast,
+        do: Map.put(acc, key, Theme.ink(theme, under)),
+        else: acc
+    end)
+  end
+
+  @doc false
+  # The children with the colour under each one's label as `:under`, read from its bound
+  # element, when the label's style inks by `:contrast`; the children as they are otherwise.
+  @spec under([map()], [Element.t()], map()) :: [map()]
+  def under(children, _bound, %{label: nil}), do: children
+
+  def under(children, bound, %{label: label, frame: frame} = ctx) do
+    node = Style.node(frame.styles, Map.get(label, :style, Schema.default(:mark_label, :style)))
+
+    if Enum.any?([:fill, :stroke], &(Map.get(node, &1) == :contrast)),
+      do: Enum.zip_with(children, bound, &Map.put(&1, :under, under(&2, ctx))),
+      else: children
+  end
+
+  @doc false
+  # The colour under a mark's label (spec/14 §5.5, D-123): the fill its element is drawn
+  # with — the element's own once bound, else the mark group's — as a literal, composited
+  # over the theme's background by its `fill_opacity` × `opacity`; `nil` when the element
+  # has no fill or one `Visualize.Color.parse/1` does not read.
+  @spec under(Element.t(), map()) :: Color.t() | nil
+  def under(%Element{style: style}, %{frame: frame, static: static, paint: paint}) do
+    group =
+      case paint do
+        {:fill, {:field, _}} -> Map.get(static, :fill)
+        {:fill, colour} -> colour
+        {:stroke, _} -> Map.get(static, :fill)
+      end
+
+    case style |> Map.get(:fill, group) |> literal(frame) |> parse() do
+      nil ->
+        nil
+
+      colour ->
+        alpha =
+          opacity(Map.get(style, :fill_opacity, Map.get(static, :fill_opacity))) *
+            opacity(Map.get(style, :opacity, Map.get(static, :opacity))) * colour.opacity
+
+        over(colour, alpha, parse(frame.theme.background))
+    end
+  end
+
+  # A fill as the literal it is drawn in: a CSS reference by its fallback, a paint by its
+  # first stop, a string as itself.
+  defp literal("var(" <> rest, _frame) do
+    case String.split(rest, ",", parts: 2) do
+      [_name, fallback] -> fallback |> String.trim() |> String.replace_suffix(")", "")
+      _no_fallback -> nil
+    end
+  end
+
+  defp literal(string, _frame) when is_binary(string), do: string
+  defp literal({:paint, name}, frame), do: Defs.literal(name, frame)
+  defp literal(_none, _frame), do: nil
+
+  defp parse(nil), do: nil
+  defp parse(string), do: Color.parse(string)
+
+  defp opacity(n) when is_number(n), do: min(max(n, 0), 1)
+  defp opacity(_absent), do: 1
+
+  defp over(colour, alpha, background) when alpha >= 1 or background == nil,
+    do: %{colour | opacity: 1.0}
+
+  defp over(colour, alpha, background),
+    do: %{Color.interpolate_rgb(background, colour, alpha) | opacity: 1.0}
 
   # The width an element offers its label: a rectangle's, a circle's diameter, a sector's
   # arc length at the label's own radius; `nil` for a type with no extent.

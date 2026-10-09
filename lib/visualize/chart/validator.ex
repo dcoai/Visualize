@@ -764,7 +764,7 @@ defmodule Visualize.Chart.Validator do
     if term?(x) and term?(y), do: [], else: [{path, {:type, :anchor}}]
   end
 
-  defp check(:colour, v, _path, _ctx) when is_binary(v) or v == :none, do: []
+  defp check(:colour, v, _path, _ctx) when is_binary(v) or v in [:none, :contrast], do: []
   # A paint names a gradient of `defs` (spec/14 §2.7, §3.2).
   defp check(:colour, {:paint, name}, path, ctx) when is_atom(name),
     do: ref(:paint, name, path, ctx)
@@ -1038,7 +1038,7 @@ defmodule Visualize.Chart.Validator do
       "{:data, [x, y]}"
   end
 
-  defp type_words(:colour), do: "a colour string, :none, a theme slot or a paint"
+  defp type_words(:colour), do: "a colour string, :none, :contrast, a theme slot or a paint"
   defp type_words(:size), do: "a number or a theme slot"
   defp type_words(:font), do: "a font string or a theme slot"
   defp type_words(:slot), do: "a theme slot"

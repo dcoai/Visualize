@@ -1259,6 +1259,143 @@ defmodule Visualize.Chart.MarkTest do
     end
   end
 
+  describe "a label's ink follows its element (spec/14 §3.2, §5.5, #486, D-123)" do
+    @pale "#fff2b0"
+    @deep "#1a2a5a"
+
+    @inked_frame %{
+      kind: :cartesian,
+      margin: %{top: 0, right: 0, bottom: 0, left: 0},
+      scales: %{
+        x: %{kind: :linear, domain: [0, 4]},
+        y: %{kind: :linear, domain: [0, 10]},
+        color: %{kind: :ordinal, domain: ["k0", "k1"], range: [@pale, @deep]}
+      }
+    }
+
+    defp inked(style, label_style, opts \\ []) do
+      mark = %{
+        type: :rect,
+        channels: %{x0: :t, x1: :hi, y0: 0, y1: :v},
+        style: :cell,
+        label: %{text: [{:field, :k}], anchor: :middle, style: :ink}
+      }
+
+      extra = %{
+        frames: %{main: @inked_frame},
+        styles: %{cell: style, ink: label_style},
+        defs: Keyword.get(opts, :defs, %{})
+      }
+
+      mark
+      |> generate(extra, Keyword.take(opts, [:resolve]))
+      |> labels()
+      |> Enum.map(&{&1.content, &1.style.fill})
+    end
+
+    test "dark ink on a light fill and light ink on a dark fill, the same literal in both modes" do
+      for mode <- [:css, :literal] do
+        assert inked(%{fill: {:field, :k}}, %{fill: :contrast}, resolve: mode) == [
+                 {"k0", "#333333"},
+                 {"k1", "#ffffff"},
+                 {"k0", "#333333"},
+                 {"k1", "#ffffff"}
+               ]
+      end
+    end
+
+    test "the mark's own paint is the fill when the element carries none" do
+      assert [{_, "#ffffff"} | _] = inked(%{fill: @deep}, %{fill: :contrast})
+      assert [{_, "#333333"} | _] = inked(%{fill: @pale}, %{fill: :contrast})
+      # No fill in the style: the series paint, the default theme's #3b6fa8.
+      assert [{_, "#ffffff"} | _] = inked(%{}, %{fill: :contrast})
+      # A slot reaches the CSS output as a reference, read here by its fallback.
+      assert [{_, "#ffffff"} | _] = inked(%{fill: :series_1}, %{fill: :contrast}, resolve: :css)
+    end
+
+    test "a translucent fill is read over the background, and no fill is the background" do
+      # Deep navy at a tenth is a pale wash over white.
+      assert [{_, "#333333"} | _] = inked(%{fill: @deep, fill_opacity: 0.1}, %{fill: :contrast})
+      assert [{_, "#333333"} | _] = inked(%{fill: @deep, opacity: 0.1}, %{fill: :contrast})
+      assert [{_, "#333333"} | _] = inked(%{fill: :none, stroke: @deep}, %{fill: :contrast})
+    end
+
+    test "a paint is read by its first stop" do
+      defs = %{
+        wash: %{kind: :linear, stops: [%{offset: 0, colour: @deep}, %{offset: 1, colour: @pale}]}
+      }
+
+      for mode <- [:css, :literal] do
+        assert [{_, "#ffffff"} | _] =
+                 inked(%{fill: {:paint, :wash}}, %{fill: :contrast}, defs: defs, resolve: mode)
+      end
+    end
+
+    test "a halo's :contrast stroke is inked the same way, and other keys are untouched" do
+      mark = %{
+        type: :rect,
+        channels: %{x0: :t, x1: :hi, y0: 0, y1: :v},
+        style: :cell,
+        label: %{text: [{:field, :k}], anchor: :middle, style: :ink}
+      }
+
+      extra = %{
+        frames: %{main: @inked_frame},
+        styles: %{cell: %{fill: {:field, :k}}, ink: %{fill: "#ff0000", stroke: :contrast}}
+      }
+
+      [first, second | _] = mark |> generate(extra) |> labels()
+      assert {first.style.fill, first.style.stroke} == {"#ff0000", "#333333"}
+      assert {second.style.fill, second.style.stroke} == {"#ff0000", "#ffffff"}
+    end
+
+    test "a text with no element under it is inked against the background" do
+      chart =
+        chart(%{type: :text, channels: %{x: :t, y: :v}, label: %{text: ["!"], style: :ink}}, %{
+          styles: %{ink: %{fill: :contrast}},
+          theme: :dark
+        })
+
+      frame = Frame.new(chart, sources: @sources, size: {300, 200})
+      group = Mark.generate(frame, hd(chart.marks), sources: @sources)
+      texts = for %Element{type: :text} = t <- group.children, do: t.style.fill
+      assert texts != [] and Enum.all?(texts, &(&1 == "#e6e6e6"))
+    end
+
+    test "it validates on every theme and reads back from JSON" do
+      chart =
+        chart(
+          %{
+            type: :rect,
+            channels: %{x0: :t, x1: :hi, y0: 0, y1: :v},
+            label: %{text: ["!"], style: :ink}
+          },
+          %{styles: %{ink: %{fill: :contrast}}}
+        )
+
+      {:ok, json} = Chart.to_json(chart)
+      assert json =~ ~s("fill":"contrast")
+      assert {:ok, back} = Chart.from_json(json)
+      assert back.styles.ink.fill == :contrast
+
+      # A built-in theme, whose slots the validator checks, accepts it: it is not a slot.
+      on_dark = fn fill ->
+        Chart.from_map(%{
+          version: 2,
+          theme: :dark,
+          sources: %{p: %{fields: [:t]}},
+          frames: %{main: @frame},
+          styles: %{ink: %{fill: fill}},
+          marks: [%{type: :rect, data: :p, channels: %{x0: :t, x1: :t, y0: 0, y1: :t}}]
+        })
+      end
+
+      assert {:ok, _} = on_dark.(:contrast)
+      assert {:error, _} = on_dark.(:no_such_slot)
+      Chart.from_json(String.replace(json, ~s("version"), ~s("theme":"dark","version")))
+    end
+  end
+
   describe "the frame" do
     test "places every mark between the grid and the axes, and none without sources" do
       axes = [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]

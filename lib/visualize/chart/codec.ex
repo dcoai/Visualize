@@ -172,6 +172,7 @@ defmodule Visualize.Chart.Codec do
        do: {:series, i}
 
   defp read(:colour, "none"), do: :none
+  defp read(:colour, "contrast"), do: :contrast
   defp read(type, v) when type in [:colour, :font, :size] and is_binary(v), do: slot_or_string(v)
   defp read(:extent, "auto"), do: :auto
   defp read(:extent, v) when is_list(v), do: Enum.map(v, &read_category/1)

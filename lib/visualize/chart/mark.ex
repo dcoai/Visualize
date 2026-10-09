@@ -123,10 +123,13 @@ defmodule Visualize.Chart.Mark do
 
     children = if type in @shapes, do: Shapes.elements(ctx), else: Generic.elements(ctx)
     children = bent(children, ctx)
-    elements = children |> Enum.map(&bind(&1, ctx)) |> Strokes.apply(ctx)
+    bound = Enum.map(children, &bind(&1, ctx))
+    elements = Strokes.apply(bound, ctx)
+    # A label inked by contrast reads its element's bound fill (spec/14 §5.5, D-123).
+    labelled = Label.under(children, bound, ctx)
 
     ctx
-    |> group(elements, Label.elements(children, ctx))
+    |> group(elements, Label.elements(labelled, ctx))
     |> centre(ctx)
   end
 

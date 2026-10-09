@@ -28,7 +28,7 @@ defmodule Visualize.Theme do
 
   """
 
-  alias Visualize.Backend
+  alias Visualize.{Backend, Color}
 
   @light_series ~w(#3b6fa8 #d9730d #c8373b #2f8f86 #3f8a37 #a8891a #8f5f99 #c9527f #8a6a4f #6f7480)
   @dark_series ~w(#7fb3e6 #f7a35c #f47c7c #6fd3c8 #86d67c #f2d15b #c99bd6 #ffb3c1 #cfa98b #b7bcc6)
@@ -66,6 +66,8 @@ defmodule Visualize.Theme do
         }
 
   @colour_slots [:axis, :grid, :text, :background, :surface]
+  # WCAG AA for normal text.
+  @aa 4.5
   @size_slots [:font_size, :label_size, :title_size]
   @fixed_slots @colour_slots ++ [:font_family] ++ @size_slots
 
@@ -170,6 +172,65 @@ defmodule Visualize.Theme do
   def mode(backend) do
     if Backend.resolve(backend) == Backend.SVG, do: :css, else: :literal
   end
+
+  @doc """
+  The contrast ink for a text drawn on `under` (spec/08 §7.3, D-123): the literal of the
+  theme's `text` or `background`, whichever has the higher WCAG contrast ratio against it —
+  `text` on a tie — or `#000000`/`#ffffff`, whichever contrasts more, when neither slot
+  reaches 4.5:1. One of black and white always does, so the ink always meets WCAG AA.
+
+  `under` is a colour string `Visualize.Color.parse/1` reads, a `%Visualize.Color{}`, or
+  `nil` for nothing under the text — the theme's own background. An unreadable string is
+  `nil`, and a slot whose own value does not parse is skipped.
+
+      iex> theme = Visualize.Theme.default()
+      iex> Visualize.Theme.ink(theme, "#3b6fa8")
+      "#ffffff"
+      iex> Visualize.Theme.ink(theme, "#ffd098")
+      "#333333"
+      iex> Visualize.Theme.ink(theme, nil)
+      "#333333"
+      iex> Visualize.Theme.ink(theme, "#777777")
+      "#000000"
+
+  """
+  @spec ink(t(), String.t() | Color.t() | nil) :: String.t()
+  def ink(%__MODULE__{} = theme, under) do
+    under = parsed(under) || parsed(theme.background) || Color.rgb(255, 255, 255)
+
+    slots =
+      for literal <- [theme.text, theme.background],
+          colour = parsed(literal),
+          colour != nil,
+          do: {literal, Color.contrast(colour, under)}
+
+    case best(slots) do
+      {literal, ratio} when ratio >= @aa ->
+        literal
+
+      _neither ->
+        {literal, _ratio} =
+          best([
+            {"#000000", Color.contrast(Color.rgb(0, 0, 0), under)},
+            {"#ffffff", Color.contrast(Color.rgb(255, 255, 255), under)}
+          ])
+
+        literal
+    end
+  end
+
+  # The first of the highest ratio, so the earlier candidate wins a tie.
+  defp best([]), do: nil
+
+  defp best(candidates) do
+    Enum.reduce(candidates, fn {_, ratio} = candidate, {_, best} = acc ->
+      if ratio > best, do: candidate, else: acc
+    end)
+  end
+
+  defp parsed(%Color{} = colour), do: colour
+  defp parsed(string) when is_binary(string), do: Color.parse(string)
+  defp parsed(_other), do: nil
 
   @doc """
   The `.vis-theme-<name>` CSS rule declaring every slot of the theme, one line each.

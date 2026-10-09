@@ -108,7 +108,7 @@ defmodule Examples.Charts.TreemapChart do
         chart(meta: %{name: title(), description: [description()]}),
         source(:nodes, Design.hierarchy_fields()),
         style(:cell, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
-        style(:cell_label, extends: :label, fill: :background, font_size: 10),
+        style(:cell_label, extends: :label, fill: :contrast, font_size: 10),
         cartesian(margin: @zero_margin),
         ordinal_scale(:color, domain: Enum.to_list(0..(branches - 1)//1)),
         rect(leaves, %{x0: :x0, x1: :x1, y0: :y0, y1: :y1},
@@ -149,7 +149,7 @@ defmodule Examples.Charts.TreemapChart do
         chart(meta: %{name: "Treemap"}),
         source(:nodes, [:id, :parent, :name, :value, :branch]),
         style(:cell, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
-        style(:cell_label, extends: :label, fill: :background, font_size: 10),
+        style(:cell_label, extends: :label, fill: :contrast, font_size: 10),
         cartesian(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         # One colour per child of the root; every cell takes its branch's (D-46).
         ordinal_scale(:color, domain: [0, 1, 2, 3, 4, 5, 6, 7]),
