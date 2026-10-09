@@ -27,16 +27,19 @@ defmodule Visualize.Geo.Path do
   ## Clipping on the sphere
 
   With a projection, lines and polygons are clipped on the sphere before they are
-  projected, as d3-geo clips them (spec/07 §2.2.1, D-127): under a projection without a
-  `clip_angle` they are cut where they cross ±180° of the rotated frame, a line into
-  several subpaths and a polygon closed along the seam and the poles, so a rotated map
-  never joins a ring the long way round. Winding is d3's: a polygon's exterior ring runs
-  clockwise on a north-up map, and a ring wound the other way is the rest of the sphere.
+  projected, as d3-geo clips them (spec/07 §2.2.1, D-127): under a projection with a
+  `clip_angle` they are cut where they cross the small circle of that radius about the
+  centre — the orthographic's horizon — a line into several subpaths and a polygon closed
+  along the circle, so a globe never closes its land by a chord across the disc; under a
+  projection without one they are cut where they cross ±180° of the rotated frame and a
+  polygon is closed along the seam and the poles, so a rotated map never joins a ring the
+  long way round. Winding is d3's: a polygon's exterior ring runs clockwise on a north-up
+  map, and a ring wound the other way is the rest of the sphere.
 
   """
 
   alias Visualize.Geo.Clip
-  alias Visualize.Geo.Clip.Antimeridian
+  alias Visualize.Geo.Clip.{Antimeridian, Circle}
   alias Visualize.Geo.Projection
   alias Visualize.IR
 
@@ -210,52 +213,55 @@ defmodule Visualize.Geo.Path do
 
   # -- the clip on the sphere (spec/07 §2.2, D-127) --
 
-  # A line or a polygon's rings as parts. With a projection that has a clipper the
-  # vertices are taken into the rotated frame, clipped there, and the clip's output
-  # projected; without a projection they are planar and drawn as they are.
-  defp clip_parts(%{projection: proj} = geo_path, kind, coords) do
-    case proj && clipper(proj) do
-      nil -> unclipped_parts(geo_path, kind, coords)
-      clipper -> clipped_parts(proj, clipper, kind, coords)
-    end
-  end
+  # A line or a polygon's rings as parts. With a projection the vertices are taken into
+  # the clip's frame, clipped there, and the clip's output projected; without one they are
+  # planar and drawn as they are.
+  defp clip_parts(%{projection: nil}, :line, coords),
+    do: [{:line, Enum.map(coords, fn [x, y | _] -> {x, y} end)}]
 
-  defp clipped_parts(proj, clipper, :line, coords) do
+  defp clip_parts(%{projection: nil}, :polygon, rings),
+    do: Enum.map(rings, &{:ring, Enum.map(&1, fn [x, y | _] -> {x, y} end)})
+
+  defp clip_parts(%{projection: proj}, :line, coords) do
+    clipper = clipper(proj)
+
     clipper
-    |> Clip.line(frame(proj, coords))
-    |> Enum.map(&{:line, project_frame(proj, &1)})
+    |> Clip.line(frame(proj, clipper, coords))
+    |> Enum.map(&{:line, project_frame(proj, clipper, &1)})
   end
 
-  defp clipped_parts(proj, clipper, :polygon, rings) do
+  defp clip_parts(%{projection: proj}, :polygon, rings) do
+    clipper = clipper(proj)
+
     clipper
-    |> Clip.polygon(Enum.map(rings, &frame(proj, &1)))
-    |> Enum.map(&{:ring, project_frame(proj, &1)})
+    |> Clip.polygon(Enum.map(rings, &frame(proj, clipper, &1)))
+    |> Enum.map(&{:ring, project_frame(proj, clipper, &1)})
   end
 
-  # Planar positions as they are; under a `clip_angle`, the projection's point test until
-  # the small-circle clip (#510): the vertices it clips are dropped.
-  defp unclipped_parts(geo_path, :line, coords), do: [{:line, vertices(geo_path, coords)}]
-
-  defp unclipped_parts(geo_path, :polygon, rings),
-    do: Enum.map(rings, &{:ring, vertices(geo_path, &1)})
-
-  # The clip a projection's paths are cut by: the antimeridian without a `clip_angle`
-  # (d3-geo's default preclip, projection/index.js:71), its seam sampled every degree but
-  # at precision 0.
+  # The clip a projection's paths are cut by (d3-geo's preclip, projection/index.js:101–
+  # 103): the small circle of its `clip_angle`, or the antimeridian without one, its seam
+  # sampled every degree but at precision 0.
   defp clipper(%Projection{clip_angle: nil, precision: precision}),
     do: %Antimeridian{step: if(precision == 0, do: nil, else: 1)}
 
-  defp clipper(%Projection{}), do: nil
+  defp clipper(%Projection{clip_angle: angle}), do: Circle.new(angle)
 
-  defp frame(proj, coords) do
-    Enum.map(coords, fn [lon, lat | _] -> Projection.rotated(proj, lon, lat) end)
+  # The antimeridian is the rotated frame's, before `center`; the circle is about the
+  # projection's centre, the clip test's frame (spec/07 §1.5), and what it keeps is not
+  # tested again.
+  defp frame(proj, %Circle{}, coords),
+    do: Enum.map(coords, fn [lon, lat | _] -> Projection.centred(proj, lon, lat) end)
+
+  defp frame(proj, _clipper, coords),
+    do: Enum.map(coords, fn [lon, lat | _] -> Projection.rotated(proj, lon, lat) end)
+
+  defp project_frame(proj, %Circle{}, points) do
+    for {lon, lat} <- points, xy = Projection.project_centred(proj, lon, lat), xy != nil, do: xy
   end
 
-  defp project_frame(proj, points) do
+  defp project_frame(proj, _clipper, points) do
     for {lon, lat} <- points, xy = Projection.project_rotated(proj, lon, lat), xy != nil, do: xy
   end
-
-  defp vertices(geo_path, coords), do: Enum.flat_map(coords, &project_coord(geo_path, &1))
 
   defp project_coord(%{projection: nil}, [x, y | _]), do: [{x, y}]
 

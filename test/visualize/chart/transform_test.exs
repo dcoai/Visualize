@@ -642,8 +642,10 @@ defmodule Visualize.Chart.TransformTest do
     test ":projection over a geometry column adds its path and centroid, dropping one that projects to nothing (#349)" do
       projection = Projection.new(:orthographic) |> Projection.translate(100, 50)
       geo = Visualize.Geo.Path.new(projection)
-      near = %{"type" => "Polygon", "coordinates" => [[[0, 0], [10, 0], [10, 10], [0, 0]]]}
-      behind = %{"type" => "Polygon", "coordinates" => [[[170, 0], [175, 0], [175, 5], [170, 0]]]}
+      # Both wound clockwise, d3's interior (spec/07 §2.2.1, #510): wound anticlockwise each
+      # is the rest of the sphere, which the horizon clip closes along the whole disc.
+      near = %{"type" => "Polygon", "coordinates" => [[[0, 0], [10, 10], [10, 0], [0, 0]]]}
+      behind = %{"type" => "Polygon", "coordinates" => [[[170, 0], [175, 5], [175, 0], [170, 0]]]}
       sphere = %{"type" => "Sphere"}
 
       rows = [
