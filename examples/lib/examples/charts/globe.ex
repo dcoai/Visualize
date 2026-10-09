@@ -8,7 +8,9 @@ defmodule Examples.Charts.Globe do
   The orthographic clips the far hemisphere itself (spec/07 §1.5), so the `Sphere` is the
   visible disc and the land and the graticule end at its edge with no `clipPath` (§5.4.4,
   #349). The animation turns the projection's `rotate` — the globe spinning east with a
-  slow nod — where the hand-written version rebuilt the projection each frame. Its dark
+  slow nod — where the hand-written version rebuilt the projection each frame. The nod is
+  a tilt, `rotate`'s `phi` as d3's `φ` (D-129): at rest the globe is seen from 20° N, the
+  north pole toward the viewer, and as it turns the centre's latitude swings ±15°. Its dark
   page background and the highlight it painted on the glass are not the chart's.
 
   Its ocean is the theme's `:surface` (#422), the plane the data is laid on: not the page
@@ -33,6 +35,8 @@ defmodule Examples.Charts.Globe do
     {width, height} = Design.size(__MODULE__, opts)
     radius = min(width, height) / 2 - 20
 
+    # `rotate`'s `[lambda, phi, gamma]`: the central meridian, then d3's tilt — a negative
+    # `phi` brings that latitude north of the equator to the centre (spec/07 §1.4).
     {lon, lat} =
       case opts[:animation_tick] do
         nil -> {0, -20}
@@ -106,7 +110,8 @@ defmodule Examples.Charts.Globe do
         style(:graticule, fill: :none, stroke: :grid,
           stroke_width: {:field, :weight}, stroke_opacity: {:field, :opacity}),
         style(:land, fill: {:field, :name}, fill_opacity: 0.9, stroke: :background, stroke_width: 0.5),
-        # The orthographic clips the far hemisphere itself; rotate turns the globe.
+        # The orthographic clips the far hemisphere itself; rotate turns the globe and,
+        # by d3's phi, tilts it: -20 shows it from 20° N.
         geo(margin: %{top: 0, right: 0, bottom: 0, left: 0},
           projection: %{type: :orthographic, scale: 205, rotate: [0, -20, 0]}),
         ordinal_scale(:color),

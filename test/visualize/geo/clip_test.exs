@@ -11,6 +11,15 @@ defmodule Visualize.Geo.ClipTest do
   is compared with d3's point by point within a tolerance. d3 drops a ring's closing vertex
   where the clip leaves the ring whole and the library keeps it (`Z` closes the ring
   either way), so a ring is compared without a closing vertex that repeats its first.
+
+  The same golden holds the rotation (#511, spec/07 §1.4, D-129): points projected under
+  several `[lambda, phi, gamma]` through nine types, compared with d3's projected points —
+  `nil` where d3's stream drops the point — within `1e-9`; and, for the types whose raw
+  inverse is closed-form, `invert/3` of d3's projected point with d3's own inverse, within
+  `1e-9` too. The Natural Earth and Equal Earth inverses iterate, d3's and the library's
+  to different tolerances (spec/07 §1.2), so comparing theirs would measure the iteration
+  rather than the rotation; `test/visualize/geo/projection_rotation_test.exs` holds their
+  round trip.
   """
   use ExUnit.Case, async: true
 
@@ -18,11 +27,18 @@ defmodule Visualize.Geo.ClipTest do
 
   @golden "test/support/geo/clip_golden.jsonl"
   @tolerance 1.0e-6
+  @rotation_tolerance 1.0e-9
+  @iterative_inverse ~w(natural_earth equal_earth)
 
-  @cases @golden
-         |> File.stream!()
-         |> Enum.reject(&String.starts_with?(&1, "#"))
-         |> Enum.map(&Jason.decode!/1)
+  {rotations, cases} =
+    @golden
+    |> File.stream!()
+    |> Enum.reject(&String.starts_with?(&1, "#"))
+    |> Enum.map(&Jason.decode!/1)
+    |> Enum.split_with(&Map.has_key?(&1, "points"))
+
+  @cases cases
+  @rotations rotations
 
   # A case without a `clip_angle` keeps the type's default, which is d3's (spec/07 §1.5).
   defp projection(
@@ -92,6 +108,46 @@ defmodule Visualize.Geo.ClipTest do
         end
       end
     end
+  end
+
+  describe "conformance with d3-geo's rotation (#511)" do
+    test "the golden holds every rotation type under eight rotations" do
+      assert length(@rotations) == 72
+    end
+
+    for %{"name" => name} = golden <- @rotations do
+      @golden_case golden
+      test name do
+        %{"projection" => spec, "points" => points, "projected" => projected} = @golden_case
+        proj = projection(spec)
+
+        for {[lon, lat], theirs, inverted} <-
+              Enum.zip([points, projected, @golden_case["inverted"]]) do
+          ours = Projection.project(proj, lon, lat)
+
+          case theirs do
+            nil ->
+              assert ours == nil, "[#{lon}, #{lat}]: #{inspect(ours)}, d3 drops it"
+
+            [x, y] ->
+              assert {ox, oy} = ours, "[#{lon}, #{lat}]: nil, d3 [#{x}, #{y}]"
+              assert_close({ox, oy}, {x, y}, "[#{lon}, #{lat}] projected")
+
+              if spec["type"] not in @iterative_inverse do
+                [ilon, ilat] = inverted
+                back = Projection.invert(proj, x, y)
+                assert back, "[#{x}, #{y}]: not inverted, d3 [#{ilon}, #{ilat}]"
+                assert_close(back, {ilon, ilat}, "[#{x}, #{y}] inverted")
+              end
+          end
+        end
+      end
+    end
+  end
+
+  defp assert_close({a, b}, {c, d}, what) do
+    assert abs(a - c) < @rotation_tolerance and abs(b - d) < @rotation_tolerance,
+           "#{what}: {#{a}, #{b}}, d3 {#{c}, #{d}}"
   end
 
   defp equirectangular(lambda) do

@@ -73,6 +73,7 @@ defmodule Visualize.Geo.Projection do
   alias Visualize.Geo.Projection.{Azimuthal, Compromise, Conic, Cylindrical, Pseudocylindrical}
 
   @deg_to_rad :math.pi() / 180
+  @pi_rad :math.pi()
   @rad_to_deg 180 / :math.pi()
 
   defstruct type: :mercator,
@@ -174,11 +175,14 @@ defmodule Visualize.Geo.Projection do
   def center(%__MODULE__{} = proj, lon, lat), do: %{proj | center: {lon, lat}}
 
   @doc """
-  Sets the rotation (lambda, phi, gamma).
+  Sets the rotation (lambda, phi, gamma), in degrees: d3-geo's `projection.rotate` at
+  `[-lambda, phi, gamma]` (spec/07 §1.4).
 
-  - lambda: Rotation around the vertical axis (yaw)
-  - phi: Rotation around the horizontal axis (pitch)
-  - gamma: Rotation around the viewing axis (roll)
+  - lambda: the central meridian — the longitude turned to the centre (d3's `λ` with the
+    opposite sign)
+  - phi: d3's `φ`, a tilt toward or away from the viewer — `-20` brings 20° N to the
+    centre of an azimuthal view
+  - gamma: d3's `γ`, a roll about the viewing axis
   """
   @spec rotate(t(), number(), number(), number()) :: t()
   def rotate(%__MODULE__{} = proj, lambda, phi, gamma \\ 0) do
@@ -514,47 +518,31 @@ defmodule Visualize.Geo.Projection do
 
   # Rotation Helpers
 
+  # The rotation is d3-geo 3.1.1's `rotateRadians` (src/rotation.js:11–16) at
+  # `[-lambda, phi, gamma]` (spec/07 §1.4, D-44, D-129): the longitude shift of
+  # `rotationLambda`, then, when either is non-zero, `rotationPhiGamma` — `phi` tilting
+  # the globe about the y axis, `gamma` rolling it about the viewing (x) axis.
   defp apply_rotation(lon, lat, {0, 0, 0}), do: {lon, lat}
 
+  defp apply_rotation(lon, lat, {lambda, phi, gamma}) when phi == 0 and gamma == 0,
+    do: {normalize_longitude((lon * @deg_to_rad - lambda * @deg_to_rad) * @rad_to_deg), lat}
+
   defp apply_rotation(lon, lat, {lambda, phi, gamma}) do
-    # Convert to radians
-    lon_rad = lon * @deg_to_rad
-    lat_rad = lat * @deg_to_rad
-    lambda_rad = -lambda * @deg_to_rad
-    phi_rad = -phi * @deg_to_rad
-    gamma_rad = -gamma * @deg_to_rad
-
-    # Apply rotation (simplified - just lambda for now for performance)
-    lon_rad = lon_rad + lambda_rad
-
-    # If phi or gamma are set, need full spherical rotation
-    {lon_rad, lat_rad} =
-      if phi != 0 or gamma != 0 do
-        spherical_rotate(lon_rad, lat_rad, phi_rad, gamma_rad)
-      else
-        {lon_rad, lat_rad}
-      end
-
-    # Normalize longitude to [-180, 180]
-    lon = lon_rad * @rad_to_deg
-    lon = normalize_longitude(lon)
-
-    {lon, lat_rad * @rad_to_deg}
+    lon_rad = normalize_radians(lon * @deg_to_rad - lambda * @deg_to_rad)
+    {lon_rad, lat_rad} = rotate_phi_gamma(lon_rad, lat * @deg_to_rad, phi, gamma)
+    {lon_rad * @rad_to_deg, lat_rad * @rad_to_deg}
   end
 
   defp apply_inverse_rotation(lon, lat, {0, 0, 0}), do: {lon, lat}
 
-  # The forward rotation is lambda, then phi about x, then gamma about z; its inverse
-  # undoes them in reverse order: gamma, then phi, then lambda (D-44).
+  # d3's inverse of a composed rotation undoes it in reverse (src/compose.js:8–10, D-44):
+  # `rotationPhiGamma.invert`, then `lambda` added back and normalised.
   defp apply_inverse_rotation(lon, lat, {lambda, phi, gamma}) do
-    lon_rad = lon * @deg_to_rad
-    lat_rad = lat * @deg_to_rad
-
     {lon_rad, lat_rad} =
       if phi != 0 or gamma != 0 do
-        spherical_unrotate(lon_rad, lat_rad, phi * @deg_to_rad, gamma * @deg_to_rad)
+        unrotate_phi_gamma(lon * @deg_to_rad, lat * @deg_to_rad, phi, gamma)
       else
-        {lon_rad, lat_rad}
+        {lon * @deg_to_rad, lat * @deg_to_rad}
       end
 
     lon_rad = lon_rad + lambda * @deg_to_rad
@@ -562,34 +550,42 @@ defmodule Visualize.Geo.Projection do
     {normalize_longitude(lon_rad * @rad_to_deg), lat_rad * @rad_to_deg}
   end
 
-  # Rotate about the x axis by phi, then about the z axis by gamma.
-  defp spherical_rotate(lon, lat, phi, gamma) do
+  # `rotationPhiGamma`'s `rotation` (src/rotation.js:39–48), angles in degrees, the point
+  # in radians.
+  defp rotate_phi_gamma(lon, lat, phi, gamma) do
+    {cos_p, sin_p, cos_g, sin_g} = trig(phi, gamma)
     {x, y, z} = to_cartesian(lon, lat)
-    {y1, z1} = rotate2(y, z, phi)
-    {x2, y2} = rotate2(x, y1, gamma)
-    to_spherical(x2, y2, z1)
+    k = z * cos_p + x * sin_p
+    {:math.atan2(y * cos_g - k * sin_g, x * cos_p - z * sin_p), asin(k * cos_g + y * sin_g)}
   end
 
-  # Rotate about the z axis by gamma, then about the x axis by phi.
-  defp spherical_unrotate(lon, lat, phi, gamma) do
+  # `rotationPhiGamma`'s `rotation.invert` (src/rotation.js:50–60).
+  defp unrotate_phi_gamma(lon, lat, phi, gamma) do
+    {cos_p, sin_p, cos_g, sin_g} = trig(phi, gamma)
     {x, y, z} = to_cartesian(lon, lat)
-    {x1, y1} = rotate2(x, y, gamma)
-    {y2, z2} = rotate2(y1, z, phi)
-    to_spherical(x1, y2, z2)
+    k = z * cos_g - y * sin_g
+    {:math.atan2(y * cos_g + z * sin_g, x * cos_p + k * sin_p), asin(k * cos_p - x * sin_p)}
   end
 
-  defp rotate2(a, b, angle) do
-    c = cos(angle)
-    s = sin(angle)
-    {a * c - b * s, a * s + b * c}
+  defp trig(phi, gamma) do
+    {p, g} = {phi * @deg_to_rad, gamma * @deg_to_rad}
+    {cos(p), sin(p), cos(g), sin(g)}
   end
+
+  # d3's `asin` (src/math.js), which clamps its argument to [-1, 1].
+  defp asin(v), do: :math.asin(max(-1.0, min(1.0, v)))
+
+  # `rotationLambda`'s normalisation (src/rotation.js:21): beyond ±π, less the nearest
+  # whole turn, rounded as JavaScript's `Math.round` rounds a half (up).
+  defp normalize_radians(lambda) when abs(lambda) > @pi_rad,
+    do: lambda - Float.floor(lambda / (2 * @pi_rad) + 0.5) * 2 * @pi_rad
+
+  defp normalize_radians(lambda), do: lambda
 
   defp to_cartesian(lon, lat) do
     cos_lat = cos(lat)
     {cos_lat * cos(lon), cos_lat * sin(lon), sin(lat)}
   end
-
-  defp to_spherical(x, y, z), do: {:math.atan2(y, x), :math.asin(max(-1, min(1, z)))}
 
   defp normalize_longitude(lon) when lon > 180, do: normalize_longitude(lon - 360)
   defp normalize_longitude(lon) when lon < -180, do: normalize_longitude(lon + 360)
