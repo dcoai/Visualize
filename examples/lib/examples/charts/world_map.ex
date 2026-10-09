@@ -9,10 +9,10 @@ defmodule Examples.Charts.WorldMap do
   `Sphere`, the projection's own outline, filled under everything and stroked over it; the
   graticule is one `LineString` per meridian and parallel, the equator and the prime
   meridian heavier through style keys bound to the row; the land is one feature per land
-  mass, coloured by name through the `color` scale. The hand-written version clipped the
-  map to an ellipse it drew by hand — a pseudo-cylindrical projection ends at the
-  antimeridian, so the design clips nothing. The animation turns the projection's
-  `rotate`, the map's centre moving west.
+  mass of Natural Earth's 1:110m land (#499), coloured by its id through the `color`
+  scale. The hand-written version clipped the map to an ellipse it drew by hand — a
+  pseudo-cylindrical projection ends at the antimeridian, so the design clips nothing.
+  The animation turns the projection's `rotate`, the map's centre moving west.
 
   Its ocean is the theme's `:surface` (#422), the plane the data is laid on: not the page
   (`:background` would make it vanish), not a data colour (the land reads through the
@@ -29,7 +29,7 @@ defmodule Examples.Charts.WorldMap do
   def size, do: {700, 400}
 
   def title, do: "World Map"
-  def description, do: "Natural Earth projection with graticule"
+  def description, do: "Natural Earth projection with graticule; land from Natural Earth 1:110m"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
@@ -117,7 +117,8 @@ defmodule Examples.Charts.WorldMap do
       ])
 
     # globe: [%{shape: %{"type" => "Sphere"}}]; graticule and land: rows with GeoJSON
-    # under :shape (Examples.Charts.WorldGeography.graticule/1 and land/0).
+    # under :shape (Examples.Charts.WorldGeography.graticule/1 and land/0). The land is
+    # Natural Earth's 1:110m land (naturalearthdata.com, public domain), one row per land mass.
     {:ok, applied} = Visualize.Chart.apply(design, sources: %{globe: globe, graticule: graticule, land: land})
     Visualize.Chart.render(applied)
     """
