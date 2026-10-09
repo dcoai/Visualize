@@ -148,10 +148,10 @@ defmodule Visualize.Chart.Frame do
     theme = theme(chart.theme, Keyword.get(opts, :theme))
     styles = Style.all(chart.styles)
     projection = projection(kind, node, plot, sources)
-    panels = panels(kind, node, chart, sources, context(plot, projection, now))
+    panels = panels(kind, node, chart, sources, context(kind, plot, projection, now))
     facet = facet(kind, node, panels)
     scale_plot = if facet, do: panel_plot(plot, facet.columns, panels), else: plot
-    ctx = context(scale_plot, projection, now)
+    ctx = context(kind, scale_plot, projection, now)
 
     scales =
       Scales.realise(
@@ -389,9 +389,24 @@ defmodule Visualize.Chart.Frame do
 
   # -- construction ---------------------------------------------------------------------
 
+  @doc false
+  # The point a centred mark is about, in the coordinates its group is drawn in (spec/14
+  # §5.6, #488): the plot's middle, or the origin of a `:polar` frame's centred group,
+  # which already sits there. An `:arc` mark is translated to it and a `:chord` step's
+  # paths are drawn about it, so the ring and its ribbons share one centre.
+  @spec centre(kind(), %{width: number(), height: number()}) :: [number()]
+  def centre(:polar, _plot), do: [0, 0]
+  def centre(_kind, plot), do: [plot.width / 2, plot.height / 2]
+
   # What a mark's pipeline sees of the frame (spec/14 §5.4).
-  defp context(plot, projection, now),
-    do: %{size: [plot.width, plot.height], projection: projection, now: now}
+  defp context(kind, plot, projection, now) do
+    %{
+      size: [plot.width, plot.height],
+      centre: centre(kind, plot),
+      projection: projection,
+      now: now
+    }
+  end
 
   # Which frame `new/2` realises: the one `frame:` names, else the design's only one — a
   # design with several and no name given is an authoring error, not a default (spec/14

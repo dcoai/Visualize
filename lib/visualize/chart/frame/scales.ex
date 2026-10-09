@@ -276,6 +276,7 @@ defmodule Visualize.Chart.Frame.Scales do
 
         Transform.apply(transforms(mark.data), rows,
           size: ctx.size,
+          centre: ctx.centre,
           projection: ctx.projection,
           sources: sources,
           now: Map.get(ctx, :now)
