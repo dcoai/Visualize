@@ -19,6 +19,7 @@ defmodule Visualize.Chart.Validator do
   """
 
   alias Visualize.Chart.{Migration, Schema, Text, Var}
+  alias Visualize.Chart.Validator.Domain
   alias Visualize.Theme
 
   @typedoc "Keys and list indexes from the design to a value; `[]` is the design."
@@ -51,6 +52,7 @@ defmodule Visualize.Chart.Validator do
           | {:sync, :frame_kind | :x_scale, atom() | nil}
           | {:tiles, :projection, atom()}
           | {:tiles, :attribution | :url | :subdomains}
+          | {:outside_domain, atom(), number() | {:column, atom(), :number | :text | :time}}
 
   @type error :: {path(), reason()}
 
@@ -61,7 +63,7 @@ defmodule Visualize.Chart.Validator do
   @doc "`:ok`, or every fault of the design ordered by path."
   @spec validate(term()) :: :ok | {:error, [error(), ...]}
   def validate(map) when is_map(map) and not is_struct(map) do
-    case node(:design, map, [], context(map)) ++ cycles(map) do
+    case node(:design, map, [], context(map)) ++ cycles(map) ++ Domain.faults(map) do
       [] -> :ok
       errors -> {:error, Enum.sort_by(errors, &elem(&1, 0))}
     end
@@ -949,6 +951,16 @@ defmodule Visualize.Chart.Validator do
 
   defp words({:zone, zone, reason}),
     do: "time zone #{inspect(zone)} cannot be shown: #{inspect(reason)}"
+
+  defp words({:outside_domain, scale, {:column, field, type}}) do
+    "field #{inspect(field)} is a #{inspect(type)} column and scale #{inspect(scale)}'s " <>
+      "declared domain holds no such value: every element would draw its unknown colour"
+  end
+
+  defp words({:outside_domain, scale, value}) do
+    "#{inspect(value)} is not in scale #{inspect(scale)}'s declared domain: " <>
+      "it would draw the scale's unknown colour"
+  end
 
   defp words(:required), do: "is required"
   defp words(:unknown_key), do: "is not a key of this node"

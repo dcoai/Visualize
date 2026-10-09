@@ -214,6 +214,9 @@ Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outp
 
 `style_apply_commands/1` emits `{:fill, []}` when `:fill` is present and not `:none`, then `{:stroke, []}` when `:stroke` is present and not `:none`.
 
+**An absent fill is not `:none`** (#487, D-122). An element with no `:fill` in its own style or any group's above it fills nothing here, while the SVG backend writes no `fill` attribute and the SVG initial value, black, paints it: the two backends agree on `:none` and disagree on absence. Neither backend papers over it — the IR is the caller's, and a hand-built SVG path relies on the initial value — so a producer that must draw the same on both says `:none`. The declarative layer does: a mark element whose colour reading is missing carries `fill: :none` (spec/14 §3.4).
+
+
 A `:text` with `:tspan` children (its lines, spec/14 §7.1) emits its style commands once, then one `fillText` per line at the text's `x` and at `y` plus the sum of the lines' `dy` so far, a `dy` in `em` read as that many times the style's `font_size` (`10` when absent).
 
 Text style (`:text` elements only) emits `{:set_font, [font]}` when any of `:font_size` (default `10`), `:font_family` (default `"sans-serif"`), `:font_weight` or `:font_style` is set, `font` being the CSS shorthand `[style] [weight] size family` — `12px serif`, `italic 300 12px sans-serif`, `bold 12px serif` — with the style and the weight present only when set; `{:set_textAlign, ["left" | "center" | "right"]}` for `:text_anchor` `:start | :middle | :end`; and `set_fillStyle` under the fill rules above. No other style keys affect Canvas output.

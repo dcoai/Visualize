@@ -308,6 +308,7 @@ The table and the steps above describe a scale without a zone. A zoned scale rea
 
 - `apply/2`: `unknown` when the range is empty. Otherwise the index `i` of the first domain element equal (`==`) to the value; when not found the `unknown` value is returned, else `Enum.at(range, rem(i, length(range)))`: the range **cycles** when the domain is longer. The domain is never extended implicitly.
 - `invert/2` returns `nil`; `ticks/2` returns the domain (count ignored); `nice/1`, `clamp/2`, `padding/2` identity; `bandwidth/1` `0`.
+- **`unknown` is d3's `scaleOrdinal.unknown`** without d3's implicit default: the struct's `nil` means "no value", and the caller decides what that draws. A scale used for **colour** gives it a colour, so that a value outside the domain is still drawn, and drawn as *not one of the categories*: the declarative layer's `color` scale does so by default, with the theme's `:axis` slot, a neutral every theme makes visible on its background ([14-declarative-chart](14-declarative-chart.md) §4.3, D-122). A `nil` value is outside every domain inference builds, since inference drops `nil`s, so at this level it maps to `unknown` like any other stranger; the declarative layer reads a `nil` as no value at all and paints nothing (spec/14 §3.4).
 
 ### 8.3 Functions
 

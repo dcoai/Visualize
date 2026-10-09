@@ -74,8 +74,11 @@ defmodule Visualize.Chart.Style do
   The map of `resolve/3` with every `{:field, f}` read from the datum (spec/14 §3.4).
 
   A colour key's reading passes through the frame's `color` scale when the frame
-  declares one and is resolved as a theme slot when it is one; a `nil` reading — a
-  column the datum lacks, or a category the scale does not hold — drops the key.
+  declares one — a category outside its domain is the scale's `unknown` — and is
+  resolved as a theme slot when it is one. A colour is never dropped: a `nil` reading,
+  or a scale that yields `nil`, is `:none`, the explicit "no paint" SVG and canvas agree
+  on, where an absent fill is black on one and nothing on the other (D-122). Any other
+  key's `nil` reading drops the key.
   """
   @spec bind(map(), term(), map(), Theme.mode()) :: map()
   def bind(style, datum, frame, mode) do
@@ -84,6 +87,9 @@ defmodule Visualize.Chart.Style do
       {key, value}, acc -> Map.put(acc, key, value)
     end)
   end
+
+  defp put_reading(acc, key, nil, _frame, _mode) when key in @colour_keys,
+    do: Map.put(acc, key, :none)
 
   defp put_reading(acc, _key, nil, _frame, _mode), do: acc
 
@@ -101,7 +107,7 @@ defmodule Visualize.Chart.Style do
     Map.put(acc, key, value(key, reading, frame.theme, mode))
   end
 
-  defp put_colour(acc, _key, nil, _theme, _mode), do: acc
+  defp put_colour(acc, key, nil, _theme, _mode), do: Map.put(acc, key, :none)
 
   defp put_colour(acc, key, colour, theme, mode),
     do: Map.put(acc, key, colour(colour, theme, mode))

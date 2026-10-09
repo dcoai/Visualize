@@ -362,7 +362,7 @@ defmodule Visualize.Chart.Frame.Scales do
       |> ring(kind, name, domain)
 
     kind
-    |> construct(node, range)
+    |> construct(unknown(kind, name, node), range)
     |> with_domain(kind, domain)
     |> with_range(kind, range)
     |> flag(:nice, get(node, :nice))
@@ -370,6 +370,15 @@ defmodule Visualize.Chart.Frame.Scales do
   end
 
   defp get(node, key), do: Map.get(node, key, Schema.default(:scale, key))
+
+  # The colour scale draws a value outside its domain in a visible neutral, the theme's
+  # `:axis` slot, unless the node says otherwise (spec/14 §4.3, D-122): a colour that
+  # vanished would hide the mismatch, and the backends disagree about a missing fill.
+  defp unknown(:ordinal, :color, node) do
+    if get(node, :unknown) == nil, do: Map.put(node, :unknown, :axis), else: node
+  end
+
+  defp unknown(_kind, _name, node), do: node
 
   # An `angle` scale with a start or a sweep has its range said in degrees (§4.3, #390);
   # a list range wins, and any other scale's start and sweep say nothing.

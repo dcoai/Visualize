@@ -9,6 +9,7 @@ defmodule Visualize.ChartGen do
   import StreamData
 
   alias Visualize.Chart.{Schema, Var}
+  alias Visualize.Chart.Validator.Domain
   alias Visualize.Theme
 
   @names [:a, :b, :c]
@@ -24,6 +25,13 @@ defmodule Visualize.ChartGen do
 
   @doc "A valid design map."
   def design do
+    # A colour channel and its frame's colour scale are drawn independently, so a constant
+    # or a typed column can land outside a declared domain — the validator's
+    # `{:outside_domain, …}` (spec/14 §10.1, D-122). Such a design is not valid; drop it.
+    filter(designs(), &(Domain.faults(&1) == []), 50)
+  end
+
+  defp designs do
     gen all(
           theme <- theme(),
           sources <- sources(),

@@ -179,7 +179,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       # One cell per `:rect` element — the design filters to the leaves — with the
       # component's label rule over the row (spec/10 §3.3). A root-only hierarchy's cell
-      # has no `branch`, so no bound fill, and takes the theme's `:grid`.
+      # has no `branch`, so its bound fill is `:none` (spec/14 §3.4, D-122), and takes the
+      # theme's `:grid`.
       cells =
         Enum.zip_with(cells.children, leaves, fn rect, leaf ->
           %{x: x, y: y, width: width, height: height} = rect.attrs
@@ -189,7 +190,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             y: fmt(y),
             width: fmt(width),
             height: fmt(height),
-            fill: Map.get(rect.style, :fill, root_fill),
+            fill: cell_fill(Map.get(rect.style, :fill, :none), root_fill),
             stroke: cells.style.stroke,
             stroke_width: cells.style.stroke_width,
             label: if(width > 30 and height > 15, do: Support.truncate(leaf.label, width - 8)),
@@ -330,5 +331,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp label_anchor(:vertical, _internal?), do: "middle"
 
     defp fmt(number), do: Support.fmt(number)
+
+    # A leaf's cell takes its branch colour; the root of a root-only hierarchy has none.
+    defp cell_fill(:none, root_fill), do: root_fill
+    defp cell_fill(fill, _root_fill), do: fill
   end
 end

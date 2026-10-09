@@ -1,0 +1,195 @@
+defmodule Visualize.Chart.Validator.Domain do
+  @moduledoc false
+  # The colour-domain check of the validator (spec/14 §10.1, #487, D-122): a value a mark
+  # sends to its frame's colour scale that the scale's *declared* ordinal domain can be seen
+  # not to hold. Every element it reaches would draw the scale's `unknown`, so the design
+  # says something it cannot mean.
+  #
+  # Only what the design decides is reported: a constant channel's number, and a field
+  # whose source declares a column type no value of the domain can have. An untyped field,
+  # a `:category` column, a source read through transforms, an inferred or variable domain
+  # and a style reached through a variable are not decidable here and are passed over. The
+  # walk is total over any map, since the validator is handed arbitrary input: a shape it
+  # does not recognise contributes nothing, and the schema walk reports it.
+
+  alias Visualize.Chart.{Style, Var}
+
+  @colour_keys [:fill, :stroke]
+  @temporal [DateTime, Date, NaiveDateTime]
+
+  @doc false
+  @spec faults(map()) :: [{list(), term()}]
+  def faults(%{marks: marks} = design) when is_list(marks) do
+    frames = map_or_empty(design[:frames])
+    styles = Style.all(map_or_empty(design[:styles]))
+    sources = map_or_empty(design[:sources])
+
+    marks
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {mark, i} -> mark(mark, [:marks, i], frames, styles, sources) end)
+  end
+
+  def faults(_design), do: []
+
+  defp mark(%{} = mark, path, frames, styles, sources) when not is_struct(mark) do
+    frame = frame(mark[:frame], frames)
+    scales = map_or_empty(frame[:scales])
+    columns = columns(mark[:data], sources)
+
+    channels(mark, frame, scales, columns, path) ++ style(mark, scales, styles, columns, path)
+  end
+
+  defp mark(_mark, _path, _frames, _styles, _sources), do: []
+
+  # A mark is drawn in the frame it names, or the design's only frame (spec/14 §5.1).
+  defp frame(name, frames) when is_map_key(frames, name), do: map_or_empty(frames[name])
+
+  defp frame(_name, frames) when map_size(frames) == 1,
+    do: frames |> Map.values() |> hd() |> map_or_empty()
+
+  defp frame(_name, _frames), do: %{}
+
+  # The column types of the mark's source, when its rows are the source's own.
+  defp columns(name, sources) when is_atom(name) and is_map_key(sources, name) do
+    case sources[name] do
+      %{types: types} when is_map(types) and not is_struct(types) -> types
+      _ -> %{}
+    end
+  end
+
+  defp columns(%{source: name} = data, sources) when not is_struct(data) do
+    case Map.get(data, :transforms, []) do
+      [] -> columns(name, sources)
+      _transformed -> %{}
+    end
+  end
+
+  defp columns(_data, _sources), do: %{}
+
+  # -- channels -------------------------------------------------------------------------
+
+  # `series` names the colour scale in every frame kind, `value` on a `:rect` and in a
+  # `:geo` frame (spec/14 §4.3); a mark's `scales` node may rename it.
+  defp channels(mark, frame, scales, columns, path) do
+    channels = map_or_empty(mark[:channels])
+    name = colour_scale(map_or_empty(mark[:scales]))
+
+    case domain(scales[name]) do
+      nil ->
+        []
+
+      domain ->
+        for key <- colour_channels(mark[:type], frame[:kind]),
+            Map.has_key?(channels, key),
+            reason = channel(channels[key], name, domain, columns),
+            do: {path ++ [:channels, key], reason}
+    end
+  end
+
+  defp colour_scale(%{color: name}) when is_atom(name) and name not in [nil, true, false],
+    do: name
+
+  defp colour_scale(_scales), do: :color
+
+  defp colour_channels(:rect, _kind), do: [:series, :value]
+  defp colour_channels(_type, :geo), do: [:series, :value]
+  defp colour_channels(_type, _kind), do: [:series]
+
+  defp channel(value, name, domain, _columns) when is_number(value) do
+    if Enum.any?(domain, &(&1 == value)), do: nil, else: {:outside_domain, name, value}
+  end
+
+  defp channel({:field, field}, name, domain, columns), do: column(field, name, domain, columns)
+  defp channel(field, name, domain, columns), do: column(field, name, domain, columns)
+
+  # -- the mark's style -----------------------------------------------------------------
+
+  # A `{:field, f}` on a colour key reads through the scale named `color` whatever the
+  # mark's `scales` say (spec/14 §4.3).
+  defp style(mark, scales, styles, columns, path) do
+    case domain(scales[:color]) do
+      nil ->
+        []
+
+      domain ->
+        node = stack(mark[:style], styles)
+
+        @colour_keys
+        |> Enum.flat_map(fn key ->
+          case Map.get(node, key) do
+            {:field, field} -> [column(field, :color, domain, columns)]
+            _other -> []
+          end
+        end)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+        |> Enum.map(&{path ++ [:style], &1})
+    end
+  end
+
+  # The stack's entries cascaded left to right, each through its `extends` chain
+  # (spec/14 §3.5, §3.6). A cycle stops the walk where it closes — the validator reports
+  # it by path — and a variable contributes nothing.
+  defp stack(entries, styles) when is_list(entries) do
+    Enum.reduce(entries, %{}, fn entry, node -> Map.merge(node, entry(entry, styles, [])) end)
+  end
+
+  defp stack(entry, styles), do: entry(entry, styles, [])
+
+  defp entry(%Var{}, _styles, _seen), do: %{}
+
+  defp entry(%{} = inline, styles, seen) when not is_struct(inline) do
+    parent =
+      if Map.has_key?(inline, :extends), do: entry(inline[:extends], styles, seen), else: %{}
+
+    Map.merge(parent, Map.delete(inline, :extends))
+  end
+
+  defp entry(name, styles, seen) when is_atom(name) and is_map_key(styles, name) do
+    if name in seen, do: %{}, else: named(styles[name], styles, [name | seen])
+  end
+
+  defp entry(_entry, _styles, _seen), do: %{}
+
+  defp named(%{} = node, styles, seen) when not is_struct(node) do
+    parent = if Map.has_key?(node, :extends), do: entry(node[:extends], styles, seen), else: %{}
+    Map.merge(parent, Map.delete(node, :extends))
+  end
+
+  defp named(_node, _styles, _seen), do: %{}
+
+  # -- domains and columns --------------------------------------------------------------
+
+  # A declared ordinal domain: a literal, non-empty list with no variable and no `:auto`.
+  defp domain(%{kind: :ordinal, domain: domain}) when is_list(domain) and domain != [] do
+    if Enum.any?(domain, &(is_struct(&1, Var) or &1 == :auto)), do: nil, else: domain
+  end
+
+  defp domain(_node), do: nil
+
+  defp column(field, name, domain, columns) when is_atom(field) do
+    case Map.get(columns, field) do
+      type when type in [:number, :text, :time] ->
+        if Enum.any?(domain, &holds?(type, &1)),
+          do: nil,
+          else: {:outside_domain, name, {:column, field, type}}
+
+      _untyped_or_category ->
+        nil
+    end
+  end
+
+  defp column(_field, _name, _domain, _columns), do: nil
+
+  # Whether a column of the type can hold the value (spec/14 §2.3): a `:time` column holds
+  # temporal structs, ISO 8601 strings and numbers, so only what is none of them is out.
+  defp holds?(:number, value), do: is_number(value)
+  defp holds?(:text, value), do: is_binary(value) or is_atom(value)
+
+  defp holds?(:time, value),
+    do:
+      is_binary(value) or is_number(value) or (is_struct(value) and value.__struct__ in @temporal)
+
+  defp map_or_empty(%{} = map) when not is_struct(map), do: map
+  defp map_or_empty(_other), do: %{}
+end
