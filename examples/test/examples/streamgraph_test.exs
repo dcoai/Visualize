@@ -1,8 +1,8 @@
 defmodule Examples.StreamgraphTest do
   @moduledoc """
   The streamgraph's layers keep their places while it animates (#492): `order: :inside_out`
-  re-sorted the series by each tick's sums, so a layer jumped to another place whenever two
-  sums crossed. The order is now fixed once, inside-out by each series' total over the run.
+  re-sorted the series from each tick's rows, so a layer jumped to another place whenever
+  the order moved. The order is now fixed once, inside-out by each series' total over the run.
   """
   use ExUnit.Case, async: true
 
