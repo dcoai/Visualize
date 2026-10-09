@@ -100,6 +100,26 @@ defmodule Visualize.Chart.Text do
     |> Enum.reverse()
   end
 
+  # The estimate's advance per character, in ems (spec/14 §4.5, §5.5).
+  @per_char 0.6
+
+  @doc """
+  The estimated width of a text at a font size: 0.6 × the font size per character
+  (spec/14 §5.5). It is the one estimate the library makes of a text's width — the
+  legend's layout and a mark label's `fit` read it — and it is public so a design can
+  size itself by it, as a ring leaves room for the labels outside it (#489). A design
+  cannot measure a glyph, so it is an estimate: a wide glyph runs over it.
+
+      iex> Visualize.Chart.Text.width("Wednesday", 11)
+      59.4
+
+      iex> Visualize.Chart.Text.width("", 11)
+      0.0
+  """
+  @spec width(String.t(), number()) :: float()
+  def width(text, font_size) when is_binary(text) and is_number(font_size),
+    do: @per_char * font_size * String.length(text)
+
   @doc "Whether a string carries a hole, so a plain string can be told from a template at a glance."
   @spec template?(term()) :: boolean()
   def template?(string) when is_binary(string), do: String.contains?(string, "\#{")

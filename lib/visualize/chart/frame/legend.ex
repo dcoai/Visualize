@@ -14,7 +14,6 @@ defmodule Visualize.Chart.Frame.Legend do
   @gap 16
   @row 16
   @inset 8
-  @per_char 0.6
   @right [:top_right, :bottom_right, :right]
   @left [:top_left, :bottom_left, :left]
 
@@ -146,7 +145,7 @@ defmodule Visualize.Chart.Frame.Legend do
   # when given, is the first cell. Returns `{elements, total width}`.
   defp row(entries, title, font_size, style) do
     fill = Map.take(style, [:fill])
-    title_width = if title, do: @per_char * font_size * String.length(title) + @inset, else: 0
+    title_width = if title, do: Text.width(title, font_size) + @inset, else: 0
 
     {items, width} =
       Enum.reduce(entries, {[], title_width}, fn {value, label, colour}, {acc, x} ->
@@ -166,7 +165,7 @@ defmodule Visualize.Chart.Frame.Legend do
             transform: Transform.translate(x, 0)
           )
 
-        {[item | acc], x + @gap + @per_char * font_size * String.length(label) + @inset}
+        {[item | acc], x + @gap + Text.width(label, font_size) + @inset}
       end)
 
     title_element = if title, do: [title(title, :start, fill)], else: []
@@ -224,11 +223,10 @@ defmodule Visualize.Chart.Frame.Legend do
   end
 
   # The estimated width of a stacked legend: the swatch, the gap and the longest label
-  # (the title counted as one) at 0.6 × the font size per character.
+  # (the title counted as one) at its estimated width, `Text.width/2`.
   defp width(entries, title, font_size) do
     labels = Enum.map(entries, &elem(&1, 1)) ++ List.wrap(title)
-    longest = labels |> Enum.map(&String.length/1) |> Enum.max(fn -> 0 end)
-    @gap + @per_char * font_size * longest
+    @gap + (labels |> Enum.map(&Text.width(&1, font_size)) |> Enum.max(fn -> 0.0 end))
   end
 
   # -- position -------------------------------------------------------------------------

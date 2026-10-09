@@ -57,7 +57,8 @@ defmodule Visualize.Chart.Validator do
   @type error :: {path(), reason()}
 
   @frame_anchors [:title, :subtitle, :caption]
-  @corners [:top_left, :top_right, :bottom_left, :bottom_right]
+  # The plot's four corners and its centre (spec/14 §6.3, #489).
+  @frame_points [:top_left, :top_right, :bottom_left, :bottom_right, :center]
   @not_names [nil, true, false]
 
   @doc "`:ok`, or every fault of the design ordered by path."
@@ -758,7 +759,7 @@ defmodule Visualize.Chart.Validator do
     if name?(s), do: ref(:scale, s, path, ctx), else: [{path, {:type, :anchor}}]
   end
 
-  defp check(:anchor, {:frame, c}, _path, _ctx) when c in @corners, do: []
+  defp check(:anchor, {:frame, c}, _path, _ctx) when c in @frame_points, do: []
 
   defp check(:anchor, {:data, [x, y]}, path, _ctx) do
     if term?(x) and term?(y), do: [], else: [{path, {:type, :anchor}}]
@@ -1034,7 +1035,7 @@ defmodule Visualize.Chart.Validator do
   defp type_words(:text), do: ~S|a string, with #{var(:name)} for a variable|
 
   defp type_words(:anchor) do
-    "an anchor: :title, :subtitle, :caption, {:axis, scale}, {:frame, corner} or " <>
+    "an anchor: :title, :subtitle, :caption, {:axis, scale}, {:frame, corner | :center} or " <>
       "{:data, [x, y]}"
   end
 

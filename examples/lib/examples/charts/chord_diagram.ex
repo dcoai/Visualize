@@ -5,7 +5,9 @@ defmodule Examples.Charts.ChordDiagram do
   `:path` mark over `output: :chords`, and the group arcs as an `:arc` mark over the
   groups' own `start_angle` and `end_angle` (spec/14 §5.6, D-69), which is what lets the
   region names sit outside the ring on each group's spoke — the `:outward` anchor with
-  `rotate: :radial` (§5.5). That annotation kept the chart imperative until #137.
+  `rotate: :radial` (§5.5). That annotation kept the chart imperative until #137. The ring
+  is sized from the plot and its longest region name, so no name leaves the plot (§5.5,
+  #489).
   """
 
   import Visualize.Chart.Build
@@ -14,6 +16,8 @@ defmodule Examples.Charts.ChordDiagram do
 
   @zero_margin %{top: 0, right: 0, bottom: 0, left: 0}
   @groups ["Asia", "Europe", "Americas", "Africa", "Oceania"]
+  @region_size 11
+  @region_dr 6
 
   # Migration flow matrix (rows = from, columns = to)
   @matrix [
@@ -33,10 +37,10 @@ defmodule Examples.Charts.ChordDiagram do
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
     {width, height} = Design.size(__MODULE__, opts)
-    # The ring's outer radius, 40 inside the plot for the region names. The ribbons'
+    # The ring leaves room for the region names (spec/14 §5.5, #489). The ribbons'
     # `size` sets their radius only — 0.9 of it, the ring's inner edge — and both steps
     # are about the plot's centre, as the arc mark is (spec/14 §5.4.3, #488).
-    radius = min(width, height) / 2 - 40
+    radius = Design.ring_radius({width, height}, @groups, @region_size, @region_dr)
     size = [2 * radius, 2 * radius]
 
     design =
@@ -50,7 +54,7 @@ defmodule Examples.Charts.ChordDiagram do
           stroke: {:field, :source},
           stroke_width: 0.5
         ),
-        style(:region, extends: :label, font_size: 11),
+        style(:region, extends: :label, font_size: @region_size),
         cartesian(margin: @zero_margin),
         ordinal_scale(:color),
         path(
@@ -65,7 +69,7 @@ defmodule Examples.Charts.ChordDiagram do
           label: %{
             text: [{:field, :id}],
             anchor: :outward,
-            dr: 6,
+            dr: @region_dr,
             rotate: :radial,
             style: :region
           },
@@ -117,15 +121,15 @@ defmodule Examples.Charts.ChordDiagram do
         cartesian(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color),
         # The ribbons: the :chord transform's chords, each a ready path.
-        path(chord(:flows, [:from, :to], :value, padding: 0.05, output: :chords, size: [420, 420]),
+        path(chord(:flows, [:from, :to], :value, padding: 0.05, output: :chords, size: [366.4, 366.4]),
           %{path: :path}, style: :ribbon),
         # The group arcs from the groups' own angles, and the region names outside the
-        # ring on each group's spoke (spec/14 §5.5).
-        # The ribbons' size sets their radius only (0.9 of 210, the ring's inner edge);
+        # ring on each group's spoke (spec/14 §5.5), the ring sized to leave them room.
+        # The ribbons' size sets their radius only (0.9 of 183.2, the ring's inner edge);
         # both are about the plot's centre (spec/14 §5.4.3).
         arc(chord(:flows, [:from, :to], :value, padding: 0.05),
           %{value: :value, start: :start_angle, end: :end_angle},
-          options: %{inner_radius: 189, outer_radius: 210},
+          options: %{inner_radius: 164.88, outer_radius: 183.2},
           label: %{text: [{:field, :id}], anchor: :outward, dr: 6, rotate: :radial, style: :region},
           style: :group
         )

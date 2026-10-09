@@ -38,6 +38,26 @@ defmodule Examples.Charts.Design do
     design
   end
 
+  # A polar label's inset from the rim, and every corner label's from the plot's edge
+  # (spec/14 §5.5, §6.3).
+  @inset 4
+
+  @doc """
+  The outer radius of a ring whose labels sit outside it (spec/14 §5.5, #489): half the
+  plot's smaller side, less the room the longest label takes on its spoke — the label's
+  inset and `dr` from the rim, its estimated width (`Visualize.Chart.Text.width/2`) at
+  `font_size`, and the inset from the plot's edge — so no ring label leaves the plot.
+  `plot` is the plot area's `{width, height}`.
+
+      iex> Examples.Charts.Design.ring_radius({400, 400}, ["Wednesday", "Friday"], 11, 11)
+      121.6
+  """
+  @spec ring_radius({number(), number()}, [String.t()], number(), number()) :: float()
+  def ring_radius({width, height}, labels, font_size, dr) do
+    longest = labels |> Enum.map(&Chart.Text.width(&1, font_size)) |> Enum.max(fn -> 0.0 end)
+    Float.round(min(width, height) / 2 - (@inset + dr + longest + @inset), 6)
+  end
+
   @doc """
   True when `module` is a chart written as a design rather than an imperative one.
 
