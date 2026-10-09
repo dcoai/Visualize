@@ -32,6 +32,7 @@ defmodule ExamplesWeb.Router do
     # The Incremental demo is the Incremental line chart's drawer now (#402)
     get "/incremental", RedirectController, :incremental_line
     live "/interaction", InteractionLive, :index
+    live "/dashboard", DashboardLive, :index
     live "/builder", BuilderLive, :index
   end
 

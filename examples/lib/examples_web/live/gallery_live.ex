@@ -102,6 +102,10 @@ defmodule ExamplesWeb.GalleryLive do
           <span class="tool-icon">🎯</span>
           <span>Client-side Interaction (tooltip, crosshair, legend)</span>
         </a>
+        <a href="/dashboard" class="tool-link" style="background: linear-gradient(135deg, #10b981 0%, #047857 100%);">
+          <span class="tool-icon">🔗</span>
+          <span>Synced dashboard (one crosshair and brush across three panels)</span>
+        </a>
         <a href="/builder" class="tool-link" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">
           <span class="tool-icon">🧩</span>
           <span>Chart Builder (edit a stack of fragments)</span>

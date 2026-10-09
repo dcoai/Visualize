@@ -14,6 +14,7 @@ defmodule ExamplesWeb.SiteHeaderTest do
     {"/hybrid", :performance},
     {"/chart/incremental_line", :charts},
     {"/interaction", :interaction},
+    {"/dashboard", :interaction},
     {"/builder", :builder}
   ]
 

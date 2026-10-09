@@ -501,6 +501,222 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
     end
   end
 
+  describe "a sync group shares the brush (#467, spec/10 §6.4)" do
+    # A brush member as a page renders one: a container holding the chart's SVG, whose
+    # frame group carries the group's attributes of a real design at a size, and the plot
+    # as the brush's extent.
+    defp brush_member(size, opts \\ []) do
+      design = %{
+        version: 2,
+        interaction: %{sync: Keyword.get(opts, :group, "dash")},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :linear, domain: Keyword.get(opts, :domain, [0, 100])}}
+          }
+        }
+      }
+
+      {:ok, %{frame: frame}} = Chart.apply(design, size: size)
+      %{left: left, top: top} = frame.margin
+      {width, height} = size
+
+      %{
+        size: [width, height],
+        sync: Frame.sync_attrs(frame),
+        extent: Enum.join([left, top, left + frame.plot.width, top + frame.plot.height], ",")
+      }
+    end
+
+    # Every brush is mounted through a spy that records which charts drew a received
+    # brush; `band` reads the drawn selection as [x, width, y, height], null when hidden.
+    @brush_prelude """
+    const handled = [];
+    const Spy = Object.create(BrushHook);
+    Spy.syncTo = function (extent) {
+      handled.push(this.tag || this.el.id);
+      return BrushHook.syncTo.call(this, extent);
+    };
+    function brush(id, m, left, cssWidth) {
+      const [w, h] = m.size;
+      const css = cssWidth || w;
+      const svg = Stub.markup('svg', {viewBox: '0 0 ' + w + ' ' + h}, [Stub.markup('g', m.sync)]);
+      svg.rect = {left, top: 0, width: css, height: h * css / w};
+      const el = Stub.markup('div', {'data-brush-type': 'x', 'data-brush-extent': m.extent}, [svg]);
+      el.id = id;
+      return Stub.mount(Spy, el);
+    }
+    const band = (hook) => {
+      const r = hook.selectionRect;
+      if (r.getAttribute('visibility') !== 'visible') return null;
+      return ['x', 'width', 'y', 'height'].map((a) => Number(r.getAttribute(a)));
+    };
+    const press = (hook, clientX) =>
+      Stub.fire(hook.captureRect, 'mousedown', {button: 0, clientX, clientY: 100, preventDefault() {}});
+    const move = (clientX) => Stub.fire(document, 'mousemove', {clientX, clientY: 100, preventDefault() {}});
+    const release = () => Stub.fire(document, 'mouseup', {});
+    """
+
+    defp pushes(entries), do: for(%{"kind" => "push"} = p <- entries, do: p)
+
+    test "brushing one of three charts shows the band on all three at the same domain extent" do
+      assert {:ok, %{"log" => log, "report" => report}} =
+               run("""
+               #{@brush_prelude}
+               const a = brush('a', #{js(brush_member({600, 200}))}, 0);
+               const b = brush('b', #{js(brush_member({300, 200}))}, 700, 450);
+               const c = brush('c', #{js(brush_member({900, 200}))}, 1200);
+               const part = brush('part', #{js(brush_member({600, 200}, domain: [40, 140]))}, 2200);
+               const far = brush('far', #{js(brush_member({600, 200}, domain: [200, 300]))}, 2900);
+               const other = brush('other', #{js(brush_member({600, 200}, group: "other"))}, 3600);
+               const bands = () => ({a: band(a), b: band(b), c: band(c), part: band(part), far: band(far), other: band(other)});
+
+               Stub.mark('drag');
+               // 20 to 50 of [0, 100] on a: chart x 40 + 108 to 40 + 270 of its 540-wide plot.
+               press(a, 148);
+               move(229);
+               const during = bands();
+               move(310);
+               Stub.mark('release');
+               release();
+               const brushed = bands();
+               const heard = handled.splice(0);
+               Stub.done({during, brushed, heard});
+               """)
+
+      %{"during" => during, "brushed" => brushed, "heard" => heard} = report
+
+      # The members follow the rubber band while it is drawn: 20 to 35 on b already.
+      assert [88, w, 20, 150] = during["b"]
+      assert_in_delta w, 36, 0.01
+
+      # One extent, every member at its own pixels: 20..50 of a 240-, 540- and 840-wide plot.
+      assert brushed["a"] == [148, 162, 20, 150]
+      assert brushed["b"] == [88, 72, 20, 150]
+      assert brushed["c"] == [208, 252, 20, 150]
+
+      # Clipped to [40, 50] where the domain holds part of it; nothing where it holds none,
+      # nor in another group.
+      assert brushed["part"] == [40, 54, 20, 150]
+      assert brushed["far"] == nil
+      assert brushed["other"] == nil
+
+      # The chart brushed never handles its own echo, and the other group never hears.
+      assert heard |> Enum.uniq() |> Enum.sort() == ~w(b c far part)
+
+      # Each move publishes the extent in domain units, and nothing goes to the server.
+      drag = after_mark(log, "drag")
+
+      assert [
+               %{
+                 "name" => "vis:sync-brush:dash",
+                 "payload" => %{"extent" => [20, mid], "source" => "a"}
+               },
+               %{"payload" => %{"extent" => [20, 50], "source" => "a"}}
+             ] = events(drag)
+
+      assert_in_delta mid, 35, 0.01
+      assert pushes(drag) == []
+
+      # The release publishes the final window once more and pushes exactly one event,
+      # from the chart brushed, with its pixels and the window's domain.
+      release = after_mark(log, "release")
+      assert [%{"payload" => %{"extent" => [20, 50], "source" => "a"}}] = events(release)
+
+      assert [
+               %{
+                 "name" => "brush_select",
+                 "payload" => %{
+                   "x0" => 148,
+                   "x1" => 310,
+                   "y0" => 20,
+                   "y1" => 170,
+                   "domain" => [20, 50]
+                 }
+               }
+             ] = pushes(log)
+    end
+
+    test "a clear propagates with one push, from the chart acted on" do
+      assert {:ok, %{"log" => log, "report" => report}} =
+               run("""
+               #{@brush_prelude}
+               const a = brush('a', #{js(brush_member({600, 200}))}, 0);
+               const b = brush('b', #{js(brush_member({300, 200}))}, 700);
+               const c = brush('c', #{js(brush_member({900, 200}))}, 1200);
+               const bands = () => [band(a), band(b), band(c)];
+               press(a, 148); move(310); release();
+               const shown = bands();
+
+               Stub.mark('double-click');
+               Stub.fire(a.captureRect, 'dblclick', {});
+               const cleared = bands();
+               Stub.mark('again');
+
+               press(a, 148); move(310); release();
+               Stub.mark('click on a member');
+               // A click without a move on b is too small to select: it clears the group.
+               press(b, 760); release();
+               const clickCleared = bands();
+               Stub.done({shown, cleared, clickCleared});
+               """)
+
+      assert Enum.all?(report["shown"], &is_list/1)
+      assert report["cleared"] == [nil, nil, nil]
+      assert report["clickCleared"] == [nil, nil, nil]
+
+      dbl = after_mark(log, "double-click")
+      assert [%{"payload" => %{"extent" => nil, "source" => "a"}}] = events(dbl)
+      assert [%{"name" => "brush_clear", "payload" => %{}}] = pushes(dbl)
+
+      click = after_mark(log, "click on a member")
+      assert [%{"payload" => %{"extent" => nil, "source" => "b"}}] = events(click)
+      assert [%{"name" => "brush_clear"}] = pushes(click)
+    end
+
+    test "destroyed() removes the listener, a remount hears once, and a y brush joins no group" do
+      assert {:ok, %{"log" => log, "report" => report}} =
+               run("""
+               #{@brush_prelude}
+               const name = 'vis:sync-brush:dash';
+               const m = #{js(brush_member({300, 200}))};
+               const a = brush('a', #{js(brush_member({600, 200}))}, 0);
+               const first = brush('b', m, 700);
+               first.tag = 'b1';
+
+               const counts = {mounted: Stub.listeners(name), moves: Stub.listeners('mousemove')};
+               first.destroyed();
+               counts.destroyed = Stub.listeners(name);
+               const second = brush('b', m, 700);
+               second.tag = 'b2';
+               counts.remounted = Stub.listeners(name);
+
+               // A "y" brush shares no x: it joins no group.
+               const yEl = Stub.markup('div', {'data-brush-type': 'y'}, [Stub.markup('svg', {}, [Stub.markup('g', m.sync)])]);
+               const y = Stub.mount(BrushHook, yEl);
+               counts.withY = Stub.listeners(name);
+
+               Stub.mark('brush');
+               press(a, 148); move(310); release();
+               const heard = handled.splice(0);
+               const remountBand = band(second);
+
+               for (const hook of [a, second, y]) hook.destroyed();
+               counts.gone = [Stub.listeners(name), Stub.listeners('mousemove')];
+               Stub.done({counts, heard, remountBand});
+               """)
+
+      assert %{"mounted" => 2, "moves" => 2, "destroyed" => 1, "remounted" => 2, "withY" => 2} =
+               report["counts"]
+
+      # The destroyed mount hears nothing; the remount handles each event once and draws.
+      assert report["heard"] == ["b2", "b2"]
+      assert report["remountBand"] == [88, 72, 20, 150]
+      assert [_one] = pushes(after_mark(log, "brush"))
+      assert report["counts"]["gone"] == [0, 0]
+    end
+  end
+
   defp applied_frame(size) do
     design = %{
       version: 2,

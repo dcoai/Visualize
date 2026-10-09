@@ -40,6 +40,22 @@ defmodule Visualize.Hooks.Brush do
       end
       ```
 
+  The hook may also sit on a container around the chart's `<svg>`, as the other hooks do:
+  it maps the pointer through, and draws in, the first `<svg>` inside it.
+
+  ## In a sync group
+
+  A chart whose design names a sync group (`interaction: %{sync: "dash-42"}`, spec/14
+  §2.9) shares its brush (spec/10 §6.4, D-117): the chart brushed publishes the brushed x
+  extent in **domain** units on the group's bus, and every other member draws it as a band
+  through its own scale, clipped to its domain, at once. Only the chart brushed pushes
+  `brush_select`, once, on release, with the window as `"domain" => [lo, hi]` too, so one
+  window change is one server request:
+
+      def handle_event("brush_select", %{"domain" => [from, to]}, socket) do
+        {:noreply, assign(socket, window: {from, to})}
+      end
+
   ## Brush Types
 
   - `xy` - 2D rectangular brush (default)
@@ -71,6 +87,10 @@ defmodule Visualize.Hooks.Brush do
         this.isBrushing = false;
         this.startPoint = null;
 
+        // The SVG the brush maps the pointer through and draws in: the element itself, or
+        // the first <svg> of a container around a server-rendered chart (spec/10 §6.2).
+        this.svg = this.el.tagName.toLowerCase() === 'svg' ? this.el : this.el.querySelector('svg');
+
         // Configuration from data attributes
         this.brushType = this.el.dataset.brushType || 'xy';
         this.selectEvent = this.el.dataset.brushEvent || 'brush_select';
@@ -88,11 +108,11 @@ defmodule Visualize.Hooks.Brush do
         }
 
         // Create brush overlay group
-        this.overlay = this.el.querySelector('.brush-overlay');
+        this.overlay = this.svg.querySelector('.brush-overlay');
         if (!this.overlay) {
           this.overlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           this.overlay.classList.add('brush-overlay');
-          this.el.appendChild(this.overlay);
+          this.svg.appendChild(this.overlay);
         }
 
         // Create selection rectangle
@@ -110,12 +130,14 @@ defmodule Visualize.Hooks.Brush do
         this.captureRect.setAttribute('fill', 'transparent');
         this.captureRect.setAttribute('cursor', 'crosshair');
 
-        const bbox = this.el.getBBox ? this.el.getBBox() : this.el.getBoundingClientRect();
-        const width = this.extent ? this.extent.x1 - this.extent.x0 : (bbox.width || this.el.clientWidth);
-        const height = this.extent ? this.extent.y1 - this.extent.y0 : (bbox.height || this.el.clientHeight);
+        const bbox = this.svg.getBBox ? this.svg.getBBox() : this.svg.getBoundingClientRect();
+        const width = this.extent ? this.extent.x1 - this.extent.x0 : (bbox.width || this.svg.clientWidth);
+        const height = this.extent ? this.extent.y1 - this.extent.y0 : (bbox.height || this.svg.clientHeight);
         const x = this.extent ? this.extent.x0 : 0;
         const y = this.extent ? this.extent.y0 : 0;
 
+        // The capture area: a band received from the group spans its height (spec/10 §6.4).
+        this.area = { x, y, width, height };
         this.captureRect.setAttribute('x', x);
         this.captureRect.setAttribute('y', y);
         this.captureRect.setAttribute('width', width);
@@ -123,7 +145,8 @@ defmodule Visualize.Hooks.Brush do
         this.overlay.insertBefore(this.captureRect, this.selectionRect);
 
         // Each handler is bound once and kept on the hook: removeEventListener only
-        // matches the reference that was added, so destroyed() removes these same ones.
+        // matches the reference that was added, so destroyed() removes these same ones;
+        // onSync is the sync bus's listener (spec/10 §4.3, §6.4).
         this.onMouseDown = this.handleMouseDown.bind(this);
         this.onMouseMove = this.handleMouseMove.bind(this);
         this.onMouseUp = this.handleMouseUp.bind(this);
@@ -131,6 +154,7 @@ defmodule Visualize.Hooks.Brush do
         this.onTouchMove = this.handleTouchMove.bind(this);
         this.onTouchEnd = this.handleTouchEnd.bind(this);
         this.onClear = this.handleClear.bind(this);
+        this.onSync = this.handleSync.bind(this);
 
         this.captureRect.addEventListener('mousedown', this.onMouseDown);
         document.addEventListener('mousemove', this.onMouseMove);
@@ -143,10 +167,18 @@ defmodule Visualize.Hooks.Brush do
 
         // Double-click to clear
         this.captureRect.addEventListener('dblclick', this.onClear);
+
+        this.joinSync();
+      },
+
+      // The group shares x, so a "y" brush joins none (spec/10 §6.4).
+      joinSync() {
+        if (this.brushType === 'y') VisualizeSync.detach(this);
+        else VisualizeSync.attach(this, 'brush');
       },
 
       getSVGPoint(clientX, clientY) {
-        const svg = this.el;
+        const svg = this.svg;
         const pt = svg.createSVGPoint();
         pt.x = clientX;
         pt.y = clientY;
@@ -209,10 +241,40 @@ defmodule Visualize.Hooks.Brush do
         this.endBrush();
       },
 
+      // A clear on this chart: the group's band cleared too, and the one push.
       handleClear() {
         this.selection = null;
         this.selectionRect.setAttribute('visibility', 'hidden');
+        if (this.sync) VisualizeSync.publishBrush(this.sync, this.el, null);
         this.pushEvent(this.clearEvent, {});
+      },
+
+      // The x extent of a selection in domain units, ascending (spec/10 §6.4).
+      domainOf(sel) {
+        const a = VisualizeSync.toDomain(this.sync, sel.x0);
+        const b = VisualizeSync.toDomain(this.sync, sel.x1);
+        return [Math.min(a, b), Math.max(a, b)];
+      },
+
+      // Another member's window, drawn through this chart's own scale and never pushed:
+      // only the chart brushed talks to its server (spec/10 §6.4).
+      handleSync(e) {
+        if (VisualizeSync.own(this.el, e.detail.source) || this.isBrushing) return;
+        this.syncTo(e.detail.extent);
+      },
+
+      // Shows a domain extent as this chart's band, clipped to its domain; hides it for a
+      // clear or a disjoint extent.
+      syncTo(extent) {
+        const span = this.sync ? VisualizeSync.toChartExtent(this.sync, extent) : null;
+        if (!span) {
+          this.selection = null;
+          this.selectionRect.setAttribute('visibility', 'hidden');
+          return;
+        }
+        this.selection = { x0: span[0], y0: this.area.y, x1: span[1], y1: this.area.y + this.area.height };
+        this.selectionRect.setAttribute('visibility', 'visible');
+        this.updateSelectionRect();
       },
 
       startBrush(point) {
@@ -244,6 +306,8 @@ defmodule Visualize.Hooks.Brush do
         }
 
         this.updateSelectionRect();
+        // The members follow the rubber band as it is drawn; nothing goes to the server.
+        if (this.sync) VisualizeSync.publishBrush(this.sync, this.el, this.domainOf(this.selection));
       },
 
       endBrush() {
@@ -261,7 +325,14 @@ defmodule Visualize.Hooks.Brush do
         const minSize = 5;
         if ((sel.x1 - sel.x0) > minSize || (sel.y1 - sel.y0) > minSize) {
           this.selection = sel;
-          this.pushEvent(this.selectEvent, sel);
+          if (this.sync) {
+            // The final window on the bus, and once to the server with its domain.
+            const domain = this.domainOf(sel);
+            VisualizeSync.publishBrush(this.sync, this.el, domain);
+            this.pushEvent(this.selectEvent, Object.assign({}, sel, { domain }));
+          } else {
+            this.pushEvent(this.selectEvent, sel);
+          }
         } else {
           // Too small, treat as click and clear
           this.handleClear();
@@ -280,8 +351,10 @@ defmodule Visualize.Hooks.Brush do
         this.selectionRect.setAttribute('height', height);
       },
 
-      // Programmatically set selection from server
+      // Programmatically set selection from server; the sync group is re-read first, and a
+      // selection the server set is not published (spec/10 §6.4).
       updated() {
+        this.joinSync();
         const x0 = parseFloat(this.el.dataset.selectionX0);
         const y0 = parseFloat(this.el.dataset.selectionY0);
         const x1 = parseFloat(this.el.dataset.selectionX1);
@@ -297,12 +370,13 @@ defmodule Visualize.Hooks.Brush do
       },
 
       // The capture rect's listeners go with the element; the document's must be removed
-      // by hand, with the references mounted() stored.
+      // by hand, with the references mounted() stored, and so must the bus listener.
       destroyed() {
         document.removeEventListener('mousemove', this.onMouseMove);
         document.removeEventListener('mouseup', this.onMouseUp);
         document.removeEventListener('touchmove', this.onTouchMove);
         document.removeEventListener('touchend', this.onTouchEnd);
+        VisualizeSync.detach(this);
       }
     };
     """

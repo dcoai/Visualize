@@ -251,8 +251,8 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, the sync bus `VisualizeSync` (`Visualize.Hooks.Sync.js_bus/0`, 4.3), `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, then one `export default { … }` object listing the ten hooks — each name is exported exactly once (D-40, D-48). |
-| `Visualize.Hooks.Sync.js_bus/0` | Returns the source of `const VisualizeSync = {…}`, the bus of 4.3 that `TooltipHook` and `CrosshairHook` share. It is not exported: it is the hooks' own, and a host joins a group through a design key, not through it. |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, the sync bus `VisualizeSync` (`Visualize.Hooks.Sync.js_bus/0`, 4.3) — before every hook that uses it — `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, then one `export default { … }` object listing the ten hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.Sync.js_bus/0` | Returns the source of `const VisualizeSync = {…}`, the bus of 4.3 that `TooltipHook`, `CrosshairHook` and `BrushHook` share. It is not exported: it is the hooks' own, and a host joins a group through a design key, not through it. |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
 | `Visualize.Hooks.transform_point/2` | Delegates to `Visualize.Hooks.Zoom.transform_point/2`. |
@@ -269,7 +269,7 @@ The host application writes the bundle (`install!/0`, or `File.write!/2` of `js_
 
 ### 4.3 The sync bus
 
-**Implemented** (#466, D-116). Charts in one **sync group** share hover. A design joins one with `interaction: %{sync: "<group>"}` ([14-declarative-chart](14-declarative-chart.md) §2.9), and the markup then carries `data-vis-sync` and `data-vis-sync-x`. `TooltipHook` (12.4) and `CrosshairHook` (13.4) honour them with no host JavaScript, through one bus defined once in the bundle, `VisualizeSync`. The bus is plain DOM `CustomEvent`s on `document`, with no library.
+**Implemented** (#466, D-116; the brush #467, D-117). Charts in one **sync group** share hover and the brush. A design joins one with `interaction: %{sync: "<group>"}` ([14-declarative-chart](14-declarative-chart.md) §2.9), and the markup then carries `data-vis-sync` and `data-vis-sync-x`. `TooltipHook` (12.4), `CrosshairHook` (13.4) and `BrushHook` (6.4) honour them with no host JavaScript, through one bus defined once in the bundle, `VisualizeSync`. The bus is plain DOM `CustomEvent`s on `document`, with no library.
 
 **Membership.** A hook element is a member when it carries `data-vis-sync`, or else when its first descendant with `data-vis-sync` does. That element's `data-vis-sync-x` must hold five numbers, `d0,d1,x0,x1,width`: the x domain, the chart pixels of its two ends, and the chart's `viewBox` width. An element without them, or with a malformed `data-vis-sync-x`, is in no group and the hook behaves exactly as without the bus. A hook reads its membership on `mounted()` and again on `updated()`.
 
@@ -288,20 +288,29 @@ The host application writes the bundle (`install!/0`, or `File.write!/2` of `js_
 
 So members may differ in width, margin and domain. A received hover never publishes and never calls `pushEvent`: one hover is one event on the bus, and only the chart under the pointer talks to its server.
 
-**Lifecycle.** Each hook binds its listener once and keeps the reference (D-47). `updated()` moves the listener to the new event name when the group changed and removes it when the element left its group. `destroyed()` removes it. A remounted hook therefore listens once, and a destroyed one hears nothing.
+**The brush event** (#467, D-117). A brush travels on its own event, `vis:sync-brush:<group>`, so a crosshair or a tooltip never hears one and a brush never hears a hover. The prefix differs from the hover's rather than extending it, so no group name can spell another group's brush event. Its `detail` is `{extent, source}`:
+
+- `extent` is `[lo, hi]`, the brushed x extent in the same domain units as a hover's `x`, with `lo ≤ hi`. `null` clears the group's band.
+- `source` is the brush's hook element, and a member ignores its own echo by the same rule as a hover.
+
+A member maps a received extent through its own five numbers, **clipped to its domain**. With `[m0, m1] = [min(d0, d1), max(d0, d1)]`, the clipped extent is `[max(lo, m0), min(hi, m1)]`. When that is empty (`max(lo, m0) > min(hi, m1)`), the extent and the domain are disjoint and the member shows no band. Otherwise both ends map through `toChart`, and the band spans the two chart x values, the smaller first. An extent that covers the whole domain fills it. One that touches the domain at a single value is a band of zero width.
 
 | Function of `VisualizeSync` | Does |
 |---|---|
 | `read(el)` | the membership of an element: `{group, d0, d1, x0, x1, width}`, or `null` |
-| `eventName(group)` | `'vis:sync:' + group` |
+| `eventName(group, channel)` | `'vis:sync:' + group` for a hover, the `channel` omitted; `'vis:sync-brush:' + group` for `channel` `'brush'` |
 | `toDomain(sync, chartX)` | the domain value at a chart x |
 | `toChart(sync, x)` | the chart x of a domain value, or `null` outside the domain or for `null` |
-| `publish(sync, source, x)` | dispatches the event on `document` |
-| `attach(hook)` | reads `hook.el`, keeps `hook.sync`, and moves the hook's `onSync` listener to the group's event |
+| `toChartExtent(sync, extent)` | the chart x pair `[c0, c1]`, `c0 ≤ c1`, of an extent clipped to the domain; `null` for a `null` extent or one disjoint from the domain |
+| `publish(sync, source, x)` | dispatches a hover on `document` |
+| `publishBrush(sync, source, extent)` | dispatches a brush on `document` |
+| `attach(hook, channel)` | reads `hook.el`, keeps `hook.sync`, and moves the hook's `onSync` listener to the group's event of that channel |
 | `detach(hook)` | removes the listener |
 | `own(el, source)` | whether an event from `source` is the element's own echo |
 
-`test/visualize/hooks/executed_hooks_test.exs` executes all of this (spec/12 §6): three crosshairs of different widths in one group and a tooltip in it, a chart outside the group, a member whose domain does not hold the value, a clear, and teardown and remount.
+**Lifecycle.** Each hook binds its listener once and keeps the reference (D-47). `updated()` moves the listener to the new event name when the group changed and removes it when the element left its group. `destroyed()` removes it. A remounted hook therefore listens once, and a destroyed one hears nothing.
+
+`test/visualize/hooks/executed_hooks_test.exs` executes all of this (spec/12 §6): three crosshairs of different widths in one group and a tooltip in it, a chart outside the group, a member whose domain does not hold the value, a clear, and teardown and remount; and three brushes of different widths in one group, one brushed (6.4).
 
 ## 5. Visualize.Hooks.Zoom
 
@@ -355,7 +364,7 @@ Event: `pushEvent(eventName, {k, x, y})`, arriving in the LiveView as `handle_ev
 
 ### 6.2 `BrushHook` behaviour
 
-Attach with `phx-hook="BrushHook"` and an `id` on an `<svg>`. The hook uses `createSVGPoint` and `getScreenCTM` on the element, so it MUST be an `<svg>`. Data attributes read on `mounted()`:
+Attach with `phx-hook="BrushHook"` and an `id` on an `<svg>`, or on a container whose first `<svg>` descendant is the chart — the `<div>` a page puts around a server-rendered SVG, as the other hooks take it (#467). That `<svg>` is the hook's SVG: the hook calls `createSVGPoint` and `getScreenCTM` on it, measures it, and draws in it, so an element that is neither an `<svg>` nor holds one is not a brush. Data attributes read on `mounted()`, from the hook element:
 
 | Attribute | Default | Meaning |
 |---|---|---|
@@ -366,13 +375,13 @@ Attach with `phx-hook="BrushHook"` and an `id` on an `<svg>`. The hook uses `cre
 | `data-brush-color` | `"rgba(119, 119, 119, 0.2)"` | selection rectangle fill |
 | `data-brush-stroke` | `"#666"` | selection rectangle stroke |
 
-On mount the hook finds or appends a `<g class="brush-overlay">`, inserts into it a transparent `<rect class="brush-capture" cursor="crosshair">` covering the extent (or the element's bounding box) that receives pointer events, and a hidden `<rect class="brush-selection" stroke-width="1">` that displays the selection. Move and release listeners are attached to `document` so a drag may leave the SVG.
+On mount the hook finds or appends a `<g class="brush-overlay">`, inserts into it a transparent `<rect class="brush-capture" cursor="crosshair">` covering the extent (or the SVG's bounding box) that receives pointer events, and a hidden `<rect class="brush-selection" stroke-width="1">` that displays the selection. Move and release listeners are attached to `document` so a drag may leave the SVG.
 
-Coordinates are in the SVG's user coordinate system (`getScreenCTM().inverse()`), i.e. `viewBox` units — equal to CSS pixels only when the `viewBox` matches the rendered size. A brush starts on left-button mousedown or single-touch start on the capture rect; while brushing, `x1`/`y1` follow the pointer (`"x"` keeps `y0/y1` at the extent's edges, `"y"` keeps `x0/x1`). On release the selection is normalised so `x0 ≤ x1` and `y0 ≤ y1`; if either side exceeds 5 units it is pushed as `pushEvent(selectEvent, {x0, y0, x1, y1})`, otherwise the gesture is treated as a click and cleared. Double-click on the capture rect clears. Clearing hides the rectangle and pushes `pushEvent(clearEvent, {})`.
+Coordinates are in the SVG's user coordinate system (`getScreenCTM().inverse()`), i.e. `viewBox` units — equal to CSS pixels only when the `viewBox` matches the rendered size. A brush starts on left-button mousedown or single-touch start on the capture rect; while brushing, `x1`/`y1` follow the pointer (`"x"` keeps `y0/y1` at the extent's edges, `"y"` keeps `x0/x1`). On release the selection is normalised so `x0 ≤ x1` and `y0 ≤ y1`; if either side exceeds 5 units it is pushed as `pushEvent(selectEvent, {x0, y0, x1, y1})` — with `domain` too in a sync group (6.4) — otherwise the gesture is treated as a click and cleared. Double-click on the capture rect clears. Clearing hides the rectangle and pushes `pushEvent(clearEvent, {})`.
 
-On `updated()` the hook reads `data-selection-x0`, `-y0`, `-x1`, `-y1`; when all four parse it shows that selection (server-driven selection); else if `data-selection-clear="true"` it clears.
+On `updated()` the hook re-reads its sync group (6.4), then reads `data-selection-x0`, `-y0`, `-x1`, `-y1`; when all four parse it shows that selection (server-driven selection), without publishing it; else if `data-selection-clear="true"` it clears.
 
-Events arrive as `handle_event("brush_select", %{"x0" => x0, "y0" => y0, "x1" => x1, "y1" => y1}, socket)` and `handle_event("brush_clear", %{}, socket)`. `mounted()` binds each handler once and stores the bound function on the hook (`onMouseDown`, `onMouseMove`, `onMouseUp`, `onTouchStart`, `onTouchMove`, `onTouchEnd`, `onClear`) before adding it as a listener, and `destroyed()` removes the four `document` listeners (`mousemove`, `mouseup`, `touchmove`, `touchend`) with those same references, so nothing outlives the element; the capture rect's own listeners are discarded with it (D-47). `test/visualize/hooks/brush_test.exs` holds the source to this shape.
+Events arrive as `handle_event("brush_select", %{"x0" => x0, "y0" => y0, "x1" => x1, "y1" => y1}, socket)` and `handle_event("brush_clear", %{}, socket)`. `mounted()` binds each handler once and stores the bound function on the hook (`onMouseDown`, `onMouseMove`, `onMouseUp`, `onTouchStart`, `onTouchMove`, `onTouchEnd`, `onClear`, and `onSync`, the bus listener of 6.4) before adding it as a listener, and `destroyed()` removes the four `document` listeners (`mousemove`, `mouseup`, `touchmove`, `touchend`) with those same references, and the bus listener (`VisualizeSync.detach`), so nothing outlives the element; the capture rect's own listeners are discarded with it (D-47). `test/visualize/hooks/brush_test.exs` holds the source to this shape.
 
 ### 6.3 Server-side helpers
 
@@ -395,6 +404,35 @@ At least one of `:x_scale`, `:y_scale` MUST be given; neither raises `ArgumentEr
 - `:x_scale` only: `{invert(x_scale, x0), invert(x_scale, x1)}` — the `{start, stop}` of an x brush in domain units, ascending for an ascending range;
 - `:y_scale` only: `{invert(y_scale, y0), invert(y_scale, y1)}` in pixel order; because SVG y grows downward, `start` is the larger domain value under the usual flipped range;
 - neither: `ArgumentError`.
+
+### 6.4 In a sync group
+
+**Implemented** (#467, D-117). A brush in a sync group (4.3) shares its x extent: brushing a window on one chart shows it as a band on every member at once, and **only the chart brushed talks to its server**, so one window change is one request.
+
+**Membership.** The hook reads its group with `VisualizeSync.read` from the hook element, so the group is that element's `data-vis-sync` or that of its first descendant carrying one: for a chart rendered by `Visualize.Chart.render/2`, the sync frame's group inside the SVG ([14-declarative-chart](14-declarative-chart.md) §2.9). It reads it on `mounted()` and again on `updated()`, and listens on `vis:sync-brush:<group>` (`attach(hook, 'brush')`). A `"y"` brush joins no group: the group shares x, and a `"y"` brush selects none. Without a group the hook behaves exactly as 6.2 says.
+
+The SVG's user units are the chart's coordinates of `data-vis-sync-x` when its `viewBox` is the chart's, as `Visualize.Chart.render/2` writes it with `root: true`, so the hook maps a selection edge to the domain with `toDomain` directly.
+
+**Publishing.** The chart brushed publishes its extent, `[lo, hi]` in domain units, the two ends of `[toDomain(x0), toDomain(x1)]` in ascending order:
+
+- on every pointer move of a brush in progress, so the members follow the rubber band as it is drawn; and
+- on release, once more, the normalised selection's extent — the gesture's last event is the final window;
+- a clear publishes `null`: a double-click, a release too small to be a selection (6.2), and a clear by `data-selection-clear` on `updated()`.
+
+Only the chart under the pointer publishes. A selection the server sets through `data-selection-*` on `updated()` is not published, because the server set it on the chart it chose.
+
+**Receiving.** A member ignores its own echo (4.3). It ignores any event while a brush of its own is in progress. Otherwise:
+
+- `null` hides the band and forgets the selection.
+- An extent is mapped by `toChartExtent` through the member's own numbers, clipped to its domain. A disjoint extent hides the band. Any other extent becomes the selection `{x0: c0, x1: c1}`, shown at once. Its `y0`/`y1` are the capture area's top and bottom (`data-brush-extent`'s, else the SVG's box), so the band spans the plot's height whatever the brush type.
+
+A received extent **never calls `pushEvent`** and never publishes. The `brush_select` and `brush_clear` of a window change are pushed once, by the chart that was brushed, on release — never during the drag. A group of `n` charts therefore costs one server request per window, and the server learns of the window once.
+
+**The pushed event.** In a sync group the chart brushed adds `domain: [lo, hi]` to `brush_select`'s payload, the same extent it published, so the server reads the window in domain units without knowing which chart sent it or holding its scale: `handle_event("brush_select", %{"domain" => [lo, hi]}, socket)`, `lo` and `hi` numbers (milliseconds since the Unix epoch for a time x). `x0`, `y0`, `x1`, `y1` are the chart's pixels as before. A member that shows a received band and is then double-clicked clears the group and pushes its own `brush_clear`: it is the chart that was acted on.
+
+**Lifecycle.** `onSync` is bound once (D-47). `updated()` moves it when the group changed, and `destroyed()` removes it, so a remounted brush hears each event once and a destroyed one hears nothing.
+
+`test/visualize/hooks/executed_hooks_test.exs` executes this (spec/12 §6): three brushes of different widths in one group, a fourth whose domain is disjoint from the window and a fifth whose domain holds part of it. Brushing one draws the band on every member at the same domain extent, at each member's own pixels, clips the partial member, shows nothing on the disjoint one, leaves another group untouched, and pushes exactly one `brush_select`, from the chart brushed, carrying the domain. A clear propagates with one `brush_clear`. `destroyed()` leaves no listener, and a remount hears once. The gallery's *Synced dashboard* page (`examples/lib/examples_web/live/dashboard_live.ex`) is three panels over one time axis, each joined to one group by one design key, with crosshairs and brushes synced.
 
 ## 7. Visualize.Hooks.Canvas
 
