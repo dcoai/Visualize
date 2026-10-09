@@ -127,17 +127,22 @@ defmodule ExamplesWeb.InteractionLive do
     }
   end
 
+  # A demo panel is as wide as its chart (#513): the page's one chart size, handed to the
+  # stylesheet as `--chart-w`, so wide screens show several demos per row.
+  @doc false
+  def panel_width, do: "--chart-w: #{elem(@size, 0)}px"
+
   def render(assigns) do
     ~H"""
     <ExamplesWeb.SiteHeader.header tab={:interaction} />
-    <main>
+    <main class="main-wide">
       <a href="/" class="back-link"><span>&larr;</span> Back to Gallery</a>
 
       <p class="tab-pages">
         Also under this tab: the <a href="/dashboard">Synced dashboard</a> — one crosshair and one brush across three panels.
       </p>
 
-      <div class="panels">
+      <div class="panels panels-row" style={panel_width()}>
         <Panel.panel id="panel-tooltip">
           <:title>Tooltip</:title>
           <p class="panel-note">
@@ -231,7 +236,7 @@ defmodule ExamplesWeb.InteractionLive do
           </p>
         </Panel.panel>
 
-        <Panel.panel id="panel-code">
+        <Panel.panel id="panel-code" class="panel-wide">
           <:title>The design and the markup</:title>
           <p class="panel-note">
             The marks every demo above draws, and the markup each hook reads: the legend sits

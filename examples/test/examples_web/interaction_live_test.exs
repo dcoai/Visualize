@@ -168,8 +168,22 @@ defmodule ExamplesWeb.InteractionLiveTest do
 
   defp panels(html) do
     for [_, id, body] <-
-          Regex.scan(~r/<section id="([^"]+)" class="panel">(.*?)<\/section>/s, html),
+          Regex.scan(~r/<section id="([^"]+)" class="panel(?: [^"]*)?">(.*?)<\/section>/s, html),
         do: {id, body}
+  end
+
+  test "the demos are a row of panels each as wide as its chart; the code takes a row (#513)" do
+    html = page({720, 380})
+    {width, _height} = hd(@sizes)
+
+    assert InteractionLive.panel_width() == "--chart-w: #{width}px"
+    assert html =~ ~s(<main class="main-wide">)
+    assert html =~ ~s(<div class="panels panels-row" style="--chart-w: #{width}px">)
+    assert html =~ ~s(<section id="panel-code" class="panel panel-wide">)
+
+    for {id, _, chart} <- @panels, chart do
+      assert html =~ ~s(<section id="#{id}" class="panel">), "#{id}: a chart-wide panel"
+    end
   end
 
   test "each demo is one panel holding its heading, its explanation and its chart (#505)" do
