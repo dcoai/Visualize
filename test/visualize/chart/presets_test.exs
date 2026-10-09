@@ -168,6 +168,9 @@ defmodule Visualize.Chart.PresetsTest do
              pie.marks
 
     assert label.text == [{:field, :label}]
+    # A label on a fill reads on it and fits it, as the gallery's pie's (D-123, #494).
+    assert label.fit == :hide
+    assert pie.styles.slice_label == %{fill: :contrast, font_size: :label_size}
 
     refute Map.has_key?(
              hd(Presets.pie_chart(Map.put(assigns().pie_chart, :show_labels, false)).marks),
@@ -233,8 +236,15 @@ defmodule Visualize.Chart.PresetsTest do
     assert below_root == %{op: :filter, field: :depth, test: :gt, value: 0}
     assert positive == %{op: :filter, field: :value, test: :gt, value: 0}
     assert arc_channels == %{start: :x0, end: :x1, inner: :y0, outer: :y1}
-    assert arc_label == %{text: [{:field, :label}], anchor: :middle, style: :arc_label}
-    assert sunburst.styles.arc_label == %{fill: :background, font_size: :label_size}
+
+    assert arc_label == %{
+             text: [{:field, :label}],
+             anchor: :middle,
+             fit: :truncate,
+             style: :arc_label
+           }
+
+    assert sunburst.styles.arc_label == %{fill: :contrast, font_size: :label_size}
   end
 
   test "a chart preset renders through the layer on its own, and binds to another source" do
@@ -415,12 +425,144 @@ defmodule Visualize.Chart.PresetsTest do
 
         position = &Enum.map(tags(&1, "text"), fn t -> {num(t["x"]), num(t["y"])} end)
         assert position.(svg) == position.(component)
+        # Each label in the ink the layer chose for its arc (#494).
+        ink = &Enum.map(tags(&1, "text"), fn t -> t["fill"] end)
+        assert ink.(svg) == ink.(component)
         assert texts(svg) == texts(component)
       end
 
       # Seven nodes below the root, one of them zero-valued and therefore undrawn.
       assert length(tags(layer(:sunburst_chart, %{data: @tree_hierarchy}), "path")) == 6
     end
+  end
+
+  describe "the pie's and the sunburst's labels read on their fills (#494, D-123)" do
+    import Phoenix.LiveViewTest, only: [render_component: 2]
+
+    alias Visualize.{Color, Theme}
+    alias Visualize.Components.Tree
+    alias Visualize.IR.Element
+
+    @aa 4.5
+
+    # Ten slices and ten branches, so every colour of `:category10` is under a label.
+    @slices for i <- 0..9, do: %{name: "slice #{i}", value: 10 + i}
+    @branches %{
+      name: "root",
+      children:
+        for i <- 0..9 do
+          %{name: "b#{i}", children: [%{name: "b#{i}.0", value: 6}, %{name: "b#{i}.1", value: 4}]}
+        end
+    }
+
+    defp ink_cases do
+      [
+        pie_chart: %{data: @slices, value: & &1.value, label: & &1.name},
+        sunburst_chart: %{data: @branches}
+      ]
+    end
+
+    # The preset drawn by the layer on `theme` in `mode`, its label's `fit` replaced.
+    defp drawn(name, assigns, theme, mode, fit) do
+      design =
+        name
+        |> Presets.design(assigns)
+        |> Map.update!(:marks, fn [mark] -> [put_in(mark, [:label, :fit], fit)] end)
+
+      sources = Presets.sources(name, assigns)
+      defaults = Presets.defaults(name)
+      chart = Chart.from_map!(design)
+
+      frame =
+        Frame.new(chart, sources: sources, theme: theme, size: {defaults.width, defaults.height})
+
+      Frame.generate(frame, sources: sources, resolve: mode)
+    end
+
+    # Every labelled mark's {element, its group's style, its label}, in drawing order.
+    defp labelled(%Element{
+           children: [
+             %Element{style: %{class: "mark-elements"} = group, children: elements},
+             %Element{style: %{class: "mark-labels"}, children: labels}
+           ]
+         }) do
+      texts = Enum.filter(labels, &(&1.type == :text))
+      assert length(elements) == length(texts)
+      Enum.zip_with(elements, texts, &{&1, group, &2})
+    end
+
+    defp labelled(%Element{children: children}), do: Enum.flat_map(children, &labelled/1)
+
+    # The literal a fill is drawn in: a CSS reference by its fallback.
+    defp literal("var(" <> rest) do
+      [_name, fallback] = String.split(rest, ",", parts: 2)
+      fallback |> String.trim() |> String.replace_suffix(")", "")
+    end
+
+    defp literal(colour) when is_binary(colour), do: colour
+
+    test "the presets ink their labels by contrast and fit them as the gallery does" do
+      assert Presets.pie_chart(Keyword.fetch!(ink_cases(), :pie_chart)).marks
+             |> hd()
+             |> get_in([:label, :fit]) == :hide
+
+      assert Presets.sunburst_chart(%{data: @branches}).marks |> hd() |> get_in([:label, :fit]) ==
+               :truncate
+    end
+
+    test "every label holds 4.5:1 against its element's fill on both built-in themes" do
+      for {name, assigns} <- ink_cases(),
+          theme <- [Theme.default(), Theme.dark()],
+          mode <- [:css, :literal] do
+        # Every element labelled — `fit: :none` — so no label is excused by being hidden.
+        all = labelled(drawn(name, assigns, theme, mode, :none))
+        assert length(all) >= 10, "#{name}: #{length(all)} labels"
+
+        fills = MapSet.new(all, fn {element, _group, _text} -> literal(element.style.fill) end)
+        assert MapSet.size(fills) == 10, "#{name}: every :category10 colour under a label"
+
+        for {element, _group, text} <- all do
+          under = element.style.fill |> literal() |> Color.parse()
+          ratio = Color.contrast(Color.parse(text.style.fill), under)
+
+          assert ratio >= @aa,
+                 "#{name} #{theme.background} #{mode}: #{text.content} in #{text.style.fill} " <>
+                   "on #{Color.to_hex(under)} is #{Float.round(ratio, 2)}:1"
+        end
+      end
+    end
+
+    test "the component prints the labels the layer fitted, each in the layer's ink" do
+      for {name, assigns} <- ink_cases(), theme <- [nil, Theme.dark()] do
+        assigns = Map.put(assigns, :theme, theme)
+
+        component =
+          case name do
+            :pie_chart -> render_component(&Visualize.Components.pie_chart/1, assigns)
+            :sunburst_chart -> render_component(&Tree.sunburst_chart/1, assigns)
+          end
+
+        fit = Presets.design(name, assigns).marks |> hd() |> get_in([:label, :fit])
+        layer = drawn(name, assigns, theme || Theme.default(), :css, fit)
+        texts = for t <- fitted(layer), do: {t.content, t.style.fill}
+
+        printed =
+          for [_, fill, content] <-
+                Regex.scan(~r/<text[^>]*fill="([^"]*)"[^>]*>([^<]*)<\/text>/, component),
+              do: {content, fill}
+
+        assert printed == texts
+        assert printed != []
+        # The ink is a literal, chosen per element, never the background slot's reference.
+        refute Enum.any?(printed, fn {_content, fill} -> String.starts_with?(fill, "var(") end)
+      end
+    end
+
+    # The texts of every mark's labels' group: what the fit kept.
+    defp fitted(%Element{style: %{class: "mark-labels"}, children: labels}),
+      do: Enum.filter(labels, &(&1.type == :text))
+
+    defp fitted(%Element{children: children}), do: Enum.flat_map(children, &fitted/1)
   end
 
   defp has_function?(term) when is_function(term), do: true

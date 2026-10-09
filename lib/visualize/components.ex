@@ -321,7 +321,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       conventions
 
     A label sits at the centroid of the slice's mid-radius, as `Visualize.Shape.Arc.centroid/2`
-    computes it.
+    computes it, inked the theme's text or background, whichever reads on the slice; a
+    slice too narrow for its whole label draws none.
     """
     attr(:data, :any, required: true)
     attr(:value, :any, required: true)
@@ -345,16 +346,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
       [arcs] = Support.marks(drawn.group)
       {paths, texts} = Enum.split_with(arcs.children, &(&1.type == :path))
 
+      # The labels the layer kept, each in its own contrast ink, follow every slice — the
+      # order the layer draws a labelled mark in, and the only one there is, since a label
+      # its fit hid has no text to pair with its slice (spec/10 §2.5, #494).
+      labels =
+        for text <- texts, text.content != "" do
+          %{text: text.content, x: fmt(text.attrs.x), y: fmt(text.attrs.y), fill: text.style.fill}
+        end
+
       slices =
-        Enum.zip_with(paths, texts ++ List.duplicate(nil, length(paths)), fn path, text ->
-          %{
-            d: Support.d(path),
-            fill: path.style.fill,
-            label: if(text && text.content != "", do: text.content),
-            x: text && fmt(text.attrs.x),
-            y: text && fmt(text.attrs.y)
-          }
-        end)
+        paths
+        |> Enum.map(&%{d: Support.d(&1), fill: &1.style.fill})
+        |> Support.followed(labels)
 
       assigns =
         assign(assigns,
@@ -364,7 +367,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
           stroke_width: arcs.style.stroke_width,
           theme: drawn.theme,
           ids: drawn.ids,
-          background: Support.css(drawn.theme, :background),
           label_size: Support.css(drawn.theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
@@ -376,15 +378,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <g transform={"translate(#{elem(@centre, 0)}, #{elem(@centre, 1)})"}>
           <%= for slice <- @slices do %>
             <path d={slice.d} fill={slice.fill} stroke={@stroke} stroke-width={@stroke_width} {@transition} />
-            <text
-              :if={slice.label}
-              x={slice.x}
-              y={slice.y}
-              text-anchor="middle"
-              dominant-baseline="middle"
-              font-size={@label_size}
-              fill={@background}
-            >{slice.label}</text>
+            <%= for label <- slice.labels do %>
+              <text
+                x={label.x}
+                y={label.y}
+                text-anchor="middle"
+                dominant-baseline="middle"
+                font-size={@label_size}
+                fill={label.fill}
+              >{label.text}</text>
+            <% end %>
           <% end %>
         </g>
       </svg>

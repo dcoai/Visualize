@@ -5,8 +5,15 @@ defmodule Visualize.ComponentsTest do
   Each component is rendered through `Phoenix.LiveViewTest.render_component/2` on a small
   fixed dataset and on empty data, and compared byte for byte with
   `test/support/components/<name>.svg` and `<name>_empty.svg`. The goldens are the
-  recurrence guard for the component layer having never rendered (D-45). Regenerate only
-  when a component's output changes on purpose:
+  recurrence guard for the component layer having never rendered (D-45), and since D-64 they
+  hold every component byte for byte to what the hand-built component drew — except the
+  pie's labels. Those were retired from the equivalence by #494 (D-123): the old labels were
+  inked `:background`, white at 2.0:1 on `:category10`'s olive, and that output was the
+  defect, so the golden records the labels the preset now fits (`:hide`) and inks
+  `:contrast`, after the slices. Every other byte — the shell, every path, the donut, the
+  empty case — is still the old component's, and a test below holds that the pie's golden,
+  labels aside, is the label-less component's. Regenerate only when a component's output
+  changes on purpose:
 
       mix run -e 'Visualize.ComponentsTest.write!()'
   """
@@ -123,6 +130,22 @@ defmodule Visualize.ComponentsTest do
     end
   end
 
+  # The lines of an SVG that are neither blank nor a label.
+  defp unlabelled(svg) do
+    svg
+    |> String.split("\n")
+    |> Enum.reject(&(String.trim(&1) == "" or String.starts_with?(String.trim(&1), "<text")))
+  end
+
+  test "the pie's golden, labels aside, is the label-less component's byte for byte (#494)" do
+    {component, assigns} = Keyword.fetch!(cases(), :pie_chart)
+    golden = File.read!(Path.join(@dir, "pie_chart.svg"))
+    assert golden =~ "<text"
+
+    assert unlabelled(golden) ==
+             unlabelled(render_component(component, Map.put(assigns, :show_labels, false)))
+  end
+
   test "every chart component has a golden and an empty-data golden" do
     names = ~w(line_chart bar_chart horizontal_bar_chart pie_chart scatter_plot area_chart
                stacked_bar_chart)
@@ -208,7 +231,7 @@ defmodule Visualize.ComponentsTest do
       assert relit == light
     end
 
-    test "an explicit colour assign is used as given; a label over a mark takes :background" do
+    test "an explicit colour assign is used as given; a label on a slice is inked by contrast" do
       svg = render_case(Keyword.fetch!(cases(), :line_chart_points))
       pie = render_case(Keyword.fetch!(cases(), :pie_chart))
 
@@ -228,8 +251,11 @@ defmodule Visualize.ComponentsTest do
 
       assert pie =~ ~s|stroke="var(--vis-background, #ffffff)" stroke-width="2"|
 
-      assert pie =~
-               ~s|font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)"|
+      # The theme's background on the blue slice, its text on the orange, and black on the
+      # green, where neither slot reaches 4.5:1 (D-123, #494).
+      assert pie =~ ~s|font-size="var(--vis-label-size, 12px)" fill="#ffffff">a</text>|
+      assert pie =~ ~s|font-size="var(--vis-label-size, 12px)" fill="#333333">b</text>|
+      assert pie =~ ~s|font-size="var(--vis-label-size, 12px)" fill="#000000">c</text>|
     end
   end
 

@@ -5,6 +5,13 @@ defmodule Visualize.Components.TreeTest do
   a root-only one, each rendered through `Phoenix.LiveViewTest.render_component/2` and
   compared byte for byte with `test/support/components/<name>.svg` (D-46).
 
+  The sunburst's labels were retired from the goldens' equivalence with the hand-built
+  component by #494 (D-123): they were inked `:background` and kept by the component's own
+  thresholds, and that output was the defect — white on a pale arc — so the goldens record
+  the labels the preset now fits (`:truncate`) and inks `:contrast`, after the arcs. Every
+  other byte, every arc and the shell, is still the old component's, and a test below holds
+  that each sunburst golden, labels aside, is the component drawn with every label empty.
+
       mix run -e 'Visualize.Components.TreeTest.write!()'
   """
   use ExUnit.Case, async: true
@@ -78,6 +85,23 @@ defmodule Visualize.Components.TreeTest do
   end
 
   def render_case({component, assigns}), do: render_component(component, assigns)
+
+  # The lines of an SVG that are neither blank nor a label.
+  defp unlabelled(svg) do
+    svg
+    |> String.split("\n")
+    |> Enum.reject(&(String.trim(&1) == "" or String.starts_with?(String.trim(&1), "<text")))
+  end
+
+  test "each sunburst golden, labels aside, is the component's with every label empty (#494)" do
+    for name <- [:sunburst_chart, :sunburst_chart_colors] do
+      {component, assigns} = Keyword.fetch!(cases(), name)
+      golden = File.read!(Path.join(@dir, "#{name}.svg"))
+      assert golden =~ "<text"
+      blank = render_component(component, Map.put(assigns, :label, fn _node -> "" end))
+      assert unlabelled(golden) == unlabelled(blank), "#{name}"
+    end
+  end
 
   def goldens do
     Enum.map(cases(), fn {name, c} -> {"#{name}.svg", render_case(c)} end) ++
