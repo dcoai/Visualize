@@ -3,7 +3,8 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
   The canvas hooks executed under node against the recording DOM stub (spec/12 §6, #458):
   each scenario pins a defect that shipped green while the hooks were only read as text —
   the #456 resize of both hooks, the #270 decode of the current record types, `data-frame`
-  filtering (#432) and acknowledgements (D-107).
+  filtering (#432) and acknowledgements (D-107) — and the crosshair's markers held to the
+  drawing under the pointer, not to the container's box (#507).
   """
   use ExUnit.Case, async: true
 
@@ -714,6 +715,121 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
       assert report["remountBand"] == [88, 72, 20, 150]
       assert [_one] = pushes(after_mark(log, "brush"))
       assert report["counts"]["gone"] == [0, 0]
+    end
+  end
+
+  describe "the crosshair sits on the drawing (#507, spec/10 §13.3)" do
+    # Three smooth series over 24 hours, as /interaction draws them, realised at `size`:
+    # the crosshair's attributes as a dataset, and each series' vertices in chart units.
+    defp drawn(size) do
+      rows =
+        for i <- 0..23,
+            {s, phase} <- [{"a", 0.0}, {"b", 1.2}, {"c", 2.4}],
+            do: %{t: i, s: s, v: 50 + 30 * :math.sin(i / 3 + phase) + 8 * phase}
+
+      design = %{
+        version: 2,
+        sources: %{p: %{fields: [:t, :s, :v]}},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            margin: %{top: 30, right: 120, bottom: 40, left: 50},
+            scales: %{x: %{kind: :linear, domain: [0, 23]}, y: %{kind: :linear, nice: true}}
+          }
+        },
+        marks: [
+          %{type: :line, data: :p, channels: %{x: :t, y: :v, series: :s}, style: :smooth}
+        ],
+        styles: %{smooth: %{curve: :monotone_x}}
+      }
+
+      {:ok, applied} = Chart.apply(design, sources: %{p: rows}, size: size)
+      attrs = Crosshair.attrs(applied.frame, applied.sources)
+      [left, top | _] = attrs["data-plot"] |> String.split(",") |> Enum.map(&number/1)
+      xs = Jason.decode!(attrs["data-xs"])
+
+      vertices =
+        for ys <- Jason.decode!(attrs["data-ys"]),
+            do: for({x, y} <- Enum.zip(xs, ys), do: {left + x, top + y})
+
+      {dataset(attrs), vertices}
+    end
+
+    defp number(text), do: text |> Float.parse() |> elem(0)
+
+    # Mounts a crosshair on a container holding `child` (an svg or a canvas) laid out at
+    # `chart` (its client rectangle) inside a container laid out at `box`, puts the pointer
+    # on every vertex of the first series, and reports where each marker landed, in client
+    # pixels through the overlay's viewBox (a browser's default `xMidYMid meet`).
+    defp hover(size, child, chart, box) do
+      {dataset, vertices} = drawn(size)
+      {width, height} = size
+      %{left: cl, top: ct, width: cw, height: ch} = chart
+
+      pointers =
+        for {u, v} <- hd(vertices), do: [cl + u * cw / width, ct + v * ch / height]
+
+      make =
+        case child do
+          :svg -> "Stub.node('svg')"
+          :canvas -> "Stub.element({}, #{width}, #{height}).children[0]"
+        end
+
+      assert {:ok, %{"report" => %{"hits" => hits}}} =
+               run("""
+               const el = Stub.element(#{js(dataset)});
+               el.rect = #{js(box)};
+               const chart = #{make};
+               chart.rect = #{js(chart)};
+               el.appendChild(chart);
+               const hook = Stub.mount(CrosshairHook, el);
+               const px = (v) => parseFloat(v);
+               const hits = #{js(pointers)}.map(([x, y]) => {
+                 Stub.fire(el, 'mousemove', {clientX: x, clientY: y});
+                 const o = hook.overlay.style;
+                 const box = hook.overlay.getAttribute('viewBox').split(' ').map(Number);
+                 const k = Math.min(px(o.width) / box[2], px(o.height) / box[3]);
+                 const ox = px(o.left) + (px(o.width) - box[2] * k) / 2;
+                 const oy = px(o.top) + (px(o.height) - box[3] * k) / 2;
+                 return hook.markers.map((m) => [
+                   ox + k * (hook.plot.left + parseFloat(m.getAttribute('cx'))),
+                   oy + k * (hook.plot.top + parseFloat(m.getAttribute('cy')))
+                 ]);
+               });
+               Stub.done({hits});
+               """)
+
+      expected =
+        for j <- 0..(length(hd(vertices)) - 1) do
+          for series <- vertices do
+            {u, v} = Enum.at(series, j)
+            [cl + u * cw / width, ct + v * ch / height]
+          end
+        end
+
+      for {markers, want} <- Enum.zip(hits, expected),
+          {[x, y], [wx, wy]} <- Enum.zip(markers, want) do
+        assert abs(x - wx) <= 1 and abs(y - wy) <= 1,
+               "marker at #{inspect({x, y})}, its vertex at #{inspect({wx, wy})}"
+      end
+    end
+
+    test "over an svg whose container is a descender gap taller, every marker is on its vertex" do
+      hover({720, 380}, :svg, %{left: 30, top: 100, width: 720, height: 380}, %{
+        left: 30,
+        top: 100,
+        width: 720,
+        height: 387
+      })
+    end
+
+    test "over a CSS-scaled canvas in a taller container, every marker is on its vertex" do
+      hover({480, 320}, :canvas, %{left: 10, top: 50, width: 360, height: 240}, %{
+        left: 10,
+        top: 50,
+        width: 360,
+        height: 247
+      })
     end
   end
 

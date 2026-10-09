@@ -12,8 +12,9 @@ defmodule ExamplesWeb.InteractionLive do
   alias Visualize.Hooks.Crosshair
   alias Visualize.Theme
 
-  @width 720
-  @height 380
+  # The page's one size. The design records none (#427): `build/1` realises the frame at
+  # it, and the canvas and the crosshair's arrays read it back from that frame (#507).
+  @size {720, 380}
 
   @series ~w(alpha beta gamma)
   @title "Three series over a day"
@@ -78,7 +79,7 @@ defmodule ExamplesWeb.InteractionLive do
   }
 
   def mount(_params, _session, socket) do
-    {:ok, socket |> assign(build()) |> assign(picked: nil, hovered: nil, hidden: %{})}
+    {:ok, socket |> assign(build(@size)) |> assign(picked: nil, hovered: nil, hidden: %{})}
   end
 
   def handle_event("point_click", %{"series" => series, "hour" => hour, "value" => value}, socket) do
@@ -93,11 +94,18 @@ defmodule ExamplesWeb.InteractionLive do
     {:noreply, update(socket, :hidden, &Map.put(&1, series, hidden?))}
   end
 
-  # The chart once: its SVG, the same frame on a binary canvas with literal paints, and
-  # the crosshair's arrays for the line mark (the first).
-  defp build do
+  @doc """
+  The chart once, realised at `size` (`{width, height}`): its SVG, the same frame on a
+  binary canvas with literal paints, and the crosshair's arrays for the line mark (the
+  first). Every size the page shows — the SVG's `viewBox`, the canvas's `data-width` and
+  `data-height`, the arrays' `data-size` — is the realised frame's, so the crosshair's
+  marks sit on the drawn series (#507).
+  """
+  @spec build({pos_integer(), pos_integer()}) :: map()
+  def build(size) do
     chart = Chart.from_map!(@design)
-    {:ok, applied} = Chart.apply(chart, sources: %{primary: rows()})
+    {:ok, applied} = Chart.apply(chart, sources: %{primary: rows()}, size: size)
+    %{width: width, height: height} = applied.frame.size
 
     colours =
       Enum.map_join(1..length(@series), ",", fn i ->
@@ -109,8 +117,8 @@ defmodule ExamplesWeb.InteractionLive do
       binary: Chart.render(applied, root: true, title: @title, backend: :canvas, format: :binary_base64),
       crosshair: Crosshair.attrs(applied.frame, applied.sources),
       colors: "[" <> colours <> "]",
-      width: @width,
-      height: @height
+      width: width,
+      height: height
     }
   end
 
@@ -222,6 +230,7 @@ defmodule ExamplesWeb.InteractionLive do
       .picked { margin-top: 1rem; color: #444; }
       #tooltip-chart .mark-circle circle { cursor: pointer; }
       #crosshair-svg, #crosshair-canvas { display: inline-block; }
+      #crosshair-canvas canvas { max-width: 100%; height: auto; }
     </style>
     """
   end
