@@ -308,12 +308,14 @@ defmodule Visualize.ChartGen do
 
   # -- marks and labels ---------------------------------------------------------------
 
-  # A needle is a polar frame's mark (spec/14 §5.2, #392): drawn only there.
+  # A needle is a polar frame's mark (spec/14 §5.2, #392): drawn only there. A basemap
+  # needs a Mercator `:geo` frame and its provider node, and has tests of its own
+  # (`test/visualize/chart/tiles_test.exs`, #475).
   defp marks(sources, vars, styles, frame) do
     types =
       if frame.kind == :polar,
-        do: Schema.mark_types(),
-        else: Schema.mark_types() -- [:needle]
+        do: Schema.mark_types() -- [:tiles],
+        else: Schema.mark_types() -- [:needle, :tiles]
 
     list_of(mark(sources, vars, styles, types), max_length: 3)
   end

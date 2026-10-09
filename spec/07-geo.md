@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-This document specifies the geographic and computational-geometry modules: `Visualize.Geo.Projection` (38 map projections behind one struct), `Visualize.Geo.Path` (GeoJSON to SVG path data), `Visualize.Geo.Delaunay` and `Visualize.Geo.Voronoi` (planar triangulation and tessellation), `Visualize.Polygon` (polygon measures), and `Visualize.Contour` with `Visualize.Contour.Density` (marching squares over a grid, and kernel density estimation feeding it). Geographic input is in degrees; projected output is in pixels with y pointing down. Planar geometry uses `{x, y}` tuples.
+This document specifies the geographic and computational-geometry modules: `Visualize.Geo.Projection` (38 map projections behind one struct), `Visualize.Geo.Path` (GeoJSON to SVG path data), `Visualize.Geo.Delaunay` and `Visualize.Geo.Voronoi` (planar triangulation and tessellation), `Visualize.Polygon` (polygon measures), `Visualize.Contour` with `Visualize.Contour.Density` (marching squares over a grid, and kernel density estimation feeding it), and `Visualize.Geo.Tiles` (the Web-Mercator tile arithmetic under a basemap, §8). Geographic input is in degrees; projected output is in pixels with y pointing down. Planar geometry uses `{x, y}` tuples.
 
 ## 1. Projections
 
@@ -65,6 +65,8 @@ A point is clipped when its angular distance `c` from the projection centre — 
 
 `fit_extent(proj, [[x0, y0], [x1, y1]], [[lon0, lat0], [lon1, lat1]])` sets `scale` to `min(width / Δlon, height / Δlat) * 0.95` with the deltas in radians, `center` to the geographic midpoint and `translate` to the extent's midpoint; `rotate` is untouched. The fit is projection-independent and approximate.
 
+`fit(proj, [[x0, y0], [x1, y1]], points)` is the projection-aware fit (#475), d3-geo's `fitExtent` over a list of `{lon, lat}` points: the projection is taken with `scale` 150 and `translate` `{0, 0}`, every point is projected (a clipped point is skipped), and with `[bx0, by0, bx1, by1]` the bounds of the projected points, `k = min((x1 − x0) / (bx1 − bx0), (y1 − y0) / (by1 − by0))` gives `scale` `150 · k` and `translate` `{x0 + ((x1 − x0) − k · (bx1 + bx0)) / 2, y0 + ((y1 − y0) − k · (by1 + by0)) / 2}`. `center`, `rotate`, `clip_angle` and `parallels` are untouched, so the points' projected bounds are centred in the box and fill it on the tighter axis exactly, whatever the type. An axis along which the points have no extent does not bound `k`; when neither axis does (one point, or every point the same) `scale` is unchanged and `translate` puts the point at the box's centre; with no projectable point the projection is returned unchanged. Because it leaves `center` alone, `fit/3` keeps a Mercator projection Web-Mercator (§8.1), which `fit_extent/3`, centring on the latitude midpoint, does not.
+
 ### 1.7 Functions
 
 | Function | Contract |
@@ -83,6 +85,7 @@ A point is clipped when its angular distance `c` from the projection centre — 
 | `Visualize.Geo.Projection.bounds/1` | `[x0, y0, x1, y1]` corner-based pixel bounds (1.6). |
 | `Visualize.Geo.Projection.sphere/1` | The projection's outline as a closed list of `{x, y}` pixel points (1.6). |
 | `Visualize.Geo.Projection.fit_extent/3` | Sets scale, centre and translate to fit a geographic box into a pixel box (1.6). |
+| `Visualize.Geo.Projection.fit/3` | Sets scale and translate so a list of `{lon, lat}` points, projected, fills a pixel box on its tighter axis and is centred in it; `center` and `rotate` untouched (1.6). |
 
 ## 2. GeoJSON paths
 
@@ -296,3 +299,51 @@ A point touches only the cells of its footprint, and its contributions accumulat
 | `Visualize.Contour.Density.thresholds/2` | Sets a density threshold list or count. |
 | `Visualize.Contour.Density.compute/2` | Density contours in pixel coordinates (7.2). |
 | `Visualize.Contour.Density.render/2` | Closed path data per threshold. |
+
+## 8. Web-Mercator tiles
+
+`Visualize.Geo.Tiles` is the arithmetic of a slippy-map basemap (#475): which zoom level's tiles match a Mercator projection, which tiles cover a plot, where each one goes in plot pixels and what its URL is. It is the maths under the `:tiles` mark of [14-declarative-chart](14-declarative-chart.md) §5.2. **It never fetches anything**: it computes URLs and rectangles, and the browser loads each tile as it loads any `<image href>`. Choosing a tile provider, and keeping its usage policy and its attribution, is the host's decision; public servers such as OpenStreetMap's have policies that a dashboard polling them must respect.
+
+A tile is a square of 256 pixels at its own zoom level: at zoom `z` the world is `2^z` tiles wide and `2^z` tiles high, column `x` counted east from the antimeridian and row `y` south from latitude 85.0511° (the latitude whose Mercator ordinate is π), the slippy-map convention every tile server shares.
+
+### 8.1 The aligned projection
+
+Tiles exist in one plane only, Web-Mercator's. A `Visualize.Geo.Projection` is *tile-aligned* when its `type` is `:mercator`, its `center` latitude is `0` and its `rotate` tilt `phi` and roll `gamma` are both `0`. Such a projection with scale `k` and translate `{tx, ty}` places a point at
+
+- `x = tx + k · rad(lon − m)`, where `m = lambda + center_lon` is the central meridian (the rotation's `lambda` and the centre's longitude both shift the map sideways, §1.4);
+- `y = ty − k · ln(tan(π/4 + rad(lat) / 2))`,
+
+which is the Web-Mercator plane scaled and shifted. A non-zero centre latitude is subtracted from every latitude *before* the projection (§1.3), which is a different map from that plane, not a vertical shift of it, and a tilt or a roll turns the sphere under it; neither has tiles. `aligned/1` is `:ok` or `{:error, reason}`, the reason `{:type, type}` for another projection type, `:center` for a centre latitude other than zero, `:rotate` for a non-zero tilt or roll, checked in that order.
+
+### 8.2 The zoom
+
+One radian of longitude is `k` pixels (§1.1), so the world is `W = 2πk` pixels wide on the plot. The zoom is the level whose 256-pixel tiles are nearest that size:
+
+`z = round(log2(W / 256))`, clamped to `[0, max_zoom]`,
+
+rounding half away from zero, `max_zoom` `19` unless given (the deepest level OpenStreetMap serves). Each tile is then drawn `t = W / 2^z` pixels square. When `W` is 256 times a power of two, `t` is exactly 256; otherwise the zoom is *fractional* and the tiles are scaled to the projection, `t` between `256 / √2` and `256 · √2` — the nearest level is taken rather than the one below because it keeps the scaling factor nearest 1, so a tile's text is neither blurred by more than √2 nor shrunk by more than it. A projection smaller than one tile, or deeper than `max_zoom`, scales the clamped level's tiles further, as it must: the basemap then stays under the data, blurred or reduced, rather than leaving it.
+
+### 8.3 The covering set
+
+The world's top-left corner — longitude −180°, latitude 85.0511° — lies at the plot pixel
+
+`x0 = tx − W · (m + 180) / 360`, `y0 = ty − W / 2`,
+
+and tile `(i, j)` of the zoom's grid at `(x0 + i · t, y0 + j · t)`, `t` square. The tiles covering a plot `width × height` are the columns `i` from `floor(−x0 / t)` to `ceil((width − x0) / t) − 1` and the rows `j` from `max(0, floor(−y0 / t))` to `min(2^z − 1, ceil((height − y0) / t) − 1)`: a tile that only touches the plot's edge is not in the set, and the rows stop at the poles of the Mercator square, so the plot is empty north and south of it. A column is **wrapped** for its address: its tile is `x = i mod 2^z` (the floored modulo, never negative), so a plot across the antimeridian, or one wide enough to show the world more than once, draws the world's copies side by side as a slippy map does. `cover/3` returns one map per tile, `%{z, x, y, left, top, size}` — `x` wrapped, `left` and `top` the tile's plot pixel, `size` `t` — ordered by row and then by column.
+
+**A point lands where its tile says.** For a point `(lon, lat)` the standard slippy-map formulas give its tile `X = floor((lon + 180) / 360 · 2^z)`, `Y = floor((1 − ln(tan φ + sec φ) / π) / 2 · 2^z)` and its fractions `fx`, `fy` within it; the tile's `left + fx · t`, `top + fy · t` is the point's `Visualize.Geo.Projection.project/3`, up to floating point, because §8.1's plane and the tile grid are one plane at two scales. That is what makes data drawn through the projection sit on the roads of the basemap.
+
+### 8.4 The URL
+
+A tile's URL is its template with `{z}`, `{x}` and `{y}` replaced by the tile's zoom, wrapped column and row as decimal integers, and `{s}` by a subdomain: `subdomains[rem(x + y, n)]` for the `n` subdomains given (Leaflet's rule, so neighbouring tiles go to different hosts and a browser's per-host connection limit is shared among them). Every other character of the template is kept as it is, and nothing is escaped: a template is the provider's own string. A template with `{s}` and no subdomains raises `ArgumentError`.
+
+### 8.5 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Geo.Tiles.aligned/1` | `:ok` when the projection is tile-aligned, else `{:error, {:type, type} \| :center \| :rotate}` (8.1). |
+| `Visualize.Geo.Tiles.zoom/1` | `zoom(proj, [])`. |
+| `Visualize.Geo.Tiles.zoom/2` | The zoom level of 8.2 for the projection's scale; option `max_zoom` (`19`). |
+| `Visualize.Geo.Tiles.cover/2` | `cover(proj, size, [])`. |
+| `Visualize.Geo.Tiles.cover/3` | The tiles covering a plot of `{width, height}` pixels (8.3), as `%{z, x, y, left, top, size}` maps in row-then-column order; option `max_zoom`. Raises `ArgumentError` for a projection that is not tile-aligned. |
+| `Visualize.Geo.Tiles.url/3` | The tile's URL from a template and a list of subdomains (8.4). |

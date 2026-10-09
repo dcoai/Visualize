@@ -74,6 +74,7 @@ defmodule Visualize.Chart.Schema do
     :ticks,
     :legend,
     :projection,
+    :fit,
     :facet,
     :viewport,
     :transition
@@ -87,7 +88,8 @@ defmodule Visualize.Chart.Schema do
     :mark_offset,
     :options,
     :mark_label,
-    :tooltip
+    :tooltip,
+    :tiles
   ]
 
   @curve_types [

@@ -49,6 +49,8 @@ defmodule Visualize.Chart.Validator do
           | :radius
           | {:zone, String.t(), Visualize.Scale.Time.zone_error()}
           | {:sync, :frame_kind | :x_scale, atom() | nil}
+          | {:tiles, :projection, atom()}
+          | {:tiles, :attribution | :url | :subdomains}
 
   @type error :: {path(), reason()}
 
@@ -210,6 +212,7 @@ defmodule Visualize.Chart.Validator do
       frame_nodes: frames,
       scales: declared(one && nested(one, [:scales])),
       frame_kind: one && nested(one, [:kind]),
+      frame_node: one,
       styles: union(declared(map[:styles]), Schema.builtin_styles()),
       paints: declared(map[:defs] || %{}),
       sources: source_fields(map[:sources]),
@@ -349,6 +352,41 @@ defmodule Visualize.Chart.Validator do
        when kind not in [:polar, :unknown],
        do: [{path ++ [:type], {:invalid_for, :needle}}]
 
+  # A basemap lies under a tile-aligned Mercator projection only (spec/14 §5.2, spec/07
+  # §8.1), and its provider's node belongs to it alone.
+  defp held(:mark, %{type: :tiles}, path, ctx), do: tiles_frame(ctx.frame_node, path ++ [:type])
+
+  defp held(:mark, %{type: type, tiles: _}, path, _ctx) when is_atom(type),
+    do: [{path ++ [:tiles], {:invalid_for, type}}]
+
+  defp held(:tiles, map, path, _ctx) do
+    attribution =
+      case Map.get(map, :attribution) do
+        text when is_binary(text) ->
+          if String.trim(text) == "",
+            do: [{path ++ [:attribution], {:tiles, :attribution}}],
+            else: []
+
+        _other ->
+          []
+      end
+
+    url =
+      case Map.get(map, :url) do
+        url when is_binary(url) ->
+          missing? = not Enum.all?(["{z}", "{x}", "{y}"], &String.contains?(url, &1))
+          empty? = String.contains?(url, "{s}") and Map.get(map, :subdomains) == []
+
+          if(missing?, do: [{path ++ [:url], {:tiles, :url}}], else: []) ++
+            if(empty?, do: [{path ++ [:subdomains], {:tiles, :subdomains}}], else: [])
+
+        _other ->
+          []
+      end
+
+    attribution ++ url
+  end
+
   # The angle scale's sweep is a turn at most and never nothing; an axis's radius is
   # positive (spec/14 §4.3, §4.4, #390).
   defp held(:scale, %{sweep: sweep}, path, _ctx)
@@ -369,6 +407,43 @@ defmodule Visualize.Chart.Validator do
     do: [{path ++ [:radius], :radius}]
 
   defp held(_kind, _map, _path, _ctx), do: []
+
+  # The faults of a `:tiles` mark's frame: not `:geo`, or a projection that is not
+  # tile-aligned. A frame the mark cannot be placed in, or a variable where the
+  # projection's keys would be, is another check's to report.
+  defp tiles_frame(%{kind: :geo} = frame, path) do
+    case Map.get(frame, :projection) || %{} do
+      %{} = projection when not is_struct(projection) ->
+        case tiles_projection(projection) do
+          :ok -> []
+          what -> [{path, {:tiles, :projection, what}}]
+        end
+
+      _var ->
+        []
+    end
+  end
+
+  defp tiles_frame(%{kind: kind}, path) when is_atom(kind) and kind != nil,
+    do: [{path, {:tiles, :projection, kind}}]
+
+  defp tiles_frame(_frame, _path), do: []
+
+  defp tiles_projection(projection) do
+    type = Map.get(projection, :type, :mercator)
+
+    cond do
+      is_atom(type) and type != :mercator -> type
+      match?([_, lat] when is_number(lat) and lat != 0, Map.get(projection, :center)) -> :center
+      tilted?(Map.get(projection, :rotate)) -> :rotate
+      true -> :ok
+    end
+  end
+
+  defp tilted?([_lambda | rest]) when is_list(rest),
+    do: Enum.any?(rest, &(is_number(&1) and &1 != 0))
+
+  defp tilted?(_rotate), do: false
 
   # The frame a sync group reads: the one `frame` names, else the first by name — the frame
   # `Visualize.Chart.Applied` holds as `frame`. A name no frame carries is the reference
@@ -420,6 +495,9 @@ defmodule Visualize.Chart.Validator do
     %{ctx | scales: declared(map[:scales]), frame_kind: map[:kind]}
   end
 
+  defp enter(:fit, map, ctx),
+    do: %{ctx | transform_keys: Map.keys(map), fields: fields_of(map[:data], ctx)}
+
   defp enter(_kind, _map, ctx), do: ctx
 
   # The scales and the kind a node's scale references resolve against: its own frame's
@@ -428,7 +506,13 @@ defmodule Visualize.Chart.Validator do
 
   defp in_frame(%{frame_nodes: frames} = ctx, name) when is_map_key(frames, name) do
     node = Map.fetch!(frames, name)
-    %{ctx | scales: declared(nested(node, [:scales])), frame_kind: nested(node, [:kind])}
+
+    %{
+      ctx
+      | scales: declared(nested(node, [:scales])),
+        frame_kind: nested(node, [:kind]),
+        frame_node: node
+    }
   end
 
   defp in_frame(ctx, _name), do: ctx
@@ -473,12 +557,43 @@ defmodule Visualize.Chart.Validator do
 
   # A mark or a label says its frame when the design holds more than one (spec/14 §5.1,
   # §6.1, #383): with one frame there is nothing to say and the key means that frame.
-  defp specs(kind, %{frame_nodes: frames})
+  defp specs(kind, %{frame_nodes: frames} = ctx)
        when kind in [:mark, :label] and is_map(frames) and map_size(frames) > 1 do
-    for s <- Schema.describe(kind), do: if(s.key == :frame, do: %{s | required: true}, else: s)
+    for s <- by_type(kind, ctx), do: if(s.key == :frame, do: %{s | required: true}, else: s)
+  end
+
+  defp specs(:mark, ctx), do: by_type(:mark, ctx)
+
+  # A fit reads points through `fields` or geometries through `field` (§4.6), as the
+  # `:projection` transform does.
+  defp specs(:fit, %{transform_keys: keys}) do
+    {required, dropped} =
+      case {:fields in keys, :field in keys} do
+        {true, true} -> {[], [:field]}
+        {_, true} -> {[], []}
+        {_, false} -> {[:fields], []}
+      end
+
+    for s <- Schema.describe(:fit),
+        s.key not in dropped,
+        do: %{s | required: s.required or s.key in required}
   end
 
   defp specs(kind, _ctx), do: Schema.describe(kind)
+
+  # A `:tiles` mark reads no rows and names its provider (spec/14 §5.2, #475): `data` is
+  # not required of it and `tiles` is.
+  defp by_type(:mark, %{mark_type: :tiles}) do
+    for s <- Schema.describe(:mark) do
+      case s.key do
+        :data -> %{s | required: false}
+        :tiles -> %{s | required: true}
+        _other -> s
+      end
+    end
+  end
+
+  defp by_type(kind, _ctx), do: Schema.describe(kind)
 
   defp projection_keys(:projection, required, optional, %{transform_keys: keys}) do
     case {:fields in keys, :field in keys} do
@@ -530,6 +645,7 @@ defmodule Visualize.Chart.Validator do
     if Schema.key(:transform, key) != nil, do: {:invalid_for, op}, else: :unknown_key
   end
 
+  defp unknown_reason(:fit, key, _ctx) when key in [:field, :fields], do: {:invalid_for, :fit}
   defp unknown_reason(_kind, _key, _ctx), do: :unknown_key
 
   # A style value may be a channel binding for any key (spec/14 §3.2); the version must
@@ -812,6 +928,14 @@ defmodule Visualize.Chart.Validator do
       "since the hooks map a shared x by linear interpolation (spec/14 §2.9)"
   end
 
+  defp words({:tiles, :projection, what}) do
+    "draws tiles over #{inspect(what)}: tiles lie only under a :geo frame's :mercator " <>
+      "projection with a zero centre latitude and no tilt or roll (spec/07 §8.1)"
+  end
+
+  defp words({:tiles, :attribution}), do: "must say something: the attribution is drawn"
+  defp words({:tiles, :url}), do: "must hold each of {z}, {x} and {y}"
+  defp words({:tiles, :subdomains}), do: "must name a subdomain for the url's {s}"
   defp words(:sweep), do: "must be within a turn, and not zero"
   defp words(:radius), do: "must be positive"
 

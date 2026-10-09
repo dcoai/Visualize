@@ -365,6 +365,59 @@ defmodule Visualize.Geo.Projection do
     |> translate(translate_x, translate_y)
   end
 
+  @doc """
+  Fits the projection to a list of `{lon, lat}` points (spec/07 §1.6, #475): d3-geo's
+  `fitExtent` over points.
+
+  The points are projected at scale 150 and translate `{0, 0}`, and `scale` and
+  `translate` are set so their projected bounds fill the pixel box
+  `[[x0, y0], [x1, y1]]` on the tighter axis and are centred in it. `center`, `rotate`,
+  `clip_angle` and `parallels` are untouched, so a Mercator projection stays
+  Web-Mercator. An axis along which the points have no extent does not bound the
+  scale; with no extent on either the scale is kept and the point is centred; with no
+  projectable point the projection is returned unchanged.
+
+  ## Examples
+
+      iex> proj =
+      ...>   Visualize.Geo.Projection.new(:mercator)
+      ...>   |> Visualize.Geo.Projection.fit([[0, 0], [100, 100]], [{-10, 0}, {10, 0}])
+      iex> {x0, _} = Visualize.Geo.Projection.project(proj, -10, 0)
+      iex> {x1, _} = Visualize.Geo.Projection.project(proj, 10, 0)
+      iex> {Float.round(x0, 6), Float.round(x1, 6), proj.center}
+      {0.0, 100.0, {0, 0}}
+
+  """
+  @spec fit(t(), [[number()]], [{number(), number()}]) :: t()
+  def fit(%__MODULE__{} = proj, [[x0, y0], [x1, y1]], points) do
+    probe = %{proj | scale: 150, translate: {0, 0}}
+
+    projected =
+      for {lon, lat} <- points, xy = project(probe, lon, lat), xy != nil, do: xy
+
+    case projected do
+      [] ->
+        proj
+
+      _some ->
+        {xs, ys} = Enum.unzip(projected)
+        {bx0, bx1} = Enum.min_max(xs)
+        {by0, by1} = Enum.min_max(ys)
+        w = x1 - x0
+        h = y1 - y0
+
+        k =
+          [{w, bx1 - bx0}, {h, by1 - by0}]
+          |> Enum.filter(fn {_box, extent} -> extent > 0 end)
+          |> Enum.map(fn {box, extent} -> box / extent end)
+          |> Enum.min(fn -> proj.scale / 150 end)
+
+        proj
+        |> scale(150 * k)
+        |> translate(x0 + (w - k * (bx1 + bx0)) / 2, y0 + (h - k * (by1 + by0)) / 2)
+    end
+  end
+
   # ============================================
 
   # ============================================

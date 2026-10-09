@@ -371,7 +371,9 @@ defmodule Visualize.Chart.Build do
   """
   @spec mark(atom(), data(), opts() | Var.t(), opts()) :: fragment()
   def mark(type, data, channels, opts) do
-    base = %{type: type, data: data, channels: channels(type, channels)}
+    base = %{type: type, channels: channels(type, channels)}
+    # A mark that reads no rows — a `:tiles` mark (spec/14 §5.2) — has no `data` key.
+    base = if data == nil, do: base, else: Map.put(base, :data, data)
     %{marks: [node(:mark, base, options(type, opts))]}
   end
 
