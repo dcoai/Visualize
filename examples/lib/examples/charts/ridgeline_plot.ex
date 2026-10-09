@@ -1,17 +1,22 @@
 defmodule Examples.Charts.RidgelinePlot do
   @moduledoc """
-  Ridgeline plot as a design (#128): one `:area` mark and one `:line` mark, each split by a
-  `series` channel into one path per ridge.
+  Ridgeline plot as a design (#128): per ridge, an `:area` mark (its fill) and then a
+  `:line` mark (its crest), each over that ridge's rows through a `:filter` step.
 
   A ridge is an area drawn from its own baseline, and the baselines step up the plot with
   the ridges overlapping by half their height. That offset is a modelling question the
   layer answers in the data rather than the mark: the `y` scale runs over *ridge heights*
   — the plot's height is `(n − 1) × (1 − overlap) + 1` of them — and every row carries its
   ridge's `base` and its density's `top` in that unit, so the `:area` reads `y0: :base,
-  y1: :top` through the one linear scale and nothing is translated by hand. The rows are
-  listed back to front, so the ridge at the top of the plot is drawn last and lies over the
-  one beneath it, as the hand-written version layered them; the `color` scale's domain is
-  the ridge index, so the colours still run top to bottom. The basis curve is the style's.
+  y1: :top` through the one linear scale and nothing is translated by hand.
+
+  A ridgeline reads front to back (#491): the ridge at the top of the plot is the farthest
+  and is drawn first, and each ridge below it is nearer and drawn after it, covering it.
+  A ridge's crest belongs to its fill, so the marks go fill, crest, fill, crest down the
+  plot; one `:area` and one `:line` over every ridge would draw every fill before any
+  crest, and a hidden ridge's crest would then show through the fill in front of it. The
+  `color` scale's domain is the ridge index, so the colours run top to bottom. The basis
+  curve is the style's.
   """
 
   import Visualize.Chart.Build
@@ -42,9 +47,8 @@ defmodule Examples.Charts.RidgelinePlot do
         linear_scale(:x, domain: [0, 100]),
         # Ridge heights: the last ridge's baseline is 0, the first ridge's top is the plot's.
         linear_scale(:y, domain: [0, (@ridges - 1) * (1 - @overlap) + 1]),
-        ordinal_scale(:color, domain: ridges),
-        area(:ridges, %{x: :x, y: :top, y0: :base, series: :ridge}, style: :ridge),
-        line(:ridges, %{x: :x, y: :top, series: :ridge}, style: :crest)
+        ordinal_scale(:color, domain: ridges)
+        | ridges(ridges)
       ])
 
     {design, %{ridges: rows(opts[:animation_tick])}}
@@ -52,13 +56,24 @@ defmodule Examples.Charts.RidgelinePlot do
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-  # One row per point per ridge, the last ridge first so the first is drawn over it; each
-  # ridge's baseline is its distance from the bottom in ridge heights, and its top the
-  # density above that in the same unit.
+  # Far to near, the top ridge first: each ridge's fill and then its own crest (#491).
+  defp ridges(ridges) do
+    Enum.flat_map(ridges, fn ridge ->
+      rows = filter(:ridges, :ridge, test: :eq, value: ridge)
+
+      [
+        area(rows, %{x: :x, y: :top, y0: :base, series: :ridge}, style: :ridge),
+        line(rows, %{x: :x, y: :top, series: :ridge}, style: :crest)
+      ]
+    end)
+  end
+
+  # One row per point per ridge, the top ridge first; each ridge's baseline is its distance
+  # from the bottom in ridge heights, and its top the density above that in the same unit.
   defp rows(tick) do
     phase = if tick, do: tick * 0.08, else: 0
 
-    for ridge <- (@ridges - 1)..0//-1, i <- 0..(@points - 1)//1 do
+    for ridge <- 0..(@ridges - 1)//1, i <- 0..(@points - 1)//1 do
       x = i / (@points - 1) * 100
       base = (@ridges - 1 - ridge) * (1 - @overlap)
       %{ridge: ridge, x: x, base: base, top: base + density(x, ridge, phase, tick) / @peak}
@@ -93,9 +108,17 @@ defmodule Examples.Charts.RidgelinePlot do
         linear_scale(:x, domain: [0, 100]),
         # Eight ridges overlapping by half: the plot is 4.5 ridge heights tall.
         linear_scale(:y, domain: [0, 4.5]),
-        ordinal_scale(:color, domain: [0, 1, 2, 3, 4, 5, 6, 7]),
-        area(:ridges, %{x: :x, y: :top, y0: :base, series: :ridge}, style: :ridge),
-        line(:ridges, %{x: :x, y: :top, series: :ridge}, style: :crest)
+        ordinal_scale(:color, domain: [0, 1, 2, 3, 4, 5, 6, 7])
+        # Far to near, the top ridge first: each ridge's fill and then its own crest, so a
+        # nearer ridge covers the one behind it, crest and all.
+        | Enum.flat_map(0..7, fn ridge ->
+            rows = filter(:ridges, :ridge, test: :eq, value: ridge)
+
+            [
+              area(rows, %{x: :x, y: :top, y0: :base, series: :ridge}, style: :ridge),
+              line(rows, %{x: :x, y: :top, series: :ridge}, style: :crest)
+            ]
+          end)
       ])
 
     {:ok, applied} = Visualize.Chart.apply(design, sources: %{ridges: ridges})
