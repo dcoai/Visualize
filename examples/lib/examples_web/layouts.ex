@@ -39,6 +39,7 @@ defmodule ExamplesWeb.Layouts do
           .page-intro { margin-bottom: 1rem; }
           .page-intro h2 { font-size: 1.4rem; margin-bottom: 0.25rem; }
           .page-intro p { color: #666; }
+          .builder-notice { margin: 1rem auto 0; max-width: 1400px; padding: 0.6rem 1rem; background: #fff8e1; border-left: 4px solid #f59e0b; color: #5c4400; font-size: 0.95rem; }
           body > main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
           .gallery-note {
             max-width: 60rem;

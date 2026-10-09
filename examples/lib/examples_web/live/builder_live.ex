@@ -258,6 +258,10 @@ defmodule ExamplesWeb.BuilderLive do
   def render(assigns) do
     ~H"""
     <ExamplesWeb.SiteHeader.header tab={:builder} />
+    <p class="builder-notice" role="note">
+      <strong>In development:</strong>
+      the Chart Builder is not fully functional and is likely far from its final form.
+    </p>
     <div class="page-intro builder-intro">
       <h2>Chart builder</h2>
       <p>

@@ -18,6 +18,13 @@ defmodule ExamplesWeb.RoutesTest do
         do: path
   end
 
+  test "the Chart Builder page says it is in development (#503)" do
+    html = build_conn() |> get("/builder") |> html_response(200)
+    assert html =~ ~s(class="builder-notice")
+    assert html =~ "not fully functional"
+    assert html =~ "far from its final form"
+  end
+
   test "the router names every page, and each renders" do
     paths = fixed_routes()
     assert "/" in paths and "/incremental" in paths and "/builder" in paths
