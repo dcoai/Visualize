@@ -113,7 +113,7 @@ defmodule Visualize.Hooks do
   ### Legend
 
       <svg id="chart" phx-hook="LegendHook" data-legend-event="legend_toggle">
-        <!-- a frame with a legend: every legend-item and every series path carry data-series -->
+        <!-- a frame with a legend: every legend-item and every element a series draws carry data-series -->
       </svg>
 
   A click on an entry hides the series it names with `display="none"` and shows it again

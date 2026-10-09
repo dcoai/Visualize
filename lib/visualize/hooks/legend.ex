@@ -2,8 +2,10 @@ defmodule Visualize.Hooks.Legend do
   @moduledoc """
   Phoenix LiveView hook that hides and shows a series from its legend entry (spec/10 §14).
 
-  A frame's legend entries and its per-series paths carry the same `data-series` string
-  (spec/14 §4.5, §5.6), so `LegendHook` joins them without a lookup: a click on an entry
+  A frame's legend entries and every element and label a series draws — a line's path,
+  the points of a `:circle` or `:symbol` mark with the same `series` channel, an end label
+  — carry the same `data-series` string (spec/14 §4.5, §5.6, D-126), so `LegendHook`
+  joins them without a lookup and hides the series whole: a click on an entry
   sets `display="none"` on every `.mark [data-series]` element of that series under the
   hook element and dims the entry, and a second click shows it again. `display` is an
   SVG presentation attribute; the HTML `hidden` attribute would not hide an SVG group
@@ -28,7 +30,8 @@ defmodule Visualize.Hooks.Legend do
     unset, nothing is pushed
 
   Written by the frame (spec/10 §14.2):
-  - `data-series` on every `legend-item` group and on every per-series path
+  - `data-series` on every `legend-item` group and on every element and label of a mark
+    with a `series` channel
   """
 
   @doc """

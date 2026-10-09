@@ -85,12 +85,21 @@ defmodule Visualize.Chart.SchemaTest do
     assert Schema.channels(:percentile_band) ==
              %{required: [:x, :median], optional: [:inner_lo, :inner_hi, :outer_lo, :outer_hi]}
 
-    assert Schema.channels(:path) == %{required: [:path], optional: []}
+    assert Schema.channels(:path) == %{required: [:path], optional: [:series]}
 
     assert Schema.channels(:arc) == %{
              required: [:value],
-             optional: [:start, :end, :inner, :outer]
+             optional: [:start, :end, :inner, :outer, :series]
            }
+
+    # `series` names what a row belongs to on every type that draws rows: not on a band
+    # of all the rows, nor on a basemap (#508, D-126).
+    for type <- Schema.mark_types() -- [:percentile_band, :tiles] do
+      assert :series in Schema.channels(type).optional, inspect(type) <> " takes no series"
+    end
+
+    refute :series in Schema.channels(:percentile_band).optional
+    assert Schema.channels(:tiles) == %{required: [], optional: []}
 
     assert Schema.transform_keys(:bin) == %{required: [:field], optional: [:thresholds, :as]}
     assert Schema.transform_keys(:projection) == %{required: [], optional: [:fields, :field]}

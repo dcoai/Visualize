@@ -6,12 +6,11 @@ defmodule Visualize.Chart.Mark.Shapes do
   # `%{element, datum, style, anchor}` — the element, the datum it was drawn from, the
   # element's own style over the generator's, and the inline label's anchor point.
 
-  alias Visualize.Chart.Mark.{Channels, Label}
+  alias Visualize.Chart.Mark.{Channels, Label, Series}
   alias Visualize.Chart.Style
   alias Visualize.IR.{Element, Transform}
   alias Visualize.Scale
   alias Visualize.Shape.{Arc, Area, Band, Line, Needle, PercentileBand, Rose, Rule, Symbol, XBand}
-  alias Visualize.Theme
 
   @stroke_keys [
     :stroke,
@@ -44,7 +43,7 @@ defmodule Visualize.Chart.Mark.Shapes do
     |> Channels.pixels()
     |> series(ctx)
     |> closed(ctx)
-    |> Enum.flat_map(fn {value, rows, j} ->
+    |> Enum.flat_map(fn rows ->
       path =
         Line.new()
         |> Line.x(:x)
@@ -53,23 +52,18 @@ defmodule Visualize.Chart.Mark.Shapes do
         |> defined(rows, [:x, :y], &Line.defined/2)
         |> Line.generate_path(rows)
 
-      style = series_style(ctx, value, j)
       anchor = last_point(rows, :x, :y)
 
       # A filled line is the area under it (spec/14 §5.6): the area to the baseline first,
-      # then the line itself, unfilled.
+      # then the line itself, unfilled. The series' paint and `data-series` are the mark's
+      # (`Visualize.Chart.Mark.Series`), as on every type.
       if filled? do
         [
-          child(
-            under(rows, baseline, ctx, value),
-            rows,
-            %{class: "line-fill", stroke: :none},
-            anchor
-          ),
-          child(series_path(path, value), rows, Map.put(style, :fill, :none), anchor)
+          child(under(rows, baseline, ctx), rows, %{class: "line-fill", stroke: :none}, anchor),
+          child(Element.path(path), rows, %{fill: :none}, anchor)
         ]
       else
-        [child(series_path(path, value), rows, style, anchor)]
+        [child(Element.path(path), rows, %{}, anchor)]
       end
     end)
   end
@@ -80,7 +74,7 @@ defmodule Visualize.Chart.Mark.Shapes do
   end
 
   # The area from a series' line down to the baseline, in the line's curve.
-  defp under(rows, baseline, ctx, value) do
+  defp under(rows, baseline, ctx) do
     rows = Enum.map(rows, &Map.merge(&1, %{x0: &1.x, x1: &1.x, y0: baseline, y1: &1.y}))
 
     Area.new()
@@ -91,7 +85,7 @@ defmodule Visualize.Chart.Mark.Shapes do
     |> curve(ctx, &Area.curve/3)
     |> defined(rows, [:x0, :x1, :y0, :y1], &Area.defined/2)
     |> Area.generate_path(rows)
-    |> series_path(value)
+    |> Element.path()
   end
 
   defp area(ctx) do
@@ -109,7 +103,7 @@ defmodule Visualize.Chart.Mark.Shapes do
     end)
     |> series(ctx)
     |> closed(ctx)
-    |> Enum.map(fn {value, rows, j} ->
+    |> Enum.map(fn rows ->
       path =
         Area.new()
         |> Area.x0(:x0)
@@ -120,12 +114,7 @@ defmodule Visualize.Chart.Mark.Shapes do
         |> defined(rows, [:x0, :x1, :y0, :y1], &Area.defined/2)
         |> Area.generate_path(rows)
 
-      child(
-        series_path(path, value),
-        rows,
-        series_style(ctx, value, j),
-        last_point(rows, :x1, :y1)
-      )
+      child(Element.path(path), rows, %{}, last_point(rows, :x1, :y1))
     end)
   end
 
@@ -137,7 +126,7 @@ defmodule Visualize.Chart.Mark.Shapes do
       turn = turn(ctx)
 
       Enum.map(series, fn
-        {value, [first | _] = rows, j} -> {value, rows ++ [wrapped(first, turn)], j}
+        [first | _] = rows -> rows ++ [wrapped(first, turn)]
         empty -> empty
       end)
     else
@@ -199,41 +188,17 @@ defmodule Visualize.Chart.Mark.Shapes do
       else: setter.(shape, &Channels.placed?(&1, channels))
   end
 
-  # The rows split by the `series` channel in order of first appearance, with the series'
-  # one-based position; one unnamed series without the channel.
+  # The rows split by the `series` channel in order of first appearance: one path per
+  # series (spec/14 §5.2); all the rows as one without the channel.
   defp series(rows, ctx) do
     if Channels.has?(ctx, :series) do
       rows
       |> Enum.map(& &1.series)
       |> Enum.uniq()
-      |> Enum.with_index(1)
-      |> Enum.map(fn {value, j} -> {value, Enum.filter(rows, &(&1.series == value)), j} end)
+      |> Enum.map(fn value -> Enum.filter(rows, &(&1.series == value)) end)
     else
-      [{nil, rows, nil}]
+      [rows]
     end
-  end
-
-  # A series' path names its series, the string the legend's entries carry (spec/14 §5.6,
-  # D-77); a mark without the channel names none.
-  defp series_path(path, nil), do: Element.path(path)
-
-  defp series_path(path, value),
-    do: Element.set_attrs(Element.path(path), %{"data-series" => to_string(value)})
-
-  # A series' paint: the colour scale's value for the series, else the theme's series
-  # colour for its position (spec/14 §5.6).
-  defp series_style(_ctx, _value, nil), do: %{}
-
-  defp series_style(%{frame: frame, mode: mode, paint: {key, _}}, value, j) do
-    colour =
-      case Map.get(frame.scales, :color) do
-        nil -> nil
-        scale -> Scale.apply(scale, value)
-      end
-
-    if colour == nil,
-      do: %{key => Theme.resolve(frame.theme, {:series, j}, mode)},
-      else: %{key => Style.colour(colour, frame.theme, mode)}
   end
 
   defp last_point(rows, xk, yk) do
@@ -376,12 +341,13 @@ defmodule Visualize.Chart.Mark.Shapes do
   defp label_text([], _ctx), do: []
   defp label_text([text], ctx), do: [Element.set_style(text, Label.style(ctx))]
 
-  # The stroke keys of the mark's style and its paint, bound to the datum, replacing the
-  # generator's `current_color`.
+  # The stroke keys of the mark's style and its paint — the series' colour with a `series`
+  # channel (spec/14 §5.6, D-126) — bound to the datum, replacing the generator's
+  # `current_color`.
   defp stroke_style(%{static: static, paint: {:stroke, paint}} = ctx, datum) do
     static
     |> Map.take(@stroke_keys)
-    |> Map.put(:stroke, paint)
+    |> Map.put(:stroke, Series.over(ctx, datum, paint))
     |> Map.merge(Map.take(ctx.bound, @stroke_keys))
     |> Style.bind(datum, ctx.frame, ctx.mode)
   end
@@ -389,7 +355,7 @@ defmodule Visualize.Chart.Mark.Shapes do
   defp fill_style(%{static: static, paint: {:fill, paint}} = ctx, datum) do
     static
     |> Map.take([:fill, :fill_opacity])
-    |> Map.put(:fill, paint)
+    |> Map.put(:fill, Series.over(ctx, datum, paint))
     |> Map.merge(Map.take(ctx.bound, [:fill, :fill_opacity]))
     |> Style.bind(datum, ctx.frame, ctx.mode)
   end

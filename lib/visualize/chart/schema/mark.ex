@@ -4,23 +4,24 @@ defmodule Visualize.Chart.Schema.Mark do
 
   import Visualize.Chart.Schema, only: [spec: 3, spec: 4, style_stack: 0]
 
-  # Type, required channels, optional channels, option keys (spec/14 §5.2-5.3).
+  # Type, required channels, optional channels, option keys (spec/14 §5.2-5.3). `series`
+  # is a channel of every type that draws rows (D-126).
   @marks [
     {:line, [:x, :y], [:series], [:closed]},
     {:area, [:x, :y], [:x0, :x1, :y0, :y1, :series], [:closed]},
-    {:band, [:x0, :x1], [:y], [:height]},
-    {:rule, [], [:x, :y], []},
-    {:x_band, [:x0, :x1], [], []},
+    {:band, [:x0, :x1], [:y, :series], [:height]},
+    {:rule, [], [:x, :y, :series], []},
+    {:x_band, [:x0, :x1], [:series], []},
     {:percentile_band, [:x, :median], [:inner_lo, :inner_hi, :outer_lo, :outer_hi], []},
-    {:rose, [:angle], [:value], [:width, :inner_radius, :outer_radius, :pad_angle]},
-    {:symbol, [:x, :y], [:value], []},
-    {:needle, [:x], [:y], [:inner_radius, :width, :tail, :hub, :cap]},
-    {:arc, [:value], [:start, :end, :inner, :outer],
+    {:rose, [:angle], [:value, :series], [:width, :inner_radius, :outer_radius, :pad_angle]},
+    {:symbol, [:x, :y], [:value, :series], []},
+    {:needle, [:x], [:y, :series], [:inner_radius, :width, :tail, :hub, :cap]},
+    {:arc, [:value], [:start, :end, :inner, :outer, :series],
      [:inner_radius, :outer_radius, :corner_radius, :pad_angle, :start_angle, :end_angle]},
-    {:path, [:path], [], []},
-    {:rect, [:x0, :x1, :y0, :y1], [:value], [:corner_radius]},
-    {:circle, [:x, :y], [:value], [:radius]},
-    {:text, [:x, :y], [:value], []},
+    {:path, [:path], [:series], []},
+    {:rect, [:x0, :x1, :y0, :y1], [:value, :series], [:corner_radius]},
+    {:circle, [:x, :y], [:value, :series], [:radius]},
+    {:text, [:x, :y], [:value, :series], []},
     # A basemap: no channels, no rows (spec/14 §5.2, #475).
     {:tiles, [], [], []}
   ]

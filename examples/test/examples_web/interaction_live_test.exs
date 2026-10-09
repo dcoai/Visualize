@@ -9,6 +9,10 @@ defmodule ExamplesWeb.InteractionLiveTest do
   the SVG path's in the frame group's coordinates, the canvas stream's through its
   transform. And the canvas draws at the arrays' `data-size`, the `viewBox` of the SVG,
   since a stream draws one canvas pixel per chart unit.
+
+  The legend chart names every series' points as it names their line (#508):
+  `LegendHook` hides by `data-series`, so a point without it stayed drawn when its series
+  was toggled off.
   """
   use ExUnit.Case, async: true
 
@@ -131,6 +135,24 @@ defmodule ExamplesWeb.InteractionLiveTest do
 
       assert attr(tag, "data-size") == "#{elem(@size, 0)},#{elem(@size, 1)}"
       assert_on(crosshair_points(tag), canvas_vertices(attr(canvas, "data-binary")), "canvas")
+    end
+  end
+
+  test "the legend chart's every line, point and entry names one of the three series (#508)" do
+    {_tag, rest} = page({720, 380}) |> element("legend-chart")
+    [chart] = Regex.run(~r/<svg.*?<\/svg>/s, rest)
+    series = ~w(alpha beta gamma)
+
+    circles = Regex.scan(~r/<circle\b[^>]*>/, chart) |> List.flatten()
+    named = for c <- circles, [_, s] <- Regex.scan(~r/data-series="([^"]+)"/, c), do: s
+
+    # A point per hour per series, each naming its series.
+    assert length(circles) == 24 * 3
+    assert Enum.frequencies(named) == Map.new(series, &{&1, 24})
+
+    for s <- series do
+      assert chart =~ ~r/<path\b[^>]*data-series="#{s}"/
+      assert chart =~ ~s(class="legend-item" data-series="#{s}")
     end
   end
 end

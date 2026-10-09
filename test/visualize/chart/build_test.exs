@@ -178,7 +178,7 @@ defmodule Visualize.Chart.BuildTest do
       assert [%{"en" => text}] = for({{:function, :rose, 3}, _, _, doc, _} <- docs, do: doc)
       assert text =~ "A `:rose` mark"
       assert text =~ "Required channels: `angle`."
-      assert text =~ "Optional channels: `value`."
+      assert text =~ "Optional channels: `value`, `series`."
       assert text =~ "Options: `width`, `inner_radius`, `outer_radius`, `pad_angle`."
     end
 

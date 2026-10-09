@@ -81,6 +81,17 @@ defmodule Visualize.Chart.Mark.Channels do
   def has?(ctx, channel), do: Map.has_key?(Map.get(ctx.mark, :channels, %{}), channel)
 
   @doc false
+  # A channel's raw reading from a row, before any scale: `nil` when the mark does not
+  # declare the channel.
+  @spec reading(map(), atom(), map()) :: term()
+  def reading(ctx, channel, row) do
+    case Map.fetch(Map.get(ctx.mark, :channels, %{}), channel) do
+      {:ok, spec} -> read(spec, row, ctx.frame, ctx.mark, channel)
+      :error -> nil
+    end
+  end
+
+  @doc false
   # The pixel rows whose every listed channel is placed: the per-datum drop of §5.2.
   @spec placed([pixel_row()], [atom()]) :: [pixel_row()]
   def placed(rows, channels), do: Enum.filter(rows, &placed?(&1, channels))
