@@ -1,6 +1,6 @@
 defmodule Visualize.Chart.ColourDomainTest do
   @moduledoc """
-  #487, D-123: a colour outside its ordinal domain is the colour scale's `unknown` — the
+  #487, D-122: a colour outside its ordinal domain is the colour scale's `unknown` — the
   theme's `:axis` by default — on SVG and canvas alike; a missing colour is `:none`, which
   both backends draw as no paint; and the validator reports the mismatch a design makes
   visible (spec/14 §3.4, §4.3, §10.1).

@@ -372,7 +372,7 @@ defmodule Visualize.Chart.Frame.Scales do
   defp get(node, key), do: Map.get(node, key, Schema.default(:scale, key))
 
   # The colour scale draws a value outside its domain in a visible neutral, the theme's
-  # `:axis` slot, unless the node says otherwise (spec/14 §4.3, D-123): a colour that
+  # `:axis` slot, unless the node says otherwise (spec/14 §4.3, D-122): a colour that
   # vanished would hide the mismatch, and the backends disagree about a missing fill.
   defp unknown(:ordinal, :color, node) do
     if get(node, :unknown) == nil, do: Map.put(node, :unknown, :axis), else: node

@@ -179,7 +179,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       # One cell per `:rect` element — the design filters to the leaves — with the
       # component's label rule over the row (spec/10 §3.3). A root-only hierarchy's cell
-      # has no `branch`, so its bound fill is `:none` (spec/14 §3.4, D-123), and takes the
+      # has no `branch`, so its bound fill is `:none` (spec/14 §3.4, D-122), and takes the
       # theme's `:grid`.
       cells =
         Enum.zip_with(cells.children, leaves, fn rect, leaf ->

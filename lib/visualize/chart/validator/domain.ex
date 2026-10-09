@@ -1,6 +1,6 @@
 defmodule Visualize.Chart.Validator.Domain do
   @moduledoc false
-  # The colour-domain check of the validator (spec/14 §10.1, #487, D-123): a value a mark
+  # The colour-domain check of the validator (spec/14 §10.1, #487, D-122): a value a mark
   # sends to its frame's colour scale that the scale's *declared* ordinal domain can be seen
   # not to hold. Every element it reaches would draw the scale's `unknown`, so the design
   # says something it cannot mean.

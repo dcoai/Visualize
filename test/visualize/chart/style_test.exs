@@ -125,7 +125,7 @@ defmodule Visualize.Chart.StyleTest do
                %{fill: "#666666"}
     end
 
-    # #487, D-123: a colour is never dropped. A category outside the domain is the colour
+    # #487, D-122: a colour is never dropped. A category outside the domain is the colour
     # scale's `unknown`, the theme's `:axis` by default; a missing reading is `:none`.
     test "a category the colour scale does not hold is its unknown, the theme's :axis" do
       frame = frame(%{color: %{kind: :ordinal, domain: ["a"]}})

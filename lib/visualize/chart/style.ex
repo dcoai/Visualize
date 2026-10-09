@@ -77,7 +77,7 @@ defmodule Visualize.Chart.Style do
   declares one — a category outside its domain is the scale's `unknown` — and is
   resolved as a theme slot when it is one. A colour is never dropped: a `nil` reading,
   or a scale that yields `nil`, is `:none`, the explicit "no paint" SVG and canvas agree
-  on, where an absent fill is black on one and nothing on the other (D-123). Any other
+  on, where an absent fill is black on one and nothing on the other (D-122). Any other
   key's `nil` reading drops the key.
   """
   @spec bind(map(), term(), map(), Theme.mode()) :: map()
