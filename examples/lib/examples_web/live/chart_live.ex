@@ -3,7 +3,7 @@ defmodule ExamplesWeb.ChartLive do
 
   alias Examples.ColorPalettes
   alias Examples.{Compare, Frames, Gallery, Run}
-  alias ExamplesWeb.PerformanceDrawer
+  alias ExamplesWeb.{Highlight, PerformanceDrawer}
 
   @doc """
   The gallery's charts by slug, for the performance view (#328): the map derived from the
@@ -983,18 +983,18 @@ defmodule ExamplesWeb.ChartLive do
           The design is the thing to copy: the <code>Visualize.Chart.Build</code> calls below fold to a map,
           and the map is the chart — applied to rows and rendered by the library, on any backend (spec/14 §16).
         </p>
-        <pre><code><%= backend_sample_code(@run_backend, @module) %></code></pre>
+        <Highlight.code code={backend_sample_code(@run_backend, @module)} />
 
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">The design (data)</h3>
         <p style="color: #666; font-size: 0.9rem; margin-bottom: 0.5rem;">
           What the Build calls fold to: the stored form the builder and a host exchange (spec/14 §1, §9).
           <code>Visualize.Chart.to_json/1</code> is the same map as JSON.
         </p>
-        <pre><code><%= @still_design || "rendering…" %></code></pre>
+        <Highlight.code code={@still_design || "# rendering…"} />
 
         <%= if @animatable do %>
           <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">LiveView Animation Code</h3>
-          <pre><code><%= animation_sample_code(@run_backend) %></code></pre>
+          <Highlight.code code={animation_sample_code(@run_backend)} />
         <% end %>
       </div>
     </main>
@@ -1384,7 +1384,7 @@ defmodule ExamplesWeb.ChartLive do
 
   # The compile-and-render call the page makes for a design in Canvas mode (#268).
   defp hybrid_sample_code do
-    ~S"""
+    ~S'''
     # Canvas mode is the hybrid split (spec/14 §12): the furniture — axes, grid,
     # legend, labels — as SVG, the marks on a binary canvas beneath it.
 
@@ -1398,6 +1398,7 @@ defmodule ExamplesWeb.ChartLive do
     # tick.backdrop — a fitted basemap's tiles, for beneath the canvas
 
     # In the template, the backdrop under the canvas under the static SVG:
+    ~H"""
     <div style="position: relative">
       <div style="position: absolute; top: 0; left: 0; pointer-events: none">
         <%= Phoenix.HTML.raw(backdrop <> tick.backdrop) %>
@@ -1411,10 +1412,11 @@ defmodule ExamplesWeb.ChartLive do
       </div>
     </div>
     """
+    '''
   end
 
   defp animation_sample_code(:svg) do
-    ~S"""
+    ~S'''
     # LiveView animation: the design is fixed, the rows move.
     # On each tick the chart module binds new rows to the same design and the page
     # re-renders it whole as SVG.
@@ -1429,7 +1431,9 @@ defmodule ExamplesWeb.ChartLive do
     end
 
     # In render/1:
+    ~H"""
     <%= Phoenix.HTML.raw(MyChart.render(animation_tick: @tick)) %>
+    """
 
     # In the chart module — design/1 returns the design and the rows it binds at the
     # tick; render/1 applies and renders it (Examples.Charts.Design):
@@ -1445,7 +1449,7 @@ defmodule ExamplesWeb.ChartLive do
         %{row | value: row.base + :math.sin(tick * 0.1 + row.index) * 20}
       end
     end
-    """
+    '''
   end
 
   defp animation_sample_code(:canvas) do

@@ -27,7 +27,12 @@ defmodule Examples.MixProject do
       {:phoenix_html, "~> 4.0"},
       {:bandit, "~> 1.0"},
       {:jason, "~> 1.4"},
-      {:nx, "~> 0.9"}
+      {:nx, "~> 0.9"},
+      # Code on the pages is highlighted server-side (#506): Elixir, and HEEx in its ~H sigil
+      # (makeup_eex, which needs an HTML lexer for the markup).
+      {:makeup_elixir, "~> 1.0"},
+      {:makeup_eex, "~> 2.0"},
+      {:makeup_html, "~> 0.2"}
     ]
   end
 end

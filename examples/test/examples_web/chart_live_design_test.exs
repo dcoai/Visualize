@@ -12,9 +12,11 @@ defmodule ExamplesWeb.ChartLiveDesignTest do
     {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
     {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => to_string(backend)}, s)
 
+    # The code is highlighted (#506): read the code blocks' text, without the spans.
     Phoenix.LiveViewTest.rendered_to_string(
       ChartLive.render(Map.put(s.assigns, :__changed__, %{}))
     )
+    |> String.replace(~r/<\/?span[^>]*>/, "")
   end
 
   test "the Build calls of a sample are everything before its apply line" do

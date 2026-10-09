@@ -12,7 +12,7 @@ defmodule ExamplesWeb.InteractionLive do
   """
   use Phoenix.LiveView
 
-  alias ExamplesWeb.Panel
+  alias ExamplesWeb.{Highlight, Panel}
   alias Visualize.Chart
   alias Visualize.Hooks.Crosshair
   alias Visualize.Theme
@@ -237,7 +237,7 @@ defmodule ExamplesWeb.InteractionLive do
             The marks every demo above draws, and the markup each hook reads: the legend sits
             in the frame's right margin (<code>inside: false</code>), beside the plot.
           </p>
-          <pre><code><%= design_code() %></code></pre>
+          <Highlight.code code={design_code()} />
         </Panel.panel>
       </div>
     </main>
@@ -260,8 +260,9 @@ defmodule ExamplesWeb.InteractionLive do
     """
   end
 
+  # Elixir a reader can paste: each template sits in its ~H sigil, highlighted as HEEx.
   defp design_code do
-    """
+    ~S'''
     # The legend in the frame's right margin, beside the plot (spec/14 §4.5).
     legend: %{scale: :color, position: :top_right, inside: false, title: ["series"]}
 
@@ -270,21 +271,28 @@ defmodule ExamplesWeb.InteractionLive do
         tooltip: %{fields: [:series], template: "series {series}"}},
       %{type: :circle, channels: %{x: :hour, y: :value, series: :series},
         tooltip: %{fields: [:series, :hour, :value],
-                   template: "{series} at {hour}:00\\nvalue {value}",
+                   template: "{series} at {hour}:00\nvalue {value}",
                    event: :point_click}}
     ]
 
     # The tooltip reads the attributes the mark wrote; nothing is fetched on hover.
+    ~H"""
     <div id="chart" phx-hook="TooltipHook">{raw(svg)}</div>
+    """
 
     # The legend's entries and every element of a series share data-series; the hook joins them.
+    ~H"""
     <div id="chart" phx-hook="LegendHook" data-legend-event="legend_toggle">{raw(svg)}</div>
+    """
 
     # The crosshair reads the arrays attrs/3 wrote once, over SVG or canvas alike.
     crosshair = Visualize.Hooks.Crosshair.attrs(applied.frame, applied.sources)
+
+    ~H"""
     <div id="chart" phx-hook="CrosshairHook" {crosshair} data-crosshair-event="hover">
       {raw(svg)}
     </div>
     """
+    '''
   end
 end

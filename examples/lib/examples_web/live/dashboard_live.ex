@@ -15,7 +15,7 @@ defmodule ExamplesWeb.DashboardLive do
   import Visualize.Chart.Build
 
   alias Examples.Charts.Design
-  alias ExamplesWeb.Panel
+  alias ExamplesWeb.{Highlight, Panel}
   alias Visualize.Chart
   alias Visualize.Hooks.Crosshair
 
@@ -195,7 +195,7 @@ defmodule ExamplesWeb.DashboardLive do
 
         <Panel.panel id="panel-code">
           <:title>The design key and the markup</:title>
-          <pre><code><%= design_code() %></code></pre>
+          <Highlight.code code={design_code()} />
         </Panel.panel>
       </div>
     </main>
@@ -213,20 +213,23 @@ defmodule ExamplesWeb.DashboardLive do
     """
   end
 
+  # Elixir a reader can paste: the template sits in its ~H sigil, highlighted as HEEx.
   defp design_code do
-    """
+    ~S'''
     # One key per panel joins the group (spec/14 §2.9).
     interaction(sync: "dashboard")
 
     # The crosshair's arrays carry the group; the brush reads it from the chart's SVG.
+    ~H"""
     <div id="requests" phx-hook="CrosshairHook" {Crosshair.attrs(applied.frame, applied.sources)}>
       <div id="requests-brush" phx-hook="BrushHook" phx-update="ignore" data-brush-type="x">
         {raw(svg)}
       </div>
     </div>
+    """
 
     # Only the panel brushed pushes, once, with the window in milliseconds.
     def handle_event("brush_select", %{"domain" => [from, to]}, socket)
-    """
+    '''
   end
 end
