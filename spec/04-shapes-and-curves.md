@@ -318,7 +318,7 @@ with `v = max(0, value.(d))`, `total = Σ v`, `da = clamp(end − start, −2π,
 
 ### 8.2 Enumerations
 
-`order/2` MUST be one of `:none`, `:ascending`, `:descending`, `:reverse`, `:insideout`; `offset/2` MUST be one of `:none`, `:expand`, `:diverging`, `:silhouette`, `:wiggle`. Any other atom fails to match.
+`order/2` MUST be one of `:none`, `:ascending`, `:descending`, `:reverse`, `:insideout`, or `{:keys, list}` with `list` a list (#492); `offset/2` MUST be one of `:none`, `:expand`, `:diverging`, `:silhouette`, `:wiggle`. Any other atom fails to match.
 
 ### 8.3 Series Shape
 
@@ -339,6 +339,9 @@ one series per key **in key order**, with the series' `index` its position in th
 | `:ascending` | ascending by series sum |
 | `:descending` | descending by series sum |
 | `:insideout` | descending by sum, then alternated so the largest series is in the middle and successively smaller ones are placed outward on alternating sides |
+| `{:keys, list}` | the keys `list` names, bottom first, in its order; then every key it does not name, in key order |
+
+Every order but `{:keys, list}` is computed from the data `generate/2` is given, so the same order over a stream of data can put a different series at the bottom of each frame: an `:insideout` streamgraph re-sorts its layers whenever two sums cross. `{:keys, list}` is the fixed order (#492), as d3 allows any permutation through `stack.order`: it reads no value. A key of `list` that is not one of the stack's keys is ignored, and a key `list` names twice is placed at its first mention, so the order is always a permutation of the stack's keys. A key `list` leaves out is not an error either — it is placed above the named ones, the unnamed keys in key order — so a list that names the series a reader must find in place need not name them all. A caller that wants an order computed once, such as inside-out over a whole run, computes it from the data it chooses and passes the result as `{:keys, list}`.
 
 ### 8.5 Offset
 
@@ -359,7 +362,7 @@ The offsets are d3-shape's (D-22), applied in stacking order (8.4). Every series
 | `Visualize.Shape.Stack.new/0` | Returns a stack generator reading `key` through `Visualize.Data.Table.get/2`, `0` when absent or `nil`. |
 | `Visualize.Shape.Stack.keys/2` | Sets the list of series keys. |
 | `Visualize.Shape.Stack.value/2` | Sets the 2-arity `(datum, key) -> number` accessor. |
-| `Visualize.Shape.Stack.order/2` | Sets the series order (8.4). |
+| `Visualize.Shape.Stack.order/2` | Sets the series order (8.4): one of the atoms of 8.2, or `{:keys, list}`. |
 | `Visualize.Shape.Stack.offset/2` | Sets the baseline offset (8.5). |
 | `Visualize.Shape.Stack.generate/2` | Returns the series list as in 8.3. |
 

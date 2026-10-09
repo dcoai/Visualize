@@ -16,6 +16,13 @@ release it merely follows.
 
 ### Added
 
+- **A stack order fixed by explicit keys** (#492): `Visualize.Shape.Stack.order/2` and a
+  design's `:stack` step take `{:keys, list}`, the listed keys bottom first and every key
+  the list leaves out above them in key order; a listed key the stack lacks is ignored.
+  Every other order is computed from the data each call is given, so over an animated or
+  streaming source `:inside_out` re-sorts per frame and layers swap places; a fixed order
+  computed once does not. In JSON it is `{"$keys": [...]}`. A `:sort` step's `order` is
+  still a direction alone.
 - **A compiled chart's backdrop** (#476, D-120): `Visualize.Chart.Compiled.backdrop/1`, the
   `backdrop` key of `render/2`'s map and of `tick/3`'s payload hold a `:tiles` mark's
   images as an SVG document for a page to stack *beneath* the canvas, so a dense track

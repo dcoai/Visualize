@@ -269,6 +269,9 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:channel, v), do: is_number(v) or is_atom(v) or is_tuple(v)
   defp shape?(:field_ref, v), do: is_tuple(v)
   defp shape?(:adopted, v), do: match?({:frame, _f, _s}, v)
+  defp shape?(:key_order, v), do: match?({:keys, keys} when is_list(keys), v)
+  # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
+  defp shape?({:enum, _}, v), do: is_atom(v)
   defp shape?(:term, _), do: true
   defp shape?(_atomic, v), do: is_atom(v) or is_tuple(v) or is_binary(v)
 

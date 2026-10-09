@@ -162,6 +162,8 @@ defmodule Visualize.Chart.ValidatorTest do
     fit: [:frames, :main, :projection, :fit]
   }
 
+  @stack_orders [:none, :ascending, :descending, :inside_out, :reverse, :appearance]
+
   defp errors(design) do
     {:error, errors} = Validator.validate(design)
     errors
@@ -305,6 +307,24 @@ defmodule Visualize.Chart.ValidatorTest do
 
       assert errors(put_at(@full, path, %{op: :projection, fields: [:t, :v], field: :v})) ==
                [{path ++ [:field], {:invalid_for, :projection}}]
+    end
+
+    test "a stack's order may be fixed by its keys; a sort's may not (spec/14 §5.4, #492)" do
+      path = @paths[:transform]
+      step = %{op: :stack, fields: [:t, :v], order: {:keys, [:v, :t]}}
+      assert Validator.validate(put_at(@full, path, step)) == :ok
+
+      # A listed key the stack lacks is ignored at run time, so it is no fault here.
+      assert Validator.validate(put_at(@full, path, %{step | order: {:keys, [:nope]}})) == :ok
+
+      assert errors(put_at(@full, path, %{step | order: {:keys, ["v"]}})) ==
+               [{path ++ [:order], {:type, :key_order}}]
+
+      assert errors(put_at(@full, path, %{step | order: {:keys, :v}})) ==
+               [{path ++ [:order], {:type, {:one_of, [{:enum, @stack_orders}, :key_order]}}}]
+
+      sort = %{op: :sort, field: :v, order: {:keys, [:v]}}
+      assert errors(put_at(@full, path, sort)) == [{path ++ [:order], {:enum, @stack_orders}}]
     end
 
     test "a graph's node source must be a declared source (#346)" do
