@@ -977,6 +977,7 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - A host that opts in downloads a checksum-verified precompiled NIF at compile time and needs no Rust. depdep's store carries it in `_build`.
 - CI images have no system fonts, so the conformance suite renders with bundled test fonts and `skip_system_fonts: true`, which also makes raster goldens independent of the host.
 - The backend's release cadence is one maintainer's (a 16-month gap before 0.6.0), and keeping up with resvg depends on upstream contributions.
+- resvg 0.6 requires `rustler_precompiled ~> 0.8.1`, so the lock holds `rustler_precompiled` at 0.8.x (it was 0.9.0). Only the test-only Explorer also uses it, and it accepts `~> 0.7`. Moving it forward waits on a resvg release that allows it.
 
 ## 119. D-119 — Basemap tiles are beneath by type, at the nearest zoom, over a projection fitted without moving its centre
 
