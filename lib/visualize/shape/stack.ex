@@ -30,7 +30,7 @@ defmodule Visualize.Shape.Stack do
   @type t :: %__MODULE__{
           keys: [any()],
           value: (map(), any() -> number()) | nil,
-          order: :none | :ascending | :descending | :reverse | :insideout,
+          order: :none | :ascending | :descending | :reverse | :insideout | {:keys, [any()]},
           offset: :none | :expand | :diverging | :silhouette | :wiggle
         }
 
@@ -85,10 +85,27 @@ defmodule Visualize.Shape.Stack do
   - `:descending` - Largest series on bottom
   - `:reverse` - Reverse key order
   - `:insideout` - Larger series in middle (good for streamgraphs)
+  - `{:keys, list}` - The listed keys bottom first, then the unlisted keys in key order;
+    a listed key the stack does not have is ignored (spec/04 §8.4)
+
+  Every order but `{:keys, list}` is computed from the data `generate/2` is given, so over
+  a stream of data it can change between frames; `{:keys, list}` is fixed.
+
+      iex> alias Visualize.Shape.Stack
+      iex> Stack.new()
+      ...> |> Stack.keys([:a, :b, :c])
+      ...> |> Stack.order({:keys, [:c, :x, :a]})
+      ...> |> Stack.generate([%{a: 1, b: 2, c: 3}])
+      ...> |> Enum.map(&{&1.key, &1.index})
+      [a: 1, b: 2, c: 0]
   """
-  @spec order(t(), atom()) :: t()
+  @spec order(t(), atom() | {:keys, [any()]}) :: t()
   def order(%__MODULE__{} = stack, order)
       when order in [:none, :ascending, :descending, :reverse, :insideout] do
+    %{stack | order: order}
+  end
+
+  def order(%__MODULE__{} = stack, {:keys, keys} = order) when is_list(keys) do
     %{stack | order: order}
   end
 
@@ -141,7 +158,7 @@ defmodule Visualize.Shape.Stack do
       |> List.to_tuple()
 
     # The stacking order is a permutation of key indexes (d3's `order(series)`).
-    order_ix = stacking_order(series, order)
+    order_ix = stacking_order(series, order, keys)
 
     series
     |> apply_offset(order_ix, offset, length(data))
@@ -153,6 +170,20 @@ defmodule Visualize.Shape.Stack do
   end
 
   # --- Order: a permutation of key indexes -------------------------------------------------
+
+  # A fixed order (#492): the listed keys the stack has, at their first mention, then the
+  # rest in key order. It reads no value, so it is the same for every frame of a stream.
+  defp stacking_order(series, {:keys, listed}, keys) do
+    named =
+      listed
+      |> Enum.map(fn key -> Enum.find_index(keys, &(&1 == key)) end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    named ++ Enum.reject(stacking_order(series, :none), &(&1 in named))
+  end
+
+  defp stacking_order(series, order, _keys), do: stacking_order(series, order)
 
   defp stacking_order(series, :none), do: Enum.to_list(0..(tuple_size(series) - 1)//1)
   defp stacking_order(series, :reverse), do: Enum.reverse(stacking_order(series, :none))

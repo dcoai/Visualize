@@ -1,14 +1,23 @@
 defmodule Examples.Charts.Streamgraph do
   @moduledoc """
   Streamgraph as a design (#128): the `:stack` transform with the `:silhouette` offset and
-  the `:inside_out` order under one `:area` mark.
+  an inside-out order fixed by the series keys under one `:area` mark.
 
   The stack is a step of the mark's data pipeline (spec/14 §5.4.1): `offset: :silhouette`
-  centres the stream on zero and `order: :inside_out` puts the series whose peaks come
-  earliest in the middle — the two settings that make a stack a stream — and the mark reads
-  each layer's `y0` and `y1` with `key` as its `series` channel, which both splits the paths
-  and colours them from the `color` scale the legend explains. The basis curve is the
-  style's; the legend sits in the right margin the chart reserves for it (§4.5, #136).
+  centres the stream on zero and the order puts the heaviest series in the middle and the
+  lighter ones outward on alternating sides — the two settings that make a stack a stream —
+  and the mark reads each layer's `y0` and `y1` with `key` as its `series` channel, which
+  both splits the paths and colours them from the `color` scale the legend explains. The
+  basis curve is the style's; the legend sits in the right margin the chart reserves for it
+  (§4.5, #136).
+
+  **The order is fixed once, never per tick** (#492). `order: :inside_out` sorts by the
+  sums of the rows it is given, so over the animated run it re-sorted every tick and a
+  layer jumped to another place whenever two sums crossed — the bottom layer changed every
+  four to eight ticks. The order here is computed when the module is compiled, from each
+  series' total over one turn of the run's phase (every wave once round, which ranks them as
+  any longer run does), and passed as `order: {:keys, keys}`: each layer keeps its place
+  however its wave moves, and the still chart stacks in the same order as the run.
 
   The x axis prints `Month n` as the hand-written version did, the word the axis's
   `prefix` (spec/14 §4.4, #135).
@@ -21,6 +30,44 @@ defmodule Examples.Charts.Streamgraph do
   @margin %{top: 20, right: 100, bottom: 40, left: 40}
   @keys [:rock, :pop, :jazz, :classical, :electronic, :hiphop]
 
+  # The run's waves (`animated/1`): per genre the level, the swing, the months per radian
+  # and the phase's rate and offset, so a reading is
+  # `max(10, level + swing · sin(month / months + phase · rate + offset))`.
+  @waves [
+    rock: {30, 25, 4, 1.0, 0},
+    pop: {35, 20, 5, 1.3, 1},
+    jazz: {20, 15, 3, 0.7, 2},
+    classical: {18, 12, 6, 1.1, 3},
+    electronic: {32, 22, 4, 0.9, 4},
+    hiphop: {28, 18, 5, 1.4, 5}
+  ]
+  @phase_step 0.1
+
+  # Each genre's total over one turn of the phase (ticks 0..62, every wave once round).
+  @totals (for {key, {level, swing, months, rate, offset}} <- @waves, into: %{} do
+             total =
+               for tick <- 0..round(2 * :math.pi() / @phase_step - 1),
+                   month <- 1..24,
+                   reduce: 0 do
+                 acc ->
+                   phase = tick * @phase_step
+
+                   acc +
+                     max(10, level + swing * :math.sin(month / months + phase * rate + offset))
+               end
+
+             {key, total}
+           end)
+
+  # Inside-out, bottom first: the heaviest series in the middle, then each lighter one
+  # outward, alternately above and below — spec/04 §8.4's `:insideout` as a fixed list.
+  @order (fn ->
+            heaviest_first = Enum.sort_by(@keys, &Map.fetch!(@totals, &1), :desc)
+            above = Enum.take_every(heaviest_first, 2)
+            below = heaviest_first |> Enum.drop(1) |> Enum.take_every(2)
+            Enum.reverse(below) ++ above
+          end).()
+
   @data (for month <- 1..24 do
            %{
              month: month,
@@ -32,6 +79,9 @@ defmodule Examples.Charts.Streamgraph do
              hiphop: 20 + :rand.uniform(25) + if(month < 12, do: 10, else: 20)
            }
          end)
+
+  @doc "The stacking order, bottom first, fixed when the module is compiled (#492)."
+  def order, do: @order
 
   def title, do: "Streamgraph"
   def description, do: "Music genre popularity over time"
@@ -54,10 +104,10 @@ defmodule Examples.Charts.Streamgraph do
         ordinal_scale(:color, domain: @keys),
         axis(:x, :bottom, ticks: 8, prefix: "Month "),
         legend(:color, position: :top_right, inside: false),
-        # The silhouette offset centres the stream; inside-out ordering puts the earliest
-        # peaks in the middle (spec/14 §5.4.1).
+        # The silhouette offset centres the stream; the order is inside-out by the run's
+        # totals, fixed so no layer changes place as the waves move (spec/14 §5.4.1, #492).
         area(
-          stack(from(:months), @keys, offset: :silhouette, order: :inside_out),
+          stack(from(:months), @keys, offset: :silhouette, order: {:keys, @order}),
           %{x: :month, y: :y1, y0: :y0, series: :key},
           style: :stream
         )
@@ -77,18 +127,12 @@ defmodule Examples.Charts.Streamgraph do
 
   # Animation: every genre's popularity flows as its own wave.
   defp animated(tick) do
-    phase = tick * 0.1
+    phase = tick * @phase_step
 
     for month <- 1..24 do
-      %{
-        month: month,
-        rock: max(10, 30 + 25 * :math.sin(month / 4 + phase)),
-        pop: max(10, 35 + 20 * :math.sin(month / 5 + phase * 1.3 + 1)),
-        jazz: max(10, 20 + 15 * :math.sin(month / 3 + phase * 0.7 + 2)),
-        classical: max(10, 18 + 12 * :math.sin(month / 6 + phase * 1.1 + 3)),
-        electronic: max(10, 32 + 22 * :math.sin(month / 4 + phase * 0.9 + 4)),
-        hiphop: max(10, 28 + 18 * :math.sin(month / 5 + phase * 1.4 + 5))
-      }
+      for {key, {level, swing, months, rate, offset}} <- @waves, into: %{month: month} do
+        {key, max(10, level + swing * :math.sin(month / months + phase * rate + offset))}
+      end
     end
   end
 
@@ -97,6 +141,9 @@ defmodule Examples.Charts.Streamgraph do
     import Visualize.Chart.Build
 
     keys = [:rock, :pop, :jazz, :classical, :electronic, :hiphop]
+    # Bottom first, inside-out by each genre's total over the run: the heaviest, pop, in
+    # the middle. Computed once, so no layer changes place as the data moves.
+    order = [:classical, :hiphop, :electronic, :pop, :rock, :jazz]
 
     {:ok, design} =
       Visualize.Chart.compose([
@@ -109,8 +156,9 @@ defmodule Examples.Charts.Streamgraph do
         ordinal_scale(:color, domain: keys),
         axis(:x, :bottom, ticks: 8, prefix: "Month "),
         legend(:color, position: :top_right, inside: false),
-        # A stack centred on zero, the earliest peaks in the middle (spec/14 §5.4.1).
-        area(stack(from(:months), keys, offset: :silhouette, order: :inside_out),
+        # A stack centred on zero, its order fixed bottom first so no layer changes
+        # place between frames (spec/14 §5.4.1).
+        area(stack(from(:months), keys, offset: :silhouette, order: {:keys, order}),
           %{x: :month, y: :y1, y0: :y0, series: :key},
           style: :stream
         )

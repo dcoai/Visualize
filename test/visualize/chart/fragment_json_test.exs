@@ -96,6 +96,39 @@ defmodule Visualize.Chart.FragmentJsonTest do
     assert {:error, _reason} = Fragment.from_json("{not json")
   end
 
+  describe "a stack's fixed key order (spec/14 §11.2, #492)" do
+    @streams %{
+      version: 2,
+      sources: %{s: %{fields: [:t, :a, :b]}},
+      frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
+      marks: [
+        %{
+          type: :area,
+          data: %{
+            source: :s,
+            transforms: [%{op: :stack, fields: [:a, :b], order: {:keys, [:b, :a]}}]
+          },
+          channels: %{x: :t, y: :y1, y0: :y0, series: :key}
+        }
+      ]
+    }
+
+    test "a design whose stack order is fixed round-trips through JSON" do
+      {:ok, chart} = Visualize.Chart.from_map(@streams)
+      assert {:ok, json} = Visualize.Chart.to_json(chart)
+      assert json =~ ~s("$keys":["b","a"])
+      assert {:ok, back} = Visualize.Chart.from_json(json)
+      assert back == chart
+      assert hd(hd(back.marks).data.transforms).order == {:keys, [:b, :a]}
+    end
+
+    test "a named order still reads back as its atom" do
+      fragment = %{marks: [%{data: %{transforms: [%{op: :stack, order: :inside_out}]}}]}
+      assert {:ok, json} = Fragment.to_json(fragment)
+      assert Fragment.from_json(json) == {:ok, fragment}
+    end
+  end
+
   describe "an adopted scale (spec/14 §11, #480)" do
     @shared %{
       version: 2,

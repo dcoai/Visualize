@@ -71,6 +71,9 @@ defmodule Visualize.Chart.Codec do
   defp value(:adopted, {:frame, f, s}) when is_atom(f) and is_atom(s),
     do: %{"$adopted" => [Atom.to_string(f), Atom.to_string(s)]}
 
+  defp value(:key_order, {:keys, keys}) when is_list(keys),
+    do: %{"$keys" => Enum.map(keys, &value(:name, &1))}
+
   defp value(_type, v), do: term(v)
 
   defp category(:auto), do: "auto"
@@ -193,6 +196,9 @@ defmodule Visualize.Chart.Codec do
   defp read(:anchor, %{"$data" => [x, y]} = v) when map_size(v) == 1,
     do: {:data, [read_term(x), read_term(y)]}
 
+  defp read(:key_order, %{"$keys" => keys} = v) when map_size(v) == 1 and is_list(keys),
+    do: {:keys, Enum.map(keys, &read(:name, &1))}
+
   defp read(_type, v), do: read_term(v)
 
   defp slot_or_string(v) do
@@ -264,6 +270,9 @@ defmodule Visualize.Chart.Codec do
   # scale node may, and must not be read as one (#480).
   defp json_shape?({:node, _}, v), do: is_map(v) and not is_struct(v) and not tagged?(v)
   defp json_shape?(:adopted, v), do: is_map(v) and is_map_key(v, "$adopted") and map_size(v) == 1
+  defp json_shape?(:key_order, v), do: is_map(v) and is_map_key(v, "$keys") and map_size(v) == 1
+  # An enumeration's JSON is a string, so a tagged object beside one is never it (#492).
+  defp json_shape?({:enum, _}, v), do: is_binary(v)
   defp json_shape?({:map, _}, v), do: is_map(v) and not is_struct(v)
   defp json_shape?({:list, _}, v), do: is_list(v)
   defp json_shape?(:text, v), do: is_list(v) or is_binary(v)

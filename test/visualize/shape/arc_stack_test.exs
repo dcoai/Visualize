@@ -6,6 +6,8 @@ defmodule Visualize.Shape.ArcStackTest do
   alias Visualize.Shape
   alias Visualize.Shape.{Arc, Pie, Stack}
 
+  doctest Stack
+
   @pi :math.pi()
   @quarter %{start_angle: 0, end_angle: @pi / 2}
 
@@ -210,6 +212,40 @@ defmodule Visualize.Shape.ArcStackTest do
       assert Enum.map(series, & &1.index) == [1, 0]
       # b is at the bottom; a sits on top of it.
       assert Enum.map(hd(series).points, & &1.y0) == Enum.map(List.last(series).points, & &1.y1)
+    end
+
+    # A fixed order (spec/04 §8.4, #492): bottom first as listed, whatever the sums.
+    test "{:keys, list} stacks in exactly the listed order" do
+      data = [%{a: 5, b: 1, c: 3}, %{a: 1, b: 9, c: 2}]
+      stack = Stack.new() |> Stack.keys([:a, :b, :c]) |> Stack.order({:keys, [:b, :c, :a]})
+      series = Stack.generate(stack, data)
+
+      assert Enum.map(series, &{&1.key, &1.index}) == [a: 2, b: 0, c: 1]
+      [a, b, c] = Enum.map(series, &Enum.map(&1.points, fn p -> {p.y0, p.y1} end))
+      assert b == [{0, 1}, {0, 9}]
+      assert c == [{1, 4}, {9, 11}]
+      assert a == [{4, 9}, {11, 12}]
+
+      # The same keys over other data keep the same places: no value is read.
+      other = Stack.generate(stack, [%{a: 100, b: 0, c: 50}])
+      assert Enum.map(other, & &1.index) == [2, 0, 1]
+    end
+
+    test "{:keys, list} puts unlisted keys above in key order and ignores unknown ones" do
+      data = [%{a: 1, b: 2, c: 3, d: 4}]
+      stack = Stack.new() |> Stack.keys([:a, :b, :c, :d])
+
+      by = fn order ->
+        stack |> Stack.order(order) |> Stack.generate(data) |> Enum.map(&{&1.key, &1.index})
+      end
+
+      # c, then the unlisted a, b, d in key order; :x is not a key and is ignored.
+      assert by.({:keys, [:x, :c]}) == [a: 1, b: 2, c: 0, d: 3]
+      # A key named twice is placed at its first mention.
+      assert by.({:keys, [:d, :a, :d]}) == [a: 1, b: 2, c: 3, d: 0]
+      # Nothing listed that the stack has is key order, as :none.
+      assert by.({:keys, [:x]}) == by.(:none)
+      assert by.({:keys, []}) == by.(:none)
     end
 
     test ":insideout keeps its interleaving" do

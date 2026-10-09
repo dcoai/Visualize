@@ -194,7 +194,8 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:id, :field, :binding),
       spec(:as, {:one_of, [:name, {:list, :name}]}, :binding),
       spec(:thresholds, {:one_of, [:integer, {:list, :number}]}, :geometry),
-      spec(:order, {:enum, @orders}, :geometry),
+      # A computed order, or one fixed by the series keys (spec/14 §5.4.1, #492).
+      spec(:order, {:one_of, [{:enum, @orders}, :key_order]}, :geometry),
       spec(:offset, {:enum, @offsets}, :geometry),
       spec(:size, {:list, :number}, :geometry),
       spec(:padding, :number, :geometry),

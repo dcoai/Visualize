@@ -123,6 +123,23 @@ defmodule Visualize.Chart.TransformTest do
       assert by_key == %{b: 0, c: 1, a: 2}
     end
 
+    test ":stack takes a fixed key order through to the stack (#492)" do
+      rows = run(%{op: :stack, fields: [:a, :b, :c], order: {:keys, [:c, :x, :a]}}, @rows)
+      by_key = rows |> Enum.map(&{&1.key, &1.series}) |> Enum.uniq() |> Map.new()
+      assert by_key == %{c: 0, a: 1, b: 2}
+
+      # The bottom series is c from zero in every row, whatever the sums.
+      for %{key: :c} = row <- rows, do: assert(row.y0 == 0)
+
+      direct =
+        Stack.new()
+        |> Stack.keys([:a, :b, :c])
+        |> Stack.order({:keys, [:c, :a]})
+        |> Stack.generate(@rows)
+
+      assert Enum.map(direct, & &1.index) == [1, 2, 0]
+    end
+
     test ":sum groups by first appearance and :sort is stable" do
       assert run(%{op: :sum, field: :a, by: :k}, @rows) == [
                %{k: "k0", sum: 6},

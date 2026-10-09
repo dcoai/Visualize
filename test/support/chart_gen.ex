@@ -361,10 +361,13 @@ defmodule Visualize.ChartGen do
     bind(member_of(Schema.transform_ops()), fn op ->
       bind(transform_key_sets(op), fn {required, optional} ->
         # A fold's `as` is a pair of names, every other op's one (spec/14 §5.4).
+        # A stack's order may be fixed by its keys; a sort's is a direction (#492).
         keys =
-          if op == :fold,
-            do: Map.put(transform_keys(), :as, list_of(member_of(@names), length: 2)),
-            else: transform_keys()
+          case op do
+            :fold -> Map.put(transform_keys(), :as, list_of(member_of(@names), length: 2))
+            :stack -> Map.put(transform_keys(), :order, stack_order())
+            _op -> transform_keys()
+          end
 
         required = keys |> Map.take(required) |> Map.put(:op, constant(op))
         node(required, Map.take(keys, optional))
@@ -403,6 +406,10 @@ defmodule Visualize.ChartGen do
       from: duration(),
       to: duration()
     }
+  end
+
+  defp stack_order do
+    one_of([member_of(@orders), tuple({constant(:keys), list_of(member_of(@fields))})])
   end
 
   # A `:window` bound is `[n, unit]` (spec/14 §5.4.1, #426).

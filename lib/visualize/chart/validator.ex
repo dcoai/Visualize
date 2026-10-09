@@ -614,6 +614,8 @@ defmodule Visualize.Chart.Validator do
   defp as_type(%{key: :as}, _op), do: :name
   # `n` is a count or the plot's width for `:lttb`, and only a count for `:take`.
   defp as_type(%{key: :n}, :take), do: :integer
+  # A sort's order is a direction; a fixed key order is a stack's alone (§5.4, #492).
+  defp as_type(%{key: :order, type: {:one_of, [enum | _]}}, :sort), do: enum
   defp as_type(%{type: type}, _op), do: type
 
   defp allowed(:channels, type) do
@@ -735,6 +737,14 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp check(:adopted, _value, path, _ctx), do: [{path, {:type, :adopted}}]
+
+  # A stack's fixed order (spec/14 §5.4.1, #492): series keys, which need not be the
+  # step's fields — a listed key the stack lacks is ignored, never a fault.
+  defp check(:key_order, {:keys, keys}, path, _ctx) when is_list(keys) do
+    if Enum.all?(keys, &name?/1), do: [], else: [{path, {:type, :key_order}}]
+  end
+
+  defp check(:key_order, _value, path, _ctx), do: [{path, {:type, :key_order}}]
 
   defp check(:extent, :auto, _path, _ctx), do: []
 
@@ -1036,6 +1046,7 @@ defmodule Visualize.Chart.Validator do
   defp type_words(:name), do: "a name (an atom)"
   defp type_words(:field), do: "a field name"
   defp type_words(:field_ref), do: "{:field, name}"
+  defp type_words(:key_order), do: "{:keys, [name, …]}, the series keys bottom first"
   defp type_words(:channel), do: "a field name, a number or {:field, name}"
   defp type_words(:extent), do: "an extent: :auto, [lo, hi] or a list of categories"
   defp type_words(:text), do: ~S|a string, with #{var(:name)} for a variable|
