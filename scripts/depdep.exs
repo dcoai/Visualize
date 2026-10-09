@@ -22,6 +22,13 @@
 # `git@…:dco-tek/extla.git` (depdep #144). The restore now adopts this project's spelling.
 # Keys are unchanged again: no refill.
 #
+# v0.11.0 (#478) removes a third cause, and restores git sources. A dependency that recorded
+# a compile-time value this project's config sets read as `:envoutdated`, because nothing
+# had put the project's config into the VM that asked (depdep #161). A git dependency's
+# source (extla, here) is now its own object, keyed on the repository and the locked commit,
+# and restored before `mix deps.get`, so it is not cloned (depdep #163–#165). Keys are
+# unchanged again; the first run after this pin pushes the new source objects.
+#
 # A restore Mix still refuses is counted as a miss and recompiled, and the summary ends
 # `rebuilt N`. If N is not 0, `--explain-rebuilt` (v0.8.0) names which input the manifest
 # disagrees on.
@@ -46,6 +53,6 @@ url =
     token -> "https://gitlab-ci-token:#{token}@gitlab.conet.yarina.org/dco-tek/depdep.git"
   end
 
-Mix.install([{:depdep, git: url, tag: "v0.10.0"}])
+Mix.install([{:depdep, git: url, tag: "v0.11.0"}])
 
 Depdep.CLI.main(System.argv())
