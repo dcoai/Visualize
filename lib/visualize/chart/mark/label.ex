@@ -221,14 +221,15 @@ defmodule Visualize.Chart.Mark.Label do
 
   defp extent(_shape, _point, _centre), do: nil
 
-  # 0.6 × the font size per character is the estimate the legend's layout makes (§4.5).
-  @per_char 0.6
+  # The characters that fit a width: the inverse of `Text.width/2`, the estimate the
+  # legend's layout makes too (§4.5).
+  @em_per_char Text.width("x", 1)
 
   defp fit(:none, content, _width, _font_size), do: content
   defp fit(_fit, content, nil, _font_size), do: content
 
   defp fit(fit, content, width, font_size) do
-    room = trunc(width / (@per_char * font_size))
+    room = trunc(width / (@em_per_char * font_size))
     length = String.length(content)
 
     cond do

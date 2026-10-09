@@ -3,10 +3,9 @@ defmodule Examples.Charts.DonutChart do
   Donut chart as a design (#126): the pie chart's `:arc` with an inner radius, plus the two
   texts in the hole.
 
-  The hole's total and its caption are frame labels at `{:data, [0, 0]}` — the polar frame's
-  data anchor maps an angle and a radius through its own scales (spec/14 §6.3), and radius
-  zero is the centre — which is why the frame declares an `angle` and an `r` scale it draws
-  no axis for.
+  The hole's total and its caption are frame labels at `{:frame, :center}`, the plot's
+  centre — the polar origin (spec/14 §6.3, #489) — so the frame declares no `angle` or `r`
+  scale only to give the centre coordinates.
 
   The legend draws in the right margin the chart reserves for it, `inside: false` at the
   right, centred (spec/14 §4.5, #136). The ring is sized from the plot area that margin
@@ -54,17 +53,13 @@ defmodule Examples.Charts.DonutChart do
         style(:total_caption, extends: :label, font_size: 14, text_anchor: :middle),
         polar(margin: @margin),
         ordinal_scale(:color, domain: Enum.map(rows, & &1.category)),
-
-        # Declared so the centre has coordinates; no axis draws either of them.
-        linear_scale(:angle, domain: [0, 1]),
-        linear_scale(:r, domain: [0, 1]),
         legend(:color, position: :right, inside: false),
         arc(:slices, %{value: :revenue},
           options: %{inner_radius: outer * 0.6, outer_radius: outer, pad_angle: 0.02},
           style: :slice
         ),
-        label({:data, [0, 0]}, [currency(total)], dy: -10, style: :total),
-        label({:data, [0, 0]}, ["Total Revenue"], dy: 15, style: :total_caption)
+        label({:frame, :center}, [currency(total)], dy: -10, style: :total),
+        label({:frame, :center}, ["Total Revenue"], dy: 15, style: :total_caption)
       ])
 
     {design, %{slices: rows}}
@@ -103,10 +98,6 @@ defmodule Examples.Charts.DonutChart do
         style(:total, extends: :label, font_size: 28, font_weight: :bold, text_anchor: :middle),
         polar(margin: %{top: 0, right: 120, bottom: 0, left: 0}),
         ordinal_scale(:color, domain: Enum.map(rows, & &1.category)),
-
-        # Declared so the centre has coordinates; no axis draws either of them.
-        linear_scale(:angle, domain: [0, 1]),
-        linear_scale(:r, domain: [0, 1]),
         legend(:color, position: :right, inside: false),
 
         # An inner radius is all that separates a donut from a pie. The ring fits the
@@ -116,8 +107,8 @@ defmodule Examples.Charts.DonutChart do
           style: :slice
         ),
 
-        # A polar {:data, [angle, r]} anchor at radius zero is the hole.
-        label({:data, [0, 0]}, ["$1000K"], dy: -10, style: :total)
+        # The plot's centre, the polar origin: the hole.
+        label({:frame, :center}, ["$1000K"], dy: -10, style: :total)
       ])
 
     {:ok, applied} = Visualize.Chart.apply(design, sources: %{slices: rows})

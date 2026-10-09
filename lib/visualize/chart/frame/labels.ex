@@ -97,6 +97,13 @@ defmodule Visualize.Chart.Frame.Labels do
   defp place(%{plot: p}, {:frame, :bottom_right}),
     do: %{x: p.width - @inset, y: p.height - @inset, anchor: :end}
 
+  # The plot's centre (#489): in a `:polar` frame the origin the centred group is
+  # translated to — `[0, 0]` inside it, where a centred mark is drawn — while the labels
+  # are drawn in the plot's own coordinates, so it is the plot's middle in every kind,
+  # whatever the `r` scale's range.
+  defp place(%{plot: p}, {:frame, :center}),
+    do: %{x: p.width / 2, y: p.height / 2, anchor: :middle}
+
   defp place(frame, {:data, [x, y]}) do
     case point(frame, x, y) do
       nil -> nil
@@ -105,13 +112,14 @@ defmodule Visualize.Chart.Frame.Labels do
   end
 
   # The outward direction of an anchor (spec/14 §6.3): away from the plot for the titles
-  # and the caption, into the plot for a corner, none for a data point.
+  # and the caption, into the plot for a corner, none for a data point or the centre.
   defp outward(_frame, anchor) when anchor in [:title, :subtitle], do: {0, -1}
   defp outward(_frame, :caption), do: {0, 1}
   defp outward(_frame, {:frame, :top_left}), do: {1, 1}
   defp outward(_frame, {:frame, :top_right}), do: {-1, 1}
   defp outward(_frame, {:frame, :bottom_left}), do: {1, -1}
   defp outward(_frame, {:frame, :bottom_right}), do: {-1, -1}
+  defp outward(_frame, {:frame, :center}), do: nil
   defp outward(_frame, {:data, _point}), do: nil
 
   defp outward(frame, {:axis, scale}) do
