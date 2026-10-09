@@ -829,9 +829,20 @@ defmodule Visualize.Chart.Compiled do
 
   # -- text and the canvas --------------------------------------------------------------
 
+  # The canvas layer drops a labelled mark's labels group with its text (spec/14 §12.3,
+  # #485), so the canvas draws the wrapper and the elements' group alone.
   defp strip_text(%Element{children: children} = element) do
-    %{element | children: children |> Enum.reject(&(&1.type == :text)) |> Enum.map(&strip_text/1)}
+    %{
+      element
+      | children:
+          children
+          |> Enum.reject(&(&1.type == :text or labels?(&1)))
+          |> Enum.map(&strip_text/1)
+    }
   end
+
+  defp labels?(%Element{type: :group, style: %{class: "mark-labels"}}), do: true
+  defp labels?(_element), do: false
 
   defp only_text(%Element{type: :text} = element), do: element
 

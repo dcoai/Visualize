@@ -77,6 +77,67 @@ defmodule Visualize.Render.RasterGoldenTest do
     assert stored == Designs.names() |> Enum.map(&to_string/1) |> Enum.sort()
   end
 
+  # The gallery's pie (#485): slices separated by a 2-wide stroke in the background colour,
+  # labelled in the background colour, bold, over them; `label` is the label style's
+  # extra keys. Its picture is asserted against itself rather than stored: the stored set is
+  # the metresis panel types, one golden per `Visualize.Designs` name.
+  def pie(label) do
+    rows =
+      for {{name, value}, i} <-
+            Enum.with_index([{"Chrome", 64.5}, {"Safari", 18.8}, {"Edge", 4.9}, {"Other", 6.4}]),
+          do: %{name: name, value: value, index: i}
+
+    design = %{
+      version: 2,
+      sources: %{slices: %{fields: [:name, :value, :index]}},
+      styles: %{
+        slice: %{fill: {:field, :index}, stroke: :background, stroke_width: 2},
+        slice_label:
+          Map.merge(
+            %{extends: :label, fill: :background, font_size: 12, font_weight: :bold},
+            label
+          )
+      },
+      frames: %{
+        main: %{
+          kind: :polar,
+          margin: %{top: 0, right: 0, bottom: 0, left: 0},
+          scales: %{color: %{kind: :ordinal}}
+        }
+      },
+      marks: [
+        %{
+          type: :arc,
+          data: :slices,
+          channels: %{value: :value},
+          style: :slice,
+          label: %{text: [{:field, :name}], anchor: :middle, style: :slice_label}
+        }
+      ]
+    }
+
+    {:ok, applied} = Chart.apply(Chart.from_map!(design), sources: %{slices: rows})
+
+    {:ok, png, []} =
+      applied
+      |> Chart.generate(root: true, resolve: :literal)
+      |> Render.to_png([scale: 1, background: "#ffffff"] ++ @fonts)
+
+    png
+  end
+
+  @tag :resvg
+  test "a pie's labels are not stroked by its slices: the picture is the one with no stroke on the labels (#485)" do
+    {w, h, labelled} = PNGPixels.decode(pie(%{}))
+    {^w, ^h, unstroked} = PNGPixels.decode(pie(%{stroke: :none}))
+    assert PNGPixels.differing(labelled, unstroked, @channel_tolerance) == 0
+
+    # A halo the label style asks for is drawn: the picture changes by more than the
+    # tolerance allows, so the comparison above would see an inherited outline.
+    {^w, ^h, halo} = PNGPixels.decode(pie(%{stroke: "#000000", stroke_width: 2}))
+    assert PNGPixels.differing(labelled, halo, @channel_tolerance) > w * h * @pixel_fraction
+  end
+
   @tag :resvg
   test "the tolerance catches a picture that changed" do
     {png, []} = render(:bar)

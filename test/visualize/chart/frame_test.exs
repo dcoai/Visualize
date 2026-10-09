@@ -711,8 +711,8 @@ defmodule Visualize.Chart.FrameTest do
         |> Frame.generate(sources: %{primary: @rows}, size: @size)
 
       group = Enum.find(tree.children, &(&1.style[:class] == "mark mark-circle"))
-      [circle | _] = group.children
-      text = Enum.find(group.children, &(&1.type == :text))
+      # A labelled mark: its elements' group, then its labels' group beside it (§5.6).
+      [%{children: [circle | _]}, %{children: [text | _]}] = group.children
       # 4 up for the anchor's inset, 6 more for the margin, hanging below its point.
       assert text.attrs == %{x: circle.attrs.cx, y: circle.attrs.cy - 4 - 6, dy: "0.71em"}
 

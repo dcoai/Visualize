@@ -51,6 +51,26 @@ defmodule Visualize.Chart.MarkTest do
     Mark.generate(frame, hd(chart.marks), Keyword.put_new(opts, :sources, @sources))
   end
 
+  # A labelled mark's two parts (spec/14 §5.6, #485): its elements' group, which carries
+  # the mark's style, and the texts of its labels' group beside it.
+  defp parts(%Element{
+         children: [
+           %Element{style: %{class: "mark-elements"}} = elements,
+           %Element{style: %{class: "mark-labels"} = style, children: labels}
+         ]
+       }) do
+    assert style == %{class: "mark-labels"}
+    {elements, labels}
+  end
+
+  defp labels(group), do: group |> parts() |> elem(1)
+
+  # A labelled mark read as one group: its elements' group with the labels after them.
+  defp flat(group) do
+    {elements, labels} = parts(group)
+    %{elements | children: elements.children ++ labels}
+  end
+
   defp x, do: Scale.linear() |> Scale.domain([0, 3]) |> Scale.range([0, 300])
   defp y, do: Scale.linear() |> Scale.domain([0, 10]) |> Scale.range([200, 0])
   defp px(field), do: fn d -> Scale.apply(x(), d[field]) end
@@ -123,10 +143,12 @@ defmodule Visualize.Chart.MarkTest do
         |> Rule.label(fn d -> "at #{d.t}" end)
         |> Rule.generate(@rows)
 
-      assert length(group.children) == 4
+      # The generator's text is lifted out of its rule's group into the labels' group (#485).
+      {elements, texts} = parts(group)
+      assert length(elements.children) == 4
 
-      for {got, want} <- Enum.zip(group.children, expected) do
-        [line, text] = got.children
+      for {{got, text}, want} <- Enum.zip(Enum.zip(elements.children, texts), expected) do
+        [line] = got.children
         [want_line, want_text] = want.children
         assert line.attrs == want_line.attrs
         assert {text.attrs, text.content} == {want_text.attrs, want_text.content}
@@ -279,7 +301,7 @@ defmodule Visualize.Chart.MarkTest do
       chart = chart(mark, %{sources: %{primary: %{fields: [:a0, :a1, :r]}}})
       frame = Frame.new(chart, sources: sources, size: {300, 200})
       group = Mark.generate(frame, hd(chart.marks), sources: sources)
-      {paths, texts} = Enum.split_with(group.children, &(&1.type == :path))
+      {paths, texts} = Enum.split_with(flat(group).children, &(&1.type == :path))
 
       expected =
         for row <- rows do
@@ -302,7 +324,7 @@ defmodule Visualize.Chart.MarkTest do
 
       # A datum without both angles is dropped; the pie's angle options are not read.
       more = %{primary: rows ++ [%{a0: 0, a1: nil, r: 10}]}
-      assert length(Mark.generate(frame, hd(chart.marks), sources: more).children) == 6
+      assert length(flat(Mark.generate(frame, hd(chart.marks), sources: more)).children) == 6
     end
 
     test ":rect and :circle are one element per datum in pixels" do
@@ -962,7 +984,7 @@ defmodule Visualize.Chart.MarkTest do
     test "one text per element at the anchor point, the field read from the datum" do
       label = %{text: ["v=", {:field, :v}], anchor: :right, dx: 1, dy: 2}
       group = generate(%{type: :symbol, channels: %{x: :t, y: :v}, label: label})
-      texts = Enum.filter(group.children, &(&1.type == :text))
+      texts = labels(group)
       assert length(texts) == 4
       [first | _] = texts
       assert first.attrs == %{x: 5.0, y: 122.0, dy: "0.32em"}
@@ -980,7 +1002,7 @@ defmodule Visualize.Chart.MarkTest do
           label: %{text: [{:field, :k}]}
         })
 
-      [_, _, t0, t1] = group.children
+      [_, _, t0, t1] = flat(group).children
       assert {t0.content, t0.attrs} == {"k0", %{x: 200.0, y: 156.0}}
       assert {t1.content, t1.attrs} == {"k1", %{x: 300.0, y: 56.0}}
       assert t0.style.text_anchor == :middle
@@ -1021,8 +1043,8 @@ defmodule Visualize.Chart.MarkTest do
         generate(
           %{type: :rose, channels: %{angle: :t, value: :v}, options: %{width: 1}, label: label},
           %{frames: %{main: polar}}
-        ).children
-        |> Enum.filter(&(&1.type == :text))
+        )
+        |> labels()
       end
 
       # Sector i is centred on its angle, a quarter turn each from 12 o'clock: up, right,
@@ -1065,8 +1087,8 @@ defmodule Visualize.Chart.MarkTest do
     test "the edge anchors of a rect land 4 outside the midpoint of that edge; on a circle they fall back to the side (#134)" do
       at = fn anchor, type, channels ->
         [first | _] =
-          generate(%{type: type, channels: channels, label: %{text: ["!"], anchor: anchor}}).children
-          |> Enum.filter(&(&1.type == :text))
+          generate(%{type: type, channels: channels, label: %{text: ["!"], anchor: anchor}})
+          |> labels()
 
         {first.attrs, first.style.text_anchor}
       end
@@ -1083,7 +1105,7 @@ defmodule Visualize.Chart.MarkTest do
 
     test "fit cuts a label to its element's width or hides it; a type with no extent fits everything (#138)" do
       texts = fn mark ->
-        generate(mark).children |> Enum.filter(&(&1.type == :text)) |> Enum.map(& &1.content)
+        generate(mark) |> labels() |> Enum.map(& &1.content)
       end
 
       # The rects span 500, 900, 100 and 500 px (t to hi through x); at the default 12px
@@ -1114,6 +1136,126 @@ defmodule Visualize.Chart.MarkTest do
       # A symbol has no extent, so nothing is cut.
       symbol = %{type: :symbol, channels: %{x: :t, y: :v}, label: label.(:truncate, long)}
       assert texts.(symbol) |> hd() == long
+    end
+  end
+
+  describe "a label is not drawn in its mark's style (spec/14 §5.5, §5.6, #485)" do
+    @outlined %{outline: %{stroke: "#ffffff", stroke_width: 2, fill_opacity: 0.5}}
+
+    @label_polar %{
+      kind: :polar,
+      margin: %{top: 0, right: 0, bottom: 0, left: 0},
+      scales: %{angle: %{kind: :radial, domain: [0, 4]}, r: %{kind: :linear, domain: [0, 10]}}
+    }
+
+    # Every type that draws an inline label, in the frame it draws in, stroked by its style.
+    @labelled [
+      {:line, %{x: :t, y: :v}, :cartesian},
+      {:area, %{x: :t, y: :v}, :cartesian},
+      {:band, %{x0: :t, x1: :hi, y: :v}, :cartesian},
+      {:rule, %{x: :t}, :cartesian},
+      {:x_band, %{x0: :t, x1: :hi}, :cartesian},
+      {:symbol, %{x: :t, y: :v}, :cartesian},
+      {:rect, %{x0: :t, x1: :hi, y0: 0, y1: :v}, :cartesian},
+      {:circle, %{x: :t, y: :v}, :cartesian},
+      {:arc, %{value: :v}, :cartesian},
+      {:rose, %{angle: :t, value: :v}, :polar},
+      {:needle, %{x: :t, y: :v}, :polar},
+      {:rect, %{x0: :t, x1: :hi, y0: :lo, y1: :v}, :polar}
+    ]
+
+    # Every text of a tree with the elements above it, nearest first: a frame with no axes,
+    # legend or labels, so every text is a mark's label.
+    defp label_paths(%Element{} = element, ancestors \\ []) do
+      case element do
+        %Element{type: :text} ->
+          [{element, ancestors}]
+
+        %Element{children: children} ->
+          Enum.flat_map(children, &label_paths(&1, [element | ancestors]))
+      end
+    end
+
+    defp drawn(type, channels, kind, label_style) do
+      label = Map.merge(%{text: [{:field, :k}], anchor: :middle}, label_style)
+      mark = %{type: type, channels: channels, style: :outline, label: label}
+      frames = if kind == :polar, do: %{frames: %{main: @label_polar}}, else: %{}
+      chart = chart(mark, Map.merge(%{styles: @outlined}, frames))
+      frame = Frame.new(chart, sources: @sources, size: {300, 200})
+      Frame.generate(frame, sources: @sources, paths: true)
+    end
+
+    test "no mark's label inherits the mark's stroke, while its elements keep it" do
+      for {type, channels, kind} <- @labelled do
+        tree = drawn(type, channels, kind, %{})
+        paths = label_paths(tree)
+        assert paths != [], "#{type} in #{kind}: no labels"
+
+        for {text, ancestors} <- paths do
+          refute Map.has_key?(text.style, :stroke), "#{type}: the label has a stroke"
+
+          for ancestor <- ancestors do
+            refute Map.has_key?(ancestor.style, :stroke),
+                   "#{type}: a label sits under #{inspect(ancestor.style)}"
+
+            refute Map.has_key?(ancestor.style, :fill_opacity), "#{type}: a faded label"
+          end
+
+          # The mark is still the wrapper the hooks read: its class and data-node (D-75).
+          mark = Enum.find(ancestors, &match?(%{style: %{class: "mark " <> _}}, &1))
+          assert mark.attrs["data-node"] == "marks[0]", "#{type}"
+          assert mark.style == %{class: "mark mark-#{type}"}
+
+          assert [%{style: %{class: "mark-elements", stroke: "#ffffff", stroke_width: 2}}, _] =
+                   mark.children
+        end
+      end
+    end
+
+    test "a label style that sets a stroke keeps it: a deliberate halo" do
+      halo = %{halo: %{stroke: "#000000", stroke_width: 3}}
+
+      for {type, channels, kind} <- @labelled do
+        label = %{text: [{:field, :k}], anchor: :middle, style: :halo}
+        mark = %{type: type, channels: channels, style: :outline, label: label}
+        frames = if kind == :polar, do: %{frames: %{main: @label_polar}}, else: %{}
+        chart = chart(mark, Map.merge(%{styles: Map.merge(@outlined, halo)}, frames))
+        frame = Frame.new(chart, sources: @sources, size: {300, 200})
+        tree = Frame.generate(frame, sources: @sources)
+
+        for {text, _ancestors} <- label_paths(tree) do
+          assert {text.style.stroke, text.style.stroke_width} == {"#000000", 3}, "#{type}"
+        end
+      end
+    end
+
+    test "the SVG says it: no stroke on the labels' group or above it" do
+      tree = drawn(:arc, %{value: :v}, :cartesian, %{})
+      svg = Render.to_string(tree, backend: :svg)
+
+      assert svg =~
+               ~r{<g class="mark mark-arc" data-node="marks\[0\]"[^>]*><g class="mark-elements"[^>]*stroke="#ffffff"[^>]*>.*</g><g class="mark-labels"><text class="mark-label"}s
+
+      refute svg =~ ~r{<g class="mark-labels"[^>]*stroke}
+    end
+
+    test "an unlabelled mark is the one styled group as before, and a labelled one with no rows is still the wrapper" do
+      plain =
+        generate(%{type: :circle, channels: %{x: :t, y: :v}, style: :outline}, %{
+          styles: @outlined
+        })
+
+      assert plain.style.class == "mark mark-circle" and plain.style.stroke == "#ffffff"
+      assert Enum.all?(plain.children, &(&1.type == :circle))
+
+      empty =
+        generate(
+          %{type: :circle, channels: %{x: :t, y: :v}, label: %{text: ["!"]}},
+          %{},
+          sources: %{}
+        )
+
+      assert {%{children: []}, []} = parts(empty)
     end
   end
 
@@ -1351,7 +1493,7 @@ defmodule Visualize.Chart.MarkTest do
           label: %{text: [{:field, :k}], anchor: :outward}
         })
 
-      texts = Enum.filter(group.children, &(&1.type == :text))
+      texts = labels(group)
       assert length(texts) == 4
       [text | _] = texts
       # Beyond the outer radius (v = 4 → r(4)), along the sector's centre ray.
@@ -1368,7 +1510,7 @@ defmodule Visualize.Chart.MarkTest do
           label: %{text: [{:field, :k}]}
         })
 
-      needles = Enum.filter(group.children, &(&1.type == :group))
+      needles = Enum.filter(flat(group).children, &(&1.type == :group))
       assert length(needles) == 4
       [first | _] = needles
       assert first.style == %{class: "needle"}
@@ -1385,7 +1527,7 @@ defmodule Visualize.Chart.MarkTest do
       assert %Element{path: %Path{commands: [{:M, -5.0, +0.0} | _]}} = hub
 
       # The label sits outward of the tip by default.
-      [text | _] = Enum.filter(group.children, &(&1.type == :text))
+      [text | _] = labels(group)
       assert :math.sqrt(text.attrs.x * text.attrs.x + text.attrs.y * text.attrs.y) > r
 
       # Without y the needle reaches the outer radius; the group is not bent again.
