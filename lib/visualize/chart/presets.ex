@@ -261,14 +261,16 @@ defmodule Visualize.Chart.Presets do
       style: :slice
     ]
 
-    label = %{text: [{:field, :label}], anchor: :middle, style: :slice_label}
+    # A label on a fill is inked by contrast with it and drawn only where its whole name
+    # fits the slice, as the gallery's pie is (spec/14 §15.3, D-123, #494).
+    label = %{text: [{:field, :label}], anchor: :middle, fit: :hide, style: :slice_label}
     opts = if labelled? and a.show_labels, do: Keyword.put(opts, :label, label), else: opts
 
     fold(
       seed(a, [:value, :index] ++ if(labelled?, do: [:label], else: [])) ++
         [
           style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 2),
-          style(:slice_label, fill: :background, font_size: :label_size),
+          style(:slice_label, fill: :contrast, font_size: :label_size),
           polar(margin: @zero_margin),
           ordinal_scale(:color, range: a.colors),
           arc(:data, %{value: :value}, opts)
@@ -412,7 +414,8 @@ defmodule Visualize.Chart.Presets do
     radius = min(a.width, a.height) / 2
 
     # The nodes below the root with a positive extent (spec/10 §3.4), each arc over its
-    # own angles (D-69) and labelled at its centroid as the pie is.
+    # own angles (D-69) and labelled at its centroid as the pie is: inked by contrast with
+    # the arc and cut to the arc's length (spec/14 §15.4, D-123, #494).
     data =
       from(:data)
       |> partition(id: :id, by: :parent, field: :value, size: [2 * :math.pi(), radius])
@@ -423,11 +426,16 @@ defmodule Visualize.Chart.Presets do
       seed(a, @hierarchy_fields) ++
         [
           style(:arc, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
-          style(:arc_label, fill: :background, font_size: :label_size),
+          style(:arc_label, fill: :contrast, font_size: :label_size),
           polar(margin: @zero_margin),
           branch_scale(a),
           arc(data, %{start: :x0, end: :x1, inner: :y0, outer: :y1},
-            label: %{text: [{:field, :label}], anchor: :middle, style: :arc_label},
+            label: %{
+              text: [{:field, :label}],
+              anchor: :middle,
+              fit: :truncate,
+              style: :arc_label
+            },
             style: :arc
           )
         ]

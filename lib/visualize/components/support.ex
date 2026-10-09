@@ -3,7 +3,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @moduledoc false
     # What every component shares (spec/10 §1.2, D-64): the preset drawn through the layer,
     # the elements a template prints picked out of the frame's group, the `<svg>` shell
-    # attributes, the transition, and the label truncation of the hierarchy components.
+    # attributes, the transition, and the label truncation of the treemap.
 
     alias Visualize.{Chart, Theme}
     alias Visualize.Chart.{Frame, Mark, Presets, Style}
@@ -82,6 +82,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
          do: %{elements | children: elements.children ++ labels}
 
     defp read(mark), do: mark
+
+    @doc false
+    # The elements a template prints, each given the `labels` printed after it: the labels
+    # all after the last element and none after any other, the order the layer draws a
+    # labelled mark in (spec/14 §5.6, #485). A label a mark's fit dropped has no text, so
+    # its element's place cannot be told from its text's, and a label is never printed
+    # under a later element (spec/10 §2.5, §3.4, #494).
+    @spec followed([map()], [map()]) :: [map()]
+    def followed([], _labels), do: []
+
+    def followed(items, labels) do
+      {init, [last]} = Enum.split(items, -1)
+      Enum.map(init, &Map.put(&1, :labels, [])) ++ [Map.put(last, :labels, labels)]
+    end
 
     @doc false
     # The axis on `side` as the frame drew it: the `Visualize.Axis` group inside the

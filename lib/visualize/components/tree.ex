@@ -10,8 +10,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `:treemap` or `:partition`, then the `:filter` steps that keep what spec/10 §3 draws)
     lay the rows out, the marks draw them through `Visualize.Chart.Frame.generate/2`, and
     the component prints the elements in the markup spec/10 §3 declares, reading the rows
-    beside them for what follows the node — the tree's circle-and-text group, the treemap's
-    and the sunburst's label rules. Node labels default to the `:name` or `"name"` of a
+    beside them for what follows the node — the tree's circle-and-text group and the
+    treemap's label rule. The sunburst's labels are its mark's, fitted and inked by the
+    layer. Node labels default to the `:name` or `"name"` of a
     node's data; leaf values to its `:value` or `"value"`.
 
     ## Usage
@@ -237,8 +238,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `data` - the nested map with leaf values (required)
     * `width`, `height` - pixels (default 600 by 600); the radius is half the smaller
     * `value` - as `treemap_chart/1`
-    * `label` - as `tree_diagram/1`; drawn at the centroid of an arc thick enough and long
-      enough to hold text
+    * `label` - as `tree_diagram/1`; drawn at the arc's centroid, cut with `…` to the arc's
+      length there, and inked the theme's text or background, whichever reads on the arc
     * `colors` - as `treemap_chart/1`
     * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
       conventions
@@ -265,28 +266,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def sunburst_chart(assigns) do
       drawn = Support.draw(:sunburst_chart, assigns)
       [mark] = Support.marks(drawn.group)
-      [nodes] = drawn.rows
       {paths, texts} = Enum.split_with(mark.children, &(&1.type == :path))
 
       # One arc per `:arc` element — the design filters to the nodes below the root with a
-      # positive extent — and its label at the mark's own text, the centroid, kept when
-      # the row's ring is thick and long enough (spec/10 §3.4).
-      arcs =
-        Enum.zip_with([paths, texts, nodes], fn [path, text, node] ->
-          thickness = node.y1 - node.y0
-          length = (node.x1 - node.x0) * (node.y0 + node.y1) / 2
+      # positive extent — then the labels the layer kept, cut to their arcs and each in
+      # its own contrast ink, at the mark's own texts, the centroids (spec/10 §3.4, #494).
+      labels =
+        for text <- texts do
+          %{text: text.content, x: fmt(text.attrs.x), y: fmt(text.attrs.y), fill: text.style.fill}
+        end
 
+      arcs =
+        paths
+        |> Enum.map(fn path ->
           %{
             d: Support.d(path),
             fill: path.style.fill,
             stroke: mark.style.stroke,
-            stroke_width: mark.style.stroke_width,
-            label:
-              if(thickness > 15 and length > 30, do: Support.truncate(text.content, length - 8)),
-            cx: fmt(text.attrs.x),
-            cy: fmt(text.attrs.y)
+            stroke_width: mark.style.stroke_width
           }
         end)
+        |> Support.followed(labels)
 
       assigns =
         assign(assigns,
@@ -294,7 +294,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
           centre: {fmt(drawn.plot.width / 2), fmt(drawn.plot.height / 2)},
           theme: drawn.theme,
           ids: drawn.ids,
-          background: Support.css(drawn.theme, :background),
           label_size: Support.css(drawn.theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
@@ -306,15 +305,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <g transform={"translate(#{elem(@centre, 0)}, #{elem(@centre, 1)})"}>
           <%= for a <- @arcs do %>
             <path d={a.d} fill={a.fill} stroke={a.stroke} stroke-width={a.stroke_width} {@transition} />
-            <text
-              :if={a.label}
-              x={a.cx}
-              y={a.cy}
-              text-anchor="middle"
-              dominant-baseline="middle"
-              font-size={@label_size}
-              fill={@background}
-            >{a.label}</text>
+            <%= for label <- a.labels do %>
+              <text
+                x={label.x}
+                y={label.y}
+                text-anchor="middle"
+                dominant-baseline="middle"
+                font-size={@label_size}
+                fill={label.fill}
+              >{label.text}</text>
+            <% end %>
           <% end %>
         </g>
       </svg>
