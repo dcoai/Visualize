@@ -85,6 +85,12 @@ release it merely follows.
 
 ### Fixed
 
+- **A stack's `:insideout` order is d3's `stackOrderInsideOut`** (#496, D-125). It put the
+  heaviest series at the bottom, where the spec said the middle. It now takes the series in
+  order of appearance (by the index of each one's peak) and places each on whichever side
+  has the smaller running sum, so the earliest-peaking series sits in the middle and later
+  ones outward. Any stack ordered `:insideout`, or a design's `:stack` step ordered
+  `:inside_out`, stacks in a different order.
 - **A drop below a closed group in the builder's stack lands where it was aimed** (#468).
   `BuilderHook` counted the drawn rows to name a drop's position, while every flat position
   the builder reads counts a closed group's rows too, so a drop between a closed group and

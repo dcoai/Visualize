@@ -247,17 +247,67 @@ defmodule Visualize.Shape.ArcStackTest do
       assert by.({:keys, [:x]}) == by.(:none)
       assert by.({:keys, []}) == by.(:none)
     end
+  end
 
-    test ":insideout keeps its interleaving" do
-      data = [%{a: 5, b: 1, c: 3, d: 2}]
-      stack = Stack.new() |> Stack.keys([:a, :b, :c, :d]) |> Stack.order(:insideout)
-      # Descending by sum: a c d b; interleaved (pairs to top and bottom): a d b c.
-      assert Enum.map(Stack.generate(stack, data), &{&1.key, &1.index}) == [
-               a: 0,
-               b: 2,
-               c: 3,
-               d: 1
-             ]
+  # d3-shape 3.2.0 `src/order/insideOut.js`, lines 15-26:
+  #
+  #     for (i = 0; i < n; ++i) {
+  #       j = order[i];                         // order = appearance(series)
+  #       if (top < bottom) { top += sums[j]; tops.push(j); }
+  #       else { bottom += sums[j]; bottoms.push(j); }
+  #     }
+  #     return bottoms.reverse().concat(tops);
+  #
+  # with `appearance` (`src/order/appearance.js`, lines 3-6) a sort of the key indexes by
+  # `peak`, the index of the first greatest value (lines 8-11, `>` keeps the first), and
+  # `sum` (`src/order/ascending.js`, lines 8-11) the signed sum. Each expected order below is
+  # that loop run by hand, and was confirmed with `stack().order(stackOrderInsideOut)` under
+  # d3-shape 3.2.0. `{key, index}`: index 0 is the bottom of the stack.
+  describe "Stack :insideout is d3's stackOrderInsideOut (spec/04 §8.4, D-125)" do
+    defp inside_out(columns) do
+      keys = Enum.map(columns, &elem(&1, 0))
+      n = columns |> hd() |> elem(1) |> length()
+      data = for j <- 0..(n - 1), do: Map.new(columns, fn {k, vs} -> {k, Enum.at(vs, j)} end)
+
+      Stack.new()
+      |> Stack.keys(keys)
+      |> Stack.order(:insideout)
+      |> Stack.generate(data)
+      |> Enum.map(&{&1.key, &1.index})
+    end
+
+    test "the earliest peak sits in the middle, later peaks outward on the lighter side" do
+      # Peaks: b 0, d 1, e 2, a 3, c 4; sums a 13, b 10, c 8, d 11, e 9.
+      # b → bottom (0 < 0 is false; bottom 10), d → top (0 < 10; top 11),
+      # e → bottom (11 < 10 is false; bottom 19), a → top (11 < 19; top 24),
+      # c → bottom (24 < 19 is false). bottoms b e c reversed, then tops d a: c e b d a.
+      assert inside_out(
+               a: [1, 1, 1, 9, 1],
+               b: [6, 1, 1, 1, 1],
+               c: [1, 1, 1, 1, 4],
+               d: [1, 7, 1, 1, 1],
+               e: [1, 1, 5, 1, 1]
+             ) == [a: 4, b: 2, c: 0, d: 3, e: 1]
+    end
+
+    test "one datum: every peak is at 0, so appearance is key order and sums decide the side" do
+      # The case the #26 test pinned as a d b c (the heaviest, a, at the bottom).
+      # a → bottom (5), b → top (1 < 5), c → top (4 < 5), d → top (6): a, then b c d.
+      assert inside_out(a: [5], b: [1], c: [3], d: [2]) == [a: 0, b: 1, c: 2, d: 3]
+    end
+
+    test "a tied peak keeps the first index, and tied peaks keep key order" do
+      # a's peak is index 0 (2 at 0 and 1), c's is 0 (1 at 0 and 2), b's is 1 (3 at 1 and 2).
+      # Appearance (stable): a c b. a → bottom (4), c → top (2 < 4), b → top (2 < 4): a c b.
+      assert inside_out(a: [2, 2, 0], b: [0, 3, 3], c: [1, 0, 1]) == [a: 0, b: 2, c: 1]
+    end
+
+    test "sums are signed: a negative series lowers its side's total" do
+      # Peaks: a 0, d 0, b 1 (-1 > -3), c 1; appearance a d b c; sums a 4, b -4, c 2, d 1.
+      # a → bottom (4), d → top (1 < 4; top 1), b → top (1 < 4; top -3), c → top (-3 < 4).
+      # Summing magnitudes would send c to the bottom (5 < 4 is false): c a d b.
+      assert inside_out(a: [4, 0], b: [-3, -1], c: [0, 2], d: [1, 0]) ==
+               [a: 0, b: 2, c: 3, d: 1]
     end
   end
 

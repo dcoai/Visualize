@@ -332,16 +332,18 @@ one series per key **in key order**, with the series' `index` its position in th
 
 ### 8.4 Order
 
+A series' sum is `Σ v` over its points, signed. Each sequence runs from the bottom of the stack (`index` `0`) up.
+
 | Order | Series sequence |
 |---|---|
 | `:none` | key order |
 | `:reverse` | reversed key order |
 | `:ascending` | ascending by series sum |
 | `:descending` | descending by series sum |
-| `:insideout` | descending by sum, then alternated so the largest series is in the middle and successively smaller ones are placed outward on alternating sides |
+| `:insideout` | d3's `stackOrderInsideOut` (D-125): the series are taken in order of appearance — ascending by the index of each series' peak, its first greatest value, ties in key order — and each in turn joins the upper side when the upper side's running sum is less than the lower side's, otherwise the lower side, adding its series sum to that side's; the sequence is the lower side reversed, then the upper side. The earliest-peaking series sits in the middle, later-peaking ones are placed outward, and the two sides' sums stay balanced. |
 | `{:keys, list}` | the keys `list` names, bottom first, in its order; then every key it does not name, in key order |
 
-Every order but `{:keys, list}` is computed from the data `generate/2` is given, so the same order over a stream of data can put a different series at the bottom of each frame: an `:insideout` streamgraph re-sorts its layers whenever two sums cross. `{:keys, list}` is the fixed order (#492), as d3 allows any permutation through `stack.order`: it reads no value. A key of `list` that is not one of the stack's keys is ignored, and a key `list` names twice is placed at its first mention, so the order is always a permutation of the stack's keys. A key `list` leaves out is not an error either — it is placed above the named ones, the unnamed keys in key order — so a list that names the series a reader must find in place need not name them all. A caller that wants an order computed once, such as inside-out over a whole run, computes it from the data it chooses and passes the result as `{:keys, list}`.
+Every order but `{:keys, list}` is computed from the data `generate/2` is given, so the same order over a stream of data can put a different series at the bottom of each frame: an `:insideout` streamgraph re-sorts its layers whenever a series' peak moves or the sides' sums cross. `{:keys, list}` is the fixed order (#492), as d3 allows any permutation through `stack.order`: it reads no value. A key of `list` that is not one of the stack's keys is ignored, and a key `list` names twice is placed at its first mention, so the order is always a permutation of the stack's keys. A key `list` leaves out is not an error either — it is placed above the named ones, the unnamed keys in key order — so a list that names the series a reader must find in place need not name them all. A caller that wants an order computed once, such as inside-out over a whole run, computes it from the data it chooses and passes the result as `{:keys, list}`.
 
 ### 8.5 Offset
 

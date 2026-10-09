@@ -11,10 +11,10 @@ defmodule Examples.Charts.Streamgraph do
   basis curve is the style's; the legend sits in the right margin the chart reserves for it
   (§4.5, #136).
 
-  **The order is fixed once, never per tick** (#492). `order: :inside_out` sorts by the
-  sums of the rows it is given, so over the animated run it re-sorted every tick and a
-  layer jumped to another place whenever two sums crossed — the bottom layer changed every
-  four to eight ticks. The order here is computed when the module is compiled, from each
+  **The order is fixed once, never per tick** (#492). `order: :inside_out` is computed
+  from the rows it is given, so over the animated run it re-sorted every tick and a layer
+  jumped to another place whenever the order moved — under the sum order of the time, the
+  bottom layer changed every four to eight ticks. The order here is computed when the module is compiled, from each
   series' total over one turn of the run's phase (every wave once round, which ranks them as
   any longer run does), and passed as `order: {:keys, keys}`: each layer keeps its place
   however its wave moves, and the still chart stacks in the same order as the run.
@@ -59,8 +59,10 @@ defmodule Examples.Charts.Streamgraph do
              {key, total}
            end)
 
-  # Inside-out, bottom first: the heaviest series in the middle, then each lighter one
-  # outward, alternately above and below — spec/04 §8.4's `:insideout` as a fixed list.
+  # Inside-out by weight, bottom first: the heaviest series in the middle, then each lighter
+  # one outward, alternately above and below. This is the chart's own ranking, not the
+  # library's `:insideout`, which is d3's and ranks by where each series peaks (spec/04
+  # §8.4, D-125).
   @order (fn ->
             heaviest_first = Enum.sort_by(@keys, &Map.fetch!(@totals, &1), :desc)
             above = Enum.take_every(heaviest_first, 2)

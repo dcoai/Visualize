@@ -84,7 +84,8 @@ defmodule Visualize.Shape.Stack do
   - `:ascending` - Smallest series on bottom
   - `:descending` - Largest series on bottom
   - `:reverse` - Reverse key order
-  - `:insideout` - Larger series in middle (good for streamgraphs)
+  - `:insideout` - d3's `stackOrderInsideOut`: the earliest-peaking series in the middle,
+    later ones outward on whichever side has the smaller sum (good for streamgraphs)
   - `{:keys, list}` - The listed keys bottom first, then the unlisted keys in key order;
     a listed key the stack does not have is ignored (spec/04 §8.4)
 
@@ -196,18 +197,43 @@ defmodule Visualize.Shape.Stack do
     series |> stacking_order(:none) |> Enum.sort_by(&series_sum(series, &1), :desc)
   end
 
+  # d3's `stackOrderInsideOut` (d3-shape src/order/insideOut.js, D-125): in order of
+  # appearance, each series joins the top when the top's sum is less than the bottom's,
+  # otherwise the bottom; the order is the bottom reversed, then the top.
   defp stacking_order(series, :insideout) do
-    # Sort by sum, then interleave (largest in middle)
-    series |> stacking_order(:descending) |> interleave([], [])
+    {bottoms, tops, _bottom, _top} =
+      series
+      |> appearance_order()
+      |> Enum.reduce({[], [], 0, 0}, fn i, {bottoms, tops, bottom, top} ->
+        sum = series_sum(series, i)
+
+        if top < bottom,
+          do: {bottoms, [i | tops], bottom, top + sum},
+          else: {[i | bottoms], tops, bottom + sum, top}
+      end)
+
+    # `bottoms` is already reversed, as built; `tops` is not.
+    bottoms ++ Enum.reverse(tops)
+  end
+
+  # d3's `stackOrderAppearance` (src/order/appearance.js): key indexes in ascending order
+  # of each series' peak, a stable sort, so ties keep key order.
+  defp appearance_order(series) do
+    series |> stacking_order(:none) |> Enum.sort_by(&series_peak(series, &1))
+  end
+
+  # d3's `peak`: the index of the series' first greatest value (it compares with `>`).
+  defp series_peak(series, i) do
+    series
+    |> elem(i)
+    |> Map.fetch!(:points)
+    |> Enum.max_by(& &1.value, fn -> %{index: 0} end)
+    |> Map.fetch!(:index)
   end
 
   defp series_sum(series, i) do
     series |> elem(i) |> Map.fetch!(:points) |> Enum.reduce(0, fn %{value: v}, acc -> acc + v end)
   end
-
-  defp interleave([], top, bottom), do: Enum.reverse(top) ++ bottom
-  defp interleave([a], top, bottom), do: Enum.reverse([a | top]) ++ bottom
-  defp interleave([a, b | rest], top, bottom), do: interleave(rest, [a | top], [b | bottom])
 
   # --- Offsets ------------------------------------------------------------------------------
 
