@@ -198,9 +198,12 @@ defmodule Visualize.Chart.Transform.Layout do
       end)
 
     result = Chord.new() |> Chord.pad_angle(Map.get(node, :padding, 0)) |> Chord.generate(matrix)
+    # `size` sets the radius only; the centre is the point an `:arc` mark is about, so
+    # the ribbons meet the ring however either step is sized (spec/14 §5.4.3, #488).
     [w, h] = Map.get(node, :size, ctx.size)
     r = min(w, h) / 2
-    centre = Transform.translate(w / 2, h / 2)
+    [cx, cy] = ctx.centre
+    centre = Transform.translate(cx, cy)
 
     case Map.get(node, :output, :groups) do
       :groups ->

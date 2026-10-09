@@ -257,6 +257,8 @@ One chord is produced for every pair `i <= j` with `matrix[i][j] > 0` or `matrix
 
 `ribbon_path/2` returns an SVG path for a chord at `radius`: the source arc, a quadratic curve through the origin to the target arc's start, the target arc, a quadratic curve through the origin back to the source start, then `Z`. A self-loop draws the source arc and a single quadratic return.
 
+Both generators are about the origin, so where the circle sits is the caller's. The chart layer's `:chord` step (spec/14 §5.4.3) places them at the point an `:arc` mark is about — the plot's middle — and its `size` sets the radius only, never the centre (#488), so the ring and the ribbons of one design share one centre.
+
 ### 6.4 Functions
 
 | Function | Contract |

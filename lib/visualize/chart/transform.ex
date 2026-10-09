@@ -7,11 +7,11 @@ defmodule Visualize.Chart.Transform do
   `apply/3` runs the steps of a mark's `data.transforms` in order over its source's rows,
   each a pure function of the rows before it and its node, and yields the rows the mark
   draws. Its only context is the plot area (`size:`, the extent every layout defaults
-  to), in a `:geo` frame the projection (`projection:`), and the instant a `:window`
-  step measures back from (`now:`) — never a scale, which is
-  what lets `Visualize.Chart.Frame.new/2` run the pipeline before its scales exist and
-  infer their domains from the transformed columns. A layout's rows carry their shape as
-  a `Visualize.IR.Path` under `path`, which the `:path` mark draws as it is.
+  to), the point a centred mark is about (`centre:`), in a `:geo` frame the projection
+  (`projection:`), and the instant a `:window` step measures back from (`now:`) — never a
+  scale, which is what lets `Visualize.Chart.Frame.new/2` run the pipeline before its
+  scales exist and infer their domains from the transformed columns. A layout's rows carry
+  their shape as a `Visualize.IR.Path` under `path`, which the `:path` mark draws as it is.
 
   ## Examples
 
@@ -29,6 +29,7 @@ defmodule Visualize.Chart.Transform do
   @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, the bound sources for a graph's node table, and the instant a `:window` measures back from."
   @type context :: %{
           size: [number()],
+          centre: [number()],
           projection: Projection.t() | nil,
           sources: map(),
           now: term() | nil
@@ -46,6 +47,9 @@ defmodule Visualize.Chart.Transform do
     * `:size` - the `[width, height]` the layouts and the geo algorithms default to, and
       whose width an `:lttb` step's `n: :plot` and an `:m4` step's `width: :plot` read
       (default `[1, 1]`)
+    * `:centre` - the `[x, y]` a `:chord` step's paths are about: the point an `:arc`
+      mark is about, which the frame passes (spec/14 §5.4.3, #488); `size` sets the
+      chord's radius, never its centre (default the middle of `:size`)
     * `:projection` - the `%Visualize.Geo.Projection{}` a `:projection` step maps through
       (default `nil`)
     * `:sources` - the bound sources by name, for a graph step's `nodes` (default `%{}`)
@@ -66,8 +70,11 @@ defmodule Visualize.Chart.Transform do
   def step(transform, rows, opts), do: run(transform, Table.rows(rows), context(opts))
 
   defp context(opts) do
+    [w, h] = size = Keyword.get(opts, :size, [1, 1])
+
     %{
-      size: Keyword.get(opts, :size, [1, 1]),
+      size: size,
+      centre: Keyword.get(opts, :centre, [w / 2, h / 2]),
       projection: Keyword.get(opts, :projection),
       sources: Keyword.get(opts, :sources, %{}),
       now: Keyword.get(opts, :now)

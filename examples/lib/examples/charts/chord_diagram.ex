@@ -33,6 +33,9 @@ defmodule Examples.Charts.ChordDiagram do
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
     {width, height} = Design.size(__MODULE__, opts)
+    # The ring's outer radius, 40 inside the plot for the region names. The ribbons'
+    # `size` sets their radius only — 0.9 of it, the ring's inner edge — and both steps
+    # are about the plot's centre, as the arc mark is (spec/14 §5.4.3, #488).
     radius = min(width, height) / 2 - 40
     size = [2 * radius, 2 * radius]
 
@@ -56,9 +59,9 @@ defmodule Examples.Charts.ChordDiagram do
           style: :ribbon
         ),
         arc(
-          chord(:flows, [:from, :to], :value, padding: 0.05, size: size),
+          chord(:flows, [:from, :to], :value, padding: 0.05),
           %{value: :value, start: :start_angle, end: :end_angle},
-          options: %{inner_radius: radius - 20, outer_radius: radius},
+          options: %{inner_radius: 0.9 * radius, outer_radius: radius},
           label: %{
             text: [{:field, :id}],
             anchor: :outward,
@@ -118,9 +121,11 @@ defmodule Examples.Charts.ChordDiagram do
           %{path: :path}, style: :ribbon),
         # The group arcs from the groups' own angles, and the region names outside the
         # ring on each group's spoke (spec/14 §5.5).
-        arc(chord(:flows, [:from, :to], :value, padding: 0.05, size: [420, 420]),
+        # The ribbons' size sets their radius only (0.9 of 210, the ring's inner edge);
+        # both are about the plot's centre (spec/14 §5.4.3).
+        arc(chord(:flows, [:from, :to], :value, padding: 0.05),
           %{value: :value, start: :start_angle, end: :end_angle},
-          options: %{inner_radius: 190, outer_radius: 210},
+          options: %{inner_radius: 189, outer_radius: 210},
           label: %{text: [{:field, :id}], anchor: :outward, dr: 6, rotate: :radial, style: :region},
           style: :group
         )
