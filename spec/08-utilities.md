@@ -431,7 +431,7 @@ A *slot* names one value of a theme:
 | `:axis` | `axis` | domain lines and tick lines |
 | `:grid` | `grid` | grid lines, tree links, and any mark that sits behind the data |
 | `:text` | `text` | tick labels, axis titles and any label beside a mark |
-| `:background` | `background` | the colour the chart is drawn on: separators between marks, and a label drawn over a mark |
+| `:background` | `background` | the colour the chart is drawn on: separators between marks, and — with `text` — one of the two inks a label drawn over a mark chooses between (7.3) |
 | `:surface` | `surface` | the plane a chart's data is laid on, between the background and the grid: a map's ocean, and any field that is neither the page nor a data colour and has the grid drawn over it (#422) |
 | `:font_family` | `font_family` | every text |
 | `:font_size` | `font_size` | tick labels |
@@ -471,7 +471,10 @@ Both palettes are ten hues in the order of d3's `category10` — blue, orange, r
 
 The reference carries its fallback rather than the root declaring the property (D-55). A declaration on the `<svg>` — inline or in a `<style>` — would beat every ancestor rule in the cascade, so a consumer could not switch a theme from a class without `!important`; with the fallback form a chart rendered outside any stylesheet (a standalone `.svg`, an `<img>`) still draws in its theme, and a rule on any ancestor, `.night { --vis-axis: #a0a4ab }`, overrides it. `stylesheet/1` writes that rule for a whole theme — `.vis-theme-<name> {` then one `  --vis-<slot>: <value>;` line per slot of `slots/1`, sizes with `px`, then `}` — so a consumer that includes `stylesheet(dark())` in its CSS switches every chart under an element with `class="vis-theme-dark"` without touching Elixir.
 
+**The contrast ink** (#486, D-123). `ink(theme, under)` is the colour a text drawn on `under` should take: the theme's `text` or its `background`, whichever has the higher contrast ratio against `under` by `Visualize.Color.contrast/2` — `text` on a tie — always as the slot's **literal**, never a reference. When the higher of the two is under 4.5:1 (WCAG AA for text), it is `#000000` or `#ffffff` instead, whichever contrasts more, and one of those two always holds 4.58:1 or better against any colour, so the ink always meets AA against the colour it is chosen for. `under` is a colour string `Visualize.Color.parse/1` reads, a `%Visualize.Color{}`, or `nil` for "nothing under the text" — the theme's own `background` — and a string it cannot parse is `nil`; a slot whose own value does not parse is skipped. It is a literal because the choice is made between literals: a `var(--vis-text, …)` that a stylesheet re-pointed would undo it. The style grammar's `:contrast` value resolves through it (spec/14 §3.2, §5.5).
+
 ### 7.4 Contrast
+
 
 A theme MUST hold, by `Visualize.Color.contrast/2` against its own `background`: `text` at least 4.5:1 (WCAG AA for text), `axis` at least 3:1 (WCAG non-text contrast), every `series` colour at least 3:1, and `grid` at least 1.2:1 — visible, and faint on purpose. `surface` MUST differ from `grid`: the grid is drawn over the surface (a map's graticule over its ocean), and a surface equal to it would swallow every line (#422). Both built-in themes do; a theme from `new/1` is not checked, since a house palette is the consumer's choice. Across the colour schemes of `Visualize.Scale.Color.schemes/0`, every colour parses with `Visualize.Color.parse/1` and every scheme has at least one colour at 3:1 or better against the dark background and at 2.5:1 or better against the light one (`set2`, a pastel scheme, tops out at 2.6:1 on white), so any scheme has a usable colour on either theme; a scheme's lightest colours vanish on the light theme (`blues` opens at 1.04:1 on white) and its darkest on the dark (`blues` closes at 1.8:1 on `#1b1e24`), which is why the built-in themes carry their own palettes (7.2). `test/visualize/theme_contrast_test.exs` holds both themes and every scheme to this.
 
@@ -489,6 +492,7 @@ A theme MUST hold, by `Visualize.Color.contrast/2` against its own `background`:
 | `Visualize.Theme.resolve/3` | The slot's value as a literal or as a CSS reference with the literal fallback (7.3). |
 | `Visualize.Theme.css_name/1` | The custom-property name of a slot atom (7.3). |
 | `Visualize.Theme.mode/1` | `:css` for the SVG backend, `:literal` for any other (7.3). |
+| `Visualize.Theme.ink/2` | `ink(theme, under)`: the literal of `text` or `background`, whichever contrasts more with `under`, else black or white when neither reaches 4.5:1 (7.3). |
 | `Visualize.Theme.stylesheet/1` | The `.vis-theme-<name>` rule declaring every slot (7.3). |
 
 
