@@ -2,62 +2,16 @@ defmodule ExamplesWeb.ChartLive do
   use Phoenix.LiveView
 
   alias Examples.ColorPalettes
-  alias Examples.{Compare, Frames, Run}
+  alias Examples.{Compare, Frames, Gallery, Run}
   alias ExamplesWeb.PerformanceDrawer
 
-  @charts %{
-    # Basic Charts
-    "bar" => Examples.Charts.BarChart,
-    "horizontal_bar" => Examples.Charts.HorizontalBarChart,
-    "grouped_bar" => Examples.Charts.GroupedBarChart,
-    "stacked_bar" => Examples.Charts.StackedBarChart,
-    "line" => Examples.Charts.LineChart,
-    "scrolling_series" => Examples.Charts.ScrollingSeries,
-    "incremental_line" => Examples.Charts.IncrementalLine,
-    "multi_line" => Examples.Charts.MultiLineChart,
-    "area" => Examples.Charts.AreaChart,
-    "stacked_area" => Examples.Charts.StackedAreaChart,
-    "streamgraph" => Examples.Charts.Streamgraph,
-    "ridgeline" => Examples.Charts.RidgelinePlot,
-    "pie" => Examples.Charts.PieChart,
-    "donut" => Examples.Charts.DonutChart,
-    "scatter" => Examples.Charts.ScatterPlot,
-    "bubble" => Examples.Charts.BubbleChart,
-    "radial" => Examples.Charts.RadialBarChart,
-    "gauge" => Examples.Charts.GaugeChart,
-    "radar" => Examples.Charts.RadarChart,
-    "load_gauge" => Examples.Charts.LoadGauge,
-    "load_age" => Examples.Charts.LoadAge,
-    "load" => Examples.Charts.LoadChart,
-    "context" => Examples.Charts.ContextChart,
-    "polar" => Examples.Charts.PolarTransformChart,
-    # Hierarchical Layouts
-    "treemap" => Examples.Charts.TreemapChart,
-    "circle_pack" => Examples.Charts.CirclePacking,
-    "sunburst" => Examples.Charts.SunburstChart,
-    "tree" => Examples.Charts.TreeLayout,
-    "cluster" => Examples.Charts.ClusterDendrogram,
-    # Network/Flow Layouts
-    "force" => Examples.Charts.ForceGraph,
-    "chord" => Examples.Charts.ChordDiagram,
-    "sankey" => Examples.Charts.SankeyDiagram,
-    # Scientific
-    "contour" => Examples.Charts.ContourPlot,
-    "heatmap" => Examples.Charts.Heatmap,
-    "hexbin" => Examples.Charts.HexbinChart,
-    "spectrum" => Examples.Charts.SpectrumChart,
-    # Dense series reduced per pixel (#448)
-    "downsampling" => Examples.Charts.Downsampling,
-    # Maps
-    "world_map" => Examples.Charts.WorldMap,
-    "globe" => Examples.Charts.Globe,
-    "gps_track" => Examples.Charts.GpsTrack
-  }
+  @doc """
+  The gallery's charts by slug, for the performance view (#328): the map derived from the
+  gallery's one ordered list, `Examples.Gallery.charts/0` (#484).
+  """
+  def charts, do: Gallery.by_slug()
 
   # Charts that support animation
-  @doc "The gallery's charts by slug, for the performance view (#328)."
-  def charts, do: @charts
-
   @animatable_charts [
     "bar",
     "horizontal_bar",
@@ -98,66 +52,125 @@ defmodule ExamplesWeb.ChartLive do
     "spectrum"
   ]
 
+  # The page's own state — what the viewer chose about the page, kept from chart to chart
+  # (spec/14 §12.6, #484) — then the chart's, on the path a patch to another chart takes.
   def mount(%{"chart" => chart_slug}, _session, socket) do
-    case Map.get(@charts, chart_slug) do
+    case Gallery.module(chart_slug) do
       nil ->
         {:ok, push_navigate(socket, to: "/")}
 
       module ->
-        palettes = ColorPalettes.list_palettes()
-        palette_info = ColorPalettes.palette_info()
-
         {:ok,
-         assign(socket,
-           module: module,
-           slug: chart_slug,
-           title: module.title(),
-           description: module.description(),
+         socket
+         |> assign(
            current_palette: :default,
-           palettes: palettes,
-           palette_info: palette_info,
-           animatable: chart_slug in @animatable_charts,
-           hex_radius: 20,
-           # The still chart (#362): the last frame rendered outside a run — on mount and on
-           # a palette, backend or hex-size change — in a task, with the design as data.
-           still_frame: nil,
-           still_state: nil,
-           still_design: nil,
-           still_task: nil,
-           # The performance drawer (spec/14 §12.6, #322): a run of this chart on a
-           # backend, its frame, the compiled chart's state, and Compare's rows.
+           palettes: ColorPalettes.list_palettes(),
+           palette_info: ColorPalettes.palette_info(),
+           # The performance drawer (spec/14 §12.6, #322), open or not.
            drawer_open: false,
-           # A streaming design starts at 600 samples/s per series, as the High-Performance
-           # page did, with its window at that density from the moment the drawer opens
-           # (#359); any other chart has no rate and no window.
-           # Any other chart's rate is ticks per second of its animation, 20 by default, the
-           # page's own cadence (#361); the run's tick counter advances by its arrivals.
-           run:
-             Run.new(
-               target_fps: 60,
-               data_rate: if(Frames.stream?(module), do: 600, else: 20),
-               flow_control: true
-             ),
-           run_ticks: 0,
-           # A chart opens on the backend that makes it worth having (#407): Incremental
-           # for a streaming design, Canvas for any other; SVG is a click away.
-           run_backend: List.last(Frames.backends(module)),
-           run_state: nil,
-           run_frame: nil,
-           run_mode: nil,
-           run_scroll: nil,
-           run_series: series(module),
            # The page measures itself (spec/10 §10, #434): the container's width once the
            # hook has pushed one, and the module's own size until then — a disconnected
-           # mount has nothing to measure and must still draw.
+           # mount has nothing to measure and must still draw. A patch to another chart
+           # keeps it, so the next chart is drawn at once at the width the page knows.
            width: nil,
-           compare: nil,
+           run: nil,
+           still_task: nil,
            compare_task: nil
          )
-         |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))
-         |> still()}
+         |> load(module, chart_slug)}
     end
   end
+
+  # Previous / Next and the arrow keys patch (#484): the view stays connected and loads the
+  # chart the slug names. The mount's own params name the chart it has just loaded.
+  def handle_params(%{"chart" => slug}, _uri, %{assigns: %{slug: slug}} = socket),
+    do: {:noreply, socket}
+
+  def handle_params(%{"chart" => slug}, _uri, socket) do
+    case Gallery.module(slug) do
+      nil -> {:noreply, push_navigate(socket, to: "/")}
+      module -> {:noreply, load(socket, module, slug)}
+    end
+  end
+
+  # A chart on the page, the one path for a mount and a patch (spec/14 §12.6, #484). The
+  # outgoing chart's work ends first — a run's renderer, a still render and a Compare in
+  # flight, whose late results then fall to the stale clauses — and everything that is the
+  # chart's starts afresh; the page's own state (palette, drawer, width) is untouched.
+  defp load(socket, module, chart_slug) do
+    socket
+    |> ended()
+    |> assign(
+      module: module,
+      slug: chart_slug,
+      title: module.title(),
+      description: module.description(),
+      neighbours: Gallery.neighbours(chart_slug),
+      animatable: chart_slug in @animatable_charts,
+      hex_radius: 20,
+      # The still chart (#362): the last frame rendered outside a run — on mount and on
+      # a palette, backend or hex-size change — in a task, with the design as data.
+      still_frame: nil,
+      still_state: nil,
+      still_design: nil,
+      still_task: nil,
+      # The performance drawer's run (spec/14 §12.6, #322): a run of this chart on a
+      # backend, its frame, the compiled chart's state, and Compare's rows.
+      # A streaming design starts at 600 samples/s per series, as the High-Performance
+      # page did, with its window at that density from the moment the drawer opens
+      # (#359); any other chart has no rate and no window.
+      # Any other chart's rate is ticks per second of its animation, 20 by default, the
+      # page's own cadence (#361); the run's tick counter advances by its arrivals.
+      run:
+        Run.new(
+          target_fps: 60,
+          data_rate: if(Frames.stream?(module), do: 600, else: 20),
+          flow_control: true
+        ),
+      run_ticks: 0,
+      # A chart opens on the backend that makes it worth having (#407): Incremental
+      # for a streaming design, Canvas for any other; SVG is a click away. The backends
+      # are the chart's own (#432), so a patch takes the new chart's.
+      run_backend: List.last(Frames.backends(module)),
+      run_state: nil,
+      run_frame: nil,
+      run_mode: nil,
+      run_scroll: nil,
+      run_series: series(module),
+      compare: nil,
+      compare_task: nil
+    )
+    |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))
+    |> still()
+  end
+
+  # The outgoing chart's work, ended: its run's renderer stopped, a still render and a
+  # Compare terminated. A mount has none.
+  defp ended(%{assigns: assigns} = socket) do
+    if run = assigns.run, do: Run.cancel(run)
+
+    for %Task{pid: pid} <- [assigns.still_task, assigns.compare_task],
+        do: Task.Supervisor.terminate_child(Examples.TaskSupervisor, pid)
+
+    socket
+  end
+
+  # The arrow keys step through the gallery as Previous / Next do (#484), except while
+  # focus is in a form field — a slider's or a caret's arrow — or a modifier is held
+  # (Alt+← is the browser's back). The layout's LiveSocket reports both with every keyup
+  # as event metadata (`field`, `modified`); a keyup without them is a plain key.
+  def handle_event("key", %{"key" => key} = params, socket)
+      when key in ["ArrowLeft", "ArrowRight"] do
+    if params["field"] == true or params["modified"] == true do
+      {:noreply, socket}
+    else
+      {previous, next} = socket.assigns.neighbours
+      {_module, slug} = if key == "ArrowLeft", do: previous, else: next
+      {:noreply, push_patch(socket, to: chart_path(slug))}
+    end
+  end
+
+  def handle_event("key", _params, socket), do: {:noreply, socket}
 
   # The container's width (spec/10 §10, #434). The height is the chart's own aspect, not
   # the container's: a container sized by its content would observe the chart's height and
@@ -392,7 +405,6 @@ defmodule ExamplesWeb.ChartLive do
     end
   end
 
-
   def handle_info({ref, {:compare, rows}}, %{assigns: %{compare_task: %Task{ref: ref}}} = socket) do
     Process.demonitor(ref, [:flush])
     {:noreply, assign(socket, compare: rows, compare_task: nil)}
@@ -508,7 +520,14 @@ defmodule ExamplesWeb.ChartLive do
     if assigns.run_scroll,
       do: run_opts(assigns, 0),
       else:
-        build_chart_opts(assigns.current_palette, 0, false, assigns.slug, assigns.hex_radius, assigns.width)
+        build_chart_opts(
+          assigns.current_palette,
+          0,
+          false,
+          assigns.slug,
+          assigns.hex_radius,
+          assigns.width
+        )
   end
 
   defp pushed(socket, %{incremental: record} = plot, seq) when is_map(record) do
@@ -623,7 +642,14 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   defp run_opts(assigns, tick) do
-    build_chart_opts(assigns.current_palette, tick, true, assigns.slug, assigns.hex_radius, assigns.width)
+    build_chart_opts(
+      assigns.current_palette,
+      tick,
+      true,
+      assigns.slug,
+      assigns.hex_radius,
+      assigns.width
+    )
   end
 
   # The series a streaming design binds — the sources of its design — for the drawer's
@@ -724,9 +750,22 @@ defmodule ExamplesWeb.ChartLive do
     ~H"""
     <ExamplesWeb.SiteHeader.header tab={:charts} />
     <main>
-      <a href="/" class="back-link">
-        <span>&larr;</span> Back to Gallery
-      </a>
+      <%!-- The gallery in its order, from any chart (spec/14 §12.6, #484): Previous / Next
+            patch, so the view stays connected, and wrap; the arrow keys follow them. --%>
+      <% {{prev_module, prev_slug}, {next_module, next_slug}} = @neighbours %>
+      <nav class="chart-nav" phx-window-keyup="key">
+        <a href="/" class="back-link">
+          <span>&larr;</span> Back to Gallery
+        </a>
+        <span class="chart-nav-steps">
+          <.link patch={chart_path(prev_slug)} id="chart-prev" class="chart-nav-link" rel="prev">
+            <span>&larr;</span> Previous: <%= prev_module.title() %>
+          </.link>
+          <.link patch={chart_path(next_slug)} id="chart-next" class="chart-nav-link" rel="next">
+            Next: <%= next_module.title() %> <span>&rarr;</span>
+          </.link>
+        </span>
+      </nav>
 
       <div class="chart-detail">
         <h2><%= @title %></h2>
@@ -900,6 +939,35 @@ defmodule ExamplesWeb.ChartLive do
 
     <style>
       <%= Phoenix.HTML.raw(PerformanceDrawer.css()) %>
+      .chart-nav {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .chart-nav .back-link {
+        margin-bottom: 0;
+      }
+
+      .chart-nav-steps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.5rem;
+      }
+
+      .chart-nav-link {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: 500;
+      }
+
+      .chart-nav-link:hover {
+        text-decoration: underline;
+      }
+
       .controls-row {
         display: flex;
         flex-wrap: wrap;
@@ -1154,6 +1222,8 @@ defmodule ExamplesWeb.ChartLive do
     """
   end
 
+  defp chart_path(slug), do: "/chart/#{slug}"
+
   defp build_chart_opts(palette, tick, animating, slug, hex_radius, width) do
     # A design records no size (spec/14 §4.2, #427): the page gives one, the width its
     # container measured and the height that width at the chart's own aspect (#434).
@@ -1179,7 +1249,7 @@ defmodule ExamplesWeb.ChartLive do
   defp measured(nil, _slug), do: []
 
   defp measured(width, slug) do
-    {w, h} = Examples.Charts.Design.fitted(@charts[slug], width)
+    {w, h} = Examples.Charts.Design.fitted(Gallery.module(slug), width)
     [width: w, height: h]
   end
 

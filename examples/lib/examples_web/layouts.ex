@@ -156,7 +156,17 @@ defmodule ExamplesWeb.Layouts do
             let csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content");
             let liveSocket = new window.LiveView.LiveSocket("/live", window.Phoenix.Socket, {
               params: { _csrf_token: csrfToken },
-              hooks: { ...(window.VisualizeHooks || {}) }
+              hooks: { ...(window.VisualizeHooks || {}) },
+              // Every keyup says whether focus was in a form field and whether a modifier was
+              // held, so a page's phx-window-keyup can leave a slider's or a caret's arrow
+              // keys, and the browser's Alt+arrow, alone (#484). The page decides; this only
+              // reports what the server cannot see.
+              metadata: {
+                keyup: (e) => ({
+                  field: !!(e.target && e.target.closest && e.target.closest("input, select, textarea, [contenteditable]")),
+                  modified: e.altKey || e.ctrlKey || e.metaKey || e.shiftKey
+                })
+              }
             });
             liveSocket.connect();
             window.liveSocket = liveSocket;
