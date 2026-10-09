@@ -43,6 +43,7 @@ defmodule ExamplesWeb.Layouts do
           .tab-pages { color: #666; margin: 0.5rem 0 1rem; }
           .tab-pages a { color: #667eea; font-weight: 500; }
           body > main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+          body > main.main-wide { max-width: none; }
           .gallery-note {
             max-width: 60rem;
             margin: 0 auto 1.25rem;
@@ -108,6 +109,10 @@ defmodule ExamplesWeb.Layouts do
           .panel svg { max-width: 100%; height: auto; }
           .panel pre { margin-top: 0; }
           .panel .panel { box-shadow: none; padding: 0.75rem 1rem; border-radius: 8px; }
+          /* A row of demos, each as wide as its chart (#513); the code panel takes a row */
+          .panels-row { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+          .panels-row > .panel { flex: 0 0 auto; box-sizing: border-box; width: calc(var(--chart-w) + 4rem + 2px); max-width: 100%; }
+          .panels-row > .panel.panel-wide { flex-basis: 100%; width: 100%; }
           pre {
             background: #1e1e1e;
             color: #d4d4d4;
