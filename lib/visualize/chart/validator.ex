@@ -53,6 +53,7 @@ defmodule Visualize.Chart.Validator do
           | {:tiles, :projection, atom()}
           | {:tiles, :attribution | :url | :subdomains}
           | {:outside_domain, atom(), number() | {:column, atom(), :number | :text | :time}}
+          | {:feeds_domain, atom(), number()}
 
   @type error :: {path(), reason()}
 
@@ -961,6 +962,11 @@ defmodule Visualize.Chart.Validator do
   defp words({:outside_domain, scale, value}) do
     "#{inspect(value)} is not in scale #{inspect(scale)}'s declared domain: " <>
       "it would draw the scale's unknown colour"
+  end
+
+  defp words({:feeds_domain, scale, n}) do
+    "a text at the constant #{inspect(n)} holds scale #{inspect(scale)}'s inferred domain " <>
+      "open: place it at {:scale, :min} or {:scale, :max}, as a frame label, or declare the domain"
   end
 
   defp words(:required), do: "is required"
