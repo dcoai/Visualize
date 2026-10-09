@@ -3,7 +3,7 @@ defmodule ExamplesWeb.ChartLiveNavTest do
   A chart page steps through the gallery (spec/14 §12.6, #484): Previous / Next beside the
   back link, labelled with the neighbours' titles in the gallery's order and wrapping;
   a step is a patch, which loads the new chart on the mount's path in the same view —
-  a run stopped, the width kept, the new chart's backends; the arrow keys follow the
+  a run stopped, the width kept, the reader's backend where the new chart offers it (#501); the arrow keys follow the
   links unless focus is in a form field; and the index and the chart page read one list.
   """
   use ExUnit.Case, async: true
@@ -105,8 +105,10 @@ defmodule ExamplesWeb.ChartLiveNavTest do
     assert prev == "/chart/bar"
   end
 
-  test "a step away from a running chart stops its run and takes the new chart's backends" do
+  test "a step away from a running chart stops its run and falls back from a backend the new chart lacks" do
     s = page("incremental_line")
+    assert s.assigns.run_backend == :svg
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => "incremental"}, s)
     assert s.assigns.run_backend == :incremental
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
     %{renderer: renderer, running: true} = s.assigns.run
@@ -124,14 +126,55 @@ defmodule ExamplesWeb.ChartLiveNavTest do
     assert s.assigns.run.renderer == nil
     assert s.assigns.run_ticks == 0 and s.assigns.run_frame == nil
     assert s.assigns.compare_task == nil and s.assigns.compare == nil
-    # The bar chart's own backends, on the one it opens on (#407, #432), and no window.
-    assert s.assigns.run_backend == List.last(Frames.backends(Examples.Charts.BarChart))
+    # The bar chart offers no Incremental (#432), so it opens on SVG (#501), and no window.
+    refute :incremental in Frames.backends(Examples.Charts.BarChart)
+    assert s.assigns.run_backend == :svg
     assert s.assigns.run_scroll == nil
     assert s.assigns.run.data_rate == 20
 
     # A late frame of the old run is stale for the new chart.
     {:noreply, after_late} = ChartLive.handle_info({:frame, make_ref(), %{plots: []}}, s)
     assert after_late.assigns.run_frame == nil
+  end
+
+  test "Previous and Next keep the backend the reader chose where the chart offers it (#501)" do
+    s = page("bar")
+    assert s.assigns.run_backend == :svg
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => "canvas"}, s)
+
+    # Every chart offers Canvas, so a chosen Canvas holds across the whole gallery.
+    s =
+      Enum.reduce(Gallery.charts(), s, fn _chart, s ->
+        {next, _tag} = nav_link(html(s), "next")
+        s = step(s, next)
+        assert :canvas in Frames.backends(s.assigns.module), s.assigns.slug
+        assert s.assigns.run_backend == :canvas, s.assigns.slug
+        s
+      end)
+
+    {prev, _tag} = nav_link(html(s), "prev")
+    assert step(s, prev).assigns.run_backend == :canvas
+
+    # Incremental is a streaming design's own: Next from one keeps it on the next stream
+    # and falls back to SVG on the first chart without it.
+    s = page("scrolling_series")
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => "incremental"}, s)
+
+    s =
+      Enum.reduce_while(1..length(Gallery.charts()), s, fn _, s ->
+        {next, _tag} = nav_link(html(s), "next")
+        s = step(s, next)
+
+        if :incremental in Frames.backends(s.assigns.module) do
+          assert s.assigns.run_backend == :incremental, s.assigns.slug
+          {:cont, s}
+        else
+          assert s.assigns.run_backend == :svg, s.assigns.slug
+          {:halt, s}
+        end
+      end)
+
+    assert s.assigns.run_backend == :svg
   end
 
   test "the arrow keys step as Previous and Next do, except in a form field or with a modifier" do
