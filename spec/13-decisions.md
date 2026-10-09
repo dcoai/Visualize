@@ -951,3 +951,29 @@ Two rejected alternatives. Binding an identity into the fragment at drop time (#
 **Decision.** `BrushHook` joins the group its markup names, as the tooltip and crosshair do. The chart brushed publishes the extent `[lo, hi]` in domain units — ascending, the same encoding as a hover's `x` — on its own event, `vis:sync-brush:<group>`, with `detail: {extent, source}`; `null` clears. It publishes on every move of a brush in progress and once more on release. Each member maps the extent through its own five numbers **clipped to its domain**, and shows nothing when the two are disjoint. Only the chart brushed calls `pushEvent`, once on release. A received extent never pushes and never publishes. In a group, `brush_select` also carries `domain: [lo, hi]`, so the server reads the window without knowing which chart sent it. The brush event is separate from the hover event rather than a second shape of it. A crosshair then never mistakes an extent for an x, and the prefix differs (`vis:sync-brush:` rather than a suffix on `vis:sync:<group>`), so no group's name can spell another group's brush event. `BrushHook` may sit on a container around the SVG, as every other hook does, because a server-rendered chart is a string inside a `<div>`.
 
 **Consequences.** One window change is one request, whatever the group's size, and the band follows the drag on every member at no server cost. A member whose domain holds part of the window shows that part, so panels over different spans still agree on the instant. A window set by the server through `data-selection-*` is not published, since the server chose the chart it set. A server that wants every panel to show a window it chose sets it on each. The bus carries x only: an `"xy"` brush shares its x extent, which members draw full-height, and a `"y"` brush joins no group. The bus object moves ahead of `BrushHook` in the bundle so that every hook using it follows it.
+
+## 118. D-118 — A PNG is the library's SVG rasterised by resvg, through the optional `resvg` package
+
+**Context.** #450, #472. Alert notifications, scheduled reports and link previews need a picture without a browser, and HTML email strips SVG. §1.5 of spec/01 allows no required dependency, and #450 ruled out a headless browser. Two backends render the library's SVG faithfully without one: resvg (Rust, `Apache-2.0 OR MIT`), and libvips through librsvg. Checked 2026-10-08:
+- **The `resvg` Hex package:** 0.6.0 (2026-07-15, MIT, one maintainer, wrapping resvg 0.47). It ships NIFs through `rustler_precompiled` for ten targets, x86_64-unknown-linux-gnu among them, and adds only `rustler_precompiled` and `castore`.
+- **`vix` 0.42.0 and `image` 0.72.0:** they reach SVG through librsvg in an LGPLv3 bundle, read fonts only through the process-global fontconfig, and substitute a missing family silently.
+- **A NIF of our own:** it would need a Rust toolchain and a per-target release pipeline in a CI that is otherwise pure Elixir.
+
+A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactly at `zoom: 2.0`, and rendered text from a font directory alone. It also found two defects:
+1. **The render NIFs run on a normal scheduler.** On a VM with one normal scheduler, a 1 ms timer fired 1.6–1.7 s late across five 800×400 renders at zoom 2. A branch marking them `DirtyCpu` kept it within 1–8 ms (#477).
+2. **Text in a family the font database lacks is dropped** without an error or a warning.
+
+**Decision.** `Visualize.Render.to_png/2` rasterises the SVG the library already renders, through `{:resvg, "~> 0.6", optional: true}`.
+- **One module** is the only caller of `Resvg`, so the backend can be replaced in one place.
+- **Without the package,** `to_png/2` returns `{:error, :no_rasterizer}` and `to_png!/2` raises, as `CanvasBinary` does without Nx (spec/01 §1.4).
+- **Options:** `scale` maps to resvg's zoom and `background` to its background. A string input is given a `resources_dir` the library controls.
+- **Fonts** come from a font database built once per font configuration (`init_fontdb/1`): the host's `font_dirs`, with or without system fonts.
+- **Missing families:** resvg reports nothing, so the library computes them itself, by resolving every family list it wrote into the SVG against that database's families (#474).
+- **The scheduler defect** is fixed upstream (#477), not worked around. Until a fixed release exists, `to_png/2` documents that a render holds a scheduler for its whole duration. If the fix is not released, this entry is reopened for a NIF owned by this project, forked from the same crate.
+- **vix and image are rejected:** no per-call font directory, silent substitution, and a copyleft native bundle for one operation.
+
+**Consequences.**
+- A consumer that does not list `resvg` fetches nothing new, and `scripts/consumer_check.exs` asserts `Resvg` and `RustlerPrecompiled` are absent.
+- A host that opts in downloads a checksum-verified precompiled NIF at compile time and needs no Rust. depdep's store carries it in `_build`.
+- CI images have no system fonts, so the conformance suite renders with bundled test fonts and `skip_system_fonts: true`, which also makes raster goldens independent of the host.
+- The backend's release cadence is one maintainer's (a 16-month gap before 0.6.0), and keeping up with resvg depends on upstream contributions.
