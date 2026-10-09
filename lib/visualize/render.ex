@@ -32,11 +32,19 @@ defmodule Visualize.Render do
 
   @type renderable :: Path.t() | Element.t() | [Element.t()]
 
-  @typedoc "A family list no font resolves, its text not drawn (spec/09 §9.7)."
-  @type png_warning :: {:missing_family, String.t(), [String.t()]}
+  @typedoc """
+  A warning of `to_png/2` (spec/09 §9.7): a font-family list no font resolves, its text not
+  drawn, or another line resvg printed.
+  """
+  @type png_warning :: {:missing_family, String.t()} | {:rasterizer, String.t()}
 
   @typedoc "Why `to_png/2` produced no PNG (spec/09 §9.3)."
-  @type png_error :: :no_rasterizer | :css_references | {:rasterizer, String.t()}
+  @type png_error ::
+          :no_rasterizer
+          | :css_references
+          | :timeout
+          | {:rasterizer_version, String.t(), String.t()}
+          | {:rasterizer, String.t()}
 
   @doc """
   Renders IR to the specified backend, returning an iolist.
@@ -122,7 +130,8 @@ defmodule Visualize.Render do
   end
 
   @doc """
-  Rasterises a chart to a PNG through the optional `resvg` package (spec/09 §9, D-118).
+  Rasterises a chart to a PNG through the resvg command-line tool, run as a port (spec/09
+  §9, D-121).
 
   The input is a whole document: a root `Visualize.IR.Element` (`Visualize.IR.Element.root/3`,
   or `Visualize.Chart.generate/2` with `root: true`), rendered with `to_svg_string/2`, or the
@@ -136,6 +145,17 @@ defmodule Visualize.Render do
       |> Visualize.Chart.generate(root: true, resolve: :literal)
       |> Visualize.Render.to_png(scale: 2, background: "#ffffff")
 
+  ## The resvg binary
+
+  PNG output takes no Hex dependency: the host installs resvg 0.45 or later (Debian and
+  Ubuntu `apt install resvg`, the upstream release tarball, or `cargo install resvg`) and
+  names it, or leaves it on the `PATH`:
+
+      config :visualize, :resvg, "/usr/local/bin/resvg"
+
+  A configured path is used as given, never replaced by the `PATH`'s. Its version is read
+  once from `resvg --version`.
+
   ## Options
 
     * `:scale` - the device pixel ratio, a positive number (default `1`); the PNG is the
@@ -148,25 +168,29 @@ defmodule Visualize.Render do
       Roman`, `Arial`, `Courier New`, `Comic Sans MS`, `Impact`)
     * `:font_family` - the family list of text that names none, as the theme's
       `font_family` (default `"sans-serif"`)
+    * `:timeout` - milliseconds the render may take, a positive integer (default `30_000`)
     * Other options of an IR input pass through to the SVG backend; an SVG string takes no
       other option.
 
   ## Results
 
-    * `{:ok, png, warnings}` - the PNG binary and its warnings: one
-      `{:missing_family, list, tried}` per font-family list the SVG names that no font
-      resolves, whose text resvg left out; `[]` when every family resolves
-    * `{:error, :no_rasterizer}` - the `resvg` package is not loaded; add
-      `{:resvg, "~> 0.6"}` to the host's deps
+    * `{:ok, png, warnings}` - the PNG binary and resvg's warnings: one
+      `{:missing_family, list}` per font-family list no font resolves, whose text resvg
+      left out, and `{:rasterizer, line}` for any other line it printed; `[]` when there
+      are none
+    * `{:error, :no_rasterizer}` - no resvg binary is configured or on the `PATH`
+    * `{:error, {:rasterizer_version, found, required}}` - the binary is older than the
+      supported minimum
     * `{:error, :css_references}` - the SVG holds a `var(--` reference
+    * `{:error, :timeout}` - the render took longer than `:timeout`; resvg was killed
     * `{:error, {:rasterizer, message}}` - resvg refused the document or an option
 
   ## Fonts
 
-  `:font_dirs`, `:system_fonts` and `:generic_families` are the font configuration. Its
-  font database is built on the first call and cached for the VM's life, so a font added
-  to a directory later is not seen. resvg matches families case-sensitively and never
-  substitutes one, so a host whose system lacks Arial maps `sans-serif` to a family it has:
+  The fonts are loaded by resvg on every call, a few milliseconds for one font directory and
+  more with the system's fonts, so a font added to a directory is seen by the next render.
+  resvg never substitutes a family, so a host whose system lacks Arial maps `sans-serif` to
+  a family it has:
 
       Visualize.Render.to_png(root,
         font_dirs: ["/srv/app/fonts"],
@@ -176,10 +200,8 @@ defmodule Visualize.Render do
 
   ## Scheduling
 
-  A render holds a normal scheduler for its whole duration — tens to hundreds of
-  milliseconds for a chart-sized SVG — because resvg 0.6.0 runs its NIFs on normal
-  schedulers. Until a release carries the upstream fix (dirty CPU scheduling, #477), render
-  PNGs off the request path and not in bulk beside LiveView traffic.
+  The render runs in its own OS process. The calling process waits in a `receive`, so no
+  scheduler is held, and a crash in resvg is an error value rather than a fault in the VM.
   """
   @spec to_png(Element.t() | String.t(), keyword()) ::
           {:ok, binary(), [png_warning()]} | {:error, png_error()}
@@ -187,7 +209,7 @@ defmodule Visualize.Render do
 
   @doc """
   As `to_png/2`, returning the PNG binary of `{:ok, png, []}`: raises on the `{:error, _}`
-  branch, and when a family is missing, so the result is a complete picture or none.
+  branch, and when there is a warning, so the result is a complete picture or none.
   """
   @spec to_png!(Element.t() | String.t(), keyword()) :: binary()
   def to_png!(input, opts \\ []), do: Raster.to_png!(input, opts, Raster.available?())

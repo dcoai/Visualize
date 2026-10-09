@@ -26,6 +26,10 @@ defmodule Visualize.Check do
 
   defp job({name, env, args}), do: job({name, env, args, "."})
 
+  # The test job's raster tests need a resvg binary, which CI downloads (spec/12 §4): here
+  # it is the one VISUALIZE_RESVG names or the PATH holds, and without one
+  # test/test_helper.exs excludes the :resvg tests in one printed line, as it does :js.
+  #
   # A job that needs node runs when node is on the path; CI installs it (spec/12 §4), so a
   # workstation without it skips the job and stays green.
   defp job({name, env, args, dir, :node}) do

@@ -23,24 +23,28 @@ release it merely follows.
   canvas. `Compiled.static/1` no longer holds a static basemap's images; a page that draws
   tiles on the hybrid split stacks the backdrop. The binary stream still drops `:image`
   and gains no record for it.
-- **`Visualize.Render.to_png/2` and `to_png!/2`** (#473, D-118): a root IR element, or the
-  SVG string one renders to, rasterised to a PNG through the optional `resvg` package —
-  add `{:resvg, "~> 0.6"}` to opt in; it needs no Rust, downloading a precompiled NIF.
-  `scale:` is the device pixel ratio and `background:` a CSS colour. Without the package
-  the result is `{:error, :no_rasterizer}`. The SVG must carry literal colours (generate
-  with `resolve: :literal`); a `var(--…)` theme reference returns
-  `{:error, :css_references}`, since resvg would paint it black. Until resvg ships dirty
-  scheduling (#477) a render holds a scheduler for its duration. A consumer that does not
-  list `resvg` fetches nothing new.
-- **PNG fonts and missing-family warnings** (#474): `to_png/2` takes the font
-  configuration — `font_dirs:`, `system_fonts:` (default `true`), `generic_families:`
-  (resvg's defaults: `sans-serif` is Arial) — and `font_family:` for text that names none
-  (default `"sans-serif"`). The font database is built once per configuration and cached.
-  resvg drops text in a family it lacks without a word, so the library resolves every
-  font-family list itself, with resvg's case-sensitive rules, and **the success value is
-  now `{:ok, png, warnings}`**, one `{:missing_family, list, tried}` per list no font
-  resolves; `to_png!/2` raises when a family is missing. The gallery has raster goldens,
-  rendered with a bundled DejaVu Sans and no system fonts.
+- **`Visualize.Render.to_png/2` and `to_png!/2`** (#473, #474, #481, D-121): a root IR
+  element, or the SVG string one renders to, rasterised to a PNG by the **resvg
+  command-line tool**, run as an OS process over a port. PNG output takes no Hex
+  dependency: the host installs resvg 0.45 or later (`apt install resvg` on Debian and
+  Ubuntu, the upstream release tarball, or `cargo install resvg`) and names it with
+  `config :visualize, :resvg, "/path/to/resvg"`, or leaves it on the `PATH`. Without one
+  the result is `{:error, :no_rasterizer}`; an older one is
+  `{:error, {:rasterizer_version, found, required}}`. A render holds no BEAM scheduler and
+  cannot crash the VM, and writes no temp file. `scale:` is the device pixel ratio,
+  `background:` a CSS colour, and `timeout:` (default 30 s) bounds the render: on expiry
+  resvg is killed and the result is `{:error, :timeout}`. The SVG must carry literal colours
+  (generate with `resolve: :literal`); a `var(--…)` theme reference returns
+  `{:error, :css_references}`, since resvg would paint it black.
+- **PNG fonts and warnings** (#474, #481): `to_png/2` takes the font configuration —
+  `font_dirs:`, `system_fonts:` (default `true`), `generic_families:` (resvg's defaults:
+  `sans-serif` is Arial) — and `font_family:` for text that names none (default
+  `"sans-serif"`). resvg loads the fonts on each call, so a font added to a directory is
+  seen by the next render. **The success value is `{:ok, png, warnings}`**, resvg's own
+  report: one `{:missing_family, list}` per font-family list no font resolves, whose text
+  was left out, and `{:rasterizer, line}` for anything else it printed; `to_png!/2` raises
+  when there is a warning. The gallery has raster goldens, rendered with a bundled DejaVu
+  Sans and no system fonts.
 - **A theme's `:surface` slot** (#422): the plane a chart's data is laid on, between the
   background and the grid — `#eef2f6` on `Visualize.Theme.default/0`, `#23272f` on
   `dark/0`. It is a colour slot like any other: `slots/1` and `colour_slots/1` list it,

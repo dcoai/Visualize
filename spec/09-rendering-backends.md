@@ -21,7 +21,7 @@ The rendering layer turns the backend-agnostic IR (`Visualize.IR.Element`, `Visu
 | `Visualize.Backend.Hybrid` | Static SVG + dynamic Canvas split |
 | `Visualize.Incremental` | Stateful high-level API over `CanvasIncremental` |
 | `Visualize.Benchmark` | Throughput and payload comparison |
-| `Visualize.Render.Raster` | Internal: the one caller of `Resvg`, behind `Visualize.Render.to_png/2` (§9) |
+| `Visualize.Render.Raster` | Internal: the one module that runs the resvg binary, behind `Visualize.Render.to_png/2` (§9) |
 
 ### 1.2 The backend behaviour
 
@@ -645,7 +645,7 @@ Result map: `config: %{duration_ms, data_points, chart_type}`; the same five bac
 
 ## 9. Raster output: `Visualize.Render.Raster`
 
-`Visualize.Render.to_png/2` and `to_png!/2` (spec/02 §4) rasterise the library's SVG through the optional `resvg` package (spec/01 §1.7, D-118). `Visualize.Render.Raster` is the only module in `lib/` that names `Resvg`, so the backend can be replaced in one place. Its functions are `@doc false` ([11-public-api](11-public-api.md) §2.2), and the contract below is the one `to_png/2` exposes.
+`Visualize.Render.to_png/2` and `to_png!/2` (spec/02 §4) rasterise the library's SVG through the resvg command-line tool, run as an Erlang port (spec/01 §1.7, D-121). `Visualize.Render.Raster` is the only module in `lib/` that runs it, so the backend can be replaced in one place. Its functions are `@doc false` ([11-public-api](11-public-api.md) §2.2), and the contract below is the one `to_png/2` exposes.
 
 ### 9.1 Input
 
@@ -658,63 +658,80 @@ Any other input — a group, a path, a list — is a `FunctionClauseError`: a PN
 
 ### 9.2 Options
 
-| Option | Default | Meaning |
-|---|---|---|
-| `:scale` | `1` | Device pixel ratio, a positive number, passed to resvg as its `zoom` (a float). The PNG's width and height are the root's `width` and `height` times the scale, so `scale: 2` doubles both exactly. |
-| `:background` | `nil` | A CSS colour string painted under the document, passed to resvg as its `background`. `nil` leaves the transparent pixels transparent. A colour resvg cannot parse returns `{:error, {:rasterizer, message}}`. |
-| `:font_dirs` | `[]` | Directories whose fonts are loaded into the font database (9.6), a list of strings. Each MUST exist and be a directory. |
-| `:system_fonts` | `true` | Whether the system fonts are loaded as well (resvg's `skip_system_fonts` is its negation). The conformance suite passes `false` (D-118). |
-| `:generic_families` | resvg's | The family each CSS generic keyword names, a keyword list over `:serif`, `:sans_serif`, `:monospace`, `:cursive` and `:fantasy` with string values. A key not given keeps resvg's own default: `serif` → `Times New Roman`, `sans-serif` → `Arial`, `monospace` → `Courier New`, `cursive` → `Comic Sans MS`, `fantasy` → `Impact`. |
-| `:font_family` | `"sans-serif"` | The family list of text that names none, as `Visualize.Theme`'s `font_family` (whose default it is). It is written on the root `<svg>` element (9.7). |
+Each option becomes a resvg flag (9.5):
 
-A `:scale` that is not a positive number, a `:background` that is neither `nil` nor a string, a `:font_dirs` that is not a list of strings naming existing directories, a `:system_fonts` that is not a boolean, a `:generic_families` with a key outside the five or a value that is not a string, or a `:font_family` that is not a string, is an `ArgumentError`.
+| Option | Default | Meaning | Flag |
+|---|---|---|---|
+| `:scale` | `1` | Device pixel ratio, a positive number. The PNG's width and height are the root's `width` and `height` times the scale, so `scale: 2` doubles both exactly. | `--zoom`, the scale as a float (`2.0`, `1.5`) |
+| `:background` | `nil` | A CSS colour string painted under the document. `nil` leaves the transparent pixels transparent. A colour resvg cannot parse returns `{:error, {:rasterizer, message}}`. | `--background`, omitted for `nil` |
+| `:font_dirs` | `[]` | Directories whose fonts are loaded (9.6), a list of strings. Each MUST exist and be a directory; each is expanded to an absolute path (`Path.expand/1`) and passed once. | `--use-fonts-dir`, once per directory |
+| `:system_fonts` | `true` | Whether the system fonts are loaded as well. The conformance suite passes `false` (D-121). | `--skip-system-fonts` when `false` |
+| `:generic_families` | resvg's | The family each CSS generic keyword names, a keyword list over `:serif`, `:sans_serif`, `:monospace`, `:cursive` and `:fantasy` with string values. A key not given keeps resvg's own default: `serif` → `Times New Roman`, `sans-serif` → `Arial`, `monospace` → `Courier New`, `cursive` → `Comic Sans MS`, `fantasy` → `Impact`. | `--serif-family`, `--sans-serif-family`, `--monospace-family`, `--cursive-family`, `--fantasy-family`, for each key given |
+| `:font_family` | `"sans-serif"` | The family list of text that names none, as `Visualize.Theme`'s `font_family` (whose default it is). It is written on the root `<svg>` element (9.7). | none: resvg's `--font-family` takes a single family name, not a list, so the library writes the list into the document instead |
+| `:timeout` | `30_000` | Milliseconds the render may take, a positive integer. When it expires the render is stopped and `{:error, :timeout}` returned (9.5). | none |
 
-`:font_dirs`, `:system_fonts` and `:generic_families` are the **font configuration**: the font database is a function of them and nothing else (9.6). They are held by the host, which knows its deployment's fonts (#450's policy surface): a host on a slim image with no system fonts passes its own directory, and one whose system has no Arial maps `sans-serif` to a family it has. A wrong configuration fails loudly in the warnings (9.7).
+A `:scale` that is not a positive number, a `:background` that is neither `nil` nor a string, a `:font_dirs` that is not a list of strings naming existing directories, a `:system_fonts` that is not a boolean, a `:generic_families` with a key outside the five or a value that is not a string, a `:font_family` that is not a string, or a `:timeout` that is not a positive integer, is an `ArgumentError`. Options are checked before anything else, so a bad one raises whether or not a binary is installed.
 
-`resvg` requires a `resources_dir` for an SVG given as a string, the directory relative references resolve against. The library supplies one it controls, `System.tmp_dir!/0`; the SVG the library renders holds no relative reference, so nothing is read from it.
+`:font_dirs`, `:system_fonts` and `:generic_families` are the **font configuration**. They are held by the host, which knows its deployment's fonts (#450's policy surface): a host on a slim image with no system fonts passes its own directory, and one whose system has no Arial maps `sans-serif` to a family it has. A wrong configuration fails loudly in the warnings (9.7). `:timeout` is the caller's intent per call; one too short fails loudly as `{:error, :timeout}`.
+
+Every render also passes `--resources-dir` with `System.tmp_dir!/0`, the directory relative references resolve against. resvg reading from stdin has no directory of its own and warns without one; the SVG the library renders holds no relative reference, so nothing is read from it.
 
 ### 9.3 Results
 
-`{:ok, png, warnings}` holds a PNG binary — the 8-byte signature `<<137, 80, 78, 71, 13, 10, 26, 10>>` followed by an `IHDR` chunk whose width and height are those of 9.2 — and the list of warnings of 9.7, `[]` when every family the SVG names resolves. A warning is a value the caller reads, not a log line: the picture is still returned, since an alert's chart with a label missing may be worth more than none, but it is never indistinguishable from a complete one. The errors are values (spec/11 §4):
+`{:ok, png, warnings}` holds a PNG binary — the 8-byte signature `<<137, 80, 78, 71, 13, 10, 26, 10>>` followed by an `IHDR` chunk whose width and height are those of 9.2 — and the list of warnings of 9.7, `[]` when resvg printed none. A warning is a value the caller reads, not a log line: the picture is still returned, since an alert's chart with a label missing may be worth more than none, but it is never indistinguishable from a complete one. The errors are values (spec/11 §4):
 
 | Result | When |
 |---|---|
-| `{:error, :no_rasterizer}` | `resvg` is not loaded (`Code.ensure_loaded?(Resvg)` is false) |
+| `{:error, :no_rasterizer}` | no resvg binary is configured or on the `PATH`, or the configured path names no executable file (9.4) |
+| `{:error, {:rasterizer_version, found, required}}` | the binary's version is below the supported minimum (9.4): `found` what `resvg --version` printed, trimmed, and `required` the minimum, `"0.45.0"` |
 | `{:error, :css_references}` | the SVG holds a `var(--` reference (9.1) |
-| `{:error, {:rasterizer, message}}` | resvg refused the document or an option; `message` is its string |
+| `{:error, :timeout}` | the render did not finish within `:timeout` milliseconds; its OS processes were killed (9.5) |
+| `{:error, {:rasterizer, message}}` | resvg exited non-zero, or exited 0 without a PNG; `message` is its last `Error: …` line, for example `Error: unexpected end of stream.`, or all the text it printed, trimmed, when it printed none |
 
-`to_png!/2` returns the binary of `{:ok, png, []}`, and raises `RuntimeError` naming the reason on an error and naming the missing families when the warnings are not empty: the bang variant returns a complete picture or none.
+`to_png!/2` returns the binary of `{:ok, png, []}`, and raises `RuntimeError` naming the reason on an error and naming the warnings when they are not empty: the bang variant returns a complete picture or none.
 
-**Why the warnings are in the success tuple** (#474). The proposal asks for missing families "reported in the result's warnings", and the alternatives each lose something. A `warnings: :return` option would make the result's shape depend on an option, so a caller's pattern match would have to know how the call was made. A separate function (`missing_families/2`) leaves the plain call silent, which is the defect D-118 records, and makes a careful caller resolve the families twice. An error tuple would discard a picture the host may want. `to_png/2` was added in the same unreleased version (`CHANGELOG.md`, Unreleased), so widening `{:ok, png}` to `{:ok, png, warnings}` breaks no released caller.
+**Why the warnings are in the success tuple** (#474). The proposal asks for missing families "reported in the result's warnings", and the alternatives each lose something. A `warnings: :return` option would make the result's shape depend on an option, so a caller's pattern match would have to know how the call was made. A separate function (`missing_families/2`) leaves the plain call silent and makes a careful caller render twice. An error tuple would discard a picture the host may want. `to_png/2` was added in the same unreleased version (`CHANGELOG.md`, Unreleased), so neither widening `{:ok, png}` to `{:ok, png, warnings}` nor narrowing the warning to `{:missing_family, list}` (D-121) breaks a released caller.
 
-### 9.4 Availability and the seam
+### 9.4 The binary, its version, and the seam
 
-`Raster.available?/0` is `Code.ensure_loaded?(Resvg)`, read at the call, as `CanvasBinary.available?/0` reads Nx (spec/01 §1.4). `Resvg` is named under `@compile {:no_warn_undefined, Resvg}`, so a consumer without the package compiles the module without a warning (D-50). The test suite has the package and cannot unload it, so the absent branch is reached through one argument: `Raster.to_png/3` and `Raster.to_png!/3` take availability as a boolean, `Visualize.Render.to_png/2` passes `Raster.available?()`, and a test passes `false`. Nothing else differs between the two branches. A consumer build without the package is proved separately, by `scripts/consumer_check.exs` calling `to_png/2` ([12-testing-and-conformance](12-testing-and-conformance.md) §4).
+**Finding the binary.** `Raster.binary/0` is the host's setting, `config :visualize, :resvg, "/path/to/resvg"`, expanded with `Path.expand/1` and accepted when it names an executable file (`System.find_executable/1` of the path). When the setting is absent it is `System.find_executable("resvg")`, the first `resvg` on the `PATH`. It is `nil` when neither gives a binary. A configured path that names nothing is `nil` too: it is **never replaced by the `PATH`'s binary**, since a host that named a binary and is silently given another has a wrong setting it cannot see. A setting that is not a string is an `ArgumentError`. The setting is read at every call, so a host may set it at run time (`config/runtime.exs`).
 
-### 9.5 Scheduling
+**The version.** The supported minimum is **resvg 0.45.0**, the version Debian bookworm and trixie package (0.45.1): the raster goldens of [12-testing-and-conformance](12-testing-and-conformance.md) §6 hold on 0.45.1 with no pixel outside the tolerance (D-121). Before its first render, a binary's version is read from `resvg --version`, whose output is the bare version (`0.48.1`), parsed as three integers and compared as a tuple. The result is cached in `:persistent_term` under `{Visualize.Render.Raster, :version, path, mtime, size}`, the binary file's path, modification time and size, so the version is read once per binary file and a binary replaced in place is read again. The value is three integers, written once per binary: the use `:persistent_term` is for. Output that is not a version refuses the binary like an old one.
 
-**A render holds a normal scheduler for its whole duration.** resvg 0.6.0 runs its NIFs on a normal scheduler, and a chart-sized render takes tens to hundreds of milliseconds (D-118). While it runs, every other process on that scheduler waits. The fix is upstream: the NIFs marked `DirtyCpu` (#477). Until a release carries it, a host rendering PNGs where latency matters renders them where a stalled scheduler costs little: off the request path, and not in bulk alongside LiveView traffic. The `to_png/2` documentation says so.
+**Availability and the seam.** `Raster.available?/0` is `Raster.binary() != nil`, read at the call. The test suite cannot remove a binary from the host it runs on, so the absent branch is reached through one argument: `Raster.to_png/3` and `Raster.to_png!/3` take availability as a boolean, `Visualize.Render.to_png/2` passes `Raster.available?()`, and a test passes `false`. Nothing else differs between the two branches. A host with no binary is also proved end to end, by `scripts/consumer_check.exs` calling `to_png/2` with no setting and no `resvg` on its `PATH` ([12-testing-and-conformance](12-testing-and-conformance.md) §4).
 
-### 9.6 The font database and its cache
+### 9.5 The port
 
-resvg draws text from a font database. Building one parses every font file it loads, which costs tens of milliseconds for one file and hundreds for a system's fonts, so `Raster` builds it **once per font configuration** and reuses it:
+A render is one OS process tree, started for the call and gone when it returns. The SVG goes in on stdin and the PNG comes back on stdout, so **no file is written**. An Erlang port cannot close its write end while still reading, so resvg, which reads stdin to end-of-file, would wait forever; a POSIX `sh` wrapper gives it exactly the SVG's bytes and then end-of-file:
 
-- **Normalised configuration.** The key is `{dirs, system_fonts, generics}`: `dirs` the `:font_dirs` expanded to absolute paths (`Path.expand/1`), sorted and without duplicates; `system_fonts` the boolean; `generics` all five generic keywords with their effective family (the given value or resvg's default of 9.2), in a fixed order. Two calls whose options differ only in the order or spelling of the same directories share one database.
-- **What is built.** `Resvg.init_fontdb/1` with `font_dirs`, `skip_system_fonts: not system_fonts` and the five `*_family` options, returning a database handle (a NIF resource) that every render passes as resvg's `:fontdb` option. Beside it, the set of family names the database holds, read from `Resvg.list_fonts/1` with the same options (9.7). The two are built together and cached together.
-- **Where it is held.** In `:persistent_term`, under `{Visualize.Render.Raster, :fonts, key}`. A font configuration is set by a host's deployment and changes rarely, which is what `:persistent_term` is for: a read is a constant-time lookup with no copy and no process to call. No process owns the cache, so there is no GenServer to start or supervise, and the optional dependency adds nothing to the host's supervision tree. Two processes that miss the same key at once both build it and the second write wins; the two databases are equal, so either is correct.
-- **What it does not see.** A font added to a directory after its configuration was first used is not in the cached database: the cache lives as long as the VM. A host that installs fonts at run time restarts, or names the new directory in `:font_dirs`, which is a new key.
+```
+/bin/sh -c 'n="$1"; b="$2"; shift 2; head -c "$n" | exec "$b" "$@" - -c 2>&1' sh <bytes> <resvg> <flags…>
+```
 
-`Raster.fonts/1` (`@doc false`) returns the cached `%{db: handle, families: MapSet.t()}` for a keyword list of font options, building it on the first call; a test asserts that the same configuration returns the same handle.
+`<bytes>` is the SVG's `byte_size/1`, `<resvg>` the binary of 9.4 and `<flags…>` those of 9.2; `-` reads the SVG from stdin and `-c` writes the PNG to stdout. The port is opened with `{:spawn_executable, "/bin/sh"}` and `[:binary, :exit_status, :stderr_to_stdout, :hide]`, the SVG is written with `Port.command/2`, and the output is collected until `{:exit_status, status}`.
 
-### 9.7 Missing families
+- **Splitting the output.** resvg's stderr is merged into its stdout, and resvg prints its warnings while it parses, before it writes the PNG. So the output is split at the first PNG signature (`<<0x89, "PNG", 13, 10, 26, 10>>`): the text before it is warnings (9.7), and the signature and everything after it is the PNG.
+- **Errors.** A nonzero exit status is `{:error, {:rasterizer, message}}`. resvg ends a failure with an `Error: …` line, and when it refuses an argument (an unparsable `--background`) it prints its usage text first, so the message is the last line that starts `Error:`, trimmed; when no line does, it is the whole text, trimmed. Exit 0 with no signature in the output is the same error.
+- **The scheduler.** The calling process waits in a `receive` while resvg works in its own OS process, so no BEAM scheduler is held for the render, and a crash in resvg is an exit status, not a fault in the VM. A test holds this on a node with one normal scheduler (spec/12 §6).
+- **The timeout.** A timer (`:erlang.start_timer/3`) runs for `:timeout` milliseconds. When it fires first, the render's processes are killed and `{:error, :timeout}` is returned. Closing the port would not do it: that ends `head`, but resvg already holds the SVG and runs to completion, unwatched. OTP starts every port program in a new session (`setsid`), so the port's `sh`, whose OS pid `Port.info(port, :os_pid)` gives, leads a process group that holds `head` and resvg too; `Raster` sends that group `SIGKILL` with the shell's `kill` builtin (`/bin/sh -c 'kill -s KILL -- "-$1"' sh <os_pid>`), naming the group by number and never a process by name. The killed `sh` closes the port itself, so `Raster` then waits for the `{:exit_status, _}` that follows rather than closing a port that may already be closed. A test checks that no process of the group survives the call.
+- **When the caller dies.** The port is linked to the calling process, so it closes with it; resvg then finishes its render and exits on the closed pipe. The work is bounded by the one render.
 
-resvg drops text in a family the database lacks, without an error or a warning (D-118), and it never substitutes another family: a font-family list resolves to its first member the database has, or the text is not drawn. The library therefore resolves every family list itself, with resvg's rules, before rendering:
+`Raster.run/4` (`@doc false`) is the port alone — a binary, its arguments, the stdin bytes and a timeout, returning `{:exit, status, output}` or `{:timeout, os_pid}` — so a test can run a stand-in program through the same wrapper and timeout.
 
-1. **The default family.** Text with no `font-family` of its own or on an ancestor is drawn by resvg in its `font_family` option, a single name (`Times New Roman` by default), whatever the theme says. So that every text's family is one the SVG names, the library writes `:font_family` (9.2) as a `font-family` attribute on the root `<svg>` element, which every such text inherits. It does so only when the root has none and the SVG has such an orphan text: a `<text` element with no `font-family`, attribute or style property, on itself or on an open ancestor element, found by walking the tags with a stack. A root default no text reads would otherwise be reported missing for text that does not use it.
-2. **The lists.** Every `font-family` the SVG holds is collected, in document order and without duplicates: the attribute (`font-family="…"`, with `&quot;`, `&#39;`, `&apos;`, `&lt;`, `&gt;` and `&amp;` decoded) and the style property (`font-family: …`, up to `;` or the end of the value). With `resolve: :literal` the SVG backend writes the theme's `font_family` as the attribute, which is how the theme's family reaches the rasteriser. A document with no `<text` element has no warnings, whatever families it names.
-3. **Members.** A list is split on commas outside quotes. A member in single or double quotes is a family name with its quotes removed. An unquoted member is a family name with its runs of whitespace collapsed to one space, unless it is exactly one of the lowercase generic keywords `serif`, `sans-serif`, `monospace`, `cursive` or `fantasy`, which names the configured family of 9.2. resvg matches both names and keywords **case-sensitively** (`dejavu sans` does not find `DejaVu Sans`, and `Sans-Serif` is a family name, not the keyword), and so does the library.
-4. **Resolution.** A member resolves when the database's family set (9.6) contains its name, or, for a keyword, its configured family. A list resolves when one of its members does. Each list that does not is one warning.
+### 9.6 Fonts
 
-A warning is `{:missing_family, list, tried}`: `list` the value as written in the SVG, `tried` the family names its members asked for, generic keywords replaced by their configured families, in order. For example `{:missing_family, "Inter, sans-serif", ["Inter", "Arial"]}` says both that Inter is absent and that `sans-serif` reached for Arial.
+resvg builds its font database on every call from the flags of 9.2: the `--use-fonts-dir` directories, and the system's fonts unless `--skip-system-fonts`. That costs a few milliseconds for one directory and more for a system's fonts, against a chart render of tens to hundreds of milliseconds and about 4 ms to start the process. **Nothing is cached**: there is no font database in the VM, a font added to a directory is seen by the next render, and the library holds no state per font configuration.
 
-**The family set** is read from `Resvg.list_fonts/1`, which describes each face it loaded from a file as `path: 'Family (Language, Region)', 'Family (…)', index, Style, weight, Stretch`. The library takes the text between the first `: '` and the trailing `', index, Style, weight, Stretch`, and from it each family name: the text before a ` (Language, Region)` suffix, the names separated by `', '`. A line that does not have this form contributes no family, so a face the parser cannot read makes a list *missing* rather than silently resolved — the failure is loud. Should resvg expose the families as data (#477 may propose it), the parse is replaced by it in this one place.
+### 9.7 Warnings and missing families
+
+resvg never substitutes a family: a font-family list resolves to its first member the font database has, matched case-sensitively, or the text is not drawn, and resvg says so. Two rules of the library make that report complete and exact:
+
+1. **The default family.** Text with no `font-family` of its own or on an ancestor would be drawn by resvg in its own default (`Times New Roman`), whatever the theme says, and resvg's `--font-family` takes one name, not a list. So the library writes `:font_family` (9.2), XML-escaped, as a `font-family` attribute on the root `<svg>` element, which such text inherits, unless the root already has a `font-family` attribute or style property. resvg resolves a family only for text that uses it, so a root default no text reads is never reported.
+2. **The generic families** are resvg's, as the host configured them (9.2): `sans-serif` reaches for Arial unless `:generic_families` says otherwise.
+
+The text before the PNG (9.5) is split into lines; each is trimmed, blank lines dropped, and a line repeated (resvg reports a list once per text element) is kept once, in first-seen order. Each line becomes a warning:
+
+- **`{:missing_family, list}`** for a line `Warning (in <module>): No match for '<printed>' font-family.`, the form resvg 0.45 to 0.48 print. resvg prints the list it failed to resolve normalised: each family name in double quotes, each generic keyword bare, joined by `, ` — `font-family="Other, 'Gone', sans-serif"` is printed `"Other", "Gone", sans-serif`, and a run of whitespace inside an unquoted name is collapsed. `list` is that printed list with the double quotes around each member removed: `{:missing_family, "Other, Gone, sans-serif"}`. The members are split on commas outside double quotes, so a name holding a comma stays one member. A quoted name that equals a generic keyword (`"serif"`) reads the same as the keyword; the warning names the list, it does not re-resolve it.
+- **`{:rasterizer, line}`** for any other line, so nothing resvg reports is dropped.
+
+resvg's text is not a stable interface. Its parsing is the one function `Raster.warnings/1` (`@doc false`), and a test pins it to the output of the CI's resvg (12 §4) by rendering a missing family through the binary, not only a string.

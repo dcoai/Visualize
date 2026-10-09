@@ -32,9 +32,9 @@ Time zones are the host's: a zoned time scale ([03-scales](03-scales.md) §7.4) 
 
 The `table` package (the `Table.Reader` protocol) MUST NOT be a required dependency; it is declared `optional: true` (D-52). `Visualize.Data.Table.rows/1` reads Explorer frames and any other struct implementing the protocol only when it is present; lists, column maps and Nx tensors are read natively and work without it ([08-utilities](08-utilities.md) §6).
 
-### 1.7 `resvg` is optional
+### 1.7 PNG output needs a resvg binary on the host, not a package
 
-The `resvg` package, a rasteriser reached through a precompiled NIF, MUST NOT be a required dependency; it is declared `optional: true` (D-118). `Visualize.Render.to_png/2` ([02-architecture](02-architecture.md) §4) needs it, and `Visualize.Render.Raster` is the only module that calls it ([09-rendering-backends](09-rendering-backends.md) §9). Without it, `to_png/2` returns `{:error, :no_rasterizer}` and `to_png!/2` raises, as `CanvasBinary` does without Nx (§1.4). A consumer that does not list it fetches neither `resvg` nor its `rustler_precompiled` and `castore` dependencies ([12-testing-and-conformance](12-testing-and-conformance.md) §4).
+PNG output MUST NOT add a dependency, required or optional: `Visualize.Render.to_png/2` ([02-architecture](02-architecture.md) §4) runs the resvg command-line tool the host installs, as an OS process over a port, and `Visualize.Render.Raster` is the only module that runs it ([09-rendering-backends](09-rendering-backends.md) §9, D-121). The host names the binary with `config :visualize, :resvg`, or leaves `resvg` on its `PATH`; the supported minimum is resvg 0.45, which Debian and Ubuntu package (`apt install resvg`), and the upstream release tarball and `cargo install resvg` provide it too. Without a binary, `to_png/2` returns `{:error, :no_rasterizer}` and `to_png!/2` raises, as `CanvasBinary` does without Nx (§1.4). A consumer fetches nothing for PNG output, and `scripts/consumer_check.exs` asserts that neither `Resvg` nor `RustlerPrecompiled` reaches it ([12-testing-and-conformance](12-testing-and-conformance.md) §4). D-118's optional `resvg` package, a NIF, is superseded.
 
 ## 2. Non-goals
 
