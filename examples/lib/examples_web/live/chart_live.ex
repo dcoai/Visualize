@@ -129,10 +129,9 @@ defmodule ExamplesWeb.ChartLive do
           flow_control: true
         ),
       run_ticks: 0,
-      # A chart opens on the backend that makes it worth having (#407): Incremental
-      # for a streaming design, Canvas for any other; SVG is a click away. The backends
-      # are the chart's own (#432), so a patch takes the new chart's.
-      run_backend: List.last(Frames.backends(module)),
+      # A chart opens on SVG (#501); a patch keeps the backend the reader chose when
+      # the new chart offers it among its own (#432).
+      run_backend: opening_backend(Frames.backends(module), socket.assigns[:run_backend]),
       run_state: nil,
       run_frame: nil,
       run_mode: nil,
@@ -143,6 +142,19 @@ defmodule ExamplesWeb.ChartLive do
     )
     |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))
     |> still()
+  end
+
+  @doc """
+  The backend a chart opens on (spec/14 §12.6, #501): the one the reader chose, when the
+  chart offers it, else SVG, else the chart's first. A mount has no choice yet (`nil`).
+  """
+  @spec opening_backend([atom(), ...], atom() | nil) :: atom()
+  def opening_backend([first | _] = backends, chosen) do
+    cond do
+      chosen in backends -> chosen
+      :svg in backends -> :svg
+      true -> first
+    end
   end
 
   # The outgoing chart's work, ended: its run's renderer stopped, a still render and a
