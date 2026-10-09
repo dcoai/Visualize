@@ -662,14 +662,20 @@ Any other input — a group, a path, a list — is a `FunctionClauseError`: a PN
 |---|---|---|
 | `:scale` | `1` | Device pixel ratio, a positive number, passed to resvg as its `zoom` (a float). The PNG's width and height are the root's `width` and `height` times the scale, so `scale: 2` doubles both exactly. |
 | `:background` | `nil` | A CSS colour string painted under the document, passed to resvg as its `background`. `nil` leaves the transparent pixels transparent. A colour resvg cannot parse returns `{:error, {:rasterizer, message}}`. |
+| `:font_dirs` | `[]` | Directories whose fonts are loaded into the font database (9.6), a list of strings. Each MUST exist and be a directory. |
+| `:system_fonts` | `true` | Whether the system fonts are loaded as well (resvg's `skip_system_fonts` is its negation). The conformance suite passes `false` (D-118). |
+| `:generic_families` | resvg's | The family each CSS generic keyword names, a keyword list over `:serif`, `:sans_serif`, `:monospace`, `:cursive` and `:fantasy` with string values. A key not given keeps resvg's own default: `serif` → `Times New Roman`, `sans-serif` → `Arial`, `monospace` → `Courier New`, `cursive` → `Comic Sans MS`, `fantasy` → `Impact`. |
+| `:font_family` | `"sans-serif"` | The family list of text that names none, as `Visualize.Theme`'s `font_family` (whose default it is). It is written on the root `<svg>` element (9.7). |
 
-A `:scale` that is not a positive number, or a `:background` that is neither `nil` nor a string, is an `ArgumentError`. Options are a keyword list, so the font options of #474 extend this table without changing the call's shape.
+A `:scale` that is not a positive number, a `:background` that is neither `nil` nor a string, a `:font_dirs` that is not a list of strings naming existing directories, a `:system_fonts` that is not a boolean, a `:generic_families` with a key outside the five or a value that is not a string, or a `:font_family` that is not a string, is an `ArgumentError`.
+
+`:font_dirs`, `:system_fonts` and `:generic_families` are the **font configuration**: the font database is a function of them and nothing else (9.6). They are held by the host, which knows its deployment's fonts (#450's policy surface): a host on a slim image with no system fonts passes its own directory, and one whose system has no Arial maps `sans-serif` to a family it has. A wrong configuration fails loudly in the warnings (9.7).
 
 `resvg` requires a `resources_dir` for an SVG given as a string, the directory relative references resolve against. The library supplies one it controls, `System.tmp_dir!/0`; the SVG the library renders holds no relative reference, so nothing is read from it.
 
 ### 9.3 Results
 
-`{:ok, png}` is a PNG binary: the 8-byte signature `<<137, 80, 78, 71, 13, 10, 26, 10>>` followed by an `IHDR` chunk whose width and height are those of 9.2. The errors are values (spec/11 §4):
+`{:ok, png, warnings}` holds a PNG binary — the 8-byte signature `<<137, 80, 78, 71, 13, 10, 26, 10>>` followed by an `IHDR` chunk whose width and height are those of 9.2 — and the list of warnings of 9.7, `[]` when every family the SVG names resolves. A warning is a value the caller reads, not a log line: the picture is still returned, since an alert's chart with a label missing may be worth more than none, but it is never indistinguishable from a complete one. The errors are values (spec/11 §4):
 
 | Result | When |
 |---|---|
@@ -677,7 +683,9 @@ A `:scale` that is not a positive number, or a `:background` that is neither `ni
 | `{:error, :css_references}` | the SVG holds a `var(--` reference (9.1) |
 | `{:error, {:rasterizer, message}}` | resvg refused the document or an option; `message` is its string |
 
-`to_png!/2` returns the binary of `{:ok, png}` and raises `RuntimeError` naming the reason otherwise.
+`to_png!/2` returns the binary of `{:ok, png, []}`, and raises `RuntimeError` naming the reason on an error and naming the missing families when the warnings are not empty: the bang variant returns a complete picture or none.
+
+**Why the warnings are in the success tuple** (#474). The proposal asks for missing families "reported in the result's warnings", and the alternatives each lose something. A `warnings: :return` option would make the result's shape depend on an option, so a caller's pattern match would have to know how the call was made. A separate function (`missing_families/2`) leaves the plain call silent, which is the defect D-118 records, and makes a careful caller resolve the families twice. An error tuple would discard a picture the host may want. `to_png/2` was added in the same unreleased version (`CHANGELOG.md`, Unreleased), so widening `{:ok, png}` to `{:ok, png, warnings}` breaks no released caller.
 
 ### 9.4 Availability and the seam
 
@@ -687,4 +695,26 @@ A `:scale` that is not a positive number, or a `:background` that is neither `ni
 
 **A render holds a normal scheduler for its whole duration.** resvg 0.6.0 runs its NIFs on a normal scheduler, and a chart-sized render takes tens to hundreds of milliseconds (D-118). While it runs, every other process on that scheduler waits. The fix is upstream: the NIFs marked `DirtyCpu` (#477). Until a release carries it, a host rendering PNGs where latency matters renders them where a stalled scheduler costs little: off the request path, and not in bulk alongside LiveView traffic. The `to_png/2` documentation says so.
 
-Fonts — the host's font directories and the warning for a family the font database lacks — are #474. Until then resvg loads the system fonts, and text in a family it does not find is dropped without a warning.
+### 9.6 The font database and its cache
+
+resvg draws text from a font database. Building one parses every font file it loads, which costs tens of milliseconds for one file and hundreds for a system's fonts, so `Raster` builds it **once per font configuration** and reuses it:
+
+- **Normalised configuration.** The key is `{dirs, system_fonts, generics}`: `dirs` the `:font_dirs` expanded to absolute paths (`Path.expand/1`), sorted and without duplicates; `system_fonts` the boolean; `generics` all five generic keywords with their effective family (the given value or resvg's default of 9.2), in a fixed order. Two calls whose options differ only in the order or spelling of the same directories share one database.
+- **What is built.** `Resvg.init_fontdb/1` with `font_dirs`, `skip_system_fonts: not system_fonts` and the five `*_family` options, returning a database handle (a NIF resource) that every render passes as resvg's `:fontdb` option. Beside it, the set of family names the database holds, read from `Resvg.list_fonts/1` with the same options (9.7). The two are built together and cached together.
+- **Where it is held.** In `:persistent_term`, under `{Visualize.Render.Raster, :fonts, key}`. A font configuration is set by a host's deployment and changes rarely, which is what `:persistent_term` is for: a read is a constant-time lookup with no copy and no process to call. No process owns the cache, so there is no GenServer to start or supervise, and the optional dependency adds nothing to the host's supervision tree. Two processes that miss the same key at once both build it and the second write wins; the two databases are equal, so either is correct.
+- **What it does not see.** A font added to a directory after its configuration was first used is not in the cached database: the cache lives as long as the VM. A host that installs fonts at run time restarts, or names the new directory in `:font_dirs`, which is a new key.
+
+`Raster.fonts/1` (`@doc false`) returns the cached `%{db: handle, families: MapSet.t()}` for a keyword list of font options, building it on the first call; a test asserts that the same configuration returns the same handle.
+
+### 9.7 Missing families
+
+resvg drops text in a family the database lacks, without an error or a warning (D-118), and it never substitutes another family: a font-family list resolves to its first member the database has, or the text is not drawn. The library therefore resolves every family list itself, with resvg's rules, before rendering:
+
+1. **The default family.** Text with no `font-family` of its own or on an ancestor is drawn by resvg in its `font_family` option, a single name (`Times New Roman` by default), whatever the theme says. So that every text's family is one the SVG names, the library writes `:font_family` (9.2) as a `font-family` attribute on the root `<svg>` element, which every such text inherits. It does so only when the root has none and the SVG has such an orphan text: a `<text` element with no `font-family`, attribute or style property, on itself or on an open ancestor element, found by walking the tags with a stack. A root default no text reads would otherwise be reported missing for text that does not use it.
+2. **The lists.** Every `font-family` the SVG holds is collected, in document order and without duplicates: the attribute (`font-family="…"`, with `&quot;`, `&#39;`, `&apos;`, `&lt;`, `&gt;` and `&amp;` decoded) and the style property (`font-family: …`, up to `;` or the end of the value). With `resolve: :literal` the SVG backend writes the theme's `font_family` as the attribute, which is how the theme's family reaches the rasteriser. A document with no `<text` element has no warnings, whatever families it names.
+3. **Members.** A list is split on commas outside quotes. A member in single or double quotes is a family name with its quotes removed. An unquoted member is a family name with its runs of whitespace collapsed to one space, unless it is exactly one of the lowercase generic keywords `serif`, `sans-serif`, `monospace`, `cursive` or `fantasy`, which names the configured family of 9.2. resvg matches both names and keywords **case-sensitively** (`dejavu sans` does not find `DejaVu Sans`, and `Sans-Serif` is a family name, not the keyword), and so does the library.
+4. **Resolution.** A member resolves when the database's family set (9.6) contains its name, or, for a keyword, its configured family. A list resolves when one of its members does. Each list that does not is one warning.
+
+A warning is `{:missing_family, list, tried}`: `list` the value as written in the SVG, `tried` the family names its members asked for, generic keywords replaced by their configured families, in order. For example `{:missing_family, "Inter, sans-serif", ["Inter", "Arial"]}` says both that Inter is absent and that `sans-serif` reached for Arial.
+
+**The family set** is read from `Resvg.list_fonts/1`, which describes each face it loaded from a file as `path: 'Family (Language, Region)', 'Family (…)', index, Style, weight, Stretch`. The library takes the text between the first `: '` and the trailing `', index, Style, weight, Stretch`, and from it each family name: the text before a ` (Language, Region)` suffix, the names separated by `', '`. A line that does not have this form contributes no family, so a face the parser cannot read makes a list *missing* rather than silently resolved — the failure is loud. Should resvg expose the families as data (#477 may propose it), the parse is replaced by it in this one place.

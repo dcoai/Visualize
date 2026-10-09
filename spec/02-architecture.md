@@ -190,9 +190,9 @@ and MAY define `wrap_root(output, keyword()) :: output`, which wraps content in 
 | `Visualize.Render.path_data/1` | As `path_data/2` with the default backend. |
 | `Visualize.Render.path_data/2` | The selected backend's `path_data/1` for the path. |
 | `Visualize.Render.to_png/1` | As `to_png/2` with no options. |
-| `Visualize.Render.to_png/2` | A root `Visualize.IR.Element`, or an SVG document as a binary, rasterised to a PNG through the optional `resvg` package: `{:ok, png}`, `{:error, :no_rasterizer}` without the package, `{:error, :css_references}` when the SVG holds a `var(--` reference, `{:error, {:rasterizer, message}}` when resvg refuses the document. Options `:scale` and `:background`; [09-rendering-backends](09-rendering-backends.md) §9. |
+| `Visualize.Render.to_png/2` | A root `Visualize.IR.Element`, or an SVG document as a binary, rasterised to a PNG through the optional `resvg` package: `{:ok, png, warnings}`, the warnings listing each font-family list no font resolves (`{:missing_family, list, tried}`, `[]` when all do), `{:error, :no_rasterizer}` without the package, `{:error, :css_references}` when the SVG holds a `var(--` reference, `{:error, {:rasterizer, message}}` when resvg refuses the document. Options `:scale`, `:background`, and the font options `:font_dirs`, `:system_fonts`, `:generic_families` and `:font_family`; [09-rendering-backends](09-rendering-backends.md) §9. |
 | `Visualize.Render.to_png!/1` | As `to_png!/2` with no options. |
-| `Visualize.Render.to_png!/2` | As `to_png/2`, returning the PNG binary and raising `RuntimeError` on the `{:error, _}` branch. |
+| `Visualize.Render.to_png!/2` | As `to_png/2`, returning the PNG binary of `{:ok, png, []}` and raising `RuntimeError` on the `{:error, _}` branch and when a family is missing: a complete picture or none. |
 
 `to_png/2` is the one function of the module that produces no backend output: it renders an IR root with `to_svg_string/2` and hands the SVG to the rasteriser of [09-rendering-backends](09-rendering-backends.md) §9 (D-118). Its input is narrower than a renderable, because a PNG is a whole document: a `:root` element (`Visualize.IR.Element.root/3`, or `Visualize.Chart.generate/2` with `root: true`), or the SVG string such an element renders to (`Visualize.Chart.render/2` with `root: true`).
 
