@@ -43,6 +43,69 @@ defmodule Visualize.JsHooks do
 
   defp decode(output, _status), do: {:error, output}
 
+  @doc """
+  The JavaScript expression that builds `svg`, markup a backend rendered, as the stub's
+  element tree: one `Stub.markup(tag, attributes, children)` per element, in document
+  order (#508). A scenario then runs a hook over the chart as rendered rather than over a
+  hand-written imitation of it. Text content, comments and declarations are dropped —
+  no hook reads them — and a closing tag that does not close the open element raises.
+  """
+  @spec markup(String.t()) :: String.t()
+  def markup(svg) do
+    ~r/<!--.*?-->|<[^>]+>|[^<]+/s
+    |> Regex.scan(svg)
+    |> List.flatten()
+    |> Enum.reduce([{:root, %{}, []}], &token/2)
+    |> case do
+      [{:root, _, [root]}] ->
+        expression(root)
+
+      stack ->
+        raise ArgumentError, "unbalanced markup, open: #{inspect(Enum.map(stack, &elem(&1, 0)))}"
+    end
+  end
+
+  defp token("<!" <> _, stack), do: stack
+  defp token("<?" <> _, stack), do: stack
+
+  defp token("</" <> rest, [{tag, attrs, children}, {parent, pattrs, siblings} | stack]) do
+    closing = rest |> String.trim_trailing(">") |> String.trim()
+
+    closing == tag ||
+      raise ArgumentError, "markup closes </#{closing}> while <#{tag}> is open"
+
+    [{parent, pattrs, [{tag, attrs, Enum.reverse(children)} | siblings]} | stack]
+  end
+
+  defp token("<" <> rest, [{parent, pattrs, siblings} | stack] = all) do
+    [tag | _] = String.split(rest, ~r/[\s\/>]/, parts: 2)
+
+    attrs =
+      for [_, name, value] <- Regex.scan(~r/([^\s=\/<>]+)="([^"]*)"/, rest),
+          into: %{},
+          do: {name, unescape(value)}
+
+    if String.ends_with?(rest, "/>"),
+      do: [{parent, pattrs, [{tag, attrs, []} | siblings]} | stack],
+      else: [{tag, attrs, []} | all]
+  end
+
+  defp token(_text, stack), do: stack
+
+  defp expression({tag, attrs, children}) do
+    "Stub.markup(#{Jason.encode!(tag)}, #{Jason.encode!(attrs)}, [" <>
+      Enum.map_join(children, ", ", &expression/1) <> "])"
+  end
+
+  defp unescape(value) do
+    value
+    |> String.replace("&quot;", "\"")
+    |> String.replace("&#39;", "'")
+    |> String.replace("&lt;", "<")
+    |> String.replace("&gt;", ">")
+    |> String.replace("&amp;", "&")
+  end
+
   @doc "The entries of `log` after the mark named `label` and before the next mark."
   @spec after_mark([map()], String.t()) :: [map()]
   def after_mark(log, label) do

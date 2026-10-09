@@ -1002,9 +1002,15 @@ defmodule Visualize.Chart.MarkTest do
           label: %{text: [{:field, :k}]}
         })
 
+      # Each label names its series, so a legend toggle hides it with its line (D-126).
       [_, _, t0, t1] = flat(group).children
-      assert {t0.content, t0.attrs} == {"k0", %{x: 200.0, y: 156.0}}
-      assert {t1.content, t1.attrs} == {"k1", %{x: 300.0, y: 56.0}}
+
+      assert {t0.content, t0.attrs} ==
+               {"k0", %{:x => 200.0, :y => 156.0, "data-series" => "k0"}}
+
+      assert {t1.content, t1.attrs} ==
+               {"k1", %{:x => 300.0, :y => 56.0, "data-series" => "k1"}}
+
       assert t0.style.text_anchor == :middle
     end
 

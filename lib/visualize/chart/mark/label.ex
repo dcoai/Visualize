@@ -5,6 +5,7 @@ defmodule Visualize.Chart.Mark.Label do
 
   alias Visualize.Chart.Frame.{Defs, Position}
   alias Visualize.Chart.Label.Polar
+  alias Visualize.Chart.Mark.Series
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.Chart.Text
   alias Visualize.Color
@@ -40,7 +41,8 @@ defmodule Visualize.Chart.Mark.Label do
   end
 
   @doc false
-  # One text element per child with an anchor point, or nothing without a label.
+  # One text element per child with an anchor point, or nothing without a label; a child
+  # of a series labels it with the series' `data-series` (spec/14 §5.6, D-126).
   @spec elements([map()], map()) :: [Element.t()]
   def elements(_children, %{label: nil}), do: []
   def elements(_children, %{type: type}) when type in @own_label, do: []
@@ -56,19 +58,21 @@ defmodule Visualize.Chart.Mark.Label do
             "mark-label"
           ),
         element != nil,
-        do: element
+        do: Series.stamp(element, Map.get(child, :series))
   end
 
   @doc false
   # The texts a `:rule` or an `:x_band` generator drew into its per-datum groups, lifted out
   # into the mark's labels group (spec/14 §5.5, #485): `{elements without them, texts}`.
-  # Every other type's labels are `elements/2`'s, so nothing is lifted.
+  # A lifted text keeps its group's `data-series` (D-126). Every other type's labels are
+  # `elements/2`'s, so nothing is lifted.
   @spec lift([Element.t()], map()) :: {[Element.t()], [Element.t()]}
   def lift(elements, %{type: type}) when type in [:rule, :x_band] do
     elements
     |> Enum.map(fn %Element{children: children} = element ->
       {texts, rest} = Enum.split_with(children, &(&1.type == :text))
-      {%{element | children: rest}, texts}
+      series = Map.get(element.attrs, "data-series")
+      {%{element | children: rest}, Enum.map(texts, &Series.stamp(&1, series))}
     end)
     |> Enum.unzip()
     |> then(fn {elements, texts} -> {elements, List.flatten(texts)} end)

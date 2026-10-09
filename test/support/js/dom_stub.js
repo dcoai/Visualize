@@ -34,17 +34,32 @@ const Stub = (() => {
     fire(type, event) { (this.listeners[type] || []).slice().forEach((fn) => fn(event)); }
   }
 
-  // A selector list of compounds — `tag`, `.class`, `[attr]`, `tag[attr]` — which is every
-  // form the hooks query by; anything else throws rather than silently matching nothing.
+  // A selector list of compounds — `tag`, `.class`, `[attr]`, `tag[attr]` — joined by the
+  // descendant combinator, a space (`.mark [data-series]`, #508), which is every form the
+  // hooks query by; anything else throws rather than silently matching nothing.
+  function compound(text, selector) {
+    const m = text.match(/^([a-z0-9]*)((?:\.[\w-]+|\[[\w-]+\])*)$/i);
+    if (!m || text === '') throw new Error('dom_stub: unsupported selector ' + selector);
+    const tag = m[1].toUpperCase();
+    const classes = [...m[2].matchAll(/\.([\w-]+)/g)].map((c) => c[1]);
+    const attrs = [...m[2].matchAll(/\[([\w-]+)\]/g)].map((a) => a[1]);
+    return (el) => (tag === '' || el.tagName === tag) &&
+      classes.every((c) => el.classList.contains(c)) && attrs.every((a) => el.hasAttribute(a));
+  }
+
+  // The last compound matches the element, and the ones before it match ancestors in
+  // order, nearest first — a browser's right-to-left reading of a descendant chain.
   function matcher(selector) {
     const tests = selector.split(',').map((part) => {
-      const m = part.trim().match(/^([a-z0-9]*)((?:\.[\w-]+|\[[\w-]+\])*)$/i);
-      if (!m) throw new Error('dom_stub: unsupported selector ' + selector);
-      const tag = m[1].toUpperCase();
-      const classes = [...m[2].matchAll(/\.([\w-]+)/g)].map((c) => c[1]);
-      const attrs = [...m[2].matchAll(/\[([\w-]+)\]/g)].map((a) => a[1]);
-      return (el) => (tag === '' || el.tagName === tag) &&
-        classes.every((c) => el.classList.contains(c)) && attrs.every((a) => el.hasAttribute(a));
+      const chain = part.trim().split(/\s+/).map((text) => compound(text, selector));
+      return (el) => {
+        if (!chain[chain.length - 1](el)) return false;
+        let i = chain.length - 2;
+        for (let node = el.parentNode; i >= 0 && node && node.classList; node = node.parentNode) {
+          if (chain[i](node)) i--;
+        }
+        return i < 0;
+      };
     });
     return (el) => tests.some((test) => test(el));
   }
@@ -119,7 +134,11 @@ const Stub = (() => {
       const {top, left, width, height} = this.rect;
       return {top, left, width, height, bottom: top + height, right: left + width};
     }
-    setAttribute(name, value) { this.attributes[name] = String(value); }
+    // `class` is reflected into classList, as a browser does, so a selector reads it.
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+      if (name === 'class') this.className = String(value);
+    }
     // A `data-*` attribute the element was built with reads through its dataset, as in a browser.
     getAttribute(name) {
       if (name in this.attributes) return this.attributes[name];

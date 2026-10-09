@@ -42,7 +42,7 @@ defmodule Visualize.Chart.Mark do
 
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Scales
-  alias Visualize.Chart.Mark.{Bend, Generic, Label, Shapes, Strokes, Tiles}
+  alias Visualize.Chart.Mark.{Bend, Generic, Label, Series, Shapes, Strokes, Tiles}
   alias Visualize.Chart.{Style, Var}
   alias Visualize.Data.Table
   alias Visualize.IR.{Element, Transform}
@@ -57,7 +57,8 @@ defmodule Visualize.Chart.Mark do
   @typedoc """
   What the element builders see of a mark: the frame, the mark node, its rows, its
   resolved style split into the static part and the `{:field, f}` bindings, its paint
-  as `{key, colour}`, its options, inline label and tooltip node, and the render mode.
+  as `{key, colour}`, its options, inline label and tooltip node, the render mode, and
+  its series values by position when it has a `series` channel (spec/14 §5.2, D-126).
   """
   @type context :: %{
           frame: Frame.t(),
@@ -71,7 +72,8 @@ defmodule Visualize.Chart.Mark do
           paint: {:fill | :stroke, term()},
           options: map(),
           label: map() | nil,
-          tooltip: map() | nil
+          tooltip: map() | nil,
+          series: %{term() => pos_integer()} | nil
         }
 
   @doc "As `generate/3` with `[]` options: no source bound, an empty mark group."
@@ -121,8 +123,11 @@ defmodule Visualize.Chart.Mark do
       tooltip: node(mark, :tooltip)
     }
 
+    ctx = Map.put(ctx, :series, Series.index(ctx))
+
     children = if type in @shapes, do: Shapes.elements(ctx), else: Generic.elements(ctx)
-    children = bent(children, ctx)
+    # Every element and label a series draws names it (spec/14 §5.6, D-126).
+    children = children |> Series.annotate(ctx) |> bent(ctx)
     bound = Enum.map(children, &bind(&1, ctx))
     elements = Strokes.apply(bound, ctx)
     # A label inked by contrast reads its element's bound fill (spec/14 §5.5, D-123).
@@ -285,9 +290,9 @@ defmodule Visualize.Chart.Mark do
     end
   end
 
-  # An element's own style: the generator's, the series paint, and the bindings read
-  # from its datum (spec/14 §3.4).
-  defp bind(%{element: element, datum: datum, style: style}, ctx) do
+  # An element's own style: the series' paint under the generator's, then the bindings
+  # read from its datum (spec/14 §3.4, §5.6); and its series' `data-series` (D-126).
+  defp bind(%{element: element, datum: datum, style: style} = child, ctx) do
     bound = Style.bind(ctx.bound, datum, ctx.frame, ctx.mode)
 
     paint =
@@ -297,7 +302,14 @@ defmodule Visualize.Chart.Mark do
       end
 
     element
-    |> Element.set_style(style |> Map.merge(paint) |> Map.merge(bound))
+    |> Element.set_style(
+      child
+      |> Series.paint(ctx)
+      |> Map.merge(style)
+      |> Map.merge(paint)
+      |> Map.merge(bound)
+    )
+    |> Series.stamp(Map.get(child, :series))
     |> datum_attrs(datum, ctx)
   end
 

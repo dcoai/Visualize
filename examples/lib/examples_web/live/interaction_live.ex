@@ -58,12 +58,13 @@ defmodule ExamplesWeb.InteractionLive do
         style: :smooth,
         tooltip: %{fields: [:series], template: "series {series}"}
       },
+      # The points name their series as the line does (#508), so a legend toggle hides
+      # both, and they take the line's colour without a style of their own.
       %{
         type: :circle,
         data: :primary,
-        channels: %{x: :hour, y: :value},
+        channels: %{x: :hour, y: :value, series: :series},
         options: %{radius: 4},
-        style: :dots,
         tooltip: %{
           fields: [:series, :hour, :value],
           template: "{series} at {hour}:00\nvalue {value}",
@@ -71,10 +72,7 @@ defmodule ExamplesWeb.InteractionLive do
         }
       }
     ],
-    styles: %{
-      smooth: %{curve: :monotone_x, stroke_width: 2},
-      dots: %{fill: {:field, :series}}
-    },
+    styles: %{smooth: %{curve: :monotone_x, stroke_width: 2}},
     labels: [%{anchor: :title, text: ["Hover a point; click one to send it to the LiveView"]}]
   }
 
@@ -198,8 +196,10 @@ defmodule ExamplesWeb.InteractionLive do
 
         <h2 style="margin-top: 2.5rem;">Legend toggling</h2>
         <p style="color: #666; margin-bottom: 1rem;">
-          Every legend entry and every series path carry the same <code>data-series</code>;
-          <code>LegendHook</code> hides a series with <code>display="none"</code> when its
+          Every legend entry and every element a series draws, its line and each of its
+          points, carry the same <code>data-series</code>: both marks have the
+          <code>series</code> channel. <code>LegendHook</code> hides a series with
+          <code>display="none"</code> when its
           entry is clicked and pushes <code>legend_toggle</code>. The hidden set survives a
           patch: the LiveView re-renders on every event and the series stays hidden.
         </p>
@@ -244,7 +244,7 @@ defmodule ExamplesWeb.InteractionLive do
     marks: [
       %{type: :line, channels: %{x: :hour, y: :value, series: :series},
         tooltip: %{fields: [:series], template: "series {series}"}},
-      %{type: :circle, channels: %{x: :hour, y: :value}, style: :dots,
+      %{type: :circle, channels: %{x: :hour, y: :value, series: :series},
         tooltip: %{fields: [:series, :hour, :value],
                    template: "{series} at {hour}:00\\nvalue {value}",
                    event: :point_click}}
@@ -253,7 +253,7 @@ defmodule ExamplesWeb.InteractionLive do
     # The tooltip reads the attributes the mark wrote; nothing is fetched on hover.
     <div id="chart" phx-hook="TooltipHook">{raw(svg)}</div>
 
-    # The legend's entries and the series paths share data-series; the hook joins them.
+    # The legend's entries and every element of a series share data-series; the hook joins them.
     <div id="chart" phx-hook="LegendHook" data-legend-event="legend_toggle">{raw(svg)}</div>
 
     # The crosshair reads the arrays attrs/3 wrote once, over SVG or canvas alike.
