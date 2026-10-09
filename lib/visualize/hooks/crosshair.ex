@@ -8,7 +8,9 @@ defmodule Visualize.Hooks.Crosshair do
   same attributes serve a mark drawn as SVG and one the compiler sent to the canvas layer
   (D-76). `attrs/3` computes them from a realised `Visualize.Chart.Frame`; the hook draws
   in an overlay it appends to `document.body`, so a LiveView patch of the chart never
-  removes it, and re-reads the arrays on `updated()`.
+  removes it, and re-reads the arrays on `updated()`. The overlay is placed over the chart
+  itself — the container's first `<svg>` or `<canvas>` — not over the container, whose box
+  the page lays out (spec/10 §13.3, #507).
 
   In a sync group (spec/10 §4.3, §13.4) the hook publishes the pointer's x in domain units
   on the group's bus and draws every other member's hover at the nearest x of its own
@@ -33,7 +35,8 @@ defmodule Visualize.Hooks.Crosshair do
   - `data-xs` - the distinct x pixels, ascending, in plot coordinates
   - `data-ys` - one array per series of the y pixel at each x, `null` where absent
   - `data-plot` - `left,top,width,height` of the plot area inside the chart
-  - `data-size` - `width,height` of the chart; absent, the container's own size
+  - `data-size` - `width,height` of the chart; absent, the chart element's own size. Over
+    a canvas, the canvas's `data-width`/`data-height` are this size, from the same frame
 
   Set by the host:
   - `data-crosshair-event` - the event pushed with `{index}` when the nearest index
@@ -197,8 +200,8 @@ defmodule Visualize.Hooks.Crosshair do
         this.markers.forEach((marker, i) => marker.setAttribute('fill', this.colors[i] || this.color));
       },
 
-      // The pointer in chart units: the container's rectangle scaled to the chart's
-      // viewBox, with the overlay placed over that rectangle.
+      // The pointer in chart units: the chart's rectangle scaled to its viewBox, with the
+      // overlay placed over that rectangle.
       chartPoint(clientX, clientY) {
         const { rect, width, height } = this.place();
         return {
@@ -207,9 +210,12 @@ defmodule Visualize.Hooks.Crosshair do
         };
       },
 
-      // The overlay sized and placed over the container, with the chart's viewBox.
+      // The overlay sized and placed over the chart, with the chart's viewBox. The chart is
+      // the container's first svg or canvas, looked up on every move since a patch may
+      // replace it; the container's own box is the page's layout, a descender gap taller
+      // than an inline chart (spec/10 §13.3, #507).
       place() {
-        const rect = this.el.getBoundingClientRect();
+        const rect = this.chart().getBoundingClientRect();
         const width = this.size ? this.size[0] : rect.width;
         const height = this.size ? this.size[1] : rect.height;
         this.overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -218,6 +224,11 @@ defmodule Visualize.Hooks.Crosshair do
         this.overlay.style.width = rect.width + 'px';
         this.overlay.style.height = rect.height + 'px';
         return { rect, width, height };
+      },
+
+      // The drawing the arrays describe; the container itself when it holds none.
+      chart() {
+        return this.el.querySelector('svg, canvas') || this.el;
       },
 
       // The index of the nearest x by binary search, the lower of two equidistant ones.
