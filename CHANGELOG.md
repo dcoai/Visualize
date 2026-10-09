@@ -16,6 +16,15 @@ release it merely follows.
 
 ### Added
 
+- **`Visualize.Render.to_png/2` and `to_png!/2`** (#473, D-118): a root IR element, or the
+  SVG string one renders to, rasterised to a PNG through the optional `resvg` package —
+  add `{:resvg, "~> 0.6"}` to opt in; it needs no Rust, downloading a precompiled NIF.
+  `scale:` is the device pixel ratio and `background:` a CSS colour. Without the package
+  the result is `{:error, :no_rasterizer}`. The SVG must carry literal colours (generate
+  with `resolve: :literal`); a `var(--…)` theme reference returns
+  `{:error, :css_references}`, since resvg would paint it black. Until resvg ships dirty
+  scheduling (#477) a render holds a scheduler for its duration. A consumer that does not
+  list `resvg` fetches nothing new.
 - **A theme's `:surface` slot** (#422): the plane a chart's data is laid on, between the
   background and the grid — `#eef2f6` on `Visualize.Theme.default/0`, `#23272f` on
   `dark/0`. It is a colour slot like any other: `slots/1` and `colour_slots/1` list it,

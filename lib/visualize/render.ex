@@ -28,8 +28,12 @@ defmodule Visualize.Render do
 
   alias Visualize.Backend
   alias Visualize.IR.{Element, Path}
+  alias Visualize.Render.Raster
 
   @type renderable :: Path.t() | Element.t() | [Element.t()]
+
+  @typedoc "Why `to_png/2` produced no PNG (spec/09 §9.3)."
+  @type png_error :: :no_rasterizer | :css_references | {:rasterizer, String.t()}
 
   @doc """
   Renders IR to the specified backend, returning an iolist.
@@ -113,6 +117,54 @@ defmodule Visualize.Render do
     backend = resolve_backend(opts)
     backend.path_data(path)
   end
+
+  @doc """
+  Rasterises a chart to a PNG through the optional `resvg` package (spec/09 §9, D-118).
+
+  The input is a whole document: a root `Visualize.IR.Element` (`Visualize.IR.Element.root/3`,
+  or `Visualize.Chart.generate/2` with `root: true`), rendered with `to_svg_string/2`, or the
+  SVG string such an element renders to (`Visualize.Chart.render/2` with `root: true`).
+
+  The SVG must carry literal colours: resvg paints a `var(--…)` theme reference black, so a
+  chart meant for a PNG is generated with `resolve: :literal`, and an SVG holding one
+  returns `{:error, :css_references}`.
+
+      applied
+      |> Visualize.Chart.generate(root: true, resolve: :literal)
+      |> Visualize.Render.to_png(scale: 2, background: "#ffffff")
+
+  ## Options
+
+    * `:scale` - the device pixel ratio, a positive number (default `1`); the PNG is the
+      root's width and height times it
+    * `:background` - a CSS colour painted under the document (default `nil`: transparent)
+    * Other options of an IR input pass through to the SVG backend; an SVG string takes no
+      other option.
+
+  ## Results
+
+    * `{:ok, png}` - the PNG binary
+    * `{:error, :no_rasterizer}` - the `resvg` package is not loaded; add
+      `{:resvg, "~> 0.6"}` to the host's deps
+    * `{:error, :css_references}` - the SVG holds a `var(--` reference
+    * `{:error, {:rasterizer, message}}` - resvg refused the document or an option
+
+  ## Scheduling
+
+  A render holds a normal scheduler for its whole duration — tens to hundreds of
+  milliseconds for a chart-sized SVG — because resvg 0.6.0 runs its NIFs on normal
+  schedulers. Until a release carries the upstream fix (dirty CPU scheduling, #477), render
+  PNGs off the request path and not in bulk beside LiveView traffic.
+  """
+  @spec to_png(Element.t() | String.t(), keyword()) ::
+          {:ok, binary()} | {:error, png_error()}
+  def to_png(input, opts \\ []), do: Raster.to_png(input, opts, Raster.available?())
+
+  @doc """
+  As `to_png/2`, returning the PNG binary and raising on the `{:error, _}` branch.
+  """
+  @spec to_png!(Element.t() | String.t(), keyword()) :: binary()
+  def to_png!(input, opts \\ []), do: Raster.to_png!(input, opts, Raster.available?())
 
   # ============================================================
   # Private Functions
