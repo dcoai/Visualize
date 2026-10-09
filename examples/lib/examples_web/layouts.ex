@@ -97,6 +97,17 @@ defmodule ExamplesWeb.Layouts do
           .chart-detail h2 { margin-bottom: 1rem; color: #333; }
           .chart-detail .chart-container { margin: 1rem 0; display: flex; justify-content: center; }
           .chart-detail svg { max-width: 100%; height: auto; }
+          /* One demo, one panel: its heading, explanation and chart together (#505) */
+          .panels { display: flex; flex-direction: column; gap: 1.5rem; }
+          .panel { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.5rem 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+          .panel-title { margin-bottom: 0.75rem; color: #333; }
+          h2.panel-title { font-size: 1.35rem; }
+          h3.panel-title { font-size: 0.95rem; margin-bottom: 0.25rem; }
+          .panel-note { color: #666; margin-bottom: 1rem; }
+          .panel .chart-container { margin: 1rem 0; display: flex; justify-content: center; }
+          .panel svg { max-width: 100%; height: auto; }
+          .panel pre { margin-top: 0; }
+          .panel .panel { box-shadow: none; padding: 0.75rem 1rem; border-radius: 8px; }
           pre {
             background: #1e1e1e;
             color: #d4d4d4;

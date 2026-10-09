@@ -5,9 +5,14 @@ defmodule ExamplesWeb.InteractionLive do
   `CrosshairHook` snapping to the arrays `Visualize.Hooks.Crosshair.attrs/3` wrote once
   (spec/10 §13) — over the SVG and over the same chart on a binary canvas — and
   `LegendHook` hiding a series from its legend entry (spec/10 §14).
+
+  Each demo is one `ExamplesWeb.Panel` — its heading, its explanation and its chart
+  together — and the chart's legend sits in the frame's right margin, beside the plot
+  rather than over a series (#505).
   """
   use Phoenix.LiveView
 
+  alias ExamplesWeb.Panel
   alias Visualize.Chart
   alias Visualize.Hooks.Crosshair
   alias Visualize.Theme
@@ -38,7 +43,9 @@ defmodule ExamplesWeb.InteractionLive do
     sources: %{primary: %{fields: [:hour, :series, :value]}},
     frames: %{main: %{
       kind: :cartesian,
-      margin: %{top: 30, right: 120, bottom: 40, left: 50},
+      # The right margin holds the legend (#505): `inside: false` puts it there, beside the
+      # plot and never over a series; its estimated width is 67 of the 96.
+      margin: %{top: 30, right: 96, bottom: 40, left: 50},
       scales: %{
         x: %{kind: :linear, domain: [0, 23]},
         y: %{kind: :linear, domain: [0, :auto], nice: true},
@@ -48,7 +55,7 @@ defmodule ExamplesWeb.InteractionLive do
         %{scale: :x, side: :bottom, ticks: 12, grid: true},
         %{scale: :y, side: :left, ticks: 5, grid: true}
       ],
-      legend: %{scale: :color, position: :top_right, title: ["series"]}
+      legend: %{scale: :color, position: :top_right, inside: false, title: ["series"]}
     }},
     marks: [
       %{
@@ -130,94 +137,108 @@ defmodule ExamplesWeb.InteractionLive do
         Also under this tab: the <a href="/dashboard">Synced dashboard</a> — one crosshair and one brush across three panels.
       </p>
 
-      <div class="chart-detail">
-        <h2>Tooltip</h2>
-        <p style="color: #666; margin-bottom: 1rem;">
-          Every point carries its datum as <code>data-datum-*</code> attributes, written by
-          the mark's <code>tooltip</code> node; <code>TooltipHook</code> formats them with
-          the mark's template. Clicking a point pushes <code>point_click</code>.
-        </p>
+      <div class="panels">
+        <Panel.panel id="panel-tooltip">
+          <:title>Tooltip</:title>
+          <p class="panel-note">
+            Every point carries its datum as <code>data-datum-*</code> attributes, written by
+            the mark's <code>tooltip</code> node; <code>TooltipHook</code> formats them with
+            the mark's template. Clicking a point pushes <code>point_click</code>.
+          </p>
 
-        <div class="chart-container">
-          <div id="tooltip-chart" phx-hook="TooltipHook" data-tooltip-class="vis-tooltip">
-            <%= Phoenix.HTML.raw(@svg) %>
-          </div>
-        </div>
-
-        <p :if={@picked} class="picked">
-          <% {series, hour, value} = @picked %>
-          Clicked: <strong><%= series %></strong> at <%= hour %>:00, value <%= value %>
-        </p>
-        <p :if={!@picked} class="picked">No point clicked yet.</p>
-
-        <h2 style="margin-top: 2.5rem;">Crosshair over the SVG</h2>
-        <p style="color: #666; margin-bottom: 1rem;">
-          <code>Visualize.Hooks.Crosshair.attrs/3</code> wrote the line mark's x pixels and
-          each series' y pixels once, as <code>data-xs</code> and <code>data-ys</code>;
-          <code>CrosshairHook</code> snaps to the nearest x by binary search and pushes
-          <code>hover</code> with the index when it changes.
-        </p>
-
-        <div class="chart-container">
-          <div
-            id="crosshair-svg"
-            phx-hook="CrosshairHook"
-            {@crosshair}
-            data-crosshair-event="hover"
-            data-crosshair-colors={@colors}
-          >
-            <%= Phoenix.HTML.raw(@svg) %>
-          </div>
-        </div>
-
-        <p :if={@hovered} class="picked">Hovered index: <strong><%= @hovered %></strong></p>
-        <p :if={!@hovered} class="picked">Move over the plot to see the hovered index.</p>
-
-        <h2 style="margin-top: 2.5rem;">Crosshair over the canvas</h2>
-        <p style="color: #666; margin-bottom: 1rem;">
-          The same chart through the binary canvas backend: no element per datum exists,
-          and the crosshair reads the same arrays, so nothing changes for the hook.
-        </p>
-
-        <div class="chart-container">
-          <div id="crosshair-canvas" phx-hook="CrosshairHook" {@crosshair} data-crosshair-colors={@colors}>
-            <div
-              id="crosshair-canvas-chart"
-              phx-hook="CanvasBinaryChart"
-              phx-update="ignore"
-              data-binary={@binary}
-              data-width={@width}
-              data-height={@height}
-            >
-              <canvas width={@width} height={@height}></canvas>
+          <div class="chart-container">
+            <div id="tooltip-chart" phx-hook="TooltipHook" data-tooltip-class="vis-tooltip">
+              <%= Phoenix.HTML.raw(@svg) %>
             </div>
           </div>
-        </div>
 
-        <h2 style="margin-top: 2.5rem;">Legend toggling</h2>
-        <p style="color: #666; margin-bottom: 1rem;">
-          Every legend entry and every element a series draws, its line and each of its
-          points, carry the same <code>data-series</code>: both marks have the
-          <code>series</code> channel. <code>LegendHook</code> hides a series with
-          <code>display="none"</code> when its
-          entry is clicked and pushes <code>legend_toggle</code>. The hidden set survives a
-          patch: the LiveView re-renders on every event and the series stays hidden.
-        </p>
+          <p :if={@picked} class="picked">
+            <% {series, hour, value} = @picked %>
+            Clicked: <strong><%= series %></strong> at <%= hour %>:00, value <%= value %>
+          </p>
+          <p :if={!@picked} class="picked">No point clicked yet.</p>
+        </Panel.panel>
 
-        <div class="chart-container">
-          <div id="legend-chart" phx-hook="LegendHook" data-legend-event="legend_toggle">
-            <%= Phoenix.HTML.raw(@svg) %>
+        <Panel.panel id="panel-crosshair-svg">
+          <:title>Crosshair over the SVG</:title>
+          <p class="panel-note">
+            <code>Visualize.Hooks.Crosshair.attrs/3</code> wrote the line mark's x pixels and
+            each series' y pixels once, as <code>data-xs</code> and <code>data-ys</code>;
+            <code>CrosshairHook</code> snaps to the nearest x by binary search and pushes
+            <code>hover</code> with the index when it changes.
+          </p>
+
+          <div class="chart-container">
+            <div
+              id="crosshair-svg"
+              phx-hook="CrosshairHook"
+              {@crosshair}
+              data-crosshair-event="hover"
+              data-crosshair-colors={@colors}
+            >
+              <%= Phoenix.HTML.raw(@svg) %>
+            </div>
           </div>
-        </div>
 
-        <p class="picked">
-          Hidden on the server's record:
-          <strong><%= @hidden |> Enum.filter(fn {_, h} -> h end) |> Enum.map(&elem(&1, 0)) |> Enum.join(", ") %></strong>
-          <%= if Enum.all?(@hidden, fn {_, h} -> not h end), do: "none" %>
-        </p>
+          <p :if={@hovered} class="picked">Hovered index: <strong><%= @hovered %></strong></p>
+          <p :if={!@hovered} class="picked">Move over the plot to see the hovered index.</p>
+        </Panel.panel>
 
-        <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">The design and the markup</h3>
-        <pre><code><%= design_code() %></code></pre>
+        <Panel.panel id="panel-crosshair-canvas">
+          <:title>Crosshair over the canvas</:title>
+          <p class="panel-note">
+            The same chart through the binary canvas backend: no element per datum exists,
+            and the crosshair reads the same arrays, so nothing changes for the hook.
+          </p>
+
+          <div class="chart-container">
+            <div id="crosshair-canvas" phx-hook="CrosshairHook" {@crosshair} data-crosshair-colors={@colors}>
+              <div
+                id="crosshair-canvas-chart"
+                phx-hook="CanvasBinaryChart"
+                phx-update="ignore"
+                data-binary={@binary}
+                data-width={@width}
+                data-height={@height}
+              >
+                <canvas width={@width} height={@height}></canvas>
+              </div>
+            </div>
+          </div>
+        </Panel.panel>
+
+        <Panel.panel id="panel-legend">
+          <:title>Legend toggling</:title>
+          <p class="panel-note">
+            Every legend entry and every element a series draws, its line and each of its
+            points, carry the same <code>data-series</code>: both marks have the
+            <code>series</code> channel. <code>LegendHook</code> hides a series with
+            <code>display="none"</code> when its
+            entry is clicked and pushes <code>legend_toggle</code>. The hidden set survives a
+            patch: the LiveView re-renders on every event and the series stays hidden.
+          </p>
+
+          <div class="chart-container">
+            <div id="legend-chart" phx-hook="LegendHook" data-legend-event="legend_toggle">
+              <%= Phoenix.HTML.raw(@svg) %>
+            </div>
+          </div>
+
+          <p class="picked">
+            Hidden on the server's record:
+            <strong><%= @hidden |> Enum.filter(fn {_, h} -> h end) |> Enum.map(&elem(&1, 0)) |> Enum.join(", ") %></strong>
+            <%= if Enum.all?(@hidden, fn {_, h} -> not h end), do: "none" %>
+          </p>
+        </Panel.panel>
+
+        <Panel.panel id="panel-code">
+          <:title>The design and the markup</:title>
+          <p class="panel-note">
+            The marks every demo above draws, and the markup each hook reads: the legend sits
+            in the frame's right margin (<code>inside: false</code>), beside the plot.
+          </p>
+          <pre><code><%= design_code() %></code></pre>
+        </Panel.panel>
       </div>
     </main>
 
@@ -241,6 +262,9 @@ defmodule ExamplesWeb.InteractionLive do
 
   defp design_code do
     """
+    # The legend in the frame's right margin, beside the plot (spec/14 §4.5).
+    legend: %{scale: :color, position: :top_right, inside: false, title: ["series"]}
+
     marks: [
       %{type: :line, channels: %{x: :hour, y: :value, series: :series},
         tooltip: %{fields: [:series], template: "series {series}"}},
