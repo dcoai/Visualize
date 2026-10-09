@@ -313,6 +313,84 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
     end
   end
 
+  describe "a plot mounted mid-run (#502, D-128)" do
+    # A page switches backend during a run: the old plot's element goes, the new one
+    # mounts with the run's sequences already past the floor — six frames went to the old
+    # backend — and the first frame it is sent is the full one the switch forces.
+    test "a fresh CanvasIncrementalChart draws the first full frame whole and acks it above the floor" do
+      size = {600, 400}
+
+      assert {:ok, %{"log" => log, "report" => %{"old" => old, "inc" => inc}}} =
+               run("""
+               const ack = {ack: 'frame_drawn', ackInterval: '50', frame: 'main'};
+               const oldEl = Stub.element(Object.assign({width: '600', height: '400', binary: #{js(binary())}}, ack), 600, 400);
+               const old = Stub.mount(CanvasBinaryChart, oldEl);
+               for (let seq = 1; seq <= 6; seq++) Stub.deliver(old, 'canvas_update', {binary: #{js(binary())}, seq, frame: 'main'});
+               Stub.advance(50);
+               Stub.mark('old frame in flight');
+               Stub.deliver(old, 'canvas_update', {binary: #{js(binary())}, seq: 7, frame: 'main'});
+               old.destroyed();
+               Stub.advance(100);
+               Stub.mark('mount');
+               const incEl = Stub.element(Object.assign({width: '600', height: '400'}, ack), 600, 400);
+               const inc = Stub.mount(CanvasIncrementalChart, incEl);
+               Stub.mark('first frame');
+               Stub.deliver(inc, 'canvas_incremental', {binary: #{js(full(size))}, dx: 0, dy: 0, mode: 'full', seq: 8, frame: 'main'});
+               Stub.advance(50);
+               Stub.mark('scroll');
+               Stub.deliver(inc, 'canvas_incremental', {binary: #{js(scroll(size))}, dx: 20, dy: 0, mode: 'scroll_x', seq: 9, frame: 'main'});
+               Stub.advance(50);
+               Stub.done({old: old.canvas.id, inc: inc.canvas.id});
+               """)
+
+      pushes = fn label -> for %{"kind" => "push"} = p <- after_mark(log, label), do: p end
+
+      # The old hook acked its six; the frame it was sent as the switch came is never
+      # acked, its element gone before the interval — and an ack that had left anyway is
+      # below the floor the page keeps.
+      assert [%{"payload" => %{"seq" => 6}}] =
+               for(%{"kind" => "push"} = p <- log, p["payload"]["seq"] <= 6, do: p)
+
+      assert pushes.("old frame in flight") == []
+
+      # Mounted, the new canvas draws nothing until it is sent a frame.
+      refute drew?(after_mark(log, "mount"), inc)
+
+      # The first frame: the whole canvas cleared and the stream replayed, then one ack
+      # with the new backend's sequence, above the floor.
+      first = after_mark(log, "first frame")
+      assert "clearRect" in calls(first, inc)
+      assert drew?(first, inc)
+      refute "drawImage" in calls(first, inc)
+
+      assert [%{"name" => "frame_drawn", "payload" => %{"seq" => 8, "drawn" => 1}}] =
+               for(%{"kind" => "push"} = p <- first, do: p)
+
+      # Its pixels are current, so the next scroll copies them.
+      assert "drawImage" in calls(after_mark(log, "scroll"), inc)
+      assert [%{"payload" => %{"seq" => 9}}] = pushes.("scroll")
+      refute drew?(after_mark(log, "mount"), old)
+    end
+
+    test "a fresh CanvasBinaryChart draws its markup's frame at mount and acks the next above the floor" do
+      assert {:ok, %{"log" => log, "report" => %{"canvas" => canvas}}} =
+               run("""
+               Stub.mark('mount');
+               const el = Stub.element({width: '600', height: '400', binary: #{js(binary())}, ack: 'frame_drawn', ackInterval: '50', frame: 'main'}, 600, 400);
+               const hook = Stub.mount(CanvasBinaryChart, el);
+               Stub.mark('first frame');
+               Stub.deliver(hook, 'canvas_update', {binary: #{js(binary())} + '', seq: 8, frame: 'main'});
+               Stub.advance(50);
+               Stub.done({canvas: hook.canvas.id});
+               """)
+
+      assert drew?(after_mark(log, "mount"), canvas)
+
+      assert [%{"name" => "frame_drawn", "payload" => %{"seq" => 8, "drawn" => 1}}] =
+               for(%{"kind" => "push"} = p <- after_mark(log, "first frame"), do: p)
+    end
+  end
+
   describe "a sync group shares hover (#466, spec/10 §4.3)" do
     # The crosshair's attributes of a real design, applied at a size, as a hook's dataset:
     # the arrays, the plot, the size and the group's mapping, all from the server.

@@ -33,7 +33,8 @@ defmodule ExamplesWeb.PerformanceDrawer do
   )
 
   def performance(assigns) do
-    assigns = assign(assigns, acks?: Frames.acks?(assigns.backend))
+    assigns =
+      assign(assigns, acks?: Frames.acks?(assigns.backend), segments: segments(assigns.run))
 
     ~H"""
     <section class={"perf-drawer" <> if(@open, do: " perf-drawer-open", else: "")} id="performance-drawer">
@@ -55,7 +56,6 @@ defmodule ExamplesWeb.PerformanceDrawer do
               type="button"
               class={"perf-chip" <> if(b == @backend, do: " perf-chip-on", else: "")}
               aria-pressed={to_string(b == @backend)}
-              disabled={@run.running}
               phx-click="run_backend"
               phx-value-backend={b}
             ><%= backend_name(b) %></button>
@@ -128,6 +128,29 @@ defmodule ExamplesWeb.PerformanceDrawer do
           </span>
         </div>
 
+        <%!-- A run that switched backend (spec/14 §12.6, #502, D-128): the metrics above
+              are the current backend's since the switch, and each backend it was on
+              before is a row of its own, never mixed into them. --%>
+        <table :if={@segments != []} class="perf-compare perf-segments">
+          <caption>This run, by backend</caption>
+          <thead>
+            <tr><th>Backend</th><th>Frames</th><th>FPS</th><th>Client FPS</th><th>Render / frame</th><th>Last payload</th><th>Dropped</th><th>Stalls</th><th>Skipped</th></tr>
+          </thead>
+          <tbody>
+            <tr :for={{segment, i} <- Enum.with_index(@segments)} class={if i == 0, do: "perf-segment-now", else: "perf-segment"}>
+              <td><%= backend_name(segment.backend) %><%= if i == 0, do: " (now)" %></td>
+              <td><%= segment.frames %></td>
+              <td><%= trunc(segment.fps) %></td>
+              <td><%= if Frames.acks?(segment.backend), do: trunc(segment.client_fps), else: "—" %></td>
+              <td><%= Float.round(segment.avg_render_us / 1000, 2) %> ms</td>
+              <td><%= Float.round(segment.payload_size / 1024, 1) %> KB</td>
+              <td><%= segment.dropped %></td>
+              <td><%= segment.stalls %></td>
+              <td><%= segment.skipped %></td>
+            </tr>
+          </tbody>
+        </table>
+
         <table :if={@compare} class="perf-compare">
           <caption>This chart, <%= @ticks %> ticks per backend, headless</caption>
           <thead>
@@ -158,6 +181,10 @@ defmodule ExamplesWeb.PerformanceDrawer do
     </div>
     """
   end
+
+  # The run's segments, the current backend's first (D-128): none until a run switches.
+  defp segments(%Run{segments: []}), do: []
+  defp segments(%Run{segments: closed} = run), do: [Run.segment(run) | closed]
 
   defp backend_name(:svg), do: "SVG"
   defp backend_name(:canvas), do: "Canvas"
@@ -200,6 +227,7 @@ defmodule ExamplesWeb.PerformanceDrawer do
     .perf-frame-mode { color: #666; }
     .perf-compare { width: 100%; margin-top: 0.75rem; border-collapse: collapse; font-size: 13px; }
     .perf-compare caption { text-align: left; color: #666; padding-bottom: 0.3rem; }
+    .perf-segment-now td { font-weight: 600; }
     .perf-compare th, .perf-compare td { padding: 0.35rem 0.5rem; border-bottom: 1px solid #eee; text-align: right; }
     .perf-compare th:first-child, .perf-compare td:first-child { text-align: left; }
     """

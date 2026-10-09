@@ -52,12 +52,12 @@ defmodule ExamplesWeb.ChartLiveBackdropTest do
     assert backdrop =~ "z-index: 0;"
     assert static =~ "z-index: 2;"
     assert dynamic =~ "z-index: 3;"
-    [canvas_tag] = Regex.run(~r/<div[^>]*id="plot-main"[^>]*>/, h)
+    [canvas_tag] = Regex.run(~r/<div[^>]*id="plot-canvas-main"[^>]*>/, h)
     assert canvas_tag =~ "z-index: 1;"
     assert canvas_tag =~ ~s(data-binary="…")
 
-    assert at(h, "hybrid-backdrop-layer") < at(h, ~s(id="plot-main"))
-    assert at(h, ~s(id="plot-main")) < at(h, "hybrid-static-layer")
+    assert at(h, "hybrid-backdrop-layer") < at(h, ~s(id="plot-canvas-main"))
+    assert at(h, ~s(id="plot-canvas-main")) < at(h, "hybrid-static-layer")
     assert at(h, "hybrid-static-layer") < at(h, "hybrid-dynamic-layer")
 
     # The tiles are the backdrop alone; the attribution is over the canvas.

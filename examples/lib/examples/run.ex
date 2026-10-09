@@ -30,6 +30,11 @@ defmodule Examples.Run do
             target_fps: 60,
             data_rate: 0,
             flow_control: true,
+            # the reader's choice of flow control, kept while a backend that cannot ack is on
+            flow_wanted: true,
+            # the backend the run renders on, and the closed measurement segments (#502, D-128)
+            backend: nil,
+            segments: [],
             # the clock
             next_due: nil,
             last_tick: nil,
@@ -49,6 +54,8 @@ defmodule Examples.Run do
             # the hook's acks and flow control
             sent_seq: 0,
             acked_seq: 0,
+            # the last sequence sent before a backend switch: an ack at or below it is ignored
+            seq_floor: 0,
             acks: [],
             client_fps: 0.0,
             dropped: 0,
@@ -76,11 +83,88 @@ defmodule Examples.Run do
       target_fps: run.target_fps,
       data_rate: run.data_rate,
       flow_control: run.flow_control,
+      flow_wanted: run.flow_wanted,
+      backend: run.backend,
       running: true,
       last_tick: now_ms,
       next_due: now_us,
       needs_full: true
     )
+  end
+
+  @doc """
+  The run on `backend`: flow control is the reader's choice of it (`flow_wanted`) where
+  the backend acks and off where it does not — an SVG frame has no ack to wait for
+  (spec/10 §8.2) — so a run that passes through SVG keeps the reader's choice (#502).
+  """
+  @spec on(t(), Examples.Frames.backend()) :: t()
+  def on(%__MODULE__{} = run, backend) do
+    %{run | backend: backend, flow_control: run.flow_wanted and Examples.Frames.acks?(backend)}
+  end
+
+  @doc "The reader's flow-control toggle: the choice and the run's flow control flip together."
+  @spec toggle_flow_control(t()) :: t()
+  def toggle_flow_control(%__MODULE__{flow_control: on} = run),
+    do: %{run | flow_control: not on, flow_wanted: not on}
+
+  @doc """
+  The run switched to `backend` without stopping (spec/14 §12.6, #502, D-128).
+
+  The measurement segment of the backend it was on closes — its numbers kept, newest
+  first, in `segments` when it drew a frame — and every frame and ack metric starts
+  again, so the metrics are never two backends'. The data clock carries on. The sequence
+  floor is the last sequence sent: sequences keep rising, so an ack at or below it is the
+  old backend's and `acked/4` ignores it, and nothing is in flight for the new one. The
+  frame in flight was asked of the old backend and is forgotten, so its answer is stale
+  (`result/2`); the next frame is a full one.
+  """
+  @spec switch(t(), Examples.Frames.backend()) :: t()
+  def switch(%__MODULE__{} = run, backend) do
+    segments = if run.frame > 0, do: [segment(run) | run.segments], else: run.segments
+
+    %{
+      on(run, backend)
+      | segments: segments,
+        seq_floor: run.sent_seq,
+        acked_seq: run.sent_seq,
+        needs_full: true,
+        render_id: nil,
+        render_started: nil,
+        frame: 0,
+        frame_times: [],
+        render_times: [],
+        fps: 0.0,
+        lag: 0.0,
+        payload_size: 0,
+        acks: [],
+        client_fps: 0.0,
+        dropped: 0,
+        hold_since: nil,
+        last_ack_at: nil,
+        acking: :unknown,
+        stalls: 0,
+        ack_age: nil,
+        skipped: 0
+    }
+  end
+
+  @doc """
+  The run's measurement on its backend as it stands: what a switch closes into a segment
+  and what the drawer's per-backend table reads for the current one (D-128).
+  """
+  @spec segment(t()) :: map()
+  def segment(%__MODULE__{} = run) do
+    %{
+      backend: run.backend,
+      frames: run.frame,
+      fps: run.fps,
+      client_fps: run.client_fps,
+      avg_render_us: avg_render_us(run),
+      payload_size: run.payload_size,
+      dropped: run.dropped,
+      stalls: run.stalls,
+      skipped: run.skipped
+    }
   end
 
   @doc "The run stopped: a render in flight terminated and its messages flushed."
@@ -339,8 +423,14 @@ defmodule Examples.Run do
   A design of several frames has a canvas each and each acks the frame it drew (#432), so
   an ack for a sequence already acknowledged is another plot of a frame already counted:
   it says the client is alive and nothing more. The first ack of a sequence is the frame's.
+
+  An ack at or below the sequence floor is a hook of the backend the run switched from
+  (#502, D-128): it is ignored outright, neither a frame drawn nor a sign of life.
   """
   @spec acked(t(), integer(), non_neg_integer(), integer()) :: t()
+  def acked(%__MODULE__{seq_floor: floor} = run, seq, _drawn, _now_ms) when seq <= floor,
+    do: run
+
   def acked(%__MODULE__{acked_seq: acked} = run, seq, _drawn, now_ms) when seq <= acked do
     %{run | last_ack_at: now_ms, acking: :yes}
   end

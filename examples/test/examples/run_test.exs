@@ -194,4 +194,69 @@ defmodule Examples.RunTest do
     assert dead.renderer == nil
     Run.cancel(dying)
   end
+
+  test "a switch closes the backend's segment, marks the sequence floor and asks a full frame; acks at or below it are ignored (#502, D-128)" do
+    run =
+      started()
+      |> Run.on(:canvas)
+      |> sent(:full_redraw)
+      |> Run.rendered(1000, 0)
+      |> sent(:scroll_x)
+      |> Run.rendered(100, 16)
+      |> Run.acked(1, 1, 20)
+
+    run = %{run | render_id: 7, render_started: 5, dropped: 1, skipped: 2, pending: 3, carry: 0.5}
+    segment = Run.segment(run)
+    assert %{backend: :canvas, frames: 2, payload_size: 100, dropped: 1, skipped: 2} = segment
+
+    switched = Run.switch(run, :svg)
+
+    # The segment closed and the metrics start again: never two backends' numbers.
+    assert switched.segments == [segment]
+
+    assert %{frame: 0, fps: +0.0, lag: +0.0, payload_size: 0, frame_times: [], render_times: []} =
+             switched
+
+    assert %{acks: [], client_fps: +0.0, dropped: 0, stalls: 0, skipped: 0, acking: :unknown} =
+             switched
+
+    assert switched.last_ack_at == nil and switched.hold_since == nil
+    # The data clock is not the backend's.
+    assert {switched.pending, switched.carry} == {3, 0.5}
+
+    # Nothing in flight for the new backend, the frame in flight forgotten, the next full.
+    assert switched.seq_floor == 2 and switched.acked_seq == 2 and Run.in_flight(switched) == 0
+    assert switched.render_id == nil
+    assert :stale = Run.result(switched, 7)
+    assert switched.needs_full
+    assert {_run, :full_redraw} = Run.decide(switched, 4, true, @size, 30)
+
+    # SVG has no ack: flow control off, the reader's choice kept for the way back.
+    refute switched.flow_control
+    assert switched.flow_wanted
+
+    # The old hook's ack at or below the floor is neither a frame nor a sign of life.
+    assert Run.acked(switched, 2, 1, 40) == switched
+    assert Run.acked(switched, 1, 1, 40) == switched
+
+    {back, seq} = switched |> Run.switch(:canvas) |> Run.sending(:full_redraw)
+    assert back.flow_control and seq == 3
+    assert back.segments == [segment]
+    acked = Run.acked(back, 3, 1, 50)
+    assert acked.acked_seq == 3 and acked.acking == :yes and acked.last_ack_at == 50
+
+    # A segment that drew nothing is not kept; a new run starts with none.
+    assert Run.switch(switched, :canvas).segments == [segment]
+    assert Run.start(back, 0, 0).segments == []
+  end
+
+  test "the reader's flow-control toggle survives a backend that cannot ack (#502)" do
+    run = Run.new() |> Run.on(:canvas) |> Run.toggle_flow_control()
+    refute run.flow_control or run.flow_wanted
+    refute Run.on(run, :svg).flow_control
+    refute Run.on(Run.on(run, :svg), :canvas).flow_control
+
+    run = Run.toggle_flow_control(run)
+    assert Run.on(Run.on(run, :svg), :canvas).flow_control
+  end
 end

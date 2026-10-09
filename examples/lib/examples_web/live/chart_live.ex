@@ -133,6 +133,9 @@ defmodule ExamplesWeb.ChartLive do
       # the new chart offers it among its own (#432).
       run_backend: opening_backend(Frames.backends(module), socket.assigns[:run_backend]),
       run_state: nil,
+      # The state a backend switched to mid-run holds for the markup until the first
+      # frame of that backend arrives (#502): `{:state, state}`, or nil.
+      run_pending_state: nil,
       run_frame: nil,
       run_mode: nil,
       run_scroll: nil,
@@ -244,14 +247,19 @@ defmodule ExamplesWeb.ChartLive do
     {:noreply, assign(socket, drawer_open: not socket.assigns.drawer_open)}
   end
 
-  def handle_event(
-        "run_backend",
-        %{"backend" => backend},
-        %{assigns: %{run: %Run{running: false}}} = socket
-      ) do
-    backend = String.to_existing_atom(backend)
-    true = backend in Frames.backends(socket.assigns.module)
-    {:noreply, socket |> assign(run_backend: backend) |> still()}
+  # A backend the chart offers, chosen by name — anything else is refused, and no atom is
+  # made of it — live during a run (spec/14 §12.6, #502): mid-run the run switches without
+  # stopping, and otherwise the still chart is drawn on it. The one the page is on is no
+  # change.
+  def handle_event("run_backend", %{"backend" => name}, socket) when is_binary(name) do
+    %{module: module, run_backend: current, run: run} = socket.assigns
+    backend = Enum.find(Frames.backends(module), &(Atom.to_string(&1) == name))
+
+    cond do
+      backend in [nil, current] -> {:noreply, socket}
+      run.running -> {:noreply, switched(socket, backend)}
+      true -> {:noreply, socket |> assign(run_backend: backend) |> still()}
+    end
   end
 
   def handle_event("run_backend", _params, socket), do: {:noreply, socket}
@@ -261,7 +269,7 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   def handle_event("run_flow_control", _params, socket) do
-    {:noreply, update(socket, :run, &%{&1 | flow_control: not &1.flow_control})}
+    {:noreply, update(socket, :run, &Run.toggle_flow_control/1)}
   end
 
   # A run: the page's own animation stops, the backend's state is prepared (a design's
@@ -277,16 +285,21 @@ defmodule ExamplesWeb.ChartLive do
 
     run =
       Run.start(
-        %{
-          socket.assigns.run
-          | flow_control: socket.assigns.run.flow_control and Frames.acks?(backend)
-        },
+        Run.on(socket.assigns.run, backend),
         System.monotonic_time(:millisecond),
         System.monotonic_time(:microsecond)
       )
 
     run = Run.renderer(run, module, backend, opts)
-    socket = assign(socket, run: run, run_state: state, run_frame: nil, run_ticks: 0)
+
+    socket =
+      assign(socket,
+        run: run,
+        run_state: state,
+        run_pending_state: nil,
+        run_frame: nil,
+        run_ticks: 0
+      )
 
     if run.running,
       do: {:noreply, socket |> start_frame() |> schedule_run()},
@@ -323,7 +336,11 @@ defmodule ExamplesWeb.ChartLive do
   def handle_event("run_data_rate", _params, socket), do: {:noreply, socket}
 
   def handle_event("run_stop", _params, socket) do
-    {:noreply, socket |> update(:run, &Run.stop/1) |> assign(run_frame: nil) |> still()}
+    {:noreply,
+     socket
+     |> update(:run, &Run.stop/1)
+     |> assign(run_frame: nil, run_pending_state: nil)
+     |> still()}
   end
 
   # Compare, headless in a task: a fixed count of ticks per backend.
@@ -410,7 +427,11 @@ defmodule ExamplesWeb.ChartLive do
         now = System.monotonic_time(:millisecond)
         {run, seq} = Run.sending(run, mode_of(frame))
         run = Run.rendered(run, frame.bytes, now)
-        socket = assign(socket, run: run, run_frame: frame, run_mode: words(frame))
+
+        socket =
+          socket
+          |> switched_markup()
+          |> assign(run: run, run_frame: frame, run_mode: words(frame))
 
         # One event per plot, each named by its frame (spec/10 §9.2, #432): a design of
         # several frames has a canvas each, and a hook draws only what is its own.
@@ -515,6 +536,29 @@ defmodule ExamplesWeb.ChartLive do
 
   defp rescrolled(socket), do: socket
 
+  # A backend chosen mid-run (spec/14 §12.6, #502, D-128): the renderer re-prepares for it
+  # in place, carrying the easing, its rows, and the run's tick and window untouched; the
+  # run closes the old backend's segment, marks the sequence floor its acks fall under,
+  # forgets the frame in flight and draws the next one full. The view's own state for the
+  # markup is the new backend's from the first frame of it, so the page never lays one
+  # backend's furniture over another's frame.
+  defp switched(%{assigns: %{run: run} = assigns} = socket, backend) do
+    opts = run_opts(assigns, assigns.run_ticks)
+    Examples.Renderer.switch(run.renderer, backend, opts)
+
+    assign(socket,
+      run: Run.switch(run, backend),
+      run_backend: backend,
+      run_pending_state: {:state, Frames.prepare(assigns.module, opts, backend)}
+    )
+  end
+
+  # The first frame of a backend switched to mid-run brings its state into the markup.
+  defp switched_markup(%{assigns: %{run_pending_state: {:state, state}}} = socket),
+    do: assign(socket, run_state: state, run_pending_state: nil)
+
+  defp switched_markup(socket), do: socket
+
   # A run goes on across a resize: its renderer re-prepares at the new size and carries
   # the easing, and the run's counters are untouched (#434); its window is the plot drawn
   # at the new size (#459).
@@ -605,6 +649,12 @@ defmodule ExamplesWeb.ChartLive do
 
   defp canvas_at(%{box: box}, :top), do: box.y
   defp canvas_at(%{box: box}, :left), do: box.x
+
+  # A plot's element is named by its hook's kind as well as its frame (#502): a hook is
+  # bound when its element mounts, so a switch that changes a plot's kind mid-run is a new
+  # element, never the old hook handed the other kind's events.
+  defp plot_kind(%{incremental: record}) when is_map(record), do: "incremental"
+  defp plot_kind(_plot), do: "canvas"
 
   defp incremental_mode(%{mode: "full"}), do: :full_redraw
   defp incremental_mode(%{mode: "none"}), do: :none
@@ -793,7 +843,6 @@ defmodule ExamplesWeb.ChartLive do
                 type="button"
                 phx-click="set_backend"
                 phx-value-backend={backend}
-                disabled={@run.running}
                 class={"backend-btn #{if @run_backend == backend, do: "active", else: ""}"}
               >
                 <%= backend_word(backend) %>
@@ -895,7 +944,7 @@ defmodule ExamplesWeb.ChartLive do
                 </div>
                 <div
                   :for={plot <- frame.plots}
-                  id={"plot-#{plot.name}"}
+                  id={"plot-#{plot_kind(plot)}-#{plot.name}"}
                   phx-hook={if plot.incremental, do: "CanvasIncrementalChart", else: "CanvasBinaryChart"}
                   phx-update="ignore"
                   data-ack="frame_drawn"
