@@ -15,6 +15,7 @@ defmodule ExamplesWeb.DashboardLive do
   import Visualize.Chart.Build
 
   alias Examples.Charts.Design
+  alias ExamplesWeb.Panel
   alias Visualize.Chart
   alias Visualize.Hooks.Crosshair
 
@@ -143,62 +144,65 @@ defmodule ExamplesWeb.DashboardLive do
     <main>
       <a href="/" class="back-link"><span>&larr;</span> Back to Gallery</a>
 
-      <div class="chart-detail">
-        <h2>Synced dashboard</h2>
-        <p style="color: #666; margin-bottom: 1rem;">
-          Three panels, each a design that joins one sync group with <code>interaction(sync: "dashboard")</code>. Hover one to move every crosshair
-          to the same time; drag across one to brush a window, shown on all three at once.
-          The panels differ in width and margin: the group shares the time, not a pixel.
-          Double-click a panel to clear the window.
-        </p>
+      <div class="panels">
+        <Panel.panel id="panel-dashboard">
+          <:title>Synced dashboard</:title>
+          <p class="panel-note">
+            Three panels, each a design that joins one sync group with <code>interaction(sync: "dashboard")</code>. Hover one to move every crosshair
+            to the same time; drag across one to brush a window, shown on all three at once.
+            The panels differ in width and margin: the group shares the time, not a pixel.
+            Double-click a panel to clear the window.
+          </p>
 
-        <div class="dash-grid">
-          <div :for={panel <- @panels} class={"dash-panel dash-#{panel.id}"}>
-            <h3>{panel.title} <small>({panel.unit})</small></h3>
-            <div id={"dash-#{panel.id}"} phx-hook="CrosshairHook" {panel.crosshair}>
-              <div
-                id={"dash-#{panel.id}-brush"}
-                phx-hook="BrushHook"
-                phx-update="ignore"
-                data-brush-type="x"
-                data-brush-extent={panel.extent}
-              >
-                {Phoenix.HTML.raw(panel.svg)}
+          <div class="dash-grid">
+            <Panel.panel :for={panel <- @panels} heading="h3" class={"dash-panel dash-#{panel.id}"}>
+              <:title>{panel.title} <small>({panel.unit})</small></:title>
+              <div id={"dash-#{panel.id}"} phx-hook="CrosshairHook" {panel.crosshair}>
+                <div
+                  id={"dash-#{panel.id}-brush"}
+                  phx-hook="BrushHook"
+                  phx-update="ignore"
+                  data-brush-type="x"
+                  data-brush-extent={panel.extent}
+                >
+                  {Phoenix.HTML.raw(panel.svg)}
+                </div>
               </div>
-            </div>
+            </Panel.panel>
           </div>
-        </div>
 
-        <p class="dash-window">
-          <%= if @window do %>
-            <% {from, to} = @window %> Window: <strong>{clock(from)} – {clock(to)}</strong>
-          <% else %>
-            No window brushed.
-          <% end %>
-          Server events received: <strong id="dash-events">{@events}</strong>
-          — one per window, whichever panel was brushed.
-        </p>
+          <p class="dash-window">
+            <%= if @window do %>
+              <% {from, to} = @window %> Window: <strong>{clock(from)} – {clock(to)}</strong>
+            <% else %>
+              No window brushed.
+            <% end %>
+            Server events received: <strong id="dash-events">{@events}</strong>
+            — one per window, whichever panel was brushed.
+          </p>
 
-        <table :if={@summary} class="dash-summary">
-          <tr>
-            <th>Metric</th><th>Mean</th><th>Peak</th>
-          </tr>
-          <tr :for={{title, unit, mean, peak} <- @summary}>
-            <td>{title}</td>
-            <td>{if mean, do: "#{mean} #{unit}", else: "–"}</td>
-            <td>{if peak, do: "#{peak} #{unit}", else: "–"}</td>
-          </tr>
-        </table>
+          <table :if={@summary} class="dash-summary">
+            <tr>
+              <th>Metric</th><th>Mean</th><th>Peak</th>
+            </tr>
+            <tr :for={{title, unit, mean, peak} <- @summary}>
+              <td>{title}</td>
+              <td>{if mean, do: "#{mean} #{unit}", else: "–"}</td>
+              <td>{if peak, do: "#{peak} #{unit}", else: "–"}</td>
+            </tr>
+          </table>
+        </Panel.panel>
 
-        <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">The design key and the markup</h3>
-        <pre><code><%= design_code() %></code></pre>
+        <Panel.panel id="panel-code">
+          <:title>The design key and the markup</:title>
+          <pre><code><%= design_code() %></code></pre>
+        </Panel.panel>
       </div>
     </main>
 
     <style>
-      .dash-grid { display: grid; grid-template-columns: repeat(2, 440px); gap: 20px; }
+      .dash-grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 20px; }
       .dash-requests { grid-column: 1 / span 2; }
-      .dash-panel h3 { margin: 0 0 0.25rem; font-size: 0.95rem; }
       .dash-panel small { color: #888; font-weight: normal; }
       .dash-panel [phx-hook="CrosshairHook"] { display: inline-block; }
       .crosshair-rule { stroke-dasharray: 3 3; }

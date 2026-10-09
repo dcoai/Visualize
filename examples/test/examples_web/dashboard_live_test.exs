@@ -92,4 +92,20 @@ defmodule ExamplesWeb.DashboardLiveTest do
     assert length(panels) == 3
     assert work <= @light_budget, "the three panels cost #{work} reductions"
   end
+
+  test "the dashboard is panels: its explanation with the three charts, and the code (#505)" do
+    page = html(mounted())
+
+    assert page =~
+             ~r/<section id="panel-dashboard" class="panel">\s*<h2 class="panel-title">Synced dashboard<\/h2>\s*<p class="panel-note">/
+
+    assert page =~
+             ~r/<section id="panel-code" class="panel">\s*<h2 class="panel-title">The design key and the markup<\/h2>/
+
+    # Each chart is a panel of its own inside the dashboard's, its heading an h3.
+    for id <- ~w(requests latency errors) do
+      assert page =~
+               ~r/<section class="panel dash-panel dash-#{id}">\s*<h3 class="panel-title">.*?<\/h3>\s*<div id="dash-#{id}" phx-hook="CrosshairHook"/s
+    end
+  end
 end

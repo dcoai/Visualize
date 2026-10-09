@@ -155,4 +155,67 @@ defmodule ExamplesWeb.InteractionLiveTest do
       assert chart =~ ~s(class="legend-item" data-series="#{s}")
     end
   end
+
+  # Every demo's panel, its heading and the id of the chart it holds (#505); the code
+  # section holds its markup in place of a chart.
+  @panels [
+    {"panel-tooltip", "Tooltip", "tooltip-chart"},
+    {"panel-crosshair-svg", "Crosshair over the SVG", "crosshair-svg"},
+    {"panel-crosshair-canvas", "Crosshair over the canvas", "crosshair-canvas"},
+    {"panel-legend", "Legend toggling", "legend-chart"},
+    {"panel-code", "The design and the markup", nil}
+  ]
+
+  defp panels(html) do
+    for [_, id, body] <-
+          Regex.scan(~r/<section id="([^"]+)" class="panel">(.*?)<\/section>/s, html),
+        do: {id, body}
+  end
+
+  test "each demo is one panel holding its heading, its explanation and its chart (#505)" do
+    found = panels(page({720, 380}))
+
+    assert Enum.map(found, &elem(&1, 0)) == Enum.map(@panels, &elem(&1, 0))
+
+    for {{id, body}, {id, heading, chart}} <- Enum.zip(found, @panels) do
+      assert body =~ ~s(<h2 class="panel-title">#{heading}</h2>), "#{id}: its heading"
+      assert body =~ ~s(<p class="panel-note">), "#{id}: its explanation"
+
+      if chart,
+        do: assert(body =~ ~s(<div id="#{chart}"), "#{id}: its chart"),
+        else: assert(body =~ "<pre><code>", "#{id}: its markup")
+    end
+
+    # Every chart sits in exactly one panel.
+    for {_, _, chart} <- @panels, chart do
+      assert Enum.count(found, fn {_, body} -> body =~ ~s(<div id="#{chart}") end) == 1
+    end
+  end
+
+  for {width, height} <- @sizes do
+    @size {width, height}
+
+    test "at #{width}x#{height} every SVG demo's legend sits right of the plot, inside the chart" do
+      html = page(@size)
+      {crosshair, _} = element(html, "crosshair-svg")
+      [left, _top, plot_width, _plot_height] = numbers(attr(crosshair, "data-plot"))
+
+      for id <- ~w(tooltip-chart crosshair-svg legend-chart) do
+        {_tag, rest} = element(html, id)
+        [svg] = Regex.run(~r/<svg.*?<\/svg>/s, rest)
+
+        [_, translate] =
+          Regex.run(~r/<g class="legend"[^>]* transform="translate\(([^)]+)\)"/, svg)
+
+        # The legend group is placed in the frame group's coordinates, the plot's origin.
+        [x, _y] = numbers(translate)
+
+        assert x >= plot_width,
+               "#{id}: the legend at x #{x} is over the plot (width #{plot_width})"
+
+        # Its estimated width (spec/14 §4.5) ends inside the chart's own width.
+        assert left + x + 67.2 <= elem(@size, 0), "#{id}: the legend runs off the chart"
+      end
+    end
+  end
 end
