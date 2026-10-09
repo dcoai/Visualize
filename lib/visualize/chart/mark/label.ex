@@ -118,11 +118,13 @@ defmodule Visualize.Chart.Mark.Label do
 
     base = %{class: class, text_anchor: text_anchor}
 
-    # The text fitted to the element's own width (spec/14 §5.5, #138), or nothing.
+    # The text fitted to the element's own width (spec/14 §5.5, #138), and on a rectangle
+    # it sits on to the element's height (#497), or nothing.
     fit = Map.get(label, :fit, Schema.default(:mark_label, :fit))
     width = extent(shape, {x + dx, y + dy}, centre)
+    font_size = font_size(style_node, frame.theme)
 
-    case fit(fit, content, width, font_size(style_node, frame.theme)) do
+    case fit(fit, content, width, font_size) |> held(fit, bounds, anchor, font_size) do
       nil ->
         nil
 
@@ -239,6 +241,18 @@ defmodule Visualize.Chart.Mark.Label do
       true -> String.slice(content, 0, room - 1) <> "…"
     end
   end
+
+  # A label on a rectangle — at any anchor but an edge anchor, which sits outside it — is
+  # drawn only where the rectangle is as tall as the label's font size, under a `fit` that
+  # is not `:none` (spec/14 §5.5, #497): a thin or zero-area cell has no room for a line.
+  @edge_anchors [:x0, :x1, :y0, :y1]
+
+  defp held(nil, _fit, _bounds, _anchor, _font_size), do: nil
+  defp held(content, :none, _bounds, _anchor, _font_size), do: content
+  defp held(content, _fit, nil, _anchor, _font_size), do: content
+  defp held(content, _fit, _bounds, anchor, _font_size) when anchor in @edge_anchors, do: content
+  defp held(_content, _fit, {_x, _y, _w, h}, _anchor, font_size) when h < font_size, do: nil
+  defp held(content, _fit, _bounds, _anchor, _font_size), do: content
 
   defp font_size(style_node, theme) do
     case Style.value(:font_size, Map.get(style_node, :font_size, :label_size), theme, :literal) do

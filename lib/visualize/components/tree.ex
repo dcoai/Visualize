@@ -10,10 +10,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `:treemap` or `:partition`, then the `:filter` steps that keep what spec/10 §3 draws)
     lay the rows out, the marks draw them through `Visualize.Chart.Frame.generate/2`, and
     the component prints the elements in the markup spec/10 §3 declares, reading the rows
-    beside them for what follows the node — the tree's circle-and-text group and the
-    treemap's label rule. The sunburst's labels are its mark's, fitted and inked by the
-    layer. Node labels default to the `:name` or `"name"` of a
-    node's data; leaf values to its `:value` or `"value"`.
+    beside them for what follows the node — the tree's circle-and-text group. The
+    treemap's and the sunburst's labels are their marks', fitted and inked by the layer.
+    Node labels default to the `:name` or `"name"` of a node's data; leaf values to its
+    `:value` or `"value"`.
 
     ## Usage
 
@@ -153,9 +153,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
       conventions
 
-    A `:background`-filled `:label_size` label with a text shadow is drawn at `(x0 + 4, y0 + 14)` in a
-    cell wider than 30 and taller than 15, truncated with `…` to fit `cell width − 8`
-    at seven pixels a character.
+    A `:label_size` label is drawn at the centre of its cell, inked the theme's text or
+    background, whichever reads on the cell, and cut with `…` to the cell's width; a cell
+    shorter than the label's font size, a zero-area one among them, draws none.
     """
     attr(:data, :map, required: true)
     attr(:width, :integer, default: @treemap.width)
@@ -174,16 +174,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def treemap_chart(assigns) do
       drawn = Support.draw(:treemap_chart, assigns)
-      [cells] = Support.marks(drawn.group)
-      [leaves] = drawn.rows
+      [mark] = Support.marks(drawn.group)
+      {rects, texts} = Enum.split_with(mark.children, &(&1.type == :rect))
       root_fill = Support.css(drawn.theme, :grid)
 
-      # One cell per `:rect` element — the design filters to the leaves — with the
-      # component's label rule over the row (spec/10 §3.3). A root-only hierarchy's cell
+      # One cell per `:rect` element — the design filters to the leaves — then the labels
+      # the layer kept, cut to their cells and each in its own contrast ink, at the mark's
+      # own texts, the cells' centres (spec/10 §3.3, #497). A root-only hierarchy's cell
       # has no `branch`, so its bound fill is `:none` (spec/14 §3.4, D-122), and takes the
       # theme's `:grid`.
+      labels =
+        for text <- texts do
+          %{text: text.content, x: fmt(text.attrs.x), y: fmt(text.attrs.y), fill: text.style.fill}
+        end
+
       cells =
-        Enum.zip_with(cells.children, leaves, fn rect, leaf ->
+        rects
+        |> Enum.map(fn rect ->
           %{x: x, y: y, width: width, height: height} = rect.attrs
 
           %{
@@ -192,20 +199,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
             width: fmt(width),
             height: fmt(height),
             fill: cell_fill(Map.get(rect.style, :fill, :none), root_fill),
-            stroke: cells.style.stroke,
-            stroke_width: cells.style.stroke_width,
-            label: if(width > 30 and height > 15, do: Support.truncate(leaf.label, width - 8)),
-            label_x: fmt(x + 4),
-            label_y: fmt(y + 14)
+            stroke: mark.style.stroke,
+            stroke_width: mark.style.stroke_width
           }
         end)
+        |> Support.followed(labels)
 
       assigns =
         assign(assigns,
           cells: cells,
           theme: drawn.theme,
           ids: drawn.ids,
-          background: Support.css(drawn.theme, :background),
           label_size: Support.css(drawn.theme, :label_size),
           transition: Support.transition(assigns.animate)
         )
@@ -216,14 +220,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
         <%= for cell <- @cells do %>
           <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.fill} stroke={cell.stroke} stroke-width={cell.stroke_width} {@transition} />
-          <text
-            :if={cell.label}
-            x={cell.label_x}
-            y={cell.label_y}
-            font-size={@label_size}
-            fill={@background}
-            style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);"
-          >{cell.label}</text>
+          <%= for label <- cell.labels do %>
+            <text
+              x={label.x}
+              y={label.y}
+              dy="0.32em"
+              text-anchor="middle"
+              font-size={@label_size}
+              fill={label.fill}
+            >{label.text}</text>
+          <% end %>
         <% end %>
       </svg>
       """

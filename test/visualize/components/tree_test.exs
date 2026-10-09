@@ -12,6 +12,13 @@ defmodule Visualize.Components.TreeTest do
   other byte, every arc and the shell, is still the old component's, and a test below holds
   that each sunburst golden, labels aside, is the component drawn with every label empty.
 
+  The treemap's labels were retired from that equivalence by #497 on the same ground: the
+  component drew them itself, `:background` with a CSS text shadow at the cell's top-left
+  corner, white on a pale cell. The goldens record the labels its preset now carries,
+  fitted (`:truncate`, the cell's width and height) and inked `:contrast` at the cell's
+  centre, after the cells, with no shadow. Every cell and the shell are still the old
+  component's, which the same test holds for each treemap golden, the root-only one too.
+
       mix run -e 'Visualize.Components.TreeTest.write!()'
   """
   use ExUnit.Case, async: true
@@ -93,13 +100,17 @@ defmodule Visualize.Components.TreeTest do
     |> Enum.reject(&(String.trim(&1) == "" or String.starts_with?(String.trim(&1), "<text")))
   end
 
-  test "each sunburst golden, labels aside, is the component's with every label empty (#494)" do
-    for name <- [:sunburst_chart, :sunburst_chart_colors] do
-      {component, assigns} = Keyword.fetch!(cases(), name)
-      golden = File.read!(Path.join(@dir, "#{name}.svg"))
+  test "each sunburst and treemap golden, labels aside, is the component's with every label empty (#494, #497)" do
+    labelled =
+      Enum.map(~w(sunburst_chart sunburst_chart_colors treemap_chart treemap_chart_slice)a, fn
+        name -> {"#{name}.svg", Keyword.fetch!(cases(), name)}
+      end) ++ [{"treemap_chart_empty.svg", Keyword.fetch!(empty(), :treemap_chart)}]
+
+    for {file, {component, assigns}} <- labelled do
+      golden = File.read!(Path.join(@dir, file))
       assert golden =~ "<text"
       blank = render_component(component, Map.put(assigns, :label, fn _node -> "" end))
-      assert unlabelled(golden) == unlabelled(blank), "#{name}"
+      assert unlabelled(golden) == unlabelled(blank), file
     end
   end
 

@@ -1137,6 +1137,27 @@ defmodule Visualize.Chart.MarkTest do
       symbol = %{type: :symbol, channels: %{x: :t, y: :v}, label: label.(:truncate, long)}
       assert texts.(symbol) |> hd() == long
     end
+
+    test "fit holds a rect's height to the label's font size, but not at an edge anchor (#497)" do
+      texts = fn channels, label ->
+        generate(%{type: :rect, channels: channels, label: label})
+        |> labels()
+        |> Enum.map(& &1.content)
+      end
+
+      # 20 px tall (one unit of y over 200 px for 0..10), and a zero-area cell.
+      tall = %{x0: :t, x1: :hi, y0: :lo, y1: :v}
+      flat = %{x0: :t, x1: :hi, y0: :v, y1: :v}
+      label = fn fit, anchor -> %{text: ["ab"], anchor: anchor, fit: fit} end
+
+      assert texts.(tall, label.(:truncate, :middle)) == ["ab", "ab", "ab", "ab"]
+      # A label that would sit on a cell with no room for a line is drawn by no fit.
+      assert texts.(flat, label.(:truncate, :middle)) == []
+      assert texts.(flat, label.(:hide, :top)) == []
+      # `:none` draws it as it is, and an edge anchor sits outside the cell.
+      assert length(texts.(flat, label.(:none, :middle))) == 4
+      assert length(texts.(flat, label.(:truncate, :x1))) == 4
+    end
   end
 
   describe "a label is not drawn in its mark's style (spec/14 §5.5, §5.6, #485)" do
