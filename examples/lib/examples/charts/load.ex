@@ -48,6 +48,18 @@ defmodule Examples.Charts.Load do
   end
 
   @doc """
+  The machine's clock at a chart's animation tick: a tick is three seconds of its day,
+  counted from `origin` — the second a chart reads at rest, enough history behind it to
+  fill its axis. Every chart of the load reads it, so one tick moves them all alike, and
+  a design that draws two of them at one `origin` draws them at one instant (#493).
+
+      iex> Examples.Charts.Load.second([animation_tick: 2], 600)
+      606
+  """
+  @spec second(keyword(), integer()) :: integer()
+  def second(opts, origin), do: (opts[:animation_tick] || 0) * 3 + origin
+
+  @doc """
   The load a window reads at absolute second `t`: the sine at the window's lag under a
   noise of the window's amplitude, drifting between knots at the window's own grain so a
   longer average is the steadier line. Never below `0.05` — a machine at rest still has a
