@@ -2,7 +2,8 @@ defmodule Examples.Charts.Globe do
   @moduledoc """
   Globe as a design (#129): a `:geo` frame whose projection is the orthographic, and four
   `:path` marks over the `:projection` step — the ocean, the graticule, the land and the
-  rim — as the world map's, with the globe's own projection.
+  rim — as the world map's, with the globe's own projection, over Natural Earth's 1:110m
+  land (#499).
 
   The orthographic clips the far hemisphere itself (spec/07 §1.5), so the `Sphere` is the
   visible disc and the land and the graticule end at its edge with no `clipPath` (§5.4.4,
@@ -25,7 +26,7 @@ defmodule Examples.Charts.Globe do
   def size, do: {500, 450}
 
   def title, do: "Globe"
-  def description, do: "Rotating orthographic projection"
+  def description, do: "Rotating orthographic projection; land from Natural Earth 1:110m"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
@@ -117,6 +118,9 @@ defmodule Examples.Charts.Globe do
         path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :rim)
       ])
 
+    # globe: [%{shape: %{"type" => "Sphere"}}]; graticule and land: rows with GeoJSON
+    # under :shape (Examples.Charts.WorldGeography.graticule/1 and land/0). The land is
+    # Natural Earth's 1:110m land (naturalearthdata.com, public domain), one row per land mass.
     {:ok, applied} = Visualize.Chart.apply(design, sources: %{globe: globe, graticule: graticule, land: land})
     Visualize.Chart.render(applied)
     """

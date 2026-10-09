@@ -11,8 +11,9 @@ defmodule Examples.GalleryCostTest do
   alias Examples.Charts.Design
   alias Examples.Compare
 
-  # The most any light chart costs is about 1.4 million (Context, four plots); the heavy
-  # one, Downsampling's 50,000 unreduced rows, about 26 million.
+  # The most any light chart costs is about 2 million (the Globe over Natural Earth's 5,143
+  # land positions, #499; Context, four plots, about 1.4 million); the heavy one,
+  # Downsampling's 50,000 unreduced rows, about 26 million.
   @budget %{light: 4_000_000, heavy: 40_000_000}
   @opts [width: 700, height: 450, palette: :default]
 
