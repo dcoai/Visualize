@@ -251,6 +251,60 @@ defmodule Visualize.Chart.CompiledTest do
       assert payload.bytes == byte_size(payload.svg) + byte_size(payload.canvas)
     end
 
+    test "a canvas-layer mark's labels are not stroked by it on the SVG layer, and the canvas draws its elements alone (#485)" do
+      outline = %{stroke: "#ffffff", stroke_width: 2}
+
+      for render <- [:canvas, :binary, :svg] do
+        circle = fn label ->
+          Map.merge(
+            %{
+              type: :circle,
+              data: :primary,
+              channels: %{x: :t, y: :v},
+              style: :outline,
+              render: render
+            },
+            label
+          )
+        end
+
+        labelled = %{
+          marks: [circle.(%{label: %{text: [{:field, :t}]}})],
+          styles: %{outline: outline}
+        }
+
+        plain = %{marks: [circle.(%{})], styles: %{outline: outline}}
+        sources = %{primary: rows(3)}
+        map = Compiled.render(compile!(design(@fixed, labelled), sources: sources), sources)
+        bare = Compiled.render(compile!(design(@fixed, plain), sources: sources), sources)
+
+        # The SVG layer: the wrapper and its labels' group, no stroke above any text.
+        svg_marks =
+          Enum.filter(map.dynamic_svg, &match?(%{style: %{class: "mark mark-circle"}}, &1))
+
+        assert [mark] = svg_marks, "#{render}"
+        texts = for {text, above} <- texts_under(mark, []), do: {text, above}
+        assert length(texts) == 3, "#{render}"
+
+        for {text, above} <- texts,
+            element <- [text | above],
+            do:
+              refute(Map.has_key?(element.style, :stroke), "#{render}: #{inspect(element.style)}")
+
+        if render == :svg do
+          assert [%{style: %{class: "mark-elements", stroke: "#ffffff"}}, %{children: [_, _, _]}] =
+                   mark.children
+        else
+          # The canvas layer: the wrapper holds the elements' group alone, which is the
+          # unlabelled mark's group with its class — so the canvas draws what it drew.
+          assert [%{style: %{class: "mark mark-circle"}, children: [elements]}] = map.dynamic
+          assert [unlabelled] = bare.dynamic
+          assert elements.style == %{unlabelled.style | class: "mark-elements"}
+          assert elements.children == unlabelled.children
+        end
+      end
+    end
+
     test "an SVG-only chart has no canvas layer and its dynamic SVG is a root of its own" do
       compiled = compile!(design(@fixed), sources: %{primary: rows(3)})
       map = Compiled.render(compiled, %{primary: rows(3)})
@@ -1065,6 +1119,12 @@ defmodule Visualize.Chart.CompiledTest do
 
   defp text?(%{type: :text}), do: true
   defp text?(_), do: false
+
+  # Every text under an element with the elements above it, nearest first.
+  defp texts_under(%{type: :text} = text, above), do: [{text, above}]
+
+  defp texts_under(%{children: children} = element, above),
+    do: Enum.flat_map(children, &texts_under(&1, [element | above]))
 
   defp leaves(%{children: []} = element), do: [element]
   defp leaves(%{children: children}), do: Enum.flat_map(children, &leaves/1)

@@ -60,15 +60,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc false
     # The mark groups of the frame's group in design order (spec/14 §4.7), reaching into
-    # the centred group of a polar frame.
+    # the centred group of a polar frame. A labelled mark is a wrapper of its styled
+    # elements' group and its labels' group (spec/14 §5.6, #485); a template reads the
+    # mark's style and its elements then its labels, so it is given the elements' group
+    # with the labels after its elements.
     @spec marks(Element.t()) :: [Element.t()]
     def marks(%Element{children: children}) do
       Enum.flat_map(children, fn
         %Element{style: %{class: "polar"}} = polar -> marks(polar)
-        %Element{style: %{class: "mark " <> _}} = mark -> [mark]
+        %Element{style: %{class: "mark " <> _}} = mark -> [read(mark)]
         _other -> []
       end)
     end
+
+    defp read(%Element{
+           children: [
+             %Element{style: %{class: "mark-elements"}} = elements,
+             %Element{style: %{class: "mark-labels"}, children: labels}
+           ]
+         }),
+         do: %{elements | children: elements.children ++ labels}
+
+    defp read(mark), do: mark
 
     @doc false
     # The axis on `side` as the frame drew it: the `Visualize.Axis` group inside the

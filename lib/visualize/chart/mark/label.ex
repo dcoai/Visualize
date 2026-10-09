@@ -58,6 +58,23 @@ defmodule Visualize.Chart.Mark.Label do
   end
 
   @doc false
+  # The texts a `:rule` or an `:x_band` generator drew into its per-datum groups, lifted out
+  # into the mark's labels group (spec/14 §5.5, #485): `{elements without them, texts}`.
+  # Every other type's labels are `elements/2`'s, so nothing is lifted.
+  @spec lift([Element.t()], map()) :: {[Element.t()], [Element.t()]}
+  def lift(elements, %{type: type}) when type in [:rule, :x_band] do
+    elements
+    |> Enum.map(fn %Element{children: children} = element ->
+      {texts, rest} = Enum.split_with(children, &(&1.type == :text))
+      {%{element | children: rest}, texts}
+    end)
+    |> Enum.unzip()
+    |> then(fn {elements, texts} -> {elements, List.flatten(texts)} end)
+  end
+
+  def lift(elements, _ctx), do: {elements, []}
+
+  @doc false
   # One text at a point — or, for an edge anchor, at an edge of the element's bounds —
   # anchored, offset and styled as the mark's label says (spec/14 §5.5). A `:text` mark
   # draws its element through this too (#134), with no label node to read past its style.

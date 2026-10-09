@@ -125,10 +125,8 @@ defmodule Visualize.Chart.Mark do
     children = bent(children, ctx)
     elements = children |> Enum.map(&bind(&1, ctx)) |> Strokes.apply(ctx)
 
-    Element.group(elements ++ Label.elements(children, ctx),
-      style: group_style(ctx),
-      attrs: tooltip_attrs(ctx)
-    )
+    ctx
+    |> group(elements, Label.elements(children, ctx))
     |> centre(ctx)
   end
 
@@ -193,6 +191,30 @@ defmodule Visualize.Chart.Mark do
       %Var{name: name} -> Style.unresolved!(name)
       node -> node
     end
+  end
+
+  # The mark's group (spec/14 §5.6). Without an inline label it is one group carrying the
+  # mark's style. With one it is a wrapper — the class, the tooltip's attributes, and later
+  # `data-node` and the centring transform, everything the hooks read (D-75) — holding the
+  # styled elements' group and, beside it, the labels' group with no style, so a label is
+  # drawn in its own style and never outlined by the mark's stroke (#485). A `:text` mark
+  # is its label and keeps its own style.
+  defp group(%{label: label, type: type} = ctx, elements, _labels)
+       when label == nil or type == :text do
+    Element.group(elements, style: group_style(ctx), attrs: tooltip_attrs(ctx))
+  end
+
+  defp group(ctx, elements, labels) do
+    {elements, own} = Label.lift(elements, ctx)
+
+    Element.group(
+      [
+        Element.group(elements, style: %{group_style(ctx) | class: "mark-elements"}),
+        Element.group(own ++ labels, style: %{class: "mark-labels"})
+      ],
+      style: %{class: class(ctx)},
+      attrs: tooltip_attrs(ctx)
+    )
   end
 
   # The group's `data-tooltip-template` and `data-tooltip-event` (spec/14 §5.7).
