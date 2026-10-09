@@ -81,7 +81,14 @@ defmodule Visualize.Geo.Projection.Conic do
     f = cos(phi1_rad) * :math.pow(:math.tan(:math.pi() / 4 + phi1_rad / 2), n) / n
     rho0 = f
 
-    lat_rad = lat * @deg_to_rad
+    # The pole behind the apex is at infinity: d3's conicConformalRaw holds the latitude
+    # 1e-6 short of it (d3-geo src/projection/conicConformal.js:16–17), so a clipped path's
+    # edge, which runs along the poles (spec/07 §2.2.1), stays finite.
+    lat_rad =
+      if n > 0,
+        do: max(lat * @deg_to_rad, -:math.pi() / 2 + 1.0e-6),
+        else: min(lat * @deg_to_rad, :math.pi() / 2 - 1.0e-6)
+
     rho = f / :math.pow(:math.tan(:math.pi() / 4 + lat_rad / 2), n)
 
     lon_rad = lon * @deg_to_rad * n

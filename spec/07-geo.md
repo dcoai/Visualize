@@ -18,10 +18,10 @@ This document specifies the geographic and computational-geometry modules: `Visu
 | `center` | `{0, 0}` | `{lon, lat}` in degrees subtracted after rotation and before projecting (1.4). |
 | `rotate` | `{0, 0, 0}` | `{lambda, phi, gamma}` in degrees (1.4). |
 | `clip_angle` | `nil` | Angular radius of the visible disc in degrees, or `nil` for no clipping; `new/1` sets a per-type default (1.5). |
-| `precision` | `0.5` | Stored but not consulted by any function. |
+| `precision` | `0.5` | How a path draws the edge it is clipped along (2.2): `0` as d3-geo draws it at `precision(0)`, straight between the clip's own points; any other value sampled every degree. `project/3` does not read it. |
 | `parallels` | `{29.5, 45.5}` | Standard parallels `{phi1, phi2}` in degrees for conic types; `phi1` alone for `:bonne` and `:loximuthal`. |
 
-`new/0` is `new(:mercator)`. `new/1` accepts any atom; an unsupported atom is only detected when `project/3` or `invert/3` dispatches. Setters return an updated struct: `scale/2`, `translate/3`, `center/3`, `rotate/3` (gamma 0), `rotate/4`, `clip_angle/2` (a number or `nil`), `parallels/3`.
+`new/0` is `new(:mercator)`. `new/1` accepts any atom; an unsupported atom is only detected when `project/3` or `invert/3` dispatches. Setters return an updated struct: `scale/2`, `translate/3`, `center/3`, `rotate/3` (gamma 0), `rotate/4`, `clip_angle/2` (a number or `nil`), `precision/2`, `parallels/3`.
 
 ### 1.2 Projection types
 
@@ -38,12 +38,15 @@ Type-specific behaviour:
 - `:mercator` clamps latitude to ±1.4844 rad (about ±85.05°); `:miller` clamps to ±1.4 rad; `:transverse_mercator` clamps `cos(lat) * sin(lon)` to ±0.9999. None of the cylindrical types returns `nil`.
 - `:orthographic` returns `nil` for the far hemisphere; `:gnomonic` returns `nil` when the point is on or beyond the horizon; `:stereographic` and `:azimuthal_equal_area` return `nil` within 0.001 of the antipode. `orthographic` `invert/3` returns `nil` outside the unit disc.
 - `:albers` and `:conic_equal_area` are the same projection; the conic types read both parallels, `:bonne` and `:loximuthal` read only `phi1`. `:polyconic`, `:mollweide`, `:fahey`, `:natural_earth`, `:equal_earth`, `:winkel_tripel`, `:aitoff` and `:van_der_grinten` invert iteratively with a bounded number of steps, so their `invert/3` is approximate.
+- Every type places both poles, which the clipped paths of 2.2.1 run along (#509): `:conic_conformal` holds the latitude 10⁻⁶ radians short of the pole behind its apex, as d3-geo's `conicConformalRaw` does, so that pole lies far off the map but finite; `:loximuthal` puts a pole at `x = 0`, as d3-geo-projection's `loximuthalRaw` does; `:mollweide` takes `θ = ±π/2` at a pole without iterating, its Newton step dividing by zero there. Before #509 the three raised `ArithmeticError` at a pole, and so did their `sphere/1`.
 - `:transverse_mercator` `invert/3` is Snyder's spherical inverse, `lat = asin(sin(y) / cosh(x))` and `lon = atan2(sinh(x), cos(y))`: `|sin(y) / cosh(x)| ≤ 1` for every point of the plane, so it never raises, and `cos(y) < 0` returns the back hemisphere, so `invert(project(p)) == p` on the whole sphere except the two singular points `(0°, ±90°)` where the forward clamp applies (D-51).
 
 
 ### 1.3 Projection pipeline
 
 `project(proj, lon, lat)` performs, in order: rotation (1.4); subtraction of `center` in degrees; the clip test (1.5), returning `nil` when the point is clipped; the raw family projection, which may itself return `nil`; and finally `{x * scale + tx, -y * scale + ty}` with `{tx, ty} = translate`. The y axis is flipped so that north is up on screen. Output is `{float, float}` or `nil`.
+
+A path does not project its vertices one by one: it takes them through the rotation, clips the lines and polygons there, on the sphere, and projects what the clip leaves through the remaining stages — centre, clip test, raw projection, scale and translate (2.2).
 
 `invert(proj, x, y)` computes `{(x - tx) / scale, -(y - ty) / scale}`, applies the raw inverse (which may return `nil`), adds `center`, and applies the inverse rotation. Output is `{lon, lat}` in degrees or `nil`. The clip test is not applied on inversion.
 
@@ -79,6 +82,7 @@ A point is clipped when its angular distance `c` from the projection centre — 
 | `Visualize.Geo.Projection.rotate/3` | `rotate(proj, lambda, phi, 0)`. |
 | `Visualize.Geo.Projection.rotate/4` | Sets `rotate` to `{lambda, phi, gamma}` degrees. |
 | `Visualize.Geo.Projection.clip_angle/2` | Sets `clip_angle` in degrees, or `nil` to disable clipping. |
+| `Visualize.Geo.Projection.precision/2` | Sets `precision` (1.1, 2.2). |
 | `Visualize.Geo.Projection.parallels/3` | Sets `parallels` to `{phi1, phi2}` degrees. |
 | `Visualize.Geo.Projection.project/3` | `{x, y}` pixels for `lon, lat` degrees, or `nil` when clipped or unprojectable (1.3). |
 | `Visualize.Geo.Projection.invert/3` | `{lon, lat}` degrees for `x, y` pixels, or `nil` (1.3). |
@@ -106,19 +110,36 @@ A point is clipped when its angular distance `c` from the projection centre — 
 `render/2` returns one string, concatenating the parts of multi-geometries and collections:
 
 - `Point` — a circle of radius `point_radius` at the projected position as two arcs: `M{cx - r},{cy}A{r},{r},0,1,1,{cx + r},{cy}A{r},{r},0,1,1,{cx - r},{cy}Z`, with numbers interpolated as-is.
-- `LineString` — `M{x},{y}` followed by `L{x},{y}` per further vertex.
-- `Polygon` — each ring rendered as a line string followed by `Z`.
+- `LineString` — each piece the clip leaves (2.2.1) as `M{x},{y}` followed by `L{x},{y}` per further vertex.
+- `Polygon` — each ring of the clipped polygon (2.2.1) rendered as a line string followed by `Z`.
 - `Sphere` — the outline of 1.6 as one ring.
 
-Vertices whose projection is `nil` are dropped from lines and rings; lines are not split at clipped vertices. Line and ring numbers are floats rounded to 3 decimals (integers unchanged). A point whose projection is `nil` renders as `""`.
+Line and ring numbers are floats rounded to 3 decimals (integers unchanged). A point is not clipped on the sphere: it is placed by `project/3`, and a point whose projection is `nil` renders as `""`.
+
+#### 2.2.1 Clipping on the sphere
+
+With a projection, lines and polygons are clipped **on the sphere, before they are projected**, as d3-geo's projection stream clips them (#504, D-127). The internal module Visualize.Geo.Clip is a port of d3-geo 3.1.1's `src/clip/` — `index.js`, `antimeridian.js`, `rejoin.js` and `buffer.js` — with `src/polygonContains.js`, its `src/cartesian.js` helpers and d3-array's exact `Adder`; it and its modules are internal (`@moduledoc false`). Every vertex is taken into the **rotated frame** — `rotate` applied (1.4), the longitude in `[-180, 180]` as d3's rotation leaves it — and clipped there; the clip's output then goes through the rest of the pipeline of 1.3 (centre, clip test, raw projection, scale, translate), and an output point the raw projection cannot place is dropped. `center` is applied after the clip, so it does not move the seam, as d3's `center` does not. The clip works in degrees where d3 works in radians, so a vertex the clip passes through is the float the projection would have been given; every tolerance d3 states in radians is restated in degrees, `ε` being d3's `1e-6` radians.
+
+**A projection without `clip_angle` is cut at the antimeridian** (d3's `clipAntimeridian`, the default preclip of every d3 projection):
+
+- **Lines.** An edge whose ends lie on opposite sides of the seam (a longitude above 0 is the eastern side, any other the western) with longitudes at least 180° apart crosses ±180°: it is cut at the latitude where the great circle through its ends meets the antimeridian (`atan((sin φ0 cos φ1 sin λ1 − sin φ1 cos φ0 sin λ0) / (cos φ0 cos φ1 sin(λ0 − λ1)))`, or the mean latitude when `|sin(λ0 − λ1)| ≤ 10⁻⁶`), after an end within `ε` of the seam is moved `180 · 10⁻⁶` degrees off it. The piece before the cut ends at that latitude on its side of the seam and the piece after starts at it on the other. An edge whose ends are 180° apart in longitude (within `ε`) passes over a pole — the north when the mean of its latitudes is positive, the south otherwise — and is cut there, each piece running along the pole to the seam. **Each piece is its own subpath** (`M` … `L`), so a line is never joined across the map.
+- **Polygons.** Every ring of a polygon is cut the same way, each ring closed by its first vertex (GeoJSON's closing vertex is dropped and the first appended, as d3's stream does). A ring cut nowhere is drawn as it was given, its closing vertex kept (d3 drops it; `Z` closes the ring either way). The cut rings' pieces are **rejoined along the clip edge** (rejoin.js): when a ring is cut, its last piece runs on into its first; each piece's two ends are intersections, ordered along the edge — up the western side from the south pole, then down the eastern side from the north — and the rejoin walks pieces and edge alternately until it is back where it began, each walk one ring. The edge between two intersections on the same side is the seam between them; between the two sides it runs along a pole: from `from` to the seam's corner at the pole, across to the other side's corner and on to `to`. Whether the first stretch of edge is inside the polygon is whether the polygon contains the south pole on the antimeridian (d3's `polygonContains`, with the spherical winding below); a polygon cut nowhere that contains that point — a ring around a pole, such as Antarctica — is **closed by the whole edge**: across the north pole from the western seam, down the eastern seam, back across the south pole and up the western seam.
+- **Winding is spherical, as d3's.** A ring bounds the region on its right as it is walked — on a map with north up, a polygon's exterior ring runs clockwise, its holes anticlockwise — and a ring wound the other way is the **rest of the sphere**: everything outside it, closed along the map's edge. RFC 7946's anticlockwise exterior rings are not this convention; the Natural Earth data of the gallery (`examples/priv/geo/`) is wound for d3.
+- **The edge as drawn.** d3 resamples every projected line adaptively, which curves the seam under a pseudo-cylindrical projection; the library resamples nothing. At `precision` 0 the edge is drawn straight between the clip's own points, as d3 draws it at `precision(0)`; at any other `precision` (the default `0.5`) every stretch of edge the clip walks — along one side of the seam or along one pole — is sampled at equal steps of no more than 1°, so a clipped polygon meets the outline of 1.6, which is sampled every degree.
+
+**A projection with `clip_angle`** is clipped by its point test until the small-circle clip (#510): a vertex whose projection is `nil` is dropped from its line or ring, and a line is not split there.
+
+`test/visualize/geo/clip_test.exs` holds the clip to d3-geo itself: `test/support/geo/clip_golden.jsonl` is d3-geo 3.1.1's output for lines and polygons across the seam, over a pole and around one, a hole, and Natural Earth land under rotated equirectangular and Natural Earth projections, written by the one-off oracle `test/support/geo/clip_golden.mjs` (spec/12 §1).
+
+#### 2.2.2 As an IR path
 
 `path/2` is the same walk as a `Visualize.IR.Path` (#349): a `Point` as `M` and two `A`s closed with `Z`, a line as `M` and `L`s, a ring the same closed with `Z`, the parts of multi-geometries, collections and feature collections concatenated into one path, an empty path for a geometry with nothing to draw. Its numbers are the projected coordinates unrounded — `Visualize.IR.Path.to_string/1` formats them (spec/02) — so `render/2` and `path/2` agree to the rounding.
 
 ### 2.3 Measures
 
-- `area/2` — for `Polygon`, `|shoelace(exterior)| - |sum of shoelace(holes)|`; for `MultiPolygon`, the sum over polygons; for `GeometryCollection`, the sum of members; `0.0` for points and lines. Units are projected pixels squared (or input units squared with no projection).
-- `bounds/2` — `[x0, y0, x1, y1]` over every projected vertex of the geometry, or `nil` when there are none.
-- `centroid/2` — the arithmetic mean of every projected vertex (not area-weighted), as `{x, y}`, or `nil` when there are none.
+- `area/2` — for `Polygon`, `|shoelace(exterior)| - |sum of shoelace(holes)|`; for `MultiPolygon`, the sum over polygons; for `GeometryCollection`, the sum of members; `0.0` for points and lines. Units are projected pixels squared (or input units squared with no projection). The rings are the geometry's own, each vertex projected by `project/3` and the clipped ones dropped: the area is not taken over the clipped rings of 2.2.1.
+- `bounds/2` — `[x0, y0, x1, y1]` over every vertex of the drawn path — the clipped lines and rings of 2.2.1, the seam samples included — or `nil` when there are none.
+- `centroid/2` — the arithmetic mean of every vertex of the drawn path (not area-weighted), as `{x, y}`, or `nil` when there are none.
 
 ### 2.4 Functions
 

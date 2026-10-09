@@ -83,6 +83,87 @@ defmodule Examples.WorldGeographyTest do
     assert length(String.split(svg, "<path")) - 1 == 1 + 17 + 127 + 1
   end
 
+  # The land mark's paths, each as its subpaths' vertices: the `mark-path` group drawn with
+  # the land's fill opacity.
+  defp land_subpaths(svg) do
+    [_, land | _] = String.split(svg, ~s(<g class="mark mark-path" fill-opacity="0.8"))
+    [land | _] = String.split(land, "</g>")
+
+    for [d] <- Regex.scan(~r/ d="([^"]*)"/, land, capture: :all_but_first),
+        subpath <- String.split(d, "M", trim: true) do
+      ~r/-?\d+(?:\.\d+)?/
+      |> Regex.scan(subpath)
+      |> List.flatten()
+      |> Enum.map(&elem(Float.parse(&1), 0))
+      |> Enum.chunk_every(2)
+    end
+  end
+
+  # A ring joined the long way round crosses the map in one edge (spec/07 §2.2.1, #509).
+  test "the rotating World Map draws no land edge across the map, at any tick" do
+    {width, _} = WorldMap.size()
+
+    for tick <- [0, 15, 45, 90, 135, 179] do
+      subpaths = land_subpaths(WorldMap.render(animation_tick: tick))
+      assert length(subpaths) >= 127
+
+      longest =
+        subpaths
+        |> Enum.flat_map(fn points -> Enum.zip(points, tl(points)) end)
+        |> Enum.map(fn {[x0, _], [x1, _]} -> abs(x1 - x0) end)
+        |> Enum.max()
+
+      assert longest < width / 2, "tick #{tick}: a land edge #{longest} wide on a #{width} map"
+    end
+  end
+
+  test "every land mass draws under the uncircled projections at any rotation, no edge across the map" do
+    land = WorldGeography.land()
+
+    for type <- [:natural_earth, :equirectangular, :mollweide, :mercator],
+        rotate <- [{0, 0, 0}, {45, 0, 0}, {90, 0, 0}, {180, 0, 0}, {-135, 0, 0}, {30, 20, 10}] do
+      {lambda, phi, gamma} = rotate
+
+      projection =
+        Visualize.Geo.Projection.new(type)
+        |> Visualize.Geo.Projection.scale(100)
+        |> Visualize.Geo.Projection.translate(350, 200)
+        |> Visualize.Geo.Projection.rotate(lambda, phi, gamma)
+
+      geo = Visualize.Geo.Path.new(projection)
+
+      for %{name: name, shape: shape} <- land do
+        commands = Visualize.Geo.Path.path(geo, shape).commands
+        assert commands != [], "#{type} #{inspect(rotate)}: #{name} drew nothing"
+
+        edges =
+          for [{_, x0, _}, {:L, x1, _}] <- Enum.chunk_every(commands, 2, 1, :discard),
+              do: abs(x1 - x0)
+
+        # The map is 2π · 100 wide on the equirectangular, the widest of the four.
+        assert Enum.max(edges, fn -> 0 end) < 100 * :math.pi(),
+               "#{type} #{inspect(rotate)}: #{name} has an edge across the map"
+      end
+    end
+  end
+
+  test "at tick 45 the seam cuts land, and Antarctica still closes along the map's foot" do
+    {width, _} = WorldMap.size()
+    subpaths = land_subpaths(WorldMap.render(animation_tick: 45))
+
+    # More rings than features: the seam at 90° west cuts the Americas and Antarctica.
+    assert length(subpaths) > 127
+
+    # The ring that reaches the south pole's line runs along it from one side of the seam
+    # to the other: Antarctica, cut and rejoined, wider than half the map. Joined the long
+    # way round it would be slabs that never reach the pole.
+    foot = fn points -> points |> Enum.map(&Enum.at(&1, 1)) |> Enum.max() end
+    antarctica = Enum.max_by(subpaths, foot)
+    {xs, _} = antarctica |> Enum.map(&List.to_tuple/1) |> Enum.unzip()
+    assert Enum.max(xs) - Enum.min(xs) > width / 2
+    assert Enum.count(antarctica, &(Enum.at(&1, 1) == foot.(antarctica))) > 100
+  end
+
   test "the Globe draws the near hemisphere's land and credits the data" do
     svg = Globe.render([])
     assert svg =~ "Natural Earth 1:110m"

@@ -11,6 +11,7 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
   @deg_to_rad :math.pi() / 180
   @rad_to_deg 180 / :math.pi()
   @sqrt2 :math.sqrt(2)
+  @half_pi :math.pi() / 2
 
   @doc false
   def project(:mollweide, lon, lat, proj), do: mollweide_project(lon, lat, proj)
@@ -70,6 +71,10 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
   end
 
   defp newton_raphson_mollweide(_phi, theta, 0), do: theta
+
+  # At a pole the start, θ = φ = ±π/2, is the root and the derivative is zero there.
+  defp newton_raphson_mollweide(phi, theta, _iterations) when abs(phi) >= @half_pi,
+    do: theta
 
   defp newton_raphson_mollweide(phi, theta, iterations) do
     f = 2 * theta + sin(2 * theta) - :math.pi() * sin(phi)
@@ -428,17 +433,26 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
 
     delta = lat_rad - phi0_rad
 
-    if abs(delta) < 0.001 do
-      {lon_rad * cos(phi0_rad), delta}
-    else
-      x =
-        lon_rad * delta /
-          :math.log(
-            :math.tan(:math.pi() / 4 + lat_rad / 2) / :math.tan(:math.pi() / 4 + phi0_rad / 2)
-          )
+    half = :math.pi() / 4 + lat_rad / 2
 
-      y = delta
-      {x, y}
+    cond do
+      abs(delta) < 0.001 ->
+        {lon_rad * cos(phi0_rad), delta}
+
+      # A pole is a point, x = 0, as d3-geo-projection's loximuthalRaw has it
+      # (src/loximuthal.js:9–10); the logarithm below is infinite there.
+      abs(half) < 1.0e-6 or abs(abs(half) - :math.pi() / 2) < 1.0e-6 ->
+        {0.0, delta}
+
+      true ->
+        x =
+          lon_rad * delta /
+            :math.log(
+              :math.tan(:math.pi() / 4 + lat_rad / 2) / :math.tan(:math.pi() / 4 + phi0_rad / 2)
+            )
+
+        y = delta
+        {x, y}
     end
   end
 

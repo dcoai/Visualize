@@ -32,8 +32,8 @@ defmodule Visualize.Chart.Transform.Geo do
     Enum.flat_map(rows, fn row ->
       geometry = Table.get(row, field)
 
-      case is_map(geometry) and GeoPath.centroid(geo_path, geometry) do
-        {x, y} -> [Map.merge(row, %{path: GeoPath.path(geo_path, geometry), x: x, y: y})]
+      case is_map(geometry) and GeoPath.path_and_centroid(geo_path, geometry) do
+        {path, {x, y}} -> [Map.merge(row, %{path: path, x: x, y: y})]
         _ -> []
       end
     end)

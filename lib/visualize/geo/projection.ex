@@ -186,6 +186,14 @@ defmodule Visualize.Geo.Projection do
   @spec clip_angle(t(), number() | nil) :: t()
   def clip_angle(%__MODULE__{} = proj, angle), do: %{proj | clip_angle: angle}
 
+  @doc """
+  Sets the precision (spec/07 §1.1): `0` draws the edge a path is clipped along as d3-geo
+  does at `precision(0)`, its interpolation points joined by straight segments; any
+  other value samples that edge every degree (§2.2).
+  """
+  @spec precision(t(), number()) :: t()
+  def precision(%__MODULE__{} = proj, precision), do: %{proj | precision: precision}
+
   @doc "Sets the standard parallels for conic projections"
   @spec parallels(t(), number(), number()) :: t()
   def parallels(%__MODULE__{} = proj, phi0, phi1), do: %{proj | parallels: {phi0, phi1}}
@@ -195,25 +203,37 @@ defmodule Visualize.Geo.Projection do
   """
   @spec project(t(), number(), number()) :: {float(), float()} | nil
   def project(%__MODULE__{} = proj, lon, lat) do
-    # Apply rotation
     {lon, lat} = apply_rotation(lon, lat, proj.rotate)
+    project_rotated(proj, lon, lat)
+  end
 
-    # Apply centering
+  @doc false
+  # The point in the rotated frame, `{lon, lat}` degrees: the first stage of `project/3`
+  # (spec/07 §1.3), where `Visualize.Geo.Path` clips on the sphere (§2.2). The longitude
+  # is in [-180, 180], as d3's rotation leaves it (rotation.js:79, 95).
+  @spec rotated(t(), number(), number()) :: {number(), number()}
+  def rotated(%__MODULE__{} = proj, lon, lat) do
+    {lon, lat} = apply_rotation(lon, lat, proj.rotate)
+    {normalize_longitude(lon), lat}
+  end
+
+  @doc false
+  # The rest of `project/3` for a point already in the rotated frame: the centre
+  # subtracted, the clip test, the raw projection, scale and translate.
+  @spec project_rotated(t(), number(), number()) :: {float(), float()} | nil
+  def project_rotated(%__MODULE__{} = proj, lon, lat) do
     {center_lon, center_lat} = proj.center
     lon = lon - center_lon
     lat = lat - center_lat
 
-    # Check clip angle
     if clipped?(proj, lon, lat) do
       nil
     else
-      # Project based on type
       case family(proj.type).project(proj.type, lon, lat, proj) do
         nil ->
           nil
 
         {x, y} ->
-          # Apply scale and translate
           {tx, ty} = proj.translate
           {x * proj.scale + tx, -y * proj.scale + ty}
       end

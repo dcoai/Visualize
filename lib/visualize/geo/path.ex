@@ -18,14 +18,25 @@ defmodule Visualize.Geo.Path do
         "type" => "Feature",
         "geometry" => %{
           "type" => "Polygon",
-          "coordinates" => [[[-122, 37], [-121, 37], [-121, 38], [-122, 38], [-122, 37]]]
+          "coordinates" => [[[-122, 37], [-122, 38], [-121, 38], [-121, 37], [-122, 37]]]
         }
       }
 
       path_data = Visualize.Geo.Path.render(geo_path, feature)
 
+  ## Clipping on the sphere
+
+  With a projection, lines and polygons are clipped on the sphere before they are
+  projected, as d3-geo clips them (spec/07 §2.2.1, D-127): under a projection without a
+  `clip_angle` they are cut where they cross ±180° of the rotated frame, a line into
+  several subpaths and a polygon closed along the seam and the poles, so a rotated map
+  never joins a ring the long way round. Winding is d3's: a polygon's exterior ring runs
+  clockwise on a north-up map, and a ring wound the other way is the rest of the sphere.
+
   """
 
+  alias Visualize.Geo.Clip
+  alias Visualize.Geo.Clip.Antimeridian
   alias Visualize.Geo.Projection
   alias Visualize.IR
 
@@ -84,14 +95,27 @@ defmodule Visualize.Geo.Path do
   """
   @spec centroid(t(), map()) :: {float(), float()} | nil
   def centroid(%__MODULE__{} = geo_path, geojson) do
-    points = collect_points(geo_path, geojson)
+    geo_path |> parts(geojson) |> parts_centroid()
+  end
 
-    if Enum.empty?(points) do
-      nil
-    else
-      n = length(points)
-      {sum_x, sum_y} = Enum.reduce(points, {0, 0}, fn {x, y}, {sx, sy} -> {sx + x, sy + y} end)
-      {sum_x / n, sum_y / n}
+  @doc false
+  # `path/2` and `centroid/2` from one walk, so the clip runs once: the `:projection` step
+  # reads both for every row (spec/14 §5.4.4).
+  @spec path_and_centroid(t(), map()) :: {IR.Path.t(), {float(), float()} | nil}
+  def path_and_centroid(%__MODULE__{} = geo_path, geojson) do
+    parts = parts(geo_path, geojson)
+    {Enum.reduce(parts, IR.Path.new(), &path_part/2), parts_centroid(parts)}
+  end
+
+  defp parts_centroid(parts) do
+    case parts_points(parts) do
+      [] ->
+        nil
+
+      points ->
+        n = length(points)
+        {sum_x, sum_y} = Enum.reduce(points, {0, 0}, fn {x, y}, {sx, sy} -> {sx + x, sy + y} end)
+        {sum_x / n, sum_y / n}
     end
   end
 
@@ -126,9 +150,10 @@ defmodule Visualize.Geo.Path do
   # ============================================
 
   # A GeoJSON object as the parts a path is drawn from, every vertex projected: a point
-  # (its centre and radius), a line and a ring (their vertices, in order, the clipped ones
-  # dropped). `render/2` and `path/2` serialise the same parts, and the measures read
-  # their vertices.
+  # (its centre and radius), a line and a ring (their vertices, in order). Lines and
+  # polygons are clipped on the sphere first (`clip_parts/3`), so a line may become several
+  # and a polygon's rings are the clipped rings. `render/2` and `path/2` serialise the same
+  # parts, and the measures read their vertices.
   defp parts(geo_path, %{"type" => "FeatureCollection", "features" => features}) do
     Enum.flat_map(features, &parts(geo_path, &1))
   end
@@ -156,19 +181,19 @@ defmodule Visualize.Geo.Path do
   end
 
   defp geometry_parts(geo_path, %{"type" => "LineString", "coordinates" => coords}) do
-    [{:line, vertices(geo_path, coords)}]
+    clip_parts(geo_path, :line, coords)
   end
 
   defp geometry_parts(geo_path, %{"type" => "MultiLineString", "coordinates" => lines}) do
-    Enum.map(lines, &{:line, vertices(geo_path, &1)})
+    Enum.flat_map(lines, &clip_parts(geo_path, :line, &1))
   end
 
   defp geometry_parts(geo_path, %{"type" => "Polygon", "coordinates" => rings}) do
-    Enum.map(rings, &{:ring, vertices(geo_path, &1)})
+    clip_parts(geo_path, :polygon, rings)
   end
 
   defp geometry_parts(geo_path, %{"type" => "MultiPolygon", "coordinates" => polygons}) do
-    Enum.flat_map(polygons, fn rings -> Enum.map(rings, &{:ring, vertices(geo_path, &1)}) end)
+    Enum.flat_map(polygons, &clip_parts(geo_path, :polygon, &1))
   end
 
   defp geometry_parts(geo_path, %{"type" => "GeometryCollection", "geometries" => geometries}) do
@@ -182,6 +207,53 @@ defmodule Visualize.Geo.Path do
     do: [{:ring, Projection.sphere(proj)}]
 
   defp geometry_parts(_, _), do: []
+
+  # -- the clip on the sphere (spec/07 §2.2, D-127) --
+
+  # A line or a polygon's rings as parts. With a projection that has a clipper the
+  # vertices are taken into the rotated frame, clipped there, and the clip's output
+  # projected; without a projection they are planar and drawn as they are.
+  defp clip_parts(%{projection: proj} = geo_path, kind, coords) do
+    case proj && clipper(proj) do
+      nil -> unclipped_parts(geo_path, kind, coords)
+      clipper -> clipped_parts(proj, clipper, kind, coords)
+    end
+  end
+
+  defp clipped_parts(proj, clipper, :line, coords) do
+    clipper
+    |> Clip.line(frame(proj, coords))
+    |> Enum.map(&{:line, project_frame(proj, &1)})
+  end
+
+  defp clipped_parts(proj, clipper, :polygon, rings) do
+    clipper
+    |> Clip.polygon(Enum.map(rings, &frame(proj, &1)))
+    |> Enum.map(&{:ring, project_frame(proj, &1)})
+  end
+
+  # Planar positions as they are; under a `clip_angle`, the projection's point test until
+  # the small-circle clip (#510): the vertices it clips are dropped.
+  defp unclipped_parts(geo_path, :line, coords), do: [{:line, vertices(geo_path, coords)}]
+
+  defp unclipped_parts(geo_path, :polygon, rings),
+    do: Enum.map(rings, &{:ring, vertices(geo_path, &1)})
+
+  # The clip a projection's paths are cut by: the antimeridian without a `clip_angle`
+  # (d3-geo's default preclip, projection/index.js:71), its seam sampled every degree but
+  # at precision 0.
+  defp clipper(%Projection{clip_angle: nil, precision: precision}),
+    do: %Antimeridian{step: if(precision == 0, do: nil, else: 1)}
+
+  defp clipper(%Projection{}), do: nil
+
+  defp frame(proj, coords) do
+    Enum.map(coords, fn [lon, lat | _] -> Projection.rotated(proj, lon, lat) end)
+  end
+
+  defp project_frame(proj, points) do
+    for {lon, lat} <- points, xy = Projection.project_rotated(proj, lon, lat), xy != nil, do: xy
+  end
 
   defp vertices(geo_path, coords), do: Enum.flat_map(coords, &project_coord(geo_path, &1))
 
@@ -238,10 +310,10 @@ defmodule Visualize.Geo.Path do
   # ============================================
 
   # Every projected vertex of the object, a point's centre for a point part.
-  defp collect_points(geo_path, geojson) do
-    geo_path
-    |> parts(geojson)
-    |> Enum.flat_map(fn
+  defp collect_points(geo_path, geojson), do: geo_path |> parts(geojson) |> parts_points()
+
+  defp parts_points(parts) do
+    Enum.flat_map(parts, fn
       {:point, x, y, _r} -> [{x, y}]
       {_line_or_ring, points} -> points
     end)
