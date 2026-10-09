@@ -3,7 +3,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @moduledoc false
     # What every component shares (spec/10 §1.2, D-64): the preset drawn through the layer,
     # the elements a template prints picked out of the frame's group, the `<svg>` shell
-    # attributes, the transition, and the label truncation of the treemap.
+    # attributes and the transition.
 
     alias Visualize.{Chart, Theme}
     alias Visualize.Chart.{Frame, Mark, Presets, Style}
@@ -188,19 +188,5 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # Coordinates print through the one number formatter of every serialiser (spec/02 §3):
     # at most four decimals, never `-0`, so a golden does not record float noise.
     defdelegate fmt(number), to: Path, as: :format_number
-
-    @doc false
-    # Cuts `label` to the characters that fit `max_width` pixels at seven pixels each,
-    # ending a cut label with an ellipsis.
-    def truncate(label, max_width) do
-      label = to_string(label)
-      chars = trunc(max_width / 7)
-
-      if String.length(label) > chars do
-        String.slice(label, 0, max(chars - 1, 0)) <> "…"
-      else
-        label
-      end
-    end
   end
 end

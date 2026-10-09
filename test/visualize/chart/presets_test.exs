@@ -221,8 +221,19 @@ defmodule Visualize.Chart.PresetsTest do
 
     treemap = Presets.treemap_chart(assigns().treemap_chart)
 
-    assert [%{data: %{transforms: [%{op: :treemap}, leaves]}}] = treemap.marks
+    assert [%{data: %{transforms: [%{op: :treemap}, leaves]}, label: cell_label}] =
+             treemap.marks
+
     assert leaves == %{op: :filter, field: :height, test: :eq, value: 0}
+    # A cell's label is its mark's, read and fitted as the gallery's treemap's (#497).
+    assert cell_label == %{
+             text: [{:field, :label}],
+             anchor: :middle,
+             fit: :truncate,
+             style: :cell_label
+           }
+
+    assert treemap.styles.cell_label == %{fill: :contrast, font_size: :label_size}
 
     sunburst = Presets.sunburst_chart(assigns().sunburst_chart)
     assert sunburst.meta == %{description: ["Rings"]}
@@ -393,7 +404,7 @@ defmodule Visualize.Chart.PresetsTest do
       end
     end
 
-    test "the treemap's cells are the component's leaves, in count and geometry" do
+    test "the treemap's cells and labels are the component's, in count and geometry" do
       for a <- [%{data: @tree_hierarchy}, %{data: @root_only}] do
         svg = layer(:treemap_chart, a)
         component = render_component(&Tree.treemap_chart/1, a)
@@ -403,6 +414,11 @@ defmodule Visualize.Chart.PresetsTest do
         end
 
         assert geometry.(svg) == geometry.(component)
+        # Each label where the layer put it, in the ink it chose for its cell (#497).
+        label = &Enum.map(tags(&1, "text"), fn t -> {num(t["x"]), num(t["y"]), t["fill"]} end)
+        assert label.(svg) == label.(component)
+        assert texts(svg) == texts(component)
+        assert texts(component) != []
         rows = Presets.sources(:treemap_chart, a).data
         parents = MapSet.new(rows, & &1.parent)
         assert length(geometry.(svg)) == Enum.count(rows, &(&1.id not in parents))
@@ -436,7 +452,7 @@ defmodule Visualize.Chart.PresetsTest do
     end
   end
 
-  describe "the pie's and the sunburst's labels read on their fills (#494, D-123)" do
+  describe "the pie's, the sunburst's and the treemap's labels read on their fills (#494, #497, D-123)" do
     import Phoenix.LiveViewTest, only: [render_component: 2]
 
     alias Visualize.{Color, Theme}
@@ -458,7 +474,8 @@ defmodule Visualize.Chart.PresetsTest do
     defp ink_cases do
       [
         pie_chart: %{data: @slices, value: & &1.value, label: & &1.name},
-        sunburst_chart: %{data: @branches}
+        sunburst_chart: %{data: @branches},
+        treemap_chart: %{data: @branches}
       ]
     end
 
@@ -508,6 +525,20 @@ defmodule Visualize.Chart.PresetsTest do
 
       assert Presets.sunburst_chart(%{data: @branches}).marks |> hd() |> get_in([:label, :fit]) ==
                :truncate
+
+      assert Presets.treemap_chart(%{data: @branches}).marks |> hd() |> get_in([:label, :fit]) ==
+               :truncate
+    end
+
+    test "a root-only treemap's label holds 4.5:1 against the :grid its cell is filled with" do
+      # Its cell's fill in the layer is `:none` (D-122), so the label is inked against the
+      # background; the component fills the cell `:grid` (spec/10 §3.3, #497).
+      for theme <- [Theme.default(), Theme.dark()] do
+        svg = render_component(&Tree.treemap_chart/1, %{data: @root_only, theme: theme})
+        [_, fill] = Regex.run(~r/<text[^>]* fill="([^"]*)"[^>]*>root<\/text>/, svg)
+        ratio = Color.contrast(Color.parse(fill), Color.parse(theme.grid))
+        assert ratio >= @aa, "#{theme.background}: #{fill} on #{theme.grid} is #{ratio}:1"
+      end
     end
 
     test "every label holds 4.5:1 against its element's fill on both built-in themes" do
@@ -540,6 +571,7 @@ defmodule Visualize.Chart.PresetsTest do
           case name do
             :pie_chart -> render_component(&Visualize.Components.pie_chart/1, assigns)
             :sunburst_chart -> render_component(&Tree.sunburst_chart/1, assigns)
+            :treemap_chart -> render_component(&Tree.treemap_chart/1, assigns)
           end
 
         fit = Presets.design(name, assigns).marks |> hd() |> get_in([:label, :fit])

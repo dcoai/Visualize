@@ -3,9 +3,13 @@
   
   
     <rect x="0" y="0" width="800" height="400" fill="#111" stroke="var(--vis-background, #ffffff)" stroke-width="1"></rect>
-    <text x="4" y="14" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">x</text>
+    
   
     <rect x="0" y="400" width="800" height="200" fill="#222" stroke="var(--vis-background, #ffffff)" stroke-width="1"></rect>
-    <text x="4" y="414" font-size="var(--vis-label-size, 12px)" fill="var(--vis-background, #ffffff)" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5);">y</text>
+    
+      <text x="400" y="200" dy="0.32em" text-anchor="middle" font-size="var(--vis-label-size, 12px)" fill="#ffffff">x</text>
+    
+      <text x="400" y="500" dy="0.32em" text-anchor="middle" font-size="var(--vis-label-size, 12px)" fill="#ffffff">y</text>
+    
   
 </svg>

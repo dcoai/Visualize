@@ -390,7 +390,8 @@ defmodule Visualize.Chart.Presets do
   def treemap_chart(assigns) do
     a = assigns(:treemap_chart, assigns)
 
-    # The leaves alone (spec/10 §3.3).
+    # The leaves alone (spec/10 §3.3), each labelled at its centre as the gallery's treemap
+    # is: inked by contrast with the cell and cut to the cell (spec/14 §15.4, D-123, #497).
     data =
       from(:data)
       |> treemap(id: :id, by: :parent, field: :value, padding: a.padding, tile: a.tile)
@@ -400,9 +401,18 @@ defmodule Visualize.Chart.Presets do
       seed(a, @hierarchy_fields) ++
         [
           style(:cell, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
+          style(:cell_label, fill: :contrast, font_size: :label_size),
           cartesian(margin: margin(a)),
           branch_scale(a),
-          rect(data, %{x0: :x0, x1: :x1, y0: :y0, y1: :y1}, style: :cell)
+          rect(data, %{x0: :x0, x1: :x1, y0: :y0, y1: :y1},
+            label: %{
+              text: [{:field, :label}],
+              anchor: :middle,
+              fit: :truncate,
+              style: :cell_label
+            },
+            style: :cell
+          )
         ]
     )
   end
