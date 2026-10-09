@@ -33,7 +33,6 @@ defmodule Examples.Charts.LoadChart do
   @span 600
   @every 2
   @ceiling 4
-  @box [0.72, 0.04, 0.24, 0.24]
 
   @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
   def size, do: {760, 400}
@@ -45,93 +44,60 @@ defmodule Examples.Charts.LoadChart do
   def design(opts \\ []) do
     design =
       Design.fold(
-        [chart(meta: %{name: title(), description: [description()]})] ++
-          furniture() ++ history() ++ dial()
+        [
+          chart(meta: %{name: title(), description: [description()]}),
+          source(:load, [:t, :v], types: %{t: :time, v: :number}),
+          # One row, so the dial's track is drawn once rather than once per reading.
+          source(:dial, [:at], types: %{at: :number}),
+          style(:trace, stroke: :series_1, stroke_width: 2, curve: :monotone_x),
+          style(:volume, fill: :series_1, opacity: 0.18, curve: :monotone_x),
+          style(:track, fill: :grid, opacity: 0.5),
+          style(:reading, fill: :series_1),
+          style(:value, extends: :label, font_size: 16, font_weight: :bold)
+        ] ++
+          in_frame(:history, [
+            cartesian(margin: @margin),
+            time_scale(:x),
+            linear_scale(:y, domain: [0, @ceiling]),
+            axis(:x, :bottom, ticks: 6, format: "%H:%M"),
+            axis(:y, :left, ticks: 4, grid: true),
+            # The volume under the trace reaches the scale's floor, not the series' own
+            # minimum (spec/14 §5.2, #420).
+            area(:load, %{x: :t, y: :v, y0: {:scale, :min}}, style: :volume),
+            line(:load, %{x: :t, y: :v}, style: :trace),
+            label({:frame, :bottom_left}, ["load average — one minute"])
+          ]) ++
+          in_frame(:now, [
+            polar(box: [0.72, 0.04, 0.24, 0.24], margin: @dial, z: 1, background: :background),
+            linear_scale(:angle, domain: [0, @ceiling], start: -120, sweep: 240),
+            linear_scale(:r, domain: [0, 1]),
+            # Two sectors the polar transform arcs (spec/14 §5.2): the dial's track over
+            # the whole domain, and the newest reading over it. The dial is an inch across
+            # and carries no axis: the number in the middle is what it is read by.
+            rect(:dial, %{x0: 0, x1: @ceiling, y0: 0.62, y1: 0.92}, style: :track),
+            rect(newest(), %{x0: 0, x1: :v, y0: 0.62, y1: 0.92}, style: :reading),
+            text(newest(), %{x: 0, y: 0},
+              label: %{text: [{:field, :v}], anchor: :middle, style: :value}
+            )
+          ])
       )
 
-    {design, sources(Load.second(opts, @span))}
+    {design, %{load: rows(opts), dial: [%{at: 0}]}}
   end
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-  @doc """
-  The sources and styles the history and its dial draw with: what `history/1` and `dial/1`
-  name, said once here and in `Examples.Charts.LoadAndAge` (#493).
-  """
-  def furniture do
-    [
-      source(:load, [:t, :v], types: %{t: :time, v: :number}),
-      # One row, so the dial's track is drawn once rather than once per reading.
-      source(:dial, [:at], types: %{at: :number}),
-      style(:trace, stroke: :series_1, stroke_width: 2, curve: :monotone_x),
-      style(:volume, fill: :series_1, opacity: 0.18, curve: :monotone_x),
-      style(:track, fill: :grid, opacity: 0.5),
-      style(:reading, fill: :series_1),
-      style(:value, extends: :label, font_size: 16, font_weight: :bold)
-    ]
-  end
-
-  @doc """
-  The `history` frame: ten minutes of the one-minute load as a line over its volume.
-  `place` is where its `cartesian` goes — the margin, and the `cell` of a design with a
-  grid (spec/14 §2.8) — and the box's whole when it says no more.
-  """
-  def history(place \\ [margin: @margin]) do
-    in_frame(:history, [
-      cartesian(place),
-      time_scale(:x),
-      linear_scale(:y, domain: [0, @ceiling]),
-      axis(:x, :bottom, ticks: 6, format: "%H:%M"),
-      axis(:y, :left, ticks: 4, grid: true),
-      # The volume under the trace reaches the scale's floor, not the series' own
-      # minimum (spec/14 §5.2, #420).
-      area(:load, %{x: :t, y: :v, y0: {:scale, :min}}, style: :volume),
-      line(:load, %{x: :t, y: :v}, style: :trace),
-      label({:frame, :bottom_left}, ["load average — one minute"])
-    ])
-  end
-
-  @doc """
-  The `now` frame: the newest reading on a dial at `box`, fractions of the whole box
-  (spec/14 §4.2), over the history on its own background.
-  """
-  def dial(box \\ @box) do
-    in_frame(:now, [
-      polar(box: box, margin: @dial, z: 1, background: :background),
-      linear_scale(:angle, domain: [0, @ceiling], start: -120, sweep: 240),
-      linear_scale(:r, domain: [0, 1]),
-      # Two sectors the polar transform arcs (spec/14 §5.2): the dial's track over
-      # the whole domain, and the newest reading over it. The dial is an inch across
-      # and carries no axis: the number in the middle is what it is read by.
-      rect(:dial, %{x0: 0, x1: @ceiling, y0: 0.62, y1: 0.92}, style: :track),
-      rect(newest(), %{x0: 0, x1: :v, y0: 0.62, y1: 0.92}, style: :reading),
-      text(newest(), %{x: 0, y: 0},
-        label: %{text: [{:field, :v}], anchor: :middle, style: :value}
-      )
-    ])
-  end
-
-  @doc "The dial's box in this chart, the top-right quarter of the history (spec/14 §4.2)."
-  def box, do: @box
-
-  @doc """
-  The rows the history and the dial bind at absolute second `now`: the ten minutes up to
-  and including it, one reading every two seconds, the newest last.
-  """
-  def sources(now) do
-    load =
-      for second <- (now - @span)..now//@every do
-        %{t: DateTime.add(@epoch, second, :second), v: Float.round(Load.at(:one, second), 2)}
-      end
-
-    %{load: load, dial: [%{at: 0}]}
-  end
-
-  @doc "The instant a history row stands for, as absolute seconds of the machine's day."
-  def second_of(%{t: t}), do: DateTime.diff(t, @epoch, :second)
-
   # The newest row of the same rows the history line draws (spec/14 §5.4.1, #426).
   defp newest, do: take(from(:load), 1)
+
+  # A tick is three seconds of the machine's day, the clock every load chart reads (#493).
+  defp rows(opts) do
+    now = Load.second(opts, @span)
+
+    for second <- (now - @span)..now//@every do
+      %{t: DateTime.add(@epoch, second, :second), v: Float.round(Load.at(:one, second), 2)}
+    end
+  end
 
   def sample_code do
     ~S"""

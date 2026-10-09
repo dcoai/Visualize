@@ -166,17 +166,18 @@ defmodule Examples.Frames do
   end
 
   # The compiled chart ticked: `now:` from the opts for a streaming design, so the
-  # window's upper end is the run's and not the rows' (spec/14 §12.5).
+  # window's upper end is the run's and not the rows' (spec/14 §12.5), and `at:`, the
+  # clock a transition eases by, as `Design.step/5` passes it on SVG (#498).
   def frame(module, opts, backend, %{compiled: compiled} = state)
       when backend in [:canvas, :incremental] do
     {design, sources} = module.design(opts)
     compiled = recompiled(compiled, design, module, opts)
-    now = if now = opts[:now], do: [now: now], else: []
+    clock = for key <- [:now, :at], value = opts[key], do: {key, value}
 
     {plots, compiled} =
       Enum.map_reduce(compiled, [], fn {name, one}, acc ->
         # The tick's own frame, so a design that animates through it moves here too (#424).
-        {payload, one} = Compiled.tick(one, sources, [frame: node(design, name)] ++ now)
+        {payload, one} = Compiled.tick(one, sources, [frame: node(design, name)] ++ clock)
 
         {%{
            name: name,

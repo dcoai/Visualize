@@ -50,7 +50,7 @@ defmodule Examples.Charts.LoadAge do
     design =
       Design.fold(
         [chart(meta: %{name: title(), description: [description()]})] ++
-          furniture(:trace) ++ plot(width, :trace)
+          furniture() ++ plot(width)
       )
 
     {design, sources(Load.second(opts, @oldest))}
@@ -59,37 +59,32 @@ defmodule Examples.Charts.LoadAge do
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
   @doc """
-  The source and the style the age view draws with, its trace's style under the name
-  `trace` — this chart's `:trace`, renamed where a design composes the view beside
-  another that says `:trace` too (`Examples.Charts.LoadAndAge`, #493).
+  The source and the style the age view draws with: what `plot/1` names, said once here and
+  in `Examples.Charts.LoadAgeGauge` (#498).
   """
-  def furniture(trace) do
+  def furniture do
     [
       source(:loads, [:age, :load, :window],
         types: %{age: :number, load: :number, window: :category}
       ),
-      style(trace, stroke_width: 2, curve: :monotone_x)
+      style(:trace, stroke_width: 2, curve: :monotone_x)
     ]
   end
 
   @doc """
-  The age view's fragments, for a frame `width` wide whose trace is drawn in `trace`.
-
-  `opts`: `place`, where its `cartesian` goes — the margin, and a `cell` on a grid (spec/14
-  §2.8) — and `y`, the load scale: this chart declares its own over `[0, 4]`, and a design
-  that draws it under another load view adopts that view's instead (§4.3, #493). Unframed,
-  so this chart is one frame and a design of several puts it in one with `in_frame/2`.
+  The age view's fragments, for a frame `width` wide: its `cartesian` at `margin/0`, the log
+  age axis and the load axis, the windows' key in the plot's top-right corner and the three
+  traces. Unframed, so this chart is one frame and a design of several puts it in one with
+  `in_frame/2`.
   """
-  def plot(width, trace, opts \\ []) do
-    place = Keyword.get(opts, :place, margin: @margin)
-    margin = Keyword.fetch!(place, :margin)
-    inner = width - margin.left - margin.right
+  def plot(width) do
+    inner = width - @margin.left - @margin.right
 
     [
-      cartesian(place),
+      cartesian(margin: @margin),
       # Age on a log axis, newest at the right: a reading drifts left as it ages.
       log_scale(:x, domain: [@newest, @oldest], range: [inner, 0]),
-      Keyword.get(opts, :y, linear_scale(:y, domain: [0, 4])),
+      linear_scale(:y, domain: [0, 4]),
       ordinal_scale(:color,
         domain: Enum.map(Load.windows(), &elem(&1, 1)),
         range: [:series_1, :series_2, :series_3]
@@ -98,9 +93,15 @@ defmodule Examples.Charts.LoadAge do
       axis(:y, :left, ticks: 4, grid: true),
       legend(:color, position: :top_right),
       label({:axis, :x}, ["age — newest at the right"]),
-      line(:loads, %{x: :age, y: :load, series: :window}, style: trace)
+      line(:loads, %{x: :age, y: :load, series: :window}, style: :trace)
     ]
   end
+
+  @doc """
+  The age view's margin in pixels (spec/14 §4.2): where its plot area begins, which a frame
+  drawn over the plot reads to stay inside it (#498).
+  """
+  def margin, do: @margin
 
   @doc "The oldest age the view draws, three hours: the second it reads at rest."
   def oldest, do: @oldest

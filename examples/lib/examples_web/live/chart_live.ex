@@ -27,7 +27,7 @@ defmodule ExamplesWeb.ChartLive do
     "load_gauge",
     "load_age",
     "load",
-    "load_and_age",
+    "load_age_gauge",
     "context",
     "multi_line",
     "grouped_bar",
