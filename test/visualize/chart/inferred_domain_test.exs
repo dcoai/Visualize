@@ -1,6 +1,6 @@
 defmodule Visualize.Chart.InferredDomainTest do
   @moduledoc """
-  #490, D-125: a `:text` mark's position channel that is a literal number, on a scale whose
+  #490, D-124: a `:text` mark's position channel that is a literal number, on a scale whose
   domain is inferred, holds that domain open at the number — inference reads a constant as
   data (spec/14 §4.3) — so the validator reports it as `{:feeds_domain, scale, n}`
   (§10.1). The check is scoped to `:text`: a rule or an area at a constant baseline is

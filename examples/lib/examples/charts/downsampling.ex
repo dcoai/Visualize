@@ -99,7 +99,7 @@ defmodule Examples.Charts.Downsampling do
       # The caption in the band above the tallest spike, at the left end of whatever the `x`
       # domain turns out to be: the count of the rows this frame's line draws, from the same
       # pipeline. `{:scale, :min}` reads the domain and feeds nothing to it, so the domain is
-      # the series' own extent at every tick of a run (#490, D-125); a number here would hold
+      # the series' own extent at every tick of a run (#490, D-124); a number here would hold
       # it open at that number while the series scrolls away.
       text(bin(data, :t, thresholds: [], as: :rows), %{x: {:scale, :min}, y: @caption},
         label: %{text: [{:field, :rows}, words], anchor: :right, style: :caption}

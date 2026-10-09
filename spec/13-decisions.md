@@ -1048,7 +1048,7 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - A label that overhangs its element (`fit: :none`) is still inked against its element, and may not read where it overhangs. `fit` is the remedy, and is why the gallery sets one.
 - The components of spec/10 (the `pie_chart` and `sunburst_chart` components and their presets, `Visualize.Chart.Presets`) still ink their labels with `:background`: their goldens are the hand-built components' byte for byte, and changing them is a separate item.
 
-## 125. D-125 — A `:text` mark's constant position on an inferred domain is a fault; a constant on any other mark is data
+## 124. D-124 — A `:text` mark's constant position on an inferred domain is a fault; a constant on any other mark is data
 
 **Context.** #490. The gallery's *Downsampling* captioned each of its three frames with a `:text` mark at data `x: 0`, over a one-bin count of the frame's own pipeline. Inference reads a constant channel as data (spec/14 §4.3), so `0` was held in the inferred `x` domain. At rest the series starts at row `0` and nothing showed; during a run the window scrolls 250 rows a tick, and at tick 60 the domain was `[0, 64999]` for rows `15000..64999`: the line started 160 of 694 px in, the left of every plot empty, and `:m4`'s columns — split over the series' own extent — no longer lay on the plot's pixel columns, so its guarantee of drawing the same pixels as the whole series was lost exactly when it was being shown. The goldens and the still render are tick 0 and never saw it.
 

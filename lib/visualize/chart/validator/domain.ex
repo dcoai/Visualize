@@ -12,7 +12,7 @@ defmodule Visualize.Chart.Validator.Domain do
   # walk is total over any map, since the validator is handed arbitrary input: a shape it
   # does not recognise contributes nothing, and the schema walk reports it.
   #
-  # And the inferred-domain check (#490, D-125): a `:text` mark's position channel that is
+  # And the inferred-domain check (#490, D-124): a `:text` mark's position channel that is
   # a literal number naming a scale whose domain is inferred. Inference reads the constant
   # as data, so a caption holds the domain open where the data has left it.
 
@@ -110,7 +110,7 @@ defmodule Visualize.Chart.Validator.Domain do
   defp channel({:field, field}, name, domain, columns), do: column(field, name, domain, columns)
   defp channel(field, name, domain, columns), do: column(field, name, domain, columns)
 
-  # -- a constant on an inferred domain (#490, D-125) -----------------------------------
+  # -- a constant on an inferred domain (#490, D-124) -----------------------------------
 
   # A `:text` mark is its label (spec/14 §5.2): a number in a position channel is where the
   # words stand, never a reading the axis must reach. Any other type's constant — a rule's
