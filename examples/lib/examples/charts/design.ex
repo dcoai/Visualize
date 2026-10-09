@@ -161,12 +161,14 @@ defmodule Examples.Charts.Design do
   A design of several frames has one plot per frame (§12.1, #432), and `plots` carries
   them in drawing order with the geometry each canvas is placed by; `static` is the
   frames' documents stacked and `canvas` the first plot's, so a page that draws one
-  canvas reads what it always did.
+  canvas reads what it always did. `backdrop` is what goes beneath the canvases: every
+  plot's static backdrop and its tick's, stacked — a basemap's tiles (§12.4, #476).
   """
   @spec hybrid(module(), keyword()) :: %{
           static: String.t(),
           canvas: String.t(),
           dynamic_svg: String.t(),
+          backdrop: String.t(),
           plots: [map()],
           width: number(),
           height: number()
@@ -185,6 +187,7 @@ defmodule Examples.Charts.Design do
           static: Visualize.Chart.Compiled.static(compiled),
           canvas: payload.canvas,
           dynamic_svg: payload.svg,
+          backdrop: Visualize.Chart.Compiled.backdrop(compiled) <> payload.backdrop,
           box: compiled.box,
           plot: compiled.plot,
           margin: compiled.margin
@@ -195,6 +198,7 @@ defmodule Examples.Charts.Design do
       static: Enum.map_join(plots, "", & &1.static),
       canvas: plots |> hd() |> Map.fetch!(:canvas),
       dynamic_svg: Enum.map_join(plots, "", & &1.dynamic_svg),
+      backdrop: Enum.map_join(plots, "", & &1.backdrop),
       plots: plots,
       width: applied.frame.size.width,
       height: applied.frame.size.height
@@ -202,7 +206,8 @@ defmodule Examples.Charts.Design do
   end
 
   # The design's frames in the order they draw: `z`, ties by name (spec/14 §4.2).
-  defp ordered(applied), do: Enum.sort_by(applied.frames, fn {name, f} -> {f.z, to_string(name)} end)
+  defp ordered(applied),
+    do: Enum.sort_by(applied.frames, fn {name, f} -> {f.z, to_string(name)} end)
 
   @doc """
   The columns of `nodes/1`'s rows: what a hierarchy chart's source declares.

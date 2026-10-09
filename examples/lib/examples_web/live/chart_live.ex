@@ -50,7 +50,8 @@ defmodule ExamplesWeb.ChartLive do
     "downsampling" => Examples.Charts.Downsampling,
     # Maps
     "world_map" => Examples.Charts.WorldMap,
-    "globe" => Examples.Charts.Globe
+    "globe" => Examples.Charts.Globe,
+    "gps_track" => Examples.Charts.GpsTrack
   }
 
   # Charts that support animation
@@ -92,6 +93,7 @@ defmodule ExamplesWeb.ChartLive do
     "chord",
     "world_map",
     "globe",
+    "gps_track",
     "hexbin",
     "spectrum"
   ]
@@ -829,8 +831,16 @@ defmodule ExamplesWeb.ChartLive do
             <% true -> %>
               <%!-- One canvas per plot at its own box (spec/14 §12.1, #432): an incremental
                     canvas is the plot area at the box's margin offset, a binary one the whole
-                    box; the frames' static documents stack over them. --%>
+                    box; the frames' static documents stack over them, and their backdrops — a
+                    basemap's tiles — beneath them (spec/14 §12.4, #476): backdrop, canvas,
+                    static SVG, dynamic SVG. --%>
               <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(state, :width)}px; height: #{run_size(state, :height)}px;"}>
+                <div :if={Frames.backdrop(state) != ""} class="hybrid-backdrop-layer" style="position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(Frames.backdrop(state)) %>
+                </div>
+                <div :for={plot <- frame.plots} :if={plot.backdrop != ""} class="hybrid-backdrop-layer" style="position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;">
+                  <%= Phoenix.HTML.raw(plot.backdrop) %>
+                </div>
                 <div
                   :for={plot <- frame.plots}
                   id={"plot-#{plot.name}"}
@@ -1249,12 +1259,17 @@ defmodule ExamplesWeb.ChartLive do
     {:ok, applied} = Visualize.Chart.apply(design, sources: sources)
     {:ok, %{main: compiled}} = Visualize.Chart.compile(applied, ceiling: 1)
     static = Visualize.Chart.Compiled.static(compiled)          # the furniture, once
+    backdrop = Visualize.Chart.Compiled.backdrop(compiled)      # a basemap's tiles, once
     {tick, compiled} = Visualize.Chart.Compiled.tick(compiled, applied.sources)
-    # tick.canvas — the marks as a base64 binary stream for the hook
-    # tick.svg    — any SVG-layer marks (text, small marks) for the layer above
+    # tick.canvas   — the marks as a base64 binary stream for the hook
+    # tick.svg      — any SVG-layer marks (text, small marks) for the layer above
+    # tick.backdrop — a fitted basemap's tiles, for beneath the canvas
 
-    # In the template, the canvas under the static SVG:
+    # In the template, the backdrop under the canvas under the static SVG:
     <div style="position: relative">
+      <div style="position: absolute; top: 0; left: 0; pointer-events: none">
+        <%= Phoenix.HTML.raw(backdrop <> tick.backdrop) %>
+      </div>
       <div id="chart" phx-hook="CanvasBinaryChart" data-binary={tick.canvas}
            style="position: absolute; top: 0; left: 0">
         <canvas width={width} height={height}></canvas>

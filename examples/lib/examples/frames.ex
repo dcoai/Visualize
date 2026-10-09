@@ -9,8 +9,9 @@ defmodule Examples.Frames do
 
   A design has **one plot per frame** (spec/14 §12.1, #385, #432), so a frame of a run is
   `%{svg, plots, bytes, points}`: the SVG to show or nil, one entry per plot — its name,
-  its base64 stream or its incremental record, its SVG-layer marks and the geometry the
-  page places its canvas by — and the bytes and rows of the whole frame. A design of one
+  its base64 stream or its incremental record, its SVG-layer marks, its backdrop (a fitted
+  basemap's tiles, beneath the canvas, #476) and the geometry the page places its canvas
+  by — and the bytes and rows of the whole frame. A design of one
   frame has one plot, so the page has one shape to draw whatever the design holds.
   """
 
@@ -26,6 +27,7 @@ defmodule Examples.Frames do
           canvas: String.t() | nil,
           incremental: map() | nil,
           dynamic_svg: String.t(),
+          backdrop: String.t(),
           box: %{x: number(), y: number(), width: number(), height: number()},
           plot: %{width: number(), height: number()},
           margin: %{top: number(), right: number(), bottom: number(), left: number()}
@@ -69,7 +71,9 @@ defmodule Examples.Frames do
 
   @doc """
   The state a backend keeps for a run of `module` at `opts`: on a canvas, the compiled
-  chart and its static SVG (the furniture, rendered once); nothing on SVG.
+  chart, its static SVG (the furniture, rendered once) and its static backdrop (a
+  basemap's tiles, rendered once, for beneath the canvas: spec/14 §12.4, #476); nothing on
+  SVG.
   """
   @spec prepare(module(), keyword(), backend()) :: map() | nil
   def prepare(module, opts, backend) when backend in [:canvas, :incremental] do
@@ -81,6 +85,7 @@ defmodule Examples.Frames do
       # Each plot's static document is the design's size with that frame's group at its
       # box (spec/14 §12.4), so the frames' documents stack in `z` order.
       static: Enum.map_join(compiled, "", fn {_name, one} -> Compiled.static(one) end),
+      backdrop: Enum.map_join(compiled, "", fn {_name, one} -> Compiled.backdrop(one) end),
       width: applied.frame.size.width,
       height: applied.frame.size.height,
       plot: applied.frame.plot,
@@ -141,6 +146,11 @@ defmodule Examples.Frames do
   def static(%{static: static}), do: static
   def static(_state), do: ""
 
+  @doc "The static backdrop a prepared state carries, or an empty string (spec/14 §12.4, #476)."
+  @spec backdrop(map() | nil) :: String.t()
+  def backdrop(%{backdrop: backdrop}), do: backdrop
+  def backdrop(_state), do: ""
+
   @doc "A frame of `module` at `opts` on `backend`, and the state after it."
   @spec frame(module(), keyword(), backend(), map() | nil) :: {frame(), map() | nil}
   # A design that eases a scale steps its compiled chart (#360); any other renders whole.
@@ -173,6 +183,7 @@ defmodule Examples.Frames do
            canvas: payload.canvas,
            incremental: payload.incremental,
            dynamic_svg: payload.svg,
+           backdrop: payload.backdrop,
            bytes: payload.bytes,
            box: one.box,
            plot: one.plot,

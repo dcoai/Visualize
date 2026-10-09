@@ -16,6 +16,13 @@ release it merely follows.
 
 ### Added
 
+- **A compiled chart's backdrop** (#476, D-120): `Visualize.Chart.Compiled.backdrop/1`, the
+  `backdrop` key of `render/2`'s map and of `tick/3`'s payload hold a `:tiles` mark's
+  images as an SVG document for a page to stack *beneath* the canvas, so a dense track
+  drawn on the canvas sits on its basemap. The attribution stays in the SVG layer over the
+  canvas. `Compiled.static/1` no longer holds a static basemap's images; a page that draws
+  tiles on the hybrid split stacks the backdrop. The binary stream still drops `:image`
+  and gains no record for it.
 - **`Visualize.Render.to_png/2` and `to_png!/2`** (#473, D-118): a root IR element, or the
   SVG string one renders to, rasterised to a PNG through the optional `resvg` package —
   add `{:resvg, "~> 0.6"}` to opt in; it needs no Rust, downloading a precompiled NIF.

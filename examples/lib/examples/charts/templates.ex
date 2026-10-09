@@ -123,8 +123,9 @@ defmodule Examples.Charts.Templates do
     |> String.to_atom()
   end
 
-  # The design's source slots and every mark's `data` under the renamed names; a slot's
-  # `default` is dropped, since the pool binds by the slot's own name.
+  # The design's source slots, every mark's `data` and a projection's `fit` source (spec/14
+  # §4.6, #476) under the renamed names; a slot's `default` is dropped, since the pool
+  # binds by the slot's own name.
   defp rename_sources(design, renames) do
     design
     |> Map.update(:sources, %{}, fn slots ->
@@ -133,7 +134,18 @@ defmodule Examples.Charts.Templates do
       end)
     end)
     |> Map.update(:marks, [], fn marks -> Enum.map(marks, &rename_data(&1, renames)) end)
+    |> Map.update(:frames, %{}, fn frames ->
+      Map.new(frames, fn {name, node} -> {name, rename_fit(node, renames)} end)
+    end)
   end
+
+  defp rename_fit(%{projection: %{fit: %{data: name} = fit} = projection} = node, renames)
+       when is_atom(name) do
+    fit = %{fit | data: Map.get(renames, name, name)}
+    %{node | projection: %{projection | fit: fit}}
+  end
+
+  defp rename_fit(node, _renames), do: node
 
   defp rename_data(%{data: name} = mark, renames) when is_atom(name),
     do: %{mark | data: Map.get(renames, name, name)}
