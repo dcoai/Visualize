@@ -120,6 +120,10 @@ defmodule ExamplesWeb.InteractionLive do
     <main>
       <a href="/" class="back-link"><span>&larr;</span> Back to Gallery</a>
 
+      <p class="tab-pages">
+        Also under this tab: the <a href="/dashboard">Synced dashboard</a> — one crosshair and one brush across three panels.
+      </p>
+
       <div class="chart-detail">
         <h2>Tooltip</h2>
         <p style="color: #666; margin-bottom: 1rem;">

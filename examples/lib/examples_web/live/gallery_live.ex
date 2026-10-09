@@ -41,28 +41,6 @@ defmodule ExamplesWeb.GalleryLive do
     ~H"""
     <ExamplesWeb.SiteHeader.header tab={:charts} />
     <main>
-      <div class="tools-bar">
-        <a href="/performance" class="tool-link">
-          <span class="tool-icon">⚡</span>
-          <span>Performance Test — compare the backends on any chart</span>
-        </a>
-        <a href="/hybrid" class="tool-link">
-          <span class="tool-icon">🔀</span>
-          <span>Hybrid SVG/Canvas Demo</span>
-        </a>
-        <a href="/interaction" class="tool-link" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-          <span class="tool-icon">🎯</span>
-          <span>Client-side Interaction (tooltip, crosshair, legend)</span>
-        </a>
-        <a href="/dashboard" class="tool-link" style="background: linear-gradient(135deg, #10b981 0%, #047857 100%);">
-          <span class="tool-icon">🔗</span>
-          <span>Synced dashboard (one crosshair and brush across three panels)</span>
-        </a>
-        <a href="/builder" class="tool-link" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">
-          <span class="tool-icon">🧩</span>
-          <span>Chart Builder (edit a stack of fragments)</span>
-        </a>
-      </div>
       <p class="gallery-note">
         Every chart here is a design (spec/14): a map that says what the chart is, applied to rows and rendered by the
         library on any backend. Open one for the <code>Visualize.Chart.Build</code> calls that make it — the thing to copy — the map
