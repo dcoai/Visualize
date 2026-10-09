@@ -1,12 +1,14 @@
 defmodule Visualize.Render.RasterGoldenTest do
   @moduledoc """
-  Raster goldens of the gallery (spec/12 §6, #474): every stored design
+  Raster goldens of the gallery (spec/12 §6, #474, #481): every stored design
   (`Visualize.Designs`) rasterised by `Visualize.Render.to_png/2` with the bundled DejaVu Sans
   and no system fonts, so the pictures are the same on every host, and compared with
   `test/support/raster/<name>.png` within a per-pixel tolerance. Regenerate only when a
-  design's picture changes on purpose, or a resvg release moves pixels past the tolerance:
+  design's picture changes on purpose, or a resvg release moves pixels past the tolerance.
+  They are rendered by resvg CLI 0.48.1, the release CI pins (spec/12 §4), and the tests that
+  render are tagged `:resvg`:
 
-      MIX_ENV=test mix run -e 'ExUnit.start(autorun: false); Code.require_file("test/visualize/render/raster_golden_test.exs"); Visualize.Render.RasterGoldenTest.write!()'
+      VISUALIZE_RESVG=/path/to/resvg MIX_ENV=test mix run -e 'Application.put_env(:visualize, :resvg, System.fetch_env!("VISUALIZE_RESVG")); ExUnit.start(autorun: false); Code.require_file("test/visualize/render/raster_golden_test.exs"); Visualize.Render.RasterGoldenTest.write!()'
   """
   use ExUnit.Case, async: true
 
@@ -49,12 +51,14 @@ defmodule Visualize.Render.RasterGoldenTest do
 
   defp path(name), do: Path.join(@dir, "#{name}.png")
 
+  @tag :resvg
   test "every design rasterises without warnings with the bundled font" do
     for name <- Designs.names() do
       assert {_png, []} = render(name), "#{name}"
     end
   end
 
+  @tag :resvg
   test "every design matches its golden within the per-pixel tolerance" do
     for name <- Designs.names() do
       {png, _warnings} = render(name)
@@ -73,6 +77,7 @@ defmodule Visualize.Render.RasterGoldenTest do
     assert stored == Designs.names() |> Enum.map(&to_string/1) |> Enum.sort()
   end
 
+  @tag :resvg
   test "the tolerance catches a picture that changed" do
     {png, []} = render(:bar)
     {_w, _h, pixels} = PNGPixels.decode(png)

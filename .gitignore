@@ -37,3 +37,7 @@ erl_crash.dump
 
 # mix hex.build output
 *.tar
+
+# The resvg binary the CI test job downloads (.gitlab-ci.yml).
+/.resvg/
+/resvg.tar.gz

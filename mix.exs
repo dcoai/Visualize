@@ -68,11 +68,6 @@ defmodule Visualize.MixProject do
       # undeclared Phoenix never fires in a host. A host without LiveView never fetches it;
       # scripts/consumer_check.exs proves that on every pipeline (D-45).
       {:phoenix_live_view, "~> 1.0", optional: true},
-      # `Visualize.Render.to_png/2` (spec/02 §4, D-118): resvg through a precompiled NIF,
-      # optional like Nx. Only `Visualize.Render.Raster` calls it; without it `to_png/2` returns
-      # `{:error, :no_rasterizer}`, and scripts/consumer_check.exs proves a consumer that does
-      # not list it fetches neither `Resvg` nor `RustlerPrecompiled`.
-      {:resvg, "~> 0.6", optional: true},
       # `mix vis.surface` (spec/12 §2): the source-scan primitives and the golden renderer
       # shared with extc and extla. `only:` is load-bearing: dev/test deps are not transitive,
       # so nothing here reaches a consumer of visualize.
@@ -116,7 +111,7 @@ defmodule Visualize.MixProject do
 
   # The references the specification makes on purpose to functions that are internal
   # (behaviour callbacks; the family modules behind `Geo.Projection` and `CanvasBinary`; the
-  # one module that calls the optional rasteriser, spec/09 §9) or that the decisions log
+  # one module that calls the resvg binary, spec/09 §9) or that the decisions log
   # records as removed or as never having existed (D-2, D-13).
   @internal_prefixes [
     "Visualize.Backend.SVG.",
