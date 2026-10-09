@@ -20,7 +20,9 @@ defmodule Visualize.Chart.Schema.Mark do
     {:path, [:path], [], []},
     {:rect, [:x0, :x1, :y0, :y1], [:value], [:corner_radius]},
     {:circle, [:x, :y], [:value], [:radius]},
-    {:text, [:x, :y], [:value], []}
+    {:text, [:x, :y], [:value], []},
+    # A basemap: no channels, no rows (spec/14 §5.2, #475).
+    {:tiles, [], [], []}
   ]
   @types Enum.map(@marks, &elem(&1, 0))
   @channel_keys [
@@ -169,6 +171,8 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:render, {:enum, [:auto, :svg, :canvas, :binary]}, :geometry, default: :auto),
       spec(:transition, {:node, :transition}, :geometry),
       spec(:tooltip, {:node, :tooltip}, :content),
+      # A `:tiles` mark's provider: required of that type, invalid on any other (§5.2).
+      spec(:tiles, {:node, :tiles}, :content),
       spec(:id, :name, :content),
       spec(:frame, {:ref, :frame}, :binding)
     ]
@@ -255,6 +259,17 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:fields, {:list, :field}, :binding, default: []),
       spec(:template, :string, :content),
       spec(:event, :name, :binding)
+    ]
+  end
+
+  # A basemap's provider (spec/14 §5.2, #475): the URL template and the attribution are
+  # the host's intent, both required.
+  def describe(:tiles) do
+    [
+      spec(:url, :string, :content, required: true),
+      spec(:attribution, :string, :content, required: true),
+      spec(:subdomains, {:list, :string}, :content, default: ["a", "b", "c"]),
+      spec(:max_zoom, :integer, :geometry, default: 19)
     ]
   end
 

@@ -140,7 +140,18 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:center, {:list, :number}, :geometry),
       spec(:rotate, {:list, :number}, :geometry),
       spec(:parallels, {:list, :number}, :geometry),
-      spec(:clip_angle, :number, :geometry)
+      spec(:clip_angle, :number, :geometry),
+      spec(:fit, {:node, :fit}, :binding)
+    ]
+  end
+
+  # The view fitted to a source's points or geometries (spec/14 §4.6, #475).
+  def describe(:fit) do
+    [
+      spec(:data, {:ref, :source}, :binding, required: true),
+      spec(:fields, {:list, :field}, :binding),
+      spec(:field, :field, :binding),
+      spec(:padding, :number, :geometry, default: 0)
     ]
   end
 

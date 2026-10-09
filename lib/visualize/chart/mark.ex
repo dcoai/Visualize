@@ -42,7 +42,7 @@ defmodule Visualize.Chart.Mark do
 
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Scales
-  alias Visualize.Chart.Mark.{Bend, Generic, Label, Shapes, Strokes}
+  alias Visualize.Chart.Mark.{Bend, Generic, Label, Shapes, Strokes, Tiles}
   alias Visualize.Chart.{Style, Var}
   alias Visualize.Data.Table
   alias Visualize.IR.{Element, Transform}
@@ -94,6 +94,10 @@ defmodule Visualize.Chart.Mark do
   `Visualize.IR.Path`, or a pipeline step it cannot run.
   """
   @spec generate(Frame.t(), map(), keyword()) :: Element.t()
+  def generate(%Frame{} = frame, %{type: :tiles} = mark, opts) do
+    Tiles.generate(frame, mark, Keyword.get(opts, :resolve, :css))
+  end
+
   def generate(%Frame{} = frame, %{type: type} = mark, opts) do
     sources = Keyword.get(opts, :sources, %{})
     mode = Keyword.get(opts, :resolve, :css)
@@ -139,6 +143,21 @@ defmodule Visualize.Chart.Mark do
     ctx = %{size: [plot.width, plot.height], projection: frame.projection, now: frame.now}
     Scales.mark_rows(mark, sources, ctx)
   end
+
+  @doc false
+  # The order a frame draws its marks in (spec/14 §5.2, D-119): the `:tiles` marks first,
+  # in design order among themselves, then every other mark in design order. Takes and
+  # returns `{mark, anything}` pairs, so a caller keeps each mark's design position.
+  @spec drawing_order([{map(), term()}]) :: [{map(), term()}]
+  def drawing_order(pairs) do
+    {tiles, others} = Enum.split_with(pairs, fn {mark, _} -> tiles?(mark) end)
+    tiles ++ others
+  end
+
+  @doc false
+  # Whether a mark is a basemap (spec/14 §5.2).
+  @spec tiles?(map()) :: boolean()
+  def tiles?(mark), do: Map.get(mark, :type) == :tiles
 
   # -- construction ---------------------------------------------------------------------
 

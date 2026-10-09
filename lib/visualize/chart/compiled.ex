@@ -713,6 +713,8 @@ defmodule Visualize.Chart.Compiled do
 
       case mark.type do
         :text -> {:svg, points}
+        # A basemap draws images and text and no rows (§12.3, #475).
+        :tiles -> {:svg, 0}
         _type -> {target(frame.kind, Map.get(mark, :render, :auto), points, ceiling), points}
       end
     end)

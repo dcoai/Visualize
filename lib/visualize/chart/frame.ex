@@ -147,7 +147,7 @@ defmodule Visualize.Chart.Frame do
     now = Keyword.get(opts, :now)
     theme = theme(chart.theme, Keyword.get(opts, :theme))
     styles = Style.all(chart.styles)
-    projection = projection(kind, node, plot)
+    projection = projection(kind, node, plot, sources)
     panels = panels(kind, node, chart, sources, context(plot, projection, now))
     facet = facet(kind, node, panels)
     scale_plot = if facet, do: panel_plot(plot, facet.columns, panels), else: plot
@@ -521,7 +521,7 @@ defmodule Visualize.Chart.Frame do
             "option of Visualize.Chart.Frame.new/2"
   end
 
-  defp projection(:geo, node, plot) do
+  defp projection(:geo, node, plot, sources) do
     spec = Map.get(node, :projection, %{})
     type = Map.get(spec, :type, :mercator)
     centre = [plot.width / 2, plot.height / 2]
@@ -535,9 +535,56 @@ defmodule Visualize.Chart.Frame do
     |> maybe(spec, :rotate, &rotate/2)
     |> maybe(spec, :parallels, fn p, [a, b] -> Projection.parallels(p, a, b) end)
     |> maybe(spec, :clip_angle, &Projection.clip_angle/2)
+    |> fit(Map.get(spec, :fit), plot, sources)
   end
 
-  defp projection(_kind, _node, _plot), do: nil
+  defp projection(_kind, _node, _plot, _sources), do: nil
+
+  # The view fitted to a source (spec/14 §4.6, #475): every point of its rows — before any
+  # mark's transforms — fills the plot inset by the padding, through
+  # `Visualize.Geo.Projection.fit/3`, which keeps `center` and `rotate` and so keeps a
+  # Mercator projection tile-aligned. An unbound source, or one with no point, fits nothing.
+  defp fit(projection, nil, _plot, _sources), do: projection
+  defp fit(_projection, %Var{name: name}, _plot, _sources), do: Style.unresolved!(name)
+
+  defp fit(projection, %{data: name} = node, plot, sources) do
+    case Map.fetch(sources, name) do
+      {:ok, source} ->
+        points = source |> Visualize.Data.Table.rows() |> Enum.flat_map(&fit_points(&1, node))
+        pad = Map.get(node, :padding, Schema.default(:fit, :padding))
+        box = [[pad, pad], [plot.width - pad, plot.height - pad]]
+        Projection.fit(projection, box, points)
+
+      :error ->
+        projection
+    end
+  end
+
+  defp fit_points(row, %{field: field}) when is_map(row),
+    do: positions(Visualize.Data.Table.get(row, field))
+
+  defp fit_points(row, %{fields: [lon, lat]}) when is_map(row),
+    do: positions([Visualize.Data.Table.get(row, lon), Visualize.Data.Table.get(row, lat)])
+
+  defp fit_points(_row, _node), do: []
+
+  # Every position of a GeoJSON value at any depth: a position is a list whose first two
+  # members are numbers; a geometry's `coordinates`, a collection's `geometries`, a
+  # feature's `geometry` and a feature collection's `features` are walked.
+  defp positions([lon, lat | _]) when is_number(lon) and is_number(lat), do: [{lon, lat}]
+  defp positions(list) when is_list(list), do: Enum.flat_map(list, &positions/1)
+
+  defp positions(%{} = geo) when not is_struct(geo) do
+    keys =
+      [coordinates: "coordinates", geometries: "geometries"] ++
+        [geometry: "geometry", features: "features"]
+
+    Enum.flat_map(keys, fn {atom, string} ->
+      positions(Map.get(geo, string) || Map.get(geo, atom))
+    end)
+  end
+
+  defp positions(_other), do: []
 
   defp maybe(projection, spec, key, setter) do
     case Map.get(spec, key) do
@@ -621,8 +668,14 @@ defmodule Visualize.Chart.Frame do
   # stamped with its path at the position the frame drew it (§4.7).
   defp marks(_frame, _mode, nil, _paths?, _opts), do: []
 
+  # A basemap's `:tiles` marks are drawn first, beneath every other mark whatever the
+  # design's order (spec/14 §5.2, D-119); each keeps its own position for its paint and
+  # its path.
   defp marks(frame, mode, sources, paths?, opts) do
-    Enum.with_index(frame.marks, fn mark, i ->
+    frame.marks
+    |> Enum.with_index(fn mark, i -> {mark, i} end)
+    |> Mark.drawing_order()
+    |> Enum.map(fn {mark, i} ->
       frame
       |> Mark.generate(mark, [sources: sources, resolve: mode, index: i + 1] ++ opts)
       |> stamp([:marks, Enum.at(frame.mark_paths, i, i)], paths?)

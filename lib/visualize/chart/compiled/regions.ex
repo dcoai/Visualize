@@ -129,7 +129,13 @@ defmodule Visualize.Chart.Compiled.Regions do
     legend ++ labels
   end
 
-  defp mark_regions(%Chart{marks: marks}), do: Enum.with_index(marks, fn _, i -> {:mark, i} end)
+  # The marks in the order the frame draws them: a basemap's `:tiles` first (§5.2, D-119).
+  defp mark_regions(%Chart{marks: marks}) do
+    marks
+    |> Enum.with_index(fn mark, i -> {mark, i} end)
+    |> Mark.drawing_order()
+    |> Enum.map(fn {_mark, i} -> {:mark, i} end)
+  end
 
   defp grid_region(indexed_axes, name) do
     if Enum.any?(indexed_axes, fn {node, _} -> Map.get(node, :grid, false) end),
@@ -146,7 +152,14 @@ defmodule Visualize.Chart.Compiled.Regions do
 
   # -- status ---------------------------------------------------------------------------
 
-  defp status({:mark, _}, _chart, _axes, _viewport), do: {:dynamic, :data}
+  # A mark is the data — except a basemap, which reads no rows and moves only with a
+  # projection fitted to them (§12.2, #475).
+  defp status({:mark, i}, chart, _axes, _viewport) do
+    if Mark.tiles?(Enum.at(chart.marks, i)) and not fitted?(only_frame(chart)),
+      do: :static,
+      else: {:dynamic, :data}
+  end
+
   defp status(:panels, _chart, _axes, _viewport), do: {:dynamic, :facet}
 
   defp status({:grid, :outer}, chart, axes, viewport) do
@@ -180,6 +193,13 @@ defmodule Visualize.Chart.Compiled.Regions do
     if Enum.any?(labels, &match?({:data, _}, &1.anchor)),
       do: scales_status(chart, position_scales(node), viewport),
       else: :static
+  end
+
+  defp fitted?(node) do
+    case Map.get(node, :projection) do
+      %{fit: fit} when fit != nil -> true
+      _unfitted -> false
+    end
   end
 
   defp grid_scales(indexed_axes) do

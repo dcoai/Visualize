@@ -68,16 +68,31 @@ defmodule Visualize.Chart.ValidatorTest do
           %{scale: :y, side: :left, ticks: 5, grid: true}
         ],
         legend: %{scale: :color, position: :top_right, title: ["colour"]},
-        projection: %{type: :mercator, scale: 100, translate: [1, 2]},
+        projection: %{
+          type: :mercator,
+          scale: 100,
+          translate: [1, 2],
+          fit: %{data: :primary, fields: [:t, :v], padding: 8}
+        },
         facet: %{by: :sha, columns: 2},
         viewport: %{scale: :x, span: 60}
-      }
+      },
+      # A basemap's frame (#475): a mark that draws tiles needs a Mercator projection.
+      map: %{kind: :geo, projection: %{type: :mercator}}
     },
     marks: [
-      %{type: :line, data: :primary, channels: %{x: :t, y: :v}, style: :series, render: :svg},
+      %{
+        type: :line,
+        data: :primary,
+        channels: %{x: :t, y: :v},
+        style: :series,
+        render: :svg,
+        frame: :main
+      },
       %{
         type: :rule,
         data: :primary,
+        frame: :main,
         channels: %{x: :t},
         label: %{text: ["deploy ", {:field, :sha}], anchor: :top, style: :muted, dx: 1, dy: 2}
       },
@@ -90,12 +105,23 @@ defmodule Visualize.Chart.ValidatorTest do
         channels: %{value: :count},
         scales: %{color: :color},
         offset: %{x: :v},
-        options: %{inner_radius: 10, outer_radius: 50}
+        options: %{inner_radius: 10, outer_radius: 50},
+        frame: :main
+      },
+      %{
+        type: :tiles,
+        frame: :map,
+        tiles: %{
+          url: "https://{s}.tile.example/{z}/{x}/{y}.png",
+          attribution: "© OpenStreetMap contributors",
+          subdomains: ["a", "b"],
+          max_zoom: 18
+        }
       }
     ],
     labels: [
-      %{anchor: :title, text: ["Full ", var(:unit)], style: :title, dx: 0, dy: -4},
-      %{anchor: {:axis, :y}, text: ["unit"]}
+      %{anchor: :title, text: ["Full ", var(:unit)], style: :title, dx: 0, dy: -4, frame: :main},
+      %{anchor: {:axis, :y}, text: ["unit"], frame: :main}
     ]
   }
 
@@ -131,7 +157,9 @@ defmodule Visualize.Chart.ValidatorTest do
     mark_offset: [:marks, 2, :offset],
     options: [:marks, 2, :options],
     mark_label: [:marks, 1, :label],
-    tooltip: [:marks, 2, :tooltip]
+    tooltip: [:marks, 2, :tooltip],
+    tiles: [:marks, 3, :tiles],
+    fit: [:frames, :main, :projection, :fit]
   }
 
   defp errors(design) do
@@ -184,6 +212,9 @@ defmodule Visualize.Chart.ValidatorTest do
 
     put_at(@full, @paths[:transform], %{op: op})
   end
+
+  # A fit reads `field` or `fields`, not both (spec/14 §4.6).
+  defp reading(:fit, :field), do: put_at(@full, @paths[:fit], %{data: :primary, field: :sha})
 
   defp reading(_kind, _key), do: @full
 

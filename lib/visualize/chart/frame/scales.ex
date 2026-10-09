@@ -266,6 +266,9 @@ defmodule Visualize.Chart.Frame.Scales do
   # and the projection as the pipeline's context (spec/14 §5.4), `[]` when the source is
   # not bound; only map rows carry names a channel can read.
   @spec mark_rows(map(), map(), map()) :: [map()]
+  # A mark without `data` — a `:tiles` mark (spec/14 §5.2) — draws no rows.
+  def mark_rows(mark, _sources, _ctx) when not is_map_key(mark, :data), do: []
+
   def mark_rows(mark, sources, ctx) do
     case Map.fetch(sources, source_name(mark.data)) do
       {:ok, source} ->
