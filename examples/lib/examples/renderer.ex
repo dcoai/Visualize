@@ -71,7 +71,18 @@ defmodule Examples.Renderer do
   resize never blocks the view.
   """
   @spec resize(pid(), keyword()) :: :ok
-  def resize(renderer, opts), do: GenServer.cast(renderer, {:resize, opts})
+  def resize(renderer, opts), do: GenServer.cast(renderer, {:prepare, nil, opts})
+
+  @doc """
+  Re-prepares for `backend` at `opts` without stopping (spec/14 §12.6, #502): the resize
+  path with a backend. The new backend's state carries the easing of the one it
+  replaces, which is dropped — released, never drawn again — and the window's rows are
+  the run's, kept. A cast handled in order, so a frame asked before it is drawn on the
+  old backend and one asked after on the new.
+  """
+  @spec switch(pid(), Frames.backend(), keyword()) :: :ok
+  def switch(renderer, backend, opts),
+    do: GenServer.cast(renderer, {:prepare, backend, opts})
 
   @doc "Stops a renderer; a pid that is gone is `:ok` too."
   @spec stop(pid() | nil) :: :ok
@@ -110,9 +121,10 @@ defmodule Examples.Renderer do
   end
 
   @impl true
-  def handle_cast({:resize, opts}, state) do
-    fresh = Frames.prepare(state.module, opts, state.backend)
-    {:noreply, %{state | state: Frames.carry(state.state, fresh)}}
+  def handle_cast({:prepare, backend, opts}, state) do
+    backend = backend || state.backend
+    fresh = Frames.prepare(state.module, opts, backend)
+    {:noreply, %{state | backend: backend, state: Frames.carry(state.state, fresh)}}
   end
 
   @doc """
@@ -122,8 +134,13 @@ defmodule Examples.Renderer do
   @spec state(pid()) :: map() | nil
   def state(renderer), do: GenServer.call(renderer, :state)
 
+  @doc "The backend the renderer draws on: the one it started on, or the last switched to."
+  @spec backend(pid()) :: Frames.backend()
+  def backend(renderer), do: GenServer.call(renderer, :backend)
+
   @impl true
   def handle_call(:state, _from, state), do: {:reply, state.state, state}
+  def handle_call(:backend, _from, state), do: {:reply, state.backend, state}
 
   # The window's rows: built once at the start for a streaming design, nothing otherwise.
   defp streaming_rows(module, opts) do
