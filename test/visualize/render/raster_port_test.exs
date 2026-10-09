@@ -94,10 +94,12 @@ defmodule Visualize.Render.RasterPortTest do
     test "a 1 ms ticker keeps ticking on a one-scheduler node while renders run" do
       paths = Enum.flat_map(:code.get_path(), &[~c"-pa", &1])
 
+      # Unlinked, so `on_exit` is the peer's one owner: a linked peer starts shutting down
+      # when the test process exits, racing the stop below (#495).
       {:ok, peer, _node} =
-        :peer.start_link(%{connection: :standard_io, args: [~c"+S", ~c"1:1" | paths]})
+        :peer.start(%{connection: :standard_io, args: [~c"+S", ~c"1:1" | paths]})
 
-      on_exit(fn -> if Process.alive?(peer), do: :peer.stop(peer) end)
+      on_exit(fn -> :peer.stop(peer) end)
 
       {:ok, _} = :peer.call(peer, :application, :ensure_all_started, [:elixir])
       :ok = :peer.call(peer, :application, :set_env, [:visualize, :resvg, Raster.binary()])
