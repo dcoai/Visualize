@@ -47,12 +47,12 @@ defmodule Examples.Gallery do
     {Examples.Charts.Globe, "globe"},
     # A GPS track over OpenStreetMap tiles, the basemap beneath the canvas (#476)
     {Examples.Charts.GpsTrack, "gps_track"},
-    # A machine's load, two ways (#415), one source in two frames (#429), and the recent
-    # load over the long one in one design (#493)
+    # A machine's load, two ways (#415), one source in two frames (#429), and the dial
+    # inset over the log-age plot's corner (#498)
     {Examples.Charts.LoadGauge, "load_gauge"},
     {Examples.Charts.LoadAge, "load_age"},
     {Examples.Charts.LoadChart, "load"},
-    {Examples.Charts.LoadAndAge, "load_and_age"},
+    {Examples.Charts.LoadAgeGauge, "load_age_gauge"},
     # One source at four time scales, four frames across the box (#429)
     {Examples.Charts.ContextChart, "context"},
     # 50,000 rows reduced to the plot's width, :m4 and :lttb (#448)

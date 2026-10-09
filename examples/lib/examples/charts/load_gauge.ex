@@ -19,6 +19,10 @@ defmodule Examples.Charts.LoadGauge do
   `Examples.Charts.LoadChart` is one source drawn both ways in one chart. These two stay
   as they are: three needles on one dial and three hours on a log axis are each a chart in
   their own right, and this one is the dial said in full.
+
+  `Examples.Charts.LoadAgeGauge` (#498) insets this dial over the age view's upper-left
+  corner, and it draws the dial from this chart's own pieces — `furniture/0`, `dial/2` and
+  `sources/1`, the functions this design is built from — so the two dials cannot drift.
   """
 
   import Visualize.Chart.Build
@@ -40,25 +44,56 @@ defmodule Examples.Charts.LoadGauge do
     {_width, _height} = Design.size(__MODULE__, opts)
 
     design =
-      Design.fold([
-        chart(meta: %{name: title(), description: [description()]}),
-        source(:reading, [:window, :load, :length],
-          types: %{window: :category, load: :number, length: :number}
-        ),
-        source(:rim, [:at], types: %{at: :number}),
-        style(:rim, fill: :grid, opacity: 0.45, stroke: :none),
-        style(:pointer, fill: {:field, :window}, stroke: :background, stroke_width: 1),
-        style(:dial, extends: :axis, font_size: 11),
-        polar(margin: @margin),
-        linear_scale(:angle, domain: [0, 4], start: -120, sweep: 240),
-        # `r`'s auto range is already [0, min(w, h) / 2] of the plot (spec/14 §4.3).
-        linear_scale(:r, domain: [0, 1]),
-        ordinal_scale(:color,
-          domain: Enum.map(Load.windows(), &elem(&1, 1)),
-          range: [:series_1, :series_2, :series_3]
-        ),
-        axis(:angle, :bottom, ticks: 5, radius: 0.86, grid: true, style: :dial),
-        legend(:color, position: :top_right, inside: false),
+      Design.fold(
+        [chart(meta: %{name: title(), description: [description()]})] ++
+          furniture() ++ dial(margin: @margin)
+      )
+
+    {design, sources(Load.second(opts, 0))}
+  end
+
+  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  @doc """
+  The sources and the styles the dial draws with: what `dial/2` names, said once here and
+  in `Examples.Charts.LoadAgeGauge` (#498).
+  """
+  def furniture do
+    [
+      source(:reading, [:window, :load, :length],
+        types: %{window: :category, load: :number, length: :number}
+      ),
+      source(:rim, [:at], types: %{at: :number}),
+      style(:rim, fill: :grid, opacity: 0.45, stroke: :none),
+      style(:pointer, fill: {:field, :window}, stroke: :background, stroke_width: 1),
+      style(:dial, extends: :axis, font_size: 11)
+    ]
+  end
+
+  @doc """
+  The dial's fragments: its `polar` placed by `place` — a margin, or a `box`, `z` and
+  `background` for a dial drawn over another frame (spec/14 §4.2) — its scales, its axis,
+  its rim and its three needles.
+
+  `opts`: `legend`, `true` by default — the windows' key in the right margin. A dial inset
+  over a chart that keys the same three windows says `false`, the key being there already.
+  Unframed, so this chart is one frame and a design of several puts it in one with
+  `in_frame/2`.
+  """
+  def dial(place, opts \\ []) do
+    [
+      polar(place),
+      linear_scale(:angle, domain: [0, 4], start: -120, sweep: 240),
+      # `r`'s auto range is already [0, min(w, h) / 2] of the plot (spec/14 §4.3).
+      linear_scale(:r, domain: [0, 1]),
+      ordinal_scale(:color,
+        domain: Enum.map(Load.windows(), &elem(&1, 1)),
+        range: [:series_1, :series_2, :series_3]
+      ),
+      axis(:angle, :bottom, ticks: 5, radius: 0.86, grid: true, style: :dial)
+    ] ++
+      key(Keyword.get(opts, :legend, true)) ++
+      [
         # The dial's rim, one sector of the whole sweep just inside the axis (§5.2).
         rect(:rim, %{x0: 0, x1: 4, y0: 0.72, y1: 0.84}, style: :rim),
         # Three rows, three needles, each its own length and colour (spec/14 §5.2).
@@ -67,23 +102,24 @@ defmodule Examples.Charts.LoadGauge do
           style: :pointer,
           transition: %{duration: 450, easing: :sin_in_out}
         )
-      ])
-
-    {design, %{reading: rows(opts), rim: [%{at: 0}]}}
+      ]
   end
 
-  def render(opts \\ []), do: Design.render(__MODULE__, opts)
+  @doc """
+  The rows the dial binds at absolute second `now`: each window's reading at that second,
+  one needle a window, and the rim's one row.
+  """
+  def sources(now) do
+    reading =
+      for {window, name} <- Load.windows() do
+        %{window: name, load: Load.at(window, now), length: @lengths[window]}
+      end
 
-  defp rows(opts) do
-    now = second(opts)
-
-    for {window, name} <- Load.windows() do
-      %{window: name, load: Load.at(window, now), length: @lengths[window]}
-    end
+    %{reading: reading, rim: [%{at: 0}]}
   end
 
-  # A tick is a second of the machine's day; at rest the dial reads its first second.
-  defp second(opts), do: (opts[:animation_tick] || 0) * 3
+  defp key(true), do: [legend(:color, position: :top_right, inside: false)]
+  defp key(false), do: []
 
   def sample_code do
     ~S"""
