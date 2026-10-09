@@ -8,11 +8,12 @@ defmodule Visualize.Geo.PathTest do
   alias Visualize.Geo.{Path, Projection}
   alias Visualize.IR
 
+  # Wound clockwise on the map, d3's spherical winding (spec/07 §2.2.1): the square itself.
   @square %{
     "type" => "Feature",
     "geometry" => %{
       "type" => "Polygon",
-      "coordinates" => [[[-10, -10], [10, -10], [10, 10], [-10, 10], [-10, -10]]]
+      "coordinates" => [[[-10, -10], [-10, 10], [10, 10], [10, -10], [-10, -10]]]
     }
   }
 
@@ -41,6 +42,20 @@ defmodule Visualize.Geo.PathTest do
 
       assert [{:M, _, _}, {:L, _, _}, {:L, _, _}, {:L, _, _}, {:L, _, _}, :Z] = path.commands
       agree(Path.render(geo, @square), IR.Path.to_string(path))
+    end
+
+    test "a ring wound the other way is the rest of the sphere, closed along the map's edge" do
+      geo = Path.new(equirectangular() |> Projection.precision(0))
+
+      reversed =
+        update_in(@square, ["geometry", "coordinates"], fn [ring] -> [Enum.reverse(ring)] end)
+
+      # The whole map's edge, then the square as a hole.
+      assert [{:M, _, _} | _] = commands = Path.path(geo, reversed).commands
+      assert Enum.count(commands, &(&1 == :Z)) == 2
+      [x0, y0, x1, y1] = Path.bounds(geo, reversed)
+      assert {x0, x1} == {200 - :math.pi() * 100, 200 + :math.pi() * 100}
+      assert {y0, y1} == {100 - :math.pi() / 2 * 100, 100 + :math.pi() / 2 * 100}
     end
 
     test "a line string is open, a point two arcs closed, a collection concatenated" do
