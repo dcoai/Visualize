@@ -125,10 +125,51 @@ defmodule Visualize.Chart.StyleTest do
                %{fill: "#666666"}
     end
 
-    test "a nil reading or a category the scale does not hold drops the key" do
+    # #487, D-123: a colour is never dropped. A category outside the domain is the colour
+    # scale's `unknown`, the theme's `:axis` by default; a missing reading is `:none`.
+    test "a category the colour scale does not hold is its unknown, the theme's :axis" do
       frame = frame(%{color: %{kind: :ordinal, domain: ["a"]}})
-      assert Style.bind(%{fill: {:field, :k}, opacity: 1}, %{}, frame, :css) == %{opacity: 1}
-      assert Style.bind(%{fill: {:field, :k}}, %{k: "zzz"}, frame, :css) == %{}
+
+      assert Style.bind(%{fill: {:field, :k}}, %{k: "zzz"}, frame, :css) ==
+               %{fill: "var(--vis-axis, #666666)"}
+
+      assert Style.bind(%{stroke: {:field, :k}}, %{k: 3}, frame, :literal) ==
+               %{stroke: "#666666"}
+
+      assert Style.bind(%{fill: {:field, :k}}, %{k: "zzz"}, frame(%{}), :literal) ==
+               %{fill: "zzz"}
+    end
+
+    test "an unknown the node gives wins, :none included" do
+      frame = frame(%{color: %{kind: :ordinal, domain: ["a"], unknown: "#ff00ff"}})
+      assert Style.bind(%{fill: {:field, :k}}, %{k: "z"}, frame, :css) == %{fill: "#ff00ff"}
+
+      frame = frame(%{color: %{kind: :ordinal, domain: ["a"], unknown: :none}})
+      assert Style.bind(%{fill: {:field, :k}}, %{k: "z"}, frame, :css) == %{fill: :none}
+    end
+
+    test "only the colour scale takes the default: another ordinal keeps nil" do
+      frame = frame(%{shade: %{kind: :ordinal, domain: ["a"], range: ["#000"]}})
+      assert Visualize.Scale.apply(Frame.scales(frame).shade, "z") == nil
+    end
+
+    test "a missing colour reading is :none; any other key's nil is dropped" do
+      frame = frame(%{color: %{kind: :ordinal, domain: ["a"]}})
+
+      assert Style.bind(
+               %{fill: {:field, :k}, stroke_width: {:field, :w}, opacity: 1},
+               %{},
+               frame,
+               :css
+             ) ==
+               %{fill: :none, opacity: 1}
+
+      assert Style.bind(%{stroke: {:field, :k}}, %{}, frame(%{}), :literal) == %{stroke: :none}
+    end
+
+    test "a colour scale that yields nothing is :none" do
+      frame = frame(%{color: %{kind: :band, domain: ["a"], range: [0, 1]}})
+      assert Style.bind(%{fill: {:field, :k}}, %{k: "z"}, frame, :css) == %{fill: :none}
     end
   end
 
