@@ -83,6 +83,21 @@ defmodule Visualize.Chart.Frame.Defs do
 
   defp paint(value, _defs, _prefix, _theme, _mode), do: value
 
+  @doc false
+  # A paint's colour as a canvas draws it — its first stop's, a literal (spec/14 §3.2) — for
+  # what reads the colour an element is filled with (§5.5); `nil` for an undeclared name.
+  @spec literal(atom(), map()) :: String.t() | nil
+  def literal(name, %{defs: defs, theme: theme}) do
+    case Map.fetch(defs, name) do
+      {:ok, node} ->
+        [first | _] = stops(node)
+        Style.colour(colour(first), theme, :literal)
+
+      :error ->
+        nil
+    end
+  end
+
   # -- the gradient element ---------------------------------------------------------------
 
   defp gradient(id, node, theme, mode) do

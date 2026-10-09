@@ -77,7 +77,7 @@ defmodule Examples.Charts.ForceGraph do
         source(:links, [:source, :target]),
         style(:link, fill: :none, stroke: :axis, stroke_opacity: 0.6, stroke_width: 1.5),
         style(:node, fill: {:field, :group}, stroke: :background, stroke_width: 2),
-        style(:id, extends: :label, fill: :background, font_size: 10, font_weight: :bold),
+        style(:id, extends: :label, fill: :contrast, font_size: 10, font_weight: :bold),
         cartesian(margin: @zero_margin),
         ordinal_scale(:color, domain: [0, 1, 2, 3]),
         path(force(from(:links), [:source, :target], layout ++ [output: :links]), %{path: :path},
@@ -85,7 +85,7 @@ defmodule Examples.Charts.ForceGraph do
         ),
         circle(force(from(:links), [:source, :target], layout), %{x: :x, y: :y},
           options: %{radius: 10},
-          label: %{text: [{:field, :id}], anchor: :middle, style: :id},
+          label: %{text: [{:field, :id}], anchor: :middle, fit: :hide, style: :id},
           style: :node
         )
       ])
@@ -110,14 +110,14 @@ defmodule Examples.Charts.ForceGraph do
         source(:links, [:source, :target]),
         style(:link, fill: :none, stroke: :axis, stroke_opacity: 0.6, stroke_width: 1.5),
         style(:node, fill: {:field, :group}, stroke: :background, stroke_width: 2),
-        style(:id, extends: :label, fill: :background, font_size: 10, font_weight: :bold),
+        style(:id, extends: :label, fill: :contrast, font_size: 10, font_weight: :bold),
         cartesian(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color, domain: [0, 1, 2, 3]),
         path(force(from(:links), [:source, :target], layout ++ [output: :links]),
           %{path: :path}, style: :link),
         circle(force(from(:links), [:source, :target], layout), %{x: :x, y: :y},
           options: %{radius: 10},
-          label: %{text: [{:field, :id}], anchor: :middle, style: :id},
+          label: %{text: [{:field, :id}], anchor: :middle, fit: :hide, style: :id},
           style: :node
         )
       ])

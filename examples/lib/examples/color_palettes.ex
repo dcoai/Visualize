@@ -13,6 +13,10 @@ defmodule Examples.ColorPalettes do
   @light Theme.default()
   @dark Theme.dark()
 
+  # A UI font stack, ending in the generic family: the gallery's text is set in the first
+  # face the viewer has, where the library's default theme names only `sans-serif` (#486).
+  @font_family "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+
   @palettes %{
     default: %{
       name: "Default",
@@ -25,7 +29,6 @@ defmodule Examples.ColorPalettes do
       grid: @light.grid,
       surface: @light.surface
     },
-
     dark: %{
       name: "Dark",
       description: "The library's dark theme",
@@ -37,35 +40,78 @@ defmodule Examples.ColorPalettes do
       grid: @dark.grid,
       surface: @dark.surface
     },
-
     sunrise: %{
       name: "Sunrise",
       description: "Warm amber to deep oranges",
-      colors: ["#ffd098", "#ffbc7a", "#ffa862", "#fa944a", "#f58035", "#f06d20", "#e85a10", "#d94500"],
-      gradient: ["#ffd098", "#ffa862", "#fa944a", "#f58035", "#f06d20", "#e85a10", "#d94500", "#c03800", "#8b2500"],
+      colors: [
+        "#ffd098",
+        "#ffbc7a",
+        "#ffa862",
+        "#fa944a",
+        "#f58035",
+        "#f06d20",
+        "#e85a10",
+        "#d94500"
+      ],
+      gradient: [
+        "#ffd098",
+        "#ffa862",
+        "#fa944a",
+        "#f58035",
+        "#f06d20",
+        "#e85a10",
+        "#d94500",
+        "#c03800",
+        "#8b2500"
+      ],
       background: "#fff8f0",
       text: "#5c3d2e",
       axis: "#8b5a2b",
       grid: "#ffecd2",
       surface: "#fff2e2"
     },
-
     winter: %{
       name: "Winter",
       description: "Cool grays with blue undertones",
-      colors: ["#4a6278", "#5d7a94", "#7192aa", "#88a8bc", "#a0bccb", "#b8ced9", "#d0dfe6", "#e8eff3"],
-      gradient: ["#4a6278", "#5d7a94", "#7192aa", "#a0bccb", "#b8ced9", "#d0dfe6", "#e8eff3", "#f8fafb"],
+      colors: [
+        "#4a6278",
+        "#5d7a94",
+        "#7192aa",
+        "#88a8bc",
+        "#a0bccb",
+        "#b8ced9",
+        "#d0dfe6",
+        "#e8eff3"
+      ],
+      gradient: [
+        "#4a6278",
+        "#5d7a94",
+        "#7192aa",
+        "#a0bccb",
+        "#b8ced9",
+        "#d0dfe6",
+        "#e8eff3",
+        "#f8fafb"
+      ],
       background: "#f5f7f9",
       text: "#2c3e50",
       axis: "#4a6278",
       grid: "#dce4ea",
       surface: "#ebf0f3"
     },
-
     sunset: %{
       name: "Sunset",
       description: "Purple to reds to deep orange",
-      colors: ["#341f97", "#5f27cd", "#6c5ce7", "#8854d0", "#be2edd", "#e84393", "#ff4757", "#ff6b35"],
+      colors: [
+        "#341f97",
+        "#5f27cd",
+        "#6c5ce7",
+        "#8854d0",
+        "#be2edd",
+        "#e84393",
+        "#ff4757",
+        "#ff6b35"
+      ],
       gradient: ["#341f97", "#5f27cd", "#8854d0", "#be2edd", "#e84393", "#ff4757", "#ff6b35"],
       background: "#fef5f0",
       text: "#4a1942",
@@ -73,36 +119,87 @@ defmodule Examples.ColorPalettes do
       grid: "#f5dce8",
       surface: "#faeaec"
     },
-
     fall: %{
       name: "Fall",
       description: "Browns to orange and yellow",
-      colors: ["#5d4037", "#795548", "#a1887f", "#d7a86e", "#e6a23c", "#f5b041", "#f9c74f", "#fcf876"],
-      gradient: ["#3e2723", "#5d4037", "#795548", "#a1887f", "#d7a86e", "#e6a23c", "#f5b041", "#f9c74f"],
+      colors: [
+        "#5d4037",
+        "#795548",
+        "#a1887f",
+        "#d7a86e",
+        "#e6a23c",
+        "#f5b041",
+        "#f9c74f",
+        "#fcf876"
+      ],
+      gradient: [
+        "#3e2723",
+        "#5d4037",
+        "#795548",
+        "#a1887f",
+        "#d7a86e",
+        "#e6a23c",
+        "#f5b041",
+        "#f9c74f"
+      ],
       background: "#fdf6e3",
       text: "#4a3728",
       axis: "#6d5039",
       grid: "#efe0c9",
       surface: "#f6ebd6"
     },
-
     spring: %{
       name: "Spring",
       description: "Bright green to yellow to white",
-      colors: ["#00a86b", "#2ec866", "#5cd85c", "#8ae65c", "#b8f260", "#d4f88d", "#e8fcb4", "#f8ffe0"],
-      gradient: ["#006b3c", "#00a86b", "#2ec866", "#5cd85c", "#8ae65c", "#b8f260", "#e8fcb4", "#ffffff"],
+      colors: [
+        "#00a86b",
+        "#2ec866",
+        "#5cd85c",
+        "#8ae65c",
+        "#b8f260",
+        "#d4f88d",
+        "#e8fcb4",
+        "#f8ffe0"
+      ],
+      gradient: [
+        "#006b3c",
+        "#00a86b",
+        "#2ec866",
+        "#5cd85c",
+        "#8ae65c",
+        "#b8f260",
+        "#e8fcb4",
+        "#ffffff"
+      ],
       background: "#f0fff0",
       text: "#2d5a3d",
       axis: "#4a7c59",
       grid: "#d4f0d4",
       surface: "#e2f8e2"
     },
-
     summer: %{
       name: "Summer",
       description: "Deep greens to light mint",
-      colors: ["#0d5c3d", "#0f7a4e", "#15946a", "#22a87a", "#34c78e", "#5dd9a4", "#8eeabc", "#c5f5dc"],
-      gradient: ["#0d5c3d", "#0f7a4e", "#15946a", "#22a87a", "#34c78e", "#5dd9a4", "#8eeabc", "#e0fbee"],
+      colors: [
+        "#0d5c3d",
+        "#0f7a4e",
+        "#15946a",
+        "#22a87a",
+        "#34c78e",
+        "#5dd9a4",
+        "#8eeabc",
+        "#c5f5dc"
+      ],
+      gradient: [
+        "#0d5c3d",
+        "#0f7a4e",
+        "#15946a",
+        "#22a87a",
+        "#34c78e",
+        "#5dd9a4",
+        "#8eeabc",
+        "#e0fbee"
+      ],
       background: "#f0fdf6",
       text: "#0d4a2d",
       axis: "#1a6b45",
@@ -120,7 +217,12 @@ defmodule Examples.ColorPalettes do
   def palette_info do
     @palettes
     |> Enum.map(fn {key, palette} ->
-      {key, %{name: palette.name, description: palette.description, preview: Enum.take(palette.colors, 5)}}
+      {key,
+       %{
+         name: palette.name,
+         description: palette.description,
+         preview: Enum.take(palette.colors, 5)
+       }}
     end)
     |> Enum.into(%{})
   end
@@ -134,7 +236,7 @@ defmodule Examples.ColorPalettes do
     get(Enum.find(list_palettes(), :default, &(Atom.to_string(&1) == key)))
   end
 
-  @doc "The palette as a `Visualize.Theme`: its colours as the series, its base colours as the slots"
+  @doc "The palette as a `Visualize.Theme`: its colours as the series, its base colours as the slots, the gallery's font stack as its `font_family`"
   def theme(key) when is_binary(key) do
     theme(Enum.find(list_palettes(), :default, &(Atom.to_string(&1) == key)))
   end
@@ -149,7 +251,8 @@ defmodule Examples.ColorPalettes do
       text: palette.text,
       axis: palette.axis,
       grid: palette.grid,
-      surface: palette.surface
+      surface: palette.surface,
+      font_family: @font_family
     )
   end
 

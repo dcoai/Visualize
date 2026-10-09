@@ -188,6 +188,9 @@ defmodule Visualize.Chart.Style do
   def value(:stroke_dasharray, list, _theme, _mode) when is_list(list), do: Enum.join(list, " ")
   # A paint is the frame's to resolve, once it has its defs (spec/14 §3.2).
   def value(key, {:paint, _name} = paint, _theme, _mode) when key in @colour_keys, do: paint
+  # The contrast ink with nothing under the text: the background's, a literal in both modes
+  # (§3.2, D-123). A mark's inline label resolves it against its element instead (§5.5).
+  def value(key, :contrast, theme, _mode) when key in @colour_keys, do: Theme.ink(theme, nil)
   # The weight words CSS lacks are their numbers; normal and bold are CSS's own (§3.4).
   def value(:font_weight, :light, _theme, _mode), do: 300
   def value(:font_weight, :medium, _theme, _mode), do: 500

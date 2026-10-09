@@ -93,7 +93,7 @@ defmodule Examples.Charts.SunburstChart do
         style(:sector, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
         style(:sector_label,
           extends: :label,
-          fill: :background,
+          fill: :contrast,
           font_size: 10,
           font_weight: :bold
         ),
@@ -189,7 +189,7 @@ defmodule Examples.Charts.SunburstChart do
         chart(meta: %{name: "Sunburst Chart"}),
         source(:nodes, [:id, :parent, :name, :value, :branch]),
         style(:sector, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
-        style(:sector_label, extends: :label, fill: :background, font_size: 10, font_weight: :bold),
+        style(:sector_label, extends: :label, fill: :contrast, font_size: 10, font_weight: :bold),
         polar(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
         ordinal_scale(:color, domain: [0, 1, 2, 3]),
 
