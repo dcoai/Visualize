@@ -11,11 +11,18 @@ defmodule Visualize.Chart.Validator.Domain do
   # and a style reached through a variable are not decidable here and are passed over. The
   # walk is total over any map, since the validator is handed arbitrary input: a shape it
   # does not recognise contributes nothing, and the schema walk reports it.
+  #
+  # And the inferred-domain check (#490, D-124): a `:text` mark's position channel that is
+  # a literal number naming a scale whose domain is inferred. Inference reads the constant
+  # as data, so a caption holds the domain open where the data has left it.
 
-  alias Visualize.Chart.{Style, Var}
+  alias Visualize.Chart.Frame.Scales
+  alias Visualize.Chart.{Schema, Style, Var}
 
   @colour_keys [:fill, :stroke]
   @temporal [DateTime, Date, NaiveDateTime]
+  # The position scales a channel names before a mark's `scales` renames it (spec/14 §4.3).
+  @positions [:x, :y, :angle, :r]
 
   @doc false
   @spec faults(map()) :: [{list(), term()}]
@@ -36,7 +43,8 @@ defmodule Visualize.Chart.Validator.Domain do
     scales = map_or_empty(frame[:scales])
     columns = columns(mark[:data], sources)
 
-    channels(mark, frame, scales, columns, path) ++ style(mark, scales, styles, columns, path)
+    channels(mark, frame, scales, columns, path) ++
+      style(mark, scales, styles, columns, path) ++ inferred(mark, frame, frames, path)
   end
 
   defp mark(_mark, _path, _frames, _styles, _sources), do: []
@@ -101,6 +109,47 @@ defmodule Visualize.Chart.Validator.Domain do
 
   defp channel({:field, field}, name, domain, columns), do: column(field, name, domain, columns)
   defp channel(field, name, domain, columns), do: column(field, name, domain, columns)
+
+  # -- a constant on an inferred domain (#490, D-124) -----------------------------------
+
+  # A `:text` mark is its label (spec/14 §5.2): a number in a position channel is where the
+  # words stand, never a reading the axis must reach. Any other type's constant — a rule's
+  # baseline — is data the author means the domain to hold, and is not reported.
+  defp inferred(%{type: :text} = mark, frame, frames, path) do
+    channels = map_or_empty(mark[:channels])
+    kind = frame[:kind]
+    renames = %{scales: map_or_empty(mark[:scales])}
+    table = Scales.channel_scales(kind)
+    scales = map_or_empty(frame[:scales])
+
+    for {channel, n} <- channels,
+        is_number(n),
+        Map.get(table, channel) in @positions,
+        name = Scales.scale_for(kind, renames, channel),
+        infers?(scales[name], frames, []),
+        do: {path ++ [:channels, channel], {:feeds_domain, name, n}}
+  end
+
+  defp inferred(_mark, _frame, _frames, _path), do: []
+
+  # Whether a scale node infers its domain — `:auto`, or `:auto` at an end, the schema's
+  # default when absent — following an adoption `{:frame, f, s}` to the node that owns it
+  # (spec/14 §4.3). A variable domain, an undeclared or cyclic adoption and anything else
+  # are not decidable here, and the schema walk reports what is malformed.
+  defp infers?({:frame, f, s} = ref, frames, seen) when is_map_key(frames, f) do
+    if ref in seen,
+      do: false,
+      else: infers?(map_or_empty(map_or_empty(frames[f])[:scales])[s], frames, [ref | seen])
+  end
+
+  defp infers?(%{} = node, _frames, _seen) when not is_struct(node),
+    do: auto?(Map.get(node, :domain, Schema.default(:scale, :domain)))
+
+  defp infers?(_node, _frames, _seen), do: false
+
+  defp auto?(:auto), do: true
+  defp auto?([lo, hi]), do: lo == :auto or hi == :auto
+  defp auto?(_domain), do: false
 
   # -- the mark's style -----------------------------------------------------------------
 

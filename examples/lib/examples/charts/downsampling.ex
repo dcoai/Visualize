@@ -24,7 +24,10 @@ defmodule Examples.Charts.Downsampling do
   **The counts are the design's own.** Each frame's caption is a `:text` mark over the
   frame's rows counted by a one-bin `:bin` step (`thresholds: []`, a bin over the whole
   `t` extent, `as: :rows`), so the number is what that frame draws at the size it is
-  drawn, not a figure written beside it.
+  drawn, not a figure written beside it. It stands at `x: {:scale, :min}`, the left end of
+  the domain, which reads the domain and feeds nothing to it (#490): at a number it would
+  hold the inferred `x` domain open there while a run scrolls the series away, drawing the
+  line over the right of the plot and moving `:m4`'s columns off the pixels.
 
   The series is a slow wave with noise, rare spikes and one **dropout** — a run of rows
   with no reading — which both steps pass through as a gap: each reduced line breaks
@@ -93,9 +96,12 @@ defmodule Examples.Charts.Downsampling do
       axis(:x, :bottom, ticks: 6),
       axis(:y, :left, ticks: 4, grid: true),
       line(data, %{x: :t, y: :v}, style: :trace),
-      # The caption in the band above the tallest spike, in data units: the count of the rows
-      # this frame's line draws, from the same pipeline.
-      text(bin(data, :t, thresholds: [], as: :rows), %{x: 0, y: @caption},
+      # The caption in the band above the tallest spike, at the left end of whatever the `x`
+      # domain turns out to be: the count of the rows this frame's line draws, from the same
+      # pipeline. `{:scale, :min}` reads the domain and feeds nothing to it, so the domain is
+      # the series' own extent at every tick of a run (#490, D-124); a number here would hold
+      # it open at that number while the series scrolls away.
+      text(bin(data, :t, thresholds: [], as: :rows), %{x: {:scale, :min}, y: @caption},
         label: %{text: [{:field, :rows}, words], anchor: :right, style: :caption}
       )
     ])
@@ -153,8 +159,9 @@ defmodule Examples.Charts.Downsampling do
               axis(:x, :bottom, ticks: 6),
               axis(:y, :left, ticks: 4, grid: true),
               line(data, %{x: :t, y: :v}),
-              # The rows this frame draws, counted by a one-bin :bin of the same pipeline.
-              text(bin(data, :t, thresholds: [], as: :rows), %{x: 0, y: 128},
+              # The rows this frame draws, counted by a one-bin :bin of the same pipeline,
+              # at the left end of the x domain: a number there would widen the domain.
+              text(bin(data, :t, thresholds: [], as: :rows), %{x: {:scale, :min}, y: 128},
                 label: %{text: [{:field, :rows}, " rows"], anchor: :right}
               )
             ])
