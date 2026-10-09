@@ -21,6 +21,7 @@ The rendering layer turns the backend-agnostic IR (`Visualize.IR.Element`, `Visu
 | `Visualize.Backend.Hybrid` | Static SVG + dynamic Canvas split |
 | `Visualize.Incremental` | Stateful high-level API over `CanvasIncremental` |
 | `Visualize.Benchmark` | Throughput and payload comparison |
+| `Visualize.Render.Raster` | Internal: the one caller of `Resvg`, behind `Visualize.Render.to_png/2` (§9) |
 
 ### 1.2 The backend behaviour
 
@@ -641,3 +642,49 @@ Result map: `config: %{duration_ms, data_points, chart_type}`; the same five bac
 ### 8.4 Reports
 
 `format_report/1` and `format_stream_report/1` return a single string of fixed-width sections, one per backend, followed by a comparison summary (fastest backend, payload sizes, 100-frame bandwidth and the Hybrid break-even frame count for `format_report/1`; FPS ranking and total bandwidth for `format_stream_report/1`). They read only the keys listed in 8.2 and 8.3, so a result map from another source MUST supply all of them.
+
+## 9. Raster output: `Visualize.Render.Raster`
+
+`Visualize.Render.to_png/2` and `to_png!/2` (spec/02 §4) rasterise the library's SVG through the optional `resvg` package (spec/01 §1.7, D-118). `Visualize.Render.Raster` is the only module in `lib/` that names `Resvg`, so the backend can be replaced in one place. Its functions are `@doc false` ([11-public-api](11-public-api.md) §2.2), and the contract below is the one `to_png/2` exposes.
+
+### 9.1 Input
+
+- **A root `Visualize.IR.Element`** (`type: :root`) is rendered with `Visualize.Render.to_svg_string/2` first. The options `to_png/2` does not read (9.2) pass through to the SVG backend, as every `Visualize.Render` function passes them.
+- **A binary** is an SVG document, as `Visualize.Chart.render/2` returns with `root: true`, and is rasterised as given. An option `to_png/2` does not read is an `ArgumentError`, since there is no backend for it to reach.
+
+Any other input — a group, a path, a list — is a `FunctionClauseError`: a PNG is a whole document and has no size without its root.
+
+**The SVG must carry literal colours.** The SVG backend resolves a theme slot to a custom-property reference with the literal as its fallback (`var(--vis-axis, #333)`, [08-utilities](08-utilities.md) §7.3), which a browser reads and resvg does not: resvg paints such a value black. A chart meant for a PNG is generated with `resolve: :literal` (`Visualize.Chart.generate(applied, root: true, resolve: :literal)`). An SVG containing `var(--` returns `{:error, :css_references}` rather than a picture in the wrong colours.
+
+### 9.2 Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `:scale` | `1` | Device pixel ratio, a positive number, passed to resvg as its `zoom` (a float). The PNG's width and height are the root's `width` and `height` times the scale, so `scale: 2` doubles both exactly. |
+| `:background` | `nil` | A CSS colour string painted under the document, passed to resvg as its `background`. `nil` leaves the transparent pixels transparent. A colour resvg cannot parse returns `{:error, {:rasterizer, message}}`. |
+
+A `:scale` that is not a positive number, or a `:background` that is neither `nil` nor a string, is an `ArgumentError`. Options are a keyword list, so the font options of #474 extend this table without changing the call's shape.
+
+`resvg` requires a `resources_dir` for an SVG given as a string, the directory relative references resolve against. The library supplies one it controls, `System.tmp_dir!/0`; the SVG the library renders holds no relative reference, so nothing is read from it.
+
+### 9.3 Results
+
+`{:ok, png}` is a PNG binary: the 8-byte signature `<<137, 80, 78, 71, 13, 10, 26, 10>>` followed by an `IHDR` chunk whose width and height are those of 9.2. The errors are values (spec/11 §4):
+
+| Result | When |
+|---|---|
+| `{:error, :no_rasterizer}` | `resvg` is not loaded (`Code.ensure_loaded?(Resvg)` is false) |
+| `{:error, :css_references}` | the SVG holds a `var(--` reference (9.1) |
+| `{:error, {:rasterizer, message}}` | resvg refused the document or an option; `message` is its string |
+
+`to_png!/2` returns the binary of `{:ok, png}` and raises `RuntimeError` naming the reason otherwise.
+
+### 9.4 Availability and the seam
+
+`Raster.available?/0` is `Code.ensure_loaded?(Resvg)`, read at the call, as `CanvasBinary.available?/0` reads Nx (spec/01 §1.4). `Resvg` is named under `@compile {:no_warn_undefined, Resvg}`, so a consumer without the package compiles the module without a warning (D-50). The test suite has the package and cannot unload it, so the absent branch is reached through one argument: `Raster.to_png/3` and `Raster.to_png!/3` take availability as a boolean, `Visualize.Render.to_png/2` passes `Raster.available?()`, and a test passes `false`. Nothing else differs between the two branches. A consumer build without the package is proved separately, by `scripts/consumer_check.exs` calling `to_png/2` ([12-testing-and-conformance](12-testing-and-conformance.md) §4).
+
+### 9.5 Scheduling
+
+**A render holds a normal scheduler for its whole duration.** resvg 0.6.0 runs its NIFs on a normal scheduler, and a chart-sized render takes tens to hundreds of milliseconds (D-118). While it runs, every other process on that scheduler waits. The fix is upstream: the NIFs marked `DirtyCpu` (#477). Until a release carries it, a host rendering PNGs where latency matters renders them where a stalled scheduler costs little: off the request path, and not in bulk alongside LiveView traffic. The `to_png/2` documentation says so.
+
+Fonts — the host's font directories and the warning for a family the font database lacks — are #474. Until then resvg loads the system fonts, and text in a family it does not find is dropped without a warning.

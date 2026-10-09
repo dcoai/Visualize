@@ -32,6 +32,10 @@ Time zones are the host's: a zoned time scale ([03-scales](03-scales.md) §7.4) 
 
 The `table` package (the `Table.Reader` protocol) MUST NOT be a required dependency; it is declared `optional: true` (D-52). `Visualize.Data.Table.rows/1` reads Explorer frames and any other struct implementing the protocol only when it is present; lists, column maps and Nx tensors are read natively and work without it ([08-utilities](08-utilities.md) §6).
 
+### 1.7 `resvg` is optional
+
+The `resvg` package, a rasteriser reached through a precompiled NIF, MUST NOT be a required dependency; it is declared `optional: true` (D-118). `Visualize.Render.to_png/2` ([02-architecture](02-architecture.md) §4) needs it, and `Visualize.Render.Raster` is the only module that calls it ([09-rendering-backends](09-rendering-backends.md) §9). Without it, `to_png/2` returns `{:error, :no_rasterizer}` and `to_png!/2` raises, as `CanvasBinary` does without Nx (§1.4). A consumer that does not list it fetches neither `resvg` nor its `rustler_precompiled` and `castore` dependencies ([12-testing-and-conformance](12-testing-and-conformance.md) §4).
+
 ## 2. Non-goals
 
 - **A client-side charting runtime.** The library ships JavaScript only as hook text (`Visualize.Hooks`) that a host installs; it does not draw in the browser, manage a scene graph there, or depend on any JS charting library.

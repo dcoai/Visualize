@@ -4,6 +4,9 @@
 # `MIX_ENV=prod`, and asked what it can load. Phoenix and Nx are optional dependencies of
 # visualize, so neither may arrive: neither the components nor the chart builder (spec/14
 # §18, D-85) may be loadable, since both compile only under the `Phoenix.Component` guard.
+# Nor may resvg, the optional rasteriser, or its NIF loader (D-118): without them
+# `Visualize.Render.to_png/2` must return `{:error, :no_rasterizer}`, which the probe calls,
+# so this build is also the run of that function without its dependency (spec/12 §4).
 # The audit, the models and the golden renderer compile from directories a consumer never
 # sees (`elixirc_paths/1` in mix.exs).
 #
@@ -16,9 +19,10 @@ defmodule Visualize.ConsumerCheck do
              Visualize.Chart.Builder.Editor Visualize.Chart.Builder.Layers
              Visualize.Chart.Builder.Inspector Visualize.Chart.Builder.Params
              Visualize.Chart.Builder.Document
-             Visualize.Audit ExTLA.Spec Surfex.Golden Tz.TimeZoneDatabase)
+             Visualize.Audit ExTLA.Spec Surfex.Golden Tz.TimeZoneDatabase
+             Resvg RustlerPrecompiled)
   @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Hooks.Builder
-              Visualize.Backend.CanvasBinary)
+              Visualize.Backend.CanvasBinary Visualize.Render.Raster)
 
   def run do
     root = File.cwd!()
@@ -32,7 +36,10 @@ defmodule Visualize.ConsumerCheck do
     mix(dir, ["run", "-e", probe()])
 
     File.rm_rf!(dir)
-    IO.puts("consumer build is lib/ only - no Phoenix, no Nx, no Jason, no table, no Explorer/tz")
+
+    IO.puts(
+      "consumer build is lib/ only - no Phoenix, no Nx, no Jason, no table, no Explorer/tz, no resvg"
+    )
   end
 
   defp mix_exs(root) do
@@ -51,7 +58,8 @@ defmodule Visualize.ConsumerCheck do
   defp probe do
     absent = Enum.map(@absent, &"false = Code.ensure_loaded?(#{&1})")
     present = Enum.map(@present, &"true = Code.ensure_loaded?(#{&1})")
-    Enum.join(absent ++ present, "; ")
+    png = "{:error, :no_rasterizer} = Visualize.Render.to_png(Visualize.IR.Element.root(4, 4))"
+    Enum.join(absent ++ present ++ [png], "; ")
   end
 
   # `--warnings-as-errors` only covers the consumer's own (empty) code; a warning printed
