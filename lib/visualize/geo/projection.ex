@@ -147,13 +147,16 @@ defmodule Visualize.Geo.Projection do
   def new(type \\ :mercator) do
     projection = %__MODULE__{type: type}
 
-    # Set default clip angle for azimuthal projections
+    # The azimuthal types' clip angles are d3-geo's (spec/07 §1.5): the orthographic's
+    # horizon a hair past 90° and the whole-sphere azimuthals' a hair short of 180°, so
+    # the circle the paths are clipped by is never degenerate (src/projection/
+    # orthographic.js:14, azimuthalEqualArea.js:16, azimuthalEquidistant.js:16).
     case type do
-      :orthographic -> %{projection | clip_angle: 90}
+      :orthographic -> %{projection | clip_angle: 90 + 1.0e-6}
       :stereographic -> %{projection | clip_angle: 142}
       :gnomonic -> %{projection | clip_angle: 60}
-      :azimuthal_equal_area -> %{projection | clip_angle: 180}
-      :azimuthal_equidistant -> %{projection | clip_angle: 180}
+      :azimuthal_equal_area -> %{projection | clip_angle: 180 - 1.0e-3}
+      :azimuthal_equidistant -> %{projection | clip_angle: 180 - 1.0e-3}
       _ -> projection
     end
   end
@@ -239,6 +242,24 @@ defmodule Visualize.Geo.Projection do
       end
     end
   end
+
+  @doc false
+  # The point in the rotated and centred frame, `{lon, lat}` degrees: the frame of the
+  # clip test (spec/07 §1.5), where `Visualize.Geo.Path` clips a projection with a
+  # `clip_angle` by its small circle (§2.2.1). With `center` `{0, 0}` it is `rotated/3`.
+  @spec centred(t(), number(), number()) :: {number(), number()}
+  def centred(%__MODULE__{center: {0, 0}} = proj, lon, lat), do: rotated(proj, lon, lat)
+
+  def centred(%__MODULE__{center: {center_lon, center_lat}} = proj, lon, lat) do
+    {lon, lat} = rotated(proj, lon, lat)
+    {normalize_longitude(lon - center_lon), lat - center_lat}
+  end
+
+  @doc false
+  # A point of the centred frame the clip has kept, through the raw projection, scale and
+  # translate: the clip was the clip test, so it is not tested again.
+  @spec project_centred(t(), number(), number()) :: {float(), float()} | nil
+  def project_centred(%__MODULE__{} = proj, lon, lat), do: raw(proj, lon, lat)
 
   @doc """
   Inverse projection: converts pixel coordinates (x, y) to geographic (lon, lat).

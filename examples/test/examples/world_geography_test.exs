@@ -84,9 +84,9 @@ defmodule Examples.WorldGeographyTest do
   end
 
   # The land mark's paths, each as its subpaths' vertices: the `mark-path` group drawn with
-  # the land's fill opacity.
-  defp land_subpaths(svg) do
-    [_, land | _] = String.split(svg, ~s(<g class="mark mark-path" fill-opacity="0.8"))
+  # the land's fill opacity (the World Map's 0.8, the Globe's 0.9).
+  defp land_subpaths(svg, opacity \\ "0.8") do
+    [_, land | _] = String.split(svg, ~s(<g class="mark mark-path" fill-opacity="#{opacity}"))
     [land | _] = String.split(land, "</g>")
 
     for [d] <- Regex.scan(~r/ d="([^"]*)"/, land, capture: :all_but_first),
@@ -170,6 +170,79 @@ defmodule Examples.WorldGeographyTest do
     # The far hemisphere's land masses draw nothing, so fewer than all of them.
     land_paths = length(String.split(svg, "<path")) - 1 - 2 - 17
     assert land_paths > 20 and land_paths < 127
+  end
+
+  # The Globe's disc: the plot's centre, and the radius `design/1` gives the orthographic.
+  defp globe_disc do
+    {width, height} = Globe.size()
+    {{width / 2, height / 2}, min(width, height) / 2 - 20}
+  end
+
+  # A land mass crossing the horizon is closed along it (spec/07 §2.2.1, #510). Before the
+  # small-circle clip the vertices behind it were dropped and their neighbours joined, so
+  # the land closed by chords through the disc — the Americas a wedge across the North
+  # Atlantic at tick 0. No edge of Natural Earth 1:110m is longer than about 18 px on this
+  # disc, so an edge longer than 24 px is either the horizon or a chord: it must lie on the
+  # rim, both ends and its midpoint within half a pixel of it, which no chord does.
+  test "the Globe closes its land along the horizon, never by a chord across the disc, at any tick" do
+    {{cx, cy}, r} = globe_disc()
+    off_rim = fn [x, y] -> abs(:math.sqrt((x - cx) ** 2 + (y - cy) ** 2) - r) end
+
+    for tick <- 0..179//3 do
+      subpaths = land_subpaths(Globe.render(animation_tick: tick), "0.9")
+
+      for points <- subpaths,
+          {a, b} <- Enum.zip(points, tl(points) ++ [hd(points)]),
+          [[x0, y0], [x1, y1]] = [a, b],
+          :math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2) > 24 do
+        mid = [(x0 + x1) / 2, (y0 + y1) / 2]
+
+        assert off_rim.(a) < 0.5 and off_rim.(b) < 0.5 and off_rim.(mid) < 0.5,
+               "tick #{tick}: a land edge #{inspect(a)} → #{inspect(b)} cuts across the disc"
+      end
+    end
+
+    # At tick 0 the Americas and Afro-Eurasia cross the horizon: their rings run along it,
+    # the 2° steps of d3's circle, many points on the rim one after another.
+    rim_runs =
+      for points <- land_subpaths(Globe.render(animation_tick: 0), "0.9") do
+        points
+        |> Enum.chunk_by(&(off_rim.(&1) < 0.01))
+        |> Enum.filter(&(off_rim.(hd(&1)) < 0.01))
+        |> Enum.map(&length/1)
+        |> Enum.max(fn -> 0 end)
+      end
+
+    assert Enum.count(rim_runs, &(&1 >= 10)) >= 2
+  end
+
+  test "every land mass draws under the circled projections at any rotation" do
+    land = WorldGeography.land()
+
+    for type <- [
+          :orthographic,
+          :stereographic,
+          :gnomonic,
+          :azimuthal_equal_area,
+          :azimuthal_equidistant
+        ],
+        rotate <- [{0, 0, 0}, {45, -20, 0}, {90, 30, 0}, {180, 0, 0}, {-135, 60, 10}] do
+      {lambda, phi, gamma} = rotate
+
+      projection =
+        Visualize.Geo.Projection.new(type)
+        |> Visualize.Geo.Projection.scale(100)
+        |> Visualize.Geo.Projection.translate(350, 200)
+        |> Visualize.Geo.Projection.rotate(lambda, phi, gamma)
+
+      geo = Visualize.Geo.Path.new(projection)
+      drawn = Enum.count(land, &(Visualize.Geo.Path.path(geo, &1.shape).commands != []))
+      # Some land is always in view; a whole-sphere azimuthal shows all of it.
+      assert drawn > 0, "#{type} #{inspect(rotate)}: no land drew"
+
+      if type in [:azimuthal_equal_area, :azimuthal_equidistant],
+        do: assert(drawn == length(land), "#{type} #{inspect(rotate)}: #{drawn} drew")
+    end
   end
 
   test "the Globe animates on the canvas, each tick within the light budget" do

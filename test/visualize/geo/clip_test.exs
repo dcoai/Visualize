@@ -24,18 +24,23 @@ defmodule Visualize.Geo.ClipTest do
          |> Enum.reject(&String.starts_with?(&1, "#"))
          |> Enum.map(&Jason.decode!/1)
 
-  defp projection(%{
-         "type" => type,
-         "scale" => scale,
-         "translate" => [tx, ty],
-         "rotate" => [l, p, g]
-       }) do
-    String.to_existing_atom(type)
-    |> Projection.new()
-    |> Projection.scale(scale)
-    |> Projection.translate(tx, ty)
-    |> Projection.rotate(l, p, g)
-    |> Projection.precision(0)
+  # A case without a `clip_angle` keeps the type's default, which is d3's (spec/07 §1.5).
+  defp projection(
+         %{"type" => type, "scale" => scale, "translate" => [tx, ty], "rotate" => [l, p, g]} =
+           spec
+       ) do
+    proj =
+      String.to_existing_atom(type)
+      |> Projection.new()
+      |> Projection.scale(scale)
+      |> Projection.translate(tx, ty)
+      |> Projection.rotate(l, p, g)
+      |> Projection.precision(0)
+
+    case spec do
+      %{"clip_angle" => angle} -> Projection.clip_angle(proj, angle)
+      _ -> proj
+    end
   end
 
   # The path's subpaths as `{kind, points}`: a `Z` makes the subpath a ring.
@@ -65,7 +70,7 @@ defmodule Visualize.Geo.ClipTest do
 
   defp close?({x0, y0}, {x1, y1}), do: abs(x0 - x1) < @tolerance and abs(y0 - y1) < @tolerance
 
-  describe "conformance with d3-geo's clipAntimeridian" do
+  describe "conformance with d3-geo's clipAntimeridian and clipCircle" do
     for %{"name" => name} = golden <- @cases do
       @golden_case golden
       test name do
@@ -183,6 +188,81 @@ defmodule Visualize.Geo.ClipTest do
       assert [a, b] = count.(proj)
       assert [a0, b0] = count.(Projection.precision(proj, 0))
       assert {a - a0, b - b0} == {30, 30}
+    end
+  end
+
+  describe "the small circle of a clip angle (#510)" do
+    defp orthographic do
+      Projection.new(:orthographic) |> Projection.scale(100) |> Projection.translate(0, 0)
+    end
+
+    defp radius({x, y}), do: :math.sqrt(x * x + y * y)
+
+    test "the azimuthal types' default clip angles are d3-geo's" do
+      assert Projection.new(:orthographic).clip_angle == 90 + 1.0e-6
+      assert Projection.new(:stereographic).clip_angle == 142
+      assert Projection.new(:gnomonic).clip_angle == 60
+      assert Projection.new(:azimuthal_equal_area).clip_angle == 180 - 1.0e-3
+      assert Projection.new(:azimuthal_equidistant).clip_angle == 180 - 1.0e-3
+    end
+
+    test "a line over the horizon ends on it and comes back from it, two subpaths" do
+      line = %{"type" => "LineString", "coordinates" => [[60, 0], [120, 0], [60, 10]]}
+
+      assert [{"line", [_, out]}, {"line", [back, _]}] =
+               subpaths(Path.path(Path.new(orthographic()), line))
+
+      assert_in_delta radius(out), 100, 1.0e-6
+      assert_in_delta radius(back), 100, 1.0e-6
+    end
+
+    test "a polygon across the horizon is closed along it, every 2°, not by a chord" do
+      # Wound clockwise: north along 60°E, east along the 20th parallel's great circle, back.
+      square = %{
+        "type" => "Polygon",
+        "coordinates" => [[[60, -20], [60, 20], [120, 20], [120, -20], [60, -20]]]
+      }
+
+      assert [{"ring", points}] = subpaths(Path.path(Path.new(orthographic()), square))
+      on_rim? = &(abs(radius(&1) - 100) < 1.0e-6)
+      rim = for {a, b} <- Enum.zip(points, tl(points)), on_rim?.(a) and on_rim?.(b), do: {a, b}
+      # The horizon from about 20°S to 20°N, an edge every 2° of it, each hugging the rim.
+      assert length(rim) >= 19
+
+      for {a, b} <- rim do
+        assert radius({(elem(a, 0) + elem(b, 0)) / 2, (elem(a, 1) + elem(b, 1)) / 2}) > 99.9
+      end
+    end
+
+    test "a ring wound anticlockwise is the rest of the sphere: the whole disc and the ring" do
+      ring = %{
+        "type" => "Polygon",
+        "coordinates" => [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]
+      }
+
+      assert [{"ring", hole}, {"ring", disc}] =
+               subpaths(Path.path(Path.new(orthographic()), ring))
+
+      assert length(hole) == 5
+      # d3's whole circle: 2° steps all the way round, back onto the first (circle.js:12–14).
+      assert length(disc) == 181
+      assert Enum.all?(disc, &(abs(radius(&1) - 100) < 1.0e-6))
+    end
+
+    test "a polygon entirely behind the horizon draws nothing, one around the visible disc all of it" do
+      behind = %{"type" => "Polygon", "coordinates" => [[[170, 0], [175, 5], [175, 0], [170, 0]]]}
+      assert Path.path(Path.new(orthographic()), behind).commands == []
+
+      # The 75° circle about the centre under a 60° clip: it holds the whole clip circle.
+      around = %{
+        "type" => "Polygon",
+        "coordinates" => [[[-75, 0], [0, 75], [75, 0], [0, -75], [-75, 0]]]
+      }
+
+      gnomonic = Projection.new(:gnomonic) |> Projection.scale(100) |> Projection.translate(0, 0)
+      assert [{"ring", disc}] = subpaths(Path.path(Path.new(gnomonic), around))
+      # The gnomonic puts the 60° circle at tan 60° · 100.
+      assert Enum.all?(disc, &(abs(radius(&1) - :math.tan(:math.pi() / 3) * 100) < 1.0e-6))
     end
   end
 end

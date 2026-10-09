@@ -75,7 +75,9 @@ defmodule Visualize.Geo.PathTest do
 
     test "a geometry with nothing to draw is the empty path, and so is an unknown type" do
       geo = Path.new(Projection.new(:orthographic) |> Projection.translate(100, 100))
-      behind = %{"type" => "Polygon", "coordinates" => [[[170, 0], [175, 0], [175, 5], [170, 0]]]}
+      # Wound clockwise, d3's interior (spec/07 §2.2.1): anticlockwise it would be the rest
+      # of the sphere, and the clip would fill the whole visible disc with it.
+      behind = %{"type" => "Polygon", "coordinates" => [[[170, 0], [175, 5], [175, 0], [170, 0]]]}
       assert Path.path(geo, behind) == IR.Path.new()
       assert Path.path(geo, %{"type" => "Blob"}) == IR.Path.new()
       assert Path.centroid(geo, behind) == nil

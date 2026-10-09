@@ -30,21 +30,13 @@ defmodule Visualize.Geo.Projection.Azimuthal do
   def invert(:azimuthal_equidistant, x, y, proj), do: azimuthal_equidistant_invert(x, y, proj)
   def invert(:gnomonic, x, y, proj), do: gnomonic_invert(x, y, proj)
 
-  # Orthographic (globe)
+  # Orthographic (globe): d3-geo's `orthographicRaw` (orthographic.js:4–6), which places
+  # the far hemisphere too, folded onto the near one. The clip angle hides it (spec/07
+  # §1.5, §2.2.1): the horizon the clip closes a path along lies a hair past 90°.
   defp orthographic_project(lon, lat, _proj) do
     lon_rad = lon * @deg_to_rad
     lat_rad = lat * @deg_to_rad
-
-    # Only show front hemisphere
-    cos_c = :math.cos(lat_rad) * :math.cos(lon_rad)
-
-    if cos_c < 0 do
-      nil
-    else
-      x = :math.cos(lat_rad) * :math.sin(lon_rad)
-      y = :math.sin(lat_rad)
-      {x, y}
-    end
+    {:math.cos(lat_rad) * :math.sin(lon_rad), :math.sin(lat_rad)}
   end
 
   defp orthographic_invert(x, y, _proj) do
@@ -118,7 +110,9 @@ defmodule Visualize.Geo.Projection.Azimuthal do
     cos_lon = :math.cos(lon_rad)
     k_prime = 1 + cos_lat * cos_lon
 
-    if k_prime < 0.001 do
+    # Only the antipode itself has no place (d3-geo's azimuthalEqualAreaRaw carries NaN
+    # there): the clip circle 10⁻³° short of it is placed on the map's rim (spec/07 §1.5).
+    if k_prime <= 0 do
       nil
     else
       k = :math.sqrt(2 / k_prime)
