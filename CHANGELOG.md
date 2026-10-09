@@ -25,6 +25,15 @@ release it merely follows.
   `{:error, :css_references}`, since resvg would paint it black. Until resvg ships dirty
   scheduling (#477) a render holds a scheduler for its duration. A consumer that does not
   list `resvg` fetches nothing new.
+- **PNG fonts and missing-family warnings** (#474): `to_png/2` takes the font
+  configuration — `font_dirs:`, `system_fonts:` (default `true`), `generic_families:`
+  (resvg's defaults: `sans-serif` is Arial) — and `font_family:` for text that names none
+  (default `"sans-serif"`). The font database is built once per configuration and cached.
+  resvg drops text in a family it lacks without a word, so the library resolves every
+  font-family list itself, with resvg's case-sensitive rules, and **the success value is
+  now `{:ok, png, warnings}`**, one `{:missing_family, list, tried}` per list no font
+  resolves; `to_png!/2` raises when a family is missing. The gallery has raster goldens,
+  rendered with a bundled DejaVu Sans and no system fonts.
 - **A theme's `:surface` slot** (#422): the plane a chart's data is laid on, between the
   background and the grid — `#eef2f6` on `Visualize.Theme.default/0`, `#23272f` on
   `dark/0`. It is a colour slot like any other: `slots/1` and `colour_slots/1` list it,

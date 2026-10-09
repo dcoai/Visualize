@@ -1,14 +1,23 @@
 defmodule Visualize.Render.RasterTest do
   # `Visualize.Render.to_png/2` over the optional resvg package (spec/09 §9, D-118). The CI
-  # image has no system fonts, so nothing here asserts on text: dimensions, the PNG
-  # signature and the pixels of filled shapes only (spec/12 §4).
+  # image has no system fonts, so a call that draws text names the bundled font and leaves
+  # the system's out (spec/12 §4); the gallery's pixels are held by the raster goldens.
   use ExUnit.Case, async: true
 
   alias Visualize.{Chart, Designs, Render}
   alias Visualize.IR.Element
+  alias Visualize.PNGPixels
   alias Visualize.Render.Raster
+  alias Visualize.Render.Raster.Families
 
   @signature <<137, 80, 78, 71, 13, 10, 26, 10>>
+
+  # The bundled font and no system fonts: the same pictures on every host (spec/12 §6).
+  @fonts [
+    font_dirs: ["test/support/fonts"],
+    system_fonts: false,
+    generic_families: [sans_serif: "DejaVu Sans"]
+  ]
 
   # A 10×6 document: a red square on the left half, nothing on the right.
   defp swatch do
@@ -23,35 +32,37 @@ defmodule Visualize.Render.RasterTest do
     test "every gallery design rasterises at the frame's size" do
       for name <- Designs.names() do
         applied = Designs.apply(name)
-        assert {:ok, png} = Render.to_png(literal_design(name))
+        assert {:ok, png, []} = Render.to_png(literal_design(name), @fonts)
         assert <<@signature, _::binary>> = png
-        assert size(png) == {applied.frame.size.width, applied.frame.size.height}, "#{name}"
+
+        assert PNGPixels.size(png) == {applied.frame.size.width, applied.frame.size.height},
+               "#{name}"
       end
     end
 
     test "scale: 2 doubles the dimensions exactly" do
-      {:ok, one} = Render.to_png(literal_design(:line))
-      {:ok, two} = Render.to_png(literal_design(:line), scale: 2)
-      {w, h} = size(one)
-      assert size(two) == {2 * w, 2 * h}
-      assert size(Render.to_png!(swatch(), scale: 1.5)) == {15, 9}
+      {:ok, one, []} = Render.to_png(literal_design(:line), @fonts)
+      {:ok, two, []} = Render.to_png(literal_design(:line), [scale: 2] ++ @fonts)
+      {w, h} = PNGPixels.size(one)
+      assert PNGPixels.size(two) == {2 * w, 2 * h}
+      assert PNGPixels.size(Render.to_png!(swatch(), scale: 1.5)) == {15, 9}
     end
 
     test "an SVG string rasterises as the root it was rendered from" do
       svg = Chart.render(Designs.apply(:bar), root: true, resolve: :literal)
-      assert {:ok, from_string} = Render.to_png(svg)
-      assert {:ok, from_ir} = Render.to_png(literal_design(:bar))
-      assert size(from_string) == size(from_ir)
+      assert {:ok, from_string, []} = Render.to_png(svg, @fonts)
+      assert {:ok, from_ir, []} = Render.to_png(literal_design(:bar), @fonts)
+      assert PNGPixels.size(from_string) == PNGPixels.size(from_ir)
     end
 
     test "the shapes are painted and the background fills the transparent pixels" do
       plain = Render.to_png!(swatch())
-      assert pixel(plain, 1, 1) == {255, 0, 0, 255}
-      assert pixel(plain, 8, 1) == {0, 0, 0, 0}
+      assert PNGPixels.pixel(plain, 1, 1) == {255, 0, 0, 255}
+      assert PNGPixels.pixel(plain, 8, 1) == {0, 0, 0, 0}
 
       backed = Render.to_png!(swatch(), background: "#0000ff")
-      assert pixel(backed, 1, 1) == {255, 0, 0, 255}
-      assert pixel(backed, 8, 1) == {0, 0, 255, 255}
+      assert PNGPixels.pixel(backed, 1, 1) == {255, 0, 0, 255}
+      assert PNGPixels.pixel(backed, 8, 1) == {0, 0, 255, 255}
     end
 
     test "a theme reference is an error, not a picture in the wrong colours" do
@@ -86,69 +97,152 @@ defmodule Visualize.Render.RasterTest do
     end
   end
 
-  # The IHDR chunk follows the signature directly.
-  defp size(<<@signature, _len::32, "IHDR", w::32, h::32, _::binary>>), do: {w, h}
+  describe "fonts (spec/09 §9.6, §9.7)" do
+    # A 60×20 document with one text in `family`, or in none when `family` is nil.
+    defp text_doc(family) do
+      attr = if family, do: ~s( font-family="#{family}"), else: ""
 
-  # One RGBA pixel of an 8-bit RGBA, non-interlaced PNG: the IDAT data inflated and its
-  # scanlines unfiltered (PNG §9), rows above `y` included since each row reads the last.
-  defp pixel(<<@signature, rest::binary>> = png, x, y) do
-    {w, _h} = size(png)
-    <<_::32, "IHDR", _::64, 8, 6, 0, 0, 0, _::binary>> = rest
-    idat = for {"IDAT", data} <- chunks(rest), into: "", do: data
-    stride = w * 4
+      ~s(<svg xmlns="http://www.w3.org/2000/svg" width="60" height="20">) <>
+        ~s(<text x="0" y="16" font-size="16"#{attr}>Hi</text></svg>)
+    end
 
-    row =
-      idat
-      |> :zlib.uncompress()
-      |> rows(stride + 1)
-      |> Enum.take(y + 1)
-      |> Enum.reduce(:binary.copy(<<0>>, stride), fn <<filter, line::binary>>, prior ->
-        unfilter(filter, line, prior)
-      end)
+    test "a family list no font resolves is listed in the warnings" do
+      assert {:ok, png, [{:missing_family, "Inter, sans-serif", ["Inter", "Arial"]}]} =
+               Render.to_png(
+                 text_doc("Inter, sans-serif"),
+                 Keyword.delete(@fonts, :generic_families)
+               )
 
-    <<r, g, b, a>> = binary_part(row, x * 4, 4)
-    {r, g, b, a}
+      assert <<@signature, _::binary>> = png
+
+      assert {:ok, _, []} = Render.to_png(text_doc("Inter, sans-serif"), @fonts)
+      assert {:ok, _, []} = Render.to_png(text_doc("Nope, 'DejaVu Sans'"), @fonts)
+    end
+
+    test "names and generic keywords match case-sensitively, as resvg does" do
+      assert {:ok, _, [{:missing_family, "dejavu sans", ["dejavu sans"]}]} =
+               Render.to_png(text_doc("dejavu sans"), @fonts)
+
+      assert {:ok, _, [{:missing_family, "Sans-Serif", ["Sans-Serif"]}]} =
+               Render.to_png(text_doc("Sans-Serif"), @fonts)
+    end
+
+    test "a missing family is text resvg left out, so the warning is the only trace of it" do
+      {:ok, drawn, []} = Render.to_png(text_doc("DejaVu Sans"), @fonts)
+      {:ok, dropped, [_]} = Render.to_png(text_doc("Inter"), @fonts)
+
+      {:ok, empty, []} =
+        Render.to_png(String.replace(text_doc(nil), ~r/<text.*<\/text>/, ""), @fonts)
+
+      assert dropped == empty
+      refute drawn == empty
+    end
+
+    test "without system fonts or font directories every text family is missing" do
+      bare = [system_fonts: false]
+      {:ok, _png, warnings} = Render.to_png(literal_design(:bar), bare)
+      assert warnings == [{:missing_family, "sans-serif", ["Arial"]}]
+      assert Raster.fonts(bare).families == MapSet.new()
+    end
+
+    test "text that names no family is drawn in :font_family, written on the root" do
+      assert {:ok, _, []} = Render.to_png(text_doc(nil), @fonts)
+
+      assert {:ok, _, [{:missing_family, "Inter", ["Inter"]}]} =
+               Render.to_png(text_doc(nil), [font_family: "Inter"] ++ @fonts)
+
+      {:ok, from_default, []} = Render.to_png(text_doc(nil), @fonts)
+      {:ok, named, []} = Render.to_png(text_doc("DejaVu Sans"), @fonts)
+      assert from_default == named
+    end
+
+    test "a document with no text has no warnings, whatever it names" do
+      svg = ~s(<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" font-family="Nope"/>)
+      assert {:ok, _, []} = Render.to_png(svg, system_fonts: false)
+    end
+
+    test "the ! variant raises when a family is missing" do
+      assert_raise RuntimeError, ~r/missing_family/, fn ->
+        Render.to_png!(text_doc("Inter"), @fonts)
+      end
+
+      assert is_binary(Render.to_png!(text_doc("DejaVu Sans"), @fonts))
+    end
+
+    test "the same font configuration reuses one database" do
+      fonts = Raster.fonts(@fonts)
+      assert MapSet.member?(fonts.families, "DejaVu Sans")
+
+      respelled = [
+        generic_families: [sans_serif: "DejaVu Sans", serif: "Times New Roman"],
+        font_dirs: ["test/support/fonts/../fonts", Path.expand("test/support/fonts")],
+        system_fonts: false
+      ]
+
+      assert Raster.fonts(respelled).db === fonts.db
+      refute Raster.fonts(Keyword.delete(@fonts, :generic_families)).db === fonts.db
+    end
+
+    test "a bad font option is a programmer error" do
+      assert_raise ArgumentError, fn -> Render.to_png(swatch(), font_dirs: "test/support") end
+      assert_raise ArgumentError, fn -> Render.to_png(swatch(), font_dirs: ["no/such/dir"]) end
+      assert_raise ArgumentError, fn -> Render.to_png(swatch(), system_fonts: :no) end
+      assert_raise ArgumentError, fn -> Render.to_png(swatch(), generic_families: [sans: "X"]) end
+      assert_raise ArgumentError, fn -> Render.to_png(swatch(), generic_families: [serif: 1]) end
+      assert_raise ArgumentError, fn -> Render.to_png(swatch(), font_family: :serif) end
+    end
   end
 
-  defp chunks(<<>>), do: []
+  describe "family lists (Raster.Families)" do
+    test "attribute and style lists are collected in document order, decoded and once" do
+      svg =
+        ~s(<svg><g font-family="&quot;Open Sans&quot;, serif"><text style="fill: red; font-family: Mono Pro">a</text>) <>
+          ~s(<text font-family='Inter'>b</text><text font-family="&quot;Open Sans&quot;, serif">c</text></g></svg>)
 
-  defp chunks(<<len::32, type::binary-4, data::binary-size(len), _crc::32, rest::binary>>),
-    do: [{type, data} | chunks(rest)]
+      assert Families.lists(svg) == [~s("Open Sans", serif), "Mono Pro", "Inter"]
+    end
 
-  defp rows(<<>>, _size), do: []
+    test "a list splits on commas outside quotes; only an exact unquoted keyword is generic" do
+      assert Families.members(~s("A, B", 'C' ,  Helvetica   Neue , sans-serif, "serif", Serif)) ==
+               [
+                 {:name, "A, B"},
+                 {:name, "C"},
+                 {:name, "Helvetica Neue"},
+                 {:generic, :sans_serif},
+                 {:name, "serif"},
+                 {:name, "Serif"}
+               ]
+    end
 
-  defp rows(data, size),
-    do: [binary_part(data, 0, size) | rows(binary_part(data, size, byte_size(data) - size), size)]
+    test "a text is an orphan when neither it nor an ancestor names a family" do
+      assert Families.orphan_text?(~s(<svg><g><text>x</text></g></svg>))
+      refute Families.orphan_text?(~s(<svg><g font-family="A"><text>x</text></g></svg>))
+      refute Families.orphan_text?(~s(<svg><g style="font-family: A"><text>x</text></g></svg>))
+      refute Families.orphan_text?(~s(<svg><text font-family="A">x</text></svg>))
+      assert Families.orphan_text?(~s(<svg><g font-family="A"/><g><text>x</text></g></svg>))
+      assert Families.orphan_text?(~s(<svg><g font-family="A"></g><text a=">">x</text></svg>))
+      refute Families.orphan_text?(~s(<svg><title>t</title></svg>))
+    end
 
-  defp unfilter(filter, line, prior) do
-    up = :binary.bin_to_list(prior)
+    test "the default family is written on the root only when it has none and a text is an orphan" do
+      assert Families.with_default(~s(<svg a="1"><text>x</text></svg>), ~s("A B", serif)) ==
+               ~s(<svg font-family="&quot;A B&quot;, serif" a="1"><text>x</text></svg>)
 
-    line
-    |> :binary.bin_to_list()
-    |> Enum.with_index()
-    |> Enum.reduce([], fn {byte, i}, acc ->
-      a = if i >= 4, do: Enum.at(acc, 3), else: 0
-      b = Enum.at(up, i)
-      c = if i >= 4, do: Enum.at(up, i - 4), else: 0
-      [rem(byte + predict(filter, a, b, c), 256) | acc]
-    end)
-    |> Enum.reverse()
-    |> :binary.list_to_bin()
-  end
+      named = ~s(<svg font-family="X"><text>x</text></svg>)
+      assert Families.with_default(named, "Y") == named
+      assert Families.with_default("<svg/>", "Y") == "<svg/>"
+    end
 
-  defp predict(0, _a, _b, _c), do: 0
-  defp predict(1, a, _b, _c), do: a
-  defp predict(2, _a, b, _c), do: b
-  defp predict(3, a, b, _c), do: div(a + b, 2)
+    test "list_fonts lines give their family names; another form gives none" do
+      lines = [
+        "/f/DejaVuSans.ttf: 'DejaVu Sans (English, United States)', 0, Normal, 400, Normal",
+        "/f/a: b.ttc: 'Noto Sans CJK JP (English, United States)', 'Noto Sans CJK JP (Japanese, Japan)', 2, Normal, 400, Normal",
+        "/f/odd.ttf: 'People's Font (Chinese, People's Republic of China)', 0, Italic, 700, Condensed",
+        "not a listing line"
+      ]
 
-  defp predict(4, a, b, c) do
-    p = a + b - c
-    {pa, pb, pc} = {abs(p - a), abs(p - b), abs(p - c)}
-
-    cond do
-      pa <= pb and pa <= pc -> a
-      pb <= pc -> b
-      true -> c
+      assert Families.from_listing(lines) ==
+               MapSet.new(["DejaVu Sans", "Noto Sans CJK JP", "People's Font"])
     end
   end
 end
