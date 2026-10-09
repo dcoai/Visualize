@@ -40,6 +40,8 @@ defmodule ExamplesWeb.Layouts do
           .page-intro h2 { font-size: 1.4rem; margin-bottom: 0.25rem; }
           .page-intro p { color: #666; }
           .builder-notice { margin: 1rem auto 0; max-width: 1400px; padding: 0.6rem 1rem; background: #fff8e1; border-left: 4px solid #f59e0b; color: #5c4400; font-size: 0.95rem; }
+          .tab-pages { color: #666; margin: 0.5rem 0 1rem; }
+          .tab-pages a { color: #667eea; font-weight: 500; }
           body > main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
           .gallery-note {
             max-width: 60rem;
@@ -81,28 +83,6 @@ defmodule ExamplesWeb.Layouts do
           .chart-info { padding: 1rem 1.5rem; }
           .chart-info h3 { font-size: 1.1rem; color: #333; margin-bottom: 0.25rem; }
           .chart-info p { font-size: 0.85rem; color: #666; }
-          .tools-bar {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-          }
-          .tool-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1.25rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: transform 0.2s, box-shadow 0.2s;
-          }
-          .tool-link:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-          }
-          .tool-icon { font-size: 1.2rem; }
           .back-link {
             display: inline-flex;
             align-items: center;

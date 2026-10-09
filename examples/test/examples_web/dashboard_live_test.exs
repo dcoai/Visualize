@@ -84,9 +84,9 @@ defmodule ExamplesWeb.DashboardLiveTest do
     assert html(cleared) =~ "No window brushed."
   end
 
-  test "the page is routed, linked from the gallery, and as cheap as a light chart" do
+  test "the page is routed, linked from the Client-side Interactions page (#500), and as cheap as a light chart" do
     assert build_conn() |> get("/dashboard") |> html_response(200) =~ "Synced dashboard"
-    assert build_conn() |> get("/") |> html_response(200) =~ ~s(href="/dashboard")
+    assert build_conn() |> get("/interaction") |> html_response(200) =~ ~s(href="/dashboard")
 
     {work, panels} = Visualize.Work.reductions(fn -> DashboardLive.build() end)
     assert length(panels) == 3

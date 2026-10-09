@@ -113,6 +113,10 @@ defmodule ExamplesWeb.PerformanceLive do
           Incremental for a streaming design — with the mean render time and bytes per frame (spec/14 §12.6).
           Every chart's own page runs the same comparison live, with a target FPS and the metrics, in its Performance drawer.
         </p>
+        <p class="tab-pages">
+          Also under this tab: the <a href="/hybrid">Hybrid SVG/Canvas demo</a> — static axes in SVG over the data on a canvas,
+          its render times and payload measured live.
+        </p>
       </div>
 
       <form phx-change="pick" class="compare-controls">
