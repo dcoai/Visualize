@@ -183,7 +183,7 @@ defmodule ExamplesWeb.InteractionLiveTest do
 
       if chart,
         do: assert(body =~ ~s(<div id="#{chart}"), "#{id}: its chart"),
-        else: assert(body =~ "<pre><code>", "#{id}: its markup")
+        else: assert(body =~ ~s(<pre><code class="highlight), "#{id}: its markup")
     end
 
     # Every chart sits in exactly one panel.

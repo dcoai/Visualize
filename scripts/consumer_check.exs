@@ -5,9 +5,11 @@
 # visualize, so neither may arrive: neither the components nor the chart builder (spec/14
 # §18, D-85) may be loadable, since both compile only under the `Phoenix.Component` guard.
 # Nor may `Resvg` or its NIF loader: PNG output runs the resvg binary over a port and takes
-# no package (D-121). The probe calls `Visualize.Render.to_png/2` with no `:resvg` setting
-# and its own PATH set to an empty directory, so it is the run of that function on a host
-# without the binary whatever this host has installed: `{:error, :no_rasterizer}` (spec/12 §4).
+# no package (D-121). Nor Makeup, the examples' code highlighter (#506): its lexers are
+# dependencies of the examples app alone. The probe calls `Visualize.Render.to_png/2` with
+# no `:resvg` setting and its own PATH set to an empty directory, so it is the run of that
+# function on a host without the binary whatever this host has installed:
+# `{:error, :no_rasterizer}` (spec/12 §4).
 # The audit, the models and the golden renderer compile from directories a consumer never
 # sees (`elixirc_paths/1` in mix.exs).
 #
@@ -21,7 +23,7 @@ defmodule Visualize.ConsumerCheck do
              Visualize.Chart.Builder.Inspector Visualize.Chart.Builder.Params
              Visualize.Chart.Builder.Document
              Visualize.Audit ExTLA.Spec Surfex.Golden Tz.TimeZoneDatabase
-             Resvg RustlerPrecompiled)
+             Resvg RustlerPrecompiled Makeup)
   @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Hooks.Builder
               Visualize.Backend.CanvasBinary Visualize.Render.Raster)
 
@@ -39,7 +41,7 @@ defmodule Visualize.ConsumerCheck do
     File.rm_rf!(dir)
 
     IO.puts(
-      "consumer build is lib/ only - no Phoenix, no Nx, no Jason, no table, no Explorer/tz, no Resvg; no binary, no PNG"
+      "consumer build is lib/ only - no Phoenix, no Nx, no Jason, no table, no Explorer/tz, no Resvg, no Makeup; no binary, no PNG"
     )
   end
 
