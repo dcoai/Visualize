@@ -268,15 +268,114 @@ defmodule Visualize.Chart.TilesTest do
                {{:mark, 0}, {:dynamic, :data}}
              ]
 
+      # The static basemap's attribution is in the static SVG; its images are the backdrop.
       assert Compiled.static(compiled) =~ "mark-tiles"
-      assert Compiled.static(compiled) =~ "<image"
+      assert Compiled.static(compiled) =~ @attribution
 
       {:ok, %{main: fitted}} = Chart.compile(design(), sources: %{track: @track}, size: @size)
 
       assert Compiled.regions(fitted) ==
                [{{:mark, 1}, {:dynamic, :data}}, {{:mark, 0}, {:dynamic, :data}}]
     end
+  end
 
+  # The backdrop of spec/14 §12.3 and §12.4 (#476, D-120): on a hybrid page the canvas
+  # sits beneath the SVG layers, so a basemap drawn there would hide a canvas track.
+  describe "the backdrop beneath the canvas" do
+    defp images(svg), do: length(Regex.scan(~r/<image /, svg))
+
+    defp tile_count(compiled) do
+      frame = frame(design())
+      assert compiled.plot == frame.plot
+      length(Tiles.cover(frame.projection, {frame.plot.width, frame.plot.height}))
+    end
+
+    test "a static basemap's images are the static backdrop, its attribution the static SVG" do
+      fixed = design(nil, %{type: :mercator, scale: 50_000, center: [-0.115, 0]})
+
+      {:ok, %{main: compiled}} =
+        Chart.compile(fixed, sources: %{track: @track}, size: @size, ceiling: 1)
+
+      backdrop = Compiled.backdrop(compiled)
+      static = Compiled.static(compiled)
+      {:ok, applied} = Chart.apply(fixed, sources: %{track: @track}, size: @size)
+      n = length(Tiles.cover(applied.frame.projection, {400, 300}))
+
+      assert n > 0
+      assert images(backdrop) == n
+      assert backdrop =~ ~s(class="mark mark-tiles")
+      refute backdrop =~ @attribution
+      # The backdrop is a page-ready document of the static one's shape.
+      assert backdrop =~ ~s(<svg height="300")
+      assert backdrop =~ ~s(viewBox="0 0 400 300")
+
+      assert images(static) == 0
+      assert static =~ @attribution
+
+      # The track is the data, and dense enough here to go to the canvas.
+      assert [{track_target, 4}, {:svg, 0}] = Compiled.targets(compiled)
+      assert track_target in [:binary, :canvas]
+
+      {payload, _} = Compiled.tick(compiled, %{track: @track})
+      assert payload.canvas != ""
+      # Static: nothing of the basemap travels with a tick.
+      assert payload.backdrop == ""
+      assert images(payload.svg) == 0
+      refute payload.svg =~ @attribution
+
+      # The chart map holds the images in `backdrop` and none in either SVG list.
+      map = Compiled.render(compiled, %{track: @track})
+      assert [%{children: children}] = map.backdrop
+      assert length(children) == n and Enum.all?(children, &(&1.type == :image))
+      refute Enum.any?(List.flatten(walk(map.static ++ map.dynamic_svg)), &(&1 == :image))
+    end
+
+    test "a fitted basemap's images travel in the tick's backdrop, its attribution in its SVG" do
+      {:ok, %{main: compiled}} =
+        Chart.compile(design(), sources: %{track: @track}, size: @size, ceiling: 1)
+
+      assert Compiled.backdrop(compiled) == ""
+      refute Compiled.static(compiled) =~ "<image"
+
+      {payload, _} = Compiled.tick(compiled, %{track: @track})
+      assert images(payload.backdrop) == tile_count(compiled)
+      refute payload.backdrop =~ @attribution
+      assert images(payload.svg) == 0
+      assert payload.svg =~ @attribution
+      assert payload.canvas != ""
+
+      assert payload.bytes ==
+               byte_size(payload.svg) + byte_size(payload.backdrop) + byte_size(payload.canvas)
+
+      # Another track moves the view, and the backdrop with it.
+      far = Enum.map(@track, &%{&1 | lon: &1.lon + 2.0})
+      {moved, _} = Compiled.tick(compiled, %{track: far})
+      refute moved.backdrop == payload.backdrop
+    end
+
+    test "the one-string form keeps the basemap whole, first in the frame" do
+      applied = applied(design())
+      {:ok, %{main: compiled}} = Chart.compile(applied, ceiling: 1_000_000)
+      svg = Compiled.svg(compiled, applied.sources)
+      assert images(svg) == tile_count(compiled)
+      assert svg =~ @attribution
+    end
+
+    test "a design without tiles has an empty backdrop" do
+      {:ok, %{main: compiled}} =
+        Chart.compile(design([track_mark()]), sources: %{track: @track}, size: @size)
+
+      assert Compiled.backdrop(compiled) == ""
+      assert Compiled.render(compiled, %{track: @track}).backdrop == []
+      {payload, _} = Compiled.tick(compiled, %{track: @track})
+      assert payload.backdrop == ""
+    end
+
+    defp walk(elements) when is_list(elements), do: Enum.map(elements, &walk/1)
+    defp walk(%{type: type, children: children}), do: [type | walk(children)]
+  end
+
+  describe "a compiled chart: the one-string form and the target" do
     test "the one-string form is the frame's render, tiles first" do
       for design <- [design(), design(nil, %{type: :mercator, scale: 50_000})] do
         applied = applied(design)

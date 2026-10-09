@@ -59,7 +59,8 @@ defmodule Examples.ChartsTest do
     Examples.Charts.SpectrumChart,
     Examples.Charts.Downsampling,
     Examples.Charts.WorldMap,
-    Examples.Charts.Globe
+    Examples.Charts.Globe,
+    Examples.Charts.GpsTrack
   ]
 
   # Converted and deterministic: these hold the golden.
@@ -94,6 +95,7 @@ defmodule Examples.ChartsTest do
     Examples.Charts.RidgelinePlot,
     Examples.Charts.WorldMap,
     Examples.Charts.Globe,
+    Examples.Charts.GpsTrack,
     Examples.Charts.HexbinChart,
     Examples.Charts.SpectrumChart
   ]

@@ -13,7 +13,8 @@ defmodule Visualize.Chart.Compiled do
   The render target of each mark is decided once, at compilation, from the rows it draws
   over the binding (`targets/1`): `:svg` at or below the ceiling, the binary path above
   it. `render/2` is the hybrid chart map of `Visualize.Backend.Hybrid` with `dynamic_svg`
-  added for the SVG layer's moving part; `static/1` is the static SVG string; `tick/3` is
+  added for the SVG layer's moving part and `backdrop` for the layer beneath the canvas;
+  `static/1` is the static SVG string and `backdrop/1` the static backdrop; `tick/3` is
   the per-tick payload, and for a design with a viewport it slides the canvas layer
   through `Visualize.Incremental`, whose state the struct carries. `svg/2` is the
   one-string form, the frame's own group, equal to `Visualize.Chart.Frame.render/2` when
@@ -62,6 +63,7 @@ defmodule Visualize.Chart.Compiled do
     :plot,
     :box,
     :viewport,
+    backdrop: "",
     defs: [],
     transitions: %{},
     eased: %{},
@@ -91,6 +93,7 @@ defmodule Visualize.Chart.Compiled do
   @typedoc "The per-tick payload of spec/14 §12.4."
   @type payload :: %{
           svg: String.t(),
+          backdrop: String.t(),
           canvas: String.t(),
           canvas_format: :binary_base64 | :json,
           incremental: map() | nil,
@@ -105,6 +108,7 @@ defmodule Visualize.Chart.Compiled do
           targets: [{target(), non_neg_integer()}],
           ceiling: pos_integer(),
           static: String.t(),
+          backdrop: String.t(),
           defs: [Element.t()],
           margin: %{top: number(), right: number(), bottom: number(), left: number()},
           plot: %{width: number(), height: number()},
@@ -162,11 +166,21 @@ defmodule Visualize.Chart.Compiled do
     # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
     # it declares and the filters any mark's effect needs, found over every mark rendered
     # once in `:css` here, so a `url(#id)` on either SVG layer resolves on the page.
-    static = layer(compiled, drawn(compiled, frame, sources, nil, true), :static, false)
+    drawn = drawn(compiled, frame, sources, nil, true)
+    static = layer(compiled, drawn, :static, false)
     defs = Defs.defs(frame, :css, Element.group(static ++ all_marks(compiled, frame, sources)))
     compiled = %{compiled | defs: defs}
-    %{compiled | static: root(compiled, defs ++ static)}
+
+    %{
+      compiled
+      | static: root(compiled, defs ++ static),
+        backdrop: static_backdrop(compiled, drawn)
+    }
   end
+
+  # The static regions' backdrop — a basemap's images, drawn once (spec/14 §12.3, #476).
+  defp static_backdrop(compiled, drawn),
+    do: fragment(compiled, layer(compiled, drawn, :static_backdrop, false))
 
   # The realised frame of this name; an `%Applied{}` assembled by hand carries one frame
   # and no `frames`, as `Visualize.Chart.generate/2` reads it.
@@ -278,8 +292,18 @@ defmodule Visualize.Chart.Compiled do
   def static(%__MODULE__{static: static}), do: static
 
   @doc """
+  The static backdrop (spec/14 §12.3, §12.4, #476, D-120): a static `:tiles` mark's
+  images as one SVG root of the shape of `static/1`, rendered once at compilation, or
+  `""` when there are none. A page stacks it beneath the canvas, so a dense mark drawn
+  there sits over the basemap; the attribution is in `static/1`, over the canvas.
+  """
+  @spec backdrop(t()) :: String.t()
+  def backdrop(%__MODULE__{backdrop: backdrop}), do: backdrop
+
+  @doc """
   The hybrid chart map over the sources by slot name (spec/14 §12.4): `width`, `height`,
-  `margin`, `static`, `dynamic`, `dynamic_style`, `canvas_format` and `dynamic_svg`.
+  `margin`, `static`, `dynamic`, `dynamic_style`, `canvas_format`, `dynamic_svg` and
+  `backdrop`, the layer beneath the canvas (a basemap's images, #476).
 
   Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does for a value a scale
   cannot take.
@@ -298,7 +322,8 @@ defmodule Visualize.Chart.Compiled do
       dynamic: if(canvas == [], do: nil, else: canvas),
       dynamic_style: %{},
       canvas_format: format(compiled),
-      dynamic_svg: layer(compiled, drawn, :dynamic_svg, false)
+      dynamic_svg: layer(compiled, drawn, :dynamic_svg, false),
+      backdrop: layer(compiled, drawn, :backdrop, false)
     }
   end
 
@@ -398,6 +423,8 @@ defmodule Visualize.Chart.Compiled do
   The per-tick payload and the compiled chart holding the tick's state (spec/14 §12.4).
 
   `svg` is the SVG layer's dynamic regions as one SVG root of the shape of `static/1`
+  (`""` when there are none); `backdrop` the dynamic regions' backdrop — a fitted
+  basemap's images, for the page to stack beneath the canvas (#476) — in the same shape
   (`""` when there are none); `canvas` the canvas layer through
   `Visualize.Backend.Hybrid.render_dynamic/1` (`""` when there is none, or when the
   layer streams incrementally); `incremental` the `canvas_incremental` payload of
@@ -428,6 +455,7 @@ defmodule Visualize.Chart.Compiled do
     scrolling? = compiled.viewport != nil and format == :binary_base64
     drawn = drawn(compiled, frame, sources, hi, not scrolling?, moved)
     svg = fragment(compiled, layer(compiled, drawn, :dynamic_svg, false))
+    backdrop = fragment(compiled, layer(compiled, drawn, :dynamic_backdrop, false))
 
     # A scroll strip is built over the strip's rows and their neighbours (§12.5, D-108).
     strip = fn bounds ->
@@ -442,11 +470,12 @@ defmodule Visualize.Chart.Compiled do
     {canvas, incremental, window} = canvas(compiled, frame, whole, strip, hi)
 
     bytes =
-      byte_size(svg) + byte_size(canvas) +
+      byte_size(svg) + byte_size(backdrop) + byte_size(canvas) +
         if(incremental, do: byte_size(incremental.binary), else: 0)
 
     payload = %{
       svg: svg,
+      backdrop: backdrop,
       canvas: canvas,
       canvas_format: format,
       incremental: incremental,
@@ -518,8 +547,14 @@ defmodule Visualize.Chart.Compiled do
           plot: frame.plot
       }
 
-      static = layer(compiled, drawn(compiled, frame, sources, nil, true), :static, false)
-      %{compiled | static: root(compiled, compiled.defs ++ static)}
+      drawn = drawn(compiled, frame, sources, nil, true)
+      static = layer(compiled, drawn, :static, false)
+
+      %{
+        compiled
+        | static: root(compiled, compiled.defs ++ static),
+          backdrop: static_backdrop(compiled, drawn)
+      }
     end
   end
 
@@ -534,13 +569,40 @@ defmodule Visualize.Chart.Compiled do
     Window.apply(window, frame, Window.hi(window, chart, frame, sources, now))
   end
 
-  # Every region drawn for a tick: `%{region => %{svg: elements, canvas: elements}}`.
+  # Every region drawn for a tick: `%{region => %{svg: elements, canvas: elements}}`, and
+  # a basemap's region its `backdrop` and `over` parts besides.
   # `canvas?` false draws a canvas-layer mark's SVG part alone, the geometry being the
   # scroll's to ask for (§12.5, #404).
   defp drawn(compiled, frame, sources, hi, canvas?, moved \\ %{})
 
   defp drawn(%{regions: regions} = compiled, frame, sources, hi, canvas?, moved) do
-    Map.new(regions, fn
+    Map.new(regions, fn region ->
+      {name, output} = drawn_region(compiled, region, frame, sources, hi, canvas?, moved)
+      {name, split_backdrop(compiled, name, output)}
+    end)
+  end
+
+  # A basemap's region is drawn in two layers (spec/14 §12.3, #476, D-120): its images in
+  # the backdrop beneath the canvas, its attribution — text to be read over the data — in
+  # its group in the SVG layer. `svg` keeps the whole group for the one-string form.
+  defp split_backdrop(%{chart: chart}, {:mark, i}, %{svg: svg} = output) do
+    if Mark.tiles?(Enum.at(chart.marks, i)) do
+      Map.merge(output, %{
+        backdrop: Enum.map(svg, &children(&1, fn child -> child.type == :image end)),
+        over: Enum.map(svg, &children(&1, fn child -> child.type != :image end))
+      })
+    else
+      output
+    end
+  end
+
+  defp split_backdrop(_compiled, _region, output), do: output
+
+  defp children(%Element{children: children} = element, keep?),
+    do: %{element | children: Enum.filter(children, keep?)}
+
+  defp drawn_region(compiled, region, frame, sources, hi, canvas?, moved) do
+    case region do
       %{region: region, status: :static, static: elements} ->
         {region, %{svg: elements, canvas: []}}
 
@@ -559,7 +621,7 @@ defmodule Visualize.Chart.Compiled do
 
       %{region: region, build: build} ->
         {region, %{svg: build.(frame, sources, :css), canvas: []}}
-    end)
+    end
   end
 
   # The canvas marks over the rows under a strip and three neighbours each side (§12.5,
@@ -619,8 +681,11 @@ defmodule Visualize.Chart.Compiled do
 
   # One layer of a tick, in layout order: `:static` and `:dynamic_svg` split the SVG
   # regions by status, `:svg` takes them all (the one-string form), `:canvas` the canvas
-  # elements. A polar frame's centred group wraps its inner regions, always in the
-  # one-string form and when it has anything otherwise.
+  # elements; `:backdrop` the layer beneath the canvas, split by status as
+  # `:static_backdrop` and `:dynamic_backdrop` (#476). The SVG layers hold a basemap's
+  # group without its images, which are the backdrop's. A polar frame's centred group
+  # wraps its inner regions, always in the one-string form and when it has anything
+  # otherwise.
   defp layer(%{layout: layout, regions: regions, plot: plot}, drawn, which, always_centred?) do
     status = Map.new(regions, &{&1.region, &1.status})
 
@@ -630,8 +695,11 @@ defmodule Visualize.Chart.Compiled do
       case {which, Map.fetch!(status, region)} do
         {:svg, _} -> output.svg
         {:canvas, _} -> output.canvas
-        {:static, :static} -> output.svg
-        {:dynamic_svg, {:dynamic, _}} -> output.svg
+        {:static, :static} -> Map.get(output, :over, output.svg)
+        {:dynamic_svg, {:dynamic, _}} -> Map.get(output, :over, output.svg)
+        {:backdrop, _} -> Map.get(output, :backdrop, [])
+        {:static_backdrop, :static} -> Map.get(output, :backdrop, [])
+        {:dynamic_backdrop, {:dynamic, _}} -> Map.get(output, :backdrop, [])
         _ -> []
       end
     end

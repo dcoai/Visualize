@@ -39,6 +39,8 @@ defmodule ExamplesWeb.GalleryLive do
     # Maps
     {Examples.Charts.WorldMap, "world_map"},
     {Examples.Charts.Globe, "globe"},
+    # A GPS track over OpenStreetMap tiles, the basemap beneath the canvas (#476)
+    {Examples.Charts.GpsTrack, "gps_track"},
     # A machine's load, two ways (#415), and one source in two frames (#429)
     {Examples.Charts.LoadGauge, "load_gauge"},
     {Examples.Charts.LoadAge, "load_age"},
