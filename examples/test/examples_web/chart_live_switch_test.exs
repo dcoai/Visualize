@@ -32,7 +32,9 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     s
   end
 
-  # A tick `ms` after the last, its frame settled.
+  # A tick `ms` after the last, its frame settled. The tick reads the real clock, so its
+  # elapsed time is `ms` plus however long the test took since the last one — under load,
+  # long enough for a sample or two at the line's 20 a second (#512).
   defp ticked(s, ms) do
     s =
       Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - ms})
@@ -40,6 +42,11 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     {:noreply, s} = ChartLive.handle_info(:run_tick, s)
     settled(s)
   end
+
+  # The samples the last tick counted at the data rate, from the run's own record of it:
+  # a chart that animates by tick advances by exactly these (#361), so a test asserts the
+  # tick against them rather than against a clock it does not hold (#512).
+  defp arrived(s), do: s.assigns.run.arrivals |> hd() |> elem(1)
 
   defp switch(s, backend) do
     {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => to_string(backend)}, s)
@@ -87,7 +94,9 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     assert h =~ "<svg" and not (h =~ "hybrid-wrapper")
 
     s = ticked(s, 1)
-    assert s.assigns.run_ticks == ticks
+    # The tick carried over: the first Canvas frame is the chart at the tick the SVG run
+    # was at, plus what this tick counted — never a counter started again.
+    assert s.assigns.run_ticks == ticks + arrived(s)
     assert %{svg: nil, plots: [%{canvas: canvas}]} = s.assigns.run_frame
     assert is_binary(canvas)
     assert [{"canvas_update", seq}] = pushed(s)
@@ -115,7 +124,7 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     canvas_pushes = pushed(s)
 
     s = ticked(s, 1)
-    assert s.assigns.run_ticks == ticks
+    assert s.assigns.run_ticks == ticks + arrived(s)
     assert s.assigns.run_frame.svg =~ "<svg" and s.assigns.run_frame.plots == []
     # An SVG frame travels in the diff: nothing more is pushed.
     assert pushed(s) == canvas_pushes
@@ -184,6 +193,7 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     {:noreply, after_stale} = ChartLive.handle_info({:frame, old, frame}, s)
     assert after_stale.assigns.run_frame == s.assigns.run_frame
     assert after_stale.assigns.run == s.assigns.run
+    assert after_stale.assigns.run_ticks == s.assigns.run_ticks
   end
 
   test "acks for the old backend's sequences do not count; the new backend's do, with flow control as the reader left it" do
