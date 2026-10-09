@@ -46,34 +46,64 @@ defmodule Examples.Charts.LoadAge do
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
     {width, _height} = Design.size(__MODULE__, opts)
-    inner = width - @margin.left - @margin.right
 
     design =
-      Design.fold([
-        chart(meta: %{name: title(), description: [description()]}),
-        source(:loads, [:age, :load, :window],
-          types: %{age: :number, load: :number, window: :category}
-        ),
-        style(:trace, stroke_width: 2, curve: :monotone_x),
-        cartesian(margin: @margin),
-        # Age on a log axis, newest at the right: a reading drifts left as it ages.
-        log_scale(:x, domain: [@newest, @oldest], range: [inner, 0]),
-        linear_scale(:y, domain: [0, 4]),
-        ordinal_scale(:color,
-          domain: Enum.map(Load.windows(), &elem(&1, 1)),
-          range: [:series_1, :series_2, :series_3]
-        ),
-        axis(:x, :bottom, ticks: [5, 30, 60, 300, 900, 3600, 10_800], format: :duration),
-        axis(:y, :left, ticks: 4, grid: true),
-        legend(:color, position: :top_right),
-        label({:axis, :x}, ["age — newest at the right"]),
-        line(:loads, %{x: :age, y: :load, series: :window}, style: :trace)
-      ])
+      Design.fold(
+        [chart(meta: %{name: title(), description: [description()]})] ++
+          furniture(:trace) ++ plot(width, :trace)
+      )
 
-    {design, %{loads: rows(opts)}}
+    {design, sources(Load.second(opts, @oldest))}
   end
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  @doc """
+  The source and the style the age view draws with, its trace's style under the name
+  `trace` — this chart's `:trace`, renamed where a design composes the view beside
+  another that says `:trace` too (`Examples.Charts.LoadAndAge`, #493).
+  """
+  def furniture(trace) do
+    [
+      source(:loads, [:age, :load, :window],
+        types: %{age: :number, load: :number, window: :category}
+      ),
+      style(trace, stroke_width: 2, curve: :monotone_x)
+    ]
+  end
+
+  @doc """
+  The age view's fragments, for a frame `width` wide whose trace is drawn in `trace`.
+
+  `opts`: `place`, where its `cartesian` goes — the margin, and a `cell` on a grid (spec/14
+  §2.8) — and `y`, the load scale: this chart declares its own over `[0, 4]`, and a design
+  that draws it under another load view adopts that view's instead (§4.3, #493). Unframed,
+  so this chart is one frame and a design of several puts it in one with `in_frame/2`.
+  """
+  def plot(width, trace, opts \\ []) do
+    place = Keyword.get(opts, :place, margin: @margin)
+    margin = Keyword.fetch!(place, :margin)
+    inner = width - margin.left - margin.right
+
+    [
+      cartesian(place),
+      # Age on a log axis, newest at the right: a reading drifts left as it ages.
+      log_scale(:x, domain: [@newest, @oldest], range: [inner, 0]),
+      Keyword.get(opts, :y, linear_scale(:y, domain: [0, 4])),
+      ordinal_scale(:color,
+        domain: Enum.map(Load.windows(), &elem(&1, 1)),
+        range: [:series_1, :series_2, :series_3]
+      ),
+      axis(:x, :bottom, ticks: [5, 30, 60, 300, 900, 3600, 10_800], format: :duration),
+      axis(:y, :left, ticks: 4, grid: true),
+      legend(:color, position: :top_right),
+      label({:axis, :x}, ["age — newest at the right"]),
+      line(:loads, %{x: :age, y: :load, series: :window}, style: trace)
+    ]
+  end
+
+  @doc "The oldest age the view draws, three hours: the second it reads at rest."
+  def oldest, do: @oldest
 
   @doc """
   The ages a frame draws, geometrically spaced from the newest to the oldest: even on the
@@ -84,21 +114,24 @@ defmodule Examples.Charts.LoadAge do
     for i <- 0..steps(), do: @newest * :math.pow(10, i * decades() / steps())
   end
 
-  defp rows(opts) do
-    now = second(opts)
+  @doc """
+  The rows the age view binds at absolute second `now`: every window at every age, each
+  the mean of the span its slot covers, measured back from `now`.
+  """
+  def sources(now) do
     half = :math.pow(10, decades() / steps() / 2)
 
-    for {window, name} <- Load.windows(), age <- ages() do
-      %{age: age, load: Load.mean(window, now - age * half, now - age / half), window: name}
-    end
+    loads =
+      for {window, name} <- Load.windows(), age <- ages() do
+        %{age: age, load: Load.mean(window, now - age * half, now - age / half), window: name}
+      end
+
+    %{loads: loads}
   end
 
   # The span a slot covers: half a step either side of it, in the grid's own ratio.
   defp decades, do: :math.log10(@oldest / @newest)
   defp steps, do: round(decades() * @per_decade)
-
-  # A tick is three seconds of the machine's day, as the gauge's is.
-  defp second(opts), do: (opts[:animation_tick] || 0) * 3 + @oldest
 
   def sample_code do
     ~S"""
