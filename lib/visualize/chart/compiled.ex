@@ -20,6 +20,12 @@ defmodule Visualize.Chart.Compiled do
   one-string form, the frame's own group, equal to `Visualize.Chart.Frame.render/2` when
   every mark targets `:svg`.
 
+  A `:force` step is warm here (spec/14 §12.5, D-132): the struct carries each graph's
+  last layout, every node's position and velocity by id, and `tick/3` and `step/3` move
+  the graph on from it — reheated to the step's `alpha` for at most its `ticks`
+  iterations — where `Visualize.Chart.render/2` lays it out cold every time. The marks of
+  one graph share that one run, and `carry/2` carries the layout across a recompilation.
+
   ## Examples
 
       iex> design = %{
@@ -45,6 +51,7 @@ defmodule Visualize.Chart.Compiled do
   alias Visualize.Chart.{Applied, Frame, Mark}
   alias Visualize.Chart.Compiled.{Motion, Regions, Transition, Window}
   alias Visualize.Chart.Frame.{Defs, Furniture, Scales}
+  alias Visualize.Chart.Transform.Force
   alias Visualize.IR.{Element, Transform}
 
   @default_ceiling 1000
@@ -68,7 +75,8 @@ defmodule Visualize.Chart.Compiled do
     transitions: %{},
     eased: %{},
     motions: %{},
-    moving: %{}
+    moving: %{},
+    forces: %{}
   ]
 
   @typedoc "A render target of spec/14 §12.3."
@@ -89,6 +97,14 @@ defmodule Visualize.Chart.Compiled do
 
   @typedoc "The frame's drawing order: regions, and a centred group of regions in a polar frame."
   @type layout :: [region() | {:centred, [region()]}]
+
+  @typedoc """
+  The warm force layouts of spec/14 §12.5 (D-132): per graph, each node's position and
+  velocity by id.
+  """
+  @type forces :: %{
+          term() => %{term() => %{x: number(), y: number(), vx: number(), vy: number()}}
+        }
 
   @typedoc "The per-tick payload of spec/14 §12.4."
   @type payload :: %{
@@ -117,7 +133,8 @@ defmodule Visualize.Chart.Compiled do
           transitions: %{atom() => map()},
           eased: %{atom() => map()},
           motions: %{non_neg_integer() => map()},
-          moving: %{non_neg_integer() => map()}
+          moving: %{non_neg_integer() => map()},
+          forces: forces()
         }
 
   @doc false
@@ -160,7 +177,10 @@ defmodule Visualize.Chart.Compiled do
       box: box(frame),
       viewport: window && Map.put(window, :full, stale?(chart, window.scale, targets)),
       transitions: Transition.scales(chart, window && window.scale),
-      motions: Motion.marks(chart)
+      motions: Motion.marks(chart),
+      # The layout the chart is compiled over, cold, is where the first tick starts from
+      # (spec/14 §12.5, D-132).
+      forces: Force.warm(frame.forces)
     }
 
     # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
@@ -262,9 +282,11 @@ defmodule Visualize.Chart.Compiled do
   A compiled chart's `plot` is part of its state, so a chart drawn at a new size is a new
   compilation — and a scale that was mid-transition when the size changed should go on
   from where it stood rather than jump back to its target. The eased scale states and the
-  mark motions of `previous` are kept for the scales and marks `fresh` still has; anything
-  else is dropped, since a state for a scale the design no longer eases would never be
-  read again.
+  mark motions of `previous` are kept for the scales and marks `fresh` still has, and so is
+  its warm force layout for each graph `fresh` still has (D-132): a caller that compiles
+  again because a tick's marks differ keeps the graph where it stood. Anything else is
+  dropped, since a state for a scale the design no longer eases, or for a graph it no
+  longer draws, would never be read again.
 
       iex> design = %{version: 2, sources: %{s: %{fields: [:t, :v]}},
       ...>   frames: %{main: %{kind: :cartesian, scales: %{
@@ -283,7 +305,8 @@ defmodule Visualize.Chart.Compiled do
     %{
       fresh
       | eased: Map.take(previous.eased, Map.keys(fresh.transitions)),
-        moving: Map.take(previous.moving, Map.keys(fresh.motions))
+        moving: Map.take(previous.moving, Map.keys(fresh.motions)),
+        forces: Map.merge(fresh.forces, Map.take(previous.forces, Map.keys(fresh.forces)))
     }
   end
 
@@ -355,6 +378,7 @@ defmodule Visualize.Chart.Compiled do
   def step(%__MODULE__{} = compiled, sources, opts \\ []) when is_map(sources) do
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
+    compiled = %{compiled | forces: Force.warm(frame.forces)}
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
     children = layer(compiled, drawn(compiled, frame, sources, hi, true, moved), :svg, true)
 
@@ -445,6 +469,7 @@ defmodule Visualize.Chart.Compiled do
   def tick(%__MODULE__{} = compiled, sources, opts) when is_map(sources) do
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
+    compiled = %{compiled | forces: Force.warm(frame.forces)}
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
     format = format(compiled)
 
@@ -560,8 +585,9 @@ defmodule Visualize.Chart.Compiled do
 
   # A tick re-realises the frame, and must do it at the size the chart was compiled at
   # (spec/14 §4.2, #427): a design records none, so the compiled chart is where it lives.
-  defp realise_opts(%{theme: theme, size: size}, sources),
-    do: [sources: sources, theme: theme, size: {size.width, size.height}]
+  # Its force layouts start from the ones the chart carries (§12.5, D-132).
+  defp realise_opts(%{theme: theme, size: size, forces: forces}, sources),
+    do: [sources: sources, theme: theme, size: {size.width, size.height}, warm: forces]
 
   defp window_frame(nil, _chart, frame, _sources, _now), do: frame
 

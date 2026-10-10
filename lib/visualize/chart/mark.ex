@@ -152,7 +152,8 @@ defmodule Visualize.Chart.Mark do
       size: [plot.width, plot.height],
       centre: Frame.centre(frame.kind, plot),
       projection: frame.projection,
-      now: frame.now
+      now: frame.now,
+      forces: frame.forces
     }
 
     Scales.mark_rows(mark, sources, ctx)

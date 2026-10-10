@@ -116,10 +116,20 @@ defmodule Visualize.Layout.Force do
   - `:links` - list of links (optional)
   - `:forces` - force configuration (optional)
   - `:iterations` - maximum iterations (default: 300)
+  - `:alpha` - the starting temperature (default: 1.0); below 1 a reheat, d3's
+    `alpha(a).restart()`, for nodes that already carry their positions
+  - `:alpha_decay` - the fraction of alpha lost per iteration (default:
+    `1 - 0.001 ^ (1 / iterations)`); d3's own is `1 - 0.001 ^ (1 / 300)`
+
+  A node given with `:x` and `:y` starts there, and with `:vx` and `:vy` keeps that
+  velocity, so passing a previous run's nodes with a lower `:alpha` and a few
+  `:iterations` continues that layout rather than starting a new one (spec/06 §8.3,
+  D-132). With every option at its default the layout starts from the spiral.
 
   ## Returns
 
-  A map with `:nodes` and `:links` containing final positions.
+  A map with `:nodes` and `:links` containing final positions, each node carrying its
+  final `:x`, `:y`, `:vx` and `:vy`.
 
   ## Examples
 
@@ -139,9 +149,12 @@ defmodule Visualize.Layout.Force do
     forces = Keyword.get(opts, :forces, default_forces())
     iterations = Keyword.get(opts, :iterations, 300)
 
-    alpha = 1.0
+    alpha = Keyword.get(opts, :alpha, 1.0)
     alpha_min = 0.001
-    alpha_decay = 1 - :math.pow(alpha_min, 1 / iterations)
+
+    alpha_decay =
+      Keyword.get_lazy(opts, :alpha_decay, fn -> 1 - :math.pow(alpha_min, 1 / iterations) end)
+
     velocity_decay = 0.4
 
     # Initialize nodes

@@ -8,7 +8,8 @@ defmodule Visualize.Chart.Transform do
   each a pure function of the rows before it and its node, and yields the rows the mark
   draws. Its only context is the plot area (`size:`, the extent every layout defaults
   to), the point a centred mark is about (`centre:`), in a `:geo` frame the projection
-  (`projection:`), and the instant a `:window` step measures back from (`now:`) — never a
+  (`projection:`), the instant a `:window` step measures back from (`now:`), and the
+  realisation's laid-out `:force` steps (`forces:`, spec/14 §5.4.3, D-132) — never a
   scale, which is what lets `Visualize.Chart.Frame.new/2` run the pipeline before its
   scales exist and infer their domains from the transformed columns. A layout's rows carry
   their shape as a `Visualize.IR.Path` under `path`, which the `:path` mark draws as it is.
@@ -26,13 +27,14 @@ defmodule Visualize.Chart.Transform do
   alias Visualize.Data.Table
   alias Visualize.Geo.Projection
 
-  @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, the bound sources for a graph's node table, and the instant a `:window` measures back from."
+  @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, the bound sources for a graph's node table, the instant a `:window` measures back from, and the realisation's force layouts."
   @type context :: %{
           size: [number()],
           centre: [number()],
           projection: Projection.t() | nil,
           sources: map(),
-          now: term() | nil
+          now: term() | nil,
+          forces: map()
         }
 
   @data_ops [:filter, :bin, :stack, :fold, :sum, :sort, :spectrum, :take, :window, :lttb, :m4]
@@ -55,6 +57,9 @@ defmodule Visualize.Chart.Transform do
     * `:sources` - the bound sources by name, for a graph step's `nodes` (default `%{}`)
     * `:now` - the instant a `:window` step measures its durations back from (spec/14
       §5.4.1); without it each such step takes the newest reading of its own column
+    * `:forces` - the `:force` steps a realisation has laid out, by run (spec/14 §5.4.3,
+      D-132): what `Visualize.Chart.Frame.new/2` passes, so the marks of one graph read
+      one layout; a step not among them runs cold (default `%{}`)
 
   Raises `ArgumentError` for an op that is not one of spec/14 §5.4, a key an op requires
   and the node lacks, or a `:projection` step without a projection.
@@ -77,7 +82,8 @@ defmodule Visualize.Chart.Transform do
       centre: Keyword.get(opts, :centre, [w / 2, h / 2]),
       projection: Keyword.get(opts, :projection),
       sources: Keyword.get(opts, :sources, %{}),
-      now: Keyword.get(opts, :now)
+      now: Keyword.get(opts, :now),
+      forces: Keyword.get(opts, :forces, %{})
     }
   end
 

@@ -375,8 +375,12 @@ The default force list, used when `:forces` is absent, is `[{:center, x: 0, y: 0
 | `:links` | `[]` | Link maps. |
 | `:forces` | default list | Force configuration (8.2). |
 | `:iterations` | `300` | Maximum ticks. |
+| `:alpha` | `1.0` | The starting temperature: below 1 a *reheat*, d3's `alpha(a).restart()`, for nodes that already carry their positions (#527). |
+| `:alpha_decay` | `1 - alpha_min^(1 / iterations)` | The fraction of `alpha` lost per tick; d3's own default is `1 - 0.001^(1 / 300)`, about `0.0228`. |
 
-It fixes `alpha = 1.0`, `alpha_min = 0.001`, `velocity_decay = 0.4` and `alpha_decay = 1 - alpha_min^(1 / iterations)`. Each tick first sets `alpha = alpha * (1 - alpha_decay)`, then applies the forces and integrates; the loop halts before a tick when `alpha < alpha_min` or after `iterations` ticks. It returns `%{nodes: nodes, links: links}` with the input links unchanged.
+It fixes `alpha_min = 0.001` and `velocity_decay = 0.4`. Each tick first sets `alpha = alpha * (1 - alpha_decay)`, then applies the forces and integrates; the loop halts before a tick when `alpha < alpha_min` or after `iterations` ticks. It returns `%{nodes: nodes, links: links}` with the input links unchanged, every node carrying its final `x`, `y`, `vx` and `vy`.
+
+**A run continues a layout** (#527, D-132). A node given with `x` and `y` starts there, and with `vx` and `vy` keeps that velocity, since `initialize_nodes` fills in only what is absent (8.1); so a caller that passes the previous run's nodes, a lower `:alpha` and a few `:iterations` advances the layout from where it stood, as a d3 simulation reheated and run for those ticks does. With every option at its default the run is unchanged: the cold layout, from the spiral, at `alpha` 1 over 300 ticks. The declarative `:force` step (spec/14 §5.4.3) is the caller that does this, once per tick of a compiled chart.
 
 ### 8.4 Simulation GenServer
 

@@ -279,7 +279,8 @@ defmodule Visualize.Chart.Frame.Scales do
           centre: ctx.centre,
           projection: ctx.projection,
           sources: sources,
-          now: Map.get(ctx, :now)
+          now: Map.get(ctx, :now),
+          forces: Map.get(ctx, :forces, %{})
         )
 
       :error ->
