@@ -14,6 +14,12 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.2.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Changed
+
+- **Visualize is on Hex** (#516): depend on `{:visualize, "~> 0.2"}` rather than a git tag.
+  The documentation is on [HexDocs](https://hexdocs.pm/visualize). The source, and issues
+  and feedback, are at [github.com/dcoai/Visualize](https://github.com/dcoai/Visualize).
+
 ## [0.2.0] — 2026-10-10
 
 **Upgrading from 0.1.0.** This is the first minor since the first tag, and the breaks are in

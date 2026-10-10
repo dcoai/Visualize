@@ -40,19 +40,21 @@ Visualize keeps the whole chart on the server:
 
 ## Installation
 
-Visualize is installed from its git repository; pin a tag:
+Visualize is on [Hex](https://hex.pm/packages/visualize):
 
 <!-- compile only: a deps/0 fragment of the host's mix.exs -->
 ```elixir
 def deps do
   [
-    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", tag: "v0.2.0"},
+    {:visualize, "~> 0.2"},
     {:nx, "~> 0.9"}      # optional: binary canvas encoding and Nx-accelerated paths
   ]
 end
 ```
 
-Then `mix deps.get`. Read the [changelog](CHANGELOG.md) before moving the tag.
+Then `mix deps.get`. The API reference and these guides are on
+[HexDocs](https://hexdocs.pm/visualize); read the [changelog](CHANGELOG.md) before moving
+to a new minor version.
 
 ## Example
 
@@ -124,7 +126,7 @@ Visualize is pre-1.0, and its API can still change between tags. **The chart bui
 in progress, not a finished product**: try it, but expect gaps.
 
 Feedback is welcome and encouraged. Bug reports, rough edges, charts you couldn't make and
-ideas are all useful: open an issue on the
-[project's home on GitLab](https://gitlab.conet.yarina.org/dco-tek/visualize/-/issues).
+ideas are all useful: open an issue on
+[GitHub](https://github.com/dcoai/Visualize/issues).
 
 MIT licensed.
