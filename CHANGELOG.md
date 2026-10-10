@@ -14,6 +14,15 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.2.5-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Added
+
+- **`Visualize.Geo.Circle`** (#525): d3-geo's `geoCircle`. `polygon/1` returns the circle of
+  `radius` degrees (default 90) about a `center` `[lon, lat]` (default `[0, 0]`), every
+  `precision` degrees (default 6), as a GeoJSON `Polygon` — d3-geo 3.1.1's ring point for
+  point, in d3's winding, so `Visualize.Geo.Path` fills the cap about the centre under any
+  projection, cut and closed at the antimeridian. A night side is
+  `polygon(center: antisolar_point)`.
+
 ### Changed
 
 - **A projection's clip hides a row; it no longer drops it** (#522, D-130). A `:projection`
