@@ -184,28 +184,49 @@ that refuses an empty entry is the only mechanical backstop.
   consumer may have fetched it before then. So `mix hex.publish` runs only with the
   maintainer's explicit go-ahead for that version, never as a side effect of tagging.
   `mix hex.build` beforehand shows exactly what will ship.
-- **The public home.** <https://github.com/dcoai/Visualize> is a GitLab **push mirror** of
-  the protected branches and the tags (Settings → Repository → Mirroring repositories,
-  authenticated by a fine-grained GitHub token with Contents read/write on that repository
-  only). The package's `source_url`, its links and the README's issue link point there,
-  and the docs' `source_ref` is the version's tag, so the tag must have reached GitHub
-  before the docs are read. **The token expires.** When it does, the mirror stops without
-  failing any pipeline. Check GitHub's main against GitLab's before a publish.
+- **The public home.** <https://github.com/dcoai/Visualize> carries the full history, and it
+  moves **only at releases** (#521). After a tag, `~/Projects/claude-tools/publish_history.exs`
+  fast-forwards GitHub's `main` to the tagged commit and pushes the tag, over the
+  maintainer's SSH key. There is no mirror and no token. Before pushing, it refuses if the
+  tag's pipeline isn't green, if GitHub already has the tag, or if the push wouldn't be a
+  fast-forward. It also refuses if any commit about to be published matches a `--forbid`
+  pattern in a path, a diff line or a message; for visualize, those patterns are the shapes
+  of private keys and GitLab and GitHub tokens. GitLab stays the source of truth: CI, issues,
+  merge requests and work between releases. The package's `source_url`, its links and the
+  README's issue link point to GitHub, and the docs' `source_ref` is the version's tag. So
+  `publish_history.exs` runs before `mix hex.publish`. It is the same tool, and the same
+  step, as surfex's.
 
 ## 7. A release, end to end
 
+A patch on the current minor line; the number is derived:
+
 ```bash
-elixir ~/Projects/claude-tools/release.exs               # says v0.1.<n>, checks the gates
-elixir ~/Projects/claude-tools/release.exs --prepare     # then MR that commit and merge it
-elixir ~/Projects/claude-tools/release.exs --tag         # on main, at the merged commit
-elixir ~/Projects/claude-tools/release.exs --post-bump   # then MR that commit too
+git remote add github git@github.com:dcoai/Visualize.git                  # once per clone
+
+elixir ~/Projects/claude-tools/release.exs                                 # dry run: says vX.Y.Z
+elixir ~/Projects/claude-tools/release.exs --prepare                       # then MR, merge
+elixir ~/Projects/claude-tools/release.exs --tag --version X.Y.Z           # on main, at the merge commit
+elixir ~/Projects/claude-tools/publish_history.exs vX.Y.Z --remote github \
+  --forbid 'BEGIN [A-Z ]*PRIVATE KEY' --forbid 'glpat-[A-Za-z0-9_-]{10}' \
+  --forbid 'gh[po]_[A-Za-z0-9]{20}' --forbid 'github_p[a]t_' --dry-run
+elixir ~/Projects/claude-tools/publish_history.exs vX.Y.Z --remote github \
+  --forbid 'BEGIN [A-Z ]*PRIVATE KEY' --forbid 'glpat-[A-Za-z0-9_-]{10}' \
+  --forbid 'gh[po]_[A-Za-z0-9]{20}' --forbid 'github_p[a]t_'
+elixir ~/Projects/claude-tools/release.exs --post-bump --version X.Y.Z     # then MR
 ```
 
-Then publish the tag, with the go-ahead (§6), from a clean checkout of it:
+**Pin the version after `--prepare`.** The patch number is a commit count, and the prepare
+commit and its merge commit add to it. Run bare, `--tag` computes a higher number than the one
+prepared, and refuses because the changelog has no section for it (v0.2.4 met this).
+`--version X.Y.Z` tags what was prepared, and `--post-bump` needs it to name the next `-dev`.
+Before merging the prepare MR, delete any "`mix.exs` reads `…-dev`" line from the closed
+section: `--post-bump` writes it under `[Unreleased]`, and it is false of a release.
+
+Then publish to Hex, with the go-ahead (§6), from a clean checkout of the tag:
 
 ```bash
-git ls-remote https://github.com/dcoai/Visualize.git refs/tags/v<X.Y.Z>   # the mirror has it
-git worktree add --detach ../visualize-publish v<X.Y.Z> && cd ../visualize-publish
+git worktree add --detach ../visualize-publish vX.Y.Z && cd ../visualize-publish
 mix deps.get && mix hex.build      # read the file list and the dependencies
 mix hex.publish                    # the package and its docs, to hexdocs.pm
 ```
