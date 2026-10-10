@@ -4,7 +4,7 @@ defmodule Visualize.MixProject do
   # The version between releases carries `-dev`, so no commit claims to be the release it
   # merely follows. `~/Projects/claude-tools/release.exs` moves this attribute — it edits
   # `@version`, not an inline `version:` — and RELEASING.md describes the lifecycle.
-  @version "0.1.1-dev"
+  @version "0.2.0"
 
   def project do
     [

@@ -9,7 +9,7 @@ All notable changes to Visualize are recorded here, following
 > module by module, lives in [`spec/`](spec/README.md), which is the source of truth for
 > that and is not restated here.
 
-## [Unreleased]
+## [0.2.0] — 2026-10-10
 
 **Upgrading from 0.1.0.** This is the first minor since the first tag, and the breaks are in
 the declarative layer and the builder. The imperative pipeline (`Scale` → `Shape` →
@@ -680,5 +680,5 @@ the meaning of a patch.
   discipline — tagged ticks, restart keeps the state, alpha is clamped — under an ExTLA
   model that is checked in CI (D-14).
 
-[Unreleased]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/compare/v0.1.0...main
+[0.2.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.2.0
 [0.1.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.1.0
