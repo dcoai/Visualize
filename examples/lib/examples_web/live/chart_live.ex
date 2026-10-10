@@ -47,6 +47,7 @@ defmodule ExamplesWeb.ChartLive do
     "cluster",
     "chord",
     "world_map",
+    "day_night_gps",
     "globe",
     "gps_track",
     "hexbin",
@@ -129,6 +130,8 @@ defmodule ExamplesWeb.ChartLive do
           flow_control: true
         ),
       run_ticks: 0,
+      # The wall-clock instant the run started at, passed to a design as `utc:` (#526).
+      run_utc: nil,
       # A chart opens on SVG (#501); a patch keeps the backend the reader chose when
       # the new chart offers it among its own (#432).
       run_backend: opening_backend(Frames.backends(module), socket.assigns[:run_backend]),
@@ -278,6 +281,9 @@ defmodule ExamplesWeb.ChartLive do
     %{module: module, run_backend: backend} = socket.assigns
     socket = update(socket, :run, &Run.cancel/1)
     socket = assign(socket, run_scroll: fresh_scroll(socket.assigns))
+    # A clock design starts its run at the real current UTC (#526); every tick of the
+    # run, and the still frame after it, reads the same instant.
+    socket = assign(socket, run_utc: DateTime.utc_now() |> DateTime.truncate(:second))
     opts = run_opts(socket.assigns, 0)
     # The view keeps the backend's state for its markup — the canvas's size and the static
     # SVG — and the run's renderer keeps its own to draw with (#413).
@@ -705,15 +711,15 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   defp run_opts(assigns, tick) do
-    build_chart_opts(
-      assigns.current_palette,
-      tick,
-      true,
-      assigns.slug,
-      assigns.hex_radius,
-      assigns.width
-    )
+    assigns.current_palette
+    |> build_chart_opts(tick, true, assigns.slug, assigns.hex_radius, assigns.width)
+    |> clock(assigns)
   end
+
+  # The instant a run started at, as `utc:` (#526): a design that keeps a clock starts
+  # there, and every other ignores it. None before a run.
+  defp clock(opts, %{run_utc: %DateTime{} = utc}), do: Keyword.put(opts, :utc, utc)
+  defp clock(opts, _assigns), do: opts
 
   # The series a streaming design binds — the sources of its design — for the drawer's
   # point counts; nil for any other chart.

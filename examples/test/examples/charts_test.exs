@@ -60,6 +60,7 @@ defmodule Examples.ChartsTest do
     Examples.Charts.SpectrumChart,
     Examples.Charts.Downsampling,
     Examples.Charts.WorldMap,
+    Examples.Charts.DayNightGps,
     Examples.Charts.Globe,
     Examples.Charts.GpsTrack
   ]
@@ -96,6 +97,7 @@ defmodule Examples.ChartsTest do
     Examples.Charts.ContourPlot,
     Examples.Charts.RidgelinePlot,
     Examples.Charts.WorldMap,
+    Examples.Charts.DayNightGps,
     Examples.Charts.Globe,
     Examples.Charts.GpsTrack,
     Examples.Charts.HexbinChart,
@@ -235,7 +237,7 @@ defmodule Examples.ChartsTest do
       light = Visualize.Theme.default().surface
       dark = Visualize.Theme.dark().surface
 
-      for module <- [Examples.Charts.WorldMap, Examples.Charts.Globe] do
+      for module <- [Examples.Charts.WorldMap, Examples.Charts.DayNightGps, Examples.Charts.Globe] do
         light_svg = svg_under(module, :default)
         dark_svg = svg_under(module, :dark)
 
