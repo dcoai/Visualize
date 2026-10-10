@@ -67,6 +67,7 @@ renders on any of the backends:
 
 ## Installation
 
+<!-- compile only: a deps/0 fragment of the host's mix.exs -->
 ```elixir
 def deps do
   [
