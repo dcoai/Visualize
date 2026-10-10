@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-This document specifies the geographic and computational-geometry modules: `Visualize.Geo.Projection` (38 map projections behind one struct), `Visualize.Geo.Path` (GeoJSON to SVG path data), `Visualize.Geo.Delaunay` and `Visualize.Geo.Voronoi` (planar triangulation and tessellation), `Visualize.Polygon` (polygon measures), `Visualize.Contour` with `Visualize.Contour.Density` (marching squares over a grid, and kernel density estimation feeding it), and `Visualize.Geo.Tiles` (the Web-Mercator tile arithmetic under a basemap, §8). Geographic input is in degrees; projected output is in pixels with y pointing down. Planar geometry uses `{x, y}` tuples.
+This document specifies the geographic and computational-geometry modules: `Visualize.Geo.Projection` (38 map projections behind one struct), `Visualize.Geo.Path` (GeoJSON to SVG path data), `Visualize.Geo.Circle` (a circle on the sphere as a GeoJSON polygon, §2.5), `Visualize.Geo.Delaunay` and `Visualize.Geo.Voronoi` (planar triangulation and tessellation), `Visualize.Polygon` (polygon measures), `Visualize.Contour` with `Visualize.Contour.Density` (marching squares over a grid, and kernel density estimation feeding it), and `Visualize.Geo.Tiles` (the Web-Mercator tile arithmetic under a basemap, §8). Geographic input is in degrees; projected output is in pixels with y pointing down. Planar geometry uses `{x, y}` tuples.
 
 ## 1. Projections
 
@@ -163,6 +163,24 @@ With a projection, lines and polygons are clipped **on the sphere, before they a
 | `Visualize.Geo.Path.area/2` | Projected planar area (2.3). |
 | `Visualize.Geo.Path.bounds/2` | `[x0, y0, x1, y1]` of projected vertices or `nil`. |
 | `Visualize.Geo.Path.centroid/2` | Mean of projected vertices as `{x, y}` or `nil`. |
+
+### 2.5 Circles
+
+`Visualize.Geo.Circle` is d3-geo's `geoCircle` (#525, D-131): the circle of angular radius `radius` degrees about a `center` on the sphere, as a GeoJSON `Polygon` — `%{"type" => "Polygon", "coordinates" => [ring]}`, one ring of `[lon, lat]` positions in degrees, floats — that `Visualize.Geo.Path` (2.2), a `:path` mark's `geo` channel or any other consumer of GeoJSON takes as it is. It draws a cap of the sphere — a day's night side, a satellite's footprint, a range ring — under any projection, cut and closed by the clip of 2.2.1.
+
+`polygon/1` takes the options `center` (`[lon, lat]` in degrees, default `[0, 0]`), `radius` (degrees, default `90`) and `precision` (degrees, default `6`). It is a port of d3-geo 3.1.1's `src/circle.js` — its default export and `circleStream` — with the `rotateRadians` of `src/rotation.js` and `src/compose.js` it rotates by, its arithmetic d3's, in radians, point for point:
+
+- **The ring about the origin.** The circle is walked about the point `(0°, 0°)` as `circleStream(stream, r, p, 1)` walks a whole circle (src/circle.js:7–24), `r` the radius and `p` the precision in radians: the angle `t` runs from `r + 2π` down by `p` while `t > r − p / 2`, and each point is `spherical(cos r, −sin r · cos t, −sin r · sin t)` — `atan2(y, x)` and d3's clamped `asin(z)`. The ring therefore starts at the angle `r` about the circle's axis, not at its southernmost point. When `p` divides 2π the ring's last point is its first again, to rounding, so the ring closes as GeoJSON's rings do; otherwise it ends short of the first, as d3's does, and a consumer that drops a ring's last position as its closing one — the clip of 2.2.1, as d3's stream — drops a real point. A `precision` of `0` is an empty ring (src/circle.js:8); a negative one is not accepted, where d3's loop never ends.
+- **Taken to the centre.** Each point is rotated by the **inverse** of `rotateRadians(−λc, −φc, 0)` (src/circle.js:47–51), `(λc, φc)` the centre in radians: `−λc` reduced by JavaScript's `%` (the sign of the dividend), and the rotation the one d3 picks — `rotationLambda` alone when only it is non-zero, `rotationPhiGamma(−φc, 0)` alone when only it is, both composed (its inverse undoing the tilt first, compose.js:8–10), or the identity, which only normalises. The longitude comes out in `[−180, 180]` (rotation.js:4–24, a half turn rounded up as `Math.round` rounds) and both coordinates are turned into degrees.
+- **Winding.** The ring is wound as d3 winds it: on a north-up map, clockwise about the centre. Under the spherical winding of 2.2.1 the polygon is therefore the cap of `radius` about `center` — the small cap below 90°, a hemisphere at 90° and the larger cap above, as d3 draws them — and `Visualize.Geo.Path` fills that cap under every projection, cut at the rotated frame's antimeridian and closed along the map's edge where the cap crosses it, with no chord the long way round. The `radius` is taken as given, as d3 takes it, so a negative or reflex one draws whatever d3 draws.
+- **The default precision is 6°**, which d3-geo's documentation long gave and #524 chose: 61 positions for a whole circle. d3-geo 3.1.1's code defaults to 2°; every other number is d3's.
+
+`test/visualize/geo/circle_test.exs` holds the port to d3-geo itself: `test/support/geo/circle_golden.jsonl` is d3-geo 3.1.1's `geoCircle` for ten centres (the origin, both poles, one beside a pole, one on the antimeridian, one past 180°), eight radii (`0`, `1`, `30`, `90`, `120`, `179`, `200` and `−30`) and the precisions `6`, `7`, `45` and `0`, with `2` and `0.5` on nine more, written by the one-off oracle `test/support/geo/circle_golden.mjs` (spec/12 §1); every position equals d3's within `10⁻⁹` degrees.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Geo.Circle.polygon/0` | `polygon([])`: the 90° circle about `[0, 0]`, every 6°. |
+| `Visualize.Geo.Circle.polygon/1` | The circle of `radius` about `center`, every `precision` degrees, as a GeoJSON `Polygon` wound as d3's (2.5). |
 
 ## 3. Delaunay triangulation
 
