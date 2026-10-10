@@ -107,6 +107,16 @@ the same input. Read those if you draw globes, rotate projections, or stack `:in
 
 ### Added
 
+#### Documentation
+
+- **Guides** (#515): [Getting started](guides/getting_started.md),
+  [Charts in LiveView](guides/liveview.md), [Designing charts](guides/designing_charts.md)
+  and a [cheatsheet](guides/cheatsheet.cheatmd), under *Guides* in the docs. Every Elixir
+  block in them and in the README runs in the test suite, so they cannot fall behind the
+  code.
+- **The README** is a short introduction: what visualize is, why, how to install it and
+  run the examples, and where the documentation is.
+
 #### Declarative charts
 
 - **Several frames in one design** (#428, #437, #436, #438). A frame takes a `box` (fractions
