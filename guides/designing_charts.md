@@ -475,7 +475,7 @@ Contract: [spec/14 §8](../spec/14-declarative-chart.md#8-composition-and-the-st
 
 ## Where next
 
-- The [cheatsheet](cheatsheet.cheatmd) has every builder function and a recipe for each
+- The [cheatsheet](https://hexdocs.pm/visualize/cheatsheet.html) has every builder function and a recipe for each
   common chart.
 - The gallery in `examples/` has every chart as a design, with the builder calls that make
   it (`./run.sh` in `examples/`).
