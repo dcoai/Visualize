@@ -1,36 +1,62 @@
 # Visualize
 
-Visualize is a data-visualization library for Elixir and Phoenix LiveView that renders on the
-server: describe a chart as plain data, apply your rows, and get SVG or canvas output.
+Visualize is a data-visualization library for Elixir and Phoenix LiveView. You describe a chart
+as plain data, apply your rows on the server, and get SVG or canvas output.
 
-> Pre-1.0 and a work in progress.
+## The problem it solves
 
-## Why use it
+Putting a chart in a LiveView app usually means leaving Elixir: a JavaScript charting library,
+a build step to bundle it, and glue to keep its state in step with the server's. The chart
+itself ends up as code in the browser, which you can't store, check or reuse from Elixir.
 
-- Charts in Elixir, with no JavaScript charting library and no JavaScript build step.
-- A chart is a value you can store, validate, compose and edit, not code you have to rerun.
-- D3's model (scales, shapes, axes, layouts, projections), for anyone who already thinks in it.
-- Built for LiveView, with canvas streaming for data that is dense or moving fast.
+Visualize keeps the whole chart on the server:
+
+- **No JavaScript charting library and no JS build step.** Charts render in Elixir and are
+  interpolated into HEEx; LiveView sends only what changed.
+- **A chart is data.** A design is a plain map that you can store, validate, compose, edit and
+  round-trip through JSON, not code you have to rerun.
+- **One design, five backends.** The same design draws as SVG, Canvas, a binary canvas stream,
+  a hybrid of the two, or an incremental strip.
+- **Live and dense data.** A compiled chart ticks with new rows and streams them over the
+  LiveView socket, so tens of thousands of points can scroll at full frame rate.
+- **d3's model.** Scales, shapes, axes, layouts and projections, for anyone who already thinks
+  in them.
 
 ## Features
 
-- **Charts as data.** A design is a plain map: validated, versioned, JSON-encodable, and built
-  from fragments that compose and stack like styles.
-- **Rendered on the server**, interpolated into HEEx; LiveView ships only what changed.
+- **Charts as data**: validated, versioned and JSON-encodable designs, built from fragments that
+  compose and stack like styles.
 - **Five backends from one design**: SVG, Canvas, binary canvas, Hybrid and Incremental.
-- **Live data.** A compiled chart ticks with new data: a scrolling viewport, eased scale
-  transitions, a data rate independent of the frame rate.
-- **The D3 toolkit in Elixir**: eleven scale types, shapes with ten curves, axes and
+- **Live data**: scrolling viewports, eased scale transitions, and a data rate independent of
+  the frame rate.
+- **The d3 toolkit in Elixir**: eleven scale types, shapes with ten curves, axes and number/time
   formatting, hierarchy and network layouts, geographic projections, Voronoi and contours.
 - **Frames and composition**: several frames in one design, shared scales, polar as a transform.
 - **Data transforms** on a mark's data: filter, bin, stack, fold, sum, sort, take, window, FFT.
 - **Themes and a style grammar**: one style serves SVG (as CSS variables) and canvas.
 - **LiveView integration**: components, and hooks for zoom, brush, tooltip, crosshair and legend.
-- **A visual chart builder**: a LiveComponent that edits a design in the browser.
-- **Zero required runtime dependencies.** Phoenix, Nx and `table` are all optional.
+- **No required runtime dependencies**: Phoenix, Nx and `table` are all optional.
 - **Specified and gated**: every public function has a contract, and CI fails on drift.
 
+## Installation
+
+Visualize is installed from its git repository; pin a tag:
+
+<!-- compile only: a deps/0 fragment of the host's mix.exs -->
+```elixir
+def deps do
+  [
+    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", tag: "v0.1.0"},
+    {:nx, "~> 0.9"}      # optional: binary canvas encoding and Nx-accelerated paths
+  ]
+end
+```
+
+Then `mix deps.get`. Read the [changelog](CHANGELOG.md) before moving the tag.
+
 ## Example
+
+A design composed from fragments, applied to rows, and rendered:
 
 ```elixir
 import Visualize.Chart.Build
@@ -54,35 +80,19 @@ Visualize.Chart.render(applied, root: true)         # an <svg> document
 Visualize.Chart.render(applied, backend: :canvas)   # Canvas 2D commands
 ```
 
-The design records no size; the host gives it when the chart is applied. The same design
-renders on any of the backends:
-
-- **SVG** (`Visualize.Backend.SVG`): markup, diffed by LiveView. The default.
-- **Canvas** (`Visualize.Backend.Canvas`): Canvas 2D drawing commands, as JavaScript or JSON.
-- **Binary canvas** (`Visualize.Backend.CanvasBinary`): a compact command stream pushed over
-  the socket and drawn by the client hooks, for dense data.
-- **Hybrid** (`Visualize.Backend.Hybrid`): the static furniture as SVG, the changing marks as
-  canvas.
-- **Incremental** (`Visualize.Incremental`): only the newly exposed strip of a scrolling chart.
-
-## Installation
-
-<!-- compile only: a deps/0 fragment of the host's mix.exs -->
-```elixir
-def deps do
-  [
-    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", tag: "v0.1.0"},
-    {:nx, "~> 0.9"}      # optional: binary canvas encoding and Nx-accelerated paths
-  ]
-end
-```
-
-Pin a tag, and read the [changelog](CHANGELOG.md) before moving it.
+The design records no size; the host gives one when the chart is applied.
 
 ## Running the examples
 
-The gallery in `examples/` is a Phoenix LiveView app: every chart type with its design, the
-chart builder and the performance view.
+`examples/` is a Phoenix LiveView app over the library:
+
+- **The gallery** (`/`): every chart type, each with its design and the `Build` calls that make
+  it, a backend switch and a performance drawer (`/chart/<name>`).
+- **Interaction** (`/interaction`) and **Dashboard** (`/dashboard`): the tooltip, crosshair
+  and legend hooks, and three panels whose crosshairs and brushes move together.
+- **The chart builder** (`/builder`): a LiveComponent that edits a design in the browser.
+- **Performance** (`/performance`) and **Hybrid** (`/hybrid`): every design run through
+  each backend and compared, and SVG furniture under canvas marks.
 
 ```sh
 cd examples
@@ -90,14 +100,31 @@ cd examples
 ```
 
 `./run.sh 4020` picks another port and `./run.sh 0.0.0.0:4020` another address. An address
-other than loopback exposes an unauthenticated development server. `examples/README.md` has
-the rest.
+other than loopback exposes an unauthenticated development server. See
+`examples/README.md` for the rest.
 
 ## Documentation
 
+- [Getting started](guides/getting_started.md): install, a first chart in IEx, the same chart
+  in a LiveView.
+- [Charts in LiveView](guides/liveview.md): components, hooks, choosing a backend, live data.
+- [Designing charts](guides/designing_charts.md): a tour of the declarative layer.
+- [Cheatsheet](guides/cheatsheet.cheatmd): the `Build` functions and common recipes.
+- [Usage rules](usage-rules.md): the short form, for developers and agents.
 - [Specification](spec/README.md): the source of truth, with a contract for every public
   function.
-- [Usage rules](usage-rules.md): the short form, for developers and agents.
 - [Changelog](CHANGELOG.md): what each tag changed.
 - [API surface](API_SURFACE.md): the generated record of the spec and code agreeing.
-- `mix docs` builds the documentation, with the specification included.
+
+`mix docs` builds the API reference, with these documents included.
+
+## Status and feedback
+
+Visualize is pre-1.0, and its API can still change between tags. **The chart builder is a work
+in progress, not a finished product**: try it, but expect gaps.
+
+Feedback is welcome and encouraged. Bug reports, rough edges, charts you couldn't make and
+ideas are all useful: open an issue on the
+[project's home on GitLab](https://gitlab.conet.yarina.org/dco-tek/visualize/-/issues).
+
+MIT licensed.
