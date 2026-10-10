@@ -8,15 +8,19 @@ defmodule Examples.Charts.LoadAgeGauge do
   It is the gallery's example of an **overlapping inset frame** (spec/14 §4.2). The `age`
   frame is the whole box, `[0, 0, 1, 1]`; the `gauge` frame is a box of fractions of it
   (`box/0`) inside the age frame's plot area, clear of both axes and of the plot's top,
-  drawn after it (`z: 1`) on its own `background` so the traces beneath do not show
-  through the dial. The upper-left is where the plot has least to say: ages from three
-  hours back to half an hour, at loads above 2.3, which the ten-minute sine and its noise
-  do not reach once a bucket has averaged them (the highest any window draws there, over
-  429 ticks sampled from the first 3,000, is 2.24). The dial hugs its box — as wide as it
-  is tall at its radius — so the background hides the grid only where the dial is. The
-  age view's key stays where it was, in the plot's top-right corner, with the width of the
-  plot between the two, and the dial carries no key of its own: its needles are the key's
-  three colours.
+  and drawn after it (`z: 1`): 231×210 px at the default size, half again the first
+  inset's 154×140 at the same upper-left origin (#514). It has **no background**. The
+  dial now overlaps the traces of the plot's upper-left — ages from three hours back to
+  about twelve minutes, loads from 1.5 up — and they show through it rather than being
+  hidden, so nothing of the age view is lost under the inset. The dial hugs its box — as
+  wide as it is tall at its radius. The age view's key stays where it was, in the plot's
+  top-right corner, with the width of the plot between the two, and the dial carries no
+  key of its own: its needles are the key's three colours.
+
+  The traces flatten towards the left as they do on the age view alone: an old point is
+  its bucket's mean, so the ten-minute swing is averaged down with age (to about 40% at
+  three hours; `Examples.Charts.LoadAge`, #418). That is the expected reading of a
+  bucketed history, not lost data.
 
   The pieces are the two charts' own, not copies: `Examples.Charts.LoadAge` gives its
   source and style (`furniture/0`), its view (`plot/1`) and its rows (`sources/1`), and
@@ -36,9 +40,10 @@ defmodule Examples.Charts.LoadAgeGauge do
   alias Examples.Charts.{Design, Load, LoadAge, LoadGauge}
 
   # The dial's box, fractions of the whole (spec/14 §4.2): its pixels at the default size
-  # are [58, 36, 154, 140], inside the age plot's [50, 30, 680, 345] by 8 on the left and 6
-  # at the top, so it covers neither axis nor the plot's top edge.
-  @box [0.0763, 0.0857, 0.2026, 0.3333]
+  # are [58, 36, 231, 210], inside the age plot's [50, 30, 680, 345] by 8 on the left and 6
+  # at the top, so it covers neither axis nor the plot's top edge. It has no background:
+  # the traces beneath show through the dial (#514).
+  @box [0.0763, 0.0857, 0.3039, 0.5]
   @dial %{top: 18, right: 18, bottom: 4, left: 18}
 
   @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
@@ -47,7 +52,9 @@ defmodule Examples.Charts.LoadAgeGauge do
   def title, do: "Load age + gauge"
 
   def description,
-    do: "Three hours of load on a logarithmic age axis, its dial inset over the plot's corner"
+    do:
+      "Three hours of load on a logarithmic age axis, its dial inset over the plot's corner; " <>
+        "an old point is its bucket's mean, so the swing is averaged down with age"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
@@ -61,7 +68,7 @@ defmodule Examples.Charts.LoadAgeGauge do
           in_frame(:age, LoadAge.plot(width)) ++
           in_frame(
             :gauge,
-            LoadGauge.dial([box: @box, margin: @dial, z: 1, background: :background],
+            LoadGauge.dial([box: @box, margin: @dial, z: 1],
               legend: false
             )
           )
@@ -90,7 +97,8 @@ defmodule Examples.Charts.LoadAgeGauge do
     import Visualize.Chart.Build
 
     # Two frames, one over the other: the log-age view fills the box, and the dial sits
-    # in a box over its plot's upper-left corner, drawn after it on its own background.
+    # in a box over its plot's upper-left corner, drawn after it with no background, so
+    # the traces beneath show through it.
     {:ok, design} =
       Visualize.Chart.compose(
         [
@@ -112,7 +120,7 @@ defmodule Examples.Charts.LoadAgeGauge do
           ]) ++
           in_frame(:gauge, [
             # Fractions of the whole box, inside the age plot: clear of both axes.
-            polar(box: [0.0763, 0.0857, 0.2026, 0.3333], z: 1, background: :background),
+            polar(box: [0.0763, 0.0857, 0.3039, 0.5], z: 1),
             linear_scale(:angle, domain: [0, 4], start: -120, sweep: 240),
             linear_scale(:r, domain: [0, 1]),
             ordinal_scale(:color, domain: ["1 min", "5 min", "15 min"], range: [:series_1, :series_2, :series_3]),

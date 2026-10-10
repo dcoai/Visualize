@@ -26,6 +26,13 @@ defmodule Examples.Charts.LoadAge do
   trace boiled instead of drifting. `Examples.Charts.Load.mean/3` averages the slot's own
   span on an absolute-second stride; at the newest end, where the span is under a second,
   that is the single reading it always was.
+
+  So the swing is averaged down with age, and that is the reading, not a loss (#514).
+  Each point is its bucket's mean, and a slot at age *a* spans about 3.9% of *a*; a mean
+  over a span *w* scales the load's ten-minute sine by sinc(πw/600). That is about 0.92
+  at one hour (a 138 s span) and 0.38 at three (415 s), so the oldest traces converge on
+  the load's mean. It is a bucketed history's expected reading, as RRD's is, not lost
+  data.
   """
 
   import Visualize.Chart.Build
@@ -41,7 +48,11 @@ defmodule Examples.Charts.LoadAge do
   def size, do: {720, 360}
 
   def title, do: "Load age"
-  def description, do: "Three hours of load average on a logarithmic age axis"
+
+  def description,
+    do:
+      "Three hours of load average on a logarithmic age axis; " <>
+        "an old point is its bucket's mean, so the swing is averaged down with age"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
