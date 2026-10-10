@@ -25,11 +25,18 @@ defmodule Visualize.Layout.Force.Simulation do
           {:center, x: 200, y: 200},
           {:many_body, strength: -30},
           {:link, distance: 50}
-        ]
+        ],
+        # In LiveView, receive updates from the first tick
+        subscribers: [self()]
       )
 
-      # In LiveView, subscribe to updates
-      Visualize.Layout.Force.Simulation.subscribe(sim, self())
+  A subscriber given in `:subscribers` is registered in `init/1`, before the first tick
+  is armed, so it receives every tick. `subscribe/2` is for a process that joins later:
+  it is a cast sent after `start_link/1` returns, and a caller descheduled for longer
+  than a short simulation runs would find every tick already sent to nobody
+  (spec/06 §8.4, #483).
+
+      Visualize.Layout.Force.Simulation.subscribe(sim, other_pid)
 
   """
 
@@ -105,11 +112,25 @@ defmodule Visualize.Layout.Force.Simulation do
   - `:alpha_target` - target alpha (default: 0)
   - `:velocity_decay` - velocity decay (default: 0.4)
   - `:auto_start` - start simulation immediately (default: true)
+  - `:subscribers` - pids registered and monitored before the first tick is armed, so
+    each receives every tick (default: `[]`); anything but a list of pids raises
+    `ArgumentError`
 
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
+    validate_subscribers!(Keyword.get(opts, :subscribers, []))
     GenServer.start_link(__MODULE__, opts)
+  end
+
+  defp validate_subscribers!(pids) when is_list(pids) do
+    if Enum.all?(pids, &is_pid/1), do: :ok, else: invalid_subscribers!(pids)
+  end
+
+  defp validate_subscribers!(other), do: invalid_subscribers!(other)
+
+  defp invalid_subscribers!(value) do
+    raise ArgumentError, ":subscribers must be a list of pids, got: #{inspect(value)}"
   end
 
   @doc "Starts the simulation"
@@ -228,6 +249,10 @@ defmodule Visualize.Layout.Force.Simulation do
       tick_tag: nil
     }
 
+    # Registered before the deferred start is even enqueued, so no tick precedes them
+    # (spec/06 §8.4, #483); each is held as `subscribe/2` holds one.
+    state = opts |> Keyword.get(:subscribers, []) |> Enum.reduce(state, &add_subscriber/2)
+
     # Auto-start unless explicitly disabled
     if Keyword.get(opts, :auto_start, true) do
       send(self(), :start_simulation)
@@ -293,10 +318,7 @@ defmodule Visualize.Layout.Force.Simulation do
     {:noreply, %{state | nodes: nodes}}
   end
 
-  def handle_cast({:subscribe, pid}, state) do
-    Process.monitor(pid)
-    {:noreply, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
-  end
+  def handle_cast({:subscribe, pid}, state), do: {:noreply, add_subscriber(pid, state)}
 
   def handle_cast({:unsubscribe, pid}, state) do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
@@ -352,6 +374,12 @@ defmodule Visualize.Layout.Force.Simulation do
   end
 
   # Private functions
+
+  # A subscriber is monitored, so its exit removes it (the `:DOWN` clause above).
+  defp add_subscriber(pid, state) do
+    Process.monitor(pid)
+    %{state | subscribers: MapSet.put(state.subscribers, pid)}
+  end
 
   # `arm/1` is idempotent: a running simulation keeps its timer.
   defp arm(%{running: true} = state), do: state
