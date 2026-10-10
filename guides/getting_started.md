@@ -15,7 +15,7 @@ Visualize is not on Hex yet. Depend on a release tag from its repository:
 ```elixir
 def deps do
   [
-    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", tag: "v0.1.0"},
+    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", tag: "v0.2.0"},
     # Optional. Each one switches on a feature and is never required:
     {:phoenix_live_view, "~> 1.0"}, # the function components and the chart builder
     {:nx, "~> 0.9"},                # the binary canvas stream, for dense data

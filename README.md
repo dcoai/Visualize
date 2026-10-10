@@ -46,7 +46,7 @@ Visualize is installed from its git repository; pin a tag:
 ```elixir
 def deps do
   [
-    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", tag: "v0.1.0"},
+    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", tag: "v0.2.0"},
     {:nx, "~> 0.9"}      # optional: binary canvas encoding and Nx-accelerated paths
   ]
 end
