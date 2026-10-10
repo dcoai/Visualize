@@ -9,13 +9,13 @@ You hand it rows, and you get back SVG markup, or drawing commands for a `<canva
 
 ## Installation
 
-Visualize is not on Hex yet. Depend on a release tag from its repository:
+Visualize is on [Hex](https://hex.pm/packages/visualize):
 
 <!-- compile only: a deps/0 fragment of the host's mix.exs -->
 ```elixir
 def deps do
   [
-    {:visualize, git: "git@gitlab.conet.yarina.org:dco-tek/visualize.git", tag: "v0.2.0"},
+    {:visualize, "~> 0.2"},
     # Optional. Each one switches on a feature and is never required:
     {:phoenix_live_view, "~> 1.0"}, # the function components and the chart builder
     {:nx, "~> 0.9"},                # the binary canvas stream, for dense data
@@ -24,8 +24,8 @@ def deps do
 end
 ```
 
-Then run `mix deps.get`. Pin a tag, and read the [changelog](../CHANGELOG.md) before you
-move it.
+Then run `mix deps.get`. Visualize is pre-1.0, so a minor version can break: read the
+[changelog](../CHANGELOG.md) before you move to one.
 
 PNG output needs no package. It runs the `resvg` command-line tool, version 0.45 or
 later, if your host has it (`apt install resvg` on Debian and Ubuntu). Everything else in

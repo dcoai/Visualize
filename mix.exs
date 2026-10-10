@@ -16,7 +16,8 @@ defmodule Visualize.MixProject do
       name: "Visualize",
       description:
         "Server-side SVG and canvas visualization for Phoenix LiveView, in the shape of D3.",
-      source_url: "https://gitlab.conet.yarina.org/dco-tek/visualize",
+      # The public home (#516): GitLab push-mirrors main and the tags here.
+      source_url: "https://github.com/dcoai/Visualize",
       package: package(),
       docs: docs(),
       aliases: [
@@ -106,7 +107,10 @@ defmodule Visualize.MixProject do
       files:
         ~w(lib guides spec mix.exs README.md LICENSE CHANGELOG.md usage-rules.md API_SURFACE.md .formatter.exs),
       licenses: ["MIT"],
-      links: %{"GitLab" => "https://gitlab.conet.yarina.org/dco-tek/visualize"}
+      links: %{
+        "GitHub" => "https://github.com/dcoai/Visualize",
+        "Changelog" => "https://hexdocs.pm/visualize/changelog.html"
+      }
     ]
   end
 
@@ -140,6 +144,9 @@ defmodule Visualize.MixProject do
   defp docs do
     [
       main: "readme",
+      # The tag of the version being documented, which the mirror carries: a "View source"
+      # link opens the code that was published, not main.
+      source_ref: "v#{@version}",
       # The specification refers, on purpose, to internal functions (behaviour callbacks and
       # the family modules behind `Geo.Projection` and `CanvasBinary`) and to functions the
       # decisions log records as removed or as called by code that has never run (D-2, D-13).

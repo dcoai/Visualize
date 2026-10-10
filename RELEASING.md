@@ -179,12 +179,18 @@ that refuses an empty entry is the only mechanical backstop.
 - **Minor versus patch.** `--minor` is always explicit.
 - **A minor's tag message.** Patch tags take the changelog section automatically; a minor's is
   written by hand.
-- **Publishing to Hex.** Out of every release so far. `package/0` is complete — `licenses:
-  ["MIT"]`, `links:`, and a `files:` list carrying `lib`, `spec/`, `README.md`, `LICENSE`,
-  `usage-rules.md` and `API_SURFACE.md` — so `mix hex.build` succeeds and the package is ready
-  in the sense that it builds. Publishing is a different decision: it claims the `visualize`
-  name on hex.pm permanently, and unpublishing is possible only within an hour. Ask before
-  acting on it.
+- **Publishing to Hex.** Since 0.2.1 (#516) every release is published, as the last step
+  of §7. A published version is permanent: it can be reverted only within an hour, and a
+  consumer may have fetched it before then. So `mix hex.publish` runs only with the
+  maintainer's explicit go-ahead for that version, never as a side effect of tagging.
+  `mix hex.build` beforehand shows exactly what will ship.
+- **The public home.** <https://github.com/dcoai/Visualize> is a GitLab **push mirror** of
+  the protected branches and the tags (Settings → Repository → Mirroring repositories,
+  authenticated by a fine-grained GitHub token with Contents read/write on that repository
+  only). The package's `source_url`, its links and the README's issue link point there,
+  and the docs' `source_ref` is the version's tag, so the tag must have reached GitHub
+  before the docs are read. **The token expires.** When it does, the mirror stops without
+  failing any pipeline. Check GitHub's main against GitLab's before a publish.
 
 ## 7. A release, end to end
 
@@ -193,6 +199,15 @@ elixir ~/Projects/claude-tools/release.exs               # says v0.1.<n>, checks
 elixir ~/Projects/claude-tools/release.exs --prepare     # then MR that commit and merge it
 elixir ~/Projects/claude-tools/release.exs --tag         # on main, at the merged commit
 elixir ~/Projects/claude-tools/release.exs --post-bump   # then MR that commit too
+```
+
+Then publish the tag, with the go-ahead (§6), from a clean checkout of it:
+
+```bash
+git ls-remote https://github.com/dcoai/Visualize.git refs/tags/v<X.Y.Z>   # the mirror has it
+git worktree add --detach ../visualize-publish v<X.Y.Z> && cd ../visualize-publish
+mix deps.get && mix hex.build      # read the file list and the dependencies
+mix hex.publish                    # the package and its docs, to hexdocs.pm
 ```
 
 Opening a new minor line is the same sequence with `--minor` on every invocation.
