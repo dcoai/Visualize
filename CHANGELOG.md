@@ -11,9 +11,6 @@ All notable changes to Visualize are recorded here, following
 
 ## [0.2.4] — 2026-10-10
 
-`mix.exs` reads `0.2.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
-release it merely follows.
-
 ### Changed
 
 - **Visualize is on Hex** (#516): depend on `{:visualize, "~> 0.2"}` rather than a git tag.
