@@ -12,7 +12,9 @@ defmodule Examples.Charts.WorldMap do
   mass of Natural Earth's 1:110m land (#499), coloured by its id through the `color`
   scale. The hand-written version clipped the map to an ellipse it drew by hand — a
   pseudo-cylindrical projection ends at the antimeridian, so the design clips nothing.
-  The animation turns the projection's `rotate`, the map's centre moving west.
+  The animation turns the projection's `rotate` the way the Earth turns (#523): the land
+  drifts east and the centre meridian moves west, as on the Globe. `rotate`'s `lambda` is
+  the centre meridian (spec/07 §1.4, D-44), so it falls as the ticks rise.
 
   Its ocean is the theme's `:surface` (#422), the plane the data is laid on: not the page
   (`:background` would make it vanish), not a data colour (the land reads through the
@@ -34,7 +36,7 @@ defmodule Examples.Charts.WorldMap do
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
     {width, _height} = Design.size(__MODULE__, opts)
-    lon = if tick = opts[:animation_tick], do: rem(tick * 2, 360), else: 0
+    lon = if tick = opts[:animation_tick], do: -rem(tick * 2, 360), else: 0
 
     design =
       Design.fold([
