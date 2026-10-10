@@ -1,3 +1,384 @@
 # Cheatsheet
 
-Written in #519.
+## The pipeline
+{: .col-2}
+
+### Compose, apply, render
+
+```elixir
+import Visualize.Chart.Build
+
+rows = [%{t: 1, v: 3}, %{t: 2, v: 9}, %{t: 3, v: 4}]
+
+{:ok, design} =
+  Visualize.Chart.compose([
+    chart(meta: %{name: "Load"}),
+    source(:load, [:t, :v]),
+    cartesian(),
+    linear_scale(:x),
+    linear_scale(:y, domain: [0, :auto]),
+    axis(:x, :bottom),
+    axis(:y, :left),
+    line(:load, %{x: :t, y: :v})
+  ])
+
+{:ok, applied} = Visualize.Chart.apply(design, sources: %{load: rows})
+svg = Visualize.Chart.render(applied, root: true)
+```
+
+A design is a map. Every `Build` function returns a fragment, and `compose/1` folds them.
+`apply/2` validates, binds rows and realises the frames. `render/2` draws.
+
+### Store and reload
+
+```elixir
+chart = Visualize.Chart.from_map!(design)
+map = Visualize.Chart.to_map(chart)
+{:ok, ^chart} = Visualize.Chart.from_map(map)
+```
+
+`to_json/1` and `from_json/1` do the same through JSON (needs Jason).
+
+### Apply options
+
+| Option | Meaning |
+| --- | --- |
+| `sources:` | the pool: slot name to rows, columns, Explorer or Nx |
+| `vars:` | variable name to value |
+| `size:` | `{width, height}`, default `{600, 400}` |
+| `theme:` | a `%Visualize.Theme{}` |
+| `now:` | the instant `window/3` measures back from |
+
+### Compose or stack
+
+| | `compose/1` | `stack/1` |
+| --- | --- | --- |
+| a name declared twice | `:conflict` | the higher layer wins |
+| marks, labels, axes | append | replace by `id:` / `{scale, side}` |
+| returns | `{:ok, map}` | `map` |
+
+`explain/1` shows which layer set each value. `free_vars/1` lists open variables.
+
+## Build functions
+{: .col-3}
+
+### Design
+
+| Function | Sets |
+| --- | --- |
+| `chart(opts)` | the seed: version, `meta:` |
+| `source(name, fields, opts)` | a slot; `types:`, `default:` |
+| `var(name, default)` | a variable's declaration |
+| `style(name, keys)` | a named style |
+| `gradient(name, kind, stops: …)` | a paint; use with `paint(name)` |
+| `theme(:dark)` | the theme, by name or inline |
+| `layout(columns:, rows:, gap:)` | the grid frames sit on |
+| `interaction(sync: "group")` | shared hover and brush |
+
+### Frames
+
+| Function | Frame |
+| --- | --- |
+| `cartesian(opts)` | x and y |
+| `polar(opts)` | angle and r; marks bend |
+| `geo(projection: %{type: …})` | a map projection |
+| `facet(by: field, columns: n)` | small multiples |
+| `in_frame(name, fragments)` | puts fragments in a named frame |
+| `adopt(:x, frame)` | shares another frame's scale |
+
+Frame options: `margin:`, `box: [x, y, w, h]` (fractions), `cell: [c, r]`, `span:`, `z:`,
+`background:`.
+
+### Scales
+
+`linear_scale` `log_scale` `power_scale` `sqrt_scale` `symlog_scale` `time_scale`
+`band_scale` `ordinal_scale` `quantize_scale` `quantile_scale` `threshold_scale`
+`sequential_scale` `diverging_scale` `radial_scale`, each `(name, opts)`.
+
+Options: `domain:` (`:auto`, `[0, :auto]`, a list), `range:`, `nice:`, `clamp:`,
+`padding:` (band), `start:`/`sweep:` (angle), `zone:` (time), `transition:`.
+
+Names with a meaning: `:x`, `:y`, `:angle`, `:r`, `:color`, `:x_offset`, `:y_offset`.
+
+### Furniture
+
+| Function | Draws |
+| --- | --- |
+| `axis(scale, side, opts)` | `ticks:`, `format:`, `unit:`, `grid:` |
+| `legend(scale, opts)` | `position:`, `inside:`, `title:` |
+| `label(anchor, text, opts)` | a text in the frame |
+| `title(text)` | the `:title` label |
+
+Anchors: `:title`, `:subtitle`, `:caption`, `{:axis, s}`, `{:frame, :top_left}` (any corner,
+or `:center`), `{:data, [x, y]}`.
+
+### Marks
+
+| Function | Channels |
+| --- | --- |
+| `line` `area` | `x`, `y` (`y0`, `y1`) |
+| `rect` | `x0`, `x1`, `y0`, `y1`, `value` |
+| `circle` `symbol` | `x`, `y`, `value` |
+| `rule` | `x`, or `y` in polar |
+| `band` `x_band` | `x0`, `x1` |
+| `percentile_band` | `x`, `median`, `inner_lo`… |
+| `arc` | `value` (or `start`, `end`) |
+| `rose` | `angle`, `value` |
+| `needle` | `x` (polar only) |
+| `path` | `path` |
+| `text` | `x`, `y`, `value` |
+| `tiles` | none (a basemap) |
+
+Every one takes `(data, channels, opts)`. `series` works on all but `percentile_band` and
+`tiles`. Common opts: `style:`, `options:`, `label:`, `id:`, `offset:`, `scales:`.
+
+### Transforms
+
+`from(source)` starts a pipeline and each step appends:
+
+`filter(field)` `bin(field)` `stack(fields)` `fold(fields)` `sum(field)` `sort(field)`
+`take(n)` `window(field)` `lttb(fields, n)` `m4(fields, width)` `spectrum(field)`
+`treemap()` `pack()` `partition()` `tree()` `cluster()` `chord(fields, field)`
+`sankey(fields, field)` `force(fields)` `projection(fields)` `contour(field, size)`
+`density(fields)` `delaunay(fields)` `voronoi(fields)` `hexbin(fields)`
+
+Each takes the data first: `from(:s) |> bin(:v, thresholds: 20)`.
+
+### Style keys
+
+`fill` `fill_opacity` `stroke` `stroke_width` `stroke_dasharray` `stroke_style` `opacity`
+`font_family` `font_size` `font_weight` `text_anchor` `curve` `symbol` `symbol_size`
+`blend` `effect` `extends` `class`
+
+Values: a literal, a theme slot (`:series_1`, `:axis`, `:text`, `:background`),
+`{:field, f}`, `paint(name)`, `:contrast`, `:none`.
+
+## Recipes
+{: .col-2}
+
+### Line, several series
+
+```elixir
+import Visualize.Chart.Build
+
+load = [
+  %{t: 1, v: 3, host: "a"}, %{t: 2, v: 5, host: "a"},
+  %{t: 1, v: 2, host: "b"}, %{t: 2, v: 6, host: "b"}
+]
+
+{:ok, line_chart} =
+  Visualize.Chart.compose([
+    chart(),
+    source(:load, [:t, :v, :host]),
+    style(:series, stroke_width: 2, curve: :monotone_x),
+    cartesian(),
+    linear_scale(:x),
+    linear_scale(:y, domain: [0, :auto], nice: true),
+    ordinal_scale(:color, domain: ["a", "b"]),
+    axis(:x, :bottom),
+    axis(:y, :left, grid: true),
+    legend(:color),
+    line(:load, %{x: :t, y: :v, series: :host}, style: :series)
+  ])
+
+{:ok, _} = Visualize.Chart.apply(line_chart, sources: %{load: load})
+```
+
+### Bar
+
+```elixir
+import Visualize.Chart.Build
+
+letters = [%{letter: "A", n: 8}, %{letter: "B", n: 2}, %{letter: "C", n: 5}]
+
+{:ok, bar_chart} =
+  Visualize.Chart.compose([
+    chart(),
+    source(:letters, [:letter, :n]),
+    cartesian(),
+    band_scale(:x, padding: 0.1),
+    linear_scale(:y, domain: [0, :auto], nice: true),
+    axis(:x, :bottom),
+    axis(:y, :left),
+    # x0 and x1 on one field are the band's two edges.
+    rect(:letters, %{x0: :letter, x1: :letter, y0: 0, y1: :n})
+  ])
+
+{:ok, _} = Visualize.Chart.apply(bar_chart, sources: %{letters: letters})
+```
+
+Grouped bars: `fold/3` the columns into rows, add `band_scale(:x_offset)` and pass
+`offset: %{x: :series}` to the `rect`.
+
+### Stacked area
+
+```elixir
+import Visualize.Chart.Build
+
+fruit = [
+  %{x: 1, apples: 10, pears: 4},
+  %{x: 2, apples: 12, pears: 7},
+  %{x: 3, apples: 9, pears: 11}
+]
+
+{:ok, stacked_area} =
+  Visualize.Chart.compose([
+    chart(),
+    source(:fruit, [:x, :apples, :pears]),
+    cartesian(margin: %{top: 20, right: 80, bottom: 30, left: 40}),
+    linear_scale(:x),
+    linear_scale(:y, domain: [0, :auto]),
+    ordinal_scale(:color, domain: [:apples, :pears]),
+    axis(:x, :bottom),
+    axis(:y, :left),
+    # In the right margin, clear of the layers.
+    legend(:color, position: :right, inside: false),
+    area(stack(from(:fruit), [:apples, :pears]), %{x: :x, y: :y1, y0: :y0, series: :key})
+  ])
+
+{:ok, _} = Visualize.Chart.apply(stacked_area, sources: %{fruit: fruit})
+```
+
+### Scatter, coloured by category
+
+```elixir
+import Visualize.Chart.Build
+
+points = [
+  %{x: 10, y: 20, size: 4, kind: "A"},
+  %{x: 40, y: 70, size: 8, kind: "B"},
+  %{x: 80, y: 30, size: 6, kind: "A"}
+]
+
+{:ok, scatter} =
+  Visualize.Chart.compose([
+    chart(),
+    source(:points, [:x, :y, :size, :kind]),
+    style(:point, fill: {:field, :kind}, opacity: 0.7),
+    cartesian(),
+    linear_scale(:x, domain: [0, 100]),
+    linear_scale(:y, domain: [0, 100]),
+    ordinal_scale(:color, domain: ["A", "B"]),
+    axis(:x, :bottom),
+    axis(:y, :left),
+    legend(:color, title: ["Kind"]),
+    # value on a circle is its radius in pixels.
+    circle(:points, %{x: :x, y: :y, value: :size}, style: :point)
+  ])
+
+{:ok, _} = Visualize.Chart.apply(scatter, sources: %{points: points})
+```
+
+### Pie and donut
+
+```elixir
+import Visualize.Chart.Build
+
+slices = [%{name: "A", share: 50}, %{name: "B", share: 30}, %{name: "C", share: 20}]
+
+{:ok, donut} =
+  Visualize.Chart.compose([
+    chart(),
+    source(:slices, [:name, :share]),
+    style(:slice, fill: {:field, :name}, stroke: :background),
+    polar(),
+    ordinal_scale(:color, domain: ["A", "B", "C"]),
+    legend(:color),
+    # Leave out inner_radius for a pie.
+    arc(:slices, %{value: :share},
+      options: %{inner_radius: 90, outer_radius: 150, pad_angle: 0.02},
+      style: :slice,
+      label: %{text: [{:field, :name}], style: [:label, %{fill: :contrast}]}
+    ),
+    label({:frame, :center}, ["100%"])
+  ])
+
+{:ok, _} = Visualize.Chart.apply(donut, sources: %{slices: slices})
+```
+
+### Map
+
+```elixir
+import Visualize.Chart.Build
+
+globe = [%{shape: %{"type" => "Sphere"}}]
+cities = [%{name: "Oslo", lon: 10.75, lat: 59.91}, %{name: "Lima", lon: -77.04, lat: -12.05}]
+
+{:ok, map_chart} =
+  Visualize.Chart.compose([
+    chart(),
+    source(:globe, [:shape]),
+    source(:cities, [:name, :lon, :lat]),
+    style(:ocean, fill: :surface, stroke: :axis),
+    # Natural Earth is about 5.5 scales wide: 100 fills a 600-wide chart.
+    geo(projection: %{type: :natural_earth, scale: 100}),
+    # field: a GeoJSON column, projected to a path.
+    path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :ocean),
+    # fields: [lon, lat], projected to x and y pixels.
+    circle(projection(from(:cities), [:lon, :lat]), %{x: :x, y: :y},
+      label: %{text: [{:field, :name}], anchor: :right}
+    )
+  ])
+
+{:ok, _} = Visualize.Chart.apply(map_chart, sources: %{globe: globe, cities: cities})
+```
+
+Land and countries are GeoJSON features under a column, drawn as the globe is.
+
+## Rendering
+{: .col-2}
+
+### SVG
+
+```elixir
+{:ok, applied} = Visualize.Chart.apply(scatter, sources: %{points: points}, size: {480, 320})
+
+# A bare <g>, for a template.
+group = Visualize.Chart.render(applied)
+
+# A whole accessible <svg> document.
+document = Visualize.Chart.render(applied, root: true)
+```
+
+Theme colours are CSS custom properties, so a stylesheet can re-theme the page.
+
+### Canvas and binary
+
+```elixir
+# Canvas 2D commands as JSON, for the canvas hook.
+commands = Visualize.Chart.render(applied, backend: :canvas)
+
+# A compact binary stream, for the binary canvas hook (needs Nx).
+literal = Visualize.Chart.generate(applied, resolve: :literal)
+{:ok, stream} = Visualize.Backend.CanvasBinary.encode_element(literal)
+```
+
+Above about 1,000 points, prefer a canvas backend.
+
+### Hybrid and live data
+
+```elixir
+{:ok, %{main: compiled}} = Visualize.Chart.compile(applied)
+
+# Static furniture as SVG, dense marks on a canvas layer.
+hybrid = Visualize.Chart.Compiled.render(compiled, %{points: points})
+
+# One tick of live data: a payload to push and the next state.
+{payload, compiled} = Visualize.Chart.Compiled.tick(compiled, %{points: points}, [])
+```
+
+The LiveView guide covers the components and hooks that draw these.
+
+### PNG
+
+```elixir
+document = Visualize.Chart.generate(applied, root: true, resolve: :literal)
+
+case Visualize.Render.to_png(document, scale: 2, background: "#ffffff") do
+  {:ok, png, _warnings} -> byte_size(png)
+  {:error, :no_rasterizer} -> :install_resvg
+end
+```
+
+PNG needs the `resvg` binary (0.45 or later) on the `PATH`, or
+`config :visualize, :resvg, path`. Use literal colours: resvg cannot read CSS variables.
