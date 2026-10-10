@@ -130,7 +130,7 @@ defmodule Visualize.MixProject do
       # served the specification's references to internal functions, and went with it (D-133).
       skip_code_autolink_to: ["Visualize.Render.with_backend/2"],
       extras: [
-        "README.md",
+        {"README.md", title: "README"},
         # The guides, in reading order, ahead of the reference material: where a newcomer
         # starts, then the declarative layer, then the one-page summary.
         "guides/getting_started.md",
