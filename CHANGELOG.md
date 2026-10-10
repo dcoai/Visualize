@@ -280,6 +280,9 @@ the same input. Read those if you draw globes, rotate projections, or stack `:in
 - `Visualize.Format.duration/1` (#191), `Visualize.Layout.Hexbin` (#353), the closed curves
   `Visualize.Shape.Curve.basis_closed/1` and `cardinal_closed/2` (#393),
   `Visualize.Shape.Arc.angles/2` and `radii/2`, and `Visualize.Contour.cost/2` (#462).
+- **A force simulation's subscribers at start** (#483): `Visualize.Layout.Force.Simulation.start_link/1`
+  takes `subscribers:`, pids registered before the first tick, so a subscriber sees every
+  tick from the first. `subscribe/2` still joins a running simulation.
 
 #### Builder
 
@@ -304,9 +307,6 @@ the same input. Read those if you draw globes, rotate projections, or stack `:in
   - `Visualize.Chart.Builder.Stack.all/2` is new: the tree's rows, with each referenced
     group's inside fetched and each row naming its `owner`. So are `inside/2` and
     `inner_label/3`.
-
-<!-- TODO(#483): add the Simulation `:subscribers` start option as an Added entry under
-     "Data and scales" when #483 merges; it was in flight when this section was written. -->
 
 ### Changed
 
