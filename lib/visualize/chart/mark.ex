@@ -92,8 +92,9 @@ defmodule Visualize.Chart.Mark do
       defaults to its position among the frame's marks, `1` when it is not one of them
     * `:panel` - in a `:facet` frame, the panel value the rows are restricted to
 
-  Raises `ArgumentError` for an unresolved variable, a `:path` row without a
-  `Visualize.IR.Path`, or a pipeline step it cannot run.
+  Raises `ArgumentError` for an unresolved variable, a `:path` row whose `path` is neither
+  a `Visualize.IR.Path` nor `nil` (a `nil` path, such as a row a `:projection` clips, draws
+  nothing — D-130), or a pipeline step it cannot run.
   """
   @spec generate(Frame.t(), map(), keyword()) :: Element.t()
   def generate(%Frame{} = frame, %{type: :tiles} = mark, opts) do

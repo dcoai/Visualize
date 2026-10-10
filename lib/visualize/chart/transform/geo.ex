@@ -24,8 +24,14 @@ defmodule Visualize.Chart.Transform.Geo do
 
   # -- projection -------------------------------------------------------------------------
 
+  # A row the projection clips: kept, and placed nowhere (D-130).
+  @clipped %{path: nil, x: nil, y: nil}
+
   # A geometry column: each row gains the projected outline as `path` and its centroid
-  # as `x`, `y`; a geometry that projects to nothing is dropped (#349).
+  # as `x`, `y` (#349). A geometry the projection clips whole is the view's, not the
+  # data's (D-130): its row stays with `path`, `x` and `y` all `nil`, so a scale that
+  # infers its domain sees every row whatever the viewpoint, and the marks draw nothing
+  # for it. A row whose geometry is not a map is bad data and is dropped.
   defp projection(%{field: field}, rows, %{projection: %Projection{} = projection}) do
     geo_path = GeoPath.new(projection)
 
@@ -33,12 +39,15 @@ defmodule Visualize.Chart.Transform.Geo do
       geometry = Table.get(row, field)
 
       case is_map(geometry) and GeoPath.path_and_centroid(geo_path, geometry) do
+        false -> []
         {path, {x, y}} -> [Map.merge(row, %{path: path, x: x, y: y})]
-        _ -> []
+        {_nothing, nil} -> [Map.merge(row, @clipped)]
       end
     end)
   end
 
+  # A point per row: `x`, `y` through the projection, both `nil` where it clips the point
+  # (D-130). A row without two numeric coordinates is bad data and is dropped.
   defp projection(node, rows, %{projection: %Projection{} = projection}) do
     [lon, lat] = node.fields
 
@@ -47,7 +56,7 @@ defmodule Visualize.Chart.Transform.Geo do
         {lo, la} when is_number(lo) and is_number(la) ->
           case Projection.project(projection, lo, la) do
             {x, y} -> [Map.merge(row, %{x: x, y: y})]
-            nil -> []
+            nil -> [Map.merge(row, %{x: nil, y: nil})]
           end
 
         _ ->
