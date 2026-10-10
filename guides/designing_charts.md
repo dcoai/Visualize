@@ -5,7 +5,7 @@ coordinate frames, its marks and its labels, with no function anywhere in it. Be
 data, a design can be stored, diffed, validated, sent as JSON, built by a tool and bound to
 different rows. This guide is a tour of that declarative layer for someone meeting it for
 the first time. Each topic is short, has an example you can paste into IEx, and ends with
-the section of [the declarative chart spec](../spec/14-declarative-chart.md) that is its
+the section of [the declarative chart spec](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md) that is its
 contract.
 
 Every example builds on the one before, so run them in order.
@@ -72,10 +72,10 @@ dynamic marks and draws each tick cheaply (see the LiveView guide).
 `Visualize.Chart.from_map/1` and `Visualize.Chart.to_map/1` convert between the map and
 the `%Visualize.Chart{}` struct; `Visualize.Chart.to_json/1` needs Jason.
 
-Contract: [spec/14 §1](../spec/14-declarative-chart.md#1-the-map),
-[§7.3](../spec/14-declarative-chart.md#7-3-application),
-[§12](../spec/14-declarative-chart.md#12-compilation) and
-[§16](../spec/14-declarative-chart.md#16-the-builder).
+Contract: [spec/14 §1](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#1-the-map),
+[§7.3](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#73-application),
+[§12](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#12-compilation) and
+[§16](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#16-the-builder).
 
 ## Sources and typed columns
 
@@ -111,8 +111,8 @@ columns = %{t: Enum.map(readings, & &1.t), v: Enum.map(readings, & &1.v)}
   Visualize.Chart.apply(typed, sources: %{gitlab: [%{t: ~U[2026-10-01 00:00:00Z]}]})
 ```
 
-Contract: [spec/14 §2.3](../spec/14-declarative-chart.md#2-3-sources) and
-[§7.2](../spec/14-declarative-chart.md#7-2-sources-as-slots).
+Contract: [spec/14 §2.3](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#23-sources) and
+[§7.2](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#72-sources-as-slots).
 
 ## Frames
 
@@ -163,8 +163,8 @@ import Visualize.Chart.Build
 Map.keys(applied.frames)
 ```
 
-Contract: [spec/14 §4](../spec/14-declarative-chart.md#4-the-frame) (frames, boxes and
-`z` in §4.2, kinds in §4.6) and [§2.8](../spec/14-declarative-chart.md#2-8-layout).
+Contract: [spec/14 §4](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#4-the-frame) (frames, boxes and
+`z` in §4.2, kinds in §4.6) and [§2.8](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#28-layout).
 
 ## Scales
 
@@ -216,7 +216,7 @@ import Visualize.Chart.Build
 Visualize.Chart.Builder.Scales.derive(bare, %{})
 ```
 
-Contract: [spec/14 §4.3](../spec/14-declarative-chart.md#4-3-scales).
+Contract: [spec/14 §4.3](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#43-scales).
 
 ## Marks and channels
 
@@ -261,8 +261,8 @@ hosts = [
 Visualize.Chart.render(applied) =~ ~s(data-series="b")
 ```
 
-Contract: [spec/14 §5.1–§5.3](../spec/14-declarative-chart.md#5-marks) (`series` in §5.2,
-decision D-126 in [spec/13](../spec/13-decisions.md)).
+Contract: [spec/14 §5.1–§5.3](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#5-marks) (`series` in §5.2,
+decision D-126 in [spec/13](https://github.com/dcoai/Visualize/blob/main/spec/13-decisions.md)).
 
 ## Axes, legends and labels
 
@@ -293,10 +293,10 @@ import Visualize.Chart.Build
 {:ok, _} = Visualize.Chart.apply(annotated, sources: %{load: hosts})
 ```
 
-Contract: [spec/14 §4.4](../spec/14-declarative-chart.md#4-4-axes-and-tick-specs),
-[§4.5](../spec/14-declarative-chart.md#4-5-legend),
-[§5.5](../spec/14-declarative-chart.md#5-5-inline-label) and
-[§6](../spec/14-declarative-chart.md#6-labels).
+Contract: [spec/14 §4.4](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#44-axes-and-tick-specs),
+[§4.5](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#45-legend),
+[§5.5](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#55-inline-label) and
+[§6](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#6-labels).
 
 ## Styles, themes and the style grammar
 
@@ -338,9 +338,9 @@ import Visualize.Chart.Build
 Visualize.Chart.render(applied) =~ "var(--vis-series-2"
 ```
 
-Contract: [spec/14 §3](../spec/14-declarative-chart.md#3-the-style-grammar),
-[§2.5](../spec/14-declarative-chart.md#2-5-theme) and
-[§2.7](../spec/14-declarative-chart.md#2-7-defs).
+Contract: [spec/14 §3](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#3-the-style-grammar),
+[§2.5](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#25-theme) and
+[§2.7](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#27-defs).
 
 ## Data transforms on a mark
 
@@ -383,8 +383,8 @@ sales = [
 
 A domain is inferred from the transformed rows, so a stack's `y1` sets the `y` axis.
 
-Contract: [spec/14 §5.4](../spec/14-declarative-chart.md#5-4-data-and-transforms) and
-[§16.5](../spec/14-declarative-chart.md#16-5-data-nodes-and-transforms).
+Contract: [spec/14 §5.4](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#54-data-and-transforms) and
+[§16.5](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#165-data-nodes-and-transforms).
 
 ## Composition and validation
 
@@ -467,11 +467,11 @@ import Visualize.Chart.Build
 Enum.map(errors, &Visualize.Chart.Validator.format/1)
 ```
 
-Contract: [spec/14 §8](../spec/14-declarative-chart.md#8-composition-and-the-stack),
-[§7](../spec/14-declarative-chart.md#7-variables-and-slots),
-[§10](../spec/14-declarative-chart.md#10-validation),
-[§17](../spec/14-declarative-chart.md#17-inspecting-a-stack) and
-[§19](../spec/14-declarative-chart.md#19-typed-fragments-identity-use-sites-and-one-composer-at-every-level).
+Contract: [spec/14 §8](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#8-composition-and-the-stack),
+[§7](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#7-variables-and-slots),
+[§10](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#10-validation),
+[§17](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#17-inspecting-a-stack) and
+[§19](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#19-typed-fragments-identity-use-sites-and-one-composer-at-every-level).
 
 ## Where next
 
@@ -479,5 +479,5 @@ Contract: [spec/14 §8](../spec/14-declarative-chart.md#8-composition-and-the-st
   common chart.
 - The gallery in `examples/` has every chart as a design, with the builder calls that make
   it (`./run.sh` in `examples/`).
-- [spec/14](../spec/14-declarative-chart.md) is the contract for the whole layer, with
+- [spec/14](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md) is the contract for the whole layer, with
   every key's type, default and merge rule.

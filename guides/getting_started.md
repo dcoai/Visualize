@@ -249,7 +249,7 @@ follows its container's width, and for tooltips, crosshairs, brushing and zoomin
 - [Designing charts](designing_charts.md): the declarative layer in depth. It covers
   frames, scales, marks and channels, styles and themes, transforms and composition.
 - [Cheatsheet](https://hexdocs.pm/visualize/cheatsheet.html): the `Build` functions and common recipes on one page.
-- [Usage rules](../usage-rules.md): the library's conventions in short form.
-- [The specification](../spec/README.md): the contract for every public function.
+- [Usage rules](https://github.com/dcoai/Visualize/blob/main/usage-rules.md): the library's conventions in short form.
+- [The specification](https://github.com/dcoai/Visualize/blob/main/spec/README.md): the contract for every public function.
 - The gallery in `examples/` is a Phoenix app with every chart type and its code. Run it
   with `cd examples && ./run.sh` and open <http://127.0.0.1:4080>.
