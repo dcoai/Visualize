@@ -9,6 +9,11 @@ All notable changes to Visualize are recorded here, following
 > module by module, lives in [`spec/`](spec/README.md), which is the source of truth for
 > that and is not restated here.
 
+## [Unreleased]
+
+`mix.exs` reads `0.2.26-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
+release it merely follows.
+
 ## [0.2.25] — 2026-10-10
 
 ### Added
@@ -740,6 +745,7 @@ the meaning of a patch.
   discipline — tagged ticks, restart keeps the state, alpha is clamped — under an ExTLA
   model that is checked in CI (D-14).
 
+[Unreleased]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/compare/v0.2.25...main
 [0.2.25]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.2.25
 [0.2.4]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.2.4
 [0.2.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.2.0
