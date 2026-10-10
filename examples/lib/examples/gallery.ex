@@ -44,6 +44,8 @@ defmodule Examples.Gallery do
     {Examples.Charts.SpectrumChart, "spectrum"},
     # Maps
     {Examples.Charts.WorldMap, "world_map"},
+    # The night side and the GPS constellation over the turning World Map (#526)
+    {Examples.Charts.DayNightGps, "day_night_gps"},
     {Examples.Charts.Globe, "globe"},
     # A GPS track over OpenStreetMap tiles, the basemap beneath the canvas (#476)
     {Examples.Charts.GpsTrack, "gps_track"},
