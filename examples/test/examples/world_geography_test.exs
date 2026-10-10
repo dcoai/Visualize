@@ -282,4 +282,20 @@ defmodule Examples.WorldGeographyTest do
     # The globe turns: no two ticks draw the same picture.
     assert length(Enum.uniq(canvases)) == length(canvases)
   end
+
+  # Both maps turn as the Earth does (#523): the land drifts east, so Greenwich on the
+  # equator moves right from one tick to the next.
+  for chart <- [WorldMap, Globe] do
+    test "#{inspect(chart)} turns the way the Earth does, the land drifting east" do
+      greenwich_x = fn tick ->
+        {design, sources} = unquote(chart).design(animation_tick: tick)
+        {:ok, applied} = Visualize.Chart.apply(design, sources: sources)
+        projection = Visualize.Chart.Frame.projection(applied.frame)
+        {x, _y} = Visualize.Geo.Projection.project(projection, 0, 0)
+        x
+      end
+
+      assert greenwich_x.(10) > greenwich_x.(0)
+    end
+  end
 end
