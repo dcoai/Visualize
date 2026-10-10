@@ -96,14 +96,15 @@ defmodule Visualize.MixProject do
   @models ~w(Visualize.Specs.ForceSimulation)
   defp verify_models(_args), do: Enum.each(@models, &Mix.Task.rerun("extla.check", [&1]))
 
-  # The specification, the surface golden and the changelog ship with the package: they are
+  # The guides ship with the package, as hexdocs extras a reader starts from. The
+  # specification, the surface golden and the changelog ship with it too: they are
   # the contract a consumer holds the library to, and the record of what an upgrade brings,
   # not internal documentation. RELEASING.md is deliberately absent — it is a maintainer
   # document, and nothing that ships may link to a file that does not.
   defp package do
     [
       files:
-        ~w(lib spec mix.exs README.md LICENSE CHANGELOG.md usage-rules.md API_SURFACE.md .formatter.exs),
+        ~w(lib guides spec mix.exs README.md LICENSE CHANGELOG.md usage-rules.md API_SURFACE.md .formatter.exs),
       licenses: ["MIT"],
       links: %{"GitLab" => "https://gitlab.conet.yarina.org/dco-tek/visualize"}
     ]
@@ -147,6 +148,12 @@ defmodule Visualize.MixProject do
       extras:
         [
           "README.md",
+          # The guides, in reading order, ahead of the reference material: where a newcomer
+          # starts, then the declarative layer, then the one-page summary.
+          "guides/getting_started.md",
+          "guides/liveview.md",
+          "guides/designing_charts.md",
+          "guides/cheatsheet.cheatmd",
           "usage-rules.md",
           # The changelog ships in `files:`, so the README's Installation section links it
           # as the reference for moving a pinned tag. A link from a shipping document has
@@ -155,7 +162,11 @@ defmodule Visualize.MixProject do
           {"spec/README.md", filename: "specification", title: "Specification index"}
           | Path.wildcard("spec/[0-9]*.md")
         ] ++ ["API_SURFACE.md"],
+      # ExDoc lists ungrouped extras first, so the README alone stays ungrouped and the
+      # guides follow it, ahead of the reference documents.
       groups_for_extras: [
+        Guides: ~r"guides/",
+        Reference: ["usage-rules.md", "CHANGELOG.md"],
         Specification: ~r"spec/",
         Conformance: ["API_SURFACE.md"]
       ],
