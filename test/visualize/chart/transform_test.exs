@@ -627,19 +627,28 @@ defmodule Visualize.Chart.TransformTest do
   describe "geo" do
     @points [%{x: 10, y: 10}, %{x: 90, y: 10}, %{x: 50, y: 60}, %{x: 20, y: 80}, %{x: nil, y: 1}]
 
-    test ":projection adds x and y through the projection and drops clipped points" do
+    test ":projection adds x and y through the projection; a clipped point keeps its row, unplaced (D-130)" do
       projection = Projection.new(:orthographic) |> Projection.translate(100, 50)
-      rows = [%{lon: 10, lat: 20, name: "in"}, %{lon: 170, lat: 0, name: "behind"}]
-      [row] = run(%{op: :projection, fields: [:lon, :lat]}, rows, projection: projection)
+
+      rows = [
+        %{lon: 10, lat: 20, name: "in"},
+        %{lon: 170, lat: 0, name: "behind"},
+        %{lon: nil, lat: 0, name: "no lon"},
+        %{lon: "10", lat: 0, name: "not a number"}
+      ]
+
+      [row, behind] = run(%{op: :projection, fields: [:lon, :lat]}, rows, projection: projection)
       assert row.name == "in"
       assert {row.x, row.y} == Projection.project(projection, 10, 20)
+      # Clipping is the view's: the row stays, placed nowhere. Bad data is still dropped.
+      assert behind == %{lon: 170, lat: 0, name: "behind", x: nil, y: nil}
 
       assert_raise ArgumentError, ~r/needs a projection/, fn ->
         run(%{op: :projection, fields: [:lon, :lat]}, rows)
       end
     end
 
-    test ":projection over a geometry column adds its path and centroid, dropping one that projects to nothing (#349)" do
+    test ":projection over a geometry column adds its path and centroid; one that projects to nothing keeps its row, unplaced (#349, D-130)" do
       projection = Projection.new(:orthographic) |> Projection.translate(100, 50)
       geo = Visualize.Geo.Path.new(projection)
       # Both wound clockwise, d3's interior (spec/07 §2.2.1, #510): wound anticlockwise each
@@ -652,12 +661,14 @@ defmodule Visualize.Chart.TransformTest do
         %{name: "near", shape: near},
         %{name: "behind", shape: behind},
         %{name: "globe", shape: sphere},
-        %{name: "none", shape: nil}
+        %{name: "none", shape: nil},
+        %{name: "text", shape: "Polygon"}
       ]
 
-      assert [a, b] = run(%{op: :projection, field: :shape}, rows, projection: projection)
+      assert [a, behind, b] = run(%{op: :projection, field: :shape}, rows, projection: projection)
       assert a.name == "near" and a.path == Visualize.Geo.Path.path(geo, near)
       assert {a.x, a.y} == Visualize.Geo.Path.centroid(geo, near)
+      assert behind == %{name: "behind", shape: behind.shape, path: nil, x: nil, y: nil}
       assert b.name == "globe" and b.path == Visualize.Geo.Path.path(geo, sphere)
     end
 

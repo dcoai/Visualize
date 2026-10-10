@@ -6,7 +6,7 @@ defmodule Examples.WorldGeographyTest do
   """
   use ExUnit.Case, async: true
 
-  alias Examples.Charts.{Globe, WorldGeography, WorldMap}
+  alias Examples.Charts.{Design, Globe, WorldGeography, WorldMap}
   alias Examples.Frames
 
   @file_path Path.expand("../../priv/geo/ne_110m_land.geojson", __DIR__)
@@ -170,6 +170,24 @@ defmodule Examples.WorldGeographyTest do
     # The far hemisphere's land masses draw nothing, so fewer than all of them.
     land_paths = length(String.split(svg, "<path")) - 1 - 2 - 17
     assert land_paths > 20 and land_paths < 127
+  end
+
+  # #522, D-130: the land is filled through an inferred ordinal domain. When the projection
+  # dropped the rows it clipped, the domain was whichever land masses faced the viewer —
+  # 46, 73 and 106 of the 127 at these ticks — and a land mass's colour moved as it turned.
+  test "the Globe's colour domain is every land mass, in one order, whatever the viewpoint" do
+    names = Enum.map(WorldGeography.land(), & &1.name)
+
+    scales =
+      for tick <- [0, 40, 80] do
+        Design.applied(Globe, animation_tick: tick).frame.scales.color
+      end
+
+    for scale <- scales, do: assert(scale.domain == names)
+
+    # So each land mass keeps one colour through the animation.
+    colours = for scale <- scales, do: Enum.map(names, &Visualize.Scale.apply(scale, &1))
+    assert length(Enum.uniq(colours)) == 1
   end
 
   # The Globe's disc: the plot's centre, and the radius `design/1` gives the orthographic.

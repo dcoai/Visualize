@@ -14,6 +14,21 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.2.5-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Changed
+
+- **A projection's clip hides a row; it no longer drops it** (#522, D-130). A `:projection`
+  step keeps every row it is given. A point the projection clips keeps its row with `x` and
+  `y` set to `nil`. A geometry that projects to nothing keeps its row with `path`, `x` and
+  `y` set to `nil`. Marks draw nothing for these rows on every backend. Domains are now
+  inferred over every row, whatever the viewpoint. Before, a turning globe coloured through
+  an inferred `ordinal_scale(:color)` changed its land colours as it turned, and a bubble
+  map's size domain depended on what was in view. Rows with a missing or non-numeric
+  coordinate, or a geometry that is not a map, are still dropped. **If you count or read
+  the step's output rows**, expect the clipped ones, with `nil` positions.
+- **A `:line` or `:area` path that places no point draws no element** (D-130). This
+  applies to a whole series a projection clips, and to a line with no rows. Before, it
+  drew an empty `<path d="">`.
+
 ## [0.2.4] — 2026-10-10
 
 ### Changed

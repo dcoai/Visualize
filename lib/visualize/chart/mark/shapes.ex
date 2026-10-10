@@ -41,7 +41,7 @@ defmodule Visualize.Chart.Mark.Shapes do
 
     ctx
     |> Channels.pixels()
-    |> series(ctx)
+    |> series(ctx, [:x, :y])
     |> closed(ctx)
     |> Enum.flat_map(fn rows ->
       path =
@@ -101,7 +101,7 @@ defmodule Visualize.Chart.Mark.Shapes do
         y1: edge(ctx, row, :y1, row.y)
       })
     end)
-    |> series(ctx)
+    |> series(ctx, [:x0, :x1, :y0, :y1])
     |> closed(ctx)
     |> Enum.map(fn rows ->
       path =
@@ -189,16 +189,22 @@ defmodule Visualize.Chart.Mark.Shapes do
   end
 
   # The rows split by the `series` channel in order of first appearance: one path per
-  # series (spec/14 §5.2); all the rows as one without the channel.
-  defp series(rows, ctx) do
-    if Channels.has?(ctx, :series) do
-      rows
-      |> Enum.map(& &1.series)
-      |> Enum.uniq()
-      |> Enum.map(fn value -> Enum.filter(rows, &(&1.series == value)) end)
-    else
-      [rows]
-    end
+  # series (spec/14 §5.2); all the rows as one without the channel. A path none of whose
+  # rows places the path's `channels` draws nothing — no empty `<path d="">` — as a
+  # per-datum mark draws nothing for a datum it cannot place: a series, or a whole line,
+  # that a projection clips (D-130) leaves no element behind.
+  defp series(rows, ctx, channels) do
+    groups =
+      if Channels.has?(ctx, :series) do
+        rows
+        |> Enum.map(& &1.series)
+        |> Enum.uniq()
+        |> Enum.map(fn value -> Enum.filter(rows, &(&1.series == value)) end)
+      else
+        [rows]
+      end
+
+    Enum.filter(groups, fn group -> Enum.any?(group, &Channels.placed?(&1, channels)) end)
   end
 
   defp last_point(rows, xk, yk) do
