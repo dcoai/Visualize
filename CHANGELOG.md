@@ -11,9 +11,6 @@ All notable changes to Visualize are recorded here, following
 
 ## [0.2.25] — 2026-10-10
 
-`mix.exs` reads `0.2.5-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
-release it merely follows.
-
 ### Added
 
 - **`Visualize.Geo.Circle`** (#525): d3-geo's `geoCircle`. `polygon/1` returns the circle of
@@ -22,6 +19,13 @@ release it merely follows.
   point, in d3's winding, so `Visualize.Geo.Path` fills the cap about the centre under any
   projection, cut and closed at the antimeridian. A night side is
   `polygon(center: antisolar_point)`.
+- **`alpha` and `ticks` on the `:force` step** (#527, D-132): the temperature a compiled
+  chart reheats the layout to each tick (`0.3`) and the iterations it runs (`3`).
+- **`Visualize.Layout.Force.run/1` takes `:alpha` and `:alpha_decay`** (#527): a run can
+  continue a layout, from nodes that carry their `x`, `y`, `vx` and `vy`, as a reheated d3
+  simulation does. The defaults are unchanged.
+- **`Visualize.Chart.Frame.new/2` takes `warm:`** (#527, D-132): the force layouts a
+  compiled chart carries between ticks.
 
 ### Changed
 
@@ -53,16 +57,6 @@ release it merely follows.
   is about eight times cheaper.
 - **A `:force` node source's `x` and `y` seed the layout** (#527). A node whose row has
   numeric `x` and `y` starts there, as d3 honours a given position.
-
-### Added
-
-- **`alpha` and `ticks` on the `:force` step** (#527, D-132): the temperature a compiled
-  chart reheats the layout to each tick (`0.3`) and the iterations it runs (`3`).
-- **`Visualize.Layout.Force.run/1` takes `:alpha` and `:alpha_decay`** (#527): a run can
-  continue a layout, from nodes that carry their `x`, `y`, `vx` and `vy`, as a reheated d3
-  simulation does. The defaults are unchanged.
-- **`Visualize.Chart.Frame.new/2` takes `warm:`** (#527, D-132): the force layouts a
-  compiled chart carries between ticks.
 
 ## [0.2.4] — 2026-10-10
 
