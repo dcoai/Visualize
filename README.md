@@ -111,7 +111,7 @@ other than loopback exposes an unauthenticated development server. See
   in a LiveView.
 - [Charts in LiveView](guides/liveview.md): components, hooks, choosing a backend, live data.
 - [Designing charts](guides/designing_charts.md): a tour of the declarative layer.
-- [Cheatsheet](guides/cheatsheet.cheatmd): the `Build` functions and common recipes.
+- [Cheatsheet](https://hexdocs.pm/visualize/cheatsheet.html): the `Build` functions and common recipes.
 - [Usage rules](usage-rules.md): the short form, for developers and agents.
 - [Specification](spec/README.md): the source of truth, with a contract for every public
   function.

@@ -29,6 +29,9 @@ All notable changes to Visualize are recorded here, following
 
 ### Changed
 
+- **The cheatsheet links open its rendered page on HexDocs** (#528). `guides/cheatsheet.cheatmd`
+  is ExDoc's cheatsheet format, so GitHub and GitLab show it as plain text. The README and
+  the guides now link <https://hexdocs.pm/visualize/cheatsheet.html>.
 - **A projection's clip hides a row; it no longer drops it** (#522, D-130). A `:projection`
   step keeps every row it is given. A point the projection clips keeps its row with `x` and
   `y` set to `nil`. A geometry that projects to nothing keeps its row with `path`, `x` and
