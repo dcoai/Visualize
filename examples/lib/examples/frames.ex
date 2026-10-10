@@ -93,10 +93,11 @@ defmodule Examples.Frames do
     }
   end
 
-  # A design that eases a scale keeps its compiled chart on SVG too, so the easing has a
-  # state to live in (spec/14 §12.5, #360); any other chart renders whole per frame.
+  # A design that carries state between ticks — it eases (spec/14 §12.5, #360), or a
+  # `:force` step's layout is warm (#527, D-132) — keeps its compiled chart on SVG too, so
+  # the state has somewhere to live; any other chart renders whole per frame.
   def prepare(module, opts, :svg) do
-    if Design.transitions?(module) do
+    if Design.stateful?(module) do
       applied = Design.applied(module, opts)
       %{compiled: compiled!(applied, ceiling: 1_000_000_000)}
     end
@@ -153,9 +154,11 @@ defmodule Examples.Frames do
 
   @doc "A frame of `module` at `opts` on `backend`, and the state after it."
   @spec frame(module(), keyword(), backend(), map() | nil) :: {frame(), map() | nil}
-  # A design that eases a scale steps its compiled chart (#360); any other renders whole.
+  # A design that carries state steps its compiled chart (#360, #527); any other renders
+  # whole.
   def frame(module, opts, :svg, %{compiled: compiled} = state) do
     {design, sources} = module.design(opts)
+    compiled = recompiled(compiled, design, module, opts, :svg)
     {svg, compiled} = Design.step(module, compiled, design, sources, opts)
     {svg_frame(svg, sources), %{state | compiled: compiled}}
   end
@@ -171,7 +174,7 @@ defmodule Examples.Frames do
   def frame(module, opts, backend, %{compiled: compiled} = state)
       when backend in [:canvas, :incremental] do
     {design, sources} = module.design(opts)
-    compiled = recompiled(compiled, design, module, opts)
+    compiled = recompiled(compiled, design, module, opts, backend)
     clock = for key <- [:now, :at], value = opts[key], do: {key, value}
 
     {plots, compiled} =
@@ -208,13 +211,17 @@ defmodule Examples.Frames do
   # nodes and the render targets are counted from them, so a tick cannot swap them. The
   # force graph animates the link distance of its `:force` step, which is a mark's
   # transform; its frame never moves, so `tick/3`'s `frame:` cannot reach it.
-  defp recompiled(compiled, design, module, opts) do
+  #
+  # The fresh compilation carries the last one's state (`carry/2`): the easing, and the
+  # force graph's warm layout, which is what makes it one graph moving rather than a new
+  # graph every frame (#527, D-132).
+  defp recompiled(compiled, design, module, opts, backend) do
     drawn = Enum.flat_map(compiled, fn {_name, one} -> one.chart.marks end)
 
     if design.marks == drawn do
       compiled
     else
-      prepare(module, opts, :canvas).compiled
+      carry(%{compiled: compiled}, prepare(module, opts, backend)).compiled
     end
   end
 

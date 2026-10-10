@@ -41,6 +41,7 @@ defmodule Visualize.Chart.Frame do
   alias Visualize.{Chart, Theme}
   alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Scales}
   alias Visualize.Chart.{Mark, Schema, Style, Validator, Var}
+  alias Visualize.Chart.Transform.Force
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
 
@@ -68,7 +69,8 @@ defmodule Visualize.Chart.Frame do
             box: [0, 0, 1, 1],
             z: 0,
             background: nil,
-            sync: nil
+            sync: nil,
+            forces: %{}
 
   @typedoc "A frame kind of spec/14 §4.1."
   @type kind :: :cartesian | :polar | :geo | :facet
@@ -98,7 +100,8 @@ defmodule Visualize.Chart.Frame do
           box: [number()],
           z: integer(),
           background: term() | nil,
-          sync: String.t() | nil
+          sync: String.t() | nil,
+          forces: map()
         }
 
   # The size a frame is realised at when the caller gives none (spec/14 §4.2): a static
@@ -122,6 +125,12 @@ defmodule Visualize.Chart.Frame do
       spec/14 §4.2); a design records none
     * `:now` - the instant a `:window` step measures its durations back from (spec/14
       §5.4.1); without it each such step takes the newest reading of its own column
+    * `:warm` - the force layouts a compiled chart carries between ticks (spec/14 §12.5,
+      D-132); every `:force` step is cold without it (default `%{}`)
+
+  Each distinct `:force` step of the frame's marks is laid out once, before any domain is
+  inferred, and held in `forces`: every pipeline that reaches the step reads that layout
+  (spec/14 §5.4.3).
 
   Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, a
   bound value a scale cannot take, or a legend in a margin that cannot hold it (spec/14
@@ -148,16 +157,27 @@ defmodule Visualize.Chart.Frame do
     theme = theme(chart.theme, Keyword.get(opts, :theme))
     styles = Style.all(chart.styles)
     projection = projection(kind, node, plot, sources)
-    panels = panels(kind, node, chart, sources, context(kind, plot, projection, now))
+    marks = mine(chart.marks, name, chart)
+
+    # Each graph laid out once, before anything reads its rows (spec/14 §5.4.3, D-132).
+    forces =
+      Force.layouts(
+        marks,
+        sources,
+        context(kind, plot, projection, now, %{}),
+        Keyword.get(opts, :warm, %{})
+      )
+
+    panels = panels(kind, node, chart, sources, context(kind, plot, projection, now, forces))
     facet = facet(kind, node, panels)
     scale_plot = if facet, do: panel_plot(plot, facet.columns, panels), else: plot
-    ctx = context(kind, scale_plot, projection, now)
+    ctx = context(kind, scale_plot, projection, now, forces)
 
     scales =
       Scales.realise(
         chart,
         node,
-        mine(chart.marks, name, chart),
+        marks,
         kind,
         scale_plot,
         theme,
@@ -183,7 +203,7 @@ defmodule Visualize.Chart.Frame do
       axes: Map.get(node, :axes, []),
       legend: legend,
       labels: mine(chart.labels, name, chart),
-      marks: mine(chart.marks, name, chart),
+      marks: marks,
       name: name,
       domains: Keyword.get(opts, :domains, %{}),
       mark_paths: paths_of(chart.marks, name, chart),
@@ -196,7 +216,8 @@ defmodule Visualize.Chart.Frame do
       styles: styles,
       design_styles: chart.styles,
       defs: chart.defs,
-      now: now
+      now: now,
+      forces: forces
     }
   end
 
@@ -399,12 +420,13 @@ defmodule Visualize.Chart.Frame do
   def centre(_kind, plot), do: [plot.width / 2, plot.height / 2]
 
   # What a mark's pipeline sees of the frame (spec/14 §5.4).
-  defp context(kind, plot, projection, now) do
+  defp context(kind, plot, projection, now, forces) do
     %{
       size: [plot.width, plot.height],
       centre: centre(kind, plot),
       projection: projection,
-      now: now
+      now: now,
+      forces: forces
     }
   end
 

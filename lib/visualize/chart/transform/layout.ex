@@ -2,12 +2,13 @@ defmodule Visualize.Chart.Transform.Layout do
   @moduledoc false
   # The layout steps of a mark's pipeline (spec/14 §5.4.2-5.4.3): the hierarchies over
   # `Visualize.Layout.Hierarchy.stratify/2`, and the graphs — chord, sankey, force — over
-  # rows read as flows. Every position is in the pixels of `size`, and a row that has a
+  # rows read as flows; the force step is `Visualize.Chart.Transform.Force`'s (D-132). Every position is in the pixels of `size`, and a row that has a
   # shape carries it as a `Visualize.IR.Path` under `path` (D-62).
 
+  alias Visualize.Chart.Transform.Force
   alias Visualize.Data.Table
   alias Visualize.IR.{Path, Transform}
-  alias Visualize.Layout.{Chord, Cluster, Force, Hierarchy, Pack, Partition, Sankey, Tree}
+  alias Visualize.Layout.{Chord, Cluster, Hierarchy, Pack, Partition, Sankey, Tree}
   alias Visualize.Layout.Treemap
   alias Visualize.Shape.Arc
 
@@ -19,7 +20,7 @@ defmodule Visualize.Chart.Transform.Layout do
   def run(op, node, rows, ctx) when op in @hierarchies, do: hierarchy(op, node, rows, ctx)
   def run(:chord, node, rows, ctx), do: chord(node, rows, ctx)
   def run(:sankey, node, rows, ctx), do: sankey(node, rows, ctx)
-  def run(:force, node, rows, ctx), do: force(node, rows, ctx)
+  def run(:force, node, rows, ctx), do: Force.run(node, rows, ctx)
 
   # -- hierarchies ------------------------------------------------------------------------
 
@@ -135,7 +136,9 @@ defmodule Visualize.Chart.Transform.Layout do
 
   # A flow is a row read as `{source, target, value}`; the nodes are the distinct ids over
   # every source and then every target, in order of first appearance.
-  defp flows(node, rows, default) do
+  @doc false
+  @spec flows(map(), [map()], number()) :: [{term(), term(), term()}]
+  def flows(node, rows, default) do
     [source, target] = node.fields
     value = Map.get(node, :field)
 
@@ -149,7 +152,9 @@ defmodule Visualize.Chart.Transform.Layout do
   # every source and then every target with an empty table; with one (`nodes`, spec/14
   # §5.4.3, D-110), the source's rows in its order keyed by `id`, a flow naming an id the
   # table lacks a fault. A node row the layout yields is its table row under the layout's.
-  defp nodes(node, flows, ctx) do
+  @doc false
+  @spec nodes(map(), [{term(), term(), term()}], map()) :: {[term()], map()}
+  def nodes(node, flows, ctx) do
     mentioned = Enum.uniq(Enum.map(flows, &elem(&1, 0)) ++ Enum.map(flows, &elem(&1, 1)))
 
     case Map.get(node, :nodes) do
@@ -180,7 +185,9 @@ defmodule Visualize.Chart.Transform.Layout do
               "(spec/14 §5.4.3)"
   end
 
-  defp with_node(table, %{id: id} = row), do: Map.merge(Map.get(table, id, %{}), row)
+  @doc false
+  @spec with_node(map(), map()) :: map()
+  def with_node(table, %{id: id} = row), do: Map.merge(Map.get(table, id, %{}), row)
 
   # -- chord ------------------------------------------------------------------------------
 
@@ -330,44 +337,5 @@ defmodule Visualize.Chart.Transform.Layout do
     |> Path.line_to(x1, y1 + width)
     |> Path.curve_to(xi, y1 + width, xi, y0 + width, x0, y0 + width)
     |> Path.close()
-  end
-
-  # -- force ------------------------------------------------------------------------------
-
-  defp force(node, rows, ctx) do
-    flows = flows(node, rows, 1)
-    {ids, table} = nodes(node, flows, ctx)
-    nodes = Enum.map(ids, &%{id: &1})
-    links = Enum.map(flows, fn {s, t, _v} -> %{source: s, target: t} end)
-    [w, h] = Map.get(node, :size, ctx.size)
-
-    result =
-      Force.run(
-        nodes: nodes,
-        links: links,
-        forces: [
-          {:center, x: w / 2, y: h / 2},
-          {:many_body, strength: Map.get(node, :strength, -30)},
-          {:link, distance: Map.get(node, :distance, 30)}
-        ]
-      )
-
-    positions = Map.new(result.nodes, &{&1.id, &1})
-
-    case Map.get(node, :output, :nodes) do
-      :nodes ->
-        Enum.map(result.nodes, &with_node(table, Map.take(&1, [:id, :x, :y])))
-
-      :links ->
-        Enum.map(flows, fn {s, t, _v} ->
-          %{x: x0, y: y0} = Map.fetch!(positions, s)
-          %{x: x1, y: y1} = Map.fetch!(positions, t)
-          path = Path.new() |> Path.move_to(x0, y0) |> Path.line_to(x1, y1)
-          %{source: s, target: t, x0: x0, y0: y0, x1: x1, y1: y1, path: path}
-        end)
-
-      other ->
-        raise ArgumentError, ":force yields no #{inspect(other)} (spec/14 §5.4.3)"
-    end
   end
 end

@@ -8,10 +8,20 @@ defmodule Examples.Charts.ForceGraph do
   through `nodes: :nodes` (spec/14 §5.4.3), so each laid-out node carries its table row —
   here its `group`, which colours it through the `color` scale — and the layout's
   `strength` and `distance` are the step's own keys rather than the fixed ones that packed
-  twelve nodes into a blob. The simulation is a pure function of its input, so the design
-  draws the same graph every time; animated, the link distance breathes and the layout
-  settles around it each frame, where the hand-written version jittered each node about
-  its rest position by hand — a node's position is the layout's.
+  twelve nodes into a blob. Rendered whole, the simulation is a pure function of its
+  input, so the design draws the same graph every time.
+
+  Animated, the link distance breathes, `100 + 12 sin(0.1 t)`, and the layout settles
+  around the breathing distance **from where it was** (#527, D-132): a run keeps a
+  compiled chart on every backend, and its `:force` step is warm there — each tick starts
+  from the last tick's positions and velocities, reheated to the step's `alpha` for its
+  few `ticks` of iterations — so the graph swells and settles in place as one graph. The
+  breathing changes a mark's transform, so each tick is compiled again and
+  `Examples.Frames` carries the layout across (spec/14 §12.5). Laid out cold every frame,
+  as it was, the graph relaxed from scratch each tick into whichever equilibrium it fell
+  into, a node jumping by up to 327 px; warm, no node moves by more than about 11 px a
+  tick. The hand-written version jittered each node about its rest position by hand — a
+  node's position is the layout's.
   """
 
   import Visualize.Chart.Build
@@ -61,7 +71,8 @@ defmodule Examples.Charts.ForceGraph do
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
-    # Animated, the link distance breathes and the layout settles around it each frame.
+    # Animated, the link distance breathes; a run's warm layout settles around it from
+    # where it was (#527, D-132).
     distance =
       case opts[:animation_tick] do
         nil -> 100

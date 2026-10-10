@@ -37,6 +37,32 @@ release it merely follows.
 - **A `:line` or `:area` path that places no point draws no element** (D-130). This
   applies to a whole series a projection clips, and to a line with no rows. Before, it
   drew an empty `<path d="">`.
+- **A compiled chart's force layout is warm** (#527, D-132). `Visualize.Chart.Compiled`
+  keeps each `:force` step's last layout, every node's position and velocity by id, and
+  each `tick/3` or `step/3` moves the graph on from it instead of laying it out again from
+  scratch. A change to the step's `distance` or `strength` now perturbs the graph rather
+  than replacing it with a new one, often a reflection or rotation of the last. A node new
+  to the graph starts near its linked neighbours, and a node that has gone is forgotten.
+  `Compiled.carry/2` carries the layout across a recompilation, so a caller that compiles
+  again because a tick's marks differ keeps the graph where it was. `Visualize.Chart.apply/2`
+  and `render` are unchanged: the same input lays out the same graph, cold.
+- **The marks of one graph share one layout** (#527, D-132). `Visualize.Chart.Frame.new/2`
+  lays out each distinct `:force` step once and holds it in the frame's new `forces`
+  field, so a links mark and a nodes mark over the same step agree exactly and the
+  simulation runs once per realisation, not once per mark and pass. Compiling a graph
+  is about eight times cheaper.
+- **A `:force` node source's `x` and `y` seed the layout** (#527). A node whose row has
+  numeric `x` and `y` starts there, as d3 honours a given position.
+
+### Added
+
+- **`alpha` and `ticks` on the `:force` step** (#527, D-132): the temperature a compiled
+  chart reheats the layout to each tick (`0.3`) and the iterations it runs (`3`).
+- **`Visualize.Layout.Force.run/1` takes `:alpha` and `:alpha_decay`** (#527): a run can
+  continue a layout, from nodes that carry their `x`, `y`, `vx` and `vy`, as a reheated d3
+  simulation does. The defaults are unchanged.
+- **`Visualize.Chart.Frame.new/2` takes `warm:`** (#527, D-132): the force layouts a
+  compiled chart carries between ticks.
 
 ## [0.2.4] — 2026-10-10
 

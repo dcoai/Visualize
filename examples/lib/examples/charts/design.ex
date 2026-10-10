@@ -86,6 +86,26 @@ defmodule Examples.Charts.Design do
   end
 
   @doc """
+  Whether a run of the module's design carries state from one tick to the next, so it
+  keeps a compiled chart on SVG too: it eases (`transitions?/1`), or a mark lays out a
+  graph with a `:force` step, whose layout a compiled chart keeps warm (spec/14 §12.5,
+  #527, D-132).
+  """
+  @spec stateful?(module()) :: boolean()
+  def stateful?(module), do: transitions?(module) or force?(module)
+
+  defp force?(module) do
+    {design, _sources} = module.design([])
+
+    Enum.any?(Map.get(design, :marks, []), fn mark ->
+      case Map.get(mark, :data) do
+        %{transforms: steps} when is_list(steps) -> Enum.any?(steps, &match?(%{op: :force}, &1))
+        _source -> false
+      end
+    end)
+  end
+
+  @doc """
   One SVG frame of a design's compiled charts at their eased scales, as the gallery's
   document, and the compiled charts after it (spec/14 §12.5, #360, #432):
   `Visualize.Chart.Compiled.step/3` per frame — each group already placed at its box
