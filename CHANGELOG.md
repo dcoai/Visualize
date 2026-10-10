@@ -12,9 +12,6 @@ All notable changes to Visualize are recorded here, following
 
 ## [0.2.35] — 2026-10-10
 
-`mix.exs` reads `0.2.26-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
-release it merely follows.
-
 ### Changed
 
 - **The documentation is the README, the guides and the changelog** (#529, D-133). The
