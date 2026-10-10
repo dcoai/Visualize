@@ -100,8 +100,9 @@ defmodule Visualize.MixProject do
   # The guides ship with the package, as hexdocs extras a reader starts from. The
   # specification, the surface golden and the changelog ship with it too: they are
   # the contract a consumer holds the library to, and the record of what an upgrade brings,
-  # not internal documentation. RELEASING.md is deliberately absent — it is a maintainer
-  # document, and nothing that ships may link to a file that does not.
+  # not internal documentation; the usage rules ship because the usage_rules tooling reads
+  # them from `deps/`. The specification, the surface golden and the usage rules are not
+  # docs extras (D-133). RELEASING.md is deliberately absent — it is a maintainer document.
   defp package do
     [
       files:
@@ -114,68 +115,38 @@ defmodule Visualize.MixProject do
     ]
   end
 
-  # The references the specification makes on purpose to functions that are internal
-  # (behaviour callbacks; the family modules behind `Geo.Projection` and `CanvasBinary`; the
-  # one module that calls the resvg binary, spec/09 §9) or that the decisions log
-  # records as removed or as never having existed (D-2, D-13).
-  @internal_prefixes [
-    "Visualize.Backend.SVG.",
-    "Visualize.Backend.Canvas.",
-    "Visualize.Backend.CanvasBinary.SVG.",
-    "Visualize.Backend.CanvasBinary.PathEncoder.",
-    "Visualize.Backend.CanvasBinary.Opcodes.",
-    "Visualize.Render.Raster"
-  ]
-  @recorded_absent [
-    "Visualize.Geo.Projection.family/1",
-    "Visualize.Render.with_backend/2",
-    "Visualize.Scale.scale/2",
-    "Visualize.Scale.color/0",
-    "Visualize.Scale.scheme/2"
-  ]
-
-  @doc false
-  def internal_reference?(reference) do
-    reference in @recorded_absent or
-      Enum.any?(@internal_prefixes, &String.starts_with?(reference, &1))
-  end
-
-  # `spec/README.md` gets an explicit filename: two README.md extras otherwise collide.
+  # Hexdocs carries the README, the guides and the changelog (D-133). The specification, the
+  # surface golden and the usage rules ship in the package but are read on GitHub, so a
+  # shipped document links them by absolute URL; test/visualize/doc_links_test.exs refuses a
+  # relative link to a file that is not one of these extras.
   defp docs do
     [
       main: "readme",
       # The tag of the version being documented, which the mirror carries: a "View source"
       # link opens the code that was published, not main.
       source_ref: "v#{@version}",
-      # The specification refers, on purpose, to internal functions (behaviour callbacks and
-      # the family modules behind `Geo.Projection` and `CanvasBinary`) and to functions the
-      # decisions log records as removed or as called by code that has never run (D-2, D-13).
-      # Those references are the document's content, not broken links.
-      skip_code_autolink_to: &__MODULE__.internal_reference?/1,
-      extras:
-        [
-          "README.md",
-          # The guides, in reading order, ahead of the reference material: where a newcomer
-          # starts, then the declarative layer, then the one-page summary.
-          "guides/getting_started.md",
-          "guides/liveview.md",
-          "guides/designing_charts.md",
-          "guides/cheatsheet.cheatmd",
-          "usage-rules.md",
-          # The changelog ships in `files:`, so the README's Installation section links it
-          # as the reference for moving a pinned tag. A link from a shipping document has
-          # to resolve in the published docs too, which means being an extra.
-          "CHANGELOG.md",
-          {"spec/README.md", filename: "specification", title: "Specification index"}
-          | Path.wildcard("spec/[0-9]*.md")
-        ] ++ ["API_SURFACE.md"],
+      # The changelog records `Render.with_backend/2` as removed (D-2): a reference to a
+      # function that no longer exists, on purpose, not a broken link. The rest of this list
+      # served the specification's references to internal functions, and went with it (D-133).
+      skip_code_autolink_to: ["Visualize.Render.with_backend/2"],
+      extras: [
+        "README.md",
+        # The guides, in reading order, ahead of the reference material: where a newcomer
+        # starts, then the declarative layer, then the one-page summary.
+        "guides/getting_started.md",
+        "guides/liveview.md",
+        "guides/designing_charts.md",
+        "guides/cheatsheet.cheatmd",
+        # The changelog ships in `files:`, so the README's Installation section links it
+        # as the reference for moving a pinned tag. A link from a shipping document has
+        # to resolve in the published docs too, which means being an extra.
+        "CHANGELOG.md"
+      ],
       # ExDoc lists ungrouped extras first, so the README alone stays ungrouped and the
       # guides follow it, ahead of the reference documents.
       groups_for_extras: [
         Guides: ~r"guides/",
-        Reference: ["usage-rules.md", "CHANGELOG.md"],
-        Specification: ~r"spec/",
-        Conformance: ["API_SURFACE.md"]
+        Reference: ["CHANGELOG.md"]
       ],
       groups_for_modules: [
         Facade: [Visualize],

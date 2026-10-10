@@ -14,7 +14,7 @@ says where to look.
 `Visualize.Components` and `Visualize.Components.Tree` are function components for the
 common chart types: `<.line_chart data={@rows} x={& &1.date} y={& &1.value} />`. They
 render SVG and need no hooks. Their assigns are listed in
-[spec/10 §2–3](../spec/10-liveview-integration.md).
+[spec/10 §2–3](https://github.com/dcoai/Visualize/blob/main/spec/10-liveview-integration.md).
 
 Anything else is a design. You apply it, render it to a string, and put the string in the
 template with `Phoenix.HTML.raw/1`, as [Getting started](getting_started.md) shows. The
@@ -50,7 +50,7 @@ let liveSocket = new LiveSocket("/live", Socket, {
 Register the library's hooks whole, and give any hook of your own a name of its own. If
 your hook reused a library name such as `CanvasBinaryChart`, it would replace the
 library's hook, and that hook would stop matching what the server sends
-([spec/10 §9.2](../spec/10-liveview-integration.md)).
+([spec/10 §9.2](https://github.com/dcoai/Visualize/blob/main/spec/10-liveview-integration.md)).
 
 You can also skip the file and serve the module from a controller, as the gallery in
 `examples/` does. It sends `Visualize.Hooks.js_code()` with the content type
@@ -131,8 +131,8 @@ Use it for dense data that changes often.
 shifts the pixels it already has and draws only the newly exposed strip. Use it for a
 streaming time series.
 
-The backends are specified in [spec/09](../spec/09-rendering-backends.md), and the split
-in [spec/14 §12.3–12.4](../spec/14-declarative-chart.md).
+The backends are specified in [spec/09](https://github.com/dcoai/Visualize/blob/main/spec/09-rendering-backends.md), and the split
+in [spec/14 §12.3–12.4](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md).
 
 ## Live data with a compiled chart
 
@@ -319,7 +319,7 @@ If frames arrive faster than the browser can draw them, they queue up in the bro
 The canvas hooks can acknowledge what they have drawn. Add `data-ack="frame_drawn"` to
 the element, put a `seq` number in each payload, and handle the `frame_drawn` event. Its
 `seq` tells you how far behind the browser is, and you can skip frames until it catches
-up ([spec/10 §9.2](../spec/10-liveview-integration.md)).
+up ([spec/10 §9.2](https://github.com/dcoai/Visualize/blob/main/spec/10-liveview-integration.md)).
 
 ### Scale transitions
 
@@ -347,7 +347,7 @@ taller = Enum.map(rows, &%{&1 | v: &1.v * 2})
 
 `step/3` returns the frame's SVG group as an element, for an all-SVG chart. `tick/3`
 takes the same `at:` option. A mark can take a `transition` too, so that a gauge's
-needle sweeps to a new reading ([spec/14 §12.5](../spec/14-declarative-chart.md)).
+needle sweeps to a new reading ([spec/14 §12.5](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md)).
 
 ### Following the container's size
 
@@ -465,7 +465,7 @@ inside a selection instead of its domain.
 
 `ZoomHook` applies zoom and pan to a group inside an SVG on the client, and pushes `zoom`
 with the transform. The helpers in `Visualize.Hooks.Zoom` do the same arithmetic on the
-server ([spec/10 §5–6](../spec/10-liveview-integration.md)).
+server ([spec/10 §5–6](https://github.com/dcoai/Visualize/blob/main/spec/10-liveview-integration.md)).
 
 ### Sync groups
 
@@ -482,7 +482,7 @@ and tooltip on every chart in the group. A brush on one shows as a band on all o
 Only the chart under the pointer talks to its server. In a group, `brush_select` also
 carries `domain: [lo, hi]` in data units, so you do not need the conversion above. The
 `/dashboard` page of the gallery shows three synced panels
-([spec/10 §4.3](../spec/10-liveview-integration.md)).
+([spec/10 §4.3](https://github.com/dcoai/Visualize/blob/main/spec/10-liveview-integration.md)).
 
 ## PNG export
 
@@ -502,4 +502,4 @@ end
 ```
 
 The options, the errors and the font settings are in `Visualize.Render.to_png/2` and
-[spec/09 §9](../spec/09-rendering-backends.md).
+[spec/09 §9](https://github.com/dcoai/Visualize/blob/main/spec/09-rendering-backends.md).

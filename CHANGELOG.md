@@ -6,13 +6,22 @@ All notable changes to Visualize are recorded here, following
 
 > **Note.** This file is written for a consumer of the library, so it says what changed in
 > the surface and in behaviour, not what changed in the repository. What the library *is*,
-> module by module, lives in [`spec/`](spec/README.md), which is the source of truth for
-> that and is not restated here.
+> module by module, lives in
+> [`spec/`](https://github.com/dcoai/Visualize/blob/main/spec/README.md), which is the
+> source of truth for that and is not restated here.
 
 ## [Unreleased]
 
 `mix.exs` reads `0.2.26-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
+
+### Changed
+
+- **The documentation is the README, the guides and the changelog** (#529, D-133). The
+  specification, `API_SURFACE.md` and `usage-rules.md` are no longer hexdocs pages; they still
+  ship in the package and are read on GitHub. Every link to them from the README, the guides
+  and this changelog is now an absolute GitHub URL, and a link to a section of the
+  specification uses GitHub's heading anchor, so it opens at that section there.
 
 ## [0.2.25] — 2026-10-10
 

@@ -112,13 +112,17 @@ other than loopback exposes an unauthenticated development server. See
 - [Charts in LiveView](guides/liveview.md): components, hooks, choosing a backend, live data.
 - [Designing charts](guides/designing_charts.md): a tour of the declarative layer.
 - [Cheatsheet](https://hexdocs.pm/visualize/cheatsheet.html): the `Build` functions and common recipes.
-- [Usage rules](usage-rules.md): the short form, for developers and agents.
-- [Specification](spec/README.md): the source of truth, with a contract for every public
-  function.
 - [Changelog](CHANGELOG.md): what each tag changed.
-- [API surface](API_SURFACE.md): the generated record of the spec and code agreeing.
 
-`mix docs` builds the API reference, with these documents included.
+`mix docs` builds the API reference with the guides and the changelog. Three more documents
+ship in the package and are read on GitHub:
+
+- [Usage rules](https://github.com/dcoai/Visualize/blob/main/usage-rules.md):
+  the short form, for developers and agents.
+- [Specification](https://github.com/dcoai/Visualize/blob/main/spec/README.md):
+  the source of truth, with a contract for every public function.
+- [API surface](https://github.com/dcoai/Visualize/blob/main/API_SURFACE.md):
+  the generated record of the spec and code agreeing.
 
 ## Status and feedback
 
