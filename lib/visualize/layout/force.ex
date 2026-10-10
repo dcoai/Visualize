@@ -20,14 +20,15 @@ defmodule Visualize.Layout.Force do
         %{source: "b", target: "c"}
       ]
 
-      # Start simulation
+      # Start simulation; a subscriber given here receives every tick from the first
       {:ok, sim} = Visualize.Layout.Force.start_link(
         nodes: nodes,
-        links: links
+        links: links,
+        subscribers: [self()]
       )
 
-      # Subscribe to updates in LiveView
-      Visualize.Layout.Force.subscribe(sim, self())
+      # A process that joins a running simulation later subscribes
+      Visualize.Layout.Force.subscribe(sim, other_pid)
 
   ## LiveView Integration
 
@@ -39,10 +40,9 @@ defmodule Visualize.Layout.Force do
             {:center, x: 300, y: 200},
             {:many_body, strength: -100},
             {:link, distance: 50}
-          ]
+          ],
+          subscribers: [self()]
         )
-
-        Visualize.Layout.Force.subscribe(sim, self())
 
         {:ok, assign(socket, sim: sim, nodes: [], links: [])}
       end

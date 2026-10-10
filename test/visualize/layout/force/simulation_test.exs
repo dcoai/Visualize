@@ -1,7 +1,8 @@
 defmodule Visualize.Layout.Force.SimulationTest do
   @moduledoc """
   The timer discipline of spec/06 §8.5, exercised on the callbacks directly so every
-  interleaving the model found is reproduced deterministically, plus one live run.
+  interleaving the model found is reproduced deterministically, plus live runs that count
+  ticks rather than time them.
   """
   use ExUnit.Case, async: true
 
@@ -89,23 +90,72 @@ defmodule Visualize.Layout.Force.SimulationTest do
     assert s3.alpha_target == 1
   end
 
-  test "a live simulation with a cold target stops on its own" do
-    {:ok, pid} =
-      Simulation.start_link(nodes: [%{id: :a}, %{id: :b}], alpha: 0.01, alpha_decay: 0.5)
+  # alpha 0.01 halving each tick stays at or above alpha_min (0.001) for three ticks and
+  # falls below it on the fourth: a live run is exactly four ticks.
+  @cold [nodes: [%{id: :a}, %{id: :b}], alpha: 0.01, alpha_decay: 0.5]
+  @cold_ticks 4
 
-    Simulation.subscribe(pid, self())
-    assert_receive {:force_tick, %{nodes: _}}, 500
-    wait_until_stopped(pid, 50)
-    refute :sys.get_state(pid).running
-    assert :sys.get_state(pid).tick_ref == nil
-  end
+  # Waits on the event, not on the clock: the bound is generous because a loaded host
+  # delays a 16 ms timer by seconds (#483), and the assertions count ticks.
+  @patience 30_000
 
-  defp wait_until_stopped(pid, tries) when tries > 0 do
-    if :sys.get_state(pid).running do
-      Process.sleep(20)
-      wait_until_stopped(pid, tries - 1)
+  defp receive_ticks(n) do
+    for _ <- 1..n do
+      assert_receive {:force_tick, %{nodes: nodes}}, @patience
+      nodes
     end
   end
 
-  defp wait_until_stopped(_pid, 0), do: flunk("simulation never stopped")
+  test "a live simulation with a cold target stops on its own" do
+    {:ok, pid} = Simulation.start_link(@cold ++ [subscribers: [self()]])
+
+    receive_ticks(@cold_ticks)
+    # The last tick broadcasts and stops in one message, so the state read after it is final.
+    state = :sys.get_state(pid)
+    refute state.running
+    assert state.tick_ref == nil
+    refute_received {:force_tick, _}
+  end
+
+  test "a subscriber given at start receives every tick from the first, however late it looks" do
+    {:ok, pid} = Simulation.start_link(@cold ++ [subscribers: [self()]])
+    # The caller is descheduled past the whole run: subscribe/2 here would find it over.
+    Process.sleep(200)
+
+    {:ok, expected} = Simulation.init(@cold ++ [auto_start: false])
+    {:noreply, after_one} = Simulation.handle_cast(:tick, expected)
+
+    [first | _] = receive_ticks(@cold_ticks)
+    assert first == after_one.nodes
+    refute :sys.get_state(pid).running
+    refute_received {:force_tick, _}
+  end
+
+  test "a subscriber given at start is monitored, as subscribe/2's is, and its exit removes it" do
+    subscriber = spawn(fn -> receive do: (:exit -> :ok) end)
+
+    {:ok, pid} =
+      Simulation.start_link(nodes: [%{id: :a}], auto_start: false, subscribers: [subscriber])
+
+    state = :sys.get_state(pid)
+    assert MapSet.member?(state.subscribers, subscriber)
+    {:monitors, monitors} = Process.info(pid, :monitors)
+    assert {:process, subscriber} in monitors
+
+    {:noreply, after_exit} =
+      Simulation.handle_info({:DOWN, make_ref(), :process, subscriber, :normal}, state)
+
+    refute MapSet.member?(after_exit.subscribers, subscriber)
+    send(subscriber, :exit)
+  end
+
+  test "subscribers that are not a list of pids are refused in the caller" do
+    assert_raise ArgumentError, ~r/:subscribers must be a list of pids/, fn ->
+      Simulation.start_link(nodes: [], subscribers: self())
+    end
+
+    assert_raise ArgumentError, ~r/:subscribers must be a list of pids/, fn ->
+      Simulation.start_link(nodes: [], subscribers: [self(), :not_a_pid])
+    end
+  end
 end
