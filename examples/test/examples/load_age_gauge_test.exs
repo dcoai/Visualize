@@ -23,11 +23,10 @@ defmodule Examples.LoadAgeGaugeTest do
 
     assert applied.frames |> Map.keys() |> Enum.sort() == [:age, :gauge]
     assert applied.frames.age.box == [0, 0, 1, 1]
-    assert design.frames.gauge.background == :background
   end
 
   describe "the inset" do
-    test "the dial's box lies inside the age plot, in its upper-left quadrant" do
+    test "the dial's box lies inside the age plot, at its upper-left corner" do
       for size <- [LoadAgeGauge.size(), {900, 500}] do
         {width, height} = size
         frames = applied(width: width, height: height).frames
@@ -41,17 +40,36 @@ defmodule Examples.LoadAgeGaugeTest do
         {right, bottom} = {left + plot.width, top + plot.height}
 
         # The dial's box in pixels: clear of the y axis on the left and of the plot's top,
-        # and no further than the plot's centre either way.
+        # inside the plot's bottom, and in its left half — the age view's key keeps the
+        # top-right. Half again the first inset (#514), it reaches past the plot's middle
+        # height, over the traces, which show through it.
         {x0, y0, x1, y1} = {x * width, y * height, (x + w) * width, (y + h) * height}
         assert x0 > left and y0 > top
-        assert x1 < (left + right) / 2 and y1 < (top + bottom) / 2
+        assert x1 < (left + right) / 2 and y1 < bottom
       end
     end
 
-    test "the dial is drawn above the age view, on its own background" do
+    test "the dial's box is 231×210 px at the default size, half again the first inset" do
+      {width, height} = LoadAgeGauge.size()
+      [x, y, w, h] = LoadAgeGauge.box()
+
+      assert Enum.map([x * width, y * height, w * width, h * height], &round/1) == [
+               58,
+               36,
+               231,
+               210
+             ]
+    end
+
+    test "the dial has no background, so the traces beneath show through it (#514)" do
+      {design, _sources} = LoadAgeGauge.design([])
+      assert design.frames.gauge[:background] == nil
+      assert applied([]).frames.gauge.background == nil
+    end
+
+    test "the dial is drawn above the age view" do
       frames = applied([]).frames
       assert frames.gauge.z > frames.age.z
-      assert frames.gauge.background != nil
 
       # Drawn later in the document: the gauge's group follows the age view's.
       svg = Design.render(LoadAgeGauge, [])
