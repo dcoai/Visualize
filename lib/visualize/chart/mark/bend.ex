@@ -8,7 +8,8 @@ defmodule Visualize.Chart.Mark.Bend do
   a point goes to `(r · sin a, −r · cos a)` (spec/04 §6.2); a straight segment is sampled
   at no more than 2° of angle and bent point by point, so a line wraps around the arc;
   a curve is sampled along its parameter, so it is interpolated in `(angle, r)` before it
-  bends; a rect becomes an annular sector; a circle keeps its radius at the bent centre;
+  bends; a rect becomes an annular sector; a circle keeps its radius at the bent centre,
+  and a symbol its shape at the bent point (`place/1`);
   a text moves to the bent point; a group's children bend, and a `translate` in a
   transform bends as a point.
 
@@ -80,6 +81,14 @@ defmodule Visualize.Chart.Mark.Bend do
   def bend(%Element{} = element, _opts), do: bend_transform(element)
 
   # A translate in the element's transform is a point of the layout: bent as one.
+  @doc """
+  An element drawn in pixels about its own origin — a symbol's glyph — moved to its bent
+  position with its shape kept: only its `translate` bends, as a circle keeps its radius
+  at the bent centre (spec/14 §5.2, §21.7).
+  """
+  @spec place(Element.t()) :: Element.t()
+  def place(%Element{} = element), do: bend_transform(element)
+
   defp bend_transform(%Element{transform: %Transform{operations: ops} = t} = element) do
     bent =
       Enum.map(ops, fn

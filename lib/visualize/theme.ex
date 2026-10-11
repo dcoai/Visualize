@@ -179,6 +179,37 @@ defmodule Visualize.Theme do
   @spec role_names() :: [atom(), ...]
   def role_names, do: @role_slots
 
+  # Each role's cue besides its hue (spec/08 §7.5, spec/14 §21.7, D-142): the library's,
+  # not a theme's, as the hue order is.
+  @cues %{
+    good: %{glyph: :circle, dash: nil},
+    warning: %{glyph: :triangle, dash: "6 3"},
+    bad: %{glyph: :cross, dash: "2 3"},
+    info: %{glyph: :square, dash: "8 3 2 3"},
+    neutral: %{glyph: :diamond, dash: "1 4"}
+  }
+
+  @doc """
+  A role's cue besides its hue (spec/08 §7.5, D-142): its glyph, a symbol type, and its
+  dash, a stroke pattern (`nil` for solid), so a status reads in greyscale. Fixed by the
+  library for every theme. Raises `ArgumentError` for anything but a role.
+
+      iex> Visualize.Theme.cue(:warning)
+      %{glyph: :triangle, dash: "6 3"}
+
+  """
+  @spec cue(atom()) :: %{glyph: atom(), dash: String.t() | nil}
+  def cue(role) do
+    case Map.fetch(@cues, role) do
+      {:ok, cue} ->
+        cue
+
+      :error ->
+        raise ArgumentError,
+              "a cue is a role's, one of #{inspect(@role_slots)}; got: #{inspect(role)}"
+    end
+  end
+
   @doc """
   `default/0` with the given fields replaced; `ramps` and `roles` are merged key by key.
 

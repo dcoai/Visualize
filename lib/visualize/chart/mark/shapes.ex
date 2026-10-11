@@ -8,8 +8,9 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   alias Visualize.Chart.Mark.{Channels, Label, Series}
   alias Visualize.Chart.Style
+  alias Visualize.Data.Table
   alias Visualize.IR.{Element, Transform}
-  alias Visualize.Scale
+  alias Visualize.{Scale, Theme}
   alias Visualize.Shape.{Arc, Area, Band, Line, Needle, PercentileBand, Rose, Rule, Symbol, XBand}
 
   @stroke_keys [
@@ -459,7 +460,7 @@ defmodule Visualize.Chart.Mark.Shapes do
     Enum.map(rows, fn row ->
       path =
         Symbol.new()
-        |> Symbol.type(type)
+        |> Symbol.type(glyph(type, row.datum, frame))
         |> Symbol.size(Map.get(row, :value) || size)
         |> Symbol.generate_path(row.datum)
 
@@ -467,6 +468,19 @@ defmodule Visualize.Chart.Mark.Shapes do
       %{element: element, datum: row.datum, style: %{}, anchor: {row.x, row.y}}
     end)
   end
+
+  # A symbol type bound to a field is the role's glyph when the colour scale maps the
+  # reading to a role (spec/14 §21.7), the reading when it is a symbol type, else a circle.
+  defp glyph({:field, field}, datum, frame) do
+    reading = Table.get(datum, field)
+
+    case Style.role(frame, reading) do
+      nil -> if reading in Symbol.types(), do: reading, else: :circle
+      role -> Theme.cue(role).glyph
+    end
+  end
+
+  defp glyph(type, _datum, _frame), do: type
 
   # -- needle ----------------------------------------------------------------------------
 
