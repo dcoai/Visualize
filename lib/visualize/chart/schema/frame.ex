@@ -92,6 +92,7 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:format, {:one_of, [:string, {:enum, [:duration]}]}, :content),
       spec(:prefix, :string, :content),
       spec(:unit, :string, :content),
+      spec(:measure, {:node, :measure}, :content),
       spec(:grid, :boolean, :geometry, default: false),
       spec(:offset, :number, :geometry, default: 0),
       spec(:radius, :number, :geometry, range: {0, 1, 0.05}),
@@ -112,6 +113,16 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:size_inner, :number, :geometry, default: 6),
       spec(:size_outer, :number, :geometry, default: 6),
       spec(:padding, :number, :geometry, default: 3)
+    ]
+  end
+
+  # What the values on an axis's scale are: a UCUM code and one of the fixed quantities
+  # (spec/14 §4.4, spec/05 §4, D-138) — facts about the data, the shape of a field
+  # description's `unit` and `quantity`, which a feed's schema will supply (#535).
+  def describe(:measure) do
+    [
+      spec(:unit, :string, :content),
+      spec(:quantity, {:enum, Visualize.Quantity.all()}, :content)
     ]
   end
 

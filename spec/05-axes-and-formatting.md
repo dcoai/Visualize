@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-`Visualize.Axis` builds a reference axis — domain line, tick marks, and labels — for any scale that implements `ticks/2` and `apply/2`, returning a backend-neutral `Visualize.IR.Element` group that `Visualize.Render` serialises. `Visualize.Format` supplies the label formatters an axis (or any chart text) uses: grouped numbers, SI prefixes, percentages, currency, exponential and fixed notation, a D3-style specifier parser, and a strftime-like date formatter. Sizes are in user units (pixels under SVG).
+`Visualize.Axis` builds a reference axis — domain line, tick marks, and labels — for any scale that implements `ticks/2` and `apply/2`, returning a backend-neutral `Visualize.IR.Element` group that `Visualize.Render` serialises. `Visualize.Format` supplies the label formatters an axis (or any chart text) uses: grouped numbers, SI prefixes, percentages, currency, exponential and fixed notation, a D3-style specifier parser, and a strftime-like date formatter. `Visualize.Unit` and `Visualize.Quantity` name units by their UCUM codes and scale a value into the unit that fits it (§4). Sizes are in user units (pixels under SVG).
 
 ## 1. `Visualize.Axis`
 
@@ -299,7 +299,7 @@ So clock times within a day, days within a week, dates within a season and month
 - `Log` and `Symlog`: `number/2` of `:si` when the notation is `{:si, e}`, else of the notation;
 - any other scale (`Band`, `Ordinal`, the discretising scales): `nil`, the default label.
 
-The functions are pure: the same domain, count and locale give the same formatter, so a compiled chart re-derives them on every realisation and an axis on a moving domain follows it (spec/14 §12.5). Units and quantities (#536) build their display scaling on `notation/1` and `number/2`.
+The functions are pure: the same domain, count and locale give the same formatter, so a compiled chart re-derives them on every realisation and an axis on a moving domain follows it (spec/14 §12.5). Units and quantities (§4, #536) build their display scaling on `notation/1` and `number/2`.
 
 ### 3.2 Functions
 
@@ -313,3 +313,132 @@ The functions are pure: the same domain, count and locale give the same formatte
 | `Visualize.Format.Auto.notation/2` | `:plain`, `:grouped` or `{:si, e}` of a numeric domain's magnitude (3.1). |
 | `Visualize.Format.Auto.number/1` | As `number/2` with `[]` options. |
 | `Visualize.Format.Auto.number/2` | The formatter of a notation, `:si` per value included (3.1). |
+
+## 4. Units and quantities
+
+### 4.1 Units are UCUM codes
+
+A unit is named by its code in the **Unified Code for Units of Measure** (UCUM, <https://ucum.org/ucum>, Regenstrief Institute, version 2.1): case-sensitive, unambiguous codes built for exchange between machines and the ones OpenTelemetry's semantic conventions use. One name per unit is the point (#536, D-138): a source that says `"s"` and one that says `"sec"` must not draw two labels, so a code is checked, never guessed at. `Visualize.Unit` reads the subset of UCUM's grammar (§2.1 of the specification, *Syntax rules*) that measurement data uses, over a fixed table of atoms and prefixes, strict enough to refuse a typo and permissive enough for the codes real sources send:
+
+```
+code       = "/" term | term
+term       = component { ("." | "/") component }      left-associative, as UCUM §2.1.3
+component  = annotation
+           | unit [exponent] [annotation]
+           | factor [annotation]
+unit       = [prefix] atom                             a prefix only on a metric atom
+exponent   = ["+" | "-"] digit { digit }
+factor     = digit { digit }                           a positive integer, "1" the unity
+annotation = "{" char { char } "}"                     ASCII 33–126 except "{" and "}"
+```
+
+| Prefix | `k` | `M` | `G` | `m` | `u` | `n` | `Ki` | `Mi` | `Gi` |
+|---|---|---|---|---|---|---|---|---|---|
+| Factor | 10³ | 10⁶ | 10⁹ | 10⁻³ | 10⁻⁶ | 10⁻⁹ | 2¹⁰ | 2²⁰ | 2³⁰ |
+
+| Atom | Name | Metric | Dimension | Factor to the base | Symbol |
+|---|---|---|---|---|---|
+| `s` | second | yes | time | 1 | `s` |
+| `min` | minute | no | time | 60 | `min` |
+| `h` | hour | no | time | 3,600 | `h` |
+| `d` | day | no | time | 86,400 | `d` |
+| `By` | byte | yes | information | 1 | `B` |
+| `bit` | bit | yes | information | 1/8 | `bit` |
+| `%` | percent | no | none | 1/100 | `%` |
+| `Hz` | hertz | yes | time⁻¹ | 1 | `Hz` |
+| `Cel` | degree Celsius | yes | temperature | — | `°C` |
+| `[degF]` | degree Fahrenheit | no | temperature | — | `°F` |
+| `K` | kelvin | yes | temperature | 1 | `K` |
+| `m` | metre | yes | length | 1 | `m` |
+| `g` | gram | yes | mass | 1 | `g` |
+| `W` | watt | yes | mass·length²·time⁻³ | 1,000 | `W` |
+| `J` | joule | yes | mass·length²·time⁻² | 1,000 | `J` |
+| `Pa` | pascal | yes | mass·length⁻¹·time⁻² | 1,000 | `Pa` |
+
+The bases are the second, the byte, the metre, the gram and the kelvin, so a watt is 1,000 g·m²·s⁻³. A **symbol is matched whole before it is split**: `min` is the minute and `m` the metre, never a milli-`in` or a milli-nothing; only a symbol that is not an atom is read as a prefix and a metric atom, longest prefix first (`MiBy` is `Mi`·`By`, `ms` is `m`·`s`, `kW` is `k`·`W`). So `s`, `ms`, `us`, `ns`, `min`, `h`, `d`, `By`, `kBy`, `MBy`, `GBy`, `KiBy`, `MiBy`, `GiBy`, `bit`, `kbit`, `Mbit`, `%`, `Hz`, `kHz`, `Cel`, `[degF]`, `K`, `m`, `mm`, `km`, `m/s`, `km/h`, `m2`, `s-1`, `W`, `kW`, `J`, `kW.h`, `Pa`, `kPa`, `1`, `{request}`, `{request}/s`, `/s` and `By{heap}` are codes; `sec`, `kmin` (the minute is not metric), `B` (the bel, not in the table), `{x` (an unclosed annotation), `m//s`, `.s`, `s^2` and `""` are not. An annotation means the unity (UCUM §2.1.5): `{request}/s` is the dimension of `/s`, named. Parentheses, `10*`-style powers of ten and the rest of UCUM's atoms are not read; the table grows by proposal.
+
+A code has a **dimension** — the sum of its components' dimensions, each times its exponent, a quotient's negated — and a **factor**, the product of each component's factor (its prefix's times its atom's, or the integer) raised to its exponent, kept as an exact rational. `Cel` and `[degF]` are UCUM's *special* units, scales with an offset: they have a dimension but no factor, and so does any code that holds one.
+
+**Display symbol.** `Visualize.Unit.symbol/2` writes a code as a reader reads it: each atom by the table's symbol, the prefix `u` as `µ`; a positive exponent above one as superscript digits (`m2` → `m²`); the components with a positive exponent joined by `·`, then `/` and those with a negative one by their magnitude, in parentheses when there are two or more (`kW.h` → `kW·h`, `By/s` → `B/s`, `Pa` stays `Pa`, `g/(m·s2)` → `g/(m·s²)`, `s-1` → `/s`); the factor `1` and an annotation are dropped, so `1` and `{request}` are `""` and `{request}/s` is `/s`. With `annotations: true` an annotation that stands alone as a component is written as its text without braces — `{request}/s` → `request/s`, `{request}` → `request` — and one attached to a unit is dropped even then, the unit saying more than its note (`By{heap}` → `B`).
+
+**Scaling** within a dimension is multiplication by a ratio of factors: `Visualize.Unit.convert(value, from, to)` is `value × factor(from) / factor(to)` for two codes of one dimension and both with a factor, and raises `ArgumentError` otherwise. That is display scaling — 1,500 `ms` is 1.5 `s` — and not conversion between unit systems: `Cel` to `[degF]` (or to `K`) is out of scope (#536) and raises.
+
+**`Telemetry.Metrics` units.** `Visualize.Unit.from_telemetry/1` maps the unit atom a `Telemetry.Metrics` definition carries — or the `to` of its `{from, to}` conversion — to a code. visualize does not depend on `telemetry_metrics`; this is a table of atoms:
+
+| Atom | Code | Atom | Code | Atom | Code |
+|---|---|---|---|---|---|
+| `:second` | `s` | `:byte` | `By` | `:percent` | `%` |
+| `:millisecond` | `ms` | `:kilobyte` | `kBy` | `:unit` | `1` |
+| `:microsecond` | `us` | `:megabyte` | `MBy` | `:hertz` | `Hz` |
+| `:nanosecond` | `ns` | `:gigabyte` | `GBy` | `:celsius` | `Cel` |
+| `:minute` | `min` | `:kibibyte` | `KiBy` | `:fahrenheit` | `[degF]` |
+| `:hour` | `h` | `:mebibyte` | `MiBy` | `:kelvin` | `K` |
+| `:day` | `d` | `:gibibyte` | `GiBy` | `:meter`, `:metre` | `m` |
+| | | `:bit` | `bit` | `:watt` | `W` |
+| | | `:kilobit` | `kbit` | `:kilowatt` | `kW` |
+| | | `:megabit` | `Mbit` | `:joule` | `J` |
+| | | | | `:pascal` | `Pa` |
+
+It returns `{:ok, code}`, `{:error, :native}` for `:native` — a measurement in the VM's native time unit has no fixed size, and a definition converts it first (`unit: {:native, :millisecond}`) — and `{:error, {:unknown, atom}}` for any other atom, so a misspelt unit is refused rather than turned into an annotation. `:unit` is `Telemetry.Metrics`' own default, the dimensionless `1`. (`Telemetry.Metrics` converts `:kilobyte` by 1,000, which is UCUM's `kBy`.)
+
+### 4.2 A fixed list of quantities
+
+A quantity is what a unit measures. It chooses how a value is displayed — later a colour ramp and physical anchors too (#531 §3) — and the list is fixed: it grows by proposal, never by a source naming a new one. `Visualize.Quantity.all/0` is the list in this order:
+
+| Quantity | Base unit | Dimension | Display family (smallest first) |
+|---|---|---|---|
+| `:duration` | `s` | time | `ns`, `us`, `ms`, `s`, `min`, `h`, `d` |
+| `:information` | `By` | information | `By`, `kBy`, `MBy`, `GBy`; binary `By`, `KiBy`, `MiBy`, `GiBy`; bits `bit`, `kbit`, `Mbit`, `Gbit` |
+| `:data_rate` | `By/s` | information·time⁻¹ | the information families over `/s`: `By/s`, `kBy/s`, `MBy/s`, `GBy/s`; binary; bits `bit/s` … `Gbit/s` |
+| `:frequency` | `Hz` | time⁻¹ | `Hz`, `kHz`, `MHz`, `GHz`; events `/h`, `/min`, `/s` |
+| `:ratio` | `1` | none | — (displayed in its own unit, `%` or `1`) |
+| `:count` | `1` | none | — (SI notation from a thousand) |
+| `:temperature` | `Cel` | temperature | — (displayed in its own unit) |
+| `:length` | `m` | length | `mm`, `m`, `km` |
+| `:speed` | `m/s` | length·time⁻¹ | — (displayed in its own unit) |
+| `:power` | `W` | mass·length²·time⁻³ | `W`, `kW`, `MW`, `GW` |
+| `:energy` | `J` | mass·length²·time⁻² | `J`, `kJ`, `MJ`, `GJ`; watt-hours `W.h`, `kW.h`, `MW.h`, `GW.h` |
+| `:pressure` | `Pa` | mass·length⁻¹·time⁻² | `Pa`, `kPa`, `MPa` |
+
+**Which family.** A quantity with more than one family takes the one its unit is written in, so the data says and no setting does: an information or data-rate unit holding the atom `bit` scales in bits, one holding a binary prefix (`Ki`, `Mi`, `Gi`) in binary prefixes, and every other in decimal prefixes — **decimal is the default**, as UCUM's `kBy` and `Telemetry.Metrics`' `:kilobyte` are 1,000 bytes, so a host that measures in `MiBy` keeps `KiB`/`MiB`/`GiB` and nobody else sees them; a frequency unit holding `Hz` scales in hertz and any other (`/s`, `{request}/s`) in events per hour, minute and second; an energy unit holding `h` (`kW.h`) in watt-hours and any other in joules.
+
+**The measure.** A unit and a quantity together are a *measure*, `%{unit: code | nil, quantity: quantity | nil}`, the two facts a field description carries (#535). `Visualize.Quantity.resolve/1` completes and checks one: the unit is checked (§4.1); a missing quantity is the one the unit's dimension implies — the table's dimension, a dimensionless unit holding `%` being `:ratio` and any other dimensionless one `:count` — or `nil` when no quantity has that dimension (`g`, `Cel/s`); a missing unit is the quantity's base unit; a unit whose dimension is not its quantity's (`By` as a `:duration`) is `{:error, {:quantity, quantity, code}}`, and a `:ratio` or a `:count` takes any dimensionless unit. It returns `{:ok, %{unit: code | nil, quantity: quantity | nil}}`, `{:error, {:unit, code, reason}}` for a code that does not read, `{:error, {:unknown_quantity, term}}` for a quantity not in the list, or the mismatch. `Visualize.Quantity.of_unit/1` is the inference alone.
+
+**Unit and quantity are facts about the data, not knobs.** Neither changes what a value is; they say what it already is, so a display can choose for it. What a reader sees — the format, the tick count — stays the design's to override (§3, spec/14 §4.4); there is no setting that picks a display unit, or decimal against binary, apart from the data.
+
+### 4.3 Display scaling
+
+**The display unit** of a domain in a measure, `Visualize.Quantity.display_unit(domain, measure)`, is the family member that fits the domain's magnitude `M`, the greatest `|d|` among its numbers converted to the base: the **largest member in which `M` is at least 1**, else the smallest. So 0–1,500 `ms` is shown in `s` (`M` = 1.5 s), 0–900 `ms` in `ms`, 0–90 `s` in `min`, 0–1,500,000 `By` in `MBy`, 0–0.5 `/s` in `/min`, 0–3,000 `W` in `kW`. A measure whose quantity has no family, a unit without a factor (`Cel`), no quantity, or `M = 0` keeps the unit it has.
+
+**The tick formatter** of a scale in a measure, `Visualize.Quantity.formatter(scale, measure, opts)` (`count:` and `locale:` as `Visualize.Format.Auto.formatter/2`), writes every tick in the display unit:
+
+- on `Linear`, `Power` and `Radial`: the domain converted to the display unit, its `Visualize.Format.Auto.notation/2` — `{:si, 3}` in place of `:grouped` for a `:count`, whose family is SI from a thousand (`1.2k`, `90k`), one prefix for the axis as ever — and each tick converted, written by `Visualize.Format.Auto.number/2` of that notation, then the display unit's symbol: `0 s`, `0.5 s`, `1 s`, `1.5 s` for 0–1,500 `ms`;
+- on `Log` and `Symlog`, whose ticks are powers of ten in the scale's unit: each tick in its **own** display unit, the largest in which it is at least 1 among the family members a power of ten from the unit — so a tick lands on a round number, `1 ms`, `10 ms`, `100 ms`, `1 s`, `10 s`, `100 s`, `1k s`, never `1.67 min` — written by `Visualize.Format.Auto.number(:si)` as #532's log axis is; `0` and a quantity with no family keep the unit;
+- on any other scale (`Time`, `Band`, `Ordinal`, the discretising scales): `Visualize.Format.Auto.formatter/2`, the measure unused.
+
+The symbol follows the number after a space (`1.5 s`, `20 °C`, `2.5 MB`), except `%` and a symbol that begins with `/`, which follow it directly (`45%`, `12/s`); an empty symbol (`1`, `{request}`) adds nothing. A non-number is `to_string/1`. The function is pure, so an axis on a moving domain re-derives its display unit with its format on every realisation (spec/14 §12.5).
+
+**The label rule.** `Visualize.Quantity.label(measure)` is what a title says about a measure: **the unit, else the quantity, else nothing** — the symbol of the unit with its annotations written (`ms`, `kW·h`, `request/s`, `request`) when it is not empty, else the quantity's name with its underscores as spaces (`count`, `ratio`, `data rate`), else `nil`. An axis that draws its measure applies it to what its ticks cannot say (spec/14 §4.4).
+
+### 4.4 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Unit.parse/1` | `{:ok, components}` for a code (4.1), each `%{prefix: String.t() \| nil, atom: String.t() \| nil, factor: pos_integer() \| nil, annotation: String.t() \| nil, exponent: integer()}` with a quotient's exponent negated; `{:error, reason}` — `:empty`, `{:syntax, rest}` at the first character that does not read, `{:unknown_atom, symbol}`, `{:not_metric, prefix, atom}`. |
+| `Visualize.Unit.valid?/1` | Whether a string is a code (4.1). |
+| `Visualize.Unit.dimension/1` | The dimension of a code, a map from `:time`, `:information`, `:length`, `:mass`, `:temperature` to a non-zero exponent (`%{}` dimensionless); raises `ArgumentError` for a code that does not read. |
+| `Visualize.Unit.factor/1` | The factor of a code to its base, an exact `{numerator, denominator}`, or `nil` for one holding a special unit; raises as `dimension/1`. |
+| `Visualize.Unit.convert/3` | `value × factor(from) / factor(to)` for two codes of one dimension with factors; `ArgumentError` otherwise (4.1). |
+| `Visualize.Unit.symbol/1` | As `symbol/2` with `[]` options. |
+| `Visualize.Unit.symbol/2` | The display symbol of a code, `annotations:` (default `false`) writing a lone annotation's text (4.1). |
+| `Visualize.Unit.from_telemetry/1` | `{:ok, code}` for a `Telemetry.Metrics` unit atom or `{from, to}` pair, `{:error, :native}`, `{:error, {:unknown, atom}}` (4.1). |
+| `Visualize.Quantity.all/0` | The fixed list of quantities, in the order of 4.2. |
+| `Visualize.Quantity.base_unit/1` | A quantity's base unit (4.2). |
+| `Visualize.Quantity.family/2` | `family(quantity, unit)`: the display family a unit of the quantity scales in, smallest first, `[]` for a quantity with none (4.2). |
+| `Visualize.Quantity.of_unit/1` | The quantity a code's dimension implies, or `nil` (4.2). |
+| `Visualize.Quantity.resolve/1` | A measure completed and checked: `{:ok, measure}` or `{:error, reason}` (4.2). |
+| `Visualize.Quantity.display_unit/2` | `display_unit(domain, measure)`: the family member that fits the domain (4.3). |
+| `Visualize.Quantity.formatter/2` | As `formatter/3` with `[]` options. |
+| `Visualize.Quantity.formatter/3` | `formatter(scale, measure, opts)`: the tick formatter in the display unit, with its symbol (4.3); raises `ArgumentError` for a measure `resolve/1` refuses. |
+| `Visualize.Quantity.suffix/1` | The tick suffix of a display unit: `""`, or its symbol with its separator (4.3). |
+| `Visualize.Quantity.label/1` | The label rule: the unit, else the quantity, else `nil` (4.3). |

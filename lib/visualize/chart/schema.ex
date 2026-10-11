@@ -73,6 +73,7 @@ defmodule Visualize.Chart.Schema do
     :scale,
     :axis,
     :ticks,
+    :measure,
     :legend,
     :projection,
     :fit,
