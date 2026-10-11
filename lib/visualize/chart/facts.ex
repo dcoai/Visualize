@@ -24,7 +24,7 @@ defmodule Visualize.Chart.Facts do
   @spec contract(map()) :: %{atom() => %{atom() => [atom()]}}
   def contract(map) when is_map(map) do
     required =
-      for {slot, %{requires: requires}} when is_map(requires) <- Map.get(map, :sources, %{}),
+      for {slot, %{requires: requires}} when is_map(requires) <- slots(map),
           {field, keys} when is_list(keys) <- requires,
           key <- keys,
           do: {slot, field, key}
@@ -42,6 +42,15 @@ defmodule Visualize.Chart.Facts do
   end
 
   defp ordered(keys), do: Enum.filter(Schema.attributes(), &(&1 in keys))
+
+  # The slot declarations, or none where `sources` is not a map of them — a whole-node
+  # variable in a fragment, left for application to resolve.
+  defp slots(map) do
+    case Map.get(map, :sources) do
+      slots when is_map(slots) and not is_struct(slots) -> slots
+      _absent_or_variable -> %{}
+    end
+  end
 
   # Every fact the design holds, with the path it stands at — a text's key for a hole.
   defp uses(map) do
@@ -115,7 +124,7 @@ defmodule Visualize.Chart.Facts do
   # `requires` entry, at the use for a fact.
   defp missing(map, schemas) do
     required =
-      for {slot, %{requires: requires}} when is_map(requires) <- Map.get(map, :sources, %{}),
+      for {slot, %{requires: requires}} when is_map(requires) <- slots(map),
           {:ok, schema} <- [Map.fetch(schemas, slot)],
           {field, keys} when is_list(keys) <- requires,
           key <- keys,

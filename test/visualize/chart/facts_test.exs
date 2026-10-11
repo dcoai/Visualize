@@ -301,6 +301,7 @@ defmodule Visualize.Chart.FactsTest do
                %{primary: %{latency: [:unit, :label], state: [:order]}}
 
       assert Chart.contract(%{version: 2, frames: %{main: %{kind: :cartesian}}}) == %{}
+      assert Chart.contract(%{sources: Chart.var(:sources)}) == %{}
     end
 
     test "requires names the slot's own fields and known attributes" do
