@@ -5553,8 +5553,15 @@ defmodule Visualize.Chart.BuilderTest do
       themed = BuilderFixture.socket(BuilderFixture.layers(), store: BuilderFixture.Library)
       {:noreply, themed} = Builder.handle_event("new_fragment", %{"kind" => "theme"}, themed)
 
+      # A board chart in the board mode with a cell selected, so every form of the mode's
+      # inspector renders (spec/14 §22).
+      boarded = BuilderFixture.socket(BuilderFixture.layers(), store: BuilderFixture.Library)
+      {:noreply, boarded} = Builder.handle_event("new_fragment", %{"kind" => "board"}, boarded)
+      {:noreply, boarded} = Builder.handle_event("board_add", %{"ref" => "composite:1"}, boarded)
+
       Enum.map(
-        states ++ [with_signal, layered, expanded, masked, grouped, keyed, variables, themed],
+        states ++
+          [with_signal, layered, expanded, masked, grouped, keyed, variables, themed, boarded],
         &BuilderFixture.render/1
       ) ++ Enum.map(Keyword.keys(BuilderFixture.cases()), &rendered/1)
     end

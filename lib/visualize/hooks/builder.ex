@@ -52,6 +52,10 @@ defmodule Visualize.Hooks.Builder do
   - `move` with `%{"node" => string, "x" => number, "y" => number}` when a movable drawn
     node is dragged with the pointer and released, or with `"region"` from Shift+Arrow
     (spec/14 §18.16, spec/10 §16.3)
+  - `board_place` with `%{"cell" => string, "x" => integer, "y" => integer, "w" =>
+    integer, "h" => integer}` in scope `board` when a cell of the board mode's grid is
+    dragged by its body or resized by a `data-board-handle` and released somewhere new, or
+    moved and resized from the keyboard; the server places it or refuses it (spec/14 §22.3)
   """
 
   @doc """
@@ -162,6 +166,7 @@ defmodule Visualize.Hooks.Builder do
       },
 
       handleKeyDown(e) {
+        if (this.scope === 'board') return this.boardKey(e);
         if (this.scope === null) {
           const row = e.target && e.target.closest ? e.target.closest('[data-builder-layer]') : null;
           if (!row || !this.el.contains(row)) return;
@@ -203,6 +208,7 @@ defmodule Visualize.Hooks.Builder do
 
       handlePointerDown(e) {
         if (this.scope === 'graph') return this.startMove(e);
+        if (this.scope === 'board') return this.startPlace(e);
         if (this.scope !== 'resize' || !e.target || !e.target.closest) return;
         const handle = e.target.closest('[data-builder-resize]');
         if (!handle || !this.el.contains(handle)) return;
@@ -252,6 +258,96 @@ defmodule Visualize.Hooks.Builder do
         };
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', up);
+      },
+
+      // In scope `board` (spec/10 §16.3, spec/14 §22.3): the board mode's grid. A cell is
+      // moved by its body and resized by a handle; the pointer's travel is read as squares
+      // of the grid, the rectangle it would take is shown as it goes, and on release the
+      // rectangle is pushed as `board_place`. The hook never decides that a placement is
+      // allowed: the server places it or refuses it, and the next render is where it is.
+      squares() {
+        const gap = parseFloat(this.el.dataset.boardGap) || 0;
+        const rowHeight = parseFloat(this.el.dataset.boardRowHeight) || 80;
+        const width = this.el.getBoundingClientRect().width || 0;
+        return { col: (width + gap) / 12, row: rowHeight + gap };
+      },
+
+      rectOf(cell) {
+        const n = (key) => parseInt(cell.getAttribute('data-board-' + key), 10);
+        return { x: n('x'), y: n('y'), w: n('w'), h: n('h') };
+      },
+
+      // Clamped to the grid: a cell is never shown off it, and the server checks the rest.
+      // A move keeps the width and stops at an edge; a resize keeps the place and stops the
+      // width at the grid's right edge.
+      clampRect(r, resize) {
+        const w = resize ? Math.max(1, Math.min(12 - r.x, r.w)) : Math.max(1, Math.min(12, r.w));
+        const x = Math.max(0, Math.min(12 - w, r.x));
+        return { x: x, y: Math.max(0, r.y), w: w, h: Math.max(1, r.h) };
+      },
+
+      showRect(cell, r) {
+        cell.style.gridColumn = (r.x + 1) + ' / span ' + r.w;
+        cell.style.gridRow = (r.y + 1) + ' / span ' + r.h;
+      },
+
+      sameRect(a, b) {
+        return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+      },
+
+      // The cell goes back to where the server holds it, then the rectangle is pushed; an
+      // accepted one is the next render, a refused one leaves the cell where it was.
+      placeCell(cell, from, rect) {
+        this.showRect(cell, from);
+        if (this.sameRect(from, rect)) return;
+        this.push('board_place', { cell: cell.getAttribute('data-board-cell'), x: rect.x, y: rect.y, w: rect.w, h: rect.h });
+      },
+
+      startPlace(e) {
+        if (!e.target || !e.target.closest || e.button !== 0) return;
+        const cell = e.target.closest('[data-board-cell]');
+        if (!cell || !this.el.contains(cell) || e.target.closest('button, select, input, a')) return;
+        const handle = e.target.closest('[data-board-handle]');
+        const edges = handle ? handle.getAttribute('data-board-handle') : null;
+        const from = this.rectOf(cell);
+        const start = { x: e.clientX, y: e.clientY };
+        const pitch = this.squares();
+        let rect = from;
+        if (this.el.setPointerCapture && e.pointerId !== undefined) this.el.setPointerCapture(e.pointerId);
+        const move = (ev) => {
+          const dx = Math.round((ev.clientX - start.x) / pitch.col);
+          const dy = Math.round((ev.clientY - start.y) / pitch.row);
+          const next = edges === null
+            ? { x: from.x + dx, y: from.y + dy, w: from.w, h: from.h }
+            : { x: from.x, y: from.y, w: from.w + (edges.indexOf('e') >= 0 ? dx : 0), h: from.h + (edges.indexOf('s') >= 0 ? dy : 0) };
+          rect = this.clampRect(next, edges !== null);
+          cell.classList.add('vis-builder-board-dragging');
+          this.showRect(cell, rect);
+        };
+        const up = () => {
+          this.el.removeEventListener('pointermove', move);
+          this.el.removeEventListener('pointerup', up);
+          cell.classList.remove('vis-builder-board-dragging');
+          this.placeCell(cell, from, rect);
+        };
+        this.el.addEventListener('pointermove', move);
+        this.el.addEventListener('pointerup', up);
+      },
+
+      // With a cell focused, an arrow moves it one square and Shift with an arrow grows or
+      // shrinks it on its right or bottom edge, through the same push.
+      boardKey(e) {
+        const cell = e.target;
+        if (!cell || !cell.hasAttribute || !cell.hasAttribute('data-board-cell') || !this.el.contains(cell)) return;
+        const steps = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        const step = steps[e.key];
+        if (!step) return;
+        e.preventDefault();
+        const from = this.rectOf(cell);
+        const next = e.shiftKey
+          ? { x: from.x, y: from.y, w: from.w + step[0], h: from.h + step[1] }
+          : { x: from.x + step[0], y: from.y + step[1], w: from.w, h: from.h };
+        this.placeCell(cell, from, this.clampRect(next, e.shiftKey));
       },
 
       reveal() {

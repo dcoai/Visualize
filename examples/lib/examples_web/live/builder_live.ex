@@ -116,12 +116,60 @@ defmodule ExamplesWeb.BuilderLive do
               end
             end)
 
+          seeded = with_board(seeded)
           :persistent_term.put(@key, seeded)
           seeded
 
         state ->
           state
       end
+    end
+
+    # A board over four of the gallery's charts (spec/14 §22, D-152): its cells name the
+    # templates by the ids the seeding just issued, so opening it is the board mode, every
+    # cell previewing over the page's pool.
+    defp with_board(%{entries: entries, counters: counters}) do
+      id = fn name ->
+        Enum.find_value(entries, fn {id, entry} -> entry.name == name and id end) ||
+          raise ArgumentError, "the board's component #{inspect(name)} is not seeded"
+      end
+
+      board =
+        Visualize.Board.from_map!(%{
+          meta: %{name: "Live board", description: "The gallery's charts on one grid"},
+          window: %{last: 300},
+          sync: "board",
+          cells: %{
+            load: %{x: 0, y: 0, w: 8, h: 4, ref: id.("Charts::Load"), title: "Load", sync: false},
+            gauge: %{
+              x: 8,
+              y: 0,
+              w: 4,
+              h: 4,
+              ref: id.("Charts::Gauge"),
+              title: "Gauge",
+              sync: false
+            },
+            wave: %{x: 0, y: 4, w: 8, h: 3, ref: id.("Charts::Line Chart"), title: "Wave"},
+            bars: %{
+              x: 8,
+              y: 4,
+              w: 4,
+              h: 3,
+              ref: id.("Charts::Horizontal Bar Chart"),
+              title: "Bars",
+              sync: false
+            }
+          }
+        })
+
+      stored = %{
+        name: "Boards::live board",
+        kind: :board,
+        fragment: %{board: Visualize.Board.to_map(board)}
+      }
+
+      %{entries: Map.put(entries, {:board, 1}, stored), counters: Map.put(counters, :board, 1)}
     end
 
     @doc "The id of the entry with a name, for a page that starts from its own library."
@@ -298,6 +346,15 @@ defmodule ExamplesWeb.BuilderLive do
         entry, or <em>New → theme</em>
         opens the theme mode: the theme's colours and fonts beside a sheet of sample charts
         drawn in it.
+      </p>
+      <p>
+        <em>Boards::live board</em>
+        or <em>New → board</em>
+        opens the board mode: cells on a 12-column grid, dragged to place and resized by
+        their edges, each a chart of the library previewed over the page's samples;
+        <em>Edit component</em>
+        opens a cell's chart, and <em>Back to board</em>
+        returns to the board.
       </p>
       <p :if={@saved} class="builder-saved">{@saved}</p>
     </div>

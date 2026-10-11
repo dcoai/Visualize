@@ -46,7 +46,7 @@
       <form id="builder-new-form" class="vis-builder-new" phx-submit="new_fragment" phx-target="-1">
         <label class="vis-builder-control-label" for="builder-new-kind">New</label>
         <select id="builder-new-kind" name="kind" class="vis-builder-new-kind">
-          <option value="composite">composite</option><option value="theme">theme</option><option value="style">style</option><option value="frame">frame</option><option value="scale">scale</option><option value="axis">axis</option><option value="source">source</option><option value="var">var</option><option value="gradient">gradient</option><option value="mark">mark</option><option value="label">label</option>
+          <option value="composite">composite</option><option value="theme">theme</option><option value="board">board</option><option value="style">style</option><option value="frame">frame</option><option value="scale">scale</option><option value="axis">axis</option><option value="source">source</option><option value="var">var</option><option value="gradient">gradient</option><option value="mark">mark</option><option value="label">label</option>
         </select>
         <button type="submit" class="vis-builder-new-submit">New</button>
       </form>
@@ -112,6 +112,7 @@
           <input id="builder-keep" type="text" name="name" class="vis-builder-name" value="" placeholder="Group:sub-group:name" aria-label="save the chart as">
           <button type="submit" class="vis-builder-put">Save to library</button>
         </form>
+        
         <button type="button" class="vis-builder-save" phx-click="save" phx-target="-1">
           Save
         </button>
@@ -122,6 +123,7 @@
           Deploy
         </button>
       </div>
+      
       <div id="builder-graph" class="vis-builder-graph" tabindex="0" phx-hook="BuilderHook" data-builder-target="-1" data-builder-scope="graph">
         <div class="vis-builder-preview">
   
@@ -139,6 +141,7 @@
         <button type="button" class="vis-builder-node vis-builder-node-variables" title="variables" aria-label="variables" aria-pressed="false" data-builder-promote-target="true" phx-click="context" phx-value-panel="variables" phx-target="-1"><svg class="vis-builder-icon vis-builder-icon-variables" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6 C4 6 4 10 4 12 C4 14 4 18 6 18"/><path d="M18 6 C20 6 20 10 20 12 C20 14 20 18 18 18"/><path d="M9 9 L15 15 M15 9 L9 15"/></svg></button>
         <button type="button" class="vis-builder-node vis-builder-node-colour" title="colour — the picker for the selected node" aria-label="colour" aria-pressed="false" phx-click="context" phx-value-panel="colour" phx-target="-1"><svg class="vis-builder-icon vis-builder-icon-colour" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="14" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="13" r="1.5" fill="currentColor" stroke="none"/></svg></button>
       </nav>
+      
       
       <div class="vis-builder-inspect">
         <details class="vis-builder-section vis-builder-section-top vis-builder-section-selected" open>

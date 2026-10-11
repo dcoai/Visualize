@@ -252,6 +252,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
          when open == nil or open.kind == :composite,
          do: {:ok, :composite, Stack.structure(uses, vars)}
 
+    # A board is kept as its map form under the wrapper, checked by its own reader
+    # (spec/14 §22.1, D-152); the mode keeps it valid alone, so this refuses only a board a
+    # later edit of the reader would.
+    defp kept(%{open: %{kind: :board}, board: board}) do
+      fragment = %{board: Visualize.Board.to_map(board)}
+
+      case Validator.validate(fragment, :board) do
+        :ok -> {:ok, :board, fragment}
+        {:error, errors} -> {:error, "not a valid board: " <> faults_notice(errors)}
+      end
+    end
+
     defp kept(%{open: %{kind: kind}, uses: uses, stack_vars: vars, store: store}) do
       fragment = Stack.body(uses, vars)
 
@@ -315,6 +327,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         labels: labels,
         selected: uses |> List.first() |> then(&(&1 && &1.id)),
         open: nil,
+        board: nil,
+        board_cell: nil,
+        return_to: nil,
         stash: nil,
         stack_vars: %{},
         bindings: %{},

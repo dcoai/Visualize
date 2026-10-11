@@ -102,7 +102,9 @@ defmodule Visualize.Chart.Validator do
   `%{frames: %{main: %{…}}}` — walked with that kind's schema and no design around it, so a reference
   to a scale, style, source, variable or field the fragment does not declare is not a fault:
   a fragment is a piece, and what it refers to is bound where it is composed. A fragment
-  whose one key is not the kind's is refused as `{:type, {:node, kind}}`.
+  whose one key is not the kind's is refused as `{:type, {:node, kind}}`. A board,
+  `%{board: map}`, is read by its own reader, `Visualize.Board.from_map/1`, every fault
+  under `[:board | path]` (spec/14 §22.1).
   """
   @spec validate(term(), atom()) :: :ok | {:error, [error(), ...]}
   def validate(map, :design), do: validate(map)
@@ -120,6 +122,20 @@ defmodule Visualize.Chart.Validator do
   end
 
   def validate(_map, :composite), do: {:error, [{[], {:type, {:node, :composite}}}]}
+
+  # A board is read by its own reader (spec/14 §22.1, D-152): its version gated, its limits
+  # applied and every fault of it alone, each under the wrapper's key.
+  def validate(%{board: board} = map, :board) when map_size(map) == 1 do
+    case Visualize.Board.from_map(board) do
+      {:ok, _board} ->
+        :ok
+
+      {:error, errors} ->
+        {:error, Enum.map(errors, fn {path, reason} -> {[:board | path], reason} end)}
+    end
+  end
+
+  def validate(_map, :board), do: {:error, [{[], {:type, {:node, :board}}}]}
 
   def validate(_map, nil), do: {:error, [{[], :many_kinds}]}
 

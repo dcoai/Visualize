@@ -41,6 +41,7 @@ defmodule Visualize.Chart.Fragment do
 
   """
 
+  alias Visualize.Board.Codec, as: BoardCodec
   alias Visualize.Chart.{Codec, Limits, Migration, Schema, Use}
 
   # Jason is optional (spec/14 §11.1, D-50): as in `Visualize.Chart`, the calls in
@@ -63,7 +64,10 @@ defmodule Visualize.Chart.Fragment do
     label: :label,
     var: :var,
     gradient: :gradient,
-    composite: :composite
+    composite: :composite,
+    # A board is a library entry and never a part of a chart (spec/14 §22.1, D-152): its
+    # body is the board's map form, read by `Visualize.Board.from_map/2`.
+    board: :board
   }
 
   @typedoc "An id: the kind of thing, and a number its store never repeats (§19.2)."
@@ -270,7 +274,9 @@ defmodule Visualize.Chart.Fragment do
   version it was written at (spec/14 §9.1). It is not validated as a design — a fragment
   may be partial — so a host that keeps its library in a database can write whatever
   `Store.put/2` hands it. `{:error, {:missing_dependency, :jason}}` without Jason, as
-  `Visualize.Chart.to_json/1`.
+  `Visualize.Chart.to_json/1`. A board, `%{board: map}`, is written in the board's own JSON
+  form with its own `"$version"` inside the `board` object, and read back through it
+  (spec/14 §22.1).
 
       iex> {:ok, json} = Visualize.Chart.Fragment.to_json(%{style: %{stroke_width: 5}})
       iex> Visualize.Chart.Fragment.from_json(json)
@@ -280,7 +286,7 @@ defmodule Visualize.Chart.Fragment do
   def to_json(fragment) when is_map(fragment) and not is_struct(fragment) do
     if Code.ensure_loaded?(Jason) do
       {:ok, json} =
-        fragment |> Codec.encode() |> Map.put(@stamp, Migration.current()) |> Jason.encode()
+        fragment |> encoded() |> Map.put(@stamp, Migration.current()) |> Jason.encode()
 
       {:ok, json}
     else
@@ -347,15 +353,38 @@ defmodule Visualize.Chart.Fragment do
     {stamp, term} = Map.pop(term, @stamp)
 
     with :ok <- Migration.readable(stamp),
-         :ok <- Migration.readable(Map.get(term, "version")) do
+         :ok <- Migration.readable(Map.get(term, "version")),
+         :ok <- Migration.readable(board_stamp(term)) do
       case Limits.structure(term, limits) do
-        [] -> {:ok, Codec.decode(term), stamp || Migration.current()}
+        [] -> {:ok, decoded(term), stamp || Migration.current()}
         errors -> {:error, {:limits, errors}}
       end
     end
   end
 
-  defp rewrite({kind, n} = id, table, missed) when is_atom(kind) and is_integer(n) and n > 0 do
+  # A board fragment's body is written in the board's own JSON form (spec/15 §2.2), its
+  # `"$version"` stamp inside the `board` object, and read back through the board's codec
+  # (spec/14 §22.1, D-152): a board is not a node of the design schema.
+  defp encoded(%{board: board} = fragment) when map_size(fragment) == 1 and is_map(board) do
+    %{"board" => board |> Map.put_new(:version, Migration.current()) |> BoardCodec.encode()}
+  end
+
+  defp encoded(fragment), do: Codec.encode(fragment)
+
+  defp board_stamp(%{"board" => board} = term) when map_size(term) == 1 and is_map(board),
+    do: Map.get(board, BoardCodec.stamp())
+
+  defp board_stamp(_term), do: nil
+
+  defp decoded(%{"board" => board} = term) when map_size(term) == 1 and is_map(board) do
+    {stamp, body} = Map.pop(board, BoardCodec.stamp())
+    %{board: body |> BoardCodec.decode() |> Map.put(:version, stamp || Migration.current())}
+  end
+
+  defp decoded(term), do: Codec.decode(term)
+
+  defp rewrite({kind, n} = id, table, missed)
+       when is_atom(kind) and is_integer(n) and n > 0 do
     cond do
       kind not in kinds() -> {id, missed}
       Map.has_key?(table, id) -> {Map.fetch!(table, id), missed}

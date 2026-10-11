@@ -156,6 +156,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @shown_kinds [
       :composite,
       :theme,
+      :board,
       :style,
       :frame,
       :scale,
@@ -177,7 +178,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         ...> ]
         iex> tree = Visualize.Chart.Builder.Library.by_kind(entries)
         iex> Enum.map(tree, &{&1.kind, length(&1.items)})
-        [composite: 0, theme: 0, style: 1, frame: 0, scale: 0, axis: 0, source: 0, var: 0, mark: 0, label: 0, size: 1]
+        [composite: 0, theme: 0, board: 0, style: 1, frame: 0, scale: 0, axis: 0, source: 0, var: 0, mark: 0, label: 0, size: 1]
     """
     @spec by_kind([map()]) :: [%{kind: atom(), items: [map()]}]
     def by_kind(entries) do
