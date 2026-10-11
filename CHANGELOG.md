@@ -98,6 +98,13 @@ release it merely follows.
   reader changes it, so the page that sizes a chart can compile it to match. A component
   with `animate` gains the class `vis-animated` and a `<style>` that stops its transition
   under that media query.
+- **Status beyond hue** (#560, D-142). Every role carries a glyph and a dash besides its
+  hue, fixed by the library — `Visualize.Theme.cue/1`: `:good` a circle and solid,
+  `:warning` a triangle and `"6 3"`, `:bad` a cross and `"2 3"`, `:info` a square and
+  `"8 3 2 3"`, `:neutral` a diamond and `"1 4"`. A `{:field, f}` binding on a `:symbol`
+  mark's `symbol` or on `stroke_dasharray` reads through the frame's colour scale to the
+  role and draws its cue, so a status chart reads in greyscale. The gallery's Gauge marks
+  its zones with their glyphs.
 - **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
   `time_format/2` picks a `Visualize.Format.time/2` specifier from a time domain's span and
   the interval its ticks use — `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,
@@ -241,6 +248,8 @@ release it merely follows.
   `aria-describedby` the `<desc>` — on `Visualize.IR.Element.root/3` and every component —
   so a screen reader says a short name and then the description. `Element.root/3` takes
   `hidden: true` for `aria-hidden`.
+- **A `:symbol` mark in a polar frame keeps its glyph** (#560): only its position bends
+  around the arc. Before, the glyph itself was bent and drew as a sliver.
 - **A retargeted easing is shown where it starts on the tick it is retargeted** (#559):
   unchanged for any easing with a duration, and an easing of no duration now reaches its
   target on that tick instead of the next.

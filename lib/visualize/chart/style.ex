@@ -103,8 +103,34 @@ defmodule Visualize.Chart.Style do
     end
   end
 
+  # A dash bound to a field is the role's dash when the colour scale maps the reading to a
+  # role (spec/14 §21.7), solid — no key — for a role without one.
+  defp put_reading(acc, :stroke_dasharray, reading, frame, mode) do
+    case role(frame, reading) do
+      nil -> Map.put(acc, :stroke_dasharray, value(:stroke_dasharray, reading, frame.theme, mode))
+      role -> put_dash(acc, Theme.cue(role).dash)
+    end
+  end
+
   defp put_reading(acc, key, reading, frame, mode) do
     Map.put(acc, key, value(key, reading, frame.theme, mode))
+  end
+
+  defp put_dash(acc, nil), do: acc
+  defp put_dash(acc, dash), do: Map.put(acc, :stroke_dasharray, dash)
+
+  @doc false
+  # The role a reading means (spec/14 §21.7): the role the frame's `color` scale maps it to,
+  # else the reading itself when it is a role; `nil` otherwise.
+  @spec role(map(), term()) :: atom() | nil
+  def role(frame, reading) do
+    mapped =
+      case Map.get(frame.scales, :color) do
+        nil -> reading
+        scale -> Scale.apply(scale, reading)
+      end
+
+    if mapped in Theme.role_names(), do: mapped
   end
 
   defp put_colour(acc, key, nil, _theme, _mode), do: Map.put(acc, key, :none)
