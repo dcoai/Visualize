@@ -38,6 +38,12 @@ defmodule Visualize.Chart.Validator.Words do
   def words(:sweep), do: "must be within a turn, and not zero"
   def words(:radius), do: "must be positive"
 
+  def words({:unit, code, reason}),
+    do: "#{inspect(code)} is not a UCUM code visualize reads (#{inspect(reason)}; spec/05 §4.1)"
+
+  def words({:quantity, quantity, code}),
+    do: "unit #{inspect(code)} does not measure #{inspect(quantity)} (spec/05 §4.2)"
+
   def words({:zone, zone, :utc_only_time_zone_database}) do
     "time zone #{inspect(zone)} cannot be shown: the host has no time zone database " <>
       "configured (Calendar.UTCOnlyTimeZoneDatabase)"

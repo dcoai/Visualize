@@ -65,7 +65,13 @@ defmodule Visualize.Chart.ValidatorTest do
         },
         axes: [
           %{scale: :x, side: :bottom, ticks: %{count: 6, size_inner: 4}, format: "%H:%M"},
-          %{scale: :y, side: :left, ticks: 5, grid: true}
+          %{
+            scale: :y,
+            side: :left,
+            ticks: 5,
+            grid: true,
+            measure: %{unit: "ms", quantity: :duration}
+          }
         ],
         legend: %{scale: :color, position: :top_right, title: ["colour"]},
         projection: %{
@@ -144,6 +150,7 @@ defmodule Visualize.Chart.ValidatorTest do
     scale: [:frames, :main, :scales, :y],
     axis: [:frames, :main, :axes, 0],
     ticks: [:frames, :main, :axes, 0, :ticks],
+    measure: [:frames, :main, :axes, 1, :measure],
     legend: [:frames, :main, :legend],
     projection: [:frames, :main, :projection],
     facet: [:frames, :main, :facet],

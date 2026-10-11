@@ -5,9 +5,9 @@ defmodule Visualize.Chart.Frame.Furniture do
   # of lines at the tick positions behind the axes; and, in a polar frame, rings and
   # spokes drawn from the plot centre.
 
-  alias Visualize.{Axis, Format, Scale}
+  alias Visualize.{Axis, Format, Quantity, Scale}
   alias Visualize.Chart.Frame
-  alias Visualize.Chart.Frame.Position
+  alias Visualize.Chart.Frame.{Labels, Position}
   alias Visualize.Chart.{Schema, Style}
   alias Visualize.IR.{Element, Path, Transform}
 
@@ -106,7 +106,8 @@ defmodule Visualize.Chart.Frame.Furniture do
   @doc false
   # The `Visualize.Axis` an axis node describes over the frame's realised scale. What the
   # node leaves out is derived (§4.4, D-134): the count from the axis's length, the format
-  # from the scale's domain at that count; an explicit count, list or format wins.
+  # from the scale's domain at that count — in the display unit of its measure when it has
+  # one (D-138); an explicit count, list or format wins.
   @spec axis(map(), map()) :: Axis.t()
   def axis(frame, node) do
     scale = Map.fetch!(frame.scales, node.scale)
@@ -119,7 +120,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     |> Axis.offset(Map.get(node, :offset, Schema.default(:axis, :offset)))
     |> Axis.ticks(count)
     |> ticks(spec)
-    |> format(scale, Map.get(node, :format), count)
+    |> format(scale, Map.get(node, :format), count, Map.get(node, :measure))
     |> unit(Map.get(node, :prefix), Map.get(node, :unit))
   end
 
@@ -174,26 +175,32 @@ defmodule Visualize.Chart.Frame.Furniture do
     |> Axis.tick_padding(Map.get(spec, :padding, Schema.default(:ticks, :padding)))
   end
 
-  # No format: the one the scale's domain calls for at the axis's count, or the default
-  # label when the scale has none (a band, an ordinal).
-  defp format(axis, scale, nil, count) do
-    case Format.Auto.formatter(scale, count: count) do
+  # No format: the one the scale's domain calls for at the axis's count — scaled into the
+  # display unit of the axis's measure and followed by its symbol, when it has one
+  # (spec/05 §4.3) — or the default label when the scale has none (a band, an ordinal).
+  defp format(axis, scale, nil, count, measure) do
+    formatter =
+      if measure,
+        do: Quantity.formatter(scale, measure, count: count),
+        else: Format.Auto.formatter(scale, count: count)
+
+    case formatter do
       nil -> axis
       formatter -> Axis.tick_format(axis, formatter)
     end
   end
 
   # A named format no specifier can express (spec/14 §4.4, #191).
-  defp format(axis, _scale, :duration, _count) do
+  defp format(axis, _scale, :duration, _count, _measure) do
     Axis.tick_format(axis, fn v -> if is_number(v), do: Format.duration(v), else: to_string(v) end)
   end
 
   # A tick of a zoned time scale prints its local wall clock, whether the scale computed it
   # or the design gave it (spec/05 §2.8, #447); without a zone `local/2` is the identity.
-  defp format(axis, %Scale.Time{} = scale, spec, _count),
+  defp format(axis, %Scale.Time{} = scale, spec, _count, _measure),
     do: Axis.tick_format(axis, &Format.time(Scale.Time.local(scale, &1), spec))
 
-  defp format(axis, _scale, spec, _count) do
+  defp format(axis, _scale, spec, _count, _measure) do
     formatter = Format.formatter(spec)
     Axis.tick_format(axis, fn v -> if is_number(v), do: formatter.(v), else: to_string(v) end)
   end
@@ -212,15 +219,56 @@ defmodule Visualize.Chart.Frame.Furniture do
   defp place(frame, node, axis, mode) do
     element = axis |> Axis.generate(resolve: mode) |> restyle(frame, node, mode)
 
-    Element.group([element],
+    Element.group([element | title(frame, node, mode)],
       style: %{class: "axis axis-#{node.side}"},
       transform: side_transform(node.side, frame.plot)
     )
   end
 
-  defp side_transform(:bottom, plot), do: Transform.translate(0, plot.height)
-  defp side_transform(:right, plot), do: Transform.translate(plot.width, 0)
-  defp side_transform(_top_or_left, _plot), do: Transform.translate(0, 0)
+  # The axis says its measure once (spec/14 §4.4, D-138): when its ticks cannot carry the
+  # unit — an empty symbol, an explicit format, a scale that is not numeric — it draws a
+  # title by the label rule, placed as a label anchored at the axis is, unless the design
+  # anchors a label of its own there. The title is in plot coordinates, so it is moved
+  # back out of the axis group's translation.
+  defp title(frame, node, mode) do
+    case title_text(frame, node) do
+      nil ->
+        []
+
+      text ->
+        case {Labels.axis_title(frame, node.side, text, mode), side_offset(node.side, frame.plot)} do
+          {title, {0, 0}} -> title
+          {title, {dx, dy}} -> [Element.group(title, transform: Transform.translate(-dx, -dy))]
+        end
+    end
+  end
+
+  defp title_text(_frame, %{measure: nil}), do: nil
+
+  defp title_text(frame, %{measure: measure} = node) do
+    labelled? = Enum.any?(frame.labels, &(&1.anchor == {:axis, node.scale}))
+    scale = Map.fetch!(frame.scales, node.scale)
+
+    ticks_say_it? =
+      Map.get(node, :format) == nil and numeric?(scale) and
+        Quantity.suffix(Quantity.display_unit(scale.domain, measure)) != ""
+
+    if labelled? or ticks_say_it?, do: nil, else: Quantity.label(measure)
+  end
+
+  defp title_text(_frame, _node), do: nil
+
+  defp numeric?(%struct{}),
+    do: struct in [Scale.Linear, Scale.Power, Scale.Radial, Scale.Log, Scale.Symlog]
+
+  defp side_offset(:bottom, plot), do: {0, plot.height}
+  defp side_offset(:right, plot), do: {plot.width, 0}
+  defp side_offset(_top_or_left, _plot), do: {0, 0}
+
+  defp side_transform(side, plot) do
+    {dx, dy} = side_offset(side, plot)
+    Transform.translate(dx, dy)
+  end
 
   # A style other than the built-in `:axis` reaches the axis's elements by kind, and its
   # `text_angle` turns each tick label about its own point (spec/14 §6.3).

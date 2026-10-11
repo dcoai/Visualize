@@ -56,6 +56,8 @@ defmodule Visualize.Chart.Validator do
           | :sweep
           | :radius
           | {:zone, String.t(), Visualize.Scale.Time.zone_error()}
+          | {:unit, term(), Visualize.Unit.reason()}
+          | {:quantity, Visualize.Quantity.t(), Visualize.Unit.code()}
           | {:sync, :frame_kind | :x_scale, atom() | nil}
           | {:tiles, :projection, atom()}
           | {:tiles, :attribution | :url | :subdomains}
@@ -447,6 +449,24 @@ defmodule Visualize.Chart.Validator do
 
   defp held(:axis, %{radius: radius}, path, _ctx) when is_number(radius) and radius <= 0,
     do: [{path ++ [:radius], :radius}]
+
+  # An axis's measure is a UCUM code Visualize.Unit reads and a quantity of its dimension
+  # (spec/14 §4.4, §10.1, D-138). Only values of the right type are checked: a wrong type
+  # or quantity is the type check's fault, and a variable is checked once it is bound.
+  defp held(:measure, measure, path, _ctx) do
+    typed =
+      Map.filter(measure, fn
+        {:unit, unit} -> is_binary(unit)
+        {:quantity, quantity} -> quantity in Visualize.Quantity.all()
+        _other -> false
+      end)
+
+    case Visualize.Quantity.resolve(typed) do
+      {:ok, _resolved} -> []
+      {:error, {:unit, code, reason}} -> [{path ++ [:unit], {:unit, code, reason}}]
+      {:error, {:quantity, _quantity, _code} = reason} -> [{path ++ [:quantity], reason}]
+    end
+  end
 
   defp held(_kind, _map, _path, _ctx), do: []
 

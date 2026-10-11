@@ -91,6 +91,29 @@ release it merely follows.
   it. See [spec/14 §9.2](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#92-sanity-limits-on-a-document-from-elsewhere).
 - **`Visualize.Chart.Migration.readable/1`**: the version gate alone, for a reader that holds
   a version before it holds a design.
+- **Units by UCUM code: `Visualize.Unit`** (#536, D-138). `parse/1` and `valid?/1` check a
+  UCUM code (`ms`, `kBy`, `MiBy`, `%`, `Cel`, `kW.h`, `{request}/s`) against a fixed table
+  of prefixes and atoms, refusing typos such as `sec` or `kmin` with a reason;
+  `symbol/2` writes a code for a reader (`B/s`, `µs`, `°C`, `kW·h`); `convert/3` scales a
+  value between codes of one dimension (1,500 `ms` is 1.5 `s`) and refuses °C to °F, which
+  is out of scope. `from_telemetry/1` maps a `Telemetry.Metrics` unit (`:millisecond`,
+  `:kilobyte`, `{:native, :millisecond}`) to its code, without depending on
+  `telemetry_metrics`.
+- **Quantities and display scaling: `Visualize.Quantity`** (#536, D-138). A fixed list of
+  twelve quantities (`:duration`, `:information`, `:data_rate`, `:frequency`, `:ratio`,
+  `:count`, `:temperature`, `:length`, `:speed`, `:power`, `:energy`, `:pressure`), each
+  with a base unit and a family to scale in. `display_unit/2` picks the unit that fits a
+  domain, `formatter/3` writes a scale's ticks in it with its symbol (`0.5 s, 1 s, 1.5 s`
+  for 0–1,500 ms), and `label/1` is the axis-label rule: the unit, else the quantity, else
+  nothing. Information scales in decimal units (`kB`, `MB`) unless your unit is binary
+  (`MiBy`) or in bits, which then keep their own family.
+- **An axis `measure`** (#536, D-138): `measure: %{unit: "ms", quantity: :duration}` (either
+  key alone is enough) says what the axis's values are. With no `format`, a numeric axis's
+  ticks are scaled into the unit that fits and carry its symbol; when the ticks cannot say
+  the unit (a count, an explicit `format`), the axis draws a title by the label rule
+  unless you anchor your own label there. The validator refuses a code it cannot read and a
+  unit that does not measure its quantity. The existing `unit` key is unchanged: it is still
+  a literal suffix.
 
 ### Changed
 

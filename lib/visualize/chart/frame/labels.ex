@@ -28,6 +28,13 @@ defmodule Visualize.Chart.Frame.Labels do
     end)
   end
 
+  @doc false
+  # An axis's title from its measure (spec/14 §4.4, D-138): the text placed and styled as
+  # a label anchored at that axis is, by the axis's own side, in plot coordinates.
+  @spec axis_title(map(), atom(), String.t(), atom()) :: [Element.t()]
+  def axis_title(frame, side, text, mode),
+    do: label(frame, %{anchor: {:side, side}, text: Text.unparse([text])}, mode)
+
   defp label(frame, node, mode) do
     default_style = if node.anchor == :title, do: :title, else: Schema.default(:label, :style)
     style_node = Style.node(frame.styles, Map.get(node, :style, default_style))
@@ -84,6 +91,7 @@ defmodule Visualize.Chart.Frame.Labels do
     do: %{x: 0, y: p.height + m.bottom - @inset, anchor: :start}
 
   defp place(frame, {:axis, scale}), do: axis_title(frame, axis_side(frame, scale))
+  defp place(frame, {:side, side}), do: axis_title(frame, side)
 
   defp place(_frame, {:frame, :top_left}),
     do: %{x: @inset, y: @inset, dy: "0.71em", anchor: :start}
@@ -122,13 +130,10 @@ defmodule Visualize.Chart.Frame.Labels do
   defp outward(_frame, {:frame, :center}), do: nil
   defp outward(_frame, {:data, _point}), do: nil
 
-  defp outward(frame, {:axis, scale}) do
-    case axis_side(frame, scale) do
-      :bottom -> {0, 1}
-      # A side title is rotated; further from the plot is −y in its own frame.
-      _top_left_right -> {0, -1}
-    end
-  end
+  defp outward(frame, {:axis, scale}), do: outward(frame, {:side, axis_side(frame, scale)})
+  defp outward(_frame, {:side, :bottom}), do: {0, 1}
+  # A side title is rotated; further from the plot is −y in its own frame.
+  defp outward(_frame, {:side, _top_left_right}), do: {0, -1}
 
   defp axis_side(frame, scale) do
     case Enum.find(frame.axes, &(&1.scale == scale)) do
