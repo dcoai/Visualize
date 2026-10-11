@@ -422,6 +422,12 @@ release it merely follows.
   hundred on a busy machine and crossed its byte budget. The chart page reads every instant
   of a run through a `run_clock` it holds, and its tests drive that clock exactly. Nothing a
   person sees changes.
+- **The suite no longer waits on the clock** (#520, D-148). Every test that waited on wall
+  time now waits on a message or a count with a bound of at least five seconds, and a check
+  beside D-114's fails the gate on a shorter `assert_receive`, ExUnit's 100 ms default, a
+  `refute_receive` that waits, a short `receive … after` or a sleep, unless the site is
+  allow-listed with its reason. The examples' per-chart size test, which ran 51.6 s of its
+  60 s timeout, is one test per chart that renders each chart once instead of three times.
 - **`Visualize.Chart.to_json/1` raised on a channel at its scale's own end** (#554): a
   `{:scale, :min}` or `{:scale, :max}` channel, such as an area's `y0`, had no JSON form. It is
   now written `{"$scale": "min"}` and read back as the tuple.

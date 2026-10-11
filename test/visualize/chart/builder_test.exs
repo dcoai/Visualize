@@ -3095,7 +3095,9 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, playing} = Builder.handle_event("play", %{}, s)
       assert playing.assigns.playing
-      assert_receive {:visualize_chart_tick, "b"}, 1000
+      # The first tick is armed on the signals' period; a starved runner may deliver it
+      # late, so the wait is a bound on a defect, not on the period (D-148).
+      assert_receive {:visualize_chart_tick, "b"}, 5_000
       {:ok, ticked} = Builder.update(%{tick: :next}, playing)
       assert ticked.assigns.tick == 1
       refute BuilderFixture.render(ticked) == before

@@ -185,7 +185,8 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert is_pid(s.assigns.run.renderer)
     s = settled(s)
     assert s.assigns.run.frame == 2
-    assert_receive :run_tick, 1_000
+    # The next tick is armed on the run's period; the wait bounds a defect, not the period.
+    assert_receive :run_tick, 5_000
 
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
     refute s.assigns.run.running

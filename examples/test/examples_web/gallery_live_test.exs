@@ -82,9 +82,14 @@ defmodule ExamplesWeb.GalleryLiveTest do
     again = build_conn() |> get("/") |> html_response(200)
     refute again =~ ~s(<div class="chart-preview-pending")
     assert length(Regex.scan(~r/role="img"/, again)) == n
+    # A task started by `Task.Supervisor.async_nolink/2` is monitored by the caller, so a
+    # mount that started none added no monitor here: asserted at once, with nothing to wait
+    # for, where a 200 ms `refute_receive` had only shown that nothing came quickly (D-148).
+    {:monitors, before} = Process.info(self(), :monitors)
     {:ok, warm} = GalleryLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{transport_pid: self()})
     assert map_size(warm.assigns.previews) == n
-    refute_receive {_ref, {:preview, _, _}}, 200
+    {:monitors, now} = Process.info(self(), :monitors)
+    assert now -- before == []
   end
 
   test "the cache renders once and remembers; clear forgets" do

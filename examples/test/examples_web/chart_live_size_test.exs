@@ -24,6 +24,21 @@ defmodule ExamplesWeb.ChartLiveSizeTest do
     s
   end
 
+  # A connected page at `width` on `backend`, its still frame settled. Connected, a still
+  # frame renders in a task and each change — the mount, the backend, the resize —
+  # terminates the render before it (#362), so the chart is rendered once, at the size the
+  # test asserts, rather than three times in this process (D-148).
+  defp connected(slug, backend, width) do
+    socket = %Phoenix.LiveView.Socket{transport_pid: self()}
+    {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, socket)
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => to_string(backend)}, s)
+    {:noreply, s} = ChartLive.handle_event("resize", %{"width" => width, "height" => 0}, s)
+    %Task{ref: ref} = s.assigns.still_task
+    assert_receive {^ref, {:still, _frame, _state, _design, _access} = still}, 30_000
+    {:noreply, s} = ChartLive.handle_info({ref, still}, s)
+    s
+  end
+
   # The markup, the canvas's base64 elided: a regex over a long attribute hits PCRE's
   # match limit and silently finds nothing.
   defp html(s) do
@@ -106,8 +121,7 @@ defmodule ExamplesWeb.ChartLiveSizeTest do
     for slug <- ["load", "context", "spectrum"], width <- [1336, 420] do
       module = ChartLive.charts()[slug]
       {dw, dh} = Design.size(module, [])
-      s = page(slug, :canvas) |> resized(width)
-      h = html(s)
+      h = html(connected(slug, :canvas, width))
 
       {ww, wh} = wrapper(h)
       expected = min(width, dw)
@@ -128,25 +142,30 @@ defmodule ExamplesWeb.ChartLiveSizeTest do
     end
   end
 
-  test "every gallery chart, on every backend, is no larger than its size/0 after a large resize" do
-    for {slug, module} <- ChartLive.charts(),
-        backend <- Examples.Frames.backends(module) do
-      {dw, dh} = Design.size(module, [])
-      s = page(slug, backend) |> resized(2400)
-      h = html(s)
-      where = "#{slug} on #{backend}"
+  # One test a chart, so the gallery's charts run as async cases rather than one 86-case
+  # loop at the edge of its timeout (#520).
+  for {slug, module} <- ChartLive.charts() do
+    test "#{slug}, on every backend, is no larger than its size/0 after a large resize" do
+      slug = unquote(slug)
+      module = unquote(module)
 
-      for {w, ht} <- svgs(h) do
-        assert w <= dw and ht <= dh, "#{where}: an <svg> at #{w}x#{ht} past #{dw}x#{dh}"
-      end
+      for backend <- Examples.Frames.backends(module) do
+        {dw, dh} = Design.size(module, [])
+        h = html(connected(slug, backend, 2400))
+        where = "#{slug} on #{backend}"
 
-      if backend != :svg do
-        {ww, wh} = wrapper(h)
-        assert {ww, wh} == {dw / 1, dh / 1}, "#{where}: wrapper #{ww}x#{wh}, design #{dw}x#{dh}"
+        for {w, ht} <- svgs(h) do
+          assert w <= dw and ht <= dh, "#{where}: an <svg> at #{w}x#{ht} past #{dw}x#{dh}"
+        end
 
-        for p <- plots(h) do
-          assert p.canvas == {p.width, p.height}, "#{where}: canvas and element disagree"
-          assert p.left + p.width <= ww and p.top + p.height <= wh, "#{where}: plot outside"
+        if backend != :svg do
+          {ww, wh} = wrapper(h)
+          assert {ww, wh} == {dw / 1, dh / 1}, "#{where}: wrapper #{ww}x#{wh}, design #{dw}x#{dh}"
+
+          for p <- plots(h) do
+            assert p.canvas == {p.width, p.height}, "#{where}: canvas and element disagree"
+            assert p.left + p.width <= ww and p.top + p.height <= wh, "#{where}: plot outside"
+          end
         end
       end
     end

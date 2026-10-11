@@ -33,9 +33,11 @@ defmodule Visualize.Render.RasterPortTest do
   end
 
   # Whether any process of the group `os_pid` led is left: signal 0 to the group fails when
-  # none is (spec/12 §6). A killed process is reaped by its parent asynchronously, so this
-  # asks up to `tries` times before answering yes.
-  defp group_alive?(os_pid, tries \\ 100) do
+  # none is (spec/12 §6). A killed process is reaped by its parent asynchronously, and no
+  # message says when, so this asks up to `tries` times, 10 ms apart, before answering yes:
+  # thirty seconds, a bound on a defect, where one second had been a bound on the load
+  # (D-148). A group already gone answers at the first try.
+  defp group_alive?(os_pid, tries \\ 3_000) do
     {_, status} =
       System.cmd("/bin/sh", ["-c", ~S(kill -0 -- "-$1" 2>/dev/null), "sh", "#{os_pid}"])
 
