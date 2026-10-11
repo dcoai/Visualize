@@ -80,6 +80,19 @@ release it merely follows.
   derives the kind with `Fragment.kind/1` needs no change. A board entry cannot be
   dropped into a chart.
 
+- **Bind a board's slots in the builder** (#580, D-152). Give `Visualize.Chart.Builder`
+  a `catalog`: a map from each feed you offer to its `Visualize.Data.Schema`, for example
+  the schema `Visualize.Feed.describe/1` answers. In the board mode, each cell's sources
+  are then bound to those feeds. Without a catalog they are bound to your `sources`. The
+  mode shows every unbound slot and every unmet contract (`Visualize.Board.Binding.check/3`)
+  before any data flows. The binding is never stored in the board. Each change is sent to
+  your LiveView as `{on_bind, id, board_id, binding}` (`on_bind` defaults to
+  `:visualize_board_bound`). Hand it back through `board_bindings`, keyed by the board
+  entry's id, when the board opens again. A slot with no binding starts bound to the feed
+  of its own name, if there is one. The preview binds through the binding. A catalog feed
+  previews over your `sources` entry of that name, or else over rows made from its schema
+  (`Visualize.Chart.Builder.Boards.sample/2`).
+
 - **A board runs live** (#574, D-146). Add `{Visualize.Board.Supervisor, name: MyApp.Boards}`
   to your tree and start a board under it with `Visualize.Board.Server.start/2`, passing
   `board:`, `store:`, `binding:` and `feeds:`. The board process owns the window (UTC), the

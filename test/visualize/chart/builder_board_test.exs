@@ -519,4 +519,134 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert s.assigns.notice =~ "no longer holds composite:9"
     end
   end
+
+  describe "binding the slots (§22.8)" do
+    alias Visualize.Board.Binding
+    alias Visualize.Data.Schema
+
+    # The uptime chart whose one slot states a contract: `v` must say its unit, and `t` is a
+    # number.
+    defp strict do
+      [{:house, house}, {:shared, shared}, panel] = BuilderFixture.layers()
+
+      shared =
+        put_in(shared, [:sources, :primary], %{
+          fields: [:t, :v],
+          types: %{t: :number},
+          requires: %{v: [:unit]}
+        })
+
+      {uses, _labels} =
+        Visualize.Chart.Composite.decompose(
+          Visualize.Chart.stack([{:house, house}, {:shared, shared}, panel])
+        )
+
+      %{composite: %{uses: uses, vars: %{}}}
+    end
+
+    defp catalog do
+      %{
+        :api => Schema.new!(%{t: %{type: :number}, v: %{type: :number, unit: "ms"}}),
+        :bare => Schema.new!(%{t: %{type: :time}, v: %{type: :number}}),
+        "vm.memory" => Schema.new!(%{t: %{type: :number}, v: %{type: :number, unit: "MB"}})
+      }
+    end
+
+    defp strict_board(opts) do
+      agent =
+        Memory.start([
+          {"Charts::strict", strict()},
+          {"Boards::ops", %{board: board_map() |> Board.from_map!() |> Board.to_map()}}
+        ])
+
+      s = BuilderFixture.socket(BuilderFixture.layers(), [store: {Memory, agent}] ++ opts)
+      s = event(s, "add_layer", %{"name" => "board:1"})
+      event(s, "board_select", %{"cell" => "latency"})
+    end
+
+    test "with no catalog the sample pool is bound by name, and every change is sent" do
+      s = event(opened(), "board_select", %{"cell" => "latency"})
+
+      assert s.assigns.binding.slots == %{
+               {:latency, :primary} => :primary,
+               {:errors, :primary} => :primary
+             }
+
+      html = BuilderFixture.render(s)
+      assert html =~ "sources — the sample pool"
+      assert html =~ ~s(<select name="slot.primary">)
+
+      s = event(s, "board_bind", %{"_target" => ["slot.primary"], "slot.primary" => ""})
+      assert s.assigns.binding.slots == %{{:errors, :primary} => :primary}
+      binding = s.assigns.binding
+      assert_received {:visualize_board_bound, "b", {:board, 1}, ^binding}
+
+      html = BuilderFixture.render(s)
+      assert html =~ "cells.latency.sources.primary"
+      assert html =~ "vis-builder-board-slot-faulty"
+    end
+
+    test "with a catalog its feeds are offered, and unbound slots and unmet contracts are shown" do
+      s = strict_board(catalog: catalog())
+      # No feed is called `primary`, so nothing binds by name.
+      assert s.assigns.binding == Binding.new()
+
+      html = BuilderFixture.render(s)
+      assert html =~ "sources — the host&#39;s feeds"
+      assert html =~ ~s(<option value="vm.memory">vm.memory</option>)
+      assert html =~ "cells.latency.sources.primary: "
+
+      s = event(s, "board_bind", %{"_target" => ["slot.primary"], "slot.primary" => "bare"})
+      assert Binding.fetch(s.assigns.binding, :latency, :primary) == {:ok, :bare}
+      mode = Visualize.Chart.Builder.Editing.editing(s.assigns).board_mode
+      faults = Enum.join(mode.selected.slots |> hd() |> Map.fetch!(:faults), "\n")
+      assert faults =~ "unit"
+      assert faults =~ "cells.latency.sources.primary.types.t"
+
+      s = event(s, "board_bind", %{"_target" => ["slot.primary"], "slot.primary" => "api"})
+      mode = Visualize.Chart.Builder.Editing.editing(s.assigns).board_mode
+      assert hd(mode.selected.slots).faults == []
+
+      # A catalog feed previews over rows made from its schema.
+      html = BuilderFixture.render(s)
+
+      [_, latency] =
+        Regex.run(
+          ~r/data-board-cell="latency".*?<div class="vis-builder-board-cell-body">(.*?)<\/div>/s,
+          html
+        )
+
+      assert latency =~ "<svg"
+    end
+
+    test "a feed the page names that the catalog lacks binds nothing" do
+      s = strict_board(catalog: catalog())
+      s = event(s, "board_bind", %{"_target" => ["slot.primary"], "slot.primary" => "nope"})
+      assert s.assigns.binding == Binding.new()
+    end
+
+    test "the host's binding for a board is taken when it opens, and the board never holds it" do
+      held = Binding.new(%{{:latency, :primary} => :api, {:errors, :primary} => "vm.memory"})
+      s = strict_board(catalog: catalog(), board_bindings: %{{:board, 1} => held})
+      assert s.assigns.binding == held
+
+      {Memory, agent} = s.assigns.store
+      s = event(s, "put_design", %{"name" => "Boards::ops"})
+      {:ok, entry} = Memory.get({:board, 1}, agent)
+      refute inspect(entry.fragment) =~ "vm.memory"
+      assert Map.keys(entry.fragment) == [:board]
+      assert s.assigns.binding == held
+    end
+
+    test "removing a cell removes its bindings, and adding one binds its slots by name" do
+      s = opened()
+      s = event(s, "board_remove", %{"cell" => "latency"})
+      assert s.assigns.binding.slots == %{{:errors, :primary} => :primary}
+      assert_received {:visualize_board_bound, "b", {:board, 1}, %Binding{slots: slots}}
+      assert map_size(slots) == 1
+
+      s = event(s, "board_add", %{"ref" => "composite:1"})
+      assert Binding.fetch(s.assigns.binding, :cell_1, :primary) == {:ok, :primary}
+    end
+  end
 end

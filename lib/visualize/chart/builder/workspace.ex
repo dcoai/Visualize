@@ -64,6 +64,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           |> opened(entry, [], %{}, %{}, %{})
           |> assign(
             board: board,
+            binding: Visualize.Chart.Builder.BoardMode.started(socket.assigns, board, entry.id),
             board_cell: board.cells |> Map.keys() |> Enum.min(fn -> nil end)
           )
           |> added_chart(entry.name || "new board", "chart #{socket.assigns.next_chart}")
@@ -94,6 +95,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         open: %{id: entry.id, name: entry.name, kind: entry.kind},
         board: nil,
         board_cell: nil,
+        binding: nil,
         return_to: nil,
         uses: uses,
         labels: labels,
@@ -111,7 +113,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # The live assigns are the selected chart's; parking writes them back to its row.
-    # A board chart holds its board and its selected cell, and a component opened from a
+    # A board chart holds its board, its selected cell and the host's binding of it, and a component opened from a
     # board the chart it returns to (spec/14 §22.2, §22.7).
     @chart_state [
       :uses,
@@ -122,6 +124,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       :signals,
       :board,
       :board_cell,
+      :binding,
       :return_to
     ]
 

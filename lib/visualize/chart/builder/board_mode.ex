@@ -22,13 +22,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Writes, only: [pool: 1]
 
     alias Visualize.Board
+    alias Visualize.Board.Binding
     alias Visualize.Chart.Builder.{Boards, Stack, Store}
+    alias Visualize.Data.{Delivery, Schema}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
     @events ~w(
       board_select board_place board_add board_remove board_cell board_cell_var board_edit
-      board_var board_view board_edit_component board_return
+      board_var board_view board_edit_component board_return board_bind
     )
 
     @doc false
@@ -65,7 +67,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:ok, ref} ->
           case Boards.added(socket.assigns.board, ref) do
             {:ok, board, cell} ->
-              {:noreply, assign(socket, board: board, board_cell: cell, notice: nil)}
+              socket = assign(socket, board: board, board_cell: cell, notice: nil)
+              {:noreply, bound(socket, by_name(socket.assigns, socket.assigns.binding, [cell]))}
 
             {:error, errors} ->
               {:noreply, refused(socket, errors)}
@@ -88,9 +91,51 @@ if Code.ensure_loaded?(Phoenix.Component) do
         cell ->
           board = Boards.removed(socket.assigns.board, cell)
           next = board.cells |> Map.keys() |> Enum.min(fn -> nil end)
-          {:noreply, assign(socket, board: board, board_cell: next, notice: nil)}
+          binding = socket.assigns.binding || Binding.new()
+          kept = for {{c, _slot}, _feed} = pair <- binding.slots, c != cell, into: %{}, do: pair
+
+          {:noreply,
+           socket
+           |> assign(board: board, board_cell: next, notice: nil)
+           |> bound(%{binding | slots: kept})}
       end
     end
+
+    # -- the binding (§22.8) -------------------------------------------------------------------
+
+    # A slot of the selected cell bound to a bindable feed, or unbound; a feed from the page
+    # is one of the bindable feeds by its printed form, never a term of its own.
+    def handle_event("board_bind", %{"_target" => ["slot." <> text = field]} = params, socket) do
+      %{board_cell: cell} = socket.assigns
+      slots = for {{^cell, slot}, _need} <- required(socket.assigns), do: slot
+
+      case {cell, Boards.named(slots, text)} do
+        {nil, _} ->
+          {:noreply, socket}
+
+        {_cell, nil} ->
+          {:noreply, socket}
+
+        {cell, slot} ->
+          binding = socket.assigns.binding || Binding.new()
+
+          binding =
+            case Map.get(params, field, "") do
+              "" ->
+                %{binding | slots: Map.delete(binding.slots, {cell, slot})}
+
+              key ->
+                case Enum.find(feeds(socket.assigns), &(Boards.feed_key(&1) == key)) do
+                  nil -> binding
+                  feed -> Binding.put(binding, cell, slot, feed)
+                end
+            end
+
+          {:noreply, bound(socket, binding)}
+      end
+    end
+
+    def handle_event("board_bind", _params, socket), do: {:noreply, socket}
 
     # -- the forms (§22.4) ---------------------------------------------------------------------
 
@@ -256,9 +301,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {:error, errors} -> errors
         end
 
+      binding = assigns.binding || Binding.new()
+      required = required(assigns)
+      bind_faults = binding_faults(assigns, binding, required)
+      faults = faults ++ bind_faults
       faulty = MapSet.new(for {[:cells, cell | _], _reason} <- faults, do: cell)
-      pools = Map.new(board.cells, fn {name, _cell} -> {name, pool(assigns)} end)
-      previews = Boards.preview(board, fetch, pools: pools, theme: assigns.theme)
+      pools = Binding.pools(binding, feed_sources(assigns))
+
+      previews =
+        Boards.preview(board, fetch,
+          pools: pools,
+          theme: assigns.theme,
+          describe: describe(assigns, binding)
+        )
+
       layout = Board.layout(board)
 
       view = fn name, rect ->
@@ -282,7 +338,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
           for({name, rect} <- Board.arrange(board, layout.breakpoint), do: view.(name, rect)),
         stacked:
           for({name, rect} <- Board.arrange(board, layout.breakpoint - 1), do: view.(name, rect)),
-        selected: selected(board, assigns.board_cell, fetch, names),
+        selected:
+          selected(board, assigns.board_cell, fetch, names)
+          |> with_slots(assigns.board_cell, binding, required, bind_faults),
+        catalog?: is_map(assigns[:catalog]),
+        feeds: for(feed <- feeds(assigns), do: {Boards.feed_key(feed), Boards.feed_key(feed)}),
         components: for(%{kind: :composite} = e <- entries, do: {e.name, Store.encode_id(e.id)}),
         vars: board_vars(board, fetch),
         window: window(board.window),
@@ -291,6 +351,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp board_mode(_assigns, _kind), do: nil
+
+    # The selected cell's slots, each with the feed it is bound to and its own faults (§22.8).
+    defp with_slots(nil, _cell, _binding, _required, _faults), do: nil
+
+    defp with_slots(selected, cell, binding, required, faults) do
+      slots =
+        for {{^cell, slot}, _need} <- Enum.sort(required) do
+          feed =
+            case Binding.fetch(binding, cell, slot) do
+              {:ok, feed} -> Boards.feed_key(feed)
+              :error -> nil
+            end
+
+          %{
+            name: Atom.to_string(slot),
+            feed: feed,
+            faults:
+              for(
+                {[:cells, ^cell, :sources, ^slot | _], _reason} = fault <- faults,
+                do: Board.format_error(fault)
+              )
+          }
+        end
+
+      Map.put(selected, :slots, slots)
+    end
 
     defp selected(_board, nil, _fetch, _names), do: nil
 
@@ -357,6 +443,114 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(nil), do: ""
     defp shown(value) when is_binary(value), do: value
     defp shown(value), do: to_string(value)
+
+    # -- the binding's parts (§22.8) -----------------------------------------------------------
+
+    @doc false
+    # The binding a board opens with: the host's for its id, else every slot bound by name.
+    def started(assigns, %Board{} = board, id) do
+      case Map.get(assigns[:board_bindings] || %{}, id) do
+        %Binding{} = binding ->
+          binding
+
+        _none ->
+          by_name(Map.put(assigns, :board, board), Binding.new(), Map.keys(board.cells))
+      end
+    end
+
+    # Each unbound slot of the cells bound to the bindable feed of its own name, if any.
+    defp by_name(assigns, binding, cells) do
+      binding = binding || Binding.new()
+      feeds = feeds(assigns)
+
+      for {{cell, slot}, _need} <- required(assigns),
+          cell in cells,
+          Binding.fetch(binding, cell, slot) == :error,
+          feed = Enum.find(feeds, &(Boards.feed_key(&1) == Atom.to_string(slot))),
+          feed != nil,
+          reduce: binding do
+        binding -> Binding.put(binding, cell, slot, feed)
+      end
+    end
+
+    # The binding kept on the chart and, when it changed, sent to the host (§22.8).
+    defp bound(socket, binding) do
+      if binding == socket.assigns.binding do
+        socket
+      else
+        %{id: id, open: open} = socket.assigns
+        tag = Map.get(socket.assigns, :on_bind, :visualize_board_bound)
+        send(self(), {tag, id, open && open.id, binding})
+        assign(socket, :binding, binding)
+      end
+    end
+
+    # The bindable feeds: the catalog's, else the sample pool's names (§22.8).
+    defp feeds(%{catalog: catalog}) when is_map(catalog),
+      do: catalog |> Map.keys() |> Enum.sort_by(&Boards.feed_key/1)
+
+    defp feeds(assigns), do: assigns |> pool() |> Map.keys() |> Enum.sort_by(&Boards.feed_key/1)
+
+    # Every cell's slots, each cell read alone, so one that does not resolve leaves the
+    # others' listed (§22.8).
+    defp required(%{board: %Board{cells: cells} = board, store: store}) do
+      fetch = Stack.fetch(store)
+
+      Enum.reduce(cells, %{}, fn {name, cell}, acc ->
+        case Board.required_sources(%{board | cells: %{name => cell}}, fetch) do
+          {:ok, required} -> Map.merge(acc, required)
+          {:error, _errors} -> acc
+        end
+      end)
+    end
+
+    defp required(_assigns), do: %{}
+
+    # The rows each bindable feed previews over (§22.6): the host's `sources` of its name,
+    # else rows made from a catalog feed's schema.
+    defp feed_sources(%{catalog: catalog} = assigns) when is_map(catalog) do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      sources = assigns.sources || %{}
+
+      Map.new(catalog, fn {feed, schema} ->
+        rows = Map.get_lazy(sources, feed, fn -> Boards.sample(schema, now) end)
+        {feed, Delivery.new(rows, schema: Schema.version(schema))}
+      end)
+    end
+
+    defp feed_sources(assigns), do: pool(assigns)
+
+    # A slot's schema for the preview: its bound feed's in the catalog (§22.6).
+    defp describe(%{catalog: catalog}, binding) when is_map(catalog) do
+      fn {cell, slot} ->
+        with {:ok, feed} <- Binding.fetch(binding, cell, slot),
+             {:ok, schema} <- Map.fetch(catalog, feed) do
+          {:ok, schema}
+        else
+          :error -> {:error, :undescribed}
+        end
+      end
+    end
+
+    defp describe(_assigns, _binding), do: nil
+
+    # The binding check (§22.8): every fault, but a stale binding of a cell whose component
+    # did not resolve, which the board's own faults already name.
+    defp binding_faults(assigns, binding, required) do
+      schemas = if is_map(assigns[:catalog]), do: assigns.catalog, else: %{}
+      resolved = MapSet.new(for {{cell, _slot}, _need} <- required, do: cell)
+
+      case Binding.check(binding, required, schemas) do
+        :ok ->
+          []
+
+        {:error, errors} ->
+          Enum.reject(errors, fn {[:cells, cell | _], reason} ->
+            reason == :not_required and cell in Map.keys(assigns.board.cells) and
+              cell not in resolved
+          end)
+      end
+    end
 
     # -- writing ---------------------------------------------------------------------------------
 
