@@ -14,9 +14,16 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
     {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => to_string(backend)}, s)
     {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
-    {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
+    {:noreply, s} = ChartLive.handle_event("run_start", %{}, at(s, 0))
     settled(s)
   end
+
+  # The page's clock stopped at `ms` (D-148): every instant the page reads is this one.
+  defp at(s, ms),
+    do: Phoenix.Component.assign(s, run_clock: &System.convert_time_unit(ms, :millisecond, &1))
+
+  # The page's clock moved on by `ms`: the next tick's elapsed time, exactly.
+  defp later(s, ms), do: at(s, s.assigns.run_clock.(:millisecond) + ms)
 
   defp html(s),
     do:
@@ -32,21 +39,13 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     s
   end
 
-  # A tick `ms` after the last, its frame settled. The tick reads the real clock, so its
-  # elapsed time is `ms` plus however long the test took since the last one — under load,
-  # long enough for a sample or two at the line's 20 a second (#512).
+  # A tick `ms` after the last on the page's stopped clock, its frame settled. The tick had
+  # read the real clock, so its elapsed time was `ms` plus however long the test took —
+  # under load, a sample or two more at the line's 20 a second (#512); now it is `ms`.
   defp ticked(s, ms) do
-    s =
-      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - ms})
-
-    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    {:noreply, s} = ChartLive.handle_info(:run_tick, later(s, ms))
     settled(s)
   end
-
-  # The samples the last tick counted at the data rate, from the run's own record of it:
-  # a chart that animates by tick advances by exactly these (#361), so a test asserts the
-  # tick against them rather than against a clock it does not hold (#512).
-  defp arrived(s), do: s.assigns.run.arrivals |> hd() |> elem(1)
 
   defp switch(s, backend) do
     {:noreply, s} = ChartLive.handle_event("run_backend", %{"backend" => to_string(backend)}, s)
@@ -73,7 +72,8 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     s = page("line", :svg) |> ticked(100) |> ticked(100)
     renderer = s.assigns.run.renderer
     ticks = s.assigns.run_ticks
-    assert ticks > 0
+    # Two ticks of 100 ms at the line's 20 a second: four, exactly.
+    assert ticks == 4
     assert s.assigns.run_frame.svg =~ "<svg"
     # The line eases its y scale, so SVG keeps a compiled chart too — with no canvas.
     assert svg_state?(Renderer.state(renderer))
@@ -93,10 +93,10 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     h = html(s)
     assert h =~ "<svg" and not (h =~ "hybrid-wrapper")
 
-    s = ticked(s, 1)
+    s = ticked(s, 50)
     # The tick carried over: the first Canvas frame is the chart at the tick the SVG run
-    # was at, plus what this tick counted — never a counter started again.
-    assert s.assigns.run_ticks == ticks + arrived(s)
+    # was at, plus the one 50 ms counts — never a counter started again.
+    assert s.assigns.run_ticks == ticks + 1
     assert %{svg: nil, plots: [%{canvas: canvas}]} = s.assigns.run_frame
     assert is_binary(canvas)
     assert [{"canvas_update", seq}] = pushed(s)
@@ -123,8 +123,8 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     refute s.assigns.run.flow_control
     canvas_pushes = pushed(s)
 
-    s = ticked(s, 1)
-    assert s.assigns.run_ticks == ticks + arrived(s)
+    s = ticked(s, 50)
+    assert ticks == 2 and s.assigns.run_ticks == ticks + 1
     assert s.assigns.run_frame.svg =~ "<svg" and s.assigns.run_frame.plots == []
     # An SVG frame travels in the diff: nothing more is pushed.
     assert pushed(s) == canvas_pushes
@@ -135,8 +135,9 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
 
   test "a streaming design keeps its rows and window origin across SVG → Incremental → Canvas → SVG; each first frame is full" do
     s = page("scrolling_series", :svg) |> ticked(40) |> ticked(40)
+    # Two ticks of 40 ms at 600 a second: 24 samples each, six columns at four per pixel.
     origin = s.assigns.run_scroll.origin
-    assert origin > 0
+    assert origin == 48
     held = rows(s)
 
     s = switch(s, :incremental)
@@ -156,7 +157,7 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
     # Then it scrolls, as a run on Incremental does.
     s = ticked(s, 40)
     %{plots: [%{incremental: next}]} = s.assigns.run_frame
-    assert next.mode in ["scroll_x", "none"]
+    assert next.mode == "scroll_x" and next.dx == 6
 
     # To Canvas: a streaming design's compiled chart draws incremental records there too,
     # so the element and its hook are the same kind — and the chart, compiled afresh,
@@ -177,12 +178,7 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
   test "a frame asked of the old backend before the switch is stale and never reaches the page" do
     s = page("line", :canvas)
 
-    s =
-      Phoenix.Component.assign(s,
-        run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 100}
-      )
-
-    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    {:noreply, s} = ChartLive.handle_info(:run_tick, later(s, 100))
     old = s.assigns.run.render_id
     assert old != nil
 

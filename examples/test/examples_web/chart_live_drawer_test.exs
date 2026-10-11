@@ -9,12 +9,20 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
   alias Examples.Run
   alias ExamplesWeb.ChartLive
 
-  # A page opens on SVG (#501); a test still names the backend it means.
+  # A page opens on SVG (#501); a test still names the backend it means. Its clock is
+  # stopped at zero (D-148), so a tick is as long as `later/2` says and no longer.
   defp page(slug, backend \\ :svg) do
     {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
     {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => to_string(backend)}, s)
-    s
+    at(s, 0)
   end
+
+  # The page's clock stopped at `ms` (D-148): every instant the page reads is this one.
+  defp at(s, ms),
+    do: Phoenix.Component.assign(s, run_clock: &System.convert_time_unit(ms, :millisecond, &1))
+
+  # The page's clock moved on by `ms`: the next tick's elapsed time, exactly (#567).
+  defp later(s, ms), do: at(s, s.assigns.run_clock.(:millisecond) + ms)
 
   defp html(s),
     do:
@@ -50,12 +58,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
     s =
       Enum.reduce(1..3, s, fn _, s ->
-        s =
-          Phoenix.Component.assign(s,
-            run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 40}
-          )
-
-        {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+        {:noreply, s} = ChartLive.handle_info(:run_tick, later(s, 40))
         if s.assigns.run.render_id, do: settled(s), else: s
       end)
 
@@ -351,10 +354,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     {:noreply, s} = ChartLive.handle_event("run_start", %{}, s)
     s = settled(s)
 
-    s =
-      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 40})
-
-    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    {:noreply, s} = ChartLive.handle_info(:run_tick, later(s, 40))
     s = settled(s)
     %{incremental: before, plot: was} = plot(s.assigns.run_frame)
     assert before.mode in ["scroll_x", "none"]
@@ -364,10 +364,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     # The hook resizes its canvas to the element's data-width x data-height, which clears
     # it, and draws no scroll until a full record (spec/10 §9.2): the renderer's chart is
     # compiled again with its window afresh, so the next payload is that full record.
-    s =
-      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 40})
-
-    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    {:noreply, s} = ChartLive.handle_info(:run_tick, later(s, 40))
     s = settled(s)
     %{incremental: record, plot: area} = plot(s.assigns.run_frame)
     assert record.mode == "full"
@@ -384,10 +381,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
   # A tick `ms` after the last, its frame settled when one was asked for.
   defp ticked(s, ms) do
-    s =
-      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - ms})
-
-    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
+    {:noreply, s} = ChartLive.handle_info(:run_tick, later(s, ms))
     if s.assigns.run.render_id, do: settled(s), else: s
   end
 
@@ -484,24 +478,24 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert s.assigns.run.data_rate == 600 and s.assigns.run.flow_control
     s = settled(s)
     assert plot(s.assigns.run_frame).incremental.mode == "full"
+    full = s.assigns.run_frame.bytes
     assert pushed(s) == [{"canvas_incremental", 1}]
     h = html(s)
     assert h =~ ~s(phx-hook="CanvasIncrementalChart")
     assert h =~ "top: 40px; left: 60px"
 
     # 16 ms at 600/s is 9 samples: two columns at four per pixel, one sample pending.
-    s =
-      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 16})
-
-    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
-    # The origin the frame was asked for: `settled/1` may let a later tick advance it.
-    origin = s.assigns.run_scroll.origin
-    assert origin >= 8 and rem(origin, 4) == 0
+    {:noreply, s} = ChartLive.handle_info(:run_tick, later(s, 16))
+    assert s.assigns.run_scroll.origin == 8 and s.assigns.run.pending == 1
     s = settled(s)
-    assert %{mode: "scroll_x", dx: dx} = plot(s.assigns.run_frame).incremental
-    assert dx == div(origin, 4)
+    assert %{mode: "scroll_x", dx: 2} = plot(s.assigns.run_frame).incremental
     assert pushed(s) == [{"canvas_incremental", 1}, {"canvas_incremental", 2}]
-    assert s.assigns.run_frame.bytes < 30_000
+    # A scroll ships its strip, not its window: two columns of 810 cost under a fiftieth of
+    # the full frame (3,418 bytes against 218,879). A strip is about 2.9 KB and 266 bytes a
+    # column, so the 30,000-byte bound this replaced was crossed when a tick read off the
+    # real clock saw some 0.7 s under load and scrolled a hundred columns (#567); the tick
+    # is exact now, so the strip is too (D-148).
+    assert s.assigns.run_frame.bytes * 50 < full
 
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
     refute s.assigns.run.running
@@ -574,13 +568,8 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     frame0 = s.assigns.run_frame.svg
 
     # 100 ms at 10 ticks/s is one tick: the next frame is the chart at tick 1.
-    s =
-      Phoenix.Component.assign(s,
-        run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 100, carry: 0.0}
-      )
-
-    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
-    assert s.assigns.run_ticks >= 1
+    {:noreply, s} = ChartLive.handle_info(:run_tick, later(s, 100))
+    assert s.assigns.run_ticks == 1
     s = settled(s)
     refute s.assigns.run_frame.svg == frame0
     assert html(s) =~ ">full<"
@@ -604,13 +593,9 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert s.assigns.run_frame.svg =~ "<svg" and s.assigns.run_mode == "full"
     origin = s.assigns.run_scroll.origin
 
-    # 16 ms at 600/s is 9 samples, two whole columns at four per pixel — plus whatever
-    # the render's own time let arrive; the window moves by whole columns of samples.
-    s =
-      Phoenix.Component.assign(s, run: %{s.assigns.run | last_tick: s.assigns.run.last_tick - 16})
-
-    {:noreply, s} = ChartLive.handle_info(:run_tick, s)
-    assert s.assigns.run_scroll.origin >= origin + 8 and rem(s.assigns.run_scroll.origin, 4) == 0
+    # 16 ms at 600/s is 9 samples: the window moves by the two whole columns they fill.
+    {:noreply, s} = ChartLive.handle_info(:run_tick, later(s, 16))
+    assert s.assigns.run_scroll.origin == origin + 8
     s = settled(s)
     assert s.assigns.run_frame.svg =~ "<svg"
     h = html(s)
