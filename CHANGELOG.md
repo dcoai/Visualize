@@ -280,6 +280,12 @@ release it merely follows.
 
 ### Changed
 
+- **The builder is split into modules by area, with no change in behaviour** (#568).
+  `Visualize.Chart.Builder` keeps its assigns, its message, `css/0`, `styles/1` and
+  `tick/2` exactly as before; what moved is internal (`Visualize.Chart.Builder.Events.*`,
+  `Editing`, `Tree`, `Selection`, `Writes`, `Workspace`, `Modes`, `ThemeMode`, none of
+  them public). A test that calls the component's `handle_event/3` directly sees the same
+  results; an event the builder does not handle still raises `FunctionClauseError` there.
 - **A root names every chart and describes it with its summary** (#557, D-142).
   `Visualize.Chart.render/2` and `generate/2` with `root: true` title a design with no
   `meta.name` by its kind, and write the generated summary after `meta.description` in the
