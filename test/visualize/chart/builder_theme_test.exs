@@ -257,6 +257,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
                {"default", "builtin:default"},
                {"dark", "builtin:dark"},
                {"colour_safe", "builtin:colour_safe"},
+               {"print", "builtin:print"},
                {"Looks::house", "theme:1"}
              ]
     end

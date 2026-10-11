@@ -34,6 +34,8 @@ defmodule ExamplesWeb.Router do
     live "/interaction", InteractionLive, :index
     live "/dashboard", DashboardLive, :index
     live "/board", BoardLive, :index
+    # The board's exports are actions on the running board, not pages (#578).
+    post "/board/export/:format", BoardExportController, :export
     live "/builder", BuilderLive, :index
   end
 

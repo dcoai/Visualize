@@ -165,21 +165,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # The window in the board's zone (spec/15 §1.5): UTC in, the zone out.
-    defp window_text(%{window: {from, to}, zone: zone}) do
-      "#{clock(from, zone)} – #{clock(to, zone)} (#{zone})"
-    end
-
+    defp window_text(%{window: window, zone: zone}), do: Board.window_text(window, zone)
     defp window_text(_info), do: nil
-
-    defp clock(instant, zone) do
-      local =
-        case DateTime.shift_zone(instant, zone) do
-          {:ok, local} -> local
-          {:error, _reason} -> instant
-        end
-
-      Calendar.strftime(local, "%Y-%m-%d %H:%M:%S")
-    end
 
     defmodule Cell do
       @moduledoc """

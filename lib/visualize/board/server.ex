@@ -55,7 +55,7 @@ defmodule Visualize.Board.Server do
   use GenServer, restart: :transient
 
   alias Visualize.Board
-  alias Visualize.Board.{Binding, Cell, State, View}
+  alias Visualize.Board.{Binding, Cell, Snapshot, State, View}
   alias Visualize.Data.Schema.Cache
   alias Visualize.Feed.Monitor
 
@@ -184,6 +184,16 @@ defmodule Visualize.Board.Server do
   @spec info(GenServer.server()) :: info()
   def info(board), do: GenServer.call(board, :info)
 
+  @doc """
+  The board frozen as it stands (spec/15 §12.2): a `Visualize.Board.Snapshot` of the
+  board, its now and its resolved window, the width, the theme, and every cell's prepared
+  component, variables and the slots the board last handed it — or the reason a cell that
+  has crashed died. It holds no pid and no feed: `Visualize.Board.Export` draws it, and it
+  reopens anywhere after the board has stopped.
+  """
+  @spec snapshot(GenServer.server()) :: Snapshot.t()
+  def snapshot(board), do: GenServer.call(board, :snapshot)
+
   @doc "The board and its cells stopped; `:ok`."
   @spec stop(GenServer.server()) :: :ok
   def stop(board), do: GenServer.stop(board, :normal)
@@ -249,7 +259,7 @@ defmodule Visualize.Board.Server do
     for {name, %{pid: nil, state: {:crashed, _} = crashed}} <- state.cells,
         do: send(pid, message({:cell, name, crashed_view(state, name, crashed)}))
 
-    {:reply, {:ok, snapshot(state)}, state}
+    {:reply, {:ok, present(state)}, state}
   end
 
   def handle_call({:unsubscribe, pid}, _from, state) do
@@ -299,7 +309,8 @@ defmodule Visualize.Board.Server do
   end
 
   def handle_call(:tick, _from, state), do: {:reply, :ok, turn(state)}
-  def handle_call(:info, _from, state), do: {:reply, snapshot(state), state}
+  def handle_call(:info, _from, state), do: {:reply, present(state), state}
+  def handle_call(:snapshot, _from, state), do: {:reply, frozen(state), state}
 
   @impl true
   def handle_info(:tick, state) do
@@ -400,7 +411,7 @@ defmodule Visualize.Board.Server do
     told = {state.window, state.board.zone, state.width, state.board.sync}
 
     if told != state.told do
-      Enum.each(Map.keys(state.subscribers), &send(&1, message({:board, snapshot(state, false)})))
+      Enum.each(Map.keys(state.subscribers), &send(&1, message({:board, present(state, false)})))
     end
 
     %{state | told: told}
@@ -514,7 +525,7 @@ defmodule Visualize.Board.Server do
   defp size({_x, _y, w, h}), do: {w, h}
   defp size(nil), do: nil
 
-  defp snapshot(state, cells? \\ true) do
+  defp present(state, cells? \\ true) do
     base = %{
       board: state.board,
       window: state.window,
@@ -535,6 +546,30 @@ defmodule Visualize.Board.Server do
     else
       Map.drop(base, [:board])
     end
+  end
+
+  # The board as a snapshot (spec/15 §12.2): what each cell was last handed, never a
+  # call to a cell, so a slow cell does not hold it.
+  defp frozen(state) do
+    cells =
+      Map.new(state.components, fn {name, %{chart: chart, vars: vars}} ->
+        crashed =
+          case state.cells[name] do
+            %{state: {:crashed, reason}} -> reason
+            _running -> nil
+          end
+
+        {name, %{chart: chart, vars: vars, slots: state.sent[name], crashed: crashed}}
+      end)
+
+    Snapshot.new(
+      board: state.board,
+      now: state.now,
+      window: state.window,
+      width: state.width,
+      theme: state.theme,
+      cells: cells
+    )
   end
 
   defp message(message), do: {:visualize_board, self(), message}

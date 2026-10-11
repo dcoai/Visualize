@@ -74,6 +74,38 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert Server.info(board).board.window == %{last: 300}
   end
 
+  test "the export buttons hand back the board as SVG, its snapshot and its printed pages (#578)" do
+    html = build_conn() |> get("/board") |> html_response(200)
+
+    for format <- ~w(svg png snapshot print) do
+      assert html =~ ~s(formaction="/board/export/#{format}"), format
+    end
+
+    {:ok, board} = Examples.BoardDemo.board()
+    :ok = Server.tick(board)
+
+    svg = build_conn() |> post("/board/export/svg")
+    assert response(svg, 200) =~ ~s(class="vis-board-export")
+    assert Plug.Conn.get_resp_header(svg, "content-type") |> hd() =~ "image/svg+xml"
+    assert Plug.Conn.get_resp_header(svg, "content-disposition") |> hd() =~ "board.svg"
+
+    for cell <- ~w(load memory queue wave offline) do
+      assert svg.resp_body =~ ~s(data-vis-cell="#{cell}"), cell
+    end
+
+    snapshot = build_conn() |> post("/board/export/snapshot")
+    assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
+    assert Map.keys(frozen.cells) |> Enum.sort() == ~w(load memory offline queue wave)a
+    assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
+
+    print = build_conn() |> post("/board/export/print")
+    assert html_response(print, 200) =~ "@page { size: 210mm 297mm"
+
+    png = build_conn() |> post("/board/export/png")
+    assert png.status in [200, 503]
+    if png.status == 200, do: assert(<<137, 80, 78, 71, _::binary>> = png.resp_body)
+  end
+
   # The first view of each cell that is no longer loading.
   defp views(seen, []), do: seen
 

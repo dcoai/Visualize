@@ -6,7 +6,9 @@ defmodule ExamplesWeb.BoardLive do
   The page holds nothing of the board's but its pid: the component subscribes the page
   when it connects, and the page's one `handle_info/2` clause forwards the board's
   messages to it. The window buttons set the board's window, which re-asks every feed;
-  brushing a time chart does the same, and a double-click restores the window.
+  brushing a time chart does the same, and a double-click restores the window. The
+  export buttons post to `ExamplesWeb.BoardExportController`, which freezes the board
+  and hands back its SVG, its PNG, its snapshot or its printed pages (#578).
   """
   use Phoenix.LiveView
 
@@ -64,6 +66,15 @@ defmodule ExamplesWeb.BoardLive do
             — or brush a time chart; double-click it to restore.
           </p>
 
+          <form class="board-exports" method="post" action="/board/export/svg">
+            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+            Export: <button type="submit" formaction="/board/export/svg">SVG</button>
+            <button type="submit" formaction="/board/export/png">PNG</button>
+            <button type="submit" formaction="/board/export/snapshot">Snapshot</button>
+            <button type="submit" formaction="/board/export/print" formtarget="_blank">Print</button>
+            — the board frozen as it stands; a snapshot reopens with no feeds.
+          </form>
+
           <.live_component
             module={Visualize.Components.Board}
             id="demo-board"
@@ -80,7 +91,7 @@ defmodule ExamplesWeb.BoardLive do
     </main>
 
     <style>
-      .board-windows button { margin: 0 0.25rem; }
+      .board-windows button, .board-exports button { margin: 0 0.25rem; }
       .vis-board-header { display: flex; gap: 1rem; align-items: baseline; }
       .vis-board-title { font-size: 1.1rem; margin: 0.25rem 0; }
       .vis-board-window { color: #555; margin: 0; }

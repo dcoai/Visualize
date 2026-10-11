@@ -362,6 +362,32 @@ defmodule Visualize.Board do
   defp back(to, seconds), do: DateTime.add(to, -round(seconds * 1_000_000), :microsecond)
 
   @doc """
+  A resolved window as a person reads it, in the board's zone (spec/15 §1.5, §9.1): each
+  end shifted from UTC into `zone` by the host's time-zone database and written
+  `YYYY-MM-DD HH:MM:SS`, then the zone's name; `nil` for no window. A zone the database
+  does not know leaves the ends in UTC. The board component's header and an export's
+  (§12.1) both print it.
+
+      iex> Visualize.Board.window_text({~U[2026-10-11 11:00:00Z], ~U[2026-10-11 12:00:00Z]}, "Etc/UTC")
+      "2026-10-11 11:00:00 – 2026-10-11 12:00:00 (Etc/UTC)"
+      iex> Visualize.Board.window_text(nil, "Etc/UTC")
+      nil
+  """
+  @spec window_text({DateTime.t(), DateTime.t()} | nil, String.t()) :: String.t() | nil
+  def window_text(nil, _zone), do: nil
+  def window_text({from, to}, zone), do: "#{clock(from, zone)} – #{clock(to, zone)} (#{zone})"
+
+  defp clock(instant, zone) do
+    local =
+      case DateTime.shift_zone(instant, zone) do
+        {:ok, local} -> local
+        {:error, _reason} -> instant
+      end
+
+    Calendar.strftime(local, "%Y-%m-%d %H:%M:%S")
+  end
+
+  @doc """
   One cell's variables before they are narrowed to its component's (spec/15 §5): the
   board's, with the cell's over them. A component's declared default is the third layer,
   applied by `Visualize.Chart.apply/2`.

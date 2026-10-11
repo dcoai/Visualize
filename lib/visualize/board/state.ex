@@ -57,6 +57,10 @@ defmodule Visualize.Board.State do
 
   @banner_height 22
 
+  @doc false
+  # The height of `banner/3`'s root, which an export lays out (spec/15 §12.1).
+  def banner_height, do: @banner_height
+
   # -- deciding ---------------------------------------------------------------------------
 
   @doc """
@@ -143,11 +147,13 @@ defmodule Visualize.Board.State do
   def words(:capped), do: "Capped: part of the window"
   def words(:live), do: ""
 
-  defp reason({:unbound, slot}), do: "#{inspect(slot)} is not bound"
-  defp reason({:no_feed, feed}), do: "no feed #{inspect(feed)}"
-  defp reason({:apply, [error | _]}), do: Validator.format(error)
-  defp reason(reason) when is_binary(reason), do: reason
-  defp reason(reason), do: inspect(reason, limit: 5, printable_limit: 60)
+  @doc false
+  # A down reason as the words print it; a snapshot keeps it so (spec/15 §12.3).
+  def reason({:unbound, slot}), do: "#{inspect(slot)} is not bound"
+  def reason({:no_feed, feed}), do: "no feed #{inspect(feed)}"
+  def reason({:apply, [error | _]}), do: Validator.format(error)
+  def reason(reason) when is_binary(reason), do: reason
+  def reason(reason), do: inspect(reason, limit: 5, printable_limit: 60)
 
   # -- drawing ------------------------------------------------------------------------------
 
