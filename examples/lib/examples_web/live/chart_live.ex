@@ -115,6 +115,7 @@ defmodule ExamplesWeb.ChartLive do
       still_frame: nil,
       still_state: nil,
       still_design: nil,
+      still_access: nil,
       still_task: nil,
       # The performance drawer's run (spec/14 §12.6, #322): a run of this chart on a
       # backend, its frame, the compiled chart's state, and Compare's rows.
@@ -453,7 +454,7 @@ defmodule ExamplesWeb.ChartLive do
 
   # The still chart's frame (#362); a superseded one falls to the stale clause below.
   def handle_info(
-        {ref, {:still, frame, state, design}},
+        {ref, {:still, frame, state, design, access}},
         %{assigns: %{still_task: %Task{ref: ref}}} = socket
       ) do
     Process.demonitor(ref, [:flush])
@@ -463,6 +464,7 @@ defmodule ExamplesWeb.ChartLive do
         still_frame: frame,
         still_state: state,
         still_design: design,
+        still_access: access,
         still_task: nil
       )
 
@@ -512,13 +514,21 @@ defmodule ExamplesWeb.ChartLive do
       state = Frames.prepare(module, opts, backend)
       {frame, state} = Frames.frame(module, opts, backend, state)
       {design, _sources} = module.design(opts)
-      {:still, frame, state, inspect(design, pretty: true, limit: :infinity, width: 80)}
+
+      {:still, frame, state, inspect(design, pretty: true, limit: :infinity, width: 80),
+       access(module, opts)}
     end
 
     cond do
       not connected?(socket) ->
-        {:still, frame, state, design} = render.()
-        assign(socket, still_frame: frame, still_state: state, still_design: design)
+        {:still, frame, state, design, access} = render.()
+
+        assign(socket,
+          still_frame: frame,
+          still_state: state,
+          still_design: design,
+          still_access: access
+        )
 
       match?(:ok, Run.supervisor()) ->
         if task = assigns.still_task,
@@ -576,6 +586,15 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   defp resized(socket), do: socket
+
+  # The chart's text alternative at the still frame (spec/14 §21, #557): the summary that
+  # names the hybrid layers' wrapper and is shown under the chart, and the hidden data
+  # table that follows the chart for a screen reader.
+  defp access(module, opts) do
+    applied = Examples.Charts.Design.applied(module, opts)
+    summary = Visualize.Chart.Summary.new(applied)
+    %{summary: summary, table: Visualize.Chart.Summary.table(applied, id: "chart-data")}
+  end
 
   # A chart that has not run is at rest; one that has stays at the run's tick.
   defp still_opts(%{run_ticks: ticks} = assigns) when ticks > 0, do: run_opts(assigns, ticks)
@@ -942,7 +961,12 @@ defmodule ExamplesWeb.ChartLive do
                     box; the frames' static documents stack over them, and their backdrops — a
                     basemap's tiles — beneath them (spec/14 §12.4, #476): backdrop, canvas,
                     static SVG, dynamic SVG. --%>
-              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(state, :width)}px; height: #{run_size(state, :height)}px;"}>
+              <%!-- The layers are one picture (spec/14 §21.4): the wrapper is the image a
+                    screen reader meets, named and described by the summary, and every
+                    SVG layer under it is aria-hidden. --%>
+              <% summary = Frames.summary(state) %>
+              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(state, :width)}px; height: #{run_size(state, :height)}px;"} {if summary, do: Visualize.Chart.Summary.attrs(summary, "chart-access"), else: []}>
+                <%= if summary, do: Phoenix.HTML.raw(Visualize.Chart.Summary.description(summary, "chart-access")) %>
                 <div :if={Frames.backdrop(state) != ""} class="hybrid-backdrop-layer" style="position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;">
                   <%= Phoenix.HTML.raw(Frames.backdrop(state)) %>
                 </div>
@@ -973,6 +997,14 @@ defmodule ExamplesWeb.ChartLive do
               </div>
           <% end %>
         </div>
+        <%!-- The data-table fallback, visually hidden (spec/14 §21.3), and the summary shown
+              for the reader who wants to see what a screen reader is told. --%>
+        <%= if @still_access do %>
+          <%= Phoenix.HTML.raw(@still_access.table) %>
+          <p class="chart-summary" aria-hidden="true" style="color: #666; font-size: 0.85rem; margin: 0.5rem 0 0;">
+            <strong>Text alternative:</strong> <%= Visualize.Chart.Summary.text(@still_access.summary) %>
+          </p>
+        <% end %>
         <PerformanceDrawer.performance
           run={@run}
           backend={@run_backend}

@@ -1,4 +1,4 @@
-<svg width="400" height="300" class="tree" font-family="var(--vis-font-family, sans-serif)" role="img" aria-labelledby="vis-73z2h-title vis-73z2h-desc" viewBox="0 0 400 300">
+<svg width="400" height="300" class="tree" font-family="var(--vis-font-family, sans-serif)" role="img" aria-labelledby="vis-73z2h-title" aria-describedby="vis-73z2h-desc" viewBox="0 0 400 300">
   <title id="vis-73z2h-title">Org</title>
   <desc id="vis-73z2h-desc">A vertical tree</desc>
   <g transform="translate(40, 20)">

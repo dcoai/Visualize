@@ -74,7 +74,15 @@ release it merely follows.
   your connector and never stored in the board. `check/3` reports every unbound slot,
   every contract a feed's schema cannot meet (with `apply/2`'s reasons), and every binding
   to a slot no cell declares. `pools/2` builds one pool per cell from your sources.
-
+- **Every chart describes itself** (#557, D-142). `Visualize.Chart.Summary.new/1` reads an
+  applied chart into a text alternative — its name, its kind (a line chart, a gauge, a
+  treemap…), its series, each axis's range or categories, and the highest and lowest value
+  it draws, each with where it is — and `text/1` writes it as sentences, values written as
+  their axis writes them (its `measure`'s display unit, `prefix` and `unit`) to four
+  significant digits. `table/2` is the data-table fallback: an HTML `<table>` per mark,
+  visually hidden and still read, for a page to place beside the chart. `attrs/2` and
+  `description/2` name and describe whatever element stands for the chart — a canvas, or
+  the wrapper of a hybrid chart's layers.
 - **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
   `time_format/2` picks a `Visualize.Format.time/2` specifier from a time domain's span and
   the interval its ticks use — `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,
@@ -210,6 +218,20 @@ release it merely follows.
 
 ### Changed
 
+- **A root names every chart and describes it with its summary** (#557, D-142).
+  `Visualize.Chart.render/2` and `generate/2` with `root: true` title a design with no
+  `meta.name` by its kind, and write the generated summary after `meta.description` in the
+  `<desc>`; `summary: false` leaves the description the design's alone, and a string
+  replaces the summary. `aria-labelledby` now names the `<title>` only and the new
+  `aria-describedby` the `<desc>` — on `Visualize.IR.Element.root/3` and every component —
+  so a screen reader says a short name and then the description. `Element.root/3` takes
+  `hidden: true` for `aria-hidden`.
+- **A canvas names itself, and a hybrid chart's SVG layers are hidden** (#557).
+  The root wrapper of `Visualize.Backend.Canvas` and `Visualize.Backend.Hybrid.render/1` take
+  `title:` and `description:` and put them on the `<canvas>` (`role="img"`, `aria-label`,
+  and the description as its fallback content); `Hybrid.render_static/1` — and so a
+  compiled chart's static, dynamic and backdrop documents — is `aria-hidden="true"`, one
+  layer of a picture the page names.
 - **A design's axis without a `format` or a tick count derives them** (#532, D-134). The
   count comes from the axis's length and the format from its scale's domain, recomputed on
   every realisation, so a time axis reads `03:00` or `Mar 05` instead of

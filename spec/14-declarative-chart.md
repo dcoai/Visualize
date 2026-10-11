@@ -501,7 +501,7 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 
 **Every node the frame draws carries its path when asked** (#259, D-105). `generate/2` and `render/2` take `paths:`, `false` by default; with `paths: true` the element each design node renders carries `data-node` spelling the node's path as `Visualize.Chart.Validator.format_path/1` spells one — `frames.<name>` on the frame's own group, `marks[i]` on a mark's group (its zero-based position among the **design's** `marks`, not among the frame's), `frames.<name>.axes[i]` on an axis's group, `frames.<name>.legend` on the legend's, `labels[i]` on a label's text. The frame stamps what it places: a mark's group is `Visualize.Chart.Mark.generate/3`'s as it is, tagged by the frame at the design position it came from, so a facet frame's copies of one mark carry one path, a polar frame's ring and spoke axes keep their positions among `axes`, and the second mark of a design drawn in the second frame is `marks[1]` there. A mark's inline label (§5.5) sits inside its mark's group — in the labels group beside the mark's elements (§5.6) — and has no path of its own; the grid is furniture, not a node. Without the option the markup is byte for byte what it was, so a chart drawn for a page is unchanged, and the builder — which draws with it so a click on the graph can name what it hit (§18.4, §18.16) — is the caller that asks. `Visualize.Chart.render/2` passes it through.
 
-**A design renders as a document when asked** (#131). `Visualize.Chart.generate/2` is the applied chart as a `Visualize.IR.Element` — the frame's group, as `generate/2` above builds it over the bound sources — and `Visualize.Chart.render/2` is that element serialised. Both take `root:`, `false` by default: with `root: true` the group is the one child of `Visualize.IR.Element.root/3` at the frame's own `size`, the accessible root of spec/02 §2.1 — `role="img"`, the `viewBox`, a `<title>` and a `<desc>` first with `aria-labelledby` naming them — its title and description the design's `meta.name` and `meta.description` (§2.1), each a text with no hole left in it after application, an absent or empty one leaving its element out; `title:` and `description:` override them and `responsive:` reaches the root as its own option. A design carries everything the root needs, so nothing new is written to say it: a caller that put a chart in a page built this `<svg>` by hand, and three of them did it three ways. The default stays the bare group, so nothing that renders a chart today changes. The components of spec/10 keep their own `<svg>`: their markup is what spec/10 §1.2 specifies, class and font included, not a shell around a rendered design.
+**A design renders as a document when asked** (#131). `Visualize.Chart.generate/2` is the applied chart as a `Visualize.IR.Element` — the frame's group, as `generate/2` above builds it over the bound sources — and `Visualize.Chart.render/2` is that element serialised. Both take `root:`, `false` by default: with `root: true` the group is the one child of `Visualize.IR.Element.root/3` at the frame's own `size`, the accessible root of spec/02 §2.1 — `role="img"`, the `viewBox`, a `<title>` and a `<desc>` first with `aria-labelledby` naming them — its title the design's `meta.name` (§2.1) — else the chart's kind, so every root is named — and its description `meta.description` followed by the chart's generated summary (§21.2), each a text with no hole left in it after application; `title:`, `description:` and `summary:` override them and `responsive:` reaches the root as its own option. A design carries everything the root needs, so nothing new is written to say it: a caller that put a chart in a page built this `<svg>` by hand, and three of them did it three ways. The default stays the bare group, so nothing that renders a chart today changes. The components of spec/10 keep their own `<svg>`: their markup is what spec/10 §1.2 specifies, class and font included, not a shell around a rendered design.
 
 ## 5. Marks
 
@@ -1408,9 +1408,9 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.compile/1` | As `compile/2` with `[]` options: an applied chart compiled as it is, or a design applied with no options first. |
 | `Visualize.Chart.compile/2` | `compile(design, opts)`: `{:ok, %{name => %Visualize.Chart.Compiled{}}}`, one per frame (§12.1, #385), for an applied chart, or for a chart or a design map applied first with `sources:`, `vars:` and `theme:` as `apply/2` takes them, with `ceiling:` the point-count ceiling of §12.3 (`1000`); else the `{:error, errors}` of application. Raises `ArgumentError` as `apply/2` does, and for a `ceiling:` that is not a positive integer. |
 | `Visualize.Chart.generate/1` | As `generate/2` with `[]` options. |
-| `Visualize.Chart.generate/2` | `generate(applied, opts)`: the applied chart as a `Visualize.IR.Element` — `Visualize.Chart.Frame.generate/2` of its frame over its bound sources with `resolve:` and `paths:` as that function takes them — or, with `root: true`, that group inside `Visualize.IR.Element.root/3` at the frame's size, titled from the design's `meta` unless `title:` and `description:` say otherwise, `responsive:` passed through (§4.7). |
+| `Visualize.Chart.generate/2` | `generate(applied, opts)`: the applied chart as a `Visualize.IR.Element` — `Visualize.Chart.Frame.generate/2` of its frame over its bound sources with `resolve:` and `paths:` as that function takes them — or, with `root: true`, that group inside `Visualize.IR.Element.root/3` at the frame's size, titled from the design's `meta` — else the summary's name — and described by `meta.description` followed by the summary (§21.2), unless `title:`, `description:` and `summary:` say otherwise, `responsive:` passed through (§4.7). |
 | `Visualize.Chart.render/1` | As `render/2` with `[]` options. |
-| `Visualize.Chart.render/2` | `render(applied, opts)`: `generate/2` serialised through `Visualize.Render.to_string/2` — `backend:` and `resolve:` (default `Visualize.Theme.mode/1` of the backend), `paths:`, `root:`, `title:`, `description:` and `responsive:` as `generate/2` takes them. |
+| `Visualize.Chart.render/2` | `render(applied, opts)`: `generate/2` serialised through `Visualize.Render.to_string/2` — `backend:` and `resolve:` (default `Visualize.Theme.mode/1` of the backend), `paths:`, `root:`, `title:`, `description:`, `summary:` and `responsive:` as `generate/2` takes them. |
 
 ### 14.2 `Visualize.Chart.Schema`
 
@@ -2993,3 +2993,88 @@ The simulation is Machado, Oliveira and Fernandes (2009) at severity 1.0 (spec/0
 | `Visualize.Chart.Builder.ThemeRamps.section/1` | the *ramps* and *roles* sections of the editor (§20.4): each ramp drawn, under the chosen deficiency (§20.5) and as its lightness, its anchors and its violation; each role at its position |
 | `Visualize.Chart.Builder.Themes.anchor_added/2` | `anchor_added(node, ramp)`: the node with the ramp resampled at one more evenly spaced anchor |
 | `Visualize.Chart.Builder.Themes.anchor_removed/3` | `anchor_removed(node, ramp, i)`: the node without the ramp's anchor at `i`; two anchors stay |
+
+## 21. Accessibility
+
+**Implemented in part** (#546, D-142). A chart is accessible in four ways, one work item each: a **text alternative** generated from the design and its data (§21.1–§21.4, #557), **keyboard navigation** into its points (§21.5, #558), **reduced motion** (§21.6, #559), and **status beyond hue** (§21.7, #560). The sections after §21.4 are written with their work items.
+
+### 21.1 The summary
+
+`Visualize.Chart.Summary.new/1` reads an applied chart (§7.3) into a `%Visualize.Chart.Summary{name, frames}`: what a screen reader says for the chart, generated rather than written, so every chart has one and it follows the data. `text/1` writes it as sentences.
+
+**The name** is the design's `meta.name` (§2.2) as one string, else the first frame's kind with its first letter capitalised (`"Line chart"`): every chart is named.
+
+**The frames** are summarised in drawing order (`z`, ties by name, §4.2), each as `%{name, kind, series, rows, unit, axes, extremes}` over its **data marks** — every mark but a `:rule`, `:band`, `:x_band`, `:text` or `:tiles`, which annotate data rather than draw it.
+
+**The kind** is the first rule that holds:
+
+| Rule | Kind |
+|---|---|
+| a `:geo` frame | `map` |
+| a data mark is a `:needle` | `gauge` |
+| a data mark's pipeline runs a layout | the layout's: `tree diagram`, `dendrogram` (`:cluster`), `circle packing`, `treemap`, `sunburst` (`:partition` under an `:arc`; `icicle` otherwise), `chord diagram`, `Sankey diagram`, `network graph` (`:force`), `contour plot`, `density contour plot`, `hexbin chart`, `Voronoi diagram`, `triangulation` (`:delaunay`), `spectrum`, `histogram` (`:bin`) |
+| the first data mark, in a `:polar` frame | `radar chart` for a `:line` or `:area`, `radial bar chart` for a `:rect` |
+| the first data mark | `:line` a `line chart`; `:area` an `area chart`, a `stacked area chart` under a `:stack`, a `streamgraph` under a `:wiggle` or `:silhouette` stack; `:rect` a **bar** — one edge on a band scale and the other family starting at a baseline (no field) or stacked — as a `bar chart`, a `grouped bar chart` with an `offset`, a `stacked bar chart` under a `:stack`, else a `heatmap` with a `value` channel and a `rectangle chart` without; `:symbol` and `:circle` a `scatter plot`, a `bubble chart` with a `value` channel; `:arc` a `pie chart`, a `donut chart` with an inner radius; `:rose` a `rose chart`; `:percentile_band` a `percentile band chart` |
+| otherwise | `chart` |
+
+**The value a mark draws** is what its extremes are of, and makes it a series:
+
+- a mark under a `:stack` draws its rows' own `value` column (§5.4), not the stacked edges, named `value` and written as its `y` scale's axis writes it;
+- a mark under a hierarchy layout (`:tree`, `:cluster`, `:pack`, `:partition`, `:treemap`) with a `field` draws that field, named by it;
+- any other mark draws its **value channel** when that reads a field (a constant says nothing) through a scale the frame declares — a position a layout computed in pixels is not a value — or is the share of an `:arc` or a `:rose`, named by the field:
+
+| Type | Value channel | Where a row is |
+|---|---|---|
+| `:line`, `:area`, `:symbol`, `:circle` | `y` | `x` |
+| `:percentile_band` | `median` | `x` |
+| `:needle` | `x` | — |
+| `:rose` | `value` | `angle` |
+| `:arc` | `value` | its name |
+| `:rect`, a bar on `x0` | `y1` | `x0` |
+| `:rect`, a bar on `y0` | `x1` | `y0` |
+| `:rect`, otherwise | `value` | `x0` and `y0` |
+
+A row's **name** is its `series` reading, else the first field its inline label (§5.5) reads. Where a row is, written as its scale's axis writes it after the field's name (`x 41`), is followed by its series (`in series_b`) when the mark has one — a stacked mark's `key`.
+
+**The series** are, in order of first appearance, the `series` readings of every data mark that has the channel, the `key`s of a stacked mark, and the value's name of every other mark that draws at least one number; one name is said once. **The rows** are the first such mark's rows, else the largest mark's, and are called by its kind: `shapes` in a `:geo` frame and for `:path`, `slices` for `:arc`, `readings` for `:needle`, `bars` for a bar and `cells` for another `:rect`, `points` otherwise.
+
+**An axis** (§4.4) says its title and its scale's domain: the range from its least to its greatest value for a numeric or time scale, its categories for a band or ordinal one — all of them up to ten, else how many with the first and the last. A scale with an empty domain says nothing. **The title** is the text of the label the design anchors at the axis (`{:axis, s}`, §6.1), else the measure's label (`Visualize.Quantity.label/1`, D-138), else the fields the frame's marks bind to the scale — the marks that draw a value when any of them does, each by its first channel of `x`, `y`, `angle`, `r`, `x0`, `y0`, `x1`, `y1`, `value`, `median` that reads a field through the scale, a stacked mark's stacked edges as `value` — else the scale's name.
+
+**The extremes** are one per value the frame draws: the data marks that draw the same value name through the same scale — a ridgeline's layers, a scrolling series' bands — are one value, and say one highest and one lowest, each with where it is. A value of one row says that row alone (`Value 42%.`).
+
+**A value is written as its axis writes it**, to four significant digits rather than at the ticks' step, so an extreme is not rounded to a tick: on a time scale, the axis's own tick format; on any other scale with an axis, a number by the axis's explicit `format` (a `Visualize.Format` specifier, or `:duration`), else scaled into its measure's display unit and followed by its symbol (spec/05 §4.3), else to four significant digits (`Visualize.Format` `",.4~r"`), inside the axis's `prefix` and `unit`; a value on a scale with no axis, and anything not a number, as plain text.
+
+**The sentences** of a frame are the kind with its series — `Line chart, 1 series (y) of 51 points.`, `Line chart, 4 series: a, b, c and d.` (ten at most, then `and n more`), `Map, 127 shapes.` with none — then one per axis, `Bottom axis x, from 0 to 50.` or `Left axis day, 7 categories: Mon, …`, its side's name or, in a polar frame, `Angle axis` and `Radius axis`, then one per extreme, `Highest y 101 at x 41; lowest y 15.96 at x 50.` A design of several frames says each frame's name first (`History: Area chart, …`).
+
+### 21.2 The root says it
+
+`Visualize.Chart.generate/2` and `render/2` with `root: true` (§4.7) describe the chart with its summary. **The title** is `title:`, else `meta.name`, else the summary's name, so no root is unnamed. **The description** is `description:`, else `meta.description`, followed by the summary's text (a full stop between them when the description has none). `summary:` is `true` by default; a string is the caller's own text in its place, and `false` leaves the description the design's alone.
+
+**The name and the description are wired apart** (spec/02 §2.1, amending D-56): `aria-labelledby` names the `<title>` and `aria-describedby` the `<desc>`, so a screen reader says a short name and then the summary, rather than a paragraph as the name. A root with a description and no title is labelled by the description, the only text it has. The components of spec/10 §1.2 wire their `<title>` and `<desc>` the same way.
+
+### 21.3 The data table
+
+`Visualize.Chart.Summary.table/2` is the data-table fallback: the rows each data mark draws, one `<table>` per mark — a mark whose table repeats another's (a gauge's fill and needle over one reading) is left out — inside a `<div class="vis-data-table">` that is **visually hidden and still read** (the clip pattern of a screen-reader-only class). A `role="img"` root presents its children to assistive technology as one image, so the table cannot live inside the `<svg>`: a host places it beside the chart.
+
+Each table has a `<caption>` — the summary's name, then `: <source>` when there are several tables, then `(the first n of m rows)` when it is cut short — a header row of `<th scope="col">` cells named by field, and a `<tr>` of `<td>` cells per row. **The columns** of a stacked mark are its series (`key`), the field its position reads and its `value`; of a hierarchy, the fields its inline label reads and the field it is sized by; of any other mark, the fields its label reads, then its channels' fields in the order `series`, `x`, `x0`, `x1`, `y`, `y0`, `y1`, `angle`, `r`, `start`, `end`, `inner`, `outer`, `value`, `median` — a channel only when it maps through a scale the frame declares, or is a `series` or the share of an `:arc` or `:rose` — one column per field. A mark with no column has no table. Every value is written as §21.1 writes it, an absent one as an empty cell, and all text is escaped.
+
+Options: `hidden:` (default `true`; `false` omits the hiding style), `id:` on the `<div>`, `class:` (default `"vis-data-table"`), `caption:` (default the summary's name), `limit:` the rows a table holds (default `1000`).
+
+### 21.4 A canvas, and a hybrid chart's layers
+
+A canvas is an image to assistive technology with nothing in it to read, so the element that stands for the chart carries the summary:
+
+- `Visualize.Backend.Canvas.wrap_root/2` takes `title:` and `description:` ([09-rendering-backends](09-rendering-backends.md) §3.6): with a title the `<canvas>` is `role="img"` with the title as `aria-label`, and the description is a `<p id="<canvas_id>-summary">` inside it — the canvas's fallback content, never drawn — that its `aria-describedby` names.
+- `Visualize.Backend.Hybrid.render/1` takes the same two and a `canvas_id:` for the `html` container's `<canvas>` (spec/09 §6.2), and its SVG layer — `render_static/1`'s root — is `aria-hidden="true"`: one layer of a picture the canvas names. The compiled chart's static, dynamic and backdrop documents (§12.4) are rendered through it and are `aria-hidden` too.
+- `Visualize.Chart.Summary.attrs/2` and `description/2` name any other element that stands for the chart: `attrs(summary, id)` is `[role: "img", "aria-label": name, "aria-describedby": id <> "-summary"]`, a keyword list to spread into a HEEx tag, and `description(summary, id)` is the `<p id="<id>-summary" hidden>` it points at, the summary's text escaped. A page that stacks a compiled chart's layers (§12.4) puts them on the wrapper of the layers, the one element that is the whole picture; the gallery's chart page does, shows the summary under the chart, and follows the chart with the hidden table.
+
+### 21.5 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Summary.new/1` | `new(applied)`: the `%Visualize.Chart.Summary{}` of an applied chart (§21.1). |
+| `Visualize.Chart.Summary.text/1` | `text(summary_or_applied)`: the summary as sentences, frame by frame (§21.1). |
+| `Visualize.Chart.Summary.table/1` | As `table/2` with `[]` options. |
+| `Visualize.Chart.Summary.table/2` | `table(applied, opts)`: the data-table fallback as an HTML string (§21.3). |
+| `Visualize.Chart.Summary.attrs/2` | `attrs(summary, id)`: the attributes that make an element stand for the chart (§21.4). |
+| `Visualize.Chart.Summary.description/2` | `description(summary, id)`: the hidden `<p>` `attrs/2` points `aria-describedby` at (§21.4). |

@@ -161,7 +161,10 @@ defmodule Visualize.ChartTest do
       assert String.ends_with?(svg, bare <> "</svg>")
       assert svg =~ ~s(role="img") and svg =~ ~s(viewBox="0 0 300 200")
       assert svg =~ ~s(<title id="vis-) and svg =~ ">Rain</title>"
-      assert svg =~ ">Rain in mm</desc>" and svg =~ ~s(aria-labelledby=")
+      # The design's description, then the generated summary (spec/14 §21.2, D-142).
+      # The frame declares no scale, so its marks draw pixels and no value (§21.1).
+      assert svg =~ ">Rain in mm. Line chart, 2 points.</desc>"
+      assert svg =~ ~r/aria-describedby="(vis-[a-z0-9]+)-desc" aria-labelledby="\1-title"/
       assert length(String.split(svg, "<svg ")) == 2
 
       root = Chart.generate(applied, root: true)
@@ -169,13 +172,23 @@ defmodule Visualize.ChartTest do
       assert Chart.generate(applied) == List.last(root.children)
     end
 
-    test "an empty meta leaves the title and description out; the options override them" do
+    test "an empty meta is named by the kind and described by the summary; the options override them" do
       svg = Chart.render(applied(%{}), root: true)
-      refute svg =~ "<title" or svg =~ "<desc"
+      assert svg =~ ">Line chart</title>"
+
+      assert svg =~
+               ">Line chart, 2 points.</desc>"
+
       assert svg =~ ~s(role="img")
 
       svg = Chart.render(applied(%{name: "Rain"}), root: true, title: "Snow", description: "cm")
-      assert svg =~ ">Snow</title>" and svg =~ ">cm</desc>"
+      assert svg =~ ">Snow</title>" and svg =~ ">cm. Line chart, 2 points.</desc>"
+
+      svg = Chart.render(applied(%{name: "Rain"}), root: true, description: "cm", summary: false)
+      assert svg =~ ">cm</desc>"
+
+      svg = Chart.render(applied(%{}), root: true, summary: "Two readings.")
+      assert svg =~ ">Line chart</title>" and svg =~ ">Two readings.</desc>"
       assert Chart.render(applied(%{}), root: true, responsive: true) =~ "width:100%;height:auto"
     end
 

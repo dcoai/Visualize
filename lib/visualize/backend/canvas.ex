@@ -127,6 +127,12 @@ defmodule Visualize.Backend.Canvas do
     end
   end
 
+  # The script as a page fragment: a `<canvas>` and the `<script>` that draws it (spec/09
+  # §3.6). `:width`, `:height` and `:canvas_id` size and name the element; with a `:title`
+  # the canvas is `role="img"` with the title as `aria-label`, and a `:description` is a
+  # `<p id="<canvas_id>-summary">` inside it — its fallback content — that
+  # `aria-describedby` names (spec/14 §21.4, D-142): `Visualize.Chart.Summary`'s name and
+  # text.
   @impl true
   @spec wrap_root(iolist(), keyword()) :: iolist()
   def wrap_root(content, opts) do
@@ -141,7 +147,9 @@ defmodule Visualize.Backend.Canvas do
       to_string(width),
       "\" height=\"",
       to_string(height),
-      "\"></canvas>\n",
+      "\"",
+      named_canvas(canvas_id, Keyword.get(opts, :title), Keyword.get(opts, :description)),
+      "</canvas>\n",
       "<script>\n",
       "(function() {\n",
       "  var canvas = document.getElementById('",
@@ -152,6 +160,27 @@ defmodule Visualize.Backend.Canvas do
       "})();\n",
       "</script>\n"
     ]
+  end
+
+  @doc false
+  # The rest of a `<canvas>` tag after its size, through its fallback content: `role="img"`
+  # named by the title and described by the description's paragraph (spec/14 §21.4);
+  # nothing more for a canvas with no title.
+  @spec named_canvas(String.t(), String.t() | nil, String.t() | nil) :: iolist()
+  def named_canvas(_id, nil, _description), do: [">"]
+
+  def named_canvas(id, title, description) do
+    escape = &Visualize.Chart.Summary.Table.escape/1
+
+    described =
+      if description, do: [~s( aria-describedby="), escape.(id), ~s(-summary")], else: []
+
+    fallback =
+      if description,
+        do: [~s(<p id="), escape.(id), ~s(-summary">), escape.(description), "</p>"],
+        else: []
+
+    [~s( role="img" aria-label="), escape.(title), ~s("), described, ">", fallback]
   end
 
   # ============================================================

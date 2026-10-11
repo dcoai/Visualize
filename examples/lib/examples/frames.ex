@@ -82,6 +82,9 @@ defmodule Examples.Frames do
 
     %{
       compiled: compiled,
+      # What the chart says to a screen reader (spec/14 §21.4): the page names the layers'
+      # wrapper with it, since no one layer is the picture.
+      summary: Visualize.Chart.Summary.new(applied),
       # Each plot's static document is the design's size with that frame's group at its
       # box (spec/14 §12.4), so the frames' documents stack in `z` order.
       static: Enum.map_join(compiled, "", fn {_name, one} -> Compiled.static(one) end),
@@ -99,7 +102,11 @@ defmodule Examples.Frames do
   def prepare(module, opts, :svg) do
     if Design.stateful?(module) do
       applied = Design.applied(module, opts)
-      %{compiled: compiled!(applied, ceiling: 1_000_000_000)}
+
+      %{
+        compiled: compiled!(applied, ceiling: 1_000_000_000),
+        summary: Visualize.Chart.Summary.text(applied)
+      }
     end
   end
 
@@ -147,6 +154,14 @@ defmodule Examples.Frames do
   def static(%{static: static}), do: static
   def static(_state), do: ""
 
+  @doc """
+  The summary a prepared hybrid state carries (spec/14 §21.4), or `nil`: what names the
+  wrapper of the chart's layers.
+  """
+  @spec summary(map() | nil) :: Visualize.Chart.Summary.t() | nil
+  def summary(%{summary: %Visualize.Chart.Summary{} = summary}), do: summary
+  def summary(_state), do: nil
+
   @doc "The static backdrop a prepared state carries, or an empty string (spec/14 §12.4, #476)."
   @spec backdrop(map() | nil) :: String.t()
   def backdrop(%{backdrop: backdrop}), do: backdrop
@@ -159,7 +174,10 @@ defmodule Examples.Frames do
   def frame(module, opts, :svg, %{compiled: compiled} = state) do
     {design, sources} = module.design(opts)
     compiled = recompiled(compiled, design, module, opts, :svg)
-    {svg, compiled} = Design.step(module, compiled, design, sources, opts)
+
+    {svg, compiled} =
+      Design.step(module, compiled, design, sources, [summary: state.summary] ++ opts)
+
     {svg_frame(svg, sources), %{state | compiled: compiled}}
   end
 

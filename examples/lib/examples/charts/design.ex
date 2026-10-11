@@ -109,7 +109,8 @@ defmodule Examples.Charts.Design do
   One SVG frame of a design's compiled charts at their eased scales, as the gallery's
   document, and the compiled charts after it (spec/14 §12.5, #360, #432):
   `Visualize.Chart.Compiled.step/3` per frame — each group already placed at its box
-  (§12.1) — inside the accessible root the module's title and description name.
+  (§12.1) — inside the accessible root the module's title and description name, the
+  description followed by the `summary:` of the opts (spec/14 §21.1) when they carry one.
 
   `compiled` is the `{name, compiled}` list `Examples.Frames.prepare/3` keeps, in the
   order the frames draw; `opts` are the tick's, `now:` and `at:` among them.
@@ -128,10 +129,18 @@ defmodule Examples.Charts.Design do
 
     [{_name, first} | _] = compiled
 
+    # The summary of the chart as it was prepared (spec/14 §21.1): applying the design
+    # again on every frame to say it would cost the run what it measures.
+    description =
+      case Keyword.get(opts, :summary) do
+        nil -> module.description()
+        summary -> module.description() <> ". " <> summary
+      end
+
     svg =
       Visualize.IR.Element.root(first.size.width, first.size.height,
         title: module.title(),
-        description: module.description(),
+        description: description,
         children: groups
       )
       |> Visualize.Render.to_string()

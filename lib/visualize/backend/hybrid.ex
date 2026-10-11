@@ -64,6 +64,13 @@ defmodule Visualize.Backend.Hybrid do
     * `:canvas_format` - Canvas output format: `:json` (default), `:js` or `:commands`;
       the container's `CanvasChart` hook (`Visualize.Hooks.Canvas`) replays `:json` from
       `data-commands` and `:js` from `data-script`
+    * `:title`, `:description` - the chart's accessible name and description (spec/14
+      §21.4, D-142), put on the `<canvas>` of `html` as `Visualize.Backend.Canvas`'s root
+      wrapper puts them; `Visualize.Chart.Summary`'s name and text
+    * `:canvas_id` - the prefix of the description's id (default
+      `"visualize-hybrid-canvas"`), unique per chart on a page
+
+  The SVG layer is `aria-hidden`: it is one layer of a picture the canvas names.
 
   ## Returns
 
@@ -90,7 +97,11 @@ defmodule Visualize.Backend.Hybrid do
     canvas = render_dynamic_canvas(dynamic, dynamic_style, margin, canvas_format)
 
     # Generate combined HTML container
-    html = generate_html(svg, canvas, width, height, canvas_format)
+    named =
+      {Keyword.get(opts, :canvas_id, "visualize-hybrid-canvas"), Keyword.get(opts, :title),
+       Keyword.get(opts, :description)}
+
+    html = generate_html(svg, canvas, width, height, canvas_format, named)
 
     %{
       svg: svg,
@@ -100,7 +111,8 @@ defmodule Visualize.Backend.Hybrid do
   end
 
   @doc """
-  Renders only the static SVG portion (for initial render or resize).
+  Renders only the static SVG portion (for initial render or resize): an `aria-hidden`
+  root, one layer of a picture another element names (spec/14 §21.4).
   """
   @spec render_static(keyword()) :: String.t()
   def render_static(opts) do
@@ -138,7 +150,7 @@ defmodule Visualize.Backend.Hybrid do
       )
 
     # Create SVG root with transparent background (so canvas shows through)
-    root = Element.root(width, height, children: [static_group])
+    root = Element.root(width, height, hidden: true, children: [static_group])
 
     SVG.render_element(root, [])
     |> IO.iodata_to_binary()
@@ -174,7 +186,7 @@ defmodule Visualize.Backend.Hybrid do
     |> IO.iodata_to_binary()
   end
 
-  defp generate_html(svg, canvas, width, height, format) do
+  defp generate_html(svg, canvas, width, height, format, {id, title, description}) do
     # Escape the canvas commands for HTML attribute
     escaped_canvas =
       canvas
@@ -197,7 +209,7 @@ defmodule Visualize.Backend.Hybrid do
         data-height="#{height}"
         style="position: absolute; top: 0; left: 0;"
       >
-        <canvas width="#{width}" height="#{height}" style="display: block;"></canvas>
+        <canvas width="#{width}" height="#{height}" style="display: block;"#{Canvas.named_canvas(id, title, description)}</canvas>
       </div>
     </div>
     """
