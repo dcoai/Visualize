@@ -1,0 +1,509 @@
+defmodule Visualize.Board.InteractionTest do
+  @moduledoc """
+  Interaction across a board's cells (spec/15 §13, #545, D-151): a brush sets every
+  cell's window through the board and re-asks the feeds, debounced; a selection is
+  `{field, value}` read through `links` and drawn as a per-datum `opacity` in every cell
+  that shows it; a drill target is validated data whose variables come from the picked
+  datum.
+  """
+  use ExUnit.Case, async: true
+
+  import Phoenix.LiveViewTest, only: [render_component: 2]
+
+  @moduletag :capture_log
+
+  # When a wait gives up on a defect, never how fast the machine is (spec/12 §6, D-148).
+  @patience 10_000
+
+  alias Visualize.Board
+  alias Visualize.Board.{Binding, Server, View}
+  alias Visualize.Components.Board, as: Component
+  alias Visualize.Components.Board.Cell
+  alias Visualize.Data.Schema
+  alias Visualize.Test.Feeds
+
+  # A line and its points, a series per `k`.
+  @series %{
+    version: 2,
+    sources: %{primary: %{fields: [:t, :v, :k]}},
+    frames: %{
+      main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}
+    },
+    marks: [
+      %{type: :line, data: :primary, channels: %{x: :t, y: :v, series: :k}},
+      %{type: :circle, data: :primary, channels: %{x: :t, y: :v, series: :k}}
+    ]
+  }
+
+  # A bar per `name`, a category the schema types.
+  @bars %{
+    version: 2,
+    sources: %{primary: %{fields: [:name, :v]}},
+    frames: %{
+      main: %{
+        kind: :cartesian,
+        scales: %{x: %{kind: :band}, y: %{kind: :linear, domain: [0, 10]}}
+      }
+    },
+    marks: [%{type: :rect, data: :primary, channels: %{x0: :name, x1: :name, y0: 0, y1: :v}}]
+  }
+
+  @store %{{:composite, 1} => @series, {:composite, 2} => @bars}
+
+  @series_schema Schema.new!(%{
+                   t: %{type: :time},
+                   v: %{type: :number},
+                   k: %{type: :category}
+                 })
+  @bars_schema Schema.new!(%{name: %{type: :category}, v: %{type: :number}})
+  @t0 ~U[2026-10-11 12:00:00Z]
+
+  # Rows inside whatever window the feed is asked for, so a new window is seen in them.
+  defp series_rows(keys) do
+    fn window, _budget ->
+      from = if window, do: hd(window), else: @t0
+      rows = for i <- 0..3, k <- keys, do: %{t: DateTime.add(from, i * 60), v: i + 1, k: k}
+      {rows, []}
+    end
+  end
+
+  defp board(extra \\ %{}) do
+    Board.from_map!(
+      Map.merge(
+        %{
+          window: %{last: 3600},
+          links: %{name: :k},
+          cells: %{
+            a: %{x: 0, y: 0, w: 4, h: 3, ref: {:composite, 1}},
+            b: %{x: 4, y: 0, w: 4, h: 3, ref: {:composite, 1}},
+            c: %{x: 8, y: 0, w: 4, h: 3, ref: {:composite, 2}},
+            d: %{x: 0, y: 3, w: 4, h: 3, ref: {:composite, 1}}
+          }
+        },
+        extra
+      )
+    )
+  end
+
+  defp scripted(opts) do
+    {feed, agent} = Feeds.scripted(opts)
+    Process.unlink(agent)
+    on_exit(fn -> if Process.alive?(agent), do: Agent.stop(agent) end)
+    {feed, agent}
+  end
+
+  # Four cells: a and b one series design over ["p", "q"], c bars over names "p" and "r",
+  # and d the series design over keys none of the others has.
+  defp start(opts \\ []) do
+    {fa, a} = scripted(schema: @series_schema, rows: series_rows(["p", "q"]))
+    {fb, b} = scripted(schema: @series_schema, rows: series_rows(["p", "q"]))
+    {fc, _c} = scripted(schema: @bars_schema, rows: [%{name: "p", v: 4}, %{name: "r", v: 6}])
+    {fd, _d} = scripted(schema: @series_schema, rows: series_rows(["x", "y"]))
+
+    binding =
+      Binding.new(%{
+        {:a, :primary} => :fa,
+        {:b, :primary} => :fb,
+        {:c, :primary} => :fc,
+        {:d, :primary} => :fd
+      })
+
+    sup = start_supervised!(Supervisor.child_spec(Visualize.Board.Supervisor, id: make_ref()))
+
+    defaults = [
+      board: board(),
+      store: @store,
+      binding: binding,
+      feeds: %{fa: fa, fb: fb, fc: fc, fd: fd},
+      tick: nil,
+      debounce: 0,
+      clock: fn -> DateTime.add(@t0, 3600) end
+    ]
+
+    {:ok, pid} = Server.start(sup, Keyword.merge(defaults, opts))
+    {:ok, _info} = Server.subscribe(pid)
+    {pid, %{a: a, b: b}}
+  end
+
+  # The next view of each named cell that satisfies the test.
+  defp views_until(cells, test), do: views_until(cells, test, %{})
+  defp views_until([], _test, seen), do: seen
+
+  defp views_until(cells, test, seen) do
+    receive do
+      {:visualize_board, _board, {:cell, cell, %View{} = view}} ->
+        if cell in cells and test.(view),
+          do: views_until(List.delete(cells, cell), test, Map.put(seen, cell, view)),
+          else: views_until(cells, test, seen)
+    after
+      @patience -> flunk("no view of #{inspect(cells)} within #{@patience} ms")
+    end
+  end
+
+  defp board_info_until(test) do
+    receive do
+      {:visualize_board, _board, {:board, info}} ->
+        if test.(info), do: info, else: board_info_until(test)
+    after
+      @patience -> flunk("no board info within #{@patience} ms")
+    end
+  end
+
+  # Views of a cell until the row behind its first point starts at `from`.
+  defp follows(board, cell, from) do
+    receive do
+      {:visualize_board, _board, {:cell, ^cell, %View{}}} ->
+        case Server.pick(board, cell, 0, 0) do
+          {:ok, %{row: %{t: ^from}}} -> :ok
+          _before -> follows(board, cell, from)
+        end
+    after
+      @patience -> flunk("#{inspect(cell)} did not follow the window within #{@patience} ms")
+    end
+  end
+
+  # Every message already in the mailbox, taken.
+  defp drained do
+    receive do
+      message -> [message | drained()]
+    after
+      0 -> []
+    end
+  end
+
+  defp live, do: &(&1.state == :live and &1.svg != nil)
+
+  defp dims(svg), do: length(String.split(svg, ~s(opacity="0.25"))) - 1
+
+  describe "the board value (spec/15 §1.2, §1.3, §3)" do
+    test "links and a drill node read, round-trip through JSON, and are checked alone" do
+      board =
+        board(%{
+          vars: %{service: "api"},
+          cells: %{
+            a: %{
+              x: 0,
+              y: 0,
+              w: 4,
+              h: 3,
+              ref: {:composite, 1},
+              drill: %{board: :self, vars: %{service: {:datum, :k}, range: "1h"}}
+            }
+          }
+        })
+
+      assert {:ok, json} = Board.to_json(board)
+      assert json =~ ~s("$datum":"k")
+      assert Board.from_json(json) == {:ok, board}
+      assert Board.from_map(Board.to_map(board)) == {:ok, board}
+
+      cell = fn drill ->
+        %{cells: %{a: %{x: 0, y: 0, w: 1, h: 1, ref: {:composite, 1}, drill: drill}}}
+      end
+
+      assert {:error, errors} =
+               Board.validate(
+                 Map.merge(cell.(%{vars: %{s: {:datum, "k"}}, extra: 1}), %{links: %{"a" => :b}})
+               )
+
+      assert {[:cells, :a, :drill, :board], :required} in errors
+      assert {[:cells, :a, :drill, :extra], :unknown_key} in errors
+      assert {[:cells, :a, :drill, :vars, :s], {:type, :field}} in errors
+      assert {[:links, "a"], {:type, :name}} in errors
+
+      assert Board.validate(cell.(%{board: {:board, 1}})) ==
+               {:error, [{[:cells, :a, :drill, :board], {:type, :board_ref}}]}
+
+      assert Board.validate(cell.(:detail)) ==
+               {:error, [{[:cells, :a, :drill], {:type, {:node, :drill}}}]}
+
+      for ref <- [:self, :detail, "detail", 7],
+          do: assert(Board.validate(cell.(%{board: ref})) == :ok)
+
+      assert Board.format_error({[:cells, :a, :drill, :board], {:no_board, :detail}}) ==
+               "cells.a.drill.board: names the board :detail, which the host does not hold"
+    end
+
+    test "a drill target is refused at validation when the target cannot meet it (spec/15 §13.3)" do
+      detail = Board.from_map!(%{vars: %{service: "api"}})
+
+      drilled = fn drill ->
+        board(%{
+          vars: %{range: "1h"},
+          cells: %{
+            a: %{x: 0, y: 0, w: 4, h: 3, ref: {:composite, 1}, drill: drill},
+            c: %{x: 4, y: 0, w: 4, h: 3, ref: {:composite, 2}}
+          }
+        })
+      end
+
+      good = drilled.(%{board: :detail, vars: %{service: {:datum, :k}}})
+      assert Board.validate(good, @store, boards: %{detail: detail}) == :ok
+
+      # A target the host does not hold.
+      assert Board.validate(good, @store, boards: %{}) ==
+               {:error, [{[:cells, :a, :drill, :board], {:no_board, :detail}}]}
+
+      # A variable the target does not declare, and a field the component has not.
+      bad = drilled.(%{board: :detail, vars: %{region: "eu", service: {:datum, :host}}})
+
+      assert Board.validate(bad, @store, boards: fn :detail -> {:ok, detail} end) ==
+               {:error,
+                [
+                  {[:cells, :a, :drill, :vars, :region], {:undeclared, :var, :region}},
+                  {[:cells, :a, :drill, :vars, :service], {:undeclared, :field, :host}}
+                ]}
+
+      # `:self` is the board itself, checked with or without `boards:`.
+      assert Board.validate(drilled.(%{board: :self, vars: %{range: "5m"}}), @store) == :ok
+
+      assert Board.validate(drilled.(%{board: :self, vars: %{service: "db"}}), @store) ==
+               {:error, [{[:cells, :a, :drill, :vars, :service], {:undeclared, :var, :service}}]}
+
+      # Without `boards:` another board's ref is the host's to check; the runtime is given
+      # them, and refuses a board whose drill cannot be met.
+      assert Board.validate(good, @store) == :ok
+
+      sup = start_supervised!(Supervisor.child_spec(Visualize.Board.Supervisor, id: make_ref()))
+
+      assert {:error, {:board, [{[:cells, :a, :drill, :board], {:no_board, :detail}}]}} =
+               Server.start(sup, board: good, store: @store, tick: nil)
+    end
+
+    test "link/2, linked/2 and drill/3 read the board's links and a cell's target" do
+      board =
+        Board.from_map!(%{
+          links: %{name: :service, svc: :service},
+          cells: %{
+            a: %{
+              x: 0,
+              y: 0,
+              w: 1,
+              h: 1,
+              ref: {:composite, 1},
+              drill: %{board: "detail", vars: %{service: {:datum, :name}, at: {:datum, :t}}}
+            },
+            b: %{x: 1, y: 0, w: 1, h: 1, ref: {:composite, 1}}
+          }
+        })
+
+      assert Board.link(board, :svc) == :service
+      assert Board.link(board, :service) == :service
+      assert Board.linked(board, :svc) == [:name, :service, :svc]
+      assert Board.linked(board, :host) == [:host]
+
+      # Typed values from the datum: a DateTime stays one.
+      assert Board.drill(board, :a, %{name: "db", t: @t0}) ==
+               {:ok, %{board: "detail", vars: %{service: "db", at: @t0}}}
+
+      assert Board.drill(board, :b, %{name: "db"}) == :none
+
+      assert Board.drill(board, :a, %{name: "db"}) ==
+               {:error, [{[:cells, :a, :drill, :vars, :at], {:missing, :datum, :t}}]}
+    end
+  end
+
+  describe "brush to window (spec/15 §13.1)" do
+    test "a brush changes every cell's window and re-asks the feeds; reset restores it" do
+      {board, %{a: a, b: b}} = start()
+      views_until([:a, :b, :c, :d], live())
+      before = {Feeds.calls(a, :fetch), Feeds.calls(b, :fetch)}
+
+      from = DateTime.add(@t0, 600)
+      to = DateTime.add(@t0, 1200)
+      assert Server.brush(board, %{from: from, to: to}) == :ok
+
+      # Every feed asked once more, for the brushed window.
+      assert {Feeds.calls(a, :fetch), Feeds.calls(b, :fetch)} ==
+               {elem(before, 0) + 1, elem(before, 1) + 1}
+
+      info = board_info_until(&(&1.window == {from, to}))
+      assert info.moved
+
+      # Every series cell follows: each draws again, and the row behind its first point is
+      # now the brushed window's first.
+      for cell <- [:a, :b, :d], do: follows(board, cell, from)
+
+      assert {:error, [{[:window], {:window, :inverted}}]} =
+               Server.brush(board, %{from: to, to: from})
+
+      assert Server.reset_window(board) == :ok
+      info = Server.info(board)
+      assert info.board.window == %{last: 3600} and not info.moved
+    end
+
+    test "rapid brushes are debounced: one refetch, for the last window" do
+      # A debounce no run of three back-to-back calls outlasts, however loaded the host.
+      {board, %{a: a}} = start(debounce: 1000)
+      views_until([:a], live())
+      before = Feeds.calls(a, :fetch)
+
+      windows =
+        for minutes <- [5, 10, 15] do
+          %{from: DateTime.add(@t0, minutes * 60), to: DateTime.add(@t0, minutes * 120)}
+        end
+
+      for window <- windows, do: assert(Server.brush(board, window) == :ok)
+
+      # Nothing applied yet: the window waits for the brushes to settle.
+      assert Server.info(board).board.window == %{last: 3600}
+
+      last = List.last(windows)
+      board_info_until(&(&1.window == {last.from, last.to}))
+
+      # One refetch for three brushes, for the last window.
+      assert Feeds.calls(a, :fetch) == before + 1
+
+      # A window set by a call drops a brush still waiting.
+      assert Server.brush(board, hd(windows)) == :ok
+      assert Server.window(board, %{last: 600}) == :ok
+      :ok = Server.tick(board)
+      assert Server.info(board).board.window == %{last: 600}
+    end
+  end
+
+  describe "linked selection (spec/15 §13.2)" do
+    test "a selection dims the rest in every cell that shows it, through links, and clears" do
+      {board, _agents} = start()
+      seen = views_until([:a, :b, :c, :d], live())
+      for {_cell, view} <- seen, do: assert(dims(view.svg) == 0)
+
+      assert Server.select(board, {:k, "p"}) == :ok
+      assert board_info_until(&(&1.selection == {:k, "p"})).selection == {:k, "p"}
+
+      dimmed = views_until([:a, :b, :c], &(&1.svg != nil and dims(&1.svg) > 0))
+
+      # The series cells dim series q, its path and its four points, and keep p.
+      for cell <- [:a, :b] do
+        svg = dimmed[cell].svg
+        assert dims(svg) == 5
+
+        for [element] <- Regex.scan(~r/<(?:path|circle)[^>]*data-series="p"[^>]*>/, svg),
+            do: refute(element =~ "opacity")
+      end
+
+      # The bars name it `name`, linked to `k`: the bar "r" is dimmed, "p" is not.
+      assert dims(dimmed.c.svg) == 1
+
+      # d shows neither p nor its links: drawn as it was.
+      assert Server.select(board, {:name, "p"}) == :ok
+      assert Server.info(board).selection == {:k, "p"}
+      d = Map.fetch!(seen, :d)
+      # A synchronising call on d: the selections reached it before the pick did.
+      {:ok, _row} = Server.pick(board, :d, 0, 0)
+
+      for {:visualize_board, _, {:cell, :d, %View{svg: svg}}} <- drained(),
+          do: assert(svg == d.svg)
+
+      assert Server.select(board, nil) == :ok
+      board_info_until(&(&1.selection == nil))
+      cleared = views_until([:a, :b, :c], &(&1.svg != nil and dims(&1.svg) == 0))
+      assert map_size(cleared) == 3
+    end
+
+    test "a pick answers the row behind a keyboard point and its identity" do
+      {board, _agents} = start()
+      views_until([:a, :c], live())
+
+      # Series "q" is the keyboard's second series of cell a; its third point.
+      assert {:ok, %{row: row, identity: {:k, "q"}}} = Server.pick(board, :a, 1, 2)
+      assert %{k: "q", v: 3, t: %DateTime{}} = row
+
+      # A bar names no series: the schema's category field is its identity.
+      assert {:ok, %{row: %{name: "r", v: 6}, identity: {:name, "r"}}} =
+               Server.pick(board, :c, 0, 1)
+
+      assert Server.pick(board, :a, 9, 0) == :error
+      assert Server.pick(board, :nope, 0, 0) == :error
+    end
+
+    test "the component turns a pick into a selection, or into a drill the page follows" do
+      detail = Board.from_map!(%{vars: %{service: "api"}})
+
+      value =
+        board(%{
+          cells: %{
+            a: %{x: 0, y: 0, w: 4, h: 3, ref: {:composite, 1}},
+            b: %{x: 4, y: 0, w: 4, h: 3, ref: {:composite, 1}},
+            c: %{
+              x: 8,
+              y: 0,
+              w: 4,
+              h: 3,
+              ref: {:composite, 2},
+              drill: %{board: :detail, vars: %{service: {:datum, :name}}}
+            },
+            d: %{x: 0, y: 3, w: 4, h: 3, ref: {:composite, 1}}
+          }
+        })
+
+      {board, _agents} = start(board: value, boards: %{detail: detail})
+      views_until([:a, :c], live())
+
+      cell = fn name ->
+        %Phoenix.LiveView.Socket{
+          assigns: %{
+            __changed__: %{},
+            id: "ops-#{name}",
+            cell: name,
+            server: board,
+            board: value,
+            board_id: "ops"
+          }
+        }
+      end
+
+      Cell.handle_event("pick", %{"series" => 0, "index" => 1}, cell.(:a))
+      assert Server.info(board).selection == {:k, "p"}
+
+      Cell.handle_event("pick", %{"series" => 0, "index" => 1}, cell.(:c))
+
+      assert_received {:visualize_board_drill, "ops",
+                       %{cell: :c, board: :detail, vars: %{service: "r"}}}
+
+      # The drill did not select.
+      assert Server.info(board).selection == {:k, "p"}
+
+      # Escape's event clears it.
+      socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, server: board}}
+      Component.handle_event("select_clear", %{}, socket)
+      assert Server.info(board).selection == nil
+    end
+
+    test "the board's header shows the selection and the undo, and the section marks it" do
+      info = %{
+        window: {@t0, DateTime.add(@t0, 600)},
+        zone: "Etc/UTC",
+        now: @t0,
+        width: 1200,
+        sync: nil,
+        selection: {:service, "api"},
+        moved: true
+      }
+
+      html =
+        render_component(Component,
+          id: "ops",
+          server: self(),
+          board: board(),
+          info: info
+        )
+
+      assert html =~ ~s(data-board-selection="service api")
+      assert html =~ "Selected: service api"
+      assert html =~ ~s(phx-click="select_clear")
+      assert html =~ ~s(phx-click="reset_window")
+
+      html =
+        render_component(Component,
+          id: "ops",
+          server: self(),
+          board: board(),
+          info: %{info | selection: nil, moved: false}
+        )
+
+      refute html =~ "data-board-selection"
+      refute html =~ "Reset window"
+    end
+  end
+end

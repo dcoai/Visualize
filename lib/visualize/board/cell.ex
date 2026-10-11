@@ -22,14 +22,27 @@ defmodule Visualize.Board.Cell do
     variables compile again, `carry/2`'d from the compiled chart before.
 
   The board's messages are plain sends, never calls, so a slow cell never holds the board:
-  `{:data, slots, now}`, `{:now, now}`, `{:size, size}`, `{:component, chart, vars}` and
-  `{:subscribers, pids, newcomer}`.
+  `{:data, slots, now}`, `{:now, now}`, `{:size, size}`, `{:component, chart, vars}`,
+  `{:selection, selection}` and `{:subscribers, pids, newcomer}`.
+
+  - **The selection** (spec/15 §13.2, D-151). A cell whose rows hold the board's selection
+    draws every other datum dimmed: its rows gain a `:"$vis_dim"` column, `nil` where the
+    selection is and `0.25` elsewhere, and each mark with `data` ends its style stack with
+    `%{opacity: {:field, :"$vis_dim"}}`. A cell that does not hold it draws as before.
+  - **A pick**, `{:pick, from, ref, series, index}`, is answered to `from` as `{ref,
+    reply}`: the row behind that keyboard point and its identity, or `:error`.
   """
 
   use GenServer, restart: :temporary
 
   alias Visualize.Board.Draw
-  alias Visualize.Chart.Compiled
+  alias Visualize.Chart
+  alias Visualize.Chart.{Compiled, Summary}
+  alias Visualize.Data.{Schema, Table}
+
+  # The column a selection is drawn through, and how far the data it does not hold fade.
+  @dim :"$vis_dim"
+  @dimmed 0.25
 
   @doc false
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
@@ -54,10 +67,13 @@ defmodule Visualize.Board.Cell do
       title: Keyword.get(opts, :title),
       stale_after: Keyword.get(opts, :stale_after),
       subscribers: Keyword.get(opts, :subscribers, []),
+      selection: Keyword.get(opts, :selection),
       slots: nil,
       now: nil,
       drawn: nil,
       compiled: nil,
+      compiled_from: nil,
+      pickable: nil,
       applied: nil,
       summary: nil,
       svg: nil,
@@ -95,13 +111,25 @@ defmodule Visualize.Board.Cell do
     {:noreply, %{state | chart: chart, vars: vars, drawn: nil} |> draw() |> show()}
   end
 
+  def handle_info({:selection, selection}, state) do
+    {:noreply, %{state | selection: selection, drawn: nil} |> draw() |> show()}
+  end
+
   def handle_info({:subscribers, pids, newcomer}, state) do
     state = %{state | subscribers: pids}
     if newcomer && state.view, do: send(newcomer, message(state, state.view))
     {:noreply, state}
   end
 
+  # A pick (spec/15 §13.2): the row behind a keyboard point and its identity, answered to
+  # the caller under its reference.
+  def handle_info({:pick, from, ref, series, index}, state) do
+    send(from, {ref, picked(state, series, index)})
+    {:noreply, state}
+  end
+
   # Every later data message behind this one, the newest kept (spec/15 §8.3).
+
   defp newest(slots, now) do
     receive do
       {:data, slots, now} -> newest(slots, now)
@@ -121,45 +149,144 @@ defmodule Visualize.Board.Cell do
   defp draw(state) do
     cond do
       not Draw.drawable?(state.slots) ->
-        %{state | svg: nil, attrs: {%{}, %{}}, fault: nil, drawn: nil}
+        %{state | svg: nil, attrs: {%{}, %{}}, pickable: nil, fault: nil, drawn: nil}
 
       state.drawn == drawn_from(state) ->
         state
 
       true ->
-        sources = Draw.sources(state.slots)
+        placed = Draw.sources(state.slots)
 
-        case compiled(state, sources) do
-          {:ok, state} -> step(state, sources)
-          {:error, errors} -> %{state | svg: nil, attrs: {%{}, %{}}, fault: {:apply, errors}}
+        {sources, chart} = selected(state, placed)
+
+        case compiled(state, sources, chart) do
+          {:ok, state} ->
+            step(state, sources)
+
+          {:error, errors} ->
+            %{state | svg: nil, attrs: {%{}, %{}}, pickable: nil, fault: {:apply, errors}}
         end
     end
   end
 
-  # What the frame is drawn from: the deliveries and their schemas, at a size, for a chart.
+  # What the frame is drawn from: the deliveries and their schemas, at a size, for a chart,
+  # under a selection.
   defp drawn_from(state) do
     {Map.new(state.slots, fn {slot, %{delivery: d, schema: s}} -> {slot, {d, s}} end), state.size,
-     state.chart, state.vars}
+     state.chart, state.vars, state.selection}
   end
 
-  # The compiled charts for these sources: the ones held, unless none are, the size or the
-  # chart moved, or a delivery names another schema version; then compiled again and
-  # carried from the ones before (spec/14 §12.1, §12.5).
-  defp compiled(state, sources) do
-    {_slots, size, chart, vars} = drawn_from(state)
-    previous = state.drawn
+  # The compiled charts for these sources: the ones held, unless none are, the size, the
+  # chart drawn or its variables moved, or a delivery names another schema version; then
+  # compiled again and carried from the ones before (spec/14 §12.1, §12.5).
+  defp compiled(state, sources, chart) do
+    from = {state.size, chart, state.vars}
 
     fresh? =
-      state.compiled != nil and previous != nil and elem(previous, 1) == size and
-        elem(previous, 2) == chart and elem(previous, 3) == vars and
+      state.compiled != nil and state.compiled_from == from and
         not Enum.any?(state.compiled, fn {_name, c} -> Compiled.stale?(c, sources) end)
 
-    if fresh?, do: {:ok, state}, else: compile(state, sources)
+    if fresh?, do: {:ok, state}, else: compile(%{state | compiled_from: from}, sources, chart)
   end
 
-  defp compile(state, sources) do
-    with {:ok, done} <- Draw.compile(state, sources, state.compiled || []) do
+  defp compile(state, sources, chart) do
+    with {:ok, done} <- Draw.compile(%{state | chart: chart}, sources, state.compiled || []) do
       {:ok, Map.merge(state, done)}
+    end
+  end
+
+  # -- the selection (spec/15 §13.2) --------------------------------------------------------
+
+  # The sources and the chart a selection is drawn with: when a row of any slot holds it,
+  # every row gains the dim column and every mark with data reads its opacity from it;
+  # otherwise the sources and the chart as they were.
+  defp selected(%{selection: %{fields: fields, value: value}} = state, sources)
+       when value != nil do
+    if Enum.any?(sources, fn {_slot, d} -> Enum.any?(d.rows, &holds?(&1, fields, value)) end) do
+      dim = fn row ->
+        Map.put(row, @dim, if(holds?(row, fields, value), do: nil, else: @dimmed))
+      end
+
+      {Map.new(sources, fn {slot, d} -> {slot, %{d | rows: Enum.map(d.rows, dim)}} end),
+       dimmed(state.chart)}
+    else
+      {sources, state.chart}
+    end
+  end
+
+  defp selected(state, sources), do: {sources, state.chart}
+
+  defp holds?(row, fields, value), do: Enum.any?(fields, &(Table.get(row, &1) == value))
+
+  # The style grammar's own per-datum binding (spec/14 §3.2, §3.6): an `opacity` read from
+  # the dim column, last in each data mark's stack, the column declared on every source
+  # that declares its fields.
+  defp dimmed(%Chart{marks: marks, sources: sources} = chart) do
+    node = %{opacity: {:field, @dim}}
+
+    marks =
+      Enum.map(marks, fn
+        %{data: _} = mark -> Map.update(mark, :style, [node], &(List.wrap(&1) ++ [node]))
+        mark -> mark
+      end)
+
+    sources =
+      Map.new(sources || %{}, fn
+        {slot, %{fields: [_ | _] = fields} = node} -> {slot, %{node | fields: fields ++ [@dim]}}
+        pair -> pair
+      end)
+
+    %{chart | marks: marks, sources: sources}
+  end
+
+  # The row behind a keyboard point, without the dim column, and its identity: the mark's
+  # series field, else the first `:category` field of its slot's schema the row holds.
+  defp picked(%{pickable: nil}, _series, _index), do: :error
+
+  defp picked(state, series, index)
+       when is_integer(series) and series >= 0 and is_integer(index) and index >= 0 do
+    with %{points: points} <- Enum.at(Summary.points(state.pickable), series),
+         %{row: row, mark: mark} <- Enum.at(points, index) do
+      row = Map.delete(row, @dim)
+
+      {:ok,
+       %{row: row, identity: series_identity(mark, row) || category_identity(state, mark, row)}}
+    else
+      _none -> :error
+    end
+  end
+
+  defp picked(_state, _series, _index), do: :error
+
+  defp series_identity(mark, row) do
+    case mark |> Map.get(:channels, %{}) |> Map.get(:series) do
+      {:field, field} when is_atom(field) -> identity(field, row)
+      field when is_atom(field) and field not in [nil, true, false] -> identity(field, row)
+      _other -> nil
+    end
+  end
+
+  defp category_identity(state, mark, row) do
+    with slot when is_atom(slot) <- slot_of(mark),
+         %{schema: %Schema{fields: fields}} <- Map.get(state.slots || %{}, slot) do
+      fields
+      |> Enum.filter(fn {_name, field} -> Map.get(field, :type) == :category end)
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.sort()
+      |> Enum.find_value(&identity(&1, row))
+    else
+      _none -> nil
+    end
+  end
+
+  defp slot_of(%{data: %{source: slot}}), do: slot
+  defp slot_of(%{data: slot}), do: slot
+  defp slot_of(_mark), do: nil
+
+  defp identity(field, row) do
+    case Table.get(row, field) do
+      nil -> nil
+      value -> {field, value}
     end
   end
 
@@ -167,11 +294,14 @@ defmodule Visualize.Board.Cell do
     at = System.monotonic_time(:millisecond)
     {svg, compiled} = Draw.step(state.compiled, sources, at, state)
 
+    {attrs, pickable} = Draw.realised(state.applied, sources, state.theme, state.size)
+
     %{
       state
       | compiled: compiled,
         svg: svg,
-        attrs: Draw.attrs(state.applied, sources, state.theme, state.size),
+        attrs: attrs,
+        pickable: pickable,
         fault: nil,
         drawn: drawn_from(state),
         frames: state.frames + 1

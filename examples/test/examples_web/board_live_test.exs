@@ -1,10 +1,12 @@
 defmodule ExamplesWeb.BoardLiveTest do
   @moduledoc """
   The live board page (#576, spec/15 §10): the demo board runs under the examples'
-  `Visualize.Board.Supervisor`, the page renders its five cells through
+  `Visualize.Board.Supervisor`, the page renders its eight cells through
   `Visualize.Components.Board`, a connected page receives every cell's view — the
   offline cell's designed "feed down" among them — and the window buttons move the
-  board's window.
+  board's window. The last row interacts (#545, spec/15 §13): a service picked in one
+  cell is selected in all three, through `links` for the bars, and a bar drills down to
+  the detail board the page opens.
   """
   use ExUnit.Case, async: false
 
@@ -21,7 +23,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert html =~ ~s(phx-hook="BoardHook")
     assert html =~ "<h2 class=\"vis-board-title\">Live board</h2>"
 
-    for cell <- ~w(load memory queue wave offline) do
+    for cell <- ~w(load memory queue wave offline requests errors services) do
       assert html =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
@@ -89,13 +91,16 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert Plug.Conn.get_resp_header(svg, "content-type") |> hd() =~ "image/svg+xml"
     assert Plug.Conn.get_resp_header(svg, "content-disposition") |> hd() =~ "board.svg"
 
-    for cell <- ~w(load memory queue wave offline) do
+    for cell <- ~w(load memory queue wave offline requests errors services) do
       assert svg.resp_body =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
     snapshot = build_conn() |> post("/board/export/snapshot")
     assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
-    assert Map.keys(frozen.cells) |> Enum.sort() == ~w(load memory offline queue wave)a
+
+    assert Map.keys(frozen.cells) |> Enum.sort() ==
+             ~w(errors load memory offline queue requests services wave)a
+
     assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
 
     print = build_conn() |> post("/board/export/print")
@@ -106,7 +111,72 @@ defmodule ExamplesWeb.BoardLiveTest do
     if png.status == 200, do: assert(<<137, 80, 78, 71, _::binary>> = png.resp_body)
   end
 
+  test "a service picked in one cell is selected in all three, and Escape's event clears it" do
+    {:ok, board} = Examples.BoardDemo.board()
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+    views(%{}, ~w(requests errors services)a)
+
+    # The first series of Requests is `api`; its first point is picked.
+    assert {:ok, %{identity: {:service, "api"}}} = Server.pick(board, :requests, 0, 0)
+    :ok = Server.select(board, {:service, "api"})
+
+    # Errors dims web and db; Services, whose field is `name`, dims their bars.
+    dimmed = dimmed(%{}, ~w(errors services)a)
+    assert dimmed.errors =~ ~s(opacity="0.25")
+    assert dimmed.services =~ ~s(opacity="0.25")
+
+    # The bars are a drill-down, not a selection: their pick names the bar's service.
+    assert {:ok, %{row: %{name: name}}} = Server.pick(board, :services, 0, 1)
+    assert name in Examples.BoardDemo.Services.services()
+
+    :ok = Server.select(board, nil)
+    assert Server.info(board).selection == nil
+    Server.unsubscribe(board, self())
+  end
+
+  test "a drill the component resolved is followed to the detail board" do
+    {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
+    target = %{cell: :services, board: :detail, vars: %{service: "db"}}
+
+    assert {:noreply, %{redirected: {:live, :redirect, %{to: "/board/detail?service=db"}}}} =
+             BoardLive.handle_info({:visualize_board_drill, "demo-board", target}, socket)
+  end
+
+  test "the detail board shows one service, its variable filtering both cells" do
+    html = build_conn() |> get("/board/detail?service=web") |> html_response(200)
+    assert html =~ "Service: web"
+    assert html =~ ~s(data-vis-cell="requests") and html =~ ~s(data-vis-cell="errors")
+
+    {:ok, board} = Examples.BoardDemo.detail("web")
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+    views(%{}, ~w(requests errors)a)
+
+    assert {:ok, %{row: %{service: "web"}}} = Server.pick(board, :requests, 0, 0)
+    assert Server.pick(board, :requests, 1, 0) == :error
+    Server.stop(board)
+  end
+
+  # The first view of each cell whose chart dims something.
+  defp dimmed(seen, []), do: seen
+
+  defp dimmed(seen, waiting) do
+    receive do
+      {:visualize_board, _board, {:cell, cell, %{svg: svg}}} when is_binary(svg) ->
+        if cell in waiting and svg =~ ~s(opacity="0.25"),
+          do: dimmed(Map.put(seen, cell, svg), List.delete(waiting, cell)),
+          else: dimmed(seen, waiting)
+
+      {:visualize_board, _board, _other} ->
+        dimmed(seen, waiting)
+    after
+      10_000 -> flunk("no dimmed view of #{inspect(waiting)}")
+    end
+  end
+
   # The first view of each cell that is no longer loading.
+
   defp views(seen, []), do: seen
 
   defp views(seen, waiting) do

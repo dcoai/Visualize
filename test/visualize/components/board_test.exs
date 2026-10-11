@@ -57,6 +57,7 @@ defmodule Visualize.Components.BoardTest do
         binding: Binding.new(%{{:latency, :primary} => :f, {:errors, :primary} => :f}),
         feeds: %{f: feed},
         tick: nil,
+        debounce: 0,
         clock: fn -> DateTime.add(@t0, 600) end
       )
 
@@ -216,8 +217,14 @@ defmodule Visualize.Components.BoardTest do
       Component.handle_event("brush", %{"domain" => domain}, socket)
       assert Server.info(board).window == {from, to}
 
+      # A cleared brush is a click as often as an undo: the window stays (spec/15 §13.1).
       Component.handle_event("brush_clear", %{}, socket)
+      assert Server.info(board).window == {from, to}
+      assert Server.info(board).moved
+
+      Component.handle_event("reset_window", %{}, socket)
       assert Server.info(board).board.window == %{last: 600}
+      refute Server.info(board).moved
 
       # A brush with no domain changes nothing.
       Component.handle_event("brush", %{"x0" => 1, "x1" => 9}, socket)

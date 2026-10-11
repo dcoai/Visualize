@@ -93,14 +93,21 @@ defmodule Visualize.Board.Draw do
   # The hooks' attributes from the frame realised over the sources (spec/15 §8.3): the
   # keyboard's for a chart of one frame, the crosshair's for a cartesian one whose first
   # mark has `x` and `y`. `{crosshair, keyboard}`.
-  def attrs(%{frames: frames} = applied, sources, theme, size) when map_size(frames) == 1 do
+  def attrs(applied, sources, theme, size),
+    do: applied |> realised(sources, theme, size) |> elem(0)
+
+  @doc false
+  # The hooks' attributes, and the chart realised over the sources that a pick reads its
+  # keyboard points from (spec/15 §13.2): `{{crosshair, keyboard}, pickable}`, `pickable`
+  # `nil` for a chart of more than one frame, which has no keyboard points.
+  def realised(%{frames: frames} = applied, sources, theme, size) when map_size(frames) == 1 do
     plain = Map.new(sources, fn {slot, d} -> {slot, Delivery.source(d)} end)
     frame = Frame.new(applied.chart, sources: plain, theme: theme, size: size)
-    keyboard = Keyboard.attrs(%{applied | frame: frame, sources: plain})
-    {crosshair(frame, applied.chart, plain), keyboard}
+    pickable = %{applied | frame: frame, sources: plain}
+    {{crosshair(frame, applied.chart, plain), Keyboard.attrs(pickable)}, pickable}
   end
 
-  def attrs(_applied, _sources, _theme, _size), do: {%{}, %{}}
+  def realised(_applied, _sources, _theme, _size), do: {{%{}, %{}}, nil}
 
   defp crosshair(%Frame{kind: :cartesian} = frame, %Chart{marks: [mark | _]}, sources) do
     channels = Map.get(mark, :channels, %{})

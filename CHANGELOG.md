@@ -33,6 +33,37 @@ release it merely follows.
   in one HTML document a browser prints as a PDF. `Visualize.Board.window_text/2` writes a
   window in a zone as the board's header does.
 
+
+- **A board's cells interact** (#581, #545, D-151). Three interactions span a board's
+  cells, and the board process holds each as shared state.
+  - **Brush to window.** A brush in any cell sets the window of every cell. The component
+    calls `Visualize.Board.Server.brush/2`, which waits `debounce:` milliseconds (250) for
+    the next brush, so a burst of brushes re-asks each feed once.
+    `Visualize.Board.Server.reset_window/1` restores the window the board was started with.
+    The component shows a *Reset window* button while the window is moved, and the board's
+    info reports `moved`.
+  - **Linked selection.** A click on a chart, or Enter on a point the keyboard reached,
+    selects `{field, value}` across the board. The field is the series field, else a
+    `:category` field of the schema. Every cell whose rows hold the selection dims the
+    other data with `opacity` 0.25, bound per datum through the style grammar. A cell that
+    does not hold it is drawn unchanged. The new board key `links: %{name: :service}` joins
+    fields of different names. Escape or *Clear selection* clears it. The new functions
+    are `Visualize.Board.Server.select/2` and `pick/4`, and `Visualize.Board.link/2` and
+    `linked/2`.
+  - **Drill-down.** A cell's new `drill: %{board: ref, vars: %{var => {:datum, field}}}`
+    opens another board, or `:self`, with variables taken from the clicked datum.
+    `Visualize.Board.validate/3` and `Visualize.Board.Server.start/2` take `boards:` and
+    refuse a target the host does not hold (`{:no_board, ref}`) or a variable it does not
+    declare. The component sends your page `{:visualize_board_drill, id, %{cell, board,
+    vars}}`, and you follow it, for example with `push_navigate/2`. `Visualize.Board.drill/3`
+    resolves a target from a row.
+
+  `KeyboardHook` gains `data-keyboard-pick-event` and `data-keyboard-target`, and
+  `BoardHook` gains Escape for the selection. A board's JSON gains `{"$datum": field}`.
+
+  **Changed:** a cleared brush on a board no longer restores the window, because a click on
+  a chart is a cleared brush. *Reset window* is the undo.
+
 - **A board runs live** (#574, D-146). Add `{Visualize.Board.Supervisor, name: MyApp.Boards}`
   to your tree and start a board under it with `Visualize.Board.Server.start/2`, passing
   `board:`, `store:`, `binding:` and `feeds:`. The board process owns the window (UTC), the

@@ -33,6 +33,32 @@ defmodule Visualize.Hooks.BoardTest do
   const active = () => document.activeElement && document.activeElement.getAttribute('id');
   """
 
+  test "BoardHook's Escape clears the board's selection while it holds one (spec/15 §13.2)" do
+    assert {:ok, %{"log" => log}} =
+             run("""
+             #{@board_prelude}
+             Stub.mount(BoardHook, el);
+             Stub.mark('no selection');
+             key(keys, 'Escape');
+             Stub.mark('a selection, Escape inside a chart');
+             el.setAttribute('data-board-selection', 'service api');
+             key(keys, 'Escape');
+             Stub.mark('Escape on a cell');
+             key(a, 'Escape');
+             Stub.done({});
+             """)
+
+    clears = fn mark ->
+      for %{"kind" => "push", "name" => "select_clear"} = p <-
+            Visualize.JsHooks.after_mark(log, mark),
+          do: p["target"]
+    end
+
+    assert clears.("no selection") == []
+    assert clears.("a selection, Escape inside a chart") == ["ops"]
+    assert clears.("Escape on a cell") == ["ops"]
+  end
+
   test "BoardHook pushes the board's width to its component, once per settled change" do
     assert {:ok, %{"log" => log, "report" => report}} =
              run("""

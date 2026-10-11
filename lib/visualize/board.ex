@@ -57,7 +57,8 @@ defmodule Visualize.Board do
             vars: %{},
             sync: nil,
             layout: %{},
-            stale_after: nil
+            stale_after: nil,
+            links: %{}
 
   @typedoc "A cell (spec/15 §1.3): a placement and a component reference."
   @type cell :: %{
@@ -68,7 +69,17 @@ defmodule Visualize.Board do
           required(:ref) => {:composite, pos_integer()},
           optional(:title) => String.t() | nil,
           optional(:vars) => %{atom() => term()},
-          optional(:sync) => boolean()
+          optional(:sync) => boolean(),
+          optional(:drill) => drill() | nil
+        }
+
+  @typedoc """
+  A cell's drill target (spec/15 §13.3): the board a click on a datum opens — `:self`, or
+  the host's name for a board — and its variables, each a field of the datum or a value.
+  """
+  @type drill :: %{
+          required(:board) => atom() | String.t() | pos_integer(),
+          optional(:vars) => %{atom() => {:datum, atom()} | term()}
         }
 
   @typedoc "The time window (spec/15 §1.5)."
@@ -83,7 +94,8 @@ defmodule Visualize.Board do
           vars: %{atom() => term()},
           sync: String.t() | nil,
           layout: map(),
-          stale_after: number() | nil
+          stale_after: number() | nil,
+          links: %{atom() => atom()}
         }
 
   @typedoc "A placement on the grid."
@@ -247,6 +259,13 @@ defmodule Visualize.Board do
   `ref`; a component that is not a design has its faults under the ref; a cell variable
   its component does not declare is `{:undeclared, :var, name}`; and a cell that cannot
   join the board's sync group has the component's `{:sync, …}` fault at its `sync`.
+
+  A cell's drill target (spec/15 §13.3) is checked against `boards:` — a map from a ref
+  to a board, or a fetch `(ref -> {:ok, board} | :error)`: a ref it does not hold is
+  `{:no_board, ref}`, a variable the target does not declare `{:undeclared, :var, name}`,
+  and a `{:datum, field}` whose field the component's sources do not declare
+  `{:undeclared, :field, field}`. A `:self` target is checked against this board with or
+  without `boards:`.
   """
   @spec validate(t() | map(), store(), keyword()) :: :ok | {:error, [error(), ...]}
   def validate(board, store, opts) do
@@ -264,7 +283,9 @@ defmodule Visualize.Board do
     {charts, errors} =
       Validator.components(Map.get(map, :cells, %{}), Validator.fetch(store), limits)
 
-    {charts, errors ++ Validator.given(map, charts)}
+    boards = if Keyword.has_key?(opts, :boards), do: Validator.fetch(opts[:boards])
+
+    {charts, errors ++ Validator.given(map, charts) ++ Validator.drills(map, charts, boards)}
   end
 
   @doc """
@@ -395,6 +416,83 @@ defmodule Visualize.Board do
   @spec vars(t(), atom()) :: %{atom() => term()}
   def vars(%__MODULE__{vars: vars, cells: cells}, cell) do
     Map.merge(vars, cells |> Map.fetch!(cell) |> Map.get(:vars, %{}))
+  end
+
+  # -- interaction (spec/15 §13) ------------------------------------------------------------
+
+  @doc """
+  The name a field links to through the board's `links` (spec/15 §13.2), or the field
+  itself when `links` does not name it. A link is one step.
+
+      iex> board = Visualize.Board.from_map!(%{links: %{name: :service}})
+      iex> {Visualize.Board.link(board, :name), Visualize.Board.link(board, :host)}
+      {:service, :host}
+  """
+  @spec link(t(), atom()) :: atom()
+  def link(%__MODULE__{links: links}, field), do: Map.get(links, field, field)
+
+  @doc """
+  Every field that links to the same name as `field`, itself and that name included, in
+  name order (spec/15 §13.2): the fields a cell reads a selection at.
+
+      iex> board = Visualize.Board.from_map!(%{links: %{name: :service, svc: :service}})
+      iex> Visualize.Board.linked(board, :name)
+      [:name, :service, :svc]
+  """
+  @spec linked(t(), atom()) :: [atom()]
+  def linked(%__MODULE__{links: links} = board, field) do
+    to = link(board, field)
+
+    links
+    |> Enum.flat_map(fn {from, link} -> if link == to, do: [from], else: [] end)
+    |> then(&[to, field | &1])
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  A cell's drill target with its variables taken from a datum (spec/15 §13.3):
+  `{:ok, %{board: ref, vars: vars}}`, `:none` for a cell with no `drill`, or `{:error,
+  errors}` for a `{:datum, field}` the row has no value for.
+
+      iex> board = Visualize.Board.from_map!(%{vars: %{service: "api"}, cells: %{a: %{x: 0, y: 0,
+      ...>   w: 4, h: 2, ref: {:composite, 1}, drill: %{board: :self, vars: %{service: {:datum, :name}}}}}})
+      iex> Visualize.Board.drill(board, :a, %{name: "db", v: 3})
+      {:ok, %{board: :self, vars: %{service: "db"}}}
+      iex> Visualize.Board.drill(board, :a, %{v: 3})
+      {:error, [{[:cells, :a, :drill, :vars, :service], {:missing, :datum, :name}}]}
+  """
+  @spec drill(t(), atom(), map()) ::
+          {:ok, %{board: term(), vars: map()}} | :none | {:error, [error(), ...]}
+  def drill(%__MODULE__{cells: cells}, cell, row) when is_map(row) do
+    case cells |> Map.fetch!(cell) |> Map.get(:drill) do
+      nil -> :none
+      %{board: ref} = drill -> drilled(cell, ref, Map.get(drill, :vars, %{}), row)
+    end
+  end
+
+  defp drilled(cell, ref, vars, row) do
+    {vars, errors} =
+      vars
+      |> Enum.sort()
+      |> Enum.reduce({%{}, []}, fn
+        {var, {:datum, field}}, {vars, errors} ->
+          case Visualize.Data.Table.get(row, field) do
+            nil ->
+              {vars, [{[:cells, cell, :drill, :vars, var], {:missing, :datum, field}} | errors]}
+
+            value ->
+              {Map.put(vars, var, value), errors}
+          end
+
+        {var, value}, {vars, errors} ->
+          {Map.put(vars, var, value), errors}
+      end)
+
+    case errors do
+      [] -> {:ok, %{board: ref, vars: vars}}
+      errors -> Validator.done(errors)
+    end
   end
 
   # -- sources (spec/15 §4.1) --------------------------------------------------------------

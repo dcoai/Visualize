@@ -175,6 +175,12 @@ defmodule Visualize.Chart.Validator.Words do
   # A snapshot's own reason (spec/15 §12.3, D-150).
   def words(:not_on_board), do: "is not a cell of the snapshot's board"
 
+  # A board's interaction (spec/15 §13.3, D-151).
+  def words({:no_board, ref}), do: "names the board #{inspect(ref)}, which the host does not hold"
+
+  def words({:missing, :datum, field}),
+    do: "takes #{inspect(field)} from the datum, which has no value for it"
+
   # A board bundle's import (spec/15 §11.3, D-147).
   def words({:not_carried, id}), do: "refers to #{inspect(id)}, which the bundle does not carry"
 
@@ -273,6 +279,10 @@ defmodule Visualize.Chart.Validator.Words do
   defp type_words(:snapshot), do: "a snapshot map"
   defp type_words(:row), do: "a row map"
   defp type_words(:status), do: "one of :loading, :live, :stale or {:down, words}"
+
+  defp type_words(:board_ref),
+    do: ":self, or a board's name: an atom, a string or a positive integer"
+
   defp type_words(:window), do: "nil, %{last: seconds} or %{from: t, to: t}"
   defp type_words({:id, kind}), do: "a #{kind} id, {#{inspect(kind)}, n}"
   defp type_words({:enum, allowed}), do: "one of #{list(allowed)}"

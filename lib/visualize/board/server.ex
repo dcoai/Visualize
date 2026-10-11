@@ -10,6 +10,12 @@ defmodule Visualize.Board.Server do
   deliveries, schemas and statuses. Pushes reach the monitor through this process's
   mailbox. Setting a window (`window/2`) re-asks every feed.
 
+  The board also holds what its cells share when a person acts on one of them (spec/15
+  §13, D-151): a brushed window (`brush/2`), applied once rapid brushes settle and undone
+  by `reset_window/1`, and the one selection (`select/2`), its field read through the
+  board's `links` and sent to every cell, which dims the data that do not hold it.
+  `pick/4` reads the row behind a cell's keyboard point from that cell's process.
+
   Each cell is a `Visualize.Board.Cell`: heap-limited, `:temporary` under a
   `DynamicSupervisor` this process starts and is the parent of, and monitored here. A
   cell that dies is shown `{:crashed, reason}` to every subscriber at once and started
@@ -49,6 +55,10 @@ defmodule Visualize.Board.Server do
     * `:clock` - the board's now, a function of no argument answering a UTC `DateTime`
       (default `DateTime.utc_now/0`)
     * `:limits` - the limits the components' designs are read under
+    * `:boards` - the boards the cells' drill targets may name, as
+      `Visualize.Board.validate/3` takes them (default `%{}`)
+    * `:debounce` - milliseconds a brushed window waits for the next (default `250`);
+      `0` applies each at once
     * `:name` - a registered name
   """
 
@@ -70,6 +80,8 @@ defmodule Visualize.Board.Server do
           now: DateTime.t() | nil,
           width: number(),
           sync: String.t() | nil,
+          selection: {atom(), term()} | nil,
+          moved: boolean(),
           cells: %{atom() => %{pid: pid() | nil, state: State.t(), restarts: non_neg_integer()}}
         }
 
@@ -102,6 +114,8 @@ defmodule Visualize.Board.Server do
         :store,
         :name,
         :limits,
+        boards: %{},
+        debounce: 250,
         binding: Binding.new(),
         feeds: %{},
         theme: Visualize.Theme.default(),
@@ -116,7 +130,8 @@ defmodule Visualize.Board.Server do
     store = Keyword.fetch!(opts, :store)
     limits = Keyword.take(opts, [:limits])
 
-    with {:ok, components} <- board_check(Board.components(board, store, limits)),
+    with {:ok, components} <-
+           board_check(Board.components(board, store, Keyword.take(opts, [:limits, :boards]))),
          {:ok, required} <- board_check(Board.required_sources(board, store, limits)),
          :ok <- feeds_check(opts[:binding], opts[:feeds]) do
       needs =
@@ -165,7 +180,62 @@ defmodule Visualize.Board.Server do
   def window(board, window), do: GenServer.call(board, {:window, window})
 
   @doc """
+  A brushed window (spec/15 §13.1): validated at once — `:ok`, or `{:error, errors}` as
+  `window/2` answers — and set as `window/2` sets it once `debounce:` milliseconds pass
+  with no later brush, so rapid brushes re-ask every feed once, for the last.
+  """
+  @spec brush(GenServer.server(), Board.window()) :: :ok | {:error, [Board.error(), ...]}
+  def brush(board, window), do: GenServer.call(board, {:brush, window})
+
+  @doc "The window the board was started with, set as `window/2` sets it (spec/15 §13.1)."
+  @spec reset_window(GenServer.server()) :: :ok
+  def reset_window(board), do: GenServer.call(board, :reset_window)
+
+  @doc """
+  The board's selection (spec/15 §13.2): `{field, value}`, its field read through the
+  board's `links`, or `nil` to clear it. Every cell is sent it, and every subscriber the
+  board's info. `:ok`.
+  """
+  @spec select(GenServer.server(), {atom(), term()} | nil) :: :ok
+  def select(board, nil), do: GenServer.call(board, {:select, nil})
+
+  def select(board, {field, _value} = identity) when is_atom(field),
+    do: GenServer.call(board, {:select, identity})
+
+  @doc """
+  The row behind a cell's keyboard point, `{series, index}` (spec/10 §17.2), and its
+  identity (spec/15 §13.2): `{:ok, %{row: row, identity: {field, value} | nil}}`, or
+  `:error` for a cell that is not running or a point it does not have.
+
+  The board answers the cell's process and the caller asks it, so a pick never holds the
+  board; a cell that dies meanwhile answers `:error`.
+  """
+  @spec pick(GenServer.server(), atom(), non_neg_integer(), non_neg_integer()) ::
+          {:ok, %{row: map(), identity: {atom(), term()} | nil}} | :error
+  def pick(board, cell, series, index) do
+    case GenServer.call(board, {:cell, cell}) do
+      pid when is_pid(pid) -> ask(pid, series, index)
+      nil -> :error
+    end
+  end
+
+  defp ask(pid, series, index) do
+    ref = Process.monitor(pid)
+    send(pid, {:pick, self(), ref, series, index})
+
+    receive do
+      {^ref, reply} ->
+        Process.demonitor(ref, [:flush])
+        reply
+
+      {:DOWN, ^ref, :process, ^pid, _reason} ->
+        :error
+    end
+  end
+
+  @doc """
   Board variables merged over the board's, and every cell prepared again (spec/15 §5,
+
   §8.2): `:ok`, or `{:error, errors}`.
   """
   @spec vars(GenServer.server(), map()) :: :ok | {:error, [Board.error(), ...]}
@@ -216,9 +286,24 @@ defmodule Visualize.Board.Server do
 
     state =
       prepared
-      |> Map.take([:board, :store, :binding, :feeds, :theme, :width, :tick, :max_heap, :clock])
+      |> Map.take([
+        :board,
+        :store,
+        :binding,
+        :feeds,
+        :theme,
+        :width,
+        :tick,
+        :max_heap,
+        :clock,
+        :boards,
+        :debounce
+      ])
       |> Map.merge(%{
         limits: Map.get(prepared, :limits, []),
+        given: board.window,
+        selection: nil,
+        brushed: 0,
         components: prepared.components,
         needs: prepared.needs,
         monitor: monitor,
@@ -266,23 +351,57 @@ defmodule Visualize.Board.Server do
     {:reply, :ok, drop_subscriber(state, pid)}
   end
 
+  # A window set by a call drops a brush still waiting: it is the later choice.
   def handle_call({:window, window}, _from, state) do
-    board = %{state.board | window: window}
+    case Board.validate(%{state.board | window: window}) do
+      :ok -> {:reply, :ok, windowed(%{state | brushed: state.brushed + 1}, window)}
+      {:error, _errors} = error -> {:reply, error, state}
+    end
+  end
 
-    case Board.validate(board) do
+  # A brush waits `debounce` for the next; only the last one's timer finds its number.
+  def handle_call({:brush, window}, _from, state) do
+    case Board.validate(%{state.board | window: window}) do
+      :ok when state.debounce == 0 ->
+        {:reply, :ok, windowed(state, window)}
+
       :ok ->
-        monitor = Monitor.refetch(state.monitor)
-        {:reply, :ok, turn(%{state | board: board, monitor: monitor})}
+        brushed = state.brushed + 1
+        Process.send_after(self(), {:brush, brushed, window}, state.debounce)
+        {:reply, :ok, %{state | brushed: brushed}}
 
       {:error, _errors} = error ->
         {:reply, error, state}
     end
   end
 
+  def handle_call(:reset_window, _from, state) do
+    {:reply, :ok, windowed(%{state | brushed: state.brushed + 1}, state.given)}
+  end
+
+  def handle_call({:select, identity}, _from, state) do
+    selection =
+      case identity do
+        nil -> nil
+        {field, value} -> {Board.link(state.board, field), value}
+      end
+
+    state = %{state | selection: selection}
+
+    for {_name, %{pid: pid}} when is_pid(pid) <- state.cells,
+        do: send(pid, {:selection, selection_for(state)})
+
+    {:reply, :ok, tell(state)}
+  end
+
+  def handle_call({:cell, name}, _from, state) do
+    {:reply, get_in(state.cells, [name, :pid]), state}
+  end
+
   def handle_call({:vars, vars}, _from, state) do
     board = %{state.board | vars: Map.merge(state.board.vars, vars)}
 
-    case Board.components(board, state.store, limits: state.limits) do
+    case Board.components(board, state.store, limits: state.limits, boards: state.boards) do
       {:ok, components} ->
         for {name, %{chart: chart, vars: v}} <- components,
             components[name] != state.components[name],
@@ -319,6 +438,11 @@ defmodule Visualize.Board.Server do
     {:noreply, state}
   end
 
+  def handle_info({:brush, brushed, window}, %{brushed: brushed} = state),
+    do: {:noreply, windowed(state, window)}
+
+  def handle_info({:brush, _superseded, _window}, state), do: {:noreply, state}
+
   def handle_info({:visualize_feed, _ref, _message} = message, state) do
     {:ok, monitor} = Monitor.handle_message(state.monitor, message)
     {:noreply, %{state | monitor: monitor}}
@@ -349,6 +473,18 @@ defmodule Visualize.Board.Server do
   def terminate(_reason, state) do
     Monitor.stop(state.monitor)
   end
+
+  # The board's window set, every feed re-asked, and the turn run at once (spec/15 §8.2).
+  defp windowed(state, window) do
+    monitor = Monitor.refetch(state.monitor)
+    turn(%{state | board: %{state.board | window: window}, monitor: monitor})
+  end
+
+  # The selection as a cell reads it: the fields that may hold it and the value.
+  defp selection_for(%{selection: nil}), do: nil
+
+  defp selection_for(%{selection: {field, value}, board: board}),
+    do: %{fields: Board.linked(board, field), value: value}
 
   # -- a turn -------------------------------------------------------------------------------
 
@@ -408,7 +544,9 @@ defmodule Visualize.Board.Server do
   # The subscribers told the board's own state when the window, the zone or the width
   # moved (spec/15 §8.2).
   defp tell(state) do
-    told = {state.window, state.board.zone, state.width, state.board.sync}
+    told =
+      {state.window, state.board.zone, state.width, state.board.sync, state.selection,
+       moved?(state)}
 
     if told != state.told do
       Enum.each(Map.keys(state.subscribers), &send(&1, message({:board, present(state, false)})))
@@ -437,6 +575,7 @@ defmodule Visualize.Board.Server do
        stale_after: state.board.stale_after,
        subscribers: Map.keys(state.subscribers),
        max_heap: state.max_heap,
+       selection: selection_for(state),
        data: data}
 
     entry = Map.get(state.cells, name, %{pid: nil, state: :loading, restarts: 0, since: nil})
@@ -532,7 +671,9 @@ defmodule Visualize.Board.Server do
       zone: state.board.zone,
       now: state.now,
       width: state.width,
-      sync: state.board.sync
+      sync: state.board.sync,
+      selection: state.selection,
+      moved: moved?(state)
     }
 
     if cells? do
@@ -571,6 +712,8 @@ defmodule Visualize.Board.Server do
       cells: cells
     )
   end
+
+  defp moved?(state), do: state.board.window != state.given
 
   defp message(message), do: {:visualize_board, self(), message}
 end
