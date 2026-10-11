@@ -167,6 +167,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       class = if class, do: [class: class], else: []
       font = ["font-family": Theme.resolve(theme, :font_family, :css)]
       labelled = if ids.labelledby, do: ["aria-labelledby": ids.labelledby], else: []
+
+      labelled =
+        labelled ++ if ids.describedby, do: ["aria-describedby": ids.describedby], else: []
+
       class ++ font ++ [role: "img"] ++ labelled ++ if(responsive, do: @responsive, else: [])
     end
 

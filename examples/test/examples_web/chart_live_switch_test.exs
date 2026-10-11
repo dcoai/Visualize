@@ -59,7 +59,7 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
   defp canvas_state?(_state), do: false
 
   defp svg_state?(%{compiled: [{_, %{ceiling: ceiling}} | _]} = state),
-    do: Map.keys(state) == [:compiled] and ceiling > 1
+    do: Enum.sort(Map.keys(state)) == [:compiled, :summary] and ceiling > 1
 
   defp svg_state?(_state), do: false
 

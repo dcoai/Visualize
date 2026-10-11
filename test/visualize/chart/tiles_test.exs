@@ -306,7 +306,8 @@ defmodule Visualize.Chart.TilesTest do
       assert backdrop =~ ~s(class="mark mark-tiles")
       refute backdrop =~ @attribution
       # The backdrop is a page-ready document of the static one's shape.
-      assert backdrop =~ ~s(<svg height="300")
+      # A layer of the picture the page names: aria-hidden (spec/14 §21.4, D-142).
+      assert backdrop =~ ~s(<svg aria-hidden="true" height="300")
       assert backdrop =~ ~s(viewBox="0 0 400 300")
 
       assert images(static) == 0

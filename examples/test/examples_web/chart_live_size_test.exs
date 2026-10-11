@@ -163,7 +163,7 @@ defmodule ExamplesWeb.ChartLiveSizeTest do
       )
 
     {:noreply, s} =
-      ChartLive.handle_info({ref, {:still, frame, s.assigns.still_state, "design"}}, s)
+      ChartLive.handle_info({ref, {:still, frame, s.assigns.still_state, "design", nil}}, s)
 
     assert [["canvas_incremental", payload]] = Phoenix.LiveView.Utils.get_push_events(s)
     assert payload.mode == "full" and is_binary(payload.binary)
@@ -180,7 +180,10 @@ defmodule ExamplesWeb.ChartLiveSizeTest do
       )
 
     {:noreply, s} =
-      ChartLive.handle_info({ref, {:still, s.assigns.still_frame, s.assigns.still_state, "d"}}, s)
+      ChartLive.handle_info(
+        {ref, {:still, s.assigns.still_frame, s.assigns.still_state, "d", nil}},
+        s
+      )
 
     assert Phoenix.LiveView.Utils.get_push_events(s) == []
   end
@@ -197,7 +200,7 @@ defmodule ExamplesWeb.ChartLiveSizeTest do
       )
 
     {:noreply, s} =
-      ChartLive.handle_info({ref, {:still, frame, s.assigns.still_state, "design"}}, s)
+      ChartLive.handle_info({ref, {:still, frame, s.assigns.still_state, "design", nil}}, s)
 
     refute Enum.any?(Phoenix.LiveView.Utils.get_push_events(s), fn [n, p] ->
              n == "canvas_incremental" and not Map.has_key?(p, :seq)

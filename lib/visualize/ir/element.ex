@@ -328,9 +328,13 @@ defmodule Visualize.IR.Element do
     * `:responsive` - when true, `preserveAspectRatio="xMidYMid meet"` (unless given) and
       `style="width:100%;height:auto"`, so the `<svg>` fills its container's width at the
       drawing's aspect ratio while `width` and `height` stay its intrinsic size (D-54)
-    * `:title`, `:description` - the accessible name and description (D-56): a `<title>`
-      and a `<desc>` become the first children, each with an id, and `aria-labelledby`
-      names them
+    * `:title`, `:description` - the accessible name and description (D-56, D-142): a
+      `<title>` and a `<desc>` become the first children, each with an id;
+      `aria-labelledby` names the title and `aria-describedby` the description, so a
+      screen reader says a short name and then the description — a description alone
+      is named by `aria-labelledby`, as it is the only text the root has
+    * `:hidden` - `aria-hidden="true"` on the root: one layer of a picture another
+      element names, as a hybrid chart's SVG layers are (spec/14 §21.4)
     * `:id` - the root's id and the prefix of the two child ids (`<id>-title`,
       `<id>-desc`); defaults to `vis-` and a hash of the two texts, and is only set when
       a title or description is given
@@ -351,6 +355,8 @@ defmodule Visualize.IR.Element do
       |> put_unless_nil(:style, if(responsive, do: "width:100%;height:auto"))
       |> put_unless_nil(:id, ids.root)
       |> put_unless_nil(:aria_labelledby, ids.labelledby)
+      |> put_unless_nil(:aria_describedby, ids.describedby)
+      |> put_unless_nil(:aria_hidden, if(Keyword.get(opts, :hidden, false), do: "true"))
 
     labels =
       Enum.reject(
@@ -365,11 +371,14 @@ defmodule Visualize.IR.Element do
   end
 
   @doc false
-  # The ids of a root's accessible name and description (D-56): `nil` for each text that
-  # is absent, and `nil` throughout when both are; `labelledby` is the `aria-labelledby`
-  # value naming the ids present. The prefix is the given id or `vis-` plus a base-36
-  # hash of the two texts, so equal charts share ids and different ones do not.
-  def label_ids(_id, nil, nil), do: %{root: nil, title: nil, desc: nil, labelledby: nil}
+  # The ids of a root's accessible name and description (D-56, D-142): `nil` for each
+  # text that is absent, and `nil` throughout when both are; `labelledby` is the
+  # `aria-labelledby` value — the title's id, else the description's, the only text there
+  # is — and `describedby` the `aria-describedby` value, the description's id when there
+  # is a title to name the root. The prefix is the given id or `vis-` plus a base-36 hash
+  # of the two texts, so equal charts share ids and different ones do not.
+  def label_ids(_id, nil, nil),
+    do: %{root: nil, title: nil, desc: nil, labelledby: nil, describedby: nil}
 
   def label_ids(id, title, description) do
     prefix =
@@ -377,8 +386,15 @@ defmodule Visualize.IR.Element do
 
     title_id = if title, do: prefix <> "-title"
     desc_id = if description, do: prefix <> "-desc"
-    labelledby = Enum.join(Enum.reject([title_id, desc_id], &is_nil/1), " ")
-    %{root: prefix, title: title_id, desc: desc_id, labelledby: labelledby}
+    describedby = if title_id, do: desc_id
+
+    %{
+      root: prefix,
+      title: title_id,
+      desc: desc_id,
+      labelledby: title_id || desc_id,
+      describedby: describedby
+    }
   end
 
   defp put_unless_nil(map, _key, nil), do: map

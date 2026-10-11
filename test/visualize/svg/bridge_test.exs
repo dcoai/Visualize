@@ -109,7 +109,7 @@ defmodule Visualize.SVG.BridgeTest do
              }
   end
 
-  test "a named root has a title, a desc and aria-labelledby on both paths (D-56)" do
+  test "a named root is labelled by its title and described by its desc on both paths (D-56, D-142)" do
     named = Element.root(10, 20, title: "Sales", description: "Monthly sales, 2024 & 2025")
     plain = Element.root(10, 20)
     only_title = Element.root(10, 20, title: "Sales", id: "chart")
@@ -119,7 +119,8 @@ defmodule Visualize.SVG.BridgeTest do
       [_, id] = Regex.run(~r/ id="([^"]+)"/, svg)
       assert String.starts_with?(id, "vis-")
       assert svg =~ ~s( role="img")
-      assert svg =~ ~s( aria-labelledby="#{id}-title #{id}-desc")
+      assert svg =~ ~s( aria-labelledby="#{id}-title")
+      assert svg =~ ~s( aria-describedby="#{id}-desc")
 
       assert svg =~
                ~s(><title id="#{id}-title">Sales</title><desc id="#{id}-desc">Monthly sales, 2024 &amp; 2025</desc>)
@@ -133,6 +134,16 @@ defmodule Visualize.SVG.BridgeTest do
       assert render.(only_title) =~ ~s( aria-labelledby="chart-title")
       assert render.(only_title) =~ ~s(<title id="chart-title">Sales</title>)
       refute render.(only_title) =~ "<desc"
+      refute render.(only_title) =~ "aria-describedby"
+
+      # A description alone is the only text the root has, so it names it.
+      only_desc = render.(Element.root(10, 20, description: "Monthly", id: "d"))
+      assert only_desc =~ ~s( aria-labelledby="d-desc")
+      refute only_desc =~ "aria-describedby"
+
+      # A layer of a picture another element names (spec/14 §21.4).
+      assert render.(Element.root(10, 20, hidden: true)) =~ ~s( aria-hidden="true")
+      refute render.(plain) =~ "aria-hidden"
     end
 
     assert Element.root(1, 1, title: "a").attrs.id == Element.root(2, 2, title: "a").attrs.id

@@ -52,6 +52,7 @@ defmodule Visualize.Chart do
     Migration,
     Schema,
     Stack,
+    Summary,
     Template,
     Text,
     Use,
@@ -685,21 +686,32 @@ defmodule Visualize.Chart do
   ## Options
 
     * `:root` - wrap the group in a root `<svg>` (default `false`)
-    * `:title` and `:description` - the root's; default the design's `meta.name` and
-      `meta.description`, an absent or empty one leaving its element out
+    * `:title` - the root's accessible name; default the design's `meta.name`, else the
+      chart's kind (`Visualize.Chart.Summary`, spec/14 §21.2), so every chart is named
+    * `:description` - the root's own description; default the design's
+      `meta.description`, an absent or empty one saying nothing
+    * `:summary` - the generated text alternative written after the description
+      (spec/14 §21.1): `true` (default) for `Visualize.Chart.Summary.text/1`, a string
+      for the caller's own, `false` for none
     * `:responsive` - the root's, as `Visualize.IR.Element.root/3` takes it
   """
   @spec generate(Applied.t(), keyword()) :: Element.t()
-  def generate(%Applied{chart: chart, frame: frame, frames: frames, sources: sources}, opts) do
+  def generate(
+        %Applied{chart: chart, frame: frame, frames: frames, sources: sources} = applied,
+        opts
+      ) do
     group = frames_group(realised(frames, frame), sources, opts)
 
     if Keyword.get(opts, :root, false) do
       meta = chart.meta || %{}
+      summary = summary(applied, Keyword.get(opts, :summary, true))
+
+      description =
+        Keyword.get_lazy(opts, :description, fn -> meta_text(Map.get(meta, :description)) end)
 
       Element.root(frame.size.width, frame.size.height,
-        title: Keyword.get_lazy(opts, :title, fn -> meta_text(Map.get(meta, :name)) end),
-        description:
-          Keyword.get_lazy(opts, :description, fn -> meta_text(Map.get(meta, :description)) end),
+        title: Keyword.get_lazy(opts, :title, fn -> title(meta, summary, applied) end),
+        description: described(description, summary),
         responsive: Keyword.get(opts, :responsive, false),
         children: [group]
       )
@@ -707,6 +719,30 @@ defmodule Visualize.Chart do
       group
     end
   end
+
+  # The generated text alternative a root describes itself with (spec/14 §21.1).
+  defp summary(applied, true), do: Summary.new(applied)
+  defp summary(_applied, text) when is_binary(text), do: text
+  defp summary(_applied, false), do: nil
+
+  # The root's name: the design's, else the chart's kind (spec/14 §21.2).
+  defp title(meta, summary, applied) do
+    case meta_text(Map.get(meta, :name)) do
+      nil -> (match?(%Summary{}, summary) && summary.name) || Summary.new(applied).name
+      name -> name
+    end
+  end
+
+  # The design's description, then the summary, as one text.
+  defp described(description, nil), do: description
+
+  defp described(description, %Summary{} = summary),
+    do: described(description, Summary.text(summary))
+
+  defp described(nil, text), do: text
+  defp described(description, text), do: description <> sentence_end(description) <> text
+
+  defp sentence_end(text), do: if(String.ends_with?(text, [".", "!", "?"]), do: " ", else: ". ")
 
   # An `%Applied{}` assembled by hand — one frame realised through `Visualize.Chart.Frame.new/2`
   # and no `frames` — draws that frame alone, so a caller that has one frame need not name it.
@@ -779,7 +815,8 @@ defmodule Visualize.Chart do
     {mode, opts} =
       Keyword.pop_lazy(opts, :resolve, fn -> Visualize.Theme.mode(opts[:backend]) end)
 
-    {ours, rest} = Keyword.split(opts, [:paths, :root, :title, :description, :responsive])
+    {ours, rest} =
+      Keyword.split(opts, [:paths, :root, :title, :description, :summary, :responsive])
 
     applied
     |> generate([resolve: mode] ++ ours)

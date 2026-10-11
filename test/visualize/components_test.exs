@@ -178,7 +178,7 @@ defmodule Visualize.ComponentsTest do
 
       titled = render_case(Keyword.fetch!(cases(), :line_chart_points))
       [_, id] = Regex.run(~r/aria-labelledby="([^"]+)-title/, titled)
-      assert titled =~ ~s|role="img" aria-labelledby="#{id}-title #{id}-desc"|
+      assert titled =~ ~s|role="img" aria-labelledby="#{id}-title" aria-describedby="#{id}-desc"|
       assert titled =~ ~s|<title id="#{id}-title">Points</title>|
       assert titled =~ ~s|<desc id="#{id}-desc">Four points on a monotone curve</desc>|
       assert titled =~ ~s|<g class="x-axis" transform="translate(0, 350)"><g aria-hidden="true"|
@@ -191,6 +191,7 @@ defmodule Visualize.ComponentsTest do
         })
 
       assert only_desc =~ ~r/aria-labelledby="vis-[a-z0-9]+-desc"/
+      refute only_desc =~ "aria-describedby"
       refute only_desc =~ "<title"
       assert only_desc =~ ~r/<desc id="vis-[a-z0-9]+-desc">Three slices<\/desc>/
     end
