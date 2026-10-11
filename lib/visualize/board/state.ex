@@ -35,9 +35,9 @@ defmodule Visualize.Board.State do
   alias Visualize.Chart.Validator
   alias Visualize.Data.{Delivery, Schema, Table}
   alias Visualize.Feed
+  alias Visualize.{Format, Render, Theme}
   alias Visualize.IR.Element
   alias Visualize.Shape.Symbol
-  alias Visualize.{Format, Render, Theme}
 
   @type t ::
           :loading
@@ -234,7 +234,7 @@ defmodule Visualize.Board.State do
     |> Render.to_string()
   end
 
-  @doc "A state's name, the `data-vis-state` its drawings carry: `\"stale\"`, `\"down\"`, …"
+  @doc ~s(A state's name, the `data-vis-state` its drawings carry: `"stale"`, `"down"`, …)
   @spec name(t()) :: String.t()
   def name({tag, _detail}), do: Atom.to_string(tag)
   def name(state) when is_atom(state), do: Atom.to_string(state)
