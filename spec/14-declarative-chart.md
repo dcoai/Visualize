@@ -2996,7 +2996,7 @@ The simulation is Machado, Oliveira and Fernandes (2009) at severity 1.0 (spec/0
 
 ## 21. Accessibility
 
-**Implemented in part** (#546, D-142). A chart is accessible in four ways, one work item each: a **text alternative** generated from the design and its data (§21.1–§21.4, #557), **keyboard navigation** into its points (§21.5, #558), **reduced motion** (§21.6, #559), and **status beyond hue** (§21.7, #560). The sections after §21.4 are written with their work items.
+**Implemented in part** (#546, D-142). A chart is accessible in four ways, one work item each: a **text alternative** generated from the design and its data (§21.1–§21.4, #557), **keyboard navigation** into its points (§21.5, #558), **reduced motion** (#559), and **status beyond hue** (#560); the last two are written with their work items, before the functions.
 
 ### 21.1 The summary
 
@@ -3068,7 +3068,15 @@ A canvas is an image to assistive technology with nothing in it to read, so the 
 - `Visualize.Backend.Hybrid.render/1` takes the same two and a `canvas_id:` for the `html` container's `<canvas>` (spec/09 §6.2), and its SVG layer — `render_static/1`'s root — is `aria-hidden="true"`: one layer of a picture the canvas names. The compiled chart's static, dynamic and backdrop documents (§12.4) are rendered through it and are `aria-hidden` too.
 - `Visualize.Chart.Summary.attrs/2` and `description/2` name any other element that stands for the chart: `attrs(summary, id)` is `[role: "img", "aria-label": name, "aria-describedby": id <> "-summary"]`, a keyword list to spread into a HEEx tag, and `description(summary, id)` is the `<p id="<id>-summary" hidden>` it points at, the summary's text escaped. A page that stacks a compiled chart's layers (§12.4) puts them on the wrapper of the layers, the one element that is the whole picture; the gallery's chart page does, shows the summary under the chart, and follows the chart with the hidden table.
 
-### 21.5 Functions
+### 21.5 Keyboard navigation
+
+**Implemented** (#558). A chart's points are reachable from the keyboard: `Visualize.Hooks.Keyboard.attrs/1` writes, once on the server, every point the summary counts (§21.1) with its position and a readout, and `KeyboardHook` makes the chart **one tab stop** in which the arrow keys move between points and series and a polite live region reads the point ([10-liveview-integration](10-liveview-integration.md) §17). Like the crosshair's arrays (D-76), the attribute serves a chart drawn as SVG and one on a canvas alike.
+
+**The points** are, per series in the order §21.1 names them, the rows of the data marks that draw a value — the rows of one `series` reading or stacked `key`, or a mark's rows when it has neither, named by the value — in data order; marks whose series share a name are one series. A series of more than 1,000 points is **sampled** to 1,000 evenly spaced ones, its first and last kept: a keyboard does not step through 50,000 rows, and the readout still counts the series' own. Each point's **readout** is `<series>, <i> of <n>: <where>, <value name> <value>` — `y, 3 of 51: x 2, y 54.3`, `value, 1 of 6: Chrome, value 64.5` — every value written as §21.1 writes it, and its **position** the centre of what it draws in the chart's own pixels: its `x` reading (the middle of `x0` and `x1` for a rectangle) and its `y` reading (`y1` for a rectangle), through the frame's scales, moved by the frame's margin and box (§4.2). A point in a `:polar` or `:geo` frame, or one whose position channels do not place it, has no position: it is read and not marked.
+
+**A board adds the order across its cells one level up** (#539). A chart is one stop and keeps its arrows; a board makes each cell one stop in its own order — Tab between cells — or, if it navigates its cells with arrows, moves focus *into* a chart with Enter and takes it back on Escape: the hook moves focus to the nearest enclosing element carrying `data-vis-cell` when Escape is pressed inside it. Neither level needs the other's details.
+
+### 21.6 Functions
 
 | Function | Contract |
 |---|---|

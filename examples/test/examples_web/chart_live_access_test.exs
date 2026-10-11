@@ -1,0 +1,46 @@
+defmodule ExamplesWeb.ChartLiveAccessTest do
+  @moduledoc """
+  The chart page is accessible (spec/14 §21, #557, #558): on SVG the chart's own root
+  names it; on a canvas the wrapper of the layers is the named image and every SVG layer
+  is hidden; on both the chart is one keyboard stop carrying its points, the hidden data
+  table follows it, and the summary is shown under it.
+  """
+  use ExUnit.Case, async: true
+
+  alias ExamplesWeb.ChartLive
+
+  defp html(slug, backend) do
+    {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => to_string(backend)}, s)
+
+    ChartLive.render(Map.put(s.assigns, :__changed__, %{}))
+    |> Phoenix.LiveViewTest.rendered_to_string()
+    |> String.replace(~r/data-binary="[^"]*"/, ~s(data-binary=""))
+  end
+
+  test "on SVG: one keyboard stop with the points, the root named, the table and the summary" do
+    page = html("line", :svg)
+
+    assert page =~
+             ~r/<div id="chart-keys" phx-hook="KeyboardHook"[^>]* data-keyboard-name="Line Chart"/
+
+    assert page =~ ~s(data-keyboard-points="[{&quot;name&quot;:&quot;y&quot;)
+
+    assert page =~
+             ~r/<svg aria-describedby="vis-[a-z0-9]+-desc" aria-labelledby="vis-[a-z0-9]+-title"/
+
+    assert page =~ ~s(<div class="vis-data-table" id="chart-data" style="position:absolute;)
+    assert page =~ "<strong>Text alternative:</strong> Line chart, 1 series (y) of 51 points."
+  end
+
+  test "on a canvas: the wrapper is the named image, described by the summary, and the layers are hidden" do
+    page = html("line", :canvas)
+
+    assert page =~
+             ~r/class="hybrid-wrapper" style="[^"]*" role="img" aria-label="Line Chart" aria-describedby="chart-access-summary"/
+
+    assert page =~ ~s{<p id="chart-access-summary" hidden>Line chart, 1 series (y) of 51 points.}
+    assert page =~ ~s(<svg aria-hidden="true")
+    assert page =~ ~s(phx-hook="KeyboardHook")
+  end
+end

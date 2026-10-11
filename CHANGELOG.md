@@ -83,6 +83,13 @@ release it merely follows.
   visually hidden and still read, for a page to place beside the chart. `attrs/2` and
   `description/2` name and describe whatever element stands for the chart — a canvas, or
   the wrapper of a hybrid chart's layers.
+- **A chart's points from the keyboard** (#558, D-142). `KeyboardHook`, the bundle's
+  eleventh hook, makes a chart one tab stop: the arrow keys move between its points and
+  its series, Home and End to a series' ends, a polite live region reads each point
+  (`y, 3 of 51: x 2, y 54.3`) and a ring marks it over the SVG or the canvas. Escape
+  hands focus back to an enclosing `data-vis-cell`, so a board can navigate its cells
+  around charts. `Visualize.Hooks.Keyboard.attrs/1` writes the points once on the server
+  from an applied chart; a series of more than 1,000 points is sampled evenly.
 - **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
   `time_format/2` picks a `Visualize.Format.time/2` specifier from a time domain's span and
   the interval its ticks use — `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,

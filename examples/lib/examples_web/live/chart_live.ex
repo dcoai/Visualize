@@ -588,12 +588,16 @@ defmodule ExamplesWeb.ChartLive do
   defp resized(socket), do: socket
 
   # The chart's text alternative at the still frame (spec/14 §21, #557): the summary that
-  # names the hybrid layers' wrapper and is shown under the chart, and the hidden data
-  # table that follows the chart for a screen reader.
+  # names the hybrid layers' wrapper and is shown under the chart, the hidden data table
+  # that follows the chart for a screen reader, and its points for the keyboard (#558).
   defp access(module, opts) do
     applied = Examples.Charts.Design.applied(module, opts)
     summary = Visualize.Chart.Summary.new(applied)
-    %{summary: summary, table: Visualize.Chart.Summary.table(applied, id: "chart-data")}
+    %{
+      summary: summary,
+      table: Visualize.Chart.Summary.table(applied, id: "chart-data"),
+      keyboard: Visualize.Hooks.Keyboard.attrs(applied)
+    }
   end
 
   # A chart that has not run is at rest; one that has stays at the run's tick.
@@ -950,6 +954,9 @@ defmodule ExamplesWeb.ChartLive do
           <%!-- One frame loop (spec/14 §12.6, #362): the run's frame while a run is going, the still one
                 otherwise — SVG whole, or the canvas under the compiled chart's static furniture. --%>
           <% {frame, state} = if(@run.running and @run_frame, do: {@run_frame, @run_state}, else: {@still_frame, @still_state}) %>
+          <%!-- The chart is one tab stop: the arrow keys move between its points and a live
+                region reads each one (spec/14 §21.5, #558). --%>
+          <div id="chart-keys" phx-hook="KeyboardHook" {if @still_access, do: @still_access.keyboard, else: %{}}>
           <%= cond do %>
             <% frame == nil -> %>
               <p class="chart-pending">rendering…</p>
@@ -996,6 +1003,7 @@ defmodule ExamplesWeb.ChartLive do
                 </div>
               </div>
           <% end %>
+          </div>
         </div>
         <%!-- The data-table fallback, visually hidden (spec/14 §21.3), and the summary shown
               for the reader who wants to see what a screen reader is told. --%>
