@@ -10,9 +10,9 @@ defmodule Visualize.Hooks.CanvasHooksTest do
 
   require Opcodes
 
-  @hooks ~w(ZoomHook BrushHook CanvasChart CanvasBinaryChart CanvasIncrementalChart ResizeHook TooltipHook CrosshairHook LegendHook BuilderHook KeyboardHook)
+  @hooks ~w(ZoomHook BrushHook CanvasChart CanvasBinaryChart CanvasIncrementalChart ResizeHook TooltipHook CrosshairHook LegendHook BuilderHook KeyboardHook BoardHook)
 
-  test "js_code/0 defines and exports the eleven hooks once each" do
+  test "js_code/0 defines and exports the twelve hooks once each" do
     js = Hooks.js_code()
 
     for hook <- @hooks do

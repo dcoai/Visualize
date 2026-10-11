@@ -251,7 +251,7 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, the sync bus `VisualizeSync` (`Visualize.Hooks.Sync.js_bus/0`, 4.3) — before every hook that uses it — `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, `KeyboardHook`, then one `export default { … }` object listing the eleven hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, the sync bus `VisualizeSync` (`Visualize.Hooks.Sync.js_bus/0`, 4.3) — before every hook that uses it — `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, `KeyboardHook`, `BoardHook`, then one `export default { … }` object listing the twelve hooks — each name is exported exactly once (D-40, D-48). |
 | `Visualize.Hooks.Sync.js_bus/0` | Returns the source of `const VisualizeSync = {…}`, the bus of 4.3 that `TooltipHook`, `CrosshairHook` and `BrushHook` share. It is not exported: it is the hooks' own, and a host joins a group through a design key, not through it. |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
@@ -371,6 +371,7 @@ Attach with `phx-hook="BrushHook"` and an `id` on an `<svg>`, or on a container 
 | `data-brush-type` | `"xy"` | `"xy"` rectangle; `"x"` horizontal band; `"y"` vertical band |
 | `data-brush-event` | `"brush_select"` | event pushed when a selection ends |
 | `data-brush-clear-event` | `"brush_clear"` | event pushed when the selection is cleared |
+| `data-brush-target` | unset | the `phx-target` both events are pushed to with `pushEventTo` — a LiveComponent's `@myself`, as a board's cell names its board (spec/15 §9.2); unset, they go to the LiveView with `pushEvent` |
 | `data-brush-extent` | unset | `"x0,y0,x1,y1"`: clamps pointer positions and sizes the capture area; also supplies the full-height/width edges for 1-D brushes |
 | `data-brush-color` | `"rgba(119, 119, 119, 0.2)"` | selection rectangle fill |
 | `data-brush-stroke` | `"#666"` | selection rectangle stroke |
@@ -379,7 +380,7 @@ On mount the hook finds or appends a `<g class="brush-overlay">`, inserts into i
 
 Coordinates are in the SVG's user coordinate system (`getScreenCTM().inverse()`), i.e. `viewBox` units — equal to CSS pixels only when the `viewBox` matches the rendered size. A brush starts on left-button mousedown or single-touch start on the capture rect; while brushing, `x1`/`y1` follow the pointer (`"x"` keeps `y0/y1` at the extent's edges, `"y"` keeps `x0/x1`). On release the selection is normalised so `x0 ≤ x1` and `y0 ≤ y1`; if either side exceeds 5 units it is pushed as `pushEvent(selectEvent, {x0, y0, x1, y1})` — with `domain` too in a sync group (6.4) or under a design's brush (6.5) — otherwise the gesture is treated as a click and cleared. Double-click on the capture rect clears. Clearing hides the rectangle and pushes `pushEvent(clearEvent, {})`.
 
-On `updated()` the hook re-reads its sync group (6.4), then reads `data-selection-x0`, `-y0`, `-x1`, `-y1`; when all four parse it shows that selection (server-driven selection), without publishing it; else if `data-selection-clear="true"` it clears.
+On `updated()` the hook first finds its `<svg>` again: a server that redraws the chart replaces the `<svg>` or its children, which removes the overlay the hook drew there, so the hook takes the container's present `<svg>` and appends its overlay to it again when the overlay is no longer inside it. The capture rect, the selection and the listeners are the same elements, carried over (spec/15 §9.1, D-146). It then re-reads its sync group (6.4), then reads `data-selection-x0`, `-y0`, `-x1`, `-y1`; when all four parse it shows that selection (server-driven selection), without publishing it; else if `data-selection-clear="true"` it clears.
 
 Events arrive as `handle_event("brush_select", %{"x0" => x0, "y0" => y0, "x1" => x1, "y1" => y1}, socket)` and `handle_event("brush_clear", %{}, socket)`. `mounted()` binds each handler once and stores the bound function on the hook (`onMouseDown`, `onMouseMove`, `onMouseUp`, `onTouchStart`, `onTouchMove`, `onTouchEnd`, `onClear`, and `onSync`, the bus listener of 6.4) before adding it as a listener, and `destroyed()` removes the four `document` listeners (`mousemove`, `mouseup`, `touchmove`, `touchend`) with those same references, and the bus listener (`VisualizeSync.detach`), so nothing outlives the element; the capture rect's own listeners are discarded with it (D-47). `test/visualize/hooks/brush_test.exs` holds the source to this shape.
 
@@ -795,3 +796,27 @@ On `mounted()` the hook makes the container focusable — `tabindex="0"` — and
 - **blur** hides the marker and keeps the point, so focus coming back resumes there.
 
 `destroyed()` removes the three listeners with the kept references and the two elements it appended. `test/visualize/hooks/keyboard_test.exs` executes it under the harness of spec/12 §6.
+
+## 18. Visualize.Hooks.Board
+
+**Implemented** (#575, D-146). The container of a live board (spec/15 §9): it tells the board's component how wide the board is, and it moves focus across the board's cells (spec/14 §21.5).
+
+### 18.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.Board.js_hook/0` | Returns the source of `export const BoardHook = {…}` (18.2). |
+
+### 18.2 `BoardHook` behaviour
+
+Attach with `phx-hook="BoardHook"` and an `id` on the board's container. The cells are its descendants carrying `data-vis-cell`, and their order in the document is their reading order. Data attributes, read on `mounted()`:
+
+| Attribute | Default | Meaning |
+|---|---|---|
+| `data-board-event` | `"resize"` | the event pushed with `{width}` |
+| `data-board-debounce` | `150` | milliseconds the width must hold before it is pushed |
+
+- **The width.** On `mounted()` the hook pushes the container's width: its bounding rectangle's, rounded, else its `offsetWidth`. Where the browser has `ResizeObserver`, it observes the container and pushes the width again once it has held for the debounce period. A width that is not positive, or the same as the last pushed, is not pushed. The push is `pushEventTo(this.el, event, {width})`, so it reaches the LiveComponent that rendered the container. A page with the board's component handles nothing.
+- **The cells.** One `keydown` listener on the container acts only when the event's target is a cell itself (`data-vis-cell`). A key pressed inside a chart bubbles up with the chart's element as its target and is left to the chart's own hook. **ArrowRight** and **ArrowDown** move focus to the next cell, **ArrowLeft** and **ArrowUp** to the previous one, each stopping at the ends. **Home** and **End** move to the first and the last cell, and **Enter** moves focus to the cell's first descendant carrying a `tabindex`, its chart's `KeyboardHook` container. Each calls `preventDefault()`. **Tab** is never handled, so a cell stays one stop in the page's order. **Escape** inside a chart is `KeyboardHook`'s, which moves focus back to the nearest `data-vis-cell` (17.3).
+
+`destroyed()` removes the listener with the kept reference, disconnects the observer and clears a pending push. `test/visualize/hooks/board_test.exs` executes it under the harness of spec/12 §6, over cells carrying `data-vis-cell`.

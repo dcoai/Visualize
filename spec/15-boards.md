@@ -427,3 +427,67 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 | `Visualize.Board.State.of/3` | `of(slots, now, stale_after)`: the state of a cell's slots at now, each slot `%{delivery, schema, status}` (§8.4). |
 | `Visualize.Board.Rows.place/2` | `place(delivery, schema)`: the delivery's rows in time order with a break row in every gap wider than a field's `continuity` (§8.5). |
 | `Visualize.Board.Rows.seconds/1` | A time in seconds, as §8.5 measures a gap; `nil` for a value that is no time. |
+
+## 9. The board in LiveView
+
+**Implemented** (#540, #575, D-146). `Visualize.Components.Board` draws a running board (§8) in a LiveView page: the grid, its cells, and the hooks that make them interactive. Like the library's other components it compiles only when `Phoenix.Component` is loaded (spec/10 §2, D-45).
+
+### 9.1 The components
+
+`Visualize.Components.Board` is a `Phoenix.LiveComponent`:
+
+```heex
+<.live_component module={Visualize.Components.Board} id="ops" server={@board} board={@board_value} />
+```
+
+| Assign | Default | Meaning |
+|---|---|---|
+| `id` | required | the component's id, the board's DOM id and the prefix of its cells' |
+| `server` | required | the board process, a pid or a registered name |
+| `board` | required | the `%Visualize.Board{}` the process runs: its cells, titles, layout and window |
+| `theme` | `Visualize.Theme.default/0` | the theme a cell is drawn in before its first view |
+| `title` | the board's `meta.name` | the board's heading |
+| `width` | `1200` | the width the grid is arranged at until `BoardHook` pushes one |
+
+It renders a `<section phx-hook="BoardHook">` holding a header and the grid. **The header** names the board and shows the window **in the board's zone** (§1.5): the window the board process resolved in UTC, each end shifted into the zone by the host's time-zone database and written `YYYY-MM-DD HH:MM:SS`, followed by the zone's name. **The grid** is a CSS grid of 12 equal columns, rows `row_height` high and `gap` apart (§1.6, `Visualize.Board.layout/1`), and each cell is placed with `grid-column` and `grid-row` at its arrangement for the container's width (`Visualize.Board.arrange/2`). **Below the breakpoint the cells reflow** as §1.6 says, stacked full width in reading order, and the section carries the class `vis-board-stacked`. The width is the one the board's hook last pushed (§9.3), or the board process's own width once the page subscribes, and the `width` assign before either.
+
+**Each cell is its own `Visualize.Components.Board.Cell`**, a `Phoenix.LiveComponent` with the id `"<board id>-<cell>"` (`cell_id/2`). A view (§8.3) updates one cell's component, so **the diff a frame costs is that cell's alone**: its SVG and its hooks' attributes, never the grid or another cell. A cell renders an `<article>`:
+
+- carrying `data-vis-cell` (the cell's name), `data-vis-state` (its state's name, `Visualize.Board.State.name/1`), `tabindex="0"`, `role="group"` and an `aria-label` of the cell's title and, when it is not live, its state's words, so **a cell is one tab stop** (spec/14 §21.5);
+- holding its title, when it has one, as a heading;
+- when the view has a chart, the chart inside three nested hook elements: `CrosshairHook` with the view's crosshair attributes, which shares hover across the board's sync group; `BrushHook` with `data-brush-type="x"`, `data-brush-event="brush"` and `data-brush-target` naming the board's component; and `KeyboardHook` with the view's keyboard attributes and `tabindex="-1"`, so the chart is reached through its cell (§9.3) rather than as a second tab stop;
+- the view's `note` (§8.3): above the chart as a banner when there is a chart, alone when there is not. **A cell is never blank.** Before its first view it draws `:loading` from `theme`.
+
+### 9.2 The page's part
+
+The component runs in the page's process. Once the page is connected, the component subscribes **that process** to the board (`Visualize.Board.Server.subscribe/2`), once, so the board's messages arrive at the page. The page hands them on with one clause:
+
+```elixir
+def handle_info({:visualize_board, _board, _message} = message, socket) do
+  Visualize.Components.Board.forward("ops", message)
+  {:noreply, socket}
+end
+```
+
+`forward(id, message)` sends a cell's view to that cell's component (`send_update/2`), and the board's window, zone and width to the board's. It answers `:ignore` for any other message. When the page's process exits, the board drops the subscriber, since it monitors every subscriber (§8.2).
+
+**The hooks' pushes come to the component, not to the page.** `BoardHook` pushes the container's width with `pushEventTo` its own element, and each cell's `BrushHook` pushes to the component that `data-brush-target` names. The component turns them into calls on the board process:
+
+| Event | Becomes |
+|---|---|
+| `resize` `{width}` | `Visualize.Board.Server.resize/2`: every cell drawn at its new box, and the grid arranged at the width |
+| `brush` `{domain: [from, to]}` | `Visualize.Board.Server.window/2` with `%{from, to}`, the domain read as milliseconds since the Unix epoch (a time `x`'s, spec/10 §6.4): the board's window, and every feed re-asked |
+| `brush_clear` | `Visualize.Board.Server.window/2` with the `board` assign's own window: the brush cleared restores the board as it was given |
+
+A brush without a domain, which is a chart in no sync group and with no design brush, changes nothing. So the page holds no event of the board's, no margin and no scale.
+
+### 9.3 Keyboard and focus
+
+The order across cells is the board's (spec/14 §21.5, D-142). `BoardHook` (spec/10 §18) acts on a key whose target is a cell. The arrow keys move focus to the next and the previous cell in reading order, which is the order the cells are rendered in. Home and End move to the first and the last cell, and Enter moves focus into the cell's chart. A key pressed inside a chart is the chart's, and Escape there hands focus back to its cell (`KeyboardHook`, spec/10 §17.3).
+
+### 9.4 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Components.Board.cell_id/2` | `cell_id(board_id, cell)`: a cell's component and DOM id, `"<board_id>-<cell>"`. |
+| `Visualize.Components.Board.forward/2` | `forward(id, message)`: a board process's message handed to the board's component or a cell's (§9.2); `:ignore` for any other message. |
