@@ -119,6 +119,29 @@ defmodule Visualize.Axis do
   end
 
   @doc """
+  The tick-count hint an axis `length` pixels long asks for on a side (spec/05 §1.5):
+  one tick per 80 px across a `:top` or `:bottom` axis, per 35 px down a `:left` or
+  `:right` one (Observable Plot's spacing), at least 2 and at most 10.
+
+  A pure function rather than a default: `ticks/2` stays d3's ten unless given this.
+
+      iex> Visualize.Axis.tick_count(600, :bottom)
+      7
+
+      iex> Visualize.Axis.tick_count(300, :left)
+      8
+
+  """
+  @spec tick_count(number(), orientation()) :: pos_integer()
+  def tick_count(length, orient) when is_number(length) and orient in [:top, :bottom],
+    do: count(length, 80)
+
+  def tick_count(length, orient) when is_number(length) and orient in [:left, :right],
+    do: count(length, 35)
+
+  defp count(length, spacing), do: (abs(length) / spacing) |> trunc() |> max(2) |> min(10)
+
+  @doc """
   Generates the axis as an IR Element tree.
 
   Returns a group element containing the domain line and tick groups.

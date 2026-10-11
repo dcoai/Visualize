@@ -10,10 +10,12 @@ defmodule Visualize.ComponentsTest do
   pie's labels. Those were retired from the equivalence by #494 (D-123): the old labels were
   inked `:background`, white at 2.0:1 on `:category10`'s olive, and that output was the
   defect, so the golden records the labels the preset now fits (`:hide`) and inks
-  `:contrast`, after the slices. Every other byte — the shell, every path, the donut, the
-  empty case — is still the old component's, and a test below holds that the pie's golden,
-  labels aside, is the label-less component's. Regenerate only when a component's output
-  changes on purpose:
+  `:contrast`, after the slices. The axes left it with D-134 (#532): an axis without a
+  format or a count derives them, so a time axis reads `03:00` where the old component
+  printed `2024-01-01 03:00:00Z`, and a 540 px x axis carries six ticks, not eleven. Every
+  other byte — the shell, every path, the donut — is still the old component's, and a test
+  below holds that the pie's golden, labels aside, is the label-less component's.
+  Regenerate only when a component's output changes on purpose:
 
       mix run -e 'Visualize.ComponentsTest.write!()'
   """

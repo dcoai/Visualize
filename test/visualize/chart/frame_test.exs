@@ -235,7 +235,8 @@ defmodule Visualize.Chart.FrameTest do
       full =
         polar_svg(%{angle: %{kind: :linear}, r: %{kind: :linear}}, [
           %{scale: :angle, side: :bottom, ticks: 2},
-          %{scale: :r, side: :top, grid: true}
+          # Ten ticks, as before the count was derived (D-134), so one lands on R.
+          %{scale: :r, side: :top, ticks: 10, grid: true}
         ])
 
       assert full =~ ~s|<circle cx="0" cy="0" r="150.0" stroke=|
@@ -355,7 +356,7 @@ defmodule Visualize.Chart.FrameTest do
       assert Frame.scales(frame) == %{y: replaced}
     end
 
-    test "an axis's explicit tick values beat its count, which beats the default" do
+    test "an axis's explicit tick values beat its count, which beats the derived count" do
       axes = fn ticks -> [%{scale: :x, side: :bottom, ticks: ticks}] end
 
       count = fn frame ->
@@ -375,7 +376,7 @@ defmodule Visualize.Chart.FrameTest do
 
       assert count.(
                Frame.new(chart(Map.put(base, :axes, [%{scale: :x, side: :bottom}])), size: @size)
-             ) == 11
+             ) == 3
     end
   end
 
@@ -802,6 +803,137 @@ defmodule Visualize.Chart.FrameTest do
 
       refute svg =~ "<defs>"
       refute svg =~ "mix-blend-mode"
+    end
+  end
+
+  describe "derived axis defaults (§4.4, D-134)" do
+    defp labels(svg) do
+      ~r/<text[^>]*>([^<]*)<\/text>/ |> Regex.scan(svg) |> Enum.map(&List.last/1)
+    end
+
+    defp time_axis(rows, axis, size \\ {600, 300}) do
+      %{
+        version: 2,
+        sources: %{primary: %{fields: [:t, :v]}},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            margin: %{top: 0, right: 0, bottom: 30, left: 0},
+            scales: %{x: %{kind: :time}, y: %{kind: :linear}},
+            axes: [Map.merge(%{scale: :x, side: :bottom}, axis)]
+          }
+        },
+        marks: [line(%{x: :t, y: :v})]
+      }
+      |> Chart.from_map!()
+      |> Frame.new(sources: %{primary: rows}, size: size)
+      |> Frame.render()
+      |> labels()
+    end
+
+    defp rows_over(seconds),
+      do: [%{t: @t0, v: 0}, %{t: DateTime.add(@t0, seconds, :second), v: 1}]
+
+    test "a time axis reads its span: clock, weekday, date, month" do
+      assert time_axis(rows_over(2 * 3600), %{}) |> hd() == "00:00"
+      assert time_axis(rows_over(3 * 86_400), %{}) |> hd() == "Mon 00:00"
+      assert time_axis(rows_over(61 * 86_400), %{}) |> hd() == "Jan 01"
+      assert time_axis(rows_over(730 * 86_400), %{}) |> hd() == "Jan 2024"
+    end
+
+    test "a numeric axis reads its magnitude: plain, grouped, one SI prefix" do
+      numbers = fn hi ->
+        %{
+          version: 2,
+          sources: %{primary: %{fields: [:n]}},
+          frames: %{
+            main: %{
+              kind: :cartesian,
+              scales: %{y: %{kind: :linear, domain: [0, hi]}},
+              axes: [%{scale: :y, side: :left}]
+            }
+          }
+        }
+        |> Chart.from_map!()
+        |> Frame.new(size: {300, 300})
+        |> Frame.render()
+        |> labels()
+      end
+
+      assert numbers.(900) |> List.last() == "900"
+      assert numbers.(90_000) |> List.last() == "90,000"
+      assert numbers.(9_000_000) == ~w(0 1M 2M 3M 4M 5M 6M 7M 8M 9M)
+      assert numbers.(2_500_000) == ~w(0 0.5M 1M 1.5M 2M 2.5M)
+    end
+
+    test "the count grows with the axis's length and is capped" do
+      counts =
+        for width <- [200, 400, 800, 1600],
+            do: length(time_axis(rows_over(86_400), %{}, {width, 300}))
+
+      assert counts == Enum.sort(counts)
+      assert hd(counts) < List.last(counts)
+      assert List.last(counts) <= 13
+    end
+
+    test "an explicit format and count win" do
+      rows = rows_over(2 * 3600)
+      assert time_axis(rows, %{format: "%H"}) |> hd() == "00"
+      assert length(time_axis(rows, %{ticks: 2})) == 3
+      assert length(time_axis(rows, %{ticks: %{count: 2, size_inner: 0}})) == 3
+      assert time_axis(rows, %{ticks: [@t0]}) == ["00:00"]
+      # A ticks node without a count keeps the derived count.
+      assert time_axis(rows, %{ticks: %{size_inner: 0}}) == time_axis(rows, %{})
+    end
+
+    test "prefix and unit wrap the derived label" do
+      design = %{
+        version: 2,
+        sources: %{primary: %{fields: [:n]}},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{y: %{kind: :linear, domain: [0, 3_000_000]}},
+            axes: [%{scale: :y, side: :left, prefix: "$", unit: "/yr"}]
+          }
+        }
+      }
+
+      assert "$3M/yr" in (design
+                          |> Chart.from_map!()
+                          |> Frame.new(size: {300, 300})
+                          |> Frame.render()
+                          |> labels())
+    end
+
+    test "a derived axis is the hand-built axis given the derived count and format" do
+      design = %{
+        version: 2,
+        sources: %{primary: %{fields: [:t, :v]}},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            margin: %{top: 0, right: 0, bottom: 0, left: 0},
+            scales: %{x: %{kind: :time}},
+            axes: [%{scale: :x, side: :bottom}]
+          }
+        },
+        marks: [line(%{x: :t, y: :v})]
+      }
+
+      frame = Frame.new(Chart.from_map!(design), sources: %{primary: @rows}, size: {500, 100})
+      scale = Frame.scale(frame, :x)
+      count = Axis.tick_count(500, :bottom)
+
+      hand =
+        Axis.bottom(scale)
+        |> Axis.theme(Theme.default())
+        |> Axis.ticks(count)
+        |> Axis.tick_format(Visualize.Format.Auto.formatter(scale, count: count))
+        |> Axis.generate()
+
+      assert Render.to_string(hand) =~ ">01:00<"
+      assert Frame.render(frame) =~ Render.to_string(hand)
     end
   end
 

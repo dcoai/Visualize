@@ -15,6 +15,33 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.2.36-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Added
+
+- **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
+  `time_format/2` picks a `Visualize.Format.time/2` specifier from a time domain's span and
+  the interval its ticks use — `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,
+  `%b %d` within 92 days, `%b %Y` (or `%Y`) beyond. `notation/2` reads a numeric domain's
+  magnitude — `:plain` below 1,000, `:grouped` below a million, `{:si, 6}` and up beyond —
+  and `number/2` turns a notation into a formatter (`90,000`; `0.5M, 1M, 1.5M`, one prefix
+  for the whole axis). `formatter/2` does both for a realised scale. Every function takes
+  `locale:`, `"en"` by default and the only locale for now; another raises.
+- **`Visualize.Axis.tick_count/2`** (#532): the tick count an axis of a given length asks
+  for — one per 80 px across, per 35 px down, between 2 and 10.
+
+### Changed
+
+- **A design's axis without a `format` or a tick count derives them** (#532, D-134). The
+  count comes from the axis's length and the format from its scale's domain, recomputed on
+  every realisation, so a time axis reads `03:00` or `Mar 05` instead of
+  `2024-03-05 03:00:00Z`, an axis over thousands is grouped and one over millions carries an
+  SI prefix, and a streaming window's axis changes format as its span changes. A host no
+  longer computes these and passes them in as variables (or passes the width into binding to
+  do it). An explicit `format`, count or list of values still wins. **What you may see:** an
+  axis shorter than 800 px across or 350 px down now draws fewer than ten ticks — set
+  `ticks: 10` to keep them; a numeric axis over years (`1990..2020`) is now grouped
+  (`1,990`) — set `format: "d"`; and `unit: "M"` over values from 1,000 reads `1,200M`. The
+  hand-built `Visualize.Axis` is unchanged: d3's ten ticks and its default label.
+
 ## [0.2.35] — 2026-10-10
 
 ### Changed

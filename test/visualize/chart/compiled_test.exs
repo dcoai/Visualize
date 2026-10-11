@@ -805,10 +805,19 @@ defmodule Visualize.Chart.CompiledTest do
       # rows before it are held in slots, not rebuilt as a list per row, and on a scroll
       # the strip is at the leading edge so that was very nearly every row. Counted in
       # reductions, not timed (spec/12 §6, D-114): a timed ratio flakes under load.
+      # The axis keeps the ten ticks every axis drew when the bound was set: a 100 px axis
+      # now derives two (D-134), which takes ~14k reductions off the small tick and ~8k off
+      # the large, so the same strip would read as a worse ratio of a smaller whole.
       cost = fn span, rows ->
         design = %{
           @stream
-          | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: span}}}
+          | frames: %{
+              main: %{
+                @stream.frames.main
+                | viewport: %{scale: :x, span: span},
+                  axes: [%{scale: :x, side: :bottom, ticks: 10}]
+              }
+            }
         }
 
         compiled = compile!(design, size: {140, 100}, sources: %{primary: rows})
@@ -1099,6 +1108,72 @@ defmodule Visualize.Chart.CompiledTest do
       assert compiled.viewport.hi == DateTime.add(@t0, 300, :second)
       assert payload.incremental == nil
       assert payload.svg =~ "mark-line"
+    end
+
+    test "a moving time axis re-derives its format from the span each tick draws (D-134)" do
+      design =
+        @stream
+        |> put_in([:frames, :main, :scales, :x], %{kind: :time})
+        |> put_in([:frames, :main, :margin], %{top: 0, right: 0, bottom: 20, left: 0})
+        |> put_in([:marks], [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}])
+
+      labels = fn payload ->
+        ~r/<text[^>]*>([^<]*)<\/text>/
+        |> Regex.scan(payload.svg)
+        |> Enum.map(&List.last/1)
+        |> tap(&assert(&1 != []))
+      end
+
+      rows = fn step -> for i <- 0..48, do: %{t: DateTime.add(@t0, i * step, :second), v: 1} end
+
+      # Two hours windowed out of four: clock times.
+      design = put_in(design, [:frames, :main, :viewport, :span], 2 * 3600)
+      compiled = compile!(design, size: {600, 100}, sources: %{primary: rows.(300)})
+      {hours, compiled} = Compiled.tick(compiled, %{primary: rows.(300)})
+      assert Enum.all?(labels.(hours), &(&1 =~ ~r/^\d\d:\d\d$/))
+
+      # The same chart over rows a day apart scrolls to a window of the same span, still
+      # clock times; the span is the window's, not the data's.
+      {later, _} = Compiled.tick(compiled, %{primary: rows.(86_400)})
+      assert Enum.all?(labels.(later), &(&1 =~ ~r/^\d\d:\d\d$/))
+
+      # A three-day window over the same rows: weekdays.
+      wide = put_in(design, [:frames, :main, :viewport, :span], 3 * 86_400)
+      compiled = compile!(wide, size: {600, 100}, sources: %{primary: rows.(3600)})
+      {days, _} = Compiled.tick(compiled, %{primary: rows.(3600)})
+      assert Enum.all?(labels.(days), &(&1 =~ ~r/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) /))
+    end
+
+    test "an inferred time axis follows its domain as the rows grow (D-134)" do
+      design = %{
+        version: 2,
+        sources: %{primary: %{fields: [:t, :v]}},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :time}, y: %{kind: :linear, domain: [0, 10]}},
+            axes: [%{scale: :x, side: :bottom}]
+          }
+        },
+        marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
+      }
+
+      rows = fn hours ->
+        for h <- 0..hours, do: %{t: DateTime.add(@t0, h * 3600, :second), v: 1}
+      end
+
+      first = fn svg -> ~r/<text[^>]*>([^<]*)<\/text>/ |> Regex.run(svg) |> List.last() end
+
+      compiled = compile!(design, size: {600, 200}, sources: %{primary: rows.(2)})
+      assert {{:axis, 0}, {:inferred, [:x]}} in Compiled.dynamic_regions(compiled)
+
+      {two_hours, compiled} = Compiled.tick(compiled, %{primary: rows.(2)})
+      {four_days, compiled} = Compiled.tick(compiled, %{primary: rows.(96)})
+      {two_months, _} = Compiled.tick(compiled, %{primary: rows.(24 * 60)})
+
+      assert first.(two_hours.svg) == "00:00"
+      assert first.(four_days.svg) =~ ~r/^Tue \d\d/
+      assert first.(two_months.svg) =~ ~r/^Sep \d\d$/
     end
   end
 
