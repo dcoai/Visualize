@@ -2031,7 +2031,7 @@ One assign is not like the others. `layers` is the thing the builder *edits* —
 
 It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every module of the builder is wrapped in `if Code.ensure_loaded?(Phoenix.Component)`, `phoenix_live_view` stays an optional dependency of this library, and `scripts/consumer_check.exs` asserts that `Visualize.Chart.Builder` is absent from a consumer that does not have LiveView, beside the assertions it already makes for the components. An application that renders predefined charts never compiles a line of it.
 
-**The component is one entry and modules by area** (#568). `builder.ex` keeps the LiveComponent's callbacks — `mount/1`, `update/2`, `render/1` — and one `handle_event/3`, which routes each event by its name to the module of its area; an event two modules claim is a compile error. The areas are internal modules (`@moduledoc false`, every function `@doc false`, so none is public surface, spec/12 §2): what the render reads, derived in one pass (`Visualize.Chart.Builder.Editing.editing/1`); the layer tree's rows (`Builder.Tree`); what is selected (`Builder.Selection`); the write path and the ownership rule (`Builder.Writes`, §18.15); the workspace of charts and the store as the builder reaches it (`Builder.Workspace`, §19.9); and the events of the library and the message, the charts, the strip and inspector, the data page, the layer tree, the form, the variables and the graph (`Builder.Events.*`). **A mode is a module listed in `Builder.Modes`** — today the theme mode, `Builder.ThemeMode` (§20) — with `events/0`, `handle_event/3` and `assigns/3`, the render's assigns for the mode, keyed by it and `nil` while it is off; adding a mode adds its module there and reads its key in the render, and nothing else in the builder changes.
+**The component is one entry and modules by area** (#568). `builder.ex` keeps the LiveComponent's callbacks — `mount/1`, `update/2`, `render/1` — and one `handle_event/3`, which routes each event by its name to the module of its area; an event two modules claim is a compile error. The areas are internal modules (`@moduledoc false`, every function `@doc false`, so none is public surface, spec/12 §2): what the render reads, derived in one pass (`Visualize.Chart.Builder.Editing.editing/1`); the layer tree's rows (`Builder.Tree`); what is selected (`Builder.Selection`); the write path and the ownership rule (`Builder.Writes`, §18.15); the workspace of charts and the store as the builder reaches it (`Builder.Workspace`, §19.9); and the events of the library and the message, the charts, the strip and inspector, the data page, the layer tree, the form, the variables and the graph (`Builder.Events.*`). **A mode is a module listed in `Builder.Modes`** — the theme mode, `Builder.ThemeMode` (§20), and the board mode, `Builder.BoardMode` (§22) — with `events/0`, `handle_event/3` and `assigns/3`, the render's assigns for the mode, keyed by it and `nil` while it is off; adding a mode adds its module there and reads its key in the render, and nothing else in the builder changes.
 
 ### 18.2 Assigns and the message
 
@@ -2765,7 +2765,7 @@ A library item has two independent axes, and the library is browsed by either.
 
 **Group and sub-group are stored, subjective, and orthogonal** — the person's own filing, free to gather dissimilar kinds under one heading. They remain in the entry's name as `<group>:<sub-group>:<name>` (§18.16, D-97), which is now an attribute of the entry and not a key anything references.
 
-Two views over one store: by kind, or by group. **Empty kinds are shown** — a `Scale` heading with nothing under it says the library holds no scale yet, which is information, where an absent heading is indistinguishable from a bug. The kinds a library item is usually one of — composite, design, theme, style, frame, scale, axis, source, var, mark, label — are always shown, empty or not; any other kind appears when an entry has it. **Group is the default view**, kind a click away.
+Two views over one store: by kind, or by group. **Empty kinds are shown** — a `Scale` heading with nothing under it says the library holds no scale yet, which is information, where an absent heading is indistinguishable from a bug. The kinds a library item is usually one of — composite, design, theme, board, style, frame, scale, axis, source, var, mark, label — are always shown, empty or not; any other kind appears when an entry has it. **Group is the default view**, kind a click away.
 
 | Function | Contract |
 |---|---|
@@ -3141,3 +3141,77 @@ The gallery's chart page compiles with `motion: :reduce` while its `ResizeHook` 
 | `Visualize.Chart.Summary.table/2` | `table(applied, opts)`: the data-table fallback as an HTML string (§21.3). |
 | `Visualize.Chart.Summary.attrs/2` | `attrs(summary, id)`: the attributes that make an element stand for the chart (§21.4). |
 | `Visualize.Chart.Summary.description/2` | `description(summary, id)`: the hidden `<p>` `attrs/2` points `aria-describedby` at (§21.4). |
+
+## 22. The board mode
+
+**Implemented** (#544, #579, D-152). A board ([15-boards](15-boards.md)) is a dashboard as data: cells on a 12-column grid, each a reference to a composite of the store, sharing a window, variables and a sync group. The builder edits one in its **board mode**, the shape the editor takes when the open chart is a board, as the theme mode is its shape for a theme (§20, §19.9). The mode is `Visualize.Chart.Builder.BoardMode`, one entry of `Builder.Modes` (§18.1).
+
+### 22.1 A board is a library entry
+
+**A board is a kind of fragment, `:board`**, stored as the singular wrapper `%{board: map}` whose body is the board's map form ([15-boards](15-boards.md) §2.1): every key, `version` included. So a board is versioned by its own `version`, as a theme document is (D-139), and read back by `Visualize.Board.from_map/2`, which gates the version before anything else and applies the limits ([15-boards](15-boards.md) §2.3). `Visualize.Chart.Fragment.kind/1` of the wrapper is `:board`; `Visualize.Chart.Fragment.kinds/0` holds it, so the store issues `{:board, n}` ids and `Visualize.Chart.Builder.Store.decode_id/1` reads `"board:3"`.
+
+- **Per-kind validity** (§19.8) of a board is its reader: `Visualize.Chart.Validator.validate(%{board: map}, :board)` is every fault of `Visualize.Board.from_map/2`, each under `[:board | path]`, so *Save to library* refuses a board that does not read, with the board's own words. A board's faults **given the store** — a dangling component, an undeclared cell variable, a cell that cannot join the group ([15-boards](15-boards.md) §3.2) — are shown in the mode (§22.5) and do not block a save: a board names entries the person may be about to create.
+- **The JSON form.** `Visualize.Chart.Fragment.to_json/1` writes a board fragment as `{"$version": v, "board": {…}}`, the board's body in its own JSON form ([15-boards](15-boards.md) §2.2) — a component as `{"$id": …}`, a window's time as `{"$time": …}` — with its `"$version"` stamp inside the `board` object. `Visualize.Chart.Fragment.from_json/2` reads it back through the board's codec, gating that inner stamp as it gates the outer one, so `from_json(to_json(f))` is `f` for a board as for every other fragment, and a host that keeps its library as JSON keeps its boards the same way.
+- **A bundle of a board entry carries its components.** The cells' refs are ids inside the fragment, so `Visualize.Chart.Builder.Bundle.export/3` of a board entry takes their closure (§19.7) and a store's `import/2` re-keys them through its table: the imported board names the imported components. `Bundle.export_board/3` and `import_board/3` ([15-boards](15-boards.md) §11) are unchanged: they carry a board that lives outside the store.
+- **A board is shown, never composed.** It is not a part of a chart: dropping a board entry into a stack is refused by name, as a wrong kind is (§18.17), and a board is never a use site's `ref`.
+- **The library shows it.** `Board` is one of the kinds always shown in the kind view (§19.8), and *New* offers `board`, which opens an empty board — no cells, the defaults of [15-boards](15-boards.md) §1.2 — in the mode.
+
+### 22.2 Entering the mode
+
+The mode is on while the selected chart is a board — its `open` kind is `:board` — and off otherwise. A chart becomes a board by **opening a board entry** of the library, which reads its body through `Visualize.Board.from_map/2` and opens the board, so *Save to library* writes the entry back; an entry that does not read is not opened, and the notice names its faults. Or by ***New → board***. A board chart holds the `%Visualize.Board{}` being edited, not a stack of uses: it has no layers to show, so its row in the *Charts* panel offers no **+**, and *Save*, *Theme* and *Deploy*, which are a composite's, are not on its chart bar.
+
+**Every edit keeps the board valid alone.** Each write of the mode builds the board it would make and validates it alone ([15-boards](15-boards.md) §3.1); a board with a fault is not written, and the notice names the fault in the board's words (`Visualize.Board.format_error/1`). So the board the mode holds always reads, and what *Save to library* stores always opens again.
+
+### 22.3 The grid: placing and resizing cells
+
+In the mode the main column is the **grid** (`Visualize.Chart.Builder.BoardGrid.grid/1`): `<div class="vis-builder-board-grid">`, a CSS grid of 12 equal columns, rows the board's `row_height` high and `gap` apart (`Visualize.Board.layout/1`), the arithmetic of [15-boards](15-boards.md) §1.6. Each cell is an `<article class="vis-builder-board-cell">` placed with `grid-column` and `grid-row` at its `x`, `y`, `w` and `h`, carrying `data-board-cell` (its name) and `data-board-x`, `-y`, `-w` and `-h`, `tabindex="0"` and an `aria-label` of its title and its rectangle. It shows its title (else its name), its component's name, its preview (§22.6), and three **handles**, `<span data-board-handle>` of `e`, `s` and `se`, on its right edge, its bottom edge and its corner. A click selects the cell (`board_select`).
+
+**The hook moves; the server places.** `BuilderHook` in scope `board` ([10-liveview-integration](10-liveview-integration.md) §16.3) drags a cell by its body and resizes it by a handle, showing the rectangle it would take as the pointer moves, and pushes `board_place` with `{cell, x, y, w, h}` when it is released. The server is the authority: `Visualize.Chart.Builder.Boards.place/3` writes the rectangle and validates the board, and refuses — leaving the cell where it was, with the notice — a cell that runs off the grid (`{:off_grid, 12}`), one that overlaps another (`{:overlap, other}`), or a rectangle whose keys are not integers of the right sign. So whatever a client sends, the board holds no overlap and nothing off the grid. With a cell focused, the arrow keys move it by one square and Shift with an arrow resizes it by one, through the same push.
+
+**Adding and removing.** *Add a cell* (`board_add`, a select of the store's composites) places a new cell, 4 columns by 2 rows, at the **first free place in reading order** (`Visualize.Chart.Builder.Boards.free/3`): the first row, then the first column, where a 4-by-2 rectangle overlaps nothing; it is named `cell_<n>`, the least `n` no cell has, since a cell's name is its identity and the builder makes no atom of a person's text. Its component is the chosen composite. With no composite in the store there is nothing to add, and the form says so. *Remove* (`board_remove`) removes the selected cell.
+
+**The reflow is shown.** *Wide* and *narrow* (`board_view`) switch the grid between the placement and the board **below its breakpoint**: the cells as `Visualize.Board.arrange/2` stacks them at a width of `breakpoint − 1`, in reading order, each across all 12 columns, in a column as narrow as a phone's, with the sentence *below <breakpoint> px the cells stack in reading order*. The narrow view is a view: its cells carry no handles and are not dragged, and the placement is edited in the wide one.
+
+### 22.4 The cell and the board
+
+In the mode the inspector (`context` `:inspect`) is `Visualize.Chart.Builder.Boards.panel/1` in place of the node's form: one `<form class="vis-builder-board">` per part, each a `<fieldset class="vis-builder-board-section">` with its word as the legend:
+
+| Section | Controls | Writes |
+|---|---|---|
+| *cell* — the selected one | its title; its component, a select of the store's composites; *joins the sync group*, a checkbox; one text box per variable its component declares; *Edit component*; *Remove* | the cell's `title`, `ref`, `sync` and `vars` |
+| *add a cell* | a select of the store's composites and *Add* | a new cell (§22.3) |
+| *board* | the name and the description | `meta` |
+| *window* | *none*, *last* or *fixed*; the seconds of *last*; the UTC *from* and *to* of *fixed*, each a `datetime-local` read as UTC; the display *zone* | `window` and `zone` |
+| *sharing* | the sync group (empty is none); *stale after*, seconds (empty is never) | `sync` and `stale_after` |
+| *layout* | breakpoint, row height and gap, pixels | `layout` |
+| *variables* | one text box per variable any cell's component declares | the board's `vars` |
+| *validity* | the board's faults given the store (§22.5) | — |
+
+**A variable's name is one a component declares.** A cell's variables are the variables its component's design declares (spec/14 §2.4), read from the flattened component; the board's are those of every cell's component. A name from the page is matched against those names and never made an atom. A value is read as a number when it is one, else kept as the text; an empty box removes the value, so the cascade ([15-boards](15-boards.md) §5) falls through to the board's or the component's default. A board variable that no component declares — one stored before its component changed — is listed with its value, to be removed.
+
+**The window.** Choosing *fixed* where the window was not fixed starts it at the last whole hour before now; *last* starts at 3600 seconds. The zone is checked as the board checks it ([15-boards](15-boards.md) §1.5): a zone the host's database does not know is refused.
+
+### 22.5 The board's faults
+
+The *validity* section lists `Visualize.Board.validate/3` of the board given the store — a cell whose component the store no longer holds, a component that is not a design, a cell variable the component does not declare, a cell that cannot join the board's group — one line each in `Visualize.Board.format_error/1`'s words, or *a valid board — Save to library keeps it*. A cell with a fault carries `vis-builder-board-cell-faulty`, so the grid shows where.
+
+### 22.6 The preview
+
+**Each cell is realised alone**, through `Visualize.Board.realise/4` of a board holding that one cell, its placement and the board's shared state — so the cell's component is resolved through the store, its variables are the cascade, the board's group and zone are written into it, and it is applied at its box's size at a container width of 1200 pixels, exactly as the runtime's cell process applies it ([15-boards](15-boards.md) §6, §8.3). One cell at a time, so a cell that cannot be applied shows its own faults and every other cell still draws. A cell that applies is drawn with `Visualize.Chart.render/2` as a responsive root titled with the cell's title; one that does not lists its faults in its card, as the preview does (§18.4).
+
+**The preview is the builder's model: sample data, no process.** A board's slots are the cells' ([15-boards](15-boards.md) §4.1), and each cell's pool binds them. Each slot is bound **by its own name** to the builder's pool — the host's `sources` and the builder's signals (§19.10) — as the preview of one design binds its slots. A live preview through `Visualize.Board.Server` and the board's LiveView component was not taken: it needs feeds, which the builder does not hold and a host need not give it, and a process per open board the builder would have to start, supervise and stop. The board the builder saves is the one the runtime runs, so what the preview applies is what the runtime applies.
+
+### 22.7 Edit component
+
+*Edit component* (`board_edit_component`) opens the selected cell's composite as a chart of the workspace, as opening the entry from the library does (§19.9), so *Save to library* writes the component back and every cell that uses it previews the change. The chart remembers the board it came from: its chart bar carries ***Back to board*** (`board_return`), which selects the board's chart again. **Returning closes the component's chart when it holds no unsaved change** — its structure is the one it was opened with, or the one the store now holds — and leaves it open, with a notice, when it does, so nothing a person did is dropped. A component the store no longer holds is not opened, and the notice says so. A board's chart closed in the meantime leaves *Back to board* with nothing to return to, and the notice says that too.
+
+### 22.8 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Boards.panel/1` | the inspector of the board mode (§22.4) |
+| `Visualize.Chart.Builder.BoardGrid.grid/1` | the grid of the board mode (§22.3): every cell placed, its handles and its preview, or the reflow below the breakpoint |
+| `Visualize.Chart.Builder.Boards.place/3` | `place(board, cell, rect)`: the board with the cell at the rectangle, `{:ok, board}`, or `{:error, errors}` — the board's own faults of the placement, `{:off_grid, 12}` and `{:overlap, other}` among them (§22.3) |
+| `Visualize.Chart.Builder.Boards.free/3` | `free(board, w, h)`: the first `{x, y}` in reading order where a `w`-by-`h` rectangle overlaps no cell (§22.3) |
+| `Visualize.Chart.Builder.Boards.declared/2` | `declared(ref, fetch)`: the variables a component declares, from its flattened design, sorted (§22.4) |
+| `Visualize.Chart.Builder.Boards.preview/3` | `preview(board, fetch, opts)`: each cell realised alone (§22.6), `%{cell => {:ok, svg} \| {:error, lines}}`; `pools:` by cell, `theme:` |

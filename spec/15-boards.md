@@ -105,6 +105,10 @@ A window that gives `last` together with `from` or `to`, a `from` without a `to`
 
 `Visualize.Board.boxes/2` gives each cell's box in pixels at a container width, as `%{name => {x, y, w, h}}`. A column is `(width − 11 × gap) / 12` wide and a row is `row_height` high. A cell spanning `w` columns is `w` columns and the `w − 1` gaps between them across, and likewise down. It starts after `x` columns and their gaps, and `y` rows and theirs. This is the arithmetic of a CSS grid with that gap, which is what metresis draws. **A resize is a recompile at the new size** (spec/14 §12.5): each cell's box is the `size:` its component is applied at (§6).
 
+### 1.7 Where a board is kept
+
+**A host keeps its boards where it likes**, and the value says nothing about where. The builder keeps them **in its store, as entries of the kind `:board`** (spec/14 §22.1, #544, D-152): the fragment `%{board: map}`, whose body is the map form of §2.1 with its `version`, read back by `from_map/2` and so gated and bounded as §2.3 says. A board entry is a library entry like a theme: it is listed, opened in the builder's board mode, saved under a name, and exported in a bundle with the closure of its cells' components, which an import re-keys. It is never composed into a chart: a board is shown, and a composite is what is composed. The binding (§4.2) is not in the entry, because it is the host's.
+
 ## 2. Version, codecs and limits
 
 ### 2.1 The map form
@@ -555,7 +559,7 @@ Entries are in dependency order, each after everything it refers to, and each ke
 
 ### 11.2 Importing a board
 
-`Visualize.Chart.Builder.Bundle.import_board/3` takes the receiving store, the bundle and options, and returns `{:ok, %{board: board, ids: table, outside: outside}}` or `{:error, errors}`, every fault in the path shape of §3. `board` is the board with every cell's `ref` rewritten to its component's new id. `table` is the `old => new` id table of the store's `import/2` (spec/14 §19.7), and `outside` the references inside the carried entries to ids the bundle does not carry, which import as masks and are reported, never a failure. The board is returned to the host and is not put in the store: a board is not a library entry (spec/14 §19.8), and where a host keeps its boards is its own.
+`Visualize.Chart.Builder.Bundle.import_board/3` takes the receiving store, the bundle and options, and returns `{:ok, %{board: board, ids: table, outside: outside}}` or `{:error, errors}`, every fault in the path shape of §3. `board` is the board with every cell's `ref` rewritten to its component's new id. `table` is the `old => new` id table of the store's `import/2` (spec/14 §19.7), and `outside` the references inside the carried entries to ids the bundle does not carry, which import as masks and are reported, never a failure. The board is returned to the host and is not put in the store: where a host keeps the boards it imports is its own (§1.7). A host that keeps them in its store, as the builder does, puts the returned board there as a `:board` entry.
 
 **Every check comes before any entry is put**, so a refused bundle leaves the receiving store as it was. In order:
 
