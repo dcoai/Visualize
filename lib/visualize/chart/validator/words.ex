@@ -172,6 +172,14 @@ defmodule Visualize.Chart.Validator.Words do
   def words({:window, :inverted}), do: "has a from that is not before its to"
   def words({:dangling, id}), do: "refers to #{inspect(id)}, which the store does not hold"
 
+  # A board bundle's import (spec/15 §11.3, D-147).
+  def words({:not_carried, id}), do: "refers to #{inspect(id)}, which the bundle does not carry"
+
+  def words({:theme_taken, name}),
+    do: "is the theme #{inspect(name)}, a name the store already gives a different theme"
+
+  def words({:store, reason}), do: "the store refused the import: #{inspect(reason)}"
+
   def words({:cycle, chain}) when is_list(chain),
     do: "reaches itself through #{Enum.map_join(chain, " → ", &inspect/1)}"
 

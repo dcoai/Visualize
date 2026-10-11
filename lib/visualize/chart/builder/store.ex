@@ -144,24 +144,36 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.filter(&(&1.kind == :theme))
       |> Enum.find_value(:error, fn summary ->
         case get(store, summary.id) do
-          {:ok, entry} -> if named?(entry, wanted), do: {:ok, entry}
-          :error -> nil
+          {:ok, entry} ->
+            if theme_name(entry) == wanted, do: {:ok, Map.put(entry, :id, summary.id)}
+
+          :error ->
+            nil
         end
       end)
     end
 
-    defp named?(%{fragment: %{theme: theme}} = entry, wanted) do
-      own =
-        case theme do
-          %{name: name} when is_atom(name) -> to_string(name)
-          name when is_atom(name) -> to_string(name)
-          _unnamed -> nil
-        end
+    @doc """
+    The name a stored theme entry answers to, as a string (spec/14 §19.7): the name its
+    theme gives itself, or, for one that gives none, its entry name's last `:` segment.
+    `nil` for an entry that is not a theme. This is what `theme/2` matches a name against,
+    and what a board bundle's import checks a carried theme by (spec/15 §11.2).
 
-      own == wanted or (own == nil and last_segment(entry.name) == wanted)
+        iex> Visualize.Chart.Builder.Store.theme_name(%{name: "house:ocean", fragment: %{theme: %{series: ["#036"]}}})
+        "ocean"
+        iex> Visualize.Chart.Builder.Store.theme_name(%{name: "house:x", fragment: %{style: %{}}})
+        nil
+    """
+    @spec theme_name(entry()) :: String.t() | nil
+    def theme_name(%{fragment: %{theme: theme}} = entry) do
+      case theme do
+        %{name: name} when is_atom(name) and name != nil -> to_string(name)
+        name when is_atom(name) and name != nil -> to_string(name)
+        _unnamed -> last_segment(Map.get(entry, :name))
+      end
     end
 
-    defp named?(_entry, _wanted), do: false
+    def theme_name(_entry), do: nil
 
     defp last_segment(name) when is_binary(name), do: name |> String.split(":") |> List.last()
     defp last_segment(_name), do: nil
