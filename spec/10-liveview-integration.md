@@ -785,7 +785,7 @@ The arrays are built by the library: every number prints through `Visualize.IR.P
 
 ### 17.3 `KeyboardHook` behaviour
 
-Attach with `phx-hook="KeyboardHook"` and an `id` on a *container* holding the chart, with the attributes of 17.2 on it; they are read on `mounted()` and again on `updated()`, the position clamped to the new points. Set by the host: `data-keyboard-event`, the event pushed with `{series, index}` (zero-based) each time the focused point changes; unset, nothing is pushed.
+Attach with `phx-hook="KeyboardHook"` and an `id` on a *container* holding the chart, with the attributes of 17.2 on it; they are read on `mounted()` and again on `updated()`, the position clamped to the new points. Set by the host: `data-keyboard-event`, the event pushed with `{series, index}` (zero-based) each time the focused point changes; unset, nothing is pushed. `data-keyboard-pick-event`, the event pushed with `{series, index}` when a point is **picked** (below); unset, nothing is picked. `data-keyboard-target`, the `phx-target` both events go to with `pushEventTo`, as a board's cell names its own component (spec/15 §9.1); unset, they go to the LiveView.
 
 On `mounted()` the hook makes the container focusable — `tabindex="0"` — and gives it `role="group"` and an `aria-label` of `<name>, chart: arrow keys move between points`, each only where the host set none and again on every `updated()`, since a patch drops an attribute the server did not render; it appends to `document.body` — never inside the container, so a LiveView patch neither removes nor sees them — a visually hidden `<div class="vis-keyboard-readout" aria-live="polite">` and an overlay `<svg class="vis-keyboard-focus">` (`position: absolute`, `pointer-events: none`, hidden) holding one `<circle r="6">` with no fill and a 2-pixel stroke. It binds `keydown`, `focus` and `blur` on the container, each bound once and kept (D-47).
 
@@ -794,8 +794,10 @@ On `mounted()` the hook makes the container focusable — `tabindex="0"` — and
 - **Escape** hides the marker and forgets the point; when the container sits inside an element carrying `data-vis-cell`, focus moves to that element (spec/14 §21.5).
 - **Tab** is never handled: the chart is one stop, and the page's order — a board's cells — goes on past it.
 - **blur** hides the marker and keeps the point, so focus coming back resumes there.
+- **Enter** at a reached point picks it: with `data-keyboard-pick-event` set it pushes `{series, index}` and calls `preventDefault()`. Before any point is reached, Enter does nothing.
+- **A click** on the container picks the point nearest to it (#545). The click's position is read on the chart, its first `<svg>` or `<canvas>`, through `data-size` as the marker is placed. The nearest point is the one with the least horizontal distance, and of points within half a unit of that distance the one with the least vertical distance: the crosshair's snapping (§13.3), then the series nearest the pointer. Points with no position, and a click outside the chart's rectangle, pick nothing. A click that ends a drag is no pick: the hook keeps where the last `mousedown` was, and a click more than 3 CSS pixels from it is a brush, not a click (§6.2). A picked point becomes the reached point, so the arrow keys go on from it.
 
-`destroyed()` removes the three listeners with the kept references and the two elements it appended. `test/visualize/hooks/keyboard_test.exs` executes it under the harness of spec/12 §6.
+`destroyed()` removes the five listeners — `keydown`, `focus`, `blur`, `mousedown` and `click` — with the kept references and the two elements it appended. `test/visualize/hooks/keyboard_test.exs` executes it under the harness of spec/12 §6.
 
 ## 18. Visualize.Hooks.Board
 
@@ -815,8 +817,11 @@ Attach with `phx-hook="BoardHook"` and an `id` on the board's container. The cel
 |---|---|---|
 | `data-board-event` | `"resize"` | the event pushed with `{width}` |
 | `data-board-debounce` | `150` | milliseconds the width must hold before it is pushed |
+| `data-board-clear-event` | `"select_clear"` | the event pushed when Escape clears the board's selection |
+| `data-board-selection` | unset | set by the board's component while the board holds a selection (spec/15 §9.2) |
 
 - **The width.** On `mounted()` the hook pushes the container's width: its bounding rectangle's, rounded, else its `offsetWidth`. Where the browser has `ResizeObserver`, it observes the container and pushes the width again once it has held for the debounce period. A width that is not positive, or the same as the last pushed, is not pushed. The push is `pushEventTo(this.el, event, {width})`, so it reaches the LiveComponent that rendered the container. A page with the board's component handles nothing.
 - **The cells.** One `keydown` listener on the container acts only when the event's target is a cell itself (`data-vis-cell`). A key pressed inside a chart bubbles up with the chart's element as its target and is left to the chart's own hook. **ArrowRight** and **ArrowDown** move focus to the next cell, **ArrowLeft** and **ArrowUp** to the previous one, each stopping at the ends. **Home** and **End** move to the first and the last cell, and **Enter** moves focus to the cell's first descendant carrying a `tabindex`, its chart's `KeyboardHook` container. Each calls `preventDefault()`. **Tab** is never handled, so a cell stays one stop in the page's order. **Escape** inside a chart is `KeyboardHook`'s, which moves focus back to the nearest `data-vis-cell` (17.3).
+- **The selection** (spec/15 §13.2, #545). Before the cell keys are read, an **Escape** whose target is anywhere in the container, a cell or a chart inside one, pushes `pushEventTo(this.el, clearEvent, {})` while the container carries `data-board-selection`, and nothing when it does not. It does not call `preventDefault()`, so the chart's own hook still hands focus back to the cell: one Escape inside a chart clears the selection and returns focus.
 
 `destroyed()` removes the listener with the kept reference, disconnects the observer and clears a pending push. `test/visualize/hooks/board_test.exs` executes it under the harness of spec/12 §6, over cells carrying `data-vis-cell`.
