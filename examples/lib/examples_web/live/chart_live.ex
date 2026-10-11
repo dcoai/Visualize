@@ -78,6 +78,10 @@ defmodule ExamplesWeb.ChartLive do
            # The reader's motion preference, as the resize hook reports it (spec/14 §21.6,
            # #559): `:reduce` compiles every chart to step rather than ease.
            motion: :full,
+           # The clock every instant of a run is read from (spec/14 §12.6, D-148): a function
+           # of a time unit. A test stops it and advances it by exactly a tick's milliseconds,
+           # so what a tick scrolls never depends on how long the test took (#567).
+           run_clock: &System.monotonic_time/1,
            run: nil,
            still_task: nil,
            compare_task: nil
@@ -308,8 +312,8 @@ defmodule ExamplesWeb.ChartLive do
     run =
       Run.start(
         Run.on(socket.assigns.run, backend),
-        System.monotonic_time(:millisecond),
-        System.monotonic_time(:microsecond)
+        now(socket, :millisecond),
+        now(socket, :microsecond)
       )
 
     run = Run.renderer(run, module, backend, opts)
@@ -390,8 +394,7 @@ defmodule ExamplesWeb.ChartLive do
 
   # The hook's ack (spec/10 §8.2).
   def handle_event("frame_drawn", %{"seq" => seq, "drawn" => drawn}, socket) do
-    {:noreply,
-     update(socket, :run, &Run.acked(&1, seq, drawn, System.monotonic_time(:millisecond)))}
+    {:noreply, update(socket, :run, &Run.acked(&1, seq, drawn, now(socket, :millisecond)))}
   end
 
   def handle_info(:run_tick, %{assigns: %{run: %Run{running: false}}} = socket),
@@ -400,7 +403,7 @@ defmodule ExamplesWeb.ChartLive do
   # A tick of the run: no data rate here, so every frame is the chart at its next
   # animation tick — a full render, decided by the run for flow control's sake.
   def handle_info(:run_tick, socket) do
-    now = System.monotonic_time(:millisecond)
+    now = now(socket, :millisecond)
     socket = schedule_run(socket)
     %{run_scroll: scroll, run_backend: backend} = socket.assigns
     density = if scroll, do: scroll.samples_per_px, else: 1
@@ -446,7 +449,7 @@ defmodule ExamplesWeb.ChartLive do
         {:noreply, assign(socket, run: run)}
 
       {:ok, run} ->
-        now = System.monotonic_time(:millisecond)
+        now = now(socket, :millisecond)
         {run, seq} = Run.sending(run, mode_of(frame))
         run = Run.rendered(run, frame.bytes, now)
 
@@ -723,8 +726,11 @@ defmodule ExamplesWeb.ChartLive do
     assign(socket, run: run)
   end
 
+  # The page's clock, in `unit` (D-148).
+  defp now(socket, unit), do: socket.assigns.run_clock.(unit)
+
   defp schedule_run(socket) do
-    {run, delay} = Run.schedule(socket.assigns.run, System.monotonic_time(:microsecond))
+    {run, delay} = Run.schedule(socket.assigns.run, now(socket, :microsecond))
     Process.send_after(self(), :run_tick, delay)
     assign(socket, run: run)
   end

@@ -417,6 +417,11 @@ release it merely follows.
 
 ### Fixed
 
+- **The examples' performance drawer test failed under load** (#567, D-148): a tick's
+  elapsed time came from the real clock, so a strip meant to scroll two columns scrolled a
+  hundred on a busy machine and crossed its byte budget. The chart page reads every instant
+  of a run through a `run_clock` it holds, and its tests drive that clock exactly. Nothing a
+  person sees changes.
 - **`Visualize.Chart.to_json/1` raised on a channel at its scale's own end** (#554): a
   `{:scale, :min}` or `{:scale, :max}` channel, such as an area's `y0`, had no JSON form. It is
   now written `{"$scale": "min"}` and read back as the tuple.
