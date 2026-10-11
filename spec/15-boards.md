@@ -190,14 +190,17 @@ The board's own reasons, beside those of spec/14 §10.1 it reuses (`:required`, 
 ```elixir
 %{
   {:latency, :primary} => %{fields: [:t, :latency], types: %{t: :time, latency: :number},
-                            requires: %{latency: [:unit, :label]}},
-  {:errors, :primary}  => %{fields: [:t, :count], types: %{}, requires: %{}}
+                            requires: %{latency: [:unit, :label]},
+                            reads: [{[:marks, 0, :channels, :x], :t, :time},
+                                    {[:marks, 0, :channels, :y], :latency, :number}]},
+  {:errors, :primary}  => %{fields: [:t, :count], types: %{}, requires: %{}, reads: []}
 }
 ```
 
 - **Namespaced per cell.** A slot's key is the cell's name and the slot's own name. One design used in two cells is two sets of slots, each bound to its own data. This is what lets a "request time" component show one service in one cell and another service beside it.
 - **`fields` and `types`** are the slot's declaration (spec/14 §2.3), with `types` `%{}` when it declares none.
 - **`requires` is the slot's whole contract** (spec/14 §7.4, D-136): its `requires` together with every attribute a fact of it reads, as `Visualize.Chart.contract/1` gives it. A connector tests a feed's schema against it before offering the feed, as a picker does (spec/14 §7.2). It is `%{}` for a slot that states none.
+- **`reads` is what the slot's fields must be** (spec/14 §7.4, D-153): every field the component reads from the slot through a scale, as `{path, field, need}`. `path` is the read's path in the component (the channel, the style or the offset), and `need` is what the scale's kind needs: `:time`, `:number` or `:category`. It is `[]` for a slot nothing reads through a scale.
 
 ### 4.2 The binding
 
@@ -211,9 +214,13 @@ The board's own reasons, beside those of spec/14 §10.1 it reuses (`:required`, 
 
 - **Every unbound slot.** A required slot that the binding does not bind is `{:unbound, :binding, slot}`.
 - **Every contract the bound schema cannot meet.** For a bound slot whose contract is not empty, the feed's schema is looked up or described once. A feed the map does not hold is `{:undescribed, feed}`, and a describe that answers `{:error, reason}` is `{:describe, feed, reason}`. Each attribute the contract requires that the schema does not give the field is `{:missing_attribute, slot, field, key}` at `[…, slot, :requires, field]`. Each field whose declared type the schema contradicts is `{:schema_type, field, declared, described}` at `[…, slot, :types, field]`. These are the same reasons, with the same words, as `Visualize.Chart.apply/2` reports for one design (spec/14 §7.4), so a connector that checks its binding first sees, before any data flows, every fault the cells would report later.
-- **A binding to nothing.** A binding of a `{cell, slot}` that is not required, such as a cell since removed or a slot since renamed, is `:not_required` at its path, so a stale binding is seen rather than kept.
+- **Every field of the wrong type.** For a bound slot whose `reads` is not empty, the feed's schema is looked up or described once, as for the contract. Each read whose field the schema describes with a type that does not satisfy its need is `{:type_mismatch, slot, field, expected, given}` at `[:cells, cell | path]`, the read's path in the component under the cell. These are the reason and the words of `Visualize.Chart.apply/2` (spec/14 §7.4), so a wrong binding is seen before any data flows rather than raised by the cell's frame. Nothing requires a schema for a type check alone. A slot with an empty contract whose feed is undescribed, or whose describe answers an error, has its types unchecked and is not a fault.
+- **A binding to nothing.**
+ A binding of a `{cell, slot}` that is not required, such as a cell since removed or a slot since renamed, is `:not_required` at its path, so a stale binding is seen rather than kept.
 
-A slot whose contract is empty is not looked up, as spec/14 §7.4's "the facts the slot did not ask for are not read" holds for one design. Its feed needs no schema.
+A slot whose contract is empty and whose `reads` is empty is not looked up, as spec/14 §7.4's "the facts the slot did not ask for are not read" holds for one design. Its feed needs no schema.
+
+**A check over known types.** `Visualize.Board.Binding.check_types/3` takes the binding, the required sources and a map from feed to what is known of its fields' types: a `%Visualize.Data.Schema{}`, or a map from field to type such as `Visualize.Data.Table.column_types/1` reads from a sample's rows, each checked by its own column of spec/14 §7.4's table. It returns `:ok` or `{:error, errors}`, only the `{:type_mismatch, …}` faults, by path. A tool whose feeds have no schema, such as the builder over its sample pool (spec/14 §22.8), checks a binding with it before it draws.
 
 ### 4.4 Pools
 
@@ -292,6 +299,7 @@ Every fault of every cell is reported, each under its cell: `[:cells, name | pat
 | `Visualize.Board.Binding.put/4` | The binding with one cell's slot bound to a feed. |
 | `Visualize.Board.Binding.fetch/3` | The feed a cell's slot is bound to, `{:ok, feed}`, or `:error`. |
 | `Visualize.Board.Binding.check/3` | `:ok`, or every unbound slot, every contract the bound schemas cannot meet and every binding to nothing, by path (§4.3). |
+| `Visualize.Board.Binding.check_types/3` | `:ok`, or every field a bound slot's component reads through a scale whose known type does not satisfy the need, `{:type_mismatch, slot, field, expected, given}` by path (§4.3). |
 | `Visualize.Board.Binding.pools/2` | One pool per cell from the binding and the host's sources by feed (§4.4). |
 
 ## 8. The runtime: a process per board and per cell
@@ -403,7 +411,8 @@ A cell is always in exactly one state, and **every state is drawn deliberately**
 | State | When | Role | Words |
 |---|---|---|---|
 | `{:crashed, reason}` | the cell's process died; the board draws it until the restarted cell speaks | `:bad` | `Crashed, restarting` |
-| `{:down, reason}` | a slot's feed is down, the slot is not bound, or the component cannot be applied to what arrived (`{:apply, errors}`, the faults of `Visualize.Chart.apply/2`) | `:bad` | `Feed down` and the reason |
+| `{:down, reason}` | a slot's feed is down, the slot is not bound, or the component cannot be applied to what arrived for any other reason (`{:apply, errors}`, the faults of `Visualize.Chart.apply/2`) | `:bad` | `Feed down` and the reason |
+| `{:invalid, errors}` | the component cannot be applied because a slot's field has a type its scale cannot take (`{:apply, errors}` holding a `{:type_mismatch, …}`, spec/14 §7.4, D-153); the builder's previews draw it for a binding its check refuses (spec/14 §18.4) | `:bad` | `Wrong binding` and the first fault |
 | `:loading` | a slot has no delivery yet and none is down | `:info` | `Loading…` |
 | `:no_data` | every slot has a delivery and every delivery is empty | `:neutral` | `No data yet` |
 | `{:stale, age}` | a slot's feed is `:stale` in the monitor, or the newest reading of a slot with a `DateTime` time field is older than the board's `stale_after` at the board's now; `age` is its age in seconds, or `nil` when only the monitor says so | `:warning` | `Stale` and the age (`Visualize.Format.duration/1`) |
@@ -412,7 +421,7 @@ A cell is always in exactly one state, and **every state is drawn deliberately**
 
 The first row that holds is the state, in this order: a cell whose feed is down is not also called loading, and a stale chart that is capped says stale.
 
-**Two drawings.** `Visualize.Board.State.render(state, theme, {w, h})` is the **whole cell**: the theme's `surface` filling the box, a frame in the role's colour, and the glyph and the words centred in the theme's `text` colour, as an accessible SVG root whose title is the words. It is drawn where there is no chart: loading, no data, crashed, and down or stale before anything was drawn. `Visualize.Board.State.banner(state, theme, width)` is a **banner**: one line across the top of a chart, in the role's colour, glyph and words. It is drawn over the chart for stale, capped and down, so a person still sees the last data with what is wrong with it. `:live` draws neither. Both are in `:css` mode (spec/08 §7.3), so a page's stylesheet themes them as it themes the charts.
+**Two drawings.** `Visualize.Board.State.render(state, theme, {w, h})` is the **whole cell**: the theme's `surface` filling the box, a frame in the role's colour, and the glyph and the words centred in the theme's `text` colour, as an accessible SVG root whose title is the words. It is drawn where there is no chart: loading, no data, crashed, invalid, and down or stale before anything was drawn. `Visualize.Board.State.banner(state, theme, width)` is a **banner**: one line across the top of a chart, in the role's colour, glyph and words. It is drawn over the chart for stale, capped and down, so a person still sees the last data with what is wrong with it. `:live` draws neither. Both are in `:css` mode (spec/08 §7.3), so a page's stylesheet themes them as it themes the charts.
 
 ### 8.5 Time
 

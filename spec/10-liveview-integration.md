@@ -661,7 +661,7 @@ The embeddable builder for a stack of design fragments. What it is, what its hos
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.Builder.Preview.panel/1` | Renders the preview pane (spec/14 §18.4): `Visualize.Chart.render/2` of `Visualize.Chart.apply/2` of the `design` assign over `sources`, `vars` and `theme`, or the faults of application, each line `Visualize.Chart.Validator.format/1` of one error. |
+| `Visualize.Chart.Builder.Preview.panel/1` | Renders the preview pane (spec/14 §18.4): `Visualize.Chart.render/2` of `Visualize.Chart.apply/2` of the `design` assign over `sources`, `vars` and `theme`, or the faults of application, each line `Visualize.Chart.Validator.format/1` of one error; a binding `Visualize.Chart.check_types/2` refuses is not applied and is drawn as the fault panel, `<div class="vis-builder-fault">` (spec/14 §18.4, D-153). |
 | `Visualize.Chart.Builder.Editor.nodes/1` | The editable nodes of a fragment (spec/14 §18.5): one `%{path, kind, label}` per node the schema's walk reaches, the root first. |
 | `Visualize.Chart.Builder.Editor.widget/1` | The control a `t:Visualize.Chart.Schema.type/0` gets (spec/14 §18.6): `:checkbox`, `:number`, `:text`, `:textarea` or `{:select, allowed}`. |
 | `Visualize.Chart.Builder.Editor.parse/2` | `parse(type, string)`: `{:ok, value}` for a submitted string read back as a value of the type (spec/14 §18.6), `:error` for a blank string and for anything the type cannot take. |
@@ -679,7 +679,7 @@ The component's assigns are spec/14 §18.2, each declared with `attr/3` as every
 
 | Panel | Assigns |
 |---|---|
-| `Visualize.Chart.Builder.Preview.panel/1` | `design` (`:map`, required), `sources` (`:map`, `%{}`), `vars` (`:map`, `%{}`), `theme` (`:any`, `nil`), `class` (`:string`, `nil`) |
+| `Visualize.Chart.Builder.Preview.panel/1` | `design` (`:map`, required), `sources` (`:map`, `%{}`), `vars` (`:map`, `%{}`), `theme` (`:any`, `nil`), `catalog` (`:map`, `nil`: the connector catalog, whose schemas type a slot bound to one of its feeds), `class` (`:string`, `nil`) |
 | `Visualize.Chart.Builder.Editor.panel/1` | `id` (`:string`, `nil` — the editor's id, which its form carries as `<id>-form`; `nil` derives it from the node, below), `kind` (`:atom`, required), `node` (`:map`, required), `path` (`:list`, `[]`), `facet` (`:atom`, `nil` — the first facet the node carries), `errors` (`:list`, `[]` — the `{path, reason}` pairs of spec/14 §10.1), `target` (`:any`, `nil` — the `phx-target` of the form's events), `class` (`:string`, `nil`) |
 | `Visualize.Chart.Builder.Layers.panel/1` | `id` (`:string`, required — the hook element's), `layers` (`:list`, required), `selected` (`:integer`, `0`), `disabled` (`:any`, an empty `MapSet` — the positions dropped from the stack), `target` (`:any`, `nil`), `class` (`:string`, `nil`) |
 | `Visualize.Chart.Builder.Inspector.panel/1` | `id` (`:string`, required — the hook element's), `layers` (`:list`, required), `target` (`:any`, `nil`), `class` (`:string`, `nil`) |
