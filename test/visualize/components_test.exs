@@ -373,8 +373,16 @@ defmodule Visualize.ComponentsTest do
           class: "c"
         })
 
-      assert svg =~ ~s(<svg width="600" height="400" class="c")
+      assert svg =~ ~s(<svg width="600" height="400" class="c vis-animated")
       assert length(Regex.scan(~r/transition: all 0.3s ease-in-out;/, svg)) == length(@points)
+
+      # A reader who asks for less motion gets none (spec/14 §21.6): the rule beats the
+      # inline transition, and a chart that does not animate carries no rule.
+      assert svg =~
+               "<style>@media (prefers-reduced-motion: reduce) { svg.vis-animated * { transition: none !important; } }</style>"
+
+      still = render_component(&Components.scatter_plot/1, %{data: @points, x: & &1.x, y: & &1.y})
+      refute still =~ "<style" or still =~ "vis-animated"
     end
 
     test "pie labels are drawn only with show_labels and a label accessor" do

@@ -90,6 +90,14 @@ release it merely follows.
   hands focus back to an enclosing `data-vis-cell`, so a board can navigate its cells
   around charts. `Visualize.Hooks.Keyboard.attrs/1` writes the points once on the server
   from an applied chart; a series of more than 1,000 points is sampled evenly.
+- **Reduced motion** (#559, D-142). `Visualize.Chart.compile/2` takes `motion: :reduce`,
+  and `Compiled.tick/3` and `step/3` take `motion:` per tick: every scale transition and
+  mark motion is then drawn at its target on the tick it changes, its state kept, so
+  turning motion back on eases on from where the chart stands. `ResizeHook` now pushes
+  `reduced_motion` — `prefers-reduced-motion: reduce` — with every size and again when the
+  reader changes it, so the page that sizes a chart can compile it to match. A component
+  with `animate` gains the class `vis-animated` and a `<style>` that stops its transition
+  under that media query.
 - **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
   `time_format/2` picks a `Visualize.Format.time/2` specifier from a time domain's span and
   the interval its ticks use — `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,
@@ -233,6 +241,9 @@ release it merely follows.
   `aria-describedby` the `<desc>` — on `Visualize.IR.Element.root/3` and every component —
   so a screen reader says a short name and then the description. `Element.root/3` takes
   `hidden: true` for `aria-hidden`.
+- **A retargeted easing is shown where it starts on the tick it is retargeted** (#559):
+  unchanged for any easing with a duration, and an easing of no duration now reaches its
+  target on that tick instead of the next.
 - **A canvas names itself, and a hybrid chart's SVG layers are hidden** (#557).
   The root wrapper of `Visualize.Backend.Canvas` and `Visualize.Backend.Hybrid.render/1` take
   `title:` and `description:` and put them on the `<canvas>` (`role="img"`, `aria-label`,

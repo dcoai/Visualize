@@ -159,12 +159,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def transition(false), do: []
 
     @doc false
+    # The `<style>` an animated chart carries (spec/10 §1.2, spec/14 §21.6, D-142): a
+    # reader who asks for less motion gets none — the stylesheet's `!important` beats the
+    # marks' inline transition.
+    def reduced_motion,
+      do:
+        "@media (prefers-reduced-motion: reduce) { svg.vis-animated * { transition: none !important; } }"
+
+    @doc false
     # The attributes of the `<svg>` beyond its size (spec/10 §1.2): `class` when given,
     # the theme's font so every text inherits it, and under `responsive` the
     # `preserveAspectRatio` and `style` that let CSS scale it (D-54), matching
-    # `Visualize.IR.Element.root/3` under `responsive: true`.
-    def svg_attrs(class, responsive, theme, ids) do
-      class = if class, do: [class: class], else: []
+    # `Visualize.IR.Element.root/3` under `responsive: true`. An animated chart's class
+    # gains `vis-animated`, which `reduced_motion/0`'s rule stops (spec/14 §21.6).
+    def svg_attrs(class, responsive, theme, ids, animate) do
+      class =
+        case {class, animate} do
+          {nil, false} -> []
+          {nil, true} -> [class: "vis-animated"]
+          {class, false} -> [class: class]
+          {class, true} -> [class: class <> " vis-animated"]
+        end
+
       font = ["font-family": Theme.resolve(theme, :font_family, :css)]
       labelled = if ids.labelledby, do: ["aria-labelledby": ids.labelledby], else: []
 

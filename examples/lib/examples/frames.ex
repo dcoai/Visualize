@@ -78,7 +78,7 @@ defmodule Examples.Frames do
   @spec prepare(module(), keyword(), backend()) :: map() | nil
   def prepare(module, opts, backend) when backend in [:canvas, :incremental] do
     applied = Design.applied(module, opts)
-    compiled = compiled!(applied, ceiling: 1)
+    compiled = compiled!(applied, ceiling: 1, motion: Keyword.get(opts, :motion, :full))
 
     %{
       compiled: compiled,
@@ -104,7 +104,8 @@ defmodule Examples.Frames do
       applied = Design.applied(module, opts)
 
       %{
-        compiled: compiled!(applied, ceiling: 1_000_000_000),
+        compiled:
+          compiled!(applied, ceiling: 1_000_000_000, motion: Keyword.get(opts, :motion, :full)),
         summary: Visualize.Chart.Summary.text(applied)
       }
     end
@@ -193,7 +194,9 @@ defmodule Examples.Frames do
       when backend in [:canvas, :incremental] do
     {design, sources} = module.design(opts)
     compiled = recompiled(compiled, design, module, opts, backend)
-    clock = for key <- [:now, :at], value = opts[key], do: {key, value}
+    # The tick's clock, and its motion (spec/14 §21.6): a reader's preference that changed
+    # mid-run reaches the ticks without a recompilation.
+    clock = for key <- [:now, :at, :motion], value = opts[key], do: {key, value}
 
     {plots, compiled} =
       Enum.map_reduce(compiled, [], fn {name, one}, acc ->

@@ -74,21 +74,25 @@ defmodule Visualize.Chart.Compiled.Transition do
         %{state | shown: shown, pending: nil}
 
       not inside?(inferred, state.target) or shrink_after <= 0 ->
-        retarget(state, shown, inferred, at)
+        retarget(state, shown, inferred, node, at)
 
       state.pending == nil ->
         %{state | shown: shown, pending: at}
 
       at - state.pending >= shrink_after ->
-        retarget(state, shown, inferred, at)
+        retarget(state, shown, inferred, node, at)
 
       true ->
         %{state | shown: shown}
     end
   end
 
-  defp retarget(state, shown, target, at),
-    do: %{state | from: shown, target: target, since: at, shown: shown, pending: nil}
+  # Shown where the new easing stands on this tick: where it starts, unless it has no
+  # duration — reduced motion (spec/14 §21.6) — and is at its target at once.
+  defp retarget(state, shown, target, node, at) do
+    moved = %{state | from: shown, target: target, since: at, shown: shown, pending: nil}
+    %{moved | shown: position(moved, node, at)}
+  end
 
   # Where the easing stands at `at`: `from` toward `target` along the curve, done when
   # the duration has passed or is nothing.
