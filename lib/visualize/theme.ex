@@ -119,7 +119,7 @@ defmodule Visualize.Theme do
   @aa 4.5
   @size_slots [:font_size, :label_size, :title_size]
   @fixed_slots @colour_slots ++ @role_slots ++ [:font_family] ++ @size_slots
-  @builtin [:default, :dark, :colour_safe]
+  @builtin [:default, :dark, :colour_safe, :print]
 
   @doc "The light theme: dark text and axes on white (spec/08 §7.2)."
   @spec default() :: t()
@@ -152,7 +152,28 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  The built-in theme of a name — `:default`, `:dark` or `:colour_safe` — or `nil`.
+  The print theme (spec/08 §7.2, spec/15 §12.4): paper. A white background and surface, so
+  a printer lays no ink under the data; near-black text and axes and a grid dark enough to
+  survive a photocopy; the default's series; and the colour-safe theme's blue → orange →
+  red `status` ramp, since a printed page is read in whatever light and by whatever eyes
+  it reaches, often in greyscale, where the ramp's falling lightness and each role's glyph
+  still carry the order.
+  """
+  @spec print() :: t()
+  def print do
+    %__MODULE__{
+      name: :print,
+      axis: "#333333",
+      grid: "#c8c8c8",
+      text: "#111111",
+      background: "#ffffff",
+      surface: "#ffffff",
+      ramps: %{@light_ramps | status: @safe_status}
+    }
+  end
+
+  @doc """
+  The built-in theme of a name — `:default`, `:dark`, `:colour_safe` or `:print` — or `nil`.
 
       iex> Visualize.Theme.builtin(:colour_safe).name
       :colour_safe
@@ -164,6 +185,7 @@ defmodule Visualize.Theme do
   def builtin(:default), do: default()
   def builtin(:dark), do: dark()
   def builtin(:colour_safe), do: colour_safe()
+  def builtin(:print), do: print()
   def builtin(_name), do: nil
 
   @doc false

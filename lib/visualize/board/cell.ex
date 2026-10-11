@@ -28,14 +28,8 @@ defmodule Visualize.Board.Cell do
 
   use GenServer, restart: :temporary
 
-  alias Visualize.Board.{Rows, State, View}
-  alias Visualize.Chart
-  alias Visualize.Chart.{Compiled, Frame, Summary}
-  alias Visualize.Data.{Delivery, Schema}
-  alias Visualize.Data.Schema.Cache
-  alias Visualize.Hooks.{Crosshair, Keyboard}
-  alias Visualize.IR.Element
-  alias Visualize.Render
+  alias Visualize.Board.Draw
+  alias Visualize.Chart.Compiled
 
   @doc false
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
@@ -120,34 +114,26 @@ defmodule Visualize.Board.Cell do
 
   # The chart drawn when every slot holds a delivery with rows and anything it is drawn
   # from changed; the frame kept otherwise. A component the data cannot be applied to is a
-  # fault the state shows, never a raise.
+  # fault the state shows, never a raise. The drawing is `Visualize.Board.Draw`'s, which a
+  # snapshot draws through too (spec/15 §12.2).
   defp draw(%{slots: nil} = state), do: state
 
   defp draw(state) do
     cond do
-      not drawable?(state.slots) ->
+      not Draw.drawable?(state.slots) ->
         %{state | svg: nil, attrs: {%{}, %{}}, fault: nil, drawn: nil}
 
       state.drawn == drawn_from(state) ->
         state
 
       true ->
-        sources =
-          Map.new(state.slots, fn {slot, %{delivery: d, schema: s}} ->
-            {slot, Rows.place(d, s)}
-          end)
+        sources = Draw.sources(state.slots)
 
         case compiled(state, sources) do
           {:ok, state} -> step(state, sources)
           {:error, errors} -> %{state | svg: nil, attrs: {%{}, %{}}, fault: {:apply, errors}}
         end
     end
-  end
-
-  defp drawable?(slots) do
-    map_size(slots) > 0 and
-      Enum.all?(slots, fn {_slot, slot} -> match?(%Delivery{}, slot.delivery) end) and
-      Enum.any?(slots, fn {_slot, slot} -> slot.delivery.rows != [] end)
   end
 
   # What the frame is drawn from: the deliveries and their schemas, at a size, for a chart.
@@ -172,121 +158,33 @@ defmodule Visualize.Board.Cell do
   end
 
   defp compile(state, sources) do
-    {w, h} = state.size
-
-    schemas =
-      Cache.new(for {slot, %{schema: %Schema{} = schema}} <- state.slots, do: {slot, schema})
-
-    options = [
-      sources: sources,
-      vars: state.vars,
-      size: {w, h},
-      theme: state.theme,
-      schemas: schemas
-    ]
-
-    options = if state.now, do: Keyword.put(options, :now, state.now), else: options
-
-    with {:ok, applied} <- Chart.apply(state.chart, options) do
-      {:ok, frames} = Chart.compile(applied, motion: :full)
-      previous = Map.new(state.compiled || [])
-
-      compiled =
-        for {name, _frame} <- Enum.sort_by(applied.frames, fn {n, f} -> {f.z, to_string(n)} end) do
-          fresh = Map.fetch!(frames, name)
-
-          case Map.fetch(previous, name) do
-            {:ok, before} -> {name, Compiled.carry(before, fresh)}
-            :error -> {name, fresh}
-          end
-        end
-
-      summary = %{name: Summary.new(applied).name, text: Summary.text(applied)}
-      {:ok, %{state | compiled: compiled, applied: applied, summary: summary}}
+    with {:ok, done} <- Draw.compile(state, sources, state.compiled || []) do
+      {:ok, Map.merge(state, done)}
     end
   end
 
   defp step(state, sources) do
     at = System.monotonic_time(:millisecond)
-
-    {groups, compiled} =
-      Enum.map_reduce(state.compiled, [], fn {name, one}, acc ->
-        {group, one} = Compiled.step(one, sources, at: at)
-        {group, [{name, one} | acc]}
-      end)
-
-    {w, h} = state.size
-
-    svg =
-      Element.root(w, h,
-        title: state.title || state.summary.name,
-        description: state.summary.text,
-        responsive: true,
-        children: groups
-      )
-      |> Render.to_string()
+    {svg, compiled} = Draw.step(state.compiled, sources, at, state)
 
     %{
       state
-      | compiled: Enum.reverse(compiled),
+      | compiled: compiled,
         svg: svg,
-        attrs: attrs(state, sources),
+        attrs: Draw.attrs(state.applied, sources, state.theme, state.size),
         fault: nil,
         drawn: drawn_from(state),
         frames: state.frames + 1
     }
   end
 
-  # The hooks' attributes from the frame realised over this step's sources (spec/15 §8.3):
-  # the keyboard's for a chart of one frame, the crosshair's for a cartesian one whose
-  # first mark has `x` and `y`.
-  defp attrs(%{applied: %{frames: frames} = applied} = state, sources)
-       when map_size(frames) == 1 do
-    plain = Map.new(sources, fn {slot, d} -> {slot, Delivery.source(d)} end)
-    frame = Frame.new(applied.chart, sources: plain, theme: state.theme, size: state.size)
-    keyboard = Keyboard.attrs(%{applied | frame: frame, sources: plain})
-    {crosshair(frame, applied.chart, plain), keyboard}
-  end
-
-  defp attrs(_state, _sources), do: {%{}, %{}}
-
-  defp crosshair(%Frame{kind: :cartesian} = frame, %Chart{marks: [mark | _]}, sources) do
-    channels = Map.get(mark, :channels, %{})
-
-    if is_map(channels) and Map.has_key?(channels, :x) and Map.has_key?(channels, :y),
-      do: Crosshair.attrs(frame, sources),
-      else: %{}
-  end
-
-  defp crosshair(_frame, _chart, _sources), do: %{}
-
   # -- showing ------------------------------------------------------------------------------
 
   # The view of the cell's present state, sent to every subscriber when it changed, and
   # the state reported to the board when that changed.
   defp show(state) do
-    cell_state = cell_state(state)
-    {crosshair, keyboard} = state.attrs
-    {w, _h} = state.size
-
-    note =
-      cond do
-        state.svg == nil -> State.render(cell_state, state.theme, state.size)
-        cell_state == :live -> nil
-        true -> State.banner(cell_state, state.theme, w)
-      end
-
-    view = %View{
-      cell: state.name,
-      title: state.title,
-      state: cell_state,
-      size: state.size,
-      svg: state.svg,
-      note: note,
-      crosshair: crosshair,
-      keyboard: keyboard,
-      frames: state.frames
-    }
+    cell_state = Draw.state(state.fault, state.slots, state.now, state.stale_after)
+    view = Draw.view(state, cell_state, state)
 
     if view != state.view do
       Enum.each(state.subscribers, &send(&1, message(state, view)))
@@ -296,10 +194,6 @@ defmodule Visualize.Board.Cell do
 
     %{state | view: view, state: cell_state}
   end
-
-  defp cell_state(%{fault: {:apply, _errors} = fault}), do: {:down, fault}
-  defp cell_state(%{slots: nil}), do: :loading
-  defp cell_state(state), do: State.of(state.slots, state.now, state.stale_after)
 
   defp message(state, view), do: {:visualize_board, state.board, {:cell, state.name, view}}
 end

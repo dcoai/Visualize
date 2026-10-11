@@ -17,6 +17,22 @@ release it merely follows.
 
 ### Added
 
+- **A board leaves the screen** (#578, D-150). `Visualize.Board.Server.snapshot/1` freezes a
+  running board as a `Visualize.Board.Snapshot` — the board, its now and window, the
+  theme, and each cell's component and the data it showed — and
+  `Visualize.Board.Snapshot.realise/4` makes one purely, as `Visualize.Board.realise/4`
+  does. A snapshot needs no store, feed or process: `to_json/1` writes it (stamped
+  `"$version"`, rows column by column) and `from_json/2` reads it back under the same version
+  policy and limits as a board. `Visualize.Board.Export.svg/2` draws a snapshot as one SVG
+  document: the header with the window in the board's zone, and every cell at its grid box
+  with its title, its state banner, and its chart embedded byte for byte as the cell draws
+  it, or its state's panel when it has no chart. `png/2` rasterises that through resvg.
+  For paper, `Visualize.Theme.print/0` (also `theme: :print`) is white with dark ink and
+  the colour-safe status ramp, and `Export.pages/2` lays the board on A4 or Letter, portrait
+  or landscape, never splitting a cell, as one SVG per page; `Export.html/2` puts the pages
+  in one HTML document a browser prints as a PDF. `Visualize.Board.window_text/2` writes a
+  window in a zone as the board's header does.
+
 - **A board runs live** (#574, D-146). Add `{Visualize.Board.Supervisor, name: MyApp.Boards}`
   to your tree and start a board under it with `Visualize.Board.Server.start/2`, passing
   `board:`, `store:`, `binding:` and `feeds:`. The board process owns the window (UTC), the

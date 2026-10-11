@@ -1,0 +1,246 @@
+defmodule Visualize.Board.Snapshot.Codec do
+  @moduledoc false
+  # The JSON form of a snapshot (spec/15 §12.3): its map form with string keys, stamped
+  # `"$version"`. The board is its own JSON form (spec/15 §2.2), each cell's component a
+  # design's (spec/14 §11) and the theme a theme node's (spec/14 §9.3), so every document
+  # inside a snapshot is spelt as it is on its own. Values JSON has no form for are the
+  # tagged terms of spec/14 §11.2.
+  #
+  # Rows are written **column by column** — `{"fields": [name, …], "rows": [[value, …],
+  # …]}` — so a field's name keeps the spelling it had, an atom (`{"$atom": "t"}`) or a
+  # string, which a JSON object's keys could not; a row that lacks a field has
+  # `{"$absent": true}` in its place. A schema's fields are a list of `[name,
+  # description]` pairs for the same reason, and a description's `status`, which maps
+  # category values to roles, a list of `[value, role]` pairs.
+  #
+  # Decoding never fails on a wrong shape: what it cannot place is passed through for the
+  # reader to name. A key the snapshot does not know stays a string, so a misspelling makes
+  # no atom and is reported at its own spelling.
+
+  alias Visualize.Board.Codec, as: BoardCodec
+  alias Visualize.Chart.Codec
+  alias Visualize.Data.Schema
+
+  @stamp "$version"
+  @absent %{"$absent" => true}
+
+  @keys [:board, :now, :window, :width, :theme, :cells]
+  @cell_keys [:chart, :vars, :slots, :crashed]
+  @slot_keys [:rows, :window, :resolution, :capped, :reduced_by, :version, :schema, :status]
+  @statuses [:loading, :live, :stale]
+
+  @doc false
+  def stamp, do: @stamp
+
+  @doc false
+  def keys, do: @keys
+
+  @doc false
+  def cell_keys, do: @cell_keys
+
+  @doc false
+  def slot_keys, do: @slot_keys
+
+  # -- encode ---------------------------------------------------------------------------
+
+  @doc false
+  def encode(%{version: version} = map) do
+    %{
+      @stamp => version,
+      "board" => BoardCodec.encode(map.board),
+      "now" => Codec.encode_term(map.now),
+      "window" => Codec.encode_term(map.window),
+      "width" => map.width,
+      "theme" => Map.fetch!(Codec.encode(%{theme: map.theme}), "theme"),
+      "cells" => Map.new(map.cells, fn {name, cell} -> {Atom.to_string(name), cell(cell)} end)
+    }
+  end
+
+  defp cell(cell) do
+    %{
+      "chart" => Codec.encode(cell.chart),
+      "vars" => Map.new(cell.vars, fn {k, v} -> {Atom.to_string(k), Codec.encode_term(v)} end),
+      "slots" => slots(cell.slots),
+      "crashed" => cell.crashed
+    }
+  end
+
+  defp slots(nil), do: nil
+  defp slots(slots), do: Map.new(slots, fn {name, slot} -> {Atom.to_string(name), slot(slot)} end)
+
+  defp slot(slot) do
+    %{
+      "rows" => rows(slot.rows),
+      "window" => Codec.encode_term(Map.get(slot, :window)),
+      "resolution" => Codec.encode_term(Map.get(slot, :resolution)),
+      "capped" => Map.get(slot, :capped),
+      "reduced_by" => Codec.encode_term(Map.get(slot, :reduced_by)),
+      "version" => slot.version,
+      "schema" => schema(slot.schema),
+      "status" => status(slot.status)
+    }
+  end
+
+  defp rows(nil), do: nil
+
+  defp rows(rows) do
+    fields = rows |> Enum.flat_map(&Map.keys/1) |> Enum.uniq()
+
+    %{
+      "fields" => Enum.map(fields, &Codec.encode_term/1),
+      "rows" =>
+        Enum.map(rows, fn row ->
+          Enum.map(fields, fn field ->
+            case Map.fetch(row, field) do
+              {:ok, value} -> Codec.encode_term(value)
+              :error -> @absent
+            end
+          end)
+        end)
+    }
+  end
+
+  defp schema(nil), do: nil
+
+  defp schema(fields) do
+    fields
+    |> Enum.sort_by(fn {name, _} -> to_string(name) end)
+    |> Enum.map(fn {name, description} -> [Codec.encode_term(name), description(description)] end)
+  end
+
+  defp description(description) do
+    Map.new(description, fn
+      {:status, status} when is_map(status) ->
+        {"status",
+         Enum.map(status, fn {k, v} -> [Codec.encode_term(k), Codec.encode_term(v)] end)}
+
+      {key, value} ->
+        {Atom.to_string(key), Codec.encode_term(value)}
+    end)
+  end
+
+  defp status({:down, reason}), do: %{"down" => reason}
+  defp status(status), do: Atom.to_string(status)
+
+  # -- decode ---------------------------------------------------------------------------
+
+  @doc false
+  # A parsed document, its stamp already taken off, as the snapshot's map.
+  def decode(term) do
+    Map.new(term, fn {key, value} ->
+      case known(key, @keys) do
+        :board -> {:board, board(value)}
+        :now -> {:now, Codec.decode_term(value)}
+        :window -> {:window, Codec.decode_term(value)}
+        :theme -> {:theme, theme(value)}
+        :cells -> {:cells, names(value, &read_cell/1)}
+        other -> {other, value}
+      end
+    end)
+  end
+
+  defp board(term) when is_map(term) do
+    {stamp, term} = Map.pop(term, @stamp)
+    map = BoardCodec.decode(term)
+    if stamp == nil, do: map, else: Map.put(map, :version, stamp)
+  end
+
+  defp board(other), do: other
+
+  defp theme(term) when is_map(term), do: Map.fetch!(Codec.decode(%{"theme" => term}), :theme)
+  defp theme(other), do: other
+
+  defp read_cell(cell) when is_map(cell) do
+    Map.new(cell, fn {key, value} ->
+      case known(key, @cell_keys) do
+        :chart -> {:chart, Codec.decode(value)}
+        :vars -> {:vars, names(value, &Codec.decode_term/1)}
+        :slots -> {:slots, names(value, &read_slot/1)}
+        other -> {other, value}
+      end
+    end)
+  end
+
+  defp read_cell(other), do: other
+
+  defp read_slot(slot) when is_map(slot) do
+    Map.new(slot, fn {key, value} ->
+      case known(key, @slot_keys) do
+        :rows -> {:rows, read_rows(value)}
+        :schema -> {:schema, read_schema(value)}
+        :status -> {:status, read_status(value)}
+        key when key in [:window, :resolution, :reduced_by] -> {key, Codec.decode_term(value)}
+        other -> {other, value}
+      end
+    end)
+  end
+
+  defp read_slot(other), do: other
+
+  defp read_rows(%{"fields" => fields, "rows" => rows} = term)
+       when map_size(term) == 2 and is_list(fields) and is_list(rows) do
+    names = Enum.map(fields, &Codec.decode_term/1)
+
+    Enum.map(rows, fn
+      values when is_list(values) and length(values) == length(names) ->
+        names
+        |> Enum.zip(values)
+        |> Enum.reject(fn {_name, value} -> value == @absent end)
+        |> Map.new(fn {name, value} -> {name, Codec.decode_term(value)} end)
+
+      other ->
+        other
+    end)
+  end
+
+  defp read_rows(other), do: other
+
+  defp read_schema(pairs) when is_list(pairs) do
+    if Enum.all?(pairs, &match?([_name, description] when is_map(description), &1)) do
+      Map.new(pairs, fn [name, description] ->
+        {Codec.decode_term(name), read_description(description)}
+      end)
+    else
+      pairs
+    end
+  end
+
+  defp read_schema(other), do: other
+
+  defp read_description(description) do
+    Map.new(description, fn {key, value} ->
+      case known(key, Schema.attributes()) do
+        :status when is_list(value) -> {:status, read_pairs(value)}
+        key when is_atom(key) -> {key, Codec.decode_term(value)}
+        key -> {key, value}
+      end
+    end)
+  end
+
+  defp read_pairs(pairs) do
+    if Enum.all?(pairs, &match?([_k, _v], &1)),
+      do: Map.new(pairs, fn [k, v] -> {Codec.decode_term(k), Codec.decode_term(v)} end),
+      else: pairs
+  end
+
+  defp read_status(%{"down" => reason} = term) when map_size(term) == 1, do: {:down, reason}
+
+  defp read_status(status) when is_binary(status),
+    do: Enum.find(@statuses, status, &(Atom.to_string(&1) == status))
+
+  defp read_status(other), do: other
+
+  defp names(map, read) when is_map(map),
+    do: Map.new(map, fn {name, value} -> {atom(name), read.(value)} end)
+
+  defp names(other, _read), do: other
+
+  # A key the snapshot knows, as its atom; any other key as it was read.
+  defp known(key, keys) when is_binary(key),
+    do: Enum.find(keys, key, &(Atom.to_string(&1) == key))
+
+  defp known(key, _keys), do: key
+
+  defp atom(key) when is_binary(key), do: String.to_atom(key)
+  defp atom(key), do: key
+end
