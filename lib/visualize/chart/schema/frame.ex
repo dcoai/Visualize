@@ -64,7 +64,7 @@ defmodule Visualize.Chart.Schema.Frame do
     [
       spec(:kind, {:enum, @scale_kinds}, :geometry, required: true),
       spec(:domain, :extent, :geometry, default: :auto),
-      spec(:range, {:one_of, [:extent, :name]}, :geometry, default: :auto),
+      spec(:range, {:one_of, [:extent, :ramp, :name]}, :geometry, default: :auto),
       spec(:nice, :boolean, :geometry, default: false),
       spec(:clamp, :boolean, :geometry, default: false),
       spec(:base, :number, :geometry, default: 10),

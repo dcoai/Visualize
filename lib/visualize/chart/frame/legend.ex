@@ -104,6 +104,7 @@ defmodule Visualize.Chart.Frame.Legend do
 
   defp colour?(value, _theme) when is_binary(value), do: true
   defp colour?({:series, i}, _theme), do: is_integer(i) and i >= 1
+  defp colour?({:ramp, name, t}, _theme), do: name in Theme.ramp_names() and is_number(t)
   defp colour?(value, theme) when is_atom(value), do: value in Theme.slots(theme)
   defp colour?(_value, _theme), do: false
 

@@ -40,7 +40,8 @@ defmodule Visualize.Color do
           opacity: number()
         }
 
-  # D65 standard illuminant
+  # The D50 white point, with the sRGB matrices Bradford-adapted to it, as d3-color has them:
+  # CIE Lab is defined against D50, and `to_lab/1` and `lab/4` are each other's inverse.
   @xn 0.96422
   @yn 1.0
   @zn 0.82521
@@ -368,9 +369,15 @@ defmodule Visualize.Color do
     g = rgb_xyz(g / 255)
     b_val = rgb_xyz(b / 255)
 
-    x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b_val) / @xn
-    y = (0.2126729 * r + 0.7151522 * g + 0.0721750 * b_val) / @yn
-    z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b_val) / @zn
+    # The D50-adapted matrix, the inverse of `lab/4`'s; a grey is exactly neutral, a = b = 0.
+    y = (0.2225045 * r + 0.7168786 * g + 0.0606169 * b_val) / @yn
+
+    {x, z} =
+      if r == g and g == b_val,
+        do: {y, y},
+        else:
+          {(0.4360747 * r + 0.3850649 * g + 0.1430804 * b_val) / @xn,
+           (0.0139322 * r + 0.0971045 * g + 0.7141733 * b_val) / @zn}
 
     x = xyz_lab(x)
     y = xyz_lab(y)

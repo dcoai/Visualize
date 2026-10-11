@@ -270,6 +270,7 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:field_ref, v), do: is_tuple(v)
   defp shape?(:adopted, v), do: match?({:frame, _f, _s}, v)
   defp shape?(:key_order, v), do: match?({:keys, keys} when is_list(keys), v)
+  defp shape?(:ramp, v), do: match?({:ramp, name} when is_atom(name), v)
   # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
   defp shape?({:enum, _}, v), do: is_atom(v)
   defp shape?(:term, _), do: true
@@ -360,6 +361,10 @@ defmodule Visualize.Chart.Schema do
       spec(:text, :string, :style, default: theme.text),
       spec(:background, :string, :style, default: theme.background),
       spec(:surface, :string, :style, default: theme.surface),
+      # The meaning-bearing ramps and the two free roles (spec/08 §7.5, #533); an inline
+      # theme names only what it changes, the rest the default's.
+      spec(:ramps, {:map, {:list, :string}}, :style, default: theme.ramps),
+      spec(:roles, {:map, :string}, :style, default: theme.roles),
       spec(:font_family, :string, :style, default: theme.font_family),
       spec(:font_size, :number, :style, default: theme.font_size, range: {6, 72, 1}),
       spec(:label_size, :number, :style, default: theme.label_size, range: {6, 72, 1}),

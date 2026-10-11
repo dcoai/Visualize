@@ -54,6 +54,7 @@ defmodule Visualize.Chart.Validator do
           | {:tiles, :attribution | :url | :subdomains}
           | {:outside_domain, atom(), number() | {:column, atom(), :number | :text | :time}}
           | {:feeds_domain, atom(), number()}
+          | {:contract, String.t()}
 
   @type error :: {path(), reason()}
 
@@ -259,8 +260,12 @@ defmodule Visualize.Chart.Validator do
   defp source_fields(nil), do: %{}
   defp source_fields(_), do: :unknown
 
-  defp slots(:default), do: theme_slots(Theme.default())
-  defp slots(:dark), do: theme_slots(Theme.dark())
+  defp slots(name) when is_atom(name) and name not in @not_names do
+    case Theme.builtin(name) do
+      nil -> :unknown
+      theme -> theme_slots(theme)
+    end
+  end
 
   # An inline theme gives its slots only when it is a whole, valid theme: a variable in
   # it is resolved at application, and an invalid one is already reported on its keys.
@@ -308,6 +313,22 @@ defmodule Visualize.Chart.Validator do
         name?(name),
         name not in fields,
         do: {path ++ [:types, name], {:undeclared, :field, name}}
+  end
+
+  # An inline theme's ramps and roles hold their meaning contracts (spec/08 §7.5, D-135):
+  # measured once the keys they are read with are well typed, so a type fault is not
+  # reported twice, and only the first breach, as construction refuses at the first.
+  defp held(:theme, map, path, _ctx) do
+    with ramps when is_map(ramps) <- Map.get(map, :ramps, %{}),
+         roles when is_map(roles) <- Map.get(map, :roles, %{}),
+         true <- Enum.all?(ramps, fn {_, v} -> is_list(v) and Enum.all?(v, &is_binary/1) end),
+         true <- Enum.all?(roles, fn {_, v} -> is_binary(v) end),
+         theme = Theme.build(Theme.default(), Map.take(map, [:ramps, :roles])),
+         {:error, {kind, name}, message} <- Theme.check(theme) do
+      [{path ++ [plural(kind), name], {:contract, message}}]
+    else
+      _ -> []
+    end
   end
 
   # A layout's weights are positive: a cell of no width is not a cell (spec/14 §2.8, #384).
@@ -781,7 +802,19 @@ defmodule Visualize.Chart.Validator do
   defp check(:colour, {:paint, name}, path, ctx) when is_atom(name),
     do: ref(:paint, name, path, ctx)
 
+  # A ramp position is a meaning the theme renders (spec/14 §3.2, D-135).
+  defp check(:colour, {:ramp, name, t}, path, _ctx) do
+    if name in Theme.ramp_names() and is_number(t) and t >= 0 and t <= 1,
+      do: [],
+      else: [{path, {:type, :colour}}]
+  end
+
   defp check(:colour, v, path, ctx), do: slot_or(:colour, v, path, ctx)
+
+  defp check(:ramp, {:ramp, name}, path, _ctx) do
+    if name in Theme.ramp_names(), do: [], else: [{path, {:type, :ramp}}]
+  end
+
   defp check(:size, v, _path, _ctx) when is_number(v), do: []
   defp check(:size, v, path, ctx), do: slot_or(:size, v, path, ctx)
   defp check(:font, v, _path, _ctx) when is_binary(v), do: []
@@ -921,10 +954,13 @@ defmodule Visualize.Chart.Validator do
   defp plural(:field), do: :fields
   defp plural(:slot), do: :slots
   defp plural(:frame), do: :frames
+  defp plural(:ramp), do: :ramps
+  defp plural(:role), do: :roles
 
   # -- formatting -----------------------------------------------------------------------
 
   defp words({:weight, key}), do: "every #{key} weight is a positive number"
+  defp words({:contract, message}), do: "breaks its contract: #{message}"
   defp words(:both), do: "says both box and cell: a frame says where it goes once"
   defp words(:outside), do: "is outside the design's layout grid"
 
@@ -1056,7 +1092,12 @@ defmodule Visualize.Chart.Validator do
       "{:data, [x, y]}"
   end
 
-  defp type_words(:colour), do: "a colour string, :none, :contrast, a theme slot or a paint"
+  defp type_words(:colour) do
+    "a colour string, :none, :contrast, a theme slot, a role, {:ramp, name, t} with t in " <>
+      "0..1 or a paint"
+  end
+
+  defp type_words(:ramp), do: "{:ramp, name} with name one of #{list(Theme.ramp_names())}"
   defp type_words(:size), do: "a number or a theme slot"
   defp type_words(:font), do: "a font string or a theme slot"
   defp type_words(:slot), do: "a theme slot"

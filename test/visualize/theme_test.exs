@@ -7,7 +7,8 @@ defmodule Visualize.ThemeTest do
 
   doctest Theme
 
-  @fixed ~w(axis grid text background surface font_family font_size label_size title_size)a
+  @fixed ~w(axis grid text background surface good warning bad info neutral font_family font_size
+             label_size title_size)a
 
   describe "slots" do
     test "series first, then the fixed slots, for both themes" do

@@ -27,6 +27,27 @@ release it merely follows.
   `locale:`, `"en"` by default and the only locale for now; another raises.
 - **`Visualize.Axis.tick_count/2`** (#532): the tick count an axis of a given length asks
   for — one per 80 px across, per 35 px down, between 2 and 10.
+- **Themes carry meaning: four ramps and five roles** (#533, D-135). A `Visualize.Theme`
+  now has `ramps` — `status` (good → caution → bad), `thermal` (cold → neutral → hot),
+  `diverging` (below → at → above a midpoint) and `sequential` (less → more), each a list of
+  anchor colours interpolated in CIE Lab — and the roles `:good`, `:warning`, `:bad` (the
+  status ramp at 0, 0.5 and 1), `:info` and `:neutral`. A design colours by meaning with a
+  role (`fill: :bad`) or a ramp position (`fill: {:ramp, :thermal, 0.8}`), wherever a colour
+  is accepted, and every theme renders it in its own tones. `Visualize.Theme.ramp/3` reads a
+  position; roles are slots, so `stylesheet/1` declares `--vis-good` and the rest.
+- **Ramp and role contracts are checked when a theme is built.** `Theme.new/1`,
+  `Theme.merge/2` and an inline design theme refuse a ramp whose hues are out of order, whose
+  lightness is not monotonic, or whose midpoint is not neutral, with an `ArgumentError`
+  naming the theme, the ramp and what is broken; `Theme.check/1` returns the same answer
+  without raising, and the validator reports it as `{:contract, message}`. The tolerances
+  are in spec/08 §7.5.
+- **`Visualize.Theme.colour_safe/0`** (`theme: :colour_safe`): the light theme with its
+  status ramp blue → orange → red, so status reads under the commonest colour-vision
+  deficiencies. `Theme.builtin/1` resolves the three built-in names.
+- **Colour scales range over a theme ramp.** `range: {:ramp, :status}` on an ordinal colour
+  scale spreads its domain end to end (three states draw as `:good`, `:warning`, `:bad`); on a
+  threshold scale its buckets; on a sequential or diverging scale it interpolates the ramp.
+  JSON writes a ramp as `{"$ramp": "status"}` and a position as `{"$ramp": ["status", 0.5]}`.
 
 ### Changed
 
@@ -41,6 +62,20 @@ release it merely follows.
   `ticks: 10` to keep them; a numeric axis over years (`1990..2020`) is now grouped
   (`1,990`) — set `format: "d"`; and `unit: "M"` over values from 1,000 reads `1,200M`. The
   hand-built `Visualize.Axis` is unchanged: d3's ten ticks and its default label.
+- **A `:sequential` or `:diverging` colour scale left at `range: :auto` now draws the theme's
+  `sequential` or `diverging` ramp**, where it ran from the background to the first series
+  colour. Heatmaps, contours and hexbins change colour slightly on the light theme, and follow
+  the theme's own ramp on the dark one; give `range:` to keep the old colours.
+- **`ramps` and `roles` merge key by key** in `Theme.new/1` and `Theme.merge/2`, and a theme
+  lacking one takes the default theme's — never a series colour.
+- `Theme.slots/1` and `Theme.colour_slots/1` include the five roles, after `surface`.
+
+### Fixed
+
+- **`Visualize.Color.to_lab/1` was not the inverse of `Visualize.Color.lab/4`**: it used the
+  D65 sRGB matrix against the D50 white point, so a grey had a chroma of about 12 and a colour
+  did not survive a round trip (`#808080` came back `#758194`). Lab, LCh, `brighter/2`,
+  `darker/2`, `interpolate_lab/3` and `interpolate_hcl/3` now read true.
 
 ## [0.2.35] — 2026-10-10
 

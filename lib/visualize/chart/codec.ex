@@ -35,6 +35,12 @@ defmodule Visualize.Chart.Codec do
   defp value(_type, %Var{name: name}), do: %{"$var" => Atom.to_string(name)}
   defp value(_type, {:field, f}) when is_atom(f), do: %{"$field" => Atom.to_string(f)}
   defp value(:colour, {:paint, name}) when is_atom(name), do: %{"$paint" => Atom.to_string(name)}
+
+  # A ramp position, and a whole ramp as a colour scale's range (spec/14 §11.2, #533).
+  defp value(:colour, {:ramp, name, t}) when is_atom(name) and is_number(t),
+    do: %{"$ramp" => [Atom.to_string(name), t]}
+
+  defp value(:ramp, {:ramp, name}) when is_atom(name), do: %{"$ramp" => Atom.to_string(name)}
   defp value({:node, kind}, v) when is_map(v) and not is_struct(v), do: node(kind, v)
   defp value({:list, t}, v) when is_list(v), do: Enum.map(v, &value(t, &1))
 
@@ -148,6 +154,20 @@ defmodule Visualize.Chart.Codec do
   defp read(:colour, %{"$paint" => name} = v) when map_size(v) == 1 and is_binary(name),
     do: {:paint, String.to_atom(name)}
 
+  defp read(:colour, %{"$ramp" => [name, t]} = v) when map_size(v) == 1 and is_number(t) do
+    case ramp_name(name) do
+      nil -> v
+      found -> {:ramp, found, t}
+    end
+  end
+
+  defp read(:ramp, %{"$ramp" => name} = v) when map_size(v) == 1 do
+    case ramp_name(name) do
+      nil -> v
+      found -> {:ramp, found}
+    end
+  end
+
   defp read({:node, kind}, v) when is_map(v) and not is_struct(v), do: read_node(kind, v)
   defp read({:list, t}, v) when is_list(v), do: Enum.map(v, &read(t, &1))
 
@@ -208,6 +228,9 @@ defmodule Visualize.Chart.Codec do
       v
     end
   end
+
+  # A ramp's name is one of the theme's four, so no atom is created from a document.
+  defp ramp_name(name), do: Enum.find(Theme.ramp_names(), &(Atom.to_string(&1) == name))
 
   defp read_category("auto"), do: :auto
   defp read_category(v), do: read_term(v)
@@ -271,6 +294,7 @@ defmodule Visualize.Chart.Codec do
   defp json_shape?({:node, _}, v), do: is_map(v) and not is_struct(v) and not tagged?(v)
   defp json_shape?(:adopted, v), do: is_map(v) and is_map_key(v, "$adopted") and map_size(v) == 1
   defp json_shape?(:key_order, v), do: is_map(v) and is_map_key(v, "$keys") and map_size(v) == 1
+  defp json_shape?(:ramp, v), do: is_map(v) and is_map_key(v, "$ramp") and map_size(v) == 1
   # An enumeration's JSON is a string, so a tagged object beside one is never it (#492).
   defp json_shape?({:enum, _}, v), do: is_binary(v)
   defp json_shape?({:map, _}, v), do: is_map(v) and not is_struct(v)

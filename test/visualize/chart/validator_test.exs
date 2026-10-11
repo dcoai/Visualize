@@ -637,7 +637,8 @@ defmodule Visualize.Chart.ValidatorTest do
                "marks[0].options.radius: is not read by :line"
 
       assert Validator.format({[:styles, :s, :fill], {:type, :colour}}) ==
-               "styles.s.fill: must be a colour string, :none, :contrast, a theme slot or a paint"
+               "styles.s.fill: must be a colour string, :none, :contrast, a theme slot, a role, " <>
+                 "{:ramp, name, t} with t in 0..1 or a paint"
     end
   end
 
