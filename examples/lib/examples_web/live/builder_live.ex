@@ -292,6 +292,13 @@ defmodule ExamplesWeb.BuilderLive do
         hands the page the flat
         design.
       </p>
+      <p>
+        <em>Theme</em>
+        on the chart bar, a <em>Theme::</em>
+        entry, or <em>New → theme</em>
+        opens the theme mode: the theme's colours and fonts beside a sheet of sample charts
+        drawn in it.
+      </p>
       <p :if={@saved} class="builder-saved">{@saved}</p>
     </div>
     <main>

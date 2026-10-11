@@ -127,6 +127,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec theme(store(), atom() | String.t()) ::
             {:ok, Visualize.Theme.t()} | {:error, [Visualize.Chart.Validator.error()]} | :error
     def theme(store, name) when is_atom(name) or is_binary(name) do
+      with {:ok, entry} <- theme_entry(store, name), do: ChartTheme.from_map(entry.fragment)
+    end
+
+    @doc """
+    The stored theme entry `theme/2` reads — `{:ok, entry}`, its `id`, `name` and fragment —
+    or `:error` (spec/14 §20.1): what the theme mode opens when a chart's design names a
+    stored theme, so saving updates the entry the chart draws in.
+    """
+    @spec theme_entry(store(), atom() | String.t()) :: {:ok, entry()} | :error
+    def theme_entry(store, name) when is_atom(name) or is_binary(name) do
       wanted = to_string(name)
 
       store
@@ -134,7 +144,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.filter(&(&1.kind == :theme))
       |> Enum.find_value(:error, fn summary ->
         case get(store, summary.id) do
-          {:ok, entry} -> if named?(entry, wanted), do: ChartTheme.from_map(entry.fragment)
+          {:ok, entry} -> if named?(entry, wanted), do: {:ok, entry}
           :error -> nil
         end
       end)

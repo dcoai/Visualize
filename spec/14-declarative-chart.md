@@ -2795,7 +2795,7 @@ Selection is a use's id, and a host that seeds one (`selected`) is honoured when
 
 **Opening is a chart** (#243; this replaces the one-open-thing model of the first draft, in which the workspace was stashed while an entry was open). The workspace holds several **charts** at once, one **selected**; each chart is a stack — the compose face of one thing — and the panel of §18.8 lists them. The chart the host seeded is the first; its layers take anything. Clicking a library entry opens it *as a new chart* — a composite's sites, labelled by the store's names, or any other body as one inline site named for the entry — selected, with the entry recorded on it so that *Save as* writes the entry; the field forms write to the selected site's local, which for an opened style is the style's own body. Closing a chart removes it from the workspace and selects its neighbour; the last chart is not closed. Opening another entry adds another chart, as opening a second file does. Dragging an entry into the selected chart composes it, as a use referring to its id whose label is the entry's name, and the composer **admits only the chart's kind**: a chart opened on a style refuses a frame by name — *a style composer takes a style; Frame::wide is a frame* — while a chart that is a composite takes anything. The chart's row says which: its name, and its kind when it is not a composite.
 
-**What an open kind shows.** A composite or a design has the node tabs, the preview and the design's faults from `apply/2`; any other kind has its own form as the one root — a wrapper body's nodes are its kind's, so `%{style: %{…}}` opens on a `style` tab — no preview, since there is no chart to look at, and the faults of per-kind validity in their place. The document panel exports the fragment itself in the JSON form, valid as its kind.
+**What an open kind shows.** A composite or a design has the node tabs, the preview and the design's faults from `apply/2`; any other kind has its own form as the one root — a wrapper body's nodes are its kind's, so `%{style: %{…}}` opens on a `style` tab — no preview, since there is no chart to look at, and the faults of per-kind validity in their place. A theme is the exception that has something to look at: it opens the theme mode of §20, whose editor replaces the form and whose preview sheet fills the main column. The document panel exports the fragment itself in the JSON form, valid as its kind.
 
 **Save writes the lowest tier.** The workspace and a composite are saved as structure. Any other kind is saved as `body/2` gives it — one bare inline site is its body, values and nothing else, so a style stays a style; a stack of sites is structure under the kind's id — and is refused when what it flattens to is no longer that kind (*opened as a style and is now a frame*) or is not valid as one. A singular wrapper cascades as a node of its kind, so two style fragments stack key by key as two styles would (§8.2), and a stored structure of kind `style` flattens to a style wherever it is used.
 
@@ -2905,3 +2905,61 @@ A bare `<input type="color">` would drop the theme slot, and the theme slot is h
 | §19.8 — a multi-root fragment is of kind `design` | it is no kind of fragment; the thing that is many kinds is a composite, and design is only what Deploy makes |
 
 The rule underneath all of it: **the thing a person renames is never the thing a reference uses.** A name is an attribute of a library entry; a reference is an id; a declaration in place has neither. Nothing in the model ever has to hunt for a word.
+
+## 20. The theme mode
+
+**Implemented** (#534, D-139). A theme is where a host sets its look (spec/08 §7), and a theme stored as a value (§9.3) needs a tool that shows what it does. The builder has one: the **theme mode**, which is the shape the editor takes when the open chart is a theme — §19.9's rule that the editor's shape is the open fragment's kind, given a face for this kind.
+
+### 20.1 Entering the mode
+
+The mode is on while the selected chart is a theme — its `open` kind is `:theme` — and off otherwise; nothing else switches it. A chart becomes a theme in three ways:
+
+- **opening a theme entry** of the library (§19.8), which opens it as a chart as every entry opens (§19.9), so *Save to library* writes the entry back;
+- ***New → theme*** (`new_fragment`, §19.8), an empty theme fragment, which reads as the default theme until something is set;
+- ***Theme*** on the chart bar of a composite chart (`open_theme`), which opens **the chart's own theme**: the stored entry when the design names a theme the store holds (`Visualize.Chart.Builder.Store.theme_entry/2`), so saving updates what the chart draws in; else a new theme holding the built-in theme's node, or the inline theme's merged over the default, unsaved until named.
+
+The mode writes the open site's `theme` — the selected site's local, or the first site of the chart that carries one — as every form writes a node (§18.7); a site that refers to a library entry is read-only, and an edit there is refused with the locked notice (§18.8). A theme that is a **name** in the site (`%{theme: :dark}`) becomes that theme's full node at its first edit, so the edit changes one value of the theme the person was looking at, not of the default.
+
+### 20.2 The theme editor
+
+In the mode the inspector (`context` `:inspect`) is `Visualize.Chart.Builder.Themes.panel/1` in place of the node's form: one `<form class="vis-builder-theme">` (`phx-change="theme_edit"`) of sections, each a `<fieldset class="vis-builder-theme-section">` with its word as the legend:
+
+| Section | Controls | Writes |
+|---|---|---|
+| *theme* | the theme's `name` (a text box); *derive from*, a select of the built-in themes and the store's theme entries with a button (`theme_derive`) | `name`; derive replaces every value of the node with the chosen theme's and keeps the `name`, so a variant starts from what it varies — dark from light, colour-safe from either — with the meaning held |
+| *series* | one colour input per series colour (`series.<i>`), each with an **×** (`theme_series_remove`), then **+** (`theme_series_add`), which appends the next default series colour | `series`, as the whole list; the last colour cannot be removed (spec/08 §7.2) |
+| *chrome* | a colour input each for `background`, `surface`, `text`, `axis`, `grid` | the slot |
+| *fonts* | `font_family` (a text box), `font_size`, `label_size`, `title_size` (number boxes) | the field |
+| *validity* | the theme's faults — per-kind validity (§19.8), the contract faults among them — one line each in the validator's words, or *a valid theme — Save to library keeps it* | — |
+
+A colour control is `<input type="color">` showing the slot's literal as `#rrggbb` (a colour `Visualize.Color.parse/1` reads but that is not hex is shown as its hex), and its title is the value as stored. A blank or unreadable value leaves the node unchanged. Saving is *Save to library* under the theme kind's per-kind validity, which refuses a theme that breaks a contract (§19.9) — the editor shows why before a save is tried.
+
+### 20.3 The preview sheet
+
+In the mode the main column, where a non-composite kind showed a sentence (§19.9), is `Visualize.Chart.Builder.ThemeSheet.sheet/1`: a grid of `<figure class="vis-builder-theme-sample">` cards, each a small chart drawn through `Visualize.Chart.apply/2` and `render/2` with the theme being edited and its title as the caption. The samples are fixed — `Visualize.Chart.Builder.ThemeSheet.samples/0` — because a theme is judged against everything it must serve, not against one chart:
+
+| Sample | What it shows |
+|---|---|
+| *series* | eight lines coloured by the categorical series, over axes |
+| *status* | five bars coloured `:good`, `:warning`, `:bad`, `:info`, `:neutral` — the roles (spec/08 §7.5) |
+| *thermal* | a grid of cells on a `:sequential` scale ranging over the `thermal` ramp |
+| *diverging* | bars below and above zero on a `:diverging` scale over the `diverging` ramp |
+| *axes, grid and text* | a titled line chart with both axes, a grid and an axis label |
+
+and a *chrome* card of swatches — every series colour, then background, surface, text, axis and grid — so the colours are seen as values as well as in use. Each sample paints its frame's `background` and is rendered with `resolve: :literal`, so the sheet shows the edited theme and no stylesheet of the host's page can re-point a slot under it. The theme is built unchecked (`Visualize.Theme.build/2`), so a theme that breaks a contract still draws while it is being fixed; a ramp that cannot be drawn at all — fewer than two anchors, an anchor that is not a colour — draws as the default theme's while the editor names the fault.
+
+**Designs from the store** (`theme_designs`): beneath the samples a select of the store's composite entries and **+** (`theme_design_add`) adds one to the sheet, flattened through the store (§19.6) and applied over the host's pool and variables in the theme being edited; each carries an **×** (`theme_design_remove`). A design that does not apply shows its faults in its card, as the preview does (§18.4). The chosen designs are the builder's while a person works, not the theme's, and are not saved.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Themes.panel/1` | the theme editor of §20.2 |
+| `Visualize.Chart.Builder.Themes.editable/2` | `editable(theme, store)`: the theme a site holds as the node the editor writes — a name as the whole node of the theme it names (built-in, else the store's), a map as it is, anything else an empty node |
+| `Visualize.Chart.Builder.Themes.effective/2` | `effective(theme, store)`: the `%Visualize.Theme{}` a design's `theme` value draws as — a built-in name, a stored theme by name, or a map over the default — built unchecked, so a broken contract still draws |
+| `Visualize.Chart.Builder.Themes.change/3` | `change(node, field, value)`: the node with one control's value written — `name`, `series.<i>`, a chrome slot, a font field — or `:error` for a value that does not read |
+| `Visualize.Chart.Builder.Themes.series_added/1` | the node with one more series colour, the default palette's at the next position, cycling |
+| `Visualize.Chart.Builder.Themes.series_removed/2` | the node without the series colour at an index; the last colour stays |
+| `Visualize.Chart.Builder.Themes.derived/2` | `derived(node, theme)`: the node with every value of the theme and the node's own `name` |
+| `Visualize.Chart.Builder.ThemeSheet.sheet/1` | the preview sheet of §20.3 |
+| `Visualize.Chart.Builder.ThemeSheet.samples/0` | the fixed samples: each `%{id, title, design, sources}` |
+| `Visualize.Chart.Builder.ThemeSheet.drawable/1` | a theme whose undrawable ramps are the default's, so a sheet always draws |
+| `Visualize.Chart.Builder.Store.theme_entry/2` | `theme_entry(store, name)`: the stored theme entry `theme/2` reads, `{:ok, entry}` or `:error` |

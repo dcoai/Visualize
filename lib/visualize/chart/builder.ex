@@ -78,6 +78,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Store,
       Styles,
       StyleStack,
+      Themes,
+      ThemeSheet,
       Variables
     }
 
@@ -188,7 +190,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
          mask_layers: MapSet.new(),
          expanded: MapSet.new(),
          find: "",
-         node_label: "design"
+         node_label: "design",
+         theme_designs: []
        )}
     end
 
@@ -461,6 +464,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <button
                 :if={@preview?}
                 type="button"
+                class="vis-builder-theme-open"
+                phx-click="open_theme"
+                phx-target={@myself}
+                title="the theme mode: edit and preview this chart's theme"
+              >
+                Theme
+              </button>
+              <button
+                :if={@preview?}
+                type="button"
                 class="vis-builder-deploy"
                 phx-click="deploy"
                 phx-target={@myself}
@@ -487,7 +500,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 steps={@steps}
                 target={@myself}
               />
-              <p :if={!@preview?} class="vis-builder-context-note">
+              <ThemeSheet.sheet
+                :if={@theme_mode}
+                id={@id <> "-theme-sheet"}
+                theme={@theme_mode.theme}
+                designs={@theme_mode.designs}
+                choices={@theme_mode.choices}
+                sources={@bound_pool}
+                vars={@bindings}
+                target={@myself}
+              />
+              <p :if={!@preview? and !@theme_mode} class="vis-builder-context-note">
                 a {@kind} has no chart to look at; its form is in the inspector
               </p>
             </div>
@@ -540,7 +563,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-target={@myself}
               >{Phoenix.HTML.raw(Glyphs.icon(:colour))}</button>
             </nav>
-            <div :if={@context == :inspect} class="vis-builder-inspect">
+            <Themes.panel
+              :if={@context == :inspect and @theme_mode}
+              id={@id <> "-theme"}
+              node={@theme_mode.node}
+              theme={@theme_mode.theme}
+              faults={@theme_mode.faults}
+              derive={@theme_mode.derive}
+              target={@myself}
+            />
+            <div :if={@context == :inspect and !@theme_mode} class="vis-builder-inspect">
               <details
                 :for={top <- @page.tops}
                 :if={@page.sections? and not @data_page?}
@@ -708,7 +740,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <Masks.panel
-              :if={@context == :inspect && @site && !(@style_site && @style_entry)}
+              :if={@context == :inspect && @site && !(@style_site && @style_entry) && !@theme_mode}
               id={@id <> "-masks"}
               use={@site.use}
               label={@site.label}
@@ -2385,6 +2417,74 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # -- the theme mode (spec/14 §20, D-139) ----------------------------------------------
+
+    def handle_event("theme_edit", %{"_target" => [field]} = params, socket) do
+      value = Map.get(params, field, "")
+      {:noreply, theme_written(socket, &Themes.change(&1, field, value))}
+    end
+
+    def handle_event("theme_edit", _params, socket), do: {:noreply, socket}
+
+    def handle_event("theme_series_add", _params, socket) do
+      {:noreply, theme_written(socket, &{:ok, Themes.series_added(&1)})}
+    end
+
+    def handle_event("theme_series_remove", %{"index" => index}, socket) do
+      {:noreply, theme_written(socket, &{:ok, Themes.series_removed(&1, position(index))})}
+    end
+
+    def handle_event("theme_derive", %{"from" => from}, socket) do
+      case Themes.derive_source(from, socket.assigns.store) do
+        {:ok, theme} -> {:noreply, theme_written(socket, &{:ok, Themes.derived(&1, theme)})}
+        {:error, notice} -> {:noreply, assign(socket, :notice, notice)}
+      end
+    end
+
+    def handle_event("theme_design_add", %{"id" => submitted}, socket) do
+      case Store.decode_id(submitted) do
+        {:ok, id} ->
+          {:noreply, update(socket, :theme_designs, &if(id in &1, do: &1, else: &1 ++ [id]))}
+
+        :error ->
+          {:noreply, socket}
+      end
+    end
+
+    def handle_event("theme_design_remove", %{"id" => submitted}, socket) do
+      case Store.decode_id(submitted) do
+        {:ok, id} -> {:noreply, update(socket, :theme_designs, &List.delete(&1, id))}
+        :error -> {:noreply, socket}
+      end
+    end
+
+    # The chart's own theme opened in the theme mode (spec/14 §20.1): the stored entry when
+    # the design names one the store holds, so saving updates what the chart draws in; else a
+    # new theme of the built-in's or the inline theme's whole node.
+    def handle_event("open_theme", _params, socket) do
+      %{uses: uses, stack_vars: vars, store: store} = socket.assigns
+
+      value =
+        case Stack.design(uses, vars, Stack.fetch(store)) do
+          {:ok, design, _report} -> Map.get(design, :theme, :default)
+          {:error, _cycle} -> :default
+        end
+
+      entry =
+        with name when is_atom(name) and name != nil <- value,
+             nil <- Theme.builtin(name),
+             true <- store != nil,
+             {:ok, entry} <- Store.theme_entry(store, name) do
+          Map.put(entry, :kind, :theme)
+        else
+          _new ->
+            node = value |> Themes.effective(store) |> Visualize.Chart.Theme.node()
+            %{id: nil, name: nil, kind: :theme, fragment: %{theme: node}}
+        end
+
+      {:noreply, opened_entry(socket, entry)}
+    end
+
     def handle_event("import", %{"document" => document}, socket) do
       case Chart.from_json(document) do
         {:ok, chart} -> {:noreply, imported(socket, Chart.to_map(chart))}
@@ -2644,6 +2744,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         kind: kind,
         preview?: kind == :composite,
         preview_theme: preview_theme,
+        theme_mode: theme_mode(assigns, kind, errors),
         chart_rows: chart_rows(assigns),
         selected_index: Stack.index_of(assigns.uses, assigns.selected),
         chosen_index: chosen_index(assigns),
@@ -3059,6 +3160,52 @@ if Code.ensure_loaded?(Phoenix.Component) do
           do: index
     end
 
+    # The theme mode (spec/14 §20): while the open chart is a theme, the node the editor
+    # writes, the theme it draws as, its faults, what it may derive from, and the designs a
+    # person has put on the sheet; `nil` in any other chart.
+    defp theme_mode(%{uses: uses, selected: selected, store: store} = assigns, :theme, errors) do
+      value =
+        case Themes.site(uses, selected) do
+          %Use{local: %{theme: value}} -> value
+          _none -> nil
+        end
+
+      %{
+        node: Themes.editable(value, store),
+        theme: Themes.effective(value, store),
+        faults: Enum.map(errors, &Validator.format/1),
+        derive: Themes.derive_choices(store),
+        designs: sheet_designs(assigns),
+        choices: sheet_choices(store)
+      }
+    end
+
+    defp theme_mode(_assigns, _kind, _errors), do: nil
+
+    # The designs a person has put on the sheet, each flattened through the store (§19.6).
+    defp sheet_designs(%{theme_designs: ids, store: store}) when store != nil do
+      fetch = Stack.fetch(store)
+
+      for id <- ids, {:ok, entry} <- [Store.get(store, id)] do
+        design =
+          case Chart.flatten(entry.fragment, fetch) do
+            {:ok, design, _report} -> design
+            {:error, {:cycle, _chain}} -> %{}
+          end
+
+        %{id: Store.encode_id(id), name: entry.name, design: design}
+      end
+    end
+
+    defp sheet_designs(_assigns), do: []
+
+    defp sheet_choices(nil), do: []
+
+    defp sheet_choices(store) do
+      for %{kind: :composite} = entry <- Store.list(store),
+          do: {entry.name, Store.encode_id(entry.id)}
+    end
+
     # The theme the preview draws in: the host's when it gives one; else, for a design that
     # names a theme that is not built-in, the store's theme of that name — the `theme:` of
     # application supplied by the library, so a host ships a theme as a value (spec/14 §2.5,
@@ -3095,8 +3242,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       layer ++ Scales.unscaled(design, Scales.pool_types(pool))
     end
 
+    # The design of a non-composite chart is stamped with the version as every design the
+    # stack makes is (§9.1); per-kind validity reads the fragment, which carries none.
     defp faults(kind, design, _assigns, nil) do
-      case Validator.validate(design, kind) do
+      case Validator.validate(Map.delete(design, :version), kind) do
         :ok -> []
         {:error, errors} -> errors
       end
@@ -4375,6 +4524,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp root_of(:label), do: "labels"
     defp root_of(:scale), do: "frame"
     defp root_of(_kind), do: "design"
+
+    # One write of the theme mode into the open theme site (spec/14 §20.1).
+    defp theme_written(socket, fun) do
+      %{uses: uses, selected: selected, store: store} = socket.assigns
+
+      case Themes.written(uses, selected, store, fun) do
+        {:ok, uses} -> assign(socket, uses: uses, notice: nil)
+        :unchanged -> socket
+        {:locked, use} -> assign(socket, :notice, locked_notice(socket.assigns, use))
+        :none -> assign(socket, :notice, "this chart holds no theme to edit")
+      end
+    end
 
     defp locked_notice(%{labels: labels}, use),
       do: "#{Stack.label(labels, use)} is from the library — open it to edit"

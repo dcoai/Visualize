@@ -45,6 +45,46 @@ defmodule ExamplesWeb.BuilderLiveTest do
     assert html =~ ~s(class="vis-builder-deploy")
   end
 
+  describe "the theme mode (spec/14 §20, D-139)" do
+    alias Examples.Charts.Templates
+    alias Visualize.Chart.Builder.Themes
+
+    test "the page offers it, and the library ships a host theme as a value" do
+      html = build_conn() |> get("/builder") |> html_response(200)
+
+      assert html =~ ~s(class="vis-builder-theme-open")
+      assert html =~ "In development:"
+
+      assert {:ok, %Visualize.Theme{name: :house}} =
+               Visualize.Chart.Builder.Store.theme(Library, :house)
+    end
+
+    test "a theme made in the builder renders every gallery chart" do
+      {:ok, dark} = Themes.derive_source("builtin:dark", Library)
+
+      node =
+        Enum.reduce(
+          [{"axis", "#c0c4cc"}, {"series.0", "#ffb000"}, {"font_family", "Georgia, serif"}],
+          Themes.derived(%{name: :night}, dark),
+          fn {field, value}, node ->
+            {:ok, node} = Themes.change(node, field, value)
+            node
+          end
+        )
+
+      theme = Themes.effective(node, Library)
+      assert theme.name == :night and theme.axis == "#c0c4cc"
+      pool = Templates.pool()
+
+      for template <- Templates.all() do
+        assert {:ok, applied} = Chart.apply(template.design, sources: pool, theme: theme),
+               template.name
+
+        assert Chart.render(applied, resolve: :literal) =~ "<", template.name
+      end
+    end
+  end
+
   describe "a chart type is a template in the library (spec/14 §18.16, #233)" do
     alias Examples.Charts.Templates
 
