@@ -77,6 +77,11 @@ defmodule Visualize.Chart.Codec do
   defp value(:slot, v) when is_atom(v), do: Atom.to_string(v)
   defp value(:slot, {:series, i}), do: %{"$series" => i}
   defp value(type, v) when type in [:size, :channel] and is_atom(v), do: Atom.to_string(v)
+
+  # A channel at its scale's own end (spec/14 §5.2, §11.2, #554).
+  defp value(:channel, {:scale, which}) when which in [:min, :max],
+    do: %{"$scale" => Atom.to_string(which)}
+
   defp value(type, {:series, i}) when type in [:colour, :size, :font], do: %{"$series" => i}
   defp value(:extent, :auto), do: "auto"
   defp value(:extent, v) when is_list(v), do: Enum.map(v, &category/1)
@@ -209,8 +214,11 @@ defmodule Visualize.Chart.Codec do
     Map.new(v, fn {k, e} -> {atom(k), read(t, e)} end)
   end
 
+  # A string naming a member of an enumeration alternative is that member, whatever comes
+  # first: an axis's `format` is a string or `:duration`, and `"duration"` is the atom
+  # (spec/14 §11.1, #554, D-144). Otherwise the first alternative of the value's shape.
   defp read({:one_of, types}, v) do
-    case Enum.find(types, &json_shape?(&1, v)) do
+    case Enum.find(types, &member?(&1, v)) || Enum.find(types, &json_shape?(&1, v)) do
       nil -> read_term(v)
       t -> read(t, v)
     end
@@ -227,6 +235,15 @@ defmodule Visualize.Chart.Codec do
   defp read(type, %{"$series" => i} = v)
        when type in [:slot, :colour, :size, :font] and map_size(v) == 1,
        do: {:series, i}
+
+  # Only the two ends are read as atoms; any other is left for the validator to name.
+  defp read(:channel, %{"$scale" => which} = v) when map_size(v) == 1 do
+    case which do
+      "min" -> {:scale, :min}
+      "max" -> {:scale, :max}
+      _other -> v
+    end
+  end
 
   defp read(:colour, "none"), do: :none
   defp read(:colour, "contrast"), do: :contrast
@@ -325,6 +342,11 @@ defmodule Visualize.Chart.Codec do
 
   defp read_mask("all"), do: :all
   defp read_mask(paths) when is_list(paths), do: Enum.map(paths, &read_term/1)
+
+  defp member?({:enum, allowed}, v) when is_binary(v),
+    do: v in Enum.map(allowed, &Atom.to_string/1)
+
+  defp member?(_type, _v), do: false
 
   # The JSON shape of each alternative of a `{:one_of, types}`: strings stand for atoms.
   # A tagged object is a term, never a node: an adopted scale (`$adopted`) sits where a

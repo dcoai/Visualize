@@ -330,6 +330,14 @@ release it merely follows.
 
 ### Fixed
 
+- **`Visualize.Chart.to_json/1` raised on a channel at its scale's own end** (#554): a
+  `{:scale, :min}` or `{:scale, :max}` channel, such as an area's `y0`, had no JSON form. It is
+  now written `{"$scale": "min"}` and read back as the tuple.
+- **An axis's `format: :duration` read back from JSON as the string `"duration"`** (#554,
+  D-144), so the axis printed that word as a format specifier instead of durations. Where a
+  key may be a string or an enumerated atom, a string naming a member of the enumeration now
+  reads back as the atom. Every gallery design now round-trips through `to_json/1` and
+  `from_json/1`.
 - **`Visualize.Color.to_lab/1` was not the inverse of `Visualize.Color.lab/4`**: it used the
   D65 sRGB matrix against the D50 white point, so a grey had a chroma of about 12 and a colour
   did not survive a round trip (`#808080` came back `#758194`). Lab, LCh, `brighter/2`,

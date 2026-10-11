@@ -680,6 +680,31 @@ defmodule Visualize.Chart.MarkTest do
       assert Frame.new(chart, sources: %{primary: rows}, size: {300, 200}).scales.y.domain ==
                Enum.min_max(Enum.map(rows, & &1.v)) |> Tuple.to_list()
     end
+
+    test "it round-trips through JSON as a tagged term (spec/14 §11.2, #554)" do
+      chart =
+        Chart.from_map!(%{
+          version: 2,
+          sources: %{primary: %{fields: [:t, :v]}},
+          frames: %{main: offset_frame(%{y: %{kind: :linear, domain: [50, 150]}})},
+          marks: [
+            %{
+              data: :primary,
+              type: :area,
+              channels: %{x: :t, y: :v, y0: {:scale, :min}, y1: {:scale, :max}}
+            }
+          ]
+        })
+
+      {:ok, json} = Chart.to_json(chart)
+      assert json =~ ~s("y0":{"$scale":"min"})
+      assert json =~ ~s("y1":{"$scale":"max"})
+      assert {:ok, ^chart} = Chart.from_json(json)
+
+      # Any other end is left as it was read, never an atom, for the validator to name.
+      bad = String.replace(json, ~s("$scale":"min"), ~s("$scale":"middle"))
+      assert {:error, [{[:marks, 0, :channels, :y0], {:type, :channel}}]} = Chart.from_json(bad)
+    end
   end
 
   describe "an area's default baseline stays in the plot (spec/14 §5.2, #420)" do

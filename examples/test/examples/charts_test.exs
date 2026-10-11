@@ -153,15 +153,30 @@ defmodule Examples.ChartsTest do
     end
   end
 
+  # Every term a gallery design holds has a JSON form (spec/14 §11.2, #554): a tuple the
+  # validator accepts without one makes `to_json/1` fail on a valid chart.
+  test "every design round-trips through to_json/from_json" do
+    for module <- charts() do
+      {design, _sources} = module.design([])
+      chart = Chart.from_map!(design)
+      assert {:ok, json} = Chart.to_json(chart), inspect(module)
+      assert {:ok, ^chart} = Chart.from_json(json), inspect(module)
+    end
+  end
+
   # The sanity limits' defaults are generous (spec/14 §9.2, #541, D-137): every gallery
-  # design passes them. `from_map/1` applies them too, so the test above holds it as well;
-  # this one says so by name. (Through the JSON reader once #554 gives `{:scale, :min}` a
-  # JSON form.)
+  # design passes them, as a map and through the JSON reader, which checks the parsed
+  # document's structure before decoding it. `from_map/1` applies them too, so the test
+  # above holds it as well; this one says so by name.
   test "every design passes the default sanity limits" do
     for module <- charts() do
       {design, _sources} = module.design([])
       assert Chart.Limits.check(design) == :ok, inspect(module)
-      assert {:ok, _chart} = Chart.from_map(design, limits: Chart.Limits.defaults())
+      assert {:ok, chart} = Chart.from_map(design, limits: Chart.Limits.defaults())
+      {:ok, json} = Chart.to_json(chart)
+
+      assert {:ok, _chart} = Chart.from_json(json, limits: Chart.Limits.defaults()),
+             inspect(module)
     end
   end
 
