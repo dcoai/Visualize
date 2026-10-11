@@ -30,6 +30,22 @@ release it merely follows.
   skips to the newest data instead of drawing a backlog. `subscribe/1` delivers
   `{:visualize_board, board, {:cell, name, %Visualize.Board.View{}}}` straight from each
   cell: its SVG frame, its drawn state, and the crosshair and keyboard hooks' attributes.
+- **A live board in LiveView** (#575, D-146). Render a board with
+  `<.live_component module={Visualize.Components.Board} id="ops" server={pid} board={board} />`.
+  Add one clause to your page:
+  `def handle_info({:visualize_board, _, _} = m, s), do: (Visualize.Components.Board.forward("ops", m); {:noreply, s})`.
+  The component subscribes your page to the board when it connects. It lays the cells on
+  the 12-column grid and reflows them below the breakpoint, and shows the window in the
+  board's zone. Each cell is its own LiveComponent (`Visualize.Components.Board.Cell`), so
+  a frame's diff is that cell's alone. A cell carries `data-vis-cell`, is one tab stop, and
+  wraps its chart in `CrosshairHook`, `BrushHook` and `KeyboardHook`. Brushing a cell sets
+  the board's window, and a double-click restores it.
+- **`BoardHook`** (#575), the twelfth hook in the bundle. It pushes the board's width to
+  its component and moves focus between cells with the arrow keys, Home and End. Enter
+  moves focus into a cell's chart, and Escape (`KeyboardHook`'s) brings it back.
+- **`BrushHook` takes `data-brush-target`** (#575). With it set, the brush pushes its events
+  to that LiveComponent instead of the LiveView. On `updated()` the hook also re-attaches
+  its overlay to a chart the server has redrawn, so a brush keeps working over a live chart.
 - **Every cell state is drawn** (#574). `Visualize.Board.State` decides and draws loading,
   no data yet, stale, feed down, capped and crashed from the board's theme. Each state
   uses a role colour and its glyph, so it reads in greyscale. Where there is no chart the

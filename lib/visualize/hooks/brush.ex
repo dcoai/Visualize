@@ -115,6 +115,7 @@ defmodule Visualize.Hooks.Brush do
         this.brushType = this.el.dataset.brushType || (this.design && this.design.type) || 'xy';
         this.selectEvent = this.el.dataset.brushEvent || 'brush_select';
         this.clearEvent = this.el.dataset.brushClearEvent || 'brush_clear';
+        this.target = this.el.dataset.brushTarget || null;
         this.fillColor = this.el.dataset.brushColor || 'rgba(119, 119, 119, 0.2)';
         this.strokeColor = this.el.dataset.brushStroke || '#666';
 
@@ -172,6 +173,22 @@ defmodule Visualize.Hooks.Brush do
         this.captureRect.addEventListener('dblclick', this.onClear);
 
         this.joinSync();
+      },
+
+      // An event to the component `data-brush-target` names, else to the LiveView
+      // (spec/10 §6.2).
+      push(event, payload) {
+        if (this.target) this.pushEventTo(this.target, event, payload);
+        else this.pushEvent(event, payload);
+      },
+
+      // A chart the server redrew: its present <svg> found again, and the overlay — the
+      // same capture and selection, the same listeners — appended to it when the redraw
+      // dropped it (spec/10 §6.2, spec/15 §9.1).
+      reattach() {
+        const svg = this.el.tagName.toLowerCase() === 'svg' ? this.el : this.el.querySelector('svg');
+        if (svg) this.svg = svg;
+        if (!this.svg.contains(this.overlay)) this.svg.appendChild(this.overlay);
       },
 
       // The capture area: the extent, else the SVG's box; a band received from the group
@@ -297,7 +314,7 @@ defmodule Visualize.Hooks.Brush do
         this.selection = null;
         this.selectionRect.setAttribute('visibility', 'hidden');
         if (this.sync) VisualizeSync.publishBrush(this.sync, this.el, null);
-        this.pushEvent(this.clearEvent, {});
+        this.push(this.clearEvent, {});
       },
 
       // The x extent of a selection in domain units, ascending (spec/10 §6.4, §6.5).
@@ -382,9 +399,9 @@ defmodule Visualize.Hooks.Brush do
             // sync group or under the design's brush (spec/10 §6.4, §6.5).
             const domain = this.domainOf(sel);
             if (this.sync) VisualizeSync.publishBrush(this.sync, this.el, domain);
-            this.pushEvent(this.selectEvent, Object.assign({}, sel, { domain }));
+            this.push(this.selectEvent, Object.assign({}, sel, { domain }));
           } else {
-            this.pushEvent(this.selectEvent, sel);
+            this.push(this.selectEvent, sel);
           }
         } else {
           // Too small, treat as click and clear
@@ -408,6 +425,7 @@ defmodule Visualize.Hooks.Brush do
       // are re-read first — a chart re-rendered for a new window or width has new numbers —
       // and a selection the server set is not published (spec/10 §6.4, §6.5).
       updated() {
+        this.reattach();
         this.joinSync();
         this.design = this.readDesign();
         this.extent = this.readExtent();
