@@ -77,7 +77,8 @@ defmodule Visualize.Chart.Compiled do
     eased: %{},
     motions: %{},
     moving: %{},
-    forces: %{}
+    forces: %{},
+    versions: %{}
   ]
 
   @typedoc "A render target of spec/14 §12.3."
@@ -135,7 +136,8 @@ defmodule Visualize.Chart.Compiled do
           eased: %{atom() => map()},
           motions: %{non_neg_integer() => map()},
           moving: %{non_neg_integer() => map()},
-          forces: forces()
+          forces: forces(),
+          versions: %{atom() => String.t() | nil}
         }
 
   @doc false
@@ -181,7 +183,9 @@ defmodule Visualize.Chart.Compiled do
       motions: Motion.marks(chart),
       # The layout the chart is compiled over, cold, is where the first tick starts from
       # (spec/14 §12.5, D-132).
-      forces: Force.warm(frame.forces)
+      forces: Force.warm(frame.forces),
+      # The schema versions its facts were read from: another one recompiles (§12.1).
+      versions: applied.versions
     }
 
     # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
@@ -519,10 +523,43 @@ defmodule Visualize.Chart.Compiled do
 
   # -- per tick -------------------------------------------------------------------------
 
+  @doc """
+  Whether a delivery among the sources names a schema version other than the one its
+  slot was compiled with (spec/14 §12.1, D-136): the facts the chart read — a label, a
+  tick unit, an ordinal domain — may no longer hold, and a schema change recompiles,
+  as a resize does. A source that is not a delivery claims no version and is never
+  stale. `tick/3`, `step/3`, `render/2` and `svg/2` raise `ArgumentError` for a stale
+  delivery; the caller compiles again and `carry/2`s the state across.
+  """
+  @spec stale?(t(), map()) :: boolean()
+  def stale?(%__MODULE__{} = compiled, sources) when is_map(sources),
+    do: changed(compiled, sources) != nil
+
+  defp changed(%{versions: versions}, sources) do
+    Enum.find_value(sources, fn
+      {slot, %Delivery{schema: version}} ->
+        compiled = Map.get(versions, slot)
+        if version != compiled, do: {slot, compiled, version}
+
+      _plain ->
+        nil
+    end)
+  end
+
   # The tick's sources as the chart reads them: a delivery is the source it carries
-  # (spec/08 §10.4).
-  defp sources!(_compiled, sources),
-    do: Map.new(sources, fn {name, source} -> {name, Delivery.source(source)} end)
+  # (spec/08 §10.4), once it is known to name the schema the chart was compiled with.
+  defp sources!(compiled, sources) do
+    case changed(compiled, sources) do
+      nil ->
+        Map.new(sources, fn {name, source} -> {name, Delivery.source(source)} end)
+
+      {slot, compiled_with, delivered} ->
+        raise ArgumentError,
+              "slot #{inspect(slot)}'s delivery names schema version #{inspect(delivered)}, " <>
+                "and the chart was compiled with #{inspect(compiled_with)}: a schema change " <>
+                "recompiles (spec/14 §12.1) — compile again and carry/2 the state across"
+    end
+  end
 
   # The frame of a tick: realised over the sources, its viewport scale windowed. With the
   # window's upper end given — what a run passes every tick — the scale's domain is known

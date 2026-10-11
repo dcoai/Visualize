@@ -131,6 +131,9 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `fields` | `{:list, :field}` | `:binding` | required | `:override` |
 | `types` | `{:map, {:enum, [:time, :number, :category, :text]}}` | `:binding` | `%{}` | `:override` |
 | `default` | `:name` | `:binding` | `nil` | `:override` |
+| `requires` | `{:map, {:list, {:enum, attributes}}}`, `attributes` those of `Visualize.Data.Schema.attributes/0` | `:binding` | `%{}` | `:override` |
+
+**A slot states a contract** (#552, D-136): `requires` maps a field the slot declares to the description attributes the schema of the bound feed MUST give it — `requires: %{latency: [:unit, :label]}` — and `Visualize.Chart.apply/2` checks it, with every fact the design reads of the slot, against that schema (§7.4). A name under `requires` that `fields` does not list is `{:undeclared, :field, field}` at `[:sources, name, :requires, field]`, as under `types`.
 
 **A column has a type** (#369): `types` maps a declared field to one of four — `:time` (a point in time), `:number`, `:category` (one of a set of names) or `:text` (free text). It is a separate key rather than a pair in `fields` because the JSON form (§11) has no tuples and a keyword list would not survive it; the validator holds the two together — a name under `types` that `fields` does not list is `{[:sources, name, :types, field], {:undeclared, :field, field}}` — so they cannot drift silently. A field with no type is as it always was. **Rendering reads no type**: a scale still says how a column maps to the plot, and a channel bound to a field with no scale is still the identity (§4.3); the type says what the column is, which is what lets a tool derive the scale a person did not write (§18.16, #370). `Visualize.Chart.column_type/3` answers `column_type(design, source, field)` with the type or `nil`; `Visualize.Chart.Schema.column_types/0` is the four. **Rows can suggest a type**: `Visualize.Data.Table.column_types/1` (spec/08 §6.3) reads a table's columns whole — every value temporal (`temporal?/1`) is `:time`, every value a number `:number`, every value a string `:text`, every value an atom or boolean `:category`, anything mixed no type — for a tool to pre-fill what a design does not declare; the design's word, once written, is never overridden by rows.
 
@@ -843,7 +846,7 @@ An axis title follows the side of the first axis that names its scale; with no a
 
 **Implemented.** `Visualize.Chart.var/1` builds `%Visualize.Chart.Var{name: name}`, a term allowed wherever a value can appear — a style value, a channel, a whole node (`style: var(:style)`, `margin: var(:margin)`) — and, inside a text, as `#{var(:name)}`. The term carries only the name; the default is declared once under `vars` (§2.4), so two fragments cannot disagree about it (D-59). The validator requires every variable used to be declared (`{:undeclared, :var, name}`) and does not type the value, which is unknown until application: the value is typed by the validator at the path where the variable stood, once `Visualize.Chart.apply/2` has put it there (§7.3). Resolution is **single level**: the value a variable takes at application MUST NOT itself be a variable, and one that is is `{:var_binding, name}` at every path where the variable stood (§7.3, §10.1). A variable *nested inside* a value another variable is bound to is not resolved either, and needs no rule of its own — the `vars` declarations are dropped before validation, so the validator finds it as `{:undeclared, :var, name}` at its path; only the direct case was silent.
 
-**A text interpolates.** A `:text` is one string — `"Uptime for #{var(:host)} over 24h"` — in which `#{var(:name)}` stands for a variable and `#{field(:name)}` for the datum's field a mark's label reads (§5.5); `\#{` is a literal `#{`. `Visualize.Chart.Text.parse/1` reads it into parts and `Visualize.Chart.Text.unparse/1` writes parts back, the two inverse, so a text is one value whichever form holds it: its variables stand *at the key* (`labels[0].text`, never `labels[0].text[1]`), each named once however many holes name it, and application writes the bound value into the string as `to_string/1` gives it. A hole that names neither `var` nor `field`, or a `#{` never closed, is `{:template, reason}` at the key. The list-of-parts form an earlier draft wrote is read wherever a text is read and is written back as the string (§9), so no document goes stale and no second form survives a round trip.
+**A text interpolates.** A `:text` is one string — `"Uptime for #{var(:host)} over 24h"` — in which `#{var(:name)}` stands for a variable, `#{field(:name)}` for the datum's field a mark's label reads (§5.5) and `#{fact(:source, :field, :key)}` for an attribute of the feed's schema bound to a slot (§7.4, #552); `\#{` is a literal `#{`. `Visualize.Chart.Text.parse/1` reads it into parts and `Visualize.Chart.Text.unparse/1` writes parts back, the two inverse, so a text is one value whichever form holds it: its variables stand *at the key* (`labels[0].text`, never `labels[0].text[1]`), each named once however many holes name it, and application writes the bound value into the string as `to_string/1` gives it. A hole that names none of `var`, `field` and `fact`, or a `#{` never closed, is `{:template, reason}` at the key. The list-of-parts form an earlier draft wrote is read wherever a text is read and is written back as the string (§9), so no document goes stale and no second form survives a round trip.
 
 | Function | Contract |
 |---|---|
@@ -862,13 +865,84 @@ An axis title follows the side of the first axis that names its scale; with no a
 
 ### 7.3 Application
 
-**Implemented** (work item 5 of #53, D-65). `Visualize.Chart.apply/2` takes a design — a `%Visualize.Chart{}`, or a design map that goes through `Visualize.Chart.from_map/1` first, so an invalid map is its errors — and the options `sources:` (the pool, a map from name to source, `%{}`), `vars:` (a map from variable name to value, `%{}`), `theme:` (a `%Visualize.Theme{}`, as `Visualize.Chart.Frame.new/2` takes it), `size:` (the host's container as `{width, height}`, `{600, 400}` by default, §4.2) and `now:` (the instant a `:window` step measures its durations back from, §5.4.1; absent, each such step takes the newest reading of its own column), and returns `{:ok, applied}` or `{:error, errors}` — the errors of §10.1 by path, ordered by path — in three steps. Each step reports every fault it finds and a step with faults stops before the next, so resolution faults are never mixed with binding faults, nor either with the validator's.
+**Implemented** (work item 5 of #53, D-65). `Visualize.Chart.apply/2` takes a design — a `%Visualize.Chart{}`, or a design map that goes through `Visualize.Chart.from_map/1` first, so an invalid map is its errors — and the options `sources:` (the pool, a map from name to source, `%{}`), `vars:` (a map from variable name to value, `%{}`), `theme:` (a `%Visualize.Theme{}`, as `Visualize.Chart.Frame.new/2` takes it), `size:` (the host's container as `{width, height}`, `{600, 400}` by default, §4.2) and `now:` (the instant a `:window` step measures its durations back from, §5.4.1; absent, each such step takes the newest reading of its own column), `schemas:` (a `%Visualize.Data.Schema.Cache{}`, the empty cache by default) and `describe:` (a feed's describe function, `nil` by default; spec/08 §10.3), and returns `{:ok, applied}` or `{:error, errors}` — the errors of §10.1 by path, ordered by path — in four steps. Each step reports every fault it finds and a step with faults stops before the next, so resolution faults are never mixed with binding faults, nor either with the validator's.
 
 1. **Variables resolve.** Every `%Visualize.Chart.Var{}` in the design — a value, a text part, a whole node — is replaced by the value `vars:` gives its name, else by the declared `default` (§2.4); a variable with neither is `{:unresolved, :var, name}` at the path of its use, and every use is reported; a variable whose value — from `vars:` or from its own declared default — is itself a `%Visualize.Chart.Var{}` is `{:var_binding, name}` at every path where it stood, since resolution is single level (§7.1) and a second pass would let a stored design bind a variable to a variable and never settle. A name in `vars:` that no declaration carries is `{:undeclared, :var, name}` at `[:vars, name]`. In a text a resolved part that is a number or an atom is written with `to_string/1`, so `["n = ", var(:n)]` with `n: 3` reads `["n = ", "3"]`; every other value stands as it is, where the validator types it. The `vars` declarations are dropped: the concrete chart has none and no variable anywhere in it, which is what `Visualize.Chart.Frame.new/2` requires (§4.7).
 2. **Slots bind.** Each slot of `sources` (§2.3) binds to the pool's entry under its own name, else under its `default`; a slot with neither is `{:unbound, :source, name}` at `[:sources, name]`. Pool entries that no slot names are ignored, so one pool serves many designs. A bound source is anything `Visualize.Data.Table.rows/1` reads and is kept as given — the frame reads it through `rows/1` as it does any source, and a rank-1 `Nx` tensor stays a tensor for the dense path (D-52). A `%Visualize.Data.Delivery{}` (spec/08 §10.4) binds as the source it carries, so the applied chart holds that source and never the delivery. Every field the slot declares MUST be a key of some row of the bound source, in either spelling; a field no row carries is `{:missing_field, field}` at `[:sources, name]`, one error per field, which is the "made for `{a, b, c}`" contract failing loudly (§7.2). A source with no rows binds without a check. A field a channel, a text or a transform reads is checked against the slot's declaration by the validator (§5.4), so a field the design reads and the source lacks is caught at one or the other.
-3. **The result validates and its frame is realised.** `Visualize.Chart.Validator.validate/1` runs over the resolved, bound design — the value a variable took is typed here, at the path where it stood — and `Visualize.Chart.Frame.new/2` builds the frame over the bound sources, inferring every `:auto` domain from the bound columns (§4.3). A value a scale cannot take, or a theme name `theme:` does not resolve, raises `ArgumentError` from the frame as it does for any chart: those are faults of the data or the consumer, not of the binding.
+3. **Facts resolve** (#552, §7.4). The schema of every slot whose contract is not empty is resolved through `schemas:` and `describe:` from the version its delivery names. The contract is checked against it: `{:no_schema, slot}`, `{:unknown_schema, feed, version}`, `{:describe, feed, reason}`, `{:schema_version, feed, version, got}`, `{:missing_attribute, slot, field, key}` and `{:schema_type, field, declared, described}` are reported, every one of them. With no fault, every `%Visualize.Chart.Fact{}` is replaced by the attribute it names, as a variable is by its value. A design with no `requires` and no fact passes through this step unchanged.
+4. **The result validates and its frame is realised.** `Visualize.Chart.Validator.validate/1` runs over the resolved, bound design — the value a variable took is typed here, at the path where it stood — and `Visualize.Chart.Frame.new/2` builds the frame over the bound sources, inferring every `:auto` domain from the bound columns (§4.3). A value a scale cannot take, or a theme name `theme:` does not resolve, raises `ArgumentError` from the frame as it does for any chart: those are faults of the data or the consumer, not of the binding.
 
-The result is a `%Visualize.Chart.Applied{}` (§14.10): `chart`, the concrete `%Visualize.Chart{}` — no variable anywhere in it, `vars` empty, the slot declarations kept as the data contract, everything else as the design wrote it; `sources`, the bound sources by slot name; and `frame`, the realised frame, whose `Visualize.Chart.Frame.scales/1` is the escape hatch. `Visualize.Chart.render/2` draws it: `Visualize.Chart.Frame.render/2` of the frame over the bound sources, with the same options. The design, its fragments and a binding are storable; the applied chart holds data and is not — it has no map form and no JSON form.
+The result is a `%Visualize.Chart.Applied{}` (§14.10): `chart`, the concrete `%Visualize.Chart{}` — no variable anywhere in it, `vars` empty, the slot declarations kept as the data contract, everything else as the design wrote it; `sources`, the bound sources by slot name; `frame`, the realised frame, whose `Visualize.Chart.Frame.scales/1` is the escape hatch; and `schemas`, `versions` and `cache` (§7.4): the schema of each slot that has one, the version each delivery named, and the cache grown by any describe. `Visualize.Chart.render/2` draws it: `Visualize.Chart.Frame.render/2` of the frame over the bound sources, with the same options. The design, its fragments and a binding are storable; the applied chart holds data and is not — it has no map form and no JSON form.
+
+### 7.4 Schemas: the contract and the facts
+
+**Implemented** (#552, D-136). A feed describes its fields in a schema, and each of its deliveries names the schema's version ([08-utilities](08-utilities.md) §10). A design does not carry those facts as variables a host must compute. It **states a contract**, the attributes a slot's schema must give, and **reads facts** from the bound schema. `Visualize.Chart.apply/2` checks one against the other and resolves the other, as it resolves variables.
+
+**The contract: `requires`.** A slot (§2.3) writes `requires`, a map from a field it declares to the description attributes the bound schema MUST give that field:
+
+```elixir
+source(:primary, [:t, :latency, :state],
+  types: %{t: :time, latency: :number, state: :category},
+  requires: %{latency: [:unit, :label]}
+)
+```
+
+The keys are the slot's own fields: a field `requires` names that `fields` does not list is `{:undeclared, :field, field}` at `[:sources, name, :requires, field]`, as for `types`. The values are lists of the attributes of `Visualize.Data.Schema.attributes/0`, checked as an enumeration. It is a map of lists, not a list of pairs, because the JSON form (§11) has no tuples. A slot with no `requires` and no fact read of it states no contract, and binds as it always has.
+
+**A fact: `Visualize.Chart.fact/3`.** `fact(source, field, key)` is `%Visualize.Chart.Fact{source: source, field: field, key: key}`: the attribute `key` of `field` in the schema bound to slot `source`. It is a term allowed wherever a value can appear, as a variable is (§7.1), and in a text as the hole `#{fact(:source, :field, :key)}`. So an axis title, a tick unit and an ordinal domain read the feed:
+
+```elixir
+import Visualize.Chart, only: [fact: 3]
+alias Visualize.Data.{Delivery, Schema}
+
+design = %{
+  version: 2,
+  sources: %{primary: %{fields: [:t, :latency, :state], requires: %{latency: [:unit, :label]}}},
+  frames: %{main: %{
+    kind: :cartesian,
+    scales: %{
+      x: %{kind: :linear},
+      y: %{kind: :linear},
+      color: %{kind: :ordinal, domain: fact(:primary, :state, :order)}
+    },
+    axes: [%{scale: :y, side: :left, unit: fact(:primary, :latency, :unit)}]
+  }},
+  marks: [%{type: :circle, data: :primary, channels: %{x: :t, y: :latency, series: :state}}],
+  labels: [%{anchor: {:axis, :y}, text: "\#{fact(:primary, :latency, :label)} (\#{fact(:primary, :latency, :unit)})"}]
+}
+
+schema = Schema.new!(%{
+  latency: %{type: :number, unit: "s", label: "Request time"},
+  state: %{type: :category, order: ["ok", "warn", "fail"]}
+})
+
+rows = [%{t: 1, latency: 0.2, state: "warn"}, %{t: 2, latency: 0.4, state: "ok"}]
+delivery = Delivery.new(rows, schema: Schema.version(schema))
+
+{:ok, applied} =
+  Visualize.Chart.apply(design,
+    sources: %{primary: delivery},
+    describe: fn :primary -> {:ok, schema} end
+  )
+
+[%{text: "Request time (s)"}] = applied.chart.labels
+["ok", "warn", "fail"] = Visualize.Chart.Frame.scale(applied.frame, :color).domain
+```
+
+The validator checks a fact against the design before application, so a design that reads what it does not declare does not validate. The slot MUST be declared (`{:undeclared, :source, source}`), and the field MUST be one of that slot's `fields` (`{:undeclared_field, source, field}`). The key MUST be one of the attributes (`{:enum, attributes}`). In a text, the key MUST be one whose value is written as words: every attribute but `order` and `status`, which are a list and a map, are `{:invalid_for, :text}` there. **Reading a fact is a requirement**: the contract of a slot is its `requires` together with every attribute a fact of it reads. `Visualize.Chart.contract/1` returns that contract, `%{slot => %{field => [key, …]}}` with each list in the order of `Visualize.Data.Schema.attributes/0`, for a picker to test a feed's schema before offering it (§7.2).
+
+**Application** (§7.3) resolves a slot's schema after binding, for each slot whose contract is not empty. The slot's **feed** is the pool name the slot bound to, its own or its `default`. Its **version** is the `schema` of the delivery bound to it ([08-utilities](08-utilities.md) §10.4). The schema is `Visualize.Data.Schema.Cache.resolve/4` of the `schemas:` cache for the feed and the version, with `describe:` as the describe function. So a cached version costs a lookup, an unknown one asks the feed once, and two slots bound to one feed at one version ask it once between them. Then, for each slot:
+
+- **No schema.** A slot whose contract is not empty but whose source is not a delivery, or is one with no `schema`, is `{:no_schema, slot}` at `[:sources, slot]`.
+- **The version cannot be resolved.** `{:unknown_schema, feed, version}`, `{:describe, feed, reason}` and `{:schema_version, feed, version, got}` are reported at `[:sources, slot]`, as `resolve/4` answers them.
+- **An attribute is missing.** Each required attribute the schema does not give the field is `{:missing_attribute, slot, field, key}`. For a `requires` entry it is at `[:sources, slot, :requires, field]`. For a fact it is at the path where the fact stood, a text's key for a hole. The reason names the slot, the field and the attribute, whichever path reports it. A field the schema does not describe at all gives none of its attributes.
+- **A declared type disagrees.** A field whose `types` entry (§2.3) and whose schema `type` differ is `{:schema_type, field, declared, described}` at `[:sources, slot, :types, field]`. This holds for every typed field of a slot with a schema, whether or not it is required.
+
+Every fault of every slot is reported. A step with faults stops before validation, as each step of §7.3 does. Otherwise every fact is replaced by its value, as a variable is by its own. A fact standing for a whole value takes the value as the schema gives it, and the validator types it at the path where it stood, so `domain: fact(:primary, :latency, :unit)` is `{:type, :extent}` there. In a text, a string stands as it is, and a number or an atom is written with `to_string/1`.
+
+**The facts the slot did not ask for are not read.** A delivery whose slot has an empty contract binds as its rows, and its version is not resolved. A host that sends deliveries to a design that reads no schema needs no cache. The version is still recorded, so that a schema change is noticed (§12.1).
+
+The applied chart (§14.10) carries `schemas`, the resolved schema of each slot that has one; `versions`, the version each slot's delivery named, or `nil` for a delivery that named none, for every slot bound to a delivery; and `cache`, the `schemas:` cache with whatever `describe:` added. The caller keeps the cache for its next application.
 
 ## 8. Composition and the stack
 
@@ -967,11 +1041,19 @@ They agree exactly where the fragments are disjoint. Over two fragments that dec
 | `{:var_binding, name}` | the value the variable took at application is itself a variable (§7.1, §7.3) |
 | `{:unbound, :source, name}` | a slot with no source in the pool under its name or its default (§7.3) |
 | `{:missing_field, field}` | the bound source has no row carrying a field the slot declares (§7.3) |
+| `{:undeclared_field, source, field}` | a fact (§7.4) of a field that slot `source` does not declare in its `fields` |
+| `{:type, :fact}` | a `%Visualize.Chart.Fact{}` whose source, field or key is not an atom name (§7.4) |
+| `{:no_schema, slot}` | a slot whose contract is not empty is bound to a source that is not a delivery, or to a delivery that names no schema version (§7.4) |
+| `{:unknown_schema, feed, version}` | the version the slot's delivery names is not in the `schemas:` cache and there is no `describe:` (§7.4, spec/08 §10.3) |
+| `{:describe, feed, reason}` | `describe:` answered `{:error, reason}` for the slot's feed |
+| `{:schema_version, feed, version, got}` | `describe:` answered a schema of version `got` where the delivery names `version`: the delivery is not described by the feed's present schema |
+| `{:missing_attribute, slot, field, key}` | the schema bound to `slot` does not give `field` the attribute `key`, which the slot `requires` or a fact reads (§7.4); at the requirement or at the fact |
+| `{:schema_type, field, declared, described}` | the slot's `types` declares `field` as `declared` and its schema describes it as `described` (§7.4) |
 | `:conflict` | a `:union` key declared with different values by two fragments (§8) |
 | `:cycle` | a style that reaches itself through `extends` (§3.5) |
 | `{:unscaled, field}` | the builder's, not the layer's (§18.16, #370): a position channel bound to a field that names a scale the frame lacks and no type could be read for; the design still validates and draws |
 
-The last four are reported by `Visualize.Chart.apply/2` and `Visualize.Chart.compose/2` in the same shape, so one reader serves every error of the layer. `Visualize.Chart.Validator.format/1` renders one error as a line a person reads, `marks[1].channels.y: field :temp is not declared by the mark's source`, `sources.primary: has no field :v`.
+The resolution, binding and schema faults are reported by `Visualize.Chart.apply/2`, and `:conflict` by `Visualize.Chart.compose/2`, in the same shape, so one reader serves every error of the layer. `Visualize.Chart.Validator.format/1` renders one error as a line a person reads, `marks[1].channels.y: field :temp is not declared by the mark's source`, `sources.primary: has no field :v`.
 
 ### 10.2 Checks
 
@@ -1000,6 +1082,7 @@ The last four are reported by `Visualize.Chart.apply/2` and `Visualize.Chart.com
 | `{:frame, :main, :x}`, a scale adopted from another frame (§4.3) | `{"$adopted": ["main", "x"]}`, the frame and the scale (#480) |
 | `{:keys, [:pop, :rock]}`, a stack's fixed order (§5.4.1) | `{"$keys": ["pop", "rock"]}`, the keys in order (#492) |
 | `{:data, [x, y]}` | `{"$data": [x, y]}`, the two values as terms |
+| `%Visualize.Chart.Fact{source: :primary, field: :latency, key: :unit}` (§7.4) | `{"$fact": ["primary", "latency", "unit"]}`, the slot, the field and the attribute (#552) |
 | `:none` as a colour | `"none"` |
 | `:contrast` as a colour (§3.2) | `"contrast"` |
 | `:auto` in an extent | `"auto"` (so a category spelled `"auto"` reads back as `:auto`) |
@@ -1016,6 +1099,8 @@ Everything else — numbers, strings, booleans, lists, maps — is its JSON self
 **Implemented** (work item 6 of #53, D-66). `Visualize.Chart.compile/2` compiles a design the way HEEx compiles a template: the design is validated once, the theme and the styles are resolved, everything data-independent is drawn once, and the result is a `%Visualize.Chart.Compiled{}` per frame, each with one closure per dynamic region taking the realised frame and the bound sources. Rendering a compiled chart per tick pays no validation and no static drawing.
 
 `compile/2` takes a `%Visualize.Chart.Applied{}` (§7.3), or a `%Visualize.Chart{}` or a design map, which go through `Visualize.Chart.apply/2` first with the same `sources:`, `vars:` and `theme:` options — so a compiled chart is always compiled *over a binding*, the one the render targets are chosen from (§12.3) — and returns `{:ok, %{name => compiled}}`, **one compiled chart per frame** (#385), or the `{:error, errors}` of application. A design of one frame is a map of one, so a caller has one shape to read whatever the design holds. Its one option of its own is `ceiling:`, the point-count ceiling of §12.3, a positive integer, `1000` by default. The struct holds `chart`, the concrete `%Visualize.Chart{}` **restricted to this frame** — its `frames` the one frame, its `marks` and `labels` the ones that say it (§5.1) — so everything below this point reads one frame and never asks which; `theme`, its `%Visualize.Theme{}`; `regions`, every region of §12.2 in the frame's drawing order, each static with its element drawn once or dynamic with its closure and its reason; `targets`, the target and the bound point count of every mark in that frame's order (§12.3); `ceiling`; `static`, the static SVG string of §12.4, rendered once; `plot`, `margin` and `size` as the frame gives them — `size` the render's, which is the design's box; `box`, this frame's own pixel box `%{x, y, width, height}` within it (§4.2), which is where a page puts this plot's canvas; `domains`, the extents this frame was realised with rather than inferring — a scale adopted from another frame (§4.3), whose rows are not in this compiled chart to be re-read — which every tick's realisation is given; `viewport`, `nil` or the window state of §12.5; and `forces`, the warm force layouts of §12.5 (#527, D-132), `%{}` for a design with no `:force` step. A compiled chart is a value: recompile on a design change, not on a data change; one compiled chart serves every tick of one binding, and a slot rebound to another source is another compilation. It holds closures and data, so it has no map or JSON form, as the applied chart has none (§14.10); a macro or sigil that runs the compiler on a literal design at compile time is not built here and would need a data form of the regions.
+
+**A schema change recompiles** (#552, D-136), as a resize does (§12.5). A compiled chart reads its schema facts once, at application (§7.4): a label, a tick unit and an ordinal domain are drawn into its static regions, and its inferred domains and formats rest on them. So it records `versions`, the version each slot's delivery named when it was compiled (`Visualize.Chart.Applied`'s `versions`), and a delivery naming another version is a chart that no longer holds. `Visualize.Chart.Compiled.stale?/2` answers whether any delivery among a tick's sources does. `tick/3`, `step/3`, `render/2` and `svg/2` raise `ArgumentError` for such a delivery, naming the slot and both versions, rather than draw facts that no longer hold. The rule is the version, not the facts this design reads: a relabelled field the chart never shows still recompiles, which is the price of a rule a caller can check with one comparison per slot. The compiled chart cannot recompile itself — the design, the pool and the schema cache are the caller's — so the caller compiles again with the new delivery and its cache and `carry/2`s the eased scales, the mark motions and the warm layouts across, exactly as for a resize. A source that is not a delivery claims no version, so a slot fed plain rows is never stale.
 
 **A compiled chart is one plot, and a design has one per frame** (#385). The regions, the render targets and the incremental window are per plot (spec/09 §5.3, D-106, D-107) and stay so: what a frame adds is that a design holds several of them. Each frame compiles over its **own** realised frame (`Applied.frames`) and the marks and labels that say it, so nothing inside the compiler asks how many frames there are: the region, transition and window modules read the one frame their restricted chart holds. A frame's `static` (§12.4) is a page-ready document at the design's size with that frame's group translated by its box **and** its margins, so the documents of a design's frames stack — each is transparent where it draws nothing — and a design of one frame at the box `[0, 0, 1, 1]` renders byte for byte what it always did.
 
@@ -1251,6 +1336,8 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.from_json/1` | `from_map/1` over a JSON document decoded as §11; `{:error, [{[], {:json, message}}]}` for a document that does not parse, `{:error, {:missing_dependency, :jason}}` without Jason. |
 | `Visualize.Chart.to_json/1` | `{:ok, json}` for `to_map/1` encoded as §11, `{:error, {:missing_dependency, :jason}}` without Jason. |
 | `Visualize.Chart.var/1` | `%Visualize.Chart.Var{name: name}` for an atom (§7.1). |
+| `Visualize.Chart.fact/3` | `fact(source, field, key)`: `%Visualize.Chart.Fact{}`, the attribute `key` of `field` in the schema bound to slot `source`, resolved at application (§7.4). |
+| `Visualize.Chart.contract/1` | `contract(design)`: each slot's requirements of its feed's schema — its `requires` with every attribute a fact of it reads — as `%{slot => %{field => [key, …]}}`, attributes in the order of `Visualize.Data.Schema.attributes/0`; a slot with none is absent (§7.4). |
 | `Visualize.Chart.column_type/3` | `column_type(design, source, field)`: the type `types` declares for the field of the source (§2.3), or `nil` when the design, the source or the type is absent; a chart struct or a design map. |
 | `Visualize.Chart.apply/1` | As `apply/2` with `[]` options: every variable takes its default and the pool is empty, so a slot with a default is unbound too — it applies a design that declares no source. |
 | `Visualize.Chart.apply/2` | `apply(design, opts)`: `{:ok, %Visualize.Chart.Applied{}}` for a chart or a design map with the variables of `vars:` resolved, the slots bound from the pool of `sources:` and the frame realised with `theme:` (§7.3), else `{:error, errors}` by path — the map's own errors, the unresolved variables, the unbound slots and missing fields, or the validator's, whichever step fails first. Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does. |
@@ -1387,7 +1474,7 @@ A style is looked up by name among the declared styles and the built-in four (§
 
 ### 14.10 `Visualize.Chart.Applied`
 
-**Implemented.** The applied chart of §7.3, a struct with no functions of its own: `chart`, the concrete `%Visualize.Chart{}`; `sources`, the bound sources by slot name, each as the pool gave it; `frame`, its `%Visualize.Chart.Frame{}` realised over them. `Visualize.Chart.apply/2` is its only constructor and `Visualize.Chart.render/2` its renderer; it has no map or JSON form, because it holds the data the design was applied to.
+**Implemented.** The applied chart of §7.3, a struct with no functions of its own: `chart`, the concrete `%Visualize.Chart{}`; `sources`, the bound sources by slot name, each as the pool gave it (a delivery as the source it carries); `frame`, its `%Visualize.Chart.Frame{}` realised over them; `frames`, every frame by name; `schemas`, `versions` and `cache`, what the schema step of §7.4 found. `Visualize.Chart.apply/2` is its only constructor and `Visualize.Chart.render/2` its renderer; it has no map or JSON form, because it holds the data the design was applied to.
 
 ### 14.11 `Visualize.Chart.Compiled`
 
@@ -1403,6 +1490,7 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Compiled.backdrop/1` | The static backdrop (§12.3, §12.4, #476): a static `:tiles` mark's images as one SVG root of the shape of `static/1`, rendered once at compilation; `""` when there are none. The page stacks it beneath the canvas. |
 | `Visualize.Chart.Compiled.render/2` | `render(compiled, sources)`: the hybrid chart map of §12.4 over the sources by slot name — `static`, `dynamic`, `dynamic_style`, `canvas_format`, `dynamic_svg`, `backdrop`, `width`, `height`, `margin`. Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does for a value a scale cannot take. |
 | `Visualize.Chart.Compiled.svg/2` | `svg(compiled, sources)`: the one-string form of §12.4, the frame's group with the static and the dynamic regions in the frame's order; equal to `Visualize.Chart.Frame.render/2` when every mark targets `:svg`. |
+| `Visualize.Chart.Compiled.stale?/2` | `stale?(compiled, sources)`: whether a delivery among the sources names a schema version other than the one its slot was compiled with (§12.1); a source that is not a delivery claims no version and is never stale. |
 | `Visualize.Chart.Compiled.tick/2` | As `tick/3` with `[]` options: the window's `hi` is the newest bound value. |
 | `Visualize.Chart.Compiled.tick/3` | `tick(compiled, sources, opts)`: `{payload, compiled}` — the per-tick payload of §12.4 (`svg`, `backdrop`, `canvas`, `canvas_format`, `incremental`, `bytes`) and the compiled chart holding the tick's sources and, for a viewport design, the window state of §12.5, and for a design with a `:force` step the tick's warm layout (§12.5, D-132); `now:` fixes the window's upper end. |
 | `Visualize.Chart.Compiled.step/2` | As `step/3` with `[]` options. |

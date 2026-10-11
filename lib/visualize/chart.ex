@@ -44,6 +44,8 @@ defmodule Visualize.Chart do
     Compiled,
     Compose,
     Composite,
+    Fact,
+    Facts,
     Fragment,
     Frame,
     Migration,
@@ -57,6 +59,7 @@ defmodule Visualize.Chart do
   }
 
   alias Visualize.Chart.Frame.Scales
+  alias Visualize.Data.Schema.Cache
 
   alias Visualize.IR.{Element, Transform}
 
@@ -203,6 +206,33 @@ defmodule Visualize.Chart do
   def var(name) when is_atom(name), do: %Var{name: name}
 
   @doc """
+  A fact of the feed's schema bound to slot `source`: the attribute `key` of `field`
+  (spec/14 §7.4). Allowed wherever a value can appear, and in a text as
+  `\#{fact(:source, :field, :key)}`; `apply/2` replaces it by the attribute, and a
+  schema that does not give it fails application.
+  """
+  @spec fact(atom(), atom(), atom()) :: Fact.t()
+  def fact(source, field, key) when is_atom(source) and is_atom(field) and is_atom(key),
+    do: %Fact{source: source, field: field, key: key}
+
+  @doc """
+  Each slot's requirements of its feed's schema (spec/14 §7.4): its `requires` with every
+  attribute a fact of it reads, as `%{slot => %{field => [key, …]}}` in the order of
+  `Visualize.Data.Schema.attributes/0`. A slot with none is absent. A picker tests a
+  feed's schema against it before offering the feed (§7.2).
+
+      iex> design = %{
+      ...>   sources: %{s: %{fields: [:v], requires: %{v: [:label]}}},
+      ...>   labels: [%{anchor: :title, text: [Visualize.Chart.fact(:s, :v, :unit)]}]
+      ...> }
+      iex> Visualize.Chart.contract(design)
+      %{s: %{v: [:unit, :label]}}
+  """
+  @spec contract(t() | map()) :: %{atom() => %{atom() => [atom()]}}
+  def contract(%__MODULE__{} = chart), do: chart |> to_map() |> Facts.contract()
+  def contract(design) when is_map(design), do: Facts.contract(design)
+
+  @doc """
   The type a source's `types` declares for a field (spec/14 §2.3, #369), or `nil` when
   the design, the source or the type is absent.
 
@@ -280,6 +310,10 @@ defmodule Visualize.Chart do
       §4.2); a design records no size
     * `:now` - the instant a `:window` step measures its durations back from (spec/14
       §5.4.1); without it each such step takes the newest reading of its own column
+    * `:schemas` - a `Visualize.Data.Schema.Cache` of feeds' schemas by version
+      (default empty), read for every slot whose contract is not empty (spec/14 §7.4)
+    * `:describe` - `(feed -> {:ok, schema} | {:error, reason})`, asked once for a
+      version the cache lacks (default `nil`)
 
   Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does, for a value a scale
   cannot take or a theme name it cannot resolve.
@@ -310,14 +344,22 @@ defmodule Visualize.Chart do
     pool = opts |> Keyword.get(:sources, %{}) |> Map.new()
     vars = opts |> Keyword.get(:vars, %{}) |> Map.new()
 
+    cache = Keyword.get_lazy(opts, :schemas, &Cache.new/0)
+
     with {:ok, chart} <- Template.resolve(chart, vars),
          {:ok, sources} <- Template.bind(chart, pool),
+         {:ok, chart, described} <- Facts.apply(chart, pool, cache, opts[:describe]),
          :ok <- Validator.validate(to_map(chart)) do
       shared = [sources: sources] ++ Keyword.take(opts, [:theme, :now, :size])
       frames = realise_frames(chart, shared)
 
       frame = frames |> Map.values() |> Enum.min_by(& &1.name)
-      {:ok, %Applied{chart: chart, sources: sources, frame: frame, frames: frames}}
+
+      {:ok,
+       struct!(
+         %Applied{chart: chart, sources: sources, frame: frame, frames: frames},
+         described
+       )}
     end
   end
 
@@ -576,7 +618,10 @@ defmodule Visualize.Chart do
 
   def compile(design, opts) do
     with {:ok, applied} <-
-           __MODULE__.apply(design, Keyword.take(opts, [:sources, :vars, :theme, :size, :now])) do
+           __MODULE__.apply(
+             design,
+             Keyword.take(opts, [:sources, :vars, :theme, :size, :now, :schemas, :describe])
+           ) do
       compile(applied, opts)
     end
   end
