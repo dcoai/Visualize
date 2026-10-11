@@ -9,6 +9,10 @@ defmodule Visualize.Board.RuntimeTest do
   # A killed or raising cell is reported by the VM and the supervisor; kept out of the run.
   @moduletag :capture_log
 
+  # How long a wait gives up after: when a defect is given up on, never how fast the
+  # machine is (spec/12 §6, D-148).
+  @patience 10_000
+
   alias Visualize.Board
   alias Visualize.Board.{Binding, Server, View}
   alias Visualize.Data.Schema
@@ -77,26 +81,27 @@ defmodule Visualize.Board.RuntimeTest do
     {feed, agent}
   end
 
-  # The next view of a cell this process receives, within the timeout.
-  defp view(cell, timeout \\ 10_000) do
+  # The next view of a cell this process receives.
+  defp view(cell) do
     receive do
       {:visualize_board, _board, {:cell, ^cell, %View{} = view}} -> view
     after
-      timeout -> flunk("no view of #{inspect(cell)} within #{timeout} ms")
+      @patience -> flunk("no view of #{inspect(cell)} within #{@patience} ms")
     end
   end
 
   # Views of a cell until one satisfies the test.
-  defp view_until(cell, test, timeout \\ 10_000) do
-    view = view(cell, timeout)
-    if test.(view), do: view, else: view_until(cell, test, timeout)
+  defp view_until(cell, test) do
+    view = view(cell)
+    if test.(view), do: view, else: view_until(cell, test)
   end
 
+  # Every view already in the mailbox dropped; call it once nothing more can arrive.
   defp flush_views do
     receive do
       {:visualize_board, _board, _message} -> flush_views()
     after
-      50 -> :ok
+      0 -> :ok
     end
   end
 
@@ -174,7 +179,9 @@ defmodule Visualize.Board.RuntimeTest do
       :sys.resume(slow)
       a = view(:a)
       assert a.frames == 2
-      refute_receive {:visualize_board, _, {:cell, :a, _view}}, 200
+      # Once the cell answers, everything it sent is here: nothing more was drawn.
+      :sys.get_state(slow)
+      refute_received {:visualize_board, _, {:cell, :a, _view}}
     end
 
     test "a heap-blowing cell is killed alone, shown crashed, and restarted; the others go on" do
@@ -263,9 +270,12 @@ defmodule Visualize.Board.RuntimeTest do
       live = view_until(:old, &(&1.state != :loading))
       assert live.state == :live
 
-      # The board's now moves on; nothing new arrives, and the cell grows stale.
-      flush_views()
+      # The board's now moves on; nothing new arrives, and the cell grows stale. The old
+      # board's cell is gone before its views are dropped, so none of them is read below.
+      old_cell = Process.monitor(Server.info(board).cells.old.pid)
       Server.stop(board)
+      assert_receive {:DOWN, ^old_cell, :process, _, _}, @patience
+      flush_views()
 
       {:ok, board} =
         start(
@@ -329,7 +339,7 @@ defmodule Visualize.Board.RuntimeTest do
       a = view_until(:a, &(&1.size != {596.0, 256}))
       assert a.size == {600.0, 256}
       assert a.svg =~ ~s(viewBox="0 0 600.0 256")
-      assert_receive {:visualize_board, ^board, {:board, %{width: 600}}}
+      assert_receive {:visualize_board, ^board, {:board, %{width: 600}}}, @patience
     end
 
     test "new board variables prepare every cell again" do

@@ -142,7 +142,7 @@ defmodule Visualize.Feed.ConformanceTest do
     test "a callback that hangs is a finding once the timeout passes" do
       hang = %Signals{
         Signals.new(Visualize.Signals.new(:discrete, [:t, :n]), every: 1)
-        | clock: fn -> Process.sleep(:infinity) end
+        | clock: fn -> receive(do: (:never_sent -> nil)) end
       }
 
       assert [{:deliveries, {:timeout, {:fetch, nil, nil}}} | _] =
