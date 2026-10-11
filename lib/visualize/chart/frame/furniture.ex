@@ -104,19 +104,62 @@ defmodule Visualize.Chart.Frame.Furniture do
   end
 
   @doc false
-  # The `Visualize.Axis` an axis node describes over the frame's realised scale.
+  # The `Visualize.Axis` an axis node describes over the frame's realised scale. What the
+  # node leaves out is derived (§4.4, D-134): the count from the axis's length, the format
+  # from the scale's domain at that count; an explicit count, list or format wins.
   @spec axis(map(), map()) :: Axis.t()
   def axis(frame, node) do
     scale = Map.fetch!(frame.scales, node.scale)
+    spec = Map.get(node, :ticks)
+    count = count(spec) || Axis.tick_count(axis_length(frame, node, scale), run(frame, node))
 
     Axis
     |> apply(node.side, [scale])
     |> Axis.theme(frame.theme)
     |> Axis.offset(Map.get(node, :offset, Schema.default(:axis, :offset)))
-    |> ticks(Map.get(node, :ticks))
-    |> format(scale, Map.get(node, :format))
+    |> Axis.ticks(count)
+    |> ticks(spec)
+    |> format(scale, Map.get(node, :format), count)
     |> unit(Map.get(node, :prefix), Map.get(node, :unit))
   end
+
+  # The count a tick spec gives, or `nil` when the axis derives it.
+  defp count(count) when is_integer(count), do: count
+  defp count(%{count: count}) when is_integer(count), do: count
+  defp count(_spec), do: nil
+
+  # The axis's length in pixels (§4.4): an `angle` axis's arc and an `r` axis's spoke in a
+  # polar frame, else the span of its scale's range — the plot's side when the scale has
+  # no two-ended numeric range.
+  defp axis_length(%{kind: :polar} = frame, %{scale: :angle} = node, _scale) do
+    {a0, a1} = sweep(frame)
+    axis_radius(frame, node) * abs(a1 - a0)
+  end
+
+  defp axis_length(%{kind: :polar} = frame, %{scale: :r}, _scale) do
+    {r0, r1} = radii(frame)
+    r1 - r0
+  end
+
+  defp axis_length(_frame, _node, %{range: [r0, r1]}) when is_number(r0) and is_number(r1),
+    do: abs(r1 - r0)
+
+  defp axis_length(frame, %{side: side}, _scale) when side in [:top, :bottom],
+    do: frame.plot.width
+
+  defp axis_length(frame, _node, _scale), do: frame.plot.height
+
+  # Which way the axis's labels run, as the side `Visualize.Axis.tick_count/2` spaces them
+  # by: a ring's labels sit side by side like a bottom axis's; a spoke's stack like a left
+  # axis's when it runs more up and down than across.
+  defp run(%{kind: :polar}, %{scale: :angle}), do: :bottom
+
+  defp run(%{kind: :polar}, %{scale: :r} = node) do
+    {ux, uy} = spoke_direction(node)
+    if abs(uy) > abs(ux), do: :left, else: :bottom
+  end
+
+  defp run(_frame, node), do: node.side
 
   defp ticks(axis, nil), do: axis
   defp ticks(axis, count) when is_integer(count), do: Axis.ticks(axis, count)
@@ -131,19 +174,26 @@ defmodule Visualize.Chart.Frame.Furniture do
     |> Axis.tick_padding(Map.get(spec, :padding, Schema.default(:ticks, :padding)))
   end
 
-  defp format(axis, _scale, nil), do: axis
+  # No format: the one the scale's domain calls for at the axis's count, or the default
+  # label when the scale has none (a band, an ordinal).
+  defp format(axis, scale, nil, count) do
+    case Format.Auto.formatter(scale, count: count) do
+      nil -> axis
+      formatter -> Axis.tick_format(axis, formatter)
+    end
+  end
 
   # A named format no specifier can express (spec/14 §4.4, #191).
-  defp format(axis, _scale, :duration) do
+  defp format(axis, _scale, :duration, _count) do
     Axis.tick_format(axis, fn v -> if is_number(v), do: Format.duration(v), else: to_string(v) end)
   end
 
   # A tick of a zoned time scale prints its local wall clock, whether the scale computed it
   # or the design gave it (spec/05 §2.8, #447); without a zone `local/2` is the identity.
-  defp format(axis, %Scale.Time{} = scale, spec),
+  defp format(axis, %Scale.Time{} = scale, spec, _count),
     do: Axis.tick_format(axis, &Format.time(Scale.Time.local(scale, &1), spec))
 
-  defp format(axis, _scale, spec) do
+  defp format(axis, _scale, spec, _count) do
     formatter = Format.formatter(spec)
     Axis.tick_format(axis, fn v -> if is_number(v), do: formatter.(v), else: to_string(v) end)
   end

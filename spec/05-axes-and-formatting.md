@@ -82,7 +82,11 @@ Every label therefore sits `i + p` beyond the tick, away from the plot, as in d3
 
 Tick values are `tick_values` when set, else `Scale.ticks(scale, ticks || 10)`. For a `Band` or `Ordinal` scale that is the domain. On a `Band` scale each tick is centred in its band by the `c` term of 1.3, so `offset/2` is only the pixel offset; on every other scale the tick sits at `apply/2` (D-23).
 
-Default label (no `tick_format`): floats are rounded to 6 decimal places and printed in plain decimal notation with trailing zeros and a trailing `.` removed (`2.0 → "2"`, `0.1 + 0.2 → "0.3"`, `1000.0 → "1000"`, `0.00001 → "0.00001"`) — never in exponent form, and never `-0` (#354; the rule of `Visualize.IR.Path.format_number/1`, D-12, at six decimals); any other value is `to_string/1` (`DateTime` therefore prints ISO 8601). A custom formatter receives the raw tick value.
+Default label (no `tick_format`): floats are rounded to 6 decimal places and printed in plain decimal notation with trailing zeros and a trailing `.` removed (`2.0 → "2"`, `0.1 + 0.2 → "0.3"`, `1000.0 → "1000"`, `0.00001 → "0.00001"`) — never in exponent form, and never `-0` (#354; the rule of `Visualize.IR.Path.format_number/1`, D-12, at six decimals); any other value is `to_string/1` (`DateTime` therefore prints ISO 8601). A custom formatter receives the raw tick value. These are the hand-built axis's defaults; the declarative layer's axis derives both, as follows.
+
+`Visualize.Axis` keeps d3-axis's defaults — ten ticks, the default label of 1.5 — so an axis built by hand is d3's axis. The declarative layer's axis derives its count from its length (below) and its format from its scale's domain (§3) where the design gives neither (spec/14 §4.4, D-134); a caller building an axis by hand gets the same result with `ticks(Visualize.Axis.tick_count(length, orient))` and `tick_format(Visualize.Format.Auto.formatter(scale, count: count))`.
+
+**Tick count from the length.** `tick_count(length, orient)` is the tick-count hint an axis `length` pixels long asks for: `⌊|length| / spacing⌋`, at least `2` and at most `10`. The spacing is Observable Plot's: `80` px a tick across a `:top` or `:bottom` axis, whose labels sit side by side and are as wide as their text, and `35` px down a `:left` or `:right` one, whose labels stack a line apart. So a 600 px wide x axis asks for 7 ticks, a 240 px one for 3, and a 300 px tall y axis for 8; ten, d3's default, is the cap, reached at 800 px across and 350 px down. The count is a hint (spec/03): a scale returns the nice ticks nearest it.
 
 ### 1.6 Rendering
 
@@ -109,6 +113,7 @@ Default label (no `tick_format`): floats are rounded to 6 decimal places and pri
 | `Visualize.Axis.generate/2` | Returns the `IR.Element` group described in 1.4, its theme slots resolved in the `:resolve` mode. |
 | `Visualize.Axis.render/1` | As `render/2` with `[]` options. |
 | `Visualize.Axis.render/2` | Renders `generate/1` through `Visualize.Render.to_string/2`; returns a string. |
+| `Visualize.Axis.tick_count/2` | `⌊length / spacing⌋` in `2..10`, spacing `80` across, `35` down (1.5). |
 
 ## 2. `Visualize.Format`
 
@@ -259,3 +264,52 @@ A `Date` has hour, minute, second and milliseconds `0`. Fields are printed as st
 | `Visualize.Format.time/1` | As `time/2` with format `"%Y-%m-%d"`. |
 | `Visualize.Format.time/2` | One-pass strftime-style formatting of a date/time struct (2.8). |
 | `Visualize.Format.duration/1` | A length of time in seconds in the unit its magnitude chooses (2.9). |
+
+## 3. `Visualize.Format.Auto`
+
+### 3.1 Derived formats
+
+`Visualize.Format.Auto` derives a tick format from what a realised scale already knows — its domain and the tick count — so no host computes it (#532, D-134). Each function takes `locale:`, a locale name, `"en"` by default; `"en"` is the only one that ships, and any other raises `ArgumentError` naming it, so adding a locale later changes no signature. A locale holds the grouping separator, the decimal point and the time formats below; English month and weekday names are `time/2`'s (2.8).
+
+**Time: from the span and the interval.** `time_format(domain, opts)` is the `time/2` specifier for a time domain `[t0, t1]` (`DateTime`, `NaiveDateTime` or `Date`, in either order), with `count:` the tick count (default `10`). The span is `|t1 − t0|` in seconds; the interval is the one the time scale's ticks use for that span and count (`Visualize.Scale.Time.interval/2`, spec/03 §7.3.1), *sub-day* when its unit is `:second`, `:minute` or `:hour`. The format names the units a reader needs to tell two ticks apart and no more:
+
+| Span | Sub-day interval | Longer interval |
+|---|---|---|
+| ≤ 1 day | `%H:%M` (`%H:%M:%S` when the interval is in seconds) | — |
+| ≤ 7 days | `%a %H:%M` (`Tue 12:00`) | `%a %d` (`Tue 05`) |
+| ≤ 92 days | `%b %d %H:%M` (`Mar 05 12:00`) | `%b %d` (`Mar 05`) |
+| longer | `%b %Y` (`Mar 2024`) | `%b %Y`; `%Y` when the interval is whole years |
+
+So clock times within a day, days within a week, dates within a season and months beyond, each with the time of day while the ticks fall within a day. One format serves every tick of the axis, unlike d3's multi-scale `tickFormat`, which formats each tick by the boundary it lands on: an axis whose labels share one shape reads as one scale.
+
+**Numbers: from the magnitude.** `notation(domain)` classifies a numeric domain by its magnitude `m`, the greatest `|d|` among its numbers:
+
+| Magnitude | Notation | Labels |
+|---|---|---|
+| `m < 1000` | `:plain` | the default label of 1.5 (`0`, `250`, `0.25`) |
+| `1000 ≤ m < 10⁶` | `:grouped` | the default label with its integer digits grouped in threes by the locale's separator (`90,000`, `12,500.5`) |
+| `m ≥ 10⁶` | `{:si, e}` | `v / 10ᵉ` as the default label, then the prefix of `e` (`2.5M`, `0.5M`, `9M`); `0` stays `0` |
+
+`e` is the exponent of the largest SI prefix from `M` (`6`) to `Y` (`24`) not above `m`, so **one prefix serves every tick**, as d3's `tickFormat` with an `s` specifier does: `0.5M, 1M, 1.5M`, never `500k, 1M, 1.5M`. `number(notation, opts)` is the formatter of a notation; it also takes `:si`, each value with its own prefix from `k` up (`1`, `100`, `1k`, `1M`) and plain below a thousand, which is what a log scale's ticks — orders of magnitude apart — want. A non-number formats as `to_string/1`.
+
+**One scale.** `formatter(scale, opts)` is the derived formatter of a realised scale, with `count:` and `locale:`:
+
+- `Visualize.Scale.Time`: `time/2` with `time_format/2` of the domain, each tick shifted into the scale's zone by `Visualize.Scale.Time.local/2` first (2.8), so a zoned axis reads local time; a non-time value formats as `to_string/1`;
+- `Linear`, `Power` and `Radial`: `number/2` of `notation/1` of the domain;
+- `Log` and `Symlog`: `number/2` of `:si` when the notation is `{:si, e}`, else of the notation;
+- any other scale (`Band`, `Ordinal`, the discretising scales): `nil`, the default label.
+
+The functions are pure: the same domain, count and locale give the same formatter, so a compiled chart re-derives them on every realisation and an axis on a moving domain follows it (spec/14 §12.5). Units and quantities (#536) build their display scaling on `notation/1` and `number/2`.
+
+### 3.2 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Format.Auto.formatter/1` | As `formatter/2` with `[]` options. |
+| `Visualize.Format.Auto.formatter/2` | The derived formatter of a realised scale, or `nil` (3.1). |
+| `Visualize.Format.Auto.time_format/1` | As `time_format/2` with `[]` options. |
+| `Visualize.Format.Auto.time_format/2` | The `time/2` specifier for a time domain's span and interval (3.1). |
+| `Visualize.Format.Auto.notation/1` | As `notation/2` with `[]` options. |
+| `Visualize.Format.Auto.notation/2` | `:plain`, `:grouped` or `{:si, e}` of a numeric domain's magnitude (3.1). |
+| `Visualize.Format.Auto.number/1` | As `number/2` with `[]` options. |
+| `Visualize.Format.Auto.number/2` | The formatter of a notation, `:si` per value included (3.1). |
