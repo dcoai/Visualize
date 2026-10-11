@@ -123,6 +123,31 @@ defmodule Visualize.ChartTest do
       assert Chart.from_json(json) == {:ok, chart}
     end
 
+    # A key that is a string or an enumeration (an axis's `format`) reads a member's name as
+    # the member, whichever alternative the schema lists first (spec/14 §11.1, D-144).
+    test "a string naming an enumeration alternative's member reads back as that atom" do
+      axis = fn format -> %{scale: :x, side: :bottom, format: format} end
+
+      chart =
+        Chart.from_map!(%{
+          version: 2,
+          frames: %{
+            main: %{
+              kind: :cartesian,
+              scales: %{x: %{kind: :linear}},
+              axes: [axis.(:duration), axis.(".1~s")]
+            }
+          }
+        })
+
+      {:ok, json} = Chart.to_json(chart)
+
+      assert [%{"format" => "duration"}, %{"format" => ".1~s"}] =
+               Jason.decode!(json)["frames"]["main"]["axes"]
+
+      assert {:ok, ^chart} = Chart.from_json(json)
+    end
+
     test "a document that does not parse is a JSON error at the root" do
       assert {:error, [{[], {:json, message}}]} = Chart.from_json("{")
       assert is_binary(message)

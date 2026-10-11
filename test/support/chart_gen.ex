@@ -71,6 +71,9 @@ defmodule Visualize.ChartGen do
 
   defp category_string, do: filter(text_string(), &(&1 != "auto"))
 
+  # An axis's `format` string "duration" reads back as `:duration` (spec/14 §11.1, D-144).
+  defp format_string, do: filter(text_string(), &(&1 != "duration"))
+
   defp datetime, do: map(integer(0..2_000_000_000), &DateTime.from_unix!/1)
 
   defp json_term do
@@ -88,6 +91,9 @@ defmodule Visualize.ChartGen do
   end
 
   defp field_ref(fields), do: map(member_of(fields), &{:field, &1})
+
+  # A channel at its scale's own end (spec/14 §5.2, §11.2, #554).
+  defp scale_end, do: map(member_of([:min, :max]), &{:scale, &1})
 
   # A value generator, plus a declared variable when the design has any.
   defp with_var(gens, vars) when map_size(vars) == 0, do: one_of(gens)
@@ -294,7 +300,7 @@ defmodule Visualize.ChartGen do
 
     node(%{scale: member_of(scales), side: member_of(@sides)}, %{
       ticks: one_of([integer(1..10), list_of(json_term(), max_length: 3), ticks]),
-      format: text_string(),
+      format: one_of([format_string(), constant(:duration)]),
       grid: boolean(),
       offset: number(),
       style: member_of(Schema.builtin_styles())
@@ -446,7 +452,7 @@ defmodule Visualize.ChartGen do
   end
 
   defp channel_value(fields, vars) do
-    with_var([member_of(fields), number(), field_ref(fields)], vars)
+    with_var([member_of(fields), number(), field_ref(fields), scale_end()], vars)
   end
 
   # Every option is a number but a needle's cap, an enum (spec/14 §5.3, #392).
