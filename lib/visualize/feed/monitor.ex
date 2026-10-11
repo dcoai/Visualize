@@ -1,0 +1,418 @@
+defmodule Visualize.Feed.Monitor do
+  @moduledoc """
+  The loop over a set of feeds, as a value (spec/08 §11.4, D-140).
+
+  A monitor subscribes where a feed can push, polls where it cannot, and hands a chart
+  one finished delivery per slot. It is not a process: the process that owns the feeds —
+  a board's (#540), a LiveView's — holds it in its state, calls `tick/2` each frame and
+  `handle_message/2` from `handle_info/2`, and passes `deliveries/1` and `cache/1` to
+  `Visualize.Chart.apply/2` or a compiled chart. That process subscribes, so the pushes
+  arrive in its mailbox.
+
+  Pushes buffer, and the next tick drains them: one merge, one trim and one reduction per
+  feed per tick, whatever the push rate. A pull feed is polled every `every:`
+  milliseconds. Errors and staleness are states, `status/1`, never raises.
+
+  ## Examples
+
+      iex> alias Visualize.Feed.Monitor
+      iex> signal = Visualize.Signals.new(:sine, [:t, :v], window: 100)
+      iex> feeds = %{wave: Visualize.Feed.Signals.new(signal, tick: 500)}
+      iex> monitor = Monitor.new(feeds, budget: 20) |> Monitor.tick(now: 0)
+      iex> Monitor.status(monitor)
+      %{wave: :live}
+      iex> %{wave: delivery} = Monitor.deliveries(monitor)
+      iex> {length(delivery.rows), delivery.reduced_by}
+      {20, :visualize}
+
+  """
+
+  alias Visualize.Data.{Delivery, Schema, Table}
+  alias Visualize.Data.Schema.Cache
+  alias Visualize.Feed
+  alias Visualize.Feed.Window
+
+  defstruct entries: %{},
+            refs: %{},
+            cache: %Cache{},
+            window: nil,
+            budget: nil,
+            reduce: :lttb,
+            every: 1000,
+            stale_after: nil,
+            limit: 100_000
+
+  @type name :: term()
+  @type status :: :loading | :live | :stale | {:down, term()}
+
+  @type t :: %__MODULE__{
+          entries: %{name() => map()},
+          refs: %{reference() => name()},
+          cache: Cache.t(),
+          window: Feed.window(),
+          budget: Feed.budget(),
+          reduce: :lttb | :m4,
+          every: non_neg_integer(),
+          stale_after: pos_integer() | nil,
+          limit: pos_integer()
+        }
+
+  @doc """
+  A monitor over a map of feeds by slot name, calling nothing. Options: `window:` and
+  `budget:` (the request), `reduce:` (`:lttb` or `:m4`), `every:` (a pull feed's poll
+  interval, milliseconds, `1000`), `stale_after:` (milliseconds without an answer before
+  a feed is `:stale`, `nil` for never) and `limit:` (the most rows held for a feed whose
+  rows cannot be trimmed by time, `100_000`).
+  """
+  @spec new(%{name() => Feed.t()}, keyword()) :: t()
+  def new(feeds, opts \\ []) when is_map(feeds) do
+    opts =
+      Keyword.validate!(opts,
+        window: nil,
+        budget: nil,
+        reduce: :lttb,
+        every: 1000,
+        stale_after: nil,
+        limit: 100_000
+      )
+
+    monitor = struct!(__MODULE__, opts)
+    %{monitor | entries: Map.new(feeds, fn {name, feed} -> {name, entry(feed)} end)}
+  end
+
+  defp entry(feed) do
+    %{
+      feed: feed,
+      supports: nil,
+      ref: nil,
+      held: nil,
+      schema: nil,
+      out: nil,
+      pending: [],
+      refetch: true,
+      due: nil,
+      last_ok: nil,
+      status: :loading,
+      error: nil
+    }
+  end
+
+  @doc """
+  One turn of the loop at `now:` (the owner's monotonic clock in milliseconds; read when
+  absent): every feed, in name order, is described if it is not yet, fetched if it holds
+  nothing, its window moved or its poll is due, its buffered pushes drained, every
+  version resolved, and its holding finished for the window and the budget.
+  """
+  @spec tick(t(), keyword()) :: t()
+  def tick(%__MODULE__{} = monitor, opts \\ []) do
+    now = Keyword.get_lazy(opts, :now, fn -> System.monotonic_time(:millisecond) end)
+
+    monitor.entries
+    |> Map.keys()
+    |> Enum.sort()
+    |> Enum.reduce(monitor, &step(&2, &1, now))
+  end
+
+  defp step(monitor, name, now) do
+    monitor
+    |> described(name, now)
+    |> fetched(name, now)
+    |> drained(name, now)
+    |> finished(name, now)
+  end
+
+  # -- 1. describe and subscribe ----------------------------------------------------------
+
+  defp described(monitor, name, now) do
+    entry = monitor.entries[name]
+
+    cond do
+      entry.supports != nil -> subscribed(monitor, name, now)
+      not due?(entry, now) -> monitor
+      true -> describe(monitor, name, now)
+    end
+  end
+
+  defp describe(monitor, name, now) do
+    entry = monitor.entries[name]
+
+    case Feed.describe(entry.feed) do
+      {:error, reason} ->
+        put_entry(monitor, name, %{entry | status: {:down, reason}, due: now + monitor.every})
+
+      {_version, schema, supports} ->
+        monitor = %{monitor | cache: Cache.put(monitor.cache, name, schema)}
+        entry = %{entry | supports: supports, schema: entry.schema || schema, due: nil}
+        monitor |> put_entry(name, entry) |> subscribed(name, now)
+    end
+  end
+
+  defp subscribed(monitor, name, now) do
+    entry = monitor.entries[name]
+
+    if :push in entry.supports and entry.ref == nil and due?(entry, now) do
+      case Feed.subscribe(entry.feed, self()) do
+        {:ok, ref} ->
+          %{monitor | refs: Map.put(monitor.refs, ref, name)}
+          |> put_entry(name, %{entry | ref: ref})
+
+        {:error, reason} ->
+          # Polled meanwhile, as a pull feed is; subscribed again when due.
+          put_entry(monitor, name, %{entry | status: {:down, reason}, due: now + monitor.every})
+      end
+    else
+      monitor
+    end
+  end
+
+  defp due?(%{due: nil}, _now), do: true
+  defp due?(%{due: due}, now), do: now >= due
+
+  # -- 2. fetch ---------------------------------------------------------------------------
+
+  defp fetched(monitor, name, now) do
+    entry = monitor.entries[name]
+
+    cond do
+      entry.supports == nil -> monitor
+      fetch?(entry, now) -> fetch(monitor, name, now)
+      true -> monitor
+    end
+  end
+
+  defp fetch?(%{held: nil, due: due}, now), do: due == nil or now >= due
+  defp fetch?(%{refetch: true}, _now), do: true
+  defp fetch?(%{ref: nil, due: due}, now), do: due == nil or now >= due
+  defp fetch?(_entry, _now), do: false
+
+  defp fetch(monitor, name, now) do
+    entry = monitor.entries[name]
+    poll = %{entry | due: now + monitor.every}
+
+    case Feed.fetch(entry.feed, monitor.window, monitor.budget) do
+      {:error, reason} ->
+        put_entry(monitor, name, %{poll | status: {:down, reason}})
+
+      {:ok, delivery} ->
+        case resolve(monitor, name, delivery) do
+          {:ok, delivery, schema, monitor} ->
+            held = %{delivery | rows: Table.rows(delivery)}
+            entry = %{poll | held: held, schema: schema, refetch: false}
+            put_entry(monitor, name, live(entry, now))
+
+          {:error, reason, monitor} ->
+            put_entry(monitor, name, %{poll | status: {:down, reason}, error: reason})
+        end
+    end
+  end
+
+  # A delivery's version, resolved through the cache and the feed's describe once
+  # (spec/08 §11.3). A delivery naming none is the feed's described schema.
+  defp resolve(monitor, name, %Delivery{schema: nil} = delivery) do
+    entry = monitor.entries[name]
+    {:ok, %{delivery | schema: Schema.version(entry.schema)}, entry.schema, monitor}
+  end
+
+  defp resolve(monitor, name, %Delivery{schema: version} = delivery) do
+    feed = monitor.entries[name].feed
+    describe = Feed.describer(%{name => feed})
+
+    case Cache.resolve(monitor.cache, name, version, describe) do
+      {:ok, schema, cache} -> {:ok, delivery, schema, %{monitor | cache: cache}}
+      {:error, reason, cache} -> {:error, reason, %{monitor | cache: cache}}
+    end
+  end
+
+  defp live(entry, now), do: %{entry | status: :live, last_ok: now, error: nil}
+
+  # -- 3. drain the pushes ----------------------------------------------------------------
+
+  defp drained(monitor, name, now) do
+    entry = monitor.entries[name]
+
+    entry.pending
+    |> Enum.reverse()
+    |> Enum.reduce(put_entry(monitor, name, %{entry | pending: []}), fn delivery, monitor ->
+      case resolve(monitor, name, delivery) do
+        {:ok, delivery, schema, monitor} ->
+          entry = monitor.entries[name]
+          held = merge(entry.held, delivery, schema, monitor.limit)
+          put_entry(monitor, name, live(%{entry | held: held, schema: schema}, now))
+
+        {:error, reason, monitor} ->
+          put_entry(monitor, name, %{monitor.entries[name] | error: reason})
+      end
+    end)
+  end
+
+  # A push appended to the holding: only its rows strictly after what the holding covers,
+  # by the time field; without one every row, keeping the newest `limit`.
+  defp merge(nil, delivery, _schema, _limit), do: %{delivery | rows: Table.rows(delivery)}
+
+  defp merge(held, delivery, schema, limit) do
+    rows = Table.rows(delivery)
+
+    case Feed.time_field(schema) do
+      nil ->
+        all = held.rows ++ rows
+        cut = max(length(all) - limit, 0)
+
+        %{held | rows: Enum.drop(all, cut), schema: delivery.schema}
+        |> Map.update!(:capped, &(&1 or cut > 0))
+
+      time ->
+        held_to = window_to(held) || newest(held.rows, time)
+        rows = Window.newer(rows, time, held_to)
+        to = Window.latest(held_to, window_to(delivery) || newest(rows, time))
+        from = window_from(held)
+
+        %{held | rows: held.rows ++ rows, schema: delivery.schema, window: [from, to]}
+    end
+  end
+
+  defp window_from(%Delivery{window: [from, _to]}), do: from
+  defp window_from(_delivery), do: nil
+
+  defp window_to(%Delivery{window: [_from, to]}), do: to
+  defp window_to(_delivery), do: nil
+
+  defp newest(rows, time), do: Enum.reduce(rows, nil, &Window.latest(&2, Table.get(&1, time)))
+
+  # -- 4. finish --------------------------------------------------------------------------
+
+  defp finished(monitor, name, now) do
+    entry = monitor.entries[name]
+
+    case entry.held do
+      nil ->
+        monitor
+
+      held ->
+        # The holding is trimmed whatever the feed honours, so pushes never grow it past
+        # the window; the delivery handed out is reduced for the budget.
+        held = Feed.finish(held, entry.schema, window: monitor.window)
+
+        out =
+          Feed.finish(held, entry.schema,
+            supports: entry.supports,
+            budget: monitor.budget,
+            reduce: monitor.reduce
+          )
+
+        put_entry(monitor, name, stale(%{entry | held: held, out: out}, now, monitor))
+    end
+  end
+
+  defp stale(%{status: :live, last_ok: last} = entry, now, %{stale_after: after_ms})
+       when is_integer(after_ms) and now - last > after_ms,
+       do: %{entry | status: :stale}
+
+  defp stale(entry, _now, _monitor), do: entry
+
+  defp put_entry(monitor, name, entry),
+    do: %{monitor | entries: Map.put(monitor.entries, name, entry)}
+
+  # -- the owner's calls ------------------------------------------------------------------
+
+  @doc """
+  A message the owner received: `{:ok, monitor}` with a push buffered or a pushed schema
+  cached (spec/08 §11.3), `:ignore` for any other message. A push of a subscription the
+  monitor no longer holds is dropped.
+  """
+  @spec handle_message(t(), term()) :: {:ok, t()} | :ignore
+  def handle_message(%__MODULE__{} = monitor, {:visualize_feed, ref, message})
+      when is_reference(ref) do
+    case Map.fetch(monitor.refs, ref) do
+      {:ok, name} -> {:ok, received(monitor, name, message)}
+      :error -> {:ok, monitor}
+    end
+  end
+
+  def handle_message(%__MODULE__{}, _message), do: :ignore
+
+  defp received(monitor, name, {:schema, _version, %Schema{} = schema}),
+    do: %{monitor | cache: Cache.put(monitor.cache, name, schema)}
+
+  defp received(monitor, name, {:delivery, %Delivery{} = delivery}) do
+    entry = monitor.entries[name]
+    put_entry(monitor, name, %{entry | pending: [delivery | entry.pending]})
+  end
+
+  @doc """
+  The monitor with a new window. A pull feed fetches at the next tick; a push feed only
+  when the window starts before what it holds covers, and is otherwise trimmed.
+  """
+  @spec window(t(), Feed.window()) :: t()
+  def window(%__MODULE__{window: window} = monitor, window), do: monitor
+
+  def window(%__MODULE__{} = monitor, window) do
+    entries =
+      Map.new(monitor.entries, fn {name, entry} ->
+        {name, %{entry | refetch: entry.refetch or not covers?(entry, window)}}
+      end)
+
+    %{monitor | window: window, entries: entries}
+  end
+
+  defp covers?(%{ref: nil}, _window), do: false
+
+  defp covers?(%{held: %Delivery{window: [held, _]}}, [from, _]) when held != nil and from != nil,
+    do: Window.compare(from, held) != :lt
+
+  defp covers?(_entry, _window), do: false
+
+  @doc "The monitor with a new budget, refinished at the next tick."
+  @spec budget(t(), Feed.budget()) :: t()
+  def budget(%__MODULE__{} = monitor, budget), do: %{monitor | budget: budget}
+
+  @doc "A feed added or replaced under a name: the old one unsubscribed, the new one described at the next tick."
+  @spec put(t(), name(), Feed.t()) :: t()
+  def put(%__MODULE__{} = monitor, name, feed) do
+    monitor = remove(monitor, name)
+    put_entry(monitor, name, entry(feed))
+  end
+
+  @doc "A feed dropped, unsubscribed."
+  @spec remove(t(), name()) :: t()
+  def remove(%__MODULE__{} = monitor, name) do
+    case Map.fetch(monitor.entries, name) do
+      {:ok, entry} ->
+        unsubscribe(entry)
+        refs = Map.reject(monitor.refs, fn {_ref, n} -> n == name end)
+        %{monitor | entries: Map.delete(monitor.entries, name), refs: refs}
+
+      :error ->
+        monitor
+    end
+  end
+
+  @doc "Every push feed unsubscribed; the monitor's end."
+  @spec stop(t()) :: :ok
+  def stop(%__MODULE__{entries: entries}) do
+    Enum.each(entries, fn {_name, entry} -> unsubscribe(entry) end)
+  end
+
+  defp unsubscribe(%{ref: nil}), do: :ok
+  defp unsubscribe(%{feed: feed, ref: ref}), do: Feed.unsubscribe(feed, ref)
+
+  # -- the answers ------------------------------------------------------------------------
+
+  @doc "The finished delivery of every feed that has one, by name: a pool."
+  @spec deliveries(t()) :: %{name() => Delivery.t()}
+  def deliveries(%__MODULE__{entries: entries}),
+    do: for({name, %{out: %Delivery{} = out}} <- entries, into: %{}, do: {name, out})
+
+  @doc "Each feed's state: `:loading`, `:live`, `:stale` or `{:down, reason}`."
+  @spec status(t()) :: %{name() => status()}
+  def status(%__MODULE__{entries: entries}),
+    do: Map.new(entries, fn {name, entry} -> {name, entry.status} end)
+
+  @doc "Each feed's last unresolved delivery reason, for the feeds that have one."
+  @spec errors(t()) :: %{name() => term()}
+  def errors(%__MODULE__{entries: entries}),
+    do: for({name, %{error: error}} <- entries, error != nil, into: %{}, do: {name, error})
+
+  @doc "The schema cache, holding every version the deliveries name: `apply/2`'s `schemas:`."
+  @spec cache(t()) :: Cache.t()
+  def cache(%__MODULE__{cache: cache}), do: cache
+end

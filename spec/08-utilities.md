@@ -831,7 +831,7 @@ A push feed sends a subscriber two kinds of message, each tagged so a process th
 
 **`Visualize.Feed.Telemetry`** is an in-process `:telemetry` provider, a `GenServer`: `start_link(metrics: definitions)` takes a list of `Telemetry.Metrics` definitions — read by their fields (`name`, `event_name`, `measurement`, `tags`, `tag_values`, `keep`, `unit`, `description`) and their struct's name, with **no dependency on `telemetry_metrics`** — attaches one handler for their events and collects. `:telemetry` is an **optional** dependency, called directly under `@compile {:no_warn_undefined, :telemetry}` (D-50): a host without it builds warning-free and never starts the provider.
 
-- **One feed per metric.** `feeds(server)` is a map from each metric's name, joined with dots (`"vm.memory.total"`), to `%Visualize.Feed.Telemetry{server, metric}`; `feed(server, name)` is one. A metric is one family of series, so each is its own slot: its schema is `t` (`:time`, label `"Time"`), `value` (`:number`, labelled with the definition's `description`, else its name; its `unit` the definition's through `Visualize.Unit.from_telemetry/1` and its `quantity` that unit's, `Visualize.Quantity.of_unit/1`) and each of its `tags` (`:category`). A unit the mapping refuses — `:native`, or an atom outside spec/05 §4.1's table — leaves `value` with no `unit` and no `quantity` rather than a guess. One design (a latency line over `[:t, :value]`) then binds any metric.
+- **One feed per metric.** `feeds(server)` is a map from each metric's name, joined with dots (`"vm.memory.total"`), to `%Visualize.Feed.Telemetry{server, metric}`; `feed(server, name)` is one. Two definitions of one name — a summary and a counter of `phoenix.endpoint.stop.duration`, as a dashboard often has — are each keyed by their kind as well (`"….duration:summary"`, `"….duration:counter"`), and both keep the plain name as their label. A metric is one family of series, so each is its own slot: its schema is `t` (`:time`, label `"Time"`), `value` (`:number`, labelled with the definition's `description`, else its name; its `unit` the definition's through `Visualize.Unit.from_telemetry/1` and its `quantity` that unit's, `Visualize.Quantity.of_unit/1`) and each of its `tags` (`:category`). A unit the mapping refuses — `:native`, or an atom outside spec/05 §4.1's table — leaves `value` with no `unit` and no `quantity` rather than a guess. One design (a latency line over `[:t, :value]`) then binds any metric.
 - **The rows.** A handler runs in the process that emits the event, as a reporter's does: it applies `keep`, reads the measurement (a key, or a function of the measurements and, at arity 2, the metadata), skips `nil`, takes the tags from `tag_values` and sends them to the collector. The collector stamps each with its own clock in microseconds, strictly increasing (so the seam of §11.4 is exact: a fetch serves up to the last stamp, and every later push is after it), and keeps a row `%{t: DateTime, value: v}` plus the tags. A **counter** row's value is the count of events so far for its tags, and a **sum**'s the running total, as a reporter shows them; a **last value**, **summary** or **distribution** row's value is the measurement. A counter's `unit` is `"1"`, whatever the definition says, since it counts events.
 - **Retention.** Each metric keeps its newest `keep:` rows (`10_000`). The collector covers from its start until it first drops a row, then from its oldest row; a fetch whose `from` is before that is `capped`, and its `window` starts where the collector's data does — which is what `Combine` routes the rest of the window by.
 - **The capabilities** are `[:window, :push]`. A fetch serves the rows within a window of `DateTime` bounds (a bound of another kind is `{:error, {:window, window}}`), up to now; a budget is left to the monitor. Every `every:` milliseconds (`1000`; `nil` for only on `flush/1`) the collector sends each subscriber of a metric the rows new since the last flush, one delivery per metric; `flush/1` does it at once. The subscribe handshake sends the schema first; a subscriber that exits is dropped. The collector detaches its handler when it stops.
@@ -855,10 +855,13 @@ A push feed sends a subscriber two kinds of message, each tagged so a process th
 | `Visualize.Feed.Window.before/4` | `before(rows, field, from, upper)`: the rows whose `field` lies in `[from, upper)`, the seam of a combination (11.5). |
 | `Visualize.Feed.Window.newer/3` | `newer(rows, field, time)`: the rows whose `field` lies strictly after the time, the seam of a push (11.4). |
 | `Visualize.Feed.Window.intersect/2` | The intersection of two windows, `nil` for everything. |
-| `Visualize.Feed.Window.latest/2`, `earliest/2` | The later and the earlier of two times, a `nil` ignored. |
+| `Visualize.Feed.Window.latest/2` | The later of two times, a `nil` ignored. |
+| `Visualize.Feed.Window.earliest/2` | The earlier of two times, a `nil` ignored. |
 | `Visualize.Feed.Window.time?/1` | Whether a value is a time a window can be over. |
 | `Visualize.Feed.Window.position/1` | A time as a number: itself, a `DateTime`'s Unix microseconds, a `NaiveDateTime`'s and a `Date`'s Gregorian seconds and days. |
+| `Visualize.Feed.Monitor.new/1` | `new(feeds, [])`. |
 | `Visualize.Feed.Monitor.new/2` | A monitor over feeds by name, calling nothing (11.4). |
+| `Visualize.Feed.Monitor.tick/1` | `tick(monitor, [])`: `now` read from the monotonic clock. |
 | `Visualize.Feed.Monitor.tick/2` | One turn of the loop at `now:`: describe, fetch, drain, resolve, finish. |
 | `Visualize.Feed.Monitor.handle_message/2` | `{:ok, monitor}` with a push buffered or a schema cached, `:ignore` for any other message. |
 | `Visualize.Feed.Monitor.window/2` | The monitor with a new window, refetching only what the window needs. |
@@ -871,9 +874,12 @@ A push feed sends a subscriber two kinds of message, each tagged so a process th
 | `Visualize.Feed.Monitor.cache/1` | The schema cache holding every version the deliveries name. |
 | `Visualize.Feed.Monitor.stop/1` | Every push feed unsubscribed; `:ok`. |
 | `Visualize.Feed.Combine.new/1` | One feed over several, freshest first, routed by window (11.5). |
+| `Visualize.Feed.Combine.describe/1` | The parts' shared `{version, schema, supports}`; `{:error, {:combine_schema, versions}}`, `{:error, :combine_time_field}`, or a part's own error. |
+| `Visualize.Feed.Signals.new/1` | `new(signal, [])`: a signal as a feed at tick `0`. |
 | `Visualize.Feed.Signals.new/2` | A signal as a feed (11.6). |
 | `Visualize.Feed.Signals.at/2` | A ticked feed moved to a tick. |
 | `Visualize.Feed.Telemetry.start_link/1` | The collector over `metrics:` definitions, attached (11.6). |
+| `Visualize.Feed.Telemetry.child_spec/1` | The collector as a supervisor's child, `{Visualize.Feed.Telemetry, metrics: definitions}`. |
 | `Visualize.Feed.Telemetry.feeds/1` | Each metric's feed, by its dotted name. |
 | `Visualize.Feed.Telemetry.feed/2` | One metric's feed. |
 | `Visualize.Feed.Telemetry.flush/1` | Every subscriber sent the rows new since the last flush, now. |

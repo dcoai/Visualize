@@ -150,6 +150,41 @@ release it merely follows.
   unless you anchor your own label there. The validator refuses a code it cannot read and a
   unit that does not measure its quantity. The existing `unit` key is unchanged: it is still
   a literal suffix.
+- **The feed behaviour: `Visualize.Feed`** (#537, D-140). A feed is a struct whose module
+  implements `describe/1` (`{version, schema, supports}`, where `supports` is any of
+  `[:window, :budget, :push]`) and `fetch(feed, window, budget)` (a
+  `%Visualize.Data.Delivery{}`), and optionally `subscribe/2` and `unsubscribe/2`. Only rows
+  are required. A window and a budget are requests: when your feed does not honour them,
+  `Visualize.Feed.finish/3` trims to the window by the schema's `:time` field and reduces to
+  the budget with LTTB or M4, one series per category value and every number field's peaks
+  kept, and records `reduced_by: :visualize`. A push feed sends
+  `{:visualize_feed, ref, {:schema, version, schema}}` before
+  `{:visualize_feed, ref, {:delivery, delivery}}`, where each delivery holds the rows new
+  since the last. A version the subscriber does not hold is asked of `describe` once.
+  Callbacks answer `{:error, reason}` and never raise.
+- **`Visualize.Feed.Monitor`**: the loop over your feeds, as a value you keep in your
+  process's state (a LiveView today, a board later). Call `tick/2` each frame and
+  `handle_message/2` from `handle_info/2`. It describes and subscribes your feeds, polls
+  pull feeds every `every:` ms, buffers pushes until the next tick and merges them once,
+  and deduplicates a push that overlaps a fetch. Pass `deliveries/1` and `cache/1` to
+  `Visualize.Chart.apply/2` as `sources:` and `schemas:`. `status/1` reports each feed as
+  `:loading`, `:live`, `:stale` (with `stale_after:`) or `{:down, reason}`, and the last
+  delivery is still handed out while a feed is down. `window/2` moves the window: a push
+  feed is fetched again only for older data.
+- **`Visualize.Feed.Combine`**: one slot over several feeds, freshest first, for example
+  the last hour from `:telemetry` and older data from a history store. Each feed is asked
+  for the part of the window the fresher ones did not serve, and the seams are
+  deduplicated. Every part must describe the same schema version.
+- **`Visualize.Feed.Signals`**: a `Visualize.Signals` signal as a pull feed, honouring a
+  window of ticks, with a fixed tick (`at/2`) or a clock (`every:`). It comes with
+  `Visualize.Signals.rows/3`, the rows from one tick to another.
+- **`Visualize.Feed.Telemetry`**: an in-process `:telemetry` collector over a list of
+  `Telemetry.Metrics` definitions. Start it in your supervision tree with
+  `{Visualize.Feed.Telemetry, metrics: metrics}`. Each metric is a push feed (`feeds/1`)
+  with rows `%{t: DateTime, value: v}` plus its tags, and a schema giving the label, the
+  UCUM unit and the quantity. A counter's value is the running count, a sum's the running
+  total. `:telemetry` is now an optional dependency of visualize. If your app lacks it,
+  everything else builds as before. visualize does not depend on `telemetry_metrics`.
 
 ### Changed
 
