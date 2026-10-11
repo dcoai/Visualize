@@ -369,6 +369,82 @@ end
 <div id="chart-box" phx-hook="ResizeHook">{Phoenix.HTML.raw(@svg)}</div>
 ```
 
+## Writing a feed
+
+A feed is what fills a chart's source slot with rows. It is a struct whose module
+implements `Visualize.Feed`. `describe/1` returns the feed's schema: what each field
+means, under a version that is the schema's content hash. `fetch/3` returns a
+`Visualize.Data.Delivery` for a window and a budget. Only rows are required. A feed
+lists in `supports` what it honours of `[:window, :budget, :push]`, and visualize trims
+and reduces for it where it does not. Errors are values: a window the feed cannot read
+is `{:error, reason}`, never a raise. This one keeps a list of rows and honours the window:
+
+```elixir
+defmodule MyApp.RequestsFeed do
+  @behaviour Visualize.Feed
+
+  alias Visualize.Data.{Delivery, Schema}
+  alias Visualize.Feed.Window
+
+  defstruct rows: []
+
+  @schema Schema.new!(%{
+            minute: %{type: :time, label: "Minute"},
+            requests: %{type: :number, unit: "{request}", label: "Requests"}
+          })
+
+  @impl true
+  def describe(_feed), do: {Schema.version(@schema), @schema, [:window]}
+
+  @impl true
+  def fetch(%__MODULE__{rows: rows}, window, _budget) do
+    if window == nil or Enum.all?(window, &(&1 == nil or is_number(&1))) do
+      {:ok,
+       Delivery.new(Window.trim(rows, :minute, window),
+         window: Window.intersect(window, [0, length(rows) - 1]),
+         schema: Schema.version(@schema)
+       )}
+    else
+      {:error, {:window, window}}
+    end
+  end
+end
+```
+
+The contract has rules a type cannot state. The delivery's `window` must be the window
+actually served. `capped` must be true only when the feed stopped short of the window
+asked. A feed that names `:window` must keep to it. `Visualize.Feed.Conformance` checks
+them, through the behaviour alone. `check/2` returns findings, and `[]` means the feed
+passes. A capability the options give nothing to probe is a finding too:
+
+```elixir
+feed = %MyApp.RequestsFeed{rows: for(m <- 0..59, do: %{minute: m, requests: rem(m * 37, 50)})}
+
+Visualize.Feed.Conformance.check(feed, windows: [nil, [10, 20], [-5, 5]])
+#=> []
+Visualize.Feed.Conformance.check(feed, [])
+#=> [supports: {:no_probe, :window}]
+```
+
+In a test suite, `use Visualize.Feed.Conformance` writes one test per check:
+
+<!-- compile only: an ExUnit module runs under mix test -->
+```elixir
+defmodule MyApp.RequestsFeedTest do
+  use ExUnit.Case, async: true
+
+  use Visualize.Feed.Conformance,
+    feed: %MyApp.RequestsFeed{rows: for(m <- 0..59, do: %{minute: m, requests: m})},
+    windows: [nil, [10, 20], [-5, 5]]
+end
+```
+
+`feed:` is evaluated in each test, so a feed backed by a process can start it with
+`start_supervised!/1`. A feed that pushes also needs `push:`, a function of the feed
+that makes it push. `down:` gives a feed whose provider cannot answer, and the kit then
+checks that its every call returns an error value. The checks and their findings are in
+[spec/08 §12](https://github.com/dcoai/Visualize/blob/main/spec/08-utilities.md).
+
 ## Interaction
 
 The interaction hooks read data attributes that the server writes into the markup.

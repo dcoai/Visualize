@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation) with `Visualize.Color.Vision` (colour-vision simulation, §1.8), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping), `Visualize.Data.Table` (tabular sources as rows), `Visualize.Data.Schema` and `Visualize.Data.Delivery` (what a feed says about its fields, and one answer of a feed, §10), `Visualize.Feed` and its monitor and providers (how a feed is asked, §11) and `Visualize.Theme` (the colours, font and sizes every mark draws with). All are pure except `Random`, which reads and advances the calling process's `:rand` state, and the feeds of §11, whose providers are other processes.
+This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation) with `Visualize.Color.Vision` (colour-vision simulation, §1.8), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping), `Visualize.Data.Table` (tabular sources as rows), `Visualize.Data.Schema` and `Visualize.Data.Delivery` (what a feed says about its fields, and one answer of a feed, §10), `Visualize.Feed` and its monitor and providers (how a feed is asked, §11), `Visualize.Feed.Conformance` (the test every provider runs, §12) and `Visualize.Theme` (the colours, font and sizes every mark draws with). All are pure except `Random`, which reads and advances the calling process's `:rand` state, and the feeds of §11, whose providers are other processes.
 
 ## 1. Color
 
@@ -780,7 +780,7 @@ A small source works unchanged, and a large one implements the window and the bu
 - **The time field** is the schema's one field of type `:time` (`Visualize.Feed.time_field/1`); a schema with none, or with more than one, has no time field. The window is over the time field's values.
 - **Trimming.** When the request has a window, `supports` lacks `:window` and the schema has a time field, the rows are those whose time is within the window — both bounds inclusive, a `nil` bound open, a row with no time dropped — and the delivery's `window` becomes the request's, intersected with what the feed said it served. Times compare by `Visualize.Feed.Window.compare/2`: numbers by value, and `DateTime`, `NaiveDateTime` and `Date` each by their own `compare/2`; a window and a column must be of one kind. A schema with no time field cannot be trimmed: such a feed honours its window itself or is shown whole.
 - **Reducing.** When the request has a budget, `supports` lacks `:budget` and there are more rows than the budget, the rows are reduced by `Visualize.Data.lttb/3` or `m4/3` (§5.2) and `reduced_by` becomes `:visualize`. The reduction keeps the shape of every series: the rows are **grouped** by the values of the schema's `:category` fields (a feed's tags), and within each group every `:number` field is reduced as `y` against the time field as `x` (a `DateTime` as its Unix microseconds, a `NaiveDateTime` and a `Date` as their Gregorian seconds and days), or against the row's position in the group when the schema has no time field. The rows kept are the **union** of every field's choice, in their original order — so a row is kept whole, a tooltip reads a real datum, and a peak of any field survives. The budget is shared evenly: each group's field gets `max(3, div(budget, groups × fields))` points under LTTB and `max(1, div(budget, 4 × groups × fields))` pixel columns under M4, so the union stays within about the budget. A schema with no `:number` field is not reduced.
-- **A budget-honouring feed is not reduced again**, whatever it returned; a feed that names `:budget` and ships more than the budget is wrong, which the conformance kit (#538) says, not something visualize hides. A window works the same way.
+- **A budget-honouring feed is not reduced again**, whatever it returned; a feed that names `:budget` and ships more than the budget is wrong, which the conformance kit (§12) says, not something visualize hides. A window works the same way.
 
 ### 11.3 Push: the messages and their order
 
@@ -888,3 +888,128 @@ A push feed sends a subscriber two kinds of message, each tagged so a process th
 | `Visualize.Feed.Telemetry.feeds/1` | Each metric's feed, by its dotted name. |
 | `Visualize.Feed.Telemetry.feed/2` | One metric's feed. |
 | `Visualize.Feed.Telemetry.flush/1` | Every subscriber sent the rows new since the last flush, now. |
+
+## 12. Feeds: the conformance kit
+
+**Implemented** (#538, D-145). "Two hosts can't drift" holds only if every provider honours §10–§11 the same way; without a shared test each provider reads the contract for itself. `Visualize.Feed.Conformance` is that test: the library's own reading of the contract as checks, shipped in `lib/` so a provider's suite runs it wherever the provider lives — `Visualize.Feed.Signals` and `Visualize.Feed.Telemetry` in this repository, metresis's feed in metresis. It drives a feed through the behaviour alone (`Visualize.Feed.describe/1`, `fetch/3`, `subscribe/2`, `unsubscribe/2`) and knows nothing of the provider.
+
+### 12.1 Two layers: findings, and the tests that report them
+
+- **The checks are functions that answer values.** `Visualize.Feed.Conformance.check(check, feed, opts)` runs one check and answers a list of **findings**, `[]` for a feed that passes; `check(feed, opts)` runs all six in the order of 12.3 and concatenates them. A finding is `{check, reason}`, `check` the check's name and `reason` a term naming the fault (12.3), and `format/1` words one as a line a person reads. Because a finding is a value, the kit itself is tested as any function is: against a deliberately broken feed, each flaw producing the finding it should.
+- **The tests are a macro.** `use Visualize.Feed.Conformance, opts` inside a module that has called `use ExUnit.Case` expands to one `describe` block (named by `name:`, `"feed conformance"` by default, so one module can check several feeds) holding one `test` per check, named for it. Each test evaluates the `feed:` expression in the test process, runs `check/3` and, when there are findings, `flunk`s with every one formatted, one per line. Outside an `ExUnit.Case` module, `describe` and `test` are undefined and the module does not compile; a `name:` that is not a string literal, a missing `feed:` and an unknown option are an `ArgumentError` as the `use` expands.
+- **The kit references no ExUnit function** (D-145). `describe`, `test` and `flunk` appear only in the code the macro returns, which is compiled in the caller's module, where `use ExUnit.Case` imported them. The kit's own module calls nothing of ExUnit, so it compiles in every environment of every consumer with no guard, loads in a `MIX_ENV=prod` build (scripts/consumer_check.exs asserts it, spec/12 §4), and costs a consumer's runtime nothing it does not call.
+
+### 12.2 The options
+
+| Option | Value | Default |
+|---|---|---|
+| `feed:` | an expression giving the feed under test. It is evaluated afresh in **each** generated test, in the test process, so it may call `start_supervised!/1` and the test module's own functions | required |
+| `windows:` | the windows a fetch is probed with, a list of §11.1's windows. A feed that names `:window` needs at least one with a bound | `[nil]` |
+| `budgets:` | the budgets each window is probed with | `[nil, 5]` |
+| `push:` | a function of the feed that makes it push at least one delivery to its subscribers — emit an event and flush, append a row. A feed that names `:push` needs one | `nil` |
+| `down:` | an expression giving a feed of the same provider that **cannot** answer — its process not running, its store gone. When given, the errors check holds its every callback to an error value | `nil` |
+| `timeout:` | milliseconds a callback may take before it is a finding, and the most the push check waits for the first push | `1000` |
+| `quiet:` | milliseconds of silence that end a push, and the wait for a push after unsubscribing | `100` |
+| `name:` | the `describe` block's name | `"feed conformance"` |
+
+`check/2` and `check/3` take the same options, with `feed:` and `down:` as values rather than expressions, and `feed:` given as the function's argument. An option the kit does not know is an `ArgumentError`, at compile time for the macro.
+
+**Every callback runs in a process of its own.** The kit calls each callback, and the `push:` function, in a process it monitors, with the caller in its `$callers` (so a sandboxed repository or a mock's allowance follows the call, as it follows a `Task`). A callback that raises or exits is the finding `{:raised, call, reason}`, and one that has not answered within `timeout:` is `{:timeout, call}`, its process killed — where `call` names what was asked: `:describe`, `{:fetch, window, budget}`, `:subscribe`, `:unsubscribe` or `:push`. So a check always completes with its findings, whatever the feed does, and a raise is reported as a fault of the contract (§11.1: errors are values) rather than as a crash of the test.
+
+### 12.3 The checks
+
+Each check is named, and each names its findings. A **request** is `{window, budget}`; **served** is a delivery's `window`. A check that cannot begin — its describe answered an error — reports `{:describe_error, reason}` and stops.
+
+**`:describe` — a valid schema and a stable version.** `describe/1` answers `{version, schema, supports}` (§11.1), the schema a `%Visualize.Data.Schema{}` that `Visualize.Data.Schema.new/1` accepts from its own fields, and the version the content hash of that schema (§10.2) — so the same schema gives the same version, wherever it is computed. A second describe of the same feed answers the same version and an equal schema.
+
+| Reason | Meaning |
+|---|---|
+| `{:not_described, answer}` | the answer is not `{version, %Schema{}, supports}` or `{:error, reason}` |
+| `{:schema_invalid, errors}` | `Schema.new/1` refuses the schema's fields, with its errors |
+| `{:version, given, computed}` | the version is not the schema's content hash |
+| `{:unstable, first, second}` | a second describe answered another version, or another schema under the same one |
+
+**`:deliveries` — well formed and honest.** Every request of `windows:` × `budgets:` is fetched, and each delivery is held to §10.4 and to what it says it served. The time field is §11.2's; a schema without one skips the clauses that need it.
+
+- **Well formed.** The answer is `{:ok, %Delivery{}}` — an error for a probe window is a finding, since the kit's windows are ones the feed is meant to answer. Its fields hold their kinds: `rows` a row list or column map whose rows are maps (a tensor or a `Table.Reader` struct is read through `Visualize.Data.Table.rows/1`), `window` `nil` or `[from, to]` of times or `nil` with `from` not after `to`, `capped` a boolean, `reduced_by` `nil` or `:feed`, `schema` a string, `resolution` `nil`, a positive number or an atom. Every row's fields are fields the schema describes, by either spelling, and its time field holds a time (`Visualize.Feed.Window.time?/1`) or `nil`.
+- **Versioned.** The delivery names the version describe answered: a delivery the feed produced must say what it was produced under (§11.1), and the kit's describe and fetch are moments apart.
+- **The served window is the truth.** Every row's time lies within `served`. And `served` covers everything the feed holds in it: an **open fetch** — `[nil, to]`, `to` the served window's end, no budget — is asked as well, and every row it serves within both served windows, up to the earlier end, must be in the delivery (a row arriving between the two fetches lies after that end and is not counted). A budgeted or reduced delivery is not held to this clause.
+- **`capped` is the truth** (§10.4: the feed stopped short of the window it was asked for). Of a request whose window has a `from`: a capped delivery's `served` starts after that `from`; an uncapped one holds every row the open fetch serves from `from` on — the feed held nothing in the asked window before where it says it started. A request with no `from` asks for the feed's own span, so its `capped` is the feed's word.
+- **`reduced_by` is the truth.** A feed never answers `:visualize`, which only `finish/3` writes. `:feed` is only for a request with a budget, from a feed that names `:budget`, and with fewer rows than the same window fetched with no budget; `nil` with a budget means no fewer rows than with none.
+- **`resolution` is consistent.** A positive number is the spacing of the rows in the time field's own units — seconds for a `DateTime` or a `NaiveDateTime`, days for a `Date`, the values themselves for numbers — and `:second`, `:minute`, `:hour`, `:day` and `:week` are those spans in seconds; another atom is carried unchecked. Within each series — the rows sharing the values of every `:category` field, as §11.2 groups them — no two consecutive distinct times are closer than the resolution: a delivery never claims to be coarser than its rows.
+
+| Reason | Meaning |
+|---|---|
+| `{:fetch_error, request, reason}` | a probe answered `{:error, reason}` |
+| `{:not_a_delivery, request, answer}` | a probe answered something other than `{:ok, %Delivery{}}` |
+| `{:malformed, request, field, value}` | a field of the delivery, or a row (`field` `:rows`), not of its kind |
+| `{:version, request, named, described}` | the delivery names another version, or none |
+| `{:undescribed_field, request, field}` | a row holds a field the schema does not describe |
+| `{:not_a_time, request, value}` | a row's time field holds a value that is not a time |
+| `{:outside_served, request, time, served}` | a row whose time lies outside the window the delivery says it served |
+| `{:missing, request, count, served}` | `count` rows the feed holds within the served window are not in the delivery |
+| `{:capped, request, served}` | `capped` is `true` and `served` reaches the asked `from` |
+| `{:uncapped, request, count}` | `capped` is `false` and the feed holds `count` rows between the asked `from` and where it served from |
+| `{:reduced_by, request, by}` | `reduced_by` is `:visualize`, or `:feed` with no budget, from a feed that does not name `:budget`, or with as many rows as with no budget |
+| `{:unrecorded_reduction, request, count, whole}` | `reduced_by` is `nil` and the budget served `count` rows of the `whole` |
+| `{:resolution, request, gap, resolution}` | two consecutive rows of one series `gap` apart, closer than the resolution |
+
+**`:supports` — the declared capabilities are true.** `supports` is a list of distinct members of `Visualize.Feed.capabilities/0`, and each it names is honoured:
+
+- **`:window`**: of every request with a window, `served` lies within the asked window and so does every row's time. It needs a probe: `windows:` with a bound.
+- **`:budget`**: of every request with a budget, the delivery has at most that many rows. It needs a budget in `budgets:`.
+- **`:push`**: `subscribe/2` answers `{:ok, ref}` (and is unsubscribed at once). It needs `push:`, without which the push check cannot run.
+- And what is not named is not done: a feed that does not name `:push` answers `subscribe/2` with an error, so a monitor polls it rather than waiting for pushes that would arrive unannounced.
+
+| Reason | Meaning |
+|---|---|
+| `{:supports, supports}` | `supports` is not a list of distinct capabilities |
+| `{:no_probe, capability}` | a named capability the options give nothing to probe: no bounded window, no budget, no `push:` |
+| `{:window_served, request, served}` | a `:window` feed served a window not within the one asked |
+| `{:window_row, request, time}` | a `:window` feed served a row outside the window asked |
+| `{:over_budget, request, count}` | a `:budget` feed served `count` rows, more than the budget |
+| `{:push_refused, reason}` | a `:push` feed's `subscribe/2` answered `{:error, reason}` |
+| `{:push_undeclared, answer}` | a feed that does not name `:push` answered `subscribe/2` with `answer`, not an error |
+
+**`:push` — the schema before the data.** For a feed that names `:push` (otherwise the check has nothing to do): the kit subscribes its own process. Before `subscribe/2` returns, the present schema is already in the mailbox, the first message under the reference (§11.3's handshake). Then `push:` runs, and the kit collects the messages under the reference — waiting up to `timeout:` for the first delivery, then until `quiet:` passes with none. Every schema message's version is its schema's content hash, and **every delivery names a version whose schema arrived before it** — the handshake's, or one pushed since: a delivery under a new version is preceded by its schema. Each pushed delivery is well formed (as above) and its rows lie within its own `window`. The kit unsubscribes at the end.
+
+| Reason | Meaning |
+|---|---|
+| `{:subscribe_error, reason}` | `subscribe/2` answered an error, so nothing could be checked |
+| `{:handshake, got}` | the first message was not the schema — `got` is `:nothing` or the message |
+| `{:schema_message, version, computed}` | a pushed schema whose version is not its content hash |
+| `{:before_schema, version}` | a delivery naming a version whose schema had not arrived |
+| `{:not_a_message, message}` | a message under the reference that is neither a schema nor a delivery |
+| `{:no_delivery, timeout}` | `push:` ran and no delivery arrived within `timeout:` |
+| `{:malformed, :push, field, value}` | a pushed delivery's field not of its kind |
+| `{:outside_served, :push, time, window}` | a pushed row outside the delivery's own window |
+
+**`:errors` — errors are values, never crashes** (§11.1). The feed is fetched with windows it cannot read — `[:not, :a_time]`, and a window of the other kind of time than its time field holds (a `DateTime` window for numeric times, a numeric one otherwise) — and each answers `{:ok, %Delivery{}}` (a feed that does not honour windows may ignore one) or `{:error, reason}`; `unsubscribe/2` with a reference it never answered answers `:ok`. With `down:`, the feed that cannot answer answers `describe/1`, `fetch(feed, nil, nil)` and, where its module subscribes, `subscribe/2` with `{:error, reason}`, and `unsubscribe/2` with `:ok`. A raise or an exit anywhere is `{:raised, call, reason}`, as everywhere.
+
+| Reason | Meaning |
+|---|---|
+| `{:not_a_value, call, answer}` | a callback answered outside its contract — neither its success nor `{:error, reason}` |
+| `{:answered_down, call, answer}` | the `down:` feed answered a callback with a success |
+
+**`:unsubscribe` — unsubscribing stops pushes.** For a push feed: subscribe, take the handshake, unsubscribe — which answers `:ok` — then run `push:` and wait `quiet:`: nothing more arrives under the reference. For a feed that does not push, `Visualize.Feed.unsubscribe/2` answers `:ok`.
+
+| Reason | Meaning |
+|---|---|
+| `{:unsubscribe, answer}` | `unsubscribe/2` answered something other than `:ok` |
+| `{:pushed_after_unsubscribe, count}` | `count` messages arrived under the reference after it was unsubscribed |
+
+Common to every check: `{:raised, call, reason}`, `{:timeout, call}` and `{:describe_error, reason}`.
+
+### 12.4 Run here
+
+`Visualize.Feed.Signals` runs the kit over windows that reach before the signal's start, past its present tick and beyond its `limit:` (so `capped`), and `Visualize.Feed.Telemetry` over a collector with a fixed clock, windows before its start (capped) and within its rows, a `push:` that emits an event and flushes, and a `down:` feed whose collector is not running. A fake feed in the test support, honest unless given a flaw, holds the kit to its negatives: the honest feed passes every check, and each flaw — an unstable version, a version that is not the hash, a served window that leaves out its own rows, a missing row, a `capped` with no shortfall and an uncapped delivery that stopped short, an unrecorded reduction, a resolution finer than claimed, a window or a budget overrun, a delivery before its schema, a fetch that raises, pushes after unsubscribing — fails the check it targets with the finding that names it.
+
+### 12.5 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Feed.Conformance.__using__/1` | `use Visualize.Feed.Conformance, opts`: one ExUnit test per check, in a `describe` block, in a module that uses `ExUnit.Case` (12.1). |
+| `Visualize.Feed.Conformance.checks/0` | The six checks in their order: `[:describe, :deliveries, :supports, :push, :errors, :unsubscribe]`. |
+| `Visualize.Feed.Conformance.check/2` | `check(feed, opts)`: every check's findings, concatenated in the order of `checks/0`. |
+| `Visualize.Feed.Conformance.check/3` | `check(check, feed, opts)`: one check's findings, `[]` for a feed that passes (12.3). |
+| `Visualize.Feed.Conformance.format/1` | One finding as a line a person reads. |
