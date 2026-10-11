@@ -237,6 +237,22 @@ release it merely follows.
   UCUM unit and the quantity. A counter's value is the running count, a sum's the running
   total. `:telemetry` is now an optional dependency of visualize. If your app lacks it,
   everything else builds as before. visualize does not depend on `telemetry_metrics`.
+- **A conformance kit for your feeds: `Visualize.Feed.Conformance`** (#538, D-145). Add
+  `use Visualize.Feed.Conformance, feed: …, windows: […]` to an `ExUnit.Case` module and
+  it writes six tests: `describe` answers a valid schema under its content hash, and the
+  same one each time; every delivery is well formed and names that version, its `window`
+  covers its rows and every row the feed holds there, and `capped`, `reduced_by` and
+  `resolution` are true; the capabilities in `supports` are honoured, and an undeclared
+  `:push` is refused; a push feed sends the schema before any delivery naming it (give
+  `push:`, a function that makes it push); a window the feed cannot read is an error
+  value, never a raise (give `down:` to check a feed whose provider is gone as well); and
+  unsubscribing stops pushes. `Visualize.Feed.Conformance.check/2` runs the same checks
+  outside a test and returns the findings as values, `[]` for a feed that passes. Each
+  callback runs in its own process with you in `$callers`, so a sandboxed repository works
+  and a raise is reported as a finding. The kit calls no ExUnit function itself, so it
+  compiles in every environment of your app. `Visualize.Feed.Signals` and
+  `Visualize.Feed.Telemetry` pass it. The LiveView guide has a new section, *Writing a
+  feed*.
 
 - **Overlays are marks** (#565, D-143): what a host drew around a chart — event markers,
   thresholds, the brush — is now part of the design, so every host that applies it draws
