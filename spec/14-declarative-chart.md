@@ -256,7 +256,7 @@ A `frame` that names no frame of the design is `{:undeclared, :frame, name}`, as
 - a **meaning** for a `:colour` key (#533, D-135): a **role** — `:good`, `:warning`, `:bad`, `:info`, `:neutral` — or a **ramp position** `{:ramp, name, t}` along one of the theme's four ramps, `:status`, `:thermal`, `:diverging` or `:sequential`, at `t` in `0..1` ([08-utilities](08-utilities.md) §7.5). A role is a theme slot and resolves like one; a ramp position resolves to its literal in both modes, except that `{:ramp, :status, 0 | 0.5 | 1}` resolves as `:good`, `:warning` and `:bad` do, so the two spellings of one meaning are one colour (spec/08 §7.3). A design that colours by meaning writes these rather than series slots: a series slot promises a *distinct* colour, a role promises the meaning, and every theme — light, dark, colour-vision-safe, a host's — renders it in its own tones with the hue order fixed;
 - a **paint** `{:paint, name}` for a `:colour` key: a gradient the design declares under `defs` (§2.7). `Visualize.Chart.Style.resolve/3` passes it through untouched, as it does a binding, and the **frame** resolves it once its elements are drawn — `Visualize.Chart.Frame.generate/2` replaces every `{:paint, name}` in the tree's styles with `url(#vis-paint-<h>-<name>)` in `:css` and with the gradient's **first stop's colour**, resolved as a colour, in `:literal`, since a canvas gradient is a different object and the first stop keeps a canvas chart drawable and honest. The validator reports `{:undeclared, :paint, name}` for a name `defs` lacks.
 - the **contrast ink** `:contrast` for a `:colour` key (#486, D-123): the theme's `:text` or `:background`, whichever has the higher WCAG contrast ratio (`Visualize.Color.contrast/2`) against the colour the text is drawn on — `Visualize.Theme.ink/2`, spec/08 §7.3. In a mark's inline label (§5.5) that colour is the fill of the element the label sits on, so the ink is chosen **per element**: dark on a pale slice, light on a dark one, in one style. Anywhere else — a frame label, an axis, a `:text` mark, a mark's own paint — there is no element under the text, and the colour is the theme's `background`, so `:contrast` there is the ink that reads on the page (on every theme that holds spec/08 §7.4, its `text`). When neither slot reaches 4.5:1 against the colour (WCAG AA for text), the ink is black or white instead, whichever contrasts more, and one of the two always reaches 4.58:1. The ink is a **literal colour in both modes**: `Visualize.Chart.Style.resolve/3` writes the chosen slot's literal, never a `var(--vis-text, …)`, because the choice was made against the literals — a stylesheet that overrode `--vis-text` under it would undo the choice it was made for — so under `resolve: :css` the ink is chosen against the slots' fallback literals and the element's fill's, exactly as under `:literal`, and the SVG and the canvas carry the same colour.
-- a **channel binding** `{:field, f}` for any key, which is how `Visualize.Shape.Band`'s per-datum fill is expressed: the value is read from the datum at render — per element for a mark that draws one element per datum, from the series' first datum for a mark that draws one path per series (§5.6) — and, for a `:colour` key, passed through the scale named `color` when the frame declares one (§3.4) — a value its domain lacks is the scale's `unknown` colour (§4.3), never a dropped key.
+- a **channel binding** `{:field, f}` for any key — on `symbol` and `stroke_dasharray` through the `color` scale to a role's cue (§21.7) — which is how `Visualize.Shape.Band`'s per-datum fill is expressed: the value is read from the datum at render — per element for a mark that draws one element per datum, from the series' first datum for a mark that draws one path per series (§5.6) — and, for a `:colour` key, passed through the scale named `color` when the frame declares one (§3.4) — a value its domain lacks is the scale's `unknown` colour (§4.3), never a dropped key.
 
 Eighteen keys reach the element the mark draws — the fifteen of §3.4, `line_height`, and, as one, `effect` with `effect_radius`, and `blend`; four more — `curve`, `curve_opts`, `symbol` and `symbol_size` — reach the mark's generator (§5.6) and never an element; five — `stroke_style` (§5.6), `vertical_align`, `margin_x`, `margin_y` and `text_angle` (§6.3) — are read by the placements from the style node and never reach an element as themselves; and `extends` reaches neither, being consumed by the lookup that flattens it (§3.5).
 
@@ -2996,7 +2996,7 @@ The simulation is Machado, Oliveira and Fernandes (2009) at severity 1.0 (spec/0
 
 ## 21. Accessibility
 
-**Implemented in part** (#546, D-142). A chart is accessible in four ways, one work item each: a **text alternative** generated from the design and its data (§21.1–§21.4, #557), **keyboard navigation** into its points (§21.5, #558), **reduced motion** (§21.6, #559), and **status beyond hue** (#560), written with its work item before the functions.
+**Implemented in part** (#546, D-142). A chart is accessible in four ways, one work item each: a **text alternative** generated from the design and its data (§21.1–§21.4, #557), **keyboard navigation** into its points (§21.5, #558), **reduced motion** (§21.6, #559), and **status beyond hue** (§21.7, #560).
 
 ### 21.1 The summary
 
@@ -3085,7 +3085,23 @@ A canvas is an image to assistive technology with nothing in it to read, so the 
 
 The gallery's chart page compiles with `motion: :reduce` while its `ResizeHook` says the reader prefers it.
 
-### 21.7 Functions
+### 21.7 Status beyond hue
+
+**Implemented** (#560). A role (`:good`, `:warning`, `:bad`, `:info`, `:neutral`, D-135) is a meaning, and its colour is one way of saying it: a greyscale print, a projector, and a reader who cannot tell red from green need another. **Each role carries a cue** besides its hue — a **glyph**, a symbol type of [04-shapes-and-curves](04-shapes-and-curves.md) §9.2, and a **dash**, a stroke pattern — `Visualize.Theme.cue/1` ([08-utilities](08-utilities.md) §7.5):
+
+| Role | Glyph | Dash |
+|---|---|---|
+| `:good` | `:circle` | solid |
+| `:warning` | `:triangle` | `"6 3"` |
+| `:bad` | `:cross` | `"2 3"` |
+| `:info` | `:square` | `"8 3 2 3"` |
+| `:neutral` | `:diamond` | `"1 4"` |
+
+**The library fixes the cues, as it fixes the roles' hue order.** A theme restyles how a role looks; it does not change which glyph means `bad`, so a reader learns the convention once, on every chart.
+
+**A mark draws them through the role its datum has.** A channel binding `{:field, f}` (§3.2) on the `symbol` key of a `:symbol` mark, or on `stroke_dasharray`, reads `f` from the datum and passes it through the frame's `color` scale when the frame declares one, as a colour key's binding is passed: a reading the scale maps to a role is drawn with that role's glyph or dash; any other reading is the key's own value — a symbol type, a dash — and on `symbol` a reading that is neither draws a `:circle`. So a design that colours its zones by `fill: {:field, :zone}` through `ordinal_scale(:color, domain: ["ok", "warm", "hot"], range: [:good, :warning, :bad])` marks each zone with a `:symbol` mark of `symbol: {:field, :zone}` — the gallery's Gauge does — or outlines it with `stroke_dasharray: {:field, :zone}`, and the zone reads in greyscale without a legend. A per-datum `symbol` is the generator's, per element (§5.6); a solid dash is the key left out.
+
+### 21.8 Functions
 
 | Function | Contract |
 |---|---|

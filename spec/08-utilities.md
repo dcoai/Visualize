@@ -546,6 +546,8 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 
 **Precedence.** Where a colour comes from, highest first: a **literal** the design writes, or the **design's colour scale** (`range: [...]`, `range: {:ramp, name}`, spec/14 §4.3) — both deliberate choices; then the **theme's** rendering of a role or a ramp position the design names; then the theme's default. A feed's schema, when it comes (#531), sits between the last two: it names meanings, and the theme renders them.
 
+**Cues** (#560, D-142). Every role also carries a glyph and a dash, `cue/1`, which the library fixes as it fixes the hue order — `:good` a `:circle` and a solid stroke, `:warning` a `:triangle` and `"6 3"`, `:bad` a `:cross` and `"2 3"`, `:info` a `:square` and `"8 3 2 3"`, `:neutral` a `:diamond` and `"1 4"` — so a status reads without its hue ([14-declarative-chart](14-declarative-chart.md) §21.7).
+
 ### 7.6 Functions
 
 | Function | Contract |
@@ -561,6 +563,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 | `Visualize.Theme.ramp/3` | `ramp(theme, name, t)`: the literal colour at `t` along the named ramp, Lab-interpolated, `t` clamped to `0..1`; the default theme's ramp when the theme lacks it (7.5). |
 | `Visualize.Theme.ramp_names/0` | `[:status, :thermal, :diverging, :sequential]` (7.5). |
 | `Visualize.Theme.role_names/0` | `[:good, :warning, :bad, :info, :neutral]` (7.5). |
+| `Visualize.Theme.cue/1` | `cue(role)`: `%{glyph: symbol_type, dash: String.t() \| nil}`, the role's glyph and dash (`nil` solid) of 7.5; raises `ArgumentError` for anything but a role. |
 | `Visualize.Theme.slots/1` | The theme's slot names in the order of 7.1. |
 | `Visualize.Theme.colour_slots/1` | The theme's colour slots alone — the series, then axis, grid, text, background and surface, then the five roles — for a control that offers a colour as a slot (spec/14 §19.10). |
 | `Visualize.Theme.series_slot/2` | `series_slot(theme, i)`: the `:series_k` atom the positive index `i` cycles to (7.1). |
