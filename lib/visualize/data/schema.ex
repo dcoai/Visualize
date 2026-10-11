@@ -84,6 +84,11 @@ defmodule Visualize.Data.Schema do
   @spec attributes() :: [atom(), ...]
   def attributes, do: @attributes
 
+  @doc false
+  # The three polarities, which a colour scale over a ramp reads too (spec/14 §4.3, D-143).
+  @spec polarities() :: [atom(), ...]
+  def polarities, do: @polarities
+
   @doc """
   The schema of a map of field descriptions, or every fault of it by path (spec/08 §10.1).
 

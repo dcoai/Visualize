@@ -95,7 +95,9 @@ defmodule Visualize.Chart.Compiled.Regions do
     style = Map.get(styles, Map.get(mark, :style), %{})
 
     colours =
-      for key <- [:fill, :stroke], match?({:field, _}, Map.get(style, key)), do: :color
+      for key <- [:fill, :stroke],
+          match?({:field, _}, Map.get(style, key)),
+          do: Scales.colour_scale(mark)
 
     declared = Map.keys(Map.get(node, :scales, %{}))
     Enum.uniq(channels ++ colours) |> Enum.filter(&(&1 in declared))

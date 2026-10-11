@@ -56,6 +56,22 @@ defmodule Visualize.Hooks.Brush do
         {:noreply, assign(socket, window: {from, to})}
       end
 
+  ## The design's brush
+
+  A design that says `interaction: %{brush: :x}` (spec/14 §2.9, D-143) writes its brush on
+  its frame's group — the kind, the plot area and the `x` mapping
+  (`Visualize.Chart.Frame.brush_attrs/1`) — and the hook reads them from the first
+  descendant carrying `data-vis-brush` when its own element gives no type or extent
+  (spec/10 §6.5). Every `brush_select` then carries the window in domain units, so a host
+  attaches the hook to a container around the rendered chart and holds no margin and no
+  scale to invert:
+
+      <div id="cpu" phx-hook="BrushHook" data-brush-event="zoom">{raw(svg)}</div>
+
+      def handle_event("zoom", %{"domain" => [from, to]}, socket) do
+        {:noreply, assign(socket, window: {from, to})}
+      end
+
   ## Brush Types
 
   - `xy` - 2D rectangular brush (default)
@@ -91,21 +107,19 @@ defmodule Visualize.Hooks.Brush do
         // the first <svg> of a container around a server-rendered chart (spec/10 §6.2).
         this.svg = this.el.tagName.toLowerCase() === 'svg' ? this.el : this.el.querySelector('svg');
 
+        // The design's own brush, when the chart carries one (spec/10 §6.5): its kind, its
+        // x mapping and its plot area. The element's own attributes win over it.
+        this.design = this.readDesign();
+
         // Configuration from data attributes
-        this.brushType = this.el.dataset.brushType || 'xy';
+        this.brushType = this.el.dataset.brushType || (this.design && this.design.type) || 'xy';
         this.selectEvent = this.el.dataset.brushEvent || 'brush_select';
         this.clearEvent = this.el.dataset.brushClearEvent || 'brush_clear';
         this.fillColor = this.el.dataset.brushColor || 'rgba(119, 119, 119, 0.2)';
         this.strokeColor = this.el.dataset.brushStroke || '#666';
 
-        // Parse extent if provided
-        this.extent = null;
-        if (this.el.dataset.brushExtent) {
-          const parts = this.el.dataset.brushExtent.split(',').map(parseFloat);
-          if (parts.length === 4) {
-            this.extent = { x0: parts[0], y0: parts[1], x1: parts[2], y1: parts[3] };
-          }
-        }
+        // Parse extent if provided, else take the design's plot area
+        this.extent = this.readExtent();
 
         // Create brush overlay group
         this.overlay = this.svg.querySelector('.brush-overlay');
@@ -130,18 +144,7 @@ defmodule Visualize.Hooks.Brush do
         this.captureRect.setAttribute('fill', 'transparent');
         this.captureRect.setAttribute('cursor', 'crosshair');
 
-        const bbox = this.svg.getBBox ? this.svg.getBBox() : this.svg.getBoundingClientRect();
-        const width = this.extent ? this.extent.x1 - this.extent.x0 : (bbox.width || this.svg.clientWidth);
-        const height = this.extent ? this.extent.y1 - this.extent.y0 : (bbox.height || this.svg.clientHeight);
-        const x = this.extent ? this.extent.x0 : 0;
-        const y = this.extent ? this.extent.y0 : 0;
-
-        // The capture area: a band received from the group spans its height (spec/10 §6.4).
-        this.area = { x, y, width, height };
-        this.captureRect.setAttribute('x', x);
-        this.captureRect.setAttribute('y', y);
-        this.captureRect.setAttribute('width', width);
-        this.captureRect.setAttribute('height', height);
+        this.placeCapture();
         this.overlay.insertBefore(this.captureRect, this.selectionRect);
 
         // Each handler is bound once and kept on the hook: removeEventListener only
@@ -169,6 +172,54 @@ defmodule Visualize.Hooks.Brush do
         this.captureRect.addEventListener('dblclick', this.onClear);
 
         this.joinSync();
+      },
+
+      // The capture area: the extent, else the SVG's box; a band received from the group
+      // spans its height (spec/10 §6.4).
+      placeCapture() {
+        const bbox = this.svg.getBBox ? this.svg.getBBox() : this.svg.getBoundingClientRect();
+        const width = this.extent ? this.extent.x1 - this.extent.x0 : (bbox.width || this.svg.clientWidth);
+        const height = this.extent ? this.extent.y1 - this.extent.y0 : (bbox.height || this.svg.clientHeight);
+        const x = this.extent ? this.extent.x0 : 0;
+        const y = this.extent ? this.extent.y0 : 0;
+
+        this.area = { x, y, width, height };
+        this.captureRect.setAttribute('x', x);
+        this.captureRect.setAttribute('y', y);
+        this.captureRect.setAttribute('width', width);
+        this.captureRect.setAttribute('height', height);
+      },
+
+      // The design's brush from the element, or its first descendant carrying
+      // data-vis-brush: {type, map, extent}, the map as VisualizeSync reads a group's x;
+      // null for none, or for numbers that do not parse (spec/10 §6.5).
+      readDesign() {
+        const node = this.el.hasAttribute('data-vis-brush') ? this.el : this.el.querySelector('[data-vis-brush]');
+        if (!node) return null;
+        const x = (node.getAttribute('data-vis-brush-x') || '').split(',').map(parseFloat);
+        const e = (node.getAttribute('data-vis-brush-extent') || '').split(',').map(parseFloat);
+        if (x.length !== 5 || x.some((n) => Number.isNaN(n))) return null;
+        if (e.length !== 4 || e.some((n) => Number.isNaN(n))) return null;
+        return {
+          type: node.getAttribute('data-vis-brush'),
+          map: { d0: x[0], d1: x[1], x0: x[2], x1: x[3], width: x[4] },
+          extent: { x0: e[0], y0: e[1], x1: e[2], y1: e[3] }
+        };
+      },
+
+      // The element's own data-brush-extent, else the design's plot area, else none.
+      readExtent() {
+        if (this.el.dataset.brushExtent) {
+          const parts = this.el.dataset.brushExtent.split(',').map(parseFloat);
+          if (parts.length === 4) return { x0: parts[0], y0: parts[1], x1: parts[2], y1: parts[3] };
+        }
+        return this.design ? this.design.extent : null;
+      },
+
+      // The x mapping a selection's edges are read through: the sync group's, else the
+      // design's brush's; null when the chart says neither.
+      mapping() {
+        return this.sync || (this.design && this.design.map) || null;
       },
 
       // The group shares x, so a "y" brush joins none (spec/10 §6.4).
@@ -249,10 +300,11 @@ defmodule Visualize.Hooks.Brush do
         this.pushEvent(this.clearEvent, {});
       },
 
-      // The x extent of a selection in domain units, ascending (spec/10 §6.4).
+      // The x extent of a selection in domain units, ascending (spec/10 §6.4, §6.5).
       domainOf(sel) {
-        const a = VisualizeSync.toDomain(this.sync, sel.x0);
-        const b = VisualizeSync.toDomain(this.sync, sel.x1);
+        const map = this.mapping();
+        const a = VisualizeSync.toDomain(map, sel.x0);
+        const b = VisualizeSync.toDomain(map, sel.x1);
         return [Math.min(a, b), Math.max(a, b)];
       },
 
@@ -325,10 +377,11 @@ defmodule Visualize.Hooks.Brush do
         const minSize = 5;
         if ((sel.x1 - sel.x0) > minSize || (sel.y1 - sel.y0) > minSize) {
           this.selection = sel;
-          if (this.sync) {
-            // The final window on the bus, and once to the server with its domain.
+          if (this.mapping()) {
+            // The final window on the bus, and once to the server with its domain — in a
+            // sync group or under the design's brush (spec/10 §6.4, §6.5).
             const domain = this.domainOf(sel);
-            VisualizeSync.publishBrush(this.sync, this.el, domain);
+            if (this.sync) VisualizeSync.publishBrush(this.sync, this.el, domain);
             this.pushEvent(this.selectEvent, Object.assign({}, sel, { domain }));
           } else {
             this.pushEvent(this.selectEvent, sel);
@@ -351,10 +404,14 @@ defmodule Visualize.Hooks.Brush do
         this.selectionRect.setAttribute('height', height);
       },
 
-      // Programmatically set selection from server; the sync group is re-read first, and a
-      // selection the server set is not published (spec/10 §6.4).
+      // Programmatically set selection from server; the sync group and the design's brush
+      // are re-read first — a chart re-rendered for a new window or width has new numbers —
+      // and a selection the server set is not published (spec/10 §6.4, §6.5).
       updated() {
         this.joinSync();
+        this.design = this.readDesign();
+        this.extent = this.readExtent();
+        this.placeCapture();
         const x0 = parseFloat(this.el.dataset.selectionX0);
         const y0 = parseFloat(this.el.dataset.selectionY0);
         const x1 = parseFloat(this.el.dataset.selectionX1);

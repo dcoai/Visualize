@@ -74,6 +74,7 @@ map = Visualize.Chart.to_map(chart)
 | `theme(:dark)` | the theme, by name or inline |
 | `layout(columns:, rows:, gap:)` | the grid frames sit on |
 | `interaction(sync: "group")` | shared hover and brush |
+| `interaction(brush: :x)` | the design's own brush: `brush_select` carries `domain` |
 
 ### Frames
 

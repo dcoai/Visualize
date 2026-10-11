@@ -153,10 +153,12 @@ defmodule Visualize.Chart.Validator.Domain do
 
   # -- the mark's style -----------------------------------------------------------------
 
-  # A `{:field, f}` on a colour key reads through the scale named `color` whatever the
-  # mark's `scales` say (spec/14 §4.3).
+  # A `{:field, f}` on a colour key reads through the mark's colour scale, `color` renamed
+  # by its `scales` like any channel (spec/14 §4.3, D-143).
   defp style(mark, scales, styles, columns, path) do
-    case domain(scales[:color]) do
+    name = colour_scale(map_or_empty(mark[:scales]))
+
+    case domain(scales[name]) do
       nil ->
         []
 
@@ -166,7 +168,7 @@ defmodule Visualize.Chart.Validator.Domain do
         @colour_keys
         |> Enum.flat_map(fn key ->
           case Map.get(node, key) do
-            {:field, field} -> [column(field, :color, domain, columns)]
+            {:field, field} -> [column(field, name, domain, columns)]
             _other -> []
           end
         end)

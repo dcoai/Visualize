@@ -60,6 +60,9 @@ defmodule Visualize.Chart.Validator do
           | {:unit, term(), Visualize.Unit.reason()}
           | {:quantity, Visualize.Quantity.t(), Visualize.Unit.code()}
           | {:sync, :frame_kind | :x_scale, atom() | nil}
+          | {:brush, :frame_kind | :x_scale, atom() | nil}
+          | {:colour_map, atom()}
+          | {:polarity, :range}
           | {:tiles, :projection, atom()}
           | {:tiles, :attribution | :url | :subdomains}
           | {:outside_domain, atom(), number() | {:column, atom(), :number | :text | :time}}
@@ -360,26 +363,14 @@ defmodule Visualize.Chart.Validator do
         do: {path ++ [key], {:weight, key}}
   end
 
-  # A sync group reads a linear or a time x of a cartesian frame (spec/14 §2.9, D-116): the
-  # hooks map a shared value by linear interpolation, which is that scale and no other.
-  defp held(:interaction, %{sync: sync} = map, path, ctx) when is_binary(sync) do
-    frames = ctx.frame_nodes
-
-    case sync_frame(Map.get(map, :frame), frames) do
-      %{kind: :cartesian} = frame ->
-        case sync_x_kind(frame, frames, []) do
-          kind when kind in [:linear, :time] -> []
-          kind -> [{path ++ [:sync], {:sync, :x_scale, kind}}]
-        end
-
-      # A kind that is no frame kind is its own fault, reported on the frame.
-      %{kind: kind} ->
-        {:enum, kinds} = Schema.key(:frame, :kind).type
-        if kind in kinds, do: [{path ++ [:sync], {:sync, :frame_kind, kind}}], else: []
-
-      _none ->
-        []
-    end
+  # A sync group and the design's brush read a linear or a time x of a cartesian frame
+  # (spec/14 §2.9, D-116, D-143): the hooks map a value by linear interpolation, which is
+  # that scale and no other.
+  defp held(:interaction, map, path, ctx) do
+    for {key, given?} <- [sync: is_binary(Map.get(map, :sync)), brush: Map.get(map, :brush) == :x],
+        given?,
+        fault <- linear_x(Map.get(map, :frame), ctx.frame_nodes),
+        do: {path ++ [key], Tuple.insert_at(fault, 0, key)}
   end
 
   # A frame says where it goes once (spec/14 §4.2, §2.8, #384): its box, or its cell on
@@ -432,20 +423,8 @@ defmodule Visualize.Chart.Validator do
     attribution ++ url
   end
 
-  # The angle scale's sweep is a turn at most and never nothing; an axis's radius is
-  # positive (spec/14 §4.3, §4.4, #390).
-  defp held(:scale, %{sweep: sweep}, path, _ctx)
-       when is_number(sweep) and (sweep == 0 or abs(sweep) > 360),
-       do: [{path ++ [:sweep], :sweep}]
-
-  # A time scale's zone is one the host's time zone database can show (spec/14 §4.3, §10.1,
-  # #447): a host without a database, or a name it does not know, is refused by name
-  # rather than drawn in UTC (D-115).
-  defp held(:scale, %{kind: :time, zone: zone}, path, _ctx) when is_binary(zone) do
-    case Visualize.Scale.Time.check_zone(zone) do
-      :ok -> []
-      {:error, reason} -> [{path ++ [:zone], {:zone, zone, reason}}]
-    end
+  defp held(:scale, map, path, _ctx) do
+    sweep(map, path) ++ zone(map, path) ++ colour_map(map, path) ++ polarity(map, path)
   end
 
   defp held(:axis, %{radius: radius}, path, _ctx) when is_number(radius) and radius <= 0,
@@ -470,6 +449,48 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp held(_kind, _map, _path, _ctx), do: []
+
+  # The angle scale's sweep is a turn at most and never nothing; an axis's radius is
+  # positive (spec/14 §4.3, §4.4, #390).
+  defp sweep(%{sweep: sweep}, path) when is_number(sweep) and (sweep == 0 or abs(sweep) > 360),
+    do: [{path ++ [:sweep], :sweep}]
+
+  defp sweep(_scale, _path), do: []
+
+  # A time scale's zone is one the host's time zone database can show (spec/14 §4.3, §10.1,
+  # #447): a host without a database, or a name it does not know, is refused by name
+  # rather than drawn in UTC (D-115).
+  defp zone(%{kind: :time, zone: zone}, path) when is_binary(zone) do
+    case Visualize.Scale.Time.check_zone(zone) do
+      :ok -> []
+      {:error, reason} -> [{path ++ [:zone], {:zone, zone, reason}}]
+    end
+  end
+
+  defp zone(_scale, _path), do: []
+
+  # A map of colours is an ordinal scale's range (spec/14 §4.3, D-143): it pins categories,
+  # and a continuous scale has none.
+  defp colour_map(%{kind: kind, range: %{} = range}, path)
+       when is_atom(kind) and kind != :ordinal and not is_struct(range),
+       do: [{path ++ [:range], {:colour_map, kind}}]
+
+  defp colour_map(_scale, _path), do: []
+
+  # Polarity orders a ramp (spec/14 §4.3, D-143) — a `{:ramp, name}` range, or the `:auto`
+  # range of a sequential or a diverging scale, which is its theme ramp; a list or a map
+  # already says each colour.
+  defp polarity(%{polarity: polarity} = scale, path) when is_atom(polarity) and polarity != nil do
+    case {Map.get(scale, :kind), Map.get(scale, :range, :auto)} do
+      {_kind, {:ramp, _name}} -> []
+      {kind, :auto} when kind in [:sequential, :diverging] -> []
+      {_kind, %Var{}} -> []
+      {_kind, %Fact{}} -> []
+      _other -> [{path ++ [:polarity], {:polarity, :range}}]
+    end
+  end
+
+  defp polarity(_scale, _path), do: []
 
   # The faults of a `:tiles` mark's frame: not `:geo`, or a projection that is not
   # tile-aligned. A frame the mark cannot be placed in, or a variable where the
@@ -511,6 +532,26 @@ defmodule Visualize.Chart.Validator do
   # The frame a sync group reads: the one `frame` names, else the first by name — the frame
   # `Visualize.Chart.Applied` holds as `frame`. A name no frame carries is the reference
   # check's fault, not this one's.
+  # The faults of the frame a sync group or a brush reads, as `{what, kind}`: not cartesian,
+  # or an `x` that is not linear or time.
+  defp linear_x(name, frames) do
+    case sync_frame(name, frames) do
+      %{kind: :cartesian} = frame ->
+        case sync_x_kind(frame, frames, []) do
+          kind when kind in [:linear, :time] -> []
+          kind -> [{:x_scale, kind}]
+        end
+
+      # A kind that is no frame kind is its own fault, reported on the frame.
+      %{kind: kind} ->
+        {:enum, kinds} = Schema.key(:frame, :kind).type
+        if kind in kinds, do: [{:frame_kind, kind}], else: []
+
+      _none ->
+        []
+    end
+  end
+
   defp sync_frame(nil, frames) when is_map(frames) and map_size(frames) > 0,
     do: frames |> Enum.min_by(fn {name, _node} -> name end) |> elem(1)
 
@@ -858,6 +899,14 @@ defmodule Visualize.Chart.Validator do
     if name in Theme.ramp_names(), do: [], else: [{path, {:type, :ramp}}]
   end
 
+  # A map of colours (spec/14 §4.3, D-143): each category's colour as a style takes one,
+  # checked at the category's own path.
+  defp check(:colour_map, map, path, ctx) when is_map(map) and not is_struct(map) do
+    Enum.flat_map(map, fn {category, colour} ->
+      check(:colour, colour, path ++ [category], ctx)
+    end)
+  end
+
   defp check(:size, v, _path, _ctx) when is_number(v), do: []
   defp check(:size, v, path, ctx), do: slot_or(:size, v, path, ctx)
   defp check(:font, v, _path, _ctx) when is_binary(v), do: []
@@ -934,6 +983,10 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp category?(%DateTime{}), do: true
+  # A variable or a fact stands for one member — a threshold at a feed's target (§4.3,
+  # §7.4) — and is typed once application has replaced it.
+  defp category?(%Var{}), do: true
+  defp category?(%Fact{}), do: true
   defp category?(v), do: is_number(v) or is_binary(v) or (name?(v) and v != :auto)
 
   defp term?(%DateTime{}), do: true

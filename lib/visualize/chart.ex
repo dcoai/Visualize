@@ -781,7 +781,11 @@ defmodule Visualize.Chart do
 
     Element.group(children,
       style: %{class: "frame frame-#{frame.name}"},
-      attrs: Map.put(Frame.sync_attrs(frame), "data-node", "frames.#{frame.name}"),
+      attrs:
+        frame
+        |> Frame.sync_attrs()
+        |> Map.merge(Frame.brush_attrs(frame))
+        |> Map.put("data-node", "frames.#{frame.name}"),
       transform: Transform.translate(x * width + margin.left, y * height + margin.top)
     )
   end

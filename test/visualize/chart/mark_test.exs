@@ -157,13 +157,14 @@ defmodule Visualize.Chart.MarkTest do
       end
     end
 
-    test ":x_band is Shape.XBand filled in the mark's paint" do
+    test ":x_band is Shape.XBand filled in the mark's paint, cut to the plot's width" do
       [group | _] = generate(%{type: :x_band, channels: %{x0: :t, x1: :hi}}).children
 
+      # Every `hi` lies past the domain's end, 3, so each band is clamped there (#565).
       [want | _] =
         XBand.new()
         |> XBand.x0(:t)
-        |> XBand.x1(:hi)
+        |> XBand.x1(fn row -> min(row.hi, 3) end)
         |> XBand.scale(x())
         |> XBand.y1(200)
         |> XBand.generate(@rows)

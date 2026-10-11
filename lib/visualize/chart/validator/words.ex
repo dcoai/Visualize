@@ -27,6 +27,27 @@ defmodule Visualize.Chart.Validator.Words do
       "since the hooks map a shared x by linear interpolation (spec/14 §2.9)"
   end
 
+  def words({:brush, :frame_kind, kind}),
+    do: "brushes a #{inspect(kind)} frame; only a cartesian frame's x is brushed"
+
+  def words({:brush, :x_scale, nil}),
+    do: "brushes a frame with no x scale; a linear or time x is what a brush selects"
+
+  def words({:brush, :x_scale, kind}) do
+    "brushes a #{inspect(kind)} x scale; only a linear or time x is brushed, since the hook " <>
+      "turns a brushed pixel into a value by linear interpolation (spec/14 §2.9)"
+  end
+
+  def words({:colour_map, kind}) do
+    "is a map of colours on a #{inspect(kind)} scale; a map pins categories, which an " <>
+      ":ordinal scale has (spec/14 §4.3)"
+  end
+
+  def words({:polarity, :range}) do
+    "orders a ramp, and this scale does not range over one: give range: {:ramp, name}, " <>
+      "or leave a :sequential or :diverging scale's range :auto (spec/14 §4.3)"
+  end
+
   def words({:tiles, :projection, what}) do
     "draws tiles over #{inspect(what)}: tiles lie only under a :geo frame's :mercator " <>
       "projection with a zero centre latitude and no tilt or roll (spec/07 §8.1)"

@@ -238,6 +238,30 @@ release it merely follows.
   total. `:telemetry` is now an optional dependency of visualize. If your app lacks it,
   everything else builds as before. visualize does not depend on `telemetry_metrics`.
 
+- **Overlays are marks** (#565, D-143): what a host drew around a chart — event markers,
+  thresholds, the brush — is now part of the design, so every host that applies it draws
+  the same overlays on SVG, the canvas, the binary stream and the hybrid page.
+  - **A `:rule` at `y` in a cartesian frame** is a horizontal rule across the plot — a
+    threshold (`channels: %{y: :value}` over a source of thresholds) or a feed's target
+    (`y: fact(:primary, :latency, :target)` over `take(1)` of the feed) — labelled at its
+    left end.
+  - **A colour scale's `range` may be a map of colours** on an `:ordinal` scale, pinning each
+    category by name: `range: %{"info" => :info, "critical" => :bad}`, or a feed's own
+    meaning, `range: fact(:events, :severity, :status)`. A category the map does not name
+    draws the theme's neutral `:axis` colour. In JSON it is a `"$colours"` list of pairs.
+  - **`polarity` on a colour scale over a ramp** (`:higher_is_better`, `:lower_is_better`,
+    `:neutral`, or `fact(:primary, :latency, :polarity)`) places the ramp's good end at the
+    better end of the domain. With `kind: :threshold`, `domain: [fact(…, :target)]` and
+    `range: {:ramp, :status}`, a reading beyond the feed's target is `:bad` whichever way the
+    feed says is better.
+  - **A variable or a fact may stand for one member of a domain list**, as the threshold
+    above does.
+  - **`interaction: %{brush: :x}`**: the design's own brush. The chart writes its plot area
+    and its x mapping (`Visualize.Chart.Frame.brush_attrs/1`), and `BrushHook` on a container
+    around it pushes `brush_select` with `"domain" => [lo, hi]` (milliseconds for a time x)
+    — your handler reads the window and needs no margins and no scale to invert. The
+    element's own `data-brush-type` and `data-brush-extent` still win.
+
 ### Changed
 
 - **A root names every chart and describes it with its summary** (#557, D-142).
@@ -292,6 +316,17 @@ release it merely follows.
   `Visualize.Chart.Builder.Store.relocate/3` refuses a newer bundle before it puts an entry.
 - **The `Visualize.Chart.Validator.path` type** may hold strings: the path of a limit fault in a JSON
   document refused before decoding uses the document's own keys.
+
+- **A mark's `scales: %{color: name}` now reaches every colour the mark reads** (#565,
+  D-143): a `{:field, f}` fill or stroke in its style reads through the renamed scale, as its
+  `series` channel's validation already did, so an overlay can colour by its own scale
+  without changing the series' colours. A mark that renamed `color` and coloured its style
+  by a field used to read the frame's `color` scale there.
+- **In a cartesian frame a `:rule` and an `:x_band` are cut to the plot area**: a rule
+  outside it, or a band wholly outside it, draws nothing, and a band that crosses an edge is
+  clamped to it — an event that began before the window no longer draws across the axis.
+- **`BrushHook` sends `domain` whenever it can map the selection**: in a sync group, as
+  before, and now under a design's brush too.
 
 ### Fixed
 

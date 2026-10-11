@@ -288,8 +288,14 @@ defmodule Visualize.Chart.Mark.Shapes do
     end
   end
 
+  # A rule at `y` alone in a cartesian frame is a horizontal rule across the plot: a
+  # threshold or a target (spec/14 §5.2, #565).
   defp rule(ctx) do
-    rows = ctx |> Channels.pixels() |> Channels.placed([:x])
+    if Channels.has?(ctx, :y) and not Channels.has?(ctx, :x), do: across(ctx), else: down(ctx)
+  end
+
+  defp down(ctx) do
+    rows = ctx |> Channels.pixels() |> Channels.placed([:x]) |> within(:x, ctx.frame.plot.width)
 
     elements =
       Rule.new()
@@ -300,6 +306,45 @@ defmodule Visualize.Chart.Mark.Shapes do
       |> Rule.generate(rows)
 
     rule_children(elements, rows, ctx)
+  end
+
+  # One group per placed reading: the line from the plot's left edge to its right, and the
+  # label at its left end, 3 px in and 3 px above, as a vertical rule's sits by its top.
+  defp across(ctx) do
+    width = ctx.frame.plot.width
+    rows = ctx |> Channels.pixels() |> Channels.placed([:y]) |> within(:y, ctx.frame.plot.height)
+
+    elements =
+      Enum.map(rows, fn row ->
+        line = Element.line(0, row.y, width, row.y, %{stroke: :current_color, stroke_width: 1})
+
+        label =
+          case label_accessor(ctx) do
+            nil -> []
+            text -> [Element.text(text.(row), x: 0, y: row.y, dx: 3, dy: -3)]
+          end
+
+        Element.group([line | label], style: %{class: "rule"})
+      end)
+
+    rule_children(elements, rows, ctx)
+  end
+
+  # The readings inside the plot along one axis, `[0, extent]` inclusive: a rule or an x
+  # band is cut to the plot area in a cartesian frame (spec/14 §5.2, #565), since marks
+  # are not clipped and an instant the window has passed would be drawn in the margin.
+  defp within(rows, channel, extent) do
+    Enum.filter(rows, fn row ->
+      reading = Map.fetch!(row, channel)
+      reading >= 0 and reading <= extent
+    end)
+  end
+
+  # An x band clamped to the plot's width, and dropped when it lies wholly outside it.
+  defp clamped(rows, width) do
+    for row <- rows,
+        max(row.x0, row.x1) >= 0 and min(row.x0, row.x1) <= width,
+        do: %{row | x0: row.x0 |> max(0) |> min(width), x1: row.x1 |> max(0) |> min(width)}
   end
 
   defp rule_children(elements, rows, ctx) do
@@ -318,7 +363,11 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   defp x_band(ctx) do
     rows = ctx |> Channels.pixels() |> Channels.placed([:x0, :x1])
-    {y0, y1} = if ctx.frame.kind == :polar, do: radii(ctx), else: {0, ctx.frame.plot.height}
+
+    {rows, {y0, y1}} =
+      if ctx.frame.kind == :polar,
+        do: {rows, radii(ctx)},
+        else: {clamped(rows, ctx.frame.plot.width), {0, ctx.frame.plot.height}}
 
     elements =
       XBand.new()
