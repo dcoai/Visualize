@@ -125,6 +125,13 @@ const Stub = (() => {
       m.inverse = () => ({a: 1 / m.a, d: 1 / m.d, e: -m.e / m.a, f: -m.f / m.d});
       return m;
     }
+    // Focus moves to the element, as a browser's does: recorded, the document's active
+    // element, and its `focus` listeners called (#558).
+    focus() {
+      log.push({on: this.attributes.id || this.tagName, kind: 'focus'});
+      doc.activeElement = this;
+      this.fire('focus', {target: this});
+    }
     removeChild(child) { child.remove(); return child; }
     remove() {
       if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this);

@@ -2,7 +2,7 @@ defmodule Visualize.Hooks do
   @moduledoc """
   Phoenix LiveView JavaScript hooks for interactive visualizations.
 
-  This module bundles ten hooks:
+  This module bundles eleven hooks:
   - `ZoomHook` — zoom and pan interactions (`Visualize.Hooks.Zoom`)
   - `BrushHook` — brush selection (`Visualize.Hooks.Brush`)
   - `CanvasChart` — replays Canvas commands or a script (`Visualize.Hooks.Canvas`)
@@ -18,6 +18,8 @@ defmodule Visualize.Hooks do
     (`Visualize.Hooks.Legend`)
   - `BuilderHook` — a layer of the chart builder dragged into place, an inspector row
     clicked (`Visualize.Hooks.Builder`)
+  - `KeyboardHook` — a chart's points reached from the keyboard, read aloud by a live
+    region (`Visualize.Hooks.Keyboard`)
 
   `TooltipHook` and `CrosshairHook` share hover, and `BrushHook` the brushed window, across
   the charts of a sync group over one bus, `VisualizeSync` (`Visualize.Hooks.Sync`), which
@@ -128,6 +130,15 @@ defmodule Visualize.Hooks do
   The chart builder's two browser gestures: a layer dragged onto another pushes `reorder`,
   and a click on an inspector row pushes `inspect`. See `Visualize.Hooks.Builder`.
 
+  ### Keyboard
+
+      <div id="chart-keys" phx-hook="KeyboardHook" {Visualize.Hooks.Keyboard.attrs(applied)}>
+        {Phoenix.HTML.raw(@svg)}
+      </div>
+
+  The chart is one tab stop: the arrow keys move between its points and series, and a
+  live region reads each point. See `Visualize.Hooks.Keyboard`.
+
   """
 
   alias Visualize.Hooks.{
@@ -137,6 +148,7 @@ defmodule Visualize.Hooks do
     CanvasBinary,
     CanvasIncremental,
     Crosshair,
+    Keyboard,
     Legend,
     Resize,
     Sync,
@@ -178,8 +190,10 @@ defmodule Visualize.Hooks do
 
     #{Builder.js_hook()}
 
+    #{Keyboard.js_hook()}
+
     // Default export for convenience
-    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook, CrosshairHook, LegendHook, BuilderHook };
+    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook, CrosshairHook, LegendHook, BuilderHook, KeyboardHook };
     """
   end
 

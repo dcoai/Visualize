@@ -118,6 +118,9 @@ defmodule Visualize.Chart.Summary do
   # The categories, series and values a sentence lists before it says how many more.
   @listed 10
 
+  # The points of one series a keyboard reaches (§21.5): a series of more is sampled.
+  @reachable 1000
+
   @doc """
   The summary of an applied chart: its name and, per frame in drawing order (`z`, ties
   by name, §4.2), its kind, series, axes and extremes.
@@ -184,6 +187,102 @@ defmodule Visualize.Chart.Summary do
   def description(%__MODULE__{} = summary, id) when is_binary(id) do
     escape = &Visualize.Chart.Summary.Table.escape/1
     ~s(<p id="#{escape.(id)}-summary" hidden>#{escape.(text(summary))}</p>)
+  end
+
+  @doc false
+  # The points a keyboard reaches (§21.5): per series in the summary's order, every row of
+  # the data marks that draw a value, in data order, with its readout and its position in
+  # the chart's pixels (`nil` in a polar or geographic frame, or where the row is not
+  # placed). Series of one name across marks are one series. A series of more than
+  # `@reachable` points is sampled to that many, evenly, its first and last kept, and each
+  # readout counts the series' own rows. `Visualize.Hooks.Keyboard` writes them.
+  @spec points(Applied.t()) :: [%{name: String.t(), points: [map()]}]
+  def points(%Applied{sources: sources} = applied) do
+    all =
+      applied
+      |> realised()
+      |> Enum.sort_by(&{&1.z, to_string(&1.name)})
+      |> Enum.flat_map(&frame_points(&1, sources))
+
+    grouped = Enum.group_by(all, &elem(&1, 0), &elem(&1, 1))
+
+    all
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.uniq()
+    |> Enum.map(fn name ->
+      rows = Map.fetch!(grouped, name)
+      n = length(rows)
+
+      points =
+        for {{ctx, value, row, reading, position}, i} <- sampled(rows, n) do
+          said = "#{value.label} #{formatter(ctx.frame, value.scale).(reading)}"
+          where = Enum.join(Enum.reject([place(ctx, value.where, row), said], &is_nil/1), ", ")
+          {x, y} = position || {nil, nil}
+          %{text: "#{name}, #{i} of #{n}: #{where}", x: x, y: y}
+        end
+
+      %{name: name, points: points}
+    end)
+  end
+
+  # The rows with their one-based positions, at most `@reachable` of them evenly spaced,
+  # the first and the last always among them.
+  defp sampled(rows, n) when n <= @reachable, do: Enum.with_index(rows, 1)
+
+  defp sampled(rows, n) do
+    keep = MapSet.new(0..(@reachable - 1), &round(&1 * (n - 1) / (@reachable - 1)))
+    for {row, i} <- Enum.with_index(rows), MapSet.member?(keep, i), do: {row, i + 1}
+  end
+
+  defp frame_points(frame, sources) do
+    for mark <- frame.marks,
+        Map.get(mark, :type) not in @auxiliary,
+        ctx = %{frame: frame, mark: mark},
+        value = value(ctx),
+        value != nil,
+        rows = Mark.rows(frame, mark, sources),
+        {row, position} <- Enum.zip(rows, positions(frame, mark, rows)),
+        reading = value.read.(row),
+        is_number(reading) do
+      name =
+        case Channels.reading(ctx, :series, row) || stacked_key(mark, row) do
+          nil -> value.label
+          series -> plain(series)
+        end
+
+      {name, {ctx, value, row, reading, position}}
+    end
+  end
+
+  # Where each row is drawn, in the chart's pixels (§21.5): the middle of its `x` — of `x0`
+  # and `x1` for a rectangle — and its `y`, or `y1`, moved by the frame's margin and box; no
+  # position in a frame whose marks bend or project.
+  defp positions(%Frame{kind: kind}, _mark, rows) when kind != :cartesian,
+    do: Enum.map(rows, fn _row -> nil end)
+
+  defp positions(frame, mark, rows) do
+    [bx, by, _w, _h] = frame.box
+    left = bx * frame.size.width + frame.margin.left
+    top = by * frame.size.height + frame.margin.top
+
+    %{frame: frame, mark: mark, rows: rows}
+    |> Channels.pixels()
+    |> Enum.map(fn pixel ->
+      with x when is_number(x) <- centre(pixel, :x, :x0, :x1),
+           y when is_number(y) <- centre(pixel, :y, :y1, :y1) do
+        {left + x, top + y}
+      else
+        _unplaced -> nil
+      end
+    end)
+  end
+
+  defp centre(pixel, one, a, b) do
+    case {Map.get(pixel, one), Map.get(pixel, a), Map.get(pixel, b)} do
+      {v, _, _} when is_number(v) -> v
+      {_, v0, v1} when is_number(v0) and is_number(v1) -> (v0 + v1) / 2
+      _none -> nil
+    end
   end
 
   # -- the frame --------------------------------------------------------------------------
@@ -523,26 +622,10 @@ defmodule Visualize.Chart.Summary do
 
   # Where a row is: its partner channel as the chart writes it, then its series; or its
   # name — its series, else the first field its inline label reads.
-  defp where(_ctx, nil, _row), do: nil
-
-  defp where(ctx, channels, row) when is_list(channels) do
-    case for(channel <- channels, at = placed(ctx, channel, row), do: at) do
-      [] -> where(ctx, :name, row)
-      places -> Enum.join(places, ", ")
-    end
-  end
-
-  defp where(ctx, :name, row) do
-    case Channels.reading(ctx, :series, row) || label_field(ctx.mark, row) do
-      nil -> nil
-      name -> plain(name)
-    end
-  end
-
-  defp where(ctx, channel, row) do
+  defp where(ctx, channel, row) when is_atom(channel) and channel not in [nil, :name] do
     case placed(ctx, channel, row) do
       nil ->
-        where(ctx, :name, row)
+        place(ctx, :name, row)
 
       at ->
         case Channels.reading(ctx, :series, row) || stacked_key(ctx.mark, row) do
@@ -551,6 +634,28 @@ defmodule Visualize.Chart.Summary do
         end
     end
   end
+
+  defp where(ctx, where, row), do: place(ctx, where, row)
+
+  # Where a row is without its series: its partner channels as the chart writes them, else
+  # its name — its series, else the first field its inline label reads.
+  defp place(_ctx, nil, _row), do: nil
+
+  defp place(ctx, channels, row) when is_list(channels) do
+    case for(channel <- channels, at = placed(ctx, channel, row), do: at) do
+      [] -> place(ctx, :name, row)
+      places -> Enum.join(places, ", ")
+    end
+  end
+
+  defp place(ctx, :name, row) do
+    case Channels.reading(ctx, :series, row) || label_field(ctx.mark, row) do
+      nil -> nil
+      name -> plain(name)
+    end
+  end
+
+  defp place(ctx, channel, row), do: placed(ctx, channel, row) || place(ctx, :name, row)
 
   # A channel's reading of a row as the chart writes it, after the field's name.
   defp placed(%{frame: frame, mark: mark} = ctx, channel, row) do
