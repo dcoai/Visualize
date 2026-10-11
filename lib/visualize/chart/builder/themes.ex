@@ -16,10 +16,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Stack, Store}
+    alias Visualize.Chart.Builder.{Stack, Store, ThemeRamps}
     alias Visualize.Chart.Theme, as: Document
     alias Visualize.Chart.Use
     alias Visualize.{Color, Theme}
+    alias Visualize.Color.Vision
 
     @chrome [:background, :surface, :text, :axis, :grid]
     @sizes [:font_size, :label_size, :title_size]
@@ -35,12 +36,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:theme, :any, required: true, doc: "the `%Visualize.Theme{}` the node draws as")
     attr(:faults, :list, default: [], doc: "the theme's faults, each a line a person reads")
     attr(:derive, :list, default: [], doc: "the themes to derive from, `{label, value}` each")
+
+    attr(:vision, :atom,
+      default: :none,
+      doc: "the deficiency the ramps and the sheet are seen under"
+    )
+
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
 
     @doc """
-    Renders the theme editor (spec/14 §20.2): `<form class="vis-builder-theme">` of sections
-    — the theme's name and *derive from*, the series, the chrome, the fonts — then the
-    theme's validity.
+    Renders the theme editor (spec/14 §20.2, §20.4, §20.5): *derive from* and the *vision*
+    select, then `<form class="vis-builder-theme">` of sections — the theme's name, the
+    series, the chrome, the fonts, the ramps and the roles — then the theme's validity.
     """
     def panel(assigns) do
       assigns =
@@ -58,6 +65,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <option :for={{label, value} <- @derive} value={value}>{label}</option>
           </select>
           <button type="submit" class="vis-builder-theme-derive-button" title="take every value of that theme, keep this theme's name">Derive</button>
+        </form>
+        <form id={@id <> "-vision"} class="vis-builder-theme-vision" phx-change="theme_vision" phx-submit="submitted" phx-target={@target}>
+          <label class="vis-builder-control-label" for={@id <> "-vision-kind"}>seen with</label>
+          <select id={@id <> "-vision-kind"} name="vision">
+            <option :for={kind <- [:none | Vision.deficiencies()]} value={kind} selected={kind == @vision}>
+              {if kind == :none, do: "normal vision", else: kind}
+            </option>
+          </select>
         </form>
         <form id={@id <> "-form"} class="vis-builder-theme" phx-change="theme_edit" phx-submit="submitted" phx-target={@target}>
           <fieldset class="vis-builder-theme-section">
@@ -102,6 +117,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <input type="number" name={to_string(key)} value={size} min="1" step="1" />
             </label>
           </fieldset>
+          <ThemeRamps.section theme={@theme} vision={@vision} target={@target} />
         </form>
         <section class="vis-builder-theme-validity">
           <p :if={@faults == []} class="vis-builder-theme-valid">a valid theme — Save to library keeps it</p>
@@ -195,6 +211,47 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    def change(node, "ramps." <> rest, value) do
+      with [name, index] <- String.split(rest, ".", parts: 2),
+           ramp when ramp != nil <- ramp_named(name),
+           {i, ""} <- Integer.parse(index),
+           anchors = anchors(node, ramp),
+           true <- i >= 0 and i < length(anchors),
+           {:ok, colour} <- colour(value) do
+        {:ok, ramp_put(node, ramp, List.replace_at(anchors, i, colour))}
+      else
+        _ -> :error
+      end
+    end
+
+    # A status role is set by the colour at its fixed position: the anchor that stands there
+    # (spec/14 §20.4); `:warning` has none on an even ramp. `:info` and `:neutral` are colours.
+    def change(node, "roles." <> role, value) when role in ["info", "neutral"] do
+      with {:ok, colour} <- colour(value) do
+        roles = node |> Map.get(:roles, %{}) |> Map.put(String.to_existing_atom(role), colour)
+        {:ok, Map.put(node, :roles, roles)}
+      end
+    end
+
+    def change(node, "roles." <> role, value) when role in ["good", "warning", "bad"] do
+      anchors = anchors(node, :status)
+      n = length(anchors)
+
+      at =
+        case role do
+          "good" -> 0
+          "bad" -> n - 1
+          "warning" when rem(n, 2) == 1 -> div(n, 2)
+          "warning" -> nil
+        end
+
+      with true <- at != nil, {:ok, colour} <- colour(value) do
+        {:ok, ramp_put(node, :status, List.replace_at(anchors, at, colour))}
+      else
+        _ -> :error
+      end
+    end
+
     def change(node, "font_family", value) do
       case String.trim(value) do
         "" -> :error
@@ -257,6 +314,49 @@ if Code.ensure_loaded?(Phoenix.Component) do
         [_only] -> node
         series -> Map.put(node, :series, List.delete_at(series, i))
       end
+    end
+
+    @doc """
+    The node with the ramp resampled at one more evenly spaced anchor, each the colour the
+    ramp had at its position (spec/14 §20.4): the ramp changes as little as the even spacing
+    allows, and the new anchor is there to be moved.
+
+        iex> node = Visualize.Chart.Builder.Themes.anchor_added(%{}, :thermal)
+        iex> node.ramps.thermal
+        ["#0e68ad", "#acbbd5", "#e3aea6", "#c02e31"]
+    """
+    @spec anchor_added(map(), Theme.ramp_name()) :: map()
+    def anchor_added(node, ramp) do
+      anchors = anchors(node, ramp)
+      n = length(anchors)
+      theme = Theme.build(Theme.default(), %{ramps: %{ramp => anchors}})
+      ramp_put(node, ramp, for(k <- 0..n, do: Theme.ramp(theme, ramp, k / n)))
+    end
+
+    @doc "The node without the ramp's anchor at `i`; a ramp keeps two anchors (spec/14 §20.4)."
+    @spec anchor_removed(map(), Theme.ramp_name(), non_neg_integer()) :: map()
+    def anchor_removed(node, ramp, i) do
+      case anchors(node, ramp) do
+        [_, _] -> node
+        anchors -> ramp_put(node, ramp, List.delete_at(anchors, i))
+      end
+    end
+
+    @doc false
+    # The ramp a client's string names, of the four; no atom is made from the string.
+    @spec ramp_named(String.t()) :: Theme.ramp_name() | nil
+    def ramp_named(name), do: Enum.find(Theme.ramp_names(), &(Atom.to_string(&1) == name))
+
+    # A ramp's anchors as the node holds them, else the default theme's — what it draws as.
+    defp anchors(node, ramp) do
+      case node |> Map.get(:ramps, %{}) |> Map.get(ramp) do
+        [_ | _] = anchors -> anchors
+        _none -> Map.fetch!(Theme.default().ramps, ramp)
+      end
+    end
+
+    defp ramp_put(node, ramp, anchors) do
+      Map.put(node, :ramps, node |> Map.get(:ramps, %{}) |> Map.put(ramp, anchors))
     end
 
     @doc """

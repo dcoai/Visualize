@@ -191,7 +191,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
          expanded: MapSet.new(),
          find: "",
          node_label: "design",
-         theme_designs: []
+         theme_designs: [],
+         vision: :none
        )}
     end
 
@@ -506,6 +507,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 theme={@theme_mode.theme}
                 designs={@theme_mode.designs}
                 choices={@theme_mode.choices}
+                vision={@vision}
                 sources={@bound_pool}
                 vars={@bindings}
                 target={@myself}
@@ -570,6 +572,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               theme={@theme_mode.theme}
               faults={@theme_mode.faults}
               derive={@theme_mode.derive}
+              vision={@vision}
               target={@myself}
             />
             <div :if={@context == :inspect and !@theme_mode} class="vis-builder-inspect">
@@ -2434,6 +2437,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, theme_written(socket, &{:ok, Themes.series_removed(&1, position(index))})}
     end
 
+    def handle_event("theme_anchor_add", %{"ramp" => ramp}, socket) do
+      case Themes.ramp_named(ramp) do
+        nil -> {:noreply, socket}
+        ramp -> {:noreply, theme_written(socket, &{:ok, Themes.anchor_added(&1, ramp)})}
+      end
+    end
+
+    def handle_event("theme_anchor_remove", %{"ramp" => ramp, "index" => index}, socket) do
+      case Themes.ramp_named(ramp) do
+        nil ->
+          {:noreply, socket}
+
+        ramp ->
+          {:noreply,
+           theme_written(socket, &{:ok, Themes.anchor_removed(&1, ramp, position(index))})}
+      end
+    end
+
+    # The deficiency the ramps and the sheet are seen under: the builder's, not the theme's
+    # (spec/14 §20.5); a value that names none is normal vision.
+    def handle_event("theme_vision", %{"vision" => vision}, socket) do
+      seen =
+        Enum.find(Visualize.Color.Vision.deficiencies(), :none, &(Atom.to_string(&1) == vision))
+
+      {:noreply, assign(socket, :vision, seen)}
+    end
+
     def handle_event("theme_derive", %{"from" => from}, socket) do
       case Themes.derive_source(from, socket.assigns.store) do
         {:ok, theme} -> {:noreply, theme_written(socket, &{:ok, Themes.derived(&1, theme)})}
@@ -3113,9 +3143,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.uniq()
     end
 
-    defp theme(map) when is_map(map) and not is_struct(map), do: Theme.new(map)
-    defp theme(name) when is_atom(name), do: Theme.builtin(name) || Theme.default()
-    defp theme(_other), do: Theme.default()
+    # The theme the wells show colours through, built unchecked: a theme being edited may
+    # break a contract for a moment, and the editor says so rather than the render raising
+    # (spec/14 §20.4).
+    defp theme(value), do: Themes.effective(value, nil)
 
     # The find box names a variable exactly to highlight its fields; a partial match
     # filters the list only.

@@ -338,4 +338,148 @@ defmodule Visualize.Chart.BuilderThemeTest do
     assert [%{ref: nil, local: %{theme: %{}}}] = socket.assigns.uses
     assert Stack.kinds() |> Enum.member?(:theme)
   end
+
+  # -- ramps, roles and colour vision (spec/14 §20.4, §20.5) ----------------------------
+
+  # The markup of one ramp's block in a rendered builder.
+  defp ramp_block(html, name) do
+    [_, after_open] = String.split(html, ~s(data-ramp="#{name}"), parts: 2)
+    after_open |> String.split("data-ramp=", parts: 2) |> hd()
+  end
+
+  describe "ramps and roles (spec/14 §20.4)" do
+    test "every ramp is drawn, with its lightness and its anchors, the status roles marked" do
+      html = BuilderFixture.render(new_theme())
+
+      for name <- Theme.ramp_names() do
+        block = ramp_block(html, name)
+        assert block =~ "vis-builder-theme-lightness"
+        assert block =~ ~s(name="ramps.#{name}.0")
+        refute block =~ "vis-builder-theme-violation"
+      end
+
+      status = ramp_block(html, :status)
+      for role <- ~w(good warning bad), do: assert(status =~ ~s(title="#{role} stands at))
+    end
+
+    test "an anchor edit redraws the ramp" do
+      before = new_theme() |> BuilderFixture.render() |> ramp_block(:sequential)
+      socket = new_theme() |> edit("ramps.sequential.1", "#4a7fc0")
+
+      assert Themes.effective(theme_node(socket), nil).ramps.sequential ==
+               ~w(#e9f2fc #4a7fc0 #004580)
+
+      after_edit = socket |> BuilderFixture.render() |> ramp_block(:sequential)
+      assert after_edit != before
+      assert after_edit =~ ~s(value="#4a7fc0")
+    end
+
+    test "an edit that breaks a contract is shown on its ramp, named, and refused at save" do
+      socket = new_theme() |> edit("name", "clash") |> edit("ramps.status.0", "#c23238")
+      html = BuilderFixture.render(socket)
+
+      status = ramp_block(html, :status)
+
+      assert html =~
+               ~s(class="vis-builder-theme-ramp vis-builder-theme-ramp-broken" data-ramp="status")
+
+      assert status =~ "good (0) must be green or blue"
+      refute ramp_block(html, :thermal) =~ "vis-builder-theme-violation"
+      refute html =~ "a valid theme"
+
+      socket = event(socket, "put_design", %{"name" => "Looks::clash"})
+      assert socket.assigns.notice =~ "not a valid theme"
+      assert socket.assigns.notice =~ "theme.ramps.status"
+      assert socket.assigns.open.id == nil
+    end
+
+    test "every broken ramp and role is named, not only the first" do
+      socket =
+        new_theme()
+        |> edit("ramps.status.0", "#c23238")
+        |> edit("ramps.diverging.1", "#ff0000")
+        |> edit("roles.neutral", "#00aa00")
+
+      html = BuilderFixture.render(socket)
+      assert ramp_block(html, :status) =~ "vis-builder-theme-violation"
+      assert ramp_block(html, :diverging) =~ "the midpoint (0.5) must be neutral"
+      assert html =~ "must be neutral, at most 10 C*"
+    end
+
+    test "anchors are added by resampling and removed down to two" do
+      socket = new_theme() |> event("theme_anchor_add", %{"ramp" => "thermal"})
+      thermal = Themes.effective(theme_node(socket), nil).ramps.thermal
+      assert length(thermal) == 4
+      assert hd(thermal) == "#0e68ad" and List.last(thermal) == "#c02e31"
+
+      socket =
+        Enum.reduce(1..3, socket, fn _, s ->
+          event(s, "theme_anchor_remove", %{"ramp" => "thermal", "index" => "1"})
+        end)
+
+      assert Themes.effective(theme_node(socket), nil).ramps.thermal == ~w(#0e68ad #c02e31)
+      assert event(socket, "theme_anchor_add", %{"ramp" => "nonsense"}) == socket
+    end
+
+    test "a status role is set by the anchor at its fixed position" do
+      socket = new_theme() |> edit("roles.good", "#3d9a50") |> edit("roles.bad", "#b02020")
+      theme = Themes.effective(theme_node(socket), nil)
+
+      assert Theme.resolve(theme, :good, :literal) == "#3d9a50"
+      assert Theme.resolve(theme, :bad, :literal) == "#b02020"
+
+      socket = edit(socket, "roles.warning", "#c08000")
+
+      assert Theme.resolve(Themes.effective(theme_node(socket), nil), :warning, :literal) ==
+               "#c08000"
+    end
+
+    test "warning has no anchor on an even status ramp, and says so" do
+      socket = new_theme() |> event("theme_anchor_add", %{"ramp" => "status"})
+      before = theme_node(socket)
+
+      assert socket |> edit("roles.warning", "#c08000") |> theme_node() == before
+      assert BuilderFixture.render(socket) =~ "status has no anchor at 0.5"
+    end
+
+    test "info and neutral are colours of their own" do
+      socket = new_theme() |> edit("roles.info", "#2255aa") |> edit("roles.neutral", "#777777")
+      theme = Themes.effective(theme_node(socket), nil)
+      assert theme.roles == %{info: "#2255aa", neutral: "#777777"}
+    end
+  end
+
+  describe "colour-vision simulation (spec/14 §20.5)" do
+    test "the vision select redraws the ramps and the sheet under the deficiency" do
+      socket = new_theme()
+      normal = BuilderFixture.render(socket)
+      refute normal =~ "vis-builder-theme-strip-vision"
+
+      socket = event(socket, "theme_vision", %{"vision" => "deuteranopia"})
+      assert socket.assigns.vision == :deuteranopia
+      seen = BuilderFixture.render(socket)
+
+      assert seen =~ ~s(aria-label="status, under deuteranopia")
+      assert seen =~ ~s(data-vision="deuteranopia")
+
+      # The sheet's colours are the simulated ones: the default's red series colour is gone
+      # from it, and its deuteranope reading is there.
+      sheet = fn html -> html |> String.split("vis-builder-theme-sheet") |> Enum.at(1) end
+      assert sheet.(normal) =~ ~s(stroke="#c8373b")
+      refute sheet.(seen) =~ ~s(stroke="#c8373b")
+
+      simulated =
+        "#c8373b"
+        |> Visualize.Color.parse()
+        |> Visualize.Color.Vision.simulate(:deuteranopia)
+        |> Visualize.Color.to_hex()
+
+      assert sheet.(seen) =~ simulated
+    end
+
+    test "a value that names no deficiency is normal vision, and no atom is made" do
+      socket = new_theme() |> event("theme_vision", %{"vision" => "nonsense-4c1d"})
+      assert socket.assigns.vision == :none
+    end
+  end
 end

@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping), `Visualize.Data.Table` (tabular sources as rows), `Visualize.Data.Schema` and `Visualize.Data.Delivery` (what a feed says about its fields, and one answer of a feed, §10) and `Visualize.Theme` (the colours, font and sizes every mark draws with). All are pure except `Random`, which reads and advances the calling process's `:rand` state.
+This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation) with `Visualize.Color.Vision` (colour-vision simulation, §1.8), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping), `Visualize.Data.Table` (tabular sources as rows), `Visualize.Data.Schema` and `Visualize.Data.Delivery` (what a feed says about its fields, and one answer of a feed, §10) and `Visualize.Theme` (the colours, font and sizes every mark draws with). All are pure except `Random`, which reads and advances the calling process's `:rand` state.
 
 ## 1. Color
 
@@ -96,6 +96,27 @@ Each `interpolate_*/3` takes two colours and `t` (not clamped) and returns a col
 | `Visualize.Color.interpolate_hsl/3` | HSL interpolation, shortest hue arc. |
 | `Visualize.Color.interpolate_lab/3` | Lab interpolation. |
 | `Visualize.Color.interpolate_hcl/3` | HCL interpolation, shortest hue arc. |
+
+### 1.8 Colour-vision simulation
+
+**Implemented** (#563, D-139). `Visualize.Color.Vision` simulates how a colour reads to a person with one of the three dichromacies, so a palette can be judged by eye for the readers it would fail. It is a pure colour transform and is used for judging only — nothing in the library draws through it on its own.
+
+The model is **Machado, Oliveira and Fernandes (2009)**, "A Physiologically-based Model for Simulation of Color Vision Deficiency", *IEEE Transactions on Visualization and Computer Graphics* 15(6), 1291–1298, at **severity 1.0** — full dichromacy. A colour is decoded from sRGB to linear RGB (the sRGB transfer function of IEC 61966-2-1: `c / 12.92` for `c ≤ 0.04045`, else `((c + 0.055) / 1.055)^2.4`), multiplied by the deficiency's matrix, clamped to `0..1`, and encoded back; the opacity is kept. The matrices are the paper's published severity-1.0 matrices:
+
+| Deficiency | Matrix (rows R, G, B) |
+|---|---|
+| `:protanopia` (no L cones) | `[0.152286, 1.052583, −0.204868]`, `[0.114503, 0.786281, 0.099216]`, `[−0.003882, −0.048116, 1.051998]` |
+| `:deuteranopia` (no M cones) | `[0.367322, 0.860646, −0.227968]`, `[0.280085, 0.672501, 0.047413]`, `[−0.011820, 0.042940, 0.968881]` |
+| `:tritanopia` (no S cones) | `[1.255528, −0.076749, −0.178779]`, `[−0.078411, 0.930809, 0.147602]`, `[0.004733, 0.691367, 0.303900]` |
+
+Each row sums to 1, so every grey is its own simulation — a property the tests hold. `:none` is the identity. Machado's model was chosen over Brettel, Viénot and Mollon (1997), which is more exact for tritanopia but splits each deficiency into two half-planes, and over Viénot, Brettel and Mollon (1999), a single projection that cannot grade severity: one matrix per deficiency is cheap enough to run over every colour of a preview on every edit, and the same model at a severity below 1 would simulate the anomalous trichromacies later with no new code path (D-139).
+
+| Function | Contract |
+|---|---|
+| `Visualize.Color.Vision.deficiencies/0` | `[:protanopia, :deuteranopia, :tritanopia]` |
+| `Visualize.Color.Vision.matrix/1` | the deficiency's 3×3 matrix as three rows, from the table above |
+| `Visualize.Color.Vision.simulate/2` | `simulate(colour, deficiency)`: a `%Visualize.Color{}` as the deficiency sees it, opacity kept; `:none` is the colour; any other atom raises `ArgumentError` |
+| `Visualize.Color.Vision.recolour/2` | `recolour(text, deficiency)`: every `#rrggbb` and `#rgb` colour literal in a text — an SVG's attribute values, a style — replaced by its simulation as `#rrggbb`; a `#` that is a reference, `url(#id)`, is left alone |
 
 ## 2. Interpolate
 
@@ -519,7 +540,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 
 **Roles** are the meaning vocabulary: `:good` = `status(0)`, `:warning` = `status(0.5)`, `:bad` = `status(1)`, plus `:info` and `:neutral`, the names design systems give their semantic tokens (Material, Bootstrap, Carbon, Primer: success, warning, danger, info, neutral). The three status roles are **fixed points on the `status` ramp**, not colours of their own, so within a theme a role and its ramp position cannot disagree; a theme sets them by setting `status`. `:info` and `:neutral` are the theme's `roles` and have contracts too: `:info` is a chromatic blue, `:neutral` is neutral. A role names a meaning, never a colour, which is what lets data name it — a feed's state `"down"` can say `:bad`, and every theme renders `:bad` as its own red.
 
-**Contracts are checked when a theme is constructed.** `new/1` and `merge/2` — and so an inline theme in a design (spec/14 §2.5) — check every ramp and role and raise `ArgumentError` naming the theme, the ramp or role, and the term it breaks: `theme :house: ramp :status breaks its contract: lightness must change one way along the ramp, by at least 3 L* a step (its ends say it falls); anchor 2 "#e0a030" (L* 70.8) moves 10.7 L* the wrong way from anchor 1 "#4ca34b" (L* 60.2)`. A ramp name not of the four, a role key not `:info` or `:neutral` — `:good`, `:warning` and `:bad` included, with a message saying to set `status` — a ramp of fewer than two anchors, and an anchor `Visualize.Color.parse/1` cannot read are refused the same way. `check/1` is the same check returning `{:error, subject, message}`, `subject` `{:ramp, name}` or `{:role, name}`, for a caller that reports rather than raises — the validator (spec/14 §10.1). The built-in themes hold every contract, and `test/visualize/theme_ramps_test.exs` holds them to it. A struct written literally, `%Visualize.Theme{…}`, is not checked: it is the escape hatch, as the contrast floors of 7.4 are not checked on a host's theme.
+**Contracts are checked when a theme is constructed.** `new/1` and `merge/2` — and so an inline theme in a design (spec/14 §2.5) — check every ramp and role and raise `ArgumentError` naming the theme, the ramp or role, and the term it breaks: `theme :house: ramp :status breaks its contract: lightness must change one way along the ramp, by at least 3 L* a step (its ends say it falls); anchor 2 "#e0a030" (L* 70.8) moves 10.7 L* the wrong way from anchor 1 "#4ca34b" (L* 60.2)`. A ramp name not of the four, a role key not `:info` or `:neutral` — `:good`, `:warning` and `:bad` included, with a message saying to set `status` — a ramp of fewer than two anchors, and an anchor `Visualize.Color.parse/1` cannot read are refused the same way. `check/1` is the same check returning `{:error, subject, message}`, `subject` `{:ramp, name}` or `{:role, name}`, for a caller that reports rather than raises — the validator (spec/14 §10.1). `violations/1` runs it on each ramp and role alone and lists every one that breaks, for a caller that shows each fault where it is — the theme editor (spec/14 §20.4). The built-in themes hold every contract, and `test/visualize/theme_ramps_test.exs` holds them to it. A struct written literally, `%Visualize.Theme{…}`, is not checked: it is the escape hatch, as the contrast floors of 7.4 are not checked on a host's theme.
 
 **Fallback.** A theme that lacks a ramp or a role — a struct whose `ramps` or `roles` map leaves a key out — takes the **default theme's**, never a series colour: a series colour carries no meaning, so falling back to one would break the very promise the ramp exists to keep.
 
@@ -536,6 +557,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 | `Visualize.Theme.new/1` | `default/0` with the given keyword fields replaced, `ramps` and `roles` merged; contracts checked (7.2, 7.5). |
 | `Visualize.Theme.merge/2` | The theme with the given keyword fields replaced, `ramps` and `roles` merged; contracts checked (7.2, 7.5). |
 | `Visualize.Theme.check/1` | `:ok`, or `{:error, subject, message}` for the first ramp or role that breaks its contract (7.5). |
+| `Visualize.Theme.violations/1` | Every ramp and role that breaks its contract, `{subject, message}` each, in the order `check/1` reads them: the contract run on each alone, so a theme editor names every fault and not only the first (7.5, spec/14 §20.4). |
 | `Visualize.Theme.ramp/3` | `ramp(theme, name, t)`: the literal colour at `t` along the named ramp, Lab-interpolated, `t` clamped to `0..1`; the default theme's ramp when the theme lacks it (7.5). |
 | `Visualize.Theme.ramp_names/0` | `[:status, :thermal, :diverging, :sequential]` (7.5). |
 | `Visualize.Theme.role_names/0` | `[:good, :warning, :bad, :info, :neutral]` (7.5). |

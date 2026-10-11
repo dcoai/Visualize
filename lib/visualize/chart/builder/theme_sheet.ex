@@ -21,6 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart
     alias Visualize.Chart.Builder.Themes
     alias Visualize.Chart.Validator
+    alias Visualize.Color.Vision
     alias Visualize.Theme
 
     # A sample's size: small enough that the sheet shows them side by side.
@@ -40,6 +41,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:choices, :list, default: [], doc: "the store's composites to add, `{name, id}` each")
     attr(:sources, :map, default: %{}, doc: "the pool a stored design binds to")
     attr(:vars, :map, default: %{}, doc: "the values a stored design's variables take")
+    attr(:vision, :atom, default: :none, doc: "the deficiency the sheet is seen under (§20.5)")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the sheet's events")
 
     @doc """
@@ -53,25 +55,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns =
         assign(assigns,
           drawn: theme,
-          samples: Enum.map(samples(), &drawn(&1, theme, size: @size)),
+          samples: Enum.map(samples(), &drawn(&1, theme, size: @size, vision: assigns.vision)),
           stored:
             Enum.map(
               assigns.designs,
               &drawn(&1, theme,
                 sources: assigns.sources,
-                vars: assigns.vars
+                vars: assigns.vars,
+                vision: assigns.vision
               )
-            )
+            ),
+          seen: &seen(&1, assigns.vision)
         )
 
       ~H"""
-      <div id={@id} class="vis-builder-theme-sheet" style={"background: #{@drawn.background}"}>
+      <div id={@id} class="vis-builder-theme-sheet" style={"background: #{@seen.(@drawn.background)}"} data-vision={@vision}>
         <figure class="vis-builder-theme-sample vis-builder-theme-chrome">
           <div class="vis-builder-theme-swatches">
             <span
               :for={colour <- @drawn.series}
               class="vis-builder-theme-chip"
-              style={"background: #{colour}"}
+              style={"background: #{@seen.(colour)}"}
               title={colour}
             ></span>
           </div>
@@ -79,11 +83,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <span
               :for={slot <- [:background, :surface, :text, :axis, :grid]}
               class="vis-builder-theme-chip vis-builder-theme-chip-named"
-              style={"background: #{Map.fetch!(@drawn, slot)}; color: #{Theme.ink(@drawn, Map.fetch!(@drawn, slot))}"}
+              style={"background: #{@seen.(Map.fetch!(@drawn, slot))}; color: #{@seen.(Theme.ink(@drawn, Map.fetch!(@drawn, slot)))}"}
               title={"#{slot} #{Map.fetch!(@drawn, slot)}"}
             >{slot}</span>
           </div>
-          <figcaption style={"color: #{@drawn.text}; font-family: #{@drawn.font_family}"}>chrome</figcaption>
+          <figcaption style={"color: #{@seen.(@drawn.text)}; font-family: #{@drawn.font_family}"}>chrome</figcaption>
         </figure>
         <figure :for={card <- @samples ++ @stored} class="vis-builder-theme-sample" data-sample={card.id}>
           <svg
@@ -96,7 +100,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <ul :if={card.errors != []} class="vis-builder-errors">
             <li :for={line <- card.errors} class="vis-builder-error">{line}</li>
           </ul>
-          <figcaption style={"color: #{@drawn.text}; font-family: #{@drawn.font_family}"}>
+          <figcaption style={"color: #{@seen.(@drawn.text)}; font-family: #{@drawn.font_family}"}>
             {card.title}
             <button
               :if={card.stored?}
@@ -143,7 +147,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case Chart.apply(sample.design, [sources: sources, vars: vars, theme: theme] ++ size) do
         {:ok, %{frame: %{size: %{width: w, height: h}}} = applied} ->
           Map.merge(base, %{
-            markup: Phoenix.HTML.raw(Chart.render(applied, resolve: :literal)),
+            markup:
+              applied
+              |> Chart.render(resolve: :literal)
+              |> Vision.recolour(Keyword.get(opts, :vision, :none))
+              |> Phoenix.HTML.raw(),
             errors: [],
             width: w,
             height: h
@@ -201,6 +209,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Map.merge(chrome)
       |> Map.merge(%{ramps: ramps, roles: roles, series: series})
     end
+
+    defp seen(colour, :none), do: colour
+
+    # The drawn theme's colours all read (`drawable/1`), so each is simulated directly.
+    defp seen(colour, vision),
+      do: colour |> Visualize.Color.parse() |> Vision.simulate(vision) |> Visualize.Color.to_hex()
 
     defp drawable_ramp?([_, _ | _] = anchors), do: Enum.all?(anchors, &colour?/1)
     defp drawable_ramp?(_anchors), do: false

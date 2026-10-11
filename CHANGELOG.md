@@ -37,6 +37,20 @@ release it merely follows.
   drawn in the theme being edited, to which designs from the store can be added. *Save to
   library* keeps the theme and refuses one that is not valid. `Store.theme_entry/2` finds
   the entry a stored theme name stands for.
+- **The theme mode edits ramps and roles and checks them live** (#563, D-139). Each ramp is
+  drawn as the theme interpolates it, with a lightness strip and its anchors (change, add by
+  resampling, remove); the status roles are marked at their fixed positions and set by the
+  colour there, and `:info` and `:neutral` are colours of their own. Every edit runs the
+  meaning contracts: a broken ramp or role is outlined and named in the contract's words,
+  and *Save to library* refuses the theme. `Visualize.Theme.violations/1` lists every broken
+  ramp and role, where `check/1` gives the first.
+- **Colour-vision simulation** (#563): `Visualize.Color.Vision.simulate/2` shows a colour as
+  a person with protanopia, deuteranopia or tritanopia sees it (Machado, Oliveira and
+  Fernandes 2009, severity 1.0, in linear sRGB), and `recolour/2` applies it to every colour
+  literal of an SVG. The theme mode's *seen with* select draws the ramps and the preview
+  sheet under each deficiency.
+- **Fixed:** the builder no longer raises while rendering a design whose inline theme breaks
+  a contract; its colour wells draw the theme unchecked.
 - **Fixed:** a non-composite chart in the builder (a style, a theme) no longer reports its
   own `version` stamp as a fault of its kind.
 - **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
