@@ -4,7 +4,7 @@
 
 A **board** is a dashboard as data: designs laid out on a grid, sharing a time window, variables and a sync group, but never geometry. It is the layer above the composite of [14-declarative-chart](14-declarative-chart.md) §19.6. A composite is overlapping parts that **flatten** into one chart in one coordinate space, such as a gauge drawn over a line. A board **never flattens**: each cell is its own chart, applied, rendered and updated on its own, and the cells share *state*, not pixels (#531 §1).
 
-This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's, §8 (#540, D-146). A board travels to another host in a bundle with its components and themes, re-keyed on import (§11, #542).
+This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's, §8 (#540, D-146). A board travels to another host in a bundle with its components and themes, re-keyed on import (§11, #542). A board leaves the screen as a picture — an SVG, a PNG or printed pages — drawn from a frozen snapshot of its data (§12, #578, D-150).
 
 ```
 board      — layout + shared state                       (this document)
@@ -259,6 +259,7 @@ Every fault of every cell is reported, each under its cell: `[:cells, name | pat
 | `Visualize.Board.arrange/2` | Each cell's placement at a container width, `[{name, %{x, y, w, h}}]` in reading order, stacked below the breakpoint (§1.6). |
 | `Visualize.Board.boxes/2` | Each cell's box in pixels at a container width, `%{name => {x, y, w, h}}`, after reflow (§1.6). |
 | `Visualize.Board.window/2` | The window resolved at now: `{from, to}` in UTC, or `nil` for a board with no window (§1.5). |
+| `Visualize.Board.window_text/2` | `window_text(window, zone)`: a resolved window as a person reads it, each end shifted into the zone and written `YYYY-MM-DD HH:MM:SS`, then the zone's name; `nil` for no window (§9.1, §12.1). |
 | `Visualize.Board.vars/2` | One cell's variables before narrowing: the board's with the cell's over them (§5). |
 | `Visualize.Board.required_sources/2` | As `required_sources/3` with `[]` options. |
 | `Visualize.Board.required_sources/3` | Every cell's slots through the store, keyed `{cell, slot}`, each with `fields`, `types` and its `requires` contract (§4.1); `limits:` for the components' designs. |
@@ -417,6 +418,7 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 | `Visualize.Board.Server.resize/2` | The container width set and every cell's box recomputed; `:ok`. |
 | `Visualize.Board.Server.tick/1` | One turn of the loop now; `:ok` once it is done. |
 | `Visualize.Board.Server.info/1` | The board's present state (§8.2). |
+| `Visualize.Board.Server.snapshot/1` | The board frozen as it stands: a `Visualize.Board.Snapshot` (§12.2). |
 | `Visualize.Board.Server.stop/1` | The board and its cells stopped; `:ok`. |
 | `Visualize.Board.Cell.child_spec/1` | A cell's child spec, `restart: :temporary`: the board starts its cells and restarts them itself (§8.3). |
 | `Visualize.Board.State.render/3` | A state drawn as the whole cell, an SVG root string (§8.4). |
@@ -449,7 +451,7 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 | `title` | the board's `meta.name` | the board's heading |
 | `width` | `1200` | the width the grid is arranged at until `BoardHook` pushes one |
 
-It renders a `<section phx-hook="BoardHook">` holding a header and the grid. **The header** names the board and shows the window **in the board's zone** (§1.5): the window the board process resolved in UTC, each end shifted into the zone by the host's time-zone database and written `YYYY-MM-DD HH:MM:SS`, followed by the zone's name. **The grid** is a CSS grid of 12 equal columns, rows `row_height` high and `gap` apart (§1.6, `Visualize.Board.layout/1`), and each cell is placed with `grid-column` and `grid-row` at its arrangement for the container's width (`Visualize.Board.arrange/2`). **Below the breakpoint the cells reflow** as §1.6 says, stacked full width in reading order, and the section carries the class `vis-board-stacked`. The width is the one the board's hook last pushed (§9.3), or the board process's own width once the page subscribes, and the `width` assign before either.
+It renders a `<section phx-hook="BoardHook">` holding a header and the grid. **The header** names the board and shows the window **in the board's zone** (§1.5): the window the board process resolved in UTC, each end shifted into the zone by the host's time-zone database and written `YYYY-MM-DD HH:MM:SS`, followed by the zone's name — `Visualize.Board.window_text/2`, which an export's header prints too (§12.1). **The grid** is a CSS grid of 12 equal columns, rows `row_height` high and `gap` apart (§1.6, `Visualize.Board.layout/1`), and each cell is placed with `grid-column` and `grid-row` at its arrangement for the container's width (`Visualize.Board.arrange/2`). **Below the breakpoint the cells reflow** as §1.6 says, stacked full width in reading order, and the section carries the class `vis-board-stacked`. The width is the one the board's hook last pushed (§9.3), or the board process's own width once the page subscribes, and the `width` assign before either.
 
 **Each cell is its own `Visualize.Components.Board.Cell`**, a `Phoenix.LiveComponent` with the id `"<board id>-<cell>"` (`cell_id/2`). A view (§8.3) updates one cell's component, so **the diff a frame costs is that cell's alone**: its SVG and its hooks' attributes, never the grid or another cell. A cell renders an `<article>`:
 
@@ -499,6 +501,7 @@ The order across cells is the board's (spec/14 §21.5, D-142). `BoardHook` (spec
 - **The host's part, as a host writes it.** The examples' tree holds `{Visualize.Board.Supervisor, name: Examples.Boards}` (§8.1) and `Examples.BoardDemo`, which runs the demo's feed processes. The demo board is started under `Examples.Boards` on the first visit and is the same process on every later one, so every visitor shares its window, which is the board's shared state (§8.2). The page holds the board's pid, renders `Visualize.Components.Board`, and forwards the board's messages with the one `handle_info/2` clause of §9.2.
 - **Five cells over live feeds.** *Load* is the gallery's *Load* design: its history is fed by a `Visualize.Signals` sine through the library's `Visualize.Feed.Signals` on the wall clock, and its dial's track by a fixed feed. *Wave* is the gallery's *Line Chart* with its `x` a time scale, over a second signal. *Memory* and *Run queue* are **one component in two cells**, each bound to its own in-process `:telemetry` metric through `Visualize.Feed.Telemetry`, which a probe emits every half second. *Offline* is the *Line Chart* bound to a feed that cannot be reached, so the designed "feed down" state is always on the page. A signal counts ticks and a board's window is UTC, so the demo's wall-clock wrapper is the one conversion between them: a window of instants is asked as ticks, and the ticks are answered as instants.
 - **The window moves.** Buttons set the board's window to the last 1, 5 or 15 minutes, and brushing a time chart sets it to the brushed span. Both re-ask every feed, and a double-click restores the window. The header shows the window in the board's zone. Below the breakpoint the cells stack.
+- **The board leaves the page** (#578, §12). *Export* buttons freeze the running board (`Visualize.Board.Server.snapshot/1`) and hand it back as a file: *SVG* (`Visualize.Board.Export.svg/2`), *PNG* (`png/2`; a host with no resvg answers 503 and says why), and *Snapshot*, the snapshot's JSON, which reopens with no feed. *Print* opens the printed pages (`html/2`, A4 portrait in the print theme) in a new tab for the browser to print to paper or a PDF. The buttons `POST` to `ExamplesWeb.BoardExportController` at `/board/export/:format`, since an export is an action on the running board and not a page of the site, so the site map does not list it.
 
 ## 11. A board in a bundle
 
@@ -546,3 +549,102 @@ Then the entries are imported through the store's own `import/2`, which issues e
 | `Visualize.Chart.Builder.Bundle.export_board/3` | `export_board(store, board, source)`: a bundle of the board's map form, every component its cells reference with their closure, and every stored theme the board or its components name, dependencies first, with provenance (§11.1). |
 | `Visualize.Chart.Builder.Bundle.import_board/2` | As `import_board/3` with `[]` options. |
 | `Visualize.Chart.Builder.Bundle.import_board/3` | `import_board(store, bundle, opts)`: every check of §11.2 before any entry is put, then the store's `import/2` and the board's refs rewritten through its table; `{:ok, %{board, ids, outside}}` or `{:error, errors}`; `limits:` as `Visualize.Board.from_map/2` takes them. |
+
+## 12. Exporting a board
+
+**Implemented** (#578, D-150). A dashboard is shared and printed, not only watched (#531 item 11). A board leaves the screen in three forms: one SVG document of the whole board, or a PNG of it; a **snapshot**, the board and its data frozen as one value that reopens anywhere; and printed pages. Each is drawn from a snapshot, so every form shows exactly the data the snapshot froze, with no store, no feed and no process.
+
+```
+running board ─ Server.snapshot/1 ─┐
+                                   ├─ %Snapshot{} ─┬─ Export.svg/2 ─ Export.png/2
+board + store + pools ─ realise/4 ─┘   (JSON)      └─ Export.pages/2 ─ Export.html/2
+```
+
+### 12.1 The board as one document
+
+`Visualize.Board.Export.svg(snapshot, opts)` draws the board at a width as one SVG document:
+
+- **The page.** The document is the grid's width with a margin of the board's `gap` on each side. A rectangle of the theme's `background` fills it.
+- **The header**, when the board has a name or a window: the board's `meta.name` (or `title:`) in the theme's `title_size`, and below it the window in the board's zone, `Visualize.Board.window_text/2`, as the board component's header prints it (§9.1). The root's accessible title is the name and its description the window.
+- **The cells, at their grid boxes.** Each cell is a group carrying `data-vis-cell` and `data-vis-state` (`Visualize.Board.State.name/1`), translated to its box of `Visualize.Board.boxes/2` at the width, offset by the margin and the header. In it, in order: the cell's `title`, when it has one, in a strip one and a half `label_size`s high; the state's banner (§8.4), when there is a chart and the state is not `:live`; and the chart. Where the cell has no chart — loading, no data, down or stale before anything was drawn, crashed — the state's panel (`Visualize.Board.State.render/3`) stands in its place: **the same drawing the board component shows** (§9.1).
+- **Each cell's own SVG, byte for byte.** A chart, a banner or a panel is the cell's own SVG root, placed unchanged inside a viewport (`<svg x y width height viewBox>`) whose view box is that root's own size, so a strip above it scales it to fit (`xMidYMid meet`) rather than redraws it. The chart is the view a cell process draws of the same data (§12.2). Ids inside a chart are derived from content (a gradient's, a filter's, the accessible root's, spec/14 §21.2), so two cells that draw one definition share an id with one body, and putting the cells into one document changes none of them.
+
+Options: `width:` (default the snapshot's), `theme:` (default the snapshot's), `title:`, and `resolve:`. Under `resolve: :css`, the default, every theme value is the custom-property reference with its literal as fallback that the cells draw (spec/08 §7.3), so a page's stylesheet themes the export as it themes the board. Under `resolve: :literal` every reference is replaced by the literal it carries, `Visualize.Board.Export.literal/1`. Since a theme writes each slot's literal as its reference's fallback, this is the document in `:literal` mode, for a reader of no CSS. A reference with no fallback is left as it is.
+
+**PNG.** `Visualize.Board.Export.png(snapshot, opts)` is `svg/2` with `resolve: :literal`, rasterised by `Visualize.Render.to_png/2` (spec/09 §9, D-121), and answers as `to_png/2` does: `{:ok, png, warnings}` or `{:error, reason}`. Its options are `svg/2`'s and `to_png/2`'s raster and font options. resvg reads no custom property (spec/09 §9.1), which is why the literal form is the one rasterised.
+
+### 12.2 The snapshot
+
+A **snapshot** (`%Visualize.Board.Snapshot{}`) is a board frozen at one instant, as one value:
+
+| Field | Meaning |
+|---|---|
+| `version` | the schema version it was written at (§12.3) |
+| `board` | the `%Visualize.Board{}` |
+| `now` | the board's now when it was taken, a UTC `DateTime`, or `nil` |
+| `window` | the window resolved at now, `{from, to}` in UTC, or `nil` |
+| `width` | the container width the board was drawn at |
+| `theme` | the `%Visualize.Theme{}` the cells were drawn in |
+| `cells` | by name: `chart`, the cell's component **prepared** as `Visualize.Board.components/3` prepares it (resolved, flattened, the group and zone written); `vars`, its variables narrowed; `slots`, each slot's `%{delivery, schema, status}` as the board last handed it to the cell (§8.2), or `nil` before any; and `crashed`, `nil`, or the words of the reason a crashed cell's process died |
+
+**A bundle carries definitions; a snapshot carries data.** A bundle (§11) carries a board and the store entries it refers to, by id, to be imported into another store, re-keyed and edited. A snapshot carries each cell's component already resolved, with the rows it showed, the window and the theme, to be looked at. It refers to no id, needs no store and is never imported into one. A snapshot of a board is to the board what a printout is to a document: the same content, at one moment, with nothing live behind it.
+
+**Taking one.**
+
+- `Visualize.Board.Server.snapshot(board)` freezes a running board (§8): its board, now, resolved window, width and theme, every cell's prepared component and variables, the slots the board last sent each cell, and the reason of any cell that has crashed. It is a call to the board process, which already holds all of this. No cell is called, so a slow cell does not hold the snapshot.
+- `Visualize.Board.Snapshot.realise(board, store, pools, opts)` freezes a board purely. It is `Visualize.Board.realise/4` (§6) over the same arguments, refused with every fault as `realise/4` reports them. On success each cell's slots are its pool's sources as deliveries (a delivery as it is, any other source as its rows), with the schema that application found for each slot and the status `:live`. Its options are `realise/4`'s. With `now:` the window is the board's resolved at it. Without, a fixed window is kept and a trailing one is `nil`.
+
+A snapshot keeps only what its codecs write: each delivery's rows as a list, each status as `:loading`, `:live`, `:stale` or `{:down, words}`, a down reason as the words a state prints for it (`Feed down: …`), and a crash's reason as its inspected text. So a snapshot that has been through JSON is equal to the one written (§12.3).
+
+**Drawing one.** `Visualize.Board.Snapshot.views(snapshot, opts)` draws every cell, purely, as `%{name => %Visualize.Board.View{}}`. A cell's view is **the view a cell process draws of the same data as its first frame**. The cell process and the snapshot draw through the same steps: the slots' rows placed by their timestamp with a break in every gap (§8.5), the component applied at the cell's box with the board's now and the slots' schemas, compiled, each frame stepped once, wrapped in the accessible root titled with the cell's title, and the state decided and drawn (§8.3–§8.4). A crashed cell is its crashed panel. A running cell that has eased between frames (a transition in flight, spec/14 §12.5) may differ from its snapshot only by where the easing stood. The snapshot draws the data at rest. Options are `width:` and `theme:`, by default the snapshot's. A snapshot carries data rather than pictures, so it redraws at any width and in any theme: printed pages are the same snapshot in the print theme at the page's width (§12.4).
+
+### 12.3 The snapshot's codecs
+
+A snapshot follows the version policy of spec/14 §9.1 (D-137) and the board's codecs (§2):
+
+- **The map form.** `Visualize.Board.Snapshot.to_map/1` is plain data: `version`; `board` in its map form (§2.1); `now`; `window` as `nil` or `%{from, to}`; `width`; `theme` as a theme node (`Visualize.Chart.Theme.node/1`, spec/14 §9.3); and `cells`, each with `chart` in a design's map form, `vars`, `crashed`, and `slots`. Each slot is the delivery's `rows`, `window`, `resolution`, `capped`, `reduced_by` and its schema `version`, the schema's fields as `schema`, and the `status`. A slot with no delivery has `rows: nil`. `Visualize.Board.Snapshot.from_map/2` reads it back, and `from_map(to_map(s))` is `{:ok, s}`.
+- **The JSON form.** `Visualize.Board.Snapshot.to_json/1` writes the map form stamped `"$version"`, behind the optional Jason as every JSON function is. Each document inside is spelt as it is on its own: the board as its JSON form (§2.2, with its own stamp), each component as a design's (spec/14 §11) and the theme as a theme node's. Values JSON has no form for are the tagged terms of spec/14 §11.2. **Rows are written column by column**, `{"fields": [name, …], "rows": [[value, …], …]}`, so each field name keeps its spelling: an atom as `{"$atom": "t"}`, a string as itself, which a JSON object's keys could not keep. A row that lacks a field has `{"$absent": true}` in its place. A schema's fields are a list of `[name, description]` pairs for the same reason, and a description's `status` a list of `[value, role]` pairs. `Visualize.Board.Snapshot.from_json/2` reads it back, and `from_json(to_json(s))` is `{:ok, s}`. A row value must be one of spec/14 §11.2's terms (a number, a string, a boolean, `nil`, an atom, a `DateTime`, a list or a map of them).
+- **Reading, in order.** A newer snapshot is refused by name before anything is read: `{:newer_schema, needs, this}` at `[:version]` in the map form and at `["$version"]` in the JSON form. No stamp reads as the current version, and snapshots begin at version 2. The document is then held to the `depth` and `items` limits under `limits:` (spec/14 §9.2), before any key is decoded in the JSON form. `items` bounds a slot's rows as it bounds every list. Then every key is checked and every fault reported, each at its path: an unknown key is `:unknown_key`; `board` and `cells` are `:required`; the board is read by `Visualize.Board.from_map/2`, its faults under `[:board]`; the theme by `Visualize.Chart.Theme.from_map/2`; each cell's component by `Visualize.Chart.from_map/2` with the limits, its faults under `[:cells, name, :chart]`; each schema by `Visualize.Data.Schema.new/1`, its faults under the slot's `schema`; `now` and the window's ends are `{:type, :utc_datetime}` unless UTC `DateTime`s; a window whose `from` is after its `to` is `{:window, :inverted}`; a `width` that is not positive is `{:type, :positive}`; a row that is not a map is `{:type, :row}`; a status that is none of the four is `{:type, :status}`. **Every cell of the board must be in `cells`**: a missing one is `:required` at `[:cells, name]`, and a cell the board does not have is `:not_on_board` there. `Visualize.Board.Snapshot.format_error/1` words a fault with the root named `snapshot`.
+
+### 12.4 Print
+
+**The print theme.** `Visualize.Theme.print/0` (spec/08 §7.2), the built-in `:print`, is paper: a white background and a white surface, so a printer lays no ink under the data; near-black text and axes, and a grid dark enough to survive a photocopy; the default theme's series; and the colour-safe theme's blue → orange → red `status` ramp. A printed page is read in whatever light and by whatever eyes it reaches, often in greyscale, where the ramp's falling lightness and each role's glyph (spec/14 §21.7) still carry the order. It passes the contracts of spec/08 §7.5.
+
+**The page layout.** `Visualize.Board.Export.paginate(board, opts)` lays a board out on paper, purely, as `%{size: {w, h}, width: width, pages: [%{name => {x, y, w, h}}, …]}`: the page's size in CSS pixels (96 to the inch), the width the cells are drawn at, and each page's cells at their boxes on the page.
+
+- **Paper.** `paper:` is `:a4` (210 × 297 mm, the default) or `:letter` (8.5 × 11 in). `orientation:` is `:portrait` (the default) or `:landscape`. `margin:` is the page's margin in pixels, `48` (half an inch) by default.
+- **Reflowed to the page.** The board is arranged at the page's width less its margins (`Visualize.Board.boxes/2`), as a container of that width arranges it (§1.6). A portrait A4 page is narrower than the default breakpoint, so its cells stack in reading order, each across the page. A landscape page keeps the grid.
+- **Bands, never split.** The cells are taken in **bands**: a band is the cells whose rows overlap, joined until no cell in it shares a row with one outside it. A band is the least that can be moved down the page without cutting a cell. Bands are placed below a header of two lines (the name, and the window with the page's number), a `gap` apart, and a band that does not fit below the last starts the next page. A band taller than a page's room is **scaled down to fit one page**, its width with it so a cell keeps its proportions, and centred. No cell is split across pages, and every box lies inside the margins, below the header.
+- **Pages.** `Visualize.Board.Export.pages(snapshot, opts)` draws each page as its own SVG document, its root `width` and `height` in the paper's unit (`210mm` by `297mm`) over a view box in pixels, so it prints at the paper's size. The header names the board and gives the window and `page n of m`. The cells are drawn as §12.1 draws them, from the snapshot redrawn at the layout's width in `theme:`, `Visualize.Theme.print/0` by default, and a scaled band is placed scaled. Its options are `paginate/2`'s with `svg/2`'s `title:` and `resolve:`.
+- **One document to print.** `Visualize.Board.Export.html(snapshot, opts)` puts the pages in one HTML document whose `@page` rule is the paper's size with no margin, each page filling one sheet. A browser prints it as paper or as one multi-page PDF.
+
+**Why SVG pages and not a PDF.** resvg, the rasteriser the library already uses (D-121), makes PNG and not PDF. No PDF writer is cheap to add: a PDF library is a native or a large dependency for one output, and none is on the hosts this library is run on. Each page is a standalone SVG that `Visualize.Render.to_png/2` rasterises with `resolve: :literal`, and the HTML document gives a host that wants a PDF one through any browser's print, which every host that shows a board already has.
+
+### 12.5 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Board.Export.svg/1` | As `svg/2` with `[]` options. |
+| `Visualize.Board.Export.svg/2` | The board as one SVG document: the header, and each cell at its box with its title, its banner and its own SVG embedded byte for byte, or its state's panel (§12.1). |
+| `Visualize.Board.Export.png/1` | As `png/2` with `[]` options. |
+| `Visualize.Board.Export.png/2` | `svg/2` with `resolve: :literal`, rasterised by `Visualize.Render.to_png/2`; as `to_png/2` answers (§12.1). |
+| `Visualize.Board.Export.literal/1` | An SVG with every custom-property reference replaced by the fallback it carries (§12.1). |
+| `Visualize.Board.Export.paginate/1` | As `paginate/2` with `[]` options: A4 portrait. |
+| `Visualize.Board.Export.paginate/2` | The board laid out on paper, purely: the page's size, the drawing width, and each page's cells at their boxes, bands never split (§12.4). |
+| `Visualize.Board.Export.pages/1` | As `pages/2` with `[]` options. |
+| `Visualize.Board.Export.pages/2` | One SVG document per page, of the paper's size, in the print theme by default (§12.4). |
+| `Visualize.Board.Export.html/1` | As `html/2` with `[]` options. |
+| `Visualize.Board.Export.html/2` | The pages in one HTML document with an `@page` rule of the paper's size (§12.4). |
+| `Visualize.Board.Snapshot.realise/3` | As `realise/4` with `[]` options. |
+| `Visualize.Board.Snapshot.realise/4` | A snapshot of a board realised purely: `Visualize.Board.realise/4`'s faults, or `{:ok, snapshot}` (§12.2). |
+| `Visualize.Board.Snapshot.views/1` | As `views/2` with `[]` options: the snapshot's width and theme. |
+| `Visualize.Board.Snapshot.views/2` | Every cell drawn, purely, as the cell process draws the same data: `%{name => %Visualize.Board.View{}}`; `width:` and `theme:` (§12.2). |
+| `Visualize.Board.Snapshot.to_map/1` | The snapshot as plain data (§12.3). |
+| `Visualize.Board.Snapshot.from_map/1` | As `from_map/2` with `[]` options. |
+| `Visualize.Board.Snapshot.from_map/2` | The snapshot of a map: the version gate, the limits, then every key; `{:ok, snapshot}` or every fault (§12.3). |
+| `Visualize.Board.Snapshot.to_json/1` | The snapshot as a JSON document stamped `"$version"`, rows column by column (§12.3). |
+| `Visualize.Board.Snapshot.from_json/1` | As `from_json/2` with `[]` options. |
+| `Visualize.Board.Snapshot.from_json/2` | The snapshot of a JSON document, `"$version"` and the limits checked before a key is decoded (§12.3). |
+| `Visualize.Board.Snapshot.format_error/1` | One fault as a line a person reads, the root named `snapshot`. |
+
+`Visualize.Board.Server.snapshot/1` is in §8.6, `Visualize.Board.window_text/2` in §7.1 and `Visualize.Theme.print/0` in spec/08 §7.6.
