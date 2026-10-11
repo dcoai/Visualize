@@ -64,7 +64,8 @@ defmodule Visualize.Chart.Schema.Frame do
     [
       spec(:kind, {:enum, @scale_kinds}, :geometry, required: true),
       spec(:domain, :extent, :geometry, default: :auto),
-      spec(:range, {:one_of, [:extent, :ramp, :name]}, :geometry, default: :auto),
+      # A map of colours pins each category by name: a schema's `status` (§4.3, D-143).
+      spec(:range, {:one_of, [:extent, :ramp, :colour_map, :name]}, :geometry, default: :auto),
       spec(:nice, :boolean, :geometry, default: false),
       spec(:clamp, :boolean, :geometry, default: false),
       spec(:base, :number, :geometry, default: 10),
@@ -76,6 +77,8 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:align, :number, :geometry, default: 0.5),
       spec(:round, :boolean, :geometry, default: false),
       spec(:unknown, :term, :geometry),
+      # Which end of the domain is better, placing a ramp range by worth (§4.3, D-143).
+      spec(:polarity, {:enum, Visualize.Data.Schema.polarities()}, :geometry),
       spec(:transition, {:node, :transition}, :geometry),
       spec(:start, :number, :geometry, default: 0, range: {-360, 360, 5}),
       spec(:sweep, :number, :geometry, default: 360, range: {-360, 360, 5}),

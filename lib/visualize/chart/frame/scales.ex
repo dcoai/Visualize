@@ -251,13 +251,24 @@ defmodule Visualize.Chart.Frame.Scales do
 
   # A rect's `value` reaches the colour scale in every frame (spec/14 §4.3): in a polar
   # frame `value` is the rose's radius, not the rect's.
-  def scale_for(:polar, %{type: :rect} = mark, :value),
-    do: Map.get(Map.get(mark, :scales, %{}), :color, :color)
+  def scale_for(:polar, %{type: :rect} = mark, :value), do: colour_scale(mark)
 
   def scale_for(kind, mark, channel) do
     case Map.get(channel_scales(kind), channel) do
       nil -> nil
       name -> Map.get(Map.get(mark, :scales, %{}), name, name)
+    end
+  end
+
+  @doc false
+  # A mark's colour scale: `color`, or what its `scales` node renames `color` to — the one
+  # scale its series' paint, its style's colour bindings and its labels read (spec/14
+  # §4.3, D-143).
+  @spec colour_scale(map()) :: atom()
+  def colour_scale(mark) do
+    case Map.get(mark, :scales, %{}) do
+      %{color: name} when is_atom(name) and name not in [nil, true, false] -> name
+      _none -> :color
     end
   end
 
@@ -323,11 +334,13 @@ defmodule Visualize.Chart.Frame.Scales do
           scale in inferring,
           do: {scale, values(value, rows)}
 
+    colour = colour_scale(mark)
+
     colours =
       for key <- [:fill, :stroke],
-          :color in inferring,
+          colour in inferring,
           {:field, field} <- [Map.get(Style.node(styles, Map.get(mark, :style)), key)],
-          do: {:color, column(rows, field)}
+          do: {colour, column(rows, field)}
 
     # An offset field's values are its offset scale's domain (spec/14 §4.3).
     offsets =
@@ -358,15 +371,20 @@ defmodule Visualize.Chart.Frame.Scales do
   defp build(name, node, values, plot, theme, axes) do
     kind = get(node, :kind)
     domain = domain(kind, name, get(node, :domain), values)
+    worth = worth(get(node, :polarity))
 
-    range =
+    {domain, range} =
       case get(node, :range) do
         {:ramp, ramp} ->
-          over_ramp(kind, name, ramp, domain, theme)
+          {domain, over_ramp(kind, name, ramp, domain, theme, worth)}
+
+        %{} = colours when not is_struct(colours) ->
+          pinned(kind, name, colours, domain)
 
         given ->
-          range(kind, name, sweep(name, node, given), plot, theme, axes)
-          |> ring(kind, name, domain)
+          {domain,
+           range(kind, name, sweep(name, node, given), plot, theme, axes, worth)
+           |> ring(kind, name, domain)}
       end
 
     kind
@@ -382,11 +400,39 @@ defmodule Visualize.Chart.Frame.Scales do
   # The colour scale draws a value outside its domain in a visible neutral, the theme's
   # `:axis` slot, unless the node says otherwise (spec/14 §4.3, D-122): a colour that
   # vanished would hide the mismatch, and the backends disagree about a missing fill.
-  defp unknown(:ordinal, :color, node) do
+  defp unknown(:ordinal, :color, node), do: neutral_unknown(node)
+
+  # A map of colours is a colour scale whatever its name (§4.3, D-143).
+  defp unknown(:ordinal, _name, %{range: %{} = colours} = node) when not is_struct(colours),
+    do: neutral_unknown(node)
+
+  defp unknown(_kind, _name, node), do: node
+
+  defp neutral_unknown(node) do
     if get(node, :unknown) == nil, do: Map.put(node, :unknown, :axis), else: node
   end
 
-  defp unknown(_kind, _name, node), do: node
+  # A range given as a map of colours pins each category by name (spec/14 §4.3, D-143): the
+  # domain keeps the members the map names, each mapped to its colour, so any other value is
+  # outside it and draws `unknown`. It is an ordinal scale's; a scale of any other kind has
+  # no categories to pin.
+  defp pinned(:ordinal, _name, colours, domain) do
+    members = Enum.filter(domain, &Map.has_key?(colours, &1))
+    {members, Enum.map(members, &Map.fetch!(colours, &1))}
+  end
+
+  defp pinned(kind, name, _colours, _domain) do
+    raise ArgumentError,
+          "scale #{inspect(name)} (#{kind}) cannot range over a map of colours: a map pins " <>
+            "categories, which an :ordinal scale has; list the colours instead"
+  end
+
+  # Where a ramp position is read, by polarity (spec/14 §4.3, D-143): as it is when lower is
+  # better or nothing is said, reversed when higher is, folded about the middle when either
+  # way from it is worse.
+  defp worth(:higher_is_better), do: fn t -> 1 - t end
+  defp worth(:neutral), do: fn t -> abs(2 * t - 1) end
+  defp worth(_lower_or_nil), do: fn t -> t end
 
   # An `angle` scale with a start or a sweep has its range said in degrees (§4.3, #390);
   # a list range wins, and any other scale's start and sweep say nothing.
@@ -556,8 +602,11 @@ defmodule Visualize.Chart.Frame.Scales do
   # A colour scale's `:auto` range is theme-derived whatever its name: its output is a
   # colour, the plot area has nothing to offer it, and the theme's ramp of that meaning is
   # the colour that promises "more" or "either side of the middle" (spec/14 §4.3, D-135).
-  defp range(kind, name, :auto, _plot, theme, _axes) when kind in @colour,
-    do: over_ramp(kind, name, kind, [], theme)
+  defp range(kind, name, :auto, _plot, theme, _axes, worth) when kind in @colour,
+    do: over_ramp(kind, name, kind, [], theme, worth)
+
+  defp range(kind, name, range, plot, theme, axes, _worth),
+    do: range(kind, name, range, plot, theme, axes)
 
   defp range(_kind, :x, :auto, plot, _theme, _axes), do: [0, plot.width]
   defp range(_kind, :y, :auto, plot, _theme, _axes), do: [plot.height, 0]
@@ -595,22 +644,25 @@ defmodule Visualize.Chart.Frame.Scales do
   # threshold scale its buckets, each to a ramp position the theme resolves in the render
   # target's mode like any slot. A scale whose range length is its bucket count has no count
   # to take from a ramp, and a position scale has no use for a colour.
-  defp over_ramp(kind, name, ramp, _domain, theme) when kind in @colour do
+  defp over_ramp(kind, name, ramp, _domain, theme, worth) when kind in @colour do
     known_ramp!(name, ramp)
-    fn t -> Theme.ramp(theme, ramp, t) end
+    fn t -> Theme.ramp(theme, ramp, worth.(t)) end
   end
 
-  defp over_ramp(:ordinal, name, ramp, domain, _theme), do: spread(name, ramp, length(domain))
+  defp over_ramp(:ordinal, name, ramp, domain, _theme, worth),
+    do: name |> spread(ramp, length(domain)) |> Enum.map(&placed(&1, worth))
 
-  defp over_ramp(:threshold, name, ramp, domain, _theme),
-    do: spread(name, ramp, length(domain) + 1)
+  defp over_ramp(:threshold, name, ramp, domain, _theme, worth),
+    do: name |> spread(ramp, length(domain) + 1) |> Enum.map(&placed(&1, worth))
 
-  defp over_ramp(kind, name, ramp, _domain, _theme) do
+  defp over_ramp(kind, name, ramp, _domain, _theme, _worth) do
     raise ArgumentError,
           "scale #{inspect(name)} (#{kind}) cannot range over {:ramp, #{inspect(ramp)}}: a ramp " <>
             "is a colour scale's range, on an :ordinal, :threshold, :sequential or :diverging " <>
             "scale; list the colours instead"
   end
+
+  defp placed({:ramp, ramp, t}, worth), do: {:ramp, ramp, worth.(t)}
 
   defp spread(name, ramp, n) do
     known_ramp!(name, ramp)

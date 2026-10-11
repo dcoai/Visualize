@@ -273,6 +273,7 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:adopted, v), do: match?({:frame, _f, _s}, v)
   defp shape?(:key_order, v), do: match?({:keys, keys} when is_list(keys), v)
   defp shape?(:ramp, v), do: match?({:ramp, name} when is_atom(name), v)
+  defp shape?(:colour_map, v), do: is_map(v) and not is_struct(v)
   # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
   defp shape?({:enum, _}, v), do: is_atom(v)
   defp shape?(:term, _), do: true
@@ -307,12 +308,13 @@ defmodule Visualize.Chart.Schema do
     ]
   end
 
-  # A sync group shares hover in domain units; `frame` names the frame whose `x` it reads
-  # (spec/14 §2.9, D-116).
+  # A sync group shares hover in domain units; `frame` names the frame whose `x` it reads;
+  # `brush` is the design's own brush on that frame (spec/14 §2.9, D-116, D-143).
   defp design_node(:interaction) do
     [
       spec(:sync, :string, :binding),
-      spec(:frame, {:ref, :frame}, :binding)
+      spec(:frame, {:ref, :frame}, :binding),
+      spec(:brush, {:enum, [:x]}, :binding)
     ]
   end
 

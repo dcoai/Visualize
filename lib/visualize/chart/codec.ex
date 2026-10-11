@@ -42,6 +42,18 @@ defmodule Visualize.Chart.Codec do
     do: %{"$ramp" => [Atom.to_string(name), t]}
 
   defp value(:ramp, {:ramp, name}) when is_atom(name), do: %{"$ramp" => Atom.to_string(name)}
+
+  # A map of colours as `[category, colour]` pairs in the categories' term order (spec/14
+  # §11.2, D-143): an object's keys are strings, and a category need not be one.
+  defp value(:colour_map, map) when is_map(map) and not is_struct(map) do
+    pairs =
+      map
+      |> Enum.sort_by(fn {category, _colour} -> category end)
+      |> Enum.map(fn {category, colour} -> [term(category), value(:colour, colour)] end)
+
+    %{"$colours" => pairs}
+  end
+
   defp value({:node, kind}, v) when is_map(v) and not is_struct(v), do: node(kind, v)
   defp value({:list, t}, v) when is_list(v), do: Enum.map(v, &value(t, &1))
 
@@ -174,6 +186,13 @@ defmodule Visualize.Chart.Codec do
       nil -> v
       found -> {:ramp, found, t}
     end
+  end
+
+  defp read(:colour_map, %{"$colours" => pairs} = v) when map_size(v) == 1 and is_list(pairs) do
+    if Enum.all?(pairs, &match?([_, _], &1)),
+      do:
+        Map.new(pairs, fn [category, colour] -> {read_term(category), read(:colour, colour)} end),
+      else: v
   end
 
   defp read(:ramp, %{"$ramp" => name} = v) when map_size(v) == 1 do
@@ -314,6 +333,10 @@ defmodule Visualize.Chart.Codec do
   defp json_shape?(:adopted, v), do: is_map(v) and is_map_key(v, "$adopted") and map_size(v) == 1
   defp json_shape?(:key_order, v), do: is_map(v) and is_map_key(v, "$keys") and map_size(v) == 1
   defp json_shape?(:ramp, v), do: is_map(v) and is_map_key(v, "$ramp") and map_size(v) == 1
+
+  defp json_shape?(:colour_map, v),
+    do: is_map(v) and is_map_key(v, "$colours") and map_size(v) == 1
+
   # An enumeration's JSON is a string, so a tagged object beside one is never it (#492).
   defp json_shape?({:enum, _}, v), do: is_binary(v)
   defp json_shape?({:map, _}, v), do: is_map(v) and not is_struct(v)

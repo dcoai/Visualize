@@ -386,6 +386,78 @@ A domain is inferred from the transformed rows, so a stack's `y1` sets the `y` a
 Contract: [spec/14 §5.4](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#54-data-and-transforms) and
 [§16.5](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#165-data-nodes-and-transforms).
 
+## Overlays: events, thresholds and the brush
+
+What a dashboard draws over a chart is marks fed from sources, so every host that applies
+the design draws them. An event at an instant is a `rule/3` at `x`, an event that lasted
+an `x_band/3`, and a threshold a `rule/3` at `y`, a horizontal line across the plot. In a
+cartesian frame both are cut to the plot, so an event that began before the window does
+not cross the axis.
+
+Colour them by meaning, not by series. A mark's `scales: %{color: name}` gives it a colour
+scale of its own, so the lines keep their series' colours. An `:ordinal` scale whose
+`range` is a map pins each severity to a role, which every theme draws in its own tones.
+A feed's schema can supply that map, `range: fact(:events, :severity, :status)`, and a
+target line, `y: fact(:primary, :latency, :target)`.
+
+```elixir
+import Visualize.Chart.Build
+
+events = [
+  %{at: 2, ends: nil, title: "deploy", severity: "info"},
+  %{at: 0, ends: 1.5, title: "maintenance", severity: "warning"}
+]
+
+{:ok, overlaid} =
+  Visualize.Chart.compose([
+    chart(),
+    source(:load, [:t, :v, :host]),
+    source(:events, [:at, :ends, :title, :severity]),
+    source(:limits, [:value, :severity]),
+    cartesian(),
+    linear_scale(:x),
+    linear_scale(:y, domain: [0, :auto]),
+    ordinal_scale(:severity, range: %{"info" => :info, "warning" => :warning, "critical" => :bad}),
+    line(:load, %{x: :t, y: :v, series: :host}),
+    rule(filter(from(:events), :ends, test: :absent), %{x: :at},
+      scales: %{color: :severity},
+      style: %{stroke: {:field, :severity}, stroke_dasharray: [3, 3]},
+      label: %{text: "\#{field(:title)}"}
+    ),
+    x_band(filter(from(:events), :ends, test: :present), %{x0: :at, x1: :ends},
+      scales: %{color: :severity},
+      style: %{fill: {:field, :severity}, fill_opacity: 0.15}
+    ),
+    rule(:limits, %{y: :value}, scales: %{color: :severity}, style: %{stroke: {:field, :severity}})
+  ])
+
+limits = [%{value: 5.5, severity: "critical"}]
+pool = %{load: hosts, events: events, limits: limits}
+{:ok, applied} = Visualize.Chart.apply(overlaid, sources: pool)
+Visualize.Chart.render(applied) =~ "var(--vis-bad"
+#=> true
+```
+
+A threshold feeds the `y` domain, so it is always in view. `polarity:` on a colour scale over
+a ramp (`range: {:ramp, :status}`) places the good end at the better end of the domain: a
+`:threshold` scale at a feed's target with `polarity: fact(:primary, :latency, :polarity)`
+colours a reading beyond the target `:bad`.
+
+The brush belongs to the design too. With `interaction(brush: :x)` the chart writes its plot
+area and its `x` mapping. `BrushHook` on a container around the rendered chart then pushes
+`brush_select` with `"domain" => [lo, hi]` (milliseconds for a time `x`), so the handler
+needs no margins and no scale to invert:
+
+```elixir
+Visualize.Chart.Build.interaction(brush: :x)
+#=> %{interaction: %{brush: :x}}
+```
+
+Contract: [spec/14 §5.2](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#52-types-and-channels),
+[§4.3](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#43-scales) and
+[§2.9](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#29-interaction); the hook in
+[spec/10 §6.5](https://github.com/dcoai/Visualize/blob/main/spec/10-liveview-integration.md#65-the-designs-brush).
+
 ## Composition and validation
 
 There are two ways to merge fragments, and they differ on purpose:

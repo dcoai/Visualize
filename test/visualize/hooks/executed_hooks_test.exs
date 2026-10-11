@@ -796,6 +796,98 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
     end
   end
 
+  describe "the design's brush (#565, spec/10 §6.5)" do
+    # A chart whose design says `brush: :x`, alone on its page: its frame group carries the
+    # brush's kind, x mapping and plot area, and the hook element only names the event.
+    defp designed(size, domain) do
+      design = %{
+        version: 2,
+        interaction: %{brush: :x},
+        frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear, domain: domain}}}}
+      }
+
+      {:ok, %{frame: frame}} = Chart.apply(design, size: size)
+      {width, height} = size
+      %{size: [width, height], brush: Frame.brush_attrs(frame)}
+    end
+
+    @designed_prelude """
+    function chart(id, m, own) {
+      const [w, h] = m.size;
+      const g = Stub.markup('g', m.brush);
+      const svg = Stub.markup('svg', {viewBox: '0 0 ' + w + ' ' + h}, [g]);
+      svg.rect = {left: 0, top: 0, width: w, height: h};
+      const el = Stub.markup('div', Object.assign({'data-brush-event': 'zoom'}, own || {}), [svg]);
+      el.id = id;
+      return {hook: Stub.mount(BrushHook, el), g};
+    }
+    const capture = (hook) => ['x', 'y', 'width', 'height'].map((a) => Number(hook.captureRect.getAttribute(a)));
+    const drag = (hook, from, to) => {
+      Stub.fire(hook.captureRect, 'mousedown', {button: 0, clientX: from, clientY: 100, preventDefault() {}});
+      Stub.fire(document, 'mousemove', {clientX: to, clientY: 100, preventDefault() {}});
+      Stub.fire(document, 'mouseup', {});
+    };
+    """
+
+    test "a chart in no sync group captures its plot and pushes the window in domain units" do
+      assert {:ok, %{"log" => log, "report" => report}} =
+               run("""
+               #{@designed_prelude}
+               const {hook, g} = chart('solo', #{js(designed({600, 200}, [0, 100]))});
+               const mounted = {capture: capture(hook), type: hook.brushType, sync: hook.sync};
+
+               Stub.mark('first');
+               // 20 to 50 of [0, 100]: chart x 40 + 108 to 40 + 270 of its 540-wide plot.
+               drag(hook, 148, 310);
+
+               // Re-rendered for the window brushed, at a new width: the hook reads it again.
+               g.setAttribute('data-vis-brush-x', '20,50,40,380,400');
+               g.setAttribute('data-vis-brush-extent', '40,20,380,170');
+               hook.updated();
+               const updated = capture(hook);
+               Stub.mark('second');
+               drag(hook, 108, 210);
+               Stub.done({mounted, updated});
+               """)
+
+      # The capture area is the design's plot, and the brush its kind, with no group joined.
+      assert report["mounted"] == %{"capture" => [40, 20, 540, 150], "type" => "x", "sync" => nil}
+      assert report["updated"] == [40, 20, 340, 150]
+
+      assert [
+               %{
+                 "name" => "zoom",
+                 "payload" => %{
+                   "x0" => 148,
+                   "x1" => 310,
+                   "y0" => 20,
+                   "y1" => 170,
+                   "domain" => [20, 50]
+                 }
+               }
+             ] = pushes(after_mark(log, "first") -- after_mark(log, "second"))
+
+      # 68 to 170 of the new 340-wide plot over [20, 50]: 26 to 35.
+      assert [%{"name" => "zoom", "payload" => %{"domain" => [lo, hi]}}] =
+               pushes(after_mark(log, "second"))
+
+      assert_in_delta lo, 26, 0.01
+      assert_in_delta hi, 35, 0.01
+    end
+
+    test "the element's own type and extent win over the design's" do
+      assert {:ok, %{"report" => report}} =
+               run("""
+               #{@designed_prelude}
+               const own = {'data-brush-type': 'xy', 'data-brush-extent': '0,0,600,200'};
+               const {hook} = chart('own', #{js(designed({600, 200}, [0, 100]))}, own);
+               Stub.done({capture: capture(hook), type: hook.brushType});
+               """)
+
+      assert report == %{"capture" => [0, 0, 600, 200], "type" => "xy"}
+    end
+  end
+
   describe "the crosshair sits on the drawing (#507, spec/10 §13.3)" do
     # Three smooth series over 24 hours, as /interaction draws them, realised at `size`:
     # the crosshair's attributes as a dataset, and each series' vertices in chart units.

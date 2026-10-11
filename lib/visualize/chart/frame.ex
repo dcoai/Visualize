@@ -70,6 +70,7 @@ defmodule Visualize.Chart.Frame do
             z: 0,
             background: nil,
             sync: nil,
+            brush: nil,
             forces: %{}
 
   @typedoc "A frame kind of spec/14 §4.1."
@@ -101,6 +102,7 @@ defmodule Visualize.Chart.Frame do
           z: integer(),
           background: term() | nil,
           sync: String.t() | nil,
+          brush: :x | nil,
           forces: map()
         }
 
@@ -212,6 +214,7 @@ defmodule Visualize.Chart.Frame do
       z: Map.get(node, :z, Schema.default(:frame, :z)),
       background: Map.get(node, :background),
       sync: sync_group(chart, name),
+      brush: brush(chart, name),
       theme: theme,
       styles: styles,
       design_styles: chart.styles,
@@ -288,7 +291,7 @@ defmodule Visualize.Chart.Frame do
     group =
       Element.group(children,
         style: %{class: "frame"},
-        attrs: sync_attrs(frame),
+        attrs: Map.merge(sync_attrs(frame), brush_attrs(frame)),
         transform: Transform.translate(frame.margin.left, frame.margin.top)
       )
       |> stamp([:frames, frame.name], paths?)
@@ -338,16 +341,57 @@ defmodule Visualize.Chart.Frame do
   def sync_attrs(%__MODULE__{sync: nil}), do: %{}
 
   def sync_attrs(%__MODULE__{sync: group} = frame) do
+    %{"data-vis-sync" => group, "data-vis-sync-x" => numbers(x_mapping(frame))}
+  end
+
+  @doc """
+  The attributes of the design's brush for the frame it brushes (spec/14 §2.9, D-143):
+  `data-vis-brush`, its kind; `data-vis-brush-x`, the `x` mapping exactly as
+  `sync_attrs/1` gives it; and `data-vis-brush-extent`, `x0,y0,x1,y1`, the plot area in
+  the chart's coordinates — what `BrushHook` captures over and turns into a window in
+  domain units (spec/10 §6.5). `%{}` for a frame the design does not brush.
+
+      iex> chart = Visualize.Chart.from_map!(%{version: 2,
+      ...>   interaction: %{brush: :x},
+      ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear, domain: [0, 100]}}}}})
+      iex> Visualize.Chart.Frame.new(chart, size: {300, 200}) |> Visualize.Chart.Frame.brush_attrs()
+      %{"data-vis-brush" => "x", "data-vis-brush-extent" => "40,20,280,170", "data-vis-brush-x" => "0,100,40,280,300"}
+  """
+  @spec brush_attrs(t()) :: %{String.t() => String.t()}
+  def brush_attrs(%__MODULE__{brush: nil}), do: %{}
+
+  def brush_attrs(%__MODULE__{brush: kind} = frame) do
+    [bx, by | _] = frame.box
+    left = bx * frame.size.width + frame.margin.left
+    top = by * frame.size.height + frame.margin.top
+    extent = [left, top, left + frame.plot.width, top + frame.plot.height]
+
+    %{
+      "data-vis-brush" => Atom.to_string(kind),
+      "data-vis-brush-x" => numbers(x_mapping(frame)),
+      "data-vis-brush-extent" => numbers(extent)
+    }
+  end
+
+  # The `x` scale as the hooks map it: `d0,d1,x0,x1,width` — its domain in the bus's unit,
+  # the chart pixels of its ends and the chart's width (spec/14 §2.9).
+  defp x_mapping(frame) do
     %{domain: [d0, d1], range: [r0, r1]} = scale(frame, :x)
     [bx | _] = frame.box
     offset = bx * frame.size.width + frame.margin.left
-    numbers = [domain_unit(d0), domain_unit(d1), r0 + offset, r1 + offset, frame.size.width]
-
-    %{
-      "data-vis-sync" => group,
-      "data-vis-sync-x" => Enum.map_join(numbers, ",", &Visualize.IR.Path.format_number/1)
-    }
+    [domain_unit(d0), domain_unit(d1), r0 + offset, r1 + offset, frame.size.width]
   end
+
+  defp numbers(numbers), do: Enum.map_join(numbers, ",", &Visualize.IR.Path.format_number/1)
+
+  # The design's brush when this frame is the one it reads — the sync frame's rule: the
+  # frame `interaction.frame` names, else the design's first by name (spec/14 §2.9).
+  defp brush(%Chart{interaction: %{brush: kind} = interaction, frames: frames}, name)
+       when kind != nil do
+    if (Map.get(interaction, :frame) || frames |> Map.keys() |> Enum.min()) == name, do: kind
+  end
+
+  defp brush(_chart, _name), do: nil
 
   # A value of the x domain in the bus's unit: a number as it is, a time in milliseconds
   # since the Unix epoch, JavaScript's own unit (D-116).

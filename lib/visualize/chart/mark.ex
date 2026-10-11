@@ -102,6 +102,7 @@ defmodule Visualize.Chart.Mark do
   end
 
   def generate(%Frame{} = frame, %{type: type} = mark, opts) do
+    frame = coloured(frame, mark)
     sources = Keyword.get(opts, :sources, %{})
     mode = Keyword.get(opts, :resolve, :css)
     index = Keyword.get_lazy(opts, :index, fn -> position(frame, mark) end)
@@ -180,6 +181,23 @@ defmodule Visualize.Chart.Mark do
     case Enum.find_index(frame.marks, &(&1 == mark)) do
       nil -> 1
       i -> i + 1
+    end
+  end
+
+  # A mark's colour scale is `color` renamed by its `scales` node (spec/14 §4.3, D-143), so
+  # within the mark that scale stands under `color`: its series' paint, its style's colour
+  # bindings and its labels' ink all read the one scale, and an overlay that renames it
+  # leaves the series' colours to the marks that keep `color`.
+  defp coloured(frame, mark) do
+    case Scales.colour_scale(mark) do
+      :color ->
+        frame
+
+      name ->
+        case Map.fetch(frame.scales, name) do
+          {:ok, scale} -> %{frame | scales: Map.put(frame.scales, :color, scale)}
+          :error -> %{frame | scales: Map.delete(frame.scales, :color)}
+        end
     end
   end
 

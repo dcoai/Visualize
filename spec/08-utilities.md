@@ -658,6 +658,8 @@ A description says what a field **means**, never how it is drawn:
 
 `Visualize.Data.Schema.attributes/0` is the nine keys in that order, the vocabulary spec/14 §7.4's contract names.
 
+A design draws the meanings through its scales (spec/14 §4.3, #565, D-143): `status` is an `:ordinal` colour scale's range as it stands — `range: fact(:events, :severity, :status)`, a map from a state to a role — and `target` and `polarity` are a `:threshold` colour scale's `domain` and `polarity` over `range: {:ramp, :status}`, so a reading on the better side of the target is `:good` and one beyond it `:bad`; `target` is also a `:rule` at `y` (spec/14 §5.2), the target line.
+
 Four of the keys are checked here only as far as this library owns them, and each has one place a later rule goes:
 
 - **`unit`** is any non-empty string for now. Whether it is a valid UCUM code is the units proposal's (#536), and that check replaces the one private function that accepts the string, so nothing else changes when it lands.
