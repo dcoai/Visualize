@@ -139,7 +139,7 @@ defmodule ExamplesWeb.InteractionLive do
       <a href="/" class="back-link"><span>&larr;</span> Back to Gallery</a>
 
       <p class="tab-pages">
-        Also under this tab: the <a href="/dashboard">Synced dashboard</a> — one crosshair and one brush across three panels — and a <a href="/board">Live board</a>, five cells over live feeds, each its own process.
+        Also under this tab: the <a href="/dashboard">Synced dashboard</a> — one crosshair and one brush across three panels — and a <a href="/board">Live board</a>, eight cells over live feeds, each its own process, whose services drill down to a <a href="/board/detail">detail board</a>.
       </p>
 
       <div class="panels panels-row" style={panel_width()}>

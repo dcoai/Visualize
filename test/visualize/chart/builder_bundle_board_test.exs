@@ -267,15 +267,15 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
       assert {[:cells], {:limit, :items, 2, 3}} in errors
 
       # A hand-edited bundle carrying more entries than the board's own maps hold items
-      # (its root holds nine keys, `stale_after` among them, so nine is the tightest
-      # limit the board itself passes).
+      # (its root holds ten keys, `stale_after` and `links` among them, so ten is the
+      # tightest limit the board itself passes).
       spare =
-        for n <- 100..105,
+        for n <- 100..106,
             do: %{id: {:style, n}, name: "s", kind: :style, fragment: %{style: %{}}}
 
       wide = %{bundle | entries: bundle.entries ++ spare}
-      assert {:error, errors} = Bundle.import_board(to, wide, limits: [items: 9])
-      assert {[:entries], {:limit, :items, 9, 10}} in errors
+      assert {:error, errors} = Bundle.import_board(to, wide, limits: [items: 10])
+      assert {[:entries], {:limit, :items, 10, 11}} in errors
 
       assert {:error, errors} = Bundle.import_board(to, bundle, limits: [depth: 4])
       key = Store.encode_id(src.line)

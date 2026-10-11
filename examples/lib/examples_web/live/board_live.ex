@@ -1,14 +1,19 @@
 defmodule ExamplesWeb.BoardLive do
   @moduledoc """
-  A live board (#576, spec/15 §8–§9, D-146): `Examples.BoardDemo`'s five cells, drawn by
+  A live board (#576, spec/15 §8–§10, D-146): `Examples.BoardDemo`'s eight cells, drawn by
   `Visualize.Components.Board` over the board process the library runs.
 
   The page holds nothing of the board's but its pid: the component subscribes the page
   when it connects, and the page's one `handle_info/2` clause forwards the board's
   messages to it. The window buttons set the board's window, which re-asks every feed;
-  brushing a time chart does the same, and a double-click restores the window. The
+  brushing a time chart does the same, and the header's Reset window restores it. The
   export buttons post to `ExamplesWeb.BoardExportController`, which freezes the board
   and hands back its SVG, its PNG, its snapshot or its printed pages (#578).
+
+  The three cells of the last row interact (spec/15 §13, #545): a service picked in one is
+  selected in all three, and a click on a bar drills down. The component hands the drill to
+  this page, which follows it to `/board/detail` with the bar's service: the page knows its
+  routes, the library does not.
   """
   use Phoenix.LiveView
 
@@ -27,6 +32,11 @@ defmodule ExamplesWeb.BoardLive do
   def handle_info({:visualize_board, _board, _message} = message, socket) do
     Visualize.Components.Board.forward("demo-board", message)
     {:noreply, socket}
+  end
+
+  # A drill the component resolved from the clicked bar (spec/15 §13.3): the page follows it.
+  def handle_info({:visualize_board_drill, "demo-board", %{board: :detail, vars: vars}}, socket) do
+    {:noreply, push_navigate(socket, to: "/board/detail?" <> URI.encode_query(vars))}
   end
 
   @impl true
@@ -52,6 +62,13 @@ defmodule ExamplesWeb.BoardLive do
             to a feed that cannot be reached: its state is drawn, not left blank. Narrow the
             window to stack the cells.
           </p>
+          <p class="panel-note">
+            The last row interacts across cells. <em>Requests</em> and <em>Errors</em> are one
+            design over two feeds: click a line, or press Enter on a point, to select its service
+            in every cell, the others dimmed. <em>Services</em> names the field <code>name</code>,
+            and the board's <code>{"links: %{name: :service}"}</code> makes it the same selection.
+            Click a bar to drill down to that service's detail board. Escape clears the selection.
+          </p>
 
           <p class="board-windows">
             Window:
@@ -63,7 +80,7 @@ defmodule ExamplesWeb.BoardLive do
             >
               {name}
             </button>
-            — or brush a time chart; double-click it to restore.
+            — or brush a time chart; Reset window restores it.
           </p>
 
           <form class="board-exports" method="post" action="/board/export/svg">
@@ -95,6 +112,8 @@ defmodule ExamplesWeb.BoardLive do
       .vis-board-header { display: flex; gap: 1rem; align-items: baseline; }
       .vis-board-title { font-size: 1.1rem; margin: 0.25rem 0; }
       .vis-board-window { color: #555; margin: 0; }
+      .vis-board-selection { margin: 0; }
+      .vis-board-header button { margin-left: 0.25rem; }
       .vis-cell { background: var(--vis-background, #fff); border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px; overflow: hidden; display: flex; flex-direction: column; }
       .vis-cell:focus { outline: 2px solid #3b6fa8; outline-offset: 1px; }
       .vis-cell-title { font-size: 0.85rem; margin: 0 0 2px 0; color: #444; }
@@ -122,6 +141,11 @@ defmodule ExamplesWeb.BoardLive do
     def handle_info({:visualize_board, _, _} = message, socket) do
       Visualize.Components.Board.forward("ops", message)
       {:noreply, socket}
+    end
+
+    # A drill-down the component resolved; the page knows where it leads.
+    def handle_info({:visualize_board_drill, "ops", %{board: :detail, vars: vars}}, socket) do
+      {:noreply, push_navigate(socket, to: "/board/detail?" <> URI.encode_query(vars))}
     end
     '''
   end

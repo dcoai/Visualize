@@ -194,5 +194,60 @@ defmodule Visualize.Hooks.KeyboardTest do
 
       assert %{"on" => "cell", "kind" => "focus"} in log
     end
+
+    test "Enter at the reached point and a click pick a point, to the target (spec/15 §13.2)" do
+      json = Jason.encode!(Keyboard.attrs(applied()))
+
+      assert {:ok, %{"log" => log, "report" => r}} =
+               run("""
+               const attrs = #{json};
+               const chart = Stub.markup('svg', {viewBox: '0 0 220 120'});
+               chart.rect = {left: 100, top: 50, width: 440, height: 240};
+               const el = Stub.markup('div', Object.assign({id: 'keys',
+                 'data-keyboard-pick-event': 'pick', 'data-keyboard-target': '7'}, attrs), [chart]);
+               Stub.mount(KeyboardHook, el);
+               let prevented = false;
+               const key = (k) => el.fire('keydown', {key: k, preventDefault: () => { prevented = true; }});
+               // A point in chart units, clicked at its client position: the chart is drawn at twice its size.
+               const at = (x, y) => ({clientX: 100 + x * 2, clientY: 50 + y * 2});
+               const click = (x, y) => el.fire('click', at(x, y));
+
+               Stub.mark('enter before a point');
+               key('Enter');
+               const early = prevented;
+               Stub.mark('click near Bergen at t 1');
+               el.fire('mousedown', at(115, 12));
+               click(115, 12);
+               Stub.mark('a drag is a brush');
+               el.fire('mousedown', at(100, 12));
+               click(130, 12);
+               Stub.mark('outside the chart');
+               el.fire('click', {clientX: 20, clientY: 20});
+               Stub.mark('arrows go on from the picked point, Enter picks');
+               key('ArrowLeft');
+               key('Enter');
+               const late = prevented;
+               Stub.mark('nearest x first');
+               click(200, 95);
+               Stub.done({early, late});
+               """)
+
+      picks = fn mark ->
+        for %{"kind" => "push", "name" => "pick"} = p <- Visualize.JsHooks.after_mark(log, mark),
+            do: {p["target"], p["payload"]}
+      end
+
+      assert picks.("enter before a point") == []
+      refute r["early"]
+      assert picks.("click near Bergen at t 1") == [{"7", %{"series" => 1, "index" => 1}}]
+      assert picks.("a drag is a brush") == []
+      assert picks.("outside the chart") == []
+
+      assert picks.("arrows go on from the picked point, Enter picks") ==
+               [{"7", %{"series" => 1, "index" => 0}}]
+
+      assert r["late"]
+      assert picks.("nearest x first") == [{"7", %{"series" => 0, "index" => 2}}]
+    end
   end
 end

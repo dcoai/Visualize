@@ -195,7 +195,9 @@ defmodule Visualize.Chart.Summary do
   # the chart's pixels (`nil` in a polar or geographic frame, or where the row is not
   # placed). Series of one name across marks are one series. A series of more than
   # `@reachable` points is sampled to that many, evenly, its first and last kept, and each
-  # readout counts the series' own rows. `Visualize.Hooks.Keyboard` writes them.
+  # readout counts the series' own rows. `Visualize.Hooks.Keyboard` writes them; each point
+  # also carries the `row` behind it and the `mark` that drew it, which a board's cell
+  # reads to answer a pick (spec/15 §13.2).
   @spec points(Applied.t()) :: [%{name: String.t(), points: [map()]}]
   def points(%Applied{sources: sources} = applied) do
     all =
@@ -218,7 +220,7 @@ defmodule Visualize.Chart.Summary do
           said = "#{value.label} #{formatter(ctx.frame, value.scale).(reading)}"
           where = Enum.join(Enum.reject([place(ctx, value.where, row), said], &is_nil/1), ", ")
           {x, y} = position || {nil, nil}
-          %{text: "#{name}, #{i} of #{n}: #{where}", x: x, y: y}
+          %{text: "#{name}, #{i} of #{n}: #{where}", x: x, y: y, row: row, mark: ctx.mark}
         end
 
       %{name: name, points: points}

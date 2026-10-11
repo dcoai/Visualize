@@ -25,6 +25,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `data-brush-target`) — and become calls on the board process, so the page handles no
     event of the board's.
 
+    ## Interaction across cells (spec/15 §13, D-151)
+
+    A brush sets the board's window once rapid brushes settle, and the header's *Reset
+    window* restores the window the board was started with. A click on a chart, or Enter on
+    a point the keyboard reached, **picks** the point: in a cell with a `drill` target it
+    opens that target, and in any other it selects the datum's `{field, value}` across the
+    board. The header shows the selection and *Clear selection*; Escape clears it too.
+
+    The component does not navigate. A drill is sent to the page's process as
+    `{:visualize_board_drill, id, %{cell: cell, board: ref, vars: vars}}`, and the page,
+    which knows its routes, follows it:
+
+        def handle_info({:visualize_board_drill, "ops", %{board: :detail, vars: vars}}, socket) do
+          {:noreply, push_navigate(socket, to: "/detail?" <> URI.encode_query(vars))}
+        end
+
     ## Assigns
 
       * `id` - the component's id, the board's DOM id and the prefix of its cells' (required)
@@ -107,12 +123,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event("brush", %{"domain" => [from, to]}, socket)
         when is_number(from) and is_number(to) and from < to do
       window = %{from: instant(from), to: instant(to)}
-      :ok = Server.window(socket.assigns.server, window)
+      :ok = Server.brush(socket.assigns.server, window)
       {:noreply, socket}
     end
 
-    def handle_event("brush_clear", _params, socket) do
-      :ok = Server.window(socket.assigns.server, socket.assigns.board.window)
+    # A cleared brush is a click as often as an undo, so it keeps the window; the header's
+    # Reset window is the undo (spec/15 §13.1).
+    def handle_event("brush_clear", _params, socket), do: {:noreply, socket}
+
+    def handle_event("reset_window", _params, socket) do
+      :ok = Server.reset_window(socket.assigns.server)
+      {:noreply, socket}
+    end
+
+    def handle_event("select_clear", _params, socket) do
+      :ok = Server.select(socket.assigns.server, nil)
       {:noreply, socket}
     end
 
@@ -130,7 +155,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           layout: layout,
           placed: Board.arrange(assigns.board, width),
           stacked: width < layout.breakpoint,
-          window: window_text(assigns.info)
+          window: window_text(assigns.info),
+          moved: match?(%{moved: true}, assigns.info),
+          selection: selection_text(assigns.info)
         )
 
       ~H"""
@@ -139,11 +166,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
         class={if @stacked, do: "vis-board vis-board-stacked", else: "vis-board"}
         phx-hook="BoardHook"
         data-board-event="resize"
+        data-board-selection={@selection}
         aria-label={@title || "Board"}
       >
         <header :if={@title || @window} class="vis-board-header">
           <h2 :if={@title} class="vis-board-title">{@title}</h2>
           <p :if={@window} class="vis-board-window">{@window}</p>
+          <button
+            :if={@moved}
+            type="button"
+            class="vis-board-reset"
+            phx-click="reset_window"
+            phx-target={@myself}
+          >
+            Reset window
+          </button>
+          <p :if={@selection} class="vis-board-selection" aria-live="polite">
+            Selected: {@selection}
+            <button type="button" phx-click="select_clear" phx-target={@myself}>
+              Clear selection
+            </button>
+          </p>
         </header>
         <div
           class="vis-board-grid"
@@ -158,6 +201,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             title={Map.get(@board.cells[name], :title)}
             theme={@theme}
             target={@myself}
+            server={@server}
+            board={@board}
+            board_id={@id}
           />
         </div>
       </section>
@@ -168,6 +214,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp window_text(%{window: window, zone: zone}), do: Board.window_text(window, zone)
     defp window_text(_info), do: nil
 
+    # The selection as a person reads it: the field and the value.
+    defp selection_text(%{selection: {field, value}}) do
+      text = if String.Chars.impl_for(value), do: to_string(value), else: inspect(value)
+      "#{field} #{text}"
+    end
+
+    defp selection_text(_info), do: nil
+
     defmodule Cell do
       @moduledoc """
       One cell of `Visualize.Components.Board` (spec/15 §9.1): placed on the grid, one tab
@@ -175,17 +229,49 @@ if Code.ensure_loaded?(Phoenix.Component) do
       `KeyboardHook`, and its state drawn over or instead of the chart. Updated by
       `Visualize.Components.Board.forward/2` with a `Visualize.Board.View`; never blank, a
       cell with no view yet shows `:loading`.
+
+      Its chart's `KeyboardHook` pushes `pick` here (spec/15 §13): the board answers the
+      row behind the point, and the cell opens its `drill` target through the page, or
+      selects the datum's identity across the board.
       """
 
       use Phoenix.LiveComponent
 
-      alias Visualize.Board.State
+      alias Visualize.Board
+      alias Visualize.Board.{Server, State}
 
       @impl true
       def mount(socket), do: {:ok, assign(socket, view: nil)}
 
       @impl true
       def update(assigns, socket), do: {:ok, assign(socket, assigns)}
+
+      @impl true
+      def handle_event("pick", %{"series" => series, "index" => index}, socket)
+          when is_integer(series) and series >= 0 and is_integer(index) and index >= 0 do
+        %{server: server, cell: cell, board: board} = socket.assigns
+
+        with {:ok, %{row: row, identity: identity}} <- Server.pick(server, cell, series, index) do
+          picked(Board.drill(board, cell, row), identity, socket.assigns)
+        end
+
+        {:noreply, socket}
+      end
+
+      def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+      # A drill goes to the page, which knows its routes; a datum with an identity is the
+      # board's selection; a datum with neither does nothing (spec/15 §13.2, §13.3).
+      defp picked({:ok, target}, _identity, assigns) do
+        send(
+          self(),
+          {:visualize_board_drill, assigns.board_id, Map.put(target, :cell, assigns.cell)}
+        )
+      end
+
+      defp picked(:none, nil, _assigns), do: :ok
+      defp picked(:none, identity, assigns), do: Server.select(assigns.server, identity)
+      defp picked({:error, _errors}, _identity, _assigns), do: :ok
 
       @impl true
       def render(assigns) do
@@ -228,7 +314,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
               data-brush-event="brush"
               data-brush-target={@target}
             >
-              <div id={"#{@id}-keys"} phx-hook="KeyboardHook" tabindex="-1" {@keyboard}>
+              <div
+                id={"#{@id}-keys"}
+                phx-hook="KeyboardHook"
+                tabindex="-1"
+                data-keyboard-pick-event="pick"
+                data-keyboard-target={@myself}
+                {@keyboard}
+              >
                 {Phoenix.HTML.raw(@svg)}
               </div>
             </div>

@@ -31,6 +31,11 @@ defmodule Visualize.Hooks.Keyboard do
   Set by the host:
   - `data-keyboard-event` - the event pushed with `{series, index}` when the focused point
     changes; unset, nothing is pushed
+  - `data-keyboard-pick-event` - the event pushed with `{series, index}` when a point is
+    picked: Enter at the reached point, or a click, which picks the point nearest to it
+    (spec/10 §17.3, spec/15 §13); unset, nothing is picked
+  - `data-keyboard-target` - the `phx-target` both events go to with `pushEventTo`;
+    unset, they go to the LiveView
   """
 
   alias Visualize.Chart.{Applied, Summary}
@@ -109,10 +114,21 @@ defmodule Visualize.Hooks.Keyboard do
         this.onKeyDown = this.handleKeyDown.bind(this);
         this.onFocus = this.handleFocus.bind(this);
         this.onBlur = this.hide.bind(this);
+        this.onMouseDown = this.handleMouseDown.bind(this);
+        this.onClick = this.handleClick.bind(this);
+        this.down = null;
         this.read();
         this.el.addEventListener('keydown', this.onKeyDown);
         this.el.addEventListener('focus', this.onFocus);
         this.el.addEventListener('blur', this.onBlur);
+        this.el.addEventListener('mousedown', this.onMouseDown);
+        this.el.addEventListener('click', this.onClick);
+      },
+
+      // An event to the component `data-keyboard-target` names, else to the LiveView.
+      push(event, payload) {
+        if (this.target) this.pushEventTo(this.target, event, payload);
+        else this.pushEvent(event, payload);
       },
 
       svg(tag, className) {
@@ -129,6 +145,8 @@ defmodule Visualize.Hooks.Keyboard do
         this.series = JSON.parse(ds.keyboardPoints || '[]');
         this.size = ds.size ? ds.size.split(',').map(parseFloat) : null;
         this.eventName = ds.keyboardEvent || null;
+        this.pickName = ds.keyboardPickEvent || null;
+        this.target = ds.keyboardTarget || null;
         const own = {
           tabindex: '0',
           role: 'group',
@@ -163,6 +181,7 @@ defmodule Visualize.Hooks.Keyboard do
           case 'Home': next = this.clamp(at ? at.series : 0, 0); break;
           case 'End': next = this.clamp(at ? at.series : 0, Infinity); break;
           case 'Escape': this.escape(); return;
+          case 'Enter': this.pick(at, e); return;
           default: return;
         }
         e.preventDefault();
@@ -171,7 +190,46 @@ defmodule Visualize.Hooks.Keyboard do
         this.at = next;
         this.mark();
         this.say(this.series[next.series].points[next.index][2]);
-        if (moved && this.eventName) this.pushEvent(this.eventName, { series: next.series, index: next.index });
+        if (moved && this.eventName) this.push(this.eventName, { series: next.series, index: next.index });
+      },
+
+      // The reached point picked (spec/15 §13.2); nothing before a point is reached.
+      pick(at, e) {
+        if (!at || !this.pickName) return;
+        if (e && e.preventDefault) e.preventDefault();
+        this.push(this.pickName, { series: at.series, index: at.index });
+      },
+
+      handleMouseDown(e) {
+        this.down = { x: e.clientX, y: e.clientY };
+      },
+
+      // A click picks the point nearest to it, by the crosshair's snapping: the least
+      // horizontal distance, then the least vertical one. A click ending a drag is a brush.
+      handleClick(e) {
+        if (!this.pickName) return;
+        const down = this.down;
+        this.down = null;
+        if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 3) return;
+        const chart = this.el.querySelector('svg, canvas') || this.el;
+        const rect = chart.getBoundingClientRect();
+        if (!(rect.width > 0) || e.clientX < rect.left || e.clientX > rect.left + rect.width ||
+            e.clientY < rect.top || e.clientY > rect.top + rect.height) return;
+        const width = this.size ? this.size[0] : rect.width;
+        const height = this.size ? this.size[1] : rect.height;
+        const x = (e.clientX - rect.left) * width / rect.width;
+        const y = (e.clientY - rect.top) * height / rect.height;
+        let best = null;
+        this.series.forEach((s, si) => s.points.forEach((p, pi) => {
+          if (p[0] === null || p[1] === null) return;
+          const dx = Math.abs(p[0] - x), dy = Math.abs(p[1] - y);
+          if (!best || dx < best.dx - 0.5 || (Math.abs(dx - best.dx) <= 0.5 && dy < best.dy)) {
+            best = { series: si, index: pi, dx, dy };
+          }
+        }));
+        if (!best) return;
+        this.at = { series: best.series, index: best.index };
+        this.push(this.pickName, { series: best.series, index: best.index });
       },
 
       // Escape forgets the point and, inside a board's cell, hands focus back to it
@@ -222,6 +280,8 @@ defmodule Visualize.Hooks.Keyboard do
         this.el.removeEventListener('keydown', this.onKeyDown);
         this.el.removeEventListener('focus', this.onFocus);
         this.el.removeEventListener('blur', this.onBlur);
+        this.el.removeEventListener('mousedown', this.onMouseDown);
+        this.el.removeEventListener('click', this.onClick);
         if (this.overlay.parentNode) this.overlay.parentNode.removeChild(this.overlay);
         if (this.readout.parentNode) this.readout.parentNode.removeChild(this.readout);
       }

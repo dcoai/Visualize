@@ -4,7 +4,7 @@
 
 A **board** is a dashboard as data: designs laid out on a grid, sharing a time window, variables and a sync group, but never geometry. It is the layer above the composite of [14-declarative-chart](14-declarative-chart.md) §19.6. A composite is overlapping parts that **flatten** into one chart in one coordinate space, such as a gauge drawn over a line. A board **never flattens**: each cell is its own chart, applied, rendered and updated on its own, and the cells share *state*, not pixels (#531 §1).
 
-This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's, §8 (#540, D-146). A board travels to another host in a bundle with its components and themes, re-keyed on import (§11, #542). A board leaves the screen as a picture — an SVG, a PNG or printed pages — drawn from a frozen snapshot of its data (§12, #578, D-150).
+This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's, §8 (#540, D-146). A board travels to another host in a bundle with its components and themes, re-keyed on import (§11, #542). A board leaves the screen as a picture — an SVG, a PNG or printed pages — drawn from a frozen snapshot of its data (§12, #578, D-150). A board's cells interact through its shared state: a brush sets every cell's window, a selection is highlighted in every cell that shows it, and a click drills down to another board (§13, #545, D-151).
 
 ```
 board      — layout + shared state                       (this document)
@@ -41,6 +41,7 @@ A board is data in the sense of spec/14 §1.1: a struct of maps, lists and atoms
 | `sync` | a string, or `nil` | `nil` | the sync group the cells join (§1.5) |
 | `layout` | a node: `breakpoint`, `row_height` and `gap` (§1.6) | `%{}` | how the grid is drawn and when it reflows |
 | `stale_after` | a positive number, seconds, or `nil` | `nil` | how old a cell's newest reading may be before the cell shows it is stale (§8.4); `nil` is never |
+| `links` | a map from a field's name to the name it links to, both atoms | `%{}` | fields of different names that mean the same thing, so a selection in one cell finds its datum in another (§13.2) |
 
 A key not in the table is `:unknown_key`, at the board's level and at every node's.
 
@@ -58,6 +59,7 @@ A cell is a placement on the grid and a **component reference**:
 | `title` | a string | `nil` | the cell's name for a person; the runtime draws it, and nothing in the component reads it |
 | `vars` | a map from a variable's name to a value | `%{}` | this cell's values of its component's variables, over the board's (§5) |
 | `sync` | a boolean | `true` | whether this cell joins the board's sync group (§1.5) |
+| `drill` | a drill node (§13.3), or `nil` | `nil` | the board a click on one of this cell's data opens, and the variables it is opened with |
 
 **A cell's name is its identity.** Cells are a map by name, as a design's frames are (spec/14 §2.1), so a cell is the same cell wherever it is moved. The name namespaces the cell's sources (§4.1), keys its variables and its realised chart (§6), and is what a binding names. It is never drawn.
 
@@ -111,7 +113,7 @@ A window that gives `last` together with `from` or `to`, a `from` without a `to`
 
 ### 2.2 The JSON form
 
-`Visualize.Board.to_json/1` writes the board as a JSON document behind the optional `Jason` dependency, as spec/14 §11.1 does for a design. Without Jason, `to_json/1` and `from_json/2` return `{:error, {:missing_dependency, :jason}}`. The document is the map form with string keys, except for the version. **The version is the stamp `"$version"`** at the document's top level, as a fragment document carries it (spec/14 §19.7, D-137), so any JSON document this library writes, other than a design, is stamped under one key. A reader gates a document by that key before it knows anything else about it. Values JSON has no form for are the tagged terms of spec/14 §11.2: a component reference `{:composite, 5}` is `{"$id": ["composite", 5]}`, a window's `DateTime` is `{"$time": "…"}`, and an atom in a variable's value is `{"$atom": "…"}`. A cell's name and a variable's name are object keys.
+`Visualize.Board.to_json/1` writes the board as a JSON document behind the optional `Jason` dependency, as spec/14 §11.1 does for a design. Without Jason, `to_json/1` and `from_json/2` return `{:error, {:missing_dependency, :jason}}`. The document is the map form with string keys, except for the version. **The version is the stamp `"$version"`** at the document's top level, as a fragment document carries it (spec/14 §19.7, D-137), so any JSON document this library writes, other than a design, is stamped under one key. A reader gates a document by that key before it knows anything else about it. Values JSON has no form for are the tagged terms of spec/14 §11.2: a component reference `{:composite, 5}` is `{"$id": ["composite", 5]}`, a window's `DateTime` is `{"$time": "…"}`, and an atom in a variable's value is `{"$atom": "…"}`. A cell's name and a variable's name are object keys. A drill variable taken from a datum, `{:datum, :service}`, is `{"$datum": "service"}`, a tag of the board's own, since no design holds one. `links` is an object of field names to field names, both strings. A drill's `board` is its JSON self when it is a string or an integer, and `{"$atom": "…"}` when it is an atom, `:self` included.
 
 `Visualize.Board.from_json/2` reads the document back. `from_json(to_json(board))` is `{:ok, board}` for every valid board. A document that does not parse is `{:error, [{[], {:json, message}}]}`, and so is one whose top level is not an object. Decoding makes an atom of a cell's name and a variable's name, as a design's names are made atoms (spec/14 §11.1). **A key the board does not know is left a string**, so a misspelt key is reported as `:unknown_key` at its own spelling and makes no atom.
 
@@ -140,6 +142,8 @@ For the board and each of its nodes, in this order: unknown keys, required keys,
 - **Staleness.** A `stale_after` that is neither `nil` nor a positive number is `{:type, :positive}`.
 - **Variables.** A board's or a cell's variable name that is not an atom is `{:type, :name}` at its path. A value that is itself a variable (`%Visualize.Chart.Var{}`) is `{:var_binding, name}`, because a board's variables are values, and resolution is single level (spec/14 §7.1).
 - **A component reference** that is not an id `{kind, n}` is `{:type, {:id, :composite}}`. An id of another kind, `{:style, 3}`, is `{:ref_kind, :composite, :style}`, as the validator refuses a wrong-kind id before resolution (spec/14 §19.7).
+- **Links.** A `links` that is not a map is `{:type, {:map, :name}}` at `[:links]`. A key or a value that is not an atom is `{:type, :name}` at `[:links, key]`.
+- **A drill node** (§13.3) that is not a map is `{:type, {:node, :drill}}` at the cell's `drill`. Its unknown keys are `:unknown_key`, a missing `board` is `:required`, and a `board` that is neither `:self`, an atom, a non-empty string nor a positive integer is `{:type, :board_ref}`. Its `vars` are checked as a board's variables are, and a `{:datum, field}` whose field is not an atom is `{:type, :field}` at the variable's path.
 
 ### 3.2 Given a store
 
@@ -150,6 +154,8 @@ For the board and each of its nodes, in this order: unknown keys, required keys,
 - **A component that is not a design.** Every fault of reading the flattened component is reported under the cell's ref, `[:cells, name, :ref | path]`, with `path` the design's own: `cells.latency.ref.marks[0].type: is required`. A composite that flattens to a partial design, such as a house look of a theme and a frame, is not a component.
 - **A variable the component does not declare.** A cell's variable that its component's design does not declare is `{:undeclared, :var, name}` at `[:cells, name, :vars, var]`. A board variable that no cell's component declares is **not** a fault. It is a default for whichever components declare it (§5), as a pool entry that no slot names is ignored (spec/14 §7.3).
 - **A cell that cannot join the group.** With the board's `sync` set and the cell's `sync` true, the component's design is validated with the board's group written into its `interaction.sync`. Any `{:sync, …}` fault (spec/14 §2.9) is reported at `[:cells, name, :sync]`.
+
+- **A drill target** (§13.3). `validate/3` takes `boards:`, the boards a drill may name: a map from a ref to a `%Visualize.Board{}`, or a fetch function `(ref -> {:ok, board} | :error)`. A target of `:self` is the board being validated. A ref that `boards:` does not hold is `{:no_board, ref}` at `[:cells, name, :drill, :board]`. A drill variable that the target board does not declare, which is a key of its `vars` (§1.2), is `{:undeclared, :var, var}` at `[:cells, name, :drill, :vars, var]`. A `{:datum, field}` whose field no source of the cell's component declares is `{:undeclared, :field, field}` there too, when the component's sources declare any fields at all. Without `boards:`, only a `:self` target is checked against a board, since the board names the others and the host holds them.
 
 A referenced id inside a component that the store no longer holds (a style, a scale) is a mask, as everywhere in spec/14 §19.2. It is not a fault of the board.
 
@@ -168,6 +174,8 @@ The board's own reasons, beside those of spec/14 §10.1 it reuses (`:required`, 
 | `{:unbound, :binding, slot}` | a slot of the cell's component that the binding does not bind (§4.3) |
 | `{:undescribed, feed}` | a slot that states a contract, bound to a feed whose schema the check was not given (§4.3) |
 | `:not_required` | a binding of a slot that no cell's component declares (§4.3) |
+| `{:no_board, ref}` | a drill target that the boards given to `validate/3` do not hold (§13.3) |
+| `{:missing, :datum, field}` | a drill variable taken from a datum that has no value for its field (§13.3) |
 
 ## 4. Sources and binding
 
@@ -253,7 +261,7 @@ Every fault of every cell is reported, each under its cell: `[:cells, name | pat
 | `Visualize.Board.to_json/1` | The board as a JSON document stamped `"$version"`, `{:ok, json}`, or `{:error, {:missing_dependency, :jason}}`. |
 | `Visualize.Board.validate/1` | `:ok`, or every fault of a board or a board map alone (§3.1). |
 | `Visualize.Board.validate/2` | As `validate/3` with `[]` options. |
-| `Visualize.Board.validate/3` | `:ok`, or every fault of the board alone and then given the store (§3.2), with `limits:` for the components' designs. |
+| `Visualize.Board.validate/3` | `:ok`, or every fault of the board alone and then given the store (§3.2), with `limits:` for the components' designs and `boards:` for the cells' drill targets. |
 | `Visualize.Board.format_error/1` | One fault as a line a person reads, the root named `board`. |
 | `Visualize.Board.layout/1` | The effective layout: the board's `layout` over `breakpoint: 768`, `row_height: 80`, `gap: 8` (§1.6). |
 | `Visualize.Board.arrange/2` | Each cell's placement at a container width, `[{name, %{x, y, w, h}}]` in reading order, stacked below the breakpoint (§1.6). |
@@ -267,6 +275,9 @@ Every fault of every cell is reported, each under its cell: `[:cells, name | pat
 | `Visualize.Board.components/3` | Every cell's component prepared, purely: `{:ok, %{cell => %{chart, vars}}}` with the group and the zone written and the variables narrowed, or every fault (§6). |
 | `Visualize.Board.realise/3` | As `realise/4` with `[]` options. |
 | `Visualize.Board.realise/4` | Every cell applied, purely: `{:ok, %{cell => applied}, cache}`, or every fault under its cell (§6). |
+| `Visualize.Board.link/2` | `link(board, field)`: the name a field links to through `links`, or the field itself (§13.2). |
+| `Visualize.Board.linked/2` | `linked(board, field)`: every field name that links to the same name as `field`, itself included (§13.2). |
+| `Visualize.Board.drill/3` | `drill(board, cell, row)`: the cell's drill target with its variables taken from the row, `{:ok, %{board: ref, vars: vars}}`; `:none` for a cell with no `drill`; `{:error, errors}` for a datum with no value for a field it names (§13.3). |
 
 ### 7.2 `Visualize.Board.Binding`
 
@@ -324,9 +335,11 @@ children = [
 | `max_heap:` | `25_000_000` | each cell's heap limit, in words (200 MB on a 64-bit host) |
 | `clock:` | `DateTime.utc_now/0` | the board's "now": a function of no argument answering a UTC `DateTime` |
 | `limits:` | the defaults | the limits the components' designs are read under (spec/14 §9.2) |
+| `boards:` | `%{}` | the boards the cells' drill targets may name, as `Visualize.Board.validate/3` takes them (§3.2, §13.3) |
+| `debounce:` | `250` | milliseconds a brushed window waits for the next before it is applied (§13.1); `0` applies each at once |
 | `name:` | none | a registered name, as `GenServer.start_link/3` takes it |
 
-**Starting** prepares every cell with `Visualize.Board.components/3` (§6). A board that does not validate alone and given the store, does not prepare, or that names a feed in its binding that `feeds:` does not hold, is **not started**: `start/2` answers `{:error, {:board, errors}}` with the faults of §3, or `{:error, {:feeds, names}}`. A board is refused as a whole, before any process runs, because a dashboard that half starts is the quiet difference §3 exists to prevent. The board then starts its cells' `DynamicSupervisor`, linked to it as its parent, so the cells go when the board goes, and one `Visualize.Board.Cell` per cell under it, each monitored.
+**Starting** prepares every cell with `Visualize.Board.components/3` (§6). A board that does not validate alone and given the store and `boards:`, does not prepare, or that names a feed in its binding that `feeds:` does not hold, is **not started**: `start/2` answers `{:error, {:board, errors}}` with the faults of §3, or `{:error, {:feeds, names}}`. A board is refused as a whole, before any process runs, because a dashboard that half starts is the quiet difference §3 exists to prevent. The board then starts its cells' `DynamicSupervisor`, linked to it as its parent, so the cells go when the board goes, and one `Visualize.Board.Cell` per cell under it, each monitored.
 
 **It owns the shared state** (#531, further considerations §3):
 
@@ -335,6 +348,7 @@ children = [
 - **The zone** is the board's, for display (§1.5). It is written into the cells' time scales when they are prepared and sent to subscribers with the window.
 - **The variables.** `vars(board, vars)` merges new board variables over the board's and prepares every cell again, sending each its new chart and variables. A cell compiles again when it next draws.
 - **The sync group** is written into the components when they are prepared (§1.5), so the cells' frames carry it.
+- **The brushed window and the selection** (§13). `brush(board, window)` sets the window as `window/2` does, after the debounce. `reset_window(board)` restores the window the board was started with. `select(board, identity)` holds the board's one selection and sends it to every cell.
 
 **It owns the feeds.** The board holds a `Visualize.Feed.Monitor` (spec/08 §11.4, D-140) over `feeds:`, with `every:` the board's tick, `stale_after:` the board's `stale_after` in milliseconds and `budget:` the option. It is the monitor's owner as that section says: it ticks the monitor at the start of every turn with its own monotonic clock, routes every `{:visualize_feed, ref, message}` in its mailbox to `handle_message/2`, and `stop/1`s the monitor when it terminates. A feed is fetched once however many slots it fills.
 
@@ -346,10 +360,10 @@ children = [
 
 | Message | When |
 |---|---|
-| `{:board, info}` | on subscribing, and whenever the resolved window, the zone or the width changes: `info` is `%{window: {from, to} \| nil, zone: zone, now: now, width: width, sync: group}` |
+| `{:board, info}` | on subscribing, and whenever the resolved window, the zone, the width or the selection changes: `info` is `%{window: {from, to} \| nil, zone: zone, now: now, width: width, sync: group, selection: {field, value} \| nil, moved: boolean}`, `moved` whether the window is other than the one the board was started with (§13.1) |
 | `{:cell, name, view}` | a cell's view changed: a new frame, a new state, or both (§8.3) |
 
-`info/1` answers the board's present state: `%{board: board, window: window, zone: zone, now: now, width: width, cells: %{name => %{pid: pid \| nil, state: state, restarts: n}}}`. `tick/1` runs one turn now and returns once it is done: the way a test, or a host that drives time itself (`tick: nil`), moves the board. `stop/1` stops the board and its cells.
+`info/1` answers the board's present state: `%{board: board, window: window, zone: zone, now: now, width: width, sync: group, selection: selection, moved: moved, cells: %{name => %{pid: pid \| nil, state: state, restarts: n}}}`. `tick/1` runs one turn now and returns once it is done: the way a test, or a host that drives time itself (`tick: nil`), moves the board. `stop/1` stops the board and its cells.
 
 ### 8.3 The cell process
 
@@ -360,6 +374,7 @@ children = [
 - **Coalescing.** When the cell takes a data message from its mailbox, it first takes every later data message waiting behind it and keeps only the newest. A cell that falls behind therefore skips to the present instead of drawing a backlog. Its mailbox is bounded by what arrives during one draw, and a slow cell drops its own frames, never anyone else's. Size, chart and subscriber messages are taken in order.
 - **Drawing.** With every slot holding a delivery, the cell places its rows (§8.5) and applies its chart with `Visualize.Chart.apply/2`: `sources:` the placed deliveries, `vars:`, `size:` its box, `theme:`, `now:` the board's, and `schemas:` a cache of the slots' resolved schemas, so application describes nothing. It compiles the applied chart with `Visualize.Chart.compile/2`, one compiled chart per frame in drawing order (`z`, then name), and draws each data change with `Visualize.Chart.Compiled.step/3` per frame inside one accessible root (spec/14 §21.2): titled with the cell's `title`, else the chart's summary name, described by the summary, and `responsive`, so a viewer at another width scales it. **It compiles again** when a slot's delivery names a schema version other than the one its chart was compiled with (`Compiled.stale?/2`, spec/14 §12.1), when its size changes, and when the board sends it a new chart or variables. Each recompilation is `carry/2`'d from the one before (spec/14 §12.5), so an easing goes on from where it stood and a force layout stays warm. A data change that keeps the schema and the size is a `step/3` only.
 - **Interaction.** The cell's frame is the compiled one-string form, whose frame group carries the frame's `data-vis-sync`, `data-vis-sync-x` and `data-vis-brush` attributes as `Visualize.Chart.Frame.generate/2`'s does (spec/14 §2.9, §12.4). With each frame the cell computes, for a chart of one frame, the `KeyboardHook` attributes (spec/10 §17.2) and, when that frame is cartesian and its first mark has `x` and `y` channels, the `CrosshairHook` attributes (spec/10 §13.2), both from the frame realised over the step's sources, so hover, the brush and the keyboard follow the data. The board's LiveView component (#575) places them.
+- **Selection and picking.** The board sends each cell the selection as the fields that may hold it and the value (§13.2), and the cell draws it, or asks to be drawn as before, with `{:selection, …}`. A cell answers a pick, `{series, index}` into its keyboard points, with the row behind that point and its identity (§13.2). A pick is a call from the caller's process, never from the board's.
 - **The view.** A cell sends `{:cell, name, view}` to every subscriber whenever its frame or its state changes. A turn that changes only now sends nothing unless the state changes with it, such as a cell growing stale. `view` is a `%Visualize.Board.View{}`:
 
   | Field | Meaning |
@@ -414,6 +429,10 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 | `Visualize.Board.Server.subscribe/2` | A subscriber added: `{:ok, info}`, every cell resending its view to it (§8.2). |
 | `Visualize.Board.Server.unsubscribe/2` | A subscriber removed; `:ok`. |
 | `Visualize.Board.Server.window/2` | The board's window set and every feed re-asked: `:ok`, or `{:error, errors}`. |
+| `Visualize.Board.Server.brush/2` | A brushed window: validated at once, `:ok` or `{:error, errors}`, and set as `window/2` sets it once `debounce:` has passed with no later brush (§13.1). |
+| `Visualize.Board.Server.reset_window/1` | The window the board was started with, set as `window/2` sets it; `:ok` (§13.1). |
+| `Visualize.Board.Server.select/2` | `select(board, {field, value} \| nil)`: the board's selection, its field read through `links`, sent to every cell and every subscriber; `:ok` (§13.2). |
+| `Visualize.Board.Server.pick/4` | `pick(board, cell, series, index)`: the row behind a cell's keyboard point and its identity, `{:ok, %{row: row, identity: {field, value} \| nil}}`, or `:error` for a cell or a point there is not (§13.2). |
 | `Visualize.Board.Server.vars/2` | Board variables merged and every cell prepared again: `:ok`, or `{:error, errors}`. |
 | `Visualize.Board.Server.resize/2` | The container width set and every cell's box recomputed; `:ok`. |
 | `Visualize.Board.Server.tick/1` | One turn of the loop now; `:ok` once it is done. |
@@ -457,7 +476,7 @@ It renders a `<section phx-hook="BoardHook">` holding a header and the grid. **T
 
 - carrying `data-vis-cell` (the cell's name), `data-vis-state` (its state's name, `Visualize.Board.State.name/1`), `tabindex="0"`, `role="group"` and an `aria-label` of the cell's title and, when it is not live, its state's words, so **a cell is one tab stop** (spec/14 §21.5);
 - holding its title, when it has one, as a heading;
-- when the view has a chart, the chart inside three nested hook elements: `CrosshairHook` with the view's crosshair attributes, which shares hover across the board's sync group; `BrushHook` with `data-brush-type="x"`, `data-brush-event="brush"` and `data-brush-target` naming the board's component; and `KeyboardHook` with the view's keyboard attributes and `tabindex="-1"`, so the chart is reached through its cell (§9.3) rather than as a second tab stop;
+- when the view has a chart, the chart inside three nested hook elements: `CrosshairHook` with the view's crosshair attributes, which shares hover across the board's sync group; `BrushHook` with `data-brush-type="x"`, `data-brush-event="brush"` and `data-brush-target` naming the board's component; and `KeyboardHook` with the view's keyboard attributes, `tabindex="-1"`, `data-keyboard-pick-event="pick"` and `data-keyboard-target` naming the cell's component, so the chart is reached through its cell (§9.3) rather than as a second tab stop and a click or Enter on a point picks it (§13);
 - the view's `note` (§8.3): above the chart as a banner when there is a chart, alone when there is not. **A cell is never blank.** Before its first view it draws `:loading` from `theme`.
 
 ### 9.2 The page's part
@@ -478,14 +497,27 @@ end
 | Event | Becomes |
 |---|---|
 | `resize` `{width}` | `Visualize.Board.Server.resize/2`: every cell drawn at its new box, and the grid arranged at the width |
-| `brush` `{domain: [from, to]}` | `Visualize.Board.Server.window/2` with `%{from, to}`, the domain read as milliseconds since the Unix epoch (a time `x`'s, spec/10 §6.4): the board's window, and every feed re-asked |
-| `brush_clear` | `Visualize.Board.Server.window/2` with the `board` assign's own window: the brush cleared restores the board as it was given |
+| `brush` `{domain: [from, to]}` | `Visualize.Board.Server.brush/2` with `%{from, to}`, the domain read as milliseconds since the Unix epoch (a time `x`'s, spec/10 §6.4): the board's window once the debounce has passed, and every feed re-asked (§13.1) |
+| `brush_clear` | nothing on the board: the band is gone from the chart, and the window stays until it is reset (§13.1). A click on a chart is a brush too small to keep, so it must not move the window |
+| `reset_window` | `Visualize.Board.Server.reset_window/1`: the window the board was started with |
+| `select_clear` | `Visualize.Board.Server.select/2` with `nil`: the selection cleared (§13.2) |
+| a cell's `pick` `{series, index}` | `Visualize.Board.Server.pick/4` for that cell, then for a cell with a `drill` the drill message below, and for any other cell `Visualize.Board.Server.select/2` with the datum's identity, when it has one (§13.2, §13.3) |
 
 A brush without a domain, which is a chart in no sync group and with no design brush, changes nothing. So the page holds no event of the board's, no margin and no scale.
 
+**The header holds the board's undo.** While the board's window is not the one it was started with (`moved`), the header shows a **Reset window** button, and while a selection is held it shows the selection, `Selected: service api`, and a **Clear selection** button. The section carries `data-board-selection` while a selection is held, so `BoardHook` knows that Escape has something to clear.
+
+**A drill is the page's to follow.** A cell's pick that resolves a drill target sends the page's process `{:visualize_board_drill, id, %{cell: cell, board: ref, vars: vars}}`, `id` the board component's. The component does not navigate: it knows no route of the host's, and a drill to `:self` may mean a page with the variables in its URL or, for a board shown to one person, `Visualize.Board.Server.vars/2`. A page that follows drills adds one clause beside the one that forwards the board's messages:
+
+```elixir
+def handle_info({:visualize_board_drill, "ops", %{board: :detail, vars: vars}}, socket) do
+  {:noreply, push_navigate(socket, to: ~p"/detail?#{vars}")}
+end
+```
+
 ### 9.3 Keyboard and focus
 
-The order across cells is the board's (spec/14 §21.5, D-142). `BoardHook` (spec/10 §18) acts on a key whose target is a cell. The arrow keys move focus to the next and the previous cell in reading order, which is the order the cells are rendered in. Home and End move to the first and the last cell, and Enter moves focus into the cell's chart. A key pressed inside a chart is the chart's, and Escape there hands focus back to its cell (`KeyboardHook`, spec/10 §17.3).
+The order across cells is the board's (spec/14 §21.5, D-142). `BoardHook` (spec/10 §18) acts on a key whose target is a cell. The arrow keys move focus to the next and the previous cell in reading order, which is the order the cells are rendered in. Home and End move to the first and the last cell, and Enter moves focus into the cell's chart. A key pressed inside a chart is the chart's, and Escape there hands focus back to its cell (`KeyboardHook`, spec/10 §17.3). Enter on a chart's point picks it (§13.2). **Escape anywhere in the board clears the selection** when one is held, so one Escape inside a chart both returns focus to the cell and clears it (spec/10 §18.2).
 
 ### 9.4 Functions
 
@@ -499,9 +531,10 @@ The order across cells is the board's (spec/14 §21.5, D-142). `BoardHook` (spec
 **Implemented** (#576, D-146). The examples site shows a live board at **`/board`**, under the *Client-side Interactions* tab and linked from that tab's page beside the synced dashboard, so the site map holds it (spec/14 §12.6, `examples/test/examples_web/site_map_test.exs`).
 
 - **The host's part, as a host writes it.** The examples' tree holds `{Visualize.Board.Supervisor, name: Examples.Boards}` (§8.1) and `Examples.BoardDemo`, which runs the demo's feed processes. The demo board is started under `Examples.Boards` on the first visit and is the same process on every later one, so every visitor shares its window, which is the board's shared state (§8.2). The page holds the board's pid, renders `Visualize.Components.Board`, and forwards the board's messages with the one `handle_info/2` clause of §9.2.
-- **Five cells over live feeds.** *Load* is the gallery's *Load* design: its history is fed by a `Visualize.Signals` sine through the library's `Visualize.Feed.Signals` on the wall clock, and its dial's track by a fixed feed. *Wave* is the gallery's *Line Chart* with its `x` a time scale, over a second signal. *Memory* and *Run queue* are **one component in two cells**, each bound to its own in-process `:telemetry` metric through `Visualize.Feed.Telemetry`, which a probe emits every half second. *Offline* is the *Line Chart* bound to a feed that cannot be reached, so the designed "feed down" state is always on the page. A signal counts ticks and a board's window is UTC, so the demo's wall-clock wrapper is the one conversion between them: a window of instants is asked as ticks, and the ticks are answered as instants.
-- **The window moves.** Buttons set the board's window to the last 1, 5 or 15 minutes, and brushing a time chart sets it to the brushed span. Both re-ask every feed, and a double-click restores the window. The header shows the window in the board's zone. Below the breakpoint the cells stack.
+- **Eight cells over live feeds; five show the runtime.** *Load* is the gallery's *Load* design: its history is fed by a `Visualize.Signals` sine through the library's `Visualize.Feed.Signals` on the wall clock, and its dial's track by a fixed feed. *Wave* is the gallery's *Line Chart* with its `x` a time scale, over a second signal. *Memory* and *Run queue* are **one component in two cells**, each bound to its own in-process `:telemetry` metric through `Visualize.Feed.Telemetry`, which a probe emits every half second. *Offline* is the *Line Chart* bound to a feed that cannot be reached, so the designed "feed down" state is always on the page. A signal counts ticks and a board's window is UTC, so the demo's wall-clock wrapper is the one conversion between them: a window of instants is asked as ticks, and the ticks are answered as instants.
+- **The window moves.** Buttons set the board's window to the last 1, 5 or 15 minutes, and brushing a time chart sets it to the brushed span. Both re-ask every feed, and the header's *Reset window* restores the window. The header shows the window in the board's zone. Below the breakpoint the cells stack.
 - **The board leaves the page** (#578, §12). *Export* buttons freeze the running board (`Visualize.Board.Server.snapshot/1`) and hand it back as a file: *SVG* (`Visualize.Board.Export.svg/2`), *PNG* (`png/2`; a host with no resvg answers 503 and says why), and *Snapshot*, the snapshot's JSON, which reopens with no feed. *Print* opens the printed pages (`html/2`, A4 portrait in the print theme) in a new tab for the browser to print to paper or a PDF. The buttons `POST` to `ExamplesWeb.BoardExportController` at `/board/export/:format`, since an export is an action on the running board and not a page of the site, so the site map does not list it.
+- **Cells that interact** (§13, #545). *Requests* and *Errors* are **one component in two cells**, a line per service over two synthetic feeds that share the field `service`. Picking a service's line in either, by a click or by Enter on a point, selects `{:service, "api"}`, and both cells dim every other service. *Services* is a bar per service over a third feed that calls the field `name`. The board's `links: %{name: :service}` says the two are one, so the same selection dims every other bar. A click on a bar **drills down**: the cell's `drill: %{board: :detail, vars: %{service: {:datum, :name}}}` names the detail board, which the page opens at `/board/detail?service=api`, a board of its own whose variable `service` filters its two cells to that service. The page starts the detail board itself, linked to its own process, so each visitor's detail board is their own and goes when they leave. Escape, or *Clear selection*, clears the selection.
 
 ## 11. A board in a bundle
 
@@ -648,3 +681,56 @@ A snapshot follows the version policy of spec/14 §9.1 (D-137) and the board's c
 | `Visualize.Board.Snapshot.format_error/1` | One fault as a line a person reads, the root named `snapshot`. |
 
 `Visualize.Board.Server.snapshot/1` is in §8.6, `Visualize.Board.window_text/2` in §7.1 and `Visualize.Theme.print/0` in spec/08 §7.6.
+
+
+## 13. Interaction across cells
+
+**Implemented** (#545, D-151). Interaction on a board spans its cells (#531 items 8–10). A brush in one cell moves every cell's window, a selection in one cell is highlighted in every cell that shows it, and a click on a datum opens another board with variables taken from it. All three are the board's **shared state**, held by the board process (§8.2). A cell's chart does not talk to another cell's: it tells the board, and the board tells every cell.
+
+### 13.1 Brush to window
+
+A brush on a time chart in any cell chooses a window (`interaction: %{brush: :x}`, spec/14 §2.9, or the sync group's brush, spec/10 §6.4), and its `domain` reaches the board's component as `brush` (§9.2). The component calls `Visualize.Board.Server.brush/2`, and the board sets the window as `window/2` does: validated as the board's `window` key (§3.1), resolved at the board's now, and **every feed re-asked** (`Visualize.Feed.Monitor.refetch/1`). Each cell then receives its slots' rows in the new window and draws them, so **every cell follows**, whichever cell was brushed, including cells in no sync group.
+
+- **Rapid brushes are debounced in the board process.** A brushed window is validated at once, so a bad one answers `{:error, errors}` to its caller, and then waits `debounce:` milliseconds (`250`) for the next. A later brush replaces it and the wait starts again, so a person re-brushing three times in quick succession costs every feed one fetch, for the last window. `debounce: 0` applies each brush at once. `window/2`, from a host's buttons, is never debounced: a button is one deliberate choice. A `window/2` call drops a brush still waiting, since it is the later choice.
+- **Undo is "Reset window".** `Visualize.Board.Server.reset_window/1` sets the window the board was started with, its `board:` option's `window`, and re-asks every feed. The board reports `moved: true` in its info (§8.2) whenever its window is other than that one, and the component shows a **Reset window** button while it is. A cleared brush (`brush_clear`) changes nothing on the board: a click on a chart is a brush too small to keep, and it must not throw away the window a person chose.
+
+### 13.2 Linked selection
+
+**The identity is `{field, value}`.** A selection names a field and a value, such as `{:service, "api"}`. Cells over different feeds agree on it when their rows have that field with that value, so two feeds that describe the same thing in the same terms link with no configuration, as the schema's meaning makes them comparable (spec/08 §10.1, D-136).
+
+**`links` names fields that mean the same thing under different names.** `links: %{name: :service, svc: :service}` says that a row's `name` and a row's `svc` are both the field `service`. `Visualize.Board.link/2` gives the name a field links to, the field itself when `links` does not name it. `Visualize.Board.linked/2` gives every field that links to the same name, so `linked(board, :name)` is `[:name, :service, :svc]` in name order. A link is one step: the name a field links to is not looked up again.
+
+**Picking.** A selection starts with a **pick**: a click on a cell's chart, or Enter on the point the keyboard has reached (spec/10 §17.3), names one of the cell's keyboard points as `{series, index}` (spec/10 §17.2). The cell's component calls `Visualize.Board.Server.pick/4`, which asks the board for the cell's process and then asks that process, from the caller's process, so a pick never holds the board. The cell answers with **the row behind the point** and its **identity**, read in this order:
+
+1. the point's mark's `series` channel, when it reads a field: `{field, value}` with the row's value;
+2. else the first field, by name, that the schema of the mark's slot types `:category` and the row has a value for;
+3. else none, `nil`: a point that names nothing a board can share selects nothing.
+
+The row is the datum as the mark drew it, with its typed values: a `DateTime` is a `DateTime`, not the string a data attribute would hold.
+
+**Selecting.** `Visualize.Board.Server.select(board, {field, value})` holds the selection, with its field read through `link/2`, so `{:name, "api"}` and `{:service, "api"}` are one selection under `links: %{name: :service}`. `select(board, nil)` clears it. The board sends every cell the selection as `linked/2`'s fields and the value, sends every subscriber its info (§8.2) with `selection`, and keeps it for a cell it restarts. The selection is the board's, so every viewer of one board process sees it, as every viewer sees its window.
+
+**Highlighting: the style grammar's `opacity`, bound per datum.** A cell **shows** the selection when a row of any of its slots has the value at one of the linked fields. Such a cell draws every other datum dimmed. It adds a column, `:"$vis_dim"`, to its slots' rows: `nil` for a row that holds the selection, and `0.25` for every other row. It draws its component with a style node `%{opacity: {:field, :"$vis_dim"}}` appended to the style stack of every mark that has `data` (spec/14 §3.6), the later winning, with the column declared among the sources' fields for that drawing alone. That is the existing grammar's own way to style per datum (spec/14 §3.2, a channel binding on a non-colour key): a mark drawing an element per datum dims each element, and a line or an area dims a whole series from its first datum (§5.6). A `nil` reading drops the key, so the selected data keep their own opacity. A cell that does not show the selection is drawn exactly as before, byte for byte, because a selection it cannot find says nothing about it. The highlight therefore needs no hook, works on every render target the cell's chart has, and a stylesheet sees it as the `opacity` attribute it is. A transform that derives new rows without the column, such as a `:sum`, leaves its mark undimmed. The selection's identity is not on those rows. A selection change recompiles each cell that shows it or showed it, as a change of chart does (§8.3).
+
+**Clearing.** Escape anywhere in the board clears the selection (§9.3), and so does the header's **Clear selection** button. Selecting with no identity changes nothing, so a click on a datum that names nothing keeps the selection.
+
+### 13.3 Drill-down
+
+**A drill target is stored data on the cell.** A cell's `drill` node says which board a click on one of its data opens and with which variables:
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `board` | `:self`, an atom, a non-empty string or a positive integer | required | the target: `:self` is this board, and anything else is the host's name for a board, since a board is not a store entry and where a host keeps its boards is its own (§11.2) |
+| `vars` | a map from the target's variable name to `{:datum, field}` or a value | `%{}` | the variables the target is opened with: a field of the clicked datum, or a fixed value |
+
+```elixir
+drill: %{board: :detail, vars: %{service: {:datum, :name}, range: "1h"}}
+```
+
+**It is validated against the target.** Alone, the node's shape is checked (§3.1). Given `boards:` (§3.2), its target must be a board the host holds, and every variable it sets must be one the target declares, a key of the target's `vars`. A `{:datum, field}` must name a field the cell's component's sources declare, when they declare any. A target of `:self` is checked against the board itself, with or without `boards:`. An invalid target is refused when the board is read with the store, and the runtime refuses to start such a board (§8.2), so a drill cannot fail later for want of a variable the target never had.
+
+**A click resolves it.** A pick (§13.2) in a cell with a `drill` resolves the target instead of selecting. `Visualize.Board.drill(board, cell, row)` gives `{:ok, %{board: ref, vars: vars}}` with every `{:datum, field}` read from the picked row and every fixed value as it is. A row with no value for a datum field is `{:error, [{[:cells, cell, :drill, :vars, var], {:missing, :datum, field}}]}`, and nothing opens. The board's component hands the target to the page as a message, and the page decides what opening it means (§9.2). The library holds no route, and `push_navigate` from the component would have to guess one. A callback assign would put a function in the component's assigns, where a message is how a LiveView already talks to its own page. A page that ignores the message ignores drills.
+
+### 13.4 Functions
+
+The functions are listed with their modules: `link/2`, `linked/2` and `drill/3` in §7.1, and `brush/2`, `reset_window/1`, `select/2` and `pick/4` in §8.6.

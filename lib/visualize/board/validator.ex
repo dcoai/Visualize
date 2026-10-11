@@ -14,8 +14,20 @@ defmodule Visualize.Board.Validator do
   # Boards were introduced at schema version 2 (spec/15 §2.3): there is no older board.
   @first 2
 
-  @board_keys [:version, :meta, :cells, :window, :zone, :vars, :sync, :layout, :stale_after]
-  @cell_keys [:x, :y, :w, :h, :ref, :title, :vars, :sync]
+  @board_keys [
+    :version,
+    :meta,
+    :cells,
+    :window,
+    :zone,
+    :vars,
+    :sync,
+    :layout,
+    :stale_after,
+    :links
+  ]
+  @cell_keys [:x, :y, :w, :h, :ref, :title, :vars, :sync, :drill]
+  @drill_keys [:board, :vars]
   @cell_required [:x, :y, :w, :h, :ref]
   @meta_keys [:name, :description]
   @layout_keys [:breakpoint, :row_height, :gap]
@@ -31,6 +43,9 @@ defmodule Visualize.Board.Validator do
 
   @doc false
   def cell_keys, do: @cell_keys
+
+  @doc false
+  def drill_keys, do: @drill_keys
 
   @doc false
   def meta_keys, do: @meta_keys
@@ -53,7 +68,8 @@ defmodule Visualize.Board.Validator do
         vars(Map.get(map, :vars, %{}), [:vars]) ++
         sync(Map.get(map, :sync)) ++
         layout(Map.get(map, :layout, %{})) ++
-        stale_after(Map.get(map, :stale_after))
+        stale_after(Map.get(map, :stale_after)) ++
+        links(Map.get(map, :links, %{}))
 
     done(errors)
   end
@@ -128,6 +144,7 @@ defmodule Visualize.Board.Validator do
   defp cell_key(:vars, vars, path), do: vars(vars, path)
   defp cell_key(:sync, sync, _path) when is_boolean(sync), do: []
   defp cell_key(:sync, _sync, path), do: [{path, {:type, :boolean}}]
+  defp cell_key(:drill, drill, path), do: drill(drill, path)
   defp cell_key(_key, _value, _path), do: []
 
   # A component is a composite id (spec/15 §1.3); an id of another kind is refused by its
@@ -240,7 +257,48 @@ defmodule Visualize.Board.Validator do
   defp stale_after(s) when is_number(s) and s > 0, do: []
   defp stale_after(_s), do: [{[:stale_after], {:type, :positive}}]
 
+  # Fields that mean one thing under two names (spec/15 §13.2): a name to a name.
+  defp links(links) when is_map(links) and not is_struct(links) do
+    for {field, link} <- links,
+        not (name?(field) and name?(link)),
+        do: {[:links, field], {:type, :name}}
+  end
+
+  defp links(_links), do: [{[:links], {:type, {:map, :name}}}]
+
+  defp name?(name), do: is_atom(name) and not is_boolean(name) and not is_nil(name)
+
+  # A cell's drill target (spec/15 §13.3): a board ref and the variables it is opened
+  # with, each a field of the datum or a value.
+  defp drill(nil, _path), do: []
+
+  defp drill(drill, path) when is_map(drill) and not is_struct(drill) do
+    unknown(drill, @drill_keys, path) ++
+      if(Map.has_key?(drill, :board),
+        do: board_ref(drill.board, path ++ [:board]),
+        else: [{path ++ [:board], :required}]
+      ) ++
+      drill_vars(Map.get(drill, :vars, %{}), path ++ [:vars])
+  end
+
+  defp drill(_drill, path), do: [{path, {:type, {:node, :drill}}}]
+
+  defp board_ref(ref, _path) when is_binary(ref) and ref != "", do: []
+  defp board_ref(ref, _path) when is_integer(ref) and ref > 0, do: []
+
+  defp board_ref(ref, path) do
+    if name?(ref), do: [], else: [{path, {:type, :board_ref}}]
+  end
+
+  defp drill_vars(vars, path) when is_map(vars) and not is_struct(vars) do
+    vars(vars, path) ++
+      for {name, {:datum, field}} <- vars, not name?(field), do: {path ++ [name], {:type, :field}}
+  end
+
+  defp drill_vars(vars, path), do: vars(vars, path)
+
   defp sync(nil), do: []
+
   defp sync(sync) when is_binary(sync) and sync != "", do: []
   defp sync(_sync), do: [{[:sync], {:type, :string}}]
 
@@ -327,7 +385,80 @@ defmodule Visualize.Board.Validator do
   end
 
   @doc false
+  # The faults of each cell's drill target given the boards a drill may name (spec/15
+  # §13.3): a ref the host does not hold, a variable the target does not declare, and a
+  # datum field the cell's component's sources do not declare. `boards` is a fetch, or
+  # `nil` when none was given, and then only a `:self` target is checked.
+  def drills(map, charts, boards) do
+    map
+    |> Map.get(:cells, %{})
+    |> Enum.sort()
+    |> Enum.flat_map(fn
+      {name, %{drill: %{board: ref} = drill}} ->
+        path = [:cells, name, :drill]
+        vars = Map.get(drill, :vars, %{})
+
+        target(ref, map, boards, path) ++
+          declared_by(target_vars(ref, map, boards), vars, path) ++
+          datum_fields(Map.get(charts, name), vars, path)
+
+      {_name, _cell} ->
+        []
+    end)
+  end
+
+  defp target(:self, _map, _boards, _path), do: []
+  defp target(_ref, _map, nil, _path), do: []
+
+  defp target(ref, _map, boards, path) do
+    case boards.(ref) do
+      {:ok, _board} -> []
+      :error -> [{path ++ [:board], {:no_board, ref}}]
+    end
+  end
+
+  # The variables the target declares, the keys of its `vars`; `nil` when it is not known.
+  defp target_vars(:self, map, _boards), do: Map.keys(Map.get(map, :vars, %{}))
+  defp target_vars(_ref, _map, nil), do: nil
+
+  defp target_vars(ref, _map, boards) do
+    case boards.(ref) do
+      {:ok, board} -> board |> Map.get(:vars, %{}) |> Map.keys()
+      :error -> nil
+    end
+  end
+
+  defp declared_by(nil, _vars, _path), do: []
+
+  defp declared_by(declared, vars, path) do
+    for var <- vars |> Map.keys() |> Enum.sort(),
+        var not in declared,
+        do: {path ++ [:vars, var], {:undeclared, :var, var}}
+  end
+
+  # A datum field must be one the component's sources declare, when they declare any.
+  defp datum_fields(nil, _vars, _path), do: []
+
+  defp datum_fields(%Chart{sources: sources}, vars, path) do
+    fields =
+      for {_slot, node} <- sources || %{},
+          field <- Map.get(node, :fields, []),
+          is_atom(field),
+          uniq: true,
+          do: field
+
+    if fields == [] do
+      []
+    else
+      for {var, {:datum, field}} <- Enum.sort(vars),
+          field not in fields,
+          do: {path ++ [:vars, var], {:undeclared, :field, field}}
+    end
+  end
+
+  @doc false
   # The variables a component declares.
+
   def declared(%Chart{vars: vars}) when is_map(vars) and not is_struct(vars), do: Map.keys(vars)
   def declared(_chart), do: []
 

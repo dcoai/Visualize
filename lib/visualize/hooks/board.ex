@@ -15,6 +15,10 @@ defmodule Visualize.Hooks.Board do
     first descendant with a `tabindex`. A key pressed inside a chart is the chart's: the
     hook acts only on a key whose target is the cell itself. Escape inside a chart is
     `KeyboardHook`'s, which hands focus back to the cell.
+  - **The selection** (spec/15 §13.2). While the container carries
+    `data-board-selection`, an Escape anywhere in it — on a cell or inside a chart —
+    pushes the clear event to the component, so one Escape inside a chart both returns
+    focus to the cell and clears the board's selection.
 
   ## Usage
 
@@ -28,6 +32,9 @@ defmodule Visualize.Hooks.Board do
   - `data-board-event` - the event pushed with `{width}` (default: `"resize"`)
   - `data-board-debounce` - milliseconds the width must hold before it is pushed
     (default: 150)
+  - `data-board-clear-event` - the event Escape pushes to clear the selection
+    (default: "select_clear")
+  - `data-board-selection` - set by the component while the board holds a selection
   """
 
   @doc "Returns the JavaScript source of `BoardHook`."
@@ -37,6 +44,7 @@ defmodule Visualize.Hooks.Board do
       mounted() {
         this.eventName = this.el.dataset.boardEvent || 'resize';
         this.debounce = parseInt(this.el.dataset.boardDebounce, 10) || 150;
+        this.clearEvent = this.el.dataset.boardClearEvent || 'select_clear';
         this.timer = null;
         this.last = null;
 
@@ -72,6 +80,11 @@ defmodule Visualize.Hooks.Board do
       },
 
       handleKeyDown(e) {
+        // Escape anywhere in the board clears its selection; the chart's own hook still
+        // hands focus back, so nothing is prevented (spec/10 §18.2).
+        if (e.key === 'Escape' && this.el.hasAttribute('data-board-selection')) {
+          this.pushEventTo(this.el, this.clearEvent, {});
+        }
         const cell = e.target;
         if (!cell || !cell.hasAttribute || !cell.hasAttribute('data-vis-cell')) return;
         const cells = this.cells();
