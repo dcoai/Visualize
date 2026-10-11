@@ -8,6 +8,8 @@ defmodule Visualize.Geo.Projection.Cylindrical do
   translation and rotation are applied by the parent module.
   """
 
+  import Visualize.Geo.Math, only: [asin: 1]
+
   @deg_to_rad :math.pi() / 180
   @rad_to_deg 180 / :math.pi()
 
@@ -87,7 +89,7 @@ defmodule Visualize.Geo.Projection.Cylindrical do
     # leaves asin's domain, and cos y < 0 correctly returns the back hemisphere (D-51).
     cosh_x = (:math.exp(x) + :math.exp(-x)) / 2
     lon = :math.atan2(sinh_x, cos_y)
-    lat = :math.asin(sin_y / cosh_x)
+    lat = asin(sin_y / cosh_x)
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
 
@@ -101,7 +103,7 @@ defmodule Visualize.Geo.Projection.Cylindrical do
 
   defp cylindrical_equal_area_invert(x, y, _proj) do
     lon = x * @rad_to_deg
-    lat = :math.asin(max(-1, min(1, y))) * @rad_to_deg
+    lat = asin(y) * @rad_to_deg
     {lon, lat}
   end
 
@@ -140,7 +142,7 @@ defmodule Visualize.Geo.Projection.Cylindrical do
   defp gall_peters_invert(x, y, _proj) do
     cos_phi = cos(45 * @deg_to_rad)
     lon = x / cos_phi * @rad_to_deg
-    lat = :math.asin(max(-1, min(1, y * cos_phi))) * @rad_to_deg
+    lat = asin(y * cos_phi) * @rad_to_deg
     {lon, lat}
   end
 

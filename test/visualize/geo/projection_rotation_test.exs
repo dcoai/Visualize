@@ -82,6 +82,21 @@ defmodule Visualize.Geo.ProjectionRotationTest do
     end
   end
 
+  # The property's failure of #566: a rotation that carries its point onto a pole, where
+  # collignon's inverse took asin(-1.0000000000000004). Random angles land within 10⁻⁸° of
+  # a pole only on some seeds, so the cases are fixed here.
+  test "a point the rotation carries onto a pole round-trips on every type" do
+    for type <- @types,
+        {angles, point} <- [
+          {{0, 90, 0}, {0, 0}},
+          {{0, -90, 0}, {0, 0}},
+          {{30, 90, 45}, {-30, 0}},
+          {{180, -90, 0}, {0, 0}}
+        ] do
+      assert_round_trip(type, angles, point)
+    end
+  end
+
   test "all three angles non-zero round-trip to floating-point noise on closed forms" do
     for type <- [
           :equirectangular,

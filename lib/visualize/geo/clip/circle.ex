@@ -14,6 +14,7 @@ defmodule Visualize.Geo.Clip.Circle do
   @behaviour Visualize.Geo.Clip
 
   import Bitwise
+  import Visualize.Geo.Math, only: [asin: 1, acos: 1]
 
   alias Visualize.Geo.{Cartesian, Clip}
 
@@ -304,19 +305,11 @@ defmodule Visualize.Geo.Clip.Circle do
     end
   end
 
-  # -- cartesian.js and math.js --
+  # -- cartesian.js --
 
   defp scale({x, y, z}, k), do: {x * k, y * k, z * k}
   defp add({a0, a1, a2}, {b0, b1, b2}), do: {a0 + b0, a1 + b1, a2 + b2}
 
   # cartesian.js:3–5, in degrees.
   defp spherical({x, y, z}), do: {:math.atan2(y, x) * @degrees, asin(z) * @degrees}
-
-  defp acos(x) when x > 1, do: 0.0
-  defp acos(x) when x < -1, do: @pi
-  defp acos(x), do: :math.acos(x)
-
-  defp asin(x) when x > 1, do: @pi / 2
-  defp asin(x) when x < -1, do: -@pi / 2
-  defp asin(x), do: :math.asin(x)
 end

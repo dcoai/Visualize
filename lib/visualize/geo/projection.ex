@@ -70,6 +70,8 @@ defmodule Visualize.Geo.Projection do
 
   """
 
+  import Visualize.Geo.Math, only: [asin: 1]
+
   alias Visualize.Geo.Projection.{Azimuthal, Compromise, Conic, Cylindrical, Pseudocylindrical}
 
   @deg_to_rad :math.pi() / 180
@@ -343,7 +345,7 @@ defmodule Visualize.Geo.Projection do
 
     for bearing <- 0..359 do
       b = bearing * @deg_to_rad
-      lat = :math.asin(sin(c) * cos(b))
+      lat = asin(sin(c) * cos(b))
       lon = :math.atan2(sin(b) * sin(c), cos(c))
       {lon / @deg_to_rad, lat / @deg_to_rad}
     end
@@ -571,9 +573,6 @@ defmodule Visualize.Geo.Projection do
     {p, g} = {phi * @deg_to_rad, gamma * @deg_to_rad}
     {cos(p), sin(p), cos(g), sin(g)}
   end
-
-  # d3's `asin` (src/math.js), which clamps its argument to [-1, 1].
-  defp asin(v), do: :math.asin(max(-1.0, min(1.0, v)))
 
   # `rotationLambda`'s normalisation (src/rotation.js:21): beyond ±π, less the nearest
   # whole turn, rounded as JavaScript's `Math.round` rounds a half (up).

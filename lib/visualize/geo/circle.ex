@@ -24,6 +24,8 @@ defmodule Visualize.Geo.Circle do
       angle (default `6`); `0` gives an empty ring, as in d3
   """
 
+  import Visualize.Geo.Math, only: [asin: 1]
+
   @pi :math.pi()
   @tau 2 * @pi
   @radians @pi / 180
@@ -122,9 +124,4 @@ defmodule Visualize.Geo.Circle do
 
   # cartesian.js:3–5.
   defp spherical({x, y, z}), do: {:math.atan2(y, x), asin(z)}
-
-  # math.js: d3's `asin`, which clamps its argument.
-  defp asin(x) when x > 1, do: @pi / 2
-  defp asin(x) when x < -1, do: -@pi / 2
-  defp asin(x), do: :math.asin(x)
 end

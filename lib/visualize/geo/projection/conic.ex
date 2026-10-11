@@ -8,6 +8,8 @@ defmodule Visualize.Geo.Projection.Conic do
   translation and rotation are applied by the parent module.
   """
 
+  import Visualize.Geo.Math, only: [asin: 1]
+
   @deg_to_rad :math.pi() / 180
   @rad_to_deg 180 / :math.pi()
 
@@ -56,7 +58,7 @@ defmodule Visualize.Geo.Projection.Conic do
     rho0 = :math.sqrt(c) / n
 
     rho = :math.sqrt(x * x + (rho0 - y) * (rho0 - y))
-    lat = :math.asin((c - rho * rho * n * n) / (2 * n))
+    lat = asin((c - rho * rho * n * n) / (2 * n))
     lon = :math.atan2(x, rho0 - y) / n
 
     {lon * @rad_to_deg, lat * @rad_to_deg}

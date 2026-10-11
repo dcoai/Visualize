@@ -428,6 +428,16 @@ release it merely follows.
   `refute_receive` that waits, a short `receive … after` or a sleep, unless the site is
   allow-listed with its reason. The examples' per-chart size test, which ran 51.6 s of its
   60 s timeout, is one test per chart that renders each chart once instead of three times.
+- **A projection no longer raises `ArithmeticError` at the edge of its domain** (#566,
+  D-149). Rounding carried a value that is exactly ±1 at a pole or the antimeridian a few
+  ulps past it: `Projection.invert/3` of `:collignon`'s own south pole raised
+  `asin(-1.0000000000000004)`, and so did a rotation that carried a point onto that pole.
+  `:albers`, `:conic_equal_area`, `:mollweide`, `:eckert2`, `:eckert3`, `:eckert6`,
+  `:wagner4` and `:loximuthal` failed the same way at a pole, and `:mollweide`'s
+  `project/3` at a latitude one ulp inside one. Every inverse sine and cosine in
+  `Visualize.Geo` is now d3's clamped one, so `invert/3` of a point just outside a map's
+  outline returns a point, as d3 does, where it raised. Points inside the domain project and
+  invert exactly as before.
 - **`Visualize.Chart.to_json/1` raised on a channel at its scale's own end** (#554): a
   `{:scale, :min}` or `{:scale, :max}` channel, such as an area's `y0`, had no JSON form. It is
   now written `{"$scale": "min"}` and read back as the tuple.

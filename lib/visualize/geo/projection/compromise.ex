@@ -8,6 +8,8 @@ defmodule Visualize.Geo.Projection.Compromise do
   translation and rotation are applied by the parent module.
   """
 
+  import Visualize.Geo.Math, only: [asin: 1, acos: 1]
+
   @deg_to_rad :math.pi() / 180
   @rad_to_deg 180 / :math.pi()
 
@@ -102,7 +104,7 @@ defmodule Visualize.Geo.Projection.Compromise do
     lat_rad = lat * @deg_to_rad
 
     # Parametric latitude
-    theta = :math.asin(@ee_m * sin(lat_rad))
+    theta = asin(@ee_m * sin(lat_rad))
     theta2 = theta * theta
     theta6 = theta2 * theta2 * theta2
 
@@ -124,7 +126,7 @@ defmodule Visualize.Geo.Projection.Compromise do
       @ee_m * x * (@ee_a1 + 3 * @ee_a2 * theta2 + theta6 * (7 * @ee_a3 + 9 * @ee_a4 * theta2)) /
         cos(theta)
 
-    lat = :math.asin(sin(theta) / @ee_m)
+    lat = asin(sin(theta) / @ee_m)
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
 
@@ -263,7 +265,7 @@ defmodule Visualize.Geo.Projection.Compromise do
     lat_rad = lat * @deg_to_rad
 
     cos_lat = cos(lat_rad)
-    alpha = :math.acos(cos_lat * cos(lon_rad / 2))
+    alpha = acos(cos_lat * cos(lon_rad / 2))
 
     sinc_alpha = if alpha == 0, do: 1, else: sin(alpha) / alpha
 
@@ -290,7 +292,7 @@ defmodule Visualize.Geo.Projection.Compromise do
     cos_half_lon = cos(lon / 2)
     sin_half_lon = sin(lon / 2)
 
-    alpha = :math.acos(cos_lat * cos_half_lon)
+    alpha = acos(cos_lat * cos_half_lon)
     sinc_alpha = if alpha == 0, do: 1, else: sin(alpha) / alpha
 
     f1 = (lon + 2 * cos_lat * sin_half_lon / sinc_alpha) / 2 - x
@@ -319,7 +321,7 @@ defmodule Visualize.Geo.Projection.Compromise do
     lat_rad = lat * @deg_to_rad
 
     cos_lat = cos(lat_rad)
-    alpha = :math.acos(cos_lat * cos(lon_rad / 2))
+    alpha = acos(cos_lat * cos(lon_rad / 2))
     sinc_alpha = if alpha == 0, do: 1, else: sin(alpha) / alpha
 
     x = 2 * cos_lat * sin(lon_rad / 2) / sinc_alpha
@@ -342,7 +344,7 @@ defmodule Visualize.Geo.Projection.Compromise do
     cos_half_lon = cos(half_lon)
     sin_half_lon = sin(half_lon)
 
-    alpha = :math.acos(cos_lat * cos_half_lon)
+    alpha = acos(cos_lat * cos_half_lon)
     sinc_alpha = if alpha == 0, do: 1, else: sin(alpha) / alpha
 
     f1 = 2 * cos_lat * sin_half_lon / sinc_alpha - x
@@ -375,7 +377,7 @@ defmodule Visualize.Geo.Projection.Compromise do
 
       true ->
         abs_lat = abs(lat_rad)
-        theta = :math.asin(2 * abs_lat / :math.pi())
+        theta = asin(2 * abs_lat / :math.pi())
         cos_theta = cos(theta)
         sin_theta = sin(theta)
 

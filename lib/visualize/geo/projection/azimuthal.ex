@@ -8,6 +8,8 @@ defmodule Visualize.Geo.Projection.Azimuthal do
   translation and rotation are applied by the parent module.
   """
 
+  import Visualize.Geo.Math, only: [asin: 1, acos: 1]
+
   @deg_to_rad :math.pi() / 180
   @rad_to_deg 180 / :math.pi()
 
@@ -45,7 +47,7 @@ defmodule Visualize.Geo.Projection.Azimuthal do
     if rho > 1 do
       nil
     else
-      c = :math.asin(rho)
+      c = asin(rho)
       cos_c = :math.cos(c)
       sin_c = :math.sin(c)
 
@@ -53,7 +55,7 @@ defmodule Visualize.Geo.Projection.Azimuthal do
         if rho == 0 do
           0
         else
-          :math.asin(y * sin_c / rho)
+          asin(y * sin_c / rho)
         end
 
       lon = :math.atan2(x * sin_c, rho * cos_c)
@@ -88,7 +90,7 @@ defmodule Visualize.Geo.Projection.Azimuthal do
       if rho == 0 do
         0
       else
-        :math.asin(y * sin_c / rho)
+        asin(y * sin_c / rho)
       end
 
     lon =
@@ -124,7 +126,7 @@ defmodule Visualize.Geo.Projection.Azimuthal do
 
   defp azimuthal_equal_area_invert(x, y, _proj) do
     rho = :math.sqrt(x * x + y * y)
-    c = 2 * :math.asin(rho / 2)
+    c = 2 * asin(rho / 2)
     cos_c = :math.cos(c)
     sin_c = :math.sin(c)
 
@@ -132,7 +134,7 @@ defmodule Visualize.Geo.Projection.Azimuthal do
       if rho == 0 do
         0
       else
-        :math.asin(y * sin_c / rho)
+        asin(y * sin_c / rho)
       end
 
     lon = :math.atan2(x * sin_c, rho * cos_c)
@@ -145,7 +147,7 @@ defmodule Visualize.Geo.Projection.Azimuthal do
     lat_rad = lat * @deg_to_rad
 
     cos_lat = :math.cos(lat_rad)
-    c = :math.acos(cos_lat * :math.cos(lon_rad))
+    c = acos(cos_lat * :math.cos(lon_rad))
 
     if c == 0 do
       {0.0, 0.0}
@@ -167,7 +169,7 @@ defmodule Visualize.Geo.Projection.Azimuthal do
       cos_c = :math.cos(c)
       sin_c = :math.sin(c)
 
-      lat = :math.asin(y * sin_c / rho)
+      lat = asin(y * sin_c / rho)
       lon = :math.atan2(x * sin_c, rho * cos_c)
       {lon * @rad_to_deg, lat * @rad_to_deg}
     end
@@ -203,7 +205,7 @@ defmodule Visualize.Geo.Projection.Azimuthal do
       if rho == 0 do
         0
       else
-        :math.asin(y * sin_c / rho)
+        asin(y * sin_c / rho)
       end
 
     lon = :math.atan2(x * sin_c, rho * cos_c)
