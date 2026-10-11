@@ -491,3 +491,11 @@ The order across cells is the board's (spec/14 §21.5, D-142). `BoardHook` (spec
 |---|---|
 | `Visualize.Components.Board.cell_id/2` | `cell_id(board_id, cell)`: a cell's component and DOM id, `"<board_id>-<cell>"`. |
 | `Visualize.Components.Board.forward/2` | `forward(id, message)`: a board process's message handed to the board's component or a cell's (§9.2); `:ignore` for any other message. |
+
+## 10. The examples' live board
+
+**Implemented** (#576, D-146). The examples site shows a live board at **`/board`**, under the *Client-side Interactions* tab and linked from that tab's page beside the synced dashboard, so the site map holds it (spec/14 §12.6, `examples/test/examples_web/site_map_test.exs`).
+
+- **The host's part, as a host writes it.** The examples' tree holds `{Visualize.Board.Supervisor, name: Examples.Boards}` (§8.1) and `Examples.BoardDemo`, which runs the demo's feed processes. The demo board is started under `Examples.Boards` on the first visit and is the same process on every later one, so every visitor shares its window, which is the board's shared state (§8.2). The page holds the board's pid, renders `Visualize.Components.Board`, and forwards the board's messages with the one `handle_info/2` clause of §9.2.
+- **Five cells over live feeds.** *Load* is the gallery's *Load* design: its history is fed by a `Visualize.Signals` sine through the library's `Visualize.Feed.Signals` on the wall clock, and its dial's track by a fixed feed. *Wave* is the gallery's *Line Chart* with its `x` a time scale, over a second signal. *Memory* and *Run queue* are **one component in two cells**, each bound to its own in-process `:telemetry` metric through `Visualize.Feed.Telemetry`, which a probe emits every half second. *Offline* is the *Line Chart* bound to a feed that cannot be reached, so the designed "feed down" state is always on the page. A signal counts ticks and a board's window is UTC, so the demo's wall-clock wrapper is the one conversion between them: a window of instants is asked as ticks, and the ticks are answered as instants.
+- **The window moves.** Buttons set the board's window to the last 1, 5 or 15 minutes, and brushing a time chart sets it to the brushed span. Both re-ask every feed, and a double-click restores the window. The header shows the window in the board's zone. Below the breakpoint the cells stack.
