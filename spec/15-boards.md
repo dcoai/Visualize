@@ -4,7 +4,7 @@
 
 A **board** is a dashboard as data: designs laid out on a grid, sharing a time window, variables and a sync group, but never geometry. It is the layer above the composite of [14-declarative-chart](14-declarative-chart.md) §19.6. A composite is overlapping parts that **flatten** into one chart in one coordinate space, such as a gauge drawn over a line. A board **never flattens**: each cell is its own chart, applied, rendered and updated on its own, and the cells share *state*, not pixels (#531 §1).
 
-This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's, §8 (#540, D-146). A board's travel with its components in a bundle is #542's.
+This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's, §8 (#540, D-146). A board travels to another host in a bundle with its components and themes, re-keyed on import (§11, #542).
 
 ```
 board      — layout + shared state                       (this document)
@@ -61,7 +61,7 @@ A cell is a placement on the grid and a **component reference**:
 
 **A cell's name is its identity.** Cells are a map by name, as a design's frames are (spec/14 §2.1), so a cell is the same cell wherever it is moved. The name namespaces the cell's sources (§4.1), keys its variables and its realised chart (§6), and is what a binding names. It is never drawn.
 
-**A component is a store entry, referred to by id** (spec/14 §19.2). The ref is an id of kind `:composite`, issued by the store. That entry holds either a composite, which flattens to a design (spec/14 §19.6), or a flat design, such as an imported document. `Visualize.Chart.Composite.flatten/2` reads both, and a design flattens to itself. A design is not a kind of fragment and has no id of its own (spec/14 §19.8), so a composite id is the one form a component reference takes. A local key or an inline design is not a component reference, because a board holds no designs of its own. Whatever it shows is in the store, where the builder edits it and a bundle carries it (#542).
+**A component is a store entry, referred to by id** (spec/14 §19.2). The ref is an id of kind `:composite`, issued by the store. That entry holds either a composite, which flattens to a design (spec/14 §19.6), or a flat design, such as an imported document. `Visualize.Chart.Composite.flatten/2` reads both, and a design flattens to itself. A design is not a kind of fragment and has no id of its own (spec/14 §19.8), so a composite id is the one form a component reference takes. A local key or an inline design is not a component reference, because a board holds no designs of its own. Whatever it shows is in the store, where the builder edits it and a bundle carries it (§8).
 
 **The rectangle is metresis's** (its spec §8.3), so a metresis panel becomes a cell mechanically: `x`, `y`, `w` and `h` carry over unchanged, its stored design becomes the component, and its query becomes the cell's binding.
 
@@ -499,3 +499,50 @@ The order across cells is the board's (spec/14 §21.5, D-142). `BoardHook` (spec
 - **The host's part, as a host writes it.** The examples' tree holds `{Visualize.Board.Supervisor, name: Examples.Boards}` (§8.1) and `Examples.BoardDemo`, which runs the demo's feed processes. The demo board is started under `Examples.Boards` on the first visit and is the same process on every later one, so every visitor shares its window, which is the board's shared state (§8.2). The page holds the board's pid, renders `Visualize.Components.Board`, and forwards the board's messages with the one `handle_info/2` clause of §9.2.
 - **Five cells over live feeds.** *Load* is the gallery's *Load* design: its history is fed by a `Visualize.Signals` sine through the library's `Visualize.Feed.Signals` on the wall clock, and its dial's track by a fixed feed. *Wave* is the gallery's *Line Chart* with its `x` a time scale, over a second signal. *Memory* and *Run queue* are **one component in two cells**, each bound to its own in-process `:telemetry` metric through `Visualize.Feed.Telemetry`, which a probe emits every half second. *Offline* is the *Line Chart* bound to a feed that cannot be reached, so the designed "feed down" state is always on the page. A signal counts ticks and a board's window is UTC, so the demo's wall-clock wrapper is the one conversion between them: a window of instants is asked as ticks, and the ticks are answered as instants.
 - **The window moves.** Buttons set the board's window to the last 1, 5 or 15 minutes, and brushing a time chart sets it to the brushed span. Both re-ask every feed, and a double-click restores the window. The header shows the window in the board's zone. Below the breakpoint the cells stack.
+
+## 11. A board in a bundle
+
+A board names its components by store id, and an id is one store's (spec/14 §19.2). The host that authored a board (metresis) holds those ids; the host that shows it (Exio) does not. So a board travels in a **bundle** (spec/14 §19.7) with everything it shows, and arrives under ids the receiving store issues (#542, D-147).
+
+### 11.1 What travels, and what does not
+
+`Visualize.Chart.Builder.Bundle.export_board/3` takes a store, a board and the source's name for the provenance, as `export/3` does. The bundle holds:
+
+- **the board**, in its map form (§2.1), under the bundle's `board` key;
+- **every component its cells reference**, each once, however many cells use it;
+- **the library entries those components use**, transitively: the closure of `export/3`, so a style or a scale a component refers to travels with it;
+- **every stored theme the board or its components name.** A component names a theme by its design's `theme` (spec/14 §2.5). The flattened design's `theme` is read, and when it is a variable, it is read through the cell's cascade (§5): the cell's value, then the board's, then the component's default. This is how a board names a theme, since a board has no `theme` key of its own. A name that is a built-in theme (`Visualize.Theme.builtins/0`) is not carried, because every host has it. Any other name is looked up in the store by `Visualize.Chart.Builder.Store.theme_entry/2` and that entry is carried with its closure. A theme the store does not hold is not carried, and the host applies it as it would have (spec/14 §2.5). A theme referred to by id from a use site is in the components' closure already.
+
+Entries are in dependency order, each after everything it refers to, and each keeps its original id. A cell whose component the store does not hold is exported as it is, and its component is not carried. Its import reports it (§11.3).
+
+**Bindings never travel.** A bundle has no binding and no feed. A binding (§4.2) is the host's: it names the host's feeds, and the receiving host has others. The importing host binds the board's slots, which `required_sources/3` names, to its own feeds. A cell's `vars`, its title and its placement are the board's and travel with it.
+
+### 11.2 Importing a board
+
+`Visualize.Chart.Builder.Bundle.import_board/3` takes the receiving store, the bundle and options, and returns `{:ok, %{board: board, ids: table, outside: outside}}` or `{:error, errors}`, every fault in the path shape of §3. `board` is the board with every cell's `ref` rewritten to its component's new id. `table` is the `old => new` id table of the store's `import/2` (spec/14 §19.7), and `outside` the references inside the carried entries to ids the bundle does not carry, which import as masks and are reported, never a failure. The board is returned to the host and is not put in the store: a board is not a library entry (spec/14 §19.8), and where a host keeps its boards is its own.
+
+**Every check comes before any entry is put**, so a refused bundle leaves the receiving store as it was. In order:
+
+1. **The bundle's schema.** A provenance `schema` above `Visualize.Chart.Migration.current/0` is `{:newer_schema, needs, this}` at `[:provenance, :schema]`, as D-137 says, and nothing else of the bundle is read. A bundle with no `schema` reads as the current version.
+2. **The board.** A bundle with no board is `:required` at `[:board]`. The board map is read by `Visualize.Board.from_map/2` with the `limits:` option: its own `version` is gated as §2.3 says, then held to `depth` and `items`, then validated alone. Its faults are at the board's own paths.
+3. **The entries' limits.** A bundle that carries more entries than `items` is `{:limit, :items, max, given}` at `[:entries]`. Each entry's fragment is held to `depth` and `items` as `Visualize.Chart.Fragment.from_json/2` holds a fragment, each fault at `[:entries, id | path]`, with `id` written as `Visualize.Chart.Builder.Store.encode_id/1` writes it (`"style:11"`).
+4. **The board given the bundle.** The board is validated as §3.2 validates it, with the bundle's entries as the store and `limits:` for each component's design. The board is therefore read exactly as the receiving store will hold it. **A cell whose component the bundle does not carry** is `{:not_carried, id}` at `[:cells, name, :ref]`, naming the cell. A component that reaches itself, one that is not a design, an undeclared cell variable and a cell that cannot join the group are §3.2's faults at the same paths.
+5. **Theme names.** A theme is found by name (spec/14 §2.5), so a carried theme that the receiving store already holds under its name with a different body would be shadowed or would shadow, and a board would draw in a theme it was not designed in. That is `{:theme_taken, name}` at `[:entries, id]`. A theme of that name whose body is the same is not a fault: either draws the board as it was designed.
+
+Then the entries are imported through the store's own `import/2`, which issues each entry a new id from the receiving store's sequences and rewrites the references inside the collection through one `old => new` table (spec/14 §19.7, D-103). **A new id never collides** with one the store already holds, because the store issues it. The board's cell refs are rewritten through the same table, so each cell names its component's new id. A store that refuses the import, `{:error, reason}`, is `{:store, reason}` at `[]`, and the board is not returned.
+
+### 11.3 Reasons
+
+| Reason | Meaning |
+|---|---|
+| `{:not_carried, id}` | a cell's component that the bundle does not carry, at the cell's `ref` |
+| `{:theme_taken, name}` | a carried theme whose name the receiving store already gives a different theme, at the carried entry |
+| `{:store, reason}` | the receiving store refused the import, with the store's own reason |
+
+### 11.4 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Bundle.export_board/3` | `export_board(store, board, source)`: a bundle of the board's map form, every component its cells reference with their closure, and every stored theme the board or its components name, dependencies first, with provenance (§11.1). |
+| `Visualize.Chart.Builder.Bundle.import_board/2` | As `import_board/3` with `[]` options. |
+| `Visualize.Chart.Builder.Bundle.import_board/3` | `import_board(store, bundle, opts)`: every check of §11.2 before any entry is put, then the store's `import/2` and the board's refs rewritten through its table; `{:ok, %{board, ids, outside}}` or `{:error, errors}`; `limits:` as `Visualize.Board.from_map/2` takes them. |

@@ -64,6 +64,19 @@ release it merely follows.
   where two readings are further apart than the field's `continuity`.
   `Visualize.Board.components/3` prepares each cell's component, writing in the board's
   group and zone (a time scale with no zone takes the board's).
+- **A board travels to another host in a bundle** (#542, D-147). `Visualize.Chart.Builder.Bundle.export_board/3`
+  bundles a `%Visualize.Board{}` with every component its cells reference, the library
+  entries those use, and every stored theme the board or its components name (a theme the
+  design's `theme` names, read through the cell's variables). `import_board/3` checks the
+  whole bundle before it puts anything — a newer `schema` or board `version` is refused,
+  `limits:` bound the board, the entries and the components, a cell whose component the
+  bundle does not carry is `{:not_carried, id}` at that cell, and a carried theme whose name
+  the store already gives a different theme is `{:theme_taken, name}` — then imports the
+  entries through the store's own `import/2` and returns `%{board: board, ids: table,
+  outside: ids}`, the board's cell refs rewritten to the new ids. Bindings never travel: bind
+  the imported board's `required_sources/3` to your own feeds. `%Bundle{}` gains a `board`
+  key, `nil` for a bundle `export/3` makes. `Visualize.Chart.Builder.Store.theme_name/1` is
+  public: the name a stored theme entry answers to.
 - **A theme is a stored, versioned value** (#561, D-139). `Visualize.Chart.Theme` writes a
   theme as a document — `to_map/1` is `%{version: 2, theme: node}`, `to_json/1` the stamped
   `{"$version": 2, "theme": {…}}` — and `from_map/2` and `from_json/2` read one back to a
