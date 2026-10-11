@@ -157,6 +157,7 @@ defmodule Visualize.MixProject do
       groups_for_modules: [
         Facade: [Visualize],
         "Declarative chart": ~r"Visualize\.Chart",
+        Boards: ~r"Visualize\.Board",
         Scales: ~r"Visualize\.Scale",
         Shapes: ~r"Visualize\.Shape",
         "Axes and formatting": [Visualize.Axis, Visualize.Format],

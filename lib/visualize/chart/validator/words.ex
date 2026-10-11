@@ -144,6 +144,26 @@ defmodule Visualize.Chart.Validator.Words do
       "or declare the scale under frame"
   end
 
+  # A board's own reasons (spec/15 §3.3, D-141).
+  def words({:off_grid, columns}), do: "runs past the board's #{columns} columns"
+  def words({:overlap, other}), do: "overlaps cell #{inspect(other)}"
+  def words({:window, :both}), do: "says both last and from/to: a window is one or the other"
+  def words({:window, :inverted}), do: "has a from that is not before its to"
+  def words({:dangling, id}), do: "refers to #{inspect(id)}, which the store does not hold"
+
+  def words({:cycle, chain}) when is_list(chain),
+    do: "reaches itself through #{Enum.map_join(chain, " → ", &inspect/1)}"
+
+  def words({:unbound, :binding, slot}),
+    do: "slot #{inspect(slot)} is bound to no feed: the binding names none for it"
+
+  def words({:undescribed, feed}) do
+    "feed #{inspect(feed)} has no schema to check the slot's contract against: give the " <>
+      "check its schema or a describe function"
+  end
+
+  def words(:not_required), do: "binds a slot that no cell's component declares"
+
   def words({:json, message}), do: "JSON does not parse: #{message}"
   def words({:missing_dependency, :jason}), do: "needs the optional dependency Jason"
 
@@ -213,6 +233,13 @@ defmodule Visualize.Chart.Validator.Words do
   defp type_words(:font), do: "a font string or a theme slot"
   defp type_words(:slot), do: "a theme slot"
   defp type_words(:term), do: "a JSON-representable term"
+  defp type_words(:positive), do: "a positive number"
+  defp type_words(:non_neg_integer), do: "a non-negative integer"
+  defp type_words(:pos_integer), do: "a positive integer"
+  defp type_words(:utc_datetime), do: "a DateTime in Etc/UTC"
+  defp type_words(:board), do: "a board map"
+  defp type_words(:window), do: "nil, %{last: seconds} or %{from: t, to: t}"
+  defp type_words({:id, kind}), do: "a #{kind} id, {#{inspect(kind)}, n}"
   defp type_words({:enum, allowed}), do: "one of #{list(allowed)}"
   defp type_words({:list, t}), do: "a list of #{type_words(t)}"
   defp type_words({:map, t}), do: "a map from names to #{type_words(t)}"

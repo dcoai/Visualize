@@ -41,6 +41,7 @@ Every document carries a `**Status:**` line immediately after its title.
 | 12 | [Testing and conformance](12-testing-and-conformance.md) | Goldens, the API surface gate, heading checks, CI stages, the ExTLA model | Agreed |
 | 13 | [Decisions](13-decisions.md) | The architecture decision record log | Implemented |
 | 14 | [Declarative chart](14-declarative-chart.md) | The design map: schema with facets, style grammar, frame, marks, variables, version, validation, JSON; application, composition and compilation; the builder | Agreed |
+| 15 | [Boards](15-boards.md) | The board: designs on a 12-column grid sharing a window, variables and a sync group; its codecs and validation; the sources it needs, per cell, and the binding a connector supplies | Implemented |
 
 Documents are numbered in reading order; the `README` keeps its name so the directory index renders it. New documents take the next free number.
 

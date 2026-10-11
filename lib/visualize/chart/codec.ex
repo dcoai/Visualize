@@ -127,6 +127,14 @@ defmodule Visualize.Chart.Codec do
   @doc false
   def decode(other), do: other
 
+  # One term outside any schema, as a `:term` position writes and reads it (spec/14
+  # §11.2): the board's codec (spec/15 §2.2) writes its component ids, its window's times
+  # and its variables' values through these, so a board and a design spell a term alike.
+  @doc false
+  def encode_term(value), do: term(value)
+  @doc false
+  def decode_term(value), do: read_term(value)
+
   # A key only an earlier version had is read by the type it had there, so the migration
   # that moves it gets typed values (spec/14 §9, #479); any other unknown key is a term.
   defp read_legacy(kind, k, v) do
