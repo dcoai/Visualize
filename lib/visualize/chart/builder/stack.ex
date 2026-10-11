@@ -1113,6 +1113,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       do: [
         :composite,
         :theme,
+        :board,
         :style,
         :frame,
         :scale,
@@ -1128,6 +1129,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec empty(atom()) :: map()
     def empty(:composite), do: %{composite: %{uses: [], vars: %{}}}
     def empty(:theme), do: %{theme: %{}}
+    # A board with no cells and every default (spec/14 §22.1, spec/15 §1.2).
+    def empty(:board), do: %{board: Visualize.Board.to_map(%Visualize.Board{})}
     def empty(:frame), do: %{frames: %{main: %{}}}
 
     def empty(kind) when kind in [:style, :scale, :source, :axis, :mark, :label, :var],

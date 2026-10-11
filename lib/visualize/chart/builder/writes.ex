@@ -19,6 +19,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A composer opened on a kind takes only that kind; the workspace, a composite and a
     # design take anything (spec/14 §19.6).
     @doc false
+    # A board is shown, never composed (spec/14 §22.1): no stack takes one.
+    def admits(_open, %{kind: :board} = entry),
+      do: {:refused, "#{entry.name} is a board; a board is opened, never composed into a chart"}
+
     def admits(nil, _entry), do: :ok
     def admits(%{kind: :composite}, _entry), do: :ok
     def admits(%{kind: kind}, %{kind: kind}), do: :ok

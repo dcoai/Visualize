@@ -64,6 +64,22 @@ release it merely follows.
   **Changed:** a cleared brush on a board no longer restores the window, because a click on
   a chart is a cleared brush. *Reset window* is the undo.
 
+- **Build a board in the builder** (#579, D-152). A board is now a library kind: a store
+  entry `%{board: map}` holding `Visualize.Board.to_map/1`, read back with
+  `Visualize.Board.from_map/2`. `Fragment.kinds/0` includes `:board`, so your store issues
+  `{:board, n}` ids. `Fragment.to_json/1` and `from_json/2` round-trip a board, and
+  `Bundle.export/3` of a board entry carries its cells' components. Opening a board entry,
+  or *New → board*, puts `Visualize.Chart.Builder` in its board mode. Drag a cell to place
+  it and drag its edges to resize it; the arrow keys do the same on a focused cell. The
+  server refuses an overlap or a cell off the grid. You can pick each cell's component,
+  title, sync and variables. You can set the board's name, window (none, last N seconds,
+  or a fixed UTC span), display zone, sync group, `stale_after`, layout and variables. A
+  narrow view shows how the board stacks below its breakpoint. Each cell previews through
+  `Visualize.Board.realise/4` over your `sources`, its slots bound by name. *Edit
+  component* opens a cell's composite, and *Back to board* returns. A store whose `put/2`
+  derives the kind with `Fragment.kind/1` needs no change. A board entry cannot be
+  dropped into a chart.
+
 - **A board runs live** (#574, D-146). Add `{Visualize.Board.Supervisor, name: MyApp.Boards}`
   to your tree and start a board under it with `Visualize.Board.Server.start/2`, passing
   `board:`, `store:`, `binding:` and `feeds:`. The board process owns the window (UTC), the

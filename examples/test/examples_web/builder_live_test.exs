@@ -176,4 +176,34 @@ defmodule ExamplesWeb.BuilderLiveTest do
     {:noreply, deployed} = BuilderLive.handle_info({:design_deployed, "b", design}, socket)
     assert deployed.assigns.saved == "deployed: the design applies"
   end
+
+  describe "the board mode (spec/14 §22, D-152)" do
+    alias Visualize.Chart.Builder.{Boards, Stack}
+
+    test "the page tells of it, and the library holds a board over gallery charts" do
+      html = build_conn() |> get("/builder") |> html_response(200)
+      assert html =~ "opens the board mode"
+      assert html =~ "In development:"
+      assert html =~ ~s(<option value="board">board</option>)
+
+      {:ok, entry} = Library.get(Library.id_of("Boards::live board"), nil)
+      assert entry.kind == :board
+      assert {:ok, board} = Visualize.Board.from_map(entry.fragment.board)
+      assert Visualize.Board.validate(board, Stack.fetch(Library)) == :ok
+    end
+
+    test "every cell of the seeded board previews over the page's pool" do
+      {:ok, socket} = BuilderLive.mount(%{}, %{}, %Socket{})
+      {:ok, entry} = Library.get(Library.id_of("Boards::live board"), nil)
+      board = Visualize.Board.from_map!(entry.fragment.board)
+      pools = Map.new(board.cells, fn {name, _cell} -> {name, socket.assigns.sources} end)
+
+      previews = Boards.preview(board, Stack.fetch(Library), pools: pools)
+      assert map_size(previews) == 4
+
+      for {name, preview} <- previews do
+        assert {:ok, "<svg" <> _} = preview, "#{name}: #{inspect(preview)}"
+      end
+    end
+  end
 end

@@ -59,6 +59,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Chart.Builder.{
       Axes,
+      BoardGrid,
+      Boards,
       Document,
       Editor,
       Events,
@@ -207,7 +209,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
          find: "",
          node_label: "design",
          theme_designs: [],
-         vision: :none
+         vision: :none,
+         board: nil,
+         board_cell: nil,
+         board_view: :wide,
+         return_to: nil
        )}
     end
 
@@ -399,7 +405,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                     phx-target={@myself}
                   >{row.name}<span :if={row.kind} class="vis-builder-chart-kind">{row.kind}</span></button>
                   <button
-                    :if={row.selected?}
+                    :if={row.selected? and row.kind != :board}
                     type="button"
                     class="vis-builder-add"
                     title="add an empty layer: drag objects into it from the library"
@@ -465,6 +471,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 />
                 <button type="submit" class="vis-builder-put">Save to library</button>
               </form>
+              <button
+                :if={@return_to}
+                type="button"
+                class="vis-builder-board-return"
+                phx-click="board_return"
+                phx-target={@myself}
+                title="back to the board this component was opened from (spec/14 §22.7)"
+              >
+                Back to board
+              </button>
               <button :if={@preview?} type="button" class="vis-builder-save" phx-click="save" phx-target={@myself}>
                 Save
               </button>
@@ -489,7 +505,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 Deploy
               </button>
             </div>
+            <BoardGrid.grid :if={@board_mode} id={@id <> "-board"} mode={@board_mode} target={@myself} />
             <div
+              :if={!@board_mode}
               id={@id <> "-graph"}
               class="vis-builder-graph"
               tabindex="0"
@@ -581,7 +599,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
               vision={@vision}
               target={@myself}
             />
-            <div :if={@context == :inspect and !@theme_mode} class="vis-builder-inspect">
+            <Boards.panel
+              :if={@context == :inspect and @board_mode}
+              id={@id <> "-board-panel"}
+              mode={@board_mode}
+              target={@myself}
+            />
+            <div :if={@context == :inspect and !@theme_mode and !@board_mode} class="vis-builder-inspect">
               <details
                 :for={top <- @page.tops}
                 :if={@page.sections? and not @data_page?}
@@ -749,7 +773,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <Masks.panel
-              :if={@context == :inspect && @site && !(@style_site && @style_entry) && !@theme_mode}
+              :if={@context == :inspect && @site && !(@style_site && @style_entry) && !@theme_mode && !@board_mode}
               id={@id <> "-masks"}
               use={@site.use}
               label={@site.label}

@@ -55,14 +55,46 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # inline site — selected, the entry recorded on it so Save as writes the entry
     # (spec/14 §19.9).
     @doc false
+    # A board entry opens as a board chart (spec/14 §22.2): the board read back by its own
+    # reader, and an entry that does not read is not opened.
+    def opened_entry(socket, %{kind: :board} = entry) do
+      case Visualize.Board.from_map(Map.get(entry.fragment, :board)) do
+        {:ok, board} ->
+          socket
+          |> opened(entry, [], %{}, %{}, %{})
+          |> assign(
+            board: board,
+            board_cell: board.cells |> Map.keys() |> Enum.min(fn -> nil end)
+          )
+          |> added_chart(entry.name || "new board", "chart #{socket.assigns.next_chart}")
+
+        {:error, errors} ->
+          assign(
+            socket,
+            :notice,
+            "#{entry.name || "the board"} does not open: " <>
+              Enum.map_join(errors, "; ", &Visualize.Board.format_error/1)
+          )
+      end
+    end
+
     def opened_entry(socket, entry) do
       {uses, labels, vars, signals} = Stack.open(entry, names(socket.assigns.store))
       n = socket.assigns.next_chart
 
       socket
+      |> opened(entry, uses, labels, vars, signals)
+      |> added_chart(entry.name || "new #{entry.kind}", "chart #{n}")
+    end
+
+    defp opened(socket, entry, uses, labels, vars, signals) do
+      socket
       |> park()
       |> assign(
         open: %{id: entry.id, name: entry.name, kind: entry.kind},
+        board: nil,
+        board_cell: nil,
+        return_to: nil,
         uses: uses,
         labels: labels,
         stack_vars: vars,
@@ -76,11 +108,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
         added: nil,
         notice: nil
       )
-      |> added_chart(entry.name || "new #{entry.kind}", "chart #{n}")
     end
 
     # The live assigns are the selected chart's; parking writes them back to its row.
-    @chart_state [:uses, :labels, :stack_vars, :selected, :open, :signals]
+    # A board chart holds its board and its selected cell, and a component opened from a
+    # board the chart it returns to (spec/14 §22.2, §22.7).
+    @chart_state [
+      :uses,
+      :labels,
+      :stack_vars,
+      :selected,
+      :open,
+      :signals,
+      :board,
+      :board_cell,
+      :return_to
+    ]
 
     @doc false
     def park(%{assigns: %{chart: nil}} = socket), do: socket

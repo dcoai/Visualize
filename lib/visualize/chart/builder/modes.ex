@@ -4,7 +4,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The builder's modes (spec/14 §19.9, §20): the shapes the editor takes for an open kind
     # that is not a chart of marks. A composite, a design and every other kind are the
     # design editor, which is the builder itself; a theme is the theme mode
-    # (`Visualize.Chart.Builder.ThemeMode`, D-139).
+    # (`Visualize.Chart.Builder.ThemeMode`, D-139) and a board the board mode.
     #
     # A mode is one module with three functions, and this list is the one place a mode is
     # named:
@@ -16,12 +16,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     #     for the mode, keyed by the mode (`%{theme_mode: nil}` while it is off), merged into
     #     what `Visualize.Chart.Builder.Editing.editing/1` derives.
     #
-    # A new mode — a board (#544) — is a module beside `ThemeMode` and an entry here; the
-    # render reads its key as it reads `@theme_mode`.
+    # A new mode is a module beside these and an entry here; the render reads its key as it
+    # reads `@theme_mode` and `@board_mode`. The board mode (`BoardMode`, spec/14 §22,
+    # D-152) is the editor's shape for a board.
 
-    alias Visualize.Chart.Builder.ThemeMode
+    alias Visualize.Chart.Builder.{BoardMode, ThemeMode}
 
-    @modes [ThemeMode]
+    @modes [ThemeMode, BoardMode]
 
     @doc false
     # The mode modules, for the router.

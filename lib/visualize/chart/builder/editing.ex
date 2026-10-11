@@ -282,6 +282,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       layer ++ Scales.unscaled(design, Scales.pool_types(pool))
     end
 
+    # A board chart has no design: the board mode validates the board itself, alone on every
+    # write and given the store in its validity section (spec/14 §22.2, §22.5).
+    defp faults(:board, _design, _assigns, nil), do: []
+
     # The design of a non-composite chart is stamped with the version as every design the
     # stack makes is (§9.1); per-kind validity reads the fragment, which carries none.
     defp faults(kind, design, _assigns, nil) do

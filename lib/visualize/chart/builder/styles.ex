@@ -2884,7 +2884,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         true
     """
     @spec css() :: binary()
-    def css, do: @stylesheet
+    def css, do: @stylesheet <> Visualize.Chart.Builder.BoardGrid.css()
 
     @doc """
     Returns the path where the stylesheet should be installed, beside the hooks.
