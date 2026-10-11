@@ -266,6 +266,53 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A name from the page as one of the given atoms, or `nil`: no atom is made of it.
     def named(names, text), do: Enum.find(names, &(Atom.to_string(&1) == text))
 
+    # -- feeds and their samples (§22.6, §22.8) ------------------------------------------------
+
+    @doc false
+    # A feed as the page prints it and sends it back: its name for an atom or a string,
+    # else its inspected form. A feed from the page is matched against the bindable feeds
+    # by this, and never made a term of its own.
+    def feed_key(feed) when is_atom(feed), do: Atom.to_string(feed)
+    def feed_key(feed) when is_binary(feed), do: feed
+    def feed_key(feed), do: inspect(feed)
+
+    @doc """
+    Sixty rows made from a schema, for a preview where the host gave none of a feed's
+    (spec/14 §22.6): a `:time` field a second apart and ending at `now`, a `:number` field a
+    slow sine, a `:category` field its `order` in turn — else `"a"`, `"b"` and `"c"` — and a
+    `:text` field its own name. The rows are shaped like the feed's, not its values.
+
+        iex> schema = Visualize.Data.Schema.new!(%{t: %{type: :time}, v: %{type: :number},
+        ...>   state: %{type: :category, order: ["ok", "warn"]}})
+        iex> rows = Visualize.Chart.Builder.Boards.sample(schema, ~U[2026-10-11 12:00:00Z])
+        iex> {length(rows), List.last(rows).t, Enum.map(Enum.take(rows, 3), & &1.state)}
+        {60, ~U[2026-10-11 12:00:00Z], ["ok", "warn", "ok"]}
+    """
+    @spec sample(Visualize.Data.Schema.t(), DateTime.t()) :: [map()]
+    def sample(%Visualize.Data.Schema{fields: fields}, %DateTime{} = now) do
+      fields = Enum.sort_by(fields, fn {name, _description} -> to_string(name) end)
+
+      for i <- 0..59 do
+        fields
+        |> Enum.with_index()
+        |> Map.new(fn {{name, description}, k} ->
+          {name, sampled(description, name, i, k, now)}
+        end)
+      end
+    end
+
+    defp sampled(%{type: :time}, _name, i, _k, now), do: DateTime.add(now, i - 59, :second)
+
+    defp sampled(%{type: :number}, _name, i, k, _now),
+      do: Float.round(50 + 40 * :math.sin(i / 8 + k), 3)
+
+    defp sampled(%{type: :category} = description, _name, i, _k, _now) do
+      order = Map.get(description, :order, ["a", "b", "c"])
+      Enum.at(order, rem(i, length(order)))
+    end
+
+    defp sampled(_text, name, _i, _k, _now), do: to_string(name)
+
     # -- the preview (§22.6) -------------------------------------------------------------------
 
     @doc """
@@ -279,13 +326,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       * `:pools` - each cell's pool, by its name (default none)
       * `:theme` - as `Visualize.Chart.apply/2` takes it
+      * `:describe` - `({cell, slot} -> {:ok, schema} | {:error, reason})`, as
+        `Visualize.Board.realise/4` takes it: the schema of a slot's feed
     """
     @spec preview(Board.t(), Board.store(), keyword()) :: %{
             atom() => {:ok, String.t()} | {:error, [String.t()]}
           }
     def preview(%Board{cells: cells} = board, fetch, opts) do
       pools = Keyword.get(opts, :pools, %{})
-      shared = [width: @width] ++ Keyword.take(opts, [:theme])
+      shared = [width: @width] ++ Keyword.take(opts, [:theme, :describe])
 
       Map.new(cells, fn {name, cell} ->
         alone = %{board | cells: %{name => cell}}
@@ -372,6 +421,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <span class="vis-builder-control-label">{name}</span>
               <input type="text" name={"var." <> name} value={value} placeholder="the board's, else the default" />
             </label>
+          </fieldset>
+        </form>
+        <form
+          :if={@mode.selected}
+          id={@id <> "-cell-sources"}
+          class="vis-builder-board"
+          phx-change="board_bind"
+          phx-submit="submitted"
+          phx-target={@target}
+        >
+          <fieldset class="vis-builder-board-section">
+            <legend>sources — {if @mode.catalog?, do: "the host's feeds", else: "the sample pool"}</legend>
+            <p :if={@mode.selected.slots == []} class="vis-builder-board-note">its component reads no source</p>
+            <div :for={slot <- @mode.selected.slots} class={"vis-builder-board-slot" <> if(slot.faults != [], do: " vis-builder-board-slot-faulty", else: "")}>
+              <label class="vis-builder-board-row">
+                <span class="vis-builder-control-label">{slot.name}</span>
+                <select name={"slot." <> slot.name}>
+                  <option value="" selected={slot.feed == nil}>unbound</option>
+                  <option :for={{label, key} <- @mode.feeds} value={key} selected={key == slot.feed}>{label}</option>
+                </select>
+              </label>
+              <ul :if={slot.faults != []} class="vis-builder-errors">
+                <li :for={line <- slot.faults} class="vis-builder-error">{line}</li>
+              </ul>
+            </div>
           </fieldset>
         </form>
         <div :if={@mode.selected} class="vis-builder-board-actions">

@@ -33,6 +33,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       with what the host wants every callback told (spec/14 §19.7), or `nil` for no
       library (default `nil`)
     * `on_save` - the tag of the message saving sends (default `:visualize_chart_saved`)
+    * `catalog` - the connector catalog of the board mode: each feed the host offers to its
+      `Visualize.Data.Schema`, or `nil` to bind a board's slots to the sample pool
+      (spec/14 §22.8)
+    * `board_bindings` - a `Visualize.Board.Binding` the host holds, by the board entry's id
+    * `on_bind` - the tag of the binding message, `{on_bind, id, board_id, binding}`, sent
+      on every change of a board's binding; the binding is never stored in the board
+      (default `:visualize_board_bound`)
     * `styles` - render the stylesheet in a `<style>` element (default `true`); `false` when
       the host ships `Visualize.Chart.Builder.css/0` through its own asset pipeline
     * `class` - appended to the builder's root class
@@ -122,6 +129,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         on_deploy: :visualize_chart_deployed,
         source_defaults: true,
         tick_ms: 500,
+        catalog: nil,
+        board_bindings: %{},
+        on_bind: :visualize_board_bound,
         styles: true,
         class: nil
       ]
@@ -158,6 +168,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:on_deploy, :any,
       default: :visualize_chart_deployed,
       doc: "the tag of the deploy message: the flat design, where save's carries structure"
+    )
+
+    attr(:catalog, :map,
+      default: nil,
+      doc:
+        "the connector catalog: each feed the host offers to its `Visualize.Data.Schema`;" <>
+          " `nil` binds a board's slots to the sample pool (spec/14 §22.8)"
+    )
+
+    attr(:board_bindings, :map,
+      default: %{},
+      doc: "a `Visualize.Board.Binding` the host holds, by the board entry's id (spec/14 §22.8)"
+    )
+
+    attr(:on_bind, :any,
+      default: :visualize_board_bound,
+      doc: "the tag of the binding message, `{on_bind, id, board_id, binding}`"
     )
 
     attr(:styles, :boolean,
@@ -212,6 +239,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          vision: :none,
          board: nil,
          board_cell: nil,
+         binding: nil,
          board_view: :wide,
          return_to: nil
        )}

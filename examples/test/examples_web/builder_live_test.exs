@@ -178,7 +178,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
   end
 
   describe "the board mode (spec/14 §22, D-152)" do
-    alias Visualize.Chart.Builder.{Boards, Stack}
+    alias Visualize.Chart.Builder.Stack
 
     test "the page tells of it, and the library holds a board over gallery charts" do
       html = build_conn() |> get("/builder") |> html_response(200)
@@ -192,18 +192,74 @@ defmodule ExamplesWeb.BuilderLiveTest do
       assert Visualize.Board.validate(board, Stack.fetch(Library)) == :ok
     end
 
-    test "every cell of the seeded board previews over the page's pool" do
-      {:ok, socket} = BuilderLive.mount(%{}, %{}, %Socket{})
-      {:ok, entry} = Library.get(Library.id_of("Boards::live board"), nil)
-      board = Visualize.Board.from_map!(entry.fragment.board)
-      pools = Map.new(board.cells, fn {name, _cell} -> {name, socket.assigns.sources} end)
+    # The builder over the page's own assigns, the board opened as a click on it opens it.
+    defp board_mode do
+      {:ok, page} = BuilderLive.mount(%{}, %{}, %Socket{})
 
-      previews = Boards.preview(board, Stack.fetch(Library), pools: pools)
-      assert map_size(previews) == 4
+      host =
+        page.assigns
+        |> Map.take([:layers, :sources, :catalog])
+        |> Map.merge(%{
+          id: "builder",
+          store: Library,
+          on_bind: :board_bound,
+          board_bindings: page.assigns.bindings
+        })
 
-      for {name, preview} <- previews do
-        assert {:ok, "<svg" <> _} = preview, "#{name}: #{inspect(preview)}"
+      {:ok, s} = Visualize.Chart.Builder.mount(%Socket{})
+      {:ok, s} = Visualize.Chart.Builder.update(host, s)
+      id = Visualize.Chart.Builder.Store.encode_id(Library.id_of("Boards::live board"))
+      {:noreply, s} = Visualize.Chart.Builder.handle_event("add_layer", %{"name" => id}, s)
+      {page, s}
+    end
+
+    test "the catalog is the /board page's feeds, and its binding opens the board" do
+      {page, s} = board_mode()
+
+      assert page.assigns.catalog |> Map.keys() |> MapSet.new() ==
+               MapSet.new([
+                 "examples.vm.memory",
+                 "examples.vm.run_queue",
+                 :dial,
+                 :load,
+                 :offline,
+                 :wave,
+                 :requests,
+                 :errors,
+                 :latest
+               ])
+
+      assert s.assigns.binding == Examples.BoardDemo.slots()
+
+      mode = Visualize.Chart.Builder.Editing.editing(s.assigns).board_mode
+      assert mode.catalog?
+      assert map_size(mode.board.cells) == 8
+      assert mode.faults == []
+
+      # Every cell previews over rows shaped like its feed's.
+      for cell <- mode.cells do
+        assert {:ok, "<svg" <> _} = cell.preview, "#{cell.name}: #{inspect(cell.preview)}"
       end
+    end
+
+    test "a binding the builder makes is kept by the page, by the board's id" do
+      {page, s} = board_mode()
+
+      {:noreply, _s} =
+        Visualize.Chart.Builder.handle_event(
+          "board_bind",
+          %{"_target" => ["slot.points"], "slot.points" => ""},
+          Phoenix.Component.assign(s, :board_cell, :wave)
+        )
+
+      assert_received {:board_bound, "builder", board_id, binding}
+      assert Visualize.Board.Binding.fetch(binding, :wave, :points) == :error
+
+      {:noreply, page} =
+        BuilderLive.handle_info({:board_bound, "builder", board_id, binding}, page)
+
+      assert page.assigns.bindings[board_id] == binding
+      assert page.assigns.saved =~ "bound: 8 slot(s)"
     end
   end
 end

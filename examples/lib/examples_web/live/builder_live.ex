@@ -125,51 +125,41 @@ defmodule ExamplesWeb.BuilderLive do
       end
     end
 
-    # A board over four of the gallery's charts (spec/14 §22, D-152): its cells name the
-    # templates by the ids the seeding just issued, so opening it is the board mode, every
-    # cell previewing over the page's pool.
+    # The `/board` page's board (spec/15 §10, spec/14 §22, D-152): its five components
+    # seeded as `Boards::` composites, and the board itself with its cells' refs moved onto
+    # the ids the seeding just issued, so opening it is the board mode. The `/board` page's
+    # binding is the host's and is given to the builder as `board_bindings`, never stored.
     defp with_board(%{entries: entries, counters: counters}) do
       id = fn name ->
         Enum.find_value(entries, fn {id, entry} -> entry.name == name and id end) ||
           raise ArgumentError, "the board's component #{inspect(name)} is not seeded"
       end
 
-      board =
-        Visualize.Board.from_map!(%{
-          meta: %{name: "Live board", description: "The gallery's charts on one grid"},
-          window: %{last: 300},
-          sync: "board",
-          cells: %{
-            load: %{x: 0, y: 0, w: 8, h: 4, ref: id.("Charts::Load"), title: "Load", sync: false},
-            gauge: %{
-              x: 8,
-              y: 0,
-              w: 4,
-              h: 4,
-              ref: id.("Charts::Gauge"),
-              title: "Gauge",
-              sync: false
-            },
-            wave: %{x: 0, y: 4, w: 8, h: 3, ref: id.("Charts::Line Chart"), title: "Wave"},
-            bars: %{
-              x: 8,
-              y: 4,
-              w: 4,
-              h: 3,
-              ref: id.("Charts::Horizontal Bar Chart"),
-              title: "Bars",
-              sync: false
-            }
-          }
-        })
+      refs = Map.new(board_components(), fn {name, demo_id, _design} -> {demo_id, id.(name)} end)
+      demo = Examples.BoardDemo.value()
+      cells = Map.new(demo.cells, fn {name, cell} -> {name, %{cell | ref: refs[cell.ref]}} end)
 
       stored = %{
         name: "Boards::live board",
         kind: :board,
-        fragment: %{board: Visualize.Board.to_map(board)}
+        fragment: %{board: Visualize.Board.to_map(%{demo | cells: cells})}
       }
 
       %{entries: Map.put(entries, {:board, 1}, stored), counters: Map.put(counters, :board, 1)}
+    end
+
+    # The `/board` page's components, each with the id the demo's own store gives it.
+    defp board_components do
+      store = Examples.BoardDemo.store()
+
+      for {name, demo_id} <- [
+            {"Boards::load", {:composite, 1}},
+            {"Boards::wave", {:composite, 2}},
+            {"Boards::metric", {:composite, 3}},
+            {"Boards::by service", {:composite, 4}},
+            {"Boards::services", {:composite, 5}}
+          ],
+          do: {name, demo_id, Map.fetch!(store, demo_id)}
     end
 
     @doc "The id of the entry with a name, for a page that starts from its own library."
@@ -191,25 +181,29 @@ defmodule ExamplesWeb.BuilderLive do
         meta: %{name: "Uptime"},
         theme: :default,
         styles: %{series: %{stroke: :series_1, stroke_width: 2, curve: :monotone_x}},
-        frames: %{main: %{
-          kind: :cartesian,
-          margin: %{top: 24, right: 24, bottom: 32, left: 48}
-        }}
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            margin: %{top: 24, right: 24, bottom: 32, left: 48}
+          }
+        }
       }
 
     defp shared,
       do: %{
         sources: %{primary: %{fields: [:hour, :value]}},
-        frames: %{main: %{
-          scales: %{
-            hour: %{kind: :linear, domain: :auto},
-            value: %{kind: :linear, domain: [0, :auto], nice: true}
-          },
-          axes: [
-            %{scale: :hour, side: :bottom, ticks: 6},
-            %{scale: :value, side: :left, ticks: 5, grid: true}
-          ]
-        }}
+        frames: %{
+          main: %{
+            scales: %{
+              hour: %{kind: :linear, domain: :auto},
+              value: %{kind: :linear, domain: [0, :auto], nice: true}
+            },
+            axes: [
+              %{scale: :hour, side: :bottom, ticks: 6},
+              %{scale: :value, side: :left, ticks: 5, grid: true}
+            ]
+          }
+        }
       }
 
     defp panel,
@@ -254,24 +248,31 @@ defmodule ExamplesWeb.BuilderLive do
         # A host's own theme, shipped as a value (spec/14 §9.3, D-139): a design that says
         # `theme: :house` previews in it, and opening it is the theme mode.
         {"Theme::house", Visualize.Chart.Theme.fragment(house_theme())},
-        {"Frame:axes:no grid", %{frames: %{main: %{axes: [%{scale: :value, side: :left, grid: false}]}}}},
+        {"Frame:axes:no grid",
+         %{frames: %{main: %{axes: [%{scale: :value, side: :left, grid: false}]}}}},
         {"Frame:axes:dense ticks",
          %{
-           frames: %{main: %{
-             axes: [
-               %{scale: :hour, side: :bottom, ticks: 12},
-               %{scale: :value, side: :left, ticks: 10}
-             ]
-           }}
+           frames: %{
+             main: %{
+               axes: [
+                 %{scale: :hour, side: :bottom, ticks: 12},
+                 %{scale: :value, side: :left, ticks: 10}
+               ]
+             }
+           }
          }},
         {"Frame:margin:wide", %{frames: %{main: %{margin: %{top: 900, bottom: 320}}}}},
-        {"Frame:margin:roomy", %{frames: %{main: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}}}},
+        {"Frame:margin:roomy",
+         %{frames: %{main: %{margin: %{top: 40, right: 40, bottom: 48, left: 64}}}}},
         # Bodies, not declarations: the composite says the name a style is declared under
         # (spec/14 §19.3), so a body serves any chart, whatever it calls its style.
         {"Styles::thick line", %{style: %{stroke_width: 5}}},
         {"Styles::stepped", %{style: %{curve: :step}}}
-      ] ++ templates()
+      ] ++ templates() ++ boards()
     end
+
+    # The `/board` page's components, so its board opens over them (spec/14 §22).
+    defp boards, do: for({name, _id, design} <- board_components(), do: {name, composite(design)})
 
     # A chart type is a template (spec/14 §18.16, #233): every gallery design and every
     # preset without one, as a composite under Charts::<title>.
@@ -286,11 +287,23 @@ defmodule ExamplesWeb.BuilderLive do
         do: %{hour: hour, value: Float.round(92 + 6 * :math.sin(hour / 3.5), 2)}
   end
 
+  # The connector catalog (spec/14 §22.8): the `/board` page's feeds, each by the name its
+  # binding uses, to the schema its `describe` answers. A feed that cannot describe itself
+  # now is left out of the catalog rather than offered blind.
+  defp catalog do
+    for {name, feed} <- Examples.BoardDemo.feeds(),
+        {_version, schema, _capabilities} <- [Visualize.Feed.describe(feed)],
+        into: %{},
+        do: {name, schema}
+  end
+
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
        layers: Enum.map(~w(Uptime::house Uptime::shared Uptime::panel), &{&1, Library.id_of(&1)}),
        sources: Map.merge(Examples.Charts.Templates.pool(), %{primary: rows()}),
+       catalog: catalog(),
+       bindings: %{Library.id_of("Boards::live board") => Examples.BoardDemo.slots()},
        saved: nil
      )}
   end
@@ -301,6 +314,15 @@ defmodule ExamplesWeb.BuilderLive do
   # applying it and reporting whether it drew.
   def handle_info({:design_saved, _id, %{composite: %{uses: uses}}}, socket) do
     {:noreply, assign(socket, :saved, "saved: a structure of #{length(uses)} site(s)")}
+  end
+
+  # A binding the builder made (spec/14 §22.8): the host's, kept by the board's id so the
+  # board opens with it again, and never part of the board.
+  def handle_info({:board_bound, _id, board_id, binding}, socket) do
+    {:noreply,
+     socket
+     |> update(:bindings, &Map.put(&1, board_id, binding))
+     |> assign(:saved, "bound: #{map_size(binding.slots)} slot(s) of the board to feeds")}
   end
 
   # The signals' tick (spec/14 §18.2): the builder schedules it here, the page forwards it.
@@ -351,8 +373,10 @@ defmodule ExamplesWeb.BuilderLive do
         <em>Boards::live board</em>
         or <em>New → board</em>
         opens the board mode: cells on a 12-column grid, dragged to place and resized by
-        their edges, each a chart of the library previewed over the page's samples;
-        <em>Edit component</em>
+        their edges, each a chart of the library, its sources bound to the feeds of the
+        <a href="/board">live board</a>
+        page — this page's connector catalog — and previewed
+        over rows shaped like theirs; <em>Edit component</em>
         opens a cell's chart, and <em>Back to board</em>
         returns to the board.
       </p>
@@ -367,6 +391,9 @@ defmodule ExamplesWeb.BuilderLive do
         store={Library}
         on_save={:design_saved}
         on_deploy={:design_deployed}
+        catalog={@catalog}
+        board_bindings={@bindings}
+        on_bind={:board_bound}
       />
     </main>
     """

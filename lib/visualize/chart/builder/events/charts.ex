@@ -43,6 +43,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          open: nil,
          board: nil,
          board_cell: nil,
+         binding: nil,
          return_to: nil,
          node_label: "design",
          facet: nil,
