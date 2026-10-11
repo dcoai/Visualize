@@ -251,7 +251,7 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, the sync bus `VisualizeSync` (`Visualize.Hooks.Sync.js_bus/0`, 4.3) — before every hook that uses it — `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, then one `export default { … }` object listing the ten hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, the sync bus `VisualizeSync` (`Visualize.Hooks.Sync.js_bus/0`, 4.3) — before every hook that uses it — `BrushHook`, the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, `KeyboardHook`, then one `export default { … }` object listing the eleven hooks — each name is exported exactly once (D-40, D-48). |
 | `Visualize.Hooks.Sync.js_bus/0` | Returns the source of `const VisualizeSync = {…}`, the bus of 4.3 that `TooltipHook`, `CrosshairHook` and `BrushHook` share. It is not exported: it is the hooks' own, and a host joins a group through a design key, not through it. |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
 | `Visualize.Hooks.install!/0` | Creates the directory of `default_path/0` and overwrites that file with `js_code/0`; returns `{:ok, path}`; raises `File.Error` on failure. |
@@ -750,3 +750,38 @@ A `click` whose target's nearest `[data-builder-path]` ancestor-or-self is insid
 Both pushes go through `pushEventTo(target, …)` when `data-builder-target` is set and through `pushEvent(…)` when it is not. `destroyed()` removes the five listeners with the kept references. `test/visualize/hooks/builder_test.exs` holds the source to this shape.
 
 **In scope `graph`** ([14-declarative-chart](14-declarative-chart.md) §18.16) a `click` whose target's nearest `[data-node]` ancestor-or-self is inside the hook element pushes `pick` with `{node}`, the attribute as a string, and pushes nothing for a click on anything else; no class is set by the click, because the server's answer re-renders the chart. On `mounted()` and on every `updated()` the hook reads `data-builder-selected` from the `<svg>` under it and gives `vis-builder-graph-selected` to every element whose `data-node` is the longest prefix of that label — equal to it, or followed in it by `.` or `[` — and to no other; with no `<svg>`, no label, or no element that fits, nothing is marked. The prefix rule is what lets the open form be a facet of a node the graph draws whole. The graph also **accepts a library drag and a component drag**: `dragover` with `application/x-visualize-fragment` or `application/x-visualize-component` among the types is allowed with `dropEffect` `copy`, and the `drop` pushes `place` — `{name, as}` for an entry, `{component}` for a palette row — with `x` and `y` in **chart coordinates**: the drop's client position relative to the `<svg class="vis-builder-chart">`, scaled by its `viewBox` width and height over its client width and height, so a 400×200 chart drawn at 800×400 reports half the pixel offset ([14-declarative-chart](14-declarative-chart.md) §18.16, §18.17). A `dragstart` on an element carrying `data-builder-component` sets that type with the component's word. **A drawn node is moved with the pointer, not with an HTML5 drag** (#277): `draggable` is an attribute of `HTMLElement`, and a browser does not start an HTML5 drag from an SVG element, which every drawn node is. So a `pointerdown` on a `[data-node]` element of the chart whose label is movable — an axis or the legend of any frame (`frames.<name>.axes[`, `frames.<name>.legend`), `labels[` ([14-declarative-chart](14-declarative-chart.md) §18.16) — captures the pointer and remembers the label and the start point; a `pointermove` more than four pixels from it marks the graph element `vis-builder-moving` and `vis-builder-region-<region>` for the region under the pointer, computed from `chartPoint` against `data-builder-frame` — the frame's `size` and `margin` the render carries on the `<svg>` as `w h top right bottom left`; `pointerup` releases the capture, clears both marks and, when the pointer had moved, pushes `move` with `{node, x, y}` — and when it had not, does nothing, so the click that follows selects the node as §16.3 above says. The palette's and the library's drags remain HTML5 drags, since their sources are HTML rows. With the graph focused, `Shift+ArrowUp/Down/Left/Right` push `move` with `{node, region}` for the `<svg>`'s `data-builder-selected` when it is movable, and `Shift+Enter` the `plot` region. Every `insert` a drop raises on the stack, and every `place` of an entry, carries `as`: `"link"` when `altKey` was held at the drop, `"copy"` otherwise.
+
+## 17. Visualize.Hooks.Keyboard
+
+**Implemented** (#558, D-142). A chart's points reached from the keyboard ([14-declarative-chart](14-declarative-chart.md) §21.5): the server writes every point once, with its readout and position, and the hook moves a focus marker and reads the point aloud. Like the crosshair (§13, D-76) it never reads the chart's DOM, so it serves an SVG and a canvas alike.
+
+### 17.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.Keyboard.js_hook/0` | Returns the source of `export const KeyboardHook = {…}` (17.3). |
+| `Visualize.Hooks.Keyboard.attrs/1` | `attrs(applied)`: the attributes of 17.2 for an applied chart, as a map from attribute name (string) to value (string), computed once on the server. |
+
+### 17.2 The attributes
+
+| Attribute | Value |
+|---|---|
+| `data-keyboard-name` | the chart's name, `Visualize.Chart.Summary`'s (spec/14 §21.1) |
+| `data-keyboard-points` | a JSON array with one entry per series, in the summary's order: `{"name": series, "points": [[x, y, readout], …]}`, `x` and `y` the point's position in the chart's pixels (`null` for a point with none) and `readout` its text (spec/14 §21.5) |
+| `data-size` | `width,height`: the chart's size, its `viewBox`, so a CSS-scaled chart places the marker correctly; as `CrosshairHook` reads it (§13.2) |
+
+The arrays are built by the library: every number prints through `Visualize.IR.Path.format_number/1` and every string is escaped for JSON here, so the attribute needs no JSON library.
+
+### 17.3 `KeyboardHook` behaviour
+
+Attach with `phx-hook="KeyboardHook"` and an `id` on a *container* holding the chart, with the attributes of 17.2 on it; they are read on `mounted()` and again on `updated()`, the position clamped to the new points. Set by the host: `data-keyboard-event`, the event pushed with `{series, index}` (zero-based) each time the focused point changes; unset, nothing is pushed.
+
+On `mounted()` the hook makes the container focusable — `tabindex="0"` unless it has one — gives it `role="group"` and an `aria-label` of `<name>, chart: arrow keys move between points` unless the host set one, and appends to `document.body` — never inside the container, so a LiveView patch neither removes nor sees them — a visually hidden `<div class="vis-keyboard-readout" aria-live="polite">` and an overlay `<svg class="vis-keyboard-focus">` (`position: absolute`, `pointer-events: none`, hidden) holding one `<circle r="6">` with no fill and a 2-pixel stroke. It binds `keydown`, `focus` and `blur` on the container, each bound once and kept (D-47).
+
+- **focus** reads, in the live region, `<name>: <s> series, <n> points.` — the series and the points of all of them — and marks nothing until a key is pressed.
+- **ArrowRight** and **ArrowLeft** move to the next and the previous point of the series, **ArrowDown** and **ArrowUp** to the next and the previous series at the same index, clamped to its points, **Home** and **End** to the series' first and last point; the first such key after focus starts at the first point of the first series. Each stops at the ends rather than wrapping, calls `preventDefault()`, writes the point's readout to the live region, places the marker over the chart — its first `<svg>` or `<canvas>`, as the crosshair finds it (§13.3), through `data-size` — at the point's position, hidden for a point with none, and pushes `data-keyboard-event` when it is set.
+- **Escape** hides the marker and forgets the point; when the container sits inside an element carrying `data-vis-cell`, focus moves to that element (spec/14 §21.5).
+- **Tab** is never handled: the chart is one stop, and the page's order — a board's cells — goes on past it.
+- **blur** hides the marker and keeps the point, so focus coming back resumes there.
+
+`destroyed()` removes the three listeners with the kept references and the two elements it appended. `test/visualize/hooks/keyboard_test.exs` executes it under the harness of spec/12 §6.
