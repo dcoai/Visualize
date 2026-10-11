@@ -2,7 +2,8 @@ defmodule Examples.Charts.GaugeChart do
   @moduledoc """
   A gauge as a design (#389, #392): a polar frame whose `angle` scale sweeps 240° from
   −120° over the reading's domain (spec/14 §4.3), the axis drawn as an arc at 0.85 R with
-  its ticks outward, a band of three `:rect` sectors — the green, amber and red zones —
+  its ticks outward, a band of three `:rect` sectors — the good, warning and bad zones, coloured
+  by the theme's roles (#533) —
   arced around the chart by the polar transform (§5.2), an arced `:rect` filled from zero
   to the reading, and a `:needle` over the newest reading with the value labelled beyond
   its tip. Animated, the reading wanders and the needle follows.
@@ -44,10 +45,9 @@ defmodule Examples.Charts.GaugeChart do
         polar(margin: @margin),
         linear_scale(:angle, domain: [0, 100], start: -120, sweep: 240),
         linear_scale(:r, domain: [0, 1], range: [0, outer]),
-        ordinal_scale(:color,
-          domain: ["ok", "warm", "hot"],
-          range: [:series_4, :series_2, :series_3]
-        ),
+        # The zones are status, so they take the theme's roles, not series colours: every
+        # theme renders good, warning and bad in its own tones (spec/08 §7.5).
+        ordinal_scale(:color, domain: ["ok", "warm", "hot"], range: [:good, :warning, :bad]),
         axis(:angle, :bottom, ticks: 5, radius: 0.85, unit: "%", style: :dial),
         # The zones: three sectors between 0.7 R and 0.85 R, arced around the dial.
         rect(:zones, %{x0: :from, x1: :to, y0: 0.7, y1: 0.85, value: :zone}, style: :zone),
@@ -89,7 +89,8 @@ defmodule Examples.Charts.GaugeChart do
         # The angle scale sweeps 240° from -120° over the reading's domain (spec/14 §4.3).
         linear_scale(:angle, domain: [0, 100], start: -120, sweep: 240),
         linear_scale(:r, domain: [0, 1], range: [0, 180]),
-        ordinal_scale(:color, domain: ["ok", "warm", "hot"], range: [:series_4, :series_2, :series_3]),
+        # Status zones take the theme's roles, so every theme renders them in its own tones.
+        ordinal_scale(:color, domain: ["ok", "warm", "hot"], range: [:good, :warning, :bad]),
         # The axis is an arc of the sweep at 0.85 R (spec/14 §4.6).
         axis(:angle, :bottom, ticks: 5, radius: 0.85, unit: "%"),
         # A rect with x on angle and y on r is a sector, bent by the polar transform (§5.2).

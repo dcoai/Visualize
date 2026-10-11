@@ -4,14 +4,16 @@ defmodule Examples.ColorPalettes do
 
   Each palette provides a cohesive set of colors that work well together for data
   visualization. The `:default` and `:dark` palettes are `Visualize.Theme.default/0` and
-  `Visualize.Theme.dark/0`; every palette is available as a `Visualize.Theme` through
-  `theme/1`, which is what the charts hand their axes.
+  `Visualize.Theme.dark/0`, and `:colour_safe` is `Visualize.Theme.colour_safe/0`; every
+  palette is available as a `Visualize.Theme` through `theme/1`, which is what the charts
+  hand their axes.
   """
 
   alias Visualize.Theme
 
   @light Theme.default()
   @dark Theme.dark()
+  @safe Theme.colour_safe()
 
   # A UI font stack, ending in the generic family: the gallery's text is set in the first
   # face the viewer has, where the library's default theme names only `sans-serif` (#486).
@@ -28,6 +30,17 @@ defmodule Examples.ColorPalettes do
       axis: @light.axis,
       grid: @light.grid,
       surface: @light.surface
+    },
+    colour_safe: %{
+      name: "Colour-safe",
+      description: "The library's colour-vision-safe theme: status runs blue → orange → red",
+      colors: @safe.series,
+      gradient: ["#3b6fa8", "#5f8abb", "#83a5cd", "#a7c0e0", "#cbdbf2"],
+      background: @safe.background,
+      text: @safe.text,
+      axis: @safe.axis,
+      grid: @safe.grid,
+      surface: @safe.surface
     },
     dark: %{
       name: "Dark",
@@ -143,6 +156,7 @@ defmodule Examples.ColorPalettes do
         "#f9c74f"
       ],
       background: "#fdf6e3",
+      light_end: "#faf6f2",
       text: "#4a3728",
       axis: "#6d5039",
       grid: "#efe0c9",
@@ -244,7 +258,15 @@ defmodule Examples.ColorPalettes do
   def theme(key) when is_atom(key) do
     palette = get(key)
 
-    Theme.new(
+    # A built-in theme's palette keeps its ramps and roles — the dark theme's are tuned for
+    # its page, the colour-safe theme's status is its point. Any other palette tunes one
+    # ramp, `sequential`, to run from its page to its first colour, so a heatmap takes the
+    # palette's tone; its other ramps and roles are the default's (spec/08 §7.5).
+    case Theme.builtin(key) do
+      nil -> Theme.default() |> Theme.merge(ramps: %{sequential: sequential(palette)})
+      builtin -> builtin
+    end
+    |> Theme.merge(
       name: if(Map.has_key?(@palettes, key), do: key, else: :default),
       series: palette.colors,
       background: palette.background,
@@ -254,6 +276,12 @@ defmodule Examples.ColorPalettes do
       surface: palette.surface,
       font_family: @font_family
     )
+  end
+
+  # The page to the first colour, unless the palette names a light end of its own: a cream
+  # page is a hue of its own, too far round from the palette's to make one hue family.
+  defp sequential(palette) do
+    [Map.get(palette, :light_end, palette.background), hd(palette.colors)]
   end
 
   @doc "Get the colors array from a palette"

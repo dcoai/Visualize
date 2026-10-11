@@ -543,8 +543,6 @@ defmodule Visualize.Chart.Frame do
   end
 
   defp theme(_design, %Theme{} = given), do: given
-  defp theme(:default, nil), do: Theme.default()
-  defp theme(:dark, nil), do: Theme.dark()
   defp theme(%Var{name: name}, nil), do: Style.unresolved!(name)
 
   defp theme(node, nil) when is_map(node) do
@@ -553,6 +551,10 @@ defmodule Visualize.Chart.Frame do
   end
 
   defp theme(name, nil) do
+    Theme.builtin(name) || unknown_theme!(name)
+  end
+
+  defp unknown_theme!(name) do
     raise ArgumentError,
           "theme #{inspect(name)} is neither built-in nor inline; pass it as the :theme " <>
             "option of Visualize.Chart.Frame.new/2"

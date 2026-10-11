@@ -3010,8 +3010,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.uniq()
     end
 
-    defp theme(:dark), do: Theme.dark()
     defp theme(map) when is_map(map) and not is_struct(map), do: Theme.new(map)
+    defp theme(name) when is_atom(name), do: Theme.builtin(name) || Theme.default()
     defp theme(_other), do: Theme.default()
 
     # The find box names a variable exactly to highlight its fields; a partial match

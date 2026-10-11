@@ -35,7 +35,7 @@ This document specifies the general-purpose modules used across the library: `Vi
 | `to_rgb/1` | `{r, g, b}` rounded integers. |
 | `to_rgba/1` | `{r, g, b, opacity}`. |
 | `to_hsl/1` | `%{h, s, l, opacity}` with `h` a float in `[0, 360)`, `s` and `l` in `[0, 100]`. |
-| `to_lab/1` | `%{l, a, b, opacity}`. |
+| `to_lab/1` | `%{l, a, b, opacity}`: sRGB to XYZ through the D50-adapted matrix and white point of `lab/4` (d3-color's), so the two are each other's inverse — `lab/4` of `to_lab/1` is the colour again, and a grey has `a = b = 0` (D-135). |
 | `to_hcl/1` | `%{h, c, l, opacity}` with `h` in `[0, 360)`. |
 | `to_hex/1` | `#rrggbb` in lower case, with `aa` appended when `opacity < 1`. |
 | `to_string/1` | `rgb(r, g, b)` when `opacity == 1`, otherwise `rgba(r, g, b, opacity)` with the opacity printed as-is. |
@@ -421,7 +421,7 @@ A source names its columns with atoms or strings and a caller writes accessors i
 
 ### 7.1 Struct and slots
 
-`%Visualize.Theme{name, series, axis, grid, text, background, surface, font_family, font_size, label_size, title_size}`. `name` is an atom naming the theme (`:default`, `:dark`, or the consumer's own); `series` is a non-empty list of colour strings; `axis`, `grid`, `text`, `background` and `surface` are colour strings; `font_family` is a CSS font-family string; the three sizes are numbers in user units (pixels).
+`%Visualize.Theme{name, series, axis, grid, text, background, surface, ramps, roles, font_family, font_size, label_size, title_size}`. `name` is an atom naming the theme (`:default`, `:dark`, `:colour_safe`, or the consumer's own); `series` is a non-empty list of colour strings; `axis`, `grid`, `text`, `background` and `surface` are colour strings; `ramps` maps each of the four ramp names of 7.5 to its list of anchor colour strings; `roles` maps `:info` and `:neutral` to a colour string each (7.5); `font_family` is a CSS font-family string; the three sizes are numbers in user units (pixels). Every field is plain data — strings, numbers, atoms, lists and maps — so a theme can be stored and compared as a value.
 
 A *slot* names one value of a theme:
 
@@ -433,12 +433,16 @@ A *slot* names one value of a theme:
 | `:text` | `text` | tick labels, axis titles and any label beside a mark |
 | `:background` | `background` | the colour the chart is drawn on: separators between marks, and — with `text` — one of the two inks a label drawn over a mark chooses between (7.3) |
 | `:surface` | `surface` | the plane a chart's data is laid on, between the background and the grid: a map's ocean, and any field that is neither the page nor a data colour and has the grid drawn over it (#422) |
+| `:good`, `:warning`, `:bad` | `ramps.status` | the **status roles**: the `status` ramp at 0, 0.5 and 1 (7.5) — success, caution and failure |
+| `:info`, `:neutral` | `roles` | the remaining roles: something to note that is neither good nor bad, and a state with no judgement (7.5) |
 | `:font_family` | `font_family` | every text |
 | `:font_size` | `font_size` | tick labels |
 | `:label_size` | `label_size` | mark labels and axis titles |
 | `:title_size` | `title_size` | chart titles |
 
 `slots/1` lists a theme's slots in that order, `:series_1` to `:series_n` first. `series_slot/2` is the `:series_k` atom that `{:series, i}` cycles to. A slot that is none of these, or `:series_k` with `k > n` or `k < 1`, raises `ArgumentError` in every function that takes a slot.
+
+Beside the slots, a **ramp position** `{:ramp, name, t}` names the colour at `t` (a number in `0..1`) along one of the theme's ramps (7.5). It is a colour wherever a slot is one, through the same `resolve/3`, but it is not a slot: a ramp is continuous, so there is no list of its positions to name.
 
 ### 7.2 Built-in themes
 
@@ -451,6 +455,12 @@ A *slot* names one value of a theme:
 | `text` | `#333333` | `#e6e6e6` |
 | `background` | `#ffffff` | `#1b1e24` |
 | `surface` | `#eef2f6` | `#23272f` |
+| `ramps.status` | `#4ca34b #bd7407 #c23238` | `#4f924c #db8e1c #ff8f8a` |
+| `ramps.thermal` | `#0e68ad #e8e8e8 #c02e31` | `#7fb3e6 #3a3f48 #f47c7c` |
+| `ramps.diverging` | `#b35806 #ededed #62448e` | `#f7a35c #3a3f48 #c1acee` |
+| `ramps.sequential` | `#e9f2fc #5e95d3 #004580` | `#273b4f #457cb1 #aad1f9` |
+| `roles.info` | `#3b6fa8` | `#7fb3e6` |
+| `roles.neutral` | `#6f7480` | `#b7bcc6` |
 | `font_family` | `sans-serif` | `sans-serif` |
 | `font_size` | `10` | `10` |
 | `label_size` | `12` | `12` |
@@ -458,7 +468,11 @@ A *slot* names one value of a theme:
 
 Both palettes are ten hues in the order of d3's `category10` — blue, orange, red, teal, green, yellow, purple, pink, brown, grey — each adjusted until it holds at least 3:1 (`Visualize.Color.contrast/2`, §1.5) against its own background; `text` holds at least 4.5:1 and `axis` at least 3:1. Neither palette is a d3 scheme, because every d3 categorical scheme has a colour under 2.1:1 on white (`category10`'s olive is 2.0:1), and a theme that promises contrast cannot ship one unchanged. 7.4 states the floors.
 
-`surface` is a step off the background towards the grid — a cool grey on the light theme, a step above `#1b1e24` on the dark — so a field reads as a plane under the data without becoming a data colour. `new/1` is `default/0` with the given keyword fields replaced, so a host theme that names no `surface` takes the light one, as it takes every other field it leaves out; `merge/2` replaces the fields of any theme. An unknown field raises `KeyError`; an empty `series` raises `ArgumentError`.
+The ramps of both palettes were chosen in CIE LCh to meet the contracts of 7.5 with room: on the light theme the status roles step down in lightness from 60 to 56 to 45 L*, each at 3:1 or better on white, and on the dark theme up from 55 to 66 to 72 L*, so the role that must be noticed, `:bad`, is the one furthest from the page on both.
+
+**The colour-vision-safe theme.** `colour_safe/0` is `default/0` with the name `:colour_safe` and one ramp changed: `status` runs **blue → orange → red**, `#5996d6 #cd6012 #b92931`, in place of green → amber → red. Red against green is the distinction the commonest colour-vision deficiencies lose (about one man in twelve), and blue against orange survives all three of them; the lightness still falls by 6 L* or more at each step (60, 54, 42), each at 3:1 or better on white, so a reader who sees no hue at all still reads the order. Its other ramps are the default's — blue against red (`thermal`) and orange against purple (`diverging`) already survive — and so is its categorical `series`: a palette that is both colour-vision-safe and holds 3:1 on white (7.4) has too few hues to be a ten-colour palette, and the series promise *distinct*, never a meaning. Safety is a whole theme, chosen once, not a switch on one ramp, so every role and ramp position a design names follows it with no change to the design.
+
+`surface` is a step off the background towards the grid — a cool grey on the light theme, a step above `#1b1e24` on the dark — so a field reads as a plane under the data without becoming a data colour. `new/1` is `default/0` with the given keyword fields replaced, so a host theme that names no `surface` takes the light one, as it takes every other field it leaves out; `merge/2` replaces the fields of any theme. `ramps` and `roles` are merged key by key rather than replaced, so `new(ramps: %{status: […]})` keeps the default's other three ramps and `merge(dark(), roles: %{info: …})` keeps the dark `neutral`. An unknown field raises `KeyError`; an empty `series` raises `ArgumentError`; a ramp or role that breaks its contract raises `ArgumentError` (7.5). `builtin/1` is the built-in theme of a name — `:default`, `:dark` or `:colour_safe` — or `nil`, and is what a design's `theme: name` resolves through (spec/14 §2.5).
 
 ### 7.3 Resolution
 
@@ -467,7 +481,9 @@ Both palettes are ten hues in the order of d3's `category10` — blue, orange, r
 - `:literal` — the slot's value as stored: a colour or font string, or a number for a size. A canvas colour is a literal, so every canvas backend resolves this way.
 - `:css` — a CSS custom-property reference with the literal as its fallback: `var(--vis-axis, #666666)`, `var(--vis-series-3, #c8373b)`, `var(--vis-font-size, 10px)` (a size gains `px`). What the SVG output carries.
 
-`css_name/1` is the property name of a slot atom: `--vis-` and the slot with `_` as `-` (`:series_1` → `--vis-series-1`, `:font_family` → `--vis-font-family`). `mode/1` maps a backend — a module, `:svg`, `:canvas` or `nil`, resolved by `Visualize.Backend.resolve/1` (spec/02 §3.2) — to the mode: `Visualize.Backend.SVG` is `:css`, every other backend `:literal`. `Visualize.Axis.render/2` applies it (spec/05 §1.6) and the style grammar of the declarative layer resolves through the same call.
+A role is a slot like any other: `:warning` resolves to `var(--vis-warning, #bd7407)` and `stylesheet/1` declares it, so a stylesheet switches the roles with the rest of the theme. **A ramp position** `{:ramp, name, t}` resolves to its colour (7.5) as a **literal in both modes**, as the contrast ink does: CSS has no custom property for each of a continuum of positions. The positions the status roles stand at are the exception — `{:ramp, :status, 0}`, `0.5` and `1` resolve exactly as `:good`, `:warning` and `:bad` do, in both modes — so a role and its position never disagree, not even under a stylesheet. A `t` outside `0..1` is clamped to it; a `t` that is not a number, or a ramp name not of 7.5, raises `ArgumentError`.
+
+`css_name/1` is the property name of a slot atom: `--vis-` and the slot with `_` as `-` (`:series_1` → `--vis-series-1`, `:font_family` → `--vis-font-family`, `:good` → `--vis-good`). `mode/1` maps a backend — a module, `:svg`, `:canvas` or `nil`, resolved by `Visualize.Backend.resolve/1` (spec/02 §3.2) — to the mode: `Visualize.Backend.SVG` is `:css`, every other backend `:literal`. `Visualize.Axis.render/2` applies it (spec/05 §1.6) and the style grammar of the declarative layer resolves through the same call.
 
 The reference carries its fallback rather than the root declaring the property (D-55). A declaration on the `<svg>` — inline or in a `<style>` — would beat every ancestor rule in the cascade, so a consumer could not switch a theme from a class without `!important`; with the fallback form a chart rendered outside any stylesheet (a standalone `.svg`, an `<img>`) still draws in its theme, and a rule on any ancestor, `.night { --vis-axis: #a0a4ab }`, overrides it. `stylesheet/1` writes that rule for a whole theme — `.vis-theme-<name> {` then one `  --vis-<slot>: <value>;` line per slot of `slots/1`, sizes with `px`, then `}` — so a consumer that includes `stylesheet(dark())` in its CSS switches every chart under an element with `class="vis-theme-dark"` without touching Elixir.
 
@@ -478,18 +494,54 @@ The reference carries its fallback rather than the root declaring the property (
 
 A theme MUST hold, by `Visualize.Color.contrast/2` against its own `background`: `text` at least 4.5:1 (WCAG AA for text), `axis` at least 3:1 (WCAG non-text contrast), every `series` colour at least 3:1, and `grid` at least 1.2:1 — visible, and faint on purpose. `surface` MUST differ from `grid`: the grid is drawn over the surface (a map's graticule over its ocean), and a surface equal to it would swallow every line (#422). Both built-in themes do; a theme from `new/1` is not checked, since a house palette is the consumer's choice. Across the colour schemes of `Visualize.Scale.Color.schemes/0`, every colour parses with `Visualize.Color.parse/1` and every scheme has at least one colour at 3:1 or better against the dark background and at 2.5:1 or better against the light one (`set2`, a pastel scheme, tops out at 2.6:1 on white), so any scheme has a usable colour on either theme; a scheme's lightest colours vanish on the light theme (`blues` opens at 1.04:1 on white) and its darkest on the dark (`blues` closes at 1.8:1 on `#1b1e24`), which is why the built-in themes carry their own palettes (7.2). `test/visualize/theme_contrast_test.exs` holds both themes and every scheme to this.
 
-### 7.5 Functions
+### 7.5 Ramps and roles
+
+**Implemented** (#533, D-135). A palette position promises *distinct*, never a meaning: `:series_3` is red on both built-in themes, but nothing makes it so on a host's, and a status chart coloured success, warning and failure through series slots can come out orange, grey and light blue. Some colours carry meaning a reader brings with them — the stop-light, cold blue and hot red, below and above a target — so a theme carries that meaning as **ramps**, and the library, not the theme's author, fixes what each one means.
+
+**Ramps.** A ramp is a list of two or more anchor colours, evenly spaced along `0..1`, and the colour at `t` is interpolated between the two anchors about it in **CIE Lab** (`Visualize.Color.interpolate_lab/3`), so any number of ordered levels fits and a theme never runs out of positions. A position that falls on an anchor is that anchor as written. Four ramps are standard, each with its **meaning contract**:
+
+| Ramp | Meaning | Contract |
+|---|---|---|
+| `status` | good → caution → bad, the stop-light | hue order: the colour at 0 is green or blue, at 0.5 amber, at 1 red, and the hue of every chromatic anchor falls monotonically from the first to the last; lightness monotonic |
+| `thermal` | cold → neutral → hot | the colour at 0 is blue, at 0.5 neutral, at 1 red |
+| `diverging` | below → at → above a midpoint | the colours at 0 and 1 are chromatic and at least 60° of hue apart; the colour at 0.5 is neutral |
+| `sequential` | less → more, one quantity | one hue family; lightness monotonic |
+
+Monotonic means either way: the contract fixes that lightness carries the order, and leaves which way to the theme. The built-in themes run `status` and `sequential` **away from their background** — light → dark on the light themes, dark → light on the dark one — so the low end recedes and the high end, and the role that must be noticed, `:bad`, stands out; a host theme should do the same, and `test/visualize/theme_ramps_test.exs` holds the built-ins to it, but it is not a contract, because a host that changes only its `background` keeps the default's ramps and must still build. A theme tunes a ramp's tones — dark mode, print, a brand — but cannot reorder its hues or its lightness, because a design that colours by meaning has to read the same on every theme.
+
+**The contracts' terms**, in CIE LCh (`Visualize.Color.to_hcl/1`) against the D50 white point, and their tolerances:
+
+- **Hue regions** are arcs of LCh hue: **red** below 45° or from 345°, **amber** 45° to 100° (orange through gold), **green** 100° to 200° (yellow-green through teal), **blue** 200° to 315° (cyan-blue through violet-blue). Measured: pure sRGB red is 41°, orange 71°, yellow 100°, green 134°, cyan 197°, blue 301°. A status's falling hue is read with red's arc taken below zero, so green (≈ 135°) → amber (≈ 68°) → red (≈ 30°) and blue (≈ 262°) → orange (≈ 55°) → red both fall.
+- **Chromatic** is a chroma of at least **20** C*: below that a hue is a tint a reader cannot name, and a hue contract on it would be noise. **Neutral** is a chroma of at most **10** C*: a light grey reads as no hue at that, and the built-in midpoints are 0.0 to 6.3.
+- **Monotonic lightness** is every step between consecutive anchors moving the same way by at least **3 L***. Interpolation in Lab is linear between anchors, so lightness along the whole ramp is monotonic exactly when it is across the anchors. One L* is about one just-noticeable difference under ideal viewing; three makes the order visible on a screen, not only on a meter. A ramp whose lightness is monotonic is the one a reader who sees no hue can still read in order, which is why the contract is on lightness as well as hue.
+- **One hue family** is every anchor of at least **10** C* lying within a **45°** arc of hue: the tightest round arc that admits every ColorBrewer single-hue scheme of `Visualize.Scale.Color` (`blues`, the widest, spans 42.9°; `reds` 14.0°) and refuses a multi-hue one (`viridis` spans 226°). An anchor paler than that is a near-white or near-black end whose hue is unstable and is not held to the arc. A multi-hue sequential scheme is still a scale's to use — `range: :viridis` (spec/14 §4.3) — but it is not a theme's `sequential` ramp, whose meaning is one quantity growing.
+
+**Roles** are the meaning vocabulary: `:good` = `status(0)`, `:warning` = `status(0.5)`, `:bad` = `status(1)`, plus `:info` and `:neutral`, the names design systems give their semantic tokens (Material, Bootstrap, Carbon, Primer: success, warning, danger, info, neutral). The three status roles are **fixed points on the `status` ramp**, not colours of their own, so within a theme a role and its ramp position cannot disagree; a theme sets them by setting `status`. `:info` and `:neutral` are the theme's `roles` and have contracts too: `:info` is a chromatic blue, `:neutral` is neutral. A role names a meaning, never a colour, which is what lets data name it — a feed's state `"down"` can say `:bad`, and every theme renders `:bad` as its own red.
+
+**Contracts are checked when a theme is constructed.** `new/1` and `merge/2` — and so an inline theme in a design (spec/14 §2.5) — check every ramp and role and raise `ArgumentError` naming the theme, the ramp or role, and the term it breaks: `theme :house: ramp :status breaks its contract: lightness must change one way along the ramp, by at least 3 L* a step (its ends say it falls); anchor 2 "#e0a030" (L* 70.8) moves 10.7 L* the wrong way from anchor 1 "#4ca34b" (L* 60.2)`. A ramp name not of the four, a role key not `:info` or `:neutral` — `:good`, `:warning` and `:bad` included, with a message saying to set `status` — a ramp of fewer than two anchors, and an anchor `Visualize.Color.parse/1` cannot read are refused the same way. `check/1` is the same check returning `{:error, subject, message}`, `subject` `{:ramp, name}` or `{:role, name}`, for a caller that reports rather than raises — the validator (spec/14 §10.1). The built-in themes hold every contract, and `test/visualize/theme_ramps_test.exs` holds them to it. A struct written literally, `%Visualize.Theme{…}`, is not checked: it is the escape hatch, as the contrast floors of 7.4 are not checked on a host's theme.
+
+**Fallback.** A theme that lacks a ramp or a role — a struct whose `ramps` or `roles` map leaves a key out — takes the **default theme's**, never a series colour: a series colour carries no meaning, so falling back to one would break the very promise the ramp exists to keep.
+
+**Precedence.** Where a colour comes from, highest first: a **literal** the design writes, or the **design's colour scale** (`range: [...]`, `range: {:ramp, name}`, spec/14 §4.3) — both deliberate choices; then the **theme's** rendering of a role or a ramp position the design names; then the theme's default. A feed's schema, when it comes (#531), sits between the last two: it names meanings, and the theme renders them.
+
+### 7.6 Functions
 
 | Function | Contract |
 |---|---|
 | `Visualize.Theme.default/0` | The light theme of 7.2. |
 | `Visualize.Theme.dark/0` | The dark theme of 7.2. |
-| `Visualize.Theme.new/1` | `default/0` with the given keyword fields replaced (7.2). |
-| `Visualize.Theme.merge/2` | The theme with the given keyword fields replaced (7.2). |
+| `Visualize.Theme.colour_safe/0` | The colour-vision-safe variant of the light theme of 7.2. |
+| `Visualize.Theme.builtin/1` | `builtin(name)`: the built-in theme of `:default`, `:dark` or `:colour_safe`, else `nil` (7.2). |
+| `Visualize.Theme.new/1` | `default/0` with the given keyword fields replaced, `ramps` and `roles` merged; contracts checked (7.2, 7.5). |
+| `Visualize.Theme.merge/2` | The theme with the given keyword fields replaced, `ramps` and `roles` merged; contracts checked (7.2, 7.5). |
+| `Visualize.Theme.check/1` | `:ok`, or `{:error, subject, message}` for the first ramp or role that breaks its contract (7.5). |
+| `Visualize.Theme.ramp/3` | `ramp(theme, name, t)`: the literal colour at `t` along the named ramp, Lab-interpolated, `t` clamped to `0..1`; the default theme's ramp when the theme lacks it (7.5). |
+| `Visualize.Theme.ramp_names/0` | `[:status, :thermal, :diverging, :sequential]` (7.5). |
+| `Visualize.Theme.role_names/0` | `[:good, :warning, :bad, :info, :neutral]` (7.5). |
 | `Visualize.Theme.slots/1` | The theme's slot names in the order of 7.1. |
-| `Visualize.Theme.colour_slots/1` | The theme's colour slots alone — the series, then axis, grid, text, background and surface — for a control that offers a colour as a slot (spec/14 §19.10). |
+| `Visualize.Theme.colour_slots/1` | The theme's colour slots alone — the series, then axis, grid, text, background and surface, then the five roles — for a control that offers a colour as a slot (spec/14 §19.10). |
 | `Visualize.Theme.series_slot/2` | `series_slot(theme, i)`: the `:series_k` atom the positive index `i` cycles to (7.1). |
-| `Visualize.Theme.resolve/3` | The slot's value as a literal or as a CSS reference with the literal fallback (7.3). |
+| `Visualize.Theme.resolve/3` | The slot's value as a literal or as a CSS reference with the literal fallback; a ramp position `{:ramp, name, t}` as its literal, a status role's position as the role (7.3). |
 | `Visualize.Theme.css_name/1` | The custom-property name of a slot atom (7.3). |
 | `Visualize.Theme.mode/1` | `:css` for the SVG backend, `:literal` for any other (7.3). |
 | `Visualize.Theme.ink/2` | `ink(theme, under)`: the literal of `text` or `background`, whichever contrasts more with `under`, else black or white when neither reaches 4.5:1 (7.3). |

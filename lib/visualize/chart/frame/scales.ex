@@ -360,8 +360,14 @@ defmodule Visualize.Chart.Frame.Scales do
     domain = domain(kind, name, get(node, :domain), values)
 
     range =
-      range(kind, name, sweep(name, node, get(node, :range)), plot, theme, axes)
-      |> ring(kind, name, domain)
+      case get(node, :range) do
+        {:ramp, ramp} ->
+          over_ramp(kind, name, ramp, domain, theme)
+
+        given ->
+          range(kind, name, sweep(name, node, given), plot, theme, axes)
+          |> ring(kind, name, domain)
+      end
 
     kind
     |> construct(unknown(kind, name, node), range)
@@ -548,14 +554,10 @@ defmodule Visualize.Chart.Frame.Scales do
   # -- range ----------------------------------------------------------------------------
 
   # A colour scale's `:auto` range is theme-derived whatever its name: its output is a
-  # colour, and the plot area has nothing to offer it.
-  defp range(:sequential, _name, :auto, _plot, theme, _axes) do
-    [theme.background, hd(theme.series)]
-  end
-
-  defp range(:diverging, _name, :auto, _plot, theme, _axes) do
-    [Enum.at(theme.series, 1, hd(theme.series)), theme.background, hd(theme.series)]
-  end
+  # colour, the plot area has nothing to offer it, and the theme's ramp of that meaning is
+  # the colour that promises "more" or "either side of the middle" (spec/14 §4.3, D-135).
+  defp range(kind, name, :auto, _plot, theme, _axes) when kind in @colour,
+    do: over_ramp(kind, name, kind, [], theme)
 
   defp range(_kind, :x, :auto, plot, _theme, _axes), do: [0, plot.width]
   defp range(_kind, :y, :auto, plot, _theme, _axes), do: [plot.height, 0]
@@ -587,4 +589,42 @@ defmodule Visualize.Chart.Frame.Scales do
   end
 
   defp range(_kind, _name, list, _plot, _theme, _axes) when is_list(list), do: list
+
+  # A range over one of the theme's ramps (spec/14 §4.3, #533). A colour scale interpolates
+  # it, Lab-interpolated by the theme; an ordinal scale spreads its domain end to end and a
+  # threshold scale its buckets, each to a ramp position the theme resolves in the render
+  # target's mode like any slot. A scale whose range length is its bucket count has no count
+  # to take from a ramp, and a position scale has no use for a colour.
+  defp over_ramp(kind, name, ramp, _domain, theme) when kind in @colour do
+    known_ramp!(name, ramp)
+    fn t -> Theme.ramp(theme, ramp, t) end
+  end
+
+  defp over_ramp(:ordinal, name, ramp, domain, _theme), do: spread(name, ramp, length(domain))
+
+  defp over_ramp(:threshold, name, ramp, domain, _theme),
+    do: spread(name, ramp, length(domain) + 1)
+
+  defp over_ramp(kind, name, ramp, _domain, _theme) do
+    raise ArgumentError,
+          "scale #{inspect(name)} (#{kind}) cannot range over {:ramp, #{inspect(ramp)}}: a ramp " <>
+            "is a colour scale's range, on an :ordinal, :threshold, :sequential or :diverging " <>
+            "scale; list the colours instead"
+  end
+
+  defp spread(name, ramp, n) do
+    known_ramp!(name, ramp)
+
+    case n do
+      n when n <= 1 -> [{:ramp, ramp, 0}]
+      n -> Enum.map(0..(n - 1)//1, &{:ramp, ramp, &1 / (n - 1)})
+    end
+  end
+
+  defp known_ramp!(name, ramp) do
+    ramp in Theme.ramp_names() ||
+      raise ArgumentError,
+            "scale #{inspect(name)}: #{inspect(ramp)} is not a ramp of the theme; the ramps are " <>
+              inspect(Theme.ramp_names())
+  end
 end

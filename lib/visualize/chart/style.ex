@@ -205,15 +205,18 @@ defmodule Visualize.Chart.Style do
   def colour(value, theme, mode), do: slot_or(value, theme, mode)
 
   @doc false
-  # Whether a value is a colour an element can be painted with: a string, `:none` or a
-  # theme slot.
+  # Whether a value is a colour an element can be painted with: a string, `:none`, a
+  # theme slot or a ramp position.
   @spec colour?(term()) :: boolean()
   def colour?(value) when is_binary(value) or value == :none, do: true
   def colour?({:series, i}), do: is_integer(i) and i >= 1
+  def colour?({:ramp, name, t}), do: is_atom(name) and is_number(t)
   def colour?(value), do: is_atom(value) and value not in [nil, true, false]
 
   defp slot_or(:none, _theme, _mode), do: :none
   defp slot_or({:series, _} = slot, theme, mode), do: Theme.resolve(theme, slot, mode)
+  # A ramp position, a meaning the theme renders (spec/14 §3.2, D-135).
+  defp slot_or({:ramp, _, _} = position, theme, mode), do: Theme.resolve(theme, position, mode)
   defp slot_or(slot, theme, mode) when is_atom(slot), do: Theme.resolve(theme, slot, mode)
   defp slot_or(literal, _theme, _mode), do: literal
 

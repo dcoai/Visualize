@@ -381,7 +381,7 @@ defmodule Visualize.Chart.FrameTest do
   end
 
   describe "ranges by name" do
-    test "position names take the plot area and a colour name the theme's series" do
+    test "position names take the plot area, a discrete colour the theme's series and a sequential one its ramp" do
       scales = %{
         x: %{kind: :linear},
         y: %{kind: :linear},
@@ -398,7 +398,9 @@ defmodule Visualize.Chart.FrameTest do
       assert Frame.scale(frame, :color).range == Enum.map(1..10, &:"series_#{&1}")
       assert Frame.scale(frame, :other).range == [150, 0]
       assert Scale.apply(Frame.scale(frame, :color), :b) == :series_2
-      assert Scale.apply(Frame.scale(frame, :heat), 0) == "#ffffff"
+      # A sequential scale's :auto range is the theme's sequential ramp (spec/14 §4.3, D-135).
+      assert Scale.apply(Frame.scale(frame, :heat), 0) == "#e9f2fc"
+      assert Scale.apply(Frame.scale(frame, :heat), 1) == "#004580"
     end
 
     test "a scheme name is its stops and a list is used as given" do
