@@ -147,6 +147,8 @@ Every function of this module is an `@impl` callback of `Visualize.Backend` (`re
 | `wrap_root/2` | `:width` | `800` | Canvas element width |
 | `wrap_root/2` | `:height` | `600` | Canvas element height |
 | `wrap_root/2` | `:canvas_id` | `"visualize-canvas"` | `id` of the emitted `<canvas>` |
+| `wrap_root/2` | `:title` | `nil` | The canvas's accessible name (D-142, spec/14 §21.4) |
+| `wrap_root/2` | `:description` | `nil` | The canvas's accessible description and fallback content |
 
 Output per format:
 
@@ -245,7 +247,7 @@ The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<n
 
 ### 3.6 Root wrapper
 
-`wrap_root/2` MUST emit, in order: `<canvas id="ID" width="W" height="H"></canvas>\n`, `<script>\n(function() {\n  var canvas = document.getElementById('ID');\n  var ctx = canvas.getContext('2d');\n`, the content, `})();\n</script>\n`.
+`wrap_root/2` MUST emit, in order: `<canvas id="ID" width="W" height="H"></canvas>\n` — with a `:title`, `<canvas id="ID" width="W" height="H" role="img" aria-label="TITLE" aria-describedby="ID-summary"><p id="ID-summary">DESCRIPTION</p></canvas>\n`, the paragraph and `aria-describedby` only with a `:description`, every text escaped (D-142: the canvas names itself, and its fallback content is its description) — `<script>\n(function() {\n  var canvas = document.getElementById('ID');\n  var ctx = canvas.getContext('2d');\n`, the content, `})();\n</script>\n`.
 
 ## 4. Visualize.Backend.CanvasBinary
 
@@ -545,12 +547,14 @@ The decoder MUST copy the viewport's pixels alone, shifted by `(−dx, −dy)` a
 | `:dynamic` | `nil` | `render/1`, `render_dynamic/1` | `nil`, an `IR.Path`, an `IR.Element`, or a list of `IR.Element` |
 | `:dynamic_style` | `%{stroke: "#4e79a7", fill: :none, stroke_width: 2}` | `render/1`, `render_dynamic/1` | Style applied when `:dynamic` is a path or a list |
 | `:canvas_format` | `:json` | `render/1`, `render_dynamic/1` | `:js`, `:json` or `:commands`, passed to `Canvas.render_element/2` |
+| `:title`, `:description` | `nil` | `render/1` | The chart's accessible name and description, on the `html` container's `<canvas>` as `wrap_root/2` puts them (3.6, D-142) |
+| `:canvas_id` | `"visualize-hybrid-canvas"` | `render/1` | The prefix of the description's id, `<canvas_id>-summary` |
 
 The doc comment on `render/1` states a `:js` default for `:canvas_format`; the implemented and normative default is `:json`, which is what the emitted container (6.3) expects. `render_dynamic/1` passes any format of 3.2 through, `:binary` and `:binary_base64` included, for a caller that feeds the `CanvasBinaryChart` hook itself — the compiled chart of [14-declarative-chart](14-declarative-chart.md) §12.4 does; the container of `render/1` reads `:json` and `:js` only.
 
 ### 6.3 Output
 
-Static layer: the static elements are wrapped in an `IR.Element` group with `Transform.translate(margin.left, margin.top)`, placed as the sole child of `IR.Element.root(width, height)` and rendered with `Visualize.Backend.SVG.render_element/1`, flattened to a string. Axes, tick labels and grid lines belong here.
+Static layer: the static elements are wrapped in an `IR.Element` group with `Transform.translate(margin.left, margin.top)`, placed as the sole child of `IR.Element.root(width, height, hidden: true)` — `aria-hidden`, one layer of a picture the canvas names (D-142) — and rendered with `Visualize.Backend.SVG.render_element/1`, flattened to a string. Axes, tick labels and grid lines belong here.
 
 Dynamic layer, by the shape of `:dynamic`:
 
