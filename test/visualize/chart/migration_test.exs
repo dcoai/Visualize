@@ -12,7 +12,7 @@ defmodule Visualize.Chart.MigrationTest do
   end
 
   test "a version this library does not write is an error at [:version]" do
-    assert Migration.migrate(%{version: 3}) == {:error, [{[:version], {:unsupported_version, 3}}]}
+    assert Migration.migrate(%{version: 3}) == {:error, [{[:version], {:newer_schema, 3, 2}}]}
     assert Migration.migrate(%{version: 0}) == {:error, [{[:version], {:unsupported_version, 0}}]}
     assert Migration.migrate(%{version: "1"}) == {:error, [{[:version], {:type, :integer}}]}
     assert Migration.migrate(%{}) == {:error, [{[:version], :required}]}

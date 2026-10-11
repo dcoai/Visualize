@@ -23,8 +23,12 @@ defmodule Visualize.Chart.Validator do
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
-  @typedoc "Keys and list indexes from the design to a value; `[]` is the design."
-  @type path :: [atom() | non_neg_integer()]
+  @typedoc """
+  Keys and list indexes from the design to a value; `[]` is the design. A path into a
+  parsed JSON document refused before it was decoded holds the document's key strings
+  (spec/14 §9.2), which `format_path/1` spells alike.
+  """
+  @type path :: [atom() | String.t() | non_neg_integer()]
 
   @typedoc "Why a value is at fault (spec/14 §10.1)."
   @type reason ::
@@ -36,6 +40,8 @@ defmodule Visualize.Chart.Validator do
           | {:ref_kind, atom(), atom()}
           | {:invalid_for, atom()}
           | {:unsupported_version, term()}
+          | {:newer_schema, pos_integer(), pos_integer()}
+          | {:limit, Visualize.Chart.Limits.name(), pos_integer(), number()}
           | {:json, String.t()}
           | {:missing_dependency, :jason}
           | {:unresolved, :var, atom()}
@@ -692,7 +698,11 @@ defmodule Visualize.Chart.Validator do
     do: check(:field_ref, ref, path, ctx)
 
   defp check_key(:design, %{key: :version}, v, path, _ctx) when is_integer(v) do
-    if v == Migration.current(), do: [], else: [{path, {:unsupported_version, v}}]
+    cond do
+      v == Migration.current() -> []
+      v > Migration.current() -> [{path, {:newer_schema, v, Migration.current()}}]
+      true -> [{path, {:unsupported_version, v}}]
+    end
   end
 
   # A theme needs at least one series colour (spec/08 §7.2).

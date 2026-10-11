@@ -117,6 +117,21 @@ defmodule Visualize.Chart.Validator.Words do
     "version #{inspect(v)} is not supported; the current version is #{Migration.current()}"
   end
 
+  def words({:newer_schema, needs, this}), do: "needs schema v#{needs}, this is v#{this}"
+
+  def words({:limit, :depth, max, given}),
+    do: "is nested #{given} deep; the limit depth is #{max}"
+
+  def words({:limit, :items, max, given}), do: "holds #{given} items; the limit items is #{max}"
+
+  def words({:limit, :ticks, max, given}),
+    do: "asks for #{given} ticks; the limit ticks is #{max}"
+
+  def words({:limit, :iterations, max, given}),
+    do: "asks for #{given} layout iterations; the limit iterations is #{max}"
+
+  def words({:limit, :counts, max, given}), do: "asks for #{given}; the limit counts is #{max}"
+
   # The builder's need of spec/14 §18.16 (#370), worded here so one reader serves it.
   def words({:unscaled, field}) do
     "reads #{inspect(field)} through no scale — say what #{inspect(field)} is under data, " <>

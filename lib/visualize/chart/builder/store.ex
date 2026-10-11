@@ -45,7 +45,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     builder does (spec/10 §1.1, D-45, D-85).
     """
 
-    alias Visualize.Chart.Fragment
+    alias Visualize.Chart.{Fragment, Migration}
 
     @typedoc "An entry's identity: its kind and a number the store never repeats (§19.2)."
     @type id :: {atom(), pos_integer()}
@@ -162,6 +162,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     the table and put again under its new id. A reference to an id the bundle does not
     carry is left as it is and reported in `outside`, and resolves as a mask (§19.2).
 
+    A bundle exported at a schema version newer than this library reads is refused before
+    any entry is put, as `{:error, {:newer_schema, needs, this}}` (spec/14 §9.1); one whose
+    provenance carries no `schema` is read as the current version.
+
     A store that can wrap this in a transaction should, so the bundle lands whole or not at
     all; this function itself has no way to undo a put that succeeded.
     """
@@ -169,14 +173,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
                                                                      {:ok, id()}
                                                                      | {:error, term()})) ::
             {:ok, %{ids: %{id() => id()}, outside: [id()]}} | {:error, term()}
-    def relocate(%{entries: entries} = _bundle, context, put) do
+    def relocate(%{entries: entries} = bundle, context, put) do
       carried = MapSet.new(entries, & &1.id)
 
-      with {:ok, table} <- issue(entries, context, put),
+      with :ok <- Migration.readable(schema(bundle)),
+           {:ok, table} <- issue(entries, context, put),
            {:ok, outside} <- rewrite(entries, table, context, put) do
         {:ok, %{ids: table, outside: Enum.reject(outside, &(&1 in carried))}}
       end
     end
+
+    # The schema version a bundle was exported at; `nil`, read as the current, for one
+    # exported before provenance carried it.
+    defp schema(%{provenance: %{schema: schema}}), do: schema
+    defp schema(_bundle), do: nil
 
     defp issue(entries, context, put) do
       Enum.reduce_while(entries, {:ok, %{}}, fn entry, {:ok, table} ->

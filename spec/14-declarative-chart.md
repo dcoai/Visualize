@@ -1004,7 +1004,33 @@ They agree exactly where the fragments are disjoint. Over two fragments that dec
 
 ## 9. Version and migration
 
-**Implemented.** `version` is required and is the integer `Visualize.Chart.Migration.current/0`, which is `2`. `Visualize.Chart.from_map/1` calls `Visualize.Chart.Migration.migrate/1` before validation: a design at the current version passes through unchanged; one at an older version is stepped forward one version at a time through the migration registered for each step, so a stored design never goes stale; a version above the current one, or that is not an integer, is `{:error, [{[:version], reason}]}` with `{:unsupported_version, v}` or `:required`. **Version 2 is the first step** (#383): a design holds its frames by name, so a version 1 design's singular `frame` becomes `frames: %{main: …}` and the `size` such a frame may still carry is dropped, the render giving one now (§2.1, §4.1, §4.2, #427). A stored version 1 design therefore keeps working — it is migrated where it is read, which is why this is a migration and not a breaking change. That holds for a design read from **JSON** too (§11): the codec types a key by the current schema, so a key only an earlier version had is typed by the shape it had there (`Visualize.Chart.Migration.legacy_type/2`) and the migration then moves it; otherwise a v1 `frame`'s values would stay strings and the migrated design would not validate (#479). The name `main` is the migration's word: a design that says nothing about names has one frame, and every path the builder and the validator print is `frames.main.…` for it. Within a version, `migrate/1` also returns the design in the shape this library *writes* (`Visualize.Chart.Migration.canonical/1`): a `:text` given as a list of parts becomes its string form (§7.1), which is a canonicalisation and not a version step, since the two forms are one value and both read. Every migration MUST be pure and MUST produce a map that validates at its target version.
+**Implemented.** `version` is required and is the integer `Visualize.Chart.Migration.current/0`, which is `2`. `Visualize.Chart.from_map/1` calls `Visualize.Chart.Migration.migrate/1` before validation: a design at the current version passes through unchanged; one at an older version is stepped forward one version at a time through the migration registered for each step, so a stored design never goes stale; a version above the current one is refused as §9.1 says, and one below `1`, missing or not an integer is `{:error, [{[:version], reason}]}` with `{:unsupported_version, v}`, `:required` or `{:type, :integer}`. **Version 2 is the first step** (#383): a design holds its frames by name, so a version 1 design's singular `frame` becomes `frames: %{main: …}` and the `size` such a frame may still carry is dropped, the render giving one now (§2.1, §4.1, §4.2, #427). A stored version 1 design therefore keeps working — it is migrated where it is read, which is why this is a migration and not a breaking change. That holds for a design read from **JSON** too (§11): the codec types a key by the current schema, so a key only an earlier version had is typed by the shape it had there (`Visualize.Chart.Migration.legacy_type/2`) and the migration then moves it; otherwise a v1 `frame`'s values would stay strings and the migrated design would not validate (#479). The name `main` is the migration's word: a design that says nothing about names has one frame, and every path the builder and the validator print is `frames.main.…` for it. Within a version, `migrate/1` also returns the design in the shape this library *writes* (`Visualize.Chart.Migration.canonical/1`): a `:text` given as a list of parts becomes its string form (§7.1), which is a canonicalisation and not a version step, since the two forms are one value and both read. Every migration MUST be pure and MUST produce a map that validates at its target version.
+
+### 9.1 A newer schema is refused by name
+
+**Implemented** (#541, D-137). visualize is a published package, and a design, a library fragment or a bundle is written by one host and read by another, which may run an older release. The version policy is three rules, the same for every document this library writes:
+
+- **A writer stamps the schema version it wrote.** A design carries `version` (§2.1), and `Visualize.Chart.to_json/1` writes the chart's, which `from_map/1` has migrated to `Visualize.Chart.Migration.current/0`; `Visualize.Chart.Composite.flatten/2` writes the current version into the design it produces. A fragment's JSON document (`Visualize.Chart.Fragment.to_json/1`, §19.7) carries `"$version"` at its top level beside the fragment's own keys — a fragment of most kinds has no `version` key of its own, and a `$` key is never a design's (§11.2) — and a bundle's provenance carries `schema` (§19.7).
+- **A reader refuses a newer version, and reads nothing of it.** A version above `current/0` is `{:newer_schema, needs, this}` — the version the document needs and the one this library reads — which `Visualize.Chart.Validator.format/1` words as `version: needs schema v3, this is v2`. The refusal comes **before** anything else is done with the document: `from_map/1` checks it before the limits of §9.2, the migration and the validator; `from_json/1` checks the parsed JSON's `"version"` before the codec decodes a key, so no atom is made from a document this library cannot read; `Visualize.Chart.Fragment.from_json/1` checks `"$version"`, and a design fragment's own `"version"`, likewise; `Visualize.Chart.Builder.Store.relocate/3` checks the bundle's `schema` before it puts an entry. A newer document is never half-read — never decoded by an older schema, never validated against one, never partly stored — because a key the older schema does not know would be read as an unknown term or reported as a fault that is not the author's.
+- **An older version migrates** as §9 says; a document with no stamp — a fragment document or a bundle written before the stamp existed — is read as the current version, which is what it was written at.
+
+The rule is the board's too (#539): a board document is stamped with the schema version, refused by its reader with the same `{:newer_schema, needs, this}` before any cell is read, and every design a board holds is read through `from_map/2` with the board reader's limits (§9.2). A theme travels inside a design (§2.5) or inside a bundle, so it is under the version of the document that carries it.
+
+### 9.2 Sanity limits on a document from elsewhere
+
+**Implemented** (#541, D-137). A design is authored, not data (§11.1), but a host that loads designs, fragments or boards from another host or another person is reading input it did not write. `Visualize.Chart.from_map/2`, `from_map!/2`, `from_json/2` and `Visualize.Chart.Fragment.from_json/2` take a `limits:` option, and every reader applies the defaults when it is not given, so a design no limit admits is not read through any of them. The limits bound what reading and rendering a document can be made to cost; they are **sanity limits**, not a budget — runaway protection while a chart renders belongs to the board runtime's supervised cells (#540).
+
+| Limit | Default | What it bounds | Where it is checked |
+|---|---|---|---|
+| `depth` | `64` | how deeply maps and lists nest — a use site's `local` and `vars` inside a composite count (§19.3), so this bounds composite and fragment nesting | the whole document |
+| `items` | `100_000` | the entries one list or one map holds. A design carries **no rows of its own** — a source is a slot the pool fills at application (§7.2) — so a list in the document (a variable's default, a tick's `values`, a domain, a transform's `from`/`to`, a `layout`'s weights) is the only place rows could be held inline, and this is their bound | the whole document |
+| `ticks` | `1_000` | an axis's tick count: an axis's integer `ticks`, or a `:ticks` node's `count` (§4.4) | a design |
+| `iterations` | `10_000` | a layout's iterations: a `:force` step's `ticks` (§5.4.1, §12.5) | a design |
+| `counts` | `1_000_000` | every other count a step produces or reads (§5.4.1): the integer `thresholds` of a `:bin`, `:contour` or `:density` step, a `:spectrum` step's `samples`, the integer `n` of `:take` and `:lttb`, the integer `width` of `:m4`, and each dimension of a `:contour` or `:density` step's `size`, the grid it fills | a design |
+
+A document over a limit is `{:error, errors}` of §10.1, one `{path, {:limit, name, max, given}}` per value over it — `name` the limit, `max` its value, `given` what the document asked for — at the path of the value, which `Visualize.Chart.Validator.format/1` words as `frames.main.axes[0].ticks: asks for 5000 ticks; the limit ticks is 1000`. For `depth` the path is that of the first map or list past the limit on each branch and `given` is its depth, the design itself being depth 1; for `items` it is the list or map and `given` its length. The order is fixed: the version gate (§9.1), then `depth` and `items` over the document as given — before `from_json/2` decodes it, so its path holds the document's own key strings, which `format_path/1` spells the same way — then the migration, then `ticks`, `iterations` and `counts` over the migrated design by the schema, then the validator. A value held as a variable is not a literal of the document and is not checked; its value at application is the host's. `Visualize.Chart.Fragment.from_json/2` checks `depth` and `items`, since a fragment is a piece and its counts are checked when it becomes a design that is read.
+
+**Whose number it is.** The defaults are this library's sanity values: generous, documented here and in `Visualize.Chart.Limits.defaults/0`, and every gallery design passes them by a wide margin, which a test asserts. A host is the holder of the knowledge about its own inputs, so the number it needs is its to give, at its layer: a host loading untrusted boards tightens them — `from_json(json, limits: [items: 5_000, depth: 24])` — and a limit it does not name keeps its default. A name that is not a limit, or a value that is not a positive integer, raises `ArgumentError`, as an option of the wrong shape does elsewhere. `Visualize.Chart.Limits.check/2` runs every check over a design map without reading it, for a host that holds the map and wants the verdict alone.
 
 ## 10. Validation
 
@@ -1034,7 +1060,9 @@ They agree exactly where the fragments are disjoint. Over two fragments that dec
 | `{:feeds_domain, scale, n}` | a `:text` mark's position channel that is the literal number `n` and names a scale whose domain is **inferred** — `:auto`, or `:auto` at an end, through any adoption (§4.3) — at the channel's path (#490, D-124). Inference reads the constant as data, so the domain is widened to hold `n` (§4.3), and a text placed at a fixed number is a caption or an annotation, never a reading the axis must reach: it holds a domain open that the data has left. A position channel is one whose scale in the frame's kind (§4.3) is `x` or `y`, or `angle` or `r` in a `:polar` frame, under whatever name the mark's `scales` renames it to — a `:geo` frame's positions name no scale, and a `series` names the colour scale, which is not a position; a `{:field, f}`, a `{:scale, :min}` or `:max`, a variable, a fixed or variable domain and every type but `:text` are not reported — a `:rule` at `y: 0` or an `:area`'s `y0: 0` on an inferred domain is a baseline the author means to see, and stays valid. The remedy is `{:scale, :min}` or `{:scale, :max}` (§5.2), a frame label (§6.3), or a declared domain |
 | `:both` | a frame that gives both `box` and `cell` (§4.2): two ways of saying where it goes |
 | `:outside` | a frame whose `cell`, with its `span`, runs past the grid (§2.8) |
-| `{:unsupported_version, v}` | §9 |
+| `{:unsupported_version, v}` | a version below `1` (§9) |
+| `{:newer_schema, needs, this}` | a version above the one this library reads, refused before anything else is read (§9.1): "needs schema v3, this is v2" |
+| `{:limit, name, max, given}` | a value over a sanity limit of §9.2 — `name` the limit, `max` its value, `given` what the document asked for |
 | `{:json, message}` | `Visualize.Chart.from_json/1` could not parse the document |
 | `{:missing_dependency, :jason}` | the JSON functions were called without `Jason` (§11) |
 | `{:unresolved, :var, name}` | a variable used here with no value at application and no default (§7.3) |
@@ -1063,7 +1091,7 @@ The resolution, binding and schema faults are reported by `Visualize.Chart.apply
 
 ### 11.1 Encoding
 
-**Implemented.** `Visualize.Chart.to_json/1` and `Visualize.Chart.from_json/1` are the map round-trip over a JSON document, behind the optional `Jason` dependency: `mix.exs` declares `{:jason, "~> 1.4", optional: true}`, `Visualize.Chart` declares `@compile {:no_warn_undefined, Jason}` (D-50), and without Jason both return `{:error, {:missing_dependency, :jason}}` while everything else works. `scripts/consumer_check.exs` asserts that `Jason` is absent from a bare consumer. The encoding is schema-driven: keys are strings, a `:name`, `:field`, `:slot` or enumerated atom is its string, and `from_json/1` reads each string back as the atom the schema says it is. A design is authored, not data — its names are the author's vocabulary — so decoding creates the atoms a design names; a consumer that loads designs from an untrusted source bounds them itself.
+**Implemented.** `Visualize.Chart.to_json/1` and `Visualize.Chart.from_json/1` are the map round-trip over a JSON document, behind the optional `Jason` dependency: `mix.exs` declares `{:jason, "~> 1.4", optional: true}`, `Visualize.Chart` declares `@compile {:no_warn_undefined, Jason}` (D-50), and without Jason both return `{:error, {:missing_dependency, :jason}}` while everything else works. `scripts/consumer_check.exs` asserts that `Jason` is absent from a bare consumer. The encoding is schema-driven: keys are strings, a `:name`, `:field`, `:slot` or enumerated atom is its string, and `from_json/1` reads each string back as the atom the schema says it is. A design is authored, not data — its names are the author's vocabulary — so decoding creates the atoms a design names; a consumer that loads designs from an untrusted source bounds them itself. What the reader does bound is fixed by §9: a newer document is refused before a key of it is decoded (§9.1), and a document's nesting and the size of its lists and maps are checked against the limits of §9.2 before decoding too, so neither a newer schema nor an oversized document makes an atom.
 
 ### 11.2 Tagged terms
 
@@ -1330,10 +1358,13 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.from_map/1` | `{:ok, chart}` for a valid design map after migration, else `{:error, errors}` as §10.1; the design-level keys absent from the map take the defaults of §2.1. |
-| `Visualize.Chart.from_map!/1` | As `from_map/1`, raising `ArgumentError` with the formatted errors (§10.1) on the error branch. |
+| `Visualize.Chart.from_map/1` | As `from_map/2` with `[]` options: the default limits (§9.2). |
+| `Visualize.Chart.from_map/2` | `from_map(map, limits: limits)`: `{:ok, chart}` for a valid design map after the version gate (§9.1), the limits (§9.2) and migration, else `{:error, errors}` as §10.1; the design-level keys absent from the map take the defaults of §2.1. `limits:` is a keyword list or map over `Visualize.Chart.Limits.defaults/0`; raises `ArgumentError` for a name that is not a limit or a value that is not a positive integer. |
+| `Visualize.Chart.from_map!/1` | As `from_map!/2` with `[]` options. |
+| `Visualize.Chart.from_map!/2` | As `from_map/2`, raising `ArgumentError` with the formatted errors (§10.1) on the error branch. |
 | `Visualize.Chart.to_map/1` | The design map of a chart: every design-level key, nested nodes as stored. |
-| `Visualize.Chart.from_json/1` | `from_map/1` over a JSON document decoded as §11; `{:error, [{[], {:json, message}}]}` for a document that does not parse, `{:error, {:missing_dependency, :jason}}` without Jason. |
+| `Visualize.Chart.from_json/1` | As `from_json/2` with `[]` options. |
+| `Visualize.Chart.from_json/2` | `from_map/2` over a JSON document decoded as §11, with `limits:` as it takes them; a newer `"version"` is refused and `depth` and `items` are checked on the parsed document before it is decoded (§9.1, §9.2); `{:error, [{[], {:json, message}}]}` for a document that does not parse, `{:error, {:missing_dependency, :jason}}` without Jason. |
 | `Visualize.Chart.to_json/1` | `{:ok, json}` for `to_map/1` encoded as §11, `{:error, {:missing_dependency, :jason}}` without Jason. |
 | `Visualize.Chart.var/1` | `%Visualize.Chart.Var{name: name}` for an atom (§7.1). |
 | `Visualize.Chart.fact/3` | `fact(source, field, key)`: `%Visualize.Chart.Fact{}`, the attribute `key` of `field` in the schema bound to slot `source`, resolved at application (§7.4). |
@@ -1394,7 +1425,8 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | Function | Contract |
 |---|---|
 | `Visualize.Chart.Migration.current/0` | The schema version this library writes: `2`. |
-| `Visualize.Chart.Migration.migrate/1` | `{:ok, map}` at the current version after stepping an older design forward, in the shape this library writes (`canonical/1`), else `{:error, [{[:version], reason}]}` (§9). |
+| `Visualize.Chart.Migration.migrate/1` | `{:ok, map}` at the current version after stepping an older design forward, in the shape this library writes (`canonical/1`), else `{:error, [{[:version], reason}]}` (§9) — `{:newer_schema, v, current}` for a newer one (§9.1). |
+| `Visualize.Chart.Migration.readable/1` | `readable(version)`: `:ok`, or `{:error, {:newer_schema, version, current}}` for an integer above `current/0` — the version gate of §9.1 alone, for a reader that holds a version before it holds a design (a JSON document, a fragment's stamp, a bundle's provenance); anything else is `:ok`, left to `migrate/1` to judge. |
 | `Visualize.Chart.Migration.canonical/1` | the design in the shape this library writes within the current version: a `:text` given as parts becomes its string (§7.1); everything else passes through. |
 | `Visualize.Chart.Migration.legacy_type/2` | the type a key had in an earlier version, for a key of `kind` the current schema no longer has (`frame` on a design: one `:frame` node), else `nil`; what the codec reads such a key by, so a document from that version decodes typed before it is migrated (§9, #479). |
 
@@ -1667,6 +1699,19 @@ The scale functions, one per kind of §4.3. The name carries the `_scale` suffix
 | `Visualize.Chart.Build.diverging_scale/2` | `diverging_scale(name, opts)`: `scale/3` of the `:diverging` kind (§4.3). |
 | `Visualize.Chart.Build.radial_scale/1` | As `radial_scale/2` with no options. |
 | `Visualize.Chart.Build.radial_scale/2` | `radial_scale(name, opts)`: `scale/3` of the `:radial` kind (§4.3). |
+
+### 14.13 `Visualize.Chart.Limits`
+
+**Implemented** (#541, D-137). The sanity limits of §9.2 as data and as checks.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Limits.defaults/0` | `%{depth: 64, items: 100_000, ticks: 1_000, iterations: 10_000, counts: 1_000_000}`, the system's sanity values. |
+| `Visualize.Chart.Limits.new/1` | the limits a reader applies: a keyword list or map merged over `defaults/0`; raises `ArgumentError` for a name that is not a limit or a value that is not a positive integer. |
+| `Visualize.Chart.Limits.structure/2` | `structure(document, limits)`: one `{path, {:limit, name, max, given}}` per `depth` or `items` fault of any term — a design, a fragment, a parsed JSON document with string keys — ordered by path; a struct is a leaf but a `%Visualize.Chart.Use{}`, whose `local` and `vars` are walked. |
+| `Visualize.Chart.Limits.counts/2` | `counts(design, limits)`: one such error per `ticks`, `iterations` or `counts` fault of a design map at the current version, by the schema, ordered by path; a variable is not a literal and is not checked. |
+| `Visualize.Chart.Limits.check/1` | As `check/2` with the defaults. |
+| `Visualize.Chart.Limits.check/2` | `check(design, limits)`: `:ok`, or `{:error, errors}` with every fault of `structure/2` and then `counts/2`; `limits` as `new/1` takes them. |
 
 ## 15. Presets
 
@@ -2598,8 +2643,8 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Builder.Store.split/1` | a store assign as `{module, context}`; a bare module has a `nil` context |
 | `Visualize.Chart.Builder.Store.encode_id/1` | an id as the one string the DOM and the wire carry |
 | `Visualize.Chart.Builder.Store.decode_id/1` | that string back to an id, refusing a kind that is not one so no atom is made from a client's string |
-| `Visualize.Chart.Builder.Store.relocate/3` | the reference `import/2`: issue, then rewrite through the table, through a store's own `put/2` |
-| `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id through a store, dependencies first, with provenance |
+| `Visualize.Chart.Builder.Store.relocate/3` | the reference `import/2`: issue, then rewrite through the table, through a store's own `put/2`; a bundle whose provenance `schema` is newer than this library reads is `{:error, {:newer_schema, needs, this}}` before any entry is put (§9.1), and one with no `schema` is read as the current version |
+| `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id through a store, dependencies first, with provenance: the source store, when, and the `schema` version it was exported at (§9.1) |
 | `Visualize.Chart.Fragment.kinds/0` | every kind a fragment can be, and so every kind an id can carry |
 | `Visualize.Chart.Fragment.kind/1` | the kind of a fragment, derived (§19.8); `nil` for a map that is many things, which is no kind of fragment |
 | `Visualize.Chart.Fragment.singular/1` | the kind a singular wrapper key names — `:style` for `style:` — or `nil`; `composite` is not one |
@@ -2609,8 +2654,9 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Validator.validate/2` | per-kind validity (§19.8): a fragment read as a kind — a design whole, a composite as sites, any other kind as the body under its key with that kind's schema, no key required and no reference looked up, since a fragment is a piece |
 | `Visualize.Chart.Fragment.refs/1` | every id a fragment refers to, once each, sorted — the order a map is walked is the runtime's, not a promise; a use site's `ref`, `origin`, `local` and `vars` included (§19.3, #470) |
 | `Visualize.Chart.Fragment.relocate/2` | a fragment with its ids rewritten through a table, and the ids the table did not carry; a use site's ids rewritten in place, the site still a `%Use{}` (§19.3, #470) |
-| `Visualize.Chart.Fragment.to_json/1` | a fragment of any kind — a composite holding uses and ids included — as the JSON of §11 and §19.7, `{:ok, json}`; not validated as a design, since a fragment may be partial (#465), so a host that keeps its library in a database writes what `put/2` hands it |
-| `Visualize.Chart.Fragment.from_json/1` | the inverse: tagged terms back as `%Use{}`, ids, variables and atoms, an id whose kind is not one a fragment can have left as it was read (no atom from a document); `{:error, …}` for text that is not JSON. `from_json(to_json(f))` is `f` (#465) |
+| `Visualize.Chart.Fragment.to_json/1` | a fragment of any kind — a composite holding uses and ids included — as the JSON of §11 and §19.7, `{:ok, json}`, the document stamped `"$version"` with the schema version it was written at (§9.1); not validated as a design, since a fragment may be partial (#465), so a host that keeps its library in a database writes what `put/2` hands it |
+| `Visualize.Chart.Fragment.from_json/1` | As `from_json/2` with `[]` options. |
+| `Visualize.Chart.Fragment.from_json/2` | the inverse: tagged terms back as `%Use{}`, ids, variables and atoms, an id whose kind is not one a fragment can have left as it was read (no atom from a document), the `"$version"` stamp read and dropped. `{:error, {:json, message}}` for text that is not JSON; `{:error, {:newer_schema, needs, this}}` for a stamp, or a design fragment's own `"version"`, newer than this library reads, before a key is decoded (§9.1); `{:error, {:limits, errors}}` with the `depth` and `items` faults of §9.2 under `limits:`, before a key is decoded. A document with no stamp is read as the current version. `from_json(to_json(f))` is `f` (#465) |
 
 | Function | Contract |
 |---|---|

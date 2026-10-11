@@ -153,6 +153,18 @@ defmodule Examples.ChartsTest do
     end
   end
 
+  # The sanity limits' defaults are generous (spec/14 §9.2, #541, D-137): every gallery
+  # design passes them. `from_map/1` applies them too, so the test above holds it as well;
+  # this one says so by name. (Through the JSON reader once #554 gives `{:scale, :min}` a
+  # JSON form.)
+  test "every design passes the default sanity limits" do
+    for module <- charts() do
+      {design, _sources} = module.design([])
+      assert Chart.Limits.check(design) == :ok, inspect(module)
+      assert {:ok, _chart} = Chart.from_map(design, limits: Chart.Limits.defaults())
+    end
+  end
+
   # A chart that still names an absolute colour, with the issue that keeps it there
   # (#421). Empty: the maps' ocean, the last entry, is the theme's `:surface` since #422.
   # A future gap goes here with its issue, and the guard below fails the moment an

@@ -23,14 +23,18 @@ defmodule Visualize.Chart.Migration do
   The design at the current version.
 
   A design already there passes through unchanged; an older one is migrated step by
-  step; a version above `current/0`, below `1`, missing or not an integer is an error at
-  `[:version]`.
+  step; a version above `current/0` is `{:newer_schema, v, current}` (spec/14 §9.1), and
+  one below `1`, missing or not an integer is an error at `[:version]` too.
   """
   @spec migrate(term()) :: {:ok, map()} | {:error, [Validator.error(), ...]}
   def migrate(%{version: @current} = map), do: {:ok, canonical(map)}
 
   def migrate(%{version: v} = map) when is_integer(v) and v >= 1 and v < @current do
     migrate(step(map, v))
+  end
+
+  def migrate(%{version: v}) when is_integer(v) and v > @current do
+    {:error, [{[:version], {:newer_schema, v, @current}}]}
   end
 
   def migrate(%{version: v}) when is_integer(v) do
@@ -44,6 +48,25 @@ defmodule Visualize.Chart.Migration do
   end
 
   def migrate(_), do: {:error, [{[], {:type, {:node, :design}}}]}
+
+  @doc """
+  The version gate of spec/14 §9.1 alone: `{:error, {:newer_schema, version, current}}`
+  for an integer above `current/0`, else `:ok`.
+
+  It is for a reader that holds a version before it holds a design — a parsed JSON
+  document, a fragment document's `"$version"`, a bundle's provenance — so a newer
+  document is refused before anything of it is read. Any other version is `:ok` here and
+  left to `migrate/1` to judge.
+
+      iex> Visualize.Chart.Migration.readable(3)
+      {:error, {:newer_schema, 3, 2}}
+
+      iex> Visualize.Chart.Migration.readable(1)
+      :ok
+  """
+  @spec readable(term()) :: :ok | {:error, {:newer_schema, pos_integer(), pos_integer()}}
+  def readable(v) when is_integer(v) and v > @current, do: {:error, {:newer_schema, v, @current}}
+  def readable(_version), do: :ok
 
   # One clause per registered migration, from a version to the next, each pure and
   # yielding the map at `from + 1`.

@@ -5,7 +5,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     **Export takes the closure.** Exporting an entry exports every entry it refers to,
     transitively, with their ids, so an import cannot dangle by construction. The bundle
-    carries **provenance** — which store it came from, and when — and each entry keeps its
+    carries **provenance** — which store it came from, when, and the schema version it was
+    exported at (spec/14 §9.1) — and each entry keeps its
     original id, so a repeated import of the same collection is detectable rather than a
     second copy of everything.
 
@@ -16,13 +17,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
 
     alias Visualize.Chart.Builder.Store
-    alias Visualize.Chart.Fragment
+    alias Visualize.Chart.{Fragment, Migration}
 
     @enforce_keys [:provenance, :entries]
     defstruct [:provenance, :entries]
 
-    @typedoc "Where a bundle came from, and when."
-    @type provenance :: %{store: term(), exported_at: DateTime.t()}
+    @typedoc """
+    Where a bundle came from, when, and the schema version it was exported at, which an
+    importer older than it refuses (spec/14 §9.1).
+    """
+    @type provenance :: %{store: term(), exported_at: DateTime.t(), schema: pos_integer()}
 
     @type t :: %__MODULE__{provenance: provenance(), entries: [Store.entry()]}
 
@@ -44,7 +48,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> Enum.reverse()
 
       %__MODULE__{
-        provenance: %{store: source, exported_at: DateTime.utc_now()},
+        provenance: %{
+          store: source,
+          exported_at: DateTime.utc_now(),
+          schema: Migration.current()
+        },
         entries: entries
       }
     end

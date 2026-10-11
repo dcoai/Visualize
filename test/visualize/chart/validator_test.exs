@@ -431,7 +431,7 @@ defmodule Visualize.Chart.ValidatorTest do
     end
 
     test "the version must be the current one" do
-      assert errors(Map.put(@full, :version, 3)) == [{[:version], {:unsupported_version, 3}}]
+      assert errors(Map.put(@full, :version, 3)) == [{[:version], {:newer_schema, 3, 2}}]
     end
 
     test "an empty theme series is reported" do
