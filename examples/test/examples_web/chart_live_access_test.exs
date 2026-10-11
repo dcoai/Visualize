@@ -43,4 +43,20 @@ defmodule ExamplesWeb.ChartLiveAccessTest do
     assert page =~ ~s(<svg aria-hidden="true")
     assert page =~ ~s(phx-hook="KeyboardHook")
   end
+
+  test "the resize hook's reduced_motion compiles the chart to step, and its change alone redraws it" do
+    {:ok, s} = ChartLive.mount(%{"chart" => "line"}, %{}, %Phoenix.LiveView.Socket{})
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => "canvas"}, s)
+    assert [{_name, %{motion: :full}}] = s.assigns.still_state.compiled
+
+    resize = %{"width" => 600, "height" => 0, "reduced_motion" => true}
+    {:noreply, s} = ChartLive.handle_event("resize", resize, s)
+    assert s.assigns.motion == :reduce
+    assert [{_name, %{motion: :reduce}}] = s.assigns.still_state.compiled
+
+    # The same width with the preference turned off: drawn again, easing.
+    {:noreply, s} = ChartLive.handle_event("resize", %{resize | "reduced_motion" => false}, s)
+    assert s.assigns.motion == :full
+    assert [{_name, %{motion: :full}}] = s.assigns.still_state.compiled
+  end
 end

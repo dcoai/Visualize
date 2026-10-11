@@ -75,6 +75,9 @@ defmodule ExamplesWeb.ChartLive do
            # mount has nothing to measure and must still draw. A patch to another chart
            # keeps it, so the next chart is drawn at once at the width the page knows.
            width: nil,
+           # The reader's motion preference, as the resize hook reports it (spec/14 §21.6,
+           # #559): `:reduce` compiles every chart to step rather than ease.
+           motion: :full,
            run: nil,
            still_task: nil,
            compare_task: nil
@@ -200,14 +203,25 @@ defmodule ExamplesWeb.ChartLive do
   # (#457), so a width past the cap draws nothing new. A streaming window is the plot the
   # chart is drawn at (#459), so it is rebuilt at the new plot width first, keeping its
   # density and its newest sample, and the run's next frame is full.
-  def handle_event("resize", %{"width" => width}, socket) when is_integer(width) and width > 0 do
-    %{width: was, slug: slug} = socket.assigns
+  #
+  # The push also says whether the reader asks for less motion (spec/14 §21.6, #559), and is
+  # sent again when that changes: the chart is drawn again with its easings as steps, at the
+  # width it has.
+  def handle_event("resize", %{"width" => width} = params, socket)
+      when is_integer(width) and width > 0 do
+    %{width: was, slug: slug, motion: motion_was} = socket.assigns
+    motion = if params["reduced_motion"] == true, do: :reduce, else: :full
 
-    if measured(width, slug) == measured(was, slug) do
-      {:noreply, socket}
-    else
-      socket = assign(socket, width: width)
-      {:noreply, socket |> rescrolled() |> resized() |> still()}
+    cond do
+      measured(width, slug) != measured(was, slug) ->
+        socket = assign(socket, width: width, motion: motion)
+        {:noreply, socket |> rescrolled() |> resized() |> still()}
+
+      motion != motion_was ->
+        {:noreply, socket |> assign(motion: motion) |> still()}
+
+      true ->
+        {:noreply, socket}
     end
   end
 
@@ -615,6 +629,7 @@ defmodule ExamplesWeb.ChartLive do
           assigns.hex_radius,
           assigns.width
         )
+        |> Keyword.put(:motion, assigns.motion)
   end
 
   defp pushed(socket, %{incremental: record} = plot, seq) when is_map(record) do
@@ -730,7 +745,8 @@ defmodule ExamplesWeb.ChartLive do
     |> Keyword.merge(
       samples_per_px: scroll.samples_per_px,
       origin: scroll.origin,
-      now: scroll.origin + count - 1
+      now: scroll.origin + count - 1,
+      motion: assigns.motion
     )
   end
 
@@ -738,6 +754,7 @@ defmodule ExamplesWeb.ChartLive do
     assigns.current_palette
     |> build_chart_opts(tick, true, assigns.slug, assigns.hex_radius, assigns.width)
     |> clock(assigns)
+    |> Keyword.put(:motion, assigns.motion)
   end
 
   # The instant a run started at, as `utc:` (#526): a design that keeps a clock starts

@@ -90,9 +90,14 @@ defmodule Visualize.Chart.Compiled.Motion do
   defp step(state, value, node, at) do
     shown = position(state, node, at)
 
-    if value == state.target,
-      do: %{state | shown: shown},
-      else: %{from: shown, target: value, since: at, shown: shown}
+    if value == state.target do
+      %{state | shown: shown}
+    else
+      # Shown where the new easing stands on this tick: where it starts, unless it has no
+      # duration — reduced motion (spec/14 §21.6) — and is at its target at once.
+      moved = %{from: shown, target: value, since: at, shown: shown}
+      %{moved | shown: position(moved, node, at)}
+    end
   end
 
   # Where the easing stands at `at`: `from` toward `target` along the curve, done when the

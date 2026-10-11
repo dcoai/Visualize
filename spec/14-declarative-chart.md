@@ -1406,7 +1406,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.explain/1` | `explain(layers)`: one `t:Visualize.Chart.provenance/0` per leaf path of `stack/1` of the layers — the value, the layer that set it and the layers it overrode — ordered by path (§17.1). |
 | `Visualize.Chart.free_vars/1` | `free_vars(design)`: one `t:Visualize.Chart.free_var/0` per variable still in a fragment, a chart or a stack of layers — its default, whether it is required, and every path it stands at with the schema's expectation there and the layer it came from — ordered by name (§17.2). |
 | `Visualize.Chart.compile/1` | As `compile/2` with `[]` options: an applied chart compiled as it is, or a design applied with no options first. |
-| `Visualize.Chart.compile/2` | `compile(design, opts)`: `{:ok, %{name => %Visualize.Chart.Compiled{}}}`, one per frame (§12.1, #385), for an applied chart, or for a chart or a design map applied first with `sources:`, `vars:` and `theme:` as `apply/2` takes them, with `ceiling:` the point-count ceiling of §12.3 (`1000`); else the `{:error, errors}` of application. Raises `ArgumentError` as `apply/2` does, and for a `ceiling:` that is not a positive integer. |
+| `Visualize.Chart.compile/2` | `compile(design, opts)`: `{:ok, %{name => %Visualize.Chart.Compiled{}}}`, one per frame (§12.1, #385), for an applied chart, or for a chart or a design map applied first with `sources:`, `vars:` and `theme:` as `apply/2` takes them, with `ceiling:` the point-count ceiling of §12.3 (`1000`) and `motion:` `:full` or `:reduce` (§21.6, default `:full`); else the `{:error, errors}` of application. Raises `ArgumentError` as `apply/2` does, and for a `ceiling:` that is not a positive integer. |
 | `Visualize.Chart.generate/1` | As `generate/2` with `[]` options. |
 | `Visualize.Chart.generate/2` | `generate(applied, opts)`: the applied chart as a `Visualize.IR.Element` — `Visualize.Chart.Frame.generate/2` of its frame over its bound sources with `resolve:` and `paths:` as that function takes them — or, with `root: true`, that group inside `Visualize.IR.Element.root/3` at the frame's size, titled from the design's `meta` — else the summary's name — and described by `meta.description` followed by the summary (§21.2), unless `title:`, `description:` and `summary:` say otherwise, `responsive:` passed through (§4.7). |
 | `Visualize.Chart.render/1` | As `render/2` with `[]` options. |
@@ -1551,9 +1551,9 @@ A style is looked up by name among the declared styles and the built-in four (§
 | `Visualize.Chart.Compiled.svg/2` | `svg(compiled, sources)`: the one-string form of §12.4, the frame's group with the static and the dynamic regions in the frame's order; equal to `Visualize.Chart.Frame.render/2` when every mark targets `:svg`. |
 | `Visualize.Chart.Compiled.stale?/2` | `stale?(compiled, sources)`: whether a delivery among the sources names a schema version other than the one its slot was compiled with (§12.1); a source that is not a delivery claims no version and is never stale. |
 | `Visualize.Chart.Compiled.tick/2` | As `tick/3` with `[]` options: the window's `hi` is the newest bound value. |
-| `Visualize.Chart.Compiled.tick/3` | `tick(compiled, sources, opts)`: `{payload, compiled}` — the per-tick payload of §12.4 (`svg`, `backdrop`, `canvas`, `canvas_format`, `incremental`, `bytes`) and the compiled chart holding the tick's sources and, for a viewport design, the window state of §12.5, and for a design with a `:force` step the tick's warm layout (§12.5, D-132); `now:` fixes the window's upper end. |
+| `Visualize.Chart.Compiled.tick/3` | `tick(compiled, sources, opts)`: `{payload, compiled}` — the per-tick payload of §12.4 (`svg`, `backdrop`, `canvas`, `canvas_format`, `incremental`, `bytes`) and the compiled chart holding the tick's sources and, for a viewport design, the window state of §12.5, and for a design with a `:force` step the tick's warm layout (§12.5, D-132); `now:` fixes the window's upper end, `at:` is the clock the easing reads, and `motion:` overrides the compiled chart's for this tick (§21.6). |
 | `Visualize.Chart.Compiled.step/2` | As `step/3` with `[]` options. |
-| `Visualize.Chart.Compiled.step/3` | `step(compiled, sources, opts)`: one frame of the one-string form as a `Visualize.IR.Element` — the frame's group at the eased scales' shown domains — and the compiled chart after it; `now:` and `at:` as `tick/3` takes them (§12.5, #360). |
+| `Visualize.Chart.Compiled.step/3` | `step(compiled, sources, opts)`: one frame of the one-string form as a `Visualize.IR.Element` — the frame's group at the eased scales' shown domains — and the compiled chart after it; `now:`, `at:` and `motion:` as `tick/3` takes them (§12.5, #360, §21.6). |
 
 ### 14.12 `Visualize.Chart.Build`
 
@@ -2996,7 +2996,7 @@ The simulation is Machado, Oliveira and Fernandes (2009) at severity 1.0 (spec/0
 
 ## 21. Accessibility
 
-**Implemented in part** (#546, D-142). A chart is accessible in four ways, one work item each: a **text alternative** generated from the design and its data (§21.1–§21.4, #557), **keyboard navigation** into its points (§21.5, #558), **reduced motion** (#559), and **status beyond hue** (#560); the last two are written with their work items, before the functions.
+**Implemented in part** (#546, D-142). A chart is accessible in four ways, one work item each: a **text alternative** generated from the design and its data (§21.1–§21.4, #557), **keyboard navigation** into its points (§21.5, #558), **reduced motion** (§21.6, #559), and **status beyond hue** (#560), written with its work item before the functions.
 
 ### 21.1 The summary
 
@@ -3076,7 +3076,16 @@ A canvas is an image to assistive technology with nothing in it to read, so the 
 
 **A board adds the order across its cells one level up** (#539). A chart is one stop and keeps its arrows; a board makes each cell one stop in its own order — Tab between cells — or, if it navigates its cells with arrows, moves focus *into* a chart with Enter and takes it back on Escape: the hook moves focus to the nearest enclosing element carrying `data-vis-cell` when Escape is pressed inside it. Neither level needs the other's details.
 
-### 21.6 Functions
+### 21.6 Reduced motion
+
+**Implemented** (#559). The motion a chart has is eased: a scale's `transition` (§4.3) and a mark's (§5.1) move what they draw toward its target over `duration` milliseconds (§12.5), and a component's `animate` lets the browser tween each DOM patch ([10-liveview-integration](10-liveview-integration.md) §1.2). A reader who asks the system for less motion — `prefers-reduced-motion: reduce` — gets **steps instead**: everything is drawn at its target at once, and nothing else changes.
+
+- **On the server**, `Visualize.Chart.compile/2` takes `motion:`, `:full` (default) or `:reduce`, and holds it in the compiled chart; `Visualize.Chart.Compiled.tick/3` and `step/3` take `motion:` too, which overrides it for that tick. Under `:reduce` every scale transition and every mark motion is eased with a `duration` of `0`: the shown domain and the shown readings are the targets on the tick they change. The states are kept as under `:full` — the target, the clock, a pending shrink and its `shrink_after` hysteresis, which is a wait and not a motion — so turning `motion:` back to `:full` mid-run eases on from where the chart stands. A viewport's scroll (§12.5) is not easing: the window follows the data's time, and it scrolls under either.
+- **In the browser**, `ResizeHook` adds the media query's answer to every push, `{width, height, reduced_motion}`, and pushes again with its last size when the answer changes ([10-liveview-integration](10-liveview-integration.md) §10.2): the page that sizes a chart from the hook is the page that compiles it, and passes `motion: :reduce` while the reader asks for it. A component's `animate` transition stops under the media query (spec/10 §1.2). No hook animates on its own: every motion a chart has is one of these two.
+
+The gallery's chart page compiles with `motion: :reduce` while its `ResizeHook` says the reader prefers it.
+
+### 21.7 Functions
 
 | Function | Contract |
 |---|---|

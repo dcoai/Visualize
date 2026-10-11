@@ -679,6 +679,59 @@ defmodule Visualize.Chart.CompiledTest do
     end
   end
 
+  describe "reduced motion steps instead of easing (spec/14 §21.6, #559)" do
+    test "compiled with motion: :reduce, a scale's domain is its target on the tick it changes" do
+      compiled = compile!(eased(), sources: peak(10), ceiling: 100, motion: :reduce)
+      assert compiled.motion == :reduce
+      {_, compiled} = Compiled.tick(compiled, peak(10), at: 0)
+
+      {grown, compiled} = Compiled.tick(compiled, peak(20), at: 0)
+      assert compiled.eased.y.shown == [0.0, 20.0]
+      assert grown.svg =~ ">20</text>"
+      # The states run as ever: the target and the clock are kept.
+      assert compiled.eased.y.target == [0.0, 20.0] and compiled.eased.y.since == 0
+
+      {_, compiled} = Compiled.tick(compiled, peak(10), at: 10)
+      assert compiled.eased.y.shown == [0.0, 10.0]
+    end
+
+    test "a mark's reading is its target on the tick it changes" do
+      compiled = compile!(moving(), sources: pair(0), ceiling: 100, motion: :reduce)
+      {_, compiled} = Compiled.tick(compiled, pair(0), at: 0)
+      {moved_now, compiled} = Compiled.tick(compiled, pair(10), at: 0)
+      assert compiled.moving[0][{1, :v}].shown == 10.0
+      assert moved(moved_now) =~ "L240,0"
+    end
+
+    test "a tick's motion: overrides the compiled chart's, and :full eases on from where it stands" do
+      compiled = compile!(moving(), sources: pair(0), ceiling: 100)
+      assert compiled.motion == :full
+      {_, compiled} = Compiled.tick(compiled, pair(0), at: 0)
+      {_, compiled} = Compiled.tick(compiled, pair(10), at: 0, motion: :reduce)
+      assert compiled.moving[0][{1, :v}].shown == 10.0
+
+      # Back to full motion, a new reading eases from 10 toward 0.
+      {_, compiled} = Compiled.tick(compiled, pair(0), at: 100)
+      {_, compiled} = Compiled.tick(compiled, pair(0), at: 150)
+      assert compiled.moving[0][{1, :v}].shown == 5.0
+
+      {_group, stepped} = Compiled.step(compiled, pair(20), at: 150, motion: :reduce)
+      assert stepped.moving[0][{1, :v}].shown == 20.0
+    end
+
+    test "motion: must be :full or :reduce" do
+      assert_raise ArgumentError, ~r/motion: :full or :reduce/, fn ->
+        compile!(moving(), sources: pair(0), motion: :none)
+      end
+
+      compiled = compile!(moving(), sources: pair(0))
+
+      assert_raise ArgumentError, ~r/motion: :full or :reduce/, fn ->
+        Compiled.tick(compiled, pair(1), motion: true)
+      end
+    end
+  end
+
   describe "the render target of a text mark (§12.3, #134)" do
     test "a :text mark is :svg whatever render says, since the binary stream carries no text" do
       design =

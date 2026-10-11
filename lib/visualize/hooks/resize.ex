@@ -3,8 +3,10 @@ defmodule Visualize.Hooks.Resize do
   Phoenix LiveView hook that reports a container's size to the LiveView (spec/10 §10).
 
   `ResizeHook` is the round-trip half of responsive sizing (D-54): a `ResizeObserver` on
-  the container pushes `{width, height}` once the size has held for the debounce period,
-  so the server re-renders the chart at the container's pixel width. The CSS-scaled half
+  the container pushes `{width, height, reduced_motion}` once the size has held for the
+  debounce period, so the server re-renders the chart at the container's pixel width —
+  and, while `reduced_motion` is true (`prefers-reduced-motion: reduce`, pushed again
+  whenever it changes), compiles it with `motion: :reduce` (spec/14 §21.6). The CSS-scaled half
   needs no hook: `Visualize.IR.Element.root/3` under `responsive: true`, or a component
   with `responsive={true}`, follows its container by `viewBox` and `preserveAspectRatio`.
 
@@ -14,8 +16,9 @@ defmodule Visualize.Hooks.Resize do
         <.line_chart data={@data} x={& &1.at} y={& &1.value} width={@width} height={@height} />
       </div>
 
-      def handle_event("resize", %{"width" => width, "height" => height}, socket) do
-        {:noreply, assign(socket, width: width, height: height)}
+      def handle_event("resize", %{"width" => width, "height" => height} = params, socket) do
+        motion = if params["reduced_motion"], do: :reduce, else: :full
+        {:noreply, assign(socket, width: width, height: height, motion: motion)}
       end
 
   ## Configuration
@@ -40,6 +43,13 @@ defmodule Visualize.Hooks.Resize do
         this.last = null;
         this.observer = null;
 
+        // The reader's motion preference rides on every push, and a change of it is pushed
+        // with the last size (spec/14 §21.6): the page that sizes the chart compiles it.
+        this.motion = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+          ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+        this.onMotion = () => { if (this.last) this.pushEvent(this.eventName, this.payload(this.last)); };
+        if (this.motion) this.motion.addEventListener('change', this.onMotion);
+
         if (typeof ResizeObserver === 'undefined') return;
 
         this.observer = new ResizeObserver((entries) => this.observed(entries));
@@ -62,10 +72,15 @@ defmodule Visualize.Hooks.Resize do
           return;
         }
         this.last = size;
-        this.pushEvent(this.eventName, size);
+        this.pushEvent(this.eventName, this.payload(size));
+      },
+
+      payload(size) {
+        return { width: size.width, height: size.height, reduced_motion: !!(this.motion && this.motion.matches) };
       },
 
       destroyed() {
+        if (this.motion) this.motion.removeEventListener('change', this.onMotion);
         if (this.observer) this.observer.disconnect();
         if (this.timer) clearTimeout(this.timer);
       }

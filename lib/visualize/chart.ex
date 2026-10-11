@@ -637,8 +637,10 @@ defmodule Visualize.Chart do
 
   An applied chart is compiled as it is; a chart or a design map is applied first with
   the `sources:`, `vars:` and `theme:` options of `apply/2`, and its errors are this
-  function's. The one option of the compiler's own is `:ceiling`, the point count above
-  which `render: :auto` leaves SVG for the canvas (default `1000`, spec/00 §3.2).
+  function's. The compiler's own options are `:ceiling`, the point count above which
+  `render: :auto` leaves SVG for the canvas (default `1000`, spec/00 §3.2), and `:motion`,
+  `:full` (default) or `:reduce`: a reader who asks for less motion gets every transition
+  and mark motion as a step to its target (spec/14 §21.6, D-142).
 
   ## Examples
 

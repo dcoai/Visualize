@@ -118,7 +118,7 @@ defmodule Examples.Charts.Design do
   @spec step(module(), [{atom(), Chart.Compiled.t()}], map(), map(), keyword()) ::
           {String.t(), [{atom(), Chart.Compiled.t()}]}
   def step(module, compiled, design, sources, opts) do
-    tick = Keyword.take(opts, [:now, :at])
+    tick = Keyword.take(opts, [:now, :at, :motion])
 
     {groups, stepped} =
       Enum.map_reduce(compiled, [], fn {name, one}, acc ->

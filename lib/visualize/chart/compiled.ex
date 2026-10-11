@@ -71,6 +71,7 @@ defmodule Visualize.Chart.Compiled do
     :plot,
     :box,
     :viewport,
+    motion: :full,
     backdrop: "",
     defs: [],
     transitions: %{},
@@ -132,6 +133,7 @@ defmodule Visualize.Chart.Compiled do
           plot: %{width: number(), height: number()},
           box: %{x: number(), y: number(), width: number(), height: number()},
           viewport: map() | nil,
+          motion: :full | :reduce,
           transitions: %{atom() => map()},
           eased: %{atom() => map()},
           motions: %{non_neg_integer() => map()},
@@ -152,6 +154,7 @@ defmodule Visualize.Chart.Compiled do
     frame = frame!(applied, name)
     chart = restrict(applied.chart, frame)
     ceiling = ceiling!(Keyword.get(opts, :ceiling, @default_ceiling))
+    motion = motion!(Keyword.get(opts, :motion, :full))
     window = Window.new(chart)
     {layout, regions} = Regions.build(chart, window && window.scale)
     frame = window_frame(window, chart, frame, sources, nil)
@@ -174,6 +177,7 @@ defmodule Visualize.Chart.Compiled do
       regions: regions,
       targets: targets,
       ceiling: ceiling,
+      motion: motion,
       size: frame.size,
       margin: frame.margin,
       plot: frame.plot,
@@ -377,8 +381,8 @@ defmodule Visualize.Chart.Compiled do
   @doc """
   One frame of the one-string form with the state after it (spec/14 §12.5, #360): the
   frame's group of `svg/2` as a `Visualize.IR.Element`, its eased scales at their shown
-  domains for this tick, and the compiled chart carrying the easing on. `:now` and `:at`
-  as `tick/3` takes them. A caller that wants a page-ready document wraps it in
+  domains for this tick, and the compiled chart carrying the easing on. `:now`, `:at`
+  and `:motion` as `tick/3` takes them. A caller that wants a page-ready document wraps it in
   `Visualize.IR.Element.root/3`.
   """
   @spec step(t(), map(), keyword()) :: {Element.t(), t()}
@@ -442,9 +446,24 @@ defmodule Visualize.Chart.Compiled do
 
   defp ease(compiled, frame, sources, opts) do
     at = Keyword.get_lazy(opts, :at, fn -> System.monotonic_time(:millisecond) end)
-    {frame, eased} = Transition.apply(frame, compiled.transitions, compiled.eased, at)
-    {moved, moving} = Motion.apply(compiled.motions, compiled.moving, sources, at)
+    {transitions, motions} = easings(compiled, Keyword.get(opts, :motion, compiled.motion))
+    {frame, eased} = Transition.apply(frame, transitions, compiled.eased, at)
+    {moved, moving} = Motion.apply(motions, compiled.moving, sources, at)
     {frame, moved, %{compiled | eased: eased, moving: moving}}
+  end
+
+  # The easings of a tick (spec/14 §21.6, D-142): as compiled under `:full`; under
+  # `:reduce` each with no duration, so every shown value is its target on the tick it
+  # changes while the states — the target, the clock, a pending shrink — run as ever.
+  defp easings(%{transitions: transitions, motions: motions}, motion) do
+    case motion!(motion) do
+      :full ->
+        {transitions, motions}
+
+      :reduce ->
+        {Map.new(transitions, fn {name, node} -> {name, Map.put(node, :duration, 0)} end),
+         Map.new(motions, fn {index, m} -> {index, %{m | node: Map.put(m.node, :duration, 0)}} end)}
+    end
   end
 
   @doc "As `tick/3` with `[]` options."
@@ -472,6 +491,9 @@ defmodule Visualize.Chart.Compiled do
     * `:frame` - the tick's own frame node (spec/14 §12.5, #424): when it differs from the
       one the chart was compiled with, the frame is re-realised at it and the static
       regions re-rendered, which is what a design animating through its frame needs
+    * `:motion` - `:full` or `:reduce` for this tick, by default the compiled chart's
+      (spec/14 §21.6, D-142): under `:reduce` every transition and mark motion steps to
+      its target instead of easing there
   """
   @spec tick(t(), map(), keyword()) :: {payload(), t()}
   def tick(%__MODULE__{} = compiled, sources, opts) when is_map(sources) do
@@ -845,6 +867,12 @@ defmodule Visualize.Chart.Compiled do
 
   defp ceiling!(ceiling) do
     raise ArgumentError, "ceiling: a positive integer is needed, got: #{inspect(ceiling)}"
+  end
+
+  defp motion!(motion) when motion in [:full, :reduce], do: motion
+
+  defp motion!(motion) do
+    raise ArgumentError, "motion: :full or :reduce is needed, got: #{inspect(motion)}"
   end
 
   # The target of every mark (spec/14 §12.3): the override, else by the bound row count.

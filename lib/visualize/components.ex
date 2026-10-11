@@ -131,9 +131,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
-        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -219,9 +219,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
-        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -282,9 +282,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
-        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -372,9 +372,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
-        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <g transform={"translate(#{elem(@centre, 0)}, #{elem(@centre, 1)})"}>
           <%= for slice <- @slices do %>
             <path d={slice.d} fill={slice.fill} stroke={@stroke} stroke-width={@stroke_width} {@transition} />
@@ -448,9 +448,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
-        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -523,9 +523,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
-        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
@@ -600,9 +600,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         )
 
       ~H"""
-      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids)} viewBox={"0 0 #{@width} #{@height}"}>
+      <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
-        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc>
+        <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <g class="x-axis" transform={"translate(0, #{@inner_height})"}>{@x_axis}</g>
           <g class="y-axis">{@y_axis}</g>
