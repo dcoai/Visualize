@@ -46,6 +46,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
 
     alias Visualize.Chart.{Fragment, Migration}
+    alias Visualize.Chart.Theme, as: ChartTheme
 
     @typedoc "An entry's identity: its kind and a number the store never repeats (§19.2)."
     @type id :: {atom(), pos_integer()}
@@ -111,6 +112,49 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def delete(store, id), do: with({m, c} <- split(store), do: m.delete(id, c))
     @doc false
     def import(store, bundle), do: with({m, c} <- split(store), do: m.import(bundle, c))
+
+    # -- a stored theme, by name -------------------------------------------------------
+
+    @doc """
+    The stored theme of a name (spec/14 §2.5, §9.3, D-139): the `:theme` entry whose theme
+    names itself `name` — or, for one that gives no name, whose entry name's last `:`
+    segment is `name` — read by `Visualize.Chart.Theme.from_map/2`. `{:error, errors}` for one stored that does not read,
+    `:error` when the store holds no theme of that name.
+
+    This is how a host ships a theme as a value: it stores one, and a design that names it
+    previews in it.
+    """
+    @spec theme(store(), atom() | String.t()) ::
+            {:ok, Visualize.Theme.t()} | {:error, [Visualize.Chart.Validator.error()]} | :error
+    def theme(store, name) when is_atom(name) or is_binary(name) do
+      wanted = to_string(name)
+
+      store
+      |> list()
+      |> Enum.filter(&(&1.kind == :theme))
+      |> Enum.find_value(:error, fn summary ->
+        case get(store, summary.id) do
+          {:ok, entry} -> if named?(entry, wanted), do: ChartTheme.from_map(entry.fragment)
+          :error -> nil
+        end
+      end)
+    end
+
+    defp named?(%{fragment: %{theme: theme}} = entry, wanted) do
+      own =
+        case theme do
+          %{name: name} when is_atom(name) -> to_string(name)
+          name when is_atom(name) -> to_string(name)
+          _unnamed -> nil
+        end
+
+      own == wanted or (own == nil and last_segment(entry.name) == wanted)
+    end
+
+    defp named?(_entry, _wanted), do: false
+
+    defp last_segment(name) when is_binary(name), do: name |> String.split(":") |> List.last()
+    defp last_segment(_name), do: nil
 
     # -- ids as the DOM and the wire carry them ---------------------------------------
 

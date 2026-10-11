@@ -180,6 +180,21 @@ defmodule ExamplesWeb.BuilderLive do
         labels: [%{id: :title, anchor: :title, text: ["Uptime — ", Chart.var(:unit)]}]
       }
 
+    # Warm paper, ink and a serif face; the ramps and roles are the default's, so the meaning
+    # holds and only the tones are the house's.
+    defp house_theme do
+      Visualize.Theme.new(
+        name: :house,
+        series: ~w(#2f5d8a #b5651d #a23b3b #3d7a6f #5b7f2e #8a6d1f #6d4f86 #a14d73),
+        background: "#fbfaf6",
+        surface: "#f1ede3",
+        text: "#2b2924",
+        axis: "#5f5a50",
+        grid: "#e2dccf",
+        font_family: "Georgia, serif"
+      )
+    end
+
     # The three hand-written maps are decomposed into composites of sites, one kind each
     # (spec/14 §18.12, §19.8): a map that is many things is not a fragment.
     defp seeds do
@@ -188,6 +203,9 @@ defmodule ExamplesWeb.BuilderLive do
         {"Uptime::shared", composite(shared())},
         {"Uptime::panel", composite(panel())},
         {"Theme::dark", %{theme: :dark}},
+        # A host's own theme, shipped as a value (spec/14 §9.3, D-139): a design that says
+        # `theme: :house` previews in it, and opening it is the theme mode.
+        {"Theme::house", Visualize.Chart.Theme.fragment(house_theme())},
         {"Frame:axes:no grid", %{frames: %{main: %{axes: [%{scale: :value, side: :left, grid: false}]}}}},
         {"Frame:axes:dense ticks",
          %{

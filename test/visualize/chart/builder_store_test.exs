@@ -216,6 +216,33 @@ defmodule Visualize.Chart.Builder.StoreTest do
     end
   end
 
+  describe "a stored theme, by name (spec/14 §2.5, §9.3, D-139)" do
+    test "is found by the name it gives itself, read back as the theme", %{store: store} do
+      house = Visualize.Theme.new(name: :house, axis: "#555555")
+
+      {:ok, _id} =
+        Store.put(store, entry("Looks:brand:the house", Visualize.Chart.Theme.fragment(house)))
+
+      {:ok, _id} = Store.put(store, entry("Uptime::panel", %{style: %{stroke_width: 2}}))
+
+      assert Store.theme(store, :house) == {:ok, house}
+      assert Store.theme(store, "house") == {:ok, house}
+      assert Store.theme(store, :manor) == :error
+    end
+
+    test "a theme that gives no name is found by its entry name's last segment", %{store: store} do
+      {:ok, _id} = Store.put(store, entry("Looks::print", %{theme: %{grid: "#cccccc"}}))
+      assert {:ok, %Visualize.Theme{grid: "#cccccc"}} = Store.theme(store, :print)
+    end
+
+    test "a stored theme that does not read says why", %{store: store} do
+      broken = %{theme: %{name: :clash, ramps: %{status: ~w(#c23238 #bd7407 #4ca34b)}}}
+      {:ok, _id} = Store.put(store, entry("Looks::clash", broken))
+
+      assert {:error, [{[:theme, :ramps, :status], {:contract, _}}]} = Store.theme(store, :clash)
+    end
+  end
+
   describe "refs and relocate (spec/14 §19.7)" do
     test "an id is found wherever it sits, sorted, and a look-alike tuple is not" do
       fragment = %{

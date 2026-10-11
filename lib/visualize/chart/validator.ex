@@ -44,6 +44,7 @@ defmodule Visualize.Chart.Validator do
           | {:limit, Visualize.Chart.Limits.name(), pos_integer(), number()}
           | {:json, String.t()}
           | {:missing_dependency, :jason}
+          | {:unknown_theme, atom()}
           | {:unresolved, :var, atom()}
           | {:var_binding, atom()}
           | {:unbound, :source, atom()}
