@@ -149,6 +149,8 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 **Implemented.** `theme` names a theme — `:default`, `:dark` or `:colour_safe` for the built-in ones of [08-utilities](08-utilities.md) §7.2, through `Visualize.Theme.builtin/1` — or gives one inline as a `:theme` node whose keys are the fields of `Visualize.Theme`: `name` (`:name`), `series` (`{:list, :string}`, non-empty), `axis`, `grid`, `text`, `background`, `surface` (`:string`), `ramps` (`{:map, {:list, :string}}`, a ramp name to its anchors), `roles` (`{:map, :string}`, `:info` and `:neutral` to a colour), `font_family` (`:string`), `font_size`, `label_size`, `title_size` (`:number`), every key `:style` and `:override`, defaults those of `Visualize.Theme.default/0`. An inline `ramps` or `roles` names only what it changes; the rest are the default theme's (spec/08 §7.2, §7.5). An inline theme whose ramps or roles break their contracts (spec/08 §7.5) is the fault `{:contract, message}` at `[:theme, :ramps, name]` or `[:theme, :roles, name]`, and application refuses it as `Visualize.Theme.new/1` does. A name that is neither built-in nor known to the consumer is resolved at application, which takes a `theme:` option; the validator accepts any name. Slots referenced from styles (§3.2) are checked against the theme when it is built-in or inline.
 
+A theme is also a **document of its own** (§9.3, #534, D-139): `Visualize.Chart.Theme` writes and reads a theme as this node, stamped with the schema version, so a host stores and ships one as a value. A theme kept in the builder's store is found by name (`Visualize.Chart.Builder.Store.theme/2`, §19.7), and the builder's preview resolves a design's `theme: name` that is not built-in through it, supplying the `theme:` option of application from the library.
+
 ### 2.6 Styles
 
 **Implemented.** `styles` declares named style nodes (§3). A mark, axis, legend or label references one by name through its `style` key; no other node carries a colour, a font or a curve.
@@ -1041,6 +1043,17 @@ A document over a limit is `{:error, errors}` of §10.1, one `{path, {:limit, na
 
 **Whose number it is.** The defaults are this library's sanity values: generous, documented here and in `Visualize.Chart.Limits.defaults/0`, and every gallery design passes them by a wide margin, which a test asserts. A host is the holder of the knowledge about its own inputs, so the number it needs is its to give, at its layer: a host loading untrusted boards tightens them — `from_json(json, limits: [items: 5_000, depth: 24])` — and a limit it does not name keeps its default. A name that is not a limit, or a value that is not a positive integer, raises `ArgumentError`, as an option of the wrong shape does elsewhere. `Visualize.Chart.Limits.check/2` runs every check over a design map without reading it, for a host that holds the map and wants the verdict alone.
 
+### 9.3 A theme as a document
+
+**Implemented** (#561, D-139). A theme is stored and shipped as a value, so it is a document with the version policy of §9.1 and the limits of §9.2. It has no schema of its own: a theme document is the `:theme` node of §2.5 — every field of `Visualize.Theme`, `ramps` and `roles` whole — under the design schema's version.
+
+| Form | What |
+|---|---|
+| map | `%{version: v, theme: node}`, written by `Visualize.Chart.Theme.to_map/1`; the store's fragment `%{theme: node}` — a library entry of kind `:theme` (§19.8) — reads as the same document at the current version |
+| JSON | `{"$version": v, "theme": {…}}`, the fragment document of §19.7 for a theme fragment, written by `Visualize.Chart.Theme.to_json/1` |
+
+`Visualize.Chart.Theme.from_map/2` and `from_json/2` read one back to a `%Visualize.Theme{}`, in the order every reader keeps: the version gate (a newer theme is `{[:version], {:newer_schema, needs, this}}`, before a key is read — before JSON is decoded); the `depth` and `items` limits over the document as given, under `limits:`; the migration of §9 (no step so far changes the theme node; a step that does migrates a stored theme as it migrates the designs that carry one); per-kind validity (`Visualize.Chart.Validator.validate/2` with `:theme`), which reports a broken ramp or role as `{:contract, message}` at `[:theme, :ramps, name]` or `[:theme, :roles, name]`; then the theme itself. A theme document holds **no variable** — nothing applies it — so one is `{path, {:unresolved, :var, name}}`; a node that is a **name** reads as the built-in theme of that name, and any other name is `{[:theme], {:unknown_theme, name}}`, since a document that only names a theme the reader does not have is not a theme. A map that is not a theme document is `{[], {:type, {:node, :theme}}}`, and a key beside `version` and `theme` is `:unknown_key` at its path. Every fault is the validator's `{path, reason}` (§10.1) and `from_json/2` reports a JSON or a missing-dependency fault in the same shape, so `Visualize.Chart.Validator.format/1` words all of them. `from_map(to_map(t))` and `from_json(to_json(t))` are `{:ok, t}` for every theme `new/1` builds, the built-in ones included.
+
 ## 10. Validation
 
 ### 10.1 Error shape
@@ -1076,6 +1089,7 @@ A document over a limit is `{:error, errors}` of §10.1, one `{path, {:limit, na
 | `{:limit, name, max, given}` | a value over a sanity limit of §9.2 — `name` the limit, `max` its value, `given` what the document asked for |
 | `{:json, message}` | `Visualize.Chart.from_json/1` could not parse the document |
 | `{:missing_dependency, :jason}` | the JSON functions were called without `Jason` (§11) |
+| `{:unknown_theme, name}` | a theme document (§9.3) whose theme is a name that is not built-in: it names a theme rather than being one |
 | `{:unresolved, :var, name}` | a variable used here with no value at application and no default (§7.3) |
 | `{:var_binding, name}` | the value the variable took at application is itself a variable (§7.1, §7.3) |
 | `{:unbound, :source, name}` | a slot with no source in the pool under its name or its default (§7.3) |
@@ -1723,6 +1737,21 @@ The scale functions, one per kind of §4.3. The name carries the `_scale` suffix
 | `Visualize.Chart.Limits.counts/2` | `counts(design, limits)`: one such error per `ticks`, `iterations` or `counts` fault of a design map at the current version, by the schema, ordered by path; a variable is not a literal and is not checked. |
 | `Visualize.Chart.Limits.check/1` | As `check/2` with the defaults. |
 | `Visualize.Chart.Limits.check/2` | `check(design, limits)`: `:ok`, or `{:error, errors}` with every fault of `structure/2` and then `counts/2`; `limits` as `new/1` takes them. |
+
+### 14.14 `Visualize.Chart.Theme`
+
+**Implemented** (#561, D-139). A theme as a document (§9.3).
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Theme.node/1` | a theme as the `:theme` node of §2.5: every field, `ramps` and `roles` whole |
+| `Visualize.Chart.Theme.fragment/1` | `%{theme: node}`: what the builder's store keeps, a fragment of kind `:theme` (§19.8) |
+| `Visualize.Chart.Theme.to_map/1` | `%{version: current, theme: node}`, the theme's map document |
+| `Visualize.Chart.Theme.from_map/1` | As `from_map/2` with `[]` options. |
+| `Visualize.Chart.Theme.from_map/2` | a map document or a theme fragment back to `{:ok, %Visualize.Theme{}}`, or `{:error, errors}` in the validator's shape; the version gate, `limits:`, the migration, per-kind validity and the contracts, in that order (§9.3) |
+| `Visualize.Chart.Theme.to_json/1` | `{:ok, json}`, the stamped fragment document; `{:error, {:missing_dependency, :jason}}` without Jason |
+| `Visualize.Chart.Theme.from_json/1` | As `from_json/2` with `[]` options. |
+| `Visualize.Chart.Theme.from_json/2` | the JSON document back as `from_map/2` reads a map, the version gate and the limits run on the parsed document before a key is decoded; every fault, a JSON one included, as `{:error, errors}` |
 
 ## 15. Presets
 
@@ -2655,6 +2684,7 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Builder.Store.encode_id/1` | an id as the one string the DOM and the wire carry |
 | `Visualize.Chart.Builder.Store.decode_id/1` | that string back to an id, refusing a kind that is not one so no atom is made from a client's string |
 | `Visualize.Chart.Builder.Store.relocate/3` | the reference `import/2`: issue, then rewrite through the table, through a store's own `put/2`; a bundle whose provenance `schema` is newer than this library reads is `{:error, {:newer_schema, needs, this}}` before any entry is put (§9.1), and one with no `schema` is read as the current version |
+| `Visualize.Chart.Builder.Store.theme/2` | `theme(store, name)`: the stored theme whose own `name` is `name` — else whose entry name's last `:` segment is — read by `Visualize.Chart.Theme.from_map/2`: `{:ok, theme}`, `{:error, errors}` for one stored broken, or `:error` when the store holds none of that name (§2.5, §9.3, D-139) |
 | `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id through a store, dependencies first, with provenance: the source store, when, and the `schema` version it was exported at (§9.1) |
 | `Visualize.Chart.Fragment.kinds/0` | every kind a fragment can be, and so every kind an id can carry |
 | `Visualize.Chart.Fragment.kind/1` | the kind of a fragment, derived (§19.8); `nil` for a map that is many things, which is no kind of fragment |
@@ -2667,6 +2697,7 @@ The **context** is whatever the host passes as the second element of a `{module,
 | `Visualize.Chart.Fragment.relocate/2` | a fragment with its ids rewritten through a table, and the ids the table did not carry; a use site's ids rewritten in place, the site still a `%Use{}` (§19.3, #470) |
 | `Visualize.Chart.Fragment.to_json/1` | a fragment of any kind — a composite holding uses and ids included — as the JSON of §11 and §19.7, `{:ok, json}`, the document stamped `"$version"` with the schema version it was written at (§9.1); not validated as a design, since a fragment may be partial (#465), so a host that keeps its library in a database writes what `put/2` hands it |
 | `Visualize.Chart.Fragment.from_json/1` | As `from_json/2` with `[]` options. |
+| `Visualize.Chart.Fragment.read_json/2` | `from_json/2` with the version the document was stamped with: `{:ok, fragment, version}`, the current version for an unstamped document, so a reader that migrates what it reads has the version to migrate from (§9.3); the same errors |
 | `Visualize.Chart.Fragment.from_json/2` | the inverse: tagged terms back as `%Use{}`, ids, variables and atoms, an id whose kind is not one a fragment can have left as it was read (no atom from a document), the `"$version"` stamp read and dropped. `{:error, {:json, message}}` for text that is not JSON; `{:error, {:newer_schema, needs, this}}` for a stamp, or a design fragment's own `"version"`, newer than this library reads, before a key is decoded (§9.1); `{:error, {:limits, errors}}` with the `depth` and `items` faults of §9.2 under `limits:`, before a key is decoded. A document with no stamp is read as the current version. `from_json(to_json(f))` is `f` (#465) |
 
 | Function | Contract |

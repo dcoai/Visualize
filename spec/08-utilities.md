@@ -422,7 +422,7 @@ A source names its columns with atoms or strings and a caller writes accessors i
 
 ### 7.1 Struct and slots
 
-`%Visualize.Theme{name, series, axis, grid, text, background, surface, ramps, roles, font_family, font_size, label_size, title_size}`. `name` is an atom naming the theme (`:default`, `:dark`, `:colour_safe`, or the consumer's own); `series` is a non-empty list of colour strings; `axis`, `grid`, `text`, `background` and `surface` are colour strings; `ramps` maps each of the four ramp names of 7.5 to its list of anchor colour strings; `roles` maps `:info` and `:neutral` to a colour string each (7.5); `font_family` is a CSS font-family string; the three sizes are numbers in user units (pixels). Every field is plain data — strings, numbers, atoms, lists and maps — so a theme can be stored and compared as a value.
+`%Visualize.Theme{name, series, axis, grid, text, background, surface, ramps, roles, font_family, font_size, label_size, title_size}`. `name` is an atom naming the theme (`:default`, `:dark`, `:colour_safe`, or the consumer's own); `series` is a non-empty list of colour strings; `axis`, `grid`, `text`, `background` and `surface` are colour strings; `ramps` maps each of the four ramp names of 7.5 to its list of anchor colour strings; `roles` maps `:info` and `:neutral` to a colour string each (7.5); `font_family` is a CSS font-family string; the three sizes are numbers in user units (pixels). Every field is plain data — strings, numbers, atoms, lists and maps — so a theme can be stored and compared as a value. Its stored form — a versioned document read back through the same gates as a design — is `Visualize.Chart.Theme` (spec/14 §9.3, D-139).
 
 A *slot* names one value of a theme:
 
