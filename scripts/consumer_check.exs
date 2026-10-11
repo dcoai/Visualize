@@ -6,7 +6,9 @@
 # §18, D-85) may be loadable, since both compile only under the `Phoenix.Component` guard.
 # Nor may `Resvg` or its NIF loader: PNG output runs the resvg binary over a port and takes
 # no package (D-121). Nor Makeup, the examples' code highlighter (#506): its lexers are
-# dependencies of the examples app alone. The probe calls `Visualize.Render.to_png/2` with
+# dependencies of the examples app alone. Nor `:telemetry`, optional for the telemetry feed
+# (D-140), nor `Telemetry.Metrics`, which that feed reads by its fields and only the tests
+# depend on. The probe calls `Visualize.Render.to_png/2` with
 # no `:resvg` setting and its own PATH set to an empty directory, so it is the run of that
 # function on a host without the binary whatever this host has installed:
 # `{:error, :no_rasterizer}` (spec/12 §4).
@@ -23,9 +25,10 @@ defmodule Visualize.ConsumerCheck do
              Visualize.Chart.Builder.Inspector Visualize.Chart.Builder.Params
              Visualize.Chart.Builder.Document
              Visualize.Audit ExTLA.Spec Surfex.Golden Tz.TimeZoneDatabase
-             Resvg RustlerPrecompiled Makeup)
+             Resvg RustlerPrecompiled Makeup :telemetry Telemetry.Metrics)
   @present ~w(Visualize Visualize.Scale Visualize.Hooks Visualize.Hooks.Builder
-              Visualize.Backend.CanvasBinary Visualize.Render.Raster)
+              Visualize.Backend.CanvasBinary Visualize.Render.Raster
+              Visualize.Feed.Monitor Visualize.Feed.Telemetry)
 
   def run do
     root = File.cwd!()
@@ -41,7 +44,7 @@ defmodule Visualize.ConsumerCheck do
     File.rm_rf!(dir)
 
     IO.puts(
-      "consumer build is lib/ only - no Phoenix, no Nx, no Jason, no table, no Explorer/tz, no Resvg, no Makeup; no binary, no PNG"
+      "consumer build is lib/ only - no Phoenix, no Nx, no Jason, no table, no Explorer/tz, no Resvg, no Makeup, no telemetry; no binary, no PNG"
     )
   end
 

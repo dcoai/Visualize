@@ -955,6 +955,8 @@ Every fault of every slot is reported. A step with faults stops before validatio
 
 The applied chart (§14.10) carries `schemas`, the resolved schema of each slot that has one; `versions`, the version each slot's delivery named, or `nil` for a delivery that named none, for every slot bound to a delivery; and `cache`, the `schemas:` cache with whatever `describe:` added. The caller keeps the cache for its next application.
 
+**A monitor supplies both** (#537, [08-utilities](08-utilities.md) §11.4). A host that runs its feeds through `Visualize.Feed.Monitor` passes `sources: Monitor.deliveries(monitor)` and `schemas: Monitor.cache(monitor)`: every version a monitored delivery names is already in the monitor's cache, so application asks no feed, and a pushed schema change reaches the next application as a new version.
+
 ## 8. Composition and the stack
 
 **Implemented.** Two operations close over fragments, and both are total in the sense that matters: their result is a fragment, so a stored composition is a part of another composition and a stored stack is a layer of another stack. `Visualize.Chart.compose/2` is the *union* — it assembles one design from disjoint parts and reports a name two fragments declare differently as a fault. `Visualize.Chart.stack/2` is the *cascade* — it layers a house theme, a shared frame and a panel's own overrides, and a name two layers declare differently is the higher layer's word. Neither validates nor defaults: the result becomes a chart through `Visualize.Chart.from_map/1` or `Visualize.Chart.apply/2`, which is where it MUST validate.

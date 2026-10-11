@@ -55,6 +55,12 @@ defmodule Visualize.MixProject do
       # two impls, optional like Nx: without it lists, column maps and tensors still work
       # and a struct source raises at the call (D-52).
       {:table, "~> 0.1.2", optional: true},
+      # `Visualize.Feed.Telemetry` (spec/08 §11.6) attaches to `:telemetry`, optional like
+      # Nx: a host without it builds warning-free and never starts the provider (D-50).
+      {:telemetry, "~> 1.0", optional: true},
+      # Real `Telemetry.Metrics` definitions in the telemetry provider's tests. The provider
+      # reads a definition by its fields and takes no dependency on the package (D-140).
+      {:telemetry_metrics, "~> 1.0", only: :test},
       # Explorer frames in the `Data.Table` tests only; scripts/consumer_check.exs proves
       # neither Explorer nor `Table.Reader` reaches a consumer.
       {:explorer, "~> 0.12", only: :test},
@@ -163,6 +169,13 @@ defmodule Visualize.MixProject do
           Visualize.Random,
           Visualize.Data,
           Visualize.Data.Table
+        ],
+        Feeds: [
+          ~r"Visualize\.Feed",
+          Visualize.Data.Schema,
+          Visualize.Data.Schema.Cache,
+          Visualize.Data.Delivery,
+          Visualize.Signals
         ],
         "IR and rendering": [
           ~r"Visualize\.IR",

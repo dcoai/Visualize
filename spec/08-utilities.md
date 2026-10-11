@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation) with `Visualize.Color.Vision` (colour-vision simulation, §1.8), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping), `Visualize.Data.Table` (tabular sources as rows), `Visualize.Data.Schema` and `Visualize.Data.Delivery` (what a feed says about its fields, and one answer of a feed, §10) and `Visualize.Theme` (the colours, font and sizes every mark draws with). All are pure except `Random`, which reads and advances the calling process's `:rand` state.
+This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation) with `Visualize.Color.Vision` (colour-vision simulation, §1.8), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping), `Visualize.Data.Table` (tabular sources as rows), `Visualize.Data.Schema` and `Visualize.Data.Delivery` (what a feed says about its fields, and one answer of a feed, §10), `Visualize.Feed` and its monitor and providers (how a feed is asked, §11) and `Visualize.Theme` (the colours, font and sizes every mark draws with). All are pure except `Random`, which reads and advances the calling process's `:rand` state, and the feeds of §11, whose providers are other processes.
 
 ## 1. Color
 
@@ -597,7 +597,7 @@ Value columns differ from each other: the *n*-th value column (0-based) of a sin
 - `:random` — a value in `[min, max)` from `:rand.uniform_real/0` under a seed derived from `seed`, the column's index and the tick, so the same tick always draws the same value;
 - `:discrete` — `min + rem(t + n, max − min + 1)`.
 
-The window **slides**: tick 25 over a window of 24 yields ticks 2..25, and the next tick drops 2 and adds 26. `pool(signals, tick)` yields a pool, name to rows, for a map of named signals, ready for `Visualize.Chart.apply/2`.
+The window **slides**: tick 25 over a window of 24 yields ticks 2..25, and the next tick drops 2 and adds 26. `pool(signals, tick)` yields a pool, name to rows, for a map of named signals, ready for `Visualize.Chart.apply/2`. `rows(signal, from, to)` yields one row per tick from `max(from, 0)` to `to`, whatever the signal's `window` — no row when `to` is below that — which is how `Visualize.Feed.Signals` serves a window of ticks (§11.6).
 
 ### 8.3 Functions
 
@@ -607,6 +607,7 @@ The window **slides**: tick 25 over a window of 24 yields ticks 2..25, and the n
 | `Visualize.Signals.new/2` | `new(kind, fields)` — a signal of the kind over the fields with 8.1's defaults; `new/3` takes the remaining keys as options. |
 | `Visualize.Signals.new/3` | As `new/2` with options. |
 | `Visualize.Signals.rows/2` | `rows(signal, tick)`: the window of rows ending at the tick (8.2). |
+| `Visualize.Signals.rows/3` | `rows(signal, from, to)`: one row per tick from `max(from, 0)` to `to` (8.2). |
 | `Visualize.Signals.pool/2` | `pool(signals, tick)`: `rows/2` of every signal of a map, under its name. |
 
 ## 9. FFT
@@ -632,7 +633,7 @@ The window **slides**: tick 25 over a window of 24 yields ticks 2..25, and the n
 
 ## 10. Feeds: schemas and deliveries
 
-A feed is anything that answers a chart's source slot with rows (spec/14 §7.2). What the numbers *are* — a unit, a label, the order of a set of states, what a state means — is a fact about the feed, whoever draws it, and it is not repeated with every row: a feed has a **schema**, identified by a **version**, and each of its answers, a **delivery**, names the version it was produced under and never carries the schema itself (#535, D-136). This section is the data layer of that: the schema value, how its version is computed, the cache that holds schemas by version, and the delivery. How a design states what it needs from a schema and reads it is spec/14 §7.4; how a feed is asked for a schema is the feed behaviour's (#537).
+A feed is anything that answers a chart's source slot with rows (spec/14 §7.2). What the numbers *are* — a unit, a label, the order of a set of states, what a state means — is a fact about the feed, whoever draws it, and it is not repeated with every row: a feed has a **schema**, identified by a **version**, and each of its answers, a **delivery**, names the version it was produced under and never carries the schema itself (#535, D-136). This section is the data layer of that: the schema value, how its version is computed, the cache that holds schemas by version, and the delivery. How a design states what it needs from a schema and reads it is spec/14 §7.4; how a feed is asked for a schema and its rows is the feed behaviour's (§11, #537).
 
 ### 10.1 The schema
 
@@ -744,3 +745,141 @@ A delivery is data like a design: a struct with no function in it, which a codec
 | `Visualize.Data.Delivery.new/1` | `new(rows, [])`: a delivery of the rows and no other fact. |
 | `Visualize.Data.Delivery.new/2` | A delivery of the rows with the given facts, checked (10.4). |
 | `Visualize.Data.Delivery.source/1` | The source a delivery carries; any other source as it is. |
+
+## 11. Feeds: the behaviour, the monitor and two providers
+
+**Implemented** (#537, D-140). §10 is what a feed's answer *is*: a schema by version, and a delivery. This section is how a feed is asked: `Visualize.Feed`, a behaviour every provider implements; what visualize does itself when a provider does less than it was asked; `Visualize.Feed.Monitor`, the loop that asks the feeds, takes their pushes and hands a chart one delivery per slot per tick; `Visualize.Feed.Combine`, one feed made of several by window (live data and its history in one slot); and two providers that prove the contract — `Visualize.Feed.Signals` (generated, pull) and `Visualize.Feed.Telemetry` (in-process `:telemetry`, push). A board (#531 §1, #540) binds feeds to its cells' slots; it never knows which kind of provider fills one.
+
+### 11.1 The behaviour
+
+A **feed** is a struct whose module implements `Visualize.Feed`. Providers are modules and processes, not data types, so the contract is a behaviour rather than a protocol (#531 review F): a feed value names the provider and whatever it needs to answer — a signal, a collector process and a metric, a URL. `Visualize.Feed.describe/1`, `fetch/3`, `subscribe/2` and `unsubscribe/2` dispatch to the struct's module.
+
+| Callback | Returns | |
+|---|---|---|
+| `describe(feed)` | `{version, schema, supports}` or `{:error, reason}` | required |
+| `fetch(feed, window, budget)` | `{:ok, %Visualize.Data.Delivery{}}` or `{:error, reason}` | required |
+| `subscribe(feed, pid)` | `{:ok, ref}` or `{:error, reason}` | optional: a feed whose `supports` names `:push` |
+| `unsubscribe(feed, ref)` | `:ok` | optional, with `subscribe/2` |
+
+- **`describe/1`** answers the feed's present schema (§10.1), its version (§10.2, `Visualize.Data.Schema.version/1` of that schema) and `supports`, the list of the capabilities it honours — a subset of `Visualize.Feed.capabilities/0`, `[:window, :budget, :push]`. Every capability is optional: **the minimum feed gives rows**.
+- **`fetch/3`** answers the rows for a **window** and a **budget**. A window is `nil` (whatever the feed holds, or its own default span) or `[from, to]`, the bounds values of the feed's time field (§11.2) and either bound `nil` for open; a budget is `nil` or a positive integer, the most rows the cell wants. Both are **requests**: a feed that does not name `:window` or `:budget` in `supports` may ignore them, and visualize finishes the job (§11.2). The delivery names the version it was produced under (`schema`) and the window it actually served (`window`); `capped` is `true` when the feed could not reach back to the window's `from`.
+- **`subscribe/2`** asks a push feed to send its updates to `pid` (§11.3) and answers the reference those messages carry; `unsubscribe/2` stops them. A feed that does not push implements neither, and `Visualize.Feed.subscribe/2` on it is `{:error, :no_push}`.
+- **Errors are values.** Every callback answers `{:error, reason}` for a feed that cannot answer — a provider that is down, a window it cannot read — and never raises for it; the monitor turns the value into the cell's state (§11.4). A reason is the provider's own term.
+
+`Visualize.Feed.describer/1` turns a map of feeds by name into the `describe` function of §10.3 — `fn name -> {:ok, schema} | {:error, reason} end` — which `Visualize.Data.Schema.Cache.resolve/4` and `Visualize.Chart.apply/2`'s `describe:` take.
+
+### 11.2 Requests, not requirements: visualize finishes the job
+
+A small source works unchanged, and a large one implements the window and the budget so that it does not ship raw points (#531's further considerations, §1). `Visualize.Feed.finish(delivery, schema, opts)` is what visualize does with a delivery a feed did not finish, given the schema it was produced under and the request — `supports:`, `window:`, `budget:`, and `reduce:` (`:lttb`, the default, or `:m4`). It is pure, and a delivery that needs nothing comes back as it is, its source untouched (a tensor stays a tensor).
+
+- **The time field** is the schema's one field of type `:time` (`Visualize.Feed.time_field/1`); a schema with none, or with more than one, has no time field. The window is over the time field's values.
+- **Trimming.** When the request has a window, `supports` lacks `:window` and the schema has a time field, the rows are those whose time is within the window — both bounds inclusive, a `nil` bound open, a row with no time dropped — and the delivery's `window` becomes the request's, intersected with what the feed said it served. Times compare by `Visualize.Feed.Window.compare/2`: numbers by value, and `DateTime`, `NaiveDateTime` and `Date` each by their own `compare/2`; a window and a column must be of one kind. A schema with no time field cannot be trimmed: such a feed honours its window itself or is shown whole.
+- **Reducing.** When the request has a budget, `supports` lacks `:budget` and there are more rows than the budget, the rows are reduced by `Visualize.Data.lttb/3` or `m4/3` (§5.2) and `reduced_by` becomes `:visualize`. The reduction keeps the shape of every series: the rows are **grouped** by the values of the schema's `:category` fields (a feed's tags), and within each group every `:number` field is reduced as `y` against the time field as `x` (a `DateTime` as its Unix microseconds, a `NaiveDateTime` and a `Date` as their Gregorian seconds and days), or against the row's position in the group when the schema has no time field. The rows kept are the **union** of every field's choice, in their original order — so a row is kept whole, a tooltip reads a real datum, and a peak of any field survives. The budget is shared evenly: each group's field gets `max(3, div(budget, groups × fields))` points under LTTB and `max(1, div(budget, 4 × groups × fields))` pixel columns under M4, so the union stays within about the budget. A schema with no `:number` field is not reduced.
+- **A budget-honouring feed is not reduced again**, whatever it returned; a feed that names `:budget` and ships more than the budget is wrong, which the conformance kit (#538) says, not something visualize hides. A window works the same way.
+
+### 11.3 Push: the messages and their order
+
+A push feed sends a subscriber two kinds of message, each tagged so a process that owns many feeds tells them apart:
+
+| Message | Meaning |
+|---|---|
+| `{:visualize_feed, ref, {:schema, version, schema}}` | the feed's schema is now `schema`, of `version` |
+| `{:visualize_feed, ref, {:delivery, delivery}}` | rows new since the last delivery sent to this subscriber, `delivery.schema` naming the version they were produced under |
+
+`ref` is the reference `subscribe/2` answered. A pushed delivery is an **increment**: its rows are appended to what the subscriber holds, and its `window` is the span they cover. Two rules order them (#531 review A):
+
+- **Schema before data.** A provider sends `{:schema, version, schema}` before the first delivery that names `version`, and the subscribe handshake sends the present schema first, before `subscribe/2` returns. Between two processes the BEAM delivers messages in the order they were sent, so a schema never trails its data, and a reconnect re-primes the cache.
+- **An unknown version still falls back to `describe`.** A delivery whose version the subscriber does not hold — a message lost across hosts, a subscriber that joined mid-stream — is resolved through `Visualize.Data.Schema.Cache.resolve/4` with the feed's `describe`. Push never depends on the order for correctness, only for cost.
+
+### 11.4 The monitor: who runs the loop
+
+`Visualize.Feed.Monitor` subscribes where a feed can push, polls where it cannot, and hands a chart one finished delivery per slot. It is a **value, not a process**, as the schema cache is (§10.3, D-136): `%Visualize.Feed.Monitor{}` is held in the state of the process that owns the feeds — the board process of #540, a LiveView today — which calls it from its own callbacks. A monitor process would be a second owner of the window and of "now", which belong to the board (#531's further considerations, §2–3), and a process boundary between the board and its feeds' rows would copy every delivery once more. The owner's process is the one that subscribes, so the pushes arrive in its mailbox.
+
+- **`new(feeds, opts)`** is a monitor over a map of feeds by slot name — the pool's names (spec/14 §7.2), so the deliveries are a pool and the cache's feeds are the names `Visualize.Chart.apply/2` uses. It calls nothing. Options: `window:` and `budget:` (the request, `nil` by default), `reduce:` (`:lttb`), `every:` (the poll interval of a pull feed in the owner's milliseconds, `1000`), `stale_after:` (milliseconds without an answer before a feed is stale, `nil` for never) and `limit:` (the most rows held for a feed whose rows cannot be trimmed by time, `100_000`).
+- **`tick(monitor, now: ms)`** runs the loop once, at `now` on the owner's monotonic clock in milliseconds (`System.monotonic_time(:millisecond)` when absent). For each feed, in name order:
+  1. **Describe** a feed not yet described, or one that is down and due a retry: `describe/1`, its schema put in the cache under its name, its `supports` kept; a push feed is subscribed with the owner (`self()`).
+  2. **Fetch** when the feed holds nothing yet, when the window has moved past what it holds (below), or, for a feed that does not push, when its poll is due (`every` after the last). A fetched delivery **replaces** what the feed held.
+  3. **Drain** the pushes buffered since the last tick, in arrival order, each **appended** to what the feed holds. At the seam, only the rows **strictly after** the time the holding covers are kept, so a push that overlaps a fetch adds nothing twice; without a time field every row is appended and the holding keeps the newest `limit`, `capped` when it cut.
+  4. **Resolve** every version the feed's deliveries name, cached or asked of the feed's `describe` once (§11.3); a delivery that names none is taken as produced under the schema the feed described. A delivery whose version cannot be resolved is not used, and its reason is the feed's `error`.
+  5. **Finish** what the feed holds for the window and the budget (§11.2): the holding is trimmed to the window, so a push feed's rows do not grow past it, and the delivery handed out is the holding reduced to the budget.
+- **Coalescing.** A push is buffered by `handle_message(monitor, message)`, which the owner calls from `handle_info/2` — `{:ok, monitor}` for a feed message, `:ignore` for any other — and does nothing else; the next tick drains every push since the last in one merge, one trim and one reduction. Pushes between two frames therefore cost one merge, whatever their rate. This is the data-rate/frame-rate split the gallery's runs already make (spec/14 §12.6, #300, #361): data arrives at its own rate, and the frame rate decides how often it is drawn. There is no other backpressure.
+- **The window moves.** `window(monitor, window)` sets the request. A pull feed fetches at the next tick; a push feed fetches only when the new window starts before what it holds covers — older data is the feed's to give — and is otherwise trimmed, since its pushes extend the end. So a live tail whose window slides each tick costs no fetch. `budget/2` sets the budget, refinished at the next tick.
+- **The answers are values.** `deliveries(monitor)` is the finished delivery of every feed that has one, by name — a pool for `Visualize.Chart.apply/2` or a compiled chart's `tick/3`; `cache(monitor)` is the schema cache holding every version they name, for `apply/2`'s `schemas:`, so no describe runs there; `status(monitor)` is each feed's state:
+
+  | State | When |
+  |---|---|
+  | `:loading` | nothing answered yet |
+  | `:live` | answered within `stale_after` |
+  | `:stale` | the last answer is older than `stale_after` |
+  | `{:down, reason}` | the last describe, subscribe or fetch answered `{:error, reason}`; the last delivery is still handed out |
+
+  "No data yet" is `:live` with no rows, and "capped" is the delivery's `capped`: the five cell states of #531 (§5 of the further considerations), each a value a cell draws deliberately, never a blank chart or a raise. `errors(monitor)` is each feed's last unresolved delivery reason, if any. A schema change is seen by the compiled chart, whose `stale?/2` (spec/14 §12.1) says to recompile.
+- **`put(monitor, name, feed)`** replaces or adds a feed — a rebinding — and `remove/2` drops one; `stop(monitor)` unsubscribes every push feed and is the monitor's end. A provider that stops is seen as `:stale` when `stale_after` is set, and as `{:down, reason}` at its next describe or fetch.
+
+### 11.5 Live plus history in one slot
+
+**A combining feed, in visualize** (the acceptance of #537). "The last hour from `:telemetry`, older data from metresis, one chart" is one slot whose rows come from two stores. Choosing *which* stores is the connector's — it knows that Exio's telemetry and metresis's capture are the same metric — but routing a window across them, merging the answers and deduplicating the seam is the same for every host and every pair of feeds, so writing it once here is what keeps two connectors from drifting. `Visualize.Feed.Combine.new(feeds)` is one feed over a list of feeds, freshest first:
+
+- **Routing by window.** `fetch(combine, window, budget)` asks the first feed for the window. What it served starts at its delivery's `window` `from` (else its earliest row); the part of the window before that is asked of the next feed, and so on, until the window is covered or the feeds run out. A `nil` window asks the first feed for whatever it holds and each next feed for everything before what the last one served.
+- **The seam.** Each feed's rows are trimmed to the half-open window it was asked for, `[from, served)`, so a row at the seam comes from the fresher feed only. The rows are concatenated oldest first; the delivery's `window` runs from the earliest served to the first feed's end, `capped` when the last feed asked could not reach the window's `from`.
+- **One schema.** A delivery names one version, so every feed of a combination must describe the **same** schema (one content hash, §10.2); `describe/1` answers `{:error, {:combine_schema, versions}}` otherwise, and `{:error, :combine_time_field}` for a schema with no time field, which routing needs. A connector whose stores describe the same data differently gives one the other's schema; making two catalogs agree is its job, not a guess here.
+- **Capabilities.** A combination honours `:window` (it trims every part) and pushes when its first feed does: `subscribe/2` subscribes the first feed, whose pushes name the shared version, so they reach the monitor unchanged. It does not name `:budget`; the budget is passed to every part as a request, and the monitor reduces the union.
+
+### 11.6 Two providers
+
+**`Visualize.Feed.Signals`** is a signal (§8) as a feed: `new(signal, opts)` with `describe:` (descriptions merged over the defaults, field by field), `tick:` (the feed's present tick, `0`), or `every:` (milliseconds per tick, read from `clock:`, a function of no argument in milliseconds, `System.monotonic_time(:millisecond)` by default, from `origin:`, the clock when the feed was made), and `limit:` (the most rows one fetch serves, `10_000`). `at(feed, tick)` moves a ticked feed. Its schema describes the first field, the tick, as its time field (`:time`, labelled `"Tick"`: the signal's clock, counted in ticks) and every other field `:number`, under whatever `describe:` adds (a `unit`, a `label`). It names `[:window]`: a window `[from, to]` is ticks, served as `Visualize.Signals.rows/3` from `max(from, 0)` to `min(to, tick)`, the newest `limit` of them and `capped` beyond; a `nil` window is `rows/2` at the tick, the signal's own window. A budget is a request it leaves to the monitor, which reduces each value column against the tick. It does not push: the monitor polls it at `every`, which is its data rate.
+
+**`Visualize.Feed.Telemetry`** is an in-process `:telemetry` provider, a `GenServer`: `start_link(metrics: definitions)` takes a list of `Telemetry.Metrics` definitions — read by their fields (`name`, `event_name`, `measurement`, `tags`, `tag_values`, `keep`, `unit`, `description`) and their struct's name, with **no dependency on `telemetry_metrics`** — attaches one handler for their events and collects. `:telemetry` is an **optional** dependency, called directly under `@compile {:no_warn_undefined, :telemetry}` (D-50): a host without it builds warning-free and never starts the provider.
+
+- **One feed per metric.** `feeds(server)` is a map from each metric's name, joined with dots (`"vm.memory.total"`), to `%Visualize.Feed.Telemetry{server, metric}`; `feed(server, name)` is one. Two definitions of one name — a summary and a counter of `phoenix.endpoint.stop.duration`, as a dashboard often has — are each keyed by their kind as well (`"….duration:summary"`, `"….duration:counter"`), and both keep the plain name as their label. A metric is one family of series, so each is its own slot: its schema is `t` (`:time`, label `"Time"`), `value` (`:number`, labelled with the definition's `description`, else its name; its `unit` the definition's through `Visualize.Unit.from_telemetry/1` and its `quantity` that unit's, `Visualize.Quantity.of_unit/1`) and each of its `tags` (`:category`). A unit the mapping refuses — `:native`, or an atom outside spec/05 §4.1's table — leaves `value` with no `unit` and no `quantity` rather than a guess. One design (a latency line over `[:t, :value]`) then binds any metric.
+- **The rows.** A handler runs in the process that emits the event, as a reporter's does: it applies `keep`, reads the measurement (a key, or a function of the measurements and, at arity 2, the metadata), skips `nil`, takes the tags from `tag_values` and sends them to the collector. The collector stamps each with its own clock in microseconds, strictly increasing (so the seam of §11.4 is exact: a fetch serves up to the last stamp, and every later push is after it), and keeps a row `%{t: DateTime, value: v}` plus the tags. A **counter** row's value is the count of events so far for its tags, and a **sum**'s the running total, as a reporter shows them; a **last value**, **summary** or **distribution** row's value is the measurement. A counter's `unit` is `"1"`, whatever the definition says, since it counts events.
+- **Retention.** Each metric keeps its newest `keep:` rows (`10_000`). The collector covers from its start until it first drops a row, then from its oldest row; a fetch whose `from` is before that is `capped`, and its `window` starts where the collector's data does — which is what `Combine` routes the rest of the window by.
+- **The capabilities** are `[:window, :push]`. A fetch serves the rows within a window of `DateTime` bounds (a bound of another kind is `{:error, {:window, window}}`), up to now; a budget is left to the monitor. Every `every:` milliseconds (`1000`; `nil` for only on `flush/1`) the collector sends each subscriber of a metric the rows new since the last flush, one delivery per metric; `flush/1` does it at once. The subscribe handshake sends the schema first; a subscriber that exits is dropped. The collector detaches its handler when it stops.
+- **Calls are values.** A feed whose collector is not running answers `{:error, :noproc}`, and one that stops during a call `{:error, {:down, reason}}`: the call monitors the collector rather than linking a caller's fate to it.
+
+### 11.7 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Feed.capabilities/0` | `[:window, :budget, :push]` (11.1). |
+| `Visualize.Feed.describe/1` | The feed's `{version, schema, supports}`, or `{:error, reason}`. |
+| `Visualize.Feed.fetch/3` | `fetch(feed, window, budget)`: `{:ok, delivery}` or `{:error, reason}`; the window and the budget are requests. |
+| `Visualize.Feed.subscribe/2` | `{:ok, ref}`, the feed's pushes sent to the pid (11.3); `{:error, :no_push}` for a feed that does not push. |
+| `Visualize.Feed.unsubscribe/2` | Stops a subscription; `:ok`. |
+| `Visualize.Feed.describer/1` | A map of feeds by name as §10.3's describe function. |
+| `Visualize.Feed.time_field/1` | The schema's one `:time` field, or `nil` (11.2). |
+| `Visualize.Feed.finish/3` | `finish(delivery, schema, opts)`: trimmed to the window and reduced to the budget where `supports:` lacks them (11.2). |
+| `Visualize.Feed.Window.compare/2` | `:lt`, `:eq` or `:gt` between two times of one kind. |
+| `Visualize.Feed.Window.within?/2` | Whether a time lies within a window, bounds inclusive, `nil` open. |
+| `Visualize.Feed.Window.trim/3` | `trim(rows, field, window)`: the rows whose `field` lies within the window. |
+| `Visualize.Feed.Window.before/4` | `before(rows, field, from, upper)`: the rows whose `field` lies in `[from, upper)`, the seam of a combination (11.5). |
+| `Visualize.Feed.Window.newer/3` | `newer(rows, field, time)`: the rows whose `field` lies strictly after the time, the seam of a push (11.4). |
+| `Visualize.Feed.Window.intersect/2` | The intersection of two windows, `nil` for everything. |
+| `Visualize.Feed.Window.latest/2` | The later of two times, a `nil` ignored. |
+| `Visualize.Feed.Window.earliest/2` | The earlier of two times, a `nil` ignored. |
+| `Visualize.Feed.Window.time?/1` | Whether a value is a time a window can be over. |
+| `Visualize.Feed.Window.position/1` | A time as a number: itself, a `DateTime`'s Unix microseconds, a `NaiveDateTime`'s and a `Date`'s Gregorian seconds and days. |
+| `Visualize.Feed.Monitor.new/1` | `new(feeds, [])`. |
+| `Visualize.Feed.Monitor.new/2` | A monitor over feeds by name, calling nothing (11.4). |
+| `Visualize.Feed.Monitor.tick/1` | `tick(monitor, [])`: `now` read from the monotonic clock. |
+| `Visualize.Feed.Monitor.tick/2` | One turn of the loop at `now:`: describe, fetch, drain, resolve, finish. |
+| `Visualize.Feed.Monitor.handle_message/2` | `{:ok, monitor}` with a push buffered or a schema cached, `:ignore` for any other message. |
+| `Visualize.Feed.Monitor.window/2` | The monitor with a new window, refetching only what the window needs. |
+| `Visualize.Feed.Monitor.budget/2` | The monitor with a new budget. |
+| `Visualize.Feed.Monitor.put/3` | A feed added or replaced under a name. |
+| `Visualize.Feed.Monitor.remove/2` | A feed dropped, unsubscribed. |
+| `Visualize.Feed.Monitor.deliveries/1` | The finished delivery of every feed that has one, by name: a pool. |
+| `Visualize.Feed.Monitor.status/1` | Each feed's state: `:loading`, `:live`, `:stale` or `{:down, reason}`. |
+| `Visualize.Feed.Monitor.errors/1` | Each feed's last unresolved delivery reason. |
+| `Visualize.Feed.Monitor.cache/1` | The schema cache holding every version the deliveries name. |
+| `Visualize.Feed.Monitor.stop/1` | Every push feed unsubscribed; `:ok`. |
+| `Visualize.Feed.Combine.new/1` | One feed over several, freshest first, routed by window (11.5). |
+| `Visualize.Feed.Combine.describe/1` | The parts' shared `{version, schema, supports}`; `{:error, {:combine_schema, versions}}`, `{:error, :combine_time_field}`, or a part's own error. |
+| `Visualize.Feed.Signals.new/1` | `new(signal, [])`: a signal as a feed at tick `0`. |
+| `Visualize.Feed.Signals.new/2` | A signal as a feed (11.6). |
+| `Visualize.Feed.Signals.at/2` | A ticked feed moved to a tick. |
+| `Visualize.Feed.Telemetry.start_link/1` | The collector over `metrics:` definitions, attached (11.6). |
+| `Visualize.Feed.Telemetry.child_spec/1` | The collector as a supervisor's child, `{Visualize.Feed.Telemetry, metrics: definitions}`. |
+| `Visualize.Feed.Telemetry.feeds/1` | Each metric's feed, by its dotted name. |
+| `Visualize.Feed.Telemetry.feed/2` | One metric's feed. |
+| `Visualize.Feed.Telemetry.flush/1` | Every subscriber sent the rows new since the last flush, now. |

@@ -66,11 +66,27 @@ defmodule Visualize.Signals do
   tick and each value column its kind's value there.
   """
   @spec rows(t(), non_neg_integer()) :: [map()]
-  def rows(%{kind: kind, fields: [time | values]} = signal, tick) when tick >= 0 do
+  def rows(signal, tick) when is_integer(tick) and tick >= 0 do
+    signal = Map.merge(@defaults, signal)
+    rows(signal, tick - signal.window + 1, tick)
+  end
+
+  @doc """
+  One row per tick from `max(from, 0)` to `to`, whatever the signal's `window` — none when
+  `to` is below that (spec/08 §8.2). How `Visualize.Feed.Signals` serves a window of
+  ticks.
+
+      iex> counter = Visualize.Signals.new(:discrete, [:t, :n], window: 2)
+      iex> Visualize.Signals.rows(counter, -1, 2) |> Enum.map(& &1.t)
+      [0, 1, 2]
+  """
+  @spec rows(t(), integer(), integer()) :: [map()]
+  def rows(%{kind: kind, fields: [time | values]} = signal, from, to)
+      when is_integer(from) and is_integer(to) do
     signal = Map.merge(@defaults, signal)
     count = length(values)
 
-    for t <- max(tick - signal.window + 1, 0)..tick//1 do
+    for t <- max(from, 0)..to//1 do
       values
       |> Enum.with_index()
       |> Enum.reduce(%{time => t}, fn {field, n}, row ->
