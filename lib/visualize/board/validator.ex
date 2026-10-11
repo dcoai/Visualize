@@ -14,7 +14,7 @@ defmodule Visualize.Board.Validator do
   # Boards were introduced at schema version 2 (spec/15 §2.3): there is no older board.
   @first 2
 
-  @board_keys [:version, :meta, :cells, :window, :zone, :vars, :sync, :layout]
+  @board_keys [:version, :meta, :cells, :window, :zone, :vars, :sync, :layout, :stale_after]
   @cell_keys [:x, :y, :w, :h, :ref, :title, :vars, :sync]
   @cell_required [:x, :y, :w, :h, :ref]
   @meta_keys [:name, :description]
@@ -52,7 +52,8 @@ defmodule Visualize.Board.Validator do
         zone(Map.get(map, :zone, "Etc/UTC")) ++
         vars(Map.get(map, :vars, %{}), [:vars]) ++
         sync(Map.get(map, :sync)) ++
-        layout(Map.get(map, :layout, %{}))
+        layout(Map.get(map, :layout, %{})) ++
+        stale_after(Map.get(map, :stale_after))
 
     done(errors)
   end
@@ -233,6 +234,11 @@ defmodule Visualize.Board.Validator do
   end
 
   defp vars(_vars, path), do: [{path, {:type, {:map, :term}}}]
+
+  # How old a cell's newest reading may be before it is stale (spec/15 §8.4), seconds.
+  defp stale_after(nil), do: []
+  defp stale_after(s) when is_number(s) and s > 0, do: []
+  defp stale_after(_s), do: [{[:stale_after], {:type, :positive}}]
 
   defp sync(nil), do: []
   defp sync(sync) when is_binary(sync) and sync != "", do: []

@@ -56,7 +56,8 @@ defmodule Visualize.Board do
             zone: "Etc/UTC",
             vars: %{},
             sync: nil,
-            layout: %{}
+            layout: %{},
+            stale_after: nil
 
   @typedoc "A cell (spec/15 §1.3): a placement and a component reference."
   @type cell :: %{
@@ -81,7 +82,8 @@ defmodule Visualize.Board do
           zone: String.t(),
           vars: %{atom() => term()},
           sync: String.t() | nil,
-          layout: map()
+          layout: map(),
+          stale_after: number() | nil
         }
 
   @typedoc "A placement on the grid."
@@ -443,40 +445,34 @@ defmodule Visualize.Board do
   @spec realise(t(), store(), %{atom() => map()}, keyword()) ::
           {:ok, %{atom() => Chart.Applied.t()}, Cache.t()} | {:error, [error(), ...]}
   def realise(%__MODULE__{} = board, store, pools, opts) when is_map(pools) do
-    map = to_map(board)
-
-    with :ok <- validate(board),
-         {charts, []} <- resolved(map, store, opts) do
-      apply_cells(board, charts, pools, opts)
-    else
-      {:error, errors} -> {:error, errors}
-      {_charts, errors} -> Validator.done(errors)
+    with {:ok, components} <- components(board, store, opts) do
+      apply_cells(board, components, pools, opts)
     end
   end
 
-  defp apply_cells(board, charts, pools, opts) do
+  defp apply_cells(board, components, pools, opts) do
     boxes = boxes(board, Keyword.get(opts, :width, 1200))
     shared = Keyword.take(opts, [:theme, :now])
     cache = Keyword.get_lazy(opts, :schemas, &Cache.new/0)
 
     {applied, cache, errors} =
-      charts
+      components
       |> Enum.sort()
-      |> Enum.reduce({%{}, cache, []}, fn {name, chart}, {applied, cache, errors} ->
-        cell = Map.fetch!(board.cells, name)
+      |> Enum.reduce({%{}, cache, []}, fn {name, %{chart: chart, vars: vars}},
+                                          {applied, cache, errors} ->
         {_x, _y, w, h} = Map.fetch!(boxes, name)
 
         options =
           shared ++
             [
               sources: Map.get(pools, name, %{}),
-              vars: board |> vars(name) |> Map.take(Validator.declared(chart)),
+              vars: vars,
               size: {w, h},
               schemas: cache,
               describe: describe(opts[:describe], name)
             ]
 
-        case Chart.apply(synced(chart, cell, board.sync), options) do
+        case Chart.apply(chart, options) do
           {:ok, done} ->
             {Map.put(applied, name, done), done.cache, errors}
 
@@ -490,6 +486,70 @@ defmodule Visualize.Board do
       errors -> Validator.done(errors)
     end
   end
+
+  @doc "As `components/3` with `[]` options."
+  @spec components(t(), store()) ::
+          {:ok, %{atom() => %{chart: Chart.t(), vars: map()}}} | {:error, [error(), ...]}
+  def components(board, store), do: components(board, store, [])
+
+  @doc """
+  Every cell's component prepared for application, purely (spec/15 §6): `{:ok, %{cell =>
+  %{chart: chart, vars: vars}}}`, or every fault of the board alone and given the store.
+
+  Each component is resolved through the store and read with `limits:`; with the board's
+  `sync` set and the cell's true, the board's group is written into its
+  `interaction.sync`; the board's zone is written into every `:time` scale that names no
+  zone of its own (spec/15 §1.5); and `vars` is the cascade of spec/15 §5 narrowed to the
+  variables the component declares. `realise/4` applies each; the runtime applies each in
+  its cell's process (spec/15 §8).
+  """
+  @spec components(t(), store(), keyword()) ::
+          {:ok, %{atom() => %{chart: Chart.t(), vars: map()}}} | {:error, [error(), ...]}
+  def components(%__MODULE__{} = board, store, opts) do
+    with :ok <- validate(board),
+         {charts, []} <- resolved(to_map(board), store, opts) do
+      {:ok,
+       Map.new(charts, fn {name, chart} ->
+         cell = Map.fetch!(board.cells, name)
+
+         prepared =
+           chart
+           |> synced(cell, board.sync)
+           |> zoned(board.zone)
+
+         {name,
+          %{chart: prepared, vars: board |> vars(name) |> Map.take(Validator.declared(chart))}}
+       end)}
+    else
+      {:error, errors} -> {:error, errors}
+      {_charts, errors} -> Validator.done(errors)
+    end
+  end
+
+  # The board's zone on every time scale that names none (spec/15 §1.5): UTC is a time
+  # scale's own default, so it writes nothing.
+  defp zoned(chart, "Etc/UTC"), do: chart
+
+  defp zoned(%Chart{frames: frames} = chart, zone) when is_map(frames) do
+    %{chart | frames: Map.new(frames, fn {name, frame} -> {name, zoned_frame(frame, zone)} end)}
+  end
+
+  defp zoned(chart, _zone), do: chart
+
+  defp zoned_frame(%{scales: scales} = frame, zone) when is_map(scales) do
+    scales =
+      Map.new(scales, fn
+        {name, %{kind: :time} = scale} when not is_map_key(scale, :zone) ->
+          {name, Map.put(scale, :zone, zone)}
+
+        pair ->
+          pair
+      end)
+
+    %{frame | scales: scales}
+  end
+
+  defp zoned_frame(frame, _zone), do: frame
 
   defp synced(chart, _cell, nil), do: chart
 

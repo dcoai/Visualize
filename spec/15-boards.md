@@ -4,7 +4,7 @@
 
 A **board** is a dashboard as data: designs laid out on a grid, sharing a time window, variables and a sync group, but never geometry. It is the layer above the composite of [14-declarative-chart](14-declarative-chart.md) §19.6. A composite is overlapping parts that **flatten** into one chart in one coordinate space, such as a gauge drawn over a line. A board **never flattens**: each cell is its own chart, applied, rendered and updated on its own, and the cells share *state*, not pixels (#531 §1).
 
-This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's (#540). A board's travel with its components in a bundle is #542's.
+This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's, §8 (#540, D-146). A board's travel with its components in a bundle is #542's.
 
 ```
 board      — layout + shared state                       (this document)
@@ -40,6 +40,7 @@ A board is data in the sense of spec/14 §1.1: a struct of maps, lists and atoms
 | `vars` | a map from a variable's name, an atom, to a value | `%{}` | the board's variables: the defaults of every cell's (§5) |
 | `sync` | a string, or `nil` | `nil` | the sync group the cells join (§1.5) |
 | `layout` | a node: `breakpoint`, `row_height` and `gap` (§1.6) | `%{}` | how the grid is drawn and when it reflows |
+| `stale_after` | a positive number, seconds, or `nil` | `nil` | how old a cell's newest reading may be before the cell shows it is stale (§8.4); `nil` is never |
 
 A key not in the table is `:unknown_key`, at the board's level and at every node's.
 
@@ -80,7 +81,7 @@ A board is **12 columns wide**. `Visualize.Board.columns/0` is `12`. A cell's `x
 
 A window that gives `last` together with `from` or `to`, a `from` without a `to`, a `DateTime` in another zone and a `from` not before its `to` are faults (§3.3). **Now comes from the board, never from a feed** (#531, further considerations §3). `Visualize.Board.window/2` resolves the window against the instant the caller passes as now, giving `{from, to}` as two UTC `DateTime`s, or `nil` for a board with no window. That pair is what the runtime asks each feed for (#540). The value says nothing about how a window moves. A brush or a time picker writes a new `window`.
 
-**The zone is for display only.** `zone` is the time zone the board's times are *shown* in. It is checked as a time scale's `zone` is (spec/14 §4.3, D-115): a name the host's time-zone database does not know is `{:zone, name, reason}`. The window itself stays in UTC, so two hosts in two zones fetch the same rows and show them in their own zone.
+**The zone is for display only.** `zone` is the time zone the board's times are *shown* in. It is checked as a time scale's `zone` is (spec/14 §4.3, D-115): a name the host's time-zone database does not know is `{:zone, name, reason}`. The window itself stays in UTC, so two hosts in two zones fetch the same rows and show them in their own zone. Where a cell's component has a `:time` scale that names no `zone` of its own, the board's zone is written into it when the component is prepared (§6, `components/3`), so a cell's time axis reads in the board's wall clock; a scale that names its own zone keeps it, as a cell's own variable beats the board's (§5). `"Etc/UTC"` writes nothing, since a scale with no zone is already UTC.
 
 **Variables cascade** as §5 says.
 
@@ -136,6 +137,7 @@ For the board and each of its nodes, in this order: unknown keys, required keys,
 - **Placement.** A cell whose `x + w` exceeds 12 runs off the grid and is `{:off_grid, 12}` at the cell's path. Two cells that share a grid square **overlap**. The pair is reported once, at the path of the later of the two by name, as `{:overlap, other}` naming the earlier, so a board of three cells stacked on one square reports two faults, not six. A rectangle is only checked for overlap once its four keys are integers of the right sign.
 - **The window.** A window that is neither `nil` nor one of the two forms is `{:type, :window}` at `[:window]`. `last` together with `from` or `to` is `{:window, :both}`. A `from` without a `to`, or a `to` without a `from`, is `:required` at the missing key. A `DateTime` not in `Etc/UTC`, or a value that is not a `DateTime`, is `{:type, :utc_datetime}` at its key. A `from` not before its `to` is `{:window, :inverted}` at `[:window]`. A `last` that is not a positive number is `{:type, :positive}`.
 - **The zone** is checked as §1.5 says.
+- **Staleness.** A `stale_after` that is neither `nil` nor a positive number is `{:type, :positive}`.
 - **Variables.** A board's or a cell's variable name that is not an atom is `{:type, :name}` at its path. A value that is itself a variable (`%Visualize.Chart.Var{}`) is `{:var_binding, name}`, because a board's variables are values, and resolution is single level (spec/14 §7.1).
 - **A component reference** that is not an id `{kind, n}` is `{:type, {:id, :composite}}`. An id of another kind, `{:style, 3}`, is `{:ref_kind, :composite, :style}`, as the validator refuses a wrong-kind id before resolution (spec/14 §19.7).
 
@@ -230,6 +232,8 @@ The options are `width:` (the board's container width in pixels, `1200` by defau
 
 Every fault of every cell is reported, each under its cell: `[:cells, name | path]`, with `path` application's own. A slot with no source in its cell's pool is therefore `{:unbound, :source, slot}` at `[:cells, name, :sources, slot]`, the same path the binding check uses (§4.3). The board's own faults (§3) come first. A board that does not validate alone is refused before any cell is resolved.
 
+**The first three steps are `Visualize.Board.components/3`**: `components(board, store, opts)` resolves every cell's component, writes the board's group and zone into it, and narrows the cascade to the variables it declares, giving `{:ok, %{cell => %{chart: chart, vars: vars}}}` — a `%Visualize.Chart{}` and the variables to apply it with — or `{:error, errors}` with the board's faults, alone and given the store, exactly as `realise/4` reports them. `realise/4` is `components/3` followed by the application, and the runtime (§8) prepares its cells with `components/3` and applies each one in the cell's own process. Its options are `limits:`.
+
 `realise/4` is what makes a board testable as a value, and it is the step the runtime takes per cell (#540): a cell process applies its component at its box's size, then compiles and renders it. The window (§1.5) is not applied to the component here. It is what the runtime asks the feeds for, and a cell's rows arrive already windowed (spec/08 §10.4).
 
 ## 7. Functions
@@ -258,6 +262,8 @@ Every fault of every cell is reported, each under its cell: `[:cells, name | pat
 | `Visualize.Board.vars/2` | One cell's variables before narrowing: the board's with the cell's over them (§5). |
 | `Visualize.Board.required_sources/2` | As `required_sources/3` with `[]` options. |
 | `Visualize.Board.required_sources/3` | Every cell's slots through the store, keyed `{cell, slot}`, each with `fields`, `types` and its `requires` contract (§4.1); `limits:` for the components' designs. |
+| `Visualize.Board.components/2` | As `components/3` with `[]` options. |
+| `Visualize.Board.components/3` | Every cell's component prepared, purely: `{:ok, %{cell => %{chart, vars}}}` with the group and the zone written and the variables narrowed, or every fault (§6). |
 | `Visualize.Board.realise/3` | As `realise/4` with `[]` options. |
 | `Visualize.Board.realise/4` | Every cell applied, purely: `{:ok, %{cell => applied}, cache}`, or every fault under its cell (§6). |
 
@@ -271,3 +277,153 @@ Every fault of every cell is reported, each under its cell: `[:cells, name | pat
 | `Visualize.Board.Binding.fetch/3` | The feed a cell's slot is bound to, `{:ok, feed}`, or `:error`. |
 | `Visualize.Board.Binding.check/3` | `:ok`, or every unbound slot, every contract the bound schemas cannot meet and every binding to nothing, by path (§4.3). |
 | `Visualize.Board.Binding.pools/2` | One pool per cell from the binding and the host's sources by feed (§4.4). |
+
+## 8. The runtime: a process per board and per cell
+
+**Implemented** (#540, #574, D-146). A board value (§1) says what is shown; the runtime keeps it live. It is the processes of #531's further considerations §2: **one process per board** owns the shared state and the feeds, and **one process per cell** applies, compiles and draws that cell's component. The BEAM's scheduler is the fairness: a heavy cell slows only its own frames, and nothing here schedules on top of it. What is left to design is runaway protection, done the BEAM way: each cell runs under a heap limit, and a cell that dies shows that it died and is started again, alone.
+
+```
+host's tree
+ └ Visualize.Board.Supervisor          a DynamicSupervisor the host adds (§8.1)
+    └ Visualize.Board.Server           one per board: window, zone, vars, sync, now, the monitor
+       └ DynamicSupervisor             the board's cells, started and linked by the board
+          └ Visualize.Board.Cell       one per cell: max_heap_size, apply → compile → frame
+```
+
+### 8.1 Who supervises: the host places the supervisor
+
+**The library ships `Visualize.Board.Supervisor`, a `DynamicSupervisor` that a host adds to its own tree** (#540's open question, settled here). The library starts no process of its own: it has no application callback, and nothing runs until a host puts a supervisor in its tree and starts a board under it.
+
+```elixir
+children = [
+  {Visualize.Board.Supervisor, name: MyApp.Boards},
+  MyAppWeb.Endpoint
+]
+
+{:ok, board} = Visualize.Board.Server.start(MyApp.Boards, board: board, store: store,
+                                            binding: binding, feeds: feeds)
+```
+
+`Visualize.Board.Server.start/2` takes **any** `DynamicSupervisor`, so a host that already has one starts boards under it, and `Visualize.Board.Server.child_spec/1` lets a host place one board under a supervisor of any kind. Shipping the module rather than leaving the host to write one gives the place a name in the documentation and one line to copy. It also makes a board's restart policy the library's to state (`:transient`: a board that crashes is started again with its start options, and one stopped with `stop/1` is not). The host is in control of where boards live and of their lifetime, as #531 asks. Neither choice takes that away, and this one costs the host nothing it would not write anyway.
+
+### 8.2 The board process
+
+`Visualize.Board.Server` is a `GenServer`. Its options:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `board:` | required | the `%Visualize.Board{}` |
+| `store:` | required | what resolution reads (§3.2) |
+| `binding:` | `Binding.new()` | the connector's `%Visualize.Board.Binding{}` (§4.2) |
+| `feeds:` | `%{}` | the feeds by the names the binding uses: a map from a name to a `Visualize.Feed` struct (spec/08 §11.1) |
+| `theme:` | `Visualize.Theme.default/0` | the theme every cell and every cell state is drawn in |
+| `width:` | `1200` | the container width in pixels, until a `resize/2` |
+| `tick:` | `1000` | the data rate: milliseconds between two turns of the loop; `nil` turns only on `tick/1` |
+| `budget:` | `nil` | the point budget asked of every feed (spec/08 §11.2) |
+| `max_heap:` | `25_000_000` | each cell's heap limit, in words (200 MB on a 64-bit host) |
+| `clock:` | `DateTime.utc_now/0` | the board's "now": a function of no argument answering a UTC `DateTime` |
+| `limits:` | the defaults | the limits the components' designs are read under (spec/14 §9.2) |
+| `name:` | none | a registered name, as `GenServer.start_link/3` takes it |
+
+**Starting** prepares every cell with `Visualize.Board.components/3` (§6). A board that does not validate alone and given the store, does not prepare, or that names a feed in its binding that `feeds:` does not hold, is **not started**: `start/2` answers `{:error, {:board, errors}}` with the faults of §3, or `{:error, {:feeds, names}}`. A board is refused as a whole, before any process runs, because a dashboard that half starts is the quiet difference §3 exists to prevent. The board then starts its cells' `DynamicSupervisor`, linked to it as its parent, so the cells go when the board goes, and one `Visualize.Board.Cell` per cell under it, each monitored.
+
+**It owns the shared state** (#531, further considerations §3):
+
+- **Now.** The board's `clock:` is read once per turn. That instant is the one "now" of the board: the window is resolved at it (`Visualize.Board.window/2`), each cell's age is measured against it, and it is handed to each cell's application as `now:`. No feed and no cell reads a clock of its own for this.
+- **The window**, in UTC. Each turn resolves the board's window at now and gives the monitor `[from, to]`, or `nil` for a board with no window. A trailing window (`%{last: s}`) slides every turn, which costs a pull feed a fetch and a push feed a trim (spec/08 §11.4). `window(board, window)` **sets** the board's window. It is validated as the board's `window` key is (§3.1), answering `{:error, errors}` otherwise, and it **re-asks every feed** (`Visualize.Feed.Monitor.refetch/1`), push feeds included. A window a person chose is a new question: a narrower one may be served at a finer resolution, and a feed that honours a budget can only say so if it is asked.
+- **The zone** is the board's, for display (§1.5). It is written into the cells' time scales when they are prepared and sent to subscribers with the window.
+- **The variables.** `vars(board, vars)` merges new board variables over the board's and prepares every cell again, sending each its new chart and variables. A cell compiles again when it next draws.
+- **The sync group** is written into the components when they are prepared (§1.5), so the cells' frames carry it.
+
+**It owns the feeds.** The board holds a `Visualize.Feed.Monitor` (spec/08 §11.4, D-140) over `feeds:`, with `every:` the board's tick, `stale_after:` the board's `stale_after` in milliseconds and `budget:` the option. It is the monitor's owner as that section says: it ticks the monitor at the start of every turn with its own monotonic clock, routes every `{:visualize_feed, ref, message}` in its mailbox to `handle_message/2`, and `stop/1`s the monitor when it terminates. A feed is fetched once however many slots it fills.
+
+**Each turn**, after the tick, the board hands each cell its data: for each of the cell's slots, the delivery of the feed the binding names, the schema that delivery's version resolves to in the monitor's cache, and the feed's status. A slot the binding does not bind has the status `{:down, {:unbound, slot}}`. The message goes to the cell only when it differs from the last one sent, and always with the turn's now. It is a `send`, never a call, so a slow cell never holds the board.
+
+**Resizing.** `resize(board, width)` recomputes every cell's box at the new width (§1.6, `boxes/2`) and sends each cell whose size changed its new size. A board process draws at **one** width, the last one given. A second viewer at another width is drawn the same frames, scaled by the root's `viewBox`.
+
+**Subscribers.** `subscribe(board, pid)` adds a subscriber, monitored and dropped when it exits, and answers `{:ok, info}`. Every cell then sends the newcomer its present view, so a page that subscribes late draws at once. `unsubscribe/2` removes one. The board sends the subscriber list to its cells whenever it changes, and **a cell sends its frames straight to the subscribers**, so no frame passes through the board's mailbox. Every message is `{:visualize_board, board, message}`, `board` the board process's pid:
+
+| Message | When |
+|---|---|
+| `{:board, info}` | on subscribing, and whenever the resolved window, the zone or the width changes: `info` is `%{window: {from, to} \| nil, zone: zone, now: now, width: width, sync: group}` |
+| `{:cell, name, view}` | a cell's view changed: a new frame, a new state, or both (§8.3) |
+
+`info/1` answers the board's present state: `%{board: board, window: window, zone: zone, now: now, width: width, cells: %{name => %{pid: pid \| nil, state: state, restarts: n}}}`. `tick/1` runs one turn now and returns once it is done: the way a test, or a host that drives time itself (`tick: nil`), moves the board. `stop/1` stops the board and its cells.
+
+### 8.3 The cell process
+
+`Visualize.Board.Cell` is a `GenServer` with `restart: :temporary` under the board's cells' supervisor. The **board** restarts it, not the supervisor (below).
+
+- **The heap limit.** The cell's first act is `Process.flag(:max_heap_size, %{size: max_heap, kill: true, error_logger: true, include_shared_binaries: false})`. A design that blows up — a 10,000-tick axis, an unbounded layout, a slot bound to a feed with millions of rows — grows the heap of the process that applies and draws it, and the VM kills that process when its heap passes the limit. This is the main defence, and the load-time sanity limits of spec/14 §9.2 are the first, cheaper line in front of it (#541).
+- **Crash, show, restart.** The board monitors each cell. A cell that exits with any reason but `:normal` or `:shutdown` — killed for its heap, or raising in a render — is shown at once as `{:crashed, reason}`: the board sends every subscriber that cell's crashed view (§8.4), since the cell can no longer speak for itself. It is then started again after a **backoff**: 100 ms, doubled on each restart up to 10 s, back to 100 ms when the cell had run for 30 s before it died. The restarted cell is sent the board's latest data for it at once. The board and every other cell are unaffected: a cell is linked only to its supervisor, which does not restart it, so no restart intensity can take the board down. This is why the restart is the board's and not a supervisor's: a design that dies on every frame would exhaust any supervisor's intensity and take its siblings with it.
+- **Coalescing.** When the cell takes a data message from its mailbox, it first takes every later data message waiting behind it and keeps only the newest. A cell that falls behind therefore skips to the present instead of drawing a backlog. Its mailbox is bounded by what arrives during one draw, and a slow cell drops its own frames, never anyone else's. Size, chart and subscriber messages are taken in order.
+- **Drawing.** With every slot holding a delivery, the cell places its rows (§8.5) and applies its chart with `Visualize.Chart.apply/2`: `sources:` the placed deliveries, `vars:`, `size:` its box, `theme:`, `now:` the board's, and `schemas:` a cache of the slots' resolved schemas, so application describes nothing. It compiles the applied chart with `Visualize.Chart.compile/2`, one compiled chart per frame in drawing order (`z`, then name), and draws each data change with `Visualize.Chart.Compiled.step/3` per frame inside one accessible root (spec/14 §21.2): titled with the cell's `title`, else the chart's summary name, described by the summary, and `responsive`, so a viewer at another width scales it. **It compiles again** when a slot's delivery names a schema version other than the one its chart was compiled with (`Compiled.stale?/2`, spec/14 §12.1), when its size changes, and when the board sends it a new chart or variables. Each recompilation is `carry/2`'d from the one before (spec/14 §12.5), so an easing goes on from where it stood and a force layout stays warm. A data change that keeps the schema and the size is a `step/3` only.
+- **Interaction.** The cell's frame is the compiled one-string form, whose frame group carries the frame's `data-vis-sync`, `data-vis-sync-x` and `data-vis-brush` attributes as `Visualize.Chart.Frame.generate/2`'s does (spec/14 §2.9, §12.4). With each frame the cell computes, for a chart of one frame, the `KeyboardHook` attributes (spec/10 §17.2) and, when that frame is cartesian and its first mark has `x` and `y` channels, the `CrosshairHook` attributes (spec/10 §13.2), both from the frame realised over the step's sources, so hover, the brush and the keyboard follow the data. The board's LiveView component (#575) places them.
+- **The view.** A cell sends `{:cell, name, view}` to every subscriber whenever its frame or its state changes. A turn that changes only now sends nothing unless the state changes with it, such as a cell growing stale. `view` is a `%Visualize.Board.View{}`:
+
+  | Field | Meaning |
+  |---|---|
+  | `cell` | the cell's name |
+  | `title` | the cell's `title`, or `nil` |
+  | `state` | the cell's state (§8.4) |
+  | `svg` | the chart's frame, an SVG root, or `nil` when no chart is drawn |
+  | `note` | the state's own SVG: the whole cell when `svg` is `nil`, a banner over the chart when the state is not `:live`, `nil` when it is |
+  | `crosshair`, `keyboard` | the hooks' attribute maps, `%{}` when there are none |
+  | `size` | `{width, height}`, the cell's box |
+  | `frames` | how many chart frames this cell process has drawn |
+
+  A view is never blank: it carries a frame, a state's drawing, or both.
+
+The cell reports its state to the board whenever it changes, so `info/1` answers it.
+
+### 8.4 Cell states
+
+A cell is always in exactly one state, and **every state is drawn deliberately** (#531, further considerations §5): an explicit SVG from the board's theme, never a blank chart, a crash or a spinner of the host's. `Visualize.Board.State` draws them. Each state has a **role** (spec/08 §7.5, D-135) whose colour is its accent and whose cue's glyph (spec/14 §21.7, D-142) stands beside its words, so it reads in greyscale too.
+
+| State | When | Role | Words |
+|---|---|---|---|
+| `{:crashed, reason}` | the cell's process died; the board draws it until the restarted cell speaks | `:bad` | `Crashed, restarting` |
+| `{:down, reason}` | a slot's feed is down, the slot is not bound, or the component cannot be applied to what arrived (`{:apply, errors}`, the faults of `Visualize.Chart.apply/2`) | `:bad` | `Feed down` and the reason |
+| `:loading` | a slot has no delivery yet and none is down | `:info` | `Loading…` |
+| `:no_data` | every slot has a delivery and every delivery is empty | `:neutral` | `No data yet` |
+| `{:stale, age}` | a slot's feed is `:stale` in the monitor, or the newest reading of a slot with a `DateTime` time field is older than the board's `stale_after` at the board's now; `age` is its age in seconds, or `nil` when only the monitor says so | `:warning` | `Stale` and the age (`Visualize.Format.duration/1`) |
+| `:capped` | a delivery is `capped`: the feed served less than the window | `:info` | `Capped: part of the window` |
+| `:live` | none of the above | — | — |
+
+The first row that holds is the state, in this order: a cell whose feed is down is not also called loading, and a stale chart that is capped says stale.
+
+**Two drawings.** `Visualize.Board.State.render(state, theme, {w, h})` is the **whole cell**: the theme's `surface` filling the box, a frame in the role's colour, and the glyph and the words centred in the theme's `text` colour, as an accessible SVG root whose title is the words. It is drawn where there is no chart: loading, no data, crashed, and down or stale before anything was drawn. `Visualize.Board.State.banner(state, theme, width)` is a **banner**: one line across the top of a chart, in the role's colour, glyph and words. It is drawn over the chart for stale, capped and down, so a person still sees the last data with what is wrong with it. `:live` draws neither. Both are in `:css` mode (spec/08 §7.3), so a page's stylesheet themes them as it themes the charts.
+
+### 8.5 Time
+
+- **The window is UTC; the zone is for display** (§1.5). The board resolves the window in UTC, the feeds are asked in UTC, and the zone reaches the cells' time scales and the subscribers.
+- **Rows are placed by their timestamp.** A feed's holding is kept in time order by the monitor (spec/08 §11.4). A pushed row older than the end of what the feed holds is a **late** row, placed in order rather than dropped, unless the holding already has that very row. A fetched delivery out of order is put in order before it is reduced. A cell's rows therefore arrive in time order, however the feed sent them.
+- **Gaps follow `continuity`** (spec/08 §10.1, D-136). For each slot whose schema gives a field a `continuity`, the cell walks the rows in time order, series by series, a series being the rows that share every `:category` field. Where two consecutive readings are further apart in time than the field's `continuity`, it puts a **break row** between them: the earlier row with that field `nil`. A line or an area drawn over the field breaks there (spec/14 §5.6, `defined`), and a gap in the data is drawn as a gap, never as a straight line across it. A time is measured in seconds: a `DateTime` or `NaiveDateTime` by its difference, a `Date` by its days, and a number as itself, since a time field has no unit (spec/08 §10.1) and a numeric clock is read in seconds.
+
+### 8.6 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Board.Supervisor.start_link/1` | A `DynamicSupervisor` for boards; `name:` as `DynamicSupervisor.start_link/1` takes it. |
+| `Visualize.Board.Supervisor.child_spec/1` | Its child spec, for a host's tree: a supervisor, its id the name given. |
+| `Visualize.Board.Server.start/2` | A board started under a `DynamicSupervisor`: `{:ok, pid}`, `{:error, {:board, errors}}` or `{:error, {:feeds, names}}` (§8.2). |
+| `Visualize.Board.Server.start_link/1` | A board started linked to the caller, for a host's own supervisor. |
+| `Visualize.Board.Server.child_spec/1` | Its child spec, `restart: :transient`. |
+| `Visualize.Board.Server.subscribe/1` | As `subscribe/2` for `self()`. |
+| `Visualize.Board.Server.subscribe/2` | A subscriber added: `{:ok, info}`, every cell resending its view to it (§8.2). |
+| `Visualize.Board.Server.unsubscribe/2` | A subscriber removed; `:ok`. |
+| `Visualize.Board.Server.window/2` | The board's window set and every feed re-asked: `:ok`, or `{:error, errors}`. |
+| `Visualize.Board.Server.vars/2` | Board variables merged and every cell prepared again: `:ok`, or `{:error, errors}`. |
+| `Visualize.Board.Server.resize/2` | The container width set and every cell's box recomputed; `:ok`. |
+| `Visualize.Board.Server.tick/1` | One turn of the loop now; `:ok` once it is done. |
+| `Visualize.Board.Server.info/1` | The board's present state (§8.2). |
+| `Visualize.Board.Server.stop/1` | The board and its cells stopped; `:ok`. |
+| `Visualize.Board.Cell.child_spec/1` | A cell's child spec, `restart: :temporary`: the board starts its cells and restarts them itself (§8.3). |
+| `Visualize.Board.State.render/3` | A state drawn as the whole cell, an SVG root string (§8.4). |
+| `Visualize.Board.State.banner/3` | A state drawn as a banner across a chart, an SVG root string, or `nil` for `:live` (§8.4). |
+| `Visualize.Board.State.role/1` | A state's role. |
+| `Visualize.Board.State.words/1` | A state's words, as the drawings print them. |
+| `Visualize.Board.State.name/1` | A state's name, the `data-vis-state` its drawings carry: `"stale"`, `"down"`, …. |
+| `Visualize.Board.State.of/3` | `of(slots, now, stale_after)`: the state of a cell's slots at now, each slot `%{delivery, schema, status}` (§8.4). |
+| `Visualize.Board.Rows.place/2` | `place(delivery, schema)`: the delivery's rows in time order with a break row in every gap wider than a field's `continuity` (§8.5). |
+| `Visualize.Board.Rows.seconds/1` | A time in seconds, as §8.5 measures a gap; `nil` for a value that is no time. |
