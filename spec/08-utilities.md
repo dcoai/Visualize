@@ -670,7 +670,7 @@ A schema's version is a **content hash** of its fields and their descriptions, s
 - **A map is encoded with its entries sorted by the encoding of their keys**, as `m<n>:` and each key's encoding followed by its value's. Nothing depends on a map's iteration order, which the runtime does not promise, nor on term order between different types.
 - Nothing is encoded through `:erlang.term_to_binary/2`, whose external format may change between OTP releases (its atom encoding did) and whose `:deterministic` option promises only one release.
 
-The fields map is a map like any other, so the schema is `m<n>:` and its fields by name. `Visualize.Data.Schema.version/1` returns a schema's version, which `new/1` computes once. The test suite pins the version of one schema as a literal string, so a change to the encoding fails a test before it changes a version in the field.
+The fields map is a map like any other, so the schema is `m<n>:` and its fields by name. The schema `%{v: %{type: :number}}` is therefore the bytes `visualize.schema/1\nm1:s1:vm1:a4:typea6:number`, and its version is `39b0c8eff6adfa6c6c9ada7fb3ee3a308675a1a5869afcd1ef1aca19378d0a81`, which any SHA-256 tool gives for those bytes. `Visualize.Data.Schema.version/1` returns a schema's version, which `new/1` computes once. The test suite pins the version of one schema as a literal string, so a change to the encoding fails a test before it changes a version in the field.
 
 ### 10.3 The cache
 
@@ -719,5 +719,6 @@ A delivery is data like a design: a struct with no function in it, which a codec
 | `Visualize.Data.Schema.Cache.put/3` | The cache with a feed's schema added under its version. |
 | `Visualize.Data.Schema.Cache.fetch/3` | `{:ok, schema}` or `:error` for a feed and a version. |
 | `Visualize.Data.Schema.Cache.resolve/4` | A feed's schema at a version: cached, or asked of `describe` once and cached (10.3). |
+| `Visualize.Data.Delivery.new/1` | `new(rows, [])`: a delivery of the rows and no other fact. |
 | `Visualize.Data.Delivery.new/2` | A delivery of the rows with the given facts, checked (10.4). |
 | `Visualize.Data.Delivery.source/1` | The source a delivery carries; any other source as it is. |

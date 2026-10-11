@@ -35,7 +35,8 @@ defmodule Visualize.Data.Table do
 
   @typedoc """
   Anything `rows/1` accepts: a list of rows, a keyword list or map of equal-length columns,
-  an `Nx.Tensor` of rank 1 or 2, or a struct implementing `Table.Reader`.
+  an `Nx.Tensor` of rank 1 or 2, a `Visualize.Data.Delivery`, or a struct implementing
+  `Table.Reader`.
   """
   @type source :: [row()] | %{name() => [term()]} | [{name(), [term()]}] | struct()
 
@@ -50,6 +51,7 @@ defmodule Visualize.Data.Table do
   - An `Nx.Tensor` of rank 2 yields one tuple per row, in column order — the shape the
     default `Visualize.Shape.Line` accessors read; rank 1 yields its values. Any other rank
     raises `ArgumentError`.
+  - A `Visualize.Data.Delivery` is the rows of the source it carries (spec/08 §10.4).
   - Any other struct is read through `Table.to_rows/1`: rows keyed by the reader's column
     names as it spells them. A struct with no `Table.Reader` impl raises
     `Protocol.UndefinedError`; a reader answering `:none` raises `ArgumentError`.
@@ -61,6 +63,8 @@ defmodule Visualize.Data.Table do
   # A map pattern, not `%Nx.Tensor{}`: a struct pattern needs the struct defined at compile
   # time, and a consumer without Nx has none.
   def rows(%{__struct__: Nx.Tensor} = tensor), do: tensor_rows(tensor, Nx.rank(tensor))
+  # A feed's answer is the rows of the source it carries (spec/08 §10.4).
+  def rows(%Visualize.Data.Delivery{rows: rows}), do: rows(rows)
   def rows(%_{} = struct), do: struct |> Table.to_rows() |> Enum.to_list()
   def rows(map) when map_size(map) == 0, do: []
   def rows(map) when is_map(map), do: column_rows(Map.to_list(map))
