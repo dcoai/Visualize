@@ -17,6 +17,30 @@ release it merely follows.
 
 ### Added
 
+- **A board runs live** (#574, D-146). Add `{Visualize.Board.Supervisor, name: MyApp.Boards}`
+  to your tree and start a board under it with `Visualize.Board.Server.start/2`, passing
+  `board:`, `store:`, `binding:` and `feeds:`. The board process owns the window (UTC), the
+  zone, the variables, the sync group and one "now". It drives the feeds through a
+  `Visualize.Feed.Monitor`. `window/2` sets the window and re-asks every feed, and `vars/2`,
+  `resize/2`, `tick/1`, `info/1` and `stop/1` do what they say. A board that does not
+  validate given its store, or whose binding names a missing feed, is refused before
+  anything starts. Each cell is its own process (`Visualize.Board.Cell`) under a heap limit
+  (`max_heap:`, words). A cell that blows its heap or raises shows "Crashed, restarting"
+  and is restarted with a backoff, and the board and the other cells carry on. A slow cell
+  skips to the newest data instead of drawing a backlog. `subscribe/1` delivers
+  `{:visualize_board, board, {:cell, name, %Visualize.Board.View{}}}` straight from each
+  cell: its SVG frame, its drawn state, and the crosshair and keyboard hooks' attributes.
+- **Every cell state is drawn** (#574). `Visualize.Board.State` decides and draws loading,
+  no data yet, stale, feed down, capped and crashed from the board's theme. Each state
+  uses a role colour and its glyph, so it reads in greyscale. Where there is no chart the
+  state fills the whole cell; over a chart it is a banner. The board gains the key
+  `stale_after` (seconds).
+- **Rows are placed by their timestamp** (#574). `Visualize.Feed.Monitor` keeps each
+  holding in time order and keeps a late pushed row instead of dropping it.
+  `Monitor.refetch/1` asks every feed again. `Visualize.Board.Rows.place/2` breaks a line
+  where two readings are further apart than the field's `continuity`.
+  `Visualize.Board.components/3` prepares each cell's component, writing in the board's
+  group and zone (a time scale with no zone takes the board's).
 - **A theme is a stored, versioned value** (#561, D-139). `Visualize.Chart.Theme` writes a
   theme as a document — `to_map/1` is `%{version: 2, theme: node}`, `to_json/1` the stamped
   `{"$version": 2, "theme": {…}}` — and `from_map/2` and `from_json/2` read one back to a
@@ -286,6 +310,11 @@ release it merely follows.
   `Editing`, `Tree`, `Selection`, `Writes`, `Workspace`, `Modes`, `ThemeMode`, none of
   them public). A test that calls the component's `handle_event/3` directly sees the same
   results; an event the builder does not handle still raises `FunctionClauseError` there.
+- **A compiled chart's SVG carries its frame's sync and brush attributes** (#574, D-146).
+  `Visualize.Chart.Compiled.svg/2` and `step/3` now write `data-vis-sync`,
+  `data-vis-sync-x` and `data-vis-brush` on the frame group, as `Visualize.Chart.render/2`
+  already did. A compiled chart in a sync group therefore joins the group's bus from its
+  SVG alone. A design with no group and no brush renders exactly as before.
 - **A root names every chart and describes it with its summary** (#557, D-142).
   `Visualize.Chart.render/2` and `generate/2` with `root: true` title a design with no
   `meta.name` by its kind, and write the generated summary after `meta.description` in the

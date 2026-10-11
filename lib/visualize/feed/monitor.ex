@@ -245,8 +245,10 @@ defmodule Visualize.Feed.Monitor do
     end)
   end
 
-  # A push appended to the holding: only its rows strictly after what the holding covers,
-  # by the time field; without one every row, keeping the newest `limit`.
+  # A push merged into the holding: by the time field, its rows strictly after what the
+  # holding covers appended, and its late rows — at or before that — kept unless the
+  # holding already has the very row, placed in time order when the holding is finished
+  # (spec/15 §8.5, D-146); without a time field every row, keeping the newest `limit`.
   defp merge(nil, delivery, _schema, _limit), do: %{delivery | rows: Table.rows(delivery)}
 
   defp merge(held, delivery, schema, limit) do
@@ -262,11 +264,43 @@ defmodule Visualize.Feed.Monitor do
 
       time ->
         held_to = window_to(held) || newest(held.rows, time)
-        rows = Window.newer(rows, time, held_to)
-        to = Window.latest(held_to, window_to(delivery) || newest(rows, time))
+        newer = Window.newer(rows, time, held_to)
+        late = late(held.rows, rows, time, held_to)
+        to = Window.latest(held_to, window_to(delivery) || newest(newer, time))
         from = window_from(held)
 
-        %{held | rows: held.rows ++ rows, schema: delivery.schema, window: [from, to]}
+        %{held | rows: held.rows ++ late ++ newer, schema: delivery.schema, window: [from, to]}
+    end
+  end
+
+  # The pushed rows at or before the holding's end that it does not already hold: only the
+  # held rows from the earliest late time on are compared, so a push at the edge costs
+  # little.
+  defp late(_held, _rows, _time, nil), do: []
+
+  defp late(held, rows, time, held_to) do
+    case Enum.filter(rows, &late?(Table.get(&1, time), held_to)) do
+      [] ->
+        []
+
+      late ->
+        earliest = late |> Enum.map(&Table.get(&1, time)) |> Enum.reduce(&Window.earliest/2)
+
+        seen =
+          held
+          |> Enum.filter(&(Window.compare(Table.get(&1, time), earliest) != :lt))
+          |> MapSet.new()
+
+        late |> Enum.reject(&MapSet.member?(seen, &1)) |> Enum.uniq()
+    end
+  end
+
+  # A row with no time is not late, and `Window.newer/3` leaves it out as well.
+  defp late?(t, held_to) do
+    case {place(t), place(held_to)} do
+      {nil, _held} -> false
+      {_t, nil} -> false
+      {t, held} -> t <= held
     end
   end
 
@@ -290,7 +324,7 @@ defmodule Visualize.Feed.Monitor do
       held ->
         # The holding is trimmed whatever the feed honours, so pushes never grow it past
         # the window; the delivery handed out is reduced for the budget.
-        held = Feed.finish(held, entry.schema, window: monitor.window)
+        held = held |> ordered(entry.schema) |> Feed.finish(entry.schema, window: monitor.window)
 
         out =
           Feed.finish(held, entry.schema,
@@ -302,6 +336,41 @@ defmodule Visualize.Feed.Monitor do
         put_entry(monitor, name, stale(%{entry | held: held, out: out}, now, monitor))
     end
   end
+
+  # The holding in time order (spec/08 §11.4): a stable sort, only when a row is out of
+  # order, so a reduction reads its rows in `x` order and rows that tie keep theirs.
+  defp ordered(held, schema) do
+    case Feed.time_field(schema) do
+      nil ->
+        held
+
+      time ->
+        rows = held.rows
+
+        if in_order?(rows, time),
+          do: held,
+          else: %{held | rows: Enum.sort_by(rows, &place(Table.get(&1, time)), &not_after?/2)}
+    end
+  end
+
+  defp in_order?(rows, time) do
+    rows
+    |> Enum.reduce_while(nil, fn row, last ->
+      t = place(Table.get(row, time))
+      if not_after?(last, t), do: {:cont, t}, else: {:halt, :out}
+    end)
+    |> Kernel.!=(:out)
+  end
+
+  # A time as the number it is ordered by (`Window.position/1`), `nil` for a value that is
+  # no time: a feed's bad row is ordered first and drawn as the cell decides, never a raise
+  # in the owner's process.
+  defp place(value), do: if(Window.time?(value), do: Window.position(value))
+
+  # Time order with a row that has no time first, as `nil` is no instant.
+  defp not_after?(nil, _b), do: true
+  defp not_after?(_a, nil), do: false
+  defp not_after?(a, b), do: a <= b
 
   defp stale(%{status: :live, last_ok: last} = entry, now, %{stale_after: after_ms})
        when is_integer(after_ms) and now - last > after_ms,
@@ -360,6 +429,18 @@ defmodule Visualize.Feed.Monitor do
     do: Window.compare(from, held) != :lt
 
   defp covers?(_entry, _window), do: false
+
+  @doc """
+  Every feed fetched again at the next tick, push feeds included, whatever it holds
+  (spec/08 §11.4): what a board does when a person sets its window (spec/15 §8.2).
+  """
+  @spec refetch(t()) :: t()
+  def refetch(%__MODULE__{} = monitor) do
+    %{
+      monitor
+      | entries: Map.new(monitor.entries, fn {name, e} -> {name, %{e | refetch: true}} end)
+    }
+  end
 
   @doc "The monitor with a new budget, refinished at the next tick."
   @spec budget(t(), Feed.budget()) :: t()

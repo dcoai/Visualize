@@ -373,6 +373,7 @@ defmodule Visualize.Chart.Compiled do
 
     Element.group(compiled.defs ++ children,
       style: %{class: "frame"},
+      attrs: group_attrs(frame),
       transform: placed(compiled)
     )
     |> Render.to_string(backend: :svg)
@@ -397,6 +398,7 @@ defmodule Visualize.Chart.Compiled do
     group =
       Element.group(compiled.defs ++ children,
         style: %{class: "frame"},
+        attrs: group_attrs(frame),
         transform: placed(compiled)
       )
 
@@ -434,6 +436,10 @@ defmodule Visualize.Chart.Compiled do
   end
 
   defp carried_scale(pair, _current), do: pair
+
+  # The frame's sync and brush attributes, as the frame's own group carries them (spec/14
+  # §2.9, §12.4, D-146): a compiled chart in a group joins its bus from its SVG alone.
+  defp group_attrs(frame), do: Map.merge(Frame.sync_attrs(frame), Frame.brush_attrs(frame))
 
   defp placed(%{margin: margin, box: box}),
     do: Transform.translate(margin.left + box.x, margin.top + box.y)

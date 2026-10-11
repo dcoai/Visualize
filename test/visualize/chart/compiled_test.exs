@@ -1264,3 +1264,45 @@ defmodule Visualize.Chart.CompiledTest do
     assert CanvasBinary.available?()
   end
 end
+
+defmodule Visualize.Chart.CompiledSyncTest do
+  @moduledoc """
+  A compiled chart's one-string form carries its frame's sync and brush attributes, as
+  the frame's own group does (spec/14 §12.4, #574, D-146): a board's cell joins its
+  group's bus from its SVG alone.
+  """
+  use ExUnit.Case, async: true
+
+  alias Visualize.Chart
+  alias Visualize.Chart.{Compiled, Frame}
+
+  test "step/3 and svg/2 write the frame's sync and brush attributes on the group" do
+    design = %{
+      version: 2,
+      interaction: %{sync: "ops", brush: :x},
+      sources: %{s: %{fields: [:t, :v]}},
+      frames: %{
+        main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}
+      },
+      marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]
+    }
+
+    rows = %{s: [%{t: 0, v: 1}, %{t: 10, v: 4}]}
+    {:ok, %{main: compiled}} = Chart.compile(design, sources: rows, size: {300, 200})
+    {:ok, applied} = Chart.apply(design, sources: rows, size: {300, 200})
+    expected = Map.merge(Frame.sync_attrs(applied.frame), Frame.brush_attrs(applied.frame))
+
+    assert expected["data-vis-sync"] == "ops" and expected["data-vis-brush"] == "x"
+    {group, _compiled} = Compiled.step(compiled, rows)
+    stepped = Visualize.Render.to_string(Visualize.IR.Element.root(300, 200, children: [group]))
+    svg = Compiled.svg(compiled, rows)
+
+    for {key, value} <- expected do
+      assert stepped =~ ~s(#{key}="#{value}")
+      assert svg =~ ~s(#{key}="#{value}")
+    end
+
+    # The one-string form is the frame's own group, attributes and all.
+    assert svg == Chart.render(applied)
+  end
+end

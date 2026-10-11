@@ -231,6 +231,43 @@ defmodule Visualize.Feed.MonitorTest do
     end
   end
 
+  describe "time order (spec/15 §8.5, #574, D-146)" do
+    test "a late pushed row is placed by its timestamp, and one already held is not added twice" do
+      {feed, agent} = push_feed([])
+      held = rows([1, 2, 4, 5])
+      Feeds.set(agent, rows: fn _window, _budget -> {held, [window: [1, 5]]} end)
+      monitor = Monitor.new(%{a: feed}) |> Monitor.tick(now: 0) |> Feeds.drain()
+
+      # Out of order within the push, one reading late (3), one a repeat of a held row (4).
+      pushed = rows([7, 3, 6, 4])
+      Feeds.push(agent, self(), Delivery.new(pushed, schema: Schema.version(@v1)))
+      monitor = monitor |> Feeds.drain() |> Monitor.tick(now: 1)
+
+      assert Enum.map(Monitor.deliveries(monitor).a.rows, & &1.t) == [1, 2, 3, 4, 5, 6, 7]
+      assert Monitor.deliveries(monitor).a.window == [1, 7]
+    end
+
+    test "a fetched delivery out of order is put in order before it is reduced" do
+      {feed, _agent} = Feeds.scripted(schema: @v1, rows: Enum.shuffle(rows(1..40)))
+      monitor = Monitor.new(%{a: feed}, budget: 12) |> Monitor.tick(now: 0)
+      times = Enum.map(Monitor.deliveries(monitor).a.rows, & &1.t)
+
+      assert times == Enum.sort(times)
+      assert hd(times) == 1 and List.last(times) == 40
+    end
+
+    test "refetch asks every feed again, push feeds whose holding covers the window included" do
+      {pull, pull_agent} = Feeds.scripted(schema: @v1, rows: rows(1..5))
+      {push, push_agent} = push_feed(rows(1..5))
+      monitor = Monitor.new(%{a: pull, b: push}) |> Monitor.tick(now: 0) |> Feeds.drain()
+      monitor = Monitor.tick(monitor, now: 1)
+      assert {Feeds.calls(pull_agent, :fetch), Feeds.calls(push_agent, :fetch)} == {1, 1}
+
+      monitor |> Monitor.refetch() |> Monitor.tick(now: 2)
+      assert {Feeds.calls(pull_agent, :fetch), Feeds.calls(push_agent, :fetch)} == {2, 2}
+    end
+  end
+
   test "a host passes the deliveries and the cache to apply/2, which asks no feed" do
     {feed, agent} = Feeds.scripted(schema: @v1, rows: rows(1..4))
     monitor = Monitor.new(%{primary: feed}) |> Monitor.tick(now: 0)
