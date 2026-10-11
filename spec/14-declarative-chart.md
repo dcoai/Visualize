@@ -881,13 +881,10 @@ The result is a `%Visualize.Chart.Applied{}` (§14.10): `chart`, the concrete `%
 **The contract: `requires`.** A slot (§2.3) writes `requires`, a map from a field it declares to the description attributes the bound schema MUST give that field:
 
 ```elixir
-sources: %{
-  primary: %{
-    fields: [:t, :latency],
-    types: %{t: :time, latency: :number},
-    requires: %{latency: [:unit, :label]}
-  }
-}
+source(:primary, [:t, :latency, :state],
+  types: %{t: :time, latency: :number, state: :category},
+  requires: %{latency: [:unit, :label]}
+)
 ```
 
 The keys are the slot's own fields: a field `requires` names that `fields` does not list is `{:undeclared, :field, field}` at `[:sources, name, :requires, field]`, as for `types`. The values are lists of the attributes of `Visualize.Data.Schema.attributes/0`, checked as an enumeration. It is a map of lists, not a list of pairs, because the JSON form (§11) has no tuples. A slot with no `requires` and no fact read of it states no contract, and binds as it always has.
@@ -895,12 +892,41 @@ The keys are the slot's own fields: a field `requires` names that `fields` does 
 **A fact: `Visualize.Chart.fact/3`.** `fact(source, field, key)` is `%Visualize.Chart.Fact{source: source, field: field, key: key}`: the attribute `key` of `field` in the schema bound to slot `source`. It is a term allowed wherever a value can appear, as a variable is (§7.1), and in a text as the hole `#{fact(:source, :field, :key)}`. So an axis title, a tick unit and an ordinal domain read the feed:
 
 ```elixir
-frames: %{main: %{
-  kind: :cartesian,
-  scales: %{x: %{kind: :time}, y: %{kind: :linear}, color: %{kind: :ordinal, domain: fact(:primary, :state, :order)}},
-  axes: [%{scale: :y, side: :left, unit: fact(:primary, :latency, :unit)}]
-}},
-labels: [%{anchor: {:axis, :y}, text: "#{fact(:primary, :latency, :label)} (#{fact(:primary, :latency, :unit)})"}]
+import Visualize.Chart, only: [fact: 3]
+alias Visualize.Data.{Delivery, Schema}
+
+design = %{
+  version: 2,
+  sources: %{primary: %{fields: [:t, :latency, :state], requires: %{latency: [:unit, :label]}}},
+  frames: %{main: %{
+    kind: :cartesian,
+    scales: %{
+      x: %{kind: :linear},
+      y: %{kind: :linear},
+      color: %{kind: :ordinal, domain: fact(:primary, :state, :order)}
+    },
+    axes: [%{scale: :y, side: :left, unit: fact(:primary, :latency, :unit)}]
+  }},
+  marks: [%{type: :circle, data: :primary, channels: %{x: :t, y: :latency, series: :state}}],
+  labels: [%{anchor: {:axis, :y}, text: "\#{fact(:primary, :latency, :label)} (\#{fact(:primary, :latency, :unit)})"}]
+}
+
+schema = Schema.new!(%{
+  latency: %{type: :number, unit: "s", label: "Request time"},
+  state: %{type: :category, order: ["ok", "warn", "fail"]}
+})
+
+rows = [%{t: 1, latency: 0.2, state: "warn"}, %{t: 2, latency: 0.4, state: "ok"}]
+delivery = Delivery.new(rows, schema: Schema.version(schema))
+
+{:ok, applied} =
+  Visualize.Chart.apply(design,
+    sources: %{primary: delivery},
+    describe: fn :primary -> {:ok, schema} end
+  )
+
+[%{text: "Request time (s)"}] = applied.chart.labels
+["ok", "warn", "fail"] = Visualize.Chart.Frame.scale(applied.frame, :color).domain
 ```
 
 The validator checks a fact against the design before application, so a design that reads what it does not declare does not validate. The slot MUST be declared (`{:undeclared, :source, source}`), and the field MUST be one of that slot's `fields` (`{:undeclared_field, source, field}`). The key MUST be one of the attributes (`{:enum, attributes}`). In a text, the key MUST be one whose value is written as words: every attribute but `order` and `status`, which are a list and a map, are `{:invalid_for, :text}` there. **Reading a fact is a requirement**: the contract of a slot is its `requires` together with every attribute a fact of it reads. `Visualize.Chart.contract/1` returns that contract, `%{slot => %{field => [key, …]}}` with each list in the order of `Visualize.Data.Schema.attributes/0`, for a picker to test a feed's schema before offering it (§7.2).

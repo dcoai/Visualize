@@ -4,7 +4,8 @@ defmodule Visualize.Chart.Text do
 
   A `:text` — a label's `text`, a legend's `title`, `meta.name`, `meta.description` — is
   a string in which `#{var(:name)}` stands for a variable and `#{field(:name)}` for a
-  datum's field (a mark's label reads one per element, §5.5). A literal `#{` is written
+  datum's field (a mark's label reads one per element, §5.5), and
+  `#{fact(:source, :field, :key)}` for a fact of a feed's schema (§7.4). A literal `#{` is written
   `\#{`. `parse/1` reads the string into its parts and `unparse/1` writes parts back;
   the two are inverse, and a list of parts — the form an earlier version wrote — is
   what `unparse/1` takes, which is the migration (§9).
@@ -22,10 +23,10 @@ defmodule Visualize.Chart.Text do
       {:error, :unterminated}
   """
 
-  alias Visualize.Chart.Var
+  alias Visualize.Chart.{Fact, Var}
 
-  @typedoc "One part of a text: a string, a variable, or a datum's field."
-  @type part :: String.t() | Var.t() | {:field, atom()}
+  @typedoc "One part of a text: a string, a variable, a datum's field, or a schema's fact."
+  @type part :: String.t() | Var.t() | {:field, atom()} | Fact.t()
 
   @doc ~S"""
   The parts of a text. A list is already parts and is returned as it is; a string is
@@ -66,6 +67,7 @@ defmodule Visualize.Chart.Text do
     Enum.map_join(parts, "", fn
       %Var{name: name} -> "\#{var(:#{name})}"
       {:field, name} -> "\#{field(:#{name})}"
+      %Fact{source: s, field: f, key: k} -> "\#{fact(:#{s}, :#{f}, :#{k})}"
       string when is_binary(string) -> String.replace(string, "\#{", "\\\#{")
       other -> to_string(other)
     end)
@@ -147,7 +149,33 @@ defmodule Visualize.Chart.Text do
 
   defp hole("var(:" <> name), do: named(name, &%Var{name: &1})
   defp hole("field(:" <> name), do: named(name, &{:field, &1})
+  defp hole("fact(" <> args), do: fact(args)
   defp hole(_other), do: :error
+
+  # `fact(:source, :field, :key)` (spec/14 §7.4): three names, each written as an atom.
+  defp fact(args) do
+    names = args |> String.trim_trailing(")") |> String.split(",") |> Enum.map(&String.trim/1)
+
+    with [_, _, _] <- names,
+         {:ok, [s, f, k]} <- atoms(names) do
+      {:ok, %Fact{source: s, field: f, key: k}}
+    else
+      _other -> :error
+    end
+  end
+
+  defp atoms(names) do
+    Enum.reduce_while(names, {:ok, []}, fn
+      ":" <> name, {:ok, acc} ->
+        case named(name, & &1) do
+          {:ok, atom} -> {:cont, {:ok, acc ++ [atom]}}
+          :error -> {:halt, :error}
+        end
+
+      _bare, _acc ->
+        {:halt, :error}
+    end)
+  end
 
   defp named(name, wrap) do
     case String.trim_trailing(name, ")") do

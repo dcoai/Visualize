@@ -23,6 +23,7 @@ defmodule Visualize.Chart.Schema do
   """
 
   alias Visualize.Chart.Schema.{Frame, Mark}
+  alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
   @typedoc "What a key is about (spec/14 §1.3)."
@@ -325,7 +326,9 @@ defmodule Visualize.Chart.Schema do
     [
       spec(:fields, {:list, :field}, :binding, required: true),
       spec(:types, {:map, {:enum, @column_types}}, :binding, default: %{}),
-      spec(:default, :name, :binding)
+      spec(:default, :name, :binding),
+      # The slot's contract with its feed's schema (spec/14 §2.3, §7.4, #552).
+      spec(:requires, {:map, {:list, {:enum, FeedSchema.attributes()}}}, :binding, default: %{})
     ]
   end
 

@@ -9,7 +9,7 @@ defmodule Visualize.Chart.Codec do
   # its tagged term and read back as itself, and no map clause on either side descends
   # into one, so the walk cannot rebuild a struct as a plain map or a map as a struct.
 
-  alias Visualize.Chart.{Fragment, Migration, Schema, Use, Var}
+  alias Visualize.Chart.{Fact, Fragment, Migration, Schema, Use, Var}
   alias Visualize.Theme
 
   @fixed_slots Theme.default() |> Theme.slots() |> Enum.reject(&(&1 in [:series_1]))
@@ -33,6 +33,7 @@ defmodule Visualize.Chart.Codec do
   defp key(k), do: to_string(k)
 
   defp value(_type, %Var{name: name}), do: %{"$var" => Atom.to_string(name)}
+  defp value(_type, %Fact{} = fact), do: term(fact)
   defp value(_type, {:field, f}) when is_atom(f), do: %{"$field" => Atom.to_string(f)}
   defp value(:colour, {:paint, name}) when is_atom(name), do: %{"$paint" => Atom.to_string(name)}
 
@@ -86,6 +87,10 @@ defmodule Visualize.Chart.Codec do
   defp category(v), do: term(v)
 
   defp term(%Var{name: name}), do: %{"$var" => Atom.to_string(name)}
+
+  # A schema fact (spec/14 §7.4, §11.2): the slot, the field and the attribute.
+  defp term(%Fact{source: s, field: f, key: k}),
+    do: %{"$fact" => Enum.map([s, f, k], &Atom.to_string/1)}
 
   defp term(%Use{id: {:use, n}} = use) do
     %{
@@ -147,6 +152,8 @@ defmodule Visualize.Chart.Codec do
 
   defp read(_type, %{"$var" => name} = v) when map_size(v) == 1 and is_binary(name),
     do: %Var{name: String.to_atom(name)}
+
+  defp read(_type, %{"$fact" => _} = v) when map_size(v) == 1, do: read_term(v)
 
   defp read(_type, %{"$field" => f} = v) when map_size(v) == 1 and is_binary(f),
     do: {:field, String.to_atom(f)}
@@ -258,6 +265,10 @@ defmodule Visualize.Chart.Codec do
       origin: use |> Map.get("origin") |> read_ref()
     }
   end
+
+  defp read_term(%{"$fact" => [s, f, k]} = v)
+       when map_size(v) == 1 and is_binary(s) and is_binary(f) and is_binary(k),
+       do: %Fact{source: String.to_atom(s), field: String.to_atom(f), key: String.to_atom(k)}
 
   defp read_term(%{"$field" => f} = v) when map_size(v) == 1 and is_binary(f),
     do: {:field, String.to_atom(f)}

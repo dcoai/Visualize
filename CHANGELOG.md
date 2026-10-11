@@ -63,6 +63,20 @@ release it merely follows.
   `Visualize.Data.Table.rows/1` reads it, so it goes wherever a source goes:
   `Visualize.Chart.apply/2`'s pool and a compiled chart's `tick/3`, `step/3`, `render/2`
   and `svg/2`.
+- **A design can require and read its feed's schema** (#552, D-136). A source slot can now
+  state `requires: %{latency: [:unit, :label]}`, the attributes its feed's schema must
+  describe. `Visualize.Chart.fact(:primary, :latency, :label)` reads one of them anywhere a
+  value goes, and inside a text as `#{fact(:primary, :latency, :unit)}`. So an axis title
+  can come from the field's label and unit, and an ordinal domain from its `order`.
+  `Visualize.Chart.apply/2` takes the schema cache as `schemas:` and a `describe:`
+  function, resolves the schema each delivery names, and fails with the slot, the field
+  and the missing attribute named (`{:missing_attribute, slot, field, key}`) instead of
+  drawing a blank label. The applied chart returns `schemas`, `versions` and the grown
+  `cache`. `Visualize.Chart.contract/1` lists what a design requires, for a picker.
+- **`Visualize.Chart.Compiled.stale?/2`**: whether a delivery names a schema version
+  other than the one the chart was compiled with. A schema change needs a recompile, as a
+  resize does: `tick/3`, `step/3`, `render/2` and `svg/2` raise `ArgumentError` for a stale
+  delivery, so compile again and `carry/2` the state across.
 
 ### Changed
 

@@ -18,8 +18,9 @@ defmodule Visualize.Chart.Validator do
 
   """
 
-  alias Visualize.Chart.{Migration, Schema, Text, Var}
-  alias Visualize.Chart.Validator.Domain
+  alias Visualize.Chart.{Fact, Migration, Schema, Text, Var}
+  alias Visualize.Chart.Validator.{Domain, Words}
+  alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
   @typedoc "Keys and list indexes from the design to a value; `[]` is the design."
@@ -55,6 +56,13 @@ defmodule Visualize.Chart.Validator do
           | {:outside_domain, atom(), number() | {:column, atom(), :number | :text | :time}}
           | {:feeds_domain, atom(), number()}
           | {:contract, String.t()}
+          | {:undeclared_field, atom(), atom()}
+          | {:missing_attribute, atom(), atom(), atom()}
+          | {:schema_type, atom(), atom(), atom()}
+          | {:no_schema, atom()}
+          | {:unknown_schema, term(), String.t()}
+          | {:describe, term(), term()}
+          | {:schema_version, term(), String.t(), String.t()}
 
   @type error :: {path(), reason()}
 
@@ -146,7 +154,7 @@ defmodule Visualize.Chart.Validator do
 
   @doc "One error as `path: reason` in words; the path in `marks[1].channels.y` form."
   @spec format(error()) :: String.t()
-  def format({path, reason}), do: "#{format_path(path)}: #{words(reason)}"
+  def format({path, reason}), do: "#{format_path(path)}: #{Words.words(reason)}"
 
   @doc """
   A path as a person reads it — `design` for the root, else `frame.scales.x`,
@@ -306,13 +314,16 @@ defmodule Visualize.Chart.Validator do
     unknown ++ missing ++ List.flatten(present) ++ held(kind, map, path, ctx)
   end
 
-  # What a node's keys owe each other: a source's `types` names only its `fields` (§2.3).
-  defp held(:source, %{fields: fields, types: types}, path, _ctx)
-       when is_list(fields) and is_map(types) do
-    for {name, _type} <- types,
+  # What a node's keys owe each other: a source's `types` and `requires` name only its
+  # `fields` (§2.3, §7.4).
+  defp held(:source, %{fields: fields} = source, path, _ctx) when is_list(fields) do
+    for key <- [:types, :requires],
+        names = Map.get(source, key),
+        is_map(names) and not is_struct(names),
+        {name, _value} <- names,
         name?(name),
         name not in fields,
-        do: {path ++ [:types, name], {:undeclared, :field, name}}
+        do: {path ++ [key, name], {:undeclared, :field, name}}
   end
 
   # An inline theme's ramps and roles hold their meaning contracts (spec/08 §7.5, D-135):
@@ -692,6 +703,7 @@ defmodule Visualize.Chart.Validator do
   # -- types ----------------------------------------------------------------------------
 
   defp check(_type, %Var{name: name}, path, ctx), do: ref(:var, name, path, ctx)
+  defp check(_type, %Fact{} = fact, path, ctx), do: fact(fact, path, ctx, false)
 
   defp check({:node, kind}, v, path, ctx) when is_map(v) and not is_struct(v) do
     node(kind, v, path, ctx)
@@ -834,6 +846,7 @@ defmodule Visualize.Chart.Validator do
 
   defp text_part(part, _path, _ctx) when is_binary(part), do: []
   defp text_part(%Var{name: name}, path, ctx), do: ref(:var, name, path, ctx)
+  defp text_part(%Fact{} = fact, path, ctx), do: fact(fact, path, ctx, true)
 
   defp text_part({:field, _} = part, path, %{datum?: true} = ctx) do
     check(:field_ref, part, path, ctx)
@@ -841,6 +854,38 @@ defmodule Visualize.Chart.Validator do
 
   defp text_part({:field, _}, path, _ctx), do: [{path, {:invalid_for, :label}}]
   defp text_part(_, path, _ctx), do: [{path, {:type, :text}}]
+
+  # A fact of a feed's schema (spec/14 §7.4): a declared slot, one of its fields and an
+  # attribute; in a text, an attribute written as words, never `order`'s list or
+  # `status`'s map. Whether the schema gives it is application's question.
+  defp fact(%Fact{source: s, field: f, key: k}, path, ctx, text?) do
+    cond do
+      not (name?(s) and name?(f) and name?(k)) ->
+        [{path, {:type, :fact}}]
+
+      k not in FeedSchema.attributes() ->
+        [{path, {:enum, FeedSchema.attributes()}}]
+
+      text? and k in [:order, :status] ->
+        [{path, {:invalid_for, :text}}]
+
+      true ->
+        fact_field(s, f, path, ctx.sources)
+    end
+  end
+
+  defp fact_field(source, field, path, sources) when is_map(sources) do
+    case Map.fetch(sources, source) do
+      :error -> [{path, {:undeclared, :source, source}}]
+      {:ok, fields} when is_list(fields) -> fact_in(source, field, path, field in fields)
+      {:ok, _unknown} -> []
+    end
+  end
+
+  defp fact_field(_source, _field, _path, _unknown), do: []
+
+  defp fact_in(_source, _field, _path, true), do: []
+  defp fact_in(source, field, path, false), do: [{path, {:undeclared_field, source, field}}]
 
   defp slot_or(type, v, path, ctx) do
     if slot?(v), do: ref(:slot, v, path, ctx), else: [{path, {:type, type}}]
@@ -956,158 +1001,4 @@ defmodule Visualize.Chart.Validator do
   defp plural(:frame), do: :frames
   defp plural(:ramp), do: :ramps
   defp plural(:role), do: :roles
-
-  # -- formatting -----------------------------------------------------------------------
-
-  defp words({:weight, key}), do: "every #{key} weight is a positive number"
-  defp words({:contract, message}), do: "breaks its contract: #{message}"
-  defp words(:both), do: "says both box and cell: a frame says where it goes once"
-  defp words(:outside), do: "is outside the design's layout grid"
-
-  defp words({:cycle, kind, name}),
-    do: "#{kind} #{inspect(name)} is adopted in a circle: a chain of frames returns to it"
-
-  defp words({:sync, :frame_kind, kind}),
-    do: "joins a sync group over a #{inspect(kind)} frame; only a cartesian frame's x syncs"
-
-  defp words({:sync, :x_scale, nil}),
-    do: "joins a sync group over a frame with no x scale; a linear or time x is what syncs"
-
-  defp words({:sync, :x_scale, kind}) do
-    "joins a sync group over a #{inspect(kind)} x scale; only a linear or time x syncs, " <>
-      "since the hooks map a shared x by linear interpolation (spec/14 §2.9)"
-  end
-
-  defp words({:tiles, :projection, what}) do
-    "draws tiles over #{inspect(what)}: tiles lie only under a :geo frame's :mercator " <>
-      "projection with a zero centre latitude and no tilt or roll (spec/07 §8.1)"
-  end
-
-  defp words({:tiles, :attribution}), do: "must say something: the attribution is drawn"
-  defp words({:tiles, :url}), do: "must hold each of {z}, {x} and {y}"
-  defp words({:tiles, :subdomains}), do: "must name a subdomain for the url's {s}"
-  defp words(:sweep), do: "must be within a turn, and not zero"
-  defp words(:radius), do: "must be positive"
-
-  defp words({:zone, zone, :utc_only_time_zone_database}) do
-    "time zone #{inspect(zone)} cannot be shown: the host has no time zone database " <>
-      "configured (Calendar.UTCOnlyTimeZoneDatabase)"
-  end
-
-  defp words({:zone, zone, :time_zone_not_found}),
-    do: "time zone #{inspect(zone)} is not known to the host's time zone database"
-
-  defp words({:zone, zone, reason}),
-    do: "time zone #{inspect(zone)} cannot be shown: #{inspect(reason)}"
-
-  defp words({:outside_domain, scale, {:column, field, type}}) do
-    "field #{inspect(field)} is a #{inspect(type)} column and scale #{inspect(scale)}'s " <>
-      "declared domain holds no such value: every element would draw its unknown colour"
-  end
-
-  defp words({:outside_domain, scale, value}) do
-    "#{inspect(value)} is not in scale #{inspect(scale)}'s declared domain: " <>
-      "it would draw the scale's unknown colour"
-  end
-
-  defp words({:feeds_domain, scale, n}) do
-    "a text at the constant #{inspect(n)} holds scale #{inspect(scale)}'s inferred domain " <>
-      "open: place it at {:scale, :min} or {:scale, :max}, as a frame label, or declare the domain"
-  end
-
-  defp words(:required), do: "is required"
-  defp words(:unknown_key), do: "is not a key of this node"
-  defp words({:type, type}), do: "must be #{type_words(type)}"
-
-  defp words({:ref_kind, wanted, given}),
-    do: "is a #{given} id where a #{wanted} was expected"
-
-  defp words({:enum, allowed}), do: "must be one of #{list(allowed)}"
-
-  defp words({:undeclared, :field, name}) do
-    "field #{inspect(name)} is not declared by the mark's source"
-  end
-
-  defp words({:undeclared, :slot, name}), do: "slot #{inspect(name)} is not a slot of the theme"
-  defp words({:undeclared, kind, name}), do: "#{kind} #{inspect(name)} is not declared"
-  defp words({:invalid_for, type}), do: "is not read by #{inspect(type)}"
-
-  defp words({:unsupported_version, v}) do
-    "version #{inspect(v)} is not supported; the current version is #{Migration.current()}"
-  end
-
-  # The builder's need of spec/14 §18.16 (#370), worded here so one reader serves it.
-  defp words({:unscaled, field}) do
-    "reads #{inspect(field)} through no scale — say what #{inspect(field)} is under data, " <>
-      "or declare the scale under frame"
-  end
-
-  defp words({:json, message}), do: "JSON does not parse: #{message}"
-  defp words({:missing_dependency, :jason}), do: "needs the optional dependency Jason"
-
-  defp words({:unresolved, :var, name}) do
-    "variable #{inspect(name)} has no value at application and no default"
-  end
-
-  defp words({:var_binding, name}) do
-    "variable #{inspect(name)} is bound to another variable; resolution is single level"
-  end
-
-  defp words({:unbound, :source, name}) do
-    "slot #{inspect(name)} has no source in the pool under its name or its default"
-  end
-
-  defp words({:missing_field, field}), do: "has no field #{inspect(field)}"
-  defp words(:conflict), do: "is declared differently by two fragments"
-
-  defp words(:cycle), do: "extends itself, directly or through a chain of `extends`"
-
-  # A text that does not read (spec/14 §7.1).
-  defp words({:template, :unterminated}), do: ~S|has a #{ with no closing }|
-
-  defp words({:template, {:hole, hole}}),
-    do: ~S|has #{| <> hole <> ~S|}, which names neither var(:name) nor field(:name)|
-
-  # A fault of a composite rather than of a node (spec/14 §19.6): the stack reaching itself.
-  defp words({:cycle, chain}), do: "the stack refers to itself through #{inspect(chain)}"
-
-  # A map that is many things is no kind of fragment (spec/14 §19.8).
-  defp words(:many_kinds),
-    do: "is many things at once, which is no kind of fragment; make it a composite of sites"
-
-  defp type_words(:integer), do: "an integer"
-  defp type_words(:number), do: "a number"
-  defp type_words(:boolean), do: "a boolean"
-  defp type_words(:string), do: "a string"
-  defp type_words(:name), do: "a name (an atom)"
-  defp type_words(:field), do: "a field name"
-  defp type_words(:field_ref), do: "{:field, name}"
-  defp type_words(:key_order), do: "{:keys, [name, …]}, the series keys bottom first"
-  defp type_words(:channel), do: "a field name, a number or {:field, name}"
-  defp type_words(:extent), do: "an extent: :auto, [lo, hi] or a list of categories"
-  defp type_words(:text), do: ~S|a string, with #{var(:name)} for a variable|
-
-  defp type_words(:anchor) do
-    "an anchor: :title, :subtitle, :caption, {:axis, scale}, {:frame, corner | :center} or " <>
-      "{:data, [x, y]}"
-  end
-
-  defp type_words(:colour) do
-    "a colour string, :none, :contrast, a theme slot, a role, {:ramp, name, t} with t in " <>
-      "0..1 or a paint"
-  end
-
-  defp type_words(:ramp), do: "{:ramp, name} with name one of #{list(Theme.ramp_names())}"
-  defp type_words(:size), do: "a number or a theme slot"
-  defp type_words(:font), do: "a font string or a theme slot"
-  defp type_words(:slot), do: "a theme slot"
-  defp type_words(:term), do: "a JSON-representable term"
-  defp type_words({:enum, allowed}), do: "one of #{list(allowed)}"
-  defp type_words({:list, t}), do: "a list of #{type_words(t)}"
-  defp type_words({:map, t}), do: "a map from names to #{type_words(t)}"
-  defp type_words({:node, kind}), do: "a #{kind} node"
-  defp type_words({:ref, kind}), do: "a declared #{kind} name, or a #{kind} id"
-  defp type_words({:one_of, types}), do: Enum.map_join(types, " or ", &type_words/1)
-
-  defp list(atoms), do: Enum.map_join(atoms, ", ", &inspect/1)
 end

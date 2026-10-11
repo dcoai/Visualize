@@ -1,0 +1,154 @@
+defmodule Visualize.Chart.Facts do
+  @moduledoc false
+  # The schema step of application (spec/14 §7.4, D-136): a design's contract — each slot's
+  # `requires` and every fact it reads — checked against the schema bound to the slot,
+  # and every `%Fact{}` replaced by the attribute it names. Pure: the schema cache comes
+  # in and the grown cache goes out with the result.
+
+  alias Visualize.Chart
+  alias Visualize.Chart.{Fact, Template, Validator}
+  alias Visualize.Data.{Delivery, Schema}
+  alias Visualize.Data.Schema.Cache
+
+  @typedoc "What the schema step found: each slot's schema and version, and the cache."
+  @type described :: %{
+          schemas: %{atom() => Schema.t()},
+          versions: %{atom() => String.t() | nil},
+          cache: Cache.t()
+        }
+
+  @doc false
+  # Every slot's requirements: its `requires` with the attributes its facts read, each
+  # field's list in the order of `Visualize.Data.Schema.attributes/0`; a slot with none
+  # is absent.
+  @spec contract(map()) :: %{atom() => %{atom() => [atom()]}}
+  def contract(map) when is_map(map) do
+    required =
+      for {slot, %{requires: requires}} when is_map(requires) <- Map.get(map, :sources, %{}),
+          {field, keys} when is_list(keys) <- requires,
+          key <- keys,
+          do: {slot, field, key}
+
+    read = for {_path, %Fact{source: s, field: f, key: k}} <- uses(map), do: {s, f, k}
+
+    (required ++ read)
+    |> Enum.group_by(&elem(&1, 0), &Tuple.delete_at(&1, 0))
+    |> Map.new(fn {slot, pairs} ->
+      {slot,
+       pairs
+       |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+       |> Map.new(fn {field, keys} -> {field, ordered(keys)} end)}
+    end)
+  end
+
+  defp ordered(keys), do: Enum.filter(Schema.attributes(), &(&1 in keys))
+
+  # Every fact the design holds, with the path it stands at — a text's key for a hole.
+  defp uses(map) do
+    {_map, uses} =
+      Template.walk(map, fn
+        %Fact{} = fact, path -> {fact, [{path, fact}]}
+        other, _path -> {other, []}
+      end)
+
+    uses
+  end
+
+  @doc false
+  # The chart with every fact resolved and what was described, or every fault of the
+  # contract by path (spec/14 §7.4).
+  @spec apply(Chart.t(), map(), Cache.t(), Cache.describe()) ::
+          {:ok, Chart.t(), described()} | {:error, [Validator.error(), ...]}
+  def apply(%Chart{sources: slots} = chart, pool, %Cache{} = cache, describe) do
+    map = Chart.to_map(chart)
+    contract = contract(map)
+    entries = entries(slots, pool)
+    versions = for {slot, {_feed, %Delivery{schema: v}}} <- entries, into: %{}, do: {slot, v}
+
+    {schemas, cache, errors} =
+      Enum.reduce(contract, {%{}, cache, []}, fn {slot, _fields}, {schemas, cache, errors} ->
+        case schema(slot, Map.get(entries, slot), cache, describe) do
+          {:ok, schema, cache} -> {Map.put(schemas, slot, schema), cache, errors}
+          {:error, error, cache} -> {schemas, cache, [error | errors]}
+          :unbound -> {schemas, cache, errors}
+        end
+      end)
+
+    errors = errors ++ missing(map, schemas) ++ disagreements(slots, schemas)
+
+    case Enum.sort_by(errors, &elem(&1, 0)) do
+      [] ->
+        {resolved, []} = Template.walk(map, &value(&1, &2, schemas))
+
+        {:ok, struct(Chart, resolved), %{schemas: schemas, versions: versions, cache: cache}}
+
+      errors ->
+        {:error, errors}
+    end
+  end
+
+  # Each slot's feed — the pool name it bound to — and the source the pool gave it.
+  defp entries(slots, pool) when is_map(slots) do
+    for {slot, node} <- slots,
+        {:ok, feed, source} <- [Template.entry(pool, slot, node)],
+        into: %{},
+        do: {slot, {feed, source}}
+  end
+
+  defp entries(_slots, _pool), do: %{}
+
+  # An unbound slot is binding's fault, reported there; it never reaches this step.
+  defp schema(_slot, nil, _cache, _describe), do: :unbound
+
+  defp schema(slot, {feed, %Delivery{schema: version}}, cache, describe)
+       when is_binary(version) do
+    case Cache.resolve(cache, feed, version, describe) do
+      {:ok, schema, cache} -> {:ok, schema, cache}
+      {:error, reason, cache} -> {:error, {[:sources, slot], reason}, cache}
+    end
+  end
+
+  defp schema(slot, _entry, cache, _describe),
+    do: {:error, {[:sources, slot], {:no_schema, slot}}, cache}
+
+  # Every required attribute the bound schema does not give: at the requirement for a
+  # `requires` entry, at the use for a fact.
+  defp missing(map, schemas) do
+    required =
+      for {slot, %{requires: requires}} when is_map(requires) <- Map.get(map, :sources, %{}),
+          {:ok, schema} <- [Map.fetch(schemas, slot)],
+          {field, keys} when is_list(keys) <- requires,
+          key <- keys,
+          Schema.fetch(schema, field, key) == :error,
+          do: {[:sources, slot, :requires, field], {:missing_attribute, slot, field, key}}
+
+    read =
+      for {path, %Fact{source: s, field: f, key: k}} <- uses(map),
+          {:ok, schema} <- [Map.fetch(schemas, s)],
+          Schema.fetch(schema, f, k) == :error,
+          do: {path, {:missing_attribute, s, f, k}}
+
+    required ++ read
+  end
+
+  # A field whose declared type the schema contradicts (spec/14 §7.4).
+  defp disagreements(slots, schemas) when is_map(slots) do
+    for {slot, schema} <- schemas,
+        %{types: types} when is_map(types) <- [Map.get(slots, slot)],
+        {field, declared} <- types,
+        {:ok, described} <- [Schema.fetch(schema, field, :type)],
+        described != declared,
+        do: {[:sources, slot, :types, field], {:schema_type, field, declared, described}}
+  end
+
+  defp disagreements(_slots, _schemas), do: []
+
+  # Only a chart whose contract held reaches this: every fact's slot has a schema that
+  # gives the attribute.
+  defp value(%Fact{source: s, field: f, key: k}, _path, schemas) do
+    {:ok, value} = Schema.fetch(Map.fetch!(schemas, s), f, k)
+    {value, []}
+  end
+
+  defp value(other, _path, _schemas), do: {other, []}
+end
