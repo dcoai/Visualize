@@ -17,6 +17,18 @@ release it merely follows.
 
 ### Added
 
+- **A theme is a stored, versioned value** (#561, D-139). `Visualize.Chart.Theme` writes a
+  theme as a document — `to_map/1` is `%{version: 2, theme: node}`, `to_json/1` the stamped
+  `{"$version": 2, "theme": {…}}` — and `from_map/2` and `from_json/2` read one back to a
+  `%Visualize.Theme{}` under the same rules as a design: a newer theme is refused by name
+  before a key is read, `limits:` bound it, an older one migrates, and a broken ramp or role
+  is the validator's `{:contract, message}` at its path. A document that only names a theme
+  that is not built-in is the new fault `{:unknown_theme, name}`.
+- **A host ships a theme through the builder's store** (#561).
+  `Visualize.Chart.Builder.Store.theme/2` loads a stored theme by the name it gives itself,
+  and the builder's preview draws a design whose `theme:` names a stored theme in it.
+  `Visualize.Chart.Fragment.read_json/2` is `from_json/2` with the version the document was
+  stamped with.
 - **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
   `time_format/2` picks a `Visualize.Format.time/2` specifier from a time domain's span and
   the interval its ticks use — `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,

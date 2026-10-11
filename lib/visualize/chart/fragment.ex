@@ -309,6 +309,27 @@ defmodule Visualize.Chart.Fragment do
              | {:limits, [Visualize.Chart.Validator.error(), ...]}
              | {:missing_dependency, :jason}}
   def from_json(json, opts \\ []) when is_binary(json) do
+    with {:ok, fragment, _version} <- read_json(json, opts), do: {:ok, fragment}
+  end
+
+  @doc """
+  `from_json/2` with the version the document was stamped with: `{:ok, fragment, version}`,
+  the current version for a document with no stamp (spec/14 §9.3, D-139). A reader that
+  migrates what it reads — a theme document — needs the version to migrate from, which
+  `from_json/2` drops. The errors are `from_json/2`'s.
+
+      iex> {:ok, json} = Visualize.Chart.Fragment.to_json(%{theme: %{axis: "#666666"}})
+      iex> Visualize.Chart.Fragment.read_json(json)
+      {:ok, %{theme: %{axis: "#666666"}}, 2}
+  """
+  @spec read_json(String.t(), keyword()) ::
+          {:ok, map(), pos_integer()}
+          | {:error,
+             {:json, String.t()}
+             | {:newer_schema, pos_integer(), pos_integer()}
+             | {:limits, [Visualize.Chart.Validator.error(), ...]}
+             | {:missing_dependency, :jason}}
+  def read_json(json, opts \\ []) when is_binary(json) do
     if Code.ensure_loaded?(Jason) do
       limits = opts |> Keyword.get(:limits, []) |> Limits.new()
 
@@ -328,7 +349,7 @@ defmodule Visualize.Chart.Fragment do
     with :ok <- Migration.readable(stamp),
          :ok <- Migration.readable(Map.get(term, "version")) do
       case Limits.structure(term, limits) do
-        [] -> {:ok, Codec.decode(term)}
+        [] -> {:ok, Codec.decode(term), stamp || Migration.current()}
         errors -> {:error, {:limits, errors}}
       end
     end

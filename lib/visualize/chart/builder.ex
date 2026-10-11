@@ -482,7 +482,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 design={@design}
                 sources={@bound_pool}
                 vars={@bindings}
-                theme={@theme}
+                theme={@preview_theme}
                 selected={@entry.label}
                 steps={@steps}
                 target={@myself}
@@ -2602,7 +2602,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             Enum.find(nodes, &(&1.label == label)) || implied(label) || first_node(nodes, mine)
         end
 
-      errors = faults(kind, design, assigns, cycle)
+      preview_theme = preview_theme(assigns, design)
+      errors = faults(kind, design, Map.put(assigns, :theme, preview_theme), cycle)
       {tabs, children} = strip(nodes, entry, design, errors, layer == design, assigns.context)
 
       %{
@@ -2642,6 +2643,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         unplaced: Enum.map(keyless, &Stack.label(assigns.labels, Stack.get(assigns.uses, &1))),
         kind: kind,
         preview?: kind == :composite,
+        preview_theme: preview_theme,
         chart_rows: chart_rows(assigns),
         selected_index: Stack.index_of(assigns.uses, assigns.selected),
         chosen_index: chosen_index(assigns),
@@ -3056,6 +3058,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
           into: MapSet.new(),
           do: index
     end
+
+    # The theme the preview draws in: the host's when it gives one; else, for a design that
+    # names a theme that is not built-in, the store's theme of that name — the `theme:` of
+    # application supplied by the library, so a host ships a theme as a value (spec/14 §2.5,
+    # §9.3, D-139); else the design's own, `nil`.
+    defp preview_theme(%{theme: %Theme{} = theme}, _design), do: theme
+
+    defp preview_theme(%{store: store}, %{theme: name})
+         when store != nil and is_atom(name) and name != nil do
+      with nil <- Theme.builtin(name),
+           {:ok, theme} <- Store.theme(store, name) do
+        theme
+      else
+        _builtin_or_none -> nil
+      end
+    end
+
+    defp preview_theme(_assigns, _design), do: nil
 
     # A composite or a design is applied, so its faults are the design's; any other kind is
     # validated as that kind — per-kind validity (spec/14 §19.8).

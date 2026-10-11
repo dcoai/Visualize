@@ -147,6 +147,11 @@ defmodule Visualize.Chart.Validator.Words do
   def words({:json, message}), do: "JSON does not parse: #{message}"
   def words({:missing_dependency, :jason}), do: "needs the optional dependency Jason"
 
+  # A theme document that only names a theme (spec/14 §9.3, D-139).
+  def words({:unknown_theme, name}) do
+    "names the theme #{inspect(name)}, which is not built-in; a theme document holds the theme"
+  end
+
   def words({:unresolved, :var, name}) do
     "variable #{inspect(name)} has no value at application and no default"
   end
