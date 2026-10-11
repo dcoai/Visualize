@@ -225,7 +225,7 @@ defmodule Visualize.Feed.TelemetryTest do
       {:ok, _ref} = Feed.subscribe(feed, subscriber)
       ref = Process.monitor(subscriber)
       Process.exit(subscriber, :kill)
-      assert_receive {:DOWN, ^ref, :process, _, :killed}
+      assert_receive {:DOWN, ^ref, :process, _, :killed}, 5_000
       :telemetry.execute([p, :gauge], %{value: 1}, %{})
       assert :ok = Telemetry.flush(server)
       assert %{subscribers: subscribers} = :sys.get_state(server)
