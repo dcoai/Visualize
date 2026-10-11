@@ -2963,3 +2963,30 @@ and a *chrome* card of swatches — every series colour, then background, surfac
 | `Visualize.Chart.Builder.ThemeSheet.samples/0` | the fixed samples: each `%{id, title, design, sources}` |
 | `Visualize.Chart.Builder.ThemeSheet.drawable/1` | a theme whose undrawable ramps are the default's, so a sheet always draws |
 | `Visualize.Chart.Builder.Store.theme_entry/2` | `theme_entry(store, name)`: the stored theme entry `theme/2` reads, `{:ok, entry}` or `:error` |
+
+### 20.4 Ramps and roles, checked as they are edited
+
+**Implemented** (#563, D-139). The editor's *ramps* section shows each of the four ramps of spec/08 §7.5 as one `<div class="vis-builder-theme-ramp">`, `data-ramp` its name:
+
+- **the ramp drawn**: the colour at each of 24 evenly spaced positions, `Visualize.Theme.ramp/3` of the theme being edited, so the Lab interpolation between anchors is what a person sees; on `status`, the three status roles are marked at their positions, 0, 0.5 and 1;
+- **the lightness strip** beneath it: each of those colours' CIE L* drawn as the grey of that lightness (`Visualize.Color.lab(l, 0, 0)`), the anchors' L* written under it, because lightness is what a reader with no hue at all reads and what the monotonic-lightness contract protects;
+- **the anchors**: a colour input each (`ramps.<name>.<i>`) with an **×** (`theme_anchor_remove`, offered while the ramp has more than two), and **+** (`theme_anchor_add`), which **resamples** the ramp at one more evenly spaced anchor — each new anchor the colour the ramp had at its position — so adding an anchor changes the ramp as little as the even spacing allows, and the new one is there to be moved;
+- **its violation**: where the ramp breaks its contract, the section carries `vis-builder-theme-ramp-broken` and a `<p class="vis-builder-theme-violation">` with the contract's own words (spec/08 §7.5), so the fault is shown on the ramp it concerns.
+
+The *roles* section lists the five roles. `:good`, `:warning` and `:bad` stand **at fixed positions** of `status` — 0, 0.5 and 1 — which the library fixes (D-135) and the editor shows but does not move: a role is set by the colour at its position. Each status role's colour input (`roles.good`, `roles.warning`, `roles.bad`) writes the status anchor that stands at its position — the first, the middle, the last; `status` with an even number of anchors has none at 0.5, so `:warning` is shown as the interpolated colour with the note *add an anchor to set it* and its input disabled. `:info` and `:neutral` are colours of their own (`roles.info`, `roles.neutral`). A role that breaks its contract carries its violation beneath it.
+
+**Every edit is checked.** The checks are `Visualize.Theme.violations/1` — the contract of spec/08 §7.5 run on each ramp and role alone, so every broken one is named and not only the first — run on every render of the mode, which is every edit. The *validity* section lists the theme's faults by per-kind validity (§20.2); a theme with a violation is not valid, so *Save to library* refuses it with the fault (§19.9) and nothing saves a broken theme as a valid one. The theme still draws on the sheet, unchecked, while it is being fixed (§20.3).
+
+### 20.5 Colour-vision simulation
+
+**Implemented** (#563, D-139). The editor's *vision* control (`<select name="vision">`, `theme_vision`) is one of *normal*, *deuteranopia*, *protanopia* and *tritanopia*, kept as the builder's `vision` while a person works, not stored in the theme. Under a deficiency:
+
+- each ramp is drawn a second time as the deficiency sees it, `Visualize.Color.Vision.simulate/2` of each of its 24 colours, labelled with the deficiency, between the ramp and its lightness strip;
+- the preview sheet is drawn as the deficiency sees it: every sample's and every added design's markup through `Visualize.Color.Vision.recolour/2`, and the chrome card's swatches through `simulate/2`. The sheet is rendered with literal colours (§20.3), so every colour in it is simulated, an interpolated ramp colour as it is drawn rather than an interpolation of simulated anchors.
+
+The simulation is Machado, Oliveira and Fernandes (2009) at severity 1.0 (spec/08 §1.8): a model of the commonest dichromacies for judging by eye, not a measurement of any reader.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Themes.anchor_added/2` | `anchor_added(node, ramp)`: the node with the ramp resampled at one more evenly spaced anchor |
+| `Visualize.Chart.Builder.Themes.anchor_removed/3` | `anchor_removed(node, ramp, i)`: the node without the ramp's anchor at `i`; two anchors stay |
