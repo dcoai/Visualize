@@ -48,6 +48,21 @@ release it merely follows.
   scale spreads its domain end to end (three states draw as `:good`, `:warning`, `:bad`); on a
   threshold scale its buckets; on a sequential or diverging scale it interpolates the ramp.
   JSON writes a ramp as `{"$ramp": "status"}` and a position as `{"$ramp": ["status", 0.5]}`.
+- **A feed can describe its fields: `Visualize.Data.Schema`** (#551, D-136). `new/1` takes
+  a map from field name to a description of what the field *means*: `type` (required),
+  `unit`, `quantity`, `label`, `order`, `status` (a state to a role such as `:good`,
+  `:warning` or `:bad`), `polarity`, `target` and `continuity`. A schema never names a
+  colour: `color`, `colors`, `palette`, `fill` and the like are refused, because a theme
+  chooses colour from the meaning. Each schema has a `version`, a SHA-256 content hash that
+  is the same on every node and under every release, so a version can cross a wire.
+- **`Visualize.Data.Schema.Cache`**: schemas held by `{feed, version}` as a plain value you
+  keep in your own state. `resolve/4` answers a cached version without calling anything, and
+  calls the `describe` function you give it once for a version it has not seen.
+- **`%Visualize.Data.Delivery{}`**: one answer of a feed, holding its rows, the window
+  served, the resolution, `capped`, `reduced_by` and the schema version (never the schema).
+  `Visualize.Data.Table.rows/1` reads it, so it goes wherever a source goes:
+  `Visualize.Chart.apply/2`'s pool and a compiled chart's `tick/3`, `step/3`, `render/2`
+  and `svg/2`.
 
 ### Changed
 
@@ -69,6 +84,7 @@ release it merely follows.
 - **`ramps` and `roles` merge key by key** in `Theme.new/1` and `Theme.merge/2`, and a theme
   lacking one takes the default theme's — never a series colour.
 - `Theme.slots/1` and `Theme.colour_slots/1` include the five roles, after `surface`.
+- **Visualize now starts `:crypto`** (`extra_applications`), for the schema version's hash.
 
 ### Fixed
 

@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping), `Visualize.Data.Table` (tabular sources as rows) and `Visualize.Theme` (the colours, font and sizes every mark draws with). All are pure except `Random`, which reads and advances the calling process's `:rand` state.
+This document specifies the general-purpose modules used across the library: `Visualize.Color` (parsing, colour spaces and manipulation), `Visualize.Interpolate` (interpolator factories), `Visualize.Ease` (easing curves), `Visualize.Random` (seeded random variates), `Visualize.Data` (statistics and data shaping), `Visualize.Data.Table` (tabular sources as rows), `Visualize.Data.Schema` and `Visualize.Data.Delivery` (what a feed says about its fields, and one answer of a feed, §10) and `Visualize.Theme` (the colours, font and sizes every mark draws with). All are pure except `Random`, which reads and advances the calling process's `:rand` state.
 
 ## 1. Color
 
@@ -390,6 +390,7 @@ Parameterised variants: `poly_in/2`, `poly_out/2` and `poly_in_out/2` take an ex
 | A keyword list whose values are equal-length lists | One map per index, keyed by the keys. A keyword list is read as columns before rows, as `table` reads a list; `[{:a, [1]}]` is therefore one column. A keyword list whose lists differ in length is rows. |
 | A map whose values are equal-length lists | One map per index, keyed by the map's keys (atoms or strings, as given). Any other non-empty plain map raises `ArgumentError`. |
 | `%Nx.Tensor{}` of rank 2 | One tuple per row in column order, which is what the default `Visualize.Shape.Line` accessors read. Rank 1 yields the list of values; any other rank raises `ArgumentError`. |
+| `%Visualize.Data.Delivery{}` | The rows of the source it carries, read by this same table: a delivery is a feed's answer, its rows beside the facts of the answer (§10.4, #535). |
 | Any other struct | `Table.to_rows/1`: rows keyed by the reader's column names as it spells them (Explorer: strings), whether the reader traverses by rows or by columns. A struct with no `Table.Reader` impl raises `Protocol.UndefinedError`; a reader answering `:none` raises `ArgumentError`. |
 
 `[]`, `%{}` and the empty keyword list yield `[]`. A rank-1 tensor bound to a dense series stays a first-class source for `Visualize.Shape.LineNx` and the binary path; `Visualize.Data.Table.rows/1` does not stand between them.
@@ -606,3 +607,118 @@ The window **slides**: tick 25 over a window of 24 yields ticks 2..25, and the n
 | `Visualize.Data.FFT.windows/0` | The three window kinds, `:hann` first. |
 | `Visualize.Data.FFT.spectrum/2` | As `spectrum/3` with no options. |
 | `Visualize.Data.FFT.spectrum/3` | `spectrum(values, every, opts)`: the one-sided amplitude spectrum of the newest power of two of values sampled every `every` seconds (9.2). |
+
+## 10. Feeds: schemas and deliveries
+
+A feed is anything that answers a chart's source slot with rows (spec/14 §7.2). What the numbers *are* — a unit, a label, the order of a set of states, what a state means — is a fact about the feed, whoever draws it, and it is not repeated with every row: a feed has a **schema**, identified by a **version**, and each of its answers, a **delivery**, names the version it was produced under and never carries the schema itself (#535, D-136). This section is the data layer of that: the schema value, how its version is computed, the cache that holds schemas by version, and the delivery. How a design states what it needs from a schema and reads it is spec/14 §7.4; how a feed is asked for a schema is the feed behaviour's (#537).
+
+### 10.1 The schema
+
+`Visualize.Data.Schema` is a feed's schema: `%Visualize.Data.Schema{fields, version}`, where `fields` maps a field name — an atom or a string, as the feed's rows spell it — to its **description**, a map of the keys below, and `version` is the content hash of 10.2. `Visualize.Data.Schema.new/1` is the only constructor: it takes the map of descriptions, checks it, and returns `{:ok, schema}` or `{:error, errors}` with every fault found, each `{path, reason}` in the shape of spec/14 §10.1 — the path from the schema to the value, `[:latency, :unit]` — ordered by path. `Visualize.Data.Schema.new!/1` returns the schema or raises `ArgumentError` with every fault formatted by `Visualize.Data.Schema.format_error/1`.
+
+A description says what a field **means**, never how it is drawn:
+
+| Key | Value | For a field of type | Meaning |
+|---|---|---|---|
+| `type` | `:time`, `:number`, `:category` or `:text` | required, every field | what the column is, spec/14 §2.3's four |
+| `unit` | a non-empty string | `:number` | the unit the values are in: a [UCUM](https://ucum.org) code by convention (`"s"`, `"ms"`, `"By"`, `"%"`, `"Cel"`, `"{request}/s"`) |
+| `quantity` | an atom | `:number` | what the unit measures: `:duration`, `:information`, `:temperature`, … |
+| `label` | a string | every type | the field's name for a person: `"Request time"` |
+| `order` | a non-empty list of distinct strings, atoms or numbers | `:category` | the states in their order, first to last |
+| `status` | a map from a state to a role, an atom | `:category` | what each state means: `%{"ok" => :good, "warn" => :warning, "fail" => :bad}` |
+| `polarity` | `:higher_is_better`, `:lower_is_better` or `:neutral` | `:number` | which way the values are better; `:neutral` reads the distance from `target` either way |
+| `target` | a number | `:number` | the value the field is measured against |
+| `continuity` | a positive number, seconds | every type | the longest gap between two readings that is still one run: beyond it a line breaks |
+
+`Visualize.Data.Schema.attributes/0` is the nine keys in that order, the vocabulary spec/14 §7.4's contract names.
+
+Four of the keys are checked here only as far as this library owns them, and each has one place a later rule goes:
+
+- **`unit`** is any non-empty string for now. Whether it is a valid UCUM code is the units proposal's (#536), and that check replaces the one private function that accepts the string, so nothing else changes when it lands.
+- **`quantity`** is any atom other than `nil`, `true` and `false`. The fixed list of quantities is #536's as well; until it lands every atom is accepted.
+- **`status`**'s roles are the theme's vocabulary (#533: `:good`, `:warning`, `:bad`, `:info`, `:neutral`), whose names are meanings every theme must honour. They are carried here as atoms and not checked against a list, so a role #533 adds needs no change to the schema. When the description also gives `order`, every state `status` names MUST be one of `order`'s.
+- **`continuity`** is carried for the cell that draws a feed (#531 §3: gaps follow it); no mark reads it yet.
+
+**No colour.** A schema describes meaning, and colour is the theme's to choose from it (#533, #531's revision of 2026-10-11): a key `color`, `colour`, `colors`, `colours`, `palette`, `fill` or `stroke` in a description is the fault `{:colour_key, key}`, whose line says so and names the keys that carry the meaning instead (`status`, `order`, `polarity`, `quantity`). A literal colour is something only a design writes, as a deliberate choice; data never does.
+
+The faults of `new/1`:
+
+| Reason | Meaning |
+|---|---|
+| `{:type, :schema}` | at `[]`: the schema is not a map of descriptions |
+| `{:type, :name}` | at `[name]`: a field name that is not an atom (other than `nil`, `true`, `false`) or a non-empty string |
+| `{:duplicate_field, other}` | at `[name]`: the field is named twice, as an atom and as the string that spells it (`:v` and `"v"`), which are one column (6.2); reported at the later of the two by term order |
+| `{:type, :description}` | at `[name]`: the description is not a map |
+| `:unknown_key` | at `[name, key]`: a key that is not one of the nine |
+| `{:colour_key, key}` | at `[name, key]`: a colour, which a schema never names |
+| `:required` | at `[name, :type]`: the description gives no `type` |
+| `{:enum, allowed}` | at `[name, :type]` or `[name, :polarity]`: a value not among the allowed |
+| `{:invalid_for, type}` | at `[name, key]`: a key the field's type does not take — a `unit` on a `:category` field, an `order` on a `:number` one |
+| `{:type, expected}` | at `[name, key]`: a value of the wrong shape, `expected` one of `:unit`, `:name`, `:string`, `:order`, `:status`, `:number`, `:positive` |
+| `:duplicate` | at `[name, :order, i]`: a state `order` lists twice |
+| `:not_in_order` | at `[name, :status, state]`: a state `status` names that `order` does not list |
+
+`Visualize.Data.Schema.fetch/2` reads a field's description by either spelling of its name (6.2), `{:ok, description}` or `:error`; `Visualize.Data.Schema.fetch/3` reads one attribute of it, `{:ok, value}` or `:error` when the field or the attribute is absent.
+
+### 10.2 The version: a content hash
+
+A schema's version is a **content hash** of its fields and their descriptions, so an unchanged schema has the same version wherever and whenever it is computed — on another node, under another release of this library or of OTP — and any change of content, a renamed state or a new label, is a new version. It is a 64-character lowercase hexadecimal string, the SHA-256 of a canonical encoding:
+
+- The encoding begins with the line `visualize.schema/1\n`, which names the encoding itself: a change to the rules below is a deliberate change of this line and therefore of every version, never a silent one.
+- **A field name is encoded as its string**: `:latency` and `"latency"` are one column (6.2) and give one version, so a feed that names its fields with strings across a wire and one that names them with atoms in process agree.
+- **A value is encoded by its own tag, length-prefixed**: an atom as `a<n>:<name>` and a string as `s<n>:<bytes>`, `n` the byte size in decimal — so `:ok` and `"ok"` are different states, as they are different values in a row; an integer as `i<decimal>;`; a float as `f<shortest>;`, the shortest decimal that reads back as the same float (`:erlang.float_to_binary(f, [:short])`), so `1` and `1.0` are different values; a list as `l<n>:` and its elements in order, since order is meaning in `order`.
+- **A map is encoded with its entries sorted by the encoding of their keys**, as `m<n>:` and each key's encoding followed by its value's. Nothing depends on a map's iteration order, which the runtime does not promise, nor on term order between different types.
+- Nothing is encoded through `:erlang.term_to_binary/2`, whose external format may change between OTP releases (its atom encoding did) and whose `:deterministic` option promises only one release.
+
+The fields map is a map like any other, so the schema is `m<n>:` and its fields by name. The schema `%{v: %{type: :number}}` is therefore the bytes `visualize.schema/1\nm1:s1:vm1:a4:typea6:number`, and its version is `39b0c8eff6adfa6c6c9ada7fb3ee3a308675a1a5869afcd1ef1aca19378d0a81`, which any SHA-256 tool gives for those bytes. `Visualize.Data.Schema.version/1` returns a schema's version, which `new/1` computes once. The test suite pins the version of one schema as a literal string, so a change to the encoding fails a test before it changes a version in the field.
+
+### 10.3 The cache
+
+Schemas are cached by `{feed, version}`: a delivery whose version is already known costs a map lookup and nothing more, and a delivery with a version not seen before makes the holder ask the feed for its schema once (#531 review A). `Visualize.Data.Schema.Cache` is that cache as a **value** — `%Visualize.Data.Schema.Cache{entries}`, a map from `{feed, version}` to schema — not a process and not a table: the thing that owns it (a board's process, #531 §2; for now the caller of `Visualize.Chart.apply/2`, spec/14 §7.3) holds it in its own state and passes it in, and gets the grown cache back. A feed is any term that names one, as the pool of spec/14 §7.2 names a source.
+
+`Visualize.Data.Schema.Cache.new/0` is the empty cache and `new/1` one holding a list of `{feed, schema}` pairs; `put/3` adds a schema for a feed under its own version; `fetch/3` is `{:ok, schema}` or `:error` for a feed and a version. `Visualize.Data.Schema.Cache.resolve/4` takes the cache, a feed, a version and a **describe** function — `(feed -> {:ok, schema} | {:error, reason})`, the pull side of the feed behaviour (#537), or `nil` — and returns:
+
+- `{:ok, schema, cache}`, the cache unchanged, when the version is cached: describe is not called;
+- `{:ok, schema, cache}` with the schema added, when describe answers the version asked for: it is called **once**;
+- `{:error, {:schema_version, feed, version, got}, cache}` when describe answers a schema of another version `got`: the delivery is older or newer than the feed's present schema and is not described by it. The answer is still cached under its own version, so the next delivery, which names it, costs nothing;
+- `{:error, {:describe, feed, reason}, cache}` when describe answers `{:error, reason}`;
+- `{:error, {:unknown_schema, feed, version}, cache}` when the version is not cached and there is no describe.
+
+The cache never evicts: a schema is a few hundred bytes and a feed's versions change when its catalog does, so its owner replaces the value when it wants it smaller.
+
+### 10.4 The delivery
+
+`%Visualize.Data.Delivery{}` is one answer of a feed: the rows, and the facts of this answer that are not facts of the data — a handful of terms per delivery, never per row (#531 review C, §1 of the further considerations).
+
+| Field | Value | Default |
+|---|---|---|
+| `rows` | any source of 6.1 other than a delivery: a row list, a column map, a tensor, a `Table.Reader` struct | required |
+| `window` | `[from, to]`, the window actually served, or `nil` | `nil` |
+| `resolution` | the spacing of the rows as served — seconds, or a name such as `:minute` — or `nil` | `nil` |
+| `capped` | whether the feed stopped short of the window it was asked for | `false` |
+| `reduced_by` | `:feed` when the feed reduced the rows to a budget, `:visualize` when this library did, or `nil` | `nil` |
+| `schema` | the version (10.2) of the schema the rows were produced under, or `nil` | `nil` |
+
+`Visualize.Data.Delivery.new/2` takes the rows and the other fields as a keyword list, and raises `ArgumentError` for a key that is not a field or a value that is not one of the field's (`window` of other than two, `capped` not a boolean, `reduced_by` other than the three, `schema` not a string, `rows` a delivery). A delivery is **one more source shape**: `Visualize.Data.Table.rows/1` reads it as the rows of the source it carries (6.1), so it goes wherever a source goes, and `Visualize.Data.Delivery.source/1` is that source — any other source returned as it is. `Visualize.Chart.apply/2` binds a delivery as the source it carries, and a compiled chart's `tick/3`, `step/3`, `render/2` and `svg/2` take one per slot as they take any source (spec/14 §7.3, §12.4); what the schema version means to them is spec/14 §7.4 and §12.1.
+
+A delivery is data like a design: a struct with no function in it, which a codec can hold (#531's *a chart is data, not JSON*).
+
+### 10.5 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Data.Schema.new/1` | `{:ok, schema}` for a map of field descriptions that holds (10.1), else `{:error, errors}` by path. |
+| `Visualize.Data.Schema.new!/1` | The schema, or `ArgumentError` listing every fault. |
+| `Visualize.Data.Schema.version/1` | The schema's version, the SHA-256 of its canonical encoding as 64 hex digits (10.2). |
+| `Visualize.Data.Schema.fetch/2` | A field's description by either spelling of its name, `{:ok, description}` or `:error`. |
+| `Visualize.Data.Schema.fetch/3` | One attribute of a field's description, `{:ok, value}` or `:error`. |
+| `Visualize.Data.Schema.attributes/0` | The nine description keys, `:type` first (10.1). |
+| `Visualize.Data.Schema.format_error/1` | One fault of `new/1` as a line a person reads. |
+| `Visualize.Data.Schema.Cache.new/0` | The empty cache. |
+| `Visualize.Data.Schema.Cache.new/1` | A cache holding `{feed, schema}` pairs, each under its own version. |
+| `Visualize.Data.Schema.Cache.put/3` | The cache with a feed's schema added under its version. |
+| `Visualize.Data.Schema.Cache.fetch/3` | `{:ok, schema}` or `:error` for a feed and a version. |
+| `Visualize.Data.Schema.Cache.resolve/4` | A feed's schema at a version: cached, or asked of `describe` once and cached (10.3). |
+| `Visualize.Data.Delivery.new/1` | `new(rows, [])`: a delivery of the rows and no other fact. |
+| `Visualize.Data.Delivery.new/2` | A delivery of the rows with the given facts, checked (10.4). |
+| `Visualize.Data.Delivery.source/1` | The source a delivery carries; any other source as it is. |

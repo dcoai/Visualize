@@ -7,7 +7,7 @@ defmodule Visualize.Chart.Template do
 
   alias Visualize.Chart
   alias Visualize.Chart.{Schema, Text, Validator, Var}
-  alias Visualize.Data.Table
+  alias Visualize.Data.{Delivery, Table}
 
   @doc false
   # The chart with every variable resolved from the given values or the declared
@@ -130,6 +130,8 @@ defmodule Visualize.Chart.Template do
       Enum.reduce(slots, {%{}, []}, fn {name, slot}, {bound, errors} ->
         case lookup(pool, name, slot) do
           {:ok, source} ->
+            # A delivery binds as the source it carries (spec/08 §10.4).
+            source = Delivery.source(source)
             {Map.put(bound, name, source), errors ++ missing_fields(slot, source, name)}
 
           :error ->

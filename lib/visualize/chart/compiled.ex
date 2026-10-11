@@ -52,6 +52,7 @@ defmodule Visualize.Chart.Compiled do
   alias Visualize.Chart.Compiled.{Motion, Regions, Transition, Window}
   alias Visualize.Chart.Frame.{Defs, Furniture, Scales}
   alias Visualize.Chart.Transform.Force
+  alias Visualize.Data.Delivery
   alias Visualize.IR.{Element, Transform}
 
   @default_ceiling 1000
@@ -333,6 +334,7 @@ defmodule Visualize.Chart.Compiled do
   """
   @spec render(t(), map()) :: map()
   def render(%__MODULE__{} = compiled, sources) when is_map(sources) do
+    sources = sources!(compiled, sources)
     {frame, hi} = realise(compiled, sources, nil)
     drawn = drawn(compiled, frame, sources, hi, true)
     canvas = layer(compiled, drawn, :canvas, false)
@@ -357,6 +359,7 @@ defmodule Visualize.Chart.Compiled do
   """
   @spec svg(t(), map()) :: String.t()
   def svg(%__MODULE__{} = compiled, sources) when is_map(sources) do
+    sources = sources!(compiled, sources)
     {frame, hi} = realise(compiled, sources, nil)
     children = layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true)
 
@@ -376,6 +379,7 @@ defmodule Visualize.Chart.Compiled do
   """
   @spec step(t(), map(), keyword()) :: {Element.t(), t()}
   def step(%__MODULE__{} = compiled, sources, opts \\ []) when is_map(sources) do
+    sources = sources!(compiled, sources)
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
     compiled = %{compiled | forces: Force.warm(frame.forces)}
@@ -467,6 +471,7 @@ defmodule Visualize.Chart.Compiled do
   """
   @spec tick(t(), map(), keyword()) :: {payload(), t()}
   def tick(%__MODULE__{} = compiled, sources, opts) when is_map(sources) do
+    sources = sources!(compiled, sources)
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
     compiled = %{compiled | forces: Force.warm(frame.forces)}
@@ -513,6 +518,11 @@ defmodule Visualize.Chart.Compiled do
   end
 
   # -- per tick -------------------------------------------------------------------------
+
+  # The tick's sources as the chart reads them: a delivery is the source it carries
+  # (spec/08 §10.4).
+  defp sources!(_compiled, sources),
+    do: Map.new(sources, fn {name, source} -> {name, Delivery.source(source)} end)
 
   # The frame of a tick: realised over the sources, its viewport scale windowed. With the
   # window's upper end given — what a run passes every tick — the scale's domain is known
