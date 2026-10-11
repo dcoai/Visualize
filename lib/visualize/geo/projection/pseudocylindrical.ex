@@ -8,6 +8,8 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
   translation and rotation are applied by the parent module.
   """
 
+  import Visualize.Geo.Math, only: [asin: 1, sqrt: 1]
+
   @deg_to_rad :math.pi() / 180
   @rad_to_deg 180 / :math.pi()
   @sqrt2 :math.sqrt(2)
@@ -64,8 +66,8 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
   end
 
   defp mollweide_invert(x, y, _proj) do
-    theta = :math.asin(y / @sqrt2)
-    lat = :math.asin((2 * theta + sin(2 * theta)) / :math.pi())
+    theta = asin(y / @sqrt2)
+    lat = asin((2 * theta + sin(2 * theta)) / :math.pi())
     lon = :math.pi() * x / (2 * @sqrt2 * cos(theta))
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
@@ -77,15 +79,20 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
     do: theta
 
   defp newton_raphson_mollweide(phi, theta, iterations) do
-    f = 2 * theta + sin(2 * theta) - :math.pi() * sin(phi)
-    df = 2 + 2 * cos(2 * theta)
+    case 2 + 2 * cos(2 * theta) do
+      # Within rounding of a pole the derivative is zero too, and the start is the root to
+      # the last bit (spec/07 §1.2, #566).
+      df when df == 0 ->
+        theta
 
-    new_theta = theta - f / df
+      df ->
+        new_theta = theta - (2 * theta + sin(2 * theta) - :math.pi() * sin(phi)) / df
 
-    if abs(new_theta - theta) < 0.0001 do
-      new_theta
-    else
-      newton_raphson_mollweide(phi, new_theta, iterations - 1)
+        if abs(new_theta - theta) < 0.0001 do
+          new_theta
+        else
+          newton_raphson_mollweide(phi, new_theta, iterations - 1)
+        end
     end
   end
 
@@ -122,8 +129,8 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
   end
 
   defp eckert4_invert(x, y, _proj) do
-    theta = :math.asin(y / @eckert4_cy)
-    lat = :math.asin((theta + sin(theta) * cos(theta) + 2 * sin(theta)) / @eckert4_c)
+    theta = asin(y / @eckert4_cy)
+    lat = asin((theta + sin(theta) * cos(theta) + 2 * sin(theta)) / @eckert4_c)
     lon = x / (@eckert4_cx * (1 + cos(theta)))
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
@@ -160,9 +167,9 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
   end
 
   defp hammer_invert(x, y, _proj) do
-    z = :math.sqrt(1 - x / 4 * (x / 4) - y / 2 * (y / 2))
+    z = sqrt(1 - x / 4 * (x / 4) - y / 2 * (y / 2))
     lon = 2 * :math.atan2(z * x, 2 * (2 * z * z - 1))
-    lat = :math.asin(z * y)
+    lat = asin(z * y)
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
 
@@ -202,7 +209,7 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
 
   defp collignon_invert(x, y, _proj) do
     alpha = 1 - y / @collignon_k
-    lat = :math.asin(1 - alpha * alpha)
+    lat = asin(1 - alpha * alpha)
     lon = if alpha > 0.001, do: @collignon_k * x / (2 * alpha), else: 0
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
@@ -240,7 +247,7 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
 
   defp eckert2_invert(x, y, _proj) do
     s = 2 - abs(y) / :math.sqrt(2 * :math.pi() / 3)
-    lat = :math.asin((4 - s * s) / 3) * if y < 0, do: -1, else: 1
+    lat = asin((4 - s * s) / 3) * if y < 0, do: -1, else: 1
     lon = x / (2 / :math.sqrt(6 * :math.pi()) * s)
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
@@ -252,7 +259,7 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
     lat_rad = lat * @deg_to_rad
 
     k = :math.sqrt(:math.pi() * (4 + :math.pi()))
-    x = 2 / k * lon_rad * (1 + :math.sqrt(1 - 4 * lat_rad * lat_rad / (:math.pi() * :math.pi())))
+    x = 2 / k * lon_rad * (1 + sqrt(1 - 4 * lat_rad * lat_rad / (:math.pi() * :math.pi())))
     y = 4 / k * lat_rad
     {x, y}
   end
@@ -260,7 +267,7 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
   defp eckert3_invert(x, y, _proj) do
     k = :math.sqrt(:math.pi() * (4 + :math.pi()))
     lat = k * y / 4
-    lon = k * x / (2 * (1 + :math.sqrt(1 - 4 * lat * lat / (:math.pi() * :math.pi()))))
+    lon = k * x / (2 * (1 + sqrt(1 - 4 * lat * lat / (:math.pi() * :math.pi()))))
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
 
@@ -301,7 +308,7 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
 
   defp eckert6_invert(x, y, _proj) do
     theta = @eckert6_k * y / 2
-    lat = :math.asin((theta + sin(theta)) / (1 + :math.pi() / 2))
+    lat = asin((theta + sin(theta)) / (1 + :math.pi() / 2))
     lon = @eckert6_k * x / (1 + cos(theta))
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
@@ -340,8 +347,8 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
   end
 
   defp wagner4_invert(x, y, _proj) do
-    theta = :math.asin(y / @wagner4_cy)
-    lat = :math.asin((2 * theta + sin(2 * theta)) / :math.pi())
+    theta = asin(y / @wagner4_cy)
+    lat = asin((2 * theta + sin(2 * theta)) / :math.pi())
     lon = x / (@wagner4_cx * cos(theta))
     {lon * @rad_to_deg, lat * @rad_to_deg}
   end
@@ -461,18 +468,24 @@ defmodule Visualize.Geo.Projection.Pseudocylindrical do
     phi0_rad = phi0 * @deg_to_rad
 
     lat = y + phi0_rad
+    half = :math.pi() / 4 + lat / 2
 
-    if abs(y) < 0.001 do
-      lon = x / cos(phi0_rad)
-      {lon * @rad_to_deg, lat * @rad_to_deg}
-    else
-      lon =
-        x *
-          :math.log(
-            :math.tan(:math.pi() / 4 + lat / 2) / :math.tan(:math.pi() / 4 + phi0_rad / 2)
-          ) / y
+    cond do
+      abs(y) < 0.001 ->
+        lon = x / cos(phi0_rad)
+        {lon * @rad_to_deg, lat * @rad_to_deg}
 
-      {lon * @rad_to_deg, lat * @rad_to_deg}
+      # The pole the forward projection put at x = 0, as loximuthalRaw.invert does, where
+      # the logarithm below is infinite; past it, too (spec/07 §1.2, #566).
+      half < 1.0e-6 or half > :math.pi() / 2 - 1.0e-6 ->
+        {0.0, lat * @rad_to_deg}
+
+      true ->
+        lon =
+          x *
+            :math.log(:math.tan(half) / :math.tan(:math.pi() / 4 + phi0_rad / 2)) / y
+
+        {lon * @rad_to_deg, lat * @rad_to_deg}
     end
   end
 

@@ -11,6 +11,7 @@ defmodule Visualize.Geo.PolygonContains do
   # crossing is skipped the same way here.
 
   import Bitwise
+  import Visualize.Geo.Math, only: [asin: 1]
 
   alias Visualize.Geo.{Adder, Cartesian}
 
@@ -110,8 +111,8 @@ defmodule Visualize.Geo.PolygonContains do
     intersection = arc && Cartesian.normalize(Cartesian.cross(normal, arc))
 
     case intersection do
-      {_, _, z} when z >= -1 and z <= 1 ->
-        phi_arc = if(flipped, do: -1, else: 1) * :math.asin(z)
+      {_, _, z} ->
+        phi_arc = if(flipped, do: -1, else: 1) * asin(z)
         {a0, a1, _} = arc
 
         if phi > phi_arc or (phi == phi_arc and (a0 != 0 or a1 != 0)) do
