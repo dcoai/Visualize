@@ -1137,7 +1137,7 @@ The resolution, binding and schema faults are reported by `Visualize.Chart.apply
 
 ### 11.1 Encoding
 
-**Implemented.** `Visualize.Chart.to_json/1` and `Visualize.Chart.from_json/1` are the map round-trip over a JSON document, behind the optional `Jason` dependency: `mix.exs` declares `{:jason, "~> 1.4", optional: true}`, `Visualize.Chart` declares `@compile {:no_warn_undefined, Jason}` (D-50), and without Jason both return `{:error, {:missing_dependency, :jason}}` while everything else works. `scripts/consumer_check.exs` asserts that `Jason` is absent from a bare consumer. The encoding is schema-driven: keys are strings, a `:name`, `:field`, `:slot` or enumerated atom is its string, and `from_json/1` reads each string back as the atom the schema says it is. A design is authored, not data — its names are the author's vocabulary — so decoding creates the atoms a design names; a consumer that loads designs from an untrusted source bounds them itself. What the reader does bound is fixed by §9: a newer document is refused before a key of it is decoded (§9.1), and a document's nesting and the size of its lists and maps are checked against the limits of §9.2 before decoding too, so neither a newer schema nor an oversized document makes an atom.
+**Implemented.** `Visualize.Chart.to_json/1` and `Visualize.Chart.from_json/1` are the map round-trip over a JSON document, behind the optional `Jason` dependency: `mix.exs` declares `{:jason, "~> 1.4", optional: true}`, `Visualize.Chart` declares `@compile {:no_warn_undefined, Jason}` (D-50), and without Jason both return `{:error, {:missing_dependency, :jason}}` while everything else works. `scripts/consumer_check.exs` asserts that `Jason` is absent from a bare consumer. The encoding is schema-driven: keys are strings, a `:name`, `:field`, `:slot` or enumerated atom is its string, and `from_json/1` reads each string back as the atom the schema says it is. Where a key may be a string or an enumerated atom (an axis's `format`, §4.4), a string naming a member of the enumeration reads back as that member, so `"duration"` is `:duration` and never a format string (#554, D-144). A design is authored, not data — its names are the author's vocabulary — so decoding creates the atoms a design names; a consumer that loads designs from an untrusted source bounds them itself. What the reader does bound is fixed by §9: a newer document is refused before a key of it is decoded (§9.1), and a document's nesting and the size of its lists and maps are checked against the limits of §9.2 before decoding too, so neither a newer schema nor an oversized document makes an atom.
 
 ### 11.2 Tagged terms
 
@@ -1148,6 +1148,7 @@ The resolution, binding and schema faults are reported by `Visualize.Chart.apply
 | `%Visualize.Chart.Var{name: :unit}` | `{"$var": "unit"}` |
 | `{:field, :sha}` | `{"$field": "sha"}` |
 | `{:series, 3}` | `{"$series": 3}` |
+| `{:scale, :min}`, a channel at its scale's own end (§5.2) | `{"$scale": "min"}`, the end; an end other than `min` or `max` is left as it was read, never made into an atom (#554) |
 | `{:paint, :area}` (a colour, §3.2) | `{"$paint": "area"}` |
 | `{:ramp, :status, 0.5}` (a colour, §3.2) | `{"$ramp": ["status", 0.5]}`, the ramp and the position (#533) |
 | `{:ramp, :status}` (a range, §4.3) | `{"$ramp": "status"}` (#533) |
@@ -1165,7 +1166,7 @@ The resolution, binding and schema faults are reported by `Visualize.Chart.apply
 | an atom in a `:term` position | `{"$atom": "series_1"}` |
 | `nil` | `null` |
 
-Everything else — numbers, strings, booleans, lists, maps — is its JSON self. `from_json(to_json(chart))` is `chart` for every valid chart.
+Everything else — numbers, strings, booleans, lists, maps — is its JSON self. `from_json(to_json(chart))` is `chart` for every valid chart. Every term a design may hold that JSON has no form for has a row here: a tuple a validator accepts in any position without one would make `to_json/1` fail on a valid chart, so the gallery holds every design to the round trip (#554).
 
 ## 12. Compilation
 
