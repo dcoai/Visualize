@@ -53,6 +53,28 @@ release it merely follows.
   a contract; its colour wells draw the theme unchecked.
 - **Fixed:** a non-composite chart in the builder (a style, a theme) no longer reports its
   own `version` stamp as a fault of its kind.
+- **`Visualize.Board`: a dashboard as data** (#539, D-141). A board lays designs out on a
+  12-column grid (metresis's, so a panel maps to a cell field for field). Each cell is
+  `{x, y, w, h}` and a `{:composite, n}` reference to a component in your store, which may
+  be a composite or a flat design. The cells share a UTC `window` (`%{last: seconds}` or
+  `%{from, to}`), a display `zone`, board `vars` and a `sync` group, but never geometry: a
+  board never flattens. Below `layout.breakpoint` (768 px) the cells stack full width in
+  reading order (`arrange/2`, `boxes/2`). Board variables are the defaults of every cell's
+  component variables, and a cell may override one. `to_map`/`from_map` and
+  `to_json`/`from_json` round-trip a board. The JSON is stamped `"$version"`, and a newer
+  board is refused as `{:newer_schema, needs, this}` before anything is read. `limits:`
+  applies, and the defaults apply when it is not given. `validate/1` reports off-grid and
+  overlapping cells, a bad window and wrong-kind refs. `validate/3`, given a store (a fetch
+  function or an id map), adds dangling refs, cycles, components that are not designs,
+  undeclared cell variables, and cells whose component cannot join the board's sync group
+  (set `sync: false` on those). `required_sources/3` lists every slot keyed `{cell, slot}`
+  with its `fields`, `types` and `requires` contract, so one design in two cells binds to
+  two feeds. `realise/4` applies every cell at its box's size, purely.
+- **`Visualize.Board.Binding`** (#539): which feed fills each `{cell, slot}`, supplied by
+  your connector and never stored in the board. `check/3` reports every unbound slot,
+  every contract a feed's schema cannot meet (with `apply/2`'s reasons), and every binding
+  to a slot no cell declares. `pools/2` builds one pool per cell from your sources.
+
 - **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
   `time_format/2` picks a `Visualize.Format.time/2` specifier from a time domain's span and
   the interval its ticks use — `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,
