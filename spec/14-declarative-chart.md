@@ -2988,5 +2988,6 @@ The simulation is Machado, Oliveira and Fernandes (2009) at severity 1.0 (spec/0
 
 | Function | Contract |
 |---|---|
+| `Visualize.Chart.Builder.ThemeRamps.section/1` | the *ramps* and *roles* sections of the editor (§20.4): each ramp drawn, under the chosen deficiency (§20.5) and as its lightness, its anchors and its violation; each role at its position |
 | `Visualize.Chart.Builder.Themes.anchor_added/2` | `anchor_added(node, ramp)`: the node with the ramp resampled at one more evenly spaced anchor |
 | `Visualize.Chart.Builder.Themes.anchor_removed/3` | `anchor_removed(node, ramp, i)`: the node without the ramp's anchor at `i`; two anchors stay |

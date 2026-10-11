@@ -257,6 +257,39 @@ defmodule Visualize.Theme do
   end
 
   @doc """
+  Every ramp and role of the theme that breaks its meaning contract (spec/08 §7.5), as
+  `{subject, message}` in the order `check/1` reads them — the contract run on each alone,
+  so a theme editor names every fault where it is and not only the first (spec/14 §20.4).
+
+      iex> theme = %{Visualize.Theme.default() | ramps: %{status: ~w(#c23238 #bd7407 #4ca34b)}, roles: %{neutral: "#ff0000"}}
+      iex> theme |> Visualize.Theme.violations() |> Enum.map(&elem(&1, 0))
+      [{:ramp, :status}, {:role, :neutral}]
+      iex> Visualize.Theme.violations(Visualize.Theme.dark())
+      []
+
+  """
+  @spec violations(t()) :: [{{:ramp | :role, atom()}, String.t()}]
+  def violations(%__MODULE__{ramps: ramps, roles: roles}) when is_map(ramps) and is_map(roles) do
+    ramp_faults =
+      for name <- ordered(ramps, Contract.ramps()),
+          {:error, subject, message} <- [Contract.check(Map.take(ramps, [name]), %{})],
+          do: {subject, message}
+
+    role_faults =
+      for name <- ordered(roles, Contract.roles()),
+          {:error, subject, message} <- [Contract.check(%{}, Map.take(roles, [name]))],
+          do: {subject, message}
+
+    ramp_faults ++ role_faults
+  end
+
+  # The names of a map in the contract's order, then any it does not know, sorted.
+  defp ordered(map, known) do
+    keys = Map.keys(map)
+    Enum.filter(known, &(&1 in keys)) ++ Enum.sort(keys -- known)
+  end
+
+  @doc """
   The colour at `t` along the theme's ramp `name`, as a literal: the anchors are spread
   evenly over `0..1` and interpolated in CIE Lab, a position on an anchor is the anchor as
   written, and `t` is clamped to `0..1` (spec/08 §7.5). A theme that lacks the ramp takes

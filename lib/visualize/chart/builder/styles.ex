@@ -2776,6 +2776,86 @@ if Code.ensure_loaded?(Phoenix.Component) do
       cursor: pointer;
     }
 
+    /* A ramp as the theme draws it, as a deficiency sees it, and as its lightness
+       (spec/14 §20.4, §20.5): strips of equal steps, the status roles marked above. */
+    .vis-builder .vis-builder-theme-ramp {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      width: 100%;
+      padding: 6px;
+      border: 1px solid transparent;
+      border-radius: var(--vis-builder-radius);
+    }
+
+    .vis-builder .vis-builder-theme-ramp-broken {
+      border-color: var(--vis-builder-warn);
+      background: var(--vis-builder-warn-bg);
+    }
+
+    .vis-builder .vis-builder-theme-ramp-meaning {
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+    }
+
+    .vis-builder .vis-builder-theme-strip {
+      position: relative;
+      display: flex;
+      height: 18px;
+      border-radius: 3px;
+      overflow: visible;
+    }
+
+    .vis-builder .vis-builder-theme-strip > span:not(.vis-builder-theme-marker) {
+      flex: 1 1 0;
+    }
+
+    .vis-builder .vis-builder-theme-strip-vision,
+    .vis-builder .vis-builder-theme-lightness {
+      height: 10px;
+    }
+
+    .vis-builder .vis-builder-theme-marker {
+      position: absolute;
+      top: -14px;
+      transform: translateX(-50%);
+      font-size: 9px;
+      color: var(--vis-builder-ink);
+    }
+
+    .vis-builder .vis-builder-theme-ramp .vis-builder-theme-strip:first-of-type {
+      margin-top: 12px;
+    }
+
+    .vis-builder .vis-builder-theme-anchors {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .vis-builder .vis-builder-theme-l {
+      margin-left: 3px;
+      color: var(--vis-builder-muted);
+      font-size: 10px;
+    }
+
+    .vis-builder .vis-builder-theme-violation {
+      margin: 2px 0 0;
+      color: var(--vis-builder-warn);
+      font-size: 11px;
+    }
+
+    .vis-builder .vis-builder-theme-role {
+      width: 100%;
+    }
+
+    .vis-builder .vis-builder-theme-vision {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .vis-builder .vis-builder-theme-valid {
       margin: 0;
       color: var(--vis-builder-muted);
