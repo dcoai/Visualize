@@ -40,6 +40,13 @@ release it merely follows.
   a frame's diff is that cell's alone. A cell carries `data-vis-cell`, is one tab stop, and
   wraps its chart in `CrosshairHook`, `BrushHook` and `KeyboardHook`. Brushing a cell sets
   the board's window, and a double-click restores it.
+- **A worked live board** (#576). The examples site's `/board` page is a complete host. It
+  puts `Visualize.Board.Supervisor` in its tree, starts a board of five cells over
+  `Visualize.Feed.Signals` and in-process `Visualize.Feed.Telemetry` feeds, and renders it
+  with `Visualize.Components.Board` and the one forwarding clause. One component sits in
+  two cells bound to different metrics, and one cell is bound to a feed that is always
+  down, so its drawn state is on the page. Copy it as the starting point for your own
+  board.
 - **`BoardHook`** (#575), the twelfth hook in the bundle. It pushes the board's width to
   its component and moves focus between cells with the arrow keys, Home and End. Enter
   moves focus into a cell's chart, and Escape (`KeyboardHook`'s) brings it back.

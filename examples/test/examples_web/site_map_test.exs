@@ -64,6 +64,7 @@ defmodule ExamplesWeb.SiteMapTest do
 
   test "the pages no tab names are linked from their tab's page" do
     assert build_conn() |> get("/interaction") |> html_response(200) =~ ~s(href="/dashboard")
+    assert build_conn() |> get("/interaction") |> html_response(200) =~ ~s(href="/board")
     assert build_conn() |> get("/performance") |> html_response(200) =~ ~s(href="/hybrid")
   end
 

@@ -33,6 +33,7 @@ defmodule ExamplesWeb.Router do
     get "/incremental", RedirectController, :incremental_line
     live "/interaction", InteractionLive, :index
     live "/dashboard", DashboardLive, :index
+    live "/board", BoardLive, :index
     live "/builder", BuilderLive, :index
   end
 
