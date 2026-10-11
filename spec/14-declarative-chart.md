@@ -2953,9 +2953,11 @@ and a *chrome* card of swatches — every series colour, then background, surfac
 | Function | Contract |
 |---|---|
 | `Visualize.Chart.Builder.Themes.panel/1` | the theme editor of §20.2 |
-| `Visualize.Chart.Builder.Themes.editable/1` | the theme a site holds as the node the editor writes: a built-in name as that theme's whole node, a map as it is, nothing as an empty node |
+| `Visualize.Chart.Builder.Themes.editable/2` | `editable(theme, store)`: the theme a site holds as the node the editor writes — a name as the whole node of the theme it names (built-in, else the store's), a map as it is, anything else an empty node |
 | `Visualize.Chart.Builder.Themes.effective/2` | `effective(theme, store)`: the `%Visualize.Theme{}` a design's `theme` value draws as — a built-in name, a stored theme by name, or a map over the default — built unchecked, so a broken contract still draws |
 | `Visualize.Chart.Builder.Themes.change/3` | `change(node, field, value)`: the node with one control's value written — `name`, `series.<i>`, a chrome slot, a font field — or `:error` for a value that does not read |
+| `Visualize.Chart.Builder.Themes.series_added/1` | the node with one more series colour, the default palette's at the next position, cycling |
+| `Visualize.Chart.Builder.Themes.series_removed/2` | the node without the series colour at an index; the last colour stays |
 | `Visualize.Chart.Builder.Themes.derived/2` | `derived(node, theme)`: the node with every value of the theme and the node's own `name` |
 | `Visualize.Chart.Builder.ThemeSheet.sheet/1` | the preview sheet of §20.3 |
 | `Visualize.Chart.Builder.ThemeSheet.samples/0` | the fixed samples: each `%{id, title, design, sources}` |

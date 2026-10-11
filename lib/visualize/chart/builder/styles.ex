@@ -2659,6 +2659,129 @@ if Code.ensure_loaded?(Phoenix.Component) do
       background: var(--vis-builder-bg);
     }
 
+    /* The theme mode (spec/14 §20): the sheet of samples in the main column, drawn on the
+       edited theme's background, and the editor's sections in the inspector. */
+    .vis-builder .vis-builder-theme-sheet {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: var(--vis-builder-gap);
+      padding: var(--vis-builder-gap);
+      border-radius: var(--vis-builder-radius);
+    }
+
+    .vis-builder .vis-builder-theme-sample {
+      margin: 0;
+      padding: 8px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+    }
+
+    .vis-builder .vis-builder-theme-chart {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .vis-builder .vis-builder-theme-sample figcaption {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 4px;
+      font-size: 11px;
+    }
+
+    .vis-builder .vis-builder-theme-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+
+    .vis-builder .vis-builder-theme-chip {
+      display: inline-block;
+      min-width: 22px;
+      height: 22px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: 4px;
+    }
+
+    .vis-builder .vis-builder-theme-chip-named {
+      padding: 0 6px;
+      font-size: 10px;
+      line-height: 22px;
+    }
+
+    .vis-builder .vis-builder-theme-designs,
+    .vis-builder .vis-builder-theme-derive {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .vis-builder .vis-builder-theme-designs {
+      grid-column: 1 / -1;
+    }
+
+    .vis-builder .vis-builder-theme-panel {
+      display: flex;
+      flex-direction: column;
+      gap: var(--vis-builder-gap);
+    }
+
+    .vis-builder .vis-builder-theme-section {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0 0 8px;
+      padding: 8px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+    }
+
+    .vis-builder .vis-builder-theme-section legend {
+      padding: 0 4px;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .vis-builder .vis-builder-theme-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .vis-builder .vis-builder-theme-swatch {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .vis-builder .vis-builder-theme-section input[type="color"] {
+      width: 32px;
+      height: 24px;
+      padding: 0;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: 4px;
+      background: none;
+    }
+
+    .vis-builder .vis-builder-theme-remove {
+      padding: 0 4px;
+      border: 0;
+      background: none;
+      color: var(--vis-builder-muted);
+      cursor: pointer;
+    }
+
+    .vis-builder .vis-builder-theme-valid {
+      margin: 0;
+      color: var(--vis-builder-muted);
+      font-size: 12px;
+    }
+
     /* Narrow enough and four columns is one column, each pane at its natural height. */
     @media (max-width: 900px) {
       .vis-builder-panels,

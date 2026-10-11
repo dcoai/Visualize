@@ -29,6 +29,16 @@ release it merely follows.
   and the builder's preview draws a design whose `theme:` names a stored theme in it.
   `Visualize.Chart.Fragment.read_json/2` is `from_json/2` with the version the document was
   stamped with.
+- **The builder has a theme mode** (#562, D-139). Opening a theme entry, *New → theme*,
+  or the new *Theme* button on a chart's bar puts `Visualize.Chart.Builder` in the theme
+  mode: the inspector edits the theme's series colours, chrome (background, surface, text,
+  axis, grid) and fonts, and can *derive from* a built-in or stored theme; the main column
+  is a sheet of sample charts — series, the five roles, thermal, diverging, axes and text —
+  drawn in the theme being edited, to which designs from the store can be added. *Save to
+  library* keeps the theme and refuses one that is not valid. `Store.theme_entry/2` finds
+  the entry a stored theme name stands for.
+- **Fixed:** a non-composite chart in the builder (a style, a theme) no longer reports its
+  own `version` stamp as a fault of its kind.
 - **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
   `time_format/2` picks a `Visualize.Format.time/2` specifier from a time domain's span and
   the interval its ticks use — `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,

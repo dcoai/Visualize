@@ -5547,8 +5547,12 @@ defmodule Visualize.Chart.BuilderTest do
           end
         )
 
+      # A theme chart in the theme mode, over a store with a design to preview (spec/14 §20).
+      themed = BuilderFixture.socket(BuilderFixture.layers(), store: BuilderFixture.Library)
+      {:noreply, themed} = Builder.handle_event("new_fragment", %{"kind" => "theme"}, themed)
+
       Enum.map(
-        states ++ [with_signal, layered, expanded, masked, grouped, keyed, variables],
+        states ++ [with_signal, layered, expanded, masked, grouped, keyed, variables, themed],
         &BuilderFixture.render/1
       ) ++ Enum.map(Keyword.keys(BuilderFixture.cases()), &rendered/1)
     end
