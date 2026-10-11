@@ -27,6 +27,9 @@ defmodule Examples.MixProject do
       {:phoenix_html, "~> 4.0"},
       {:bandit, "~> 1.0"},
       {:jason, "~> 1.4"},
+      # The live board's in-process metrics (`/board`, #576): definitions the library's
+      # telemetry provider reads.
+      {:telemetry_metrics, "~> 1.0"},
       {:nx, "~> 0.9"},
       # Code on the pages is highlighted server-side (#506): Elixir, and HEEx in its ~H sigil
       # (makeup_eex, which needs an HTML lexer for the markup).

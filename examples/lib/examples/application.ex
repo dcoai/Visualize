@@ -12,6 +12,9 @@ defmodule Examples.Application do
       {Task.Supervisor, name: Examples.TaskSupervisor},
       # One renderer per run, for as long as the run lasts (#413)
       {DynamicSupervisor, name: Examples.RendererSupervisor, strategy: :one_for_one},
+      # Where boards live (spec/15 §8.1, #576), and the live board's feeds
+      {Visualize.Board.Supervisor, name: Examples.Boards},
+      Examples.BoardDemo,
       ExamplesWeb.Endpoint
     ]
 
