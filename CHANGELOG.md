@@ -77,6 +77,20 @@ release it merely follows.
   other than the one the chart was compiled with. A schema change needs a recompile, as a
   resize does: `tick/3`, `step/3`, `render/2` and `svg/2` raise `ArgumentError` for a stale
   delivery, so compile again and `carry/2` the state across.
+- **Sanity limits on every design reader** (#550, #541, D-137): `Visualize.Chart.from_map/2`,
+  `from_map!/2`, `from_json/2` and `Visualize.Chart.Fragment.from_json/2` take
+  `limits: [depth: …, items: …, ticks: …, iterations: …, counts: …]`. The defaults
+  (`Visualize.Chart.Limits.defaults/0`: nesting 64, 100,000 entries in one list or map, 1,000
+  axis ticks, 10,000 force iterations, 1,000,000 for bins, samples, `n`, `width` and a grid's dimensions) always
+  apply and every gallery design passes them by a wide margin; a host reading designs or
+  boards from elsewhere tightens them. A value over a limit is
+  `{path, {:limit, name, max, given}}`, worded by `Validator.format/1` as
+  `frames.main.axes[0].ticks: asks for 5000 ticks; the limit ticks is 1000`. From JSON, the
+  nesting and sizes are checked before the document is decoded, so an oversized document
+  makes no atoms. `Visualize.Chart.Limits.check/2` gives the verdict on a map without reading
+  it. See [spec/14 §9.2](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#92-sanity-limits-on-a-document-from-elsewhere).
+- **`Visualize.Chart.Migration.readable/1`**: the version gate alone, for a reader that holds
+  a version before it holds a design.
 
 ### Changed
 
@@ -99,6 +113,20 @@ release it merely follows.
   lacking one takes the default theme's — never a series colour.
 - `Theme.slots/1` and `Theme.colour_slots/1` include the five roles, after `surface`.
 - **Visualize now starts `:crypto`** (`extra_applications`), for the schema version's hash.
+- **A design, fragment or bundle from a newer release is refused by name** (#550, #541,
+  D-137): the error is `{:newer_schema, needs, this}`, worded
+  `version: needs schema v3, this is v2`, where a newer `version` used to be
+  `{:unsupported_version, v}` (which now means a version below 1 only). Match the new reason
+  if you handled the old one for a newer document. The refusal comes before anything else is
+  read: `from_json/2` checks `"version"` before decoding a key.
+- **`Visualize.Chart.Fragment.to_json/1` stamps the document with `"$version"`**, and
+  `from_json/2` reads and drops it, refusing a newer one as `{:error, {:newer_schema, …}}`
+  and an oversized document as `{:error, {:limits, errors}}`. Documents written before the
+  stamp read as they always did, and `from_json(to_json(f))` is still `f`.
+- **A bundle's provenance carries `schema`**, the version it was exported at, and
+  `Visualize.Chart.Builder.Store.relocate/3` refuses a newer bundle before it puts an entry.
+- **The `Visualize.Chart.Validator.path` type** may hold strings: the path of a limit fault in a JSON
+  document refused before decoding uses the document's own keys.
 
 ### Fixed
 

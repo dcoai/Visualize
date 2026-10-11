@@ -1710,7 +1710,8 @@ The scale functions, one per kind of §4.3. The name carries the `_scale` suffix
 | `Visualize.Chart.Limits.new/1` | the limits a reader applies: a keyword list or map merged over `defaults/0`; raises `ArgumentError` for a name that is not a limit or a value that is not a positive integer. |
 | `Visualize.Chart.Limits.structure/2` | `structure(document, limits)`: one `{path, {:limit, name, max, given}}` per `depth` or `items` fault of any term — a design, a fragment, a parsed JSON document with string keys — ordered by path; a struct is a leaf but a `%Visualize.Chart.Use{}`, whose `local` and `vars` are walked. |
 | `Visualize.Chart.Limits.counts/2` | `counts(design, limits)`: one such error per `ticks`, `iterations` or `counts` fault of a design map at the current version, by the schema, ordered by path; a variable is not a literal and is not checked. |
-| `Visualize.Chart.Limits.check/2` | `check(design, limits)`: `:ok`, or `{:error, errors}` with every fault of `structure/2` and then `counts/2`; `limits` as `new/1` takes them, `[]` by default. |
+| `Visualize.Chart.Limits.check/1` | As `check/2` with the defaults. |
+| `Visualize.Chart.Limits.check/2` | `check(design, limits)`: `:ok`, or `{:error, errors}` with every fault of `structure/2` and then `counts/2`; `limits` as `new/1` takes them. |
 
 ## 15. Presets
 

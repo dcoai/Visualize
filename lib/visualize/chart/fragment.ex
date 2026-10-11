@@ -41,11 +41,15 @@ defmodule Visualize.Chart.Fragment do
 
   """
 
-  alias Visualize.Chart.{Codec, Schema, Use}
+  alias Visualize.Chart.{Codec, Limits, Migration, Schema, Use}
 
   # Jason is optional (spec/14 §11.1, D-50): as in `Visualize.Chart`, the calls in
   # `to_json/1` and `from_json/1` stay direct and a missing Jason is answered at runtime.
   @compile {:no_warn_undefined, Jason}
+
+  # The schema version a fragment document was written at (spec/14 §9.1): a `$` key, which
+  # no design key is (§11.2), so it never collides with a fragment's own `version`.
+  @stamp "$version"
 
   # A library body names its kind with a singular key and nothing else (§19.2). `theme` and
   # `frame` are not here because they are design keys already, and the schema's own walk
@@ -262,9 +266,11 @@ defmodule Visualize.Chart.Fragment do
 
   @doc """
   A fragment of any kind as the JSON of §11 and §19.7 (#465): use sites as `$use`, ids as
-  `$id`, variables as `$var`. It is not validated as a design — a fragment may be partial —
-  so a host that keeps its library in a database can write whatever `Store.put/2` hands it.
-  `{:error, {:missing_dependency, :jason}}` without Jason, as `Visualize.Chart.to_json/1`.
+  `$id`, variables as `$var`, and the document stamped `"$version"` with the schema
+  version it was written at (spec/14 §9.1). It is not validated as a design — a fragment
+  may be partial — so a host that keeps its library in a database can write whatever
+  `Store.put/2` hands it. `{:error, {:missing_dependency, :jason}}` without Jason, as
+  `Visualize.Chart.to_json/1`.
 
       iex> {:ok, json} = Visualize.Chart.Fragment.to_json(%{style: %{stroke_width: 5}})
       iex> Visualize.Chart.Fragment.from_json(json)
@@ -273,7 +279,9 @@ defmodule Visualize.Chart.Fragment do
   @spec to_json(map()) :: {:ok, String.t()} | {:error, {:missing_dependency, :jason}}
   def to_json(fragment) when is_map(fragment) and not is_struct(fragment) do
     if Code.ensure_loaded?(Jason) do
-      {:ok, json} = fragment |> Codec.encode() |> Jason.encode()
+      {:ok, json} =
+        fragment |> Codec.encode() |> Map.put(@stamp, Migration.current()) |> Jason.encode()
+
       {:ok, json}
     else
       {:error, {:missing_dependency, :jason}}
@@ -282,21 +290,47 @@ defmodule Visualize.Chart.Fragment do
 
   @doc """
   The fragment `to_json/1` wrote (#465): tagged terms back as `%Visualize.Chart.Use{}`,
-  ids, variables and atoms. An id whose kind is not one a fragment can have is left as it
-  was read, so no atom is made from a document's kind. `{:error, {:json, message}}` for text
-  that is not JSON. `from_json(to_json(f))` is `f`.
+  ids, variables and atoms, and the `"$version"` stamp read and dropped. An id whose kind
+  is not one a fragment can have is left as it was read, so no atom is made from a
+  document's kind. `from_json(to_json(f))` is `f`.
+
+  Before a key is decoded (spec/14 §9.1, §9.2): a stamp, or a design fragment's own
+  `"version"`, newer than this library reads is `{:error, {:newer_schema, needs, this}}`,
+  and a document over the `depth` or `items` limit is `{:error, {:limits, errors}}`, with
+  `limits:` as `Visualize.Chart.from_map/2` takes them. A document with no stamp — written
+  before the stamp existed — is read as the current version. `{:error, {:json, message}}`
+  for text that is not JSON.
   """
-  @spec from_json(String.t()) ::
-          {:ok, map()} | {:error, {:json, String.t()} | {:missing_dependency, :jason}}
-  def from_json(json) when is_binary(json) do
+  @spec from_json(String.t(), keyword()) ::
+          {:ok, map()}
+          | {:error,
+             {:json, String.t()}
+             | {:newer_schema, pos_integer(), pos_integer()}
+             | {:limits, [Visualize.Chart.Validator.error(), ...]}
+             | {:missing_dependency, :jason}}
+  def from_json(json, opts \\ []) when is_binary(json) do
     if Code.ensure_loaded?(Jason) do
+      limits = opts |> Keyword.get(:limits, []) |> Limits.new()
+
       case Jason.decode(json) do
-        {:ok, term} when is_map(term) -> {:ok, Codec.decode(term)}
+        {:ok, term} when is_map(term) -> read(term, limits)
         {:ok, other} -> {:error, {:json, "a fragment is an object, got #{inspect(other)}"}}
         {:error, error} -> {:error, {:json, Exception.message(error)}}
       end
     else
       {:error, {:missing_dependency, :jason}}
+    end
+  end
+
+  defp read(term, limits) do
+    {stamp, term} = Map.pop(term, @stamp)
+
+    with :ok <- Migration.readable(stamp),
+         :ok <- Migration.readable(Map.get(term, "version")) do
+      case Limits.structure(term, limits) do
+        [] -> {:ok, Codec.decode(term)}
+        errors -> {:error, {:limits, errors}}
+      end
     end
   end
 

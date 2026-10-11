@@ -48,6 +48,7 @@ defmodule Visualize.Chart do
     Facts,
     Fragment,
     Frame,
+    Limits,
     Migration,
     Schema,
     Stack,
@@ -143,21 +144,54 @@ defmodule Visualize.Chart do
   @doc """
   The chart of a design map, or every fault in it.
 
-  The map is migrated to the current version (spec/14 §9) and validated (§10) first;
-  design-level keys absent from the map take the defaults of spec/14 §2.1.
+  A version newer than this library reads is refused first, before anything of the map is
+  read (spec/14 §9.1); then the map is held to the sanity limits (§9.2), migrated to the
+  current version (§9) and validated (§10). Design-level keys absent from the map take the
+  defaults of spec/14 §2.1.
+
+  `limits:` tightens the limits for a design from elsewhere — a keyword list or map over
+  `Visualize.Chart.Limits.defaults/0`, which apply when it is not given; the host knows
+  its inputs and holds the number. Raises `ArgumentError` for a name that is not a limit
+  or a value that is not a positive integer.
+
+      iex> Visualize.Chart.from_map(%{version: 3, frames: %{main: %{}}})
+      {:error, [{[:version], {:newer_schema, 3, 2}}]}
   """
-  @spec from_map(term()) :: {:ok, t()} | {:error, [Validator.error(), ...]}
-  def from_map(map) do
+  @spec from_map(term(), keyword()) :: {:ok, t()} | {:error, [Validator.error(), ...]}
+  def from_map(map, opts \\ []) do
+    limits = opts |> Keyword.get(:limits, []) |> Limits.new()
+
+    with :ok <- readable(map),
+         :ok <- within(Limits.structure(map, limits)) do
+      read(map, limits)
+    end
+  end
+
+  # The steps after the document's structure is known to be within its limits: shared
+  # by `from_json/2`, which checks the structure on the parsed JSON before decoding it.
+  defp read(map, limits) do
     with {:ok, map} <- Migration.migrate(map),
+         :ok <- within(Limits.counts(map, limits)),
          :ok <- Validator.validate(map) do
       {:ok, struct(__MODULE__, Map.take(map, @design_keys))}
     end
   end
 
-  @doc "As `from_map/1`, raising `ArgumentError` with the formatted errors."
-  @spec from_map!(term()) :: t()
-  def from_map!(map) do
-    case from_map(map) do
+  defp readable(%{version: v}), do: readable_version(v)
+  defp readable(%{"version" => v}), do: readable_version(v)
+  defp readable(_map), do: :ok
+
+  defp readable_version(v) do
+    with {:error, reason} <- Migration.readable(v), do: {:error, [{[:version], reason}]}
+  end
+
+  defp within([]), do: :ok
+  defp within(errors), do: {:error, errors}
+
+  @doc "As `from_map/2`, raising `ArgumentError` with the formatted errors."
+  @spec from_map!(term(), keyword()) :: t()
+  def from_map!(map, opts \\ []) do
+    case from_map(map, opts) do
       {:ok, chart} ->
         chart
 
@@ -172,18 +206,30 @@ defmodule Visualize.Chart do
   def to_map(%__MODULE__{} = chart), do: Map.from_struct(chart)
 
   @doc """
-  The chart of a JSON document (spec/14 §11).
+  The chart of a JSON document (spec/14 §11), with `limits:` as `from_map/2` takes them.
 
-  A document that does not parse is `{:error, [{[], {:json, message}}]}`; without
-  `Jason` the result is `{:error, {:missing_dependency, :jason}}`.
+  The parsed document's `"version"` is checked, and its nesting and the size of its lists
+  and maps held to the limits, **before** the codec decodes a key (spec/14 §9.1, §9.2): a
+  newer or an oversized document is refused without an atom made from it, and a path in
+  such an error holds the document's own key strings. A document that does not parse is
+  `{:error, [{[], {:json, message}}]}`; without `Jason` the result is
+  `{:error, {:missing_dependency, :jason}}`.
   """
-  @spec from_json(String.t()) ::
+  @spec from_json(String.t(), keyword()) ::
           {:ok, t()} | {:error, [Validator.error(), ...] | {:missing_dependency, :jason}}
-  def from_json(json) when is_binary(json) do
+  def from_json(json, opts \\ []) when is_binary(json) do
     if Code.ensure_loaded?(Jason) do
+      limits = opts |> Keyword.get(:limits, []) |> Limits.new()
+
       case Jason.decode(json) do
-        {:ok, term} -> from_map(Codec.decode(term))
-        {:error, error} -> {:error, [{[], {:json, Exception.message(error)}}]}
+        {:ok, term} ->
+          with :ok <- readable(term),
+               :ok <- within(Limits.structure(term, limits)) do
+            read(Codec.decode(term), limits)
+          end
+
+        {:error, error} ->
+          {:error, [{[], {:json, Exception.message(error)}}]}
       end
     else
       {:error, {:missing_dependency, :jason}}
