@@ -107,7 +107,8 @@ defmodule Visualize.Chart.Frame.Furniture do
   # The `Visualize.Axis` an axis node describes over the frame's realised scale. What the
   # node leaves out is derived (§4.4, D-134): the count from the axis's length, the format
   # from the scale's domain at that count — in the display unit of its measure when it has
-  # one (D-138); an explicit count, list or format wins.
+  # one (D-138), under the frame's unit system, its ticks then round numbers in that unit
+  # (D-156); an explicit count, list or format wins.
   @spec axis(map(), map()) :: Axis.t()
   def axis(frame, node) do
     scale = Map.fetch!(frame.scales, node.scale)
@@ -120,7 +121,8 @@ defmodule Visualize.Chart.Frame.Furniture do
     |> Axis.offset(Map.get(node, :offset, Schema.default(:axis, :offset)))
     |> Axis.ticks(count)
     |> ticks(spec)
-    |> format(scale, Map.get(node, :format), count, Map.get(node, :measure))
+    |> display_ticks(scale, node, count, frame.system)
+    |> format(scale, Map.get(node, :format), count, Map.get(node, :measure), frame.system)
     |> unit(Map.get(node, :prefix), Map.get(node, :unit))
   end
 
@@ -175,13 +177,27 @@ defmodule Visualize.Chart.Frame.Furniture do
     |> Axis.tick_padding(Map.get(spec, :padding, Schema.default(:ticks, :padding)))
   end
 
+  # With a measure shown in another unit than the data's and neither tick values nor a
+  # format given, the ticks are round numbers in the display unit, placed at their values
+  # in the data's (spec/05 §4.3, D-156); otherwise the axis keeps the scale's own.
+  defp display_ticks(axis, scale, node, count, system) do
+    measure = Map.get(node, :measure)
+
+    values =
+      axis.tick_values == nil and measure != nil and Map.get(node, :format) == nil and
+        Quantity.ticks(scale, measure, count: count, system: system)
+
+    if is_list(values), do: Axis.tick_values(axis, values), else: axis
+  end
+
   # No format: the one the scale's domain calls for at the axis's count — scaled into the
-  # display unit of the axis's measure and followed by its symbol, when it has one
-  # (spec/05 §4.3) — or the default label when the scale has none (a band, an ordinal).
-  defp format(axis, scale, nil, count, measure) do
+  # display unit of the axis's measure under the frame's system and followed by its
+  # symbol, when it has one (spec/05 §4.3) — or the default label when the scale has none
+  # (a band, an ordinal).
+  defp format(axis, scale, nil, count, measure, system) do
     formatter =
       if measure,
-        do: Quantity.formatter(scale, measure, count: count),
+        do: Quantity.formatter(scale, measure, count: count, system: system),
         else: Format.Auto.formatter(scale, count: count)
 
     case formatter do
@@ -191,16 +207,16 @@ defmodule Visualize.Chart.Frame.Furniture do
   end
 
   # A named format no specifier can express (spec/14 §4.4, #191).
-  defp format(axis, _scale, :duration, _count, _measure) do
+  defp format(axis, _scale, :duration, _count, _measure, _system) do
     Axis.tick_format(axis, fn v -> if is_number(v), do: Format.duration(v), else: to_string(v) end)
   end
 
   # A tick of a zoned time scale prints its local wall clock, whether the scale computed it
   # or the design gave it (spec/05 §2.8, #447); without a zone `local/2` is the identity.
-  defp format(axis, %Scale.Time{} = scale, spec, _count, _measure),
+  defp format(axis, %Scale.Time{} = scale, spec, _count, _measure, _system),
     do: Axis.tick_format(axis, &Format.time(Scale.Time.local(scale, &1), spec))
 
-  defp format(axis, _scale, spec, _count, _measure) do
+  defp format(axis, _scale, spec, _count, _measure, _system) do
     formatter = Format.formatter(spec)
     Axis.tick_format(axis, fn v -> if is_number(v), do: formatter.(v), else: to_string(v) end)
   end
@@ -251,7 +267,8 @@ defmodule Visualize.Chart.Frame.Furniture do
 
     ticks_say_it? =
       Map.get(node, :format) == nil and numeric?(scale) and
-        Quantity.suffix(Quantity.display_unit(scale.domain, measure)) != ""
+        Quantity.suffix(Quantity.display_unit(scale.domain, measure, system: frame.system)) !=
+          ""
 
     if labelled? or ticks_say_it?, do: nil, else: Quantity.label(measure)
   end

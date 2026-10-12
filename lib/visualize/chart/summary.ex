@@ -697,7 +697,7 @@ defmodule Visualize.Chart.Summary do
     case {node, scale} do
       {nil, _scale} -> &plain/1
       {node, %Scale.Time{}} -> tick_format(frame, node)
-      {node, scale} -> wrapped(node, number_format(node, scale))
+      {node, scale} -> wrapped(node, number_format(node, scale, frame.system))
     end
   end
 
@@ -708,14 +708,14 @@ defmodule Visualize.Chart.Summary do
     end
   end
 
-  defp number_format(%{format: :duration}, _scale), do: numbers(&Format.duration/1)
+  defp number_format(%{format: :duration}, _scale, _system), do: numbers(&Format.duration/1)
 
-  defp number_format(%{format: spec}, _scale) when is_binary(spec),
+  defp number_format(%{format: spec}, _scale, _system) when is_binary(spec),
     do: numbers(Format.formatter(spec))
 
-  defp number_format(%{measure: measure}, %{domain: domain}) when is_map(measure) do
+  defp number_format(%{measure: measure}, %{domain: domain}, system) when is_map(measure) do
     {:ok, %{unit: unit} = resolved} = Quantity.resolve(measure)
-    display = Quantity.display_unit(domain, resolved)
+    display = Quantity.display_unit(domain, resolved, system: system)
 
     numbers(fn value ->
       scaled =
@@ -725,7 +725,7 @@ defmodule Visualize.Chart.Summary do
     end)
   end
 
-  defp number_format(_node, _scale), do: &plain/1
+  defp number_format(_node, _scale, _system), do: &plain/1
 
   defp numbers(format) do
     fn

@@ -562,7 +562,7 @@ defmodule Visualize.Board do
 
     * `:width` - the board's container width in pixels (default `1200`); each cell is
       applied at its box's size there (`boxes/2`)
-    * `:theme`, `:now` - as `Visualize.Chart.apply/2` takes them
+    * `:theme`, `:now`, `:system` - as `Visualize.Chart.apply/2` takes them
     * `:schemas` - the schema cache (default empty), threaded from cell to cell and
       returned grown
     * `:describe` - `({cell, slot} -> {:ok, schema} | {:error, reason})`: the connector
@@ -579,7 +579,7 @@ defmodule Visualize.Board do
 
   defp apply_cells(board, components, pools, opts) do
     boxes = boxes(board, Keyword.get(opts, :width, 1200))
-    shared = Keyword.take(opts, [:theme, :now])
+    shared = Keyword.take(opts, [:theme, :now, :system])
     cache = Keyword.get_lazy(opts, :schemas, &Cache.new/0)
 
     {applied, cache, errors} =

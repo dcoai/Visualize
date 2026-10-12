@@ -39,13 +39,22 @@ defmodule Visualize.Board.Draw do
   # compiled chart `previous` held for it (spec/14 §12.5): `{:ok, %{compiled, applied,
   # summary}}`, or application's faults. `previous` is `[]` for a first drawing.
   def compile(
-        %{chart: chart, vars: vars, size: size, theme: theme, now: now, slots: slots},
+        %{chart: chart, vars: vars, size: size, theme: theme, now: now, slots: slots} = cell,
         sources,
         previous
       ) do
     schemas = Cache.new(for {slot, %{schema: %Schema{} = schema}} <- slots, do: {slot, schema})
+    system = Map.get(cell, :system, :as_posted)
 
-    options = [sources: sources, vars: vars, size: size, theme: theme, schemas: schemas]
+    options = [
+      sources: sources,
+      vars: vars,
+      size: size,
+      theme: theme,
+      system: system,
+      schemas: schemas
+    ]
+
     options = if now, do: Keyword.put(options, :now, now), else: options
 
     with {:ok, applied} <- Chart.apply(chart, options) do
@@ -102,7 +111,15 @@ defmodule Visualize.Board.Draw do
   # `nil` for a chart of more than one frame, which has no keyboard points.
   def realised(%{frames: frames} = applied, sources, theme, size) when map_size(frames) == 1 do
     plain = Map.new(sources, fn {slot, d} -> {slot, Delivery.source(d)} end)
-    frame = Frame.new(applied.chart, sources: plain, theme: theme, size: size)
+
+    frame =
+      Frame.new(applied.chart,
+        sources: plain,
+        theme: theme,
+        system: applied.frame.system,
+        size: size
+      )
+
     pickable = %{applied | frame: frame, sources: plain}
     {{crosshair(frame, applied.chart, plain), Keyboard.attrs(pickable)}, pickable}
   end
@@ -162,7 +179,7 @@ defmodule Visualize.Board.Draw do
   @doc false
   # One cell drawn once, from nothing held (spec/15 §12.2): what the cell process draws as
   # its first frame of the same slots. `cell` holds `name`, `title`, `chart`, `vars`,
-  # `size`, `theme`, `now`, `stale_after` and `slots` (`nil` before any data).
+  # `size`, `theme`, `system`, `now`, `stale_after` and `slots` (`nil` before any data).
   def once(cell) do
     blank = %{svg: nil, attrs: {%{}, %{}}, frames: 0}
 

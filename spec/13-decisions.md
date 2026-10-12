@@ -1517,3 +1517,18 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - `factor/1` answers a three-tuple for a code that holds π.
 - A design or schema that names none of the new quantities, keys or units draws as before.
 - Where UCUM's definition differs from metresis's (mm Hg, inch of mercury), visualize keeps UCUM's and the parity table records the difference.
+
+## 156. D-156 — An axis shown in another unit picks its ticks in that unit, and the unit system is a render option
+
+**Context.** #594, found in #589 (work items #591 and #593). D-138 scales an axis into the member of its family that fits the domain, and D-155 added unit systems, which show a measure in another family altogether. Both changed only the *labels*: the ticks were still round numbers in the data's unit, each converted for its label, so 0–40 `kg` under `:us` read `0 lb`, `22.046226 lb`, `44.092452 lb`, … and 0–100 `s` in minutes read `0.166667 min`, `0.333333 min`, …. Unit systems are #589's headline feature, for metresis's per-viewer display, and they read badly that way. Evaluation found a second gap: nothing carried a system to an axis. The frame's furniture asked `Quantity.formatter/3` and `display_unit/2` with no `system:`, so a design could not be shown in `:us` at all.
+
+**Decision.**
+- **The ticks are chosen in the display unit.** `Visualize.Quantity.ticks/3` takes the scale's domain converted into the display unit, takes `Visualize.Scale.ticks/2` of that at the axis's count, and converts each tick back into the data's unit with `Unit.convert/3` for placement. The scale itself is not touched: its domain is the data's and is not niced again in the display unit. `Quantity.formatter/3`, given the same count and system, labels each placed value with the round number it came from, never with the value converted back again, so the round trip's last bit (`19.999999999999996`) never reaches a label.
+- **What still wins.** Explicit tick values win. An explicit `format` keeps the scale's own ticks in the data's unit, because its labels are in that unit. An explicit count only sets the count. Log and symlog scales keep their powers of ten, each tick in its own unit, as D-138 wrote them. A currency never converts, so its ticks are the scale's.
+- **The unit system is a render option, never a design key.** Which system to show is the viewer's preference, like the size of the container (spec/14 §4.2), not a fact of the chart. So `system:` is an option of `Chart.apply/2` and `Chart.compile/2`, default `:as_posted`. The realised frame carries it, and a compiled chart keeps it for each realisation per tick. Every axis's display unit, ticks, format and title decision read it, and so does the text alternative. The schema gets no key for it, so a stored design can never pin one.
+- **Boards pass it through.** `Board.realise/4`, `Board.Server` (to every cell) and `Board.Snapshot.views/2` take `system:`, and so do `Board.Export.svg/2` and `pages/2` through `views/2`. A snapshot does not record it: a reader picks it when drawing, as they pick a theme for paper.
+
+**Consequences.**
+- An axis that shows another unit now has different tick positions as well as different labels. A chart rendered without `system:` and on a domain whose display unit is its own unit draws byte for byte as before.
+- A host with viewers of several systems renders per viewer. For a board that means a board server per system. A board server draws once for all its subscribers, so the system is per board.
+- An axis's ticks no longer always land on the scale's own `ticks/2`. Code that read `Scale.ticks/2` to find an axis's tick positions should read the axis's own tick values, as the grid does.

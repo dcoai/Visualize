@@ -59,6 +59,8 @@ defmodule Visualize.Board.Export do
     * `:width` - the grid's width, the container width the cells are drawn at (default
       the snapshot's)
     * `:theme` - the theme the cells and the page are drawn in (default the snapshot's)
+    * `:system` - the unit system the cells' measures are shown in (default `:as_posted`,
+      spec/14 §4.4, D-156)
     * `:title` - the header's name (default the board's `meta.name`)
     * `:resolve` - `:css` (default), every theme value a custom-property reference with
       its literal as fallback, as the cells draw it; or `:literal`, each reference
@@ -68,7 +70,10 @@ defmodule Visualize.Board.Export do
   def svg(%Snapshot{} = snapshot, opts \\ []) do
     width = Keyword.get(opts, :width, snapshot.width)
     theme = Keyword.get(opts, :theme, snapshot.theme)
-    views = Snapshot.views(snapshot, width: width, theme: theme)
+
+    views =
+      Snapshot.views(snapshot, [width: width, theme: theme] ++ Keyword.take(opts, [:system]))
+
     %{gap: margin} = Board.layout(snapshot.board)
     lines = header_lines(snapshot, Keyword.get(opts, :title), nil)
     header = header_height(theme, lines, margin)
@@ -101,7 +106,7 @@ defmodule Visualize.Board.Export do
   @spec png(Snapshot.t(), keyword()) ::
           {:ok, binary(), [Render.png_warning()]} | {:error, Render.png_error()}
   def png(%Snapshot{} = snapshot, opts \\ []) do
-    {ours, raster} = Keyword.split(opts, [:width, :theme, :title])
+    {ours, raster} = Keyword.split(opts, [:width, :theme, :system, :title])
     snapshot |> svg([resolve: :literal] ++ ours) |> Render.to_png(raster)
   end
 
@@ -199,7 +204,7 @@ defmodule Visualize.Board.Export do
   drawn at the page's width in `:theme`, the print theme by default, from the snapshot's
   data.
 
-  The options are `paginate/2`'s, `svg/2`'s `:title` and `:resolve`.
+  The options are `paginate/2`'s, `svg/2`'s `:system`, `:title` and `:resolve`.
   """
   @spec pages(Snapshot.t(), keyword()) :: [String.t()]
   def pages(%Snapshot{} = snapshot, opts \\ []) do
@@ -207,7 +212,10 @@ defmodule Visualize.Board.Export do
     opts = Keyword.put(opts, :theme, theme)
     {_pw, _ph, wl, hl} = paper(opts)
     %{size: size, width: width, pages: pages} = paginate(snapshot.board, opts)
-    views = Snapshot.views(snapshot, width: width, theme: theme)
+
+    views =
+      Snapshot.views(snapshot, [width: width, theme: theme] ++ Keyword.take(opts, [:system]))
+
     margin = Keyword.get(opts, :margin, 48)
     count = length(pages)
 
