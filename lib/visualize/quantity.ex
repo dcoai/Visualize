@@ -1,30 +1,32 @@
 defmodule Visualize.Quantity do
   @moduledoc """
-  A fixed list of quantities, each with a base unit and a display-scaling family, and
-  the display scaling they choose (spec/05 §4.2–4.3, D-138).
+  A fixed list of quantities, each with its facts — a base unit, a kind, bounds,
+  additivity and display families by unit system — and the display scaling they choose
+  (spec/05 §4.2–4.3, D-138, D-155).
 
   A quantity is what a unit measures. A unit (a UCUM code, `Visualize.Unit`) and a
   quantity together are a *measure*, `%{unit: code, quantity: quantity}`, the two facts a
   field description carries. **They are facts about the data, not knobs**: a measure does
   not change a value, it says what the value already is, so a display can choose how to
-  show it — 0–1,500 `ms` as 0–1.5 `s`, 2,500,000 `By` as 2.5 `MB`.
+  show it — 0–1,500 `ms` as 0–1.5 `s`, 2,500,000 `By` as 2.5 `MB`, 80 `kg` in `lb` for a
+  viewer on the US system.
 
-  The list is fixed and grows by proposal:
+  The list is fixed and grows by proposal: `duration`, `information`, `data_rate`,
+  `frequency`, `ratio`, `count`, `temperature`, `length`, `speed`, `power`, `energy`,
+  `pressure`, `area`, `volume`, `mass`, `pace`, `angle`, `currency`,
+  `electric_potential`, `electric_current`, `electric_charge`, `illuminance`,
+  `sound_level`, `mass_concentration` and `amount_concentration`. spec/05 §4.2 tables
+  each one's facts and families.
 
-  | Quantity | Base unit | Display family |
-  |---|---|---|
-  | `:duration` | `s` | `ns us ms s min h d` |
-  | `:information` | `By` | `By kBy MBy GBy`; binary `KiBy MiBy GiBy`; bits |
-  | `:data_rate` | `By/s` | the information families over `/s` |
-  | `:frequency` | `Hz` | `Hz kHz MHz GHz`; events `/h /min /s` |
-  | `:ratio` | `1` | — |
-  | `:count` | `1` | — (SI from a thousand) |
-  | `:temperature` | `Cel` | — |
-  | `:length` | `m` | `mm m km` |
-  | `:speed` | `m/s` | — |
-  | `:power` | `W` | `W kW MW GW` |
-  | `:energy` | `J` | `J kJ MJ GJ`; watt-hours `W.h kW.h MW.h GW.h` |
-  | `:pressure` | `Pa` | `Pa kPa MPa` |
+  - **Kind** is `:linear`, `:affine` (a temperature), `:logarithmic` (a sound level) or
+    `:cyclic` (an angle, whose mean is circular).
+  - **Bounds** are a display hint, never validation: a difference is legitimately
+    negative, so a value outside them is never refused.
+  - **Additivity** depends on the aggregation: `additivity/2` refines the quantity's
+    defaults across series and over time by the field's metric kind (`:gauge`,
+    `:counter`, `:rate`).
+  - **Unit systems** are `:metric`, `:us`, `:uk` and `:as_posted`; a system picks the
+    family a value is shown in and never touches the data.
 
   Information is **decimal by default** — UCUM's `kBy` and `Telemetry.Metrics`'
   `:kilobyte` are 1,000 bytes — and a unit written with a binary prefix (`MiBy`) or in
@@ -38,9 +40,15 @@ defmodule Visualize.Quantity do
       iex> Visualize.Quantity.display_unit([0, 1500], %{unit: "ms"})
       "s"
 
+      iex> Visualize.Quantity.display_unit([0, 80], %{unit: "kg"}, system: :us)
+      "[lb_av]"
+
       iex> scale = Visualize.Scale.linear() |> Visualize.Scale.domain([0, 1500])
       iex> Visualize.Quantity.formatter(scale, %{unit: "ms"}).(1500)
       "1.5 s"
+
+      iex> Visualize.Quantity.additivity(:data_rate)
+      %{across: true, over_time: false}
 
       iex> Visualize.Quantity.label(%{unit: "{request}"})
       "request"
@@ -48,6 +56,7 @@ defmodule Visualize.Quantity do
   """
 
   alias Visualize.{Format, Scale, Unit}
+  alias Visualize.Quantity.Facts
 
   @typedoc "One of the fixed list of quantities."
   @type t ::
@@ -63,6 +72,28 @@ defmodule Visualize.Quantity do
           | :power
           | :energy
           | :pressure
+          | :area
+          | :volume
+          | :mass
+          | :pace
+          | :angle
+          | :currency
+          | :electric_potential
+          | :electric_current
+          | :electric_charge
+          | :illuminance
+          | :sound_level
+          | :mass_concentration
+          | :amount_concentration
+
+  @typedoc "How a quantity's values combine (spec/05 §4.2)."
+  @type kind :: :linear | :affine | :logarithmic | :cyclic
+
+  @typedoc "A unit system: a display preference, never applied to the data."
+  @type system :: :metric | :us | :uk | :as_posted
+
+  @typedoc "How a field's values were measured, which refines its quantity's additivity."
+  @type metric_kind :: :gauge | :counter | :rate
 
   @typedoc "A unit and a quantity, either or both; the two facts a field description carries."
   @type measure :: %{optional(:unit) => Unit.code() | nil, optional(:quantity) => t() | nil}
@@ -73,41 +104,11 @@ defmodule Visualize.Quantity do
           | {:quantity, t(), Unit.code()}
           | {:unknown_quantity, term()}
 
-  @base %{
-    duration: "s",
-    information: "By",
-    data_rate: "By/s",
-    frequency: "Hz",
-    ratio: "1",
-    count: "1",
-    temperature: "Cel",
-    length: "m",
-    speed: "m/s",
-    power: "W",
-    energy: "J",
-    pressure: "Pa"
-  }
+  @all Facts.all()
+  @systems [:metric, :us, :uk, :as_posted]
+  @metric_kinds [:gauge, :counter, :rate]
 
-  @all [
-    :duration,
-    :information,
-    :data_rate,
-    :frequency,
-    :ratio,
-    :count,
-    :temperature,
-    :length,
-    :speed,
-    :power,
-    :energy,
-    :pressure
-  ]
-
-  @dimensionless [:ratio, :count]
-
-  @decimal ~w(By kBy MBy GBy)
-  @binary ~w(By KiBy MiBy GiBy)
-  @bits ~w(bit kbit Mbit Gbit)
+  @dimensionless [:ratio, :count, :currency]
 
   @numeric [Scale.Linear, Scale.Power, Scale.Radial]
   @logarithmic [Scale.Log, Scale.Symlog]
@@ -116,42 +117,150 @@ defmodule Visualize.Quantity do
   @spec all() :: [t(), ...]
   def all, do: @all
 
-  @doc "A quantity's base unit, the unit its values are in when no unit is given."
-  @spec base_unit(t()) :: Unit.code()
-  def base_unit(quantity), do: Map.fetch!(@base, quantity)
+  @doc "The unit systems a display may prefer (spec/05 §4.2), `:as_posted` the default."
+  @spec systems() :: [system(), ...]
+  def systems, do: @systems
 
   @doc """
-  The display family a unit of the quantity scales in, smallest first; `[]` for a
-  quantity displayed in its own unit (spec/05 §4.2). The unit picks among a quantity's
-  families: bits, binary prefixes, hertz, watt-hours.
+  A quantity's base unit, the unit its values are in when no unit is given; `nil` for a
+  `:currency`, whose code the data must say.
+  """
+  @spec base_unit(t()) :: Unit.code() | nil
+  def base_unit(quantity), do: Facts.fetch!(quantity).base
+
+  @doc """
+  How a quantity's values combine (spec/05 §4.2): `:linear`, `:affine` (a temperature),
+  `:logarithmic` (a sound level) or `:cyclic` (an angle).
+
+  ## Examples
+
+      iex> Visualize.Quantity.kind(:angle)
+      :cyclic
+
+  """
+  @spec kind(t()) :: kind()
+  def kind(quantity), do: Facts.fetch!(quantity).kind
+
+  @doc """
+  Where a quantity's values physically lie, in its base unit, `{min | nil, max | nil}`
+  (spec/05 §4.2): a **display hint** an axis may anchor at, never validation — a value
+  outside them is never refused.
+
+  ## Examples
+
+      iex> Visualize.Quantity.bounds(:duration)
+      {0, nil}
+
+  """
+  @spec bounds(t()) :: {number() | nil, number() | nil}
+  def bounds(quantity), do: Facts.fetch!(quantity).bounds
+
+  @doc """
+  A quantity's bounds in a unit of it: the base's, converted. A unit without a factor
+  (`Cel`) takes the base's bounds as they are.
+
+  ## Examples
+
+      iex> Visualize.Quantity.bounds(:ratio, "%")
+      {0.0, 100.0}
+
+  """
+  @spec bounds(t(), Unit.code()) :: {number() | nil, number() | nil}
+  def bounds(quantity, unit) do
+    {min, max} = bounds(quantity)
+    base = base_unit(quantity)
+
+    if base == nil or base == unit or Unit.factor(unit) == nil,
+      do: {min, max},
+      else: {bound(min, base, unit), bound(max, base, unit)}
+  end
+
+  @doc """
+  Whether a sum of the quantity's values means anything (spec/05 §4.2, D-155):
+  `%{across: boolean, over_time: boolean}` — summing several series at one instant, and
+  summing one series over time. The quantity's physical defaults are refined by the
+  field's metric kind: a `:gauge` and a `:rate` never add over time, and a `:counter`'s
+  increments add over time when the quantity adds across. No quantity (a plain number)
+  defaults to both.
+
+  ## Examples
+
+      iex> Visualize.Quantity.additivity(:count, :gauge)
+      %{across: true, over_time: false}
+
+      iex> Visualize.Quantity.additivity(:temperature, :counter)
+      %{across: false, over_time: false}
+
+  """
+  @spec additivity(t() | nil, metric_kind() | nil) :: %{across: boolean(), over_time: boolean()}
+  def additivity(quantity, metric_kind \\ nil) when metric_kind in [nil | @metric_kinds] do
+    defaults =
+      case quantity do
+        nil -> %{across: true, over_time: true}
+        quantity -> Map.take(Facts.fetch!(quantity), [:across, :over_time])
+      end
+
+    case metric_kind do
+      nil -> defaults
+      :counter -> %{defaults | over_time: defaults.across}
+      _gauge_or_rate -> %{defaults | over_time: false}
+    end
+  end
+
+  @doc """
+  The display family a unit of the quantity belongs to, smallest first; `[]` for a unit
+  of no family's shape (spec/05 §4.2). A unit belongs to the first family holding a
+  member of its shape — its atoms and exponents, prefixes aside and a binary prefix kept
+  apart — so the unit picks among a quantity's families: bits, binary prefixes, hertz,
+  watt-hours, US lengths. No unit means the base unit.
 
   ## Examples
 
       iex> Visualize.Quantity.family(:information, "MiBy")
-      ["By", "KiBy", "MiBy", "GiBy"]
+      ["By", "KiBy", "MiBy", "GiBy", "TiBy"]
+
+      iex> Visualize.Quantity.family(:length, "[ft_i]")
+      ["[in_i]", "[ft_i]", "[mi_i]"]
 
   """
   @spec family(t(), Unit.code() | nil) :: [Unit.code()]
-  def family(quantity, nil), do: family(quantity, base_unit(quantity))
-  def family(:duration, _unit), do: ~w(ns us ms s min h d)
-  def family(:information, unit), do: information(unit)
-  def family(:data_rate, unit), do: Enum.map(information(unit), &(&1 <> "/s"))
+  def family(quantity, unit), do: family(quantity, unit, :as_posted)
 
-  def family(:frequency, unit),
-    do: if(atom?(unit, "Hz"), do: ~w(Hz kHz MHz GHz), else: ~w(/h /min /s))
+  @doc """
+  The display family a system shows a unit of the quantity in (spec/05 §4.2): the
+  family the quantity's table names for `:metric`, `:us` or `:uk` when it names one, else
+  the unit's own (`family/2`), which is what `:as_posted` always is.
 
-  def family(:length, _unit), do: ~w(mm m km)
-  def family(:power, _unit), do: ~w(W kW MW GW)
+  ## Examples
 
-  def family(:energy, unit),
-    do: if(atom?(unit, "h"), do: ~w(W.h kW.h MW.h GW.h), else: ~w(J kJ MJ GJ))
+      iex> Visualize.Quantity.family(:mass, "kg", :uk)
+      ["[oz_av]", "[lb_av]", "[stone_av]"]
 
-  def family(:pressure, _unit), do: ~w(Pa kPa MPa)
-  def family(quantity, _unit) when quantity in @all, do: []
+      iex> Visualize.Quantity.family(:duration, "ms", :us)
+      ["ns", "us", "ms", "s", "min", "h", "d"]
+
+  """
+  @spec family(t(), Unit.code() | nil, system()) :: [Unit.code()]
+  def family(quantity, nil, system) do
+    case base_unit(quantity) do
+      nil -> []
+      base -> family(quantity, base, system)
+    end
+  end
+
+  def family(quantity, unit, system) when system in @systems do
+    families = Facts.fetch!(quantity).families
+
+    case List.keyfind(families, system, 0) do
+      {^system, ladder} -> ladder
+      nil -> own_family(families, unit)
+    end
+  end
 
   @doc """
   The quantity a code's dimension implies, or `nil` when none of the list has it. A
-  dimensionless code holding `%` is a `:ratio`, any other a `:count`.
+  dimensionless code holding `%` is a `:ratio`, one holding an `{iso4217:…}` annotation a
+  `:currency`, any other a `:count`.
 
   ## Examples
 
@@ -166,7 +275,11 @@ defmodule Visualize.Quantity do
   def of_unit(unit) do
     case Unit.dimension(unit) do
       dims when dims == %{} ->
-        if atom?(unit, "%"), do: :ratio, else: :count
+        cond do
+          atom?(unit, "%") -> :ratio
+          currency?(unit) -> :currency
+          true -> :count
+        end
 
       dims ->
         Enum.find(@all -- @dimensionless, &(Unit.dimension(base_unit(&1)) == dims))
@@ -176,7 +289,8 @@ defmodule Visualize.Quantity do
   @doc """
   A measure completed and checked (spec/05 §4.2): a unit alone implies its quantity, a
   quantity alone means its base unit, and a unit whose dimension is not its quantity's is
-  refused. A `:ratio` or a `:count` takes any dimensionless unit.
+  refused. A `:ratio` or a `:count` takes any dimensionless unit, and a `:currency` a
+  dimensionless one holding an `{iso4217:…}` annotation.
 
   ## Examples
 
@@ -204,21 +318,31 @@ defmodule Visualize.Quantity do
     end
   end
 
-  @doc """
-  The family member that fits a domain in a measure (spec/05 §4.3): the largest in which
-  the domain's magnitude is at least 1, else the smallest. A measure with no family, a
-  unit without a factor (`Cel`) or a zero magnitude keeps its unit; no unit is `nil`.
-  """
+  @doc "As `display_unit/3` with `[]` options."
   @spec display_unit([term()], measure()) :: Unit.code() | nil
-  def display_unit(domain, measure) do
-    %{unit: unit, quantity: quantity} = resolve!(measure)
-    magnitude = magnitude(domain)
+  def display_unit(domain, measure), do: display_unit(domain, measure, [])
 
-    cond do
-      unit == nil or quantity == nil or magnitude == 0 or Unit.factor(unit) == nil -> unit
-      family(quantity, unit) == [] -> unit
-      true -> fit(family(quantity, unit), magnitude, unit)
-    end
+  @doc """
+  The member of the system's family that fits a domain in a measure (spec/05 §4.3): the
+  largest in which the domain's magnitude is at least 1, else the smallest; a family of
+  one member is that member. A measure with no family under the system, or a unit
+  without a factor (`Cel`) in its own family, keeps its unit, and so does a zero
+  magnitude when the unit is in the family — otherwise the member nearest it is taken.
+  No unit is `nil`.
+
+  ## Options
+
+  - `:system` - `:metric`, `:us`, `:uk` or `:as_posted` (default)
+
+  """
+  @spec display_unit([term()], measure(), keyword()) :: Unit.code() | nil
+  def display_unit(domain, measure, opts) do
+    system = Keyword.get(opts, :system, :as_posted)
+    %{unit: unit, quantity: quantity} = resolve!(measure)
+
+    if unit == nil or quantity == nil,
+      do: unit,
+      else: choose(family(quantity, unit, system), unit, magnitude(domain))
   end
 
   @doc """
@@ -233,6 +357,7 @@ defmodule Visualize.Quantity do
 
   - `:count` - the tick count the axis asks for (default `10`)
   - `:locale` - default `"en"`
+  - `:system` - the unit system, as `display_unit/3` (default `:as_posted`)
 
   """
   @spec formatter(struct(), measure(), keyword()) :: (term() -> String.t()) | nil
@@ -244,7 +369,7 @@ defmodule Visualize.Quantity do
         Format.Auto.formatter(scale, opts)
 
       %{unit: unit, quantity: quantity} = resolved ->
-        display = display_unit(domain, resolved)
+        display = display_unit(domain, resolved, Keyword.take(opts, [:system]))
         scaled = for d <- domain, is_number(d), do: scale(d, unit, display)
         number = Format.Auto.number(notation(quantity, scaled, opts), opts)
         suffix = suffix(display)
@@ -261,16 +386,19 @@ defmodule Visualize.Quantity do
       %{unit: nil} ->
         Format.Auto.formatter(scale, opts)
 
-      %{unit: unit, quantity: quantity} ->
+      %{unit: posted, quantity: quantity} = resolved ->
         si = Format.Auto.number(:si, Keyword.take(opts, [:locale]))
+        unit = log_unit(scale, resolved, Keyword.get(opts, :system, :as_posted))
         decades = decades(quantity, unit)
 
         fn
           value when is_number(value) ->
             display =
-              if value == 0 or decades == [], do: unit, else: fit(decades, abs(value), unit)
+              if value == 0 or decades == [],
+                do: unit,
+                else: fit(decades, abs(scale(value, posted, unit)), unit)
 
-            si.(scale(value, unit, display)) <> suffix(display)
+            si.(scale(value, posted, display)) <> suffix(display)
 
           value ->
             to_string(value)
@@ -357,9 +485,11 @@ defmodule Visualize.Quantity do
 
   defp pair(unit, quantity) do
     fits? =
-      if quantity in @dimensionless,
-        do: Unit.dimension(unit) == %{},
-        else: Unit.dimension(unit) == Unit.dimension(base_unit(quantity))
+      case quantity do
+        :currency -> Unit.dimension(unit) == %{} and currency?(unit)
+        quantity when quantity in @dimensionless -> Unit.dimension(unit) == %{}
+        quantity -> Unit.dimension(unit) == Unit.dimension(base_unit(quantity))
+      end
 
     if fits?,
       do: {:ok, %{unit: unit, quantity: quantity}},
@@ -378,18 +508,48 @@ defmodule Visualize.Quantity do
 
   # -- scaling --------------------------------------------------------------------------
 
-  defp information(unit) do
-    cond do
-      atom?(unit, "bit") -> @bits
-      binary_prefix?(unit) -> @binary
-      true -> @decimal
-    end
+  # The first family holding a member of the unit's shape, else none.
+  defp own_family(families, unit) do
+    shape = shape(unit)
+
+    Enum.find_value(families, [], fn {_system, ladder} ->
+      if Enum.any?(ladder, &(shape(&1) == shape)), do: ladder
+    end)
+  end
+
+  defp in_family?(family, unit), do: Enum.any?(family, &(shape(&1) == shape(unit)))
+
+  # A unit's atoms and exponents, prefixes aside but a binary one kept apart, annotations
+  # and integer factors aside: `kBy` and `By` are one shape, `MiBy` another.
+  defp shape(unit) do
+    unit
+    |> components()
+    |> Enum.filter(& &1.atom)
+    |> Enum.map(&{&1.atom, &1.exponent, &1.prefix in ["Ki", "Mi", "Gi", "Ti"]})
+    |> Enum.sort()
   end
 
   defp atom?(unit, atom), do: unit |> components() |> Enum.any?(&(&1.atom == atom))
 
-  defp binary_prefix?(unit),
-    do: unit |> components() |> Enum.any?(&(&1.prefix in ["Ki", "Mi", "Gi"]))
+  # The currency extension's marker, an `{iso4217:…}` annotation (spec/05 §4.1).
+  defp currency?(unit),
+    do: unit |> components() |> Enum.any?(&match?("iso4217:" <> _, &1.annotation || ""))
+
+  defp bound(nil, _base, _unit), do: nil
+  defp bound(value, base, unit), do: Unit.convert(value, base, unit)
+
+  # The member of a family a domain's magnitude chooses (spec/05 §4.3).
+  defp choose([], unit, _magnitude), do: unit
+  defp choose([member], _unit, _magnitude), do: member
+
+  defp choose(family, unit, magnitude) do
+    cond do
+      Unit.factor(unit) == nil -> unit
+      magnitude != 0 -> fit(family, magnitude, unit)
+      in_family?(family, unit) -> unit
+      true -> Enum.min_by(family, &abs(:math.log10(Unit.convert(1, unit, &1))))
+    end
+  end
 
   defp components(unit) do
     {:ok, components} = Unit.parse(unit)
@@ -412,15 +572,26 @@ defmodule Visualize.Quantity do
 
   defp decades(quantity, unit) do
     case Unit.factor(unit) do
-      nil ->
-        []
-
       {n, d} ->
-        Enum.filter(family(quantity, unit), fn member ->
-          {mn, md} = Unit.factor(member)
-          power_of_ten?(mn * d, md * n)
-        end)
+        for member <- family(quantity, unit),
+            {mn, md} <- [Unit.factor(member)],
+            power_of_ten?(mn * d, md * n),
+            do: member
+
+      _affine_or_pi ->
+        []
     end
+  end
+
+  # The unit a log axis's ticks are written from: the data's, unless the system shows
+  # the quantity in another family, then the display unit of the domain there.
+  defp log_unit(_scale, %{unit: unit}, :as_posted), do: unit
+  defp log_unit(_scale, %{quantity: nil, unit: unit}, _system), do: unit
+
+  defp log_unit(%{domain: domain}, %{unit: unit, quantity: quantity} = resolved, system) do
+    if in_family?(family(quantity, unit, system), unit),
+      do: unit,
+      else: display_unit(domain, resolved, system: system)
   end
 
   defp power_of_ten?(n, d) do

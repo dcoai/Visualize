@@ -24,6 +24,28 @@ defmodule Visualize.Feed.ConformanceTest do
     feed: Signals.new(Visualize.Signals.new(:discrete, [:t, :n], window: 3), tick: 30, limit: 10),
     windows: [nil, [4, 12], [-5, 8], [nil, 6], [25, nil], [0, 100]]
 
+  # A feed whose schema uses every quantity, each in its base unit with a metric kind and
+  # bounds (spec/05 §4.2, D-155): the kit holds no quantity, unit or new key against it.
+  use Conformance,
+    name: "Signals, every quantity",
+    feed:
+      Signals.new(
+        Visualize.Signals.new(:discrete, [:t | Visualize.Quantity.all()], window: 3),
+        tick: 30,
+        limit: 10,
+        describe:
+          Map.new(Visualize.Quantity.all(), fn q ->
+            {q,
+             %{
+               quantity: q,
+               unit: Visualize.Quantity.base_unit(q) || "{iso4217:USD}",
+               metric_kind: :gauge,
+               bounds: [nil, nil]
+             }}
+          end)
+      ),
+    windows: [nil, [4, 12], [0, 100]]
+
   # The collector's clock is fixed, so its stamps are `@t0 + 1`, `@t0 + 2`, …: a window
   # before `@t0` is before its start and capped, one after it is within its rows.
   @t0 1_760_000_000_000_000
