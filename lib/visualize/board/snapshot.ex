@@ -202,20 +202,23 @@ defmodule Visualize.Board.Snapshot do
       box there (`Visualize.Board.boxes/2`), so a snapshot redraws at any width
     * `:theme` - the theme to draw in (default the snapshot's), such as
       `Visualize.Theme.print/0` for paper
+    * `:system` - the unit system the cells' measures are shown in (default
+      `:as_posted`): the reader's, so a snapshot does not record it (spec/14 §4.4, D-156)
   """
   @spec views(t(), keyword()) :: %{atom() => View.t()}
   def views(%__MODULE__{} = snapshot, opts \\ []) do
     width = Keyword.get(opts, :width, snapshot.width)
     theme = Keyword.get(opts, :theme, snapshot.theme)
+    system = Keyword.get(opts, :system, :as_posted)
     boxes = Board.boxes(snapshot.board, width)
 
     Map.new(snapshot.cells, fn {name, cell} ->
       {_x, _y, w, h} = Map.fetch!(boxes, name)
-      {name, view(snapshot, name, cell, {w, h}, theme)}
+      {name, view(snapshot, name, cell, {w, h}, theme, system)}
     end)
   end
 
-  defp view(snapshot, name, %{crashed: reason}, size, theme) when is_binary(reason) do
+  defp view(snapshot, name, %{crashed: reason}, size, theme, _system) when is_binary(reason) do
     crashed = {:crashed, reason}
 
     %View{
@@ -227,7 +230,7 @@ defmodule Visualize.Board.Snapshot do
     }
   end
 
-  defp view(snapshot, name, cell, size, theme) do
+  defp view(snapshot, name, cell, size, theme, system) do
     Draw.once(%{
       name: name,
       title: title(snapshot, name),
@@ -235,6 +238,7 @@ defmodule Visualize.Board.Snapshot do
       vars: cell.vars,
       size: size,
       theme: theme,
+      system: system,
       now: snapshot.now,
       stale_after: snapshot.board.stale_after,
       slots: cell.slots

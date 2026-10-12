@@ -409,6 +409,9 @@ defmodule Visualize.Chart do
       §4.2); a design records no size
     * `:now` - the instant a `:window` step measures its durations back from (spec/14
       §5.4.1); without it each such step takes the newest reading of its own column
+    * `:system` - the unit system the axes show their measures in, `:metric`, `:us`,
+      `:uk` or `:as_posted` (default): the viewer's preference, never the design's
+      (spec/14 §4.4, D-156)
     * `:schemas` - a `Visualize.Data.Schema.Cache` of feeds' schemas by version
       (default empty), read for every slot whose contract is not empty (spec/14 §7.4)
     * `:describe` - `(feed -> {:ok, schema} | {:error, reason})`, asked once for a
@@ -449,7 +452,7 @@ defmodule Visualize.Chart do
          {:ok, sources} <- Template.bind(chart, pool),
          {:ok, chart, described} <- Facts.apply(chart, pool, cache, opts[:describe]),
          :ok <- Validator.validate(to_map(chart)) do
-      shared = [sources: sources] ++ Keyword.take(opts, [:theme, :now, :size])
+      shared = [sources: sources] ++ Keyword.take(opts, [:theme, :now, :size, :system])
       frames = realise_frames(chart, shared)
 
       frame = frames |> Map.values() |> Enum.min_by(& &1.name)
@@ -688,7 +691,7 @@ defmodule Visualize.Chart do
   Each is compiled over its own realised frame and the marks and labels that say it.
 
   An applied chart is compiled as it is; a chart or a design map is applied first with
-  the `sources:`, `vars:` and `theme:` options of `apply/2`, and its errors are this
+  the `sources:`, `vars:`, `theme:`, `size:`, `now:` and `system:` options of `apply/2`, and its errors are this
   function's. The compiler's own options are `:ceiling`, the point count above which
   `render: :auto` leaves SVG for the canvas (default `1000`, spec/00 §3.2), and `:motion`,
   `:full` (default) or `:reduce`: a reader who asks for less motion gets every transition
@@ -721,7 +724,16 @@ defmodule Visualize.Chart do
     with {:ok, applied} <-
            __MODULE__.apply(
              design,
-             Keyword.take(opts, [:sources, :vars, :theme, :size, :now, :schemas, :describe])
+             Keyword.take(opts, [
+               :sources,
+               :vars,
+               :theme,
+               :size,
+               :now,
+               :system,
+               :schemas,
+               :describe
+             ])
            ) do
       compile(applied, opts)
     end

@@ -47,6 +47,9 @@ defmodule Visualize.Board.Server do
     * `:feeds` - the feeds by the names the binding uses (default `%{}`)
     * `:theme` - the theme the cells and their states are drawn in
       (default `Visualize.Theme.default/0`)
+    * `:system` - the unit system every cell's measures are shown in, `:metric`, `:us`,
+      `:uk` or `:as_posted` (default); a viewer's preference, so a host serving several
+      runs a board per system (spec/14 §4.4, D-156)
     * `:width` - the container width in pixels until a `resize/2` (default `1200`)
     * `:tick` - the data rate, milliseconds between turns; `nil` turns only on `tick/1`
       (default `1000`)
@@ -119,6 +122,7 @@ defmodule Visualize.Board.Server do
         binding: Binding.new(),
         feeds: %{},
         theme: Visualize.Theme.default(),
+        system: :as_posted,
         width: 1200,
         tick: 1000,
         budget: nil,
@@ -292,6 +296,7 @@ defmodule Visualize.Board.Server do
         :binding,
         :feeds,
         :theme,
+        :system,
         :width,
         :tick,
         :max_heap,
@@ -571,6 +576,7 @@ defmodule Visualize.Board.Server do
        vars: vars,
        size: size(box),
        theme: state.theme,
+       system: state.system,
        title: Map.get(cell, :title),
        stale_after: state.board.stale_after,
        subscribers: Map.keys(state.subscribers),

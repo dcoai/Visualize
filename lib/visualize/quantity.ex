@@ -348,8 +348,10 @@ defmodule Visualize.Quantity do
   into the display unit, written by `Visualize.Format.Auto`'s notation of the scaled
   domain, then followed by the unit's symbol. A log or symlog scale gives each tick its
   own display unit; any other scale but the numeric ones is
-  `Visualize.Format.Auto.formatter/2`, the measure unused. Raises `ArgumentError` for a
-  measure `resolve/1` refuses.
+  `Visualize.Format.Auto.formatter/2`, the measure unused. A value `ticks/3` placed for
+  the same count and system is labelled with the round number it came from, so the round
+  trip through the data's unit never shows. Raises `ArgumentError` for a measure
+  `resolve/1` refuses.
 
   ## Options
 
@@ -375,10 +377,16 @@ defmodule Visualize.Quantity do
         scaled = for d <- domain, is_number(d), do: scale(d, unit, display)
         number = Format.Auto.number(notation(quantity, scaled, opts), opts)
         suffix = suffix(display)
+        # The values `ticks/3` placed, each labelled with the round number it came from.
+        rounds = Map.new(round_ticks(scale, unit, display, Keyword.get(opts, :count, 10)))
 
         fn
-          value when is_number(value) -> number.(scale(value, unit, display)) <> suffix
-          value -> to_string(value)
+          value when is_number(value) ->
+            number.(Map.get_lazy(rounds, value, fn -> scale(value, unit, display) end)) <>
+              suffix
+
+          value ->
+            to_string(value)
         end
     end
   end
@@ -414,6 +422,61 @@ defmodule Visualize.Quantity do
   def formatter(scale, measure, opts) do
     resolve!(measure)
     Format.Auto.formatter(scale, opts)
+  end
+
+  @doc "As `ticks/3` with `[]` options."
+  @spec ticks(struct(), measure()) :: [float()] | nil
+  def ticks(scale, measure), do: ticks(scale, measure, [])
+
+  @doc """
+  The tick values of a realised scale in a measure when its display unit is not its unit
+  (spec/05 §4.3, D-156): round numbers in the display unit — `Visualize.Scale.ticks/2` of
+  the domain converted into it — each converted back into the data's unit to be placed.
+  `nil` when the display unit is the unit, for a measure with no unit and for a
+  `:currency`, and on any scale but `Linear`, `Power` and `Radial`: the scale's own ticks
+  are the axis's. `formatter/3` of the same count and system labels each value with its
+  round number. Raises `ArgumentError` for a measure `resolve/1` refuses.
+
+  ## Options
+
+  - `:count` - the tick count the axis asks for (default `10`)
+  - `:system` - the unit system, as `display_unit/3` (default `:as_posted`)
+
+  ## Examples
+
+      iex> scale = Visualize.Scale.linear() |> Visualize.Scale.domain([0, 100])
+      iex> ticks = Visualize.Quantity.ticks(scale, %{unit: "s"}, count: 5)
+      [0.0, 30.0, 60.0, 90.0]
+      iex> Enum.map(ticks, Visualize.Quantity.formatter(scale, %{unit: "s"}, count: 5))
+      ["0 min", "0.5 min", "1 min", "1.5 min"]
+
+      iex> scale = Visualize.Scale.linear() |> Visualize.Scale.domain([0, 900])
+      iex> Visualize.Quantity.ticks(scale, %{unit: "ms"})
+      nil
+
+  """
+  @spec ticks(struct(), measure(), keyword()) :: [float()] | nil
+  def ticks(%struct{domain: domain} = scale, measure, opts) when struct in @numeric do
+    case resolve!(measure) do
+      %{unit: nil} ->
+        nil
+
+      %{quantity: :currency} ->
+        nil
+
+      %{unit: unit} = resolved ->
+        display = display_unit(domain, resolved, Keyword.take(opts, [:system]))
+
+        case round_ticks(scale, unit, display, Keyword.get(opts, :count, 10)) do
+          [] -> nil
+          pairs -> Enum.map(pairs, &elem(&1, 0))
+        end
+    end
+  end
+
+  def ticks(_scale, measure, _opts) do
+    resolve!(measure)
+    nil
   end
 
   @doc """
@@ -608,6 +671,24 @@ defmodule Visualize.Quantity do
 
       {:error, reason} ->
         raise ArgumentError, "not a measure: #{inspect(measure)} (#{inspect(reason)})"
+    end
+  end
+
+  # -- ticks ----------------------------------------------------------------------------
+
+  # The round ticks of the domain in the display unit, each as `{placed, round}`: the
+  # value in the data's unit it is placed at and the display-unit number it labels. None
+  # when the display unit is the unit (D-156).
+  defp round_ticks(_scale, unit, unit, _count), do: []
+
+  defp round_ticks(%{domain: domain} = scale, unit, display, count) do
+    case for(d <- domain, is_number(d), do: Unit.convert(d, unit, display)) do
+      [_, _ | _] = converted ->
+        for round <- Scale.ticks(%{scale | domain: converted}, count),
+            do: {Unit.convert(round, display, unit), round}
+
+      _fewer ->
+        []
     end
   end
 

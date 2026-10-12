@@ -72,6 +72,7 @@ defmodule Visualize.Chart.Compiled do
     :box,
     :viewport,
     motion: :full,
+    system: :as_posted,
     backdrop: "",
     defs: [],
     transitions: %{},
@@ -134,6 +135,7 @@ defmodule Visualize.Chart.Compiled do
           box: %{x: number(), y: number(), width: number(), height: number()},
           viewport: map() | nil,
           motion: :full | :reduce,
+          system: Visualize.Quantity.system(),
           transitions: %{atom() => map()},
           eased: %{atom() => map()},
           motions: %{non_neg_integer() => map()},
@@ -173,6 +175,7 @@ defmodule Visualize.Chart.Compiled do
     compiled = %__MODULE__{
       chart: chart,
       theme: frame.theme,
+      system: frame.system,
       layout: layout,
       regions: regions,
       targets: targets,
@@ -661,8 +664,15 @@ defmodule Visualize.Chart.Compiled do
   # A tick re-realises the frame, and must do it at the size the chart was compiled at
   # (spec/14 §4.2, #427): a design records none, so the compiled chart is where it lives.
   # Its force layouts start from the ones the chart carries (§12.5, D-132).
-  defp realise_opts(%{theme: theme, size: size, forces: forces}, sources),
-    do: [sources: sources, theme: theme, size: {size.width, size.height}, warm: forces]
+  defp realise_opts(%{theme: theme, system: system, size: size, forces: forces}, sources) do
+    [
+      sources: sources,
+      theme: theme,
+      system: system,
+      size: {size.width, size.height},
+      warm: forces
+    ]
+  end
 
   defp window_frame(nil, _chart, frame, _sources, _now), do: frame
 

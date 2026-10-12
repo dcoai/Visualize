@@ -45,6 +45,13 @@ release it merely follows.
   conversion was out of scope. *After:* it is `68.0`. Different dimensions, levels against
   linear units, and two currencies still raise `ArgumentError`, and the message now gives
   the reason. *Instead:* to check without raising, call `Visualize.Unit.conversion/2`.
+- **An axis shown in another unit ticks at round numbers in that unit** (#594, D-156).
+  *Affects* every axis with a measure whose display unit is not the data's unit, such as
+  seconds shown in minutes. *Before:* the ticks were round in the data's unit, so 0–100
+  `s` read `0.166667 min`, `0.333333 min`, …. *After:* the ticks are round in the
+  display unit, `0 min`, `0.2 min`, … `1.6 min`, placed at 0, 12, … 96 `s`. The labels
+  and the tick positions both change, and the grid follows them. *Instead:* to keep ticks
+  in the data's unit, give the axis an explicit `format` or explicit tick values.
 
 ### Added
 
@@ -123,6 +130,20 @@ release it merely follows.
   test names.
 - **An angle's `°` sits against its number**: `350°`. A temperature keeps its space:
   `20 °C`.
+
+#### Axes in another unit
+
+- **`system:` shows a chart in the viewer's unit system** (#594, D-156).
+  `Visualize.Chart.apply/2` and `compile/2` take `system:` (`:metric`, `:us`, `:uk` or
+  `:as_posted`, the default). Every axis with a measure is then shown in that system:
+  0–40 `kg` under `:us` reads `0 lb` … `80 lb`. The system is the viewer's choice, so a
+  design never stores one. Boards pass it through: `Visualize.Board.realise/4`,
+  `Visualize.Board.Server` (to every cell), `Visualize.Board.Snapshot.views/2` and the
+  board exports take `system:` too. A value outside the four raises `ArgumentError`.
+- **`Visualize.Quantity.ticks/3`** gives the ticks of an axis whose display unit differs
+  from its data's unit. The ticks are round numbers in the display unit, converted back
+  into the data's unit for placement. `Visualize.Quantity.formatter/3` labels each one
+  with its round number.
 
 ## [0.3.0] — 2026-10-12
 

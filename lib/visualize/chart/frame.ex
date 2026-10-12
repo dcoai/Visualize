@@ -62,6 +62,7 @@ defmodule Visualize.Chart.Frame do
             design_styles: %{},
             defs: %{},
             now: nil,
+            system: :as_posted,
             name: nil,
             domains: %{},
             mark_paths: [],
@@ -94,6 +95,7 @@ defmodule Visualize.Chart.Frame do
           design_styles: %{atom() => map()},
           defs: %{atom() => map()},
           now: term() | nil,
+          system: Visualize.Quantity.system(),
           name: atom() | nil,
           domains: %{atom() => term()},
           mark_paths: [non_neg_integer()],
@@ -127,6 +129,8 @@ defmodule Visualize.Chart.Frame do
       spec/14 §4.2); a design records none
     * `:now` - the instant a `:window` step measures its durations back from (spec/14
       §5.4.1); without it each such step takes the newest reading of its own column
+    * `:system` - the unit system every axis shows its measure in, `:metric`, `:us`, `:uk`
+      or `:as_posted` (default): the viewer's, never the design's (spec/14 §4.4, D-156)
     * `:warm` - the force layouts a compiled chart carries between ticks (spec/14 §12.5,
       D-132); every `:force` step is cold without it (default `%{}`)
 
@@ -135,7 +139,7 @@ defmodule Visualize.Chart.Frame do
   (spec/14 §5.4.3).
 
   Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, a
-  bound value a scale cannot take, or a legend in a margin that cannot hold it (spec/14
+  `system:` not of `Visualize.Quantity.systems/0`, a bound value a scale cannot take, or a legend in a margin that cannot hold it (spec/14
   §4.5).
   """
   @spec new(Chart.t(), keyword()) :: t()
@@ -156,6 +160,7 @@ defmodule Visualize.Chart.Frame do
     }
 
     now = Keyword.get(opts, :now)
+    system = system(Keyword.get(opts, :system, :as_posted))
     theme = theme(chart.theme, Keyword.get(opts, :theme))
     styles = Style.all(chart.styles)
     projection = projection(kind, node, plot, sources)
@@ -220,6 +225,7 @@ defmodule Visualize.Chart.Frame do
       design_styles: chart.styles,
       defs: chart.defs,
       now: now,
+      system: system,
       forces: forces
     }
   end
@@ -472,6 +478,17 @@ defmodule Visualize.Chart.Frame do
       now: now,
       forces: forces
     }
+  end
+
+  # The viewer's unit system (spec/14 §4.4, D-156): one of the four, else a fault here.
+  defp system(system) do
+    if system in Visualize.Quantity.systems(),
+      do: system,
+      else:
+        raise(
+          ArgumentError,
+          "system: must be one of #{inspect(Visualize.Quantity.systems())}, got #{inspect(system)}"
+        )
   end
 
   # Which frame `new/2` realises: the one `frame:` names, else the design's only one — a
