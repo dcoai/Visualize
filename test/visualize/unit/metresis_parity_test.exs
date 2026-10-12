@@ -96,4 +96,49 @@ defmodule Visualize.Unit.MetresisParityTest do
       end
     end
   end
+
+  describe "conversion (spec/05 §4.1)" do
+    @values [0, 1, -3.5, 37, 1234.5, 1.0e6]
+
+    test "every pair of units in a family converts as metresis converts it" do
+      differs = MetresisParity.conversion_differs()
+
+      for {family, rows} <- Enum.group_by(MetresisParity.units(), &elem(&1, 0)),
+          {_, from, _, from_code} <- rows,
+          {_, to, _, to_code} <- rows,
+          value <- @values do
+        theirs = MetresisParity.metresis_convert(value, family, from, to)
+        ours = Unit.convert(value, from_code, to_code)
+        label = "#{value} #{from} → #{to}: metresis #{theirs}, visualize #{ours}"
+
+        if from != to and (Map.has_key?(differs, from) or Map.has_key?(differs, to)) do
+          # UCUM's mercury, not metresis's: within 3 ppm, and not the same.
+          assert_in_delta ours, theirs, abs(theirs) * 3.0e-6 + 1.0e-12, label
+          if value != 0, do: refute(ours == theirs, label)
+        else
+          assert_in_delta ours, theirs, abs(theirs) * 1.0e-12 + 1.0e-9, label
+        end
+      end
+    end
+
+    test "°C↔°F is exact, including absolute zero and where the scales cross" do
+      assert Unit.convert(-40, "Cel", "[degF]") ==
+               MetresisParity.metresis_convert(-40, :temperature, "°C", "°F")
+
+      assert Unit.convert(0, "K", "Cel") ==
+               MetresisParity.metresis_convert(0, :temperature, "K", "°C")
+
+      assert Unit.convert(100, "Cel", "[degF]") ==
+               MetresisParity.metresis_convert(100, :temperature, "°C", "°F")
+    end
+
+    test "metresis's refusals are refusals here, named" do
+      assert {:error, {:dimension, _, _}} = Unit.conversion("kg", "Cel")
+
+      assert {:error, {:currency, _, _}} =
+               Unit.conversion("{iso4217:USD}", "{iso4217:EUR}")
+
+      assert Unit.conversion("{iso4217:USD}", "{iso4217:USD}") == {:ok, {{1, 1}, {0, 1}}}
+    end
+  end
 end

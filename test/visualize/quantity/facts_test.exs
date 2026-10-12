@@ -169,6 +169,10 @@ defmodule Visualize.Quantity.FactsTest do
       assert Quantity.formatter(scale, %{unit: "m"}, system: :us).(1609.344) == "1 mi"
       assert Quantity.formatter(scale, %{unit: "m"}).(1000) == "1 km"
       assert Quantity.formatter(scale, %{unit: "m"}, system: :metric).(1000) == "1 km"
+
+      celsius = Scale.linear() |> Scale.domain([0, 100])
+      assert Quantity.formatter(celsius, %{unit: "Cel"}, system: :us).(100) == "212 °F"
+      assert Quantity.formatter(celsius, %{unit: "Cel"}, system: :us).(-40) == "-40 °F"
     end
   end
 end

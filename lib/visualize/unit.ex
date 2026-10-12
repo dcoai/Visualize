@@ -24,10 +24,11 @@ defmodule Visualize.Unit do
   A code has a dimension and an exact factor to its base (the second, the byte, the
   metre, the gram, the kelvin, the radian, the coulomb): a rational, times a power of π
   for a code holding the degree. So values scale between two codes of one dimension —
-  1,500 `ms` is 1.5 `s`. `Cel` and `[degF]` are UCUM's affine special units, scales with
-  an offset, and have no factor. `B` and `B[SPL]` are its logarithmic ones; each has a
+  1,500 `ms` is 1.5 `s` — and convert exactly, `value × scale + offset` (`conversion/2`).
+  `Cel` and `[degF]` are UCUM's affine special units, scales with an offset: they have no
+  factor and convert by their offsets. `B` and `B[SPL]` are its logarithmic ones; each has a
   level dimension of its own here, so a decibel scales to a bel and never to a linear
-  unit.
+  unit. A currency never converts: an exchange rate is data.
 
   A person types symbols, not codes: `parse_alias/1` reads them, and refuses an ambiguous
   one (`KB`, `gal`) naming the codes it could mean.
@@ -82,6 +83,11 @@ defmodule Visualize.Unit do
   @type alias_reason ::
           {:ambiguous, String.t(), [{code(), String.t()}, ...]}
           | {:unknown_alias, String.t()}
+
+  @typedoc "Why `conversion/2` refuses a pair of codes."
+  @type conversion_reason ::
+          {:dimension | :logarithmic | :currency, code(), code()}
+          | {:affine_in_term, code()}
 
   @typedoc "A base dimension and its exponent; `%{}` is dimensionless."
   @type dimension :: %{
@@ -307,16 +313,7 @@ defmodule Visualize.Unit do
 
   """
   @spec dimension(code()) :: dimension()
-  def dimension(code) do
-    code
-    |> parse!()
-    |> Enum.filter(& &1.atom)
-    |> Enum.reduce(%{}, fn %{atom: atom, exponent: e}, acc ->
-      {dims, _factor, _metric, _symbol, _kind} = Map.fetch!(@atoms, atom)
-      Enum.reduce(dims, acc, fn {dim, n}, acc -> Map.update(acc, dim, n * e, &(&1 + n * e)) end)
-    end)
-    |> Map.reject(fn {_dim, n} -> n == 0 end)
-  end
+  def dimension(code), do: code |> parse!() |> dims()
 
   @doc """
   The exact factor of a code to its base: `{numerator, denominator}`, or
@@ -354,27 +351,60 @@ defmodule Visualize.Unit do
 
   """
   @spec kind(code()) :: kind()
-  def kind(code) do
-    kinds =
-      for %{atom: atom} <- parse!(code), atom != nil, do: atom |> atom!() |> elem(4)
+  def kind(code), do: code |> parse!() |> kind_of()
 
-    cond do
-      :affine in kinds -> :affine
-      :logarithmic in kinds -> :logarithmic
-      true -> :linear
+  @doc """
+  The exact conversion from one code to another (spec/05 §4.1, D-155):
+  `{:ok, {scale, offset}}`, so that a value in `from` is `value × scale + offset` in `to`
+  — `scale` an exact factor (`{n, d}`, or `{n, d, k}` for n/d·πᵏ), `offset` an exact
+  signed rational `{n, d}` — or why the two do not convert.
+
+  Two codes of one dimension convert by their factors. The affine units `Cel` and
+  `[degF]` convert with their offsets, standing alone. A logarithmic unit converts only
+  to its own level. A currency never converts. A refusal is `{:dimension, from, to}`,
+  `{:logarithmic, from, to}`, `{:currency, from, to}`, `{:affine_in_term, code}`, or the
+  reason `parse/1` refuses a code.
+
+  ## Examples
+
+      iex> Visualize.Unit.conversion("Cel", "[degF]")
+      {:ok, {{9, 5}, {32, 1}}}
+
+      iex> Visualize.Unit.conversion("[lb_av]", "kg")
+      {:ok, {{45359237, 100000000}, {0, 1}}}
+
+      iex> Visualize.Unit.conversion("dB[SPL]", "Pa")
+      {:error, {:logarithmic, "dB[SPL]", "Pa"}}
+
+  """
+  @spec conversion(code(), code()) ::
+          {:ok, {exact(), {integer(), pos_integer()}}} | {:error, reason() | conversion_reason()}
+  def conversion(from, to) do
+    with {:ok, fc} <- parse(from),
+         {:ok, tc} <- parse(to) do
+      cond do
+        from == to -> {:ok, {{1, 1}, {0, 1}}}
+        currencies(fc) != currencies(tc) -> {:error, {:currency, from, to}}
+        dims(fc) != dims(tc) -> {:error, {mismatch(fc, tc), from, to}}
+        affine?(fc) or affine?(tc) -> affine(from, fc, to, tc)
+        true -> {:ok, {public(divide(exact_of(fc), exact_of(tc))), {0, 1}}}
+      end
     end
   end
 
   @doc """
-  A value in `from` written in `to`: `value × factor(from) / factor(to)`, the ratio
-  exact and applied once, for two codes of one dimension that both have a factor. Raises
-  `ArgumentError` otherwise — between unit systems (`Cel` and `[degF]`) above all, which
-  is out of scope.
+  A value in `from` written in `to` (spec/05 §4.1): `value × scale + offset` of
+  `conversion/2`, as a float — the scale and offset exact, and the arithmetic rounded
+  once for an integer value. Raises `ArgumentError` naming the reason for a pair
+  `conversion/2` refuses.
 
   ## Examples
 
       iex> Visualize.Unit.convert(2_500_000, "By", "MBy")
       2.5
+
+      iex> Visualize.Unit.convert(100, "Cel", "[degF]")
+      212.0
 
       iex> Visualize.Unit.convert(30, "dB", "B")
       3.0
@@ -382,16 +412,14 @@ defmodule Visualize.Unit do
   """
   @spec convert(number(), code(), code()) :: float()
   def convert(value, from, to) when is_number(value) do
-    with true <- dimension(from) == dimension(to),
-         {fnum, fd, fk} <- exact(from),
-         {tn, td, tk} <- exact(to) do
-      {n, d} = reduce({fnum * td, fd * tn})
-      if fk == tk, do: value * n / d, else: value * n / d * :math.pow(:math.pi(), fk - tk)
-    else
-      _ ->
+    case conversion(from, to) do
+      {:ok, {scale, offset}} ->
+        apply_conversion(value, scale, offset)
+
+      {:error, reason} ->
         raise ArgumentError,
-              "cannot convert #{inspect(from)} to #{inspect(to)}: only units of one " <>
-                "dimension that scale by a factor convert (spec/05 §4.1)"
+              "cannot convert #{inspect(from)} to #{inspect(to)}: #{format_error(reason)} " <>
+                "(spec/05 §4.1)"
     end
   end
 
@@ -426,7 +454,7 @@ defmodule Visualize.Unit do
   end
 
   @doc """
-  A refusal of `parse/1` or `parse_alias/1` as a line a person reads.
+  A refusal of `parse/1`, `parse_alias/1` or `conversion/2` as a line a person reads.
 
   ## Examples
 
@@ -434,7 +462,7 @@ defmodule Visualize.Unit do
       ~s|"gal" is ambiguous: [gal_us] (US gallon) or [gal_br] (imperial gallon)|
 
   """
-  @spec format_error(reason() | alias_reason()) :: String.t()
+  @spec format_error(reason() | alias_reason() | conversion_reason()) :: String.t()
   def format_error({:ambiguous, symbol, choices}) do
     {last, rest} =
       choices |> Enum.map(fn {code, meaning} -> "#{code} (#{meaning})" end) |> List.pop_at(-1)
@@ -445,6 +473,22 @@ defmodule Visualize.Unit do
 
   def format_error({:unknown_alias, symbol}),
     do: "#{inspect(symbol)} is neither a unit symbol visualize knows nor a UCUM code"
+
+  def format_error({:dimension, from, to}),
+    do: "#{inspect(from)} and #{inspect(to)} measure different dimensions"
+
+  def format_error({:logarithmic, from, to}),
+    do: "a level converts only to its own level, so #{inspect(from)} and #{inspect(to)} do not"
+
+  def format_error({:currency, from, to}) do
+    "#{inspect(from)} and #{inspect(to)} are in different currencies, which never convert: " <>
+      "an exchange rate is data, not a fact about a unit"
+  end
+
+  def format_error({:affine_in_term, code}) do
+    "#{inspect(code)} holds °C or °F inside a term, which is not a temperature and has no " <>
+      "offset to convert by"
+  end
 
   def format_error(:empty), do: "a unit code is not empty"
   def format_error({:syntax, rest}), do: "a UCUM code does not read at #{inspect(rest)}"
@@ -667,16 +711,7 @@ defmodule Visualize.Unit do
   # -- factors ------------------------------------------------------------------------
 
   # A code's factor as `{n, d, k}`, n/d·πᵏ, or `nil` when it holds an affine unit.
-  defp exact(code) do
-    code
-    |> parse!()
-    |> Enum.reduce_while({1, 1, 0}, fn component, acc ->
-      case component_factor(component) do
-        nil -> {:halt, nil}
-        exact -> {:cont, multiply(acc, power(exact, component.exponent))}
-      end
-    end)
-  end
+  defp exact(code), do: code |> parse!() |> exact_of()
 
   defp component_factor(%{atom: nil, factor: nil}), do: {1, 1, 0}
   defp component_factor(%{atom: nil, factor: n}), do: {n, 1, 0}
@@ -707,6 +742,106 @@ defmodule Visualize.Unit do
     g = Integer.gcd(n, d)
     {div(n, g), div(d, g)}
   end
+
+  # -- conversion ---------------------------------------------------------------------
+
+  # The affine units, each as its definition to the kelvin: K = value × scale + offset.
+  @affine %{"Cel" => {{1, 1}, {27_315, 100}}, "[degF]" => {{5, 9}, {45_967, 180}}}
+
+  defp dims(components) do
+    components
+    |> Enum.filter(& &1.atom)
+    |> Enum.reduce(%{}, fn %{atom: atom, exponent: e}, acc ->
+      {dims, _factor, _metric, _symbol, _kind} = atom!(atom)
+      Enum.reduce(dims, acc, fn {dim, n}, acc -> Map.update(acc, dim, n * e, &(&1 + n * e)) end)
+    end)
+    |> Map.reject(fn {_dim, n} -> n == 0 end)
+  end
+
+  defp exact_of(components) do
+    Enum.reduce_while(components, {1, 1, 0}, fn component, acc ->
+      case component_factor(component) do
+        nil -> {:halt, nil}
+        exact -> {:cont, multiply(acc, power(exact, component.exponent))}
+      end
+    end)
+  end
+
+  # The currencies a code holds, each `{iso4217:…}` annotation with its exponent.
+  defp currencies(components) do
+    components
+    |> Enum.filter(&match?("iso4217:" <> _, &1.annotation || ""))
+    |> Enum.map(&{&1.annotation, &1.exponent})
+    |> Enum.sort()
+  end
+
+  defp mismatch(fc, tc),
+    do:
+      if(kind_of(fc) == :logarithmic or kind_of(tc) == :logarithmic,
+        do: :logarithmic,
+        else: :dimension
+      )
+
+  defp kind_of(components) do
+    kinds = for %{atom: atom} <- components, atom != nil, do: atom |> atom!() |> elem(4)
+
+    cond do
+      :affine in kinds -> :affine
+      :logarithmic in kinds -> :logarithmic
+      true -> :linear
+    end
+  end
+
+  defp affine?(components), do: kind_of(components) == :affine
+
+  # Two temperatures through the kelvin, each a standalone affine unit or a linear one.
+  defp affine(from, fc, to, tc) do
+    with {:ok, {fs, fo}} <- to_kelvin(from, fc),
+         {:ok, {ts, to_offset}} <- to_kelvin(to, tc) do
+      {sn, sd} = reduce({elem(fs, 0) * elem(ts, 1), elem(fs, 1) * elem(ts, 0)})
+      {on, od} = subtract(fo, to_offset)
+      offset = reduce_signed({on * elem(ts, 1), od * elem(ts, 0)})
+      {:ok, {{sn, sd}, offset}}
+    end
+  end
+
+  # A temperature code as `{scale, offset}` to the kelvin: `K = value × scale + offset`.
+  defp to_kelvin(_code, [%{atom: atom, prefix: prefix, exponent: 1}])
+       when is_map_key(@affine, atom) do
+    {{n, d}, offset} = Map.fetch!(@affine, atom)
+    {pn, pd, 0} = prefix_factor(prefix)
+    {:ok, {reduce({n * pn, d * pd}), offset}}
+  end
+
+  defp to_kelvin(code, components) do
+    case exact_of(components) do
+      nil -> {:error, {:affine_in_term, code}}
+      {n, d, 0} -> {:ok, {{n, d}, {0, 1}}}
+    end
+  end
+
+  defp subtract({a, b}, {c, d}), do: reduce_signed({a * d - c * b, b * d})
+
+  defp reduce_signed({0, _d}), do: {0, 1}
+
+  defp reduce_signed({n, d}) do
+    g = Integer.gcd(n, d)
+    {div(n, g), div(d, g)}
+  end
+
+  defp divide({a, b, j}, {c, d, k}), do: multiply({a, b, j}, {d, c, -k})
+
+  defp public({n, d, 0}), do: {n, d}
+  defp public(exact), do: exact
+
+  # One rounding for an integer value and a rational scale; a float rounds as it goes.
+  defp apply_conversion(value, {n, d}, {on, od}) when is_integer(value),
+    do: (value * n * od + on * d) / (d * od)
+
+  defp apply_conversion(value, {n, d}, {on, od}), do: value * n / d + on / od
+
+  defp apply_conversion(value, {n, d, k}, {0, 1}),
+    do: value * n / d * :math.pow(:math.pi(), k)
 
   # -- symbols ------------------------------------------------------------------------
 
