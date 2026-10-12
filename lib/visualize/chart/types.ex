@@ -46,13 +46,12 @@ defmodule Visualize.Chart.Types do
 
   @doc false
   # Whether a type satisfies a need (spec/14 §7.4). A schema's type is what a field means:
-  # `:text` is as discrete as `:category`, and `:time` names the time field however the
-  # feed writes it — `Visualize.Feed.Signals` writes its tick as a number — so a numeric
-  # scale takes it. A rows' type is how values are written: `:time` is instants, which no
-  # numeric scale takes, and a band or ordinal scale takes a value of any type.
+  # `:text` is as discrete as `:category`, and `:time` is instants (D-154), which no
+  # numeric scale takes — a feed's tick is a `:number`. A rows' type is how values are
+  # written: `:time` is instants there too, and a band or ordinal scale takes a value of
+  # any type.
   @spec satisfies?(atom(), need(), :schema | :rows) :: boolean()
   def satisfies?(:text, :category, :schema), do: true
-  def satisfies?(:time, :number, :schema), do: true
   def satisfies?(_type, :category, :rows), do: true
   def satisfies?(type, need, _from), do: type == need
 

@@ -664,7 +664,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       %{
         clock: Schema.new!(%{t: %{type: :time}, v: %{type: :number}}),
         names: Schema.new!(%{t: %{type: :category}, v: %{type: :number}}),
-        api: Schema.new!(%{t: %{type: :number}, v: %{type: :number}})
+        api: Schema.new!(%{t: %{type: :number, window: true}, v: %{type: :number}})
       }
     end
 
@@ -708,6 +708,34 @@ defmodule Visualize.Chart.BuilderBoardTest do
       refute html =~ "vis-builder-fault"
     end
 
+    test "a catalog feed's :time on a linear axis is reported by its schema alone (D-154)" do
+      # The rows are numbers, so only the schema can say the field is instants.
+      rows = [%{t: 1, v: 1}, %{t: 2, v: 2}]
+      design = Visualize.Chart.stack(BuilderFixture.layers())
+
+      html =
+        render_component(&Preview.panel/1, %{
+          design: design,
+          sources: %{primary: rows},
+          catalog: %{primary: typed_catalog().clock}
+        })
+
+      assert html =~ "vis-builder-fault"
+
+      assert html =~
+               "field :t of slot :primary is a time, and the scale it is read through needs a number"
+
+      html =
+        render_component(&Preview.panel/1, %{
+          design: design,
+          sources: %{primary: rows},
+          catalog: %{primary: typed_catalog().api}
+        })
+
+      assert html =~ ~s(class="vis-builder-chart")
+      refute html =~ "vis-builder-fault"
+    end
+
     test "a board cell bound to a feed of the wrong type is drawn as the fault panel" do
       held = Binding.new(%{{:latency, :primary} => :names, {:errors, :primary} => :api})
       s = opened() |> Phoenix.Component.assign(catalog: typed_catalog(), board_bindings: %{})
@@ -732,8 +760,9 @@ defmodule Visualize.Chart.BuilderBoardTest do
     end
 
     test "a catalog time feed previews over instants, which a linear axis cannot take" do
-      # The schema's `:time` passes the schema check (a tick is a number), but the rows the
-      # preview draws are instants: before D-153 this binding took the builder down.
+      # The schema's `:time` is instants (D-154), which the linear axis cannot take — the
+      # schema check reports it, and so would the rows the preview draws: before D-153 this
+      # binding took the builder down. A feed over ticks (`api`) is drawn.
       s = opened() |> Phoenix.Component.assign(catalog: typed_catalog())
       s = Phoenix.Component.assign(s, :binding, Binding.new(%{{:latency, :primary} => :clock}))
       s = event(s, "board_select", %{"cell" => "latency"})

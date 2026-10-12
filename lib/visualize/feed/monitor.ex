@@ -62,7 +62,7 @@ defmodule Visualize.Feed.Monitor do
   `budget:` (the request), `reduce:` (`:lttb` or `:m4`), `every:` (a pull feed's poll
   interval, milliseconds, `1000`), `stale_after:` (milliseconds without an answer before
   a feed is `:stale`, `nil` for never) and `limit:` (the most rows held for a feed whose
-  rows cannot be trimmed by time, `100_000`).
+  rows cannot be trimmed by a window field, `100_000`).
   """
   @spec new(%{name() => Feed.t()}, keyword()) :: t()
   def new(feeds, opts \\ []) when is_map(feeds) do
@@ -189,7 +189,7 @@ defmodule Visualize.Feed.Monitor do
     entry = monitor.entries[name]
     poll = %{entry | due: now + monitor.every}
 
-    case Feed.fetch(entry.feed, monitor.window, monitor.budget) do
+    case Feed.fetch(entry.feed, request(monitor.window, entry.schema), monitor.budget) do
       {:error, reason} ->
         put_entry(monitor, name, %{poll | status: {:down, reason}})
 
@@ -245,16 +245,16 @@ defmodule Visualize.Feed.Monitor do
     end)
   end
 
-  # A push merged into the holding: by the time field, its rows strictly after what the
+  # A push merged into the holding: by the window field, its rows strictly after what the
   # holding covers appended, and its late rows — at or before that — kept unless the
   # holding already has the very row, placed in time order when the holding is finished
-  # (spec/15 §8.5, D-146); without a time field every row, keeping the newest `limit`.
+  # (spec/15 §8.5, D-146); without a window field every row, keeping the newest `limit`.
   defp merge(nil, delivery, _schema, _limit), do: %{delivery | rows: Table.rows(delivery)}
 
   defp merge(held, delivery, schema, limit) do
     rows = Table.rows(delivery)
 
-    case Feed.time_field(schema) do
+    case Feed.window_field(schema) do
       nil ->
         all = held.rows ++ rows
         cut = max(length(all) - limit, 0)
@@ -324,7 +324,8 @@ defmodule Visualize.Feed.Monitor do
       held ->
         # The holding is trimmed whatever the feed honours, so pushes never grow it past
         # the window; the delivery handed out is reduced for the budget.
-        held = held |> ordered(entry.schema) |> Feed.finish(entry.schema, window: monitor.window)
+        window = request(monitor.window, entry.schema)
+        held = held |> ordered(entry.schema) |> Feed.finish(entry.schema, window: window)
 
         out =
           Feed.finish(held, entry.schema,
@@ -337,10 +338,10 @@ defmodule Visualize.Feed.Monitor do
     end
   end
 
-  # The holding in time order (spec/08 §11.4): a stable sort, only when a row is out of
+  # The holding in window-field order (spec/08 §11.4): a stable sort, only when a row is out of
   # order, so a reduction reads its rows in `x` order and rows that tie keep theirs.
   defp ordered(held, schema) do
-    case Feed.time_field(schema) do
+    case Feed.window_field(schema) do
       nil ->
         held
 
@@ -408,8 +409,11 @@ defmodule Visualize.Feed.Monitor do
   end
 
   @doc """
-  The monitor with a new window. A pull feed fetches at the next tick; a push feed only
-  when the window starts before what it holds covers, and is otherwise trimmed.
+  The monitor with a new window. Each feed is asked the window that applies to its window
+  field (spec/08 §11.2, D-154) — a feed over ticks is asked `nil`, its own span, by a
+  window of instants, and is neither trimmed nor refetched as that window moves. A pull
+  feed fetches at the next tick; a push feed only when the window starts before what it
+  holds covers, and is otherwise trimmed.
   """
   @spec window(t(), Feed.window()) :: t()
   def window(%__MODULE__{window: window} = monitor, window), do: monitor
@@ -417,10 +421,23 @@ defmodule Visualize.Feed.Monitor do
   def window(%__MODULE__{} = monitor, window) do
     entries =
       Map.new(monitor.entries, fn {name, entry} ->
-        {name, %{entry | refetch: entry.refetch or not covers?(entry, window)}}
+        asked = request(window, entry.schema)
+        moved? = asked != request(monitor.window, entry.schema)
+        {name, %{entry | refetch: entry.refetch or (moved? and not covers?(entry, asked))}}
       end)
 
     %{monitor | window: window, entries: entries}
+  end
+
+  # The window a feed is asked (spec/08 §11.2): the monitor's where it applies to the
+  # feed's window field, or the feed has none or is not yet described; else `nil`.
+  defp request(window, nil), do: window
+
+  defp request(window, schema) do
+    case Feed.window_type(schema) do
+      nil -> window
+      type -> if Window.applies?(window, type), do: window
+    end
   end
 
   defp covers?(%{ref: nil}, _window), do: false

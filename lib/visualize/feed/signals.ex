@@ -4,8 +4,9 @@ defmodule Visualize.Feed.Signals do
 
   The feed's present tick is fixed (`tick:`, moved with `at/2`) or read from a clock
   (`every:` milliseconds per tick). Its schema describes the first field, the tick, as
-  its time field (`:time`, labelled `"Tick"`) and every other field `:number`, under
-  whatever `describe:` adds. It honours `:window`: a window is ticks,
+  its window field — `:number`, since a tick is a count and not an instant, with
+  `window: true` and labelled `"Tick"` (spec/08 §10.1, D-154) — and every other field
+  `:number`, under whatever `describe:` adds. It honours `:window`: a window is ticks,
   served up to the present tick, at most `limit:` rows and `capped` beyond. A budget is
   left to visualize, and it does not push.
 
@@ -55,7 +56,9 @@ defmodule Visualize.Feed.Signals do
     extra = Keyword.get(opts, :describe, %{})
 
     defaults =
-      Map.new(values, &{&1, %{type: :number}}) |> Map.put(time, %{type: :time, label: "Tick"})
+      values
+      |> Map.new(&{&1, %{type: :number}})
+      |> Map.put(time, %{type: :number, window: true, label: "Tick"})
 
     schema = Schema.new!(Map.merge(defaults, extra, fn _field, d, e -> Map.merge(d, e) end))
     clock = opts[:clock] || fn -> System.monotonic_time(:millisecond) end

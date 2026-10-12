@@ -70,7 +70,10 @@ defmodule Visualize.Feed.TelemetryTest do
       {version, schema, supports} = Feed.describe(Telemetry.feed(server, name <> ":summary"))
       assert supports == [:window, :push]
       assert version == Schema.version(schema)
-      assert Feed.time_field(schema) == :t
+      # `t` holds `DateTime`s: the one `:time` field, so the window field with nothing said.
+      assert Feed.window_field(schema) == :t
+      assert {:ok, %{type: :time}} = Schema.fetch(schema, :t)
+      refute Map.has_key?(elem(Schema.fetch(schema, :t), 1), :window)
       assert {:ok, %{type: :category}} = Schema.fetch(schema, :route)
 
       assert {:ok, %{type: :number, label: "Request time", unit: "ms", quantity: :duration}} =

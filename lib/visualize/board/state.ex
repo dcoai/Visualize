@@ -100,7 +100,7 @@ defmodule Visualize.Board.State do
     end
   end
 
-  # The age in seconds of the newest reading of any slot whose time field holds
+  # The age in seconds of the newest reading of any slot whose window field holds
   # `DateTime`s, at `now`; `nil` when none does.
   defp age(_slots, nil), do: nil
 
@@ -115,7 +115,7 @@ defmodule Visualize.Board.State do
   end
 
   defp newest(%{delivery: %Delivery{} = delivery, schema: %Schema{} = schema}) do
-    case Feed.time_field(schema) do
+    case Feed.window_field(schema) do
       nil ->
         []
 

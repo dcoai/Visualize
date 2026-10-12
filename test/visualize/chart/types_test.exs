@@ -78,10 +78,30 @@ defmodule Visualize.Chart.TypesTest do
       end
     end
 
-    test "a schema's time is the time field however it is written: a numeric scale takes it" do
-      # `Visualize.Feed.Signals` describes its integer tick as `:time` (spec/08 §11.6).
-      assert Chart.check_types(design(:linear, :linear), %{primary: schema(t: :time, v: :number)}) ==
-               :ok
+    test "a schema's time is instants: a numeric scale reports it, and a tick is a number (D-154)" do
+      for kind <- [:linear, :log, :power, :sqrt, :symlog] do
+        assert Chart.check_types(design(kind, :linear), %{primary: schema(t: :time, v: :number)}) ==
+                 {:error, [mismatch(@x, :t, :number, :time)]}
+      end
+
+      # `Visualize.Feed.Signals` describes its integer tick as a `:number` window field.
+      tick = Visualize.Feed.Signals.new(Visualize.Signals.new(:sine, [:t, :v])).schema
+      assert Chart.check_types(design(:linear, :linear), %{primary: tick}) == :ok
+
+      assert Chart.check_types(design(:time, :linear), %{primary: tick}) ==
+               {:error, [mismatch(@x, :t, :time, :number)]}
+    end
+
+    test "a feed of DateTimes under :time, bound to a linear axis, is reported by application" do
+      schema = schema(t: :time, v: :number)
+      rows = for s <- 0..2, do: %{t: DateTime.add(~U[2026-10-12 00:00:00Z], s), v: s, k: "a"}
+      source = Delivery.new(rows, schema: Schema.version(schema))
+
+      assert {:error, [mismatch(@x, :t, :number, :time)]} ==
+               Chart.apply(design(:linear, :linear),
+                 sources: %{primary: source},
+                 describe: fn :primary -> {:ok, schema} end
+               )
     end
 
     test "a rows' types are how values are written: instants on a numeric scale are reported" do
@@ -307,9 +327,13 @@ defmodule Visualize.Chart.TypesTest do
       }
 
       assert Binding.check(binding, required, schemas) ==
-               {:error, [{[:cells, :a | @x], {:type_mismatch, :primary, :t, :number, :category}}]}
+               {:error,
+                [
+                  {[:cells, :a | @x], {:type_mismatch, :primary, :t, :number, :category}},
+                  {[:cells, :b | @x], {:type_mismatch, :primary, :t, :number, :time}}
+                ]}
 
-      [error] = elem(Binding.check(binding, required, schemas), 1)
+      [error | _] = elem(Binding.check(binding, required, schemas), 1)
       assert Board.format_error(error) =~ "cells.a.marks[0].channels.x: field :t of slot"
     end
 

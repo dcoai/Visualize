@@ -13,8 +13,13 @@ defmodule Visualize.Feed.MonitorTest do
 
   doctest Monitor
 
-  @v1 Schema.new!(%{t: %{type: :time}, v: %{type: :number, unit: "ms", label: "Latency"}})
-  @v2 Schema.new!(%{t: %{type: :time}, v: %{type: :number, unit: "s", label: "Latency"}})
+  # The test feeds count, so `t` is a `:number` named the window field (D-154): every
+  # window, seam and placement below is over numbers.
+  @tick %{type: :number, window: true}
+  @v1 Schema.new!(%{t: @tick, v: %{type: :number, unit: "ms", label: "Latency"}})
+  @v2 Schema.new!(%{t: @tick, v: %{type: :number, unit: "s", label: "Latency"}})
+  @stamped Schema.new!(%{t: %{type: :time}, v: %{type: :number}})
+  @t0 ~U[2026-10-12 12:00:00Z]
 
   defp rows(range), do: for(t <- range, do: %{t: t, v: rem(t * 7, 11)})
 
@@ -247,6 +252,21 @@ defmodule Visualize.Feed.MonitorTest do
       assert Monitor.deliveries(monitor).a.window == [1, 7]
     end
 
+    test "a late row stamped with an instant is placed by its timestamp as well" do
+      at = fn s -> DateTime.add(@t0, s) end
+      stamped = fn seconds -> for s <- seconds, do: %{t: at.(s), v: s} end
+      {feed, agent} = Feeds.scripted(schema: @stamped, supports: [:window, :push], rows: [])
+      held = stamped.([1, 2, 4])
+      Feeds.set(agent, rows: fn _window, _budget -> {held, [window: [at.(1), at.(4)]]} end)
+      monitor = Monitor.new(%{a: feed}) |> Monitor.tick(now: 0) |> Feeds.drain()
+
+      pushed = stamped.([5, 3])
+      Feeds.push(agent, self(), Delivery.new(pushed, schema: Schema.version(@stamped)))
+      monitor = monitor |> Feeds.drain() |> Monitor.tick(now: 1)
+
+      assert Enum.map(Monitor.deliveries(monitor).a.rows, & &1.v) == [1, 2, 3, 4, 5]
+    end
+
     test "a fetched delivery out of order is put in order before it is reduced" do
       {feed, _agent} = Feeds.scripted(schema: @v1, rows: Enum.shuffle(rows(1..40)))
       monitor = Monitor.new(%{a: feed}, budget: 12) |> Monitor.tick(now: 0)
@@ -265,6 +285,44 @@ defmodule Visualize.Feed.MonitorTest do
 
       monitor |> Monitor.refetch() |> Monitor.tick(now: 2)
       assert {Feeds.calls(pull_agent, :fetch), Feeds.calls(push_agent, :fetch)} == {2, 2}
+    end
+  end
+
+  describe "a window applies to a window field of its kind (spec/08 §11.2, D-154)" do
+    test "a window of instants leaves a feed over ticks its own span, and moving it fetches nothing" do
+      {ticks, tick_agent} = Feeds.scripted(schema: @v1, supports: [:window], rows: rows(1..10))
+      t0 = @t0
+      asked = fn window, _budget -> {[%{t: t0, v: 1}], [window: window]} end
+
+      {stamped, stamped_agent} =
+        Feeds.scripted(schema: @stamped, supports: [:window], rows: asked)
+
+      window = [DateTime.add(@t0, -60), @t0]
+
+      monitor =
+        Monitor.new(%{ticks: ticks, stamped: stamped}, window: window, every: 1000)
+        |> Monitor.tick(now: 0)
+
+      assert Monitor.status(monitor) == %{ticks: :live, stamped: :live}
+      # The feed over ticks was asked for its own span and is not trimmed by instants.
+      assert Enum.map(Monitor.deliveries(monitor).ticks.rows, & &1.t) == Enum.to_list(1..10)
+      assert Monitor.deliveries(monitor).stamped.window == window
+
+      moved = [DateTime.add(@t0, -30), DateTime.add(@t0, 30)]
+      Monitor.window(monitor, moved) |> Monitor.tick(now: 1)
+      assert Feeds.calls(tick_agent, :fetch) == 1
+      assert Feeds.calls(stamped_agent, :fetch) == 2
+    end
+
+    test "a numeric window trims a feed over ticks, and a feed of instants keeps its span" do
+      {ticks, _} = Feeds.scripted(schema: @v1, rows: rows(1..10))
+      {stamped, _} = Feeds.scripted(schema: @stamped, rows: [%{t: @t0, v: 1}])
+
+      monitor =
+        Monitor.new(%{ticks: ticks, stamped: stamped}, window: [3, 5]) |> Monitor.tick(now: 0)
+
+      assert Enum.map(Monitor.deliveries(monitor).ticks.rows, & &1.t) == [3, 4, 5]
+      assert Monitor.deliveries(monitor).stamped.rows == [%{t: @t0, v: 1}]
     end
   end
 

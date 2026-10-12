@@ -45,7 +45,7 @@ defmodule Visualize.Data.SchemaTest do
       assert {:ok, %Schema{fields: @full}} = Schema.new(@full)
     end
 
-    test "the nine keys are the vocabulary" do
+    test "the ten keys are the vocabulary" do
       assert Schema.attributes() ==
                [
                  :type,
@@ -56,7 +56,8 @@ defmodule Visualize.Data.SchemaTest do
                  :status,
                  :polarity,
                  :target,
-                 :continuity
+                 :continuity,
+                 :window
                ]
 
       assert Map.keys(@full.latency) -- Schema.attributes() == []
@@ -110,6 +111,26 @@ defmodule Visualize.Data.SchemaTest do
                  {[:v, :quantity], {:invalid_for, :time}},
                  {[:v, :status], {:invalid_for, :time}}
                ]
+    end
+
+    test "window names a clock: a boolean on a :time or :number field, one field at most (D-154)" do
+      assert {:ok, _} = Schema.new(%{t: %{type: :number, window: true}, v: %{type: :number}})
+      assert {:ok, _} = Schema.new(%{t: %{type: :time, window: true}})
+      assert {:ok, _} = Schema.new(%{t: %{type: :time, window: false}})
+
+      assert faults(%{s: %{type: :category, window: true}, x: %{type: :text, window: true}}) ==
+               [
+                 {[:s, :window], {:invalid_for, :category}},
+                 {[:x, :window], {:invalid_for, :text}}
+               ]
+
+      assert faults(%{t: %{type: :number, window: :yes}}) == [{[:t, :window], {:type, :boolean}}]
+
+      assert faults(%{a: %{type: :time, window: true}, b: %{type: :number, window: true}}) ==
+               [{[:b, :window], {:duplicate_window, :a}}]
+
+      assert Schema.format_error({[:b, :window], {:duplicate_window, :a}}) =~ "one field"
+      assert Schema.format_error({[:t, :window], {:type, :boolean}}) =~ "true or false"
     end
 
     test "values of the wrong shape" do
