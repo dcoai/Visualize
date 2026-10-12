@@ -25,7 +25,7 @@
   "plug_crypto": {:hex, :plug_crypto, "2.2.0", "144014737daaf485407f5ed77daeaad74d651b216a28c87543f8cc7043f8efc8", [:mix], [], "hexpm", "83a95744ab1c75876542b6fab135fcc176280e0f301a111c1f757fddcec95d2c"},
   "rustler_precompiled": {:hex, :rustler_precompiled, "0.10.0", "8f07ff0865cb09a6a0f75e11701e9a46e331e05f737da4e5b01374dcd25b68c0", [:mix], [{:rustler, "~> 0.28", [hex: :rustler, repo: "hexpm", optional: true]}], "hexpm", "c68c9dc732c12acfdf4a7fa06f4e6f48a641179e6be49a474c8a60809929c430"},
   "stream_data": {:hex, :stream_data, "1.4.0", "026f929db613aabea6208012ae9b8970d3fd5f88b3bdf26831bc536f98c42036", [:mix], [], "hexpm", "2b0ee3a340dcce1c8cf6302a763ee757d1e01c54d6e16d9069062509d68b1dc9"},
-  "surfex": {:hex, :surfex, "0.6.2", "2f7b063b1d4e99ac74b0fac212f44ae1b8c767be8e081701ebacbf49978de1f0", [:mix], [], "hexpm", "dad9e1f456e1ba26e9e2829e0918aab2f26de6b9bdaaad9c740a91c81551f966"},
+  "surfex": {:hex, :surfex, "0.7.0", "bd3f241bf5f06e63b3563cd20755c5e4f0729eddc662b4180edaaaeedf3744c3", [:mix], [], "hexpm", "34ccd14b850cb217f0ce5c10e9d04498b837e29f2b7af1280ec4f1e2b10b497c"},
   "table": {:hex, :table, "0.1.2", "87ad1125f5b70c5dea0307aa633194083eb5182ec537efc94e96af08937e14a8", [:mix], [], "hexpm", "7e99bc7efef806315c7e65640724bf165c3061cdc5d854060f74468367065029"},
   "table_rex": {:hex, :table_rex, "4.1.0", "fbaa8b1ce154c9772012bf445bfb86b587430fb96f3b12022d3f35ee4a68c918", [:mix], [], "hexpm", "95932701df195d43bc2d1c6531178fc8338aa8f38c80f098504d529c43bc2601"},
   "telemetry": {:hex, :telemetry, "1.3.0", "fedebbae410d715cf8e7062c96a1ef32ec22e764197f70cda73d82778d61e7a2", [:rebar3], [], "hexpm", "7015fc8919dbe63764f4b4b87a95b7c0996bd539e0d499be6ec9d7f3875b79e6"},
