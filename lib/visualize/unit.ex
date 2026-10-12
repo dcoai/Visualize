@@ -55,7 +55,7 @@ defmodule Visualize.Unit do
 
   """
 
-  alias Visualize.Unit.Alias
+  alias Visualize.Unit.{Alias, Currency}
 
   @typedoc "A UCUM code, such as `ms` or `{request}/s`."
   @type code :: String.t()
@@ -78,6 +78,7 @@ defmodule Visualize.Unit do
           | {:syntax, String.t()}
           | {:unknown_atom, String.t()}
           | {:not_metric, String.t(), String.t()}
+          | {:unknown_currency, String.t()}
 
   @typedoc "Why `parse_alias/1` refuses a symbol."
   @type alias_reason ::
@@ -102,6 +103,7 @@ defmodule Visualize.Unit do
             | :luminous_intensity
             | :level
             | :sound_pressure_level
+            | {:currency, String.t()}
           ) => integer()
         }
 
@@ -340,6 +342,45 @@ defmodule Visualize.Unit do
   end
 
   @doc """
+  The ISO 4217 code a code is in when it is a currency alone — `{iso4217:USD}` is
+  `"USD"` — else `nil`: a rate (`{iso4217:USD}/h`), any other unit, or a string that is not
+  a code (spec/05 §4.1).
+
+  ## Examples
+
+      iex> Visualize.Unit.currency("{iso4217:EUR}")
+      "EUR"
+
+      iex> Visualize.Unit.currency("{iso4217:EUR}/kW/h")
+      nil
+
+  """
+  @spec currency(term()) :: String.t() | nil
+  def currency(code) when is_binary(code) do
+    with {:ok, components} <- parse(code),
+         [{{:currency, iso}, 1}] <- Map.to_list(dims(components)) do
+      iso
+    else
+      _other -> nil
+    end
+  end
+
+  def currency(_code), do: nil
+
+  @doc """
+  An ISO 4217 code's minor units — the decimals an amount in it is written to — or `nil`
+  for a code with none (`XAU`). Raises `ArgumentError` for a code not in the table.
+
+  ## Examples
+
+      iex> Enum.map(~w(USD JPY BHD XAU), &Visualize.Unit.minor_units/1)
+      [2, 0, 3, nil]
+
+  """
+  @spec minor_units(String.t()) :: non_neg_integer() | nil
+  def minor_units(iso), do: Currency.minor_units(iso)
+
+  @doc """
   How a code's values relate to its base (spec/05 §4.1): `:affine` for a code holding
   `Cel` or `[degF]`, `:logarithmic` for one holding `B` or `B[SPL]`, else `:linear`.
   Raises `ArgumentError` for a string that is not a code.
@@ -490,6 +531,9 @@ defmodule Visualize.Unit do
       "offset to convert by"
   end
 
+  def format_error({:unknown_currency, code}),
+    do: "#{inspect(code)} is not an ISO 4217 code of visualize's currency extension"
+
   def format_error(:empty), do: "a unit code is not empty"
   def format_error({:syntax, rest}), do: "a UCUM code does not read at #{inspect(rest)}"
 
@@ -564,7 +608,8 @@ defmodule Visualize.Unit do
   # Components and the operators between them, left to right; `sign` is the exponent sign
   # the operator before this component gives it.
   defp term(code, sign, acc) do
-    with {:ok, component, rest} <- component(code) do
+    with {:ok, component, rest} <- component(code),
+         :ok <- known_currency(component) do
       acc = [%{component | exponent: sign * component.exponent} | acc]
 
       case rest do
@@ -604,6 +649,13 @@ defmodule Visualize.Unit do
        rest}
     end
   end
+
+  # The currency extension's annotation names a code of the ISO 4217 table (spec/05 §4.1).
+  defp known_currency(%{annotation: "iso4217:" <> code}) do
+    if Currency.known?(code), do: :ok, else: {:error, {:unknown_currency, code}}
+  end
+
+  defp known_currency(_component), do: :ok
 
   defp blank(fields),
     do: Map.merge(%{prefix: nil, atom: nil, factor: nil, annotation: nil, exponent: 1}, fields)
@@ -748,14 +800,29 @@ defmodule Visualize.Unit do
   # The affine units, each as its definition to the kelvin: K = value × scale + offset.
   @affine %{"Cel" => {{1, 1}, {27_315, 100}}, "[degF]" => {{5, 9}, {45_967, 180}}}
 
+  # Each atom's dimension times its exponent, and each currency annotation's own.
   defp dims(components) do
     components
-    |> Enum.filter(& &1.atom)
-    |> Enum.reduce(%{}, fn %{atom: atom, exponent: e}, acc ->
-      {dims, _factor, _metric, _symbol, _kind} = atom!(atom)
-      Enum.reduce(dims, acc, fn {dim, n}, acc -> Map.update(acc, dim, n * e, &(&1 + n * e)) end)
+    |> Enum.flat_map(fn
+      %{annotation: "iso4217:" <> code, atom: nil, exponent: e} ->
+        [{{:currency, code}, e}]
+
+      %{annotation: "iso4217:" <> code, atom: atom, exponent: e} ->
+        [{{:currency, code}, e} | atom_dims(atom, e)]
+
+      %{atom: nil} ->
+        []
+
+      %{atom: atom, exponent: e} ->
+        atom_dims(atom, e)
     end)
+    |> Enum.reduce(%{}, fn {dim, n}, acc -> Map.update(acc, dim, n, &(&1 + n)) end)
     |> Map.reject(fn {_dim, n} -> n == 0 end)
+  end
+
+  defp atom_dims(atom, e) do
+    {dims, _factor, _metric, _symbol, _kind} = atom!(atom)
+    for {dim, n} <- dims, do: {dim, n * e}
   end
 
   defp exact_of(components) do
@@ -844,6 +911,9 @@ defmodule Visualize.Unit do
     do: value * n / d * :math.pow(:math.pi(), k)
 
   # -- symbols ------------------------------------------------------------------------
+
+  defp written(%{atom: nil, annotation: "iso4217:" <> code, exponent: e}, _annotations?),
+    do: code <> superscript(abs(e))
 
   defp written(%{atom: nil, factor: nil, annotation: text}, true), do: text
   defp written(%{atom: nil, factor: nil}, false), do: ""

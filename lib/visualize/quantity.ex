@@ -259,8 +259,8 @@ defmodule Visualize.Quantity do
 
   @doc """
   The quantity a code's dimension implies, or `nil` when none of the list has it. A
-  dimensionless code holding `%` is a `:ratio`, one holding an `{iso4217:…}` annotation a
-  `:currency`, any other a `:count`.
+  dimensionless code holding `%` is a `:ratio`, any other a `:count`, and a code of one
+  currency alone (`{iso4217:USD}`) a `:currency`.
 
   ## Examples
 
@@ -275,14 +275,12 @@ defmodule Visualize.Quantity do
   def of_unit(unit) do
     case Unit.dimension(unit) do
       dims when dims == %{} ->
-        cond do
-          atom?(unit, "%") -> :ratio
-          currency?(unit) -> :currency
-          true -> :count
-        end
+        if atom?(unit, "%"), do: :ratio, else: :count
 
       dims ->
-        Enum.find(@all -- @dimensionless, &(Unit.dimension(base_unit(&1)) == dims))
+        if Unit.currency(unit),
+          do: :currency,
+          else: Enum.find(@all -- @dimensionless, &(Unit.dimension(base_unit(&1)) == dims))
     end
   end
 
@@ -290,7 +288,7 @@ defmodule Visualize.Quantity do
   A measure completed and checked (spec/05 §4.2): a unit alone implies its quantity, a
   quantity alone means its base unit, and a unit whose dimension is not its quantity's is
   refused. A `:ratio` or a `:count` takes any dimensionless unit, and a `:currency` a
-  dimensionless one holding an `{iso4217:…}` annotation.
+  code of one currency alone.
 
   ## Examples
 
@@ -368,6 +366,10 @@ defmodule Visualize.Quantity do
       %{unit: nil} ->
         Format.Auto.formatter(scale, opts)
 
+      %{unit: unit, quantity: :currency} ->
+        scaled = for d <- domain, is_number(d), do: d
+        money(Format.Auto.number(notation(:count, scaled, opts), opts), unit, opts)
+
       %{unit: unit, quantity: quantity} = resolved ->
         display = display_unit(domain, resolved, Keyword.take(opts, [:system]))
         scaled = for d <- domain, is_number(d), do: scale(d, unit, display)
@@ -385,6 +387,9 @@ defmodule Visualize.Quantity do
     case resolve!(measure) do
       %{unit: nil} ->
         Format.Auto.formatter(scale, opts)
+
+      %{unit: unit, quantity: :currency} ->
+        money(Format.Auto.number(:si, Keyword.take(opts, [:locale])), unit, opts)
 
       %{unit: posted, quantity: quantity} = resolved ->
         si = Format.Auto.number(:si, Keyword.take(opts, [:locale]))
@@ -431,8 +436,69 @@ defmodule Visualize.Quantity do
     case Unit.symbol(unit) do
       "" -> ""
       "%" -> "%"
+      "°" -> "°"
       "/" <> _ = symbol -> symbol
       symbol -> " " <> symbol
+    end
+  end
+
+  @doc "As `format/3` with `[]` options."
+  @spec format(number(), measure()) :: String.t()
+  def format(value, measure), do: format(value, measure, [])
+
+  @doc """
+  One value of a measure for a label or a tooltip, not an axis (spec/05 §4.3): a
+  `:duration` in the compound form (`1h 24m`, `840ms`), a `:currency` as money in its
+  code (`$1,240.00`, `¥1,240`), a `:count` rounded and grouped (`1,240`), and anything
+  else to `precision` decimals, then the unit's suffix (`91.40%`, `350°`, `20.50 kg`).
+  Raises `ArgumentError` for a measure `resolve/1` refuses.
+
+  ## Options
+
+  - `:precision` - decimals (default `2`); a currency's are its minor units
+  - `:locale` - default `"en"`
+  - `:system` - the unit system (default `:as_posted`); under another, the value is
+    written in its `display_unit/3`
+
+  ## Examples
+
+      iex> Visualize.Quantity.format(5040, %{unit: "s"})
+      "1h 24m"
+
+      iex> Visualize.Quantity.format(1240, %{unit: "{iso4217:USD}"})
+      "$1,240.00"
+
+      iex> Visualize.Quantity.format(350, %{unit: "deg"}, precision: 0)
+      "350°"
+
+      iex> Visualize.Quantity.format(80, %{unit: "kg"}, system: :us)
+      "176.37 lb"
+
+  """
+  @spec format(number(), measure(), keyword()) :: String.t()
+  def format(value, measure, opts) when is_number(value) do
+    precision = Keyword.get(opts, :precision, 2)
+    locale = Format.Auto.locale!(opts)
+    resolved = resolve!(measure)
+    %{unit: unit, quantity: quantity} = in_system(value, resolved, opts)
+    value = scale(value, resolved.unit, unit)
+
+    case quantity do
+      :duration ->
+        Format.duration(scale(value, unit, "s"),
+          style: :compound,
+          precision: precision,
+          locale: locale_name(opts)
+        )
+
+      :currency ->
+        Format.currency(value, code: Unit.currency(unit), locale: locale_name(opts))
+
+      :count ->
+        Format.number(round(value), separator: locale.group)
+
+      _other ->
+        fixed(value, precision, locale) <> suffix(unit)
     end
   end
 
@@ -466,6 +532,45 @@ defmodule Visualize.Quantity do
     end
   end
 
+  # -- one value ------------------------------------------------------------------------
+
+  # The measure a value is written in under a system: its display unit there.
+  defp in_system(_value, %{unit: nil} = resolved, _opts), do: resolved
+  defp in_system(_value, %{quantity: nil} = resolved, _opts), do: resolved
+
+  defp in_system(value, resolved, opts) do
+    case Keyword.get(opts, :system, :as_posted) do
+      :as_posted -> resolved
+      system -> %{resolved | unit: display_unit([value], resolved, system: system)}
+    end
+  end
+
+  defp locale_name(opts), do: Keyword.get(opts, :locale, "en")
+
+  defp fixed(value, precision, %{decimal: decimal}) do
+    fixed = :erlang.float_to_binary(value * 1.0, decimals: precision)
+    if decimal == ".", do: fixed, else: String.replace(fixed, ".", decimal)
+  end
+
+  # Money on an axis: the locale's symbol before the number and after its sign, or the
+  # code after the number for a code the locale has no symbol for.
+  defp money(number, unit, opts) do
+    code = Unit.currency(unit)
+    symbol = Map.get(Format.Auto.locale!(opts).currency, code)
+
+    fn
+      value when is_number(value) ->
+        case {number.(value), symbol} do
+          {"-" <> magnitude, symbol} when symbol != nil -> "-" <> symbol <> magnitude
+          {label, nil} -> label <> " " <> code
+          {label, symbol} -> symbol <> label
+        end
+
+      value ->
+        to_string(value)
+    end
+  end
+
   # -- resolving ------------------------------------------------------------------------
 
   defp check_unit(nil), do: :ok
@@ -486,7 +591,7 @@ defmodule Visualize.Quantity do
   defp pair(unit, quantity) do
     fits? =
       case quantity do
-        :currency -> Unit.dimension(unit) == %{} and currency?(unit)
+        :currency -> Unit.currency(unit) != nil
         quantity when quantity in @dimensionless -> Unit.dimension(unit) == %{}
         quantity -> Unit.dimension(unit) == Unit.dimension(base_unit(quantity))
       end
@@ -530,10 +635,6 @@ defmodule Visualize.Quantity do
   end
 
   defp atom?(unit, atom), do: unit |> components() |> Enum.any?(&(&1.atom == atom))
-
-  # The currency extension's marker, an `{iso4217:…}` annotation (spec/05 §4.1).
-  defp currency?(unit),
-    do: unit |> components() |> Enum.any?(&match?("iso4217:" <> _, &1.annotation || ""))
 
   defp bound(nil, _base, _unit), do: nil
   defp bound(value, base, unit), do: Unit.convert(value, base, unit)

@@ -7,6 +7,8 @@ defmodule Visualize.Unit.Alias do
   # use are written that way — a kilobyte of 1,000 or 1,024 bytes, a US or an imperial
   # gallon — and then it is refused with its choices rather than guessed at.
 
+  alias Visualize.Unit.Currency
+
   @bytes [
     {"KB", "k", "Ki", "1,000 bytes", "1,024 bytes"},
     {"kB", "k", "Ki", "1,000 bytes", "1,024 bytes"},
@@ -37,7 +39,20 @@ defmodule Visualize.Unit.Alias do
                  "cal" => [{"cal", "calorie"}, {"[Cal]", "food Calorie, a kilocalorie"}],
                  "C" => [{"Cel", "degree Celsius"}, {"C", "coulomb"}],
                  "dB" => [{"dB", "a level ratio"}, {"dB[SPL]", "sound pressure level"}],
-                 "kt" => [{"[kn_i]", "knot"}, {"kt", "kilotonne"}]
+                 "kt" => [{"[kn_i]", "knot"}, {"kt", "kilotonne"}],
+                 "$" =>
+                   for(
+                     {iso, name} <- [
+                       {"USD", "US dollar"},
+                       {"CAD", "Canadian dollar"},
+                       {"AUD", "Australian dollar"},
+                       {"NZD", "New Zealand dollar"},
+                       {"HKD", "Hong Kong dollar"},
+                       {"SGD", "Singapore dollar"}
+                     ],
+                     do: {"{iso4217:#{iso}}", name}
+                   ),
+                 "¥" => [{"{iso4217:JPY}", "yen"}, {"{iso4217:CNY}", "yuan"}]
                }
              )
 
@@ -165,7 +180,10 @@ defmodule Visualize.Unit.Alias do
     "mmol/L" => "mmol/l",
     # events
     "bpm" => "{beat}/min",
-    "rpm" => "{rev}/min"
+    "rpm" => "{rev}/min",
+    # currency (the extension, spec/05 §4.1)
+    "€" => "{iso4217:EUR}",
+    "£" => "{iso4217:GBP}"
   }
 
   @doc false
@@ -176,7 +194,16 @@ defmodule Visualize.Unit.Alias do
   def lookup(symbol) do
     case @codes do
       %{^symbol => code} -> {:code, code}
-      _codes -> if choices = @ambiguous[symbol], do: {:ambiguous, choices}, else: :none
+      _codes -> ambiguous_or_currency(symbol)
+    end
+  end
+
+  # A code of the ISO 4217 table typed alone, in capitals, is its currency.
+  defp ambiguous_or_currency(symbol) do
+    cond do
+      choices = @ambiguous[symbol] -> {:ambiguous, choices}
+      symbol =~ ~r/\A[A-Z]{3}\z/ and Currency.known?(symbol) -> {:code, "{iso4217:#{symbol}}"}
+      true -> :none
     end
   end
 
