@@ -650,8 +650,8 @@ A description says what a field **means**, never how it is drawn:
 | Key | Value | For a field of type | Meaning |
 |---|---|---|---|
 | `type` | `:time`, `:number`, `:category` or `:text` | required, every field | what the column is, spec/14 §2.3's four. A `:time` field holds **instants** — `DateTime`, `NaiveDateTime` or `Date` values, or ISO 8601 strings, what a time scale takes (spec/14 §4.3) — and never numbers: a count of ticks, a sequence number or an offset is `:number` (D-154) |
-| `unit` | a non-empty string | `:number` | the unit the values are in: a [UCUM](https://ucum.org) code by convention (`"s"`, `"ms"`, `"By"`, `"%"`, `"Cel"`, `"{request}/s"`) |
-| `quantity` | an atom | `:number` | what the unit measures: `:duration`, `:information`, `:temperature`, … |
+| `unit` | a UCUM code | `:number` | the unit the values are in: a [UCUM](https://ucum.org) code `Visualize.Unit.parse/1` reads (`"s"`, `"ms"`, `"By"`, `"%"`, `"Cel"`, `"{request}/s"`; spec/05 §4.1) |
+| `quantity` | one of `Visualize.Quantity.all/0` | `:number` | what the unit measures: `:duration`, `:information`, `:temperature`, … (spec/05 §4.2) |
 | `label` | a string | every type | the field's name for a person: `"Request time"` |
 | `order` | a non-empty list of distinct strings, atoms or numbers | `:category` | the states in their order, first to last |
 | `status` | a map from a state to a role, an atom | `:category` | what each state means: `%{"ok" => :good, "warn" => :warning, "fail" => :bad}` |
@@ -668,10 +668,14 @@ A description says what a field **means**, never how it is drawn:
 
 A design draws the meanings through its scales (spec/14 §4.3, #565, D-143): `status` is an `:ordinal` colour scale's range as it stands — `range: fact(:events, :severity, :status)`, a map from a state to a role — and `target` and `polarity` are a `:threshold` colour scale's `domain` and `polarity` over `range: {:ramp, :status}`, so a reading on the better side of the target is `:good` and one beyond it `:bad`; `target` is also a `:rule` at `y` (spec/14 §5.2), the target line.
 
-Four of the keys are checked here only as far as this library owns them, and each has one place a later rule goes:
+**A measure is checked against the vocabulary** (#595, D-157), as an axis's measure is (spec/14 §4.4), so a misspelt unit or an unknown quantity is refused where the feed describes itself, not found later, or never, when a chart draws it:
 
-- **`unit`** is any non-empty string for now. Whether it is a valid UCUM code is the units proposal's (#536), and that check replaces the one private function that accepts the string, so nothing else changes when it lands.
-- **`quantity`** is any atom other than `nil`, `true` and `false`. The fixed list of quantities is #536's as well; until it lands every atom is accepted.
+- **`unit`** is a non-empty string (else `{:type, :unit}`) that `Visualize.Unit.parse/1` reads (spec/05 §4.1), else `{:unit, code, reason}` with `parse/1`'s reason: `"mss"` is `{:unit, "mss", {:unknown_atom, "mss"}}`. A symbol a person types (`°C`, `KB`) is not a code; a feed reads it with `Visualize.Unit.parse_alias/1` before describing itself.
+- **`quantity`** is an atom other than `nil`, `true` and `false` (else `{:type, :name}`) that is one of `Visualize.Quantity.all/0` (spec/05 §4.2), else `{:unknown_quantity, quantity}`.
+- **The pair.** A field that gives both, each of them good, is checked through `Visualize.Quantity.resolve/1`: a unit whose dimension is not its quantity's is `{:quantity, quantity, code}` at `[name, :quantity]` — `unit: "By", quantity: :duration` — the reason the validator gives an axis's measure (spec/14 §10.1). A `:ratio` or a `:count` takes any dimensionless unit and a `:currency` a code of one currency alone, as `resolve/1` says. A unit alone, or a quantity alone, needs no pair check: the one implies the other.
+
+Two keys are checked here only as far as this library owns them:
+
 - **`status`**'s roles are the theme's vocabulary (#533: `:good`, `:warning`, `:bad`, `:info`, `:neutral`), whose names are meanings every theme must honour. They are carried here as atoms and not checked against a list, so a role #533 adds needs no change to the schema. When the description also gives `order`, every state `status` names MUST be one of `order`'s.
 - **`continuity`** is carried for the cell that draws a feed (#531 §3: gaps follow it); no mark reads it yet.
 
@@ -689,6 +693,9 @@ The faults of `new/1`:
 | `{:colour_key, key}` | at `[name, key]`: a colour, which a schema never names |
 | `:required` | at `[name, :type]`: the description gives no `type` |
 | `{:enum, allowed}` | at `[name, :type]`, `[name, :polarity]` or `[name, :metric_kind]`: a value not among the allowed |
+| `{:unit, code, reason}` | at `[name, :unit]`: a string `Visualize.Unit.parse/1` does not read, with its reason (D-157) |
+| `{:unknown_quantity, quantity}` | at `[name, :quantity]`: an atom that is not one of `Visualize.Quantity.all/0` (D-157) |
+| `{:quantity, quantity, code}` | at `[name, :quantity]`: the unit does not measure the quantity, by `Visualize.Quantity.resolve/1` (D-157) |
 | `{:invalid_for, type}` | at `[name, key]`: a key the field's type does not take — a `unit` on a `:category` field, an `order` on a `:number` one, a `window` on a `:category` or `:text` one |
 | `{:type, expected}` | at `[name, key]`: a value of the wrong shape, `expected` one of `:unit`, `:name`, `:string`, `:order`, `:status`, `:number`, `:positive`, `:boolean`, `:bounds` |
 | `{:duplicate_window, other}` | at `[name, :window]`: the field says `window: true` and so does `other`; a feed's windows are over one field. Reported at the later of the two by term order |
@@ -939,7 +946,8 @@ Each check is named, and each names its findings. A **request** is `{window, bud
 | Reason | Meaning |
 |---|---|
 | `{:not_described, answer}` | the answer is not `{version, %Schema{}, supports}` or `{:error, reason}` |
-| `{:schema_invalid, errors}` | `Schema.new/1` refuses the schema's fields, with its errors |
+| `{:schema_invalid, errors}` | `Schema.new/1` refuses the schema's fields, with its errors other than a measure's |
+| `{:measure, field, reason}` | `Schema.new/1` refuses a field's measure (§10.1, D-157): `reason` is `{:unit, code, reason}`, `{:unknown_quantity, quantity}` or `{:quantity, quantity, code}`, one finding per fault, so the feed's author reads which field's unit or quantity is wrong apart from the schema's other faults |
 | `{:version, given, computed}` | the version is not the schema's content hash |
 | `{:unstable, first, second}` | a second describe answered another version, or another schema under the same one |
 | `{:no_window_field, times}` | the feed names `:window` and its schema has no window field: `times` is its `:time` fields, none or several, none of them described `window: true` |
