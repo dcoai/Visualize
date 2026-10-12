@@ -9,6 +9,14 @@
 # which the examples job pulls and pushes itself (#342, #343). Without the DEPDEP_*
 # variables depdep is a no-op that exits 0.
 #
+# depdep is the only dependency cache (#588): no job has a GitLab runner `cache:`. A runner
+# cache served a job before depdep was asked, so a job it covered never touched the store,
+# and a store that had moved went unnoticed while every build stayed green. The DEPDEP_*
+# variables come from the DCOTek group. Neither a project-level variable nor this file may
+# set them, since either overrides the group's (the store moved to exio on 2026-10-12, and a
+# stale project override pointed visualize at the old one). A store that cannot be reached
+# degrades to a cold build, never a failed one.
+#
 # The private git dependencies (extla and depdep itself; surfex comes from Hex) are reached with the job token
 # through the two `insteadOf` rewrites below. This only works because dco-tek/visualize is
 # on each producer's inbound job-token allowlist (Settings → CI/CD → Token Access), which is
@@ -45,13 +53,6 @@ default:
     # A store that cannot be reached must not fail the build: fall back to a bare deps.get.
     # With --mix-get, mix deps.get's own failure is this line's failure, as it was before.
     - elixir scripts/depdep.exs --pull --mix-get --compile-deps --exclude examples || mix deps.get
-  cache:
-    key:
-      files:
-        - mix.lock
-    paths:
-      - deps
-      - _build
 
 format:
   extends: .elixir

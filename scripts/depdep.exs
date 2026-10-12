@@ -39,9 +39,8 @@
 # every run; it was the two causes above, and on v0.10.0 it restores and holds (#452,
 # pipeline 4490: `missing 0`, nothing rebuilt).
 #
-# A `compile` or `test` job served by the GitLab runner's own cache (keyed on mix.lock,
-# local to each runner) reports `already present` and never touches the store. Only a job
-# that missed that cache measures a restore, so read `rebuilt N` from those.
+# Every job restores through the store: CI keeps no GitLab runner cache (#588), so `pulled`,
+# `missing` and `rebuilt N` in each job's summary measure depdep itself.
 #
 # Depdep lives in a private project, so the URL has to carry credentials, and what is
 # available differs between a developer's machine and a CI container: a developer has an
