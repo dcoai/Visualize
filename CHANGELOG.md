@@ -12,313 +12,97 @@ All notable changes to Visualize are recorded here, following
 
 ## [Unreleased]
 
-`mix.exs` reads `0.2.36-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
-release it merely follows.
+**Upgrading from 0.2.35.** Visualize grows from a chart library into a dashboard library.
+Feeds describe their fields by meaning, and a design states what it needs of them. A board
+lays designs on a grid, runs them live under supervision, exports and prints them, and
+carries them between hosts. Themes carry meaning as ramps and roles, so a status reads the
+same on every theme, and every chart is named, described, reachable from the keyboard and
+calm under reduced motion. The imperative pipeline is unchanged, but some designs draw
+differently: axes derive their own ticks and formats, sequential colour scales follow the
+theme, and a chart's accessible markup changes, so read **Breaking** before you upgrade.
+
+### Breaking
+
+- **A design from a newer release is refused as `{:newer_schema, needs, this}`** (#550,
+  #541, D-137). *Affects* code that matched the error for a newer document from
+  `Visualize.Chart.from_map/1`, `from_map!/1`, `from_json/1` or
+  `Visualize.Chart.Migration.migrate/1`. *Before:* `{:error, [{[:version],
+  {:unsupported_version, 3}}]}`. *After:* `{:error, [{[:version], {:newer_schema, 3, 2}}]}`,
+  worded `version: needs schema v3, this is v2`, and the refusal comes before any other key
+  is read. `{:unsupported_version, v}` now means a version below 1 only. *Instead:* match
+  `{:newer_schema, _, _}` where you matched `{:unsupported_version, v}` for a newer version.
+- **Every design reader applies sanity limits** (#550, #541, D-137). *Affects* a design
+  with more than 100,000 entries in one list or map, nesting deeper than 64, more than 1,000
+  axis ticks, more than 10,000 force iterations, or a count over 1,000,000. *Before:* it
+  read. *After:* `from_map/1`, `from_map!/1`, `from_json/1` and `Fragment.from_json/1`
+  refuse it with `{path, {:limit, name, max, given}}`. No gallery design comes near a
+  limit. *Instead:* pass `limits: [items: 500_000]` (or whichever limit you need) to
+  `from_map/2`, `from_json/2` or `Fragment.from_json/2`.
+- **An axis with no `format` or tick count derives them** (#532, D-134). *Affects* every
+  design axis that gives neither. *Before:* ten ticks, and the scale's default label
+  (`2024-03-05 03:00:00Z` on a time axis, `90000` on a number axis). *After:* the count
+  comes from the axis's length (one tick per 80 px across, per 35 px down, between 2 and
+  10) and the format from the domain: `03:00` or `Mar 05`, `90,000`, `1.5M`. *Instead:*
+  - set `ticks: 10` to keep ten ticks on an axis shorter than 800 px across or 350 px down;
+  - set `format: "d"` on a numeric axis over years, which now reads `1,990` where it read
+    `1990`;
+  - check an axis with `unit: "M"` over values from 1,000, which now reads `1,200M`, and
+    give it a `format`.
+
+  An explicit `format`, count or list of values still wins. The hand-built `Visualize.Axis`
+  is unchanged.
+- **A `:sequential` or `:diverging` colour scale left at `range: :auto` draws the theme's
+  ramp** (#533, D-135). *Affects* heatmaps, contours, hexbins, radial bars and any design
+  with such a scale and no `range`. *Before:* a sequential scale ran from the theme's
+  background to its first series colour in RGB (white → `#3b6fa8` on the light theme), and
+  a diverging one from the second series colour through the background to the first.
+  *After:* it reads the theme's `sequential` or `diverging` ramp, Lab-interpolated: close
+  on the light theme, the dark theme's own ramp on the dark one. *Instead:* to keep the old
+  colours, give the range, for example `range: ["#ffffff", "#3b6fa8"]`.
+- **`Visualize.Color.to_lab/1` is the inverse of `Visualize.Color.lab/4`** (D-135). It used
+  the D65 sRGB matrix against the D50 white point. *Affects* every Lab and LCh value of a
+  chromatic colour, and so `brighter/2`, `darker/2`, `interpolate_lab/3` and
+  `interpolate_hcl/3`. *Before:* a grey had a chroma of about 12, and `#808080` came back
+  from a Lab round trip as `#758194`. *After:* `#808080` comes back as `#808080`.
+  *Instead:* nothing to call differently, but colours you stored or asserted from these
+  functions change.
+- **A mark's renamed colour scale reaches the colours its style binds** (#565, D-143). The
+  0.2.35 spec said a style's `{:field, f}` colour read the frame's `color` scale "whatever
+  the mark's `scales` say". *Affects* a mark with `scales: %{color: name}` and a `{:field,
+  f}` fill or stroke in its style. *Before:* the style read the frame's `color` scale.
+  *After:* it reads `name`, as the mark's `series` channel already did. *Instead:* to colour
+  the style through the frame's `color` scale, don't rename `color` on that mark.
+- **A chart's accessible markup changes** (#557, D-142). *Affects* tests or CSS that match
+  the root `<svg>`'s ARIA attributes, and pages that rely on a design with no `meta.name`
+  rendering unnamed.
+  - *Before:* `aria-labelledby="<title-id> <desc-id>"`. *After:*
+    `aria-labelledby="<title-id>"` and `aria-describedby="<desc-id>"`. This applies to
+    `Visualize.IR.Element.root/3` and every component.
+  - `Visualize.Chart.render/2` and `generate/2` with `root: true` now title a design with no
+    `meta.name` by its kind (`Line chart`), and write a generated summary after
+    `meta.description` in the `<desc>`. *Instead:* to keep 0.2.35's root, pass
+    `summary: false` and your own `title:`.
+  - A component with `animate` gains the class `vis-animated` and a `<style>` beside its
+    `<desc>`.
 
 ### Added
 
-- **A board leaves the screen** (#578, D-150). `Visualize.Board.Server.snapshot/1` freezes a
-  running board as a `Visualize.Board.Snapshot` — the board, its now and window, the
-  theme, and each cell's component and the data it showed — and
-  `Visualize.Board.Snapshot.realise/4` makes one purely, as `Visualize.Board.realise/4`
-  does. A snapshot needs no store, feed or process: `to_json/1` writes it (stamped
-  `"$version"`, rows column by column) and `from_json/2` reads it back under the same version
-  policy and limits as a board. `Visualize.Board.Export.svg/2` draws a snapshot as one SVG
-  document: the header with the window in the board's zone, and every cell at its grid box
-  with its title, its state banner, and its chart embedded byte for byte as the cell draws
-  it, or its state's panel when it has no chart. `png/2` rasterises that through resvg.
-  For paper, `Visualize.Theme.print/0` (also `theme: :print`) is white with dark ink and
-  the colour-safe status ramp, and `Export.pages/2` lays the board on A4 or Letter, portrait
-  or landscape, never splitting a cell, as one SVG per page; `Export.html/2` puts the pages
-  in one HTML document a browser prints as a PDF. `Visualize.Board.window_text/2` writes a
-  window in a zone as the board's header does.
+#### Charts and axes
 
-
-- **A board's cells interact** (#581, #545, D-151). Three interactions span a board's
-  cells, and the board process holds each as shared state.
-  - **Brush to window.** A brush in any cell sets the window of every cell. The component
-    calls `Visualize.Board.Server.brush/2`, which waits `debounce:` milliseconds (250) for
-    the next brush, so a burst of brushes re-asks each feed once.
-    `Visualize.Board.Server.reset_window/1` restores the window the board was started with.
-    The component shows a *Reset window* button while the window is moved, and the board's
-    info reports `moved`.
-  - **Linked selection.** A click on a chart, or Enter on a point the keyboard reached,
-    selects `{field, value}` across the board. The field is the series field, else a
-    `:category` field of the schema. Every cell whose rows hold the selection dims the
-    other data with `opacity` 0.25, bound per datum through the style grammar. A cell that
-    does not hold it is drawn unchanged. The new board key `links: %{name: :service}` joins
-    fields of different names. Escape or *Clear selection* clears it. The new functions
-    are `Visualize.Board.Server.select/2` and `pick/4`, and `Visualize.Board.link/2` and
-    `linked/2`.
-  - **Drill-down.** A cell's new `drill: %{board: ref, vars: %{var => {:datum, field}}}`
-    opens another board, or `:self`, with variables taken from the clicked datum.
-    `Visualize.Board.validate/3` and `Visualize.Board.Server.start/2` take `boards:` and
-    refuse a target the host does not hold (`{:no_board, ref}`) or a variable it does not
-    declare. The component sends your page `{:visualize_board_drill, id, %{cell, board,
-    vars}}`, and you follow it, for example with `push_navigate/2`. `Visualize.Board.drill/3`
-    resolves a target from a row.
-
-  `KeyboardHook` gains `data-keyboard-pick-event` and `data-keyboard-target`, and
-  `BoardHook` gains Escape for the selection. A board's JSON gains `{"$datum": field}`.
-
-  **Changed:** a cleared brush on a board no longer restores the window, because a click on
-  a chart is a cleared brush. *Reset window* is the undo.
-
-- **Build a board in the builder** (#579, D-152). A board is now a library kind: a store
-  entry `%{board: map}` holding `Visualize.Board.to_map/1`, read back with
-  `Visualize.Board.from_map/2`. `Fragment.kinds/0` includes `:board`, so your store issues
-  `{:board, n}` ids. `Fragment.to_json/1` and `from_json/2` round-trip a board, and
-  `Bundle.export/3` of a board entry carries its cells' components. Opening a board entry,
-  or *New → board*, puts `Visualize.Chart.Builder` in its board mode. Drag a cell to place
-  it and drag its edges to resize it; the arrow keys do the same on a focused cell. The
-  server refuses an overlap or a cell off the grid. You can pick each cell's component,
-  title, sync and variables. You can set the board's name, window (none, last N seconds,
-  or a fixed UTC span), display zone, sync group, `stale_after`, layout and variables. A
-  narrow view shows how the board stacks below its breakpoint. Each cell previews through
-  `Visualize.Board.realise/4` over your `sources`, its slots bound by name. *Edit
-  component* opens a cell's composite, and *Back to board* returns. A store whose `put/2`
-  derives the kind with `Fragment.kind/1` needs no change. A board entry cannot be
-  dropped into a chart.
-
-- **Bind a board's slots in the builder** (#580, D-152). Give `Visualize.Chart.Builder`
-  a `catalog`: a map from each feed you offer to its `Visualize.Data.Schema`, for example
-  the schema `Visualize.Feed.describe/1` answers. In the board mode, each cell's sources
-  are then bound to those feeds. Without a catalog they are bound to your `sources`. The
-  mode shows every unbound slot and every unmet contract (`Visualize.Board.Binding.check/3`)
-  before any data flows. The binding is never stored in the board. Each change is sent to
-  your LiveView as `{on_bind, id, board_id, binding}` (`on_bind` defaults to
-  `:visualize_board_bound`). Hand it back through `board_bindings`, keyed by the board
-  entry's id, when the board opens again. A slot with no binding starts bound to the feed
-  of its own name, if there is one. The preview binds through the binding. A catalog feed
-  previews over your `sources` entry of that name, or else over rows made from its schema
-  (`Visualize.Chart.Builder.Boards.sample/2`).
-
-- **A board runs live** (#574, D-146). Add `{Visualize.Board.Supervisor, name: MyApp.Boards}`
-  to your tree and start a board under it with `Visualize.Board.Server.start/2`, passing
-  `board:`, `store:`, `binding:` and `feeds:`. The board process owns the window (UTC), the
-  zone, the variables, the sync group and one "now". It drives the feeds through a
-  `Visualize.Feed.Monitor`. `window/2` sets the window and re-asks every feed, and `vars/2`,
-  `resize/2`, `tick/1`, `info/1` and `stop/1` do what they say. A board that does not
-  validate given its store, or whose binding names a missing feed, is refused before
-  anything starts. Each cell is its own process (`Visualize.Board.Cell`) under a heap limit
-  (`max_heap:`, words). A cell that blows its heap or raises shows "Crashed, restarting"
-  and is restarted with a backoff, and the board and the other cells carry on. A slow cell
-  skips to the newest data instead of drawing a backlog. `subscribe/1` delivers
-  `{:visualize_board, board, {:cell, name, %Visualize.Board.View{}}}` straight from each
-  cell: its SVG frame, its drawn state, and the crosshair and keyboard hooks' attributes.
-- **A live board in LiveView** (#575, D-146). Render a board with
-  `<.live_component module={Visualize.Components.Board} id="ops" server={pid} board={board} />`.
-  Add one clause to your page:
-  `def handle_info({:visualize_board, _, _} = m, s), do: (Visualize.Components.Board.forward("ops", m); {:noreply, s})`.
-  The component subscribes your page to the board when it connects. It lays the cells on
-  the 12-column grid and reflows them below the breakpoint, and shows the window in the
-  board's zone. Each cell is its own LiveComponent (`Visualize.Components.Board.Cell`), so
-  a frame's diff is that cell's alone. A cell carries `data-vis-cell`, is one tab stop, and
-  wraps its chart in `CrosshairHook`, `BrushHook` and `KeyboardHook`. Brushing a cell sets
-  the board's window, and a double-click restores it.
-- **A worked live board** (#576). The examples site's `/board` page is a complete host. It
-  puts `Visualize.Board.Supervisor` in its tree, starts a board of five cells over
-  `Visualize.Feed.Signals` and in-process `Visualize.Feed.Telemetry` feeds, and renders it
-  with `Visualize.Components.Board` and the one forwarding clause. One component sits in
-  two cells bound to different metrics, and one cell is bound to a feed that is always
-  down, so its drawn state is on the page. Copy it as the starting point for your own
-  board.
-- **`BoardHook`** (#575), the twelfth hook in the bundle. It pushes the board's width to
-  its component and moves focus between cells with the arrow keys, Home and End. Enter
-  moves focus into a cell's chart, and Escape (`KeyboardHook`'s) brings it back.
-- **`BrushHook` takes `data-brush-target`** (#575). With it set, the brush pushes its events
-  to that LiveComponent instead of the LiveView. On `updated()` the hook also re-attaches
-  its overlay to a chart the server has redrawn, so a brush keeps working over a live chart.
-- **Every cell state is drawn** (#574). `Visualize.Board.State` decides and draws loading,
-  no data yet, stale, feed down, capped and crashed from the board's theme. Each state
-  uses a role colour and its glyph, so it reads in greyscale. Where there is no chart the
-  state fills the whole cell; over a chart it is a banner. The board gains the key
-  `stale_after` (seconds).
-- **Rows are placed by their timestamp** (#574). `Visualize.Feed.Monitor` keeps each
-  holding in time order and keeps a late pushed row instead of dropping it.
-  `Monitor.refetch/1` asks every feed again. `Visualize.Board.Rows.place/2` breaks a line
-  where two readings are further apart than the field's `continuity`.
-  `Visualize.Board.components/3` prepares each cell's component, writing in the board's
-  group and zone (a time scale with no zone takes the board's).
-- **A board travels to another host in a bundle** (#542, D-147). `Visualize.Chart.Builder.Bundle.export_board/3`
-  bundles a `%Visualize.Board{}` with every component its cells reference, the library
-  entries those use, and every stored theme the board or its components name (a theme the
-  design's `theme` names, read through the cell's variables). `import_board/3` checks the
-  whole bundle before it puts anything — a newer `schema` or board `version` is refused,
-  `limits:` bound the board, the entries and the components, a cell whose component the
-  bundle does not carry is `{:not_carried, id}` at that cell, and a carried theme whose name
-  the store already gives a different theme is `{:theme_taken, name}` — then imports the
-  entries through the store's own `import/2` and returns `%{board: board, ids: table,
-  outside: ids}`, the board's cell refs rewritten to the new ids. Bindings never travel: bind
-  the imported board's `required_sources/3` to your own feeds. `%Bundle{}` gains a `board`
-  key, `nil` for a bundle `export/3` makes. `Visualize.Chart.Builder.Store.theme_name/1` is
-  public: the name a stored theme entry answers to.
-- **A theme is a stored, versioned value** (#561, D-139). `Visualize.Chart.Theme` writes a
-  theme as a document — `to_map/1` is `%{version: 2, theme: node}`, `to_json/1` the stamped
-  `{"$version": 2, "theme": {…}}` — and `from_map/2` and `from_json/2` read one back to a
-  `%Visualize.Theme{}` under the same rules as a design: a newer theme is refused by name
-  before a key is read, `limits:` bound it, an older one migrates, and a broken ramp or role
-  is the validator's `{:contract, message}` at its path. A document that only names a theme
-  that is not built-in is the new fault `{:unknown_theme, name}`.
-- **A host ships a theme through the builder's store** (#561).
-  `Visualize.Chart.Builder.Store.theme/2` loads a stored theme by the name it gives itself,
-  and the builder's preview draws a design whose `theme:` names a stored theme in it.
-  `Visualize.Chart.Fragment.read_json/2` is `from_json/2` with the version the document was
-  stamped with.
-- **The builder has a theme mode** (#562, D-139). Opening a theme entry, *New → theme*,
-  or the new *Theme* button on a chart's bar puts `Visualize.Chart.Builder` in the theme
-  mode: the inspector edits the theme's series colours, chrome (background, surface, text,
-  axis, grid) and fonts, and can *derive from* a built-in or stored theme; the main column
-  is a sheet of sample charts — series, the five roles, thermal, diverging, axes and text —
-  drawn in the theme being edited, to which designs from the store can be added. *Save to
-  library* keeps the theme and refuses one that is not valid. `Store.theme_entry/2` finds
-  the entry a stored theme name stands for.
-- **The theme mode edits ramps and roles and checks them live** (#563, D-139). Each ramp is
-  drawn as the theme interpolates it, with a lightness strip and its anchors (change, add by
-  resampling, remove); the status roles are marked at their fixed positions and set by the
-  colour there, and `:info` and `:neutral` are colours of their own. Every edit runs the
-  meaning contracts: a broken ramp or role is outlined and named in the contract's words,
-  and *Save to library* refuses the theme. `Visualize.Theme.violations/1` lists every broken
-  ramp and role, where `check/1` gives the first.
-- **Colour-vision simulation** (#563): `Visualize.Color.Vision.simulate/2` shows a colour as
-  a person with protanopia, deuteranopia or tritanopia sees it (Machado, Oliveira and
-  Fernandes 2009, severity 1.0, in linear sRGB), and `recolour/2` applies it to every colour
-  literal of an SVG. The theme mode's *seen with* select draws the ramps and the preview
-  sheet under each deficiency.
-- **Fixed:** the builder no longer raises while rendering a design whose inline theme breaks
-  a contract; its colour wells draw the theme unchecked.
-- **Fixed:** a non-composite chart in the builder (a style, a theme) no longer reports its
-  own `version` stamp as a fault of its kind.
-- **`Visualize.Board`: a dashboard as data** (#539, D-141). A board lays designs out on a
-  12-column grid (metresis's, so a panel maps to a cell field for field). Each cell is
-  `{x, y, w, h}` and a `{:composite, n}` reference to a component in your store, which may
-  be a composite or a flat design. The cells share a UTC `window` (`%{last: seconds}` or
-  `%{from, to}`), a display `zone`, board `vars` and a `sync` group, but never geometry: a
-  board never flattens. Below `layout.breakpoint` (768 px) the cells stack full width in
-  reading order (`arrange/2`, `boxes/2`). Board variables are the defaults of every cell's
-  component variables, and a cell may override one. `to_map`/`from_map` and
-  `to_json`/`from_json` round-trip a board. The JSON is stamped `"$version"`, and a newer
-  board is refused as `{:newer_schema, needs, this}` before anything is read. `limits:`
-  applies, and the defaults apply when it is not given. `validate/1` reports off-grid and
-  overlapping cells, a bad window and wrong-kind refs. `validate/3`, given a store (a fetch
-  function or an id map), adds dangling refs, cycles, components that are not designs,
-  undeclared cell variables, and cells whose component cannot join the board's sync group
-  (set `sync: false` on those). `required_sources/3` lists every slot keyed `{cell, slot}`
-  with its `fields`, `types` and `requires` contract, so one design in two cells binds to
-  two feeds. `realise/4` applies every cell at its box's size, purely.
-- **`Visualize.Board.Binding`** (#539): which feed fills each `{cell, slot}`, supplied by
-  your connector and never stored in the board. `check/3` reports every unbound slot,
-  every contract a feed's schema cannot meet (with `apply/2`'s reasons), and every binding
-  to a slot no cell declares. `pools/2` builds one pool per cell from your sources.
-- **Every chart describes itself** (#557, D-142). `Visualize.Chart.Summary.new/1` reads an
-  applied chart into a text alternative — its name, its kind (a line chart, a gauge, a
-  treemap…), its series, each axis's range or categories, and the highest and lowest value
-  it draws, each with where it is — and `text/1` writes it as sentences, values written as
-  their axis writes them (its `measure`'s display unit, `prefix` and `unit`) to four
-  significant digits. `table/2` is the data-table fallback: an HTML `<table>` per mark,
-  visually hidden and still read, for a page to place beside the chart. `attrs/2` and
-  `description/2` name and describe whatever element stands for the chart — a canvas, or
-  the wrapper of a hybrid chart's layers.
-- **A chart's points from the keyboard** (#558, D-142). `KeyboardHook`, the bundle's
-  eleventh hook, makes a chart one tab stop: the arrow keys move between its points and
-  its series, Home and End to a series' ends, a polite live region reads each point
-  (`y, 3 of 51: x 2, y 54.3`) and a ring marks it over the SVG or the canvas. Escape
-  hands focus back to an enclosing `data-vis-cell`, so a board can navigate its cells
-  around charts. `Visualize.Hooks.Keyboard.attrs/1` writes the points once on the server
-  from an applied chart; a series of more than 1,000 points is sampled evenly.
-- **Reduced motion** (#559, D-142). `Visualize.Chart.compile/2` takes `motion: :reduce`,
-  and `Compiled.tick/3` and `step/3` take `motion:` per tick: every scale transition and
-  mark motion is then drawn at its target on the tick it changes, its state kept, so
-  turning motion back on eases on from where the chart stands. `ResizeHook` now pushes
-  `reduced_motion` — `prefers-reduced-motion: reduce` — with every size and again when the
-  reader changes it, so the page that sizes a chart can compile it to match. A component
-  with `animate` gains the class `vis-animated` and a `<style>` that stops its transition
-  under that media query.
-- **Status beyond hue** (#560, D-142). Every role carries a glyph and a dash besides its
-  hue, fixed by the library — `Visualize.Theme.cue/1`: `:good` a circle and solid,
-  `:warning` a triangle and `"6 3"`, `:bad` a cross and `"2 3"`, `:info` a square and
-  `"8 3 2 3"`, `:neutral` a diamond and `"1 4"`. A `{:field, f}` binding on a `:symbol`
-  mark's `symbol` or on `stroke_dasharray` reads through the frame's colour scale to the
-  role and draws its cue, so a status chart reads in greyscale. The gallery's Gauge marks
-  its zones with their glyphs.
 - **`Visualize.Format.Auto`** (#532, D-134): tick formats derived from a scale's domain.
   `time_format/2` picks a `Visualize.Format.time/2` specifier from a time domain's span and
-  the interval its ticks use — `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,
-  `%b %d` within 92 days, `%b %Y` (or `%Y`) beyond. `notation/2` reads a numeric domain's
-  magnitude — `:plain` below 1,000, `:grouped` below a million, `{:si, 6}` and up beyond —
-  and `number/2` turns a notation into a formatter (`90,000`; `0.5M, 1M, 1.5M`, one prefix
-  for the whole axis). `formatter/2` does both for a realised scale. Every function takes
-  `locale:`, `"en"` by default and the only locale for now; another raises.
+  the interval its ticks use: `%H:%M` within a day, `%a %H:%M` or `%a %d` within a week,
+  `%b %d` within 92 days, and `%b %Y` (or `%Y`) beyond. `notation/2` reads a numeric
+  domain's magnitude: `:plain` below 1,000, `:grouped` below a million, and `{:si, 6}` and
+  up beyond. `number/2` turns a notation into a formatter (`90,000`; `0.5M, 1M, 1.5M`, one
+  prefix for the whole axis). `formatter/2` does both for a realised scale. Every function
+  takes `locale:`, which is `"en"` by default and the only locale for now; another raises.
 - **`Visualize.Axis.tick_count/2`** (#532): the tick count an axis of a given length asks
-  for — one per 80 px across, per 35 px down, between 2 and 10.
-- **Themes carry meaning: four ramps and five roles** (#533, D-135). A `Visualize.Theme`
-  now has `ramps` — `status` (good → caution → bad), `thermal` (cold → neutral → hot),
-  `diverging` (below → at → above a midpoint) and `sequential` (less → more), each a list of
-  anchor colours interpolated in CIE Lab — and the roles `:good`, `:warning`, `:bad` (the
-  status ramp at 0, 0.5 and 1), `:info` and `:neutral`. A design colours by meaning with a
-  role (`fill: :bad`) or a ramp position (`fill: {:ramp, :thermal, 0.8}`), wherever a colour
-  is accepted, and every theme renders it in its own tones. `Visualize.Theme.ramp/3` reads a
-  position; roles are slots, so `stylesheet/1` declares `--vis-good` and the rest.
-- **Ramp and role contracts are checked when a theme is built.** `Theme.new/1`,
-  `Theme.merge/2` and an inline design theme refuse a ramp whose hues are out of order, whose
-  lightness is not monotonic, or whose midpoint is not neutral, with an `ArgumentError`
-  naming the theme, the ramp and what is broken; `Theme.check/1` returns the same answer
-  without raising, and the validator reports it as `{:contract, message}`. The tolerances
-  are in spec/08 §7.5.
-- **`Visualize.Theme.colour_safe/0`** (`theme: :colour_safe`): the light theme with its
-  status ramp blue → orange → red, so status reads under the commonest colour-vision
-  deficiencies. `Theme.builtin/1` resolves the three built-in names.
-- **Colour scales range over a theme ramp.** `range: {:ramp, :status}` on an ordinal colour
-  scale spreads its domain end to end (three states draw as `:good`, `:warning`, `:bad`); on a
-  threshold scale its buckets; on a sequential or diverging scale it interpolates the ramp.
-  JSON writes a ramp as `{"$ramp": "status"}` and a position as `{"$ramp": ["status", 0.5]}`.
-- **A feed can describe its fields: `Visualize.Data.Schema`** (#551, D-136). `new/1` takes
-  a map from field name to a description of what the field *means*: `type` (required),
-  `unit`, `quantity`, `label`, `order`, `status` (a state to a role such as `:good`,
-  `:warning` or `:bad`), `polarity`, `target` and `continuity`. A schema never names a
-  colour: `color`, `colors`, `palette`, `fill` and the like are refused, because a theme
-  chooses colour from the meaning. Each schema has a `version`, a SHA-256 content hash that
-  is the same on every node and under every release, so a version can cross a wire.
-- **`Visualize.Data.Schema.Cache`**: schemas held by `{feed, version}` as a plain value you
-  keep in your own state. `resolve/4` answers a cached version without calling anything, and
-  calls the `describe` function you give it once for a version it has not seen.
-- **`%Visualize.Data.Delivery{}`**: one answer of a feed, holding its rows, the window
-  served, the resolution, `capped`, `reduced_by` and the schema version (never the schema).
-  `Visualize.Data.Table.rows/1` reads it, so it goes wherever a source goes:
-  `Visualize.Chart.apply/2`'s pool and a compiled chart's `tick/3`, `step/3`, `render/2`
-  and `svg/2`.
-- **A design can require and read its feed's schema** (#552, D-136). A source slot can now
-  state `requires: %{latency: [:unit, :label]}`, the attributes its feed's schema must
-  describe. `Visualize.Chart.fact(:primary, :latency, :label)` reads one of them anywhere a
-  value goes, and inside a text as `#{fact(:primary, :latency, :unit)}`. So an axis title
-  can come from the field's label and unit, and an ordinal domain from its `order`.
-  `Visualize.Chart.apply/2` takes the schema cache as `schemas:` and a `describe:`
-  function, resolves the schema each delivery names, and fails with the slot, the field
-  and the missing attribute named (`{:missing_attribute, slot, field, key}`) instead of
-  drawing a blank label. The applied chart returns `schemas`, `versions` and the grown
-  `cache`. `Visualize.Chart.contract/1` lists what a design requires, for a picker.
-- **`Visualize.Chart.Compiled.stale?/2`**: whether a delivery names a schema version
-  other than the one the chart was compiled with. A schema change needs a recompile, as a
-  resize does: `tick/3`, `step/3`, `render/2` and `svg/2` raise `ArgumentError` for a stale
-  delivery, so compile again and `carry/2` the state across.
-- **Sanity limits on every design reader** (#550, #541, D-137): `Visualize.Chart.from_map/2`,
-  `from_map!/2`, `from_json/2` and `Visualize.Chart.Fragment.from_json/2` take
-  `limits: [depth: …, items: …, ticks: …, iterations: …, counts: …]`. The defaults
-  (`Visualize.Chart.Limits.defaults/0`: nesting 64, 100,000 entries in one list or map, 1,000
-  axis ticks, 10,000 force iterations, 1,000,000 for bins, samples, `n`, `width` and a grid's dimensions) always
-  apply and every gallery design passes them by a wide margin; a host reading designs or
-  boards from elsewhere tightens them. A value over a limit is
-  `{path, {:limit, name, max, given}}`, worded by `Validator.format/1` as
-  `frames.main.axes[0].ticks: asks for 5000 ticks; the limit ticks is 1000`. From JSON, the
-  nesting and sizes are checked before the document is decoded, so an oversized document
-  makes no atoms. `Visualize.Chart.Limits.check/2` gives the verdict on a map without reading
-  it. See [spec/14 §9.2](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#92-sanity-limits-on-a-document-from-elsewhere).
-- **`Visualize.Chart.Migration.readable/1`**: the version gate alone, for a reader that holds
-  a version before it holds a design.
+  for, one per 80 px across or per 35 px down, between 2 and 10.
 - **Units by UCUM code: `Visualize.Unit`** (#536, D-138). `parse/1` and `valid?/1` check a
   UCUM code (`ms`, `kBy`, `MiBy`, `%`, `Cel`, `kW.h`, `{request}/s`) against a fixed table
-  of prefixes and atoms, refusing typos such as `sec` or `kmin` with a reason;
-  `symbol/2` writes a code for a reader (`B/s`, `µs`, `°C`, `kW·h`); `convert/3` scales a
+  of prefixes and atoms, and refuse typos such as `sec` or `kmin` with a reason.
+  `symbol/2` writes a code for a reader (`B/s`, `µs`, `°C`, `kW·h`). `convert/3` scales a
   value between codes of one dimension (1,500 `ms` is 1.5 `s`) and refuses °C to °F, which
   is out of scope. `from_telemetry/1` maps a `Telemetry.Metrics` unit (`:millisecond`,
   `:kilobyte`, `{:native, :millisecond}`) to its code, without depending on
@@ -327,280 +111,552 @@ release it merely follows.
   twelve quantities (`:duration`, `:information`, `:data_rate`, `:frequency`, `:ratio`,
   `:count`, `:temperature`, `:length`, `:speed`, `:power`, `:energy`, `:pressure`), each
   with a base unit and a family to scale in. `display_unit/2` picks the unit that fits a
-  domain, `formatter/3` writes a scale's ticks in it with its symbol (`0.5 s, 1 s, 1.5 s`
-  for 0–1,500 ms), and `label/1` is the axis-label rule: the unit, else the quantity, else
+  domain. `formatter/3` writes a scale's ticks in it with its symbol (`0.5 s, 1 s, 1.5 s`
+  for 0–1,500 ms). `label/1` is the axis-label rule: the unit, else the quantity, else
   nothing. Information scales in decimal units (`kB`, `MB`) unless your unit is binary
-  (`MiBy`) or in bits, which then keep their own family.
+  (`MiBy`) or in bits, which keep their own family.
 - **An axis `measure`** (#536, D-138): `measure: %{unit: "ms", quantity: :duration}` (either
   key alone is enough) says what the axis's values are. With no `format`, a numeric axis's
-  ticks are scaled into the unit that fits and carry its symbol; when the ticks cannot say
-  the unit (a count, an explicit `format`), the axis draws a title by the label rule
-  unless you anchor your own label there. The validator refuses a code it cannot read and a
-  unit that does not measure its quantity. The existing `unit` key is unchanged: it is still
-  a literal suffix.
-- **The feed behaviour: `Visualize.Feed`** (#537, D-140). A feed is a struct whose module
-  implements `describe/1` (`{version, schema, supports}`, where `supports` is any of
-  `[:window, :budget, :push]`) and `fetch(feed, window, budget)` (a
-  `%Visualize.Data.Delivery{}`), and optionally `subscribe/2` and `unsubscribe/2`. Only rows
-  are required. A window and a budget are requests: when your feed does not honour them,
-  `Visualize.Feed.finish/3` trims to the window by the schema's `:time` field and reduces to
-  the budget with LTTB or M4, one series per category value and every number field's peaks
-  kept, and records `reduced_by: :visualize`. A push feed sends
-  `{:visualize_feed, ref, {:schema, version, schema}}` before
-  `{:visualize_feed, ref, {:delivery, delivery}}`, where each delivery holds the rows new
-  since the last. A version the subscriber does not hold is asked of `describe` once.
-  Callbacks answer `{:error, reason}` and never raise.
-- **`Visualize.Feed.Monitor`**: the loop over your feeds, as a value you keep in your
-  process's state (a LiveView today, a board later). Call `tick/2` each frame and
-  `handle_message/2` from `handle_info/2`. It describes and subscribes your feeds, polls
-  pull feeds every `every:` ms, buffers pushes until the next tick and merges them once,
-  and deduplicates a push that overlaps a fetch. Pass `deliveries/1` and `cache/1` to
-  `Visualize.Chart.apply/2` as `sources:` and `schemas:`. `status/1` reports each feed as
-  `:loading`, `:live`, `:stale` (with `stale_after:`) or `{:down, reason}`, and the last
-  delivery is still handed out while a feed is down. `window/2` moves the window: a push
-  feed is fetched again only for older data.
-- **`Visualize.Feed.Combine`**: one slot over several feeds, freshest first, for example
-  the last hour from `:telemetry` and older data from a history store. Each feed is asked
-  for the part of the window the fresher ones did not serve, and the seams are
-  deduplicated. Every part must describe the same schema version.
-- **`Visualize.Feed.Signals`**: a `Visualize.Signals` signal as a pull feed, honouring a
-  window of ticks, with a fixed tick (`at/2`) or a clock (`every:`). It comes with
-  `Visualize.Signals.rows/3`, the rows from one tick to another.
-- **`Visualize.Feed.Telemetry`**: an in-process `:telemetry` collector over a list of
-  `Telemetry.Metrics` definitions. Start it in your supervision tree with
-  `{Visualize.Feed.Telemetry, metrics: metrics}`. Each metric is a push feed (`feeds/1`)
-  with rows `%{t: DateTime, value: v}` plus its tags, and a schema giving the label, the
-  UCUM unit and the quantity. A counter's value is the running count, a sum's the running
-  total. `:telemetry` is now an optional dependency of visualize. If your app lacks it,
-  everything else builds as before. visualize does not depend on `telemetry_metrics`.
-- **A conformance kit for your feeds: `Visualize.Feed.Conformance`** (#538, D-145). Add
-  `use Visualize.Feed.Conformance, feed: …, windows: […]` to an `ExUnit.Case` module and
-  it writes six tests: `describe` answers a valid schema under its content hash, and the
-  same one each time; every delivery is well formed and names that version, its `window`
-  covers its rows and every row the feed holds there, and `capped`, `reduced_by` and
-  `resolution` are true; the capabilities in `supports` are honoured, and an undeclared
-  `:push` is refused; a push feed sends the schema before any delivery naming it (give
-  `push:`, a function that makes it push); a window the feed cannot read is an error
-  value, never a raise (give `down:` to check a feed whose provider is gone as well); and
-  unsubscribing stops pushes. `Visualize.Feed.Conformance.check/2` runs the same checks
-  outside a test and returns the findings as values, `[]` for a feed that passes. Each
-  callback runs in its own process with you in `$callers`, so a sandboxed repository works
-  and a raise is reported as a finding. The kit calls no ExUnit function itself, so it
-  compiles in every environment of your app. `Visualize.Feed.Signals` and
-  `Visualize.Feed.Telemetry` pass it. The LiveView guide has a new section, *Writing a
-  feed*.
-
-- **Overlays are marks** (#565, D-143): what a host drew around a chart — event markers,
-  thresholds, the brush — is now part of the design, so every host that applies it draws
+  ticks are scaled into the unit that fits and carry its symbol. When the ticks cannot say
+  the unit (a count, an explicit `format`), the axis draws a title by the label rule unless
+  you anchor your own label there. The validator refuses a code it cannot read and a unit
+  that does not measure its quantity. The existing `unit` key is unchanged: it is still a
+  literal suffix.
+- **Overlays are marks** (#565, D-143). What a host drew around a chart (event markers,
+  thresholds, the brush) is now part of the design, so every host that applies it draws
   the same overlays on SVG, the canvas, the binary stream and the hybrid page.
-  - **A `:rule` at `y` in a cartesian frame** is a horizontal rule across the plot — a
-    threshold (`channels: %{y: :value}` over a source of thresholds) or a feed's target
-    (`y: fact(:primary, :latency, :target)` over `take(1)` of the feed) — labelled at its
-    left end.
-  - **A colour scale's `range` may be a map of colours** on an `:ordinal` scale, pinning each
-    category by name: `range: %{"info" => :info, "critical" => :bad}`, or a feed's own
+  - **A `:rule` at `y` in a cartesian frame** is a horizontal rule across the plot,
+    labelled at its left end: a threshold (`channels: %{y: :value}` over a source of
+    thresholds) or a feed's target (`y: fact(:primary, :latency, :target)` over `take(1)`
+    of the feed).
+  - **A colour scale's `range` may be a map of colours** on an `:ordinal` scale, pinning
+    each category by name: `range: %{"info" => :info, "critical" => :bad}`, or a feed's own
     meaning, `range: fact(:events, :severity, :status)`. A category the map does not name
     draws the theme's neutral `:axis` colour. In JSON it is a `"$colours"` list of pairs.
   - **`polarity` on a colour scale over a ramp** (`:higher_is_better`, `:lower_is_better`,
     `:neutral`, or `fact(:primary, :latency, :polarity)`) places the ramp's good end at the
     better end of the domain. With `kind: :threshold`, `domain: [fact(…, :target)]` and
-    `range: {:ramp, :status}`, a reading beyond the feed's target is `:bad` whichever way the
-    feed says is better.
+    `range: {:ramp, :status}`, a reading beyond the feed's target is `:bad` whichever way
+    the feed says is better.
   - **A variable or a fact may stand for one member of a domain list**, as the threshold
     above does.
   - **`interaction: %{brush: :x}`**: the design's own brush. The chart writes its plot area
-    and its x mapping (`Visualize.Chart.Frame.brush_attrs/1`), and `BrushHook` on a container
-    around it pushes `brush_select` with `"domain" => [lo, hi]` (milliseconds for a time x)
-    — your handler reads the window and needs no margins and no scale to invert. The
-    element's own `data-brush-type` and `data-brush-extent` still win.
+    and its x mapping (`Visualize.Chart.Frame.brush_attrs/1`), and `BrushHook` on a
+    container around it pushes `brush_select` with `"domain" => [lo, hi]` (milliseconds for
+    a time x). Your handler reads the window and needs no margins and no scale to invert.
+    The element's own `data-brush-type` and `data-brush-extent` still win.
+- **Sanity limits on every design reader** (#550, #541, D-137): `Visualize.Chart.from_map/2`,
+  `from_map!/2`, `from_json/2` and `Visualize.Chart.Fragment.from_json/2` take
+  `limits: [depth: …, items: …, ticks: …, iterations: …, counts: …]`. The defaults
+  (`Visualize.Chart.Limits.defaults/0`) are nesting 64, 100,000 entries in one list or map,
+  1,000 axis ticks, 10,000 force iterations, and 1,000,000 for bins, samples, `n`, `width`
+  and a grid's dimensions. A host reading designs or boards from elsewhere tightens them. A
+  value over a limit is `{path, {:limit, name, max, given}}`, worded by
+  `Validator.format/1` as `frames.main.axes[0].ticks: asks for 5000 ticks; the limit ticks
+  is 1000`. From JSON, the nesting and sizes are checked before the document is decoded, so
+  an oversized document makes no atoms. `Visualize.Chart.Limits.check/2` gives the verdict
+  on a map without reading it. See
+  [spec/14 §9.2](https://github.com/dcoai/Visualize/blob/main/spec/14-declarative-chart.md#92-sanity-limits-on-a-document-from-elsewhere).
+- **`Visualize.Chart.Migration.readable/1`**: the version gate alone, for a reader that
+  holds a version before it holds a design.
+
+#### Themes
+
+- **Themes carry meaning: four ramps and five roles** (#533, D-135). A `Visualize.Theme`
+  now has `ramps`, each a list of anchor colours interpolated in CIE Lab: `status` (good →
+  caution → bad), `thermal` (cold → neutral → hot), `diverging` (below → at → above a
+  midpoint) and `sequential` (less → more). It also has the roles `:good`, `:warning` and
+  `:bad` (the status ramp at 0, 0.5 and 1), `:info` and `:neutral`. A design colours by
+  meaning with a role (`fill: :bad`) or a ramp position (`fill: {:ramp, :thermal, 0.8}`),
+  wherever a colour is accepted, and every theme renders it in its own tones.
+  `Visualize.Theme.ramp/3` reads a position. Roles are slots, so `stylesheet/1` declares
+  `--vis-good` and the rest.
+- **Ramp and role contracts are checked when a theme is built.** `Theme.new/1`,
+  `Theme.merge/2` and an inline design theme refuse a ramp whose hues are out of order,
+  whose lightness is not monotonic, or whose midpoint is not neutral. The `ArgumentError`
+  names the theme, the ramp and what is broken. `Theme.check/1` returns the same answer
+  without raising, and the validator reports it as `{:contract, message}`. The tolerances
+  are in [spec/08 §7.5](https://github.com/dcoai/Visualize/blob/main/spec/08-utilities.md).
+  `Visualize.Theme.violations/1` (#563) lists every broken ramp and role, where `check/1`
+  gives the first.
+- **`Visualize.Theme.colour_safe/0`** (`theme: :colour_safe`): the light theme with its
+  status ramp blue → orange → red, so status reads under the commonest colour-vision
+  deficiencies. `Theme.builtin/1` resolves the built-in names.
+- **Colour scales range over a theme ramp.** `range: {:ramp, :status}` on an ordinal colour
+  scale spreads its domain end to end (three states draw as `:good`, `:warning`, `:bad`).
+  On a threshold scale it spreads its buckets, and on a sequential or diverging scale it
+  interpolates the ramp. JSON writes a ramp as `{"$ramp": "status"}` and a position as
+  `{"$ramp": ["status", 0.5]}`.
+- **A theme is a stored, versioned value** (#561, D-139). `Visualize.Chart.Theme` writes a
+  theme as a document: `to_map/1` is `%{version: 2, theme: node}`, and `to_json/1` the
+  stamped `{"$version": 2, "theme": {…}}`. `from_map/2` and `from_json/2` read one back to
+  a `%Visualize.Theme{}` under the same rules as a design. A newer theme is refused by name
+  before a key is read, `limits:` bound it, an older one migrates, and a broken ramp or
+  role is the validator's `{:contract, message}` at its path. A document that only names a
+  theme that is not built-in is the new fault `{:unknown_theme, name}`.
+- **Colour-vision simulation** (#563): `Visualize.Color.Vision.simulate/2` shows a colour
+  as a person with protanopia, deuteranopia or tritanopia sees it (Machado, Oliveira and
+  Fernandes 2009, severity 1.0, in linear sRGB). `recolour/2` applies it to every colour
+  literal of an SVG.
+- **`Visualize.Theme.print/0`** (`theme: :print`, #578, D-150): white with dark ink and the
+  colour-safe status ramp, for paper.
+
+#### Data and feeds
+
+- **A feed can describe its fields: `Visualize.Data.Schema`** (#551, D-136). `new/1` takes
+  a map from field name to a description of what the field *means*: `type` (required),
+  `unit`, `quantity`, `label`, `order`, `status` (a state to a role such as `:good`,
+  `:warning` or `:bad`), `polarity`, `target`, `continuity` and `window` (#586).
+  `attributes/0` lists the ten keys. A schema never names a colour: `color`, `colors`,
+  `palette`, `fill` and the like are refused, because a theme chooses colour from the
+  meaning. Each schema has a `version`, a SHA-256 content hash that is the same on every
+  node and under every release, so a version can cross a wire.
+- **A `:time` field holds instants, and a feed names its window field** (#585, #586,
+  D-154). A `:time` field's values are `DateTime`, `NaiveDateTime` or `Date` (or ISO 8601
+  strings, for a field that is not the window field). A count, tick, sequence number or
+  offset is `:number`. A feed's windows are over its window field:
+  - the field described `window: true`, which may be `:time` or `:number`
+    (`%{tick: %{type: :number, window: true}}`), else the schema's one `:time` field;
+  - with more than one `:time` field, mark the one your windows are over `window: true`,
+    and `window: false` makes a schema's only `:time` field not the window field;
+  - a numeric field your rows are ordered by, or that `continuity` is measured along, is
+    the window field too;
+  - `Schema.new/1` reports `window` on a `:category` or `:text` field
+    (`{:invalid_for, type}`), a value that is not a boolean (`{:type, :boolean}`), and two
+    `window: true` fields (`{:duplicate_window, other}`).
+
+  `Visualize.Feed.window_field/1` returns the window field and `window_type/1` its type.
+  `Visualize.Feed.Window.applies?/2` says whether a window's bounds are of a window
+  field's kind, and `instant?/1` whether a value is an instant. A feed stamped with
+  `DateTime`s that has one `:time` field, as `Visualize.Feed.Telemetry` is, needs nothing
+  more.
+- **`Visualize.Data.Schema.Cache`**: schemas held by `{feed, version}` as a plain value you
+  keep in your own state. `resolve/4` answers a cached version without calling anything,
+  and calls the `describe` function you give it once for a version it has not seen.
+- **`%Visualize.Data.Delivery{}`**: one answer of a feed, holding its rows, the window
+  served, the resolution, `capped`, `reduced_by` and the schema version (never the schema).
+  `Visualize.Data.Table.rows/1` reads it, so it goes wherever a source goes:
+  `Visualize.Chart.apply/2`'s pool and a compiled chart's `tick/3`, `step/3`, `render/2`
+  and `svg/2`.
+- **A design can require and read its feed's schema** (#552, D-136). A source slot can
+  state `requires: %{latency: [:unit, :label]}`, the attributes its feed's schema must
+  describe. `Visualize.Chart.fact(:primary, :latency, :label)` reads one of them anywhere a
+  value goes, and inside a text as `#{fact(:primary, :latency, :unit)}`. So an axis title
+  can come from the field's label and unit, and an ordinal domain from its `order`.
+  `Visualize.Chart.apply/2` takes the schema cache as `schemas:` and a `describe:`
+  function, and resolves the schema each delivery names. It fails with the slot, the field
+  and the missing attribute named (`{:missing_attribute, slot, field, key}`) instead of
+  drawing a blank label. The applied chart returns `schemas`, `versions` and the grown
+  `cache`. `Visualize.Chart.contract/1` lists what a design requires, for a picker.
+- **A bound field's type is checked against its scale** (#584, #582, #586, D-153, D-154).
+  Each field a mark reads through a scale is checked against what the scale's kind needs:
+  a time scale needs `:time`, band and ordinal need `:category` (or `:text`), and every
+  other kind needs `:number`. A mismatch is the fault
+  `{:type_mismatch, slot, field, expected, given}`, at the channel, style or offset that
+  reads the field. A `:time` field read through a linear, log, power, sqrt, symlog or other
+  numeric scale is `{:type_mismatch, slot, field, :number, :time}`.
+  - `Visualize.Chart.apply/2` reports it wherever a schema is bound. A slot with no
+    contract has its delivery's schema resolved for the check, and a schema it cannot
+    resolve is no fault. Rows with no schema still raise from the frame, as before.
+  - The pure checks are `Visualize.Chart.check_types/2` and
+    `Visualize.Board.Binding.check_types/3`. Each takes a schema or a plain map of types,
+    such as `Visualize.Data.Table.column_types/1` reads from rows.
+- **`Visualize.Chart.Compiled.stale?/2`**: whether a delivery names a schema version other
+  than the one the chart was compiled with. A schema change needs a recompile, as a resize
+  does: `tick/3`, `step/3`, `render/2` and `svg/2` raise `ArgumentError` for a stale
+  delivery, so compile again and `carry/2` the state across.
+- **The feed behaviour: `Visualize.Feed`** (#537, D-140). A feed is a struct whose module
+  implements `describe/1` (`{version, schema, supports}`, where `supports` is any of
+  `[:window, :budget, :push]`) and `fetch(feed, window, budget)` (a
+  `%Visualize.Data.Delivery{}`), and optionally `subscribe/2` and `unsubscribe/2`. Only rows
+  are required. A window and a budget are requests. When your feed does not honour them,
+  `Visualize.Feed.finish/3` trims to the window along the window field and reduces to the
+  budget with LTTB or M4, one series per category value and every number field's peaks
+  kept, and records `reduced_by: :visualize`. It never reduces the window field itself. A
+  push feed sends `{:visualize_feed, ref, {:schema, version, schema}}` before
+  `{:visualize_feed, ref, {:delivery, delivery}}`, where each delivery holds the rows new
+  since the last. A version the subscriber does not hold is asked of `describe` once.
+  Callbacks answer `{:error, reason}` and never raise.
+- **`Visualize.Feed.Monitor`**: the loop over your feeds, as a value you keep in your
+  process's state (a LiveView, or a board). Call `tick/2` each frame and `handle_message/2`
+  from `handle_info/2`. It describes and subscribes your feeds, polls pull feeds every
+  `every:` ms, buffers pushes until the next tick and merges them once, and deduplicates a
+  push that overlaps a fetch. Pass `deliveries/1` and `cache/1` to
+  `Visualize.Chart.apply/2` as `sources:` and `schemas:`. `status/1` reports each feed as
+  `:loading`, `:live`, `:stale` (with `stale_after:`) or `{:down, reason}`, and the last
+  delivery is still handed out while a feed is down. `window/2` moves the window: a push
+  feed is fetched again only for older data. Each feed is asked for the window that
+  applies to it: a feed over ticks under a window of instants is asked for its own span
+  (`nil`), and is neither trimmed nor refetched as that window moves. The monitor keeps
+  each holding in time order and keeps a late pushed row instead of dropping it (#574), and
+  `Monitor.refetch/1` asks every feed again.
+- **`Visualize.Feed.Combine`**: one slot over several feeds, freshest first, for example the
+  last hour from `:telemetry` and older data from a history store. Each feed is asked for
+  the part of the window the fresher ones did not serve, and the seams are deduplicated.
+  Every part must describe the same schema version, and the window may be over instants or
+  numbers. `describe/1` answers `{:error, :combine_window_field}` when the shared schema
+  has no window field.
+- **`Visualize.Feed.Signals`**: a `Visualize.Signals` signal as a pull feed, honouring a
+  window of ticks, with a fixed tick (`at/2`) or a clock (`every:`). It describes its tick
+  as `%{type: :number, window: true, label: "Tick"}`, so bind the tick to a linear scale,
+  not a time scale. It comes with `Visualize.Signals.rows/3`, the rows from one tick to
+  another.
+- **`Visualize.Feed.Telemetry`**: an in-process `:telemetry` collector over a list of
+  `Telemetry.Metrics` definitions. Start it in your supervision tree with
+  `{Visualize.Feed.Telemetry, metrics: metrics}`. Each metric is a push feed (`feeds/1`)
+  with rows `%{t: DateTime, value: v}` plus its tags, and a schema giving the label, the
+  UCUM unit and the quantity. A counter's value is the running count, a sum's the running
+  total.
+- **A conformance kit for your feeds: `Visualize.Feed.Conformance`** (#538, D-145). Add
+  `use Visualize.Feed.Conformance, feed: …, windows: […]` to an `ExUnit.Case` module and it
+  writes six tests:
+  - `describe` answers a valid schema under its content hash, and the same one each time;
+  - every delivery is well formed and names that version, its `window` covers its rows and
+    every row the feed holds there, and `capped`, `reduced_by` and `resolution` are true;
+  - the capabilities in `supports` are honoured, and an undeclared `:push` is refused;
+  - a push feed sends the schema before any delivery naming it (give `push:`, a function
+    that makes it push);
+  - a window the feed cannot read is an error value, never a raise (give `down:` to check
+    a feed whose provider is gone as well);
+  - unsubscribing stops pushes.
+
+  The kit also checks the window field (#586): `:no_window_field` for a feed that supports
+  `:window` with no window field, `:window_value` for a row whose window field is not of
+  its type, and `:not_an_instant` for a `:time` value that is not an instant.
+  `Visualize.Feed.Conformance.check/2` runs the same checks outside a test and returns the
+  findings as values, `[]` for a feed that passes. Each callback runs in its own process
+  with you in `$callers`, so a sandboxed repository works and a raise is reported as a
+  finding. The kit calls no ExUnit function itself, so it compiles in every environment of
+  your app. `Visualize.Feed.Signals` and `Visualize.Feed.Telemetry` pass it. The LiveView
+  guide has a new section, *Writing a feed*.
+
+#### Boards
+
+- **`Visualize.Board`: a dashboard as data** (#539, D-141). A board lays designs out on a
+  12-column grid (metresis's, so a panel maps to a cell field for field). Each cell is
+  `{x, y, w, h}` and a `{:composite, n}` reference to a component in your store, which may
+  be a composite or a flat design. The cells share a UTC `window` (`%{last: seconds}` or
+  `%{from, to}`), a display `zone`, board `vars` and a `sync` group, but never geometry: a
+  board never flattens.
+  - Below `layout.breakpoint` (768 px) the cells stack full width in reading order
+    (`arrange/2`, `boxes/2`).
+  - Board variables are the defaults of every cell's component variables, and a cell may
+    override one.
+  - `to_map`/`from_map` and `to_json`/`from_json` round-trip a board. The JSON is stamped
+    `"$version"`, and a newer board is refused as `{:newer_schema, needs, this}` before
+    anything is read. `limits:` applies, and the defaults apply when it is not given.
+  - `validate/1` reports off-grid and overlapping cells, a bad window and wrong-kind refs.
+    `validate/3`, given a store (a fetch function or an id map), adds dangling refs,
+    cycles, components that are not designs, undeclared cell variables, and cells whose
+    component cannot join the board's sync group (set `sync: false` on those).
+  - `required_sources/3` lists every slot keyed `{cell, slot}` with its `fields`, `types`,
+    `reads` and `requires` contract, so one design in two cells binds to two feeds.
+  - `realise/4` applies every cell at its box's size, purely. `components/3` prepares each
+    cell's component, writing in the board's group and zone (a time scale with no zone
+    takes the board's).
+  - The UTC window applies to feeds whose window field is `:time`. A feed over ticks keeps
+    its own span, and its `continuity` is in its own units. To put ticks on the board's
+    clock, map them to instants in your connector and describe them as `:time`.
+- **`Visualize.Board.Binding`** (#539): which feed fills each `{cell, slot}`, supplied by
+  your connector and never stored in the board. `check/3` reports every unbound slot, every
+  contract a feed's schema cannot meet (with `apply/2`'s reasons), every type mismatch per
+  cell, and every binding to a slot no cell declares. `pools/2` builds one pool per cell
+  from your sources.
+- **A board runs live** (#574, D-146). Add `{Visualize.Board.Supervisor, name: MyApp.Boards}`
+  to your tree and start a board under it with `Visualize.Board.Server.start/2`, passing
+  `board:`, `store:`, `binding:` and `feeds:`.
+  - The board process owns the window (UTC), the zone, the variables, the sync group and
+    one "now". It drives the feeds through a `Visualize.Feed.Monitor`. `window/2` sets the
+    window and re-asks every feed, and `vars/2`, `resize/2`, `tick/1`, `info/1` and
+    `stop/1` do what they say.
+  - A board that does not validate given its store, or whose binding names a missing feed,
+    is refused before anything starts.
+  - Each cell is its own process (`Visualize.Board.Cell`) under a heap limit (`max_heap:`,
+    words). A cell that blows its heap or raises shows "Crashed, restarting" and is
+    restarted with a backoff, and the board and the other cells carry on. A slow cell skips
+    to the newest data instead of drawing a backlog.
+  - `subscribe/1` delivers `{:visualize_board, board, {:cell, name, %Visualize.Board.View{}}}`
+    straight from each cell: its SVG frame, its drawn state, and the crosshair and keyboard
+    hooks' attributes.
+- **Every cell state is drawn** (#574). `Visualize.Board.State` decides and draws loading,
+  no data yet, stale, feed down, capped, crashed and wrong binding (`{:invalid, errors}`,
+  #584) from the board's theme. Each state uses a role colour and its glyph, so it reads in
+  greyscale. Where there is no chart the state fills the whole cell, and over a chart it is
+  a banner. The board gains the key `stale_after` (seconds). `Visualize.Board.Rows.place/2`
+  breaks a line where two readings are further apart than the field's `continuity`.
+- **A live board in LiveView** (#575, D-146). Render a board with
+  `<.live_component module={Visualize.Components.Board} id="ops" server={pid} board={board} />`.
+  Add one clause to your page:
+  `def handle_info({:visualize_board, _, _} = m, s), do: (Visualize.Components.Board.forward("ops", m); {:noreply, s})`.
+  The component subscribes your page to the board when it connects. It lays the cells on
+  the 12-column grid, reflows them below the breakpoint, and shows the window in the board's
+  zone. Each cell is its own LiveComponent (`Visualize.Components.Board.Cell`), so a frame's
+  diff is that cell's alone. A cell carries `data-vis-cell`, is one tab stop, and wraps its
+  chart in `CrosshairHook`, `BrushHook` and `KeyboardHook`.
+- **`BoardHook`** (#575), the twelfth hook in the bundle. It pushes the board's width to its
+  component and moves focus between cells with the arrow keys, Home and End. Enter moves
+  focus into a cell's chart, and Escape (`KeyboardHook`'s) brings it back. Escape also
+  clears a board's selection (#581).
+- **`BrushHook` takes `data-brush-target`** (#575). With it set, the brush pushes its events
+  to that LiveComponent instead of the LiveView. On `updated()` the hook also re-attaches its
+  overlay to a chart the server has redrawn, so a brush keeps working over a live chart.
+- **A board's cells interact** (#581, #545, D-151). The board process holds each
+  interaction as shared state.
+  - **Brush to window.** A brush in any cell sets the window of every cell. The component
+    calls `Visualize.Board.Server.brush/2`, which waits `debounce:` milliseconds (250) for
+    the next brush, so a burst of brushes re-asks each feed once.
+    `Visualize.Board.Server.reset_window/1` restores the window the board was started with.
+    The component shows a *Reset window* button while the window is moved, and the board's
+    info reports `moved`. A cleared brush does not restore the window, because a click on a
+    chart is a cleared brush; *Reset window* is the undo.
+  - **Linked selection.** A click on a chart, or Enter on a point the keyboard reached,
+    selects `{field, value}` across the board. The field is the series field, else a
+    `:category` field of the schema. Every cell whose rows hold the selection dims the
+    other data with `opacity` 0.25, bound per datum through the style grammar. A cell that
+    does not hold it is drawn unchanged. The board key `links: %{name: :service}` joins
+    fields of different names. Escape or *Clear selection* clears it. The functions are
+    `Visualize.Board.Server.select/2` and `pick/4`, and `Visualize.Board.link/2` and
+    `linked/2`.
+  - **Drill-down.** A cell's `drill: %{board: ref, vars: %{var => {:datum, field}}}` opens
+    another board, or `:self`, with variables taken from the clicked datum.
+    `Visualize.Board.validate/3` and `Visualize.Board.Server.start/2` take `boards:` and
+    refuse a target the host does not hold (`{:no_board, ref}`) or a variable it does not
+    declare. The component sends your page `{:visualize_board_drill, id, %{cell, board,
+    vars}}`, and you follow it, for example with `push_navigate/2`.
+    `Visualize.Board.drill/3` resolves a target from a row.
+
+  `KeyboardHook` gains `data-keyboard-pick-event` and `data-keyboard-target`. A board's JSON
+  gains `{"$datum": field}`.
+- **A board leaves the screen** (#578, D-150). `Visualize.Board.Server.snapshot/1` freezes a
+  running board as a `Visualize.Board.Snapshot`: the board, its now and window, the theme,
+  and each cell's component and the data it showed. `Visualize.Board.Snapshot.realise/4`
+  makes one purely, as `Visualize.Board.realise/4` does.
+  - A snapshot needs no store, feed or process. `to_json/1` writes it (stamped
+    `"$version"`, rows column by column), and `from_json/2` reads it back under the same
+    version policy and limits as a board.
+  - `Visualize.Board.Export.svg/2` draws a snapshot as one SVG document: the header with
+    the window in the board's zone, and every cell at its grid box with its title, its
+    state banner, and its chart embedded byte for byte as the cell draws it, or its state's
+    panel when it has no chart. `png/2` rasterises that through resvg.
+  - For paper, `Export.pages/2` lays the board on A4 or Letter, portrait or landscape,
+    never splitting a cell, as one SVG per page. `Export.html/2` puts the pages in one HTML
+    document a browser prints as a PDF. Use it with `theme: :print`.
+  - `Visualize.Board.window_text/2` writes a window in a zone as the board's header does.
+- **A board travels to another host in a bundle** (#542, D-147).
+  `Visualize.Chart.Builder.Bundle.export_board/3` bundles a `%Visualize.Board{}` with every
+  component its cells reference, the library entries those use, and every stored theme the
+  board or its components name (a theme the design's `theme` names, read through the cell's
+  variables). `import_board/3` checks the whole bundle before it puts anything:
+  - a newer `schema` or board `version` is refused;
+  - `limits:` bound the board, the entries and the components;
+  - a cell whose component the bundle does not carry is `{:not_carried, id}` at that cell;
+  - a carried theme whose name the store already gives a different theme is
+    `{:theme_taken, name}`.
+
+  It then imports the entries through the store's own `import/2` and returns
+  `%{board: board, ids: table, outside: ids}`, the board's cell refs rewritten to the new
+  ids. Bindings never travel: bind the imported board's `required_sources/3` to your own
+  feeds. `%Bundle{}` gains a `board` key, `nil` for a bundle `export/3` makes.
+- **A worked live board** (#576). The examples site's `/board` page is a complete host. It
+  puts `Visualize.Board.Supervisor` in its tree, starts a board of five cells over
+  `Visualize.Feed.Signals` and in-process `Visualize.Feed.Telemetry` feeds, and renders it
+  with `Visualize.Components.Board` and the one forwarding clause. One component sits in two
+  cells bound to different metrics, and one cell is bound to a feed that is always down, so
+  its drawn state is on the page. Copy it as the starting point for your own board.
+
+#### Accessibility
+
+- **Every chart describes itself** (#557, D-142). `Visualize.Chart.Summary.new/1` reads an
+  applied chart into a text alternative: its name, its kind (a line chart, a gauge, a
+  treemap…), its series, each axis's range or categories, and the highest and lowest value
+  it draws, each with where it is. `text/1` writes it as sentences, values written as their
+  axis writes them (its `measure`'s display unit, `prefix` and `unit`) to four significant
+  digits. `table/2` is the data-table fallback: an HTML `<table>` per mark, visually hidden
+  and still read, for a page to place beside the chart. `attrs/2` and `description/2` name
+  and describe whatever element stands for the chart, such as a canvas or the wrapper of a
+  hybrid chart's layers. `Visualize.Chart.render/2` and `generate/2` take `summary:`
+  (`true`, `false`, or your own string), and `Visualize.IR.Element.root/3` takes
+  `hidden: true` for `aria-hidden`.
+- **A chart's points from the keyboard** (#558, D-142). `KeyboardHook`, the bundle's
+  eleventh hook, makes a chart one tab stop. The arrow keys move between its points and its
+  series, and Home and End go to a series' ends. A polite live region reads each point
+  (`y, 3 of 51: x 2, y 54.3`), and a ring marks it over the SVG or the canvas. Escape hands
+  focus back to an enclosing `data-vis-cell`, so a board can navigate its cells around
+  charts. `Visualize.Hooks.Keyboard.attrs/1` writes the points once on the server from an
+  applied chart. A series of more than 1,000 points is sampled evenly.
+- **Reduced motion** (#559, D-142). `Visualize.Chart.compile/2` takes `motion: :reduce`, and
+  `Compiled.tick/3` and `step/3` take `motion:` per tick. Every scale transition and mark
+  motion is then drawn at its target on the tick it changes, its state kept, so turning
+  motion back on eases on from where the chart stands. `ResizeHook` now pushes
+  `reduced_motion` (`prefers-reduced-motion: reduce`) with every size, and again when the
+  reader changes it, so the page that sizes a chart can compile it to match. A component
+  with `animate` stops its transition under that media query.
+- **Status beyond hue** (#560, D-142). Every role carries a glyph and a dash besides its
+  hue, fixed by the library in `Visualize.Theme.cue/1`: `:good` a circle and solid,
+  `:warning` a triangle and `"6 3"`, `:bad` a cross and `"2 3"`, `:info` a square and
+  `"8 3 2 3"`, `:neutral` a diamond and `"1 4"`. A `{:field, f}` binding on a `:symbol`
+  mark's `symbol` or on `stroke_dasharray` reads through the frame's colour scale to the
+  role and draws its cue, so a status chart reads in greyscale. The gallery's Gauge marks
+  its zones with their glyphs.
+
+#### Builder
+
+- **The builder has a theme mode** (#562, D-139). Opening a theme entry, *New → theme*, or
+  the *Theme* button on a chart's bar puts `Visualize.Chart.Builder` in the theme mode.
+  - The inspector edits the theme's series colours, chrome (background, surface, text,
+    axis, grid) and fonts, and can *derive from* a built-in or stored theme.
+  - The main column is a sheet of sample charts (series, the five roles, thermal,
+    diverging, axes and text) drawn in the theme being edited. You can add designs from the
+    store to it.
+  - *Save to library* keeps the theme and refuses one that is not valid.
+    `Store.theme_entry/2` finds the entry a stored theme name stands for.
+- **The theme mode edits ramps and roles and checks them live** (#563, D-139). Each ramp is
+  drawn as the theme interpolates it, with a lightness strip and its anchors (change, add by
+  resampling, remove). The status roles are marked at their fixed positions and set by the
+  colour there, and `:info` and `:neutral` are colours of their own. Every edit runs the
+  meaning contracts: a broken ramp or role is outlined and named in the contract's words,
+  and *Save to library* refuses the theme. The *seen with* select draws the ramps and the
+  preview sheet under each colour-vision deficiency.
+- **A host ships a theme through the builder's store** (#561).
+  `Visualize.Chart.Builder.Store.theme/2` loads a stored theme by the name it gives itself,
+  and the builder's preview draws a design whose `theme:` names a stored theme in it.
+  `Visualize.Chart.Builder.Store.theme_name/1` is the name a stored theme entry answers to.
+  `Visualize.Chart.Fragment.read_json/2` is `from_json/2` with the version the document was
+  stamped with.
+- **Build a board in the builder** (#579, D-152). A board is a library kind: a store entry
+  `%{board: map}` holding `Visualize.Board.to_map/1`, read back with
+  `Visualize.Board.from_map/2`. `Fragment.kinds/0` includes `:board`, so your store issues
+  `{:board, n}` ids. `Fragment.to_json/1` and `from_json/2` round-trip a board, and
+  `Bundle.export/3` of a board entry carries its cells' components. A store whose `put/2`
+  derives the kind with `Fragment.kind/1` needs no change.
+  - Opening a board entry, or *New → board*, puts `Visualize.Chart.Builder` in its board
+    mode.
+  - Drag a cell to place it and drag its edges to resize it. The arrow keys do the same on
+    a focused cell. The server refuses an overlap or a cell off the grid.
+  - You can pick each cell's component, title, sync and variables. You can set the board's
+    name, window (none, last N seconds, or a fixed UTC span), display zone, sync group,
+    `stale_after`, layout and variables.
+  - A narrow view shows how the board stacks below its breakpoint.
+  - Each cell previews through `Visualize.Board.realise/4` over your `sources`, its slots
+    bound by name.
+  - *Edit component* opens a cell's composite, and *Back to board* returns.
+  - A board entry cannot be dropped into a chart.
+- **Bind a board's slots in the builder** (#580, D-152). Give `Visualize.Chart.Builder` a
+  `catalog`: a map from each feed you offer to its `Visualize.Data.Schema`, for example the
+  schema `Visualize.Feed.describe/1` answers. In the board mode, each cell's sources are
+  then bound to those feeds. Without a catalog they are bound to your `sources`.
+  - The mode shows every unbound slot and every unmet contract
+    (`Visualize.Board.Binding.check/3`) before any data flows.
+  - The binding is never stored in the board. Each change is sent to your LiveView as
+    `{on_bind, id, board_id, binding}` (`on_bind` defaults to `:visualize_board_bound`).
+    Hand it back through `board_bindings`, keyed by the board entry's id, when the board
+    opens again.
+  - A slot with no binding starts bound to the feed of its own name, if there is one.
+  - The preview binds through the binding. A catalog feed previews over your `sources`
+    entry of that name, or else over rows made from its schema
+    (`Visualize.Chart.Builder.Boards.sample/2`, which gives a `:number` window field its
+    row's place, 0 to 59).
+- **A wrong binding in the builder is a fault panel, not a crash** (#584, D-153). The
+  single-chart preview, the inspector and the board mode's cells check types before they
+  apply. A wrong binding is drawn as a fault panel in the board runtime's cell-state style,
+  with every fault listed beneath it.
 
 ### Changed
 
-- **Breaking for feed authors: a `:time` field holds instants, and a feed names its window
-  field** (#585, #586, D-154). Before this change, `:time` meant either an instant or a
-  tick count, and a `:time` field on a linear axis went unreported. Now `:time` means an
-  instant, and the type check reports `:time` on a numeric scale.
-  - **What a feed author must do:**
-    1. Write every `:time` field as instants: `DateTime`, `NaiveDateTime` or `Date`
-       values (or ISO 8601 strings, for a field that is not the window field). A count,
-       tick, sequence number or offset is `:number`.
-    2. If your windows are over a numeric field, type it `:number` and add `window: true`
-       to its description: `%{tick: %{type: :number, window: true}}`. The same applies to
-       a numeric field that your rows are ordered by or that `continuity` is measured
-       along.
-    3. If your schema has more than one `:time` field, mark the one your windows are over
-       with `window: true`. You can also say `window: false` on a schema's only `:time`
-       field to make it not the window field.
-    4. Replace `Visualize.Feed`'s removed `time_field` with
-       `Visualize.Feed.window_field/1`. It returns the field described `window: true`, else
-       the schema's one `:time` field.
-       `Visualize.Feed.window_type/1` gives that field's type.
-    5. Match `{:error, :combine_window_field}` from `Visualize.Feed.Combine.describe/1`
-       where you matched `:combine_time_field`.
-    6. Run the conformance kit. The `:not_a_time` finding is now `:window_value`, and
-       there are two new findings, `:no_window_field` and `:not_an_instant`.
-  - **No change needed** for a feed stamped with `DateTime`s that has one `:time` field,
-    as `Visualize.Feed.Telemetry` is.
-  - **The schema.** `Visualize.Data.Schema` has a tenth description key, `window`, a
-    boolean on a `:time` or `:number` field. `Schema.new/1` reports these as faults:
-    `window` on a `:category` or `:text` field (`{:invalid_for, type}`), a value that is
-    not a boolean (`{:type, :boolean}`), and two `window: true` fields
-    (`{:duplicate_window, other}`). `attributes/0` lists the ten keys.
-  - **The window works over numbers as over instants.**
-    - `Visualize.Feed.Window.applies?/2` says whether a window's bounds are of a window
-      field's kind. `instant?/1` says whether a value is an instant.
-    - `Visualize.Feed.finish/3` trims and reduces along a `:number` window field, and
-      never reduces the window field itself.
-    - `Visualize.Feed.Monitor` asks each feed for the window that applies to it. A feed
-      over ticks under a window of instants is asked for its own span (`nil`), and is
-      neither trimmed nor refetched as that window moves.
-    - `Visualize.Feed.Combine` routes over either kind.
-  - **On a board,** the UTC window applies to feeds whose window field is `:time`. A feed
-    over ticks keeps its own span, and its `continuity` is in its own units. To put ticks
-    on the board's clock, map them to instants in your connector and describe them as
-    `:time`.
-  - **`Visualize.Feed.Signals`** describes its tick as
-    `%{type: :number, window: true, label: "Tick"}`, so its schema's version changes.
-    Bind its tick to a linear scale, not a time scale.
-  - **The type check is strict.** A schema's `:time` field read through a linear, log,
-    power, sqrt, symlog or other numeric scale is
-    `{:type_mismatch, slot, field, :number, :time}`. It is reported by
-    `Visualize.Chart.apply/2`, by `Visualize.Chart.check_types/2`, by
-    `Visualize.Board.Binding.check/3`, and in the builder's previews, instead of raising
-    from the frame. `Visualize.Chart.Builder.Boards.sample/2` gives a `:number` window
-    field its row's place, 0 to 59.
-- **The builder is split into modules by area, with no change in behaviour** (#568).
-  `Visualize.Chart.Builder` keeps its assigns, its message, `css/0`, `styles/1` and
-  `tick/2` exactly as before; what moved is internal (`Visualize.Chart.Builder.Events.*`,
-  `Editing`, `Tree`, `Selection`, `Writes`, `Workspace`, `Modes`, `ThemeMode`, none of
-  them public). A test that calls the component's `handle_event/3` directly sees the same
-  results; an event the builder does not handle still raises `FunctionClauseError` there.
+- **A component with `animate` carries the class `vis-animated`** and a `<style>` that stops
+  its transition under `prefers-reduced-motion: reduce` (#559).
+- **A canvas names itself, and a hybrid chart's SVG layers are hidden** (#557). The root
+  wrapper of `Visualize.Backend.Canvas` and `Visualize.Backend.Hybrid.render/1` take
+  `title:` and `description:` and put them on the `<canvas>` (`role="img"`, `aria-label`,
+  and the description as its fallback content). `Hybrid.render_static/1`, and so a compiled
+  chart's static, dynamic and backdrop documents, is `aria-hidden="true"`: one layer of a
+  picture the page names.
+- **In a cartesian frame a `:rule` and an `:x_band` are cut to the plot area** (#565,
+  D-143). A rule outside it, or a band wholly outside it, draws nothing, and a band that
+  crosses an edge is clamped to it. An event that began before the window no longer draws
+  across the axis.
+- **`BrushHook` sends `domain` whenever it can map the selection**: in a sync group, as
+  before, and now under a design's brush too (#565).
 - **A compiled chart's SVG carries its frame's sync and brush attributes** (#574, D-146).
   `Visualize.Chart.Compiled.svg/2` and `step/3` now write `data-vis-sync`,
   `data-vis-sync-x` and `data-vis-brush` on the frame group, as `Visualize.Chart.render/2`
   already did. A compiled chart in a sync group therefore joins the group's bus from its
   SVG alone. A design with no group and no brush renders exactly as before.
-- **A root names every chart and describes it with its summary** (#557, D-142).
-  `Visualize.Chart.render/2` and `generate/2` with `root: true` title a design with no
-  `meta.name` by its kind, and write the generated summary after `meta.description` in the
-  `<desc>`; `summary: false` leaves the description the design's alone, and a string
-  replaces the summary. `aria-labelledby` now names the `<title>` only and the new
-  `aria-describedby` the `<desc>` — on `Visualize.IR.Element.root/3` and every component —
-  so a screen reader says a short name and then the description. `Element.root/3` takes
-  `hidden: true` for `aria-hidden`.
-- **A `:symbol` mark in a polar frame keeps its glyph** (#560): only its position bends
+- **A `:symbol` mark in a polar frame keeps its glyph** (#560). Only its position bends
   around the arc. Before, the glyph itself was bent and drew as a sliver.
-- **A retargeted easing is shown where it starts on the tick it is retargeted** (#559):
-  unchanged for any easing with a duration, and an easing of no duration now reaches its
+- **A retargeted easing is shown where it starts on the tick it is retargeted** (#559). This
+  is unchanged for any easing with a duration. An easing of no duration now reaches its
   target on that tick instead of the next.
-- **A canvas names itself, and a hybrid chart's SVG layers are hidden** (#557).
-  The root wrapper of `Visualize.Backend.Canvas` and `Visualize.Backend.Hybrid.render/1` take
-  `title:` and `description:` and put them on the `<canvas>` (`role="img"`, `aria-label`,
-  and the description as its fallback content); `Hybrid.render_static/1` — and so a
-  compiled chart's static, dynamic and backdrop documents — is `aria-hidden="true"`, one
-  layer of a picture the page names.
-- **A design's axis without a `format` or a tick count derives them** (#532, D-134). The
-  count comes from the axis's length and the format from its scale's domain, recomputed on
-  every realisation, so a time axis reads `03:00` or `Mar 05` instead of
-  `2024-03-05 03:00:00Z`, an axis over thousands is grouped and one over millions carries an
-  SI prefix, and a streaming window's axis changes format as its span changes. A host no
-  longer computes these and passes them in as variables (or passes the width into binding to
-  do it). An explicit `format`, count or list of values still wins. **What you may see:** an
-  axis shorter than 800 px across or 350 px down now draws fewer than ten ticks — set
-  `ticks: 10` to keep them; a numeric axis over years (`1990..2020`) is now grouped
-  (`1,990`) — set `format: "d"`; and `unit: "M"` over values from 1,000 reads `1,200M`. The
-  hand-built `Visualize.Axis` is unchanged: d3's ten ticks and its default label.
-- **A `:sequential` or `:diverging` colour scale left at `range: :auto` now draws the theme's
-  `sequential` or `diverging` ramp**, where it ran from the background to the first series
-  colour. Heatmaps, contours and hexbins change colour slightly on the light theme, and follow
-  the theme's own ramp on the dark one; give `range:` to keep the old colours.
 - **`ramps` and `roles` merge key by key** in `Theme.new/1` and `Theme.merge/2`, and a theme
-  lacking one takes the default theme's — never a series colour.
-- `Theme.slots/1` and `Theme.colour_slots/1` include the five roles, after `surface`.
-- **Visualize now starts `:crypto`** (`extra_applications`), for the schema version's hash.
-- **A design, fragment or bundle from a newer release is refused by name** (#550, #541,
-  D-137): the error is `{:newer_schema, needs, this}`, worded
-  `version: needs schema v3, this is v2`, where a newer `version` used to be
-  `{:unsupported_version, v}` (which now means a version below 1 only). Match the new reason
-  if you handled the old one for a newer document. The refusal comes before anything else is
-  read: `from_json/2` checks `"version"` before decoding a key.
-- **`Visualize.Chart.Fragment.to_json/1` stamps the document with `"$version"`**, and
-  `from_json/2` reads and drops it, refusing a newer one as `{:error, {:newer_schema, …}}`
-  and an oversized document as `{:error, {:limits, errors}}`. Documents written before the
-  stamp read as they always did, and `from_json(to_json(f))` is still `f`.
+  lacking one takes the default theme's, never a series colour (#533).
+- **`Theme.slots/1` and `Theme.colour_slots/1` include the five roles**, after `surface`
+  (#533). Code that pairs the slot list with a fixed list sees five more entries.
+- **`Visualize.Chart.Fragment.to_json/1` stamps the document with `"$version"`** (#550,
+  D-137). `from_json/2` reads and drops it, refusing a newer one as
+  `{:error, {:newer_schema, …}}` and an oversized document as `{:error, {:limits, errors}}`.
+  Documents written before the stamp read as they always did, and `from_json(to_json(f))`
+  is still `f`.
 - **A bundle's provenance carries `schema`**, the version it was exported at, and
-  `Visualize.Chart.Builder.Store.relocate/3` refuses a newer bundle before it puts an entry.
-- **The `Visualize.Chart.Validator.path` type** may hold strings: the path of a limit fault in a JSON
-  document refused before decoding uses the document's own keys.
-
-- **A mark's `scales: %{color: name}` now reaches every colour the mark reads** (#565,
-  D-143): a `{:field, f}` fill or stroke in its style reads through the renamed scale, as its
-  `series` channel's validation already did, so an overlay can colour by its own scale
-  without changing the series' colours. A mark that renamed `color` and coloured its style
-  by a field used to read the frame's `color` scale there.
-- **In a cartesian frame a `:rule` and an `:x_band` are cut to the plot area**: a rule
-  outside it, or a band wholly outside it, draws nothing, and a band that crosses an edge is
-  clamped to it — an event that began before the window no longer draws across the axis.
-- **`BrushHook` sends `domain` whenever it can map the selection**: in a sync group, as
-  before, and now under a design's brush too.
+  `Visualize.Chart.Builder.Store.relocate/3` refuses a newer bundle before it puts an entry
+  (#541).
+- **The `Visualize.Chart.Validator.path` type may hold strings**: the path of a limit fault
+  in a JSON document refused before decoding uses the document's own keys (#550).
+- **The builder is split into modules by area, with no change in behaviour** (#568).
+  `Visualize.Chart.Builder` keeps its assigns, its messages, `css/0`, `styles/1` and
+  `tick/2` exactly as before. What moved is internal (`Visualize.Chart.Builder.Events.*`,
+  `Editing`, `Tree`, `Selection`, `Writes`, `Workspace`, `Modes`, `ThemeMode`, none of them
+  public). A test that calls the component's `handle_event/3` directly sees the same
+  results, and an event the builder does not handle still raises `FunctionClauseError`.
+- **Visualize now starts `:crypto`** (`extra_applications`), for the schema version's hash.
+- **`:telemetry` is an optional dependency** (#537), for `Visualize.Feed.Telemetry`. If your
+  app lacks it, everything else builds as before. Visualize does not depend on
+  `telemetry_metrics`.
+- **The repository's lock moves `decimal` to 3.2.0**, past CVE-2026-97853 (#583). Visualize
+  does not require `decimal`; it reaches the lock through the test-only Explorer and the
+  optional Jason. Your app's own lock decides its version, so run
+  `mix deps.update decimal` if it holds 3.1.1.
+- **The README says where visualize is going** (#587): designs, feeds, boards and themes as
+  layers a host composes, and how a host integrates them. It is titled *README* in the
+  docs sidebar (#530).
 
 ### Fixed
 
-- **Binding a feed of the wrong type no longer takes the builder down** (#584, #582, D-153).
-  Each field a mark reads through a scale is now checked against what the scale's kind
-  needs: a time scale needs `:time`, band and ordinal need `:category` (or `:text`), and
-  every other kind needs `:number`. A mismatch is the new fault
-  `{:type_mismatch, slot, field, expected, given}`, at the channel, style or offset that
-  reads the field.
-  - `Visualize.Chart.apply/2` reports it wherever a schema is bound. A slot with no contract
-    now has its delivery's schema resolved for the check, and a schema it cannot resolve is
-    no fault. A schema's `:time` passes on a numeric scale, because a feed may write its
-    time as numbers (`Visualize.Feed.Signals`' ticks). Rows with no schema still raise from
-    the frame, as before.
-  - `Visualize.Board.Binding.check/3` reports it per cell, and
-    `Visualize.Board.required_sources/3` gives each slot its `reads`.
-  - New pure checks: `Visualize.Chart.check_types/2` and
-    `Visualize.Board.Binding.check_types/3`. Each takes a schema or a plain map of types,
-    such as `Visualize.Data.Table.column_types/1` reads from rows.
-  - The builder's single-chart preview, its inspector and the board mode's cells check
-    before they apply. A wrong binding is drawn as a fault panel in the board runtime's
-    cell-state style, with every fault listed beneath it, and is never a crash.
-  - A board cell whose application fails with a type mismatch is now in the new state
-    `{:invalid, errors}` ("Wrong binding"), not `{:down, …}` ("Feed down").
-- **The examples' performance drawer test failed under load**
- (#567, D-148): a tick's
-  elapsed time came from the real clock, so a strip meant to scroll two columns scrolled a
-  hundred on a busy machine and crossed its byte budget. The chart page reads every instant
-  of a run through a `run_clock` it holds, and its tests drive that clock exactly. Nothing a
-  person sees changes.
-- **The suite no longer waits on the clock** (#520, D-148). Every test that waited on wall
-  time now waits on a message or a count with a bound of at least five seconds, and a check
-  beside D-114's fails the gate on a shorter `assert_receive`, ExUnit's 100 ms default, a
-  `refute_receive` that waits, a short `receive … after` or a sleep, unless the site is
-  allow-listed with its reason. The examples' per-chart size test, which ran 51.6 s of its
-  60 s timeout, is one test per chart that renders each chart once instead of three times.
+- **`Visualize.Chart.to_json/1` raised on a channel at its scale's own end** (#554): a
+  `{:scale, :min}` or `{:scale, :max}` channel, such as an area's `y0`, had no JSON form. It
+  is now written `{"$scale": "min"}` and read back as the tuple.
+- **An axis's `format: :duration` read back from JSON as the string `"duration"`** (#554,
+  D-144), so the axis printed that word as a format specifier instead of durations. Where a
+  key may be a string or an enumerated atom, a string naming a member of the enumeration
+  now reads back as the atom. Every gallery design now round-trips through `to_json/1` and
+  `from_json/1`.
 - **A projection no longer raises `ArithmeticError` at the edge of its domain** (#566,
-  D-149). Rounding carried a value that is exactly ±1 at a pole or the antimeridian a few
-  ulps past it: `Projection.invert/3` of `:collignon`'s own south pole raised
+  #577, D-149). Rounding carried a value that is exactly ±1 at a pole or the antimeridian a
+  few ulps past it. `Projection.invert/3` of `:collignon`'s own south pole raised
   `asin(-1.0000000000000004)`, and so did a rotation that carried a point onto that pole.
   `:albers`, `:conic_equal_area`, `:mollweide`, `:eckert2`, `:eckert3`, `:eckert6`,
   `:wagner4` and `:loximuthal` failed the same way at a pole, and `:mollweide`'s
   `project/3` at a latitude one ulp inside one. Every inverse sine and cosine in
   `Visualize.Geo` is now d3's clamped one, so `invert/3` of a point just outside a map's
-  outline returns a point, as d3 does, where it raised. Points inside the domain project and
-  invert exactly as before.
-- **`Visualize.Chart.to_json/1` raised on a channel at its scale's own end** (#554): a
-  `{:scale, :min}` or `{:scale, :max}` channel, such as an area's `y0`, had no JSON form. It is
-  now written `{"$scale": "min"}` and read back as the tuple.
-- **An axis's `format: :duration` read back from JSON as the string `"duration"`** (#554,
-  D-144), so the axis printed that word as a format specifier instead of durations. Where a
-  key may be a string or an enumerated atom, a string naming a member of the enumeration now
-  reads back as the atom. Every gallery design now round-trips through `to_json/1` and
-  `from_json/1`.
-- **`Visualize.Color.to_lab/1` was not the inverse of `Visualize.Color.lab/4`**: it used the
-  D65 sRGB matrix against the D50 white point, so a grey had a chroma of about 12 and a colour
-  did not survive a round trip (`#808080` came back `#758194`). Lab, LCh, `brighter/2`,
-  `darker/2`, `interpolate_lab/3` and `interpolate_hcl/3` now read true.
+  outline returns a point, as d3 does, where it raised. Points inside the domain project
+  and invert exactly as before.
+- **Binding a feed of the wrong type no longer takes the builder down** (#584, #582,
+  D-153). It raised from the frame inside the builder's previews. The type check above
+  reports it instead.
+- **The builder no longer raises while rendering a design whose inline theme breaks a
+  contract** (#563). Its colour wells draw the theme unchecked.
+- **A non-composite chart in the builder (a style, a theme) no longer reports its own
+  `version` stamp as a fault of its kind** (#561).
+- **The examples' performance drawer test failed under load** (#567, D-148). A tick's
+  elapsed time came from the real clock, so a strip meant to scroll two columns scrolled a
+  hundred on a busy machine and crossed its byte budget. The chart page reads every instant
+  of a run through a `run_clock` it holds, and its tests drive that clock exactly. Nothing a
+  person sees changes.
+- **The suite no longer waits on the clock** (#520, D-148). Every test that waited on wall
+  time now waits on a message or a count with a bound of at least five seconds. A check
+  beside D-114's fails the gate on a shorter `assert_receive`, ExUnit's 100 ms default, a
+  `refute_receive` that waits, a short `receive … after` or a sleep, unless the site is
+  allow-listed with its reason. The examples' per-chart size test, which ran 51.6 s of its
+  60 s timeout, is one test per chart that renders each chart once instead of three times.
 
 ## [0.2.35] — 2026-10-10
 
