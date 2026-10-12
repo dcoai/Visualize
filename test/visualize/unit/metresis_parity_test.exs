@@ -141,4 +141,72 @@ defmodule Visualize.Unit.MetresisParityTest do
       assert Unit.conversion("{iso4217:USD}", "{iso4217:USD}") == {:ok, {{1, 1}, {0, 1}}}
     end
   end
+
+  describe "formatting (spec/05 §2.6, §2.9, §4.3)" do
+    @format_values [0, 1, 0.84, 91.4, 1234.5, -3.25, 5040, 90_061]
+
+    test "every unit formats as metresis renders it, up to the named differences" do
+      quantities = MetresisParity.quantities()
+      symbols = MetresisParity.symbol_differs()
+
+      for {family, unit, _factor, code} <- MetresisParity.units(),
+          value <- @format_values,
+          precision <- [0, 1, 2] do
+        theirs = MetresisParity.metresis_render(value, family, unit, precision)
+
+        expected =
+          theirs
+          |> String.replace(~r/(\d)(°[CF])$/, "\\1 \\2")
+          |> then(fn s ->
+            case symbols do
+              %{^unit => ours} -> String.replace_suffix(s, unit, ours)
+              _ -> s
+            end
+          end)
+
+        measure = %{unit: code, quantity: quantities[family]}
+
+        assert Quantity.format(value, measure, precision: precision) == expected,
+               "#{family} #{unit} #{value} p#{precision}: metresis #{inspect(theirs)}"
+      end
+    end
+
+    test "the unitless families format as metresis renders them" do
+      for value <- @format_values, precision <- [0, 2] do
+        assert Quantity.format(value, %{}, precision: precision) ==
+                 MetresisParity.metresis_render(value, :number, nil, precision)
+
+        assert Quantity.format(value, %{quantity: :count}, precision: precision) ==
+                 MetresisParity.metresis_render(value, :count, nil, precision)
+
+        assert Quantity.format(value, %{unit: "1", quantity: :ratio}, precision: precision) ==
+                 MetresisParity.metresis_render(value, :ratio, nil, precision)
+      end
+    end
+
+    test "currencies format as metresis renders them, but to their minor units" do
+      for code <- MetresisParity.currencies(), value <- [0, 1240, -9.5, 1_234_567.891] do
+        theirs = MetresisParity.metresis_render(value, :currency, code)
+        ours = Quantity.format(value, %{unit: "{iso4217:#{code}}"})
+
+        cond do
+          Unit.minor_units(code) == 2 -> assert ours == theirs, "#{code} #{value}"
+          value == trunc(value) -> assert ours == String.replace(theirs, ".00", ""), code
+          true -> :rounded_to_its_minor_units
+        end
+      end
+
+      assert Quantity.format(-9.5, %{unit: "{iso4217:JPY}"}) == "-¥10"
+
+      assert Quantity.format(1240, %{unit: "{iso4217:JPY}"}) == "¥1,240"
+      assert MetresisParity.metresis_render(1240, :currency, "JPY") == "¥1,240.00"
+    end
+
+    test "the formats that move: 1h 24m, 840ms, $1,240.00, 350°" do
+      assert Quantity.format(5040, %{unit: "s"}) == "1h 24m"
+      assert Quantity.format(0.84, %{unit: "s"}) == "840ms"
+      assert Quantity.format(1240, %{unit: "{iso4217:USD}"}) == "$1,240.00"
+      assert Quantity.format(350, %{unit: "deg"}, precision: 0) == "350°"
+    end
+  end
 end

@@ -144,16 +144,68 @@ defmodule Visualize.Format do
   end
 
   @doc """
-  Formats currency.
+  Formats currency (spec/05 §2.6): by a symbol, or by an ISO 4217 code.
+
+  With `:code`, the code writes itself: its minor units are the precision, the locale's
+  separators group it, and the locale's symbol for the code goes before the number after
+  the sign — or the code after the number, for a code the locale has no symbol for.
 
   ## Options
 
-  - `:symbol` - currency symbol (default: "$")
-  - `:precision` - decimal places (default: 2)
+  - `:symbol` - currency symbol (default: "$"); not with `:code`
+  - `:precision` - decimal places (default: 2, or the code's minor units)
+  - `:code` - an ISO 4217 code of `Visualize.Unit`'s table (spec/05 §4.1)
+  - `:locale` - with `:code`, default `"en"`
+
+  ## Examples
+
+      iex> Visualize.Format.currency(1240, code: "USD")
+      "$1,240.00"
+
+      iex> Visualize.Format.currency(1240, code: "JPY")
+      "¥1,240"
+
+      iex> Visualize.Format.currency(-1240.5, code: "CHF")
+      "-1,240.50 CHF"
 
   """
   @spec currency(number(), keyword()) :: String.t()
-  def currency(value, opts \\ []) do
+  def currency(value, opts \\ [])
+
+  def currency(value, opts) do
+    case Keyword.fetch(opts, :code) do
+      {:ok, code} -> currency_by_code(value, code, opts)
+      :error -> currency_by_symbol(value, opts)
+    end
+  end
+
+  defp currency_by_code(value, code, opts) do
+    locale = Visualize.Format.Auto.locale!(opts)
+
+    precision =
+      Keyword.get_lazy(opts, :precision, fn -> Visualize.Unit.minor_units(code) || 2 end)
+
+    amount = grouped_fixed(abs(value), precision, locale)
+    sign = if value < 0 and amount =~ ~r/[1-9]/, do: "-", else: ""
+
+    case locale.currency do
+      %{^code => symbol} -> sign <> symbol <> amount
+      _symbols -> sign <> amount <> " " <> code
+    end
+  end
+
+  # A magnitude to `precision` decimals, its integer digits grouped by the locale.
+  defp grouped_fixed(magnitude, precision, %{group: group, decimal: decimal}) do
+    [integer | fraction] =
+      magnitude
+      |> Kernel.*(1.0)
+      |> :erlang.float_to_binary(decimals: precision)
+      |> String.split(".")
+
+    Enum.join([group(integer, group, :infinity) | fraction], decimal)
+  end
+
+  defp currency_by_symbol(value, opts) do
     symbol = Keyword.get(opts, :symbol, "$")
     precision = Keyword.get(opts, :precision, 2)
 
@@ -541,6 +593,65 @@ defmodule Visualize.Format do
             "#{trim(Float.round(count * 1.0, 1))}#{unit}"
         end
     end
+  end
+
+  @doc """
+  A length of time in seconds, in a style (spec/05 §2.9): `:magnitude`, the default, is
+  `duration/1`; `:compound` is the label and tooltip form — the two largest non-zero
+  whole units of `d`, `h`, `m`, `s` from a second up (`1h 24m`), milliseconds below a
+  second and nanoseconds below a microsecond, each to `:precision` decimals (default `2`)
+  with trailing zeros trimmed (`840ms`). An axis keeps a single scaled unit.
+
+  ## Options
+
+  - `:style` - `:magnitude` (default) or `:compound`
+  - `:precision` - the compound style's decimals below a second (default `2`)
+  - `:locale` - default `"en"`
+
+  ## Examples
+
+      iex> Enum.map([5040, 0.84, 3603, 0, -90], &Visualize.Format.duration(&1, style: :compound))
+      ["1h 24m", "840ms", "1h 3s", "0s", "-1m 30s"]
+
+  """
+  @spec duration(number(), keyword()) :: String.t()
+  def duration(seconds, opts) when is_number(seconds) do
+    Visualize.Format.Auto.locale!(opts)
+
+    case Keyword.get(opts, :style, :magnitude) do
+      :magnitude -> duration(seconds)
+      :compound -> compound(seconds, Keyword.get(opts, :precision, 2))
+    end
+  end
+
+  defp compound(seconds, precision) when seconds < 0, do: "-" <> compound(-seconds, precision)
+  defp compound(seconds, _precision) when seconds == 0, do: "0s"
+
+  defp compound(seconds, precision) when seconds < 1.0e-6,
+    do: trimmed(seconds * 1.0e9, precision) <> "ns"
+
+  defp compound(seconds, precision) when seconds < 1,
+    do: trimmed(seconds * 1000.0, precision) <> "ms"
+
+  defp compound(seconds, _precision) do
+    {parts, _left} =
+      Enum.reduce([{86_400, "d"}, {3600, "h"}, {60, "m"}, {1, "s"}], {[], trunc(seconds)}, fn
+        {size, unit}, {parts, left} ->
+          count = div(left, size)
+          parts = if count > 0, do: ["#{count}#{unit}" | parts], else: parts
+          {parts, rem(left, size)}
+      end)
+
+    parts |> Enum.reverse() |> Enum.take(2) |> Enum.join(" ")
+  end
+
+  # Fixed decimals with trailing zeros and a trailing point trimmed: `840`, `0.5`.
+  defp trimmed(value, precision) do
+    fixed = :erlang.float_to_binary(value * 1.0, decimals: max(precision, 0))
+
+    if String.contains?(fixed, "."),
+      do: fixed |> String.trim_trailing("0") |> String.trim_trailing("."),
+      else: fixed
   end
 
   defp rem_in(seconds, size, {_unit, finer_size}),

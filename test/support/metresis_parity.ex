@@ -190,4 +190,158 @@ defmodule Visualize.MetresisParity do
   defp from_celsius(c, "°C"), do: c
   defp from_celsius(c, "K"), do: c + 273.15
   defp from_celsius(c, "°F"), do: c * 9.0 / 5.0 + 32.0
+
+  # -- formatting: `Metresis.Units.Format.render/3`, transcribed --------------------------
+
+  @doc """
+  A value as `Metresis.Units.Format.render(value, family, unit: unit, precision: p)`
+  writes it (`lib/metresis/units/format.ex` at the commit above), transcribed: by the
+  family's format style, `precision` decimals (default 2).
+  """
+  def metresis_render(value, family, unit, precision \\ 2) do
+    value = value * 1.0
+
+    case style(family) do
+      :plain ->
+        decimal(value, precision)
+
+      :integer ->
+        value |> round() |> separate()
+
+      :ratio ->
+        decimal(value, precision)
+
+      :percent ->
+        decimal(value, precision) <> "%"
+
+      :angle ->
+        if unit == "rad",
+          do: decimal(value, precision) <> " rad",
+          else: decimal(value, precision) <> "°"
+
+      :currency ->
+        money(value, unit)
+
+      :bytes ->
+        decimal(value, precision) <> " " <> (unit || "B")
+
+      :suffixed ->
+        suffixed(value, unit, precision)
+
+      :duration ->
+        value |> metresis_convert(:duration, unit || "s", "s") |> duration(precision)
+    end
+  end
+
+  defp style(:number), do: :plain
+  defp style(:count), do: :integer
+  defp style(:ratio), do: :ratio
+  defp style(:percent), do: :percent
+  defp style(:duration), do: :duration
+  defp style(:bytes), do: :bytes
+  defp style(:currency), do: :currency
+  defp style(:angle), do: :angle
+  defp style(_family), do: :suffixed
+
+  defp suffixed(value, nil, precision), do: decimal(value, precision)
+  defp suffixed(value, "°" <> _ = unit, precision), do: decimal(value, precision) <> unit
+  defp suffixed(value, unit, precision), do: decimal(value, precision) <> " " <> unit
+
+  @symbols %{"USD" => "$", "EUR" => "€", "GBP" => "£", "JPY" => "¥"}
+
+  defp money(value, code) do
+    amount = value |> abs() |> decimal_separated(2)
+    sign = if value < 0, do: "-", else: ""
+
+    case Map.get(@symbols, code) do
+      nil -> "#{sign}#{amount} #{code}"
+      symbol -> "#{sign}#{symbol}#{amount}"
+    end
+  end
+
+  defp duration(seconds, precision) when seconds < 0, do: "-" <> duration(-seconds, precision)
+  defp duration(seconds, _precision) when seconds == 0, do: "0s"
+
+  defp duration(seconds, precision) when seconds < 1.0e-6,
+    do: trimmed(seconds * 1.0e9, precision) <> "ns"
+
+  defp duration(seconds, precision) when seconds < 1.0,
+    do: trimmed(seconds * 1000.0, precision) <> "ms"
+
+  defp duration(seconds, _precision) do
+    total = trunc(seconds)
+
+    [{86_400, "d"}, {3600, "h"}, {60, "m"}, {1, "s"}]
+    |> components(total, [])
+    |> Enum.take(2)
+    |> case do
+      [] -> "0s"
+      parts -> Enum.join(parts, " ")
+    end
+  end
+
+  defp components([], _remaining, acc), do: Enum.reverse(acc)
+
+  defp components([{size, suffix} | rest], remaining, acc) do
+    count = div(remaining, size)
+
+    if count > 0,
+      do: components(rest, rem(remaining, size), ["#{count}#{suffix}" | acc]),
+      else: components(rest, remaining, acc)
+  end
+
+  defp trimmed(value, precision) do
+    value
+    |> decimal(precision)
+    |> String.replace(~r/\.(\d*?)0+$/, fn match ->
+      case String.trim_trailing(match, "0") do
+        "." -> ""
+        kept -> kept
+      end
+    end)
+  end
+
+  defp decimal(value, precision),
+    do: :erlang.float_to_binary(value * 1.0, decimals: max(precision, 0))
+
+  defp decimal_separated(value, precision) do
+    [whole | rest] = value |> decimal(precision) |> String.split(".")
+    Enum.join([separate(String.to_integer(whole)) | rest], ".")
+  end
+
+  defp separate(integer) do
+    sign = if integer < 0, do: "-", else: ""
+
+    digits =
+      integer
+      |> abs()
+      |> Integer.to_string()
+      |> String.graphemes()
+      |> Enum.reverse()
+      |> Enum.chunk_every(3)
+      |> Enum.map(&Enum.join/1)
+      |> Enum.join(",")
+      |> String.reverse()
+
+    sign <> digits
+  end
+
+  @doc """
+  Where visualize writes a unit differently from metresis's spelling: the UCUM code's
+  display symbol (spec/05 §4.1) in place of metresis's string. The number is the same.
+  """
+  def symbol_differs do
+    %{"KB" => "kB", "mph" => "mi/h", "floz" => "fl oz", "Wh" => "W·h", "kWh" => "kW·h"}
+  end
+
+  @doc """
+  The format differences by decision, each with its reason (D-155):
+
+  - **a degree of temperature takes a space**: `20.00 °C`, as SI writes it and as
+    spec/05 §4.3's axes always have; metresis wrote `20.00°C`. An angle's `°` attaches,
+    in both;
+  - **a currency is written to its minor units**: `¥1,240`, `1,240.000 BHD`; metresis
+    wrote two decimals for every code (`¥1,240.00`).
+  """
+  def format_differs, do: [:temperature_space, :currency_minor_units]
 end

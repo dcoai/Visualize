@@ -99,6 +99,31 @@ release it merely follows.
   - `metric_kind` is `:gauge`, `:counter` or `:rate`.
   - `bounds` is `[min, max]`. It overrides the quantity's bounds and is a display hint.
 
+#### Currency and value formats
+
+- **Currency as a marked extension to UCUM** (#593, D-155).
+  - `{iso4217:USD}` is a currency. Each code of the fixed ISO 4217 table has its own
+    dimension, with its minor units.
+  - Two currencies never convert, and an unknown code is refused as
+    `{:unknown_currency, code}`.
+  - Codes compose. Write an energy price as `{iso4217:EUR}/kW/h`: UCUM's `/` is
+    left-associative, so `{iso4217:EUR}/kW.h` means euro-hours per kilowatt.
+  - `Visualize.Unit.currency/1` gives a unit's currency and `minor_units/1` its decimals.
+  - `parse_alias/1` reads `USD`, `€` and `£`, and names the choices for `$` and `¥`.
+  - Caveat: any other UCUM reader sees every `{iso4217:…}` code as the dimensionless `1`.
+- **`Visualize.Format.currency/2` takes `code:` and `locale:`.** The code's minor units set
+  the decimals, and the locale gives the symbol or else the code: `$1,240.00`, `¥1,240`,
+  `1,240.00 CHF`. Currency axes write money with one SI prefix for the whole axis:
+  `$1.5k`.
+- **`Visualize.Format.duration/2` with `style: :compound`** writes `1h 24m` and `840ms`
+  for labels and tooltips. Axes keep a single scaled unit.
+- **`Visualize.Quantity.format/3`** formats one value of a measure for a label or a
+  tooltip: a compound duration, money in its code, a grouped count, or fixed decimals with
+  the unit. It writes what metresis's views wrote, apart from the differences the parity
+  test names.
+- **An angle's `°` sits against its number**: `350°`. A temperature keeps its space:
+  `20 °C`.
+
 ## [0.3.0] — 2026-10-12
 
 **Upgrading from 0.2.35.** Visualize grows from a chart library into a dashboard library.

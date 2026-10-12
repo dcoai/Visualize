@@ -40,6 +40,8 @@ defmodule Visualize.Format.Auto do
     "en" => %{
       group: ",",
       decimal: ".",
+      # The currencies the locale writes by a symbol (spec/05 §2.6); any other by its code.
+      currency: %{"USD" => "$", "EUR" => "€", "GBP" => "£", "JPY" => "¥"},
       time: %{
         seconds: "%H:%M:%S",
         clock: "%H:%M",
@@ -251,7 +253,11 @@ defmodule Visualize.Format.Auto do
 
   # -- locale ------------------------------------------------------------------------------
 
-  defp locale!(opts) do
+  @doc false
+  # A locale by its `locale:` option, `"en"` by default; `ArgumentError` for one that
+  # does not ship. Shared with `Visualize.Format` and `Visualize.Quantity`.
+  @spec locale!(keyword()) :: map()
+  def locale!(opts) do
     name = Keyword.get(opts, :locale, "en")
 
     case Map.fetch(@locales, name) do

@@ -82,7 +82,7 @@ defmodule Visualize.Unit.ConversionTest do
       assert Unit.conversion("{iso4217:USD}", "1") == {:error, {:currency, "{iso4217:USD}", "1"}}
       assert Unit.conversion("{iso4217:USD}/h", "{iso4217:USD}/min") == {:ok, {{1, 60}, {0, 1}}}
 
-      assert Unit.conversion("{iso4217:EUR}/kW.h", "{iso4217:EUR}/MW.h") ==
+      assert Unit.conversion("{iso4217:EUR}/kW/h", "{iso4217:EUR}/MW/h") ==
                {:ok, {{1000, 1}, {0, 1}}}
 
       assert_raise ArgumentError, ~r/exchange rate is data/, fn ->
