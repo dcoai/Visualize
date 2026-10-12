@@ -100,7 +100,7 @@ defmodule Visualize.Board.StateTest do
     test "rows in time order, and break rows series by series" do
       schema =
         Schema.new!(%{
-          t: %{type: :time},
+          t: %{type: :number, window: true},
           v: %{type: :number, continuity: 2000},
           host: %{type: :category}
         })

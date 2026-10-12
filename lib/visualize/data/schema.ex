@@ -4,9 +4,11 @@ defmodule Visualize.Data.Schema do
 
   A schema maps a field — named as the feed's rows name it, an atom or a string — to a
   **description**: its `type`, and as much of `unit`, `quantity`, `label`, `order`,
-  `status`, `polarity`, `target` and `continuity` as the feed knows. It says what the
-  numbers *are*, whoever draws them, and never how they are drawn: a description has no
-  colour key, since colour is the theme's to choose from the meaning (#533).
+  `status`, `polarity`, `target`, `continuity` and `window` as the feed knows. It says what
+  the numbers *are*, whoever draws them, and never how they are drawn: a description has
+  no colour key, since colour is the theme's to choose from the meaning (#533). A `:time`
+  field holds instants; a feed whose clock is a number describes it `:number` and
+  `window: true`, the field its windows are over (D-154).
 
   A schema is identified by its `version`, a content hash (spec/08 §10.2): the same
   schema has the same version on every node and under every release, and any change of
@@ -47,7 +49,8 @@ defmodule Visualize.Data.Schema do
           optional(:status) => %{term() => atom()},
           optional(:polarity) => :higher_is_better | :lower_is_better | :neutral,
           optional(:target) => number(),
-          optional(:continuity) => number()
+          optional(:continuity) => number(),
+          optional(:window) => boolean()
         }
 
   @type t :: %__MODULE__{fields: %{name() => description()}, version: String.t()}
@@ -64,23 +67,25 @@ defmodule Visualize.Data.Schema do
     :status,
     :polarity,
     :target,
-    :continuity
+    :continuity,
+    :window
   ]
   @types [:time, :number, :category, :text]
   @polarities [:higher_is_better, :lower_is_better, :neutral]
   @colour_keys [:color, :colour, :colors, :colours, :palette, :fill, :stroke]
 
   # The keys a field's type takes; every other key but `type`, `label` and `continuity` is
-  # `{:invalid_for, type}` on it.
+  # `{:invalid_for, type}` on it. `window` is a clock's: a `:time` or a `:number` field's.
   @numeric [:unit, :quantity, :polarity, :target]
   @categorical [:order, :status]
+  @clocks [:time, :number]
 
   # The first line of the canonical encoding, naming the encoding itself (spec/08 §10.2).
   @encoding "visualize.schema/1\n"
 
   @not_names [nil, true, false]
 
-  @doc "The nine description keys, `:type` first (spec/08 §10.1)."
+  @doc "The ten description keys, `:type` first (spec/08 §10.1)."
   @spec attributes() :: [atom(), ...]
   def attributes, do: @attributes
 
@@ -99,7 +104,7 @@ defmodule Visualize.Data.Schema do
   def new(fields) when is_map(fields) and not is_struct(fields) do
     errors =
       Enum.flat_map(fields, fn {name, description} -> field(name, description) end) ++
-        duplicates(Map.keys(fields))
+        duplicates(Map.keys(fields)) ++ windows(fields)
 
     case Enum.sort_by(errors, &elem(&1, 0)) do
       [] -> {:ok, %__MODULE__{fields: fields, version: hash(fields)}}
@@ -199,6 +204,20 @@ defmodule Visualize.Data.Schema do
         do: {[spelled], {:duplicate_field, name}}
   end
 
+  # A feed's windows are over one field: a second `window: true` is reported at the later
+  # field by term order, naming the first. A field whose type takes no `window` is
+  # reported for that alone.
+  defp windows(fields) do
+    case for({name, %{type: type, window: true}} when type in @clocks <- fields, do: name) do
+      [_ | [_ | _]] = names ->
+        [first | rest] = Enum.sort(names)
+        for name <- rest, do: {[name, :window], {:duplicate_window, first}}
+
+      _one_or_none ->
+        []
+    end
+  end
+
   defp key(name, _type, key, _value) when key in @colour_keys,
     do: [{[name, key], {:colour_key, key}}]
 
@@ -215,6 +234,9 @@ defmodule Visualize.Data.Schema do
   defp key(name, type, key, _value)
        when key in @categorical and type in @types and type != :category,
        do: [{[name, key], {:invalid_for, type}}]
+
+  defp key(name, type, :window, _value) when type in @types and type not in @clocks,
+    do: [{[name, :window], {:invalid_for, type}}]
 
   defp key(name, _type, :unit, value), do: unit(value, [name, :unit])
 
@@ -247,6 +269,10 @@ defmodule Visualize.Data.Schema do
 
   defp key(name, _type, :continuity, value) do
     if is_number(value) and value > 0, do: [], else: [{[name, :continuity], {:type, :positive}}]
+  end
+
+  defp key(name, _type, :window, value) do
+    if is_boolean(value), do: [], else: [{[name, :window], {:type, :boolean}}]
   end
 
   # The one place a unit is checked, and the seam the units proposal (#536) replaces with
@@ -342,7 +368,11 @@ defmodule Visualize.Data.Schema do
   defp words({:type, :unit}), do: "must be a unit: a non-empty string, a UCUM code"
   defp words({:type, :string}), do: "must be a string"
   defp words({:type, :number}), do: "must be a number"
-  defp words({:type, :positive}), do: "must be a positive number of seconds"
+
+  defp words({:type, :positive}),
+    do: "must be a positive number, in the window field's units (seconds for a time)"
+
+  defp words({:type, :boolean}), do: "must be true or false"
 
   defp words({:type, :order}),
     do: "must be a non-empty list of states: strings, atoms or numbers"
@@ -351,6 +381,9 @@ defmodule Visualize.Data.Schema do
 
   defp words({:duplicate_field, name}),
     do: "names the same column as #{inspect(name)}: a field is described once"
+
+  defp words({:duplicate_window, other}),
+    do: "is a second window field beside #{inspect(other)}: a feed's windows are over one field"
 
   defp words(:unknown_key),
     do: "is not a description key; the keys are #{Enum.map_join(@attributes, ", ", &inspect/1)}"

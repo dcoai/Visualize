@@ -416,6 +416,59 @@ release it merely follows.
 
 ### Changed
 
+- **Breaking for feed authors: a `:time` field holds instants, and a feed names its window
+  field** (#585, #586, D-154). Before this change, `:time` meant either an instant or a
+  tick count, and a `:time` field on a linear axis went unreported. Now `:time` means an
+  instant, and the type check reports `:time` on a numeric scale.
+  - **What a feed author must do:**
+    1. Write every `:time` field as instants: `DateTime`, `NaiveDateTime` or `Date`
+       values (or ISO 8601 strings, for a field that is not the window field). A count,
+       tick, sequence number or offset is `:number`.
+    2. If your windows are over a numeric field, type it `:number` and add `window: true`
+       to its description: `%{tick: %{type: :number, window: true}}`. The same applies to
+       a numeric field that your rows are ordered by or that `continuity` is measured
+       along.
+    3. If your schema has more than one `:time` field, mark the one your windows are over
+       with `window: true`. You can also say `window: false` on a schema's only `:time`
+       field to make it not the window field.
+    4. Replace `Visualize.Feed`'s removed `time_field` with
+       `Visualize.Feed.window_field/1`. It returns the field described `window: true`, else
+       the schema's one `:time` field.
+       `Visualize.Feed.window_type/1` gives that field's type.
+    5. Match `{:error, :combine_window_field}` from `Visualize.Feed.Combine.describe/1`
+       where you matched `:combine_time_field`.
+    6. Run the conformance kit. The `:not_a_time` finding is now `:window_value`, and
+       there are two new findings, `:no_window_field` and `:not_an_instant`.
+  - **No change needed** for a feed stamped with `DateTime`s that has one `:time` field,
+    as `Visualize.Feed.Telemetry` is.
+  - **The schema.** `Visualize.Data.Schema` has a tenth description key, `window`, a
+    boolean on a `:time` or `:number` field. `Schema.new/1` reports these as faults:
+    `window` on a `:category` or `:text` field (`{:invalid_for, type}`), a value that is
+    not a boolean (`{:type, :boolean}`), and two `window: true` fields
+    (`{:duplicate_window, other}`). `attributes/0` lists the ten keys.
+  - **The window works over numbers as over instants.**
+    - `Visualize.Feed.Window.applies?/2` says whether a window's bounds are of a window
+      field's kind. `instant?/1` says whether a value is an instant.
+    - `Visualize.Feed.finish/3` trims and reduces along a `:number` window field, and
+      never reduces the window field itself.
+    - `Visualize.Feed.Monitor` asks each feed for the window that applies to it. A feed
+      over ticks under a window of instants is asked for its own span (`nil`), and is
+      neither trimmed nor refetched as that window moves.
+    - `Visualize.Feed.Combine` routes over either kind.
+  - **On a board,** the UTC window applies to feeds whose window field is `:time`. A feed
+    over ticks keeps its own span, and its `continuity` is in its own units. To put ticks
+    on the board's clock, map them to instants in your connector and describe them as
+    `:time`.
+  - **`Visualize.Feed.Signals`** describes its tick as
+    `%{type: :number, window: true, label: "Tick"}`, so its schema's version changes.
+    Bind its tick to a linear scale, not a time scale.
+  - **The type check is strict.** A schema's `:time` field read through a linear, log,
+    power, sqrt, symlog or other numeric scale is
+    `{:type_mismatch, slot, field, :number, :time}`. It is reported by
+    `Visualize.Chart.apply/2`, by `Visualize.Chart.check_types/2`, by
+    `Visualize.Board.Binding.check/3`, and in the builder's previews, instead of raising
+    from the frame. `Visualize.Chart.Builder.Boards.sample/2` gives a `:number` window
+    field its row's place, 0 to 59.
 - **The builder is split into modules by area, with no change in behaviour** (#568).
   `Visualize.Chart.Builder` keeps its assigns, its message, `css/0`, `styles/1` and
   `tick/2` exactly as before; what moved is internal (`Visualize.Chart.Builder.Events.*`,

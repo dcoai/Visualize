@@ -43,8 +43,20 @@ defmodule Visualize.Feed.Conformance.Words do
   def words({:undescribed_field, request, field}),
     do: "#{request(request)}: a row holds #{inspect(field)}, which the schema does not describe"
 
-  def words({:not_a_time, request, value}),
-    do: "#{request(request)}: a row's time field holds #{inspect(value)}, not a time"
+  def words({:window_value, request, value}),
+    do:
+      "#{request(request)}: a row's window field holds #{inspect(value)}, not a value of its type " <>
+        "(an instant for :time, a number for :number)"
+
+  def words({:not_an_instant, request, field, value}),
+    do:
+      "#{request(request)}: the :time field #{inspect(field)} holds #{inspect(value)}, not an " <>
+        "instant; a count or a tick is a :number"
+
+  def words({:no_window_field, times}),
+    do:
+      "the feed names :window but its schema has no window field (its :time fields: " <>
+        "#{inspect(times)}); describe the field its windows are over window: true"
 
   def words({:outside_served, request, time, served}),
     do:

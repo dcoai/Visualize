@@ -377,7 +377,17 @@ means, under a version that is the schema's content hash. `fetch/3` returns a
 `Visualize.Data.Delivery` for a window and a budget. Only rows are required. A feed
 lists in `supports` what it honours of `[:window, :budget, :push]`, and visualize trims
 and reduces for it where it does not. Errors are values: a window the feed cannot read
-is `{:error, reason}`, never a raise. This one keeps a list of rows and honours the window:
+is `{:error, reason}`, never a raise.
+
+A window is over the feed's **window field**. A `:time` field holds instants:
+`DateTime`, `NaiveDateTime` or `Date` values. A feed whose rows are stamped with
+instants and that has one `:time` field has nothing more to say, since that field is its
+window field. A feed whose clock is a number, such as a minute index, a tick or a
+sequence number, types it `:number` and marks it `window: true`. A time scale draws the
+first and a numeric scale the second, and a `:time` field on a linear axis is reported
+before anything is drawn.
+
+This one keeps a list of rows, counts its minutes, and honours the window:
 
 ```elixir
 defmodule MyApp.RequestsFeed do
@@ -389,7 +399,7 @@ defmodule MyApp.RequestsFeed do
   defstruct rows: []
 
   @schema Schema.new!(%{
-            minute: %{type: :time, label: "Minute"},
+            minute: %{type: :number, window: true, label: "Minute"},
             requests: %{type: :number, unit: "{request}", label: "Requests"}
           })
 

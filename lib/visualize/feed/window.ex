@@ -1,10 +1,11 @@
 defmodule Visualize.Feed.Window do
   @moduledoc """
-  Windows over a feed's time field (spec/08 §11.2, D-140).
+  Windows over a feed's window field (spec/08 §11.2, D-140, D-154).
 
   A window is `nil` — whatever a feed holds — or `[from, to]`, either bound `nil` for
-  open. Its bounds are values of the feed's time field: numbers, or `DateTime`,
-  `NaiveDateTime` or `Date` values, a window and a column of one kind. These are the
+  open. Its bounds are values of the feed's window field: numbers for a `:number` field,
+  or instants — `DateTime`, `NaiveDateTime` or `Date` values — for a `:time` one, a window
+  and a column of one kind (`applies?/2`). These are the
   comparisons, the trim and the numeric position that `Visualize.Feed.finish/3`,
   `Visualize.Feed.Monitor` and `Visualize.Feed.Combine` share.
 
@@ -44,13 +45,53 @@ defmodule Visualize.Feed.Window do
   def compare(%NaiveDateTime{} = a, %NaiveDateTime{} = b), do: NaiveDateTime.compare(a, b)
   def compare(%Date{} = a, %Date{} = b), do: Date.compare(a, b)
 
-  @doc "Whether a time is a value a window can be over: a number, a `DateTime`, a `NaiveDateTime` or a `Date`."
+  @doc "Whether a value is one a window can be over: a number, or an instant (`instant?/1`)."
   @spec time?(term()) :: boolean()
   def time?(value) when is_number(value), do: true
   def time?(%DateTime{}), do: true
   def time?(%NaiveDateTime{}), do: true
   def time?(%Date{}), do: true
   def time?(_value), do: false
+
+  @doc """
+  Whether a value is an instant: a `DateTime`, a `NaiveDateTime` or a `Date` — what a
+  `:time` window field holds (spec/08 §10.1, D-154). A number is not one.
+
+      iex> Visualize.Feed.Window.instant?(~D[2026-10-12])
+      true
+      iex> Visualize.Feed.Window.instant?(12)
+      false
+  """
+  @spec instant?(term()) :: boolean()
+  def instant?(%DateTime{}), do: true
+  def instant?(%NaiveDateTime{}), do: true
+  def instant?(%Date{}), do: true
+  def instant?(_value), do: false
+
+  @doc """
+  Whether a window applies to a window field of the type, `:time` or `:number` (spec/08
+  §11.2): its bounds instants for `:time`, numbers for `:number`. A `nil` window, and one
+  with no bound, applies to either; a window that mixes kinds, or whose bounds are no
+  times, applies to neither.
+
+      iex> Visualize.Feed.Window.applies?([~U[2026-10-12 00:00:00Z], nil], :time)
+      true
+      iex> Visualize.Feed.Window.applies?([~U[2026-10-12 00:00:00Z], nil], :number)
+      false
+      iex> Visualize.Feed.Window.applies?([0, 10], :number)
+      true
+  """
+  @spec applies?(t(), :time | :number) :: boolean()
+  def applies?(nil, _type), do: true
+
+  def applies?([from, to], type) when type in [:time, :number],
+    do: of?(from, type) and of?(to, type)
+
+  def applies?(_window, _type), do: false
+
+  defp of?(nil, _type), do: true
+  defp of?(value, :number), do: is_number(value)
+  defp of?(value, :time), do: instant?(value)
 
   @doc """
   Whether a time lies within a window: both bounds inclusive, a `nil` bound open, a `nil`

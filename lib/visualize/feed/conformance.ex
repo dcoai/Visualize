@@ -143,8 +143,9 @@ defmodule Visualize.Feed.Conformance do
   # -- describe ------------------------------------------------------------------------------
 
   defp run(:describe, feed, o) do
-    with {:ok, {version, schema, _supports}} <- described(feed, o) do
+    with {:ok, {version, schema, supports}} <- described(feed, o) do
       schema_faults(version, schema) ++
+        window_field(schema, supports) ++
         case described(feed, o) do
           {:ok, {^version, ^schema, _supports}} -> []
           {:ok, {other, _schema, _supports}} -> [{:unstable, version, other}]
@@ -170,7 +171,7 @@ defmodule Visualize.Feed.Conformance do
     with {:ok, {_version, schema, supports}} <- described(feed, o) do
       if supports -- Feed.capabilities() == [] and
            Enum.uniq(supports) == supports do
-        window_honoured(feed, supports, Feed.time_field(schema), o) ++
+        window_honoured(feed, supports, Feed.window_field(schema), o) ++
           budget_honoured(feed, supports, o) ++ push_honoured(feed, supports, o)
       else
         [{:supports, supports}]
@@ -254,24 +255,34 @@ defmodule Visualize.Feed.Conformance do
     end
   end
 
+  # A feed that honours windows names the field they are over (spec/08 §10.1, D-154): one
+  # `window: true`, or a single `:time` field.
+  defp window_field(schema, supports) do
+    if is_list(supports) and :window in supports and Feed.window_field(schema) == nil,
+      do: [{:no_window_field, Enum.sort(for({name, %{type: :time}} <- schema.fields, do: name))}],
+      else: []
+  end
+
   defp pushes?(supports), do: :push in supports
 
   # -- one probe of the deliveries check -----------------------------------------------------
 
   defp probe(feed, request, {version, schema, supports}, o) do
     with {:ok, delivery, rows} <- fetched(feed, request, o) do
-      time = Feed.time_field(schema)
+      time = Feed.window_field(schema)
       served = delivery.window
 
       honest =
         version(delivery, request, version) ++
           fields(rows, request, schema) ++
-          times(rows, request, time) ++
+          times(rows, request, time, Feed.window_type(schema)) ++
+          instants(rows, request, schema, time) ++
           outside(rows, request, time, served) ++
           resolution(rows, request, schema, time, delivery.resolution)
 
-      # The clauses that compare against a second fetch need the rows' times to be times.
-      if Enum.any?(honest, &(elem(&1, 0) == :not_a_time)) do
+      # The clauses that compare against a second fetch need the rows' window field to
+      # hold values of its type.
+      if Enum.any?(honest, &(elem(&1, 0) == :window_value)) do
         honest
       else
         honest ++
@@ -372,14 +383,33 @@ defmodule Visualize.Feed.Conformance do
 
   defp described?(_schema, _field), do: false
 
-  defp times(_rows, _request, nil), do: []
+  # The window field holds values of its type: instants for `:time`, numbers for
+  # `:number` (spec/08 §12.3, D-154), or `nil`.
+  defp times(_rows, _request, nil, _type), do: []
 
-  defp times(rows, request, time) do
-    case Enum.find(rows, &(not bound?(Table.get(&1, time)))) do
+  defp times(rows, request, time, type) do
+    case Enum.find(rows, &(not of_type?(Table.get(&1, time), type))) do
       nil -> []
-      row -> [{:not_a_time, request, Table.get(row, time)}]
+      row -> [{:window_value, request, Table.get(row, time)}]
     end
   end
+
+  defp of_type?(nil, _type), do: true
+  defp of_type?(value, :time), do: Window.instant?(value)
+  defp of_type?(value, :number), do: is_number(value)
+
+  # Every other `:time` field holds instants as a time scale reads them, or `nil`: a tick
+  # written under `:time` is caught here rather than in a frame (D-154).
+  defp instants(rows, request, schema, time) do
+    for {field, %{type: :time}} <- Enum.sort(schema.fields),
+        field != time,
+        row = Enum.find(rows, &(not instant_or_nil?(Table.get(&1, field)))),
+        row != nil,
+        do: {:not_an_instant, request, field, Table.get(row, field)}
+  end
+
+  defp instant_or_nil?(nil), do: true
+  defp instant_or_nil?(value), do: Table.temporal?(value)
 
   # Every row's time within the window the delivery says it served.
   defp outside(_rows, _request, nil, _served), do: []
@@ -592,7 +622,7 @@ defmodule Visualize.Feed.Conformance do
     |> Enum.map(fn {a, b} -> {seconds(a, b), kind(a)} end)
   end
 
-  # The gap in the time field's own units: seconds for date-times, the values for numbers.
+  # The gap in the window field's own units: seconds for date-times, the values for numbers.
   defp seconds(a, b) when is_number(a), do: b - a
   defp seconds(%DateTime{} = a, b), do: (Window.position(b) - Window.position(a)) / 1_000_000
   defp seconds(%NaiveDateTime{} = a, b), do: Window.position(b) - Window.position(a)
@@ -807,7 +837,7 @@ defmodule Visualize.Feed.Conformance do
 
     case Map.fetch(known, delivery.schema) do
       {:ok, schema} when faults == [] ->
-        outside(rows, :push, Feed.time_field(schema), delivery.window)
+        outside(rows, :push, Feed.window_field(schema), delivery.window)
 
       {:ok, _schema} ->
         faults

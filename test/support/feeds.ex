@@ -74,8 +74,8 @@ defmodule Visualize.Test.Feeds do
   defmodule Broken do
     @moduledoc """
     A feed that is honest unless given a flaw: the conformance kit's negatives (spec/08
-    §12.4). Its rows are `%{t: 0..19, v: …}`, one series a tick apart; it honours a
-    numeric window, a budget (every `k`-th row, `reduced_by: :feed`, the resolution `k`)
+    §12.4). Its rows are `%{t: 0..19, v: …}`, one series a tick apart, `t` its numeric
+    window field (`window: true`, D-154); it honours a numeric window, a budget (every `k`-th row, `reduced_by: :feed`, the resolution `k`)
     and push, and `emit/1` pushes one new row under a new version of its schema, the
     schema first. Each flaw breaks one rule of the contract and nothing else.
     """
@@ -104,7 +104,10 @@ defmodule Visualize.Test.Feeds do
       :no_handshake,
       :data_before_schema,
       :keeps_pushing,
-      :raises
+      :raises,
+      :ticks_as_time,
+      :no_window_field,
+      :stamp_as_number
     ]
 
     @last 19
@@ -126,7 +129,7 @@ defmodule Visualize.Test.Feeds do
 
       schema =
         if flaw == :unstable_version,
-          do: schema("call #{n}"),
+          do: schema("call #{n}", flaw),
           else: schema(feed)
 
       version =
@@ -185,10 +188,10 @@ defmodule Visualize.Test.Feeds do
           {{state.generation, state.subscribers}, state}
         end)
 
-      schema = schema("generation #{generation}")
+      schema = schema("generation #{generation}", flaw)
       version = Schema.version(schema)
       t = 100 + generation
-      delivery = Delivery.new([%{t: t, v: 1}], window: [t, t], schema: version)
+      delivery = Delivery.new([row(t, 1, flaw)], window: [t, t], schema: version)
 
       messages =
         if flaw == :data_before_schema,
@@ -202,15 +205,31 @@ defmodule Visualize.Test.Feeds do
       :ok
     end
 
-    defp schema(%__MODULE__{agent: agent}) do
+    defp schema(%__MODULE__{agent: agent, flaw: flaw}) do
       case Agent.get(agent, & &1.generation) do
-        0 -> schema("Value")
-        n -> schema("generation #{n}")
+        0 -> schema("Value", flaw)
+        n -> schema("generation #{n}", flaw)
       end
     end
 
-    defp schema(label) when is_binary(label),
-      do: Schema.new!(%{t: %{type: :time}, v: %{type: :number, label: label}})
+    # The tick is a `:number` window field; three flaws misdescribe it (D-154): ticks
+    # called `:time`, a window feed that names no window field, and a second `:time` field
+    # written as numbers.
+    defp schema(label, flaw) when is_binary(label) do
+      t =
+        case flaw do
+          :ticks_as_time -> %{type: :time}
+          :no_window_field -> %{type: :number}
+          _honest -> %{type: :number, window: true}
+        end
+
+      fields = %{t: t, v: %{type: :number, label: label}}
+      fields = if flaw == :stamp_as_number, do: Map.put(fields, :at, %{type: :time}), else: fields
+      Schema.new!(fields)
+    end
+
+    defp row(t, v, :stamp_as_number), do: %{t: t, v: v, at: t}
+    defp row(t, v, _flaw), do: %{t: t, v: v}
 
     defp bounds(nil), do: {:ok, nil, nil}
 
@@ -228,7 +247,7 @@ defmodule Visualize.Test.Feeds do
       lo = if flaw == :window_overrun, do: 0, else: lo
       hi = if flaw == :window_overrun, do: @last, else: hi
 
-      rows = for t <- lo..hi//1, do: %{t: t, v: rem(t * 7, 5)}
+      rows = for t <- lo..hi//1, do: row(t, rem(t * 7, 5), flaw)
       rows = if flaw == :missing_row and from != nil, do: List.delete_at(rows, 2), else: rows
 
       {rows, step} =

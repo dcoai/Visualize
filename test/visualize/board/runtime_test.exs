@@ -367,6 +367,37 @@ defmodule Visualize.Board.RuntimeTest do
   end
 
   describe "rows by timestamp (spec/15 §8.5)" do
+    test "a feed over ticks keeps its own span under the board's window of instants (D-154)" do
+      ticks = put_in(@line, [:frames, :main, :scales, :x], %{kind: :linear})
+      signal = Visualize.Signals.new(:sine, [:t, :v], window: 24)
+      {stamped, _} = scripted(schema: @schema, rows: rows(20))
+
+      cells = %{
+        a: %{x: 0, y: 0, w: 6, h: 3, ref: {:composite, 1}},
+        b: %{x: 6, y: 0, w: 6, h: 3, ref: {:composite, 2}}
+      }
+
+      {:ok, board} =
+        start(
+          board: board(%{window: %{last: 3600}, cells: cells}),
+          store: %{{:composite, 1} => ticks, {:composite, 2} => @line},
+          feeds: %{ticks: Visualize.Feed.Signals.new(signal, tick: 30), stamped: stamped},
+          binding: Binding.new(%{{:a, :primary} => :ticks, {:b, :primary} => :stamped})
+        )
+
+      :ok = Server.tick(board)
+      snapshot = Server.snapshot(board)
+      a = snapshot.cells.a.slots.primary
+      assert a.status == :live
+      assert Enum.map(a.delivery.rows, & &1.t) == Enum.to_list(7..30)
+      assert snapshot.cells.b.slots.primary.status == :live
+
+      # A brush is a window of instants: it moves the stamped feed and leaves the ticks be.
+      :ok = Server.window(board, %{from: DateTime.add(@t0, 600), to: DateTime.add(@t0, 900)})
+      snapshot = Server.snapshot(board)
+      assert Enum.map(snapshot.cells.a.slots.primary.delivery.rows, & &1.t) == Enum.to_list(7..30)
+    end
+
     test "out-of-order rows land in order, and a gap beyond continuity breaks the line" do
       schema =
         Schema.new!(%{t: %{type: :time}, v: %{type: :number, continuity: 120}})

@@ -297,10 +297,10 @@ defmodule Visualize.Chart do
   A read is a channel naming a scale, a style's `{:field, f}` colour or an offset's field,
   over rows that are the slot's own. A time scale needs `:time`; band and ordinal need
   `:category`; every other kind needs `:number`. `types` maps a slot to what is known of
-  its fields. A `Visualize.Data.Schema` says what they mean: `:text` satisfies a category
-  and `:time`, which a feed may write as numbers, satisfies a number. A map from field to
+  its fields. A `Visualize.Data.Schema` says what they mean: `:text` satisfies a category,
+  and `:time` is instants (D-154), which no numeric scale takes. A map from field to
   type, as `Visualize.Data.Table.column_types/1` reads it from rows, says how they are
-  written: `:time` is instants, which no number takes, and a category takes anything. A
+  written: `:time` is instants there too, and a category takes anything. A
   slot it does not hold, and a field it does not type, are not checked. Pure and total
   over any map, so a tool calls it before `apply/2` to show a wrong binding without
   drawing.
@@ -315,7 +315,8 @@ defmodule Visualize.Chart do
       {:error, [{[:marks, 0, :channels, :x], {:type_mismatch, :primary, :t, :number, :time}}]}
       iex> schema = Visualize.Data.Schema.new!(%{t: %{type: :time}, v: %{type: :category}})
       iex> Visualize.Chart.check_types(design, %{primary: schema})
-      {:error, [{[:marks, 0, :channels, :y], {:type_mismatch, :primary, :v, :number, :category}}]}
+      {:error, [{[:marks, 0, :channels, :x], {:type_mismatch, :primary, :t, :number, :time}},
+                {[:marks, 0, :channels, :y], {:type_mismatch, :primary, :v, :number, :category}}]}
       iex> Visualize.Chart.check_types(design, %{primary: %{t: :number, v: :number}})
       :ok
   """

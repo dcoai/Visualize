@@ -82,6 +82,9 @@ defmodule Visualize.Feed.ConformanceTest do
     no_handshake: {:push, :handshake},
     data_before_schema: {:push, :before_schema},
     raises: {:errors, :raised},
+    ticks_as_time: {:deliveries, :window_value},
+    no_window_field: {:describe, :no_window_field},
+    stamp_as_number: {:deliveries, :not_an_instant},
     keeps_pushing: {:unsubscribe, :pushed_after_unsubscribe}
   ]
 

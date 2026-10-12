@@ -1,12 +1,13 @@
 defmodule Visualize.Board.Rows do
   @moduledoc """
-  A cell's rows placed by their timestamp, with a break in every gap (spec/15 §8.5,
-  D-146).
+  A cell's rows placed by their window field, with a break in every gap (spec/15 §8.5,
+  D-146, D-154).
 
-  The board's monitor already holds each feed's rows in time order (spec/08 §11.4); a
-  cell places them once more, so a delivery handed to it in any order is drawn in order,
-  and then reads the schema's `continuity` (spec/08 §10.1, D-136): where two consecutive
-  readings of one series are further apart in time than a field's `continuity`, a
+  The board's monitor already holds each feed's rows in order (spec/08 §11.4); a cell
+  places them once more, so a delivery handed to it in any order is drawn in order, and
+  then reads the schema's `continuity` (spec/08 §10.1, D-136): where two consecutive
+  readings of one series are further apart along the window field — in seconds for
+  instants, in its own units for a number — than a field's `continuity`, a
   **break row** — the earlier row with that field `nil` — is put between them. A line or
   an area over the field breaks at a datum its scale cannot place (spec/14 §5.6), so a
   gap in the data is drawn as a gap, never as a straight line across it.
@@ -14,7 +15,7 @@ defmodule Visualize.Board.Rows do
   ## Examples
 
       iex> alias Visualize.Data.{Delivery, Schema}
-      iex> schema = Schema.new!(%{t: %{type: :time}, v: %{type: :number, continuity: 5}})
+      iex> schema = Schema.new!(%{t: %{type: :number, window: true}, v: %{type: :number, continuity: 5}})
       iex> rows = [%{t: 12, v: 3}, %{t: 0, v: 1}, %{t: 2, v: 2}]
       iex> Visualize.Board.Rows.place(Delivery.new(rows), schema).rows
       [%{t: 0, v: 1}, %{t: 2, v: 2}, %{t: 2, v: nil}, %{t: 12, v: 3}]
@@ -26,10 +27,10 @@ defmodule Visualize.Board.Rows do
   alias Visualize.Feed.Window
 
   @doc """
-  The delivery with its rows in time order — a stable sort, so rows that tie keep their
-  order — and a break row in every gap wider than a field's `continuity`, series by
-  series, a series being the rows that share every `:category` field. A schema with no
-  time field, or `nil`, leaves the rows as they are.
+  The delivery with its rows in window-field order — a stable sort, so rows that tie
+  keep their order — and a break row in every gap wider than a field's `continuity`,
+  series by series, a series being the rows that share every `:category` field. A schema
+  with no window field, or `nil`, leaves the rows as they are.
   """
   @spec place(Delivery.t(), Schema.t() | nil) :: Delivery.t()
   def place(%Delivery{} = delivery, nil), do: %{delivery | rows: Table.rows(delivery)}
@@ -37,7 +38,7 @@ defmodule Visualize.Board.Rows do
   def place(%Delivery{} = delivery, %Schema{fields: fields} = schema) do
     rows = Table.rows(delivery)
 
-    case Feed.time_field(schema) do
+    case Feed.window_field(schema) do
       nil ->
         %{delivery | rows: rows}
 
@@ -85,9 +86,9 @@ defmodule Visualize.Board.Rows do
   end
 
   @doc """
-  A time in seconds, for comparing a gap with `continuity` (spec/15 §8.5): a `DateTime`
-  or a `NaiveDateTime` from its epoch, a `Date` by its days, and a number as itself — a
-  time field has no unit (spec/08 §10.1), so a numeric clock is read as seconds. `nil`
+  A window-field value as a gap is measured against `continuity` (spec/15 §8.5): an
+  instant in seconds — a `DateTime` or a `NaiveDateTime` from its epoch, a `Date` by its
+  days — and a number as itself, in the numeric window field's own units (D-154). `nil`
   for anything else.
 
       iex> Visualize.Board.Rows.seconds(~U[1970-01-01 00:01:30Z])

@@ -14,7 +14,9 @@ defmodule Visualize.Feed.CombineTest do
   doctest Combine
   doctest Signals
 
-  @schema Schema.new!(%{t: %{type: :time}, v: %{type: :number}})
+  # The stores count, so `t` is a `:number` named the window field (D-154): routing works
+  # over it as over instants.
+  @schema Schema.new!(%{t: %{type: :number, window: true}, v: %{type: :number}})
 
   defp rows(range, source), do: for(t <- range, do: %{t: t, v: t, from: source})
 
@@ -80,15 +82,23 @@ defmodule Visualize.Feed.CombineTest do
   end
 
   describe "one schema" do
-    test "every part must describe the same version, and the schema needs a time field" do
+    test "every part must describe the same version, and the schema needs a window field" do
       {live, _} = store(50..100, :live)
-      other = Schema.new!(%{t: %{type: :time}, v: %{type: :number, label: "Other"}})
+
+      other =
+        Schema.new!(%{t: %{type: :number, window: true}, v: %{type: :number, label: "Other"}})
+
       {history, _} = Feeds.scripted(schema: other)
       assert {:error, {:combine_schema, [_, _]}} = Feed.describe(Combine.new([live, history]))
 
       untimed = Schema.new!(%{v: %{type: :number}})
       {a, _} = Feeds.scripted(schema: untimed)
-      assert Feed.describe(Combine.new([a])) == {:error, :combine_time_field}
+      assert Feed.describe(Combine.new([a])) == {:error, :combine_window_field}
+
+      # A count that does not say it is the window field is not one.
+      uncounted = Schema.new!(%{t: %{type: :number}, v: %{type: :number}})
+      {b, _} = Feeds.scripted(schema: uncounted)
+      assert Feed.describe(Combine.new([b])) == {:error, :combine_window_field}
     end
 
     test "a combination honours the window, and pushes when its first feed does" do
@@ -137,7 +147,9 @@ defmodule Visualize.Feed.CombineTest do
       signal = Visualize.Signals.new(:sine, [:t, :v], window: 5)
       feed = Signals.new(signal, tick: 100, limit: 10)
       assert {_v, schema, [:window]} = Feed.describe(feed)
-      assert Feed.time_field(schema) == :t
+      # The tick is a count, not an instant: a `:number` named the window field (D-154).
+      assert Feed.window_field(schema) == :t
+      assert Schema.fetch(schema, :t) == {:ok, %{type: :number, window: true, label: "Tick"}}
 
       {:ok, d} = Feed.fetch(feed, nil, nil)
 
@@ -152,6 +164,23 @@ defmodule Visualize.Feed.CombineTest do
 
       assert Feed.fetch(feed, [~D[2026-01-01], nil], nil) ==
                {:error, {:window, [~D[2026-01-01], nil]}}
+    end
+
+    test "two tick feeds combine by their declared window field, and a monitor windows them in ticks" do
+      signal = Visualize.Signals.new(:discrete, [:t, :n])
+
+      combine =
+        Combine.new([Signals.new(signal, tick: 50, limit: 10), Signals.new(signal, tick: 50)])
+
+      assert {_v, schema, [:window]} = Feed.describe(combine)
+      assert Feed.window_field(schema) == :t
+
+      {:ok, d} = Feed.fetch(combine, [20, 50], nil)
+      assert Enum.map(d.rows, & &1.t) == Enum.to_list(20..50)
+      assert {d.window, d.capped} == {[20, 50], false}
+
+      monitor = Monitor.new(%{slot: combine}, window: [30, 45]) |> Monitor.tick(now: 0)
+      assert Enum.map(Monitor.deliveries(monitor).slot.rows, & &1.t) == Enum.to_list(30..45)
     end
 
     test "rows match the signal's own, and a description adds to the defaults" do

@@ -1434,3 +1434,44 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - **Rescuing the preview was not taken.** A rescue around `apply/2` would hide every bug the frame raises for, in the host's data and in the library alike. Checking what the preview can know first, and raising for everything else, keeps those bugs visible.
 
 **Consequences.** spec/14 §18.4's "the preview raises" holds now only for faults no type predicts, such as a theme name nothing resolves. A wrong binding is a panel in the builder, a fault under its slot, and a deliberate state in the runtime. The need table is coarser than what a scale accepts. A `:number` field on a band scale draws, but it is reported, because a schema that calls a field a number says it measures something, and a band or an ordinal colour reads categories. A host that means numbers as categories describes the field as `:category`. A slot without a contract now has its schema described when its delivery names one and its fields are read through a scale, so a describe function may be asked once more than before. A design read through steps that make fields, such as `:bin`, `:stack` or a layout, is not type-checked, and a wrong binding there still raises. At runtime a feed whose schema calls a field `:time` but whose rows are instants, bound to a linear scale, passes the schema check and still raises from the frame, as before. Only rows show that, and the runtime does not type its deliveries' rows.
+
+## 154. D-154 — A `:time` field holds instants; a feed's windows are over its window field, a `:time` one or one it describes `window: true`; a schema's `:time` on a numeric scale is a type fault
+
+**Context.** #585, found in #584 (D-153). `Visualize.Feed.Signals` (#537, D-140) described its integer tick column as `:time`, so that the window, the monitor and `Feed.Combine`, which found the field a window is over as the schema's one `:time` field, would work over ticks. That gave `:time` two meanings. It meant an instant, which is what a time scale needs and what every other feed writes. It also meant a tick count, which only a numeric scale can draw. D-153 had to let a schema's `:time` satisfy a numeric scale so that the tick feed could still be drawn. The cost was that a real feed whose `:time` field holds `DateTime`s, bound to a linear axis, passed validation and still raised from the frame. The data-to-axes milestone had already settled the question for designs (#369, spec/14 §2.3): a signal's time is its tick, an integer, and is typed `:number`, never `:time`. #537 diverged from that only because the feed contract had no other way to say which field a window is over.
+
+**Decision.**
+- **A `:time` field holds instants**: `DateTime`, `NaiveDateTime` or `Date` values, or ISO 8601 strings, which is what a time scale takes (spec/14 §4.3). It never holds numbers. A count of ticks, a sequence number or an offset is `:number`. `Feed.Signals` describes its tick as `%{type: :number, window: true, label: "Tick"}`.
+- **A feed names the field its windows are over: its window field** (spec/08 §10.1, §11.2). It is a tenth description key, `window`, a boolean that a `:time` or `:number` field may carry. The window field is the one field described `window: true`, or else the schema's one `:time` field when it has exactly one and does not describe it `window: false`. `Feed.window_field/1` answers it and replaces `Feed.time_field/1`. `Schema.new/1` refuses `window` on a `:category` or `:text` field (`{:invalid_for, type}`), a value that is not a boolean (`{:type, :boolean}`), and two fields that both say `true` (`{:duplicate_window, other}`).
+  - The key lives in the schema because `finish/3` trims a feed that does **not** honour windows. So which field to trim by is a fact about the data, not a capability, and every reader of it (`finish/3`, the monitor, `Board.Rows`, the cell states, the conformance kit) already holds the schema.
+  - It is a per-field key rather than a schema-level one, which keeps the schema a map of descriptions. The content hash (spec/08 §10.2) covers it with no change to the encoding, and no existing schema's version moves.
+  - The default keeps the common case silent. A feed stamped with instants that has one `:time` field (telemetry, metresis) declares nothing.
+- **The window works over either kind** (spec/08 §11.2). A window applies to a window field of its kind (`Feed.Window.applies?/2`): instant bounds to `:time`, number bounds to `:number`, and a window with no bound to either.
+  - `finish/3` trims, and reduces against, a numeric window field as it does a time one. It never reduces the window field itself as a value.
+  - The monitor asks each feed for the window that applies to it. That is the request, or `nil` (the feed's own span) when the request is of the other kind. A feed asked `nil` is neither trimmed by the window nor refetched when it moves.
+  - Late and out-of-order rows are placed along a numeric window field as along a time one.
+  - `Feed.Combine` routes over either kind. Its describe error for a schema with no window field is now `:combine_window_field`.
+- **On a board, a feed over ticks declares its own window domain** (spec/15 §1.5, §8.5). A board's window is in UTC. It applies to the feeds whose window field is `:time`. A feed whose window field is a number keeps its own span and its own present, and a brush does not move it. Its `continuity` gaps are measured in its own units.
+  - The alternative was mapping ticks to time through the board's clock, and it was not taken. Only the connector knows what a tick is worth, and the board does not guess a mapping. A connector that wants ticks on the board's clock maps them to instants and describes the result as `:time`, as the examples' wall-clock signal (`Examples.BoardDemo.Wave`) already does. That is why the `/board` demo is unchanged.
+- **The type check is strict.** This updates D-153's second bullet and its last consequence. A schema's `:time` no longer satisfies a numeric need, so `Types.satisfies?/3` loses its one clause for it. A `:time` field read through a linear, log, power, sqrt, symlog, radial or any other numeric scale is `{:type_mismatch, slot, field, :number, :time}` in application, in the board's binding check and in the builder's previews.
+  - The case D-153 left open, a feed whose `:time` field holds instants and is bound to a linear axis, is now reported before anything is drawn.
+  - D-153's reason for leaving it open, that it "would refuse every tick feed on a linear axis", no longer holds, because a tick feed's tick is a `:number`.
+  - The rest of D-153 stands.
+- **The conformance kit checks the declaration** (spec/08 §12.3). The `:describe` check reports a feed that names `:window` but has no window field (`{:no_window_field, times}`).
+  - The `:deliveries` check holds the window field's values to its type. That is an instant for `:time` and a number for `:number` (`{:window_value, request, value}`, which replaces `:not_a_time`).
+  - Every other `:time` field must hold instants (`{:not_an_instant, request, field, value}`). A tick written under `:time` therefore fails the kit, not a frame.
+
+**Consequences.**
+- **For a feed author:**
+  - Every `:time` field must hold instants.
+  - A feed whose window, ordering or `continuity` is over a numeric field types that field `:number` and describes it `window: true`.
+  - A feed with several `:time` fields marks the one its windows are over.
+  - `Feed.time_field/1` is gone; call `Feed.window_field/1`.
+  - `Combine`'s error is `:combine_window_field`.
+  - The kit's `:not_a_time` finding is `:window_value`.
+  - A feed stamped with `DateTime`s that has one `:time` field changes nothing.
+- **Versions move.** `Feed.Signals`' schema has a new version, since its tick's description changed.
+- **Designs that drew a tick feed:**
+  - A design that bound a tick feed's `:time` field to a linear axis now binds a `:number` field and is unchanged.
+  - A design that bound it to a time scale never drew, and still does not, now reported as a type fault.
+- **The builder's sample rows** give a `:number` window field its row's place, so a tick feed's preview counts as a tick does.
+- **Gaps are measured in the window field's units.** spec/15 §8.5's "a numeric clock is read in seconds" is now "in its own units", since `continuity` is measured along the window field.

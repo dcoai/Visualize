@@ -14,8 +14,9 @@ defmodule Visualize.FeedTest do
   doctest Feed
   doctest Window
 
+  # `t` counts, so it is a `:number` named the window field (D-154).
   @schema Schema.new!(%{
-            t: %{type: :time},
+            t: %{type: :number, window: true},
             v: %{type: :number, unit: "ms"},
             route: %{type: :category}
           })
@@ -50,10 +51,21 @@ defmodule Visualize.FeedTest do
       assert describe.(:missing) == {:error, :no_feed}
     end
 
-    test "the time field is the schema's one :time field" do
-      assert Feed.time_field(@schema) == :t
-      assert Feed.time_field(Schema.new!(%{v: %{type: :number}})) == nil
-      assert Feed.time_field(Schema.new!(%{a: %{type: :time}, b: %{type: :time}})) == nil
+    test "the window field is the one said window: true, else the schema's one :time field" do
+      assert Feed.window_field(@schema) == :t
+      assert Feed.window_type(@schema) == :number
+      assert Feed.window_field(Schema.new!(%{at: %{type: :time}, v: %{type: :number}})) == :at
+      assert Feed.window_type(Schema.new!(%{at: %{type: :time}})) == :time
+      assert Feed.window_field(Schema.new!(%{v: %{type: :number}})) == nil
+      assert Feed.window_type(Schema.new!(%{v: %{type: :number}})) == nil
+      # A number is not a window field unless it says so.
+      assert Feed.window_field(Schema.new!(%{n: %{type: :number}, v: %{type: :number}})) == nil
+      # Several `:time` fields: none, until one is named.
+      two = %{a: %{type: :time}, b: %{type: :time}}
+      assert Feed.window_field(Schema.new!(two)) == nil
+      assert Feed.window_field(Schema.new!(put_in(two.b[:window], true))) == :b
+      # `false` says the only `:time` field is not the window field.
+      assert Feed.window_field(Schema.new!(%{a: %{type: :time, window: false}})) == nil
     end
   end
 
@@ -71,6 +83,17 @@ defmodule Visualize.FeedTest do
       assert Feed.finish(delivery, @schema, window: [2, 8]).window == [5, 8]
       done = Feed.finish(Delivery.new(rows(10)), @schema, window: [8, nil])
       assert Enum.map(done.rows, & &1.t) == [8, 9, 10]
+    end
+
+    test "a window of the other kind than the window field trims nothing (D-154)" do
+      delivery = Delivery.new(rows(10))
+      instants = [~U[2026-10-12 00:00:00Z], ~U[2026-10-12 01:00:00Z]]
+      assert Feed.finish(delivery, @schema, window: instants) == delivery
+
+      stamped = Schema.new!(%{t: %{type: :time}, v: %{type: :number}})
+      t0 = ~U[2026-10-12 00:00:00Z]
+      timed = Delivery.new(for s <- 0..9, do: %{t: DateTime.add(t0, s), v: s})
+      assert Feed.finish(timed, stamped, window: [2, 5]) == timed
     end
 
     test "a feed that honours the window is not trimmed again" do
@@ -109,7 +132,12 @@ defmodule Visualize.FeedTest do
     end
 
     test "every number field's peak survives, the rows kept whole" do
-      schema = Schema.new!(%{t: %{type: :time}, a: %{type: :number}, b: %{type: :number}})
+      schema =
+        Schema.new!(%{
+          t: %{type: :number, window: true},
+          a: %{type: :number},
+          b: %{type: :number}
+        })
 
       rows =
         for t <- 1..300,
@@ -134,7 +162,8 @@ defmodule Visualize.FeedTest do
       t0 = ~U[2026-10-11 12:00:00Z]
       rows = for s <- 0..299, do: %{t: DateTime.add(t0, s), v: rem(s * 37, 101), route: "/"}
       window = [DateTime.add(t0, 100), DateTime.add(t0, 199)]
-      done = Feed.finish(Delivery.new(rows), @schema, window: window, budget: 30)
+      schema = Schema.new!(%{t: %{type: :time}, v: %{type: :number}, route: %{type: :category}})
+      done = Feed.finish(Delivery.new(rows), schema, window: window, budget: 30)
       assert length(done.rows) == 30
       assert Enum.all?(done.rows, &Window.within?(&1.t, window))
     end
@@ -147,8 +176,8 @@ defmodule Visualize.FeedTest do
       assert done.window == nil
     end
 
-    test "a schema with no number field is not reduced" do
-      schema = Schema.new!(%{t: %{type: :time}, s: %{type: :category}})
+    test "a schema with no number field but its window field is not reduced" do
+      schema = Schema.new!(%{t: %{type: :number, window: true}, s: %{type: :category}})
       delivery = Delivery.new(for t <- 1..100, do: %{t: t, s: "x"})
       assert Feed.finish(delivery, schema, budget: 10) == delivery
     end
@@ -172,6 +201,26 @@ defmodule Visualize.FeedTest do
       assert Window.newer(rows, :t, 4) == [%{"t" => 5}]
       refute Window.within?(nil, [1, 2])
       assert Enum.map([~U[2026-01-01 00:00:00Z], 3, :now], &Window.time?/1) == [true, true, false]
+    end
+
+    test "an instant is a date-time, a naive one or a date; a window applies to its kind" do
+      assert Enum.map(
+               [~U[2026-01-01 00:00:00Z], ~N[2026-01-01 00:00:00], ~D[2026-01-01]],
+               &Window.instant?/1
+             ) ==
+               [true, true, true]
+
+      refute Window.instant?(3)
+      refute Window.instant?("2026-01-01")
+      assert Window.applies?(nil, :number)
+      assert Window.applies?([nil, nil], :time)
+      assert Window.applies?([1, nil], :number)
+      refute Window.applies?([1, nil], :time)
+      assert Window.applies?([~D[2026-01-01], nil], :time)
+      refute Window.applies?([~D[2026-01-01], nil], :number)
+      refute Window.applies?([1, ~D[2026-01-01]], :number)
+      refute Window.applies?([:not, :a_time], :time)
+      refute Window.applies?(:all, :time)
     end
   end
 end

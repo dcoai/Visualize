@@ -281,9 +281,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     Sixty rows made from a schema, for a preview where the host gave none of a feed's
-    (spec/14 §22.6): a `:time` field a second apart and ending at `now`, a `:number` field a
-    slow sine, a `:category` field its `order` in turn — else `"a"`, `"b"` and `"c"` — and a
-    `:text` field its own name. The rows are shaped like the feed's, not its values.
+    (spec/14 §22.6): a `:time` field a second apart and ending at `now`, a `:number` window
+    field (`window: true`, D-154) its row's place, `0` to `59`, as a tick counts, any other
+    `:number` field a slow sine, a `:category` field its `order` in turn — else `"a"`, `"b"`
+    and `"c"` — and a `:text` field its own name. The rows are shaped like the feed's, not
+    its values.
 
         iex> schema = Visualize.Data.Schema.new!(%{t: %{type: :time}, v: %{type: :number},
         ...>   state: %{type: :category, order: ["ok", "warn"]}})
@@ -305,6 +307,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp sampled(%{type: :time}, _name, i, _k, now), do: DateTime.add(now, i - 59, :second)
+    defp sampled(%{type: :number, window: true}, _name, i, _k, _now), do: i
 
     defp sampled(%{type: :number}, _name, i, k, _now),
       do: Float.round(50 + 40 * :math.sin(i / 8 + k), 3)

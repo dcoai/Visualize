@@ -10,8 +10,9 @@ defmodule Visualize.Feed.Telemetry do
   without it the module compiles and the provider is never started.
 
   Each metric is a feed (`feeds/1`, `feed/2`) whose rows are `%{t: DateTime, value: v}`
-  plus the metric's tags, and whose schema says so: `t` the time field, `value` labelled
-  with the definition's description (else its name), in the definition's unit as a UCUM
+  plus the metric's tags, and whose schema says so: `t` the window field, a `:time` field
+  of `DateTime`s; `value` labelled with the definition's description (else its name), in
+  the definition's unit as a UCUM
   code (`Visualize.Unit.from_telemetry/1`) with the quantity it implies, each tag a
   category. A counter's value is the count so far for its tags and a sum's the running
   total; a last value's, a summary's and a distribution's the measurement.

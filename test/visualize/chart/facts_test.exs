@@ -15,8 +15,10 @@ defmodule Visualize.Chart.FactsTest do
 
   doctest Fact
 
+  # `t` counts readings, 1, 2, 3, on a linear `x`: a `:number`, the feed's window field —
+  # not `:time`, which is instants (D-154).
   @latency %{
-    t: %{type: :time},
+    t: %{type: :number, window: true},
     latency: %{type: :number, unit: "s", quantity: :duration, label: "Request time"},
     state: %{
       type: :category,

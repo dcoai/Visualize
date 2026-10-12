@@ -9,8 +9,9 @@ defmodule Visualize.Feed.Combine do
   the part of the window before that goes to the next feed, and so on. Each later feed's
   rows are trimmed to the half-open window it was asked for, `[from, served)`, so a row
   at a seam comes from the fresher feed alone. Every feed must describe the same schema,
-  since a delivery names one version, and the schema must have a time field to route by;
-  choosing the feeds and making their schemas agree is the connector's.
+  since a delivery names one version, and the schema must have a window field to route
+  by, `:time` or `:number` (spec/08 §11.2, D-154); choosing the feeds and making their
+  schemas agree is the connector's.
 
   A combination honours `:window`, and pushes when its first feed does: its pushes name
   the shared version and pass through unchanged. A budget is passed to every part as a
@@ -45,14 +46,14 @@ defmodule Visualize.Feed.Combine do
 
   @doc """
   The shared `{version, schema, supports}`: `{:error, {:combine_schema, versions}}` when
-  the feeds describe different schemas, `{:error, :combine_time_field}` when the schema
-  has no time field, and the first error of a feed that cannot describe.
+  the feeds describe different schemas, `{:error, :combine_window_field}` when the schema
+  has no window field, and the first error of a feed that cannot describe.
   """
   @impl Feed
   def describe(%__MODULE__{feeds: feeds}) do
     with {:ok, [{version, schema, supports} | _] = described} <- describe_all(feeds, []),
          :ok <- one_version(described),
-         :ok <- has_time(schema) do
+         :ok <- has_window(schema) do
       {version, schema, [:window | Enum.filter(supports, &(&1 == :push))]}
     end
   end
@@ -73,14 +74,14 @@ defmodule Visualize.Feed.Combine do
     end
   end
 
-  defp has_time(schema),
-    do: if(Feed.time_field(schema), do: :ok, else: {:error, :combine_time_field})
+  defp has_window(schema),
+    do: if(Feed.window_field(schema), do: :ok, else: {:error, :combine_window_field})
 
   @impl Feed
   def fetch(%__MODULE__{feeds: feeds} = combine, window, budget) do
     with {version, schema, _supports} <- describe(combine) do
       [from, to] = window || [nil, nil]
-      route(feeds, Feed.time_field(schema), from, to, budget, [], true, version)
+      route(feeds, Feed.window_field(schema), from, to, budget, [], true, version)
     end
   end
 
