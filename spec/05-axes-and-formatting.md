@@ -318,7 +318,7 @@ The functions are pure: the same domain, count and locale give the same formatte
 
 ### 4.1 Units are UCUM codes
 
-A unit is named by its code in the **Unified Code for Units of Measure** (UCUM, <https://ucum.org/ucum>, Regenstrief Institute, version 2.1): case-sensitive, unambiguous codes built for exchange between machines and the ones OpenTelemetry's semantic conventions use. One name per unit is the point (#536, D-138): a source that says `"s"` and one that says `"sec"` must not draw two labels, so a code is checked, never guessed at. `Visualize.Unit` reads the subset of UCUM's grammar (§2.1 of the specification, *Syntax rules*) that measurement data uses, over a fixed table of atoms and prefixes, strict enough to refuse a typo and permissive enough for the codes real sources send:
+A unit is named by its code in the **Unified Code for Units of Measure** (UCUM, <https://ucum.org/ucum>, Regenstrief Institute; the atoms and prefixes below are checked against its essence table, version 2.2 of 2024-06-17): case-sensitive, unambiguous codes built for exchange between machines and the ones OpenTelemetry's semantic conventions use. One name per unit is the point (#536, D-138, D-155): a source that says `"s"` and one that says `"sec"` must not draw two labels, so a code is checked, never guessed at. `Visualize.Unit` reads the subset of UCUM's grammar (§2.1 of the specification, *Syntax rules*) that measurement data uses, over a fixed table of atoms and prefixes, strict enough to refuse a typo and permissive enough for the codes real sources send:
 
 ```
 code       = "/" term | term
@@ -332,36 +332,94 @@ factor     = digit { digit }                           a positive integer, "1" t
 annotation = "{" char { char } "}"                     ASCII 33–126 except "{" and "}"
 ```
 
-| Prefix | `k` | `M` | `G` | `m` | `u` | `n` | `Ki` | `Mi` | `Gi` |
-|---|---|---|---|---|---|---|---|---|---|
-| Factor | 10³ | 10⁶ | 10⁹ | 10⁻³ | 10⁻⁶ | 10⁻⁹ | 2¹⁰ | 2²⁰ | 2³⁰ |
+A unit's symbol is a run of letters, `%` and bracketed parts — `[` up to the next `]` — so `[ft_i]`, `m[Hg]`, `mm[Hg]`, `B[SPL]` and `dB[SPL]` are each one symbol, as UCUM writes them; an exponent or an annotation ends it (`[ft_i]2`, `By{heap}`).
 
-| Atom | Name | Metric | Dimension | Factor to the base | Symbol |
-|---|---|---|---|---|---|
-| `s` | second | yes | time | 1 | `s` |
-| `min` | minute | no | time | 60 | `min` |
-| `h` | hour | no | time | 3,600 | `h` |
-| `d` | day | no | time | 86,400 | `d` |
-| `By` | byte | yes | information | 1 | `B` |
-| `bit` | bit | yes | information | 1/8 | `bit` |
-| `%` | percent | no | none | 1/100 | `%` |
-| `Hz` | hertz | yes | time⁻¹ | 1 | `Hz` |
-| `Cel` | degree Celsius | yes | temperature | — | `°C` |
-| `[degF]` | degree Fahrenheit | no | temperature | — | `°F` |
-| `K` | kelvin | yes | temperature | 1 | `K` |
-| `m` | metre | yes | length | 1 | `m` |
-| `g` | gram | yes | mass | 1 | `g` |
-| `W` | watt | yes | mass·length²·time⁻³ | 1,000 | `W` |
-| `J` | joule | yes | mass·length²·time⁻² | 1,000 | `J` |
-| `Pa` | pascal | yes | mass·length⁻¹·time⁻² | 1,000 | `Pa` |
+| Prefix | `da` | `h` | `k` | `M` | `G` | `T` | `d` | `c` | `m` | `u` | `n` | `p` | `Ki` | `Mi` | `Gi` | `Ti` |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Factor | 10¹ | 10² | 10³ | 10⁶ | 10⁹ | 10¹² | 10⁻¹ | 10⁻² | 10⁻³ | 10⁻⁶ | 10⁻⁹ | 10⁻¹² | 2¹⁰ | 2²⁰ | 2³⁰ | 2⁴⁰ |
 
-The bases are the second, the byte, the metre, the gram and the kelvin, so a watt is 1,000 g·m²·s⁻³. A **symbol is matched whole before it is split**: `min` is the minute and `m` the metre, never a milli-`in` or a milli-nothing; only a symbol that is not an atom is read as a prefix and a metric atom, longest prefix first (`MiBy` is `Mi`·`By`, `ms` is `m`·`s`, `kW` is `k`·`W`). So `s`, `ms`, `us`, `ns`, `min`, `h`, `d`, `By`, `kBy`, `MBy`, `GBy`, `KiBy`, `MiBy`, `GiBy`, `bit`, `kbit`, `Mbit`, `%`, `Hz`, `kHz`, `Cel`, `[degF]`, `K`, `m`, `mm`, `km`, `m/s`, `km/h`, `m2`, `s-1`, `W`, `kW`, `J`, `kW.h`, `Pa`, `kPa`, `1`, `{request}`, `{request}/s`, `/s` and `By{heap}` are codes; `sec`, `kmin` (the minute is not metric), `B` (the bel, not in the table), `{x` (an unclosed annotation), `m//s`, `.s`, `s^2` and `""` are not. An annotation means the unity (UCUM §2.1.5): `{request}/s` is the dimension of `/s`, named. Parentheses, `10*`-style powers of ten and the rest of UCUM's atoms are not read; the table grows by proposal.
+The atoms, each with UCUM's definition (the *Factor* column is to the base of its dimension, below):
 
-A code has a **dimension** — the sum of its components' dimensions, each times its exponent, a quotient's negated — and a **factor**, the product of each component's factor (its prefix's times its atom's, or the integer) raised to its exponent, kept as an exact rational. `Cel` and `[degF]` are UCUM's *special* units, scales with an offset: they have a dimension but no factor, and so does any code that holds one.
+| Atom | Name | Metric | Dimension | Factor to the base | UCUM's definition | Symbol |
+|---|---|---|---|---|---|---|
+| `s` | second | yes | time | 1 | base | `s` |
+| `min` | minute | no | time | 60 | 60 `s` | `min` |
+| `h` | hour | no | time | 3,600 | 60 `min` | `h` |
+| `d` | day | no | time | 86,400 | 24 `h` | `d` |
+| `By` | byte | yes | information | 1 | 8 `bit` | `B` |
+| `bit` | bit | yes | information | 1/8 | `1` | `bit` |
+| `%` | percent | no | none | 1/100 | 10⁻² | `%` |
+| `[ppm]` | parts per million | no | none | 10⁻⁶ | 10⁻⁶ | `ppm` |
+| `[ppb]` | parts per billion | no | none | 10⁻⁹ | 10⁻⁹ | `ppb` |
+| `mol` | mole | yes | none | 6.02214076 × 10²³ | 6.02214076 × 10²³ | `mol` |
+| `Hz` | hertz | yes | time⁻¹ | 1 | `s-1` | `Hz` |
+| `Cel` | degree Celsius | yes | temperature | — (affine) | `cel(1 K)` | `°C` |
+| `[degF]` | degree Fahrenheit | no | temperature | — (affine) | `degf(5 K/9)` | `°F` |
+| `K` | kelvin | yes | temperature | 1 | base | `K` |
+| `m` | metre | yes | length | 1 | base | `m` |
+| `[in_i]` | inch | no | length | 127/5,000 | 2.54 `cm` | `in` |
+| `[ft_i]` | foot | no | length | 381/1,250 | 12 `[in_i]` | `ft` |
+| `[yd_i]` | yard | no | length | 1,143/1,250 | 3 `[ft_i]` | `yd` |
+| `[mi_i]` | mile | no | length | 201,168/125 | 5,280 `[ft_i]` | `mi` |
+| `[nmi_i]` | nautical mile | no | length | 1,852 | 1,852 `m` | `nmi` |
+| `ar` | are | yes | length² | 100 | 100 `m2` | `a` |
+| `[acr_us]` | acre (US survey) | no | length² | 62,726,400,000/15,499,969 | 160 `[rd_us]2`, the rod 16.5 survey feet of 1,200/3,937 `m` | `ac` |
+| `l`, `L` | litre | yes | length³ | 1/1,000 | `dm3` | `l`, `L` |
+| `[foz_us]` | US fluid ounce | no | length³ | 473,176,473/16 × 10⁻¹² | `[gal_us]`/128 | `fl oz` |
+| `[pt_us]` | US pint | no | length³ | 473,176,473 × 10⁻¹² | `[gal_us]`/8 | `pt` |
+| `[gal_us]` | US gallon | no | length³ | 473,176,473/125 × 10⁻⁹ | 231 `[in_i]3` | `gal` |
+| `[foz_br]` | imperial fluid ounce | no | length³ | 454,609/16 × 10⁻⁹ | `[gal_br]`/160 | `fl oz` |
+| `[pt_br]` | imperial pint | no | length³ | 454,609/8 × 10⁻⁸ | `[gal_br]`/8 | `pt` |
+| `[gal_br]` | imperial gallon | no | length³ | 454,609 × 10⁻⁸ | 4.54609 `l` | `gal` |
+| `g` | gram | yes | mass | 1 | base | `g` |
+| `t` | tonne | yes | mass | 10⁶ | 10³ `kg` | `t` |
+| `[oz_av]` | ounce (avoirdupois) | no | mass | 45,359,237/1,600,000 | `[lb_av]`/16 | `oz` |
+| `[lb_av]` | pound (avoirdupois) | no | mass | 45,359,237/100,000 | 7,000 grains of 64.79891 `mg` | `lb` |
+| `[stone_av]` | stone | no | mass | 317,514,659/50,000 | 14 `[lb_av]` | `st` |
+| `[kn_i]` | knot | no | length·time⁻¹ | 463/900 | `[nmi_i]/h` | `kn` |
+| `W` | watt | yes | mass·length²·time⁻³ | 1,000 | `J/s` | `W` |
+| `[HP]` | horsepower | no | mass·length²·time⁻³ | 37,284,993,579,113,511/(5 × 10¹⁰) | 550 `[ft_i].[lbf_av]/s` | `hp` |
+| `J` | joule | yes | mass·length²·time⁻² | 1,000 | `N.m` | `J` |
+| `cal` | calorie (thermochemical) | yes | mass·length²·time⁻² | 4,184 | `cal_th`, 4.184 `J` | `cal` |
+| `[Cal]` | nutrition-label Calorie | no | mass·length²·time⁻² | 4,184,000 | `kcal_th` | `Cal` |
+| `Pa` | pascal | yes | mass·length⁻¹·time⁻² | 1,000 | `N/m2` | `Pa` |
+| `bar` | bar | yes | mass·length⁻¹·time⁻² | 10⁸ | 10⁵ `Pa` | `bar` |
+| `[psi]` | pound per square inch | no | mass·length⁻¹·time⁻² | 8,896,443,230,521/1,290,320 | `[lbf_av]/[in_i]2` | `psi` |
+| `m[Hg]` | metre of mercury | yes | mass·length⁻¹·time⁻² | 133,322,000 | 133.3220 `kPa` | `mHg` |
+| `[in_i'Hg]` | inch of mercury | no | mass·length⁻¹·time⁻² | 16,931,894/5 | `m[Hg].[in_i]/m` | `inHg` |
+| `rad` | radian | yes | angle | 1 | base | `rad` |
+| `deg` | degree | no | angle | π/180 | `[pi].rad/360` × 2 | `°` |
+| `C` | coulomb | yes | charge | 1 | base | `C` |
+| `A` | ampere | yes | charge·time⁻¹ | 1 | `C/s` | `A` |
+| `V` | volt | yes | mass·length²·time⁻²·charge⁻¹ | 1,000 | `J/C` | `V` |
+| `lx` | lux | yes | luminous intensity·angle²·length⁻² | 1 | `lm/m2`, the lumen `cd.sr`, the steradian `rad2` | `lx` |
+| `B` | bel | yes | level | 1 (logarithmic) | `lg(1 1)` | `B` |
+| `B[SPL]` | bel sound pressure | yes | sound pressure level | 1 (logarithmic) | `2lg(2 10*-5.Pa)` | `B(SPL)` |
 
-**Display symbol.** `Visualize.Unit.symbol/2` writes a code as a reader reads it: each atom by the table's symbol, the prefix `u` as `µ`; a positive exponent above one as superscript digits (`m2` → `m²`); the components with a positive exponent joined by `·`, then `/` and those with a negative one by their magnitude, in parentheses when there are two or more (`kW.h` → `kW·h`, `By/s` → `B/s`, `Pa` stays `Pa`, `g/(m·s2)` → `g/(m·s²)`, `s-1` → `/s`); the factor `1` and an annotation are dropped, so `1` and `{request}` are `""` and `{request}/s` is `/s`. With `annotations: true` an annotation that stands alone as a component is written as its text without braces — `{request}/s` → `request/s`, `{request}` → `request` — and one attached to a unit is dropped even then, the unit saying more than its note (`By{heap}` → `B`).
+The bases are the second, the byte, the metre, the gram, the kelvin, the radian and the coulomb, so a watt is 1,000 g·m²·s⁻³, and the pound-force of `[HP]` and `[psi]` is `[lb_av]` times the standard acceleration of free fall, 9.80665 `m/s2`. A **symbol is matched whole before it is split**: `min` is the minute and `m` the metre, never a milli-`in` or a milli-nothing; `h` is the hour, `d` the day, `t` the tonne, `cal` the calorie and `bar` the bar, and only a symbol that is not an atom is read as a prefix and a metric atom, longest prefix first (`MiBy` is `Mi`·`By`, `dam` is `da`·`m`, `ms` is `m`·`s`, `kW` is `k`·`W`, `hPa` is `h`·`Pa`, `har` is `h`·`ar`, the hectare, `mm[Hg]` is `m`·`m[Hg]`, `dB` is `d`·`B`). So `s`, `ms`, `us`, `ns`, `min`, `h`, `d`, `By`, `kBy`, `MBy`, `GBy`, `TBy`, `KiBy`, `MiBy`, `GiBy`, `TiBy`, `bit`, `kbit`, `Mbit`, `%`, `[ppm]`, `Hz`, `kHz`, `Cel`, `[degF]`, `K`, `m`, `mm`, `cm`, `km`, `[in_i]`, `[ft_i]2`, `[mi_i]/h`, `[kn_i]`, `m2`, `har`, `[acr_us]`, `ml`, `dl`, `l`, `L`, `m3`, `[gal_us]`, `[pt_br]`, `g`, `kg`, `t`, `[lb_av]`, `[stone_av]`, `m/s`, `km/h`, `min/km`, `s-1`, `W`, `kW`, `[HP]`, `J`, `kJ`, `kW.h`, `cal`, `kcal`, `[Cal]`, `Pa`, `hPa`, `kPa`, `bar`, `mbar`, `[psi]`, `mm[Hg]`, `[in_i'Hg]`, `deg`, `rad`, `V`, `mA`, `mA.h`, `lx`, `ug/m3`, `mg/dl`, `mmol/l`, `B`, `dB`, `dB[SPL]`, `1`, `{request}`, `{request}/s`, `{beat}/min`, `/s` and `By{heap}` are codes; `sec`, `kmin` (the minute is not metric), `k[in_i]` (nor is the inch), `ft` (the foot is `[ft_i]`), `{x` (an unclosed annotation), `[in_i` (an unclosed bracket), `m//s`, `.s`, `s^2` and `""` are not. `B`, `kB` and `MB` are codes, but they are the bel, the kilobel and the megabel: a person's `MB` is read by `parse_alias/1` (below), never by `parse/1`. An annotation means the unity (UCUM §2.1.5): `{request}/s` is the dimension of `/s`, named. Parentheses, `10*`-style powers of ten, arcminutes and arcseconds, and the rest of UCUM's atoms are not read; the table grows by proposal.
 
-**Scaling** within a dimension is multiplication by a ratio of factors: `Visualize.Unit.convert(value, from, to)` is `value × factor(from) / factor(to)` for two codes of one dimension and both with a factor, and raises `ArgumentError` otherwise. That is display scaling — 1,500 `ms` is 1.5 `s` — and not conversion between unit systems: `Cel` to `[degF]` (or to `K`) is out of scope (#536) and raises.
+A code has a **dimension** — the sum of its components' dimensions, each times its exponent, a quotient's negated — and a **factor**, the product of each component's factor (its prefix's times its atom's, or the integer) raised to its exponent, kept exact: a rational, times an integer power of π when the code holds `deg` (`factor/1` answers `{n, d}`, or `{n, d, k}` for n/d·πᵏ with k ≠ 0). The dimensions are `:time`, `:information`, `:length`, `:mass`, `:temperature`, `:angle`, `:charge` and `:luminous_intensity`, as UCUM's base units are, and two **level** dimensions (below). The mole is UCUM's number, so `mol` is dimensionless and `mmol/l` has the dimension of `/l`.
+
+**Special units.** `Cel` and `[degF]` are UCUM's *affine* special units, scales with an offset: they have a dimension but no factor, and so does any code that holds one. `B` and `B[SPL]` are UCUM's *logarithmic* units. UCUM gives a logarithmic unit the dimension of its argument; visualize gives each logarithmic reference a **level dimension** of its own instead — `:level` for `B`, the level of a bare ratio, and `:sound_pressure_level` for `B[SPL]` — so a level never meets the linear unit it is a logarithm of, and `dB[SPL]` is not a pressure (D-155). Within its level a logarithmic unit scales by its prefix like any other — a decibel is a tenth of a bel — so it has a factor; `Visualize.Unit.kind/1` says which kind a code is: `:linear`, `:affine` (it holds `Cel` or `[degF]`) or `:logarithmic` (it holds `B` or `B[SPL]`).
+
+**Aliases.** `Visualize.Unit.parse_alias/1` reads the symbols people type and metresis stored (D-155) — `°C`, `°F`, `lb`, `st`, `mph`, `kn`, `inHg`, `mmHg`, `psi`, `kWh`, `B`, `KiB`, `ha`, `ac` — to codes, `{:ok, code}`, and **refuses an ambiguous one, naming its choices**: `{:error, {:ambiguous, alias, choices}}`, `choices` a list of `{code, meaning}`:
+
+| Alias | Choices |
+|---|---|
+| `KB`, `kB` | `kBy` (1,000 bytes), `KiBy` (1,024 bytes) |
+| `MB`, `GB`, `TB` | `MBy`/`MiBy`, `GBy`/`GiBy`, `TBy`/`TiBy` likewise |
+| `gal`, `pt`, `floz`, `fl oz` | `[gal_us]` (US gallon), `[gal_br]` (imperial gallon); the pint and the fluid ounce (`floz`, `fl oz`) likewise |
+| `oz` | `[oz_av]` (ounce, mass), `[foz_us]` (US fluid ounce), `[foz_br]` (imperial fluid ounce) |
+| `cal` | `cal` (calorie), `[Cal]` (food Calorie, a kilocalorie) |
+| `C` | `Cel` (degree Celsius), `C` (coulomb) |
+| `dB` | `dB` (a level ratio), `dB[SPL]` (sound pressure level) |
+| `kt` | `[kn_i]` (knot), `kt` (kilotonne) |
+
+The alias table is read first, so an alias wins over a UCUM reading of the same spelling — a person who types `B` means a byte, and gets `By`. A string the table does not hold is read by `parse/1`: a valid code is its own alias (`{:ok, "kPa"}`), and any other is `{:error, {:unknown_alias, string}}`. Surrounding whitespace is ignored. `Visualize.Unit.format_error/1` words a refusal for a person: `"KB" is ambiguous: kBy (1,000 bytes) or KiBy (1,024 bytes)`.
+
+**Display symbol.** `Visualize.Unit.symbol/2` writes a code as a reader reads it: each atom by the table's symbol, the prefix `u` as `µ`; a positive exponent above one as superscript digits (`m2` → `m²`); the components with a positive exponent joined by `·`, then `/` and those with a negative one by their magnitude, in parentheses when there are two or more (`kW.h` → `kW·h`, `By/s` → `B/s`, `Pa` stays `Pa`, `g/(m·s2)` → `g/(m·s²)`, `s-1` → `/s`, `[ft_i]2` → `ft²`, `[mi_i]/h` → `mi/h`, `har` → `ha`, `mm[Hg]` → `mmHg`, `dB[SPL]` → `dB(SPL)`, `deg` → `°`); the factor `1` and an annotation are dropped, so `1` and `{request}` are `""` and `{request}/s` is `/s`. With `annotations: true` an annotation that stands alone as a component is written as its text without braces — `{request}/s` → `request/s`, `{request}` → `request` — and one attached to a unit is dropped even then, the unit saying more than its note (`By{heap}` → `B`).
+
+**Scaling** within a dimension is multiplication by a ratio of factors: `Visualize.Unit.convert(value, from, to)` is `value × factor(from) / factor(to)` for two codes of one dimension and both with a factor — the ratio computed exactly, π included, and applied once, so 180 `deg` is π `rad` and 30 `dB` is 3 `B` — and raises `ArgumentError` otherwise. That is display scaling — 1,500 `ms` is 1.5 `s` — and not conversion between unit systems: `Cel` to `[degF]` (or to `K`) is out of scope (#536) and raises.
 
 **`Telemetry.Metrics` units.** `Visualize.Unit.from_telemetry/1` maps the unit atom a `Telemetry.Metrics` definition carries — or the `to` of its `{from, to}` conversion — to a code. visualize does not depend on `telemetry_metrics`; this is a table of atoms:
 
@@ -426,8 +484,11 @@ The symbol follows the number after a space (`1.5 s`, `20 °C`, `2.5 MB`), excep
 |---|---|
 | `Visualize.Unit.parse/1` | `{:ok, components}` for a code (4.1), each `%{prefix: String.t() \| nil, atom: String.t() \| nil, factor: pos_integer() \| nil, annotation: String.t() \| nil, exponent: integer()}` with a quotient's exponent negated; `{:error, reason}` — `:empty`, `{:syntax, rest}` at the first character that does not read, `{:unknown_atom, symbol}`, `{:not_metric, prefix, atom}`. |
 | `Visualize.Unit.valid?/1` | Whether a string is a code (4.1). |
-| `Visualize.Unit.dimension/1` | The dimension of a code, a map from `:time`, `:information`, `:length`, `:mass`, `:temperature` to a non-zero exponent (`%{}` dimensionless); raises `ArgumentError` for a code that does not read. |
-| `Visualize.Unit.factor/1` | The factor of a code to its base, an exact `{numerator, denominator}`, or `nil` for one holding a special unit; raises as `dimension/1`. |
+| `Visualize.Unit.parse_alias/1` | `{:ok, code}` for a symbol a person types, by the alias table and then `parse/1`; `{:error, {:ambiguous, alias, [{code, meaning}, …]}}` naming the choices, or `{:error, {:unknown_alias, string}}` (4.1). |
+| `Visualize.Unit.format_error/1` | A refusal of `parse/1` or `parse_alias/1` as a line a person reads (4.1). |
+| `Visualize.Unit.kind/1` | `:linear`, `:affine` (a code holding `Cel` or `[degF]`) or `:logarithmic` (one holding `B` or `B[SPL]`); raises `ArgumentError` for a code that does not read (4.1). |
+| `Visualize.Unit.dimension/1` | The dimension of a code, a map from `:time`, `:information`, `:length`, `:mass`, `:temperature`, `:angle`, `:charge`, `:luminous_intensity`, `:level` and `:sound_pressure_level` to a non-zero exponent (`%{}` dimensionless); raises `ArgumentError` for a code that does not read. |
+| `Visualize.Unit.factor/1` | The factor of a code to its base, an exact `{numerator, denominator}`, `{numerator, denominator, k}` for one holding π (n/d·πᵏ), or `nil` for one holding an affine unit; raises as `dimension/1`. |
 | `Visualize.Unit.convert/3` | `value × factor(from) / factor(to)` for two codes of one dimension with factors; `ArgumentError` otherwise (4.1). |
 | `Visualize.Unit.symbol/1` | As `symbol/2` with `[]` options. |
 | `Visualize.Unit.symbol/2` | The display symbol of a code, `annotations:` (default `false`) writing a lone annotation's text (4.1). |

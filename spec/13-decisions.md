@@ -1475,3 +1475,44 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
   - A design that bound it to a time scale never drew, and still does not, now reported as a type fault.
 - **The builder's sample rows** give a `:number` window field its row's place, so a tick feed's preview counts as a tick does.
 - **Gaps are measured in the window field's units.** spec/15 §8.5's "a numeric clock is read in seconds" is now "in its own units", since `continuity` is measured along the window field.
+
+## 155. D-155 — One units vocabulary for every host: UCUM grows to the units hosts log, codes convert exactly, quantities carry their facts and unit systems, and currency is a marked extension
+
+**Context.** #589, accepted with modifications. It amends D-138 and leaves D-138's text as it stands. D-138 made units UCUM codes over a small table, with twelve quantities, and put conversion between unit systems out of scope. metresis kept a second vocabulary (`Metresis.Units`, its spec §4.4): fifteen quantity families keyed by display symbols, exact conversion within a family (°C↔°F included), per-viewer `metric | imperial | as_posted` display, bounds, aggregation exclusions and currency. Neither covered the other, and metresis's symbols are ambiguous where UCUM is not: `KB` is 1,000 or 1,024 bytes, `gal`, `pt` and `floz` do not say US or imperial, and `cal` hides several calories. The owner decided on 2026-10-12 that the vocabulary lives in visualize, the library, and that metresis uses it from there and deletes its copy (metresis#429). A shared vocabulary that cannot convert would leave metresis keeping its own, so D-138's "conversion is out of scope" no longer holds.
+
+**Decision.**
+- **UCUM stays the vocabulary, and its table grows to the units hosts log** (spec/05 §4.1). Each new atom is UCUM's, with UCUM's definition, checked against the UCUM essence table (version 2.2, 2024-06-17):
+  - SI and derived: `l`, `L`, `t`, `ar`, `V`, `A`, `C`, `lx`, `mol`, `bar`, `deg`, `rad`.
+  - Customary: `[in_i]`, `[ft_i]`, `[yd_i]`, `[mi_i]`, `[nmi_i]`, `[kn_i]`, `[acr_us]`, `[oz_av]`, `[lb_av]`, `[stone_av]`, `[foz_us]`, `[pt_us]`, `[gal_us]`, `[foz_br]`, `[pt_br]`, `[gal_br]`, `[psi]`, `m[Hg]`, `[in_i'Hg]`, `[HP]`.
+  - Energy and ratios: `cal` (UCUM's thermochemical calorie), `[Cal]`, `[ppm]`, `[ppb]`.
+  - Logarithmic: `B` and `B[SPL]`.
+  - The prefixes `c`, `d`, `h`, `da`, `T`, `Ti` and `p` join the table, so `cm`, `dl`, `hPa`, `har`, `TBy`, `TiBy` and `dB` read.
+  - Arcminutes and arcseconds are left out until a host needs them.
+  - The grammar is D-138's. A symbol may now mix letters and a bracketed part, as UCUM's do (`mm[Hg]`, `dB[SPL]`), and it is still matched whole before it is split.
+- **New dimensions follow UCUM's base units.** The plane angle has base `rad`, and `deg` is π/180 of it, so a factor is an exact rational times an integer power of π. Electric charge has base `C`, and luminous intensity sits under `lx`. The mole is UCUM's dimensionless 6.02214076 × 10²³.
+- **A level is not a linear quantity.** UCUM gives `B` the dimension of its argument. visualize gives each logarithmic reference a level dimension of its own instead: `:level` for `B`, a bare ratio level, and `:sound_pressure_level` for `B[SPL]`. So `dB` converts to `B` (a decibel is a prefixed bel), and never to a linear unit or to a sound level. A bare `dB` is a dimensionless level ratio, not a sound level.
+- **Aliases are a separate door, not part of `parse/1`.** `Visualize.Unit.parse_alias/1` reads the symbols people type (`°C`, `lb`, `mph`, `inHg`, `kWh`) as codes. It refuses an ambiguous symbol and names its choices, so `KB` gets "1,000 bytes is `kBy`, 1,024 is `KiBy`" and `gal` gets `[gal_us]` or `[gal_br]`. Its table wins over a UCUM reading of the same spelling, because a person who types `B` or `MB` means bytes and not bels. Only a spelling the table does not hold falls through to `parse/1`. A host never keeps its own alias table.
+- **Conversion is in scope and exact.** It is computed from the codes' exact factors, so a value is rounded once.
+  - The affine units `Cel`, `[degF]` and `K` convert with their offsets, standing alone.
+  - Logarithmic units convert only to their own level.
+  - Currency never converts, because an exchange rate is data and not a fact about a unit.
+  - `convert/3` keeps D-138's contract of a number or `ArgumentError`, which the display scaling relies on. `conversion/2` answers `{:ok, {scale, offset}}` or a reason, so a host can migrate stored rows with one `value × scale + offset`, as metresis does.
+- **Quantities carry the facts a host needs** (spec/05 §4.2).
+  - Every quantity has a base unit, a `kind` (`:linear`, `:affine`, `:logarithmic` or `:cyclic`) and bounds.
+  - **Bounds are a display hint, never validation.** They tell an axis where to anchor and whether to include zero. A value outside them is never refused, because differences are legitimately negative.
+  - **Additivity depends on the aggregation.** A quantity carries two physical defaults, `additive_across` (summing series at one instant) and `additive_over_time` (summing one series over time). A field's schema may state a `metric_kind` (`:gauge`, `:counter` or `:rate`), a new optional key of D-136's description, and that refines them. A gauge does not add over time. A counter's increments do, when the quantity adds at all. A rate integrates rather than adds over time. A host derives its aggregation exclusions from the two together.
+  - The list grows to the union of the two vocabularies plus what hosts already log: `area`, `volume`, `mass`, `pace`, `angle`, `currency`, `electric_potential`, `electric_current`, `electric_charge`, `illuminance`, `sound_level`, `mass_concentration` and `amount_concentration`. A percent stays a `ratio` written in `%`.
+- **Unit systems are `:metric`, `:us`, `:uk` and `:as_posted`**, because "imperial" is ambiguous in the way `gal` is. The UK uses stones, imperial pints and °C. A system picks the display family a quantity is shown in, at display time and never in storage. The default is `:as_posted`, which is D-138's display scaling: the data's unit, rescaled only within its own family. A preference that crosses dimensions is not a system switch. That covers mg/dL against mmol/L, which needs a molar mass, and pace against speed, which is a reciprocal. Such a preference stays a per-field choice.
+- **Currency is a marked extension, `{iso4217:XXX}`.**
+  - It is valid UCUM syntax, an annotation. visualize gives each code of a fixed ISO 4217 table, which carries minor units (JPY 0, BHD 3), a currency dimension of its own.
+  - Mixing two codes is refused. The codes compose (`{iso4217:USD}/h`, `{iso4217:EUR}/kW.h`). They never convert.
+  - The spec says plainly that to any other UCUM reader `{iso4217:USD}` and `{iso4217:EUR}` are both the dimensionless `1`, and so equal. visualize never hands these codes to a UCUM consumer without that caveat.
+- **Formats per quantity go through `Visualize.Format` with `locale:`.** These are currency by code and its minor units (`$1,240.00`, `¥1,240`), angle (`350°`), and the compound duration (`1h 24m`, `840ms`). The compound duration is for labels and tooltips only. An axis keeps D-138's single scaled unit (`1.4 h`), one unit per axis.
+- **metresis's vocabulary is the acceptance test.** A parity table in visualize's tests lists every unit of metresis's spec §4.4, taken from a named metresis commit, with its code here. It checks that each is expressible. Then, as the work items land, it checks that each converts and formats as `Metresis.Units` does, and it names every difference and why. metresis deletes its copy only against that table.
+
+**Consequences.**
+- A host stops keeping a unit table: metresis's ingest, profiles and forms call `parse_alias/1`, its migrations `conversion/2`, and its views `display_unit/3`.
+- `B`, `kB`, `MB` and `pt` are now valid codes: the bel, the kilobel, the megabel and the picotonne. That is UCUM's reading, and it is why a person's input goes through `parse_alias/1`, which reads them as bytes or refuses them.
+- `factor/1` answers a three-tuple for a code that holds π.
+- A design or schema that names none of the new quantities, keys or units draws as before.
+- Where UCUM's definition differs from metresis's (mm Hg, inch of mercury), visualize keeps UCUM's and the parity table records the difference.

@@ -25,7 +25,10 @@ defmodule Visualize.UnitTest do
 
     test "typos and what UCUM does not say are refused, each with its reason" do
       assert Unit.parse("sec") == {:error, {:unknown_atom, "sec"}}
-      assert Unit.parse("B") == {:error, {:unknown_atom, "B"}}
+      assert Unit.parse("ft") == {:error, {:unknown_atom, "ft"}}
+      assert Unit.parse("k[in_i]") == {:error, {:not_metric, "k", "[in_i]"}}
+      assert Unit.parse("[in_i") == {:error, {:syntax, "[in_i"}}
+      assert Unit.parse("mm[Hg") == {:error, {:syntax, "[Hg"}}
       assert Unit.parse("kmin") == {:error, {:not_metric, "k", "min"}}
       assert Unit.parse("k%") == {:error, {:not_metric, "k", "%"}}
       assert Unit.parse("{x") == {:error, {:syntax, "{x"}}
