@@ -15,7 +15,7 @@ Visualize is on [Hex](https://hex.pm/packages/visualize):
 ```elixir
 def deps do
   [
-    {:visualize, "~> 0.2"},
+    {:visualize, "~> 0.3"},
     # Optional. Each one switches on a feature and is never required:
     {:phoenix_live_view, "~> 1.0"}, # the function components and the chart builder
     {:nx, "~> 0.9"},                # the binary canvas stream, for dense data
