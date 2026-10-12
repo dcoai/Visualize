@@ -493,7 +493,29 @@ release it merely follows.
 
 ### Fixed
 
-- **The examples' performance drawer test failed under load** (#567, D-148): a tick's
+- **Binding a feed of the wrong type no longer takes the builder down** (#584, #582, D-153).
+  Each field a mark reads through a scale is now checked against what the scale's kind
+  needs: a time scale needs `:time`, band and ordinal need `:category` (or `:text`), and
+  every other kind needs `:number`. A mismatch is the new fault
+  `{:type_mismatch, slot, field, expected, given}`, at the channel, style or offset that
+  reads the field.
+  - `Visualize.Chart.apply/2` reports it wherever a schema is bound. A slot with no contract
+    now has its delivery's schema resolved for the check, and a schema it cannot resolve is
+    no fault. A schema's `:time` passes on a numeric scale, because a feed may write its
+    time as numbers (`Visualize.Feed.Signals`' ticks). Rows with no schema still raise from
+    the frame, as before.
+  - `Visualize.Board.Binding.check/3` reports it per cell, and
+    `Visualize.Board.required_sources/3` gives each slot its `reads`.
+  - New pure checks: `Visualize.Chart.check_types/2` and
+    `Visualize.Board.Binding.check_types/3`. Each takes a schema or a plain map of types,
+    such as `Visualize.Data.Table.column_types/1` reads from rows.
+  - The builder's single-chart preview, its inspector and the board mode's cells check
+    before they apply. A wrong binding is drawn as a fault panel in the board runtime's
+    cell-state style, with every fault listed beneath it, and is never a crash.
+  - A board cell whose application fails with a type mismatch is now in the new state
+    `{:invalid, errors}` ("Wrong binding"), not `{:down, …}` ("Feed down").
+- **The examples' performance drawer test failed under load**
+ (#567, D-148): a tick's
   elapsed time came from the real clock, so a strip meant to scroll two columns scrolled a
   hundred on a busy machine and crossed its byte budget. The chart page reads every instant
   of a run through a `run_clock` it holds, and its tests drive that clock exactly. Nothing a

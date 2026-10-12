@@ -36,6 +36,7 @@ defmodule Visualize.Board.Binding do
 
   """
 
+  alias Visualize.Chart.Types
   alias Visualize.Data.Schema
 
   defstruct slots: %{}
@@ -49,7 +50,12 @@ defmodule Visualize.Board.Binding do
   @type t :: %__MODULE__{slots: %{key() => feed()}}
 
   @typedoc "What one slot of a board needs, as `Visualize.Board.required_sources/3` gives it."
-  @type need :: %{fields: [atom()], types: %{atom() => atom()}, requires: %{atom() => [atom()]}}
+  @type need :: %{
+          required(:fields) => [atom()],
+          required(:types) => %{atom() => atom()},
+          required(:requires) => %{atom() => [atom()]},
+          optional(:reads) => [{list(), atom(), Visualize.Chart.need()}]
+        }
 
   @typedoc "The feeds' schemas: a map from feed to schema, or a feed's describe function."
   @type schemas :: %{feed() => Schema.t()} | (feed() -> {:ok, Schema.t()} | {:error, term()})
@@ -99,9 +105,14 @@ defmodule Visualize.Board.Binding do
       `{:missing_attribute, slot, field, key}` under `:requires`, and each declared
       type it contradicts `{:schema_type, field, declared, described}` under `:types` —
       the reasons and words of `Visualize.Chart.apply/2` (spec/14 §7.4);
+    * for a bound slot whose `reads` is not empty, each field its schema types as its
+      scale cannot take is `{:type_mismatch, slot, field, expected, given}` at
+      `[:cells, cell | path]`, the read's path in the component (D-153); a schema wanted
+      only for this is no fault where it cannot be had;
     * a binding of a slot nothing requires is `:not_required`.
 
-  A slot whose contract is empty is not looked up, and a feed is described at most once.
+  A slot whose contract and `reads` are empty is not looked up, and a feed is described at
+  most once.
   """
   @spec check(t(), %{key() => need()}, schemas()) :: :ok | {:error, [{list(), term()}, ...]}
   def check(%__MODULE__{slots: slots}, required, schemas) when is_map(required) do
@@ -116,7 +127,7 @@ defmodule Visualize.Board.Binding do
             {[{path, {:unbound, :binding, slot}} | errors], seen}
 
           {:ok, feed} ->
-            {faults, seen} = contract(path, slot, need, feed, schemas, seen)
+            {faults, seen} = contract(path, {cell, slot}, need, feed, schemas, seen)
             {faults ++ errors, seen}
         end
       end)
@@ -132,22 +143,30 @@ defmodule Visualize.Board.Binding do
     end
   end
 
-  # The facts a slot did not ask for are not read (spec/14 §7.4): an empty contract
-  # needs no schema.
-  defp contract(_path, _slot, %{requires: requires}, _feed, _schemas, seen)
-       when map_size(requires) == 0,
-       do: {[], seen}
+  # The facts a slot did not ask for are not read (spec/14 §7.4): an empty contract with
+  # nothing read through a scale needs no schema, and a schema wanted only for the type
+  # check (D-153) is no fault where it cannot be had.
+  defp contract(path, {cell, slot}, need, feed, schemas, seen) do
+    required? = map_size(Map.get(need, :requires, %{})) > 0
+    reads = Map.get(need, :reads, [])
 
-  defp contract(path, slot, need, feed, schemas, seen) do
-    {answer, seen} = schema(feed, schemas, seen)
+    if required? or reads != [] do
+      {answer, seen} = schema(feed, schemas, seen)
 
-    faults =
-      case answer do
-        {:ok, schema} -> missing(path, slot, need, schema) ++ disagreements(path, need, schema)
-        {:error, reason} -> [{path, reason}]
-      end
+      faults =
+        case answer do
+          {:ok, schema} ->
+            missing(path, slot, need, schema) ++
+              disagreements(path, need, schema) ++ mismatches(cell, slot, reads, schema)
 
-    {faults, seen}
+          {:error, reason} ->
+            if required?, do: [{path, reason}], else: []
+        end
+
+      {faults, seen}
+    else
+      {[], seen}
+    end
   end
 
   defp schema(feed, _schemas, seen) when is_map_key(seen, feed),
@@ -172,6 +191,15 @@ defmodule Visualize.Board.Binding do
     {answer, Map.put(seen, feed, answer)}
   end
 
+  # Each read whose field's known type its scale cannot take (spec/14 §7.4, D-153), at
+  # the read's path under the cell.
+  defp mismatches(cell, slot, reads, known) do
+    reads
+    |> Enum.map(fn {path, field, need} -> {path, slot, field, need} end)
+    |> Types.faults(%{slot => known})
+    |> Enum.map(fn {path, reason} -> {[:cells, cell | path], reason} end)
+  end
+
   defp missing(path, slot, %{requires: requires}, schema) do
     for {field, keys} <- requires,
         key <- keys,
@@ -184,6 +212,44 @@ defmodule Visualize.Board.Binding do
         {:ok, described} <- [Schema.fetch(schema, field, :type)],
         described != declared,
         do: {path ++ [:types, field], {:schema_type, field, declared, described}}
+  end
+
+  @doc """
+  `:ok`, or every field a bound slot's component reads through a scale whose known type
+  the scale's kind cannot take (spec/15 §4.3, spec/14 §7.4, D-153):
+  `{:type_mismatch, slot, field, expected, given}` at `[:cells, cell | path]`, the read's
+  path in the component, ordered by path.
+
+  `types` maps a feed to what is known of its fields: a `Visualize.Data.Schema`, or a map
+  from field to type, as `Visualize.Data.Table.column_types/1` reads it from a sample's
+  rows. An unbound slot, and a feed the map does not hold, are not checked — that is
+  `check/3`'s to report.
+
+      iex> alias Visualize.Board.Binding
+      iex> binding = Binding.new(%{{:wave, :points} => :clock})
+      iex> required = %{
+      ...>   {:wave, :points} => %{fields: [:t, :v], types: %{}, requires: %{},
+      ...>     reads: [{[:marks, 0, :channels, :x], :t, :number}]}
+      ...> }
+      iex> Binding.check_types(binding, required, %{clock: %{t: :time, v: :number}})
+      {:error,
+       [{[:cells, :wave, :marks, 0, :channels, :x], {:type_mismatch, :points, :t, :number, :time}}]}
+  """
+  @spec check_types(t(), %{key() => need()}, %{feed() => Visualize.Chart.field_types()}) ::
+          :ok | {:error, [{list(), term()}, ...]}
+  def check_types(%__MODULE__{slots: slots}, required, types)
+      when is_map(required) and is_map(types) do
+    faults =
+      for {{cell, slot} = key, need} <- required,
+          {:ok, feed} <- [Map.fetch(slots, key)],
+          {:ok, known} <- [Map.fetch(types, feed)],
+          fault <- mismatches(cell, slot, Map.get(need, :reads, []), known),
+          do: fault
+
+    case Enum.sort_by(faults, &elem(&1, 0)) do
+      [] -> :ok
+      faults -> {:error, faults}
+    end
   end
 
   @doc """

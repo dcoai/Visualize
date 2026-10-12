@@ -261,5 +261,60 @@ defmodule ExamplesWeb.BuilderLiveTest do
       assert page.assigns.bindings[board_id] == binding
       assert page.assigns.saved =~ "bound: 8 slot(s)"
     end
+
+    # A wrong binding is a fault panel, never a crash (spec/14 §18.4, §22.6, D-153): every
+    # component of the library in a cell, its slots bound to each of the page's feeds in turn.
+    test "any component binds to any feed without taking the builder down" do
+      alias Visualize.Chart.Builder
+      alias Visualize.Chart.Builder.{Boards, Editing, Store}
+      require Phoenix.LiveViewTest
+
+      {page, s} = board_mode()
+      event = fn s, name, params -> elem(Builder.handle_event(name, params, s), 1) end
+
+      s =
+        Enum.reduce(Map.keys(s.assigns.board.cells) -- [:wave], s, fn cell, s ->
+          event.(s, "board_remove", %{"cell" => Atom.to_string(cell)})
+        end)
+
+      s = event.(s, "board_select", %{"cell" => "wave"})
+      feeds = Map.keys(page.assigns.catalog)
+
+      bind = fn s, feed ->
+        slots = Editing.editing(s.assigns).board_mode.selected.slots
+
+        Enum.reduce(slots, s, fn %{name: slot}, s ->
+          key = "slot." <> slot
+          event.(s, "board_bind", %{"_target" => [key], key => Boards.feed_key(feed)})
+        end)
+      end
+
+      shown =
+        for %{kind: :composite, id: id} <- Library.list(nil),
+            s = event.(s, "board_cell", %{"_target" => ["ref"], "ref" => Store.encode_id(id)}),
+            s.assigns.board.cells.wave.ref == id,
+            reduce: [] do
+          shown ->
+            {s, previews} =
+              Enum.reduce(feeds, {s, []}, fn feed, {s, previews} ->
+                s = bind.(s, feed)
+                [cell] = Editing.editing(s.assigns).board_mode.cells
+                {s, [elem(cell.preview, 0) | previews]}
+              end)
+
+            # The page draws, whatever the last binding was.
+            html =
+              s.assigns
+              |> Map.drop([:__changed__, :flash, :myself])
+              |> Map.put(:layers, Map.get(s.assigns, :host_layers, []))
+              |> then(&Phoenix.LiveViewTest.render_component(Builder, &1))
+
+            assert html =~ ~s(data-board-cell="wave")
+            previews ++ shown
+        end
+
+      assert :fault in shown
+      assert :ok in shown
+    end
   end
 end

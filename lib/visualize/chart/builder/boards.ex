@@ -17,6 +17,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     use Phoenix.Component
 
     alias Visualize.{Board, Chart}
+    alias Visualize.Board.State
     alias Visualize.Board.Validator, as: BoardValidator
 
     # A new cell's size, in squares: a third of the grid across, two rows down (§22.3).
@@ -25,6 +26,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The width a preview is realised at: the runtime's default (spec/15 §6).
     @width 1200
+    # The fault panel's box: the cell-state drawing is responsive, so this is its aspect.
+    @fault_size {600, 240}
 
     # -- placing (§22.3) -------------------------------------------------------------------
 
@@ -328,33 +331,60 @@ if Code.ensure_loaded?(Phoenix.Component) do
       * `:theme` - as `Visualize.Chart.apply/2` takes it
       * `:describe` - `({cell, slot} -> {:ok, schema} | {:error, reason})`, as
         `Visualize.Board.realise/4` takes it: the schema of a slot's feed
+      * `:refused` - each cell the binding's type check refused, by its name, with its
+        faults (D-153): it is not realised, and is drawn as the fault panel
+
+    A cell whose binding has the wrong type — refused, or reporting a `{:type_mismatch, …}`
+    from application — is `{:fault, svg, lines}`: the board runtime's cell-state panel of
+    `{:invalid, errors}` and every fault's words (spec/14 §18.4, §22.6).
     """
     @spec preview(Board.t(), Board.store(), keyword()) :: %{
-            atom() => {:ok, String.t()} | {:error, [String.t()]}
+            atom() =>
+              {:ok, String.t()} | {:error, [String.t()]} | {:fault, String.t(), [String.t()]}
           }
     def preview(%Board{cells: cells} = board, fetch, opts) do
       pools = Keyword.get(opts, :pools, %{})
+      refused = Keyword.get(opts, :refused, %{})
+      theme = Keyword.get(opts, :theme) || Visualize.Theme.default()
       shared = [width: @width] ++ Keyword.take(opts, [:theme, :describe])
 
       Map.new(cells, fn {name, cell} ->
-        alone = %{board | cells: %{name => cell}}
-
         drawn =
-          case Board.realise(alone, fetch, %{name => Map.get(pools, name, %{})}, shared) do
-            {:ok, %{^name => applied}, _cache} ->
-              {:ok,
-               Chart.render(applied,
-                 root: true,
-                 responsive: true,
-                 title: Map.get(cell, :title) || Atom.to_string(name)
-               )}
+          case Map.fetch(refused, name) do
+            {:ok, errors} ->
+              fault(errors, theme)
 
-            {:error, errors} ->
-              {:error, Enum.map(errors, &Board.format_error/1)}
+            :error ->
+              alone = %{board | cells: %{name => cell}}
+              realised(alone, name, cell, fetch, Map.get(pools, name, %{}), shared, theme)
           end
 
         {name, drawn}
       end)
+    end
+
+    # The cell applied alone and drawn; one whose application reports a type fault is the
+    # fault panel, any other fault its lines.
+    defp realised(alone, name, cell, fetch, pool, shared, theme) do
+      case Board.realise(alone, fetch, %{name => pool}, shared) do
+        {:ok, %{^name => applied}, _cache} ->
+          {:ok,
+           Chart.render(applied,
+             root: true,
+             responsive: true,
+             title: Map.get(cell, :title) || Atom.to_string(name)
+           )}
+
+        {:error, errors} ->
+          if Enum.any?(errors, &match?({_path, {:type_mismatch, _, _, _, _}}, &1)),
+            do: fault(errors, theme),
+            else: {:error, Enum.map(errors, &Board.format_error/1)}
+      end
+    end
+
+    defp fault(errors, theme) do
+      {:fault, State.render({:invalid, errors}, theme, @fault_size),
+       Enum.map(errors, &Board.format_error/1)}
     end
 
     # -- the panel (§22.4) -----------------------------------------------------------------------

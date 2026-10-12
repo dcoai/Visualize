@@ -339,19 +339,33 @@ defmodule Visualize.BoardTest do
   end
 
   describe "required sources" do
-    test "the aggregate of the cells' slots, namespaced per cell, with each contract" do
+    test "the aggregate of the cells' slots, namespaced per cell, with each contract and reads" do
       {:ok, required} = Board.required_sources(Board.from_map!(board()), store())
 
       line = %{
         fields: [:t, :v],
         types: %{t: :number, v: :number},
-        requires: %{v: [:unit, :label]}
+        requires: %{v: [:unit, :label]},
+        reads: [
+          {[:marks, 0, :channels, :x], :t, :number},
+          {[:marks, 0, :channels, :y], :v, :number}
+        ]
+      }
+
+      gauge = %{
+        fields: [:n, :v],
+        types: %{},
+        requires: %{},
+        reads: [
+          {[:marks, 0, :channels, :angle], :n, :number},
+          {[:marks, 0, :channels, :value], :v, :number}
+        ]
       }
 
       assert required == %{
                {:latency, :primary} => line,
                {:eu, :primary} => line,
-               {:gauge, :reading} => %{fields: [:n, :v], types: %{}, requires: %{}}
+               {:gauge, :reading} => gauge
              }
     end
 

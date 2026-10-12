@@ -42,7 +42,7 @@ defmodule Visualize.Board do
 
   alias Visualize.Board.{Codec, Validator}
   alias Visualize.Chart
-  alias Visualize.Chart.{Limits, Migration}
+  alias Visualize.Chart.{Limits, Migration, Types}
   alias Visualize.Chart.Validator, as: ChartValidator
   alias Visualize.Chart.Validator.Words
   alias Visualize.Data.Schema.Cache
@@ -504,9 +504,10 @@ defmodule Visualize.Board do
 
   @doc """
   The board's sources: every cell's component's slots, keyed `{cell, slot}`, each with
-  its `fields`, its `types` and its `requires` contract — the slot's own with every
+  its `fields`, its `types`, its `requires` contract — the slot's own with every
   attribute a fact of it reads, as `Visualize.Chart.contract/1` gives it (spec/15 §4.1,
-  D-136). One design used in two cells is two sets of slots, bound independently.
+  D-136) — and its `reads`: each field the component reads from it through a scale, as
+  `{path, field, need}`, `need` the type the scale's kind needs (spec/14 §7.4, D-153). One design used in two cells is two sets of slots, bound independently.
 
   Components are resolved through the store as `validate/3` resolves them, with
   `limits:`; the faults that keep one from being read are `{:error, errors}`.
@@ -524,12 +525,14 @@ defmodule Visualize.Board do
 
   defp slots({cell, %Chart{sources: sources} = chart}, acc) do
     contract = Chart.contract(chart)
+    reads = chart |> Chart.to_map() |> Types.reads()
 
     Enum.reduce(sources, acc, fn {slot, node}, acc ->
       need = %{
         fields: Map.get(node, :fields, []),
         types: Map.get(node, :types, %{}),
-        requires: Map.get(contract, slot, %{})
+        requires: Map.get(contract, slot, %{}),
+        reads: for({path, ^slot, field, needed} <- reads, do: {path, field, needed})
       }
 
       Map.put(acc, {cell, slot}, need)

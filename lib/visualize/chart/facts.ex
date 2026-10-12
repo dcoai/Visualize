@@ -6,7 +6,7 @@ defmodule Visualize.Chart.Facts do
   # in and the grown cache goes out with the result.
 
   alias Visualize.Chart
-  alias Visualize.Chart.{Fact, Template, Validator}
+  alias Visualize.Chart.{Fact, Template, Types, Validator}
   alias Visualize.Data.{Delivery, Schema}
   alias Visualize.Data.Schema.Cache
 
@@ -83,7 +83,15 @@ defmodule Visualize.Chart.Facts do
         end
       end)
 
-    errors = errors ++ missing(map, schemas) ++ disagreements(slots, schemas)
+    # The type check (D-153): a slot outside the contract whose fields are read through a
+    # scale has its schema read too, where it resolves; nothing requires it, so one that
+    # does not is no fault, and that slot's types go unchecked.
+    reads = Types.reads(map)
+    {schemas, cache} = typed(reads, contract, entries, schemas, cache, describe)
+
+    errors =
+      errors ++
+        missing(map, schemas) ++ disagreements(slots, schemas) ++ Types.faults(reads, schemas)
 
     case Enum.sort_by(errors, &elem(&1, 0)) do
       [] ->
@@ -105,6 +113,21 @@ defmodule Visualize.Chart.Facts do
   end
 
   defp entries(_slots, _pool), do: %{}
+
+  defp typed(reads, contract, entries, schemas, cache, describe) do
+    slots = reads |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+
+    for slot <- slots,
+        not is_map_key(contract, slot),
+        {:ok, entry} <- [Map.fetch(entries, slot)],
+        reduce: {schemas, cache} do
+      {schemas, cache} ->
+        case schema(slot, entry, cache, describe) do
+          {:ok, schema, cache} -> {Map.put(schemas, slot, schema), cache}
+          {:error, _unrequired, cache} -> {schemas, cache}
+        end
+    end
+  end
 
   # An unbound slot is binding's fault, reported there; it never reaches this step.
   defp schema(_slot, nil, _cache, _describe), do: :unbound

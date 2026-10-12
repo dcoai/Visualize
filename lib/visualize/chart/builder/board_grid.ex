@@ -120,8 +120,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
       """
     end
 
-    # The cell's chart, raw markup the library rendered, or its faults one per line.
+    # The cell's chart, raw markup the library rendered, its fault panel, or its faults one
+    # per line.
     defp preview({:ok, svg}), do: Phoenix.HTML.raw(svg)
+
+    # A binding of the wrong type: the cell-state panel and its faults (§22.6, D-153).
+    defp preview({:fault, svg, lines}) do
+      assigns = %{svg: svg, lines: lines}
+
+      ~H"""
+      <div class="vis-builder-fault">{Phoenix.HTML.raw(@svg)}</div>
+      <ul class="vis-builder-errors"><li :for={line <- @lines} class="vis-builder-error">{line}</li></ul>
+      """
+    end
 
     defp preview({:error, lines}) do
       assigns = %{lines: lines}

@@ -102,6 +102,12 @@ defmodule Visualize.Chart.Validator.Words do
       "it as #{inspect(described)}"
   end
 
+  # The type check of a binding (spec/14 §7.4, D-153).
+  def words({:type_mismatch, slot, field, expected, given}) do
+    "field #{inspect(field)} of slot #{inspect(slot)} is #{a_type(given)}, and the scale " <>
+      "it is read through needs #{a_type(expected)}"
+  end
+
   def words({:no_schema, slot}) do
     "slot #{inspect(slot)} needs its feed's schema — it requires attributes or the design " <>
       "reads facts of it — and its source is not a delivery naming a schema version"
@@ -293,4 +299,11 @@ defmodule Visualize.Chart.Validator.Words do
   defp type_words({:one_of, types}), do: Enum.map_join(types, " or ", &type_words/1)
 
   defp list(atoms), do: Enum.map_join(atoms, ", ", &inspect/1)
+
+  # A schema type as a reader names it (spec/08 §10.1).
+  defp a_type(:time), do: "a time"
+  defp a_type(:number), do: "a number"
+  defp a_type(:category), do: "a category"
+  defp a_type(:text), do: "text"
+  defp a_type(other), do: inspect(other)
 end

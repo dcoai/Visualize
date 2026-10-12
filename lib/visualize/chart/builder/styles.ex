@@ -1075,6 +1075,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
       background: var(--vis-builder-panel);
     }
 
+    /* A binding of the wrong type (spec/14 §18.4, D-153): the cell-state panel, its faults
+       beneath it. */
+    .vis-builder-preview:has(> .vis-builder-fault) {
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .vis-builder-fault {
+      width: 100%;
+      max-width: 600px;
+    }
+
+    .vis-builder-fault svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
     /* ── the style stack at a site ───────────────────────────────────────────── */
 
     .vis-builder-style-stack {
