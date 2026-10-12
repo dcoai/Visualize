@@ -19,7 +19,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Build
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.Themes
+    alias Visualize.Chart.Builder.{Preview, Themes}
     alias Visualize.Chart.Validator
     alias Visualize.Color.Vision
     alias Visualize.Theme
@@ -144,7 +144,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
         stored?: not Map.has_key?(sample, :title)
       }
 
-      case Chart.apply(sample.design, [sources: sources, vars: vars, theme: theme] ++ size) do
+      # A sample whose pool has the wrong type is its faults, never applied (D-153).
+      checked =
+        case Preview.type_faults(sample.design, sources, nil) do
+          [] -> Chart.apply(sample.design, [sources: sources, vars: vars, theme: theme] ++ size)
+          errors -> {:error, errors}
+        end
+
+      case checked do
         {:ok, %{frame: %{size: %{width: w, height: h}}} = applied} ->
           Map.merge(base, %{
             markup:

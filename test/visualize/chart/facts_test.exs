@@ -172,7 +172,28 @@ defmodule Visualize.Chart.FactsTest do
       assert Cache.fetch(applied.cache, :primary, s.version) == {:ok, s}
     end
 
-    test "a slot that states no contract does not resolve its version" do
+    test "a slot that states no contract and that no scale reads does not resolve its version" do
+      d = %{
+        version: 2,
+        sources: %{primary: %{fields: [:t, :latency]}, spare: %{fields: [:t]}},
+        frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
+        marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :latency}}]
+      }
+
+      {:ok, applied} =
+        Chart.apply(d,
+          sources: %{primary: @rows, spare: Delivery.new(@rows, schema: "abc")},
+          describe: counting({:error, :not_asked})
+        )
+
+      refute_received {:described, _}
+      assert applied.schemas == %{}
+      assert applied.versions == %{spare: "abc"}
+    end
+
+    # The type check (D-153) reads a schema nothing requires, and asks for it once: an
+    # answer it cannot have is no fault.
+    test "a slot that states no contract resolves its version for the type check alone" do
       d = %{
         version: 2,
         sources: %{primary: %{fields: [:t, :latency]}},
@@ -186,9 +207,17 @@ defmodule Visualize.Chart.FactsTest do
           describe: counting({:error, :not_asked})
         )
 
+      assert_received {:described, :primary}
       refute_received {:described, _}
       assert applied.schemas == %{}
       assert applied.versions == %{primary: "abc"}
+
+      s = schema()
+
+      {:ok, applied} =
+        Chart.apply(d, sources: %{primary: delivery(s)}, describe: counting({:ok, s}))
+
+      assert applied.schemas == %{primary: s}
     end
   end
 

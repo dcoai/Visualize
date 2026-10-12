@@ -547,6 +547,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 :if={@preview?}
                 design={@design}
                 sources={@bound_pool}
+                catalog={@catalog}
                 vars={@bindings}
                 theme={@preview_theme}
                 selected={@entry.label}

@@ -15,6 +15,7 @@ defmodule Visualize.Board.State do
   |---|---|---|
   | `{:crashed, reason}` | `:bad` | Crashed, restarting |
   | `{:down, reason}` | `:bad` | Feed down and the reason |
+  | `{:invalid, errors}` | `:bad` | Wrong binding and the first fault |
   | `:loading` | `:info` | Loading… |
   | `:no_data` | `:neutral` | No data yet |
   | `{:stale, age}` | `:warning` | Stale and the age |
@@ -46,6 +47,7 @@ defmodule Visualize.Board.State do
           | :capped
           | {:stale, number() | nil}
           | {:down, term()}
+          | {:invalid, [Validator.error(), ...]}
           | {:crashed, term()}
 
   @typedoc "What a cell knows of one slot: its delivery, the delivery's schema and the feed's status."
@@ -130,6 +132,7 @@ defmodule Visualize.Board.State do
   @spec role(t()) :: Theme.slot() | nil
   def role({:crashed, _reason}), do: :bad
   def role({:down, _reason}), do: :bad
+  def role({:invalid, _errors}), do: :bad
   def role(:loading), do: :info
   def role(:no_data), do: :neutral
   def role({:stale, _age}), do: :warning
@@ -140,6 +143,7 @@ defmodule Visualize.Board.State do
   @spec words(t()) :: String.t()
   def words({:crashed, _reason}), do: "Crashed, restarting"
   def words({:down, reason}), do: "Feed down: " <> reason(reason)
+  def words({:invalid, [error | _]}), do: "Wrong binding: " <> Validator.format(error)
   def words(:loading), do: "Loading…"
   def words(:no_data), do: "No data yet"
   def words({:stale, nil}), do: "Stale"

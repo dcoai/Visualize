@@ -24,7 +24,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Board
     alias Visualize.Board.Binding
     alias Visualize.Chart.Builder.{Boards, Stack, Store}
-    alias Visualize.Data.{Delivery, Schema}
+    alias Visualize.Data.{Delivery, Schema, Table}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -303,16 +303,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       binding = assigns.binding || Binding.new()
       required = required(assigns)
-      bind_faults = binding_faults(assigns, binding, required)
+      sources = feed_sources(assigns)
+      bind_faults = binding_faults(assigns, binding, required, sources)
       faults = faults ++ bind_faults
       faulty = MapSet.new(for {[:cells, cell | _], _reason} <- faults, do: cell)
-      pools = Binding.pools(binding, feed_sources(assigns))
+      pools = Binding.pools(binding, sources)
 
       previews =
         Boards.preview(board, fetch,
           pools: pools,
           theme: assigns.theme,
-          describe: describe(assigns, binding)
+          describe: describe(assigns, binding),
+          refused: refused(bind_faults)
         )
 
       layout = Board.layout(board)
@@ -367,16 +369,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
           %{
             name: Atom.to_string(slot),
             feed: feed,
-            faults:
-              for(
-                {[:cells, ^cell, :sources, ^slot | _], _reason} = fault <- faults,
-                do: Board.format_error(fault)
-              )
+            faults: for(fault <- faults, slot?(fault, cell, slot), do: Board.format_error(fault))
           }
         end
 
       Map.put(selected, :slots, slots)
     end
+
+    # A fault of a cell's slot: at the slot's path, or a type fault naming it (D-153).
+    defp slot?({[:cells, cell, :sources, slot | _], _reason}, cell, slot), do: true
+    defp slot?({[:cells, cell | _], {:type_mismatch, slot, _, _, _}}, cell, slot), do: true
+    defp slot?(_fault, _cell, _slot), do: false
 
     defp selected(_board, nil, _fetch, _names), do: nil
 
@@ -535,20 +538,48 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp describe(_assigns, _binding), do: nil
 
     # The binding check (§22.8): every fault, but a stale binding of a cell whose component
-    # did not resolve, which the board's own faults already name.
-    defp binding_faults(assigns, binding, required) do
+    # did not resolve, which the board's own faults already name; and, since the preview
+    # draws rows, the binding checked against what each feed's preview rows show (D-153).
+    defp binding_faults(assigns, binding, required, sources) do
       schemas = if is_map(assigns[:catalog]), do: assigns.catalog, else: %{}
       resolved = MapSet.new(for {{cell, _slot}, _need} <- required, do: cell)
 
-      case Binding.check(binding, required, schemas) do
-        :ok ->
-          []
+      checked =
+        case Binding.check(binding, required, schemas) do
+          :ok ->
+            []
 
-        {:error, errors} ->
-          Enum.reject(errors, fn {[:cells, cell | _], reason} ->
-            reason == :not_required and cell in Map.keys(assigns.board.cells) and
-              cell not in resolved
-          end)
+          {:error, errors} ->
+            Enum.reject(errors, fn {[:cells, cell | _], reason} ->
+              reason == :not_required and cell in Map.keys(assigns.board.cells) and
+                cell not in resolved
+            end)
+        end
+
+      (checked ++ row_types(sources, binding, required))
+      |> Enum.uniq()
+      |> Enum.sort_by(&elem(&1, 0))
+    end
+
+    defp row_types(sources, binding, required) do
+      types =
+        Map.new(sources, fn {feed, source} ->
+          {feed, Table.column_types(rows(source))}
+        end)
+
+      case Binding.check_types(binding, required, types) do
+        :ok -> []
+        {:error, errors} -> errors
+      end
+    end
+
+    defp rows(%Delivery{} = delivery), do: Delivery.source(delivery)
+    defp rows(source), do: source
+
+    # The cells a type fault keeps from being realised (§22.6, D-153), with their faults.
+    defp refused(faults) do
+      for {[:cells, cell | _], {:type_mismatch, _, _, _, _}} = fault <- faults, reduce: %{} do
+        refused -> Map.update(refused, cell, [fault], &(&1 ++ [fault]))
       end
     end
 

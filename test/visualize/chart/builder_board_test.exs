@@ -649,4 +649,117 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert Binding.fetch(s.assigns.binding, :cell_1, :primary) == {:ok, :primary}
     end
   end
+
+  describe "a binding of the wrong type is a fault panel, not a crash (§18.4, §22.6, D-153)" do
+    alias Visualize.Board.Binding
+    alias Visualize.Chart.Builder.Preview
+    alias Visualize.Data.Schema
+
+    import Phoenix.LiveViewTest, only: [render_component: 2]
+
+    # Instants, which the uptime chart's linear x cannot take.
+    @stamps [%{t: ~U[2026-10-11 12:00:00Z], v: 1}, %{t: ~U[2026-10-11 12:01:00Z], v: 2}]
+
+    defp typed_catalog do
+      %{
+        clock: Schema.new!(%{t: %{type: :time}, v: %{type: :number}}),
+        names: Schema.new!(%{t: %{type: :category}, v: %{type: :number}}),
+        api: Schema.new!(%{t: %{type: :number}, v: %{type: :number}})
+      }
+    end
+
+    defp body(html, cell) do
+      [_, body] =
+        Regex.run(
+          ~r/data-board-cell="#{cell}".*?<div class="vis-builder-board-cell-body">(.*?)<\/article>/s,
+          html
+        )
+
+      body
+    end
+
+    test "the single-chart preview checks the rows it draws before applying them" do
+      s = BuilderFixture.socket(BuilderFixture.layers(), sources: %{primary: @stamps})
+      html = BuilderFixture.render(s)
+
+      assert html =~ ~s(<div class="vis-builder-fault">)
+      assert html =~ ~s(data-vis-state="invalid")
+      assert html =~ "Wrong binding: marks[0].channels.x: field :t of slot :primary is a time"
+      refute html =~ ~s(class="vis-builder-chart")
+    end
+
+    test "the single-chart preview checks a catalog feed's schema too" do
+      rows = [%{t: 1, v: 1}, %{t: 2, v: 2}]
+      names = Schema.new!(%{t: %{type: :category}, v: %{type: :number}})
+      design = Visualize.Chart.stack(BuilderFixture.layers())
+
+      html =
+        render_component(&Preview.panel/1, %{
+          design: design,
+          sources: %{primary: rows},
+          catalog: %{primary: names}
+        })
+
+      assert html =~ "vis-builder-fault"
+      assert html =~ "field :t of slot :primary is a category"
+
+      html = render_component(&Preview.panel/1, %{design: design, sources: %{primary: rows}})
+      assert html =~ ~s(class="vis-builder-chart")
+      refute html =~ "vis-builder-fault"
+    end
+
+    test "a board cell bound to a feed of the wrong type is drawn as the fault panel" do
+      held = Binding.new(%{{:latency, :primary} => :names, {:errors, :primary} => :api})
+      s = opened() |> Phoenix.Component.assign(catalog: typed_catalog(), board_bindings: %{})
+      s = Phoenix.Component.assign(s, :binding, held)
+      s = event(s, "board_select", %{"cell" => "latency"})
+
+      html = BuilderFixture.render(s)
+      latency = body(html, "latency")
+      assert latency =~ ~s(<div class="vis-builder-fault">)
+      assert latency =~ "Wrong binding"
+
+      assert latency =~
+               "cells.latency.marks[0].channels.x: field :t of slot :primary is a category"
+
+      assert body(html, "errors") =~ "<svg"
+      refute body(html, "errors") =~ "vis-builder-fault"
+
+      # The fault stands under the slot it names, and the cell is marked faulty.
+      mode = Visualize.Chart.Builder.Editing.editing(s.assigns).board_mode
+      assert Enum.join(hd(mode.selected.slots).faults, "\n") =~ "is a category"
+      assert html =~ "vis-builder-board-cell-faulty"
+    end
+
+    test "a catalog time feed previews over instants, which a linear axis cannot take" do
+      # The schema's `:time` passes the schema check (a tick is a number), but the rows the
+      # preview draws are instants: before D-153 this binding took the builder down.
+      s = opened() |> Phoenix.Component.assign(catalog: typed_catalog())
+      s = Phoenix.Component.assign(s, :binding, Binding.new(%{{:latency, :primary} => :clock}))
+      s = event(s, "board_select", %{"cell" => "latency"})
+      s = event(s, "board_bind", %{"_target" => ["slot.primary"], "slot.primary" => "clock"})
+
+      latency = s |> BuilderFixture.render() |> body("latency")
+      assert latency =~ "vis-builder-fault"
+      assert latency =~ "is a time, and the scale it is read through needs a number"
+
+      s = event(s, "board_bind", %{"_target" => ["slot.primary"], "slot.primary" => "api"})
+      latency = s |> BuilderFixture.render() |> body("latency")
+      refute latency =~ "vis-builder-fault"
+      assert latency =~ "<svg"
+    end
+
+    test "with no catalog a sample of the wrong type is caught by what its rows show" do
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: store())
+      s = Phoenix.Component.assign(s, :sources, Map.put(s.assigns.sources, :stamps, @stamps))
+      s = event(s, "add_layer", %{"name" => "board:1"})
+      s = event(s, "board_select", %{"cell" => "latency"})
+      s = event(s, "board_bind", %{"_target" => ["slot.primary"], "slot.primary" => "stamps"})
+
+      assert Binding.fetch(s.assigns.binding, :latency, :primary) == {:ok, :stamps}
+      latency = s |> BuilderFixture.render() |> body("latency")
+      assert latency =~ "vis-builder-fault"
+      assert latency =~ "field :t of slot :primary is a time"
+    end
+  end
 end

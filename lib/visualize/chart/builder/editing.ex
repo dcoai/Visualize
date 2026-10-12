@@ -32,6 +32,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Editor,
       Modes,
       Palette,
+      Preview,
       Scales,
       Sources,
       Stack,
@@ -273,10 +274,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp faults(:composite, design, %{bindings: vars, theme: theme} = assigns, nil) do
       pool = pool(assigns)
 
+      # A binding of the wrong type is a fault, never applied (spec/14 §18.4, D-153).
       layer =
-        case Chart.apply(design, sources: pool, vars: vars, theme: theme) do
-          {:ok, _applied} -> []
-          {:error, errors} -> errors
+        with [] <- Preview.type_faults(design, pool, assigns[:catalog]) do
+          case Chart.apply(design, sources: pool, vars: vars, theme: theme) do
+            {:ok, _applied} -> []
+            {:error, errors} -> errors
+          end
         end
 
       layer ++ Scales.unscaled(design, Scales.pool_types(pool))

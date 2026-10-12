@@ -71,6 +71,7 @@ defmodule Visualize.Chart.Validator do
           | {:undeclared_field, atom(), atom()}
           | {:missing_attribute, atom(), atom(), atom()}
           | {:schema_type, atom(), atom(), atom()}
+          | {:type_mismatch, atom(), atom(), :time | :number | :category, atom()}
           | {:no_schema, atom()}
           | {:unknown_schema, term(), String.t()}
           | {:describe, term(), term()}

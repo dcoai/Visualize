@@ -11,22 +11,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
     incomplete design is the normal state of one being built, so the error list is a panel
     of the tool and not an error page.
 
-    A fault the frame *raises* rather than reports — a value a scale cannot take, a theme
-    name nothing resolves — raises here as it does anywhere else (spec/14 §7.3): those are
-    faults of the host's data, and catching them would hide a bug in the host.
+    A binding of the wrong type is checked before anything is applied (spec/14 §18.4,
+    D-153): `Visualize.Chart.check_types/2` over each slot's types — what its rows show and,
+    for a catalog feed, its schema — and a mismatch is drawn as a fault panel in the board
+    runtime's cell-state style, `Visualize.Board.State.render/3` of `{:invalid, errors}`,
+    with every fault listed beneath it. Any other fault the frame *raises* rather than
+    reports — a theme name nothing resolves — raises here as it does anywhere else (spec/14
+    §7.3): those are faults of the host's data, and catching them would hide a bug in the
+    host.
 
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
     use Phoenix.Component
 
+    alias Visualize.Board.State
     alias Visualize.Chart
-    alias Visualize.Chart.Validator
+    alias Visualize.Chart.{Template, Validator}
+    alias Visualize.Data.{Delivery, Table}
+
+    # The fault panel's box: the cell-state drawing is responsive, so this is its aspect.
+    @fault_size {600, 160}
 
     attr(:design, :map, required: true, doc: "the stacked design to draw")
     attr(:sources, :map, default: %{}, doc: "the pool the design's slots bind to")
     attr(:vars, :map, default: %{}, doc: "the values the design's variables take")
     attr(:theme, :any, default: nil, doc: "a `Visualize.Theme`, `nil` for the design's own")
+
+    attr(:catalog, :map,
+      default: nil,
+      doc: "the connector catalog: a slot bound to one of its feeds is typed by its schema"
+    )
+
     attr(:class, :string, default: nil, doc: "appended to the pane's class")
 
     attr(:selected, :string,
@@ -57,6 +73,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <div class={class(@class)}>
+        <div :if={@fault} class="vis-builder-fault">{@fault}</div>
         <ul :if={@errors != []} class="vis-builder-errors">
           <li :for={line <- @errors} class="vis-builder-error">{line}</li>
         </ul>
@@ -94,11 +111,39 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # the pane's, as it is a component's (spec/10 §1.2); the markup is a string and MUST be
     # raw to reach the document (§11.2). Drawn with paths, so a click can name what it hit
     # (spec/14 §4.7, §18.16).
-    defp draw(%{design: design, sources: sources, vars: vars, theme: theme}) do
+    defp draw(%{design: design, sources: sources} = assigns) do
+      case type_faults(design, sources, assigns[:catalog]) do
+        [] -> applied(assigns)
+        errors -> fault(errors, assigns.theme)
+      end
+    end
+
+    @doc false
+    # The binding's type faults (spec/14 §18.4, D-153), ordered by path: the design checked
+    # against what each bound slot's rows show and, for a catalog feed, its schema. Every
+    # place the builder applies a design over its pool asks this first.
+    @spec type_faults(map(), map(), map() | nil) :: [Validator.error()]
+    def type_faults(design, pool, catalog) do
+      {rows, schemas} = types(design, pool, catalog)
+
+      (faults(design, schemas) ++ faults(design, rows))
+      |> Enum.uniq()
+      |> Enum.sort_by(&elem(&1, 0))
+    end
+
+    defp faults(design, types) do
+      case Chart.check_types(design, types) do
+        :ok -> []
+        {:error, errors} -> errors
+      end
+    end
+
+    defp applied(%{design: design, sources: sources, vars: vars, theme: theme}) do
       case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
         {:ok, %{frames: %{main: %{size: size, margin: margin}}} = applied} ->
           %{
             chart: Phoenix.HTML.raw(Chart.render(applied, paths: true)),
+            fault: nil,
             errors: [],
             width: size.width,
             height: size.height,
@@ -108,6 +153,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:error, errors} ->
           %{
             chart: nil,
+            fault: nil,
             errors: Enum.map(errors, &Validator.format/1),
             width: 0,
             height: 0,
@@ -115,5 +161,51 @@ if Code.ensure_loaded?(Phoenix.Component) do
           }
       end
     end
+
+    # A binding the type check refuses, never applied: the cell-state panel and every
+    # fault beneath it (spec/14 §18.4, D-153).
+    defp fault(errors, theme) do
+      panel = State.render({:invalid, errors}, theme || Visualize.Theme.default(), @fault_size)
+
+      %{
+        chart: nil,
+        fault: Phoenix.HTML.raw(panel),
+        errors: Enum.map(errors, &Validator.format/1),
+        width: 0,
+        height: 0,
+        margin: %{top: 0, right: 0, bottom: 0, left: 0}
+      }
+    end
+
+    # What the preview knows of each slot's fields' types (spec/14 §18.4), `{rows,
+    # schemas}`: each slot bound as application binds it — its own name, else its
+    # `default` — typed by what its rows show, the values the pane draws, and a slot whose
+    # feed is in the catalog by its schema too.
+    defp types(design, pool, catalog) do
+      catalog = catalog || %{}
+
+      bound =
+        case Map.get(design, :sources) do
+          slots when is_map(slots) and not is_struct(slots) ->
+            for {slot, node} <- slots,
+                is_map(node),
+                {:ok, feed, source} <- [Template.entry(pool, slot, node)],
+                do: {slot, feed, source}
+
+          _variable_or_none ->
+            []
+        end
+
+      {Map.new(bound, fn {slot, _feed, source} -> {slot, Table.column_types(rows(source))} end),
+       for(
+         {slot, feed, _source} <- bound,
+         is_map_key(catalog, feed),
+         into: %{},
+         do: {slot, catalog[feed]}
+       )}
+    end
+
+    defp rows(%Delivery{} = delivery), do: Delivery.source(delivery)
+    defp rows(source), do: source
   end
 end

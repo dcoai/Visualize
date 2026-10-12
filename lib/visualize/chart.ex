@@ -55,6 +55,7 @@ defmodule Visualize.Chart do
     Summary,
     Template,
     Text,
+    Types,
     Use,
     Validator,
     Var
@@ -141,6 +142,15 @@ defmodule Visualize.Chart do
           required: boolean(),
           uses: [%{path: Validator.path(), expects: Schema.type(), layer: term()}]
         }
+
+  @typedoc "What a scale's kind needs of a field it reads (spec/14 §7.4, D-153)."
+  @type need :: :time | :number | :category
+
+  @typedoc """
+  What is known of a slot's fields' types (spec/14 §7.4): its `Visualize.Data.Schema`, what
+  they mean, or a map from field to type, how rows write them.
+  """
+  @type field_types :: Visualize.Data.Schema.t() | %{optional(atom() | String.t()) => atom()}
 
   @doc """
   The chart of a design map, or every fault in it.
@@ -278,6 +288,47 @@ defmodule Visualize.Chart do
   @spec contract(t() | map()) :: %{atom() => %{atom() => [atom()]}}
   def contract(%__MODULE__{} = chart), do: chart |> to_map() |> Facts.contract()
   def contract(design) when is_map(design), do: Facts.contract(design)
+
+  @doc """
+  `:ok`, or every field a mark reads through a scale whose known type the scale's kind
+  cannot take (spec/14 §7.4, D-153): `{:type_mismatch, slot, field, expected, given}` at
+  the read's path, ordered by path.
+
+  A read is a channel naming a scale, a style's `{:field, f}` colour or an offset's field,
+  over rows that are the slot's own. A time scale needs `:time`; band and ordinal need
+  `:category`; every other kind needs `:number`. `types` maps a slot to what is known of
+  its fields. A `Visualize.Data.Schema` says what they mean: `:text` satisfies a category
+  and `:time`, which a feed may write as numbers, satisfies a number. A map from field to
+  type, as `Visualize.Data.Table.column_types/1` reads it from rows, says how they are
+  written: `:time` is instants, which no number takes, and a category takes anything. A
+  slot it does not hold, and a field it does not type, are not checked. Pure and total
+  over any map, so a tool calls it before `apply/2` to show a wrong binding without
+  drawing.
+
+      iex> design = %{
+      ...>   sources: %{primary: %{fields: [:t, :v]}},
+      ...>   frames: %{main: %{kind: :cartesian,
+      ...>     scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
+      ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
+      ...> }
+      iex> Visualize.Chart.check_types(design, %{primary: %{t: :time, v: :number}})
+      {:error, [{[:marks, 0, :channels, :x], {:type_mismatch, :primary, :t, :number, :time}}]}
+      iex> schema = Visualize.Data.Schema.new!(%{t: %{type: :time}, v: %{type: :category}})
+      iex> Visualize.Chart.check_types(design, %{primary: schema})
+      {:error, [{[:marks, 0, :channels, :y], {:type_mismatch, :primary, :v, :number, :category}}]}
+      iex> Visualize.Chart.check_types(design, %{primary: %{t: :number, v: :number}})
+      :ok
+  """
+  @spec check_types(t() | map(), %{atom() => field_types()}) ::
+          :ok | {:error, [Validator.error(), ...]}
+  def check_types(%__MODULE__{} = chart, types), do: chart |> to_map() |> check_types(types)
+
+  def check_types(design, types) when is_map(design) and is_map(types) do
+    case design |> Types.reads() |> Types.faults(types) |> Enum.sort_by(&elem(&1, 0)) do
+      [] -> :ok
+      errors -> {:error, errors}
+    end
+  end
 
   @doc """
   The type a source's `types` declares for a field (spec/14 §2.3, #369), or `nil` when

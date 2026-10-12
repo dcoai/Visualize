@@ -147,9 +147,15 @@ defmodule Visualize.Board.Draw do
   end
 
   @doc false
-  # A cell's state from what it holds (spec/15 §8.4): down when its component could not be
-  # applied, loading before any data, else `Visualize.Board.State.of/3`.
-  def state({:apply, _errors} = fault, _slots, _now, _stale_after), do: {:down, fault}
+  # A cell's state from what it holds (spec/15 §8.4): invalid when its component could not
+  # be applied because a field has a type its scale cannot take (D-153), down when it could
+  # not be applied otherwise, loading before any data, else `Visualize.Board.State.of/3`.
+  def state({:apply, errors} = fault, _slots, _now, _stale_after) do
+    if Enum.any?(errors, &match?({_path, {:type_mismatch, _, _, _, _}}, &1)),
+      do: {:invalid, errors},
+      else: {:down, fault}
+  end
+
   def state(_fault, nil, _now, _stale_after), do: :loading
   def state(nil, slots, now, stale_after), do: State.of(slots, now, stale_after)
 

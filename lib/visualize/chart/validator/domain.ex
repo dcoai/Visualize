@@ -163,7 +163,7 @@ defmodule Visualize.Chart.Validator.Domain do
         []
 
       domain ->
-        node = stack(mark[:style], styles)
+        node = cascade(mark[:style], styles)
 
         @colour_keys
         |> Enum.flat_map(fn key ->
@@ -181,11 +181,13 @@ defmodule Visualize.Chart.Validator.Domain do
   # The stack's entries cascaded left to right, each through its `extends` chain
   # (spec/14 §3.5, §3.6). A cycle stops the walk where it closes — the validator reports
   # it by path — and a variable contributes nothing.
-  defp stack(entries, styles) when is_list(entries) do
+  @doc false
+  @spec cascade(term(), map()) :: map()
+  def cascade(entries, styles) when is_list(entries) do
     Enum.reduce(entries, %{}, fn entry, node -> Map.merge(node, entry(entry, styles, [])) end)
   end
 
-  defp stack(entry, styles), do: entry(entry, styles, [])
+  def cascade(entry, styles), do: entry(entry, styles, [])
 
   defp entry(%Var{}, _styles, _seen), do: %{}
 
