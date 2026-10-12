@@ -1532,3 +1532,21 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - An axis that shows another unit now has different tick positions as well as different labels. A chart rendered without `system:` and on a domain whose display unit is its own unit draws byte for byte as before.
 - A host with viewers of several systems renders per viewer. For a board that means a board server per system. A board server draws once for all its subscribers, so the system is per board.
 - An axis's ticks no longer always land on the scale's own `ticks/2`. Code that read `Scale.ticks/2` to find an axis's tick positions should read the axis's own tick values, as the grid does.
+
+## 157. D-157 — A feed schema's unit and quantity are checked against the vocabulary
+
+**Context.** #595. D-136 gave a feed's schema `unit` and `quantity` as loose seams: any non-empty string was a unit and any atom a quantity, to be tightened once the vocabulary existed. #589 (D-155) provides it: `Visualize.Unit` reads UCUM codes, the currency extension included, and `Visualize.Quantity` has the fixed list. A schema could still name a misspelt unit or an unknown quantity. That failed later, when an axis resolved the measure and raised, or never, when nothing drew the field.
+
+**Decision.**
+- **`Schema.new/1` checks the measure where the feed describes itself**, as the validator checks an axis's measure (spec/14 §10.1):
+  - `unit` must be a code `Unit.parse/1` reads, else `{:unit, code, reason}` at `[field, :unit]`;
+  - `quantity` must be one of `Quantity.all/0`, else `{:unknown_quantity, quantity}` at `[field, :quantity]`;
+  - a field giving both, each good, is checked through `Quantity.resolve/1`, and a unit whose dimension is not its quantity's is `{:quantity, quantity, code}` at `[field, :quantity]`.
+  The reasons are `Quantity.resolve/1`'s own, so a schema and a design say the same thing about the same mistake. The shape checks stay first: a non-string unit is still `{:type, :unit}` and a non-atom quantity `{:type, :name}`.
+- **Codes, not symbols.** A schema holds a code. A provider that reads units from people or from another system maps them first, through `Unit.parse_alias/1` or `Unit.from_telemetry/1`, as Telemetry's feed already does.
+- **The conformance kit names the field.** A measure fault is the finding `{:measure, field, reason}`, one per fault, and no longer part of `{:schema_invalid, errors}`, which keeps the schema's other faults. A provider learns which field's measure is wrong without reading a list of schema errors.
+
+**Consequences.**
+- A schema that named a unit visualize does not read, or a quantity outside the list, is now refused. That includes a symbol such as `"KB"` or `"°C"`. Such a schema could not draw its measure on an axis before either, since resolving the measure raised.
+- `Visualize.Feed.Signals`, `Visualize.Feed.Telemetry` and every example's schema already pass, and the tests hold them to it.
+- The seam comment at `Schema.unit/2` is gone. The unit check is one call to `Unit.parse/1`.

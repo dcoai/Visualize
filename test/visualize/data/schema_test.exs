@@ -182,8 +182,7 @@ defmodule Visualize.Data.SchemaTest do
                [{[:v, :polarity], {:enum, [:higher_is_better, :lower_is_better, :neutral]}}]
     end
 
-    test "any quantity atom and any role atom are carried until #536 and #533 fix their lists" do
-      assert {:ok, _} = Schema.new(%{v: %{type: :number, quantity: :sheep_per_hour}})
+    test "any role atom is carried until #533 fixes its list" do
       assert {:ok, _} = Schema.new(%{s: %{type: :category, status: %{"x" => :mauve}}})
     end
 
@@ -248,6 +247,96 @@ defmodule Visualize.Data.SchemaTest do
       end
 
       assert Schema.format_error({[:v, :order, 2], :duplicate}) == "v.order[2]: is listed twice"
+    end
+  end
+
+  describe "new/1: a measure is checked against the vocabulary (spec/08 §10.1, D-157)" do
+    test "a misspelt unit is refused at the field's unit, in parse/1's words" do
+      assert faults(%{latency: %{type: :number, unit: "mss"}}) ==
+               [{[:latency, :unit], {:unit, "mss", {:unknown_atom, "mss"}}}]
+
+      assert Schema.format_error({[:latency, :unit], {:unit, "mss", {:unknown_atom, "mss"}}}) ==
+               ~s(latency.unit: "mss" is not a UCUM unit visualize reads \(spec/05 §4.1\))
+    end
+
+    test "a symbol a person types is not a code" do
+      assert [{[:v, :unit], {:unit, "°C", _reason}}] = faults(%{v: %{type: :number, unit: "°C"}})
+      assert {:ok, _} = Schema.new(%{v: %{type: :number, unit: "Cel"}})
+    end
+
+    test "an unknown quantity is refused at the field's quantity" do
+      assert faults(%{v: %{type: :number, quantity: :sheep_per_hour}}) ==
+               [{[:v, :quantity], {:unknown_quantity, :sheep_per_hour}}]
+
+      assert Schema.format_error({[:v, :quantity], {:unknown_quantity, :sheep_per_hour}}) =~
+               "v.quantity: :sheep_per_hour is not a quantity"
+    end
+
+    test "a unit that does not measure its quantity is refused at the quantity, as resolve/1 says" do
+      assert faults(%{v: %{type: :number, unit: "By", quantity: :duration}}) ==
+               [{[:v, :quantity], {:quantity, :duration, "By"}}]
+
+      assert Schema.format_error({[:v, :quantity], {:quantity, :duration, "By"}}) ==
+               ~s(v.quantity: unit "By" does not measure :duration \(spec/05 §4.2\))
+    end
+
+    test "a pair is checked only once each of it is good" do
+      assert faults(%{v: %{type: :number, unit: "mss", quantity: :duration}}) ==
+               [{[:v, :unit], {:unit, "mss", {:unknown_atom, "mss"}}}]
+
+      assert faults(%{v: %{type: :number, unit: "By", quantity: :durration}}) ==
+               [{[:v, :quantity], {:unknown_quantity, :durration}}]
+
+      # A bad label beside a bad pair hides neither.
+      assert faults(%{v: %{type: :number, unit: "By", quantity: :duration, label: 1}}) ==
+               [{[:v, :label], {:type, :string}}, {[:v, :quantity], {:quantity, :duration, "By"}}]
+    end
+
+    test "every quantity in its base unit, and the units feeds write, pass" do
+      for q <- Visualize.Quantity.all() do
+        unit = Visualize.Quantity.base_unit(q) || "{iso4217:USD}"
+        assert {:ok, _} = Schema.new(%{v: %{type: :number, unit: unit, quantity: q}})
+      end
+
+      for unit <- ~w(ms % 1 {request}/s {request} kW.h MiBy [lb_av] {iso4217:EUR}/kW/h) do
+        assert {:ok, _} = Schema.new(%{v: %{type: :number, unit: unit}})
+      end
+
+      assert {:ok, _} = Schema.new(%{v: %{type: :number, unit: "%", quantity: :ratio}})
+      assert {:ok, _} = Schema.new(%{v: %{type: :number, unit: "{request}", quantity: :count}})
+    end
+
+    test "Telemetry's schemas pass: every unit it maps, with the quantity it implies" do
+      for unit <- [
+            :second,
+            :millisecond,
+            :microsecond,
+            :nanosecond,
+            :byte,
+            :kilobyte,
+            :megabyte,
+            :gigabyte,
+            :percent
+          ] do
+        {:ok, code} = Visualize.Unit.from_telemetry(unit)
+        measure = %{unit: code, quantity: Visualize.Quantity.of_unit(code)}
+        description = Map.reject(Map.put(measure, :type, :number), fn {_k, v} -> v == nil end)
+        assert {:ok, _} = Schema.new(%{value: description}), "#{inspect(unit)} → #{code}"
+      end
+    end
+
+    test "Signals' schemas pass, and a description the vocabulary refuses is refused" do
+      signal = Visualize.Signals.new(:sine, [:t, :v], period: 10)
+
+      feed =
+        Visualize.Feed.Signals.new(signal, describe: %{v: %{unit: "ms", quantity: :duration}})
+
+      {_version, schema, _supports} = Visualize.Feed.describe(feed)
+      assert Schema.fetch(schema, :v, :unit) == {:ok, "ms"}
+
+      assert_raise ArgumentError, ~r/v.unit: "mss" is not a UCUM unit/, fn ->
+        Visualize.Feed.Signals.new(signal, describe: %{v: %{unit: "mss"}})
+      end
     end
   end
 

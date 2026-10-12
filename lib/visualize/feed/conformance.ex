@@ -246,14 +246,28 @@ defmodule Visualize.Feed.Conformance do
     end
   end
 
-  # The schema is one `Schema.new/1` accepts, and the version is its content hash.
+  # The schema is one `Schema.new/1` accepts, and the version is its content hash. A
+  # field's measure that the vocabulary refuses is its own finding, naming the field
+  # (D-157); the schema's other faults stay together.
   defp schema_faults(version, %Schema{fields: fields}) do
     case Schema.new(fields) do
-      {:ok, %Schema{version: ^version}} -> []
-      {:ok, %Schema{version: computed}} -> [{:version, version, computed}]
-      {:error, errors} -> [{:schema_invalid, errors}]
+      {:ok, %Schema{version: ^version}} ->
+        []
+
+      {:ok, %Schema{version: computed}} ->
+        [{:version, version, computed}]
+
+      {:error, errors} ->
+        {measures, others} = Enum.split_with(errors, &measure?/1)
+        invalid = if others == [], do: [], else: [{:schema_invalid, others}]
+        invalid ++ for({[field, _key], reason} <- measures, do: {:measure, field, reason})
     end
   end
+
+  defp measure?({[_field, :unit], {:unit, _code, _reason}}), do: true
+  defp measure?({[_field, :quantity], {:unknown_quantity, _quantity}}), do: true
+  defp measure?({[_field, :quantity], {:quantity, _quantity, _code}}), do: true
+  defp measure?(_error), do: false
 
   # A feed that honours windows names the field they are over (spec/08 §10.1, D-154): one
   # `window: true`, or a single `:time` field.

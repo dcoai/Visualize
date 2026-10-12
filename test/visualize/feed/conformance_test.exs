@@ -107,12 +107,21 @@ defmodule Visualize.Feed.ConformanceTest do
     ticks_as_time: {:deliveries, :window_value},
     no_window_field: {:describe, :no_window_field},
     stamp_as_number: {:deliveries, :not_an_instant},
+    misspelt_unit: {:describe, :measure},
     keeps_pushing: {:unsubscribe, :pushed_after_unsubscribe}
   ]
 
   describe "the kit's negatives" do
     test "an honest feed passes every check" do
       assert Conformance.check(Broken.new(), [{:down, Broken.new(:down)} | @opts]) == []
+    end
+
+    test "a measure the vocabulary refuses is its own finding, naming the field (D-157)" do
+      assert [{:describe, {:measure, :v, {:unit, "mss", {:unknown_atom, "mss"}}}} = finding] =
+               Conformance.check(:describe, Broken.new(:misspelt_unit), @opts)
+
+      assert Conformance.format(finding) =~ "field :v"
+      assert Conformance.format(finding) =~ ~s("mss" is not a UCUM unit)
     end
 
     test "every flaw is expected to fail a check, and every check is failed by a flaw" do
