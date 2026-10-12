@@ -10,7 +10,7 @@ All notable changes to Visualize are recorded here, following
 > [`spec/`](https://github.com/dcoai/Visualize/blob/main/spec/README.md), which is the
 > source of truth for that and is not restated here.
 
-## [Unreleased]
+## [0.3.0] — 2026-10-12
 
 **Upgrading from 0.2.35.** Visualize grows from a chart library into a dashboard library.
 Feeds describe their fields by meaning, and a design states what it needs of them. A board
@@ -1399,7 +1399,7 @@ the meaning of a patch.
   discipline — tagged ticks, restart keeps the state, alpha is clamped — under an ExTLA
   model that is checked in CI (D-14).
 
-[Unreleased]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/compare/v0.2.35...main
+[0.3.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.3.0
 [0.2.35]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.2.35
 [0.2.25]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.2.25
 [0.2.4]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.2.4
