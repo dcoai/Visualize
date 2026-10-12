@@ -15,6 +15,40 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.3.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Breaking
+
+- **`B`, `kB`, `MB`, `pt` and `kt` are now valid UCUM codes** (#590, D-155). They are the
+  bel, the kilobel, the megabel, the picotonne and the kilotonne, as UCUM defines them.
+  *Affects* code that relied on `Visualize.Unit.parse/1` refusing them. *Before:*
+  `Unit.parse("B")` was `{:error, {:unknown_atom, "B"}}`. *After:* it reads as the bel.
+  *Instead:* read a person's input with `Visualize.Unit.parse_alias/1`. It reads `B` as
+  `By` and refuses `MB` and `pt` as ambiguous.
+- **`Visualize.Unit.factor/1` answers `{n, d, k}` for a code that holds the degree**
+  (#590, D-155). The value is n/d·πᵏ. Every other code still answers `{n, d}`, or `nil`.
+
+### Added
+
+#### Units
+
+- **Wider UCUM coverage** (#590, D-155). `Visualize.Unit` now reads these codes, each with
+  UCUM's own definition:
+  - SI and derived units: `l`, `L`, `t`, `ar` (`har`, the hectare), `V`, `A`, `C`, `lx`,
+    `mol`, `bar`, `deg` and `rad`.
+  - US and imperial units: `[in_i]`, `[ft_i]`, `[yd_i]`, `[mi_i]`, `[nmi_i]`, `[kn_i]`,
+    `[acr_us]`, `[oz_av]`, `[lb_av]`, `[stone_av]`, `[foz_us]`, `[pt_us]`, `[gal_us]`,
+    `[foz_br]`, `[pt_br]`, `[gal_br]`, `[psi]`, `mm[Hg]`, `[in_i'Hg]` and `[HP]`.
+  - Calories and ratios: `cal`, `[Cal]` (the food Calorie), `[ppm]` and `[ppb]`.
+  - The logarithmic bel, `B`, `dB` and `dB[SPL]`. Each kind of level has a dimension of
+    its own, so a decibel converts to a bel and never to a linear unit.
+  - The prefixes `c`, `d`, `h`, `da`, `T`, `Ti` and `p`, as in `cm`, `dl`, `hPa`, `TBy`
+    and `TiBy`.
+- **`Visualize.Unit.parse_alias/1`** reads the symbols people type, such as `°C`, `lb`,
+  `mph`, `inHg` and `kWh`, as codes. It refuses an ambiguous symbol and names the codes it
+  could mean. `KB` could be `kBy` (1,000 bytes) or `KiBy` (1,024 bytes), and `gal` could be
+  `[gal_us]` or `[gal_br]`. `Visualize.Unit.format_error/1` words a refusal for a person.
+- **`Visualize.Unit.kind/1`** says whether a code is `:linear`, `:affine` (`Cel`,
+  `[degF]`) or `:logarithmic` (`B`, `dB[SPL]`).
+
 ## [0.3.0] — 2026-10-12
 
 **Upgrading from 0.2.35.** Visualize grows from a chart library into a dashboard library.
