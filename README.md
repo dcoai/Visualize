@@ -92,7 +92,10 @@ The design records no size; the host gives one when the chart is applied.
   it, a backend switch and a performance drawer (`/chart/<name>`).
 - **Interaction** (`/interaction`) and **Dashboard** (`/dashboard`): the tooltip, crosshair
   and legend hooks, and three panels whose crosshairs and brushes move together.
-- **The chart builder** (`/builder`): a LiveComponent that edits a design in the browser.
+- **A board** (`/board`): a dashboard of cells over live feeds, with a shared window, linked
+  selection, drill-down, and export to SVG, PNG and print.
+- **The chart builder** (`/builder`): a LiveComponent that edits a design, a theme or a board
+  in the browser.
 - **Performance** (`/performance`) and **Hybrid** (`/hybrid`): every design run through
   each backend and compared, and SVG furniture under canvas marks.
 
@@ -123,6 +126,46 @@ ship in the package and are read on GitHub:
   the source of truth, with a contract for every public function.
 - [API surface](https://github.com/dcoai/Visualize/blob/main/API_SURFACE.md):
   the generated record of the spec and code agreeing.
+
+## Where it's going
+
+Visualize is growing from a chart library into **the dashboard library that applications
+share**. You hand it chart definitions and data sources, and it watches the sources and keeps
+the charts current. Any application can show the same dashboard, drawn the same way, without
+an iframe or a second renderer.
+
+The pieces, in layers:
+
+- **Designs** are charts as data. They are versioned, validated and stored, and checked when
+  loaded from somewhere you don't control.
+- **Feeds** are sources that describe their fields by meaning (unit, label, order, what a
+  state means) and deliver rows. A feed has only to return rows. A time window, a point
+  budget and push updates are optional, and visualize finishes whatever a feed leaves out.
+- **Boards** lay designs out on a grid with a shared time window, linked selection and
+  drill-down. Each board and each cell runs in its own process, so one slow or broken chart
+  never stalls the rest.
+- **Themes** choose every colour, including meaning-bearing ramps (status, thermal) that hold
+  under a dark or colour-blind-safe theme. Data never names a colour.
+
+### Integrating it
+
+- **Draw a chart:** compose a design, apply your rows, and render it in HEEx. See
+  [Getting started](guides/getting_started.md).
+- **Feed live data:** implement the `Visualize.Feed` behaviour over your data, whether a
+  database, an HTTP API or `:telemetry` (a provider for `:telemetry` ships with the library).
+  Then run `Visualize.Feed.Conformance` in your test suite to prove the feed honours the
+  contract.
+- **Show a dashboard:**
+  1. Add `Visualize.Board.Supervisor` to your supervision tree.
+  2. Bind each cell's source slots to your feeds. A binding is your application's data and
+     never travels with the board.
+  3. Render the board LiveView component.
+- **Let people build:** mount the builder with a catalog of your feeds, and they can lay out
+  boards, bind cells and tune themes. Boards travel between applications as bundles, and as
+  snapshots for sharing a frozen view.
+
+These layers are new: expect them to settle over the next few releases, and tell us where
+they don't fit your application.
 
 ## Status and feedback
 
