@@ -140,7 +140,7 @@ defmodule Visualize.Chart.AxisMeasureTest do
 
     test "a quantity not in the list is the enumeration's fault alone" do
       assert {:error, [{[:frames, :main, :axes, 0, :measure, :quantity], {:enum, _}}]} =
-               Validator.validate(design(%{measure: %{quantity: :mass}}))
+               Validator.validate(design(%{measure: %{quantity: :weight}}))
     end
 
     test "a measure round-trips through JSON" do

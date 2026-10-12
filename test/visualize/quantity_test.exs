@@ -9,7 +9,7 @@ defmodule Visualize.QuantityTest do
   defp log(domain), do: Scale.log() |> Scale.domain(domain)
 
   describe "the fixed list (spec/05 §4.2)" do
-    test "twelve quantities in order, each with a base unit that reads" do
+    test "the quantities in order, each with a base unit that reads" do
       assert Quantity.all() == [
                :duration,
                :information,
@@ -22,14 +22,30 @@ defmodule Visualize.QuantityTest do
                :speed,
                :power,
                :energy,
-               :pressure
+               :pressure,
+               :area,
+               :volume,
+               :mass,
+               :pace,
+               :angle,
+               :currency,
+               :electric_potential,
+               :electric_current,
+               :electric_charge,
+               :illuminance,
+               :sound_level,
+               :mass_concentration,
+               :amount_concentration
              ]
 
-      for q <- Quantity.all(), do: assert(Unit.valid?(Quantity.base_unit(q)), "#{q}")
+      for q <- Quantity.all() -- [:currency],
+          do: assert(Unit.valid?(Quantity.base_unit(q)), "#{q}")
+
+      assert Quantity.base_unit(:currency) == nil
     end
 
     test "each base unit implies its own quantity; a ratio is the percent" do
-      for q <- Quantity.all() -- [:ratio],
+      for q <- Quantity.all() -- [:ratio, :currency],
           do: assert(Quantity.of_unit(Quantity.base_unit(q)) == q, "#{q}")
 
       assert Quantity.of_unit("%") == :ratio
@@ -38,8 +54,14 @@ defmodule Visualize.QuantityTest do
       assert Quantity.of_unit("km/h") == :speed
       assert Quantity.of_unit("{request}/s") == :frequency
       assert Quantity.of_unit("K") == :temperature
-      assert Quantity.of_unit("g") == nil
-      assert Quantity.of_unit("m2") == nil
+      assert Quantity.of_unit("g") == :mass
+      assert Quantity.of_unit("m2") == :area
+      assert Quantity.of_unit("rad/s") == nil
+      assert Quantity.of_unit("dB") == nil
+      assert Quantity.of_unit("dB[SPL]") == :sound_level
+      assert Quantity.of_unit("{iso4217:USD}") == :currency
+      assert Quantity.of_unit("mmol/l") == :amount_concentration
+      assert Quantity.of_unit("min/km") == :pace
     end
 
     test "every family member reads and has its quantity's dimension" do
@@ -58,18 +80,24 @@ defmodule Visualize.QuantityTest do
     end
 
     test "the unit picks the family: decimal by default, binary, bits, hertz, watt-hours" do
-      assert Quantity.family(:information, "By") == ~w(By kBy MBy GBy)
-      assert Quantity.family(:information, "kBy") == ~w(By kBy MBy GBy)
-      assert Quantity.family(:information, nil) == ~w(By kBy MBy GBy)
-      assert Quantity.family(:information, "MiBy") == ~w(By KiBy MiBy GiBy)
-      assert Quantity.family(:information, "Mbit") == ~w(bit kbit Mbit Gbit)
-      assert Quantity.family(:data_rate, "KiBy/s") == ~w(By/s KiBy/s MiBy/s GiBy/s)
+      assert Quantity.family(:information, "By") == ~w(By kBy MBy GBy TBy)
+      assert Quantity.family(:information, "kBy") == ~w(By kBy MBy GBy TBy)
+      assert Quantity.family(:information, nil) == ~w(By kBy MBy GBy TBy)
+      assert Quantity.family(:information, "MiBy") == ~w(By KiBy MiBy GiBy TiBy)
+      assert Quantity.family(:information, "Mbit") == ~w(bit kbit Mbit Gbit Tbit)
+      assert Quantity.family(:data_rate, "KiBy/s") == ~w(By/s KiBy/s MiBy/s GiBy/s TiBy/s)
       assert Quantity.family(:frequency, "kHz") == ~w(Hz kHz MHz GHz)
       assert Quantity.family(:frequency, "{request}/s") == ~w(/h /min /s)
       assert Quantity.family(:energy, "kW.h") == ~w(W.h kW.h MW.h GW.h)
       assert Quantity.family(:energy, "J") == ~w(J kJ MJ GJ)
 
-      for q <- [:ratio, :count, :temperature, :speed], do: assert(Quantity.family(q, nil) == [])
+      for q <- [:ratio, :count, :angle, :currency, :sound_level, :mass_concentration],
+          do: assert(Quantity.family(q, nil) == [])
+
+      assert Quantity.family(:temperature, "K") == []
+      assert Quantity.family(:speed, "m/s") == []
+      assert Quantity.family(:pressure, "mbar") == []
+      assert Quantity.family(:length, "[nmi_i]") == []
     end
   end
 
@@ -77,7 +105,9 @@ defmodule Visualize.QuantityTest do
     test "a unit implies its quantity and a quantity its base unit" do
       assert Quantity.resolve(%{unit: "ms"}) == {:ok, %{unit: "ms", quantity: :duration}}
       assert Quantity.resolve(%{quantity: :count}) == {:ok, %{unit: "1", quantity: :count}}
-      assert Quantity.resolve(%{unit: "g"}) == {:ok, %{unit: "g", quantity: nil}}
+      assert Quantity.resolve(%{unit: "g"}) == {:ok, %{unit: "g", quantity: :mass}}
+      assert Quantity.resolve(%{unit: "rad/s"}) == {:ok, %{unit: "rad/s", quantity: nil}}
+      assert Quantity.resolve(%{quantity: :currency}) == {:ok, %{unit: nil, quantity: :currency}}
       assert Quantity.resolve(%{}) == {:ok, %{unit: nil, quantity: nil}}
     end
 
@@ -100,7 +130,7 @@ defmodule Visualize.QuantityTest do
 
     test "a code that does not read and a quantity not in the list are refused" do
       assert Quantity.resolve(%{unit: "sec"}) == {:error, {:unit, "sec", {:unknown_atom, "sec"}}}
-      assert Quantity.resolve(%{quantity: :mass}) == {:error, {:unknown_quantity, :mass}}
+      assert Quantity.resolve(%{quantity: :weight}) == {:error, {:unknown_quantity, :weight}}
     end
   end
 
@@ -131,7 +161,8 @@ defmodule Visualize.QuantityTest do
       {%{unit: "%"}, 1500, "%"},
       {%{quantity: :count}, 1.0e6, "1"},
       {%{unit: "Cel"}, 1500, "Cel"},
-      {%{unit: "m"}, 0.5, "mm"},
+      {%{unit: "m"}, 0.5, "cm"},
+      {%{unit: "m"}, 0.005, "mm"},
       {%{unit: "m"}, 1500, "km"},
       {%{unit: "km/h"}, 1500, "km/h"},
       {%{unit: "W"}, 3_000, "kW"},
@@ -151,7 +182,7 @@ defmodule Visualize.QuantityTest do
     test "the magnitude is the greatest |d|, and zero, no quantity or no unit keep the unit" do
       assert Quantity.display_unit([-1500, 10], %{unit: "ms"}) == "s"
       assert Quantity.display_unit([0, 0], %{unit: "ms"}) == "ms"
-      assert Quantity.display_unit([0, 1500], %{unit: "g"}) == "g"
+      assert Quantity.display_unit([0, 1500], %{unit: "rad/s"}) == "rad/s"
       assert Quantity.display_unit([0, 1500], %{}) == nil
     end
   end

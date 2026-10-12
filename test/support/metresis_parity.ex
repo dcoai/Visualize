@@ -94,4 +94,64 @@ defmodule Visualize.MetresisParity do
   formatter names.
   """
   def currencies, do: ~w(USD EUR GBP JPY CHF)
+
+  @doc "Each metresis family's quantity here; a number is the absence of one."
+  def quantities do
+    %{
+      number: nil,
+      count: :count,
+      duration: :duration,
+      bytes: :information,
+      percent: :ratio,
+      ratio: :ratio,
+      currency: :currency,
+      mass: :mass,
+      length: :length,
+      temperature: :temperature,
+      speed: :speed,
+      pressure: :pressure,
+      energy: :energy,
+      volume: :volume,
+      angle: :angle
+    }
+  end
+
+  @doc """
+  The families whose `sum` metresis excludes on dimensional grounds (§4.4's *Excludes*,
+  `Metresis.Aggregations.excluded_by/1`).
+  """
+  def excludes_sum, do: [:percent, :ratio, :temperature, :pressure, :angle]
+
+  @doc """
+  The families visualize's additivity excludes beyond metresis's, by design (#589 §1, the
+  evaluation's modification 2): a speed's sum means nothing, across series or over time.
+  """
+  def excludes_more, do: [:speed]
+
+  @doc """
+  metresis's bounds per family, in its base unit (`Metresis.Units.bounds/1`). Here they
+  are a display hint (D-155) and differ where #589 §1 decided otherwise: a pressure has
+  none (a gauge pressure is negative), and a count, as everywhere, is `{0, nil}`.
+  """
+  def bounds do
+    %{
+      count: {0.0, nil},
+      ratio: {0.0, 1.0},
+      percent: {0.0, 100.0},
+      duration: {0.0, nil},
+      bytes: {0.0, nil},
+      mass: {0.0, nil},
+      length: {0.0, nil},
+      speed: {0.0, nil},
+      pressure: {0.0, nil},
+      energy: {nil, nil},
+      volume: {0.0, nil},
+      angle: {0.0, 360.0},
+      currency: {nil, nil},
+      temperature: {nil, nil}
+    }
+  end
+
+  @doc "Families whose bounds here differ from metresis's, by #589's decision."
+  def bounds_differ, do: [:pressure]
 end

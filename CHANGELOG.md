@@ -25,6 +25,21 @@ release it merely follows.
   `By` and refuses `MB` and `pt` as ambiguous.
 - **`Visualize.Unit.factor/1` answers `{n, d, k}` for a code that holds the degree**
   (#590, D-155). The value is n/d·πᵏ. Every other code still answers `{n, d}`, or `nil`.
+- **Some units now imply a quantity, and some display families have grown** (#591,
+  D-155). *Affects* designs and code that read `Visualize.Quantity.of_unit/1`,
+  `resolve/1`, `family/2` or an axis's measure.
+  - `g`, `m2`, `l`, `deg`, `V` and the other units of the new quantities now imply that
+    quantity. They used to imply `nil`. A measure pairing one of them with `:count` is
+    still refused, as before.
+  - Lengths now scale through `cm`: a domain of 0–0.5 `m` is shown in `cm`, not `mm`.
+  - Information and data rates now scale up to `TBy`, `TiBy` and `Tbit`, so a domain of
+    1,500 `GBy` is shown in `TB`.
+  - A unit outside its quantity's families is no longer rescaled. It is shown as it is
+    given: `mbar`, `[nmi_i]`, `m/s`, `K` and `W.s`.
+  - `Visualize.Quantity.base_unit(:currency)` is `nil`, because the currency comes from
+    the data.
+  - `Visualize.Data.Schema.attributes/0` lists twelve keys, with `:metric_kind` and
+    `:bounds` at the end.
 
 ### Added
 
@@ -48,6 +63,27 @@ release it merely follows.
   `[gal_us]` or `[gal_br]`. `Visualize.Unit.format_error/1` words a refusal for a person.
 - **`Visualize.Unit.kind/1`** says whether a code is `:linear`, `:affine` (`Cel`,
   `[degF]`) or `:logarithmic` (`B`, `dB[SPL]`).
+
+#### Quantities
+
+- **Thirteen new quantities** (#591, D-155): `area`, `volume`, `mass`, `pace`, `angle`,
+  `currency`, `electric_potential`, `electric_current`, `electric_charge`,
+  `illuminance`, `sound_level` (`dB[SPL]`), `mass_concentration` and
+  `amount_concentration`.
+- **The facts a host needs, for every quantity.**
+  - `Visualize.Quantity.kind/1` is `:linear`, `:affine`, `:logarithmic` or `:cyclic`.
+  - `bounds/1` and `bounds/2` give where values physically lie. They are a hint for an
+    axis, never a check, so a negative difference is never refused.
+  - `additivity/1,2` gives `%{across: …, over_time: …}`, refined by the field's metric
+    kind.
+- **Unit systems** (`:metric`, `:us`, `:uk`, `:as_posted`).
+  - `Visualize.Quantity.display_unit/3` and `formatter/3` take `system:` and show a
+    quantity in that system's family: 80 `kg` in `lb` for `:us`, and in stones for `:uk`.
+  - `family/3` gives a system's family.
+  - `:as_posted`, the default, is the existing behaviour.
+- **Two new optional description keys in `Visualize.Data.Schema`.**
+  - `metric_kind` is `:gauge`, `:counter` or `:rate`.
+  - `bounds` is `[min, max]`. It overrides the quantity's bounds and is a display hint.
 
 ## [0.3.0] — 2026-10-12
 

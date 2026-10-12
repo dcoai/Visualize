@@ -45,7 +45,7 @@ defmodule Visualize.Data.SchemaTest do
       assert {:ok, %Schema{fields: @full}} = Schema.new(@full)
     end
 
-    test "the ten keys are the vocabulary" do
+    test "the twelve keys are the vocabulary" do
       assert Schema.attributes() ==
                [
                  :type,
@@ -57,10 +57,39 @@ defmodule Visualize.Data.SchemaTest do
                  :polarity,
                  :target,
                  :continuity,
-                 :window
+                 :window,
+                 :metric_kind,
+                 :bounds
                ]
 
       assert Map.keys(@full.latency) -- Schema.attributes() == []
+    end
+
+    test "a numeric field says its metric kind and its bounds (D-155)" do
+      for kind <- [:gauge, :counter, :rate] do
+        assert {:ok, _} = Schema.new(%{v: %{type: :number, quantity: :count, metric_kind: kind}})
+      end
+
+      for bounds <- [[0, nil], [nil, 100], [-5, 5], [0.0, 1.0], [nil, nil]] do
+        assert {:ok, _} = Schema.new(%{v: %{type: :number, bounds: bounds}}), inspect(bounds)
+      end
+
+      assert faults(%{v: %{type: :number, metric_kind: :sum}}) ==
+               [{[:v, :metric_kind], {:enum, [:gauge, :counter, :rate]}}]
+
+      for bounds <- [[5, 0], [1, 1], [0], {0, 1}, ["0", 1], [0, 1, 2]] do
+        assert faults(%{v: %{type: :number, bounds: bounds}}) == [
+                 {[:v, :bounds], {:type, :bounds}}
+               ],
+               inspect(bounds)
+      end
+
+      assert faults(%{v: %{type: :category, metric_kind: :gauge, bounds: [0, 1]}}) == [
+               {[:v, :bounds], {:invalid_for, :category}},
+               {[:v, :metric_kind], {:invalid_for, :category}}
+             ]
+
+      assert Schema.format_error({[:v, :bounds], {:type, :bounds}}) =~ "[min, max]"
     end
 
     test "type is required and one of the four column types" do

@@ -4,11 +4,15 @@ defmodule Visualize.Data.Schema do
 
   A schema maps a field — named as the feed's rows name it, an atom or a string — to a
   **description**: its `type`, and as much of `unit`, `quantity`, `label`, `order`,
-  `status`, `polarity`, `target`, `continuity` and `window` as the feed knows. It says what
+  `status`, `polarity`, `target`, `continuity`, `window`, `metric_kind` and `bounds` as
+  the feed knows. It says what
   the numbers *are*, whoever draws them, and never how they are drawn: a description has
   no colour key, since colour is the theme's to choose from the meaning (#533). A `:time`
   field holds instants; a feed whose clock is a number describes it `:number` and
-  `window: true`, the field its windows are over (D-154).
+  `window: true`, the field its windows are over (D-154). A numeric field may say how it
+  was measured, `metric_kind: :gauge | :counter | :rate`, which refines what its
+  quantity's additivity allows, and where its values lie, `bounds: [min, max]`, a display
+  hint over its quantity's (D-155).
 
   A schema is identified by its `version`, a content hash (spec/08 §10.2): the same
   schema has the same version on every node and under every release, and any change of
@@ -50,7 +54,9 @@ defmodule Visualize.Data.Schema do
           optional(:polarity) => :higher_is_better | :lower_is_better | :neutral,
           optional(:target) => number(),
           optional(:continuity) => number(),
-          optional(:window) => boolean()
+          optional(:window) => boolean(),
+          optional(:metric_kind) => :gauge | :counter | :rate,
+          optional(:bounds) => [number() | nil]
         }
 
   @type t :: %__MODULE__{fields: %{name() => description()}, version: String.t()}
@@ -68,15 +74,18 @@ defmodule Visualize.Data.Schema do
     :polarity,
     :target,
     :continuity,
-    :window
+    :window,
+    :metric_kind,
+    :bounds
   ]
   @types [:time, :number, :category, :text]
   @polarities [:higher_is_better, :lower_is_better, :neutral]
+  @metric_kinds [:gauge, :counter, :rate]
   @colour_keys [:color, :colour, :colors, :colours, :palette, :fill, :stroke]
 
   # The keys a field's type takes; every other key but `type`, `label` and `continuity` is
   # `{:invalid_for, type}` on it. `window` is a clock's: a `:time` or a `:number` field's.
-  @numeric [:unit, :quantity, :polarity, :target]
+  @numeric [:unit, :quantity, :polarity, :target, :metric_kind, :bounds]
   @categorical [:order, :status]
   @clocks [:time, :number]
 
@@ -85,7 +94,7 @@ defmodule Visualize.Data.Schema do
 
   @not_names [nil, true, false]
 
-  @doc "The ten description keys, `:type` first (spec/08 §10.1)."
+  @doc "The twelve description keys, `:type` first (spec/08 §10.1)."
   @spec attributes() :: [atom(), ...]
   def attributes, do: @attributes
 
@@ -271,6 +280,14 @@ defmodule Visualize.Data.Schema do
     if is_number(value) and value > 0, do: [], else: [{[name, :continuity], {:type, :positive}}]
   end
 
+  defp key(name, _type, :metric_kind, value) do
+    if value in @metric_kinds, do: [], else: [{[name, :metric_kind], {:enum, @metric_kinds}}]
+  end
+
+  defp key(name, _type, :bounds, value) do
+    if bounds?(value), do: [], else: [{[name, :bounds], {:type, :bounds}}]
+  end
+
   defp key(name, _type, :window, value) do
     if is_boolean(value), do: [], else: [{[name, :window], {:type, :boolean}}]
   end
@@ -297,6 +314,11 @@ defmodule Visualize.Data.Schema do
   end
 
   defp order(_other, path), do: [{path, {:type, :order}}]
+
+  # `[min, max]`, each a number or `nil`, the first below the second when both are given.
+  defp bounds?([min, max]) when is_number(min) and is_number(max), do: min < max
+  defp bounds?([min, max]), do: (is_number(min) or min == nil) and (is_number(max) or max == nil)
+  defp bounds?(_other), do: false
 
   defp state?(v), do: is_binary(v) or is_number(v) or (is_atom(v) and v not in @not_names)
   defp role?(v), do: is_atom(v) and v not in @not_names
@@ -373,6 +395,9 @@ defmodule Visualize.Data.Schema do
     do: "must be a positive number, in the window field's units (seconds for a time)"
 
   defp words({:type, :boolean}), do: "must be true or false"
+
+  defp words({:type, :bounds}),
+    do: "must be [min, max], each a number or nil, min below max when both are given"
 
   defp words({:type, :order}),
     do: "must be a non-empty list of states: strings, atoms or numbers"

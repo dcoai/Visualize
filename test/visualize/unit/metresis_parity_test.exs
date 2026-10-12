@@ -4,7 +4,7 @@ defmodule Visualize.Unit.MetresisParityTest do
   # vocabulary against (metresis#429).
   use ExUnit.Case, async: true
 
-  alias Visualize.{MetresisParity, Unit}
+  alias Visualize.{MetresisParity, Quantity, Unit}
 
   test "the table covers every family metresis declares" do
     covered =
@@ -47,6 +47,52 @@ defmodule Visualize.Unit.MetresisParityTest do
 
         {:error, {:ambiguous, ^unit, choices}} ->
           assert code in Enum.map(choices, &elem(&1, 0)), unit
+      end
+    end
+  end
+
+  describe "quantities (spec/05 §4.2)" do
+    test "every metresis family is a quantity here, and every unit implies it" do
+      quantities = MetresisParity.quantities()
+      assert Map.keys(quantities) |> Enum.sort() == Enum.sort(MetresisParity.families())
+
+      for {family, unit, _factor, code} <- MetresisParity.units() do
+        quantity = Map.fetch!(quantities, family)
+        assert Quantity.of_unit(code) == quantity, "#{family} #{unit}"
+        assert {:ok, _} = Quantity.resolve(%{unit: code, quantity: quantity})
+      end
+
+      for iso <- MetresisParity.currencies(),
+          do: assert(Quantity.of_unit("{iso4217:#{iso}}") == :currency)
+    end
+
+    test "every sum metresis excludes is excluded here, and the further ones are named" do
+      quantities = MetresisParity.quantities()
+
+      for family <- MetresisParity.families(), quantity = quantities[family], quantity != nil do
+        additive = Quantity.additivity(quantity)
+        excluded? = not additive.across and not additive.over_time
+
+        cond do
+          family in MetresisParity.excludes_sum() -> assert excluded?, "#{family}"
+          family in MetresisParity.excludes_more() -> assert excluded?, "#{family}"
+          true -> refute excluded?, "#{family}"
+        end
+      end
+    end
+
+    test "metresis's bounds are the quantity's here, but where #589 decided otherwise" do
+      quantities = MetresisParity.quantities()
+
+      for {family, {min, max}} <- MetresisParity.bounds(),
+          family not in MetresisParity.bounds_differ() do
+        quantity = quantities[family]
+        unit = if family == :percent, do: "%", else: Quantity.base_unit(quantity)
+
+        {vmin, vmax} =
+          if unit, do: Quantity.bounds(quantity, unit), else: Quantity.bounds(quantity)
+
+        assert {vmin && vmin * 1.0, vmax && vmax * 1.0} == {min, max}, "#{family}"
       end
     end
   end
