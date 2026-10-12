@@ -12,8 +12,10 @@ All notable changes to Visualize are recorded here, following
 
 ## [0.4.0] — 2026-10-12
 
-`mix.exs` reads `0.3.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
-release it merely follows.
+One units vocabulary for every host: UCUM coverage with aliases, 25 quantities with their
+facts, exact conversion, currency, and unit systems (`system: :us`) chosen per viewer at
+render, with axis ticks picked in the unit shown. A feed schema's `unit` and `quantity`
+are now checked against it.
 
 ### Breaking
 
