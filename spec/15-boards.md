@@ -83,6 +83,8 @@ A board is **12 columns wide**. `Visualize.Board.columns/0` is `12`. A cell's `x
 
 A window that gives `last` together with `from` or `to`, a `from` without a `to`, a `DateTime` in another zone and a `from` not before its `to` are faults (§3.3). **Now comes from the board, never from a feed** (#531, further considerations §3). `Visualize.Board.window/2` resolves the window against the instant the caller passes as now, giving `{from, to}` as two UTC `DateTime`s, or `nil` for a board with no window. That pair is what the runtime asks each feed for (#540). The value says nothing about how a window moves. A brush or a time picker writes a new `window`.
 
+**The window is over instants, and a feed declares its own window domain** (D-154). The board's window applies to every feed whose window field (spec/08 §10.1) is `:time`. A feed whose window field is a `:number` — a signal's tick, a sequence number — counts in units the board's clock does not know, so the board's window does not apply to it: the monitor asks it for its own span (`nil`) and does not trim it, and its present is its own (spec/08 §11.2, §11.4). A brush, being a window of instants, does not move it either. To put such a feed on the board's clock, the connector maps its numbers to instants and describes the result as `:time`, as the examples' wall-clock signal does (§10); the board does not guess a mapping, since only the connector knows what a tick is worth.
+
 **The zone is for display only.** `zone` is the time zone the board's times are *shown* in. It is checked as a time scale's `zone` is (spec/14 §4.3, D-115): a name the host's time-zone database does not know is `{:zone, name, reason}`. The window itself stays in UTC, so two hosts in two zones fetch the same rows and show them in their own zone. Where a cell's component has a `:time` scale that names no `zone` of its own, the board's zone is written into it when the component is prepared (§6, `components/3`), so a cell's time axis reads in the board's wall clock; a scale that names its own zone keeps it, as a cell's own variable beats the board's (§5). `"Etc/UTC"` writes nothing, since a scale with no zone is already UTC.
 
 **Variables cascade** as §5 says.
@@ -415,7 +417,7 @@ A cell is always in exactly one state, and **every state is drawn deliberately**
 | `{:invalid, errors}` | the component cannot be applied because a slot's field has a type its scale cannot take (`{:apply, errors}` holding a `{:type_mismatch, …}`, spec/14 §7.4, D-153); the builder's previews draw it for a binding its check refuses (spec/14 §18.4) | `:bad` | `Wrong binding` and the first fault |
 | `:loading` | a slot has no delivery yet and none is down | `:info` | `Loading…` |
 | `:no_data` | every slot has a delivery and every delivery is empty | `:neutral` | `No data yet` |
-| `{:stale, age}` | a slot's feed is `:stale` in the monitor, or the newest reading of a slot with a `DateTime` time field is older than the board's `stale_after` at the board's now; `age` is its age in seconds, or `nil` when only the monitor says so | `:warning` | `Stale` and the age (`Visualize.Format.duration/1`) |
+| `{:stale, age}` | a slot's feed is `:stale` in the monitor, or the newest reading of a slot whose window field holds `DateTime`s is older than the board's `stale_after` at the board's now; `age` is its age in seconds, or `nil` when only the monitor says so | `:warning` | `Stale` and the age (`Visualize.Format.duration/1`) |
 | `:capped` | a delivery is `capped`: the feed served less than the window | `:info` | `Capped: part of the window` |
 | `:live` | none of the above | — | — |
 
@@ -426,8 +428,8 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 ### 8.5 Time
 
 - **The window is UTC; the zone is for display** (§1.5). The board resolves the window in UTC, the feeds are asked in UTC, and the zone reaches the cells' time scales and the subscribers.
-- **Rows are placed by their timestamp.** A feed's holding is kept in time order by the monitor (spec/08 §11.4). A pushed row older than the end of what the feed holds is a **late** row, placed in order rather than dropped, unless the holding already has that very row. A fetched delivery out of order is put in order before it is reduced. A cell's rows therefore arrive in time order, however the feed sent them.
-- **Gaps follow `continuity`** (spec/08 §10.1, D-136). For each slot whose schema gives a field a `continuity`, the cell walks the rows in time order, series by series, a series being the rows that share every `:category` field. Where two consecutive readings are further apart in time than the field's `continuity`, it puts a **break row** between them: the earlier row with that field `nil`. A line or an area drawn over the field breaks there (spec/14 §5.6, `defined`), and a gap in the data is drawn as a gap, never as a straight line across it. A time is measured in seconds: a `DateTime` or `NaiveDateTime` by its difference, a `Date` by its days, and a number as itself, since a time field has no unit (spec/08 §10.1) and a numeric clock is read in seconds.
+- **Rows are placed by their window field** (spec/08 §10.1): by their timestamp for a `:time` one, by the number for a `:number` one (D-154). A feed's holding is kept in that order by the monitor (spec/08 §11.4). A pushed row older than the end of what the feed holds is a **late** row, placed in order rather than dropped, unless the holding already has that very row. A fetched delivery out of order is put in order before it is reduced. A cell's rows therefore arrive in order, however the feed sent them.
+- **Gaps follow `continuity`** (spec/08 §10.1, D-136). For each slot whose schema gives a field a `continuity`, the cell walks the rows in order, series by series, a series being the rows that share every `:category` field. Where two consecutive readings are further apart in time than the field's `continuity`, it puts a **break row** between them: the earlier row with that field `nil`. A line or an area drawn over the field breaks there (spec/14 §5.6, `defined`), and a gap in the data is drawn as a gap, never as a straight line across it. The walk is along the window field. An instant is measured in seconds: a `DateTime` or `NaiveDateTime` by its difference, a `Date` by its days. A numeric window field is measured in its own units, so a tick feed's `continuity` is in ticks (spec/08 §10.1, D-154).
 
 ### 8.6 Functions
 
@@ -459,8 +461,8 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 | `Visualize.Board.State.words/1` | A state's words, as the drawings print them. |
 | `Visualize.Board.State.name/1` | A state's name, the `data-vis-state` its drawings carry: `"stale"`, `"down"`, …. |
 | `Visualize.Board.State.of/3` | `of(slots, now, stale_after)`: the state of a cell's slots at now, each slot `%{delivery, schema, status}` (§8.4). |
-| `Visualize.Board.Rows.place/2` | `place(delivery, schema)`: the delivery's rows in time order with a break row in every gap wider than a field's `continuity` (§8.5). |
-| `Visualize.Board.Rows.seconds/1` | A time in seconds, as §8.5 measures a gap; `nil` for a value that is no time. |
+| `Visualize.Board.Rows.place/2` | `place(delivery, schema)`: the delivery's rows in window-field order with a break row in every gap wider than a field's `continuity` (§8.5). |
+| `Visualize.Board.Rows.seconds/1` | A window-field value as §8.5 measures a gap: an instant in seconds, a number as itself; `nil` for anything else. |
 
 ## 9. The board in LiveView
 
