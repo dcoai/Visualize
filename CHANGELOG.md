@@ -40,6 +40,11 @@ release it merely follows.
     the data.
   - `Visualize.Data.Schema.attributes/0` lists twelve keys, with `:metric_kind` and
     `:bounds` at the end.
+- **`Visualize.Unit.convert/3` now converts between unit systems, and words its
+  refusals** (#592, D-155). *Before:* `convert(20, "Cel", "[degF]")` raised that
+  conversion was out of scope. *After:* it is `68.0`. Different dimensions, levels against
+  linear units, and two currencies still raise `ArgumentError`, and the message now gives
+  the reason. *Instead:* to check without raising, call `Visualize.Unit.conversion/2`.
 
 ### Added
 
@@ -63,6 +68,15 @@ release it merely follows.
   `[gal_us]` or `[gal_br]`. `Visualize.Unit.format_error/1` words a refusal for a person.
 - **`Visualize.Unit.kind/1`** says whether a code is `:linear`, `:affine` (`Cel`,
   `[degF]`) or `:logarithmic` (`B`, `dB[SPL]`).
+- **`Visualize.Unit.conversion/2`** (#592, D-155) converts between any two codes of
+  one dimension. It returns an exact `{:ok, {scale, offset}}`, where the converted value is
+  `value × scale + offset`. One such pair converts stored rows in place.
+  - `Cel`, `[degF]` and `K` convert with their offsets: `Cel` to `[degF]` is exactly
+    `{{9, 5}, {32, 1}}`.
+  - `B` converts to `dB`, but a level never converts to a linear unit.
+  - Two currencies never convert.
+  - Every refusal names its reason: `:dimension`, `:logarithmic`, `:currency` or
+    `:affine_in_term`.
 
 #### Quantities
 

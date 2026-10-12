@@ -154,4 +154,40 @@ defmodule Visualize.MetresisParity do
 
   @doc "Families whose bounds here differ from metresis's, by #589's decision."
   def bounds_differ, do: [:pressure]
+
+  @doc """
+  The units whose conversion here differs from `Metresis.Units`'s, and why: visualize
+  keeps UCUM's definition (D-155). UCUM defines the metre of mercury as 133.3220 kPa
+  exactly, so `mm[Hg]` is 133.322 Pa and `[in_i'Hg]` 3,386.3788 Pa; metresis wrote the
+  conventional millimetre of mercury, 133.322387415 Pa (13.5951 g/cm³ × 9.80665 m/s²),
+  and an inch of mercury of 3,386.388 Pa. Each differs by under 3 parts per million.
+  """
+  def conversion_differs, do: %{"mmHg" => 133.322387415, "inHg" => 3386.388}
+
+  @doc """
+  A value in `from` written in `to` as `Metresis.Units.convert/3` computes it: through the
+  family's base as `value × factor(from) / factor(to)`, a unit to itself exactly, and a
+  temperature through °C by its pair of functions.
+  """
+  def metresis_convert(value, family, from, to)
+
+  def metresis_convert(value, _family, unit, unit), do: value * 1.0
+
+  def metresis_convert(value, :temperature, from, to),
+    do: value |> to_celsius(from) |> from_celsius(to)
+
+  def metresis_convert(value, family, from, to),
+    do: value * 1.0 * factor(family, from) / factor(family, to)
+
+  defp factor(family, unit) do
+    Enum.find_value(units(), fn {f, u, factor, _code} -> f == family and u == unit and factor end)
+  end
+
+  defp to_celsius(c, "°C"), do: c * 1.0
+  defp to_celsius(k, "K"), do: k - 273.15
+  defp to_celsius(f, "°F"), do: (f - 32.0) * 5.0 / 9.0
+
+  defp from_celsius(c, "°C"), do: c
+  defp from_celsius(c, "K"), do: c + 273.15
+  defp from_celsius(c, "°F"), do: c * 9.0 / 5.0 + 32.0
 end

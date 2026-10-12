@@ -103,10 +103,12 @@ defmodule Visualize.UnitTest do
       assert Unit.convert(1, "{request}/s", "/min") == 60.0
     end
 
-    test "conversion between unit systems or dimensions is refused" do
-      assert_raise ArgumentError, ~r/cannot convert/, fn -> Unit.convert(20, "Cel", "[degF]") end
-      assert_raise ArgumentError, ~r/cannot convert/, fn -> Unit.convert(20, "Cel", "K") end
-      assert_raise ArgumentError, ~r/cannot convert/, fn -> Unit.convert(1, "s", "By") end
+    test "conversion between dimensions is refused, with the reason" do
+      assert_raise ArgumentError, ~r/cannot convert "s" to "By": .*different dimensions/, fn ->
+        Unit.convert(1, "s", "By")
+      end
+
+      assert_raise ArgumentError, ~r/inside a term/, fn -> Unit.convert(1, "Cel/h", "K/h") end
     end
   end
 
