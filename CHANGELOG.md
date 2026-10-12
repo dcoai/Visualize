@@ -25,6 +25,15 @@ release it merely follows.
   `By` and refuses `MB` and `pt` as ambiguous.
 - **`Visualize.Unit.factor/1` answers `{n, d, k}` for a code that holds the degree**
   (#590, D-155). The value is n/d·πᵏ. Every other code still answers `{n, d}`, or `nil`.
+- **`Visualize.Data.Schema.new/1` checks a field's `unit` and `quantity`** (#595,
+  D-157). *Affects* feeds whose schema names a unit visualize does not read, a quantity
+  outside `Visualize.Quantity.all/0`, or a unit that does not measure its quantity.
+  *Before:* any non-empty string was a unit and any atom a quantity. *After:* such a schema
+  is refused with `{:unit, code, reason}` at `[field, :unit]`, `{:unknown_quantity, q}` at
+  `[field, :quantity]`, or `{:quantity, q, code}` at `[field, :quantity]`, each worded by
+  `format_error/1`. A symbol such as `"KB"` or `"°C"` is refused too. *Instead:* describe
+  a field with a UCUM code; read a person's symbol with `Visualize.Unit.parse_alias/1`
+  first.
 - **Some units now imply a quantity, and some display families have grown** (#591,
   D-155). *Affects* designs and code that read `Visualize.Quantity.of_unit/1`,
   `resolve/1`, `family/2` or an axis's measure.
@@ -105,6 +114,9 @@ release it merely follows.
 - **Two new optional description keys in `Visualize.Data.Schema`.**
   - `metric_kind` is `:gauge`, `:counter` or `:rate`.
   - `bounds` is `[min, max]`. It overrides the quantity's bounds and is a display hint.
+- **The feed conformance kit names a field whose measure is refused** (#595, D-157).
+  The `:describe` check reports `{:measure, field, reason}` for each field whose unit or
+  quantity `Visualize.Data.Schema.new/1` refuses, apart from `{:schema_invalid, errors}`.
 
 #### Currency and value formats
 

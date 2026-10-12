@@ -20,6 +20,11 @@ defmodule Visualize.Feed.Conformance.Words do
     do:
       "the schema is not one Schema.new/1 accepts: #{Enum.map_join(errors, "; ", &Schema.format_error/1)}"
 
+  def words({:measure, field, reason}),
+    do:
+      "the schema's field #{inspect(field)} names a measure the vocabulary refuses: " <>
+        Schema.format_error({[field, key(reason)], reason})
+
   def words({:version, given, computed}) when is_binary(computed),
     do: "the version #{inspect(given)} is not the schema's content hash #{inspect(computed)}"
 
@@ -158,4 +163,8 @@ defmodule Visualize.Feed.Conformance.Words do
 
   defp request(:push), do: "a pushed delivery"
   defp request({window, budget}), do: "fetch(feed, #{inspect(window)}, #{inspect(budget)})"
+
+  # The key a measure's fault is at (spec/08 §10.1).
+  defp key({:unit, _code, _reason}), do: :unit
+  defp key(_quantity_fault), do: :quantity
 end

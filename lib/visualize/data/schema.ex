@@ -12,7 +12,9 @@ defmodule Visualize.Data.Schema do
   `window: true`, the field its windows are over (D-154). A numeric field may say how it
   was measured, `metric_kind: :gauge | :counter | :rate`, which refines what its
   quantity's additivity allows, and where its values lie, `bounds: [min, max]`, a display
-  hint over its quantity's (D-155).
+  hint over its quantity's (D-155). A `unit` is a UCUM code `Visualize.Unit` reads and a
+  `quantity` one of `Visualize.Quantity.all/0`, and when both are given the unit measures
+  the quantity (D-157).
 
   A schema is identified by its `version`, a content hash (spec/08 §10.2): the same
   schema has the same version on every node and under every release, and any change of
@@ -36,6 +38,8 @@ defmodule Visualize.Data.Schema do
       {:error, [{[:state, :colors], {:colour_key, :colors}}]}
 
   """
+
+  alias Visualize.{Quantity, Unit}
 
   @enforce_keys [:fields, :version]
   defstruct [:fields, :version]
@@ -108,6 +112,9 @@ defmodule Visualize.Data.Schema do
 
       iex> Visualize.Data.Schema.new(%{v: %{type: :category, unit: "s"}})
       {:error, [{[:v, :unit], {:invalid_for, :category}}]}
+
+      iex> Visualize.Data.Schema.new(%{v: %{type: :number, unit: "By", quantity: :duration}})
+      {:error, [{[:v, :quantity], {:quantity, :duration, "By"}}]}
   """
   @spec new(term()) :: {:ok, t()} | {:error, [error(), ...]}
   def new(fields) when is_map(fields) and not is_struct(fields) do
@@ -185,9 +192,9 @@ defmodule Visualize.Data.Schema do
 
     missing = if Map.has_key?(description, :type), do: [], else: [{[name, :type], :required}]
 
-    missing ++
-      Enum.flat_map(description, fn {key, value} -> key(name, type, key, value) end) ++
-      unordered(name, description)
+    keys = Enum.flat_map(description, fn {key, value} -> key(name, type, key, value) end)
+
+    missing ++ keys ++ unordered(name, description) ++ measure(name, description, keys)
   end
 
   defp field(name, _description), do: [{[name], {:type, :description}}]
@@ -249,10 +256,13 @@ defmodule Visualize.Data.Schema do
 
   defp key(name, _type, :unit, value), do: unit(value, [name, :unit])
 
+  defp key(name, _type, :quantity, value) when not is_atom(value) or value in @not_names,
+    do: [{[name, :quantity], {:type, :name}}]
+
   defp key(name, _type, :quantity, value) do
-    if is_atom(value) and value not in @not_names,
+    if value in Quantity.all(),
       do: [],
-      else: [{[name, :quantity], {:type, :name}}]
+      else: [{[name, :quantity], {:unknown_quantity, value}}]
   end
 
   defp key(name, _type, :label, value) do
@@ -292,10 +302,29 @@ defmodule Visualize.Data.Schema do
     if is_boolean(value), do: [], else: [{[name, :window], {:type, :boolean}}]
   end
 
-  # The one place a unit is checked, and the seam the units proposal (#536) replaces with
-  # UCUM validation: until then any non-empty string is a unit.
-  defp unit(value, _path) when is_binary(value) and value != "", do: []
+  # A unit is a UCUM code `Visualize.Unit` reads (spec/05 §4.1, D-157).
+  defp unit(value, path) when is_binary(value) and value != "" do
+    case Unit.parse(value) do
+      {:ok, _components} -> []
+      {:error, reason} -> [{path, {:unit, value, reason}}]
+    end
+  end
+
   defp unit(_value, path), do: [{path, {:type, :unit}}]
+
+  # A numeric field giving a unit and a quantity, each good on its own, gives a unit of
+  # that quantity (spec/05 §4.2, D-157): the pair is `Visualize.Quantity.resolve/1`'s, so
+  # its fault is the one an axis's measure reports.
+  defp measure(name, %{type: :number, unit: unit, quantity: quantity}, faults) do
+    reported? = Enum.any?(faults, &match?({[_, key], _} when key in [:unit, :quantity], &1))
+
+    case reported? || Quantity.resolve(%{unit: unit, quantity: quantity}) do
+      {:error, reason} -> [{[name, :quantity], reason}]
+      _good_or_reported -> []
+    end
+  end
+
+  defp measure(_name, _description, _faults), do: []
 
   defp order([_ | _] = states, path) do
     if Enum.all?(states, &state?/1) do
@@ -388,6 +417,16 @@ defmodule Visualize.Data.Schema do
   defp words({:type, :name}), do: "must be a name: an atom or a non-empty string"
   defp words({:type, :description}), do: "must be a map of description keys"
   defp words({:type, :unit}), do: "must be a unit: a non-empty string, a UCUM code"
+
+  defp words({:unit, _code, reason}),
+    do: "#{Unit.format_error(reason)} (spec/05 §4.1)"
+
+  defp words({:unknown_quantity, quantity}),
+    do: "#{inspect(quantity)} is not a quantity: one of Visualize.Quantity.all/0 (spec/05 §4.2)"
+
+  defp words({:quantity, quantity, code}),
+    do: "unit #{inspect(code)} does not measure #{inspect(quantity)} (spec/05 §4.2)"
+
   defp words({:type, :string}), do: "must be a string"
   defp words({:type, :number}), do: "must be a number"
 

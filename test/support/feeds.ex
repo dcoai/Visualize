@@ -107,7 +107,8 @@ defmodule Visualize.Test.Feeds do
       :raises,
       :ticks_as_time,
       :no_window_field,
-      :stamp_as_number
+      :stamp_as_number,
+      :misspelt_unit
     ]
 
     @last 19
@@ -225,8 +226,15 @@ defmodule Visualize.Test.Feeds do
 
       fields = %{t: t, v: %{type: :number, label: label}}
       fields = if flaw == :stamp_as_number, do: Map.put(fields, :at, %{type: :time}), else: fields
-      Schema.new!(fields)
+      misspelt(Schema.new!(fields), flaw)
     end
+
+    # A schema assembled around `Schema.new/1`, its value field in a unit visualize does
+    # not read (D-157): the struct a provider could build by hand.
+    defp misspelt(%Schema{fields: fields} = schema, :misspelt_unit),
+      do: %{schema | fields: put_in(fields, [:v, :unit], "mss")}
+
+    defp misspelt(schema, _flaw), do: schema
 
     defp row(t, v, :stamp_as_number), do: %{t: t, v: v, at: t}
     defp row(t, v, _flaw), do: %{t: t, v: v}
