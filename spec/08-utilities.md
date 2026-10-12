@@ -659,8 +659,10 @@ A description says what a field **means**, never how it is drawn:
 | `target` | a number | `:number` | the value the field is measured against |
 | `continuity` | a positive number | every type | the longest gap between two readings that is still one run: beyond it a line breaks. It is measured along the window field (below): seconds for a `:time` one, the field's own units for a `:number` one (D-154) |
 | `window` | a boolean | `:time` or `:number` | `true`: the field a window is over — the feed's own clock, its rows ordered and windowed by it (§11.2, D-154). At most one field says `true`; `false` says a field is not the window field, though it is the schema's only `:time` field. A `:time` window field holds `DateTime`, `NaiveDateTime` or `Date` values, which a window compares, not ISO 8601 strings |
+| `metric_kind` | `:gauge`, `:counter` or `:rate` | `:number` | how the values were measured, which refines what the quantity's additivity allows (spec/05 §4.2, D-155): a `:gauge` is a level sampled at instants and never sums over time; a `:counter` holds the increments of an accumulating count, which sum over time when the quantity sums at all; a `:rate` is per unit time and integrates rather than sums. Absent, the quantity's defaults hold |
+| `bounds` | `[min, max]`, each a number or `nil`, `min` below `max` when both are given | `:number` | where the field's values physically lie, overriding its quantity's bounds (spec/05 §4.2): a **display hint** an axis may anchor at, never validation — a value outside them is not refused |
 
-`Visualize.Data.Schema.attributes/0` is the ten keys in that order, the vocabulary spec/14 §7.4's contract names.
+`Visualize.Data.Schema.attributes/0` is the twelve keys in that order, the vocabulary spec/14 §7.4's contract names.
 
 **The window field** is the field a feed's windows are over (§11.2): the one field described `window: true`, else the schema's one `:time` field when it has exactly one and does not describe it `window: false`; otherwise the schema has none. `Visualize.Feed.window_field/1` answers it. So a feed whose rows are stamped with instants and have one `:time` field says nothing, and a feed whose clock is a number — a signal's tick, a sequence number — says `window: true` on it (D-154). The two meanings `:time` once had, an instant and a tick, are two types now: a time scale draws the first and a numeric scale the second, and the window works over either.
 
@@ -683,12 +685,12 @@ The faults of `new/1`:
 | `{:type, :name}` | at `[name]`: a field name that is not an atom (other than `nil`, `true`, `false`) or a non-empty string |
 | `{:duplicate_field, other}` | at `[name]`: the field is named twice, as an atom and as the string that spells it (`:v` and `"v"`), which are one column (6.2); reported at the later of the two by term order |
 | `{:type, :description}` | at `[name]`: the description is not a map |
-| `:unknown_key` | at `[name, key]`: a key that is not one of the ten |
+| `:unknown_key` | at `[name, key]`: a key that is not one of the twelve |
 | `{:colour_key, key}` | at `[name, key]`: a colour, which a schema never names |
 | `:required` | at `[name, :type]`: the description gives no `type` |
-| `{:enum, allowed}` | at `[name, :type]` or `[name, :polarity]`: a value not among the allowed |
+| `{:enum, allowed}` | at `[name, :type]`, `[name, :polarity]` or `[name, :metric_kind]`: a value not among the allowed |
 | `{:invalid_for, type}` | at `[name, key]`: a key the field's type does not take — a `unit` on a `:category` field, an `order` on a `:number` one, a `window` on a `:category` or `:text` one |
-| `{:type, expected}` | at `[name, key]`: a value of the wrong shape, `expected` one of `:unit`, `:name`, `:string`, `:order`, `:status`, `:number`, `:positive`, `:boolean` |
+| `{:type, expected}` | at `[name, key]`: a value of the wrong shape, `expected` one of `:unit`, `:name`, `:string`, `:order`, `:status`, `:number`, `:positive`, `:boolean`, `:bounds` |
 | `{:duplicate_window, other}` | at `[name, :window]`: the field says `window: true` and so does `other`; a feed's windows are over one field. Reported at the later of the two by term order |
 | `:duplicate` | at `[name, :order, i]`: a state `order` lists twice |
 | `:not_in_order` | at `[name, :status, state]`: a state `status` names that `order` does not list |
@@ -747,7 +749,7 @@ A delivery is data like a design: a struct with no function in it, which a codec
 | `Visualize.Data.Schema.version/1` | The schema's version, the SHA-256 of its canonical encoding as 64 hex digits (10.2). |
 | `Visualize.Data.Schema.fetch/2` | A field's description by either spelling of its name, `{:ok, description}` or `:error`. |
 | `Visualize.Data.Schema.fetch/3` | One attribute of a field's description, `{:ok, value}` or `:error`. |
-| `Visualize.Data.Schema.attributes/0` | The ten description keys, `:type` first (10.1). |
+| `Visualize.Data.Schema.attributes/0` | The twelve description keys, `:type` first (10.1). |
 | `Visualize.Data.Schema.format_error/1` | One fault of `new/1` as a line a person reads. |
 | `Visualize.Data.Schema.Cache.new/0` | The empty cache. |
 | `Visualize.Data.Schema.Cache.new/1` | A cache holding `{feed, schema}` pairs, each under its own version. |

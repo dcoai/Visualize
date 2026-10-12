@@ -441,34 +441,89 @@ It returns `{:ok, code}`, `{:error, :native}` for `:native` — a measurement in
 
 ### 4.2 A fixed list of quantities
 
-A quantity is what a unit measures. It chooses how a value is displayed — later a colour ramp and physical anchors too (#531 §3) — and the list is fixed: it grows by proposal, never by a source naming a new one. `Visualize.Quantity.all/0` is the list in this order:
+A quantity is what a unit measures. It chooses how a value is displayed — later a colour ramp and physical anchors too (#531 §3) — and carries the facts a host needs to aggregate and draw it (D-155). The list is fixed: it grows by proposal, never by a source naming a new one. `Visualize.Quantity.all/0` is the list in this order:
 
-| Quantity | Base unit | Dimension | Display family (smallest first) |
-|---|---|---|---|
-| `:duration` | `s` | time | `ns`, `us`, `ms`, `s`, `min`, `h`, `d` |
-| `:information` | `By` | information | `By`, `kBy`, `MBy`, `GBy`; binary `By`, `KiBy`, `MiBy`, `GiBy`; bits `bit`, `kbit`, `Mbit`, `Gbit` |
-| `:data_rate` | `By/s` | information·time⁻¹ | the information families over `/s`: `By/s`, `kBy/s`, `MBy/s`, `GBy/s`; binary; bits `bit/s` … `Gbit/s` |
-| `:frequency` | `Hz` | time⁻¹ | `Hz`, `kHz`, `MHz`, `GHz`; events `/h`, `/min`, `/s` |
-| `:ratio` | `1` | none | — (displayed in its own unit, `%` or `1`) |
-| `:count` | `1` | none | — (SI notation from a thousand) |
-| `:temperature` | `Cel` | temperature | — (displayed in its own unit) |
-| `:length` | `m` | length | `mm`, `m`, `km` |
-| `:speed` | `m/s` | length·time⁻¹ | — (displayed in its own unit) |
-| `:power` | `W` | mass·length²·time⁻³ | `W`, `kW`, `MW`, `GW` |
-| `:energy` | `J` | mass·length²·time⁻² | `J`, `kJ`, `MJ`, `GJ`; watt-hours `W.h`, `kW.h`, `MW.h`, `GW.h` |
-| `:pressure` | `Pa` | mass·length⁻¹·time⁻² | `Pa`, `kPa`, `MPa` |
+| Quantity | Base unit | Dimension | Kind | Bounds (in the base unit) | Additive across | Additive over time |
+|---|---|---|---|---|---|---|
+| `:duration` | `s` | time | linear | ≥ 0 | yes | yes |
+| `:information` | `By` | information | linear | ≥ 0 | yes | yes |
+| `:data_rate` | `By/s` | information·time⁻¹ | linear | ≥ 0 | yes | no |
+| `:frequency` | `Hz` | time⁻¹ | linear | ≥ 0 | yes | no |
+| `:ratio` | `1` | none | linear | 0 to 1 (0 to 100 in `%`) | no | no |
+| `:count` | `1` | none | linear | ≥ 0 | yes | yes |
+| `:temperature` | `Cel` | temperature | affine | — | no | no |
+| `:length` | `m` | length | linear | ≥ 0 | yes | yes |
+| `:speed` | `m/s` | length·time⁻¹ | linear | ≥ 0 | no | no |
+| `:power` | `W` | mass·length²·time⁻³ | linear | — | yes | no |
+| `:energy` | `J` | mass·length²·time⁻² | linear | — | yes | yes |
+| `:pressure` | `Pa` | mass·length⁻¹·time⁻² | linear | — | no | no |
+| `:area` | `m2` | length² | linear | ≥ 0 | yes | yes |
+| `:volume` | `l` | length³ | linear | ≥ 0 | yes | yes |
+| `:mass` | `g` | mass | linear | ≥ 0 | yes | yes |
+| `:pace` | `s/m` | time·length⁻¹ | linear | ≥ 0 | no | no |
+| `:angle` | `deg` | angle | cyclic | 0 to 360 | no | no |
+| `:currency` | `{iso4217:XXX}`, by code | — | linear | — | yes | yes |
+| `:electric_potential` | `V` | mass·length²·time⁻²·charge⁻¹ | linear | — | no | no |
+| `:electric_current` | `A` | charge·time⁻¹ | linear | — | yes | no |
+| `:electric_charge` | `C` | charge | linear | ≥ 0 | yes | yes |
+| `:illuminance` | `lx` | luminous intensity·angle²·length⁻² | linear | ≥ 0 | no | no |
+| `:sound_level` | `dB[SPL]` | sound pressure level | logarithmic | — | no | no |
+| `:mass_concentration` | `g/l` | mass·length⁻³ | linear | ≥ 0 | no | no |
+| `:amount_concentration` | `mol/l` | length⁻³ (the mole is a number) | linear | ≥ 0 | no | no |
 
-**Which family.** A quantity with more than one family takes the one its unit is written in, so the data says and no setting does: an information or data-rate unit holding the atom `bit` scales in bits, one holding a binary prefix (`Ki`, `Mi`, `Gi`) in binary prefixes, and every other in decimal prefixes — **decimal is the default**, as UCUM's `kBy` and `Telemetry.Metrics`' `:kilobyte` are 1,000 bytes, so a host that measures in `MiBy` keeps `KiB`/`MiB`/`GiB` and nobody else sees them; a frequency unit holding `Hz` scales in hertz and any other (`/s`, `{request}/s`) in events per hour, minute and second; an energy unit holding `h` (`kW.h`) in watt-hours and any other in joules.
+"Number" is not a quantity: a field with none is plainly formatted. A percent is a `:ratio` written in `%`. A bare `dB` is a level ratio and not a `:sound_level`, which takes `dB[SPL]` and `B[SPL]` (§4.1). A currency's unit is the annotation of §4.1's extension, `{iso4217:XXX}`, one dimension per code.
 
-**The measure.** A unit and a quantity together are a *measure*, `%{unit: code | nil, quantity: quantity | nil}`, the two facts a field description carries (#535). `Visualize.Quantity.resolve/1` completes and checks one: the unit is checked (§4.1); a missing quantity is the one the unit's dimension implies — the table's dimension, a dimensionless unit holding `%` being `:ratio` and any other dimensionless one `:count` — or `nil` when no quantity has that dimension (`g`, `Cel/s`); a missing unit is the quantity's base unit; a unit whose dimension is not its quantity's (`By` as a `:duration`) is `{:error, {:quantity, quantity, code}}`, and a `:ratio` or a `:count` takes any dimensionless unit. It returns `{:ok, %{unit: code | nil, quantity: quantity | nil}}`, `{:error, {:unit, code, reason}}` for a code that does not read, `{:error, {:unknown_quantity, term}}` for a quantity not in the list, or the mismatch. `Visualize.Quantity.of_unit/1` is the inference alone.
+**Kind** (`Visualize.Quantity.kind/1`) says how values combine. `:linear` values are on a ratio scale. A temperature is `:affine`: its zero is a convention, so a difference is meaningful and a sum of absolutes is not. A sound level is `:logarithmic`: two levels do not add as numbers. An angle is `:cyclic`: 350° and 10° are 20° apart, so a mean of angles is circular.
 
-**Unit and quantity are facts about the data, not knobs.** Neither changes what a value is; they say what it already is, so a display can choose for it. What a reader sees — the format, the tick count — stays the design's to override (§3, spec/14 §4.4); there is no setting that picks a display unit, or decimal against binary, apart from the data.
+**Bounds** (`Visualize.Quantity.bounds/1` in the base unit, `bounds/2` in a given unit, `{min | nil, max | nil}`) are a **display hint, never validation** (D-155): they tell an axis where a quantity's values physically lie — a duration is not negative, an angle wraps at 360° — so it can anchor at zero or stop at the wrap. A value outside them is never refused: a difference is legitimately negative (an elevation change, a clock offset, net energy), and a ratio may exceed one. A field's schema overrides them with its own `bounds` (spec/08 §10.1). `bounds/2` converts the base's bounds into the unit (`bounds(:angle, "rad")` is `{0, 2π}`, `bounds(:ratio, "%")` is `{0, 100}`); an affine unit's bounds are its quantity's, none for a temperature.
+
+**Additivity depends on the aggregation** (D-155). A quantity carries two physical defaults: **across** — whether summing several series at one instant means anything (the total throughput of several links, the current into a node) — and **over time** — whether summing one series over time does (the bytes sent in a day, but not a day of power readings, which integrate to energy instead). A field's schema may state its **metric kind** (spec/08 §10.1), which refines the second: `Visualize.Quantity.additivity(quantity, metric_kind)` is `%{across: boolean, over_time: boolean}`, where
+
+- no metric kind (`nil`) keeps the quantity's defaults;
+- `:gauge` — a level sampled at instants — is never additive over time, since a sum of samples counts each level once per sample;
+- `:counter` — the increments of an accumulating count — is additive over time exactly when the quantity is additive across, since increments of an extensive quantity add and increments of a temperature mean nothing;
+- `:rate` — a quantity per unit time — is never additive over time: a rate integrates rather than adds;
+
+and across is the quantity's default under every metric kind. A field with no quantity (a plain number) has both defaults `true`. A host derives its aggregation exclusions from the two: a sum over time is offered only when `over_time`, a sum of series only when `across`.
+
+**Which family.** A quantity's display families are ladders of units, smallest first, each tagged with the unit systems it serves:
+
+| Quantity | Metric | US | UK | Other families (any system) |
+|---|---|---|---|---|
+| `:duration` | — | — | — | `ns`, `us`, `ms`, `s`, `min`, `h`, `d` |
+| `:information` | — | — | — | decimal `By`, `kBy`, `MBy`, `GBy`, `TBy`; binary `By`, `KiBy`, `MiBy`, `GiBy`, `TiBy`; bits `bit`, `kbit`, `Mbit`, `Gbit`, `Tbit` |
+| `:data_rate` | — | — | — | the information families over `/s` |
+| `:frequency` | — | — | — | `Hz`, `kHz`, `MHz`, `GHz`; events `/h`, `/min`, `/s` |
+| `:temperature` | `Cel` | `[degF]` | `Cel` | — |
+| `:length` | `mm`, `cm`, `m`, `km` | `[in_i]`, `[ft_i]`, `[mi_i]` | as US | — |
+| `:area` | `cm2`, `m2`, `har`, `km2` | `[ft_i]2`, `[acr_us]`, `[mi_i]2` | as US | — |
+| `:volume` | `ml`, `l`, `m3` | `[foz_us]`, `[pt_us]`, `[gal_us]` | `[foz_br]`, `[pt_br]`, `[gal_br]` | — |
+| `:mass` | `mg`, `g`, `kg`, `t` | `[oz_av]`, `[lb_av]` | `[oz_av]`, `[lb_av]`, `[stone_av]` | — |
+| `:speed` | `km/h` | `[mi_i]/h` | as US | — |
+| `:pace` | `min/km` | `min/[mi_i]` | as US | — |
+| `:power` | — | — | — | `W`, `kW`, `MW`, `GW` |
+| `:energy` | — | — | — | `J`, `kJ`, `MJ`, `GJ`; watt-hours `W.h`, `kW.h`, `MW.h`, `GW.h`; calories `cal`, `kcal` |
+| `:pressure` | `Pa`, `kPa`, `MPa` | `[psi]` | as US | — |
+| `:electric_potential` | — | — | — | `mV`, `V`, `kV` |
+| `:electric_current` | — | — | — | `mA`, `A` |
+| `:electric_charge` | — | — | — | `mA.h`, `A.h` |
+| `:illuminance` | — | — | — | `lx`, `klx` |
+
+`:ratio`, `:count`, `:angle`, `:currency`, `:sound_level` and the two concentrations have no family: each is displayed in the unit it is given (a count in SI notation from a thousand, §4.3).
+
+A unit **belongs to** the family that holds a member of its *shape* — its atoms and their exponents, prefixes aside, a binary prefix (`Ki`, `Mi`, `Gi`, `Ti`) kept apart from a decimal one, annotations aside — the first such family in the table's order (metric before US before UK before the others). So the data says which family and no setting does: `MiBy` belongs to the binary ladder and `kBy` to the decimal one — **decimal is the default**, as UCUM's `kBy` and `Telemetry.Metrics`' `:kilobyte` are 1,000 bytes, so a host that measures in `MiBy` keeps `KiB`/`MiB`/`GiB` and nobody else sees them — `bit/s` to the bits, `{request}/s` and `{beat}/min` to the events, `kW.h` to the watt-hours, `hPa` to `Pa`, `kPa`, `MPa`, `[ft_i]` to the US length ladder. A unit of no family's shape — `mbar`, `[nmi_i]`, `[yd_i]`, `[kn_i]`, `m/s`, `K`, `[Cal]` — belongs to none and is displayed as it is given. `Visualize.Quantity.family(quantity, unit, system)` is that ladder for a system (below), and `family/2` the unit's own.
+
+**Unit systems** (D-155) are `:metric`, `:us`, `:uk` and `:as_posted`, `Visualize.Quantity.systems/0`. A system is a display preference and never touches the data: it chooses the family a value is shown in. Under `:metric`, `:us` or `:uk`, a quantity whose table row names a family for that system is shown in it — a mass in `kg` under `:us` is shown in `lb` — and any other quantity is shown as under `:as_posted`. Under **`:as_posted`**, the default, a value keeps its unit's own family and is only rescaled within it, which is D-138's display scaling unchanged. "Imperial" alone is not a system: a US and an imperial gallon are 20% apart, and the UK writes stones, imperial pints and °C. A preference that crosses dimensions is **not** a system switch and stays a per-field choice — a glucose reading in `mg/dl` against `mmol/l`, which needs the molar mass, or a pace against a speed, its reciprocal.
+
+**The measure.** A unit and a quantity together are a *measure*, `%{unit: code | nil, quantity: quantity | nil}`, the two facts a field description carries (#535). `Visualize.Quantity.resolve/1` completes and checks one: the unit is checked (§4.1); a missing quantity is the one the unit's dimension implies — the table's dimension, a dimensionless unit holding `%` being `:ratio`, one holding an `{iso4217:…}` annotation `:currency`, and any other dimensionless one `:count` — or `nil` when no quantity has that dimension (`rad/s`, `Cel/s`, a bare `dB`); a missing unit is the quantity's base unit (`nil` for a `:currency`, whose code the data must say); a unit whose dimension is not its quantity's (`By` as a `:duration`, `dB` as a `:sound_level`) is `{:error, {:quantity, quantity, code}}`; a `:ratio` or a `:count` takes any dimensionless unit, and a `:currency` a dimensionless one holding an `{iso4217:…}` annotation. It returns `{:ok, %{unit: code | nil, quantity: quantity | nil}}`, `{:error, {:unit, code, reason}}` for a code that does not read, `{:error, {:unknown_quantity, term}}` for a quantity not in the list, or the mismatch. `Visualize.Quantity.of_unit/1` is the inference alone.
+
+**Unit and quantity are facts about the data, not knobs.** Neither changes what a value is; they say what it already is, so a display can choose for it. What a reader sees — the format, the tick count — stays the design's to override (§3, spec/14 §4.4), and the unit system is the viewer's; there is no setting that picks decimal against binary apart from the data.
 
 ### 4.3 Display scaling
 
-**The display unit** of a domain in a measure, `Visualize.Quantity.display_unit(domain, measure)`, is the family member that fits the domain's magnitude `M`, the greatest `|d|` among its numbers converted to the base: the **largest member in which `M` is at least 1**, else the smallest. So 0–1,500 `ms` is shown in `s` (`M` = 1.5 s), 0–900 `ms` in `ms`, 0–90 `s` in `min`, 0–1,500,000 `By` in `MBy`, 0–0.5 `/s` in `/min`, 0–3,000 `W` in `kW`. A measure whose quantity has no family, a unit without a factor (`Cel`), no quantity, or `M = 0` keeps the unit it has.
+**The display unit** of a domain in a measure, `Visualize.Quantity.display_unit(domain, measure, opts)` with `system:` (default `:as_posted`), is the member of the family the system chooses (§4.2) that fits the domain's magnitude `M`, the greatest `|d|` among its numbers: the **largest member in which `M` is at least 1**, else the smallest. So 0–1,500 `ms` is shown in `s` (`M` = 1.5 s), 0–900 `ms` in `ms`, 0–90 `s` in `min`, 0–1,500,000 `By` in `MBy`, 0–0.5 `/s` in `/min`, 0–3,000 `W` in `kW`, 0–0.5 `m` in `cm`; and under `system: :us`, 0–80 `kg` in `[lb_av]`, 0–5,000 `m` in `[mi_i]`, 0–20 `l` in `[gal_us]`, and `Cel` in `[degF]`. A family of one member is that member whatever the magnitude. A measure whose unit belongs to no family under the system, no quantity, or a unit without a factor (`Cel`) in its own family keeps the unit it has; at `M = 0` the unit is kept when it is in the family, and otherwise the member nearest it by factor is taken.
 
-**The tick formatter** of a scale in a measure, `Visualize.Quantity.formatter(scale, measure, opts)` (`count:` and `locale:` as `Visualize.Format.Auto.formatter/2`), writes every tick in the display unit:
+**The tick formatter** of a scale in a measure, `Visualize.Quantity.formatter(scale, measure, opts)` (`count:` and `locale:` as `Visualize.Format.Auto.formatter/2`, and `system:` as `display_unit/3`), writes every tick in the display unit:
 
 - on `Linear`, `Power` and `Radial`: the domain converted to the display unit, its `Visualize.Format.Auto.notation/2` — `{:si, 3}` in place of `:grouped` for a `:count`, whose family is SI from a thousand (`1.2k`, `90k`), one prefix for the axis as ever — and each tick converted, written by `Visualize.Format.Auto.number/2` of that notation, then the display unit's symbol: `0 s`, `0.5 s`, `1 s`, `1.5 s` for 0–1,500 `ms`;
 - on `Log` and `Symlog`, whose ticks are powers of ten in the scale's unit: each tick in its **own** display unit, the largest in which it is at least 1 among the family members a power of ten from the unit — so a tick lands on a round number, `1 ms`, `10 ms`, `100 ms`, `1 s`, `10 s`, `100 s`, `1k s`, never `1.67 min` — written by `Visualize.Format.Auto.number(:si)` as #532's log axis is; `0` and a quantity with no family keep the unit;
@@ -494,11 +549,19 @@ The symbol follows the number after a space (`1.5 s`, `20 °C`, `2.5 MB`), excep
 | `Visualize.Unit.symbol/2` | The display symbol of a code, `annotations:` (default `false`) writing a lone annotation's text (4.1). |
 | `Visualize.Unit.from_telemetry/1` | `{:ok, code}` for a `Telemetry.Metrics` unit atom or `{from, to}` pair, `{:error, :native}`, `{:error, {:unknown, atom}}` (4.1). |
 | `Visualize.Quantity.all/0` | The fixed list of quantities, in the order of 4.2. |
-| `Visualize.Quantity.base_unit/1` | A quantity's base unit (4.2). |
-| `Visualize.Quantity.family/2` | `family(quantity, unit)`: the display family a unit of the quantity scales in, smallest first, `[]` for a quantity with none (4.2). |
+| `Visualize.Quantity.base_unit/1` | A quantity's base unit (4.2); `nil` for `:currency`. |
+| `Visualize.Quantity.kind/1` | `:linear`, `:affine`, `:logarithmic` or `:cyclic` (4.2). |
+| `Visualize.Quantity.bounds/1` | A quantity's bounds in its base unit, `{min \| nil, max \| nil}`: a display hint, never validation (4.2). |
+| `Visualize.Quantity.bounds/2` | `bounds(quantity, unit)`: the bounds converted into the unit (4.2). |
+| `Visualize.Quantity.additivity/1` | As `additivity/2` with no metric kind: the quantity's defaults. |
+| `Visualize.Quantity.additivity/2` | `additivity(quantity \| nil, metric_kind \| nil)`: `%{across: boolean, over_time: boolean}`, the quantity's defaults refined by `:gauge`, `:counter` or `:rate` (4.2). |
+| `Visualize.Quantity.systems/0` | `[:metric, :us, :uk, :as_posted]` (4.2). |
+| `Visualize.Quantity.family/2` | `family(quantity, unit)`: the display family a unit of the quantity belongs to, smallest first, `[]` for none (4.2). |
+| `Visualize.Quantity.family/3` | `family(quantity, unit, system)`: the family the system shows a unit of the quantity in — the system's own when the quantity has one, else the unit's (4.2). |
 | `Visualize.Quantity.of_unit/1` | The quantity a code's dimension implies, or `nil` (4.2). |
 | `Visualize.Quantity.resolve/1` | A measure completed and checked: `{:ok, measure}` or `{:error, reason}` (4.2). |
-| `Visualize.Quantity.display_unit/2` | `display_unit(domain, measure)`: the family member that fits the domain (4.3). |
+| `Visualize.Quantity.display_unit/2` | As `display_unit/3` with `[]` options. |
+| `Visualize.Quantity.display_unit/3` | `display_unit(domain, measure, system: system)`: the member of the system's family that fits the domain (4.3). |
 | `Visualize.Quantity.formatter/2` | As `formatter/3` with `[]` options. |
 | `Visualize.Quantity.formatter/3` | `formatter(scale, measure, opts)`: the tick formatter in the display unit, with its symbol (4.3); raises `ArgumentError` for a measure `resolve/1` refuses. |
 | `Visualize.Quantity.suffix/1` | The tick suffix of a display unit: `""`, or its symbol with its separator (4.3). |
