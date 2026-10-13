@@ -12,6 +12,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     import Phoenix.Component, only: [assign: 2, assign: 3]
 
+    # A frame's placement keys: where a chart shows the frame (#616).
+    @placement [:box, :cell, :span, :z]
+
     alias Visualize.{Chart, Signals}
     alias Visualize.Chart.Builder.{Scales, Stack}
     alias Visualize.Chart.{Fragment, Use}
@@ -137,6 +140,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case owner_for(uses, fetch, path, key) || Stack.get(uses, selected) do
         nil ->
           socket
+
+        # Where a chart shows a frame is the chart's, not the library's (#616, D-165): a
+        # frame's placement is written into the site's own local even when the site is
+        # linked, and the row reads *with local changes*.
+        %Use{ref: ref} = use
+        when ref != nil and key in @placement and length(path) == 2 and
+               hd(path) == :frames ->
+          local = Stack.local_path(use, fetch, path)
+          assign(socket, :uses, Stack.update(uses, use.id, &Stack.write(&1, local, key, parsed)))
 
         # A referenced site is the library's word: nothing is written here (§18.15).
         %Use{ref: ref} = use when ref != nil ->

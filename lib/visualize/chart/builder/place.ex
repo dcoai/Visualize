@@ -22,20 +22,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @type region :: :plot | :top | :bottom | :left | :right
 
     @typedoc "What the palette offers: a component, or a mark of a type."
-    @type component :: :axis | :legend | :title | :label | {:mark, atom()}
+    @type component :: :axis | :legend | :title | :label | :frame | {:mark, atom()}
 
     @typedoc "A site to insert: its kind, its body under the kind's key, and its key if named."
     @type site :: %{kind: atom(), body: map(), key: atom() | nil}
 
     @doc """
-    The palette's rows in the order shown: the four components, then a mark of every type.
+    The palette's rows in the order shown: the five components — a frame among them (#616) —
+    then a mark of every type.
 
-        iex> Visualize.Chart.Builder.Place.components() |> Enum.take(5)
-        [axis: "axis", legend: "legend", title: "title", label: "label", "mark:line": "mark: line"]
+        iex> Visualize.Chart.Builder.Place.components() |> Enum.take(6)
+        [axis: "axis", legend: "legend", title: "title", label: "label", frame: "frame", "mark:line": "mark: line"]
     """
     @spec components() :: [{atom(), String.t()}]
     def components do
-      [axis: "axis", legend: "legend", title: "title", label: "label"] ++
+      [axis: "axis", legend: "legend", title: "title", label: "label", frame: "frame"] ++
         for type <- Schema.mark_types(), do: {:"mark:#{type}", "mark: #{type}"}
     end
 
@@ -57,7 +58,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    def component(word) when word in ["axis", "legend", "title", "label"],
+    def component(word) when word in ["axis", "legend", "title", "label", "frame"],
       do: {:ok, String.to_existing_atom(word)}
 
     def component(_word), do: :error
@@ -97,6 +98,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def home(:title), do: :top
     def home(:label), do: :bottom
     def home(:legend), do: :plot
+    def home(:frame), do: :plot
     def home({:mark, _type}), do: :plot
 
     @doc """
@@ -281,6 +283,55 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case Enum.find(frames(design, size), &(&1.name == frame)) do
         nil -> spot(design, size, {0, 0})
         f -> %{frame: f.name, point: {0, 0}, geometry: %{size: f.size, margin: f.margin}}
+      end
+    end
+
+    @doc """
+    A new frame dropped on the graph at a point (spec/14 §18.16, #616): a fresh name —
+    `main` in a design with none, else the first free `frame_<n>` from 2 — and a box a
+    quarter of the graph, half its width and half its height, centred on the point and
+    kept inside, as fractions rounded to four places. `:centre` is the graph's centre,
+    where the keyboard twin and *+ frame* place one.
+
+        iex> design = %{frames: %{main: %{}, frame_2: %{}}}
+        iex> Visualize.Chart.Builder.Place.new_frame(design, {800, 400}, {700, 100})
+        {:frame_3, [0.5, 0, 0.5, 0.5]}
+        iex> Visualize.Chart.Builder.Place.new_frame(%{}, {800, 400}, :centre)
+        {:main, [0.25, 0.25, 0.5, 0.5]}
+    """
+    @spec new_frame(map(), {number(), number()}, {number(), number()} | :centre) ::
+            {atom(), [number()]}
+    def new_frame(design, {width, height}, :centre),
+      do: new_frame(design, {width, height}, {width / 2, height / 2})
+
+    def new_frame(design, {width, height}, {x, y}) do
+      cx = x / width
+      cy = y / height
+      box = [clamp(cx - 0.25, 0, 0.5), clamp(cy - 0.25, 0, 0.5), 0.5, 0.5]
+      {fresh_frame(design), Enum.map(box, &rounded/1)}
+    end
+
+    defp clamp(v, low, high), do: v |> max(low) |> min(high)
+
+    defp rounded(value) do
+      r = Float.round(value * 1.0, 4)
+      if r == trunc(r), do: trunc(r), else: r
+    end
+
+    defp fresh_frame(design) do
+      taken =
+        case is_map(design) && Map.get(design, :frames) do
+          frames when is_map(frames) -> frames |> Map.keys() |> Enum.map(&to_string/1)
+          _none -> []
+        end
+
+      if taken == [] do
+        :main
+      else
+        2
+        |> Stream.iterate(&(&1 + 1))
+        |> Enum.find(&("frame_#{&1}" not in taken))
+        |> then(&String.to_atom("frame_#{&1}"))
       end
     end
 

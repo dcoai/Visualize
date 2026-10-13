@@ -592,7 +592,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
         [:frames, :main, :margin]
     """
     @spec local_path(Use.t(), (Fragment.id() -> {:ok, map()} | :error), [term()]) :: [term()]
-    def local_path(use, fetch, path) do
+    def local_path(%Use{key: key} = use, fetch, [:frames, key | rest] = path)
+        when is_atom(key) and key != nil do
+      # A frame site placed under a key lands as `frames.<key>` (§19.6, #616), and its
+      # fragment still calls its one frame by the entry's name.
+      case shown_fragment(use, fetch) do
+        %{frames: frames} when is_map(frames) and map_size(frames) == 1 ->
+          [:frames, frames |> Map.keys() |> hd() | rest]
+
+        _other ->
+          by_kind(use, fetch, path)
+      end
+    end
+
+    def local_path(use, fetch, path), do: by_kind(use, fetch, path)
+
+    defp by_kind(use, fetch, path) do
       case {Fragment.wrapped(shown_fragment(use, fetch)), path} do
         {{:style, _}, [:styles, _key | rest]} -> [:style | rest]
         {{:source, _}, [:sources, _key | rest]} -> [:source | rest]

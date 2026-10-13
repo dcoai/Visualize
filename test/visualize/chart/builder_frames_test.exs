@@ -164,16 +164,22 @@ defmodule Visualize.Chart.BuilderFramesTest do
       refute Map.has_key?(now, :cell) or Map.has_key?(now, :span)
     end
 
-    test "a frame the library owns refuses the write with its notice" do
+    # Where a chart shows a frame is the chart's (#616, D-165): a linked owner takes the box
+    # into its own local, and refuses everything else as before.
+    test "a frame the library owns takes its box into the site's own local" do
       s = BuilderFixture.socket(BuilderFixture.layers(), store: BuilderFixture.Library)
       {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, s)
       s = at_frame(s, :main)
 
-      {:noreply, refused} =
+      {:noreply, s} =
         Builder.handle_event("frame_box", %{"frame" => "main", "box" => [0, 0, 0.5, 1]}, s)
 
-      assert refused.assigns.uses == s.assigns.uses
-      assert refused.assigns.notice =~ "is from the library — open it to edit"
+      assert s.assigns.notice == nil
+
+      assert [%{frames: %{main: %{box: [0, 0, 0.5, 1]}}}] =
+               for(%{ref: {:composite, 1}, local: local} <- s.assigns.uses, do: local)
+
+      assert Writes.composed(s).frames.main.box == [0, 0, 0.5, 1]
     end
 
     test "the frame's page has a place section: its box read, z and background its fields" do
@@ -300,6 +306,141 @@ defmodule Visualize.Chart.BuilderFramesTest do
       design = Visualize.Chart.stack([{name, layer}])
       [step] = Visualize.Chart.Builder.Steps.steps(design)
       assert step.path == [:frames, :history, :axes]
+    end
+  end
+
+  # A library holding one frame: a polar inset, its own margin.
+  defmodule FrameLibrary do
+    @moduledoc false
+    @behaviour Visualize.Chart.Builder.Store
+
+    @inset {:frame, 1}
+
+    @impl true
+    def list(_context), do: [%{id: @inset, name: "inset", kind: :frame}]
+
+    @impl true
+    def get(@inset, _context) do
+      {:ok,
+       %{
+         id: @inset,
+         name: "inset",
+         kind: :frame,
+         fragment: %{frames: %{main: %{kind: :polar, margin: %{top: 4}}}}
+       }}
+    end
+
+    def get(_id, _context), do: :error
+
+    @impl true
+    def put(%{id: id}, _context), do: {:ok, id || {:frame, 2}}
+
+    @impl true
+    def delete(_id, _context), do: :ok
+
+    @impl true
+    def import(bundle, context),
+      do: Visualize.Chart.Builder.Store.relocate(bundle, context, &put/2)
+  end
+
+  describe "new frames and the frames root (spec/14 §18.16, #616)" do
+    defp sized(layers, opts \\ []) do
+      s = BuilderFixture.socket(layers, opts)
+      {:noreply, s} = Builder.handle_event("graph_size", %{"width" => 800, "height" => 400}, s)
+      s
+    end
+
+    test "a frame dropped from the palette is a new frame, a quarter of the graph at the point" do
+      {:noreply, s} =
+        Builder.handle_event(
+          "place",
+          %{"component" => "frame", "x" => 700, "y" => 100},
+          sized(BuilderFixture.layers())
+        )
+
+      design = Writes.composed(s)
+      assert design.frames.frame_2 == %{kind: :cartesian, box: [0.5, 0, 0.5, 0.5]}
+      assert s.assigns.node_label == "frames.frame_2"
+
+      assert [%{frames: %{frame_2: _}}] =
+               for(%{ref: nil, local: %{frames: %{frame_2: _}} = l} <- s.assigns.uses, do: l)
+
+      # The one frame's mark and label now say it, so the design of two stays valid.
+      assert Enum.map(design.marks, & &1.frame) == [:main]
+      assert Enum.map(design.labels, & &1.frame) == [:main]
+      assert {:ok, _} = Visualize.Chart.from_map(design)
+    end
+
+    test "+ frame, and the keyboard twin, place one at the centre under a fresh name" do
+      s = sized(BuilderFixture.layers())
+      {:noreply, s} = Builder.handle_event("add_frame", %{}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("component_key", %{"key" => "Insert", "component" => "frame"}, s)
+
+      frames = Writes.composed(s).frames
+      assert frames.frame_2.box == [0.25, 0.25, 0.5, 0.5]
+      assert frames.frame_3.box == [0.25, 0.25, 0.5, 0.5]
+    end
+
+    test "a library frame lands linked under a fresh key, its placement its own" do
+      s = sized(BuilderFixture.layers(), store: FrameLibrary)
+
+      {:noreply, s} =
+        Builder.handle_event("place", %{"name" => "frame:1", "x" => 10, "y" => 390}, s)
+
+      design = Writes.composed(s)
+      assert %{kind: :polar, margin: %{top: 4}, box: [0, 0.5, 0.5, 0.5]} = design.frames.frame_2
+
+      [use] = for %{ref: {:frame, 1}} = use <- s.assigns.uses, do: use
+      assert use.key == :frame_2
+      assert use.local == %{frames: %{main: %{box: [0, 0.5, 0.5, 0.5]}}}
+      assert Visualize.Chart.Builder.Stack.linkage(use) == :edited
+
+      # Dragged, it is written into the site's own local — not refused (D-165).
+      {:noreply, s} =
+        Builder.handle_event(
+          "frame_box",
+          %{"frame" => "frame_2", "box" => [0.5, 0.5, 0.5, 0.5]},
+          s
+        )
+
+      assert s.assigns.notice == nil
+      assert Writes.composed(s).frames.frame_2.box == [0.5, 0.5, 0.5, 0.5]
+
+      # Anything else of it is still the library's.
+      {:noreply, refused} =
+        Builder.handle_event("pick", %{"node" => "frames.frame_2"}, s)
+
+      {:noreply, refused} =
+        Builder.handle_event(
+          "edit",
+          %{"_node" => "frames.frame_2", "kind" => "geo", "_target" => ["kind"]},
+          refused
+        )
+
+      assert Writes.composed(refused).frames.frame_2.kind == :polar
+    end
+
+    test "the frames root: each frame's select bar, axes over its scales, and what it draws" do
+      s = sized(two())
+      {:noreply, s} = Builder.handle_event("select_root", %{"root" => "frames"}, s)
+      {:noreply, s} = Builder.handle_event("pick", %{"node" => "frames.now"}, s)
+      html = BuilderFixture.render(s)
+
+      assert html =~ "+ frame"
+
+      assert html =~
+               ~s(phx-value-node="frames.history" phx-target="-1">select — place it on the graph)
+
+      assert html =~ "selected — drag it on the graph"
+
+      assert html =~ ~s(phx-value-node="marks[0]" phx-target="-1">line mark · marks[0])
+      assert html =~ ~s(phx-value-node="marks[1]" phx-target="-1">line mark · marks[1])
+
+      # Each frame's axes rows are its own.
+      assert html =~ ~s(phx-value-frame="history")
+      assert html =~ ~s(phx-value-frame="now")
     end
   end
 end

@@ -32,7 +32,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
     @events ~w(
-      menu menu_close copy_node override_node component_key place move graph_size frame_box
+      menu menu_close copy_node override_node component_key place move graph_size frame_box add_frame
     )
 
     # The smallest side, in pixels, the graph is drawn at (spec/14 §18.4).
@@ -83,6 +83,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A palette row from the keyboard: Insert places it in its home region.
     def handle_event("component_key", %{"key" => key, "component" => word}, socket) do
       case {key, Place.component(word)} do
+        {insert, {:ok, :frame}} when insert in ["Insert", "i", "Enter", " "] ->
+          {:noreply, added_frame(socket, :centre, nil)}
+
         {insert, {:ok, component}} when insert in ["Insert", "i", "Enter", " "] ->
           {:noreply, placed(socket, component, Place.home(component), keyed_spot(socket))}
 
@@ -95,6 +98,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # the point in chart coordinates, or by the region the keyboard twin names.
     def handle_event("place", %{"component" => word} = params, socket) do
       case Place.component(word) do
+        # A frame dropped on the graph is a new frame at the point (#616).
+        {:ok, :frame} ->
+          {:noreply, added_frame(socket, dropped_at(params), nil)}
+
         {:ok, component} ->
           {region, point} = where(socket, params, component)
           {:noreply, placed(socket, component, region, point)}
@@ -104,10 +111,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    def handle_event("place", %{"name" => submitted}, socket) do
+    def handle_event("place", %{"name" => submitted} = params, socket) do
       case fetch(socket.assigns.store, submitted) do
         {:ok, entry} ->
           case admits(socket.assigns.open, entry) do
+            # A frame from the library lands at the drop point under a fresh key, linked:
+            # its placement is the chart's (#616, D-165).
+            :ok when entry.kind == :frame ->
+              {:noreply, added_frame(socket, dropped_at(params), entry)}
+
             # Linked, as every drop is (#381): the entry's placement is the library's, so
             # nothing is snapped; unlock it to move it.
             :ok ->
@@ -194,6 +206,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
         _not_a_frame_or_box -> {:noreply, socket}
       end
     end
+
+    # *+ frame* on the frames root: a new frame at the graph's centre (#616).
+    def handle_event("add_frame", _params, socket),
+      do: {:noreply, added_frame(socket, :centre, nil)}
 
     # -- placing a component (spec/14 §18.16) ------------------------------------------------
 
@@ -450,6 +466,67 @@ if Code.ensure_loaded?(Phoenix.Component) do
         do: opened(socket, Editor.label(path ++ [:axes, count - 1])),
         else: socket
     end
+
+    # A new frame (spec/14 §18.16, #616): a fresh name and a quarter of the graph centred
+    # where it was dropped — an inline frame site of `kind: :cartesian`, or a library frame
+    # linked under the name as its key with the box in its own local (D-165) — inserted
+    # after the selected layer, selected and open. A design that had one frame and marks
+    # or labels that said none gives them that frame's name first, since two frames ask a
+    # frame of each.
+    defp added_frame(socket, at, entry) do
+      design = composed(socket)
+      {name, box} = Place.new_frame(design, graph_size(socket), at)
+      socket = socket |> assign(:notice, nil) |> framed_unframed(design)
+      %{uses: uses, labels: labels, selected: selected} = socket.assigns
+
+      use =
+        case entry do
+          nil ->
+            %{
+              Use.new(nil, uses)
+              | ref: nil,
+                local: %{frames: %{name => %{kind: :cartesian, box: box}}}
+            }
+
+          %{id: id, fragment: fragment} ->
+            inner = fragment |> Map.get(:frames, %{main: %{}}) |> Map.keys() |> hd()
+            %{Use.new(id, uses) | key: name, local: %{frames: %{inner => %{box: box}}}}
+        end
+
+      word = if entry, do: entry.name, else: "new frame"
+
+      socket
+      |> assign(
+        uses: Stack.insert(uses, selected, use),
+        labels: Map.put(labels, use.id, word),
+        selected: use.id
+      )
+      |> opened("frames.#{name}")
+    end
+
+    # The marks and labels of a one-frame design that say no frame are given its name.
+    defp framed_unframed(socket, design) do
+      case Map.get(design, :frames) do
+        frames when is_map(frames) and map_size(frames) == 1 ->
+          [only] = Map.keys(frames)
+
+          for root <- [:marks, :labels],
+              {node, i} <- design |> Map.get(root, []) |> List.wrap() |> Enum.with_index(),
+              is_map(node),
+              Map.get(node, :frame) == nil,
+              reduce: socket do
+            acc -> update_layer(acc, [root, i], :frame, {:ok, only})
+          end
+
+        _none_or_several ->
+          socket
+      end
+    end
+
+    defp dropped_at(%{"x" => _} = params),
+      do: {number(Map.get(params, "x")), number(Map.get(params, "y"))}
+
+    defp dropped_at(_params), do: :centre
 
     defp spotted_frame(_design, %{frame: frame}), do: frame
     defp spotted_frame(design, _point), do: Fragment.frame_of(design, nil)

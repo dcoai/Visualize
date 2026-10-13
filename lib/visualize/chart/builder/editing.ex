@@ -582,6 +582,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             other?: Map.get(owners, node.path) not in [nil, layer_label],
             before: if(node.kind == :frame, do: [meta_form(layer)], else: [])
           }
+          |> Map.merge(frame_parts(layer, node))
         end
 
       page = %{owners: owners, layer: layer_label, locked: locked}
@@ -600,6 +601,42 @@ if Code.ensure_loaded?(Phoenix.Component) do
           Map.merge(page, %{sections?: true, single: nil, tops: many})
       end
     end
+
+    # A frame's section on the frames root (#616): the axes over its position scales —
+    # those it declares and those its marks read — and what it draws, each mark and label
+    # by its label; nothing for any other section.
+    defp frame_parts(design, %{kind: :frame, path: [:frames, frame]}) do
+      declared =
+        case get_in(design, [:frames, frame, :scales]) do
+          scales when is_map(scales) -> Map.keys(scales)
+          _none -> []
+        end
+
+      drawn =
+        for root <- [:marks, :labels],
+            {node, i} <- design |> Map.get(root, []) |> List.wrap() |> Enum.with_index(),
+            is_map(node),
+            Fragment.frame_of(design, node) == frame,
+            do: {root, node, i}
+
+      read =
+        for {:marks, mark, _i} <- drawn, scale <- Scales.position_scales(design, mark), do: scale
+
+      scales = Enum.filter([:x, :y, :angle, :r], &(&1 in declared or &1 in read))
+
+      %{
+        axes: if(scales == [], do: [], else: Axes.rows(design, scales, frame)),
+        draws: for({root, node, i} <- drawn, do: drawn_word(root, node, i))
+      }
+    end
+
+    defp frame_parts(_design, _node), do: %{}
+
+    defp drawn_word(:marks, mark, i),
+      do: %{label: "marks[#{i}]", word: "#{Map.get(mark, :type, :mark)} mark · marks[#{i}]"}
+
+    defp drawn_word(:labels, _label, i),
+      do: %{label: "labels[#{i}]", word: "label · labels[#{i}]"}
 
     # The columns the pool's rows have, by name (spec/14 §18.6): the first row's keys.
     defp columns(pool) do

@@ -296,6 +296,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
       border: 0;
     }
 
+    /* The frames root (spec/14 §18.16, #616): + frame, and what each frame draws. */
+    .vis-builder .vis-builder-add-frame,
+    .vis-builder .vis-builder-draws-item {
+      padding: 2px 8px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: var(--vis-builder-panel);
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .vis-builder .vis-builder-add-frame {
+      align-self: flex-start;
+    }
+
+    .vis-builder .vis-builder-draws {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 4px 0;
+      padding: 0;
+      list-style: none;
+    }
+
     /* The open frame's outline and corner handles (spec/14 §18.16, #614): drawn over the
        chart, the outline taking no pointer so every node under it stays clickable, the
        handles taking it to resize. */

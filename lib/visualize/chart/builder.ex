@@ -638,6 +638,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <div :if={@context == :inspect and !@theme_mode and !@board_mode} class="vis-builder-inspect">
+              <button
+                :if={@preview? and root(@entry.label) == "frames"}
+                type="button"
+                class="vis-builder-add-frame"
+                title="a new frame, a quarter of the graph at its centre; drag it into place"
+                phx-click="add_frame"
+                phx-target={@myself}
+              >+ frame</button>
               <details
                 :for={top <- @page.tops}
                 :if={@page.sections? and not @data_page?}
@@ -665,6 +673,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
                     phx-target={@myself}
                   >select — edit its style</button>
                 </div>
+                <div :if={top.kind == :frame} class="vis-builder-section-select">
+                  <span :if={top.label == @entry.label} class="vis-builder-section-selected-word">selected — drag it on the graph</span>
+                  <button
+                    :if={top.label != @entry.label}
+                    type="button"
+                    class="vis-builder-section-select-button"
+                    title={"open #{top.label} — its outline and handles on the graph"}
+                    phx-click="select_node"
+                    phx-value-node={top.label}
+                    phx-target={@myself}
+                  >select — place it on the graph</button>
+                </div>
+                <Axes.section :if={top[:axes] not in [nil, []]} rows={top.axes} target={@myself} />
+                <ul :if={top[:draws] not in [nil, []]} class="vis-builder-draws" title="what this frame draws">
+                  <li :for={drawn <- top.draws}>
+                    <button
+                      type="button"
+                      class="vis-builder-draws-item"
+                      phx-click="select_node"
+                      phx-value-node={drawn.label}
+                      phx-target={@myself}
+                    >{drawn.word}</button>
+                  </li>
+                </ul>
                 <Page.page
                   id={@id <> "-page-" <> top.slug}
                   kind={top.kind}
