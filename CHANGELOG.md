@@ -25,14 +25,16 @@ release it merely follows.
   different schema versions were refused with `{:error, {:combine_schema, versions}}`.
   *After:* a later feed combines when, for each field of the first feed's schema, it has
   a field of the same name (compared as strings), of the same type, and for a number a unit
-  that converts into the first's. The combination describes itself with the first feed's
+  that converts into the first's, and when its window field (`Visualize.Feed.window_field/1`)
+  is the first's, since each later feed is asked for a window over its own. The combination describes itself with the first feed's
   schema, whole, and its pushes pass through as before. A later feed's rows come back in
   the first schema's field names, its numbers converted into the first's units (a history
   in `s` behind live data in `ms` reads in `ms`), and columns only its schema describes are
   dropped. A refusal is `{:error, {:combine_schema, [{position, field, reason}]}}`, listing
   every incompatibility: `position` is the later feed's index in the list, `field` is
   spelt as the first schema spells it, and `reason` is `:missing`, `{:type, a, b}` or
-  `{:unit, a, b}`. A unit facing a field with none is refused, as are two currencies.
+  `{:unit, a, b}`, or `{:window, first, later}` at the first's window field for a feed
+  windowing over another field (`later` is `nil` when it has none). A unit facing a field with none is refused, as are two currencies.
   *Instead:* match the new shape. Facts only a later feed knows (`polarity`, `bounds`,
   `metric_kind`) do not reach the combination's schema; describe them on the first feed.
 

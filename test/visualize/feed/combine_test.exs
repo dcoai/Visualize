@@ -255,6 +255,29 @@ defmodule Visualize.Feed.CombineTest do
                {:error, {:combine_schema, [{1, :panel, :missing}]}}
     end
 
+    test "a later feed windowing over another field is refused, since routing asks it over its own" do
+      {live, _} = store(50..100, :live)
+      other = Schema.new!(%{"t" => %{type: :number}, "v" => %{type: :number, window: true}})
+      {history, _} = Feeds.scripted(schema: other, rows: rows(0..100, :history))
+
+      assert Feed.describe(Combine.new([live, history])) ==
+               {:error, {:combine_schema, [{1, :t, {:window, :t, "v"}}]}}
+
+      assert Feed.fetch(Combine.new([live, history]), [0, 100], nil) ==
+               {:error, {:combine_schema, [{1, :t, {:window, :t, "v"}}]}}
+    end
+
+    test "a later feed with no window field is refused among its other incompatibilities" do
+      {live, _} = store(50..100, :live)
+      untimed = Schema.new!(%{"t" => %{type: :number}, "v" => %{type: :category}})
+      {history, _} = Feeds.scripted(schema: untimed)
+
+      assert Feed.describe(Combine.new([live, history])) ==
+               {:error,
+                {:combine_schema,
+                 [{1, :t, {:window, :t, nil}}, {1, :v, {:type, :number, :category}}]}}
+    end
+
     test "a unit facing none is refused either way round, in the first's spelling; two absent units agree" do
       unitless =
         Schema.new!(%{

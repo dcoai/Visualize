@@ -14,7 +14,8 @@ defmodule Visualize.Feed.Combine do
   The combination's schema is the first feed's, whole: its version, labels and facts
   (D-159). Every later feed's schema must be compatible with it
   (`Visualize.Data.Schema.compatibility/2`): the same fields by name, compared as
-  strings, of the same types, in units that convert. Its versions may differ, as a
+  strings, of the same types, in units that convert — and the same window field, since
+  each later feed is asked for a window over its own. Its versions may differ, as a
   process's live feed and a store's history always do. A later feed's rows are read in
   the first schema's words before routing: re-keyed to its spellings, numbers converted
   into its units, and columns only the later schema describes dropped. The first feed's
@@ -52,7 +53,9 @@ defmodule Visualize.Feed.Combine do
   A later feed whose schema is not compatible with the first's: its index in the list,
   the field as the first schema spells it, and why (spec/08 §10.1).
   """
-  @type incompatibility :: {pos_integer(), Schema.name(), Schema.incompatibility()}
+  @type incompatibility ::
+          {pos_integer(), Schema.name(),
+           Schema.incompatibility() | {:window, Schema.name(), Schema.name() | nil}}
 
   @doc "One feed over several, freshest first."
   @spec new([Feed.t(), ...]) :: t()
@@ -61,7 +64,9 @@ defmodule Visualize.Feed.Combine do
   @doc """
   The first feed's `{version, schema}` with the combination's supports:
   `{:error, {:combine_schema, incompatibilities}}` listing every field of every later
-  feed whose schema is not compatible with the first's, each `{position, field, reason}`;
+  feed whose schema is not compatible with the first's, each `{position, field, reason}`,
+  and `{position, window_field, {:window, first, later}}` for a later feed windowing over
+  another field (`nil` for none);
   `{:error, :combine_window_field}` when the schema has no window field; and the first
   error of a feed that cannot describe.
   """
@@ -92,17 +97,35 @@ defmodule Visualize.Feed.Combine do
   end
 
   defp compatible([{_version, first, _supports} | later]) do
+    time = Feed.window_field(first)
+
     faults =
       later
       |> Enum.with_index(1)
       |> Enum.flat_map(fn {{_version, schema, _supports}, position} ->
-        case Schema.compatibility(first, schema) do
-          :ok -> []
-          {:error, faults} -> for {field, reason} <- faults, do: {position, field, reason}
-        end
+        fields =
+          case Schema.compatibility(first, schema) do
+            :ok -> []
+            {:error, faults} -> faults
+          end
+
+        (fields ++ same_window(time, Feed.window_field(schema)))
+        |> Enum.sort_by(fn {field, _reason} -> to_string(field) end)
+        |> Enum.map(fn {field, reason} -> {position, field, reason} end)
       end)
 
     if faults == [], do: :ok, else: {:error, {:combine_schema, faults}}
+  end
+
+  # Routing asks a later feed for a window over its own window field, so it must be the
+  # first's, compared as a string (spec/08 §11.5). A first schema with no window field is
+  # `has_window/1`'s to refuse.
+  defp same_window(nil, _theirs), do: []
+
+  defp same_window(ours, theirs) do
+    if theirs != nil and to_string(theirs) == to_string(ours),
+      do: [],
+      else: [{ours, {:window, ours, theirs}}]
   end
 
   defp has_window(schema),
