@@ -12,8 +12,9 @@ All notable changes to Visualize are recorded here, following
 
 ## [0.5.1] — 2026-10-13
 
-`mix.exs` reads `0.5.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
-release it merely follows.
+Board cells show their marks' tooltips and pass a mark's click to the page, and a page may own
+a board's brushed window. In the builder, the graph is the box a design is drawn at, and every
+frame is laid out on it by dragging, by its corner handles or, on a layout, by cells.
 
 ### Added
 
