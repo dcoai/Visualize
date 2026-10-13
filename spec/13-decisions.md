@@ -1697,3 +1697,23 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - In a two-frame chart a dropped axis, a ticked side, a guessed mark's scales and a legend land in the frame a person was working on; nothing creates a stray `frames.main`.
 - A design of one frame behaves byte for byte as before; the builder goldens did not change.
 - An axis placed into a multi-frame design is part of the frame's layer, not a row of its own in the tree: it is removed by unticking it, or edited on the frame's page.
+
+## 165. D-165 — Where a chart shows a frame is the chart's: a frame's placement is the site's own
+
+**Context.** #386, work item #616. A drop from the library is a link since #381: the site references the entry, and every write into it is refused — the library's word is edited in the library. The proposal asked that a library frame dropped on the graph land at the drop point, and that frames be dragged into place (D-163). Under the lock, a linked frame could only land wherever the entry said — usually the whole box, over every other frame — and could never be dragged without unlocking it, which copies the entry and stops it following the library. A composite dropped linked (a saved chart, a house look) had the same problem the moment it shared a design with another frame.
+
+**Decision.**
+- **A frame's `box`, `cell`, `span` and `z` written at the frame (`[:frames, name]`) go into the owning site's own `local` even when the site is linked.** They say where *this chart* shows the frame — a property of the chart, not of the frame, exactly as a design records no size (spec/14 §4.2) and as a site's mask is its own (§19.3). Every other key of a linked frame is still refused with the notice.
+- **The site's linkage becomes *edited*** (ref over local, #381): the row says so, the library's later changes to the frame still flow under the placement, and *revert* takes the placement back with the rest of the local.
+- **A library frame is placed under a fresh key**, so it lands as `frames.<key>` beside the frames the chart has instead of merging into one of the same name (§19.6, #438). `Stack.local_path/3` maps `frames.<key>` back to the entry's own frame name inside the local.
+- **New frames come from the palette's *frame*, *+ frame* and the library**, each a quarter of the graph centred where it was put; adding a second frame gives the first one's name to the marks and labels that said none.
+
+**Rejected.**
+- **Unlocking a dropped library frame.** It would copy the entry and cut it off from the library for the sake of a position.
+- **Keeping placement in the site's `vars` or a new `Use` field.** The placement keys are ordinary design keys and `local` is where a site's own values already live; a new field would be a second override mechanism.
+- **Refusing the drag with a notice.** The proposal's acceptance — a person lays frames out by dragging — would not hold for the frames a library supplies.
+
+**Consequences.**
+- A library frame, or a linked composite's frame, is placed and dragged like an inline one; its row shows *with local changes* once placed.
+- A design's stored structure can hold a linked frame site whose local is only a box.
+- The lock is no longer absolute for frames; a test holds that any other write to a linked frame is still refused.
