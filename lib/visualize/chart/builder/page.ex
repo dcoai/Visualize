@@ -82,6 +82,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:target, :any, default: nil)
     attr(:depth, :integer, default: 0)
 
+    attr(:layout, :any,
+      default: nil,
+      doc: "the design's `layout`, whose grid a frame's cell and span are chosen on (#617)"
+    )
+
     slot(:style_for,
       doc:
         "rendered with the selected node's label inside its section, after its form: the style stack and editor of a styled node (spec/14 §18.18, #378)"
@@ -105,6 +110,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               phx-target={@target}
             >{section.name}</summary>
             <p :if={section[:note]} class="vis-builder-context-note vis-builder-place-note">{section.note}</p>
+            <.place_grid :if={section[:grid]} id={@id <> "-" <> slug(@label) <> "-grid"} grid={section.grid} locked={locked?(assigns, @path)} target={@target} />
             <.form_for :if={section.keys != []} page={assigns} kind={@kind} node={@node} path={@path} label={@label} only={section.keys} suffix={section.name} />
             <.form_for :for={form <- section.forms} page={assigns} kind={form.kind} node={form.node} path={form.path} label={form.label} />
             <details :for={child <- section.children} class={child_class(child, @owners, @layer, @selected_node)} open={not MapSet.member?(@collapsed, child.label)}>
@@ -288,6 +294,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           bare: false,
           keys: [:z, :background],
           note: place_note(node),
+          grid: place_grid(node, page[:layout], page.path),
           forms: [],
           children: [],
           needs: needs(page.errors, Enum.map([:box, :cell, :span, :z], &(page.path ++ [&1])))
@@ -359,6 +366,73 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
       |> Enum.reject(&(&1.keys == [] and &1.children == []))
     end
+
+    attr(:id, :string, required: true)
+    attr(:grid, :map, required: true)
+    attr(:locked, :boolean, default: false)
+    attr(:target, :any, default: nil)
+
+    # A frame's cell and span on the layout's grid, chosen (spec/14 §18.15, #617): a select
+    # of every cell, and of every span that fits from the chosen one.
+    defp place_grid(assigns) do
+      ~H"""
+      <form id={@id} class="vis-builder-place-grid" phx-change="frame_cell" phx-submit="submitted" phx-target={@target}>
+        <input type="hidden" name="frame" value={@grid.frame} />
+        <label class="vis-builder-field">
+          <span class="vis-builder-key">cell</span>
+          <select name="cell" disabled={@locked}>
+            <option :for={{value, word} <- @grid.cells} value={value} selected={value == @grid.cell}>{word}</option>
+          </select>
+        </label>
+        <label class="vis-builder-field">
+          <span class="vis-builder-key">span</span>
+          <select name="span" disabled={@locked}>
+            <option :for={{value, word} <- @grid.spans} value={value} selected={value == @grid.span}>{word}</option>
+          </select>
+        </label>
+      </form>
+      """
+    end
+
+    # The grid a frame's cell and span are chosen on, `nil` without a layout (#617): every
+    # `[column, row]`, and the spans that fit from the frame's cell (the first cell when it
+    # has none).
+    defp place_grid(node, layout, [:frames, frame]) when is_map(layout) do
+      columns = layout |> Map.get(:columns, [1]) |> List.wrap() |> length() |> max(1)
+      rows = layout |> Map.get(:rows, [1]) |> List.wrap() |> length() |> max(1)
+
+      {cell, span} =
+        case {Map.get(node, :cell), Map.get(node, :span)} do
+          {[c, r], [a, d]} -> {[c, r], [a, d]}
+          {[c, r], _none} -> {[c, r], [1, 1]}
+          _no_cell -> {nil, [1, 1]}
+        end
+
+      [c0, r0] = cell || [0, 0]
+
+      %{
+        frame: Atom.to_string(frame),
+        cell: cell && pair(cell),
+        span: pair(span),
+        cells:
+          [{"", "— placed by its box —"}] ++
+            for(
+              r <- 0..(rows - 1),
+              c <- 0..(columns - 1),
+              do: {pair([c, r]), "column #{c}, row #{r}"}
+            ),
+        spans:
+          for(
+            d <- 1..max(rows - r0, 1)//1,
+            a <- 1..max(columns - c0, 1)//1,
+            do: {pair([a, d]), "#{a} × #{d}"}
+          )
+      }
+    end
+
+    defp place_grid(_node, _layout, _path), do: nil
+
+    defp pair([a, b]), do: "#{a},#{b}"
 
     # The frame's placement as a person reads it (spec/14 §18.16, #614): its box as
     # fractions, or its cell and span, and how to change it — on the graph, not by typing.

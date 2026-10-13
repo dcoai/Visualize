@@ -443,4 +443,84 @@ defmodule Visualize.Chart.BuilderFramesTest do
       assert html =~ ~s(phx-value-frame="now")
     end
   end
+
+  describe "layout sugar: frames on the grid (spec/14 §18.15, §18.16, #617)" do
+    defp gridded, do: BuilderFixture.gridded_frames()
+
+    defp opened_on_grid(frame) do
+      s = BuilderFixture.socket(gridded())
+      {:noreply, s} = Builder.handle_event("graph_size", %{"width" => 900, "height" => 400}, s)
+      {:noreply, s} = Builder.handle_event("pick", %{"node" => "frames.#{frame}"}, s)
+      s
+    end
+
+    test "the place section offers the grid's cells and the spans that fit" do
+      [html] =
+        Regex.run(
+          ~r/<form id="[^"]*frames-now-grid".*?<\/form>/s,
+          BuilderFixture.render(opened_on_grid(:now))
+        )
+
+      assert html =~ ~s(<option value="2,0" selected>column 2, row 0</option>)
+      assert html =~ ~s(<option value="0,1">column 0, row 1</option>)
+      # From column 2 of three, a span one column wide, one or two rows high.
+      assert html =~ ~s(<option value="1,1" selected>1 × 1</option>)
+      assert html =~ ~s(<option value="1,2">1 × 2</option>)
+      refute html =~ ~s(<option value="2,1">2 × 1</option>)
+    end
+
+    test "the overlay carries the frame's cell and the grid, and draws the cells" do
+      html = BuilderFixture.render(opened_on_grid(:now))
+      assert html =~ ~s(data-builder-frame-cell="2 0 1 1")
+      assert html =~ ~s(data-builder-grid="0 0.3333,0.3333 0.3333,0.6667 0.3333;0 0.5,0.5 0.5")
+      assert length(Regex.scan(~r/class="vis-builder-grid-cell"/, html)) == 6
+    end
+
+    test "frame_cell writes the cell and span, keeps the span on the grid, and refuses a cell off it" do
+      s = opened_on_grid(:now)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "frame_cell",
+          %{"frame" => "now", "cell" => "2,1", "span" => "1,1"},
+          s
+        )
+
+      assert %{cell: [2, 1]} = now = Writes.composed(s).frames.now
+      refute Map.has_key?(now, :span)
+
+      # A span past the edge is kept to what fits.
+      {:noreply, s} =
+        Builder.handle_event(
+          "frame_cell",
+          %{"frame" => "now", "cell" => [1, 0], "span" => [3, 2]},
+          s
+        )
+
+      assert %{cell: [1, 0], span: [2, 2]} = Writes.composed(s).frames.now
+
+      {:noreply, refused} =
+        Builder.handle_event("frame_cell", %{"frame" => "now", "cell" => "3,0"}, s)
+
+      assert refused.assigns.uses == s.assigns.uses
+      assert refused.assigns.notice == "cell 3, 0 is not on the layout's grid"
+    end
+
+    test "a cell chosen for a frame placed by its box replaces the box" do
+      [{name, layer}] = gridded()
+
+      layer =
+        update_in(
+          layer,
+          [:frames, :now],
+          &(&1 |> Map.delete(:cell) |> Map.put(:box, [0.7, 0, 0.3, 0.5]))
+        )
+
+      s = BuilderFixture.socket([{name, layer}])
+      {:noreply, s} = Builder.handle_event("frame_cell", %{"frame" => "now", "cell" => "2,1"}, s)
+      now = Writes.composed(s).frames.now
+      assert now.cell == [2, 1]
+      refute Map.has_key?(now, :box)
+    end
+  end
 end

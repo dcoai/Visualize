@@ -1717,3 +1717,21 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - A library frame, or a linked composite's frame, is placed and dragged like an inline one; its row shows *with local changes* once placed.
 - A design's stored structure can hold a linked frame site whose local is only a box.
 - The lock is no longer absolute for frames; a test holds that any other write to a linked frame is still refused.
+
+## 166. D-166 — On a layout, a frame placed by a cell is dragged by cells
+
+**Context.** #386, work item #617. A design's `layout` (spec/14 §2.8, #384) is a grid of weights, and a frame on it says `cell` and `span` rather than a box. D-163 made a frame's box draggable, but dragging a celled frame freely and writing a `box` throws the layout away — the frame stops following the grid when its weights change, which is the point of a layout.
+
+**Decision.**
+- **A frame placed by a cell stays placed by a cell.** Its drag moves it by whole cells and its corners stretch its span to cell edges; the hook pushes `frame_cell`, and the server checks the cell is on the grid, keeps the span to what fits, and writes `cell` and `span` (a `[1, 1]` span removed as the default). The keyboard steps a cell, or with Shift the span.
+- **The frame's page offers the grid**: a select of every cell, a select of the spans that fit; choosing a cell for a frame placed by its box replaces the box.
+- **The grid is drawn only while a frame moves**, faintly, so the chart is not covered with lines the rest of the time; a frame placed by its box snaps to the cells' edges too.
+- **The grid's geometry is the frame's own reading**: `Place.grid/2` asks `Frame.box_of/3` for each column and row, so the gap comes out of the cells exactly as the render takes it.
+
+**Rejected.**
+- **Converting a dragged celled frame to a box.** It would quietly undo the layout.
+- **Snapping a box frame to cells and writing a cell.** A person who placed a frame by its box chose to; the cells' edges are offered as snap lines, nothing more.
+
+**Consequences.**
+- A layout's frames are rearranged on the graph and stay a layout; changing the weights afterwards still moves them.
+- A drag of a celled frame can never produce a cell off the grid; a hand-crafted push of one is refused with a notice.

@@ -110,10 +110,11 @@ defmodule Visualize.Hooks.ExecutedBuilderFramesHookTest do
   # `graph`, `svg`, `hook`, `handle(at)`, `down`, `move`, `up` and `key`.
   defp drawn(s, steps) do
     [svg] = Regex.run(~r/<svg class="vis-builder-chart".*?<\/svg>/s, BuilderFixture.render(s))
+    [_, width, height] = Regex.run(~r/width="(\d+)" height="(\d+)"/, svg)
 
     source = """
     const svg = #{Visualize.JsHooks.markup(svg)};
-    svg.rect = {left: 0, top: 0, width: 800, height: 400};
+    svg.rect = {left: 0, top: 0, width: #{width}, height: #{height}};
     const graph = Stub.markup('div', {'data-builder-scope': 'graph', 'data-builder-target': '1'}, [svg]);
     const hook = Stub.mount(BuilderHook, graph);
     const handle = (at) => svg.querySelectorAll('[data-builder-frame-handle]').find((h) => h.getAttribute('data-builder-frame-handle') === at);
@@ -221,5 +222,67 @@ defmodule Visualize.Hooks.ExecutedBuilderFramesHookTest do
 
     assert_in_delta x, 0.6 - 1 / 12, 0.0001
     assert_in_delta h, 0.5 + 1 / 12, 0.0001
+  end
+
+  # -- layout sugar (spec/14 §18.16, #617) -------------------------------------------------
+
+  # Three columns of 300 px and two rows of 200 px at 900 × 400; `now` in the top cell of
+  # the third column, open.
+  defp on_grid do
+    s = BuilderFixture.socket(BuilderFixture.gridded_frames())
+    {:noreply, s} = Builder.handle_event("graph_size", %{"width" => 900, "height" => 400}, s)
+    {:noreply, s} = Builder.handle_event("pick", %{"node" => "frames.now"}, s)
+    s
+  end
+
+  defp cell_of(s, frame), do: Map.take(Writes.composed(s).frames[frame], [:cell, :span])
+
+  test "a frame placed by a cell is dragged by whole cells, the grid drawn while it moves" do
+    s = on_grid()
+
+    {pushes, report} =
+      drawn(s, [
+        "down(svg, 750, 100);",
+        # 300 px left and 200 px down, a little short of each: one column, one row.
+        "move(460, 290);",
+        "report.moving = graph.classList.contains('vis-builder-moving');",
+        "report.outline = svg.querySelector('.vis-builder-frame-outline').getAttribute('x');",
+        "up();",
+        "report.after = graph.classList.contains('vis-builder-moving');"
+      ])
+
+    assert %{"moving" => true, "after" => false, "outline" => outline} = report
+    assert_in_delta String.to_float(outline <> if(outline =~ ".", do: "", else: ".0")), 300, 0.1
+
+    assert [{"frame_cell", %{"frame" => "now", "cell" => [1, 1], "span" => [1, 1]} = p}] =
+             pushes
+
+    assert cell_of(handed(s, [{"frame_cell", p}]), :now) == %{cell: [1, 1]}
+  end
+
+  test "a corner of a celled frame stretches it to the nearest cell edges" do
+    s = on_grid()
+
+    {pushes, _} =
+      drawn(s, [
+        "down(handle('sw'), 600, 200);",
+        # The left edge to the second column's start, the bottom to the grid's.
+        "move(310, 390);",
+        "up();"
+      ])
+
+    assert [{"frame_cell", %{"cell" => [1, 0], "span" => [2, 2]} = p}] = pushes
+    assert cell_of(handed(s, [{"frame_cell", p}]), :now) == %{cell: [1, 0], span: [2, 2]}
+  end
+
+  test "arrows step a celled frame a cell, Shift with an arrow grows its span" do
+    {pushes, _} =
+      drawn(on_grid(), ["key('ArrowDown');", "key('ArrowRight');", "key('ArrowDown', true);"])
+
+    # Right is past the grid's edge: nothing.
+    assert [
+             {"frame_cell", %{"cell" => [2, 1], "span" => [1, 1]}},
+             {"frame_cell", %{"cell" => [2, 0], "span" => [1, 2]}}
+           ] = pushes
   end
 end
