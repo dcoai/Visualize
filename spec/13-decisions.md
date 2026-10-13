@@ -1571,3 +1571,23 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - Under `:as_posted`, `hPa` stays `hPa` at every magnitude; it was rescaled into `kPa` with `Pa` and `MPa`.
 - `family/2` and `family/3` of a pressure answer its convention's ladder. Every other quantity's answers are unchanged, and the tests hold them to origin's.
 - Shipping it to metresis needs a visualize patch release.
+
+## 159. D-159 — Combine takes compatible schemas, and the first feed's schema wins whole
+
+**Context.** #605, from metresis#440. D-140's `Visualize.Feed.Combine` required every feed of a combination to describe the same schema, one content hash, and left making two catalogs agree to the connector. The case it was written for, a process's live `:telemetry` feed in front of a store's history of the same metric, can never meet that rule. The two describe one metric in different words: the field names are atoms in one and strings in the other, as are the rows' keys; the labels come from different sources; and the store knows facts the process does not (`polarity`, `bounds`, `metric_kind`). No connector can make the versions equal without throwing away what the store knows, and binding the two feeds to separate slots draws two series where there is one.
+
+**Decision.**
+- **Compatibility, per field of the first schema** (spec/08 §10.1). `Visualize.Data.Schema.compatibility(schema, other)` is `:ok` when, for each field of `schema`, `other` has a field of the same name compared as strings, of the same `type`, and for a `:number` field a unit `Visualize.Unit.conversion/2` converts into `schema`'s. Two absent units are compatible; one absent facing a present one is not, since its dimension is unknown; two currencies are not, since conversion refuses them. Otherwise it is `{:error, [{field, reason}]}` with every fault, the reasons `:missing`, `{:type, a, b}` and `{:unit, a, b}`. Nothing else is compared: labels and facts are what each feed knows. It is public, so a connector can check before it combines.
+- **The first feed's schema wins whole** (spec/08 §11.5). The combination's `{version, schema}` is the first (freshest) feed's: its version, labels and facts, nothing merged from the later feeds.
+- **Later rows are read in the first's words.** Before routing and the seam trim, a later feed's rows are re-keyed to the first schema's spellings and their numbers converted exactly into its units through `Unit.convert/3`; columns only the later schema describes are dropped, and columns no schema describes are left alone. A `:number` window field in different units has the window converted on the way to the later feed and its served `window` on the way back. The first feed's rows, and those of a later feed of the first's version, are never touched.
+- **Errors list everything.** `describe/1` answers `{:error, {:combine_schema, [{position, field, reason}]}}`, `position` the later feed's index in the list, with every incompatibility of every later feed, so a connector fixes its mapping in one pass. This replaces `{:combine_schema, versions}`, which said only that the versions differed.
+
+**Rejected.**
+- **Merging the later feeds' facts into the combination's schema.** A merged schema needs a version of its own, but a push feed sends its own `{:schema, version, schema}` and deliveries, and `Combine.subscribe/2` passes the first feed's pushes straight to the monitor, so the monitor would see two schemas for one slot. Fixing that needs a relay process per subscription, a heavier change than the case argues for. Getting a store's facts into the live feed's schema is the live feed's question: `Feed.Telemetry` reading them from a definition's options is its own proposal.
+- **Requiring equal versions and leaving the mapping to the connector.** That was D-140's rule, and the case it was written for cannot meet it without the store's facts being thrown away.
+- **Comparing every attribute.** A label or a fact differing is the point of the case, not a fault; only what changes how a row reads (name, type, unit) is compared.
+
+**Consequences.**
+- A live `Feed.Telemetry` feed and a store's history of the same metric combine in one slot, the history's rows coming back in the telemetry schema's names and units, `s` converted into `ms`.
+- A combination that was refused for differing versions now combines whenever the schemas are compatible; the error a refusal carries has a new shape, which is a breaking change for code that matched `{:combine_schema, versions}`.
+- The combination's schema has only the first feed's facts. A store's `polarity` or `bounds` reaches a chart only when the live feed describes it too.
