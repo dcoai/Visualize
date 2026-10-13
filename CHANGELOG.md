@@ -48,6 +48,13 @@ release it merely follows.
   mark's axes section, the scales derived for a bound channel and the *add axes* step
   follow the frame the mark is drawn in. `Visualize.Chart.Fragment.frame_of/2` answers
   the frame a mark or a label is drawn in.
+- **New frames in the builder, and the frames root** (#616, D-165). The palette has a
+  *frame*: dropped on the graph it is a new frame a quarter of the graph at the drop point;
+  *+ frame* on the frames root adds one at the centre; a library frame dropped on the graph
+  lands there too, linked, under a fresh name. A frame's placement (`box`, `cell`, `span`,
+  `z`) is the chart's, so a linked frame is dragged without unlocking it, the placement
+  kept in the site's own local. Each frame's section on the frames root has a select bar,
+  the axes of its scales and what it draws.
 - **`ResizeHook` takes `data-resize-target`**, the `phx-target` it pushes to with
   `pushEventTo`, so a LiveComponent can host it. Without it the hook pushes to the
   LiveView, as before.
