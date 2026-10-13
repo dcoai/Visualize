@@ -1,10 +1,11 @@
 defmodule Mix.Tasks.Vis.Headings do
-  @shortdoc "Check spec/ heading numbering, titles and status lines (spec/README §5)"
+  @shortdoc "Check spec/ heading numbering, titles, status lines and tables (spec/README §5)"
 
   @moduledoc """
   Fails when any document under `spec/` breaks the heading discipline: more or fewer than one
   `#` title, no `**Status:**` line on line 3, an unnumbered heading, a number that does not
-  match its level, or a gap or duplicate in the decimal numbering.
+  match its level, a gap or duplicate in the decimal numbering, table rows without a header
+  and separator row, or a table row whose first cell is blank.
 
       mix vis.headings
   """
@@ -21,7 +22,7 @@ defmodule Mix.Tasks.Vis.Headings do
 
       problems ->
         Enum.each(problems, &Mix.shell().error(&1))
-        Mix.raise("#{length(problems)} heading problem(s) in spec/")
+        Mix.raise("#{length(problems)} heading or table problem(s) in spec/")
     end
   end
 end
