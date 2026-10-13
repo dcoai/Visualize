@@ -1678,3 +1678,22 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - Two frames are laid side by side, or one inset over another, by dragging; their edges meet exactly at thirds, halves and each other.
 - A stored design records boxes like `[0.3333, 0, 0.3333, 1]`: four places, the precision of a pixel on a 10 000-pixel box.
 - A frame placed on a layout's cell loses its cell when dragged freely, until the layout gesture lands.
+
+## 164. D-164 — In a design of several frames, what is placed belongs to the frame it was dropped on
+
+**Context.** #386, work item #615. The builder addressed "the frame" through `Fragment.frame_path/1`, which names `frames.main` whenever a design has several. In a two-frame chart a placed axis became an axis site, and `Composite.place/2` puts an axis or scale site under `frames.main` — a frame that may not exist, which then had no `kind`; a placed mark said no `frame`, which the validator requires once there are two; the mark page's axes section, the scales derived for a bound channel and the *add axes* step all read and wrote `main`. With the graph read in the frame under the pointer (D-162), the builder knew which frame a drop was on and threw it away.
+
+**Decision.**
+- **A mark or a label placed in a design of several frames says `frame:`** the frame under the pointer; in a design of one it says nothing, as before.
+- **An axis placed in a design of several frames is written into that frame** — appended to its `axes`, its scale declared in its `scales` when missing — through the ownership rule, not inserted as sites. An axis or scale site has no way to say its frame (its key is not a frame, §19.3), and giving sites one would be a change to the composite model for a builder convenience. A legend is that frame's.
+- **What the builder reads of a frame it reads of the node's frame**, `Fragment.frame_of/2`: a mark's or a label's `frame`, else the design's one, else — several and none said — `main` if present, else the first by name. Axes rows, `toggle_axis`/`toggle_grid` (now carrying `frame`), derived scales (`Scales.derive/3`, each frame from its own marks) and the axes step follow it.
+- **The keyboard twin places in the open node's frame**, since it has no point.
+
+**Rejected.**
+- **Changing `Fragment.frame_name/1` to answer the first frame for several.** It is also the migration's and the composite placer's name for "the frame" and changing it would move where a stored scale site lands.
+- **Keying axis and scale sites by frame.** A site's key is the name of what it declares (§19.3); overloading it for a frame would make `frames.<key>.scales.<key>` ambiguous.
+
+**Consequences.**
+- In a two-frame chart a dropped axis, a ticked side, a guessed mark's scales and a legend land in the frame a person was working on; nothing creates a stray `frames.main`.
+- A design of one frame behaves byte for byte as before; the builder goldens did not change.
+- An axis placed into a multi-frame design is part of the frame's layer, not a row of its own in the tree: it is removed by unticking it, or edited on the frame's page.
