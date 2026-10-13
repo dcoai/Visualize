@@ -92,6 +92,147 @@ defmodule Visualize.Feed.TelemetryTest do
     end
   end
 
+  describe "a definition's facts (D-160)" do
+    defp value(server, name) do
+      {_v, schema, _} = Feed.describe(Telemetry.feed(server, name))
+      {:ok, value} = Schema.fetch(schema, :value)
+      value
+    end
+
+    test "each metric type gives its metric_kind", context do
+      p = prefix(context)
+
+      server =
+        start([
+          counter("#{p}.a.count"),
+          sum("#{p}.a.sum"),
+          last_value("#{p}.a.last"),
+          summary("#{p}.a.summary"),
+          distribution("#{p}.a.distribution")
+        ])
+
+      kinds =
+        for k <- ~w(count sum last summary distribution), into: %{} do
+          {k, value(server, "#{p}.a.#{k}").metric_kind}
+        end
+
+      assert kinds == %{
+               "count" => :counter,
+               "sum" => :counter,
+               "last" => :gauge,
+               "summary" => :gauge,
+               "distribution" => :gauge
+             }
+    end
+
+    test "reporter_options[:visualize] lands in the schema; an explicit metric_kind wins",
+         context do
+      p = prefix(context)
+
+      server =
+        start([
+          summary("#{p}.panel.load",
+            unit: {:native, :millisecond},
+            reporter_options: [
+              visualize: [polarity: :lower_is_better, bounds: [0, nil], target: 250]
+            ]
+          ),
+          last_value("#{p}.queue.total", reporter_options: [visualize: [metric_kind: :counter]]),
+          # Options for another reporter are that reporter's, never read here.
+          last_value("#{p}.queue.depth", reporter_options: [other: [anything: true]])
+        ])
+
+      assert %{
+               type: :number,
+               unit: "ms",
+               quantity: :duration,
+               metric_kind: :gauge,
+               polarity: :lower_is_better,
+               bounds: [0, nil],
+               target: 250
+             } = value(server, "#{p}.panel.load")
+
+      assert value(server, "#{p}.queue.total").metric_kind == :counter
+      assert %{type: :number, metric_kind: :gauge} = depth = value(server, "#{p}.queue.depth")
+      refute Map.has_key?(depth, :polarity)
+    end
+
+    test "an unknown key or an invalid fact stops start_link, naming the metric", context do
+      p = prefix(context)
+      # Two definitions of one name: the metric is named as `feeds/1` keys it.
+      ok = counter("#{p}.request.duration")
+
+      label = summary("#{p}.request.duration", reporter_options: [visualize: [label: "Nope"]])
+      up = summary("#{p}.request.duration", reporter_options: [visualize: [polarity: :up]])
+      bad = last_value("#{p}.gauge", reporter_options: [visualize: :lower_is_better])
+
+      # As any `GenServer` stopping in `init/1`, the collector exits with the reason, so a
+      # linked caller traps exits to read `start_link/1`'s answer (a supervisor does).
+      Process.flag(:trap_exit, true)
+
+      assert Telemetry.start_link(metrics: [ok, label], every: nil) ==
+               {:error,
+                {:telemetry_facts, "#{p}.request.duration:summary",
+                 [{[:value, :label], :unknown_key}]}}
+
+      assert Telemetry.start_link(metrics: [ok, up], every: nil) ==
+               {:error,
+                {:telemetry_facts, "#{p}.request.duration:summary",
+                 [{[:value, :polarity], {:enum, Schema.polarities()}}]}}
+
+      assert Telemetry.start_link(metrics: [bad], every: nil) ==
+               {:error, {:telemetry_facts, "#{p}.gauge", [{[:value], {:type, :description}}]}}
+
+      # Nothing was attached for a collector that never started.
+      assert :telemetry.list_handlers([p, :request, :duration]) == []
+      assert :telemetry.list_handlers([p, :gauge]) == []
+    end
+
+    test "a combination keeps the facts of the Telemetry feed in front of a history", context do
+      p = prefix(context)
+
+      server =
+        start([
+          summary("#{p}.panel.load",
+            unit: {:native, :millisecond},
+            reporter_options: [
+              visualize: [polarity: :lower_is_better, bounds: [0, nil], target: 250]
+            ]
+          )
+        ])
+
+      live = Telemetry.feed(server, "#{p}.panel.load")
+      :telemetry.execute([p, :panel], %{load: 7_000_000}, %{})
+
+      # The store's history, in its own words: string fields, seconds, no facts.
+      history_schema =
+        Schema.new!(%{"t" => %{type: :time}, "value" => %{type: :number, unit: "s"}})
+
+      # Before the collector's clock starts, so the history serves it.
+      t0 = ~U[2025-10-01 00:00:00Z]
+
+      {history, _} =
+        Feeds.scripted(
+          schema: history_schema,
+          supports: [:window],
+          rows: fn [from, to], _budget ->
+            {[%{"t" => t0, "value" => 0.25}], [window: [from, to]]}
+          end
+        )
+
+      {version, schema, _} = Feed.describe(live)
+      combine = Feed.Combine.new([live, history])
+      assert {^version, ^schema, [:window, :push]} = Feed.describe(combine)
+
+      assert {:ok, %{polarity: :lower_is_better, bounds: [0, nil], target: 250}} =
+               Schema.fetch(schema, :value)
+
+      {:ok, delivery} = Feed.fetch(combine, [t0, nil], nil)
+      assert delivery.schema == version
+      assert [%{t: ^t0, value: 250.0}, %{value: 7.0}] = delivery.rows
+    end
+  end
+
   describe "the rows" do
     test "a summary row is the measurement, converted; a counter's the count per tag", context do
       p = prefix(context)
