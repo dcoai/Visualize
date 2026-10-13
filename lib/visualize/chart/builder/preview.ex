@@ -98,9 +98,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           data-resize-event="graph_size"
           data-resize-target={@target}
         >
-          <.chart chart={@chart} width={@width} height={@height} selected={@selected} frames={@frames} />
+          <.chart chart={@chart} width={@width} height={@height} selected={@selected} frames={@frames} overlay={@overlay} />
         </div>
-        <.chart :if={@chart && !@box} chart={@chart} width={@width} height={@height} selected={@selected} frames={@frames} />
+        <.chart :if={@chart && !@box} chart={@chart} width={@width} height={@height} selected={@selected} frames={@frames} overlay={@overlay} />
         <ol :if={@steps != []} class="vis-builder-steps">
           <li :for={{step, i} <- Enum.with_index(@steps, 1)} class="vis-builder-step">
             <button
@@ -121,6 +121,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:height, :any, required: true)
     attr(:selected, :string, required: true)
     attr(:frames, :string, required: true)
+    attr(:overlay, :any, default: nil)
 
     # The chart's `<svg>` shell, at the size it was drawn at; `data-builder-frames` is every
     # frame's pixel box and margins in drawing order, which the graph's hook reads a point
@@ -135,7 +136,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         viewBox={"0 0 #{@width} #{@height}"}
         data-builder-selected={@selected}
         data-builder-frames={@frames}
-      >{@chart}</svg>
+      >{@chart}<g :if={@overlay} class="vis-builder-frame-overlay" data-builder-frame-box={@overlay.name}><rect class="vis-builder-frame-outline" x={@overlay.x} y={@overlay.y} width={@overlay.w} height={@overlay.h} /><rect :for={{at, x, y} <- @overlay.handles} class={"vis-builder-frame-handle vis-builder-frame-handle-#{at}"} data-builder-frame-handle={at} x={x} y={y} width={@overlay.handle} height={@overlay.handle} /></g></svg>
       """
     end
 
@@ -188,7 +189,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             errors: [],
             width: width,
             height: height,
-            frames: frames_attribute(frames)
+            frames: frames_attribute(frames),
+            overlay: overlay(frames, assigns[:selected])
           }
 
         {:error, errors} ->
@@ -198,7 +200,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             errors: Enum.map(errors, &Validator.format/1),
             width: 0,
             height: 0,
-            frames: ""
+            frames: "",
+            overlay: nil
           }
       end
     end
@@ -231,6 +234,53 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end)
     end
 
+    # The side of a corner handle, in the chart's pixels (spec/14 §18.16).
+    @handle 10
+
+    @doc false
+    # The open frame's outline and its four corner handles, drawn over the chart when the
+    # open node is a frame itself (spec/14 §18.16, #614); `nil` for any other node. Only the
+    # handles take the pointer, so every drawn node stays clickable under the outline.
+    @spec overlay(%{atom() => Frame.t()}, String.t() | nil) :: map() | nil
+    def overlay(frames, "frames." <> name) do
+      case Enum.find(frames, fn {key, _frame} -> Atom.to_string(key) == name end) do
+        {key, %Frame{box: [x, y, w, h], size: size}} ->
+          {px, py, pw, ph} = {x * size.width, y * size.height, w * size.width, h * size.height}
+          half = @handle / 2
+
+          corners = [
+            {"nw", px, py},
+            {"ne", px + pw, py},
+            {"sw", px, py + ph},
+            {"se", px + pw, py + ph}
+          ]
+
+          %{
+            name: Atom.to_string(key),
+            x: word(px),
+            y: word(py),
+            w: word(pw),
+            h: word(ph),
+            handle: @handle,
+            handles:
+              for(
+                {at, hx, hy} <- corners,
+                do:
+                  {at, word(inside(hx - half, size.width - @handle)),
+                   word(inside(hy - half, size.height - @handle))}
+              )
+          }
+
+        nil ->
+          nil
+      end
+    end
+
+    def overlay(_frames, _selected), do: nil
+
+    # A handle kept on the chart, so one at its edge is not cut in half.
+    defp inside(at, last), do: at |> max(0) |> min(last)
+
     defp word(name) when is_atom(name), do: Atom.to_string(name)
     defp word(n) when is_number(n), do: Path.format_number(n)
 
@@ -245,7 +295,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         errors: Enum.map(errors, &Validator.format/1),
         width: 0,
         height: 0,
-        frames: ""
+        frames: "",
+        overlay: nil
       }
     end
 

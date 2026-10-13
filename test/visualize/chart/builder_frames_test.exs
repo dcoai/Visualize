@@ -73,4 +73,119 @@ defmodule Visualize.Chart.BuilderFramesTest do
       assert axes == [%{scale: :y, side: :left}]
     end
   end
+
+  describe "frames are placed on the graph (spec/14 §18.16, #614)" do
+    defp at_frame(s, name) do
+      {:noreply, s} = Builder.handle_event("graph_size", %{"width" => 800, "height" => 400}, s)
+      {:noreply, s} = Builder.handle_event("pick", %{"node" => "frames.#{name}"}, s)
+      s
+    end
+
+    defp boxes(s), do: for(%{local: %{frames: frames}} <- s.assigns.uses, do: frames)
+
+    test "the open frame is outlined with four corner handles, and nothing else is" do
+      html = BuilderFixture.render(at_frame(BuilderFixture.socket(two()), :now))
+
+      assert html =~
+               ~s(<g class="vis-builder-frame-overlay" data-builder-frame-box="now"><rect class="vis-builder-frame-outline" x="400" y="0" width="400" height="400">)
+
+      # Each handle centred on its corner, kept on the chart at its edges.
+      for {at, x, y} <- [{"nw", 395, 0}, {"ne", 790, 0}, {"sw", 395, 390}, {"se", 790, 390}] do
+        assert html =~ ~s(data-builder-frame-handle="#{at}" x="#{x}" y="#{y}" width="10")
+      end
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "pick",
+          %{"node" => "marks[0]"},
+          at_frame(BuilderFixture.socket(two()), :now)
+        )
+
+      refute BuilderFixture.render(s) =~ "vis-builder-frame-overlay"
+    end
+
+    test "frame_box writes the box as fractions in the frame's owner, the frame left open" do
+      s = at_frame(BuilderFixture.socket(two()), :now)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "frame_box",
+          %{"frame" => "now", "box" => [0.5, 0.0, 0.5, 0.49999]},
+          s
+        )
+
+      assert [%{now: %{box: [0.5, 0, 0.5, 0.5]}}] = boxes(s)
+      assert s.assigns.node_label == "frames.now"
+
+      assert BuilderFixture.render(s) =~
+               ~s(data-builder-frames="history 0 0 400 400 20 20 30 40;now 400 0 400 200 20 20 30 40")
+    end
+
+    test "a box out of range is kept inside the whole and at least a twentieth on a side" do
+      s = at_frame(BuilderFixture.socket(two()), :now)
+
+      {:noreply, s} =
+        Builder.handle_event("frame_box", %{"frame" => "now", "box" => [0.9, -0.2, 0.5, 0.01]}, s)
+
+      assert [%{now: %{box: [0.5, 0, 0.5, 0.05]}}] = boxes(s)
+    end
+
+    test "a name that is no frame, or a box that does not read, changes nothing" do
+      s = at_frame(BuilderFixture.socket(two()), :now)
+
+      {:noreply, same} =
+        Builder.handle_event("frame_box", %{"frame" => "nope", "box" => [0, 0, 1, 1]}, s)
+
+      assert same.assigns.uses == s.assigns.uses
+
+      {:noreply, same} =
+        Builder.handle_event("frame_box", %{"frame" => "now", "box" => [0, 0, "x", 1]}, s)
+
+      assert same.assigns.uses == s.assigns.uses
+    end
+
+    test "a box replaces a frame's cell and span" do
+      [{name, layer}] = two()
+
+      layer =
+        layer
+        |> Map.put(:layout, %{columns: [1, 1]})
+        |> update_in(
+          [:frames, :now],
+          &(&1 |> Map.delete(:box) |> Map.merge(%{cell: [1, 0], span: [1, 1]}))
+        )
+
+      s = at_frame(BuilderFixture.socket([{name, layer}]), :now)
+
+      {:noreply, s} =
+        Builder.handle_event("frame_box", %{"frame" => "now", "box" => [0.25, 0, 0.5, 1]}, s)
+
+      assert [now] = for(frames <- boxes(s), do: frames.now)
+      assert now.box == [0.25, 0, 0.5, 1]
+      refute Map.has_key?(now, :cell) or Map.has_key?(now, :span)
+    end
+
+    test "a frame the library owns refuses the write with its notice" do
+      s = BuilderFixture.socket(BuilderFixture.layers(), store: BuilderFixture.Library)
+      {:noreply, s} = Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, s)
+      s = at_frame(s, :main)
+
+      {:noreply, refused} =
+        Builder.handle_event("frame_box", %{"frame" => "main", "box" => [0, 0, 0.5, 1]}, s)
+
+      assert refused.assigns.uses == s.assigns.uses
+      assert refused.assigns.notice =~ "is from the library — open it to edit"
+    end
+
+    test "the frame's page has a place section: its box read, z and background its fields" do
+      html = BuilderFixture.render(at_frame(BuilderFixture.socket(two()), :now))
+
+      assert html =~
+               "box x 0.5 · y 0 · w 0.5 · h 1 — drag the frame on the graph to move it, its corners to resize it; arrows nudge it"
+
+      assert html =~ ~s(phx-value-section="frames.now:place")
+      assert html =~ ~s(name="z")
+      assert html =~ ~s(data-builder-well="background")
+    end
+  end
 end

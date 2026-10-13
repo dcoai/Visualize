@@ -296,6 +296,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       border: 0;
     }
 
+    /* The open frame's outline and corner handles (spec/14 §18.16, #614): drawn over the
+       chart, the outline taking no pointer so every node under it stays clickable, the
+       handles taking it to resize. */
+    .vis-builder .vis-builder-frame-overlay {
+      pointer-events: none;
+    }
+
+    .vis-builder .vis-builder-frame-outline {
+      fill: none;
+      stroke: var(--vis-builder-accent);
+      stroke-width: 2;
+      stroke-dasharray: 6 3;
+    }
+
+    .vis-builder .vis-builder-frame-handle {
+      fill: var(--vis-builder-panel);
+      stroke: var(--vis-builder-accent);
+      stroke-width: 1.5;
+      pointer-events: all;
+    }
+
+    .vis-builder .vis-builder-frame-handle-nw,
+    .vis-builder .vis-builder-frame-handle-se { cursor: nwse-resize; }
+
+    .vis-builder .vis-builder-frame-handle-ne,
+    .vis-builder .vis-builder-frame-handle-sw { cursor: nesw-resize; }
+
     /* The graph selects (spec/14 §18.16): the innermost drawn node under the pointer is
        outlined, and the open node — marked by the hook — steadier than hover. */
     .vis-builder .vis-builder-graph [data-node] {
