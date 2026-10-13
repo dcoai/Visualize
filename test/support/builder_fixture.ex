@@ -95,6 +95,24 @@ defmodule Visualize.BuilderFixture do
   end
 
   @doc false
+  # Three columns and two rows: `history` over the left two columns, `now` the top of
+  # the third.
+  def gridded_frames do
+    [{name, layer}] = two_frames()
+
+    layer =
+      layer
+      |> Map.put(:layout, %{columns: [1, 1, 1], rows: [1, 1]})
+      |> update_in(
+        [:frames, :history],
+        &(&1 |> Map.delete(:box) |> Map.merge(%{cell: [0, 0], span: [2, 2]}))
+      )
+      |> update_in([:frames, :now], &(&1 |> Map.delete(:box) |> Map.put(:cell, [2, 0])))
+
+    [{name, layer}]
+  end
+
+  @doc false
   # The pool the layers' one slot binds to.
   def sources do
     %{primary: [%{t: 0, v: 1}, %{t: 1, v: 4}, %{t: 2, v: 2}, %{t: 3, v: 3}]}

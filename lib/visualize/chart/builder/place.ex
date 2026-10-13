@@ -311,6 +311,46 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {fresh_frame(design), Enum.map(box, &rounded/1)}
     end
 
+    @doc """
+    The design's layout as the graph draws it at a size (spec/14 §2.8, §18.16, #617): each
+    column's `{x, w}` and each row's `{y, h}` as fractions, the gap taken out of the cells
+    as `Visualize.Chart.Frame.box_of/3` takes it; `nil` for a design with no layout, or one
+    whose weights do not read.
+
+        iex> Visualize.Chart.Builder.Place.grid(%{layout: %{columns: [3, 1]}}, {800, 400})
+        %{columns: [{0.0, 0.75}, {0.75, 0.25}], rows: [{0.0, 1.0}]}
+        iex> Visualize.Chart.Builder.Place.grid(%{}, {800, 400})
+        nil
+    """
+    @spec grid(map(), {number(), number()}) ::
+            %{columns: [{number(), number()}], rows: [{number(), number()}]} | nil
+    def grid(design, size) do
+      case is_map(design) && Map.get(design, :layout) do
+        layout when is_map(layout) and not is_struct(layout) ->
+          if weights?(layout), do: lines(layout, size), else: nil
+
+        _none ->
+          nil
+      end
+    end
+
+    defp lines(layout, size) do
+      count = fn key -> layout |> Map.get(key, [1]) |> List.wrap() |> length() |> max(1) end
+
+      %{
+        columns:
+          for c <- 0..(count.(:columns) - 1) do
+            [x, _y, w, _h] = Frame.box_of(%{cell: [c, 0]}, layout, size)
+            {x, w}
+          end,
+        rows:
+          for r <- 0..(count.(:rows) - 1) do
+            [_x, y, _w, h] = Frame.box_of(%{cell: [0, r]}, layout, size)
+            {y, h}
+          end
+      }
+    end
+
     defp clamp(v, low, high), do: v |> max(low) |> min(high)
 
     defp rounded(value) do

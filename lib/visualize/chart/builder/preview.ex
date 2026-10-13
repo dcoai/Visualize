@@ -27,6 +27,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Board.State
     alias Visualize.Chart
+    alias Visualize.Chart.Builder.Place
     alias Visualize.Chart.{Frame, Template, Validator}
     alias Visualize.Data.{Delivery, Table}
     alias Visualize.IR.Path
@@ -136,7 +137,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         viewBox={"0 0 #{@width} #{@height}"}
         data-builder-selected={@selected}
         data-builder-frames={@frames}
-      >{@chart}<g :if={@overlay} class="vis-builder-frame-overlay" data-builder-frame-box={@overlay.name}><rect class="vis-builder-frame-outline" x={@overlay.x} y={@overlay.y} width={@overlay.w} height={@overlay.h} /><rect :for={{at, x, y} <- @overlay.handles} class={"vis-builder-frame-handle vis-builder-frame-handle-#{at}"} data-builder-frame-handle={at} x={x} y={y} width={@overlay.handle} height={@overlay.handle} /></g></svg>
+      >{@chart}<g :if={@overlay} class="vis-builder-frame-overlay" data-builder-frame-box={@overlay.name} data-builder-frame-cell={@overlay.cell} data-builder-grid={@overlay.grid}><g :if={@overlay.cells != []} class="vis-builder-grid-cells"><rect :for={{x, y, w, h} <- @overlay.cells} class="vis-builder-grid-cell" x={x} y={y} width={w} height={h} /></g><rect class="vis-builder-frame-outline" x={@overlay.x} y={@overlay.y} width={@overlay.w} height={@overlay.h} /><rect :for={{at, x, y} <- @overlay.handles} class={"vis-builder-frame-handle vis-builder-frame-handle-#{at}"} data-builder-frame-handle={at} x={x} y={y} width={@overlay.handle} height={@overlay.handle} /></g></svg>
       """
     end
 
@@ -190,7 +191,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             width: width,
             height: height,
             frames: frames_attribute(frames),
-            overlay: overlay(frames, assigns[:selected])
+            overlay: overlay(frames, assigns[:selected], design)
           }
 
         {:error, errors} ->
@@ -241,8 +242,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The open frame's outline and its four corner handles, drawn over the chart when the
     # open node is a frame itself (spec/14 §18.16, #614); `nil` for any other node. Only the
     # handles take the pointer, so every drawn node stays clickable under the outline.
-    @spec overlay(%{atom() => Frame.t()}, String.t() | nil) :: map() | nil
-    def overlay(frames, "frames." <> name) do
+    @spec overlay(%{atom() => Frame.t()}, String.t() | nil, map()) :: map() | nil
+    def overlay(frames, selected, design \\ %{})
+
+    def overlay(frames, "frames." <> name, design) do
       case Enum.find(frames, fn {key, _frame} -> Atom.to_string(key) == name end) do
         {key, %Frame{box: [x, y, w, h], size: size}} ->
           {px, py, pw, ph} = {x * size.width, y * size.height, w * size.width, h * size.height}
@@ -257,6 +260,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
           %{
             name: Atom.to_string(key),
+            cell: cell_of(get_in(design, [:frames, key])),
+            grid: grid_attribute(Place.grid(design, {size.width, size.height})),
+            cells: grid_cells(Place.grid(design, {size.width, size.height}), size),
             x: word(px),
             y: word(py),
             w: word(pw),
@@ -276,7 +282,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    def overlay(_frames, _selected), do: nil
+    def overlay(_frames, _selected, _design), do: nil
+
+    # The frame's cell and span as `c r a d`, for the hook to drag it cell by cell (#617);
+    # `nil` for a frame placed by its box.
+    defp cell_of(%{cell: [c, r]} = node) do
+      [a, d] = Map.get(node, :span) || [1, 1]
+      Enum.map_join([c, r, a, d], " ", &to_string/1)
+    end
+
+    defp cell_of(_node), do: nil
+
+    # The layout's columns and rows as fractions, `x w,x w;y h,y h`, or `nil` without one.
+    defp grid_attribute(nil), do: nil
+
+    defp grid_attribute(%{columns: columns, rows: rows}) do
+      line = fn spans -> Enum.map_join(spans, ",", fn {a, b} -> word(a) <> " " <> word(b) end) end
+      line.(columns) <> ";" <> line.(rows)
+    end
+
+    # Every cell of the layout in the chart's pixels, drawn faintly while a frame moves.
+    defp grid_cells(nil, _size), do: []
+
+    defp grid_cells(%{columns: columns, rows: rows}, size) do
+      for {y, h} <- rows, {x, w} <- columns do
+        {word(x * size.width), word(y * size.height), word(w * size.width), word(h * size.height)}
+      end
+    end
 
     # A handle kept on the chart, so one at its edge is not cut in half.
     defp inside(at, last), do: at |> max(0) |> min(last)

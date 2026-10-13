@@ -55,6 +55,10 @@ release it merely follows.
   `z`) is the chart's, so a linked frame is dragged without unlocking it, the placement
   kept in the site's own local. Each frame's section on the frames root has a select bar,
   the axes of its scales and what it draws.
+- **On a layout, frames are placed by cells** (#617, D-166). With a `layout` on the design,
+  a frame's page offers its `cell` and `span` as selects; a frame placed by a cell is dragged
+  between cells on the graph, the grid drawn faintly while it moves, and arrows step it a
+  cell. A frame placed by its box snaps to the cells' edges.
 - **`ResizeHook` takes `data-resize-target`**, the `phx-target` it pushes to with
   `pushEventTo`, so a LiveComponent can host it. Without it the hook pushes to the
   LiveView, as before.

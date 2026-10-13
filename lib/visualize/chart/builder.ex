@@ -722,6 +722,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   locked={@page.locked}
                   guessed={@guessed}
                   target={@myself}
+                  layout={Map.get(@design, :layout)}
                 >
                   <:style_for :let={_label}>
                     <.style_panels
@@ -781,6 +782,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 locked={@page.locked}
                 guessed={@guessed}
                 target={@myself}
+                layout={Map.get(@design, :layout)}
               >
                 <:style_for :let={_label}>
                   <.style_panels

@@ -5558,9 +5558,24 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, boarded} = Builder.handle_event("new_fragment", %{"kind" => "board"}, boarded)
       {:noreply, boarded} = Builder.handle_event("board_add", %{"ref" => "composite:1"}, boarded)
 
+      # Frames on a layout, the frames root open: each frame's cell and span (#617).
+      gridded = BuilderFixture.socket(BuilderFixture.gridded_frames())
+      {:noreply, gridded} = Builder.handle_event("pick", %{"node" => "frames.now"}, gridded)
+
       Enum.map(
         states ++
-          [with_signal, layered, expanded, masked, grouped, keyed, variables, themed, boarded],
+          [
+            with_signal,
+            layered,
+            expanded,
+            masked,
+            grouped,
+            keyed,
+            variables,
+            themed,
+            boarded,
+            gridded
+          ],
         &BuilderFixture.render/1
       ) ++ Enum.map(Keyword.keys(BuilderFixture.cases()), &rendered/1)
     end

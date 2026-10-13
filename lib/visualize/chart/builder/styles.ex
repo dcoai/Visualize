@@ -342,6 +342,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
       pointer-events: all;
     }
 
+    /* The layout's cells (spec/14 §18.16, #617), drawn faintly only while a frame moves. */
+    .vis-builder .vis-builder-grid-cells {
+      display: none;
+    }
+
+    .vis-builder .vis-builder-moving .vis-builder-grid-cells {
+      display: inline;
+    }
+
+    .vis-builder .vis-builder-grid-cell {
+      fill: none;
+      stroke: var(--vis-builder-accent);
+      stroke-width: 1;
+      stroke-opacity: 0.35;
+      stroke-dasharray: 2 3;
+    }
+
     .vis-builder .vis-builder-frame-handle-nw,
     .vis-builder .vis-builder-frame-handle-se { cursor: nwse-resize; }
 

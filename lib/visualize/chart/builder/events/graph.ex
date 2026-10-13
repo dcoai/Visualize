@@ -33,6 +33,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # each here.
     @events ~w(
       menu menu_close copy_node override_node component_key place move graph_size frame_box add_frame
+      frame_cell
     )
 
     # The smallest side, in pixels, the graph is drawn at (spec/14 §18.4).
@@ -204,6 +205,43 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:noreply, opened(socket, Editor.label(path))}
       else
         _not_a_frame_or_box -> {:noreply, socket}
+      end
+    end
+
+    # A frame placed on the layout's grid (spec/14 §18.16, #617): dragged between cells, or
+    # its cell and span chosen on its page. The cell must be one of the grid's; the span is
+    # kept to what fits from it. Both are written through the ownership rule — a frame's
+    # placement, so a linked owner takes them into its local (D-165) — and a `box` the
+    # frame said is taken away, since both is a fault (§4.2).
+    def handle_event("frame_cell", %{"frame" => name} = params, socket) do
+      design = composed(socket)
+
+      with {:ok, frame} <- frame_named(design, name),
+           %{columns: columns, rows: rows} <- Place.grid(design, graph_size(socket)),
+           {:ok, [c, r]} <- pair(Map.get(params, "cell")),
+           {:ok, [a, d]} <- pair(Map.get(params, "span", [1, 1])) do
+        if c in 0..(length(columns) - 1)//1 and r in 0..(length(rows) - 1)//1 do
+          span = [a |> max(1) |> min(length(columns) - c), d |> max(1) |> min(length(rows) - r)]
+          path = [:frames, frame]
+          node = at(design, path) || %{}
+
+          socket =
+            socket
+            |> assign(:notice, nil)
+            |> update_layer(path, :cell, {:ok, [c, r]})
+            |> update_layer(path, :span, if(span == [1, 1], do: :error, else: {:ok, span}))
+
+          socket =
+            if is_map(node) and Map.has_key?(node, :box) and socket.assigns.notice == nil,
+              do: update_layer(socket, path, :box, :error),
+              else: socket
+
+          {:noreply, opened(socket, Editor.label(path))}
+        else
+          {:noreply, assign(socket, :notice, "cell #{c}, #{r} is not on the layout's grid")}
+        end
+      else
+        _not_a_frame_or_cell -> {:noreply, socket}
       end
     end
 
@@ -522,6 +560,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
           socket
       end
     end
+
+    # A cell or a span as pushed by the hook, `[c, r]`, or as a select submits it, `"c,r"`.
+    defp pair([a, b]) when is_integer(a) and is_integer(b), do: {:ok, [a, b]}
+
+    defp pair(text) when is_binary(text) do
+      case text |> String.split(",") |> Enum.map(&Integer.parse(String.trim(&1))) do
+        [{a, ""}, {b, ""}] -> {:ok, [a, b]}
+        _other -> :error
+      end
+    end
+
+    defp pair(_other), do: :error
 
     defp dropped_at(%{"x" => _} = params),
       do: {number(Map.get(params, "x")), number(Map.get(params, "y"))}
