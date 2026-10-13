@@ -28,9 +28,16 @@ defmodule Visualize.Hooks.ResizeTest do
     assert js =~ "Math.round(rect.width)"
     assert js =~ "Math.round(rect.height)"
     assert js =~ "this.last.width === size.width && this.last.height === size.height"
-    assert js =~ "this.pushEvent(this.eventName, this.payload(size))"
-    # The settle's push, and the motion preference's change (spec/14 §21.6).
-    assert length(String.split(js, "pushEvent(")) == 3
+    assert js =~ "this.push(this.payload(size))"
+    # The settle's push, and the motion preference's change (spec/14 §21.6), both through
+    # the one push that picks the LiveView or the target.
+    assert js =~ "this.push(this.payload(this.last))"
+    assert length(String.split(js, "this.pushEvent(")) == 2
+    assert length(String.split(js, "this.pushEventTo(")) == 2
+  end
+
+  test "data-resize-target sends the push to a component with pushEventTo (spec/14 §18.4)" do
+    assert Resize.js_hook() =~ "this.target = this.el.dataset.resizeTarget || null"
   end
 
   describe "executed (spec/12 §6)" do
@@ -66,6 +73,29 @@ defmodule Visualize.Hooks.ResizeTest do
              ]
 
       assert report == %{"media" => "(prefers-reduced-motion: reduce)", "listeners" => 0}
+    end
+
+    # The builder's graph hosts the hook from inside a component (spec/14 §18.4): the push
+    # goes to the target the element names, never to the LiveView.
+    test "with data-resize-target the settle is pushed to that target" do
+      scenario = """
+      let observed = null;
+      globalThis.ResizeObserver = class { constructor(fn) { observed = fn; } observe() {} disconnect() {} };
+      const hook = Stub.mount(ResizeHook, Stub.node('div', {resizeEvent: 'graph_size', resizeTarget: '3'}));
+      observed([{contentRect: {width: 812.2, height: 501.7}}]);
+      Stub.advance(150);
+      Stub.done({});
+      """
+
+      assert {:ok, %{"log" => log}} = Visualize.JsHooks.run(scenario)
+
+      assert [
+               %{
+                 "name" => "graph_size",
+                 "target" => "3",
+                 "payload" => %{"width" => 812, "height" => 502, "reduced_motion" => false}
+               }
+             ] = for(%{"kind" => "push"} = push <- log, do: push)
     end
   end
 

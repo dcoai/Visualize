@@ -574,18 +574,44 @@ defmodule Visualize.Hooks.Builder do
         return label.startsWith('labels[');
       },
 
-      // The region a chart point falls in, from the frame the render carries on the <svg>
-      // as `w h top right bottom left` (spec/10 §16.3) — the classifier of Place.region/2.
+      // The frames the render carries on the <svg> (spec/10 §16.2), in drawing order: each
+      // `name x y w h top right bottom left`, its box in chart pixels, joined by `;`.
+      frames() {
+        const svg = this.el.querySelector('svg[data-builder-frames]');
+        const text = svg ? svg.getAttribute('data-builder-frames') : '';
+        return (text || '').split(';').filter((part) => part.trim() !== '').map((part) => {
+          const words = part.trim().split(/\\s+/);
+          const n = words.slice(1).map(Number);
+          return { name: words[0], x: n[0], y: n[1], w: n[2], h: n[3], top: n[4], right: n[5], bottom: n[6], left: n[7] };
+        });
+      },
+
+      // The frame a chart point is in (spec/14 §18.16): the topmost whose box holds it, else
+      // the nearest — Place.spot/3's reading.
+      frameAt(point) {
+        const frames = this.frames();
+        if (!point || frames.length === 0) return null;
+        const inside = (f) => point.x >= f.x && point.x <= f.x + f.w && point.y >= f.y && point.y <= f.y + f.h;
+        for (let i = frames.length - 1; i >= 0; i--) if (inside(frames[i])) return frames[i];
+        const away = (f) => {
+          const dx = Math.max(f.x - point.x, point.x - (f.x + f.w), 0);
+          const dy = Math.max(f.y - point.y, point.y - (f.y + f.h), 0);
+          return dx * dx + dy * dy;
+        };
+        return frames.reduce((best, f) => (away(f) < away(best) ? f : best));
+      },
+
+      // The region a chart point falls in, read in the frame under it — the classifier of
+      // Place.region/2 over Place.spot/3.
       regionAt(point) {
-        const svg = this.el.querySelector('svg[data-builder-frame]');
-        if (!svg || !point) return null;
-        const f = svg.getAttribute('data-builder-frame').split(/\s+/).map(Number);
-        if (f.length !== 6) return null;
-        const [w, h, top, right, bottom, left] = f;
-        if (point.y < top) return 'top';
-        if (point.y > h - bottom) return 'bottom';
-        if (point.x < left) return 'left';
-        if (point.x > w - right) return 'right';
+        const f = this.frameAt(point);
+        if (!f) return null;
+        const x = point.x - f.x;
+        const y = point.y - f.y;
+        if (y < f.top) return 'top';
+        if (y > f.h - f.bottom) return 'bottom';
+        if (x < f.left) return 'left';
+        if (x > f.w - f.right) return 'right';
         return 'plot';
       },
 

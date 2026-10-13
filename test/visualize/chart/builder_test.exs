@@ -1813,7 +1813,7 @@ defmodule Visualize.Chart.BuilderTest do
                Enum.at(s4.assigns.uses, 2)
 
       # The render carries the frame for the hook's overlay.
-      assert BuilderFixture.render(s) =~ ~s(data-builder-frame="600 400 20 20 30 40")
+      assert BuilderFixture.render(s) =~ ~s(data-builder-frames="main 0 0 600 400 20 20 30 40")
     end
 
     test "a legend moves between the margins and the plot's positions; a locked owner refuses" do

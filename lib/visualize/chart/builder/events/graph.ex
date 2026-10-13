@@ -26,13 +26,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
       ]
 
     alias Visualize.Chart.Builder.{Editor, Place, Stack}
-    alias Visualize.Chart.{Fragment, Use}
+    alias Visualize.Chart.{Fragment, Frame, Use}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
     @events ~w(
-      menu menu_close copy_node override_node component_key place move
+      menu menu_close copy_node override_node component_key place move graph_size
     )
+
+    # The smallest side, in pixels, the graph is drawn at (spec/14 §18.4).
+    @smallest 100
 
     @doc false
     def events, do: @events
@@ -151,6 +154,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # The graph is the box (spec/14 §18.4): its measured size is what the preview draws the
+    # design at. A size too small to draw in — a hidden or collapsed graph measures zero —
+    # keeps the last one, so a chart never redraws into nothing.
+    def handle_event("graph_size", %{"width" => width, "height" => height}, socket) do
+      case {integer(width), integer(height)} do
+        {w, h} when w >= @smallest and h >= @smallest ->
+          {:noreply, assign(socket, :graph_size, {w, h})}
+
+        _too_small ->
+          {:noreply, socket}
+      end
+    end
+
     # -- placing a component (spec/14 §18.16) ------------------------------------------------
 
     # The keys a move changed, written through the ownership rule: the placement key, and
@@ -194,23 +210,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The region a drop names: its point classified against the frame the preview drew, or
     # the region given outright; absent both, the component's home.
+    # A point is read in the frame under it at the size the graph was measured at (§18.4),
+    # so the region is that frame's band or its plot.
     defp where(socket, params, component) do
       point = {number(Map.get(params, "x")), number(Map.get(params, "y"))}
 
-      region =
-        case Map.get(params, "region") do
-          given when given in ~w(plot top bottom left right) ->
-            String.to_existing_atom(given)
+      case Map.get(params, "region") do
+        given when given in ~w(plot top bottom left right) ->
+          {String.to_existing_atom(given), point}
 
-          _none when is_map_key(params, "x") ->
-            Place.region(point, Place.geometry(composed(socket)))
+        _none when is_map_key(params, "x") ->
+          spot = Place.spot(composed(socket), graph_size(socket), point)
+          {Place.region(spot.point, spot.geometry), spot}
 
-          _none ->
-            if component, do: Place.home(component), else: :plot
-        end
-
-      {region, point}
+        _none ->
+          {if(component, do: Place.home(component), else: :plot), point}
+      end
     end
+
+    # The size the graph was last measured at, else the render's default (spec/14 §18.4).
+    defp graph_size(socket), do: socket.assigns[:graph_size] || Frame.default_size()
 
     defp number(value) when is_number(value), do: value
 
@@ -222,6 +241,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp number(_none), do: 0
+
+    defp integer(value) when is_integer(value), do: value
+    defp integer(value) when is_float(value), do: round(value)
+
+    defp integer(value) when is_binary(value) do
+      case Integer.parse(value) do
+        {n, _} -> n
+        :error -> 0
+      end
+    end
+
+    defp integer(_none), do: 0
 
     # A component placed: its sites inserted above the selected layer — or above the layer
     # whose axis of the same identity it replaces, so the drop is what draws (§8.2) —

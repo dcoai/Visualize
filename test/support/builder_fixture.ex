@@ -67,6 +67,34 @@ defmodule Visualize.BuilderFixture do
   end
 
   @doc false
+  # Two frames side by side, neither of them `main` — the shape the gallery's *Load* and
+  # *Context* templates have (spec/14 §18.4, #386) — over the fixture's pool.
+  def two_frames do
+    scales = %{x: %{kind: :linear, domain: :auto}, y: %{kind: :linear, domain: :auto}}
+
+    [
+      {:two,
+       %{
+         version: 2,
+         sources: %{primary: %{fields: [:t, :v]}},
+         frames: %{
+           history: %{
+             kind: :cartesian,
+             box: [0, 0, 0.5, 1],
+             scales: scales,
+             axes: [%{scale: :x, side: :bottom}]
+           },
+           now: %{kind: :cartesian, box: [0.5, 0, 0.5, 1], scales: scales}
+         },
+         marks: [
+           %{type: :line, frame: :history, data: :primary, channels: %{x: :t, y: :v}},
+           %{type: :line, frame: :now, data: :primary, channels: %{x: :t, y: :v}}
+         ]
+       }}
+    ]
+  end
+
+  @doc false
   # The pool the layers' one slot binds to.
   def sources do
     %{primary: [%{t: 0, v: 1}, %{t: 1, v: 4}, %{t: 2, v: 2}, %{t: 3, v: 3}]}
