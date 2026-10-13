@@ -78,7 +78,7 @@ defmodule Visualize.MixProject do
       # `mix vis.surface` (spec/12 §2): the source-scan primitives and the golden renderer
       # shared with extc and extla. `only:` is load-bearing: dev/test deps are not transitive,
       # so nothing here reaches a consumer of visualize.
-      {:surfex, "~> 0.7.0", only: [:dev, :test], runtime: false},
+      {:surfex, "~> 0.8.0", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       # Property tests over the scale protocol (spec/03 §1.3; test/visualize/scale/).
       {:stream_data, "~> 1.4", only: [:dev, :test]},
