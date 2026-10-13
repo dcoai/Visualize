@@ -140,6 +140,54 @@ defmodule Visualize.Components.BoardTest do
       refute html =~ "vis-cell-banner"
     end
 
+    test "the chart sits in a TooltipHook targeted at the cell, inside the keyboard's (D-161)" do
+      board = server()
+      {:ok, _info} = Server.subscribe(board)
+      view = live_view(:latency)
+
+      html =
+        render_component(Cell,
+          id: "ops-latency",
+          cell: :latency,
+          rect: %{x: 0, y: 0, w: 8, h: 3},
+          title: "Latency",
+          theme: Visualize.Theme.default(),
+          target: 3,
+          view: view
+        )
+
+      # The cell's own component, as the keyboard's target names it.
+      [_, myself] = Regex.run(~r/data-keyboard-target="([^"]+)"/, html)
+
+      assert html =~
+               ~s(<div id="ops-latency-tooltip" phx-hook="TooltipHook" data-tooltip-target="#{myself}">)
+
+      assert html =~ ~r/id="ops-latency-keys".*id="ops-latency-tooltip".*<svg/s
+
+      # No sync group on the tooltip: the crosshair shares the board's hover.
+      [tooltip] = Regex.run(~r/<div id="ops-latency-tooltip"[^>]*>/, html)
+      refute tooltip =~ "data-vis-sync"
+
+      # A loading cell has no chart, so no hook.
+      refute cell_html(%View{cell: :a, state: :loading, size: {1, 1}, note: "x"}) =~ "TooltipHook"
+    end
+
+    test "a mark's click on a cell reaches the page as :visualize_board_event (D-161)" do
+      socket = %Socket{
+        assigns: %{__changed__: %{}, id: "ops-latency", cell: :latency, board_id: "ops"}
+      }
+
+      fields = %{"id" => "42", "t" => "2026-10-11T12:01:00Z"}
+      assert {:noreply, _} = Cell.handle_event("event_open", fields, socket)
+
+      assert_received {:visualize_board_event, "ops",
+                       %{cell: :latency, event: "event_open", fields: ^fields}}
+
+      # `pick` is the cell's own: a malformed one is not forwarded as a mark's event.
+      Cell.handle_event("pick", %{"series" => "a", "index" => "b"}, socket)
+      refute_received {:visualize_board_event, _, _}
+    end
+
     test "every state renders in a cell: alone where there is no chart, a banner over one" do
       theme = Visualize.Theme.default()
       svg = ~s(<svg role="img"><title>chart</title></svg>)
@@ -229,6 +277,48 @@ defmodule Visualize.Components.BoardTest do
       # A brush with no domain changes nothing.
       Component.handle_event("brush", %{"x0" => 1, "x1" => 9}, socket)
       assert Server.info(board).board.window == %{last: 600}
+      refute_received {:visualize_board_brush, _, _}
+    end
+
+    test "with brush: :host the brush and Reset window go to the page, not the board (D-161)" do
+      board = server()
+      socket = put_in(socket(board).assigns[:brush], :host)
+      ms = DateTime.to_unix(@t0, :millisecond)
+
+      Component.handle_event("brush", %{"domain" => [ms + 60_000, ms + 300_000]}, socket)
+
+      from = DateTime.from_unix!(ms + 60_000, :millisecond)
+      to = DateTime.from_unix!(ms + 300_000, :millisecond)
+      assert_received {:visualize_board_brush, "ops", %{domain: [^from, ^to]}}
+
+      # The board's window is untouched until the page applies it.
+      info = Server.info(board)
+      assert info.board.window == %{last: 600}
+      refute info.moved
+
+      # The page applies it; the header's undo then goes to the page too.
+      :ok = Server.window(board, %{from: from, to: to})
+      assert Server.info(board).moved
+
+      Component.handle_event("reset_window", %{}, socket)
+      assert_received {:visualize_board_brush, "ops", %{domain: nil}}
+      assert Server.info(board).window == {from, to}
+      assert Server.info(board).moved
+
+      # A brush without a domain, a reversed one, or a cleared brush sends nothing.
+      Component.handle_event("brush", %{"x0" => 1, "x1" => 9}, socket)
+      Component.handle_event("brush", %{"domain" => [ms + 9, ms + 1]}, socket)
+      Component.handle_event("brush_clear", %{}, socket)
+      refute_received {:visualize_board_brush, _, _}
+    end
+
+    test "the brush assign defaults to :server and refuses anything else" do
+      html = render_component(Component, id: "ops", server: self(), board: board(), brush: :host)
+      assert html =~ ~s(<section id="ops")
+
+      assert_raise ArgumentError, ~r/:server or :host, got: :page/, fn ->
+        render_component(Component, id: "ops", server: self(), board: board(), brush: :page)
+      end
     end
 
     test "the window is shown in the board's zone" do
