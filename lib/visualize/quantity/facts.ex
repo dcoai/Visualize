@@ -1,11 +1,18 @@
 defmodule Visualize.Quantity.Facts do
   @moduledoc false
-  # The facts of each quantity (spec/05 §4.2, D-138, D-155), as data: its base unit, its
-  # kind, its bounds in the base unit (a display hint, never validation), its additivity
-  # across series and over time, and its display families — ladders of units, smallest
-  # first, each tagged with the unit systems it serves (`:any` for every system). The
-  # order of `all/0` is spec/05 §4.2's, and a quantity's families are listed metric, US,
-  # UK, then the rest: a unit belongs to the first that holds a member of its shape.
+  # The facts of each quantity (spec/05 §4.2, D-138, D-155, D-158), as data: its base
+  # unit, its kind, its bounds in the base unit (a display hint, never validation), its
+  # additivity across series and over time, and its display families — ladders of units,
+  # smallest first, each tagged with the unit systems it serves (`:any` for every
+  # system). The order of `all/0` is spec/05 §4.2's, and a quantity's families are listed
+  # metric, US, UK, then the rest: a unit belongs to the first that holds a member of its
+  # shape.
+  #
+  # A quantity read in several conventions gives `conventions:` in place of `families:`,
+  # each `{name, families: [...], also: [codes]}` — its ladders and the codes it claims
+  # without a ladder for them — listed in the order a unit's convention is chosen. A
+  # quantity's flat `families:` is the one-convention case, so `fetch!/1` answers
+  # `conventions:` for every quantity.
 
   @decimal ~w(By kBy MBy GBy TBy)
   @binary ~w(By KiBy MiBy GiBy TiBy)
@@ -97,7 +104,16 @@ defmodule Visualize.Quantity.Facts do
       bounds: {nil, nil},
       across: false,
       over_time: false,
-      families: [metric: ~w(Pa kPa MPa), us: ~w([psi]), uk: ~w([psi])]
+      # Gauge first: a unit of no convention keeps the display it had before D-158. `bar`
+      # is gauge's, but no metric ladder holds it (300 kPa stays kPa, not 3 bar).
+      conventions: [
+        gauge: [families: [metric: ~w(Pa kPa MPa), us: ~w([psi]), uk: ~w([psi])], also: ~w(bar)],
+        barometric: [
+          families: [metric: ~w(hPa), us: ~w([in_i'Hg]), uk: ~w(hPa)],
+          also: ~w(mbar)
+        ],
+        clinical: [families: [any: ~w(mm[Hg])], also: []]
+      ]
     },
     area: %{
       base: "m2",
@@ -202,7 +218,9 @@ defmodule Visualize.Quantity.Facts do
 
   @all Keyword.keys(@facts)
   @by_quantity Map.new(@facts, fn {quantity, facts} ->
-                 {quantity, Map.put_new(facts, :families, [])}
+                 {families, facts} = Map.pop(facts, :families, [])
+                 conventions = [{quantity, families: families, also: []}]
+                 {quantity, Map.put_new(facts, :conventions, conventions)}
                end)
 
   @doc false

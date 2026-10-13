@@ -175,4 +175,224 @@ defmodule Visualize.Quantity.FactsTest do
       assert Quantity.formatter(celsius, %{unit: "Cel"}, system: :us).(-40) == "-40 °F"
     end
   end
+
+  describe "conventions: a system picks within one, never across (spec/05 §4.2, D-158)" do
+    test "the proposal's four calls" do
+      assert Quantity.display_unit([], %{unit: "hPa"}, system: :us) == "[in_i'Hg]"
+      assert Quantity.display_unit([], %{unit: "mm[Hg]"}, system: :metric) == "mm[Hg]"
+      assert Quantity.display_unit([], %{unit: "mm[Hg]"}, system: :us) == "mm[Hg]"
+      assert Quantity.display_unit([0, 300_000], %{unit: "kPa"}, system: :us) == "[psi]"
+    end
+
+    test "barometric: hPa and mbar are hPa under metric and UK, inches of mercury under US" do
+      assert Quantity.display_unit([0, 1013], %{unit: "mbar"}, system: :metric) == "hPa"
+      assert Quantity.display_unit([0, 1013], %{unit: "mbar"}, system: :uk) == "hPa"
+      assert Quantity.display_unit([0, 1013], %{unit: "mbar"}, system: :us) == "[in_i'Hg]"
+      assert Quantity.display_unit([0, 1013], %{unit: "hPa"}, system: :uk) == "hPa"
+      assert Quantity.display_unit([0, 30], %{unit: "[in_i'Hg]"}, system: :metric) == "hPa"
+      assert Quantity.display_unit([0, 30], %{unit: "[in_i'Hg]"}, system: :us) == "[in_i'Hg]"
+      assert Quantity.format(1013.25, %{unit: "hPa"}, system: :us) == "29.92 inHg"
+    end
+
+    test "as posted keeps the unit's own ladder inside its convention" do
+      assert Quantity.display_unit([900, 1100], %{unit: "hPa"}) == "hPa"
+      assert Quantity.display_unit([0, 3], %{unit: "bar"}) == "bar"
+      assert Quantity.display_unit([0, 1013], %{unit: "mbar"}) == "mbar"
+      assert Quantity.display_unit([0, 120], %{unit: "mm[Hg]"}) == "mm[Hg]"
+      assert Quantity.display_unit([0, 300_000], %{unit: "Pa"}) == "kPa"
+    end
+
+    test "gauge: bar is gauge's but out of the metric ladder, so 3 bar is 300 kPa" do
+      assert Quantity.family(:pressure, "bar", :metric) == ~w(Pa kPa MPa)
+      assert Quantity.display_unit([0, 3], %{unit: "bar"}, system: :metric) == "kPa"
+      assert Quantity.display_unit([0, 3], %{unit: "bar"}, system: :us) == "[psi]"
+      assert Quantity.display_unit([0, 30], %{unit: "[psi]"}, system: :metric) == "kPa"
+    end
+
+    test "exact code first, then shape: a prefix no convention lists falls back to gauge" do
+      assert Quantity.family(:pressure, "hPa", :metric) == ~w(hPa)
+      assert Quantity.family(:pressure, "kPa", :metric) == ~w(Pa kPa MPa)
+      assert Quantity.family(:pressure, "dPa", :metric) == ~w(Pa kPa MPa)
+      assert Quantity.family(:pressure, "dPa", :us) == ~w([psi])
+      assert Quantity.family(:pressure, "dPa") == ~w(Pa kPa MPa)
+      assert Quantity.display_unit([0, 50_000], %{unit: "dPa"}, system: :metric) == "kPa"
+      assert Quantity.family(:pressure, nil, :us) == ~w([psi])
+    end
+
+    test "clinical: mm[Hg] keeps its unit in every system" do
+      for system <- Quantity.systems() do
+        assert Quantity.family(:pressure, "mm[Hg]", system) == ~w(mm[Hg])
+        assert Quantity.display_unit([60, 180], %{unit: "mm[Hg]"}, system: system) == "mm[Hg]"
+      end
+    end
+
+    test "an axis over hPa under US ticks in round inches of mercury" do
+      scale = Scale.linear() |> Scale.domain([950, 1050])
+      measure = %{unit: "hPa"}
+      ticks = Quantity.ticks(scale, measure, system: :us, count: 5)
+      labels = Enum.map(ticks, Quantity.formatter(scale, measure, system: :us, count: 5))
+
+      assert labels == ["28.5 inHg", "29 inHg", "29.5 inHg", "30 inHg", "30.5 inHg", "31 inHg"]
+
+      for {tick, inches} <- Enum.zip(ticks, [28.5, 29.0, 29.5, 30.0, 30.5, 31.0]),
+          do: assert_in_delta(Unit.convert(tick, "hPa", "[in_i'Hg]"), inches, 1.0e-9)
+    end
+
+    # Every family/3 answer of every other quantity as origin/main gave it before D-158,
+    # computed there over each quantity's base unit, every family member and some units
+    # of no family: `{quantity, units, [metric, us, uk, as_posted]}`.
+    @before [
+      {:duration, [nil, "s", "ns", "us", "ms", "min", "h", "d", "ks"],
+       [
+         ~w(ns us ms s min h d),
+         ~w(ns us ms s min h d),
+         ~w(ns us ms s min h d),
+         ~w(ns us ms s min h d)
+       ]},
+      {:information, [nil, "By", "kBy", "MBy", "GBy", "TBy"],
+       [
+         ~w(By kBy MBy GBy TBy),
+         ~w(By kBy MBy GBy TBy),
+         ~w(By kBy MBy GBy TBy),
+         ~w(By kBy MBy GBy TBy)
+       ]},
+      {:information, ["KiBy", "MiBy", "GiBy", "TiBy"],
+       [
+         ~w(By KiBy MiBy GiBy TiBy),
+         ~w(By KiBy MiBy GiBy TiBy),
+         ~w(By KiBy MiBy GiBy TiBy),
+         ~w(By KiBy MiBy GiBy TiBy)
+       ]},
+      {:information, ["bit", "kbit", "Mbit", "Gbit", "Tbit"],
+       [
+         ~w(bit kbit Mbit Gbit Tbit),
+         ~w(bit kbit Mbit Gbit Tbit),
+         ~w(bit kbit Mbit Gbit Tbit),
+         ~w(bit kbit Mbit Gbit Tbit)
+       ]},
+      {:data_rate, [nil, "By/s", "kBy/s", "MBy/s", "GBy/s", "TBy/s"],
+       [
+         ~w(By/s kBy/s MBy/s GBy/s TBy/s),
+         ~w(By/s kBy/s MBy/s GBy/s TBy/s),
+         ~w(By/s kBy/s MBy/s GBy/s TBy/s),
+         ~w(By/s kBy/s MBy/s GBy/s TBy/s)
+       ]},
+      {:data_rate, ["KiBy/s", "MiBy/s", "GiBy/s", "TiBy/s"],
+       [
+         ~w(By/s KiBy/s MiBy/s GiBy/s TiBy/s),
+         ~w(By/s KiBy/s MiBy/s GiBy/s TiBy/s),
+         ~w(By/s KiBy/s MiBy/s GiBy/s TiBy/s),
+         ~w(By/s KiBy/s MiBy/s GiBy/s TiBy/s)
+       ]},
+      {:data_rate, ["bit/s", "kbit/s", "Mbit/s", "Gbit/s", "Tbit/s"],
+       [
+         ~w(bit/s kbit/s Mbit/s Gbit/s Tbit/s),
+         ~w(bit/s kbit/s Mbit/s Gbit/s Tbit/s),
+         ~w(bit/s kbit/s Mbit/s Gbit/s Tbit/s),
+         ~w(bit/s kbit/s Mbit/s Gbit/s Tbit/s)
+       ]},
+      {:frequency, [nil, "Hz", "kHz", "MHz", "GHz"],
+       [~w(Hz kHz MHz GHz), ~w(Hz kHz MHz GHz), ~w(Hz kHz MHz GHz), ~w(Hz kHz MHz GHz)]},
+      {:frequency, ["/h", "/min", "/s"],
+       [~w(/h /min /s), ~w(/h /min /s), ~w(/h /min /s), ~w(/h /min /s)]},
+      {:ratio, [nil, "1"], [[], [], [], []]},
+      {:count, [nil, "1"], [[], [], [], []]},
+      {:temperature, [nil, "Cel"], [~w(Cel), ~w([degF]), ~w(Cel), ~w(Cel)]},
+      {:temperature, ["[degF]"], [~w(Cel), ~w([degF]), ~w(Cel), ~w([degF])]},
+      {:temperature, ["K"], [~w(Cel), ~w([degF]), ~w(Cel), []]},
+      {:length, [nil, "m", "mm", "cm", "km", "dm"],
+       [~w(mm cm m km), ~w([in_i] [ft_i] [mi_i]), ~w([in_i] [ft_i] [mi_i]), ~w(mm cm m km)]},
+      {:length, ["[in_i]", "[ft_i]", "[mi_i]"],
+       [
+         ~w(mm cm m km),
+         ~w([in_i] [ft_i] [mi_i]),
+         ~w([in_i] [ft_i] [mi_i]),
+         ~w([in_i] [ft_i] [mi_i])
+       ]},
+      {:length, ["[nmi_i]"],
+       [~w(mm cm m km), ~w([in_i] [ft_i] [mi_i]), ~w([in_i] [ft_i] [mi_i]), []]},
+      {:speed, [nil, "m/s"], [~w(km/h), ~w([mi_i]/h), ~w([mi_i]/h), []]},
+      {:speed, ["km/h"], [~w(km/h), ~w([mi_i]/h), ~w([mi_i]/h), ~w(km/h)]},
+      {:speed, ["[mi_i]/h"], [~w(km/h), ~w([mi_i]/h), ~w([mi_i]/h), ~w([mi_i]/h)]},
+      {:power, [nil, "W", "kW", "MW", "GW"],
+       [~w(W kW MW GW), ~w(W kW MW GW), ~w(W kW MW GW), ~w(W kW MW GW)]},
+      {:energy, [nil, "J", "kJ", "MJ", "GJ"],
+       [~w(J kJ MJ GJ), ~w(J kJ MJ GJ), ~w(J kJ MJ GJ), ~w(J kJ MJ GJ)]},
+      {:energy, ["W.h", "kW.h", "MW.h", "GW.h"],
+       [
+         ~w(W.h kW.h MW.h GW.h),
+         ~w(W.h kW.h MW.h GW.h),
+         ~w(W.h kW.h MW.h GW.h),
+         ~w(W.h kW.h MW.h GW.h)
+       ]},
+      {:energy, ["cal", "kcal"], [~w(cal kcal), ~w(cal kcal), ~w(cal kcal), ~w(cal kcal)]},
+      {:area, [nil, "m2", "cm2", "har", "km2"],
+       [
+         ~w(cm2 m2 har km2),
+         ~w([ft_i]2 [acr_us] [mi_i]2),
+         ~w([ft_i]2 [acr_us] [mi_i]2),
+         ~w(cm2 m2 har km2)
+       ]},
+      {:area, ["[ft_i]2", "[acr_us]", "[mi_i]2"],
+       [
+         ~w(cm2 m2 har km2),
+         ~w([ft_i]2 [acr_us] [mi_i]2),
+         ~w([ft_i]2 [acr_us] [mi_i]2),
+         ~w([ft_i]2 [acr_us] [mi_i]2)
+       ]},
+      {:volume, [nil, "l", "ml", "m3", "dl"],
+       [~w(ml l m3), ~w([foz_us] [pt_us] [gal_us]), ~w([foz_br] [pt_br] [gal_br]), ~w(ml l m3)]},
+      {:volume, ["[foz_us]", "[pt_us]", "[gal_us]"],
+       [
+         ~w(ml l m3),
+         ~w([foz_us] [pt_us] [gal_us]),
+         ~w([foz_br] [pt_br] [gal_br]),
+         ~w([foz_us] [pt_us] [gal_us])
+       ]},
+      {:volume, ["[foz_br]", "[pt_br]", "[gal_br]"],
+       [
+         ~w(ml l m3),
+         ~w([foz_us] [pt_us] [gal_us]),
+         ~w([foz_br] [pt_br] [gal_br]),
+         ~w([foz_br] [pt_br] [gal_br])
+       ]},
+      {:mass, [nil, "g", "mg", "kg", "t"],
+       [~w(mg g kg t), ~w([oz_av] [lb_av]), ~w([oz_av] [lb_av] [stone_av]), ~w(mg g kg t)]},
+      {:mass, ["[oz_av]", "[lb_av]"],
+       [~w(mg g kg t), ~w([oz_av] [lb_av]), ~w([oz_av] [lb_av] [stone_av]), ~w([oz_av] [lb_av])]},
+      {:mass, ["[stone_av]"],
+       [
+         ~w(mg g kg t),
+         ~w([oz_av] [lb_av]),
+         ~w([oz_av] [lb_av] [stone_av]),
+         ~w([oz_av] [lb_av] [stone_av])
+       ]},
+      {:pace, [nil, "s/m"], [~w(min/km), ~w(min/[mi_i]), ~w(min/[mi_i]), []]},
+      {:pace, ["min/km"], [~w(min/km), ~w(min/[mi_i]), ~w(min/[mi_i]), ~w(min/km)]},
+      {:pace, ["min/[mi_i]"], [~w(min/km), ~w(min/[mi_i]), ~w(min/[mi_i]), ~w(min/[mi_i])]},
+      {:angle, [nil, "deg"], [[], [], [], []]},
+      {:electric_potential, [nil, "V", "mV", "kV"],
+       [~w(mV V kV), ~w(mV V kV), ~w(mV V kV), ~w(mV V kV)]},
+      {:electric_current, [nil, "A", "mA"], [~w(mA A), ~w(mA A), ~w(mA A), ~w(mA A)]},
+      {:electric_charge, [nil, "C"], [[], [], [], []]},
+      {:electric_charge, ["mA.h", "A.h"],
+       [~w(mA.h A.h), ~w(mA.h A.h), ~w(mA.h A.h), ~w(mA.h A.h)]},
+      {:illuminance, [nil, "lx", "klx"], [~w(lx klx), ~w(lx klx), ~w(lx klx), ~w(lx klx)]},
+      {:sound_level, [nil, "dB[SPL]"], [[], [], [], []]},
+      {:mass_concentration, [nil, "g/l"], [[], [], [], []]},
+      {:amount_concentration, [nil, "mol/l"], [[], [], [], []]}
+    ]
+
+    test "every other quantity's family/3 answers are unchanged" do
+      for {quantity, units, answers} <- @before,
+          unit <- units,
+          {system, answer} <- Enum.zip(Quantity.systems(), answers) do
+        assert Quantity.family(quantity, unit, system) == answer,
+               inspect({quantity, unit, system})
+      end
+
+      assert @before |> Enum.map(&elem(&1, 0)) |> Enum.uniq() ==
+               Quantity.all() -- [:pressure, :currency]
+    end
+  end
 end

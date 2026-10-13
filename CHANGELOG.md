@@ -15,6 +15,23 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.4.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Changed
+
+- **A unit system picks a pressure's unit within its convention** (#598, D-158). Pressure
+  is read as gauge (`Pa`, `kPa`, `MPa`, `bar`, `[psi]`), barometric (`hPa`, `mbar`,
+  `[in_i'Hg]`) or clinical (`mm[Hg]`), and `system:` now chooses inside the stored unit's
+  convention instead of across them. *Affects* `Visualize.Quantity.display_unit/3`,
+  `family/2,3`, `format/3`, and every axis and tooltip drawn with `system:`.
+  *Before:* `hPa` and `mbar` showed as `[psi]` under `:us` and `kPa` under `:metric`;
+  `[in_i'Hg]` showed as `kPa` under `:metric`; `mm[Hg]` showed as `kPa` or `[psi]`; and
+  under the default `:as_posted`, `hPa` data was rescaled into `kPa` (1013 hPa read as
+  `101.3 kPa`). *After:* `hPa` and `mbar` show as `[in_i'Hg]` under `:us` and `hPa` under
+  `:metric` and `:uk`, so an axis over 950–1050 hPa under `:us` ticks at `28.5 inHg` …
+  `31 inHg`; `[in_i'Hg]` shows as `hPa` under `:metric`; `mm[Hg]` keeps its unit in every
+  system; and `hPa` stays `hPa` as posted. Gauge units display as before, `bar` included
+  (3 bar is still `300 kPa` for a metric viewer, and `bar` as posted). No other quantity
+  changes.
+
 ## [0.4.0] — 2026-10-12
 
 One units vocabulary for every host: UCUM coverage with aliases, 25 quantities with their

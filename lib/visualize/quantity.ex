@@ -209,10 +209,11 @@ defmodule Visualize.Quantity do
 
   @doc """
   The display family a unit of the quantity belongs to, smallest first; `[]` for a unit
-  of no family's shape (spec/05 §4.2). A unit belongs to the first family holding a
-  member of its shape — its atoms and exponents, prefixes aside and a binary prefix kept
-  apart — so the unit picks among a quantity's families: bits, binary prefixes, hertz,
-  watt-hours, US lengths. No unit means the base unit.
+  of no family's shape (spec/05 §4.2). Within the unit's convention (`family/3`), a unit
+  belongs to the first family holding a member of its shape — its atoms and exponents,
+  prefixes aside and a binary prefix kept apart — so the unit picks among a quantity's
+  families: bits, binary prefixes, hertz, watt-hours, US lengths. No unit means the base
+  unit.
 
   ## Examples
 
@@ -227,9 +228,15 @@ defmodule Visualize.Quantity do
   def family(quantity, unit), do: family(quantity, unit, :as_posted)
 
   @doc """
-  The display family a system shows a unit of the quantity in (spec/05 §4.2): the
-  family the quantity's table names for `:metric`, `:us` or `:uk` when it names one, else
-  the unit's own (`family/2`), which is what `:as_posted` always is.
+  The display family a system shows a unit of the quantity in (spec/05 §4.2, D-158): the
+  family the unit's convention names for `:metric`, `:us` or `:uk` when it names one,
+  else the unit's own (`family/2`), which is what `:as_posted` always is.
+
+  A quantity read in several conventions — a pressure is gauge, barometric or clinical —
+  picks the unit's by its exact code first, then by its shape, else the first, so a
+  system chooses within a convention and never across: a barometric `hPa` is shown in
+  inches of mercury under `:us`, and a blood pressure in `mm[Hg]` stays in it under every
+  system.
 
   ## Examples
 
@@ -238,6 +245,9 @@ defmodule Visualize.Quantity do
 
       iex> Visualize.Quantity.family(:duration, "ms", :us)
       ["ns", "us", "ms", "s", "min", "h", "d"]
+
+      iex> Visualize.Quantity.family(:pressure, "hPa", :us)
+      ["[in_i'Hg]"]
 
   """
   @spec family(t(), Unit.code() | nil, system()) :: [Unit.code()]
@@ -249,7 +259,7 @@ defmodule Visualize.Quantity do
   end
 
   def family(quantity, unit, system) when system in @systems do
-    families = Facts.fetch!(quantity).families
+    families = convention(quantity, unit)
 
     case List.keyfind(families, system, 0) do
       {^system, ladder} -> ladder
@@ -693,6 +703,36 @@ defmodule Visualize.Quantity do
   end
 
   # -- scaling --------------------------------------------------------------------------
+
+  # The families of the unit's convention (spec/05 §4.2, D-158): the first convention
+  # claiming its exact code, else the first claiming a code of its shape, else the first.
+  # Shape alone cannot choose, since `hPa` and `kPa` are one shape; a quantity of one
+  # convention has no choice to make.
+  defp convention(quantity, unit) do
+    case Facts.fetch!(quantity).conventions do
+      [{_name, only}] ->
+        Keyword.fetch!(only, :families)
+
+      [{_name, first} | _] = conventions ->
+        claims = for {_name, convention} <- conventions, do: {claimed(convention), convention}
+        shape = shape(unit)
+
+        {_claimed, convention} =
+          Enum.find(claims, &(unit in elem(&1, 0))) ||
+            Enum.find(claims, {[], first}, fn {claimed, _} ->
+              Enum.any?(claimed, &(shape(&1) == shape))
+            end)
+
+        Keyword.fetch!(convention, :families)
+    end
+  end
+
+  # Every code a convention claims: its ladders' members and the codes it holds without
+  # a ladder for them.
+  defp claimed(convention) do
+    Enum.flat_map(Keyword.fetch!(convention, :families), &elem(&1, 1)) ++
+      Keyword.fetch!(convention, :also)
+  end
 
   # The first family holding a member of the unit's shape, else none.
   defp own_family(families, unit) do
