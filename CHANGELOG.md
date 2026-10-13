@@ -10,10 +10,11 @@ All notable changes to Visualize are recorded here, following
 > [`spec/`](https://github.com/dcoai/Visualize/blob/main/spec/README.md), which is the
 > source of truth for that and is not restated here.
 
-## [Unreleased]
+## [0.5.1] — 2026-10-13
 
-`mix.exs` reads `0.5.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
-release it merely follows.
+Board cells show their marks' tooltips and pass a mark's click to the page, and a page may own
+a board's brushed window. In the builder, the graph is the box a design is drawn at, and every
+frame is laid out on it by dragging, by its corner handles or, on a layout, by cells.
 
 ### Added
 
@@ -1698,7 +1699,7 @@ the meaning of a patch.
   discipline — tagged ticks, restart keeps the state, alpha is clamped — under an ExTLA
   model that is checked in CI (D-14).
 
-[Unreleased]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/compare/v0.5.0...main
+[0.5.1]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.5.1
 [0.5.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.5.0
 [0.4.1]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.4.1
 [0.4.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.4.0
