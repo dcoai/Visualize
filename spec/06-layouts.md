@@ -344,23 +344,23 @@ Integration: after all forces have been applied, each free coordinate is updated
 | Type | Option | Default | Effect |
 |---|---|---|---|
 | `:center` | `:x`, `:y` | `0`, `0` | Translates every node's position (not velocity) so the mean position moves toward `{x, y}` by `strength`; ignores `alpha`. |
-| | `:strength` | `1` | |
+| `:center` | `:strength` | `1` | |
 | `:many_body` | `:strength` | `-30` | Every pair is evaluated directly, O(n²) per tick, with no Barnes–Hut approximation. For each other node at distance `d`, `v += (other - node) * strength * alpha / d²`; negative strength repels. |
-| | `:distance_min` | `1` | `d` is clamped to at least this value. |
-| | `:distance_max` | `:infinity` | Pairs at `d >= distance_max` are skipped. |
+| `:many_body` | `:distance_min` | `1` | `d` is clamped to at least this value. |
+| `:many_body` | `:distance_max` | `:infinity` | Pairs at `d >= distance_max` are skipped. |
 | `:link` | `:distance` | `30` | Target length. |
-| | `:strength` | `1` | Spring stiffness. |
-| | `:iterations` | `1` | Passes per tick. Per link, with `d` the distance between `pos + vel` of the endpoints, `k = (d - distance) / d * alpha * strength`; the full displacement `delta * k` is added to the source velocity and subtracted from the target velocity. Links whose endpoints are not found are ignored. |
+| `:link` | `:strength` | `1` | Spring stiffness. |
+| `:link` | `:iterations` | `1` | Passes per tick. Per link, with `d` the distance between `pos + vel` of the endpoints, `k = (d - distance) / d * alpha * strength`; the full displacement `delta * k` is added to the source velocity and subtracted from the target velocity. Links whose endpoints are not found are ignored. |
 | `:collision` | `:radius` | `10` | Number or `fn node -> number end`. |
-| | `:strength` | `1` | |
-| | `:iterations` | `1` | Passes per tick. For each overlapping pair (distance `d` less than the sum of radii `r`, with `d` floored at 0.001) the pair is pushed apart along its axis, each node by half of `(r - d) / d * strength * alpha` in opposite directions (D-44). Displacements are summed over every pair before any velocity changes, so the result does not depend on node order and the total momentum imparted is zero. Unlike d3, the split is equal rather than weighted by the squared radii. |
+| `:collision` | `:strength` | `1` | |
+| `:collision` | `:iterations` | `1` | Passes per tick. For each overlapping pair (distance `d` less than the sum of radii `r`, with `d` floored at 0.001) the pair is pushed apart along its axis, each node by half of `(r - d) / d * strength * alpha` in opposite directions (D-44). Displacements are summed over every pair before any velocity changes, so the result does not depend on node order and the total momentum imparted is zero. Unlike d3, the split is equal rather than weighted by the squared radii. |
 | `:x` | `:x` | `0` | Number or `fn node -> number end`; `vx += (target - x) * strength * alpha`. |
-| | `:strength` | `0.1` | |
+| `:x` | `:strength` | `0.1` | |
 | `:y` | `:y` | `0` | Number or function; `vy += (target - y) * strength * alpha`. |
-| | `:strength` | `0.1` | |
+| `:y` | `:strength` | `0.1` | |
 | `:radial` | `:radius` | `100` | Number or function; `v += (node - centre) * (radius - d) / d * strength * alpha`. |
-| | `:x`, `:y` | `0`, `0` | Circle centre. |
-| | `:strength` | `0.1` | |
+| `:radial` | `:x`, `:y` | `0`, `0` | Circle centre. |
+| `:radial` | `:strength` | `0.1` | |
 
 
 The default force list, used when `:forces` is absent, is `[{:center, x: 0, y: 0}, {:many_body, strength: -30}, {:link, distance: 30}]`.

@@ -47,9 +47,9 @@ Documents are numbered in reading order; the `README` keeps its name so the dire
 
 ## 5. Changing the specification
 
-1. Edit the document. Keep headings decimal-numbered and gap-free (`## 1.`, `### 1.1`, `#### 1.1.1`), one `#` title per file, and a `**Status:**` line on line 3.
+1. Edit the document. Keep headings decimal-numbered and gap-free (`## 1.`, `### 1.1`, `#### 1.1.1`), one `#` title per file, and a `**Status:**` line on line 3. Every table outside a code fence starts with a header row and a separator row, and its rows run on without a blank line or a paragraph between them: a row cut off from its table renders as literal `|` text. A table is keyed by its first column, or by its first columns together where one row per pair is the point (a function and its option); a key cell is never left blank to mean "as above".
 2. If a function table changed, run `mix vis.surface --write` to regenerate `API_SURFACE.md`.
-3. Run `mix vis.headings` to check the numbering, then `mix vis.surface --check`.
+3. Run `mix vis.headings` to check the numbering and the tables, then `mix vis.surface --check`.
 4. Commit the regenerated `API_SURFACE.md` in the same change as the document edit, so the golden and the specification never disagree in history.
 
 A change that alters the intended behaviour of implemented code MUST be recorded as a decision in [13-decisions](13-decisions.md) and MUST go through a proposal before the code changes.
