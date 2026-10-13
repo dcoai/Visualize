@@ -280,7 +280,7 @@ defmodule Visualize.Chart.BuilderTest do
       refute html =~ "vis-builder-section-other"
     end
 
-    test "a root tab is one page of sections: the frame reads kind, name, margin, binding, then its parts (spec/14 §18.15)" do
+    test "a root tab is one page of sections: the frame reads kind, name, place, margin, binding, then its parts (spec/14 §18.15)" do
       html = at_node("frames.main")
       # No chips, no facet tabs: sections.
       refute html =~ ~s(class="vis-builder-chips")
@@ -297,8 +297,7 @@ defmodule Visualize.Chart.BuilderTest do
         Regex.scan(~r/<summary class="vis-builder-section-title[^"]*"[^>]*>([^<]+)</, page)
         |> Enum.map(&List.last/1)
 
-      assert titles == ["margin", "binding", "scales", "axes", "x", "y", "x bottom", "y left"] or
-               Enum.take(titles, 2) == ["margin", "binding"]
+      assert Enum.take(titles, 3) == ["place", "margin", "binding"]
 
       # Kind and the design's name come first, bare; the margin section holds the four
       # sides — a design records no size (spec/14 §4.2) — and no textarea repeats a part.
@@ -1869,7 +1868,7 @@ defmodule Visualize.Chart.BuilderTest do
       # A drawn node is moved with the pointer, never an HTML5 drag (spec/10 §16.3, #277).
       refute js =~ "application/x-visualize-node"
       assert js =~ "if (this.scope === 'graph') return this.startMove(e);"
-      assert js =~ "if (label === null || !this.movable(label)) return;"
+      assert js =~ "if (label === null || !this.movable(label)) return this.startFrame(e);"
 
       assert js =~
                "if (!moved && Math.abs(ev.clientX - start.x) + Math.abs(ev.clientY - start.y) < 4) return;"

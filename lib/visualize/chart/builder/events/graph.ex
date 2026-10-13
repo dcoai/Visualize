@@ -31,7 +31,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
     @events ~w(
-      menu menu_close copy_node override_node component_key place move graph_size
+      menu menu_close copy_node override_node component_key place move graph_size frame_box
     )
 
     # The smallest side, in pixels, the graph is drawn at (spec/14 §18.4).
@@ -167,6 +167,31 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # A frame dragged or resized on the graph, or nudged from the keyboard (spec/14 §18.16,
+    # #614): its box as fractions, which the hook snapped and the server only checks —
+    # kept inside the box and at least a twentieth on a side, rounded to four places — and
+    # writes through the ownership rule. A box given is the frame's placement, so a `cell`
+    # and `span` it said are taken away: both is a fault (§4.2).
+    def handle_event("frame_box", %{"frame" => name, "box" => box}, socket) do
+      design = composed(socket)
+
+      with {:ok, frame} <- frame_named(design, name),
+           {:ok, box} <- fractions(box) do
+        path = [:frames, frame]
+        node = at(design, path)
+        socket = socket |> assign(:notice, nil) |> update_layer(path, :box, {:ok, box})
+
+        socket =
+          if socket.assigns.notice == nil,
+            do: Enum.reduce(placement_by_cell(node), socket, &update_layer(&2, path, &1, :error)),
+            else: socket
+
+        {:noreply, opened(socket, Editor.label(path))}
+      else
+        _not_a_frame_or_box -> {:noreply, socket}
+      end
+    end
+
     # -- placing a component (spec/14 §18.16) ------------------------------------------------
 
     # The keys a move changed, written through the ownership rule: the placement key, and
@@ -253,6 +278,66 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp integer(_none), do: 0
+
+    # The frame of the composed design a pushed name names, never a new atom.
+    defp frame_named(design, name) when is_binary(name) do
+      case Map.get(design, :frames) do
+        frames when is_map(frames) ->
+          case Enum.find(Map.keys(frames), &(to_string(&1) == name)) do
+            nil -> :error
+            frame -> {:ok, frame}
+          end
+
+        _none ->
+          :error
+      end
+    end
+
+    defp frame_named(_design, _name), do: :error
+
+    # The smallest side of a frame, as a fraction of the box (spec/14 §18.16).
+    @thinnest 0.05
+
+    # A pushed box as fractions inside the whole: `[x, y, w, h]`, each side at least the
+    # thinnest, the box kept inside, every number rounded to four places.
+    defp fractions([x, y, w, h]) do
+      case Enum.map([x, y, w, h], &number_or_nil/1) do
+        [x, y, w, h] when is_number(x) and is_number(y) and is_number(w) and is_number(h) ->
+          w = w |> max(@thinnest) |> min(1)
+          h = h |> max(@thinnest) |> min(1)
+          x = x |> max(0) |> min(1 - w)
+          y = y |> max(0) |> min(1 - h)
+          {:ok, Enum.map([x, y, w, h], &rounded/1)}
+
+        _other ->
+          :error
+      end
+    end
+
+    defp fractions(_box), do: :error
+
+    defp number_or_nil(value) when is_number(value), do: value
+
+    defp number_or_nil(value) when is_binary(value) do
+      case Float.parse(value) do
+        {n, ""} -> n
+        _other -> nil
+      end
+    end
+
+    defp number_or_nil(_other), do: nil
+
+    # Four places, and a whole number written as one: `[0, 0, 0.5, 1]`, as a person would.
+    defp rounded(value) do
+      r = Float.round(value * 1.0, 4)
+      if r == trunc(r), do: trunc(r), else: r
+    end
+
+    # The keys that placed a frame by the layout's grid, which a box replaces.
+    defp placement_by_cell(node) when is_map(node),
+      do: Enum.filter([:cell, :span], &Map.has_key?(node, &1))
+
+    defp placement_by_cell(_node), do: []
 
     # A component placed: its sites inserted above the selected layer — or above the layer
     # whose axis of the same identity it replaces, so the drop is what draws (§8.2) —

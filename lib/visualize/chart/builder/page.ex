@@ -104,6 +104,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               phx-value-section={section.key}
               phx-target={@target}
             >{section.name}</summary>
+            <p :if={section[:note]} class="vis-builder-context-note vis-builder-place-note">{section.note}</p>
             <.form_for :if={section.keys != []} page={assigns} kind={@kind} node={@node} path={@path} label={@label} only={section.keys} suffix={section.name} />
             <.form_for :for={form <- section.forms} page={assigns} kind={form.kind} node={form.node} path={form.path} label={form.label} />
             <details :for={child <- section.children} class={child_class(child, @owners, @layer, @selected_node)} open={not MapSet.member?(@collapsed, child.label)}>
@@ -247,8 +248,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     The sections of a node's page: for each facet, the keys that are values and the child
-    nodes the facet's node keys hold; a frame's are its own — kind first, bare, then *size*
-    (the size and margin nodes together), *binding*, then the parts.
+    nodes the facet's node keys hold; a frame's are its own — kind first, bare, then *place*
+    (its box or cell, `z` and `background`, #614), *margin*, *binding*, then the parts.
 
         iex> page = %{kind: :mark, node: %{type: :line, data: :p, channels: %{x: :t}, options: %{}}, path: [:marks, 0], label: "marks[0]", errors: []}
         iex> for s <- Enum.take(Visualize.Chart.Builder.Page.sections(page), 3), do: {s.name, s.keys, Enum.map(s.children, & &1.label)}
@@ -279,6 +280,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
           forms: [],
           children: [],
           needs: 0
+        },
+        %{
+          key: "#{page.label}:place",
+          name: "place",
+          title: "where the frame is drawn — drag it on the graph (spec/14 §18.16)",
+          bare: false,
+          keys: [:z, :background],
+          note: place_note(node),
+          forms: [],
+          children: [],
+          needs: needs(page.errors, Enum.map([:box, :cell, :span, :z], &(page.path ++ [&1])))
         },
         %{
           key: "#{page.label}:margin",
@@ -347,6 +359,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
       |> Enum.reject(&(&1.keys == [] and &1.children == []))
     end
+
+    # The frame's placement as a person reads it (spec/14 §18.16, #614): its box as
+    # fractions, or its cell and span, and how to change it — on the graph, not by typing.
+    defp place_note(node) do
+      placed =
+        case {Map.get(node, :cell), Map.get(node, :box)} do
+          {[c, r], _box} ->
+            [a, d] = Map.get(node, :span) || [1, 1]
+            "cell #{c}, #{r} · span #{a} × #{d}"
+
+          {nil, [x, y, w, h]} ->
+            "box x #{fraction(x)} · y #{fraction(y)} · w #{fraction(w)} · h #{fraction(h)}"
+
+          _whole ->
+            "box the whole graph"
+        end
+
+      placed <>
+        " — drag the frame on the graph to move it, its corners to resize it; arrows nudge it"
+    end
+
+    defp fraction(n) when is_number(n), do: Visualize.IR.Path.format_number(n)
+    defp fraction(other), do: inspect(other)
 
     # A key whose type admits a node.
     defp node?({:node, _}), do: true

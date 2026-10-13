@@ -1656,3 +1656,25 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - Opening a multi-frame template no longer crashes the builder; the graph shows every frame at the graph's size, and a window resize redraws at the new size with the same fractions.
 - A drop near a frame's own margin is that frame's band, not the whole graph's.
 - `data-builder-frame` (one frame's `w h top right bottom left`) is replaced by `data-builder-frames`; `Place.node/4` and `Place.moved/5` take a spot as well as a bare point, which keeps their single-frame readings.
+
+## 163. D-163 — A frame is placed by dragging it on the graph; the hook snaps, the server checks
+
+**Context.** #386, work item #614. A frame's `box` is fractions of the box the render is given (spec/14 §4.2), and once the graph is that box (D-162) a person should place frames the way they see them, never by typing four numbers. The builder already had two pointer gestures to learn from: a drawn node moved between regions (#277), whose meaning the server decides from a point, and a board cell dragged by squares (§22.3), where the hook shows the rectangle and the server accepts or refuses it. A frame is neither: its placement is continuous, and a person lining two frames up wants them to meet exactly, which pixels from a pointer never do.
+
+**Decision.**
+- **The open frame wears an outline and four corner handles**, drawn by the server over the chart; only the handles take pointer events, so the chart's own nodes stay clickable under it. A frame is selected by a click on its empty space, the hook picking the topmost frame under the point, since a `<g>` has no area of its own.
+- **The hook snaps while the pointer moves**: an edge within 8 pixels of 0, ⅓, ½, ⅔, 1 or another frame's edge lands on it. Snapping is feedback — the outline must show where the frame will land — so it lives where the pointer is.
+- **The server checks and writes**: `frame_box` carries the box as fractions; the server keeps it inside the whole, each side at least 0.05, rounds to four places and writes `box` through the ownership rule, a locked owner refusing. It never re-snaps: the snapped number is the person's choice, and a second snapping rule on the server would be a second place for the two to disagree.
+- **A box replaces a cell**: dragging a frame that said `cell` and `span` writes `box` and takes the cell away, since both is a fault. (Dragging *between cells* is the layout's own gesture, a later work item.)
+- **The keyboard has the gesture**: arrows move the open frame a twelfth of the chart, Shift with an arrow stretches its right or bottom edge a twelfth — a twelfth lands on halves, thirds and quarters.
+- **The frame's page shows its placement as a line, `z` and `background` as fields** (*place*), so what the drag wrote is readable, and the two keys a drag cannot express are editable.
+
+**Rejected.**
+- **Snapping on the server.** The outline would show one place and the frame land in another.
+- **Four number boxes for the box.** The proposal's acceptance is that a person never types a size; the line says what the box is, the keyboard twin reaches it without a pointer.
+- **Handles drawn by the hook.** They must survive the re-render every edit causes; drawn by the server they are part of the markup the patch keeps.
+
+**Consequences.**
+- Two frames are laid side by side, or one inset over another, by dragging; their edges meet exactly at thirds, halves and each other.
+- A stored design records boxes like `[0.3333, 0, 0.3333, 1]`: four places, the precision of a pixel on a 10 000-pixel box.
+- A frame placed on a layout's cell loses its cell when dragged freely, until the layout gesture lands.

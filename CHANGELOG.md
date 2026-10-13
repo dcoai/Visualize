@@ -36,6 +36,12 @@ release it merely follows.
   sees the chart as a container of that size would show it; resizing the window redraws it
   with the same fractions. A drop on the graph is read in the frame under the pointer, at
   that frame's own margins.
+- **Frames are placed on the builder's graph by dragging** (#614, D-163). A click on a
+  frame's empty space selects it; the open frame shows an outline and four corner handles;
+  dragging its body moves it and a handle resizes it, the edges snapping to thirds,
+  halves and the other frames' edges, and the box is written as fractions. Arrows move
+  the open frame a twelfth, Shift with an arrow stretches it. The frame's page gains a
+  *place* section: its box, `z` and `background`.
 - **`ResizeHook` takes `data-resize-target`**, the `phx-target` it pushes to with
   `pushEventTo`, so a LiveComponent can host it. Without it the hook pushes to the
   LiveView, as before.
