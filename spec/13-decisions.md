@@ -1635,3 +1635,24 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - A page can keep a board's window in its URL; the board stays the one place the window is held and drawn from.
 - A click on a datum with an event also picks its nearest point, so it may select or drill as well; the two are independent.
 - Existing boards are unchanged: `:server` is the default, and a mark without an event pushes nothing.
+
+## 162. D-162 — The builder's graph is the box the design is drawn at
+
+**Context.** #386, work item #613. A design records no size (spec/14 §4.2, #427): a frame's `box` is a fraction of whatever box the host's container gives at render. The builder's preview kept drawing at the render's default 600×400 and classified a drop against one frame's margins at that size, so the person laying a chart out saw neither the size it would be shown at nor where a frame's margins really fell. Worse, the preview matched a frame named `main`, so a design whose frames were `history` and `now` — the gallery's *Load* and *Context* templates — raised in render and crashed the builder. `ResizeHook` already measures a container, but pushes only to the LiveView, and the graph element already carries `BuilderHook`; an element carries one hook.
+
+**Decision.**
+- **The chart sits in a box inside the graph that hosts `ResizeHook`.** Its measured size is the builder's `graph_size`, and the preview applies the design with `size:` at it; before a measurement, the render's default. A measurement under 100 pixels on a side keeps the last one.
+- **`ResizeHook` gains `data-resize-target`**: present, it pushes with `pushEventTo`, so a component can host it. The same contract `BuilderHook` has with `data-builder-target`.
+- **The box is sized by its column, the chart by the box.** The `<svg>` fills the box by the stylesheet, so the measurement never depends on what was drawn (the loop #434 met on the chart page).
+- **Every frame is drawn**, and the `<svg>` carries `data-builder-frames`, each frame's pixel box and margins in drawing order. A point is read in the topmost frame whose box holds it, else the nearest — by the hook for the region it shows, by `Place.spot/3` on the server for what the drop means.
+- **A cell resolves in one place, made public**: `Visualize.Chart.Frame.box_of/3`, which `Frame.new/2` and the builder both read.
+
+**Rejected.**
+- **A `ResizeObserver` inside `BuilderHook`'s graph scope.** It would duplicate `ResizeHook`'s settle and its motion preference, and a second implementation of "measure, settle, push once" is a second place for it to be wrong.
+- **Taking the width and keeping an aspect, as the chart page does (#434).** The page's chart sizes its own container, so its height cannot be measured; the builder's graph is a column of the workspace whose height the shell fixes, so both sides are real measurements and the design is shown at exactly what the box is.
+- **Asking the hook which frame a drop is in and trusting it.** The server knows the design and the measured size, and computes the frame itself; the hook's frame reading is for what it draws while the pointer moves.
+
+**Consequences.**
+- Opening a multi-frame template no longer crashes the builder; the graph shows every frame at the graph's size, and a window resize redraws at the new size with the same fractions.
+- A drop near a frame's own margin is that frame's band, not the whole graph's.
+- `data-builder-frame` (one frame's `w h top right bottom left`) is replaced by `data-builder-frames`; `Place.node/4` and `Place.moved/5` take a spot as well as a bare point, which keeps their single-frame readings.
