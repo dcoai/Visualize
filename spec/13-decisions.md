@@ -1592,3 +1592,23 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - A live `Feed.Telemetry` feed and a store's history of the same metric combine in one slot, the history's rows coming back in the telemetry schema's names and units, `s` converted into `ms`.
 - A combination that was refused for differing versions now combines whenever the schemas are compatible; the error a refusal carries has a new shape, which is a breaking change for code that matched `{:combine_schema, versions}`.
 - The combination's schema has only the first feed's facts. A store's `polarity` or `bounds` reaches a chart only when the live feed describes it too.
+
+## 160. D-160 — Feed.Telemetry's schema carries a definition's facts
+
+**Context.** #608, found evaluating #605. D-159 makes a `Visualize.Feed.Combine` describe itself with its first (freshest) feed's schema whole, since its pushes name that schema's version. When an in-process `Feed.Telemetry` feed sits in front of a store's history of the same metric, the facts only the store knows — `polarity`, `bounds`, `metric_kind` — never reach the chart: the live feed's schema had a label, a unit and a quantity, and nothing else. The application already describes its metric in one place, the `Telemetry.Metrics` definition, which `Feed.Telemetry` reads for its `unit`, `description` and `tags`.
+
+**Decision.**
+- **`metric_kind` is inferred** for the `value` field from the definition's struct (spec/08 §11.6): `Counter` and `Sum` are `:counter`, since their rows are running totals; `LastValue`, `Summary` and `Distribution` are `:gauge`, since each row is a measurement.
+- **Facts come from `reporter_options[:visualize]`**, Telemetry.Metrics' place for a reporter's own options, read by `Map.get` like every other field, so the library still takes no dependency on `telemetry_metrics`. The keys are exactly `polarity`, `bounds`, `target` and `metric_kind`, all facts of `value`; an explicit `metric_kind` overrides the inference. Any other key is refused rather than ignored, as `{[:value, key], :unknown_key}`: a misspelt `polarty` silently dropped would be a fact the author believes is shown. The label stays the definition's `description` and the unit its `unit`, so neither has two sources.
+- **Validation is the schema's.** The schema is built with `Schema.new/1`, and any fault makes `init/1` answer `{:stop, {:telemetry_facts, metric, errors}}`, the metric's name as `feeds/1` keys it and §10.1's faults, so `start_link/1` fails naming the metric. No rescue: `new!/1` is not used for a schema the definition's options shape.
+
+**Rejected.**
+- **Ignoring unknown keys.** It hides typos and makes an option that does nothing look accepted.
+- **Overriding `label` or `unit` from the options.** The definition already has a place for each; two sources for one fact need a precedence rule nobody asked for.
+- **Facts for the tag fields (`order`, `status`).** A possible follow-up; the case is the `value` a store knows facts of.
+- **Merging a later feed's facts in `Combine`.** Rejected in D-159; the live feed carrying them is this decision.
+
+**Consequences.**
+- Every `Feed.Telemetry` schema now has a `metric_kind` on `value`, so every such schema's version changes; a consumer that pinned one sees a new version.
+- A connector that knows a store's facts puts them on the definition, and a combination of the live feed in front of the store's history shows them.
+- A definition with an invalid or unknown fact stops the collector at startup with the metric named, rather than serving a schema that lies.
