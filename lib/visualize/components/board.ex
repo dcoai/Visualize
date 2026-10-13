@@ -41,6 +41,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {:noreply, push_navigate(socket, to: "/detail?" <> URI.encode_query(vars))}
         end
 
+    A click on a datum whose mark's `tooltip` names an `event` (spec/14 §5.7) is sent the
+    same way, as `{:visualize_board_event, id, %{cell: cell, event: event, fields: fields}}`,
+    `fields` the strings the cell's `TooltipHook` read (D-161).
+
+    ## A host-owned window (`brush: :host`, D-161)
+
+    A page that keeps the window in its URL takes the brush itself. A brush, pushed once
+    when its drag ends, is sent to the page as
+    `{:visualize_board_brush, id, %{domain: [from, to]}}`, the ends UTC `DateTime`s, and
+    the header's *Reset window* as `{:visualize_board_brush, id, %{domain: nil}}`; the
+    component calls no window function. The page updates its URL and applies the window
+    with `Visualize.Board.Server.window/2` — `%{from: from, to: to}`, or its own default
+    for `nil` — which is never debounced; `Visualize.Board.Server.brush/2` takes the same
+    window and debounces rapid re-brushes, if the page would rather.
+
     ## Assigns
 
       * `id` - the component's id, the board's DOM id and the prefix of its cells' (required)
@@ -51,6 +66,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       * `title` - the board's heading (default the board's `meta.name`)
       * `width` - the width the grid is arranged at until `BoardHook` pushes one
         (default `1200`)
+      * `brush` - who sets a brushed window: `:server`, the board process, or `:host`, the
+        page (default `:server`)
     """
 
     use Phoenix.LiveComponent
@@ -95,8 +112,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> assign(:theme, Map.get(assigns, :theme, Visualize.Theme.default()))
         |> assign(:title, Map.get(assigns, :title) || get_in(assigns.board.meta, [:name]))
         |> assign(:width, socket.assigns.width || Map.get(assigns, :width, 1200))
+        |> assign(:brush, brush_mode(Map.get(assigns, :brush, :server)))
 
       {:ok, subscribe(socket)}
+    end
+
+    defp brush_mode(mode) when mode in [:server, :host], do: mode
+
+    defp brush_mode(mode) do
+      raise ArgumentError, "a board's brush is :server or :host, got: #{inspect(mode)}"
     end
 
     # The page's process subscribed once it is connected: the component runs in it, so
@@ -119,11 +143,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # A brushed window, in the milliseconds a time `x` shares (spec/10 §6.4), becomes the
-    # board's window in UTC; a cleared brush restores the window the board was given.
+    # board's window in UTC, or, under `brush: :host`, the page's to apply (D-161).
     def handle_event("brush", %{"domain" => [from, to]}, socket)
         when is_number(from) and is_number(to) and from < to do
-      window = %{from: instant(from), to: instant(to)}
-      :ok = Server.brush(socket.assigns.server, window)
+      brushed(socket.assigns, [instant(from), instant(to)])
       {:noreply, socket}
     end
 
@@ -132,7 +155,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event("brush_clear", _params, socket), do: {:noreply, socket}
 
     def handle_event("reset_window", _params, socket) do
-      :ok = Server.reset_window(socket.assigns.server)
+      brushed(socket.assigns, nil)
       {:noreply, socket}
     end
 
@@ -144,6 +167,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event(_event, _params, socket), do: {:noreply, socket}
 
     defp instant(ms), do: DateTime.from_unix!(round(ms), :millisecond)
+
+    # A window chosen on the board: the board process sets it, or the page is told
+    # (spec/15 §9.2). `nil` is the undo, the window the board was started with.
+    defp brushed(%{brush: :host, id: id}, domain) do
+      send(self(), {:visualize_board_brush, id, %{domain: domain}})
+    end
+
+    defp brushed(%{server: server}, [from, to]),
+      do: :ok = Server.brush(server, %{from: from, to: to})
+
+    defp brushed(%{server: server}, nil), do: :ok = Server.reset_window(server)
 
     @impl true
     def render(assigns) do
@@ -233,6 +267,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Its chart's `KeyboardHook` pushes `pick` here (spec/15 §13): the board answers the
       row behind the point, and the cell opens its `drill` target through the page, or
       selects the datum's identity across the board.
+
+      Its chart's `TooltipHook` pushes a mark's `data-tooltip-event` here too (D-161), and
+      the cell sends it to the page as `{:visualize_board_event, board_id, %{cell:, event:,
+      fields:}}`. Every event other than `pick` is a mark's.
       """
 
       use Phoenix.LiveComponent
@@ -258,7 +296,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:noreply, socket}
       end
 
-      def handle_event(_event, _params, socket), do: {:noreply, socket}
+      # `pick` is the cell's own, whatever its params: a mark naming its event `pick` is
+      # never forwarded (spec/15 §9.2).
+      def handle_event("pick", _params, socket), do: {:noreply, socket}
+
+      # A mark's click, its datum's fields as the hook read them, is the page's (D-161).
+      def handle_event(event, fields, socket) when is_map(fields) do
+        %{board_id: board_id, cell: cell} = socket.assigns
+
+        send(
+          self(),
+          {:visualize_board_event, board_id, %{cell: cell, event: event, fields: fields}}
+        )
+
+        {:noreply, socket}
+      end
 
       # A drill goes to the page, which knows its routes; a datum with an identity is the
       # board's selection; a datum with neither does nothing (spec/15 §13.2, §13.3).
@@ -310,7 +362,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <div
               id={"#{@id}-brush"}
               phx-hook="BrushHook"
-                data-brush-type="x"
+              data-brush-type="x"
               data-brush-event="brush"
               data-brush-target={@target}
             >
@@ -322,7 +374,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 data-keyboard-target={@myself}
                 {@keyboard}
               >
-                {Phoenix.HTML.raw(@svg)}
+                <div id={"#{@id}-tooltip"} phx-hook="TooltipHook" data-tooltip-target={@myself}>
+                  {Phoenix.HTML.raw(@svg)}
+                </div>
               </div>
             </div>
           </div>

@@ -1612,3 +1612,26 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - Every `Feed.Telemetry` schema now has a `metric_kind` on `value`, so every such schema's version changes; a consumer that pinned one sees a new version.
 - A connector that knows a store's facts puts them on the definition, and a combination of the live feed in front of the store's history shows them.
 - A definition with an invalid or unknown fact stops the collector at startup with the metric named, rather than serving a schema that lies.
+
+## 161. D-161 — Board cells carry mark tooltips and click events, and a host may own the brush
+
+**Context.** #611, from metresis#443. metresis wants its dashboards on the live board runtime (`Visualize.Board.Server`, `Visualize.Components.Board`), and its charts depend on two interactions a board's cells did not offer. A mark's `tooltip` node (spec/14 §5.7) is how it names an event marker on hover and opens it on a click; a cell's SVG carried the `data-tooltip-*` attributes, but no `TooltipHook` was mounted, and a click had nowhere to go but the page's own `handle_event`, which a board's page does not hold (spec/15 §9.2). And metresis keeps a brushed window in the page's URL, so a link reproduces the view; with the brush turned straight into `Server.brush/2`, the board's window and the URL drift apart.
+
+**Decision.**
+- **A cell mounts `TooltipHook` around its SVG**, innermost of its hook elements, with `data-tooltip-target` naming the cell's component (spec/15 §9.1). The element carries no sync group; the crosshair already shares the board's hover.
+- **`TooltipHook` takes `data-tooltip-target`** (spec/10 §12.3), mirroring `data-keyboard-target` and `data-brush-target`: set, a `data-tooltip-event` click goes to that component with `pushEventTo`; unset, to the LiveView as before. It is read at each click.
+- **The cell forwards a mark's click to the page** as `{:visualize_board_event, id, %{cell: cell, event: event, fields: fields}}`, a parallel of the drill message (spec/15 §9.2). Every event the cell receives other than its own `pick` is a mark's; `pick` is reserved. `fields` are the strings the hook read.
+- **`Visualize.Components.Board` takes `brush: :server | :host`**, default `:server`, anything else an `ArgumentError` at update. Under `:host` a brush sends the page `{:visualize_board_brush, id, %{domain: [from, to]}}`, the ends as UTC `DateTime`s, instead of calling `Server.brush/2`, and the header's *Reset window* sends `%{domain: nil}` instead of calling `Server.reset_window/1`. The page applies either with `Server.window/2`: the domain as `%{from, to}`, `nil` as its own default window. The header still shows the board process's window and `moved`, so it follows what the page applied.
+- **The debounce is the applier's.** The hook pushes once per gesture, at the drag's end. Under `:host` the board's debounce is bypassed, since `window/2` is never debounced; a page that wants rapid re-brushes coalesced applies them with `Server.brush/2`, which takes the same window.
+
+**Rejected.**
+- **`brush: {:host, event}`**, the proposal's first shape. The message is fixed, so the event name in the tuple would carry nothing.
+- **Routing a tooltip click to the page directly.** The page holds no event of the board's (spec/15 §9.2), the click would arrive without its cell, and two boards on a page could not be told apart.
+- **A callback assign** for either message. A function in the assigns, where a message is how a LiveView already talks to its page, as D-151 decided for drills.
+- **Leaving *Reset window* on the board process under `:host`.** The board would move back while the URL kept the brushed window.
+
+**Consequences.**
+- A design's tooltips show in a board's cells, and a board's page can open what a datum names.
+- A page can keep a board's window in its URL; the board stays the one place the window is held and drawn from.
+- A click on a datum with an event also picks its nearest point, so it may select or drill as well; the two are independent.
+- Existing boards are unchanged: `:server` is the default, and a mark without an event pushes nothing.

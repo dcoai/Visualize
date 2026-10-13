@@ -15,6 +15,23 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.5.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Added
+
+- **A board's cells show their marks' tooltips, and a mark's click reaches the page**
+  (#612, D-161). A mark's `tooltip` node now shows under the pointer in a
+  `Visualize.Components.Board` cell, as it does on a single chart. A click on a datum whose
+  mark names an `event` sends the page's process
+  `{:visualize_board_event, board_id, %{cell: cell, event: event, fields: fields}}`, beside
+  the drill message; `fields` are the datum's strings. `TooltipHook` takes
+  `data-tooltip-target` to push that event to a component rather than the LiveView.
+- **A page may own a board's window: `brush: :host`** (#612, D-161). With
+  `<.live_component module={Visualize.Components.Board} ... brush={:host} />`, a brush sends
+  the page `{:visualize_board_brush, board_id, %{domain: [from, to]}}` (UTC `DateTime`s), and
+  the header's *Reset window* sends `%{domain: nil}`, instead of moving the board's window.
+  The page puts the window in its URL and applies it with `Visualize.Board.Server.window/2`
+  (or `brush/2`, to keep the board's debounce of rapid re-brushes). The default, `:server`,
+  behaves as before.
+
 ## [0.5.0] — 2026-10-13
 
 Live data and its history share one chart: `Feed.Combine` combines feeds whose schemas are

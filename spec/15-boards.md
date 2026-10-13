@@ -467,7 +467,7 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 
 ## 9. The board in LiveView
 
-**Implemented** (#540, #575, D-146). `Visualize.Components.Board` draws a running board (§8) in a LiveView page: the grid, its cells, and the hooks that make them interactive. Like the library's other components it compiles only when `Phoenix.Component` is loaded (spec/10 §2, D-45).
+**Implemented** (#540, #575, #612, D-146, D-161). `Visualize.Components.Board` draws a running board (§8) in a LiveView page: the grid, its cells, and the hooks that make them interactive. Like the library's other components it compiles only when `Phoenix.Component` is loaded (spec/10 §2, D-45).
 
 ### 9.1 The components
 
@@ -485,6 +485,9 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 | `theme` | `Visualize.Theme.default/0` | the theme a cell is drawn in before its first view |
 | `title` | the board's `meta.name` | the board's heading |
 | `width` | `1200` | the width the grid is arranged at until `BoardHook` pushes one |
+| `brush` | `:server` | who sets the window a brush chooses: `:server`, the board process (§13.1), or `:host`, the page, which is sent the brush and the header's *Reset window* as messages (§9.2, D-161) |
+
+Any other `brush` is refused with an `ArgumentError` when the component is updated.
 
 It renders a `<section phx-hook="BoardHook">` holding a header and the grid. **The header** names the board and shows the window **in the board's zone** (§1.5): the window the board process resolved in UTC, each end shifted into the zone by the host's time-zone database and written `YYYY-MM-DD HH:MM:SS`, followed by the zone's name — `Visualize.Board.window_text/2`, which an export's header prints too (§12.1). **The grid** is a CSS grid of 12 equal columns, rows `row_height` high and `gap` apart (§1.6, `Visualize.Board.layout/1`), and each cell is placed with `grid-column` and `grid-row` at its arrangement for the container's width (`Visualize.Board.arrange/2`). **Below the breakpoint the cells reflow** as §1.6 says, stacked full width in reading order, and the section carries the class `vis-board-stacked`. The width is the one the board's hook last pushed (§9.3), or the board process's own width once the page subscribes, and the `width` assign before either.
 
@@ -492,7 +495,7 @@ It renders a `<section phx-hook="BoardHook">` holding a header and the grid. **T
 
 - carrying `data-vis-cell` (the cell's name), `data-vis-state` (its state's name, `Visualize.Board.State.name/1`), `tabindex="0"`, `role="group"` and an `aria-label` of the cell's title and, when it is not live, its state's words, so **a cell is one tab stop** (spec/14 §21.5);
 - holding its title, when it has one, as a heading;
-- when the view has a chart, the chart inside three nested hook elements: `CrosshairHook` with the view's crosshair attributes, which shares hover across the board's sync group; `BrushHook` with `data-brush-type="x"`, `data-brush-event="brush"` and `data-brush-target` naming the board's component; and `KeyboardHook` with the view's keyboard attributes, `tabindex="-1"`, `data-keyboard-pick-event="pick"` and `data-keyboard-target` naming the cell's component, so the chart is reached through its cell (§9.3) rather than as a second tab stop and a click or Enter on a point picks it (§13);
+- when the view has a chart, the chart inside four nested hook elements: `CrosshairHook` with the view's crosshair attributes, which shares hover across the board's sync group; `BrushHook` with `data-brush-type="x"`, `data-brush-event="brush"` and `data-brush-target` naming the board's component; `KeyboardHook` with the view's keyboard attributes, `tabindex="-1"`, `data-keyboard-pick-event="pick"` and `data-keyboard-target` naming the cell's component, so the chart is reached through its cell (§9.3) rather than as a second tab stop and a click or Enter on a point picks it (§13); and, innermost, around the SVG, `TooltipHook` (spec/10 §12) with `data-tooltip-target` naming the cell's component, so a mark's `tooltip` node (spec/14 §5.7) shows its text under the pointer as it does on a single chart, and a click on its datum goes to the cell (§9.2, D-161). The tooltip's element carries no sync group: the crosshair shares the board's hover;
 - the view's `note` (§8.3): above the chart as a banner when there is a chart, alone when there is not. **A cell is never blank.** Before its first view it draws `:loading` from `theme`.
 
 ### 9.2 The page's part
@@ -513,13 +516,38 @@ end
 | Event | Becomes |
 |---|---|
 | `resize` `{width}` | `Visualize.Board.Server.resize/2`: every cell drawn at its new box, and the grid arranged at the width |
-| `brush` `{domain: [from, to]}` | `Visualize.Board.Server.brush/2` with `%{from, to}`, the domain read as milliseconds since the Unix epoch (a time `x`'s, spec/10 §6.4): the board's window once the debounce has passed, and every feed re-asked (§13.1) |
+| `brush` `{domain: [from, to]}` | `Visualize.Board.Server.brush/2` with `%{from, to}`, the domain read as milliseconds since the Unix epoch (a time `x`'s, spec/10 §6.4): the board's window once the debounce has passed, and every feed re-asked (§13.1). With `brush: :host`, the page is sent `{:visualize_board_brush, id, %{domain: [from, to]}}` instead, and the board process is not called |
 | `brush_clear` | nothing on the board: the band is gone from the chart, and the window stays until it is reset (§13.1). A click on a chart is a brush too small to keep, so it must not move the window |
-| `reset_window` | `Visualize.Board.Server.reset_window/1`: the window the board was started with |
+| `reset_window` | `Visualize.Board.Server.reset_window/1`: the window the board was started with. With `brush: :host`, the page is sent `{:visualize_board_brush, id, %{domain: nil}}` instead |
 | `select_clear` | `Visualize.Board.Server.select/2` with `nil`: the selection cleared (§13.2) |
 | a cell's `pick` `{series, index}` | `Visualize.Board.Server.pick/4` for that cell, then for a cell with a `drill` the drill message below, and for any other cell `Visualize.Board.Server.select/2` with the datum's identity, when it has one (§13.2, §13.3) |
+| a cell's mark event `{field => value}`, any name but `pick` | the page is sent `{:visualize_board_event, id, %{cell: cell, event: event, fields: fields}}` (below) |
 
 A brush without a domain, which is a chart in no sync group and with no design brush, changes nothing. So the page holds no event of the board's, no margin and no scale.
+
+**A mark's click is the page's too** (D-161). A mark with a `tooltip` node naming an `event` (spec/14 §5.7) writes `data-tooltip-event` on its group, and a click on one of its data makes the cell's `TooltipHook` push that event, with the datum's fields, to the cell's component. The cell sends the page's process `{:visualize_board_event, id, %{cell: cell, event: event, fields: fields}}`: `id` the board component's, `cell` the cell's name, `event` the name the mark gave, and `fields` the datum's fields as the hook read them, string keys and string values (spec/10 §12.3). Every event the cell receives other than its own `pick` is a mark's, so a mark naming its event `pick` is never forwarded: `pick` is the cell's. A click on such a datum is also a click on the chart, so `KeyboardHook` picks the nearest point too (§13.2). The two are independent: the pick selects or drills as §13.2 and §13.3 say, and the event is the page's. A page that ignores the message ignores the clicks:
+
+```elixir
+def handle_info({:visualize_board_event, "ops", %{event: "event_open", fields: %{"id" => id}}}, socket) do
+  {:noreply, push_patch(socket, to: ~p"/ops?event=#{id}")}
+end
+```
+
+**A host may own the window** (`brush: :host`, D-161). A page that keeps the window in its URL, so that a link reproduces the view, cannot let the board process choose it alone: the URL and the board would drift apart. With `brush: :host` the component calls no window function. A brush sends the page's process `{:visualize_board_brush, id, %{domain: [from, to]}}`, `from` and `to` the brushed window's ends as UTC `DateTime`s, `from` before `to`; a brush without such a domain sends nothing, as it changes nothing under `:server`. The header's **Reset window** sends `{:visualize_board_brush, id, %{domain: nil}}`: the undo is the page's to apply too. The page decides the window, updates its URL, and tells the board with `Visualize.Board.Server.window/2`: `%{from: from, to: to}` for a domain, and for `nil` the window it started the board with, its own default. The header shows the window the board process holds and its **Reset window** while that is not the board's `board:` window, as under `:server`, so it follows what the page applied. A cleared brush changes nothing in either mode.
+
+```elixir
+def handle_info({:visualize_board_brush, "ops", %{domain: domain}}, socket) do
+  {:noreply, push_patch(socket, to: ~p"/ops?#{window_params(domain)}")}
+end
+
+def handle_params(params, _uri, socket) do
+  :ok = Visualize.Board.Server.window(socket.assigns.board, window_from(params))
+  {:noreply, socket}
+end
+```
+
+**What the page receives, and when.** `BrushHook` pushes a brush once, when the drag ends (spec/10 §6), never during it, so the page receives one message per gesture. The board's debounce (§13.1) is the board process's, and `:host` bypasses it: `window/2` is never debounced, since a page that applies a brush has made one deliberate choice of it, as a button does. A page that would rather coalesce rapid re-brushes applies the domain with `Visualize.Board.Server.brush/2`, which takes the same `%{from, to}` and debounces as §13.1 says, and keeps its URL in step at the same moment.
+
 
 **The header holds the board's undo.** While the board's window is not the one it was started with (`moved`), the header shows a **Reset window** button, and while a selection is held it shows the selection, `Selected: service api`, and a **Clear selection** button. The section carries `data-board-selection` while a selection is held, so `BoardHook` knows that Escape has something to clear.
 
@@ -701,7 +729,7 @@ A snapshot follows the version policy of spec/14 §9.1 (D-137) and the board's c
 
 ## 13. Interaction across cells
 
-**Implemented** (#545, D-151). Interaction on a board spans its cells (#531 items 8–10). A brush in one cell moves every cell's window, a selection in one cell is highlighted in every cell that shows it, and a click on a datum opens another board with variables taken from it. All three are the board's **shared state**, held by the board process (§8.2). A cell's chart does not talk to another cell's: it tells the board, and the board tells every cell.
+**Implemented** (#545, #612, D-151, D-161). Interaction on a board spans its cells (#531 items 8–10). A brush in one cell moves every cell's window, a selection in one cell is highlighted in every cell that shows it, and a click on a datum opens another board with variables taken from it. All three are the board's **shared state**, held by the board process (§8.2). A cell's chart does not talk to another cell's: it tells the board, and the board tells every cell.
 
 ### 13.1 Brush to window
 
@@ -709,6 +737,7 @@ A brush on a time chart in any cell chooses a window (`interaction: %{brush: :x}
 
 - **Rapid brushes are debounced in the board process.** A brushed window is validated at once, so a bad one answers `{:error, errors}` to its caller, and then waits `debounce:` milliseconds (`250`) for the next. A later brush replaces it and the wait starts again, so a person re-brushing three times in quick succession costs every feed one fetch, for the last window. `debounce: 0` applies each brush at once. `window/2`, from a host's buttons, is never debounced: a button is one deliberate choice. A `window/2` call drops a brush still waiting, since it is the later choice.
 - **Undo is "Reset window".** `Visualize.Board.Server.reset_window/1` sets the window the board was started with, its `board:` option's `window`, and re-asks every feed. The board reports `moved: true` in its info (§8.2) whenever its window is other than that one, and the component shows a **Reset window** button while it is. A cleared brush (`brush_clear`) changes nothing on the board: a click on a chart is a brush too small to keep, and it must not throw away the window a person chose.
+- **A host may own the window.** With the component's `brush: :host` (§9.1, D-161), the brush and *Reset window* go to the page as `{:visualize_board_brush, id, %{domain: [from, to] | nil}}` instead of to the board process, and the page sets the window with `window/2` once it has put it in its URL (§9.2). Every cell still follows, since `window/2` re-asks every feed as a brush does. The debounce above is then the page's choice: `window/2` applies at once, and `brush/2`, called by the page, still debounces.
 
 ### 13.2 Linked selection
 
@@ -746,6 +775,8 @@ drill: %{board: :detail, vars: %{service: {:datum, :name}, range: "1h"}}
 **It is validated against the target.** Alone, the node's shape is checked (§3.1). Given `boards:` (§3.2), its target must be a board the host holds, and every variable it sets must be one the target declares, a key of the target's `vars`. A `{:datum, field}` must name a field the cell's component's sources declare, when they declare any. A target of `:self` is checked against the board itself, with or without `boards:`. An invalid target is refused when the board is read with the store, and the runtime refuses to start such a board (§8.2), so a drill cannot fail later for want of a variable the target never had.
 
 **A click resolves it.** A pick (§13.2) in a cell with a `drill` resolves the target instead of selecting. `Visualize.Board.drill(board, cell, row)` gives `{:ok, %{board: ref, vars: vars}}` with every `{:datum, field}` read from the picked row and every fixed value as it is. A row with no value for a datum field is `{:error, [{[:cells, cell, :drill, :vars, var], {:missing, :datum, field}}]}`, and nothing opens. The board's component hands the target to the page as a message, and the page decides what opening it means (§9.2). The library holds no route, and `push_navigate` from the component would have to guess one. A callback assign would put a function in the component's assigns, where a message is how a LiveView already talks to its own page. A page that ignores the message ignores drills.
+
+**A mark's own event goes the same way.** A mark whose `tooltip` node names an `event` reaches the page as `{:visualize_board_event, id, %{cell, event, fields}}` on a click (§9.2, D-161), so a host can open what a datum names, such as an event marker, without the board knowing what it is.
 
 ### 13.4 Functions
 

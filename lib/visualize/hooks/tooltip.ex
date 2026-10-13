@@ -7,7 +7,8 @@ defmodule Visualize.Hooks.Tooltip do
   (spec/14 §5.7) — and the hook reads them from the element under the pointer (D-75). A
   `data-tooltip-template` on the element or an ancestor formats the text with `{field}`
   placeholders; without one the tooltip lists `field: value` per line. A click pushes the
-  fields to the LiveView only when a `data-tooltip-event` names the event.
+  fields to the LiveView only when a `data-tooltip-event` names the event, or to the
+  component `data-tooltip-target` names, as a board's cell names itself (spec/15 §9.1).
 
   In a sync group (spec/10 §4.3, §12.4) the hook publishes the pointer's x in domain units
   on the group's bus, and shows the datum element nearest to another member's hover.
@@ -29,6 +30,8 @@ defmodule Visualize.Hooks.Tooltip do
   Data attributes on the hook element:
   - `data-tooltip-class` - class of the tooltip element the hook creates
     (default: "vis-tooltip")
+  - `data-tooltip-target` - the `phx-target` a click's event goes to with `pushEventTo`;
+    unset, it goes to the LiveView (D-161)
 
   Data attributes on the elements, written by the server (spec/10 §12.2):
   - `data-datum` - the field names, space-separated, in order
@@ -211,7 +214,10 @@ defmodule Visualize.Hooks.Tooltip do
         if (!el) return;
         const event = this.nearest(el, 'data-tooltip-event');
         if (!event) return;
-        this.pushEvent(event, this.fields(el).values);
+        // To the component data-tooltip-target names, else to the LiveView (D-161).
+        const target = this.el.dataset.tooltipTarget;
+        if (target) this.pushEventTo(target, event, this.fields(el).values);
+        else this.pushEvent(event, this.fields(el).values);
       },
 
       destroyed() {

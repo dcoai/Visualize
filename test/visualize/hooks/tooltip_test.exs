@@ -72,8 +72,47 @@ defmodule Visualize.Hooks.TooltipTest do
     js = Tooltip.js_hook()
     assert js =~ "this.nearest(el, 'data-tooltip-event')"
     assert js =~ "if (!event) return;"
-    assert js =~ "this.pushEvent(event, this.fields(el).values);"
+    assert js =~ "else this.pushEvent(event, this.fields(el).values);"
     assert length(String.split(js, "pushEvent(")) == 2
+  end
+
+  test "a click's event goes to the component data-tooltip-target names (D-161)" do
+    js = Tooltip.js_hook()
+    assert js =~ "const target = this.el.dataset.tooltipTarget;"
+    assert js =~ "if (target) this.pushEventTo(target, event, this.fields(el).values);"
+  end
+
+  @tag :js
+  test "executed: a click goes to data-tooltip-target, else to the LiveView (D-161)" do
+    assert {:ok, %{"log" => log}} =
+             Visualize.JsHooks.run("""
+             const chart = (attrs) => {
+               const dot = Stub.markup('circle', {'data-datum': 'id t', 'data-datum-id': '42', 'data-datum-t': '1'});
+               const mark = Stub.markup('g', {class: 'mark', 'data-tooltip-event': 'event_open'}, [dot]);
+               const el = Stub.markup('div', attrs, [Stub.markup('svg', {}, [mark])]);
+               Stub.mount(TooltipHook, el);
+               return {el, dot, mark};
+             };
+             const cell = chart({id: 'cell-tooltip', 'data-tooltip-target': '4'});
+             Stub.mark('targeted');
+             // The stub does not bubble: a click reaches the hook's element, its target the node.
+             Stub.fire(cell.el, 'click', {target: cell.dot});
+             Stub.fire(cell.el, 'click', {target: cell.mark});
+             const page = chart({id: 'page-tooltip'});
+             Stub.mark('untargeted');
+             Stub.fire(page.el, 'click', {target: page.dot});
+             Stub.done({});
+             """)
+
+    pushes = fn mark ->
+      for %{"kind" => "push"} = p <- Visualize.JsHooks.after_mark(log, mark),
+          do: {p["target"], p["name"], p["payload"]}
+    end
+
+    fields = %{"id" => "42", "t" => "1"}
+    # The mark's group is no datum element: only the dot's click pushes.
+    assert pushes.("targeted") == [{"4", "event_open", fields}]
+    assert pushes.("untargeted") == [{nil, "event_open", fields}]
   end
 
   test "the bundle carries the hook once and exports it" do
