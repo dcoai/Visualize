@@ -38,13 +38,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def steps(design) when is_map(design) do
       sources = Map.get(design, :sources) || %{}
       marks = for mark <- List.wrap(Map.get(design, :marks, [])), is_map(mark), do: mark
-      axes = List.wrap(get_in(design, Fragment.frame_path(design) ++ [:axes]))
+      # A scale belongs to its frame (§4.3, #615): an axis measures `{frame, scale}`, and a
+      # mark reads its scales in the frame it is drawn in.
+      measured =
+        for {frame, node} <- frames(design),
+            %{scale: scale} <- List.wrap(Map.get(node, :axes)),
+            do: {frame, scale}
 
-      measured = for %{scale: scale} <- axes, do: scale
+      read_by = fn mark ->
+        for scale <- Scales.position_scales(design, mark),
+            do: {Fragment.frame_of(design, mark), scale}
+      end
 
       # The first mark reading a position scale, when no axis measures any scale the
       # marks read: one axis is the way shown, the rest is the mark page's.
-      read = Enum.flat_map(marks, &Scales.position_scales(design, &1))
+      read = Enum.flat_map(marks, read_by)
 
       unmeasured =
         if read != [] and Enum.all?(read, &(&1 not in measured)),
@@ -68,9 +76,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           else: []
         ),
         case unmeasured do
-          {_mark, i} ->
+          {mark, i} ->
             step(
-              Fragment.frame_path(design) ++ [:axes],
+              [:frames, Fragment.frame_of(design, mark), :axes],
               "add axes — tick a side on the mark's page",
               "select_node",
               %{
@@ -82,6 +90,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
             []
         end
       ])
+    end
+
+    defp frames(design) do
+      case Map.get(design, :frames) do
+        frames when is_map(frames) -> for {name, node} <- frames, is_map(node), do: {name, node}
+        _none -> []
+      end
     end
 
     defp step(path, words, event, values),

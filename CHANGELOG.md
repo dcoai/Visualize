@@ -42,6 +42,12 @@ release it merely follows.
   halves and the other frames' edges, and the box is written as fractions. Arrows move
   the open frame a twelfth, Shift with an arrow stretches it. The frame's page gains a
   *place* section: its box, `z` and `background`.
+- **In a chart of several frames, what is placed belongs to the frame under the pointer**
+  (#615, D-164). A mark or a label dropped on the builder's graph says its `frame`; an
+  axis is written into that frame with the scale it needs; a legend is that frame's. A
+  mark's axes section, the scales derived for a bound channel and the *add axes* step
+  follow the frame the mark is drawn in. `Visualize.Chart.Fragment.frame_of/2` answers
+  the frame a mark or a label is drawn in.
 - **`ResizeHook` takes `data-resize-target`**, the `phx-target` it pushes to with
   `pushEventTo`, so a LiveComponent can host it. Without it the hook pushes to the
   LiveView, as before.

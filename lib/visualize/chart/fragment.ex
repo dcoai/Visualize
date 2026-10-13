@@ -97,6 +97,33 @@ defmodule Visualize.Chart.Fragment do
   def frame_name(_design), do: :main
 
   @doc """
+  The frame a node of a design is drawn in (spec/14 §2.1, §18.16): a mark's or a label's
+  own `frame`, else the design's one frame; with several and none said — the validator's
+  fault, and a design being built — `main` when there is one, else the first by name, so
+  a tool always has a frame to read.
+
+      iex> design = %{frames: %{history: %{}, now: %{}}}
+      iex> Visualize.Chart.Fragment.frame_of(design, %{type: :line, frame: :now})
+      :now
+
+      iex> Visualize.Chart.Fragment.frame_of(%{frames: %{history: %{}, now: %{}}}, %{type: :line})
+      :history
+
+      iex> Visualize.Chart.Fragment.frame_of(%{frames: %{history: %{}}}, nil)
+      :history
+  """
+  @spec frame_of(term(), term()) :: atom()
+  def frame_of(_design, %{frame: frame}) when is_atom(frame) and frame != nil, do: frame
+
+  def frame_of(%{frames: frames}, _node) when is_map(frames) and map_size(frames) > 1 do
+    if Map.has_key?(frames, :main),
+      do: :main,
+      else: frames |> Map.keys() |> Enum.min_by(&to_string/1)
+  end
+
+  def frame_of(design, _node), do: frame_name(design)
+
+  @doc """
   The kind a singular wrapper key names — `:style` for `style:` — or `nil` for any other
   key, `composite` included (spec/14 §19.2).
 

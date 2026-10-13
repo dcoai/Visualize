@@ -171,11 +171,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       %{
         style: Palette.names(design) ++ ids.(:style),
-        scale:
-          Map.keys(get_in(design, Fragment.frame_path(design) ++ [:scales]) || %{}) ++
-            ids.(:scale),
+        scale: scale_names(design) ++ ids.(:scale),
         source: Map.keys(Map.get(design, :sources, %{})) ++ ids.(:source)
       }
+    end
+
+    # Every scale name any frame declares (#615): a scale belongs to its frame, and the
+    # names are offered together, each once.
+    defp scale_names(design) do
+      case Map.get(design, :frames) do
+        frames when is_map(frames) ->
+          frames
+          |> Map.values()
+          |> Enum.flat_map(fn
+            %{scales: scales} when is_map(scales) -> Map.keys(scales)
+            _other -> []
+          end)
+          |> Enum.uniq()
+          |> Enum.sort()
+
+        _none ->
+          []
+      end
     end
 
     # The colour chooser (spec/14 §19.10): the selected colour field, if the selected field
@@ -613,11 +630,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The axes section's rows for the open node (#373): a mark's position scales, or a
     # position scale's own row; nothing elsewhere.
     defp axes_rows(design, %{kind: :mark}, mark) when is_map(mark),
-      do: Axes.rows(design, Scales.position_scales(design, mark))
+      do: Axes.rows(design, Scales.position_scales(design, mark), Fragment.frame_of(design, mark))
 
-    defp axes_rows(design, %{kind: :scale, path: [:frames, _frame, :scales, name]}, _node)
+    defp axes_rows(design, %{kind: :scale, path: [:frames, frame, :scales, name]}, _node)
          when name in [:x, :y, :angle, :r],
-         do: Axes.rows(design, [name])
+         do: Axes.rows(design, [name], frame)
 
     defp axes_rows(_design, _entry, _node), do: []
 
