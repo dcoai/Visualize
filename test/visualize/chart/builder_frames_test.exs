@@ -7,6 +7,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
 
   alias Visualize.BuilderFixture
   alias Visualize.Chart.Builder
+  alias Visualize.Chart.Builder.Writes
 
   defp two, do: BuilderFixture.two_frames()
 
@@ -67,10 +68,8 @@ defmodule Visualize.Chart.BuilderFramesTest do
       {:noreply, s} =
         Builder.handle_event("place", %{"component" => "axis", "x" => 410, "y" => 200}, s)
 
-      axes =
-        for %{local: %{axis: body}} <- s.assigns.uses, do: body
-
-      assert axes == [%{scale: :y, side: :left}]
+      # In a design of two frames the axis is written into `now` itself (#615).
+      assert Writes.composed(s).frames.now.axes == [%{scale: :y, side: :left}]
     end
   end
 
@@ -186,6 +185,121 @@ defmodule Visualize.Chart.BuilderFramesTest do
       assert html =~ ~s(phx-value-section="frames.now:place")
       assert html =~ ~s(name="z")
       assert html =~ ~s(data-builder-well="background")
+    end
+  end
+
+  describe "a node placed on the graph goes to the frame under the pointer (spec/14 §18.16, #615)" do
+    defp measured(layers) do
+      s = BuilderFixture.socket(layers)
+      {:noreply, s} = Builder.handle_event("graph_size", %{"width" => 800, "height" => 400}, s)
+      s
+    end
+
+    defp place(s, component, x, y) do
+      {:noreply, s} =
+        Builder.handle_event("place", %{"component" => component, "x" => x, "y" => y}, s)
+
+      s
+    end
+
+    defp sites(s, kind), do: for(%{local: %{^kind => body}} <- s.assigns.uses, do: body)
+
+    # `now` with no scales of its own, its source typed, so a placed mark derives them.
+    defp bare_now do
+      [{name, layer}] = two()
+
+      layer =
+        layer
+        |> update_in([:frames, :now], &Map.delete(&1, :scales))
+        |> put_in([:sources, :primary, :types], %{t: :number, v: :number})
+
+      [{name, layer}]
+    end
+
+    test "a mark or a label dropped over the second frame says that frame" do
+      s = measured(two()) |> place("mark:line", 600, 200) |> place("title", 600, 5)
+      assert [%{type: :line, frame: :now}] = sites(s, :mark)
+      assert [%{anchor: :title, frame: :now}] = sites(s, :label)
+
+      s = measured(two()) |> place("label", 100, 200)
+      assert [%{frame: :history}] = sites(s, :label)
+    end
+
+    test "an axis dropped in a frame's margin is that frame's, its scale declared there" do
+      s = measured(bare_now()) |> place("axis", 410, 200)
+      design = Writes.composed(s)
+      assert design.frames.now.axes == [%{scale: :y, side: :left}]
+      assert design.frames.now.scales == %{y: %{kind: :linear, domain: :auto}}
+      # `history` is untouched, and nothing landed in a frame called main.
+      assert design.frames.history.axes == [%{scale: :x, side: :bottom}]
+      refute Map.has_key?(design.frames, :main)
+      assert s.assigns.node_label == "frames.now.axes[0]"
+    end
+
+    test "a legend dropped in a frame takes that frame's colour scale" do
+      [{name, layer}] = two()
+      layer = put_in(layer, [:frames, :now, :scales, :c], %{kind: :ordinal, domain: ["a"]})
+      s = measured([{name, layer}]) |> place("legend", 790, 20)
+      assert %{scale: :c} = Writes.composed(s).frames.now.legend
+      refute Map.has_key?(Writes.composed(s).frames.history, :legend)
+    end
+
+    test "a mark placed in a frame derives that frame's scales from its channels" do
+      s = measured(bare_now()) |> place("mark:line", 600, 200)
+      design = Writes.composed(s)
+      assert %{x: %{kind: :linear}, y: %{kind: :linear}} = design.frames.now.scales
+      assert Map.keys(design.frames.history.scales) == [:x, :y]
+    end
+
+    test "the keyboard twin places in the open node's frame" do
+      s = measured(two())
+      {:noreply, s} = Builder.handle_event("pick", %{"node" => "marks[1]"}, s)
+
+      {:noreply, s} =
+        Builder.handle_event("component_key", %{"key" => "Insert", "component" => "mark:area"}, s)
+
+      assert [%{type: :area, frame: :now}] = sites(s, :mark)
+    end
+
+    test "a mark's axes section is its frame's, and a tick writes there" do
+      s = measured(two())
+      {:noreply, s} = Builder.handle_event("pick", %{"node" => "marks[1]"}, s)
+      html = BuilderFixture.render(s)
+      assert html =~ ~s(phx-value-frame="now")
+      refute html =~ ~s(phx-value-frame="history")
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "toggle_axis",
+          %{"scale" => "y", "side" => "left", "frame" => "now"},
+          s
+        )
+
+      assert Writes.composed(s).frames.now.axes == [%{scale: :y, side: :left}]
+      assert Writes.composed(s).frames.history.axes == [%{scale: :x, side: :bottom}]
+
+      # Unticked again, it leaves `now`; the grid of `history`'s x is its own.
+      {:noreply, s} =
+        Builder.handle_event(
+          "toggle_axis",
+          %{"scale" => "y", "side" => "left", "frame" => "now"},
+          s
+        )
+
+      refute Map.has_key?(Writes.composed(s).frames.now, :axes)
+
+      {:noreply, s} =
+        Builder.handle_event("toggle_grid", %{"scale" => "x", "frame" => "history"}, s)
+
+      assert [%{grid: true}] = Writes.composed(s).frames.history.axes
+    end
+
+    test "the add-axes step names the frame the mark is drawn in" do
+      [{name, layer}] = two()
+      layer = update_in(layer, [:frames, :history], &Map.delete(&1, :axes))
+      design = Visualize.Chart.stack([{name, layer}])
+      [step] = Visualize.Chart.Builder.Steps.steps(design)
+      assert step.path == [:frames, :history, :axes]
     end
   end
 end

@@ -17,6 +17,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Writes,
       only: [
         admits: 2,
+        appended: 4,
         at: 2,
         composed: 1,
         derived_scales: 1,
@@ -83,7 +84,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event("component_key", %{"key" => key, "component" => word}, socket) do
       case {key, Place.component(word)} do
         {insert, {:ok, component}} when insert in ["Insert", "i", "Enter", " "] ->
-          {:noreply, placed(socket, component, Place.home(component), {0, 0})}
+          {:noreply, placed(socket, component, Place.home(component), keyed_spot(socket))}
 
         _other ->
           {:noreply, socket}
@@ -129,10 +130,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       case Enum.find(Editor.nodes(design), &(&1.label == label)) do
         %{kind: kind, path: path} = node when kind in [:axis, :legend, :label] ->
-          {region, point} = where(socket, params, nil)
+          {region, spot} = where(socket, params, nil)
+          # The node's own frame names the scales it may read, wherever it was dropped.
+          spot = %{spot | frame: node_frame(design, path)}
           body = at(design, path) || %{}
 
-          case Place.moved(kind, body, region, point, design) do
+          case Place.moved(kind, body, region, spot, design) do
             {:ok, moved} ->
               {:noreply, socket |> rewritten(path, kind, body, moved) |> opened(node.label)}
 
@@ -141,7 +144,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             {:ok, moved, sites} ->
               {:noreply,
                socket
-               |> brought(path, sites)
+               |> brought(path, sites, design, spot.frame)
                |> rewritten(path, kind, body, moved)
                |> opened(node.label)}
 
@@ -210,6 +213,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # Scale sites brought by a move, inserted beneath the moved node's owner — or the
     # selected layer when nothing owns it — so the axis reads them.
+    defp brought(socket, path, sites, design, frame) when is_map_key(design, :frames) do
+      if Place.several?(design) do
+        Enum.reduce(sites, socket, fn %{body: body, key: name}, acc ->
+          update_layer(acc, [:frames, frame, :scales], name, {:ok, body})
+        end)
+      else
+        brought(socket, path, sites)
+      end
+    end
+
+    defp brought(socket, path, sites, _design, _frame), do: brought(socket, path, sites)
+
     defp brought(socket, path, sites) do
       %{uses: uses, labels: labels, selected: selected, store: store} = socket.assigns
       fetch = Stack.fetch(store)
@@ -242,16 +257,39 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       case Map.get(params, "region") do
         given when given in ~w(plot top bottom left right) ->
-          {String.to_existing_atom(given), point}
+          {String.to_existing_atom(given), keyed_spot(socket)}
 
         _none when is_map_key(params, "x") ->
           spot = Place.spot(composed(socket), graph_size(socket), point)
           {Place.region(spot.point, spot.geometry), spot}
 
         _none ->
-          {if(component, do: Place.home(component), else: :plot), point}
+          {if(component, do: Place.home(component), else: :plot), keyed_spot(socket)}
       end
     end
+
+    # Where the keyboard twin places, naming a region and no point (#615): the frame of the
+    # open node — a frame, or the frame a mark or a label is drawn in — else the design's.
+    defp keyed_spot(socket) do
+      design = composed(socket)
+
+      frame =
+        case Enum.find(Editor.nodes(design), &(&1.label == socket.assigns.node_label)) do
+          %{path: path} -> node_frame(design, path)
+          nil -> Fragment.frame_of(design, nil)
+        end
+
+      Place.spot_in(design, graph_size(socket), frame)
+    end
+
+    # The frame a node of the design belongs to: the frame a path is under, or the frame a
+    # mark or a label says (#615).
+    defp node_frame(_design, [:frames, frame | _rest]), do: frame
+
+    defp node_frame(design, [root, i | _rest]) when root in [:marks, :labels] and is_integer(i),
+      do: Fragment.frame_of(design, at(design, [root, i]))
+
+    defp node_frame(design, _path), do: Fragment.frame_of(design, nil)
 
     # The size the graph was last measured at, else the render's default (spec/14 §18.4).
     defp graph_size(socket), do: socket.assigns[:graph_size] || Frame.default_size()
@@ -378,8 +416,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
           |> opened_placed(component, last)
           |> derived_scales()
 
+        {:frame, frame, %{scales: scales, axes: axes}} ->
+          into_frame(socket, frame, scales, axes)
+
         {:legend, node} ->
-          path = Fragment.frame_path(composed(socket))
+          path = [:frames, spotted_frame(design, point)]
 
           socket
           |> update_layer(path, :legend, {:ok, node})
@@ -390,6 +431,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
           assign(socket, notice: "a legend needs a colour scale")
       end
     end
+
+    # An axis written into a frame of a design of several (#615): its scale declared there
+    # when the frame lacks it, then the axis appended to the frame's axes, both through
+    # the ownership rule — the frame's owner — and the new axis opened.
+    defp into_frame(socket, frame, scales, axes) do
+      path = [:frames, frame]
+
+      socket =
+        Enum.reduce(scales, assign(socket, :notice, nil), fn {name, node}, acc ->
+          update_layer(acc, path ++ [:scales], name, {:ok, node})
+        end)
+
+      socket = Enum.reduce(axes, socket, &appended(&2, path, :axes, &1))
+      count = socket |> composed() |> at(path ++ [:axes]) |> List.wrap() |> length()
+
+      if count > 0,
+        do: opened(socket, Editor.label(path ++ [:axes, count - 1])),
+        else: socket
+    end
+
+    defp spotted_frame(_design, %{frame: frame}), do: frame
+    defp spotted_frame(design, _point), do: Fragment.frame_of(design, nil)
 
     # The gap above the layer that owns an axis the placed one replaces — its `{scale,
     # side}` is an axis's identity in the cascade — or 0 when nothing is replaced.

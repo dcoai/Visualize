@@ -109,7 +109,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec geometry(map()) :: %{size: map(), margin: map()}
     def geometry(design) do
-      frame = if is_map(design), do: get_in(design, Fragment.frame_path(design)) || %{}, else: %{}
+      frame =
+        if is_map(design),
+          do: get_in(design, [:frames, Fragment.frame_of(design, nil)]) || %{},
+          else: %{}
+
       frame = if is_map(frame), do: frame, else: %{}
       {width, height} = Frame.default_size()
 
@@ -262,12 +266,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
       dx * dx + dy * dy
     end
 
+    @doc """
+    A spot in a named frame, at its origin (#615): what the keyboard twin places with,
+    which names a region and no point — the open node's frame, at the graph's size. A
+    frame the design does not draw is read as `spot/3` reads the origin.
+
+        iex> design = %{frames: %{history: %{box: [0, 0, 0.5, 1]}, now: %{box: [0.5, 0, 0.5, 1]}}}
+        iex> spot = Visualize.Chart.Builder.Place.spot_in(design, {800, 400}, :now)
+        iex> {spot.frame, spot.point, spot.geometry.size}
+        {:now, {0, 0}, %{width: 400.0, height: 400.0}}
+    """
+    @spec spot_in(map(), {number(), number()}, atom()) :: spot()
+    def spot_in(design, size, frame) do
+      case Enum.find(frames(design, size), &(&1.name == frame)) do
+        nil -> spot(design, size, {0, 0})
+        f -> %{frame: f.name, point: {0, 0}, geometry: %{size: f.size, margin: f.margin}}
+      end
+    end
+
     # A point given bare is read in the design's frame at the render's default size, as
     # the graph drew it before it measured anything.
     defp spotted(%{point: _, geometry: _} = spot, _design), do: spot
 
     defp spotted({_x, _y} = point, design),
-      do: %{frame: Fragment.frame_name(design), point: point, geometry: geometry(design)}
+      do: %{frame: Fragment.frame_of(design, nil), point: point, geometry: geometry(design)}
 
     # A reading of the point against the geometry of the frame it is in.
     defp at(point, design, read) do
@@ -291,8 +313,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:error, :no_scale}
     """
     @spec node(component(), region(), map(), {number(), number()} | spot()) ::
-            {:sites, [site()]} | {:legend, map()} | {:error, :no_scale}
-    def node(:axis, region, design, _point) do
+            {:sites, [site()]}
+            | {:frame, atom(), %{scales: map(), axes: [map()]}}
+            | {:legend, map()}
+            | {:error, :no_scale}
+    def node(:axis, region, design, point) do
+      frame = spotted(point, design).frame
+
       {scale, side} =
         case region do
           :top -> {:x, :top}
@@ -301,13 +328,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
           _bottom_or_plot -> {:x, :bottom}
         end
 
-      declared = if scale_declared?(design, scale), do: [], else: [scale_site(scale)]
-      {:sites, declared ++ [%{kind: :axis, body: %{scale: scale, side: side}, key: nil}]}
+      declared? = scale_declared?(design, frame, scale)
+      axis = %{scale: scale, side: side}
+
+      # In a design of several frames an axis is the frame's own node, written into the
+      # frame under the pointer: an axis or scale site lands in one frame of the design's
+      # choosing (§19.6), which is not the one dropped on (#615).
+      if several?(design) do
+        scales = if declared?, do: %{}, else: %{scale => %{kind: :linear, domain: :auto}}
+        {:frame, frame, %{scales: scales, axes: [axis]}}
+      else
+        declared = if declared?, do: [], else: [scale_site(scale)]
+        {:sites, declared ++ [%{kind: :axis, body: axis, key: nil}]}
+      end
     end
 
-    def node(:title, region, _design, _point) do
+    def node(:title, region, design, point) do
       anchor = if region == :bottom, do: :caption, else: :title
-      {:sites, [%{kind: :label, body: %{anchor: anchor, text: ["Title"]}, key: nil}]}
+      body = framed(%{anchor: anchor, text: ["Title"]}, design, point)
+      {:sites, [%{kind: :label, body: body, key: nil}]}
     end
 
     def node(:label, region, design, point) do
@@ -320,11 +359,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
           :plot -> {:frame, at(point, design, &corner/2)}
         end
 
-      {:sites, [%{kind: :label, body: %{anchor: anchor, text: ["Label"]}, key: nil}]}
+      body = framed(%{anchor: anchor, text: ["Label"]}, design, point)
+      {:sites, [%{kind: :label, body: body, key: nil}]}
     end
 
     def node(:legend, region, design, point) do
-      case ordinal_scale(design) do
+      case ordinal_scale(design, spotted(point, design).frame) do
         nil ->
           {:error, :no_scale}
 
@@ -334,9 +374,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    def node({:mark, type}, _region, design, _point) do
-      {:sites, [%{kind: :mark, body: Map.merge(%{type: type}, guess(design, type)), key: nil}]}
+    def node({:mark, type}, _region, design, point) do
+      body = framed(Map.merge(%{type: type}, guess(design, type)), design, point)
+      {:sites, [%{kind: :mark, body: body, key: nil}]}
     end
+
+    # A mark or a label placed in a design of several frames says the frame it was dropped
+    # on (#615), since the validator asks a frame of each once there are two; in a design
+    # of one it says nothing, as it always did.
+    defp framed(body, design, point) do
+      if several?(design), do: Map.put(body, :frame, spotted(point, design).frame), else: body
+    end
+
+    @doc """
+    Whether a design has several frames (spec/14 §2.1), so that what is placed on the
+    graph says which one it belongs to (#615).
+
+        iex> Visualize.Chart.Builder.Place.several?(%{frames: %{a: %{}, b: %{}}})
+        true
+        iex> Visualize.Chart.Builder.Place.several?(%{frames: %{main: %{}}})
+        false
+    """
+    @spec several?(term()) :: boolean()
+    def several?(%{frames: frames}) when is_map(frames) and not is_struct(frames),
+      do: map_size(frames) > 1
+
+    def several?(_design), do: false
 
     @doc """
     A mark type's `data` and `channels` guessed over the composed design (spec/14 §18.16):
@@ -460,8 +523,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
             {:ok, map()} | {:ok, map(), [site()]} | :same | :unmovable
     def moved(kind, body, region, point, design \\ %{})
 
-    def moved(:axis, body, region, _point, design)
+    def moved(:axis, body, region, point, design)
         when region in [:top, :bottom, :left, :right] do
+      frame = spotted(point, design).frame
+
       case rewritten(body, :side, region) do
         :same ->
           :same
@@ -470,10 +535,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
           if orientation(region) == orientation(Map.get(body, :side)) do
             {:ok, turned}
           else
-            scale = scale_for(design, region, Map.get(body, :scale))
+            scale = scale_for(design, frame, region, Map.get(body, :scale))
             turned = Map.put(turned, :scale, scale)
 
-            if scale_declared?(design, scale),
+            if scale_declared?(design, frame, scale),
               do: {:ok, turned},
               else: {:ok, turned, [scale_site(scale)]}
           end
@@ -513,11 +578,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The scale a side reads: the one another axis on that orientation already reads —
     # other than the axis being moved — else `x` or `y` by orientation.
-    defp scale_for(design, side, own) do
+    defp scale_for(design, frame, side, own) do
       wanted = orientation(side)
 
       axes =
-        case get_in(design, Fragment.frame_path(design) ++ [:axes]) do
+        case get_in(design, [:frames, frame, :axes]) do
           axes when is_list(axes) -> axes
           _none -> []
         end
@@ -534,8 +599,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- the design's word ----------------------------------------------------------------
 
-    defp scale_declared?(design, name) do
-      scales = get_in(design, Fragment.frame_path(design) ++ [:scales])
+    defp scale_declared?(design, frame, name) do
+      scales = get_in(design, [:frames, frame, :scales])
       is_map(scales) and Map.has_key?(scales, name)
     end
 
@@ -543,8 +608,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       do: %{kind: :scale, body: %{kind: :linear, domain: :auto}, key: name}
 
     # The first ordinal scale by name: the one a legend reads its entries from (§4.5).
-    defp ordinal_scale(design) do
-      case get_in(design, Fragment.frame_path(design) ++ [:scales]) do
+    defp ordinal_scale(design, frame) do
+      case get_in(design, [:frames, frame, :scales]) do
         scales when is_map(scales) ->
           scales
           |> Enum.filter(fn {_name, node} ->

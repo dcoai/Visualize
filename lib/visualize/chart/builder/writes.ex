@@ -107,12 +107,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc false
     def derived_scales(socket) do
       design = composed(socket)
+      types = Scales.pool_types(pool(socket.assigns))
 
-      design
-      |> Scales.derive(Scales.pool_types(pool(socket.assigns)))
-      |> Enum.reduce(socket, fn {name, node}, acc ->
-        update_layer(acc, Fragment.frame_path(design) ++ [:scales], name, {:ok, node})
-      end)
+      # Each frame's from the marks drawn in it, into that frame (#615).
+      for frame <- frame_names(design),
+          {name, node} <- Scales.derive(design, types, frame),
+          reduce: socket do
+        acc -> update_layer(acc, [:frames, frame, :scales], name, {:ok, node})
+      end
+    end
+
+    # The frames a design declares, else the one a design with none is given.
+    defp frame_names(design) do
+      case Map.get(design, :frames) do
+        frames when is_map(frames) and map_size(frames) > 0 -> Map.keys(frames)
+        _none -> [Fragment.frame_name(design)]
+      end
     end
 
     # A write goes to the use that owns what it writes — the one surface that writes

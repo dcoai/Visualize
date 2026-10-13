@@ -43,48 +43,47 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A side ticked adds `%{scale, side}` to the frame's axes in the frame's layer, the
     # scale declared first when the frame lacks it; unticked, that axis leaves its layer.
     @doc false
-    def handle_event("toggle_axis", %{"scale" => scale, "side" => side}, socket) do
+    def handle_event("toggle_axis", %{"scale" => scale, "side" => side} = params, socket) do
       scale = String.to_atom(scale)
       side = String.to_atom(side)
       %{design: design} = editing(socket.assigns)
+      # The frame the row is of — the mark's or the scale's own (#615).
+      frame_path = [:frames, ticked_frame(design, params)]
 
       axes =
         design
-        |> get_in(Fragment.frame_path(design) ++ [:axes])
+        |> get_in(frame_path ++ [:axes])
         |> List.wrap()
         |> Enum.with_index()
 
       case Enum.find(axes, fn {axis, _i} -> axis[:scale] == scale and axis[:side] == side end) do
         {axis, index} ->
-          {:noreply, axis_removed(socket, axis, index)}
+          {:noreply, axis_removed(socket, frame_path, axis, index)}
 
         nil ->
           socket =
-            if Map.has_key?(
-                 get_in(design, Fragment.frame_path(design) ++ [:scales]) || %{},
-                 scale
-               ),
-               do: socket,
-               else:
-                 update_layer(
-                   socket,
-                   Fragment.frame_path(design) ++ [:scales],
-                   scale,
-                   {:ok, %{kind: :linear, domain: :auto}}
-                 )
+            if Map.has_key?(get_in(design, frame_path ++ [:scales]) || %{}, scale),
+              do: socket,
+              else:
+                update_layer(
+                  socket,
+                  frame_path ++ [:scales],
+                  scale,
+                  {:ok, %{kind: :linear, domain: :auto}}
+                )
 
-          {:noreply,
-           appended(socket, Fragment.frame_path(design), :axes, %{scale: scale, side: side})}
+          {:noreply, appended(socket, frame_path, :axes, %{scale: scale, side: side})}
       end
     end
 
-    def handle_event("toggle_grid", %{"scale" => scale}, socket) do
+    def handle_event("toggle_grid", %{"scale" => scale} = params, socket) do
       scale = String.to_atom(scale)
       %{design: design} = editing(socket.assigns)
+      frame_path = [:frames, ticked_frame(design, params)]
 
       axes =
         design
-        |> get_in(Fragment.frame_path(design) ++ [:axes])
+        |> get_in(frame_path ++ [:axes])
         |> List.wrap()
         |> Enum.with_index()
 
@@ -95,7 +94,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {axis, index} ->
           on? = Map.get(axis, :grid, false) == true
           parsed = if on?, do: :error, else: {:ok, true}
-          path = Fragment.frame_path(design) ++ [:axes, index]
+          path = frame_path ++ [:axes, index]
           {:noreply, update_layer(socket, path, :grid, parsed)}
       end
     end
@@ -376,13 +375,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A composed axis taken out of the layer that gives it: an axis site leaves the stack;
     # an entry of a layer's `frame.axes` leaves the list.
-    defp axis_removed(socket, axis, index) do
+    defp axis_removed(socket, frame_path, axis, index) do
       %{uses: uses, store: store} = socket.assigns
       fetch = Stack.fetch(store)
       placed = Stack.placed(uses, fetch)
       leaves = Chart.explain(placed)
 
-      case owner_of(leaves, placed, uses, Fragment.frame_path(placed) ++ [:axes, index]) do
+      case owner_of(leaves, placed, uses, frame_path ++ [:axes, index]) do
         nil ->
           socket
 
@@ -395,22 +394,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
               closed_site(socket, use)
 
             use ->
-              own = List.wrap(get_in(use.local, Fragment.frame_path(use.local) ++ [:axes]) || [])
+              local = Stack.local_path(use, fetch, frame_path)
+              own = List.wrap(get_in(use.local, local ++ [:axes]) || [])
               rest = List.delete(own, axis)
               parsed = if rest == [], do: :error, else: {:ok, rest}
 
               assign(
                 socket,
                 :uses,
-                Stack.update(
-                  uses,
-                  use.id,
-                  &Stack.write(&1, Fragment.frame_path(use.local), :axes, parsed)
-                )
+                Stack.update(uses, use.id, &Stack.write(&1, local, :axes, parsed))
               )
           end
       end
     end
+
+    # The frame an axes row names, when the composed design has it; else the design's.
+    defp ticked_frame(design, %{"frame" => name}) when is_binary(name) do
+      frames = Map.get(design, :frames)
+      frames = if is_map(frames), do: Map.keys(frames), else: []
+      Enum.find(frames, &(to_string(&1) == name)) || Fragment.frame_of(design, nil)
+    end
+
+    defp ticked_frame(design, _params), do: Fragment.frame_of(design, nil)
 
     # An axis site unticked leaves the stack; the selection falls back to the first layer.
     defp closed_site(socket, %Use{id: id}) do

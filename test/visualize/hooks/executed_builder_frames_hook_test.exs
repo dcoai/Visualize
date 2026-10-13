@@ -14,6 +14,7 @@ defmodule Visualize.Hooks.ExecutedBuilderFramesHookTest do
 
   alias Visualize.BuilderFixture
   alias Visualize.Chart.Builder
+  alias Visualize.Chart.Builder.Writes
 
   @moduletag :js
 
@@ -84,7 +85,7 @@ defmodule Visualize.Hooks.ExecutedBuilderFramesHookTest do
 
     # Handed back: the server reads the same point in the same frame, a y axis on the left.
     {:noreply, s} = Builder.handle_event("place", payload, s)
-    assert [%{scale: :y, side: :left}] = for(%{local: %{axis: a}} <- s.assigns.uses, do: a)
+    assert Writes.composed(s).frames.now.axes == [%{scale: :y, side: :left}]
   end
 
   # -- frames placed on the graph (spec/14 §18.16, #614) ---------------------------------

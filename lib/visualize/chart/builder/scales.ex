@@ -43,13 +43,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
         %{}
     """
     @spec derive(map(), pool_types()) :: %{atom() => map()}
-    def derive(design, pool_types) when is_map(design) do
-      declared = declared(design)
+    def derive(design, pool_types) when is_map(design),
+      do: derive(design, pool_types, Fragment.frame_of(design, nil))
+
+    @doc """
+    `derive/2` for one frame of the design (#615): the scales the channels of the marks
+    drawn in `frame` name and that frame does not declare. A design of several frames
+    derives each frame's from its own marks, since a scale name belongs to its frame
+    (§4.3).
+
+        iex> design = %{frames: %{a: %{kind: :cartesian}, b: %{kind: :cartesian, scales: %{x: %{kind: :linear}}}},
+        ...>   sources: %{s: %{fields: [:t, :v], types: %{t: :number, v: :number}}},
+        ...>   marks: [%{type: :line, frame: :b, data: :s, channels: %{x: :t, y: :v}}]}
+        iex> {Visualize.Chart.Builder.Scales.derive(design, %{}, :a), Visualize.Chart.Builder.Scales.derive(design, %{}, :b)}
+        {%{}, %{y: %{kind: :linear, domain: :auto}}}
+    """
+    @spec derive(map(), pool_types(), atom()) :: %{atom() => map()}
+    def derive(design, pool_types, frame) when is_map(design) do
+      declared = declared(design, frame)
 
       design
       |> evidence(pool_types)
-      |> Enum.reject(fn {name, _type, _path} -> name in declared end)
-      |> Enum.reduce(%{}, fn {name, type, _path}, acc ->
+      |> Enum.filter(fn {in_frame, _name, _type, _path} -> in_frame == frame end)
+      |> Enum.reject(fn {_frame, name, _type, _path} -> name in declared end)
+      |> Enum.reduce(%{}, fn {_frame, name, type, _path}, acc ->
         case {Map.has_key?(acc, name), kind(name, type)} do
           {false, kind} when kind != nil -> Map.put(acc, name, %{kind: kind, domain: :auto})
           _other -> acc
@@ -71,11 +88,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec unscaled(map(), pool_types()) :: [{[term()], {:unscaled, atom()}}]
     def unscaled(design, pool_types) when is_map(design) do
-      declared = declared(design)
-
-      for {name, nil, {path, field}} <- evidence(design, pool_types),
+      for {frame, name, nil, {path, field}} <- evidence(design, pool_types),
           name in @position,
-          name not in declared,
+          name not in declared(design, frame),
           is_atom(field),
           do: {path, {:unscaled, field}}
     end
@@ -138,7 +153,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec position_scales(map(), map()) :: [atom()]
     def position_scales(design, mark) when is_map(mark) do
-      kind = get_in(design, Fragment.frame_path(design) ++ [:kind]) || :cartesian
+      kind = frame_kind(design, Fragment.frame_of(design, mark))
 
       for {channel, _value} <- mark |> Map.get(:channels, %{}) |> Enum.sort(),
           scale = FrameScales.scale_for(kind, mark, channel),
@@ -153,21 +168,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Chart.column_type(design, source, field) || get_in(pool_types, [source, field])
     end
 
-    # Every channel of every mark that names a scale: `{scale, type or nil, {path, value}}`,
-    # in mark and channel order.
+    # Every channel of every mark that names a scale: `{frame, scale, type or nil, {path,
+    # value}}`, the frame the mark is drawn in, in mark and channel order.
     defp evidence(design, pool_types) do
-      kind = get_in(design, Fragment.frame_path(design) ++ [:kind]) || :cartesian
       marks = List.wrap(Map.get(design, :marks, []))
 
       for {mark, i} <- Enum.with_index(marks),
           is_map(mark),
+          frame = Fragment.frame_of(design, mark),
+          kind = frame_kind(design, frame),
           {channel, value} <- Map.get(mark, :channels, %{}) |> Enum.sort(),
           scale = FrameScales.scale_for(kind, mark, channel),
           scale != nil do
         type = value_type(design, pool_types, source_of(mark), value)
-        {scale, type, {[:marks, i, :channels, channel], value}}
+        {frame, scale, type, {[:marks, i, :channels, channel], value}}
       end
     end
+
+    defp frame_kind(design, frame), do: get_in(design, [:frames, frame, :kind]) || :cartesian
 
     defp source_of(%{data: name}) when is_atom(name), do: name
     defp source_of(%{data: %{source: name}}) when is_atom(name), do: name
@@ -189,8 +207,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp kind(_name, type) when type in [:category, :text], do: :band
     defp kind(_name, _type), do: nil
 
-    defp declared(design) do
-      case get_in(design, Fragment.frame_path(design) ++ [:scales]) do
+    defp declared(design, frame) do
+      case get_in(design, [:frames, frame, :scales]) do
         scales when is_map(scales) -> Map.keys(scales)
         _none -> []
       end

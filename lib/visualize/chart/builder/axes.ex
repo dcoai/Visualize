@@ -20,6 +20,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @typedoc "One row: the scale, its sides with the axis standing there, and its grid."
     @type row :: %{
             scale: atom(),
+            frame: atom(),
             sides: [%{side: atom(), word: String.t(), index: non_neg_integer() | nil}],
             grid: boolean(),
             first: non_neg_integer() | nil
@@ -42,6 +43,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               phx-click="toggle_axis"
               phx-value-scale={row.scale}
               phx-value-side={side.side}
+              phx-value-frame={row.frame}
               phx-target={@target}
             />
             {side.word}
@@ -52,6 +54,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               checked={row.grid}
               phx-click="toggle_grid"
               phx-value-scale={row.scale}
+              phx-value-frame={row.frame}
               phx-target={@target}
             />
             grid
@@ -61,9 +64,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             :if={side.index != nil}
             type="button"
             class="vis-builder-axes-link"
-            title={"frames.main.axes[#{side.index}]: ticks, format, unit …"}
+            title={"frames.#{row.frame}.axes[#{side.index}]: ticks, format, unit …"}
             phx-click="select_node"
-            phx-value-node={"frames.main.axes[#{side.index}]"}
+            phx-value-node={"frames.#{row.frame}.axes[#{side.index}]"}
             phx-target={@target}
           >{side.word} axis …</button>
         </div>
@@ -75,7 +78,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     For each position scale named, the sides an axis of it can stand on — *bottom* and
     *top* for `x`, *left* and *right* for `y`, one nominal side, *shown*, for a polar
     `angle` (`bottom`) or `r` (`top`) — each with the index of the axis standing there in
-    `frame.axes`, the first axis of the scale and whether it draws the grid.
+    `frame.axes`, the first axis of the scale and whether it draws the grid. The axes are
+    those of `frame` — the mark's or the scale's own (#615) — and of the design's frame
+    when none is given.
 
         iex> design = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]}}}
         iex> [x, y] = Visualize.Chart.Builder.Axes.rows(design, [:x, :y])
@@ -85,11 +90,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> {r.first, r.sides}
         {nil, [%{side: :top, word: "shown", index: nil}]}
     """
-    @spec rows(map(), [atom()]) :: [row()]
-    def rows(design, scales) do
+    @spec rows(map(), [atom()], atom() | nil) :: [row()]
+    def rows(design, scales, frame \\ nil) do
+      frame = frame || Fragment.frame_of(design, nil)
+
       axes =
         design
-        |> get_in(Fragment.frame_path(design) ++ [:axes])
+        |> get_in([:frames, frame, :axes])
         |> List.wrap()
         |> Enum.with_index()
 
@@ -107,6 +114,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         %{
           scale: scale,
+          frame: frame,
           sides: sides,
           first: first,
           grid: Enum.any?(mine, fn {axis, _} -> Map.get(axis, :grid, false) == true end)
