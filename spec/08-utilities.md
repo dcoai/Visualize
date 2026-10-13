@@ -704,6 +704,16 @@ The faults of `new/1`:
 
 `Visualize.Data.Schema.fetch/2` reads a field's description by either spelling of its name (6.2), `{:ok, description}` or `:error`; `Visualize.Data.Schema.fetch/3` reads one attribute of it, `{:ok, value}` or `:error` when the field or the attribute is absent.
 
+**Compatibility** (#605, D-159). Two schemas can describe the same data in different words: a process's live feed and a store's history of one metric spell their fields differently (`:t` and `"t"`), label them from different sources, and the store knows facts the process does not (`polarity`, `bounds`, `metric_kind`). Their versions differ, yet the rows of one can be read as rows of the other. `Visualize.Data.Schema.compatibility(schema, other)` says whether they can: `:ok`, or `{:error, faults}` with every fault, each `{field, reason}`, `field` spelt as `schema` spells it, ordered by the field's name as a string. The rule is **per field of `schema`**; `other`'s extra fields are not faults:
+
+| Reason | Meaning |
+|---|---|
+| `:missing` | `other` has no field of that name, compared as strings (`:t` ≡ `"t"`, 6.2) |
+| `{:type, a, b}` | `other`'s field is of type `b`, where `schema`'s is `a` |
+| `{:unit, a, b}` | a `:number` field whose units cannot be converted: `other`'s unit `b` to `schema`'s `a` by `Visualize.Unit.conversion/2` (spec/05 §4.1) — a different dimension, a different currency, or one unit absent (`nil`) facing a present one, whose dimension is unknown. Two absent units are compatible |
+
+No other attribute is compared: a label, a quantity a unit already implies, a fact such as `polarity`, `bounds` or `order` is what each feed knows, and reading `other`'s rows as `schema`'s keeps `schema`'s. Compatibility is not symmetric: `other` may have fields `schema` lacks. `Visualize.Feed.Combine` (§11.5) uses it, and a connector can ask it before combining.
+
 ### 10.2 The version: a content hash
 
 A schema's version is a **content hash** of its fields and their descriptions, so an unchanged schema has the same version wherever and whenever it is computed — on another node, under another release of this library or of OTP — and any change of content, a renamed state or a new label, is a new version. It is a 64-character lowercase hexadecimal string, the SHA-256 of a canonical encoding:
@@ -757,6 +767,7 @@ A delivery is data like a design: a struct with no function in it, which a codec
 | `Visualize.Data.Schema.fetch/2` | A field's description by either spelling of its name, `{:ok, description}` or `:error`. |
 | `Visualize.Data.Schema.fetch/3` | One attribute of a field's description, `{:ok, value}` or `:error`. |
 | `Visualize.Data.Schema.attributes/0` | The twelve description keys, `:type` first (10.1). |
+| `Visualize.Data.Schema.compatibility/2` | `:ok` when another schema's rows read as this one's, else `{:error, [{field, reason}]}`: `:missing`, `{:type, a, b}`, `{:unit, a, b}` (10.1). |
 | `Visualize.Data.Schema.format_error/1` | One fault of `new/1` as a line a person reads. |
 | `Visualize.Data.Schema.Cache.new/0` | The empty cache. |
 | `Visualize.Data.Schema.Cache.new/1` | A cache holding `{feed, schema}` pairs, each under its own version. |
@@ -844,8 +855,10 @@ A push feed sends a subscriber two kinds of message, each tagged so a process th
 
 - **Routing by window.** `fetch(combine, window, budget)` asks the first feed for the window. What it served starts at its delivery's `window` `from` (else its earliest row); the part of the window before that is asked of the next feed, and so on, until the window is covered or the feeds run out. A `nil` window asks the first feed for whatever it holds and each next feed for everything before what the last one served.
 - **The seam.** Each feed's rows are trimmed to the half-open window it was asked for, `[from, served)`, so a row at the seam comes from the fresher feed only. The rows are concatenated oldest first; the delivery's `window` runs from the earliest served to the first feed's end, `capped` when the last feed asked could not reach the window's `from`.
-- **One schema.** A delivery names one version, so every feed of a combination must describe the **same** schema (one content hash, §10.2); `describe/1` answers `{:error, {:combine_schema, versions}}` otherwise, and `{:error, :combine_window_field}` for a schema with no window field (§11.2), which routing needs. Routing works over a `:number` window field as over a `:time` one: two feeds over ticks combine as two over instants do (D-154). A connector whose stores describe the same data differently gives one the other's schema; making two catalogs agree is its job, not a guess here.
-- **Capabilities.** A combination honours `:window` (it trims every part) and pushes when its first feed does: `subscribe/2` subscribes the first feed, whose pushes name the shared version, so they reach the monitor unchanged. It does not name `:budget`; the budget is passed to every part as a request, and the monitor reduces the union.
+- **The first feed's schema, whole** (#605, D-159). A delivery names one version, and the combination's is the **first** (freshest) feed's: `describe/1` answers the first feed's `{version, schema}` — its version, labels and facts, nothing merged from the later feeds — with the supports below. A merged schema would need a version of its own while the first feed's pushes, which pass straight through (below), name the first's, so the monitor would see two schemas for one slot.
+- **Compatible schemas.** Every later feed's schema must be **compatible** with the first's (§10.1: `Visualize.Data.Schema.compatibility/2`): for each field of the first schema, a field of the same name compared as strings, of the same type, and for a `:number` field a unit that converts into the first's. Their versions may differ, as a process's live feed and a store's history of one metric always do. **The window field must be the same field too**: routing asks each later feed for a window over its own window field (§11.2, `Visualize.Feed.window_field/1`), so a later feed whose window field, compared as a string, is not the first's would be fetched over the wrong field. That is a rule of the combination, not of `compatibility/2`, which stays field by field. Otherwise `describe/1` answers `{:error, {:combine_schema, faults}}` listing **every** incompatibility of every later feed, each `{position, field, reason}`: `position` the later feed's index in the list (the first feed is `0`), `field` spelt as the first schema spells it, and `reason` `:missing`, `{:type, a, b}` or `{:unit, a, b}` (§10.1), or `{:window, first, later}` at the first's window field when the later feed's window field `later` is not the first's `first` (`nil` when it has none), ordered by position and then field. A schema with no window field (§11.2), which routing needs, is `{:error, :combine_window_field}`; a feed that cannot describe gives the first such error. Routing works over a `:number` window field as over a `:time` one: two feeds over ticks combine as two over instants do (D-154).
+- **Rows in the first's words.** Before routing and the seam trim, each row of a later feed whose version differs from the first's is read as the first schema's: a column the later schema describes under a name the first has is re-keyed to the first's spelling, and its number, when the two units differ, converted exactly into the first's unit through `Visualize.Unit.convert/3` (`nil` and non-numbers pass as they are); a column the later schema describes and the first does not is dropped; a column neither schema describes is left as it is. When the window field is a `:number` in different units, the window asked of a later feed is converted into its unit and the `window` it served back into the first's. The first feed's rows, and the rows of a later feed of the first's own version, are never touched.
+- **Capabilities.** A combination honours `:window` (it trims every part) and pushes when its first feed does: `subscribe/2` subscribes the first feed, whose pushes name the first's version — the combination's — so they reach the monitor unchanged. It does not name `:budget`; the budget is passed to every part as a request, and the monitor reduces the union.
 
 ### 11.6 Two providers
 
@@ -900,7 +913,7 @@ A push feed sends a subscriber two kinds of message, each tagged so a process th
 | `Visualize.Feed.Monitor.cache/1` | The schema cache holding every version the deliveries name. |
 | `Visualize.Feed.Monitor.stop/1` | Every push feed unsubscribed; `:ok`. |
 | `Visualize.Feed.Combine.new/1` | One feed over several, freshest first, routed by window (11.5). |
-| `Visualize.Feed.Combine.describe/1` | The parts' shared `{version, schema, supports}`; `{:error, {:combine_schema, versions}}`, `{:error, :combine_window_field}`, or a part's own error. |
+| `Visualize.Feed.Combine.describe/1` | The first part's `{version, schema}` with the combination's supports; `{:error, {:combine_schema, [{position, field, reason}]}}` for later parts whose schemas are not compatible (11.5), `{:error, :combine_window_field}`, or a part's own error. |
 | `Visualize.Feed.Signals.new/1` | `new(signal, [])`: a signal as a feed at tick `0`. |
 | `Visualize.Feed.Signals.new/2` | A signal as a feed (11.6). |
 | `Visualize.Feed.Signals.at/2` | A ticked feed moved to a tick. |

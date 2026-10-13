@@ -82,14 +82,15 @@ defmodule Visualize.Feed.CombineTest do
   end
 
   describe "one schema" do
-    test "every part must describe the same version, and the schema needs a window field" do
+    test "a part of another version but a compatible schema combines; the schema needs a window field" do
       {live, _} = store(50..100, :live)
 
       other =
         Schema.new!(%{t: %{type: :number, window: true}, v: %{type: :number, label: "Other"}})
 
-      {history, _} = Feeds.scripted(schema: other)
-      assert {:error, {:combine_schema, [_, _]}} = Feed.describe(Combine.new([live, history]))
+      {history, _} = Feeds.scripted(schema: other, rows: rows(0..100, :history))
+      version = Schema.version(@schema)
+      assert {^version, @schema, [:window]} = Feed.describe(Combine.new([live, history]))
 
       untimed = Schema.new!(%{v: %{type: :number}})
       {a, _} = Feeds.scripted(schema: untimed)
@@ -112,6 +113,259 @@ defmodule Visualize.Feed.CombineTest do
       assert ref == Feeds.ref(agent)
       assert Feed.unsubscribe(combine, ref) == :ok
       assert Feeds.calls(agent, :unsubscribe) == 1
+    end
+  end
+
+  describe "compatible schemas (D-159)" do
+    # The proposal's pair: one metric, a panel's load time, as the in-process telemetry
+    # feed describes it and as metresis's store does (#605): atoms against strings,
+    # different labels, and facts only the store knows.
+    @telemetry Schema.new!(%{
+                 t: %{type: :time, label: "Time"},
+                 value: %{
+                   type: :number,
+                   unit: "ms",
+                   quantity: :duration,
+                   label: "Panel load time"
+                 },
+                 panel: %{type: :category}
+               })
+
+    @metresis Schema.new!(%{
+                "t" => %{type: :time},
+                "value" => %{
+                  type: :number,
+                  unit: "ms",
+                  quantity: :duration,
+                  label: "metresis.panel.load.duration.max",
+                  polarity: :lower_is_better,
+                  bounds: [0.0, nil],
+                  metric_kind: :gauge
+                },
+                "panel" => %{type: :category, label: "panel"}
+              })
+
+    @t0 ~U[2026-10-13 00:00:00Z]
+
+    defp at(s), do: DateTime.add(@t0, s, :second)
+
+    # A store holding a row per second of `seconds`, `row/1`'s, honouring `DateTime`
+    # windows over `field`.
+    defp timed(schema, seconds, field, row, supports \\ [:window]) do
+      answer = fn window, _budget ->
+        [from, to] = window || [nil, nil]
+        held = seconds |> Enum.map(row) |> Feed.Window.trim(field, [from, to])
+        {held, [window: [Feed.Window.latest(from, at(seconds.first)), to || at(seconds.last)]]}
+      end
+
+      Feeds.scripted(schema: schema, supports: supports, rows: answer)
+    end
+
+    defp telemetry(supports \\ [:window]),
+      do: timed(@telemetry, 60..120, :t, &%{t: at(&1), value: &1 * 1.0, panel: "a"}, supports)
+
+    defp history(schema, row), do: timed(schema, 0..120, "t", row)
+
+    test "the telemetry and metresis pair combines, every row in the first's names" do
+      {live, _} = telemetry()
+      {history, _} = history(@metresis, &%{"t" => at(&1), "value" => &1 * 1.0, "panel" => "a"})
+      combine = Combine.new([live, history])
+
+      version = Schema.version(@telemetry)
+      assert {^version, @telemetry, [:window]} = Feed.describe(combine)
+
+      {:ok, delivery} = Feed.fetch(combine, [at(0), at(120)], nil)
+      assert delivery.schema == version
+      assert delivery.window == [at(0), at(120)]
+      assert Enum.map(delivery.rows, & &1.t) == Enum.map(0..120, &at/1)
+
+      assert Enum.map(delivery.rows, &Map.drop(&1, [:t])) ==
+               Enum.map(0..120, &%{value: &1 * 1.0, panel: "a"})
+    end
+
+    test "a history in s behind live data in ms is converted exactly; the first's rows are untouched" do
+      {live, _} = telemetry()
+
+      seconds =
+        Schema.new!(%{
+          "t" => %{type: :time},
+          "value" => %{type: :number, unit: "s"},
+          "panel" => %{type: :category}
+        })
+
+      {history, _} = history(seconds, &%{"t" => at(&1), "value" => &1 / 1000, "panel" => "a"})
+      {:ok, delivery} = Feed.fetch(Combine.new([live, history]), [at(0), at(120)], nil)
+
+      assert Enum.map(delivery.rows, & &1.value) ==
+               Enum.map(0..59, &Visualize.Unit.convert(&1 / 1000, "s", "ms")) ++
+                 Enum.map(60..120, &(&1 * 1.0))
+
+      assert Enum.at(delivery.rows, 59).value == 59.0
+    end
+
+    test "a later feed's extra fields are dropped; a column no schema describes is left" do
+      {live, _} = telemetry()
+
+      extra =
+        Schema.new!(%{
+          "t" => %{type: :time},
+          "value" => %{type: :number, unit: "ms"},
+          "panel" => %{type: :category},
+          "host" => %{type: :category}
+        })
+
+      {history, _} =
+        history(extra, fn s ->
+          %{"t" => at(s), "value" => s, "panel" => "a", "host" => "h", "from" => :history}
+        end)
+
+      {:ok, delivery} = Feed.fetch(Combine.new([live, history]), [at(0), at(120)], nil)
+      assert hd(delivery.rows) == %{"from" => :history, t: at(0), value: 0, panel: "a"}
+      assert List.last(delivery.rows) == %{t: at(120), value: 120.0, panel: "a"}
+    end
+
+    test "every incompatibility is reported with the later feed's position" do
+      {live, _} = telemetry()
+      no_panel = Schema.new!(%{"t" => %{type: :time}, "value" => %{type: :number, unit: "ms"}})
+
+      typed =
+        Schema.new!(%{t: %{type: :time}, value: %{type: :category}, panel: %{type: :category}})
+
+      bytes =
+        Schema.new!(%{
+          t: %{type: :time},
+          value: %{type: :number, unit: "By"},
+          panel: %{type: :text}
+        })
+
+      [missing, type, dimension] =
+        for schema <- [no_panel, typed, bytes], do: elem(Feeds.scripted(schema: schema), 0)
+
+      assert Feed.describe(Combine.new([live, missing, type, dimension])) ==
+               {:error,
+                {:combine_schema,
+                 [
+                   {1, :panel, :missing},
+                   {2, :value, {:type, :number, :category}},
+                   {3, :panel, {:type, :category, :text}},
+                   {3, :value, {:unit, "ms", "By"}}
+                 ]}}
+
+      assert Feed.fetch(Combine.new([live, missing]), [at(0), nil], nil) ==
+               {:error, {:combine_schema, [{1, :panel, :missing}]}}
+    end
+
+    test "a later feed windowing over another field is refused, since routing asks it over its own" do
+      {live, _} = store(50..100, :live)
+      other = Schema.new!(%{"t" => %{type: :number}, "v" => %{type: :number, window: true}})
+      {history, _} = Feeds.scripted(schema: other, rows: rows(0..100, :history))
+
+      assert Feed.describe(Combine.new([live, history])) ==
+               {:error, {:combine_schema, [{1, :t, {:window, :t, "v"}}]}}
+
+      assert Feed.fetch(Combine.new([live, history]), [0, 100], nil) ==
+               {:error, {:combine_schema, [{1, :t, {:window, :t, "v"}}]}}
+    end
+
+    test "a later feed with no window field is refused among its other incompatibilities" do
+      {live, _} = store(50..100, :live)
+      untimed = Schema.new!(%{"t" => %{type: :number}, "v" => %{type: :category}})
+      {history, _} = Feeds.scripted(schema: untimed)
+
+      assert Feed.describe(Combine.new([live, history])) ==
+               {:error,
+                {:combine_schema,
+                 [{1, :t, {:window, :t, nil}}, {1, :v, {:type, :number, :category}}]}}
+    end
+
+    test "a unit facing none is refused either way round, in the first's spelling; two absent units agree" do
+      unitless =
+        Schema.new!(%{
+          "t" => %{type: :time},
+          "value" => %{type: :number},
+          "panel" => %{type: :category}
+        })
+
+      {live, _} = telemetry()
+      {bare, _} = Feeds.scripted(schema: unitless)
+
+      assert Feed.describe(Combine.new([live, bare])) ==
+               {:error, {:combine_schema, [{1, :value, {:unit, "ms", nil}}]}}
+
+      assert Feed.describe(Combine.new([bare, live])) ==
+               {:error, {:combine_schema, [{1, "value", {:unit, nil, "ms"}}]}}
+
+      {also_bare, _} =
+        Feeds.scripted(
+          schema:
+            Schema.new!(%{t: %{type: :time}, value: %{type: :number}, panel: %{type: :category}})
+        )
+
+      assert {_v, ^unitless, [:window]} = Feed.describe(Combine.new([bare, also_bare]))
+    end
+
+    test "pushes pass through unchanged, under the first's version" do
+      {live, agent} = telemetry([:window, :push])
+      {history, _} = history(@metresis, &%{"t" => at(&1), "value" => &1 * 1.0, "panel" => "a"})
+      combine = Combine.new([live, history])
+
+      version = Schema.version(@telemetry)
+      assert {^version, @telemetry, [:window, :push]} = Feed.describe(combine)
+      assert {:ok, ref} = Feed.subscribe(combine, self())
+      assert ref == Feeds.ref(agent)
+      assert_received {:visualize_feed, ^ref, {:schema, ^version, @telemetry}}
+
+      assert Feed.unsubscribe(combine, ref) == :ok
+
+      # Monitored, the history's rows and the live end's pushes are one series of one
+      # version.
+      monitor = Monitor.new(%{slot: combine}, window: [at(0), nil]) |> Monitor.tick(now: 0)
+      monitor = Feeds.drain(monitor)
+      pushed = Delivery.new([%{t: at(121), value: 121.0, panel: "a"}], schema: version)
+      Feeds.push(agent, self(), pushed)
+      monitor = monitor |> Feeds.drain() |> Monitor.tick(now: 1)
+      delivery = Monitor.deliveries(monitor).slot
+
+      assert delivery.schema == version
+      assert Enum.map(delivery.rows, & &1.t) == Enum.map(0..121, &at/1)
+      assert Monitor.status(monitor).slot == :live
+      assert {:ok, @telemetry} = Schema.Cache.fetch(Monitor.cache(monitor), :slot, version)
+    end
+
+    test "a numeric window field in other units has its window converted both ways" do
+      ms = Schema.new!(%{t: %{type: :number, window: true, unit: "ms"}, v: %{type: :number}})
+
+      s =
+        Schema.new!(%{"t" => %{type: :number, window: true, unit: "s"}, "v" => %{type: :number}})
+
+      {live, _} =
+        Feeds.scripted(
+          schema: ms,
+          supports: [:window],
+          rows: fn [from, _to], _budget ->
+            held = for t <- 50_000..100_000//1000, t >= from, do: %{t: t, v: :live}
+            {held, [window: [max(from, 50_000), 100_000]]}
+          end
+        )
+
+      {history, agent} =
+        Feeds.scripted(
+          schema: s,
+          supports: [:window],
+          rows: fn [from, to], _budget ->
+            held = for t <- 0..100, t >= from, t <= to, do: %{"t" => t, "v" => :history}
+            {held, [window: [max(from, 0), to]]}
+          end
+        )
+
+      {:ok, delivery} = Feed.fetch(Combine.new([live, history]), [10_000, 100_000], nil)
+      assert Feeds.calls(agent, :fetch) == 1
+
+      assert Enum.map(delivery.rows, & &1.t) ==
+               Enum.map(10..49, &(&1 * 1000.0)) ++ Enum.to_list(50_000..100_000//1000)
+
+      assert delivery.window == [10_000.0, 100_000]
+      refute delivery.capped
     end
   end
 

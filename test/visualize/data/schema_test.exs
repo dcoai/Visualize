@@ -352,6 +352,65 @@ defmodule Visualize.Data.SchemaTest do
     end
   end
 
+  describe "compatibility/2 (spec/08 §10.1, D-159)" do
+    @live Schema.new!(%{
+            t: %{type: :time, label: "Time"},
+            value: %{type: :number, unit: "ms", quantity: :duration, label: "Panel load time"},
+            panel: %{type: :category}
+          })
+
+    test "names compare as strings; labels, facts and extra fields are not compared" do
+      store =
+        Schema.new!(%{
+          "t" => %{type: :time},
+          "value" => %{
+            type: :number,
+            unit: "s",
+            quantity: :duration,
+            label: "metresis.panel.load.duration.max",
+            polarity: :lower_is_better,
+            bounds: [0.0, nil],
+            metric_kind: :gauge
+          },
+          "panel" => %{type: :category, label: "panel"},
+          "host" => %{type: :category}
+        })
+
+      assert Schema.compatibility(@live, store) == :ok
+      # Not symmetric: the store's extra field is missing from the live schema.
+      assert Schema.compatibility(store, @live) == {:error, [{"host", :missing}]}
+    end
+
+    test "every fault, in the first schema's spelling, ordered by name" do
+      other =
+        Schema.new!(%{"t" => %{type: :number}, "value" => %{type: :number, unit: "By"}})
+
+      assert Schema.compatibility(@live, other) ==
+               {:error,
+                [
+                  {:panel, :missing},
+                  {:t, {:type, :time, :number}},
+                  {:value, {:unit, "ms", "By"}}
+                ]}
+    end
+
+    test "units: two absent agree, one absent facing a present one and two currencies do not" do
+      bare = Schema.new!(%{v: %{type: :number}})
+      ms = Schema.new!(%{v: %{type: :number, unit: "ms"}})
+      usd = Schema.new!(%{v: %{type: :number, unit: "{iso4217:USD}"}})
+      eur = Schema.new!(%{v: %{type: :number, unit: "{iso4217:EUR}"}})
+
+      assert Schema.compatibility(bare, bare) == :ok
+      assert Schema.compatibility(ms, bare) == {:error, [{:v, {:unit, "ms", nil}}]}
+      assert Schema.compatibility(bare, ms) == {:error, [{:v, {:unit, nil, "ms"}}]}
+
+      assert Schema.compatibility(usd, eur) ==
+               {:error, [{:v, {:unit, "{iso4217:USD}", "{iso4217:EUR}"}}]}
+
+      assert Schema.compatibility(usd, usd) == :ok
+    end
+  end
+
   describe "version/1: a content hash (spec/08 §10.2)" do
     test "is pinned: a change of encoding is a deliberate, visible change" do
       # visualize.schema/1\n m1: s1:v m1: a4:type a6:number — by hand, `sha256sum` agrees.

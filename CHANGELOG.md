@@ -15,6 +15,35 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.4.2-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Breaking
+
+- **`Visualize.Feed.Combine` combines feeds whose schemas are compatible, not only equal**
+  (#605, D-159). Live data from an in-process `:telemetry` feed and its history from a
+  store can now share one slot, though their schemas spell the fields differently (`:t`
+  and `"t"`), label them differently, or carry different facts. *Affects* code that
+  matched the refusal of `Combine.describe/1` or `fetch/3`. *Before:* any two feeds of
+  different schema versions were refused with `{:error, {:combine_schema, versions}}`.
+  *After:* a later feed combines when, for each field of the first feed's schema, it has
+  a field of the same name (compared as strings), of the same type, and for a number a unit
+  that converts into the first's, and when its window field (`Visualize.Feed.window_field/1`)
+  is the first's, since each later feed is asked for a window over its own. The combination describes itself with the first feed's
+  schema, whole, and its pushes pass through as before. A later feed's rows come back in
+  the first schema's field names, its numbers converted into the first's units (a history
+  in `s` behind live data in `ms` reads in `ms`), and columns only its schema describes are
+  dropped. A refusal is `{:error, {:combine_schema, [{position, field, reason}]}}`, listing
+  every incompatibility: `position` is the later feed's index in the list, `field` is
+  spelt as the first schema spells it, and `reason` is `:missing`, `{:type, a, b}` or
+  `{:unit, a, b}`, or `{:window, first, later}` at the first's window field for a feed
+  windowing over another field (`later` is `nil` when it has none). A unit facing a field with none is refused, as are two currencies.
+  *Instead:* match the new shape. Facts only a later feed knows (`polarity`, `bounds`,
+  `metric_kind`) do not reach the combination's schema; describe them on the first feed.
+
+### Added
+
+- **`Visualize.Data.Schema.compatibility/2`** (#605, D-159) says whether one schema's rows
+  read as another's: `:ok`, or `{:error, [{field, reason}]}` with the reasons above. A
+  connector can call it before combining two feeds.
+
 ## [0.4.1] — 2026-10-13
 
 Pressure is shown in its own convention under a unit system: barometric readings in inches of
