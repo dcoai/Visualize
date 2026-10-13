@@ -102,7 +102,6 @@ Tags, attributes and text are rendered by the functions of `Visualize.SVG.Render
 | `:text_anchor` | `:start`, `:middle`, `:end` | `"start"`, `"middle"`, `"end"` |
 | `:stroke_linecap`, `:stroke_linejoin` | any atom | `Atom.to_string/1` |
 | `:dominant_baseline` | any atom | `Atom.to_string/1` |
-
 | `:blend` | any atom | dropped for `:normal`; else `style="mix-blend-mode: <word>"` — an inline `style` attribute, since `mix-blend-mode` is a CSS property and not a presentation attribute every browser honours |
 | `:effect` with `:effect_radius` | `:shadow`, `:blur` | `filter="url(#vis-effect-<effect>-<radius>)"`, the radius `3` when absent; `:none` and `:effect_radius` alone are dropped |
 

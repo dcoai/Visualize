@@ -450,19 +450,36 @@ A code that does not read is `{:error, reason}` of `parse/1`. `Visualize.Unit.co
 
 **`Telemetry.Metrics` units.** `Visualize.Unit.from_telemetry/1` maps the unit atom a `Telemetry.Metrics` definition carries — or the `to` of its `{from, to}` conversion — to a code. visualize does not depend on `telemetry_metrics`; this is a table of atoms:
 
-| Atom | Code | Atom | Code | Atom | Code |
-|---|---|---|---|---|---|
-| `:second` | `s` | `:byte` | `By` | `:percent` | `%` |
-| `:millisecond` | `ms` | `:kilobyte` | `kBy` | `:unit` | `1` |
-| `:microsecond` | `us` | `:megabyte` | `MBy` | `:hertz` | `Hz` |
-| `:nanosecond` | `ns` | `:gigabyte` | `GBy` | `:celsius` | `Cel` |
-| `:minute` | `min` | `:kibibyte` | `KiBy` | `:fahrenheit` | `[degF]` |
-| `:hour` | `h` | `:mebibyte` | `MiBy` | `:kelvin` | `K` |
-| `:day` | `d` | `:gibibyte` | `GiBy` | `:meter`, `:metre` | `m` |
-| | | `:bit` | `bit` | `:watt` | `W` |
-| | | `:kilobit` | `kbit` | `:kilowatt` | `kW` |
-| | | `:megabit` | `Mbit` | `:joule` | `J` |
-| | | | | `:pascal` | `Pa` |
+| Atom | Code |
+|---|---|
+| `:second` | `s` |
+| `:millisecond` | `ms` |
+| `:microsecond` | `us` |
+| `:nanosecond` | `ns` |
+| `:minute` | `min` |
+| `:hour` | `h` |
+| `:day` | `d` |
+| `:byte` | `By` |
+| `:kilobyte` | `kBy` |
+| `:megabyte` | `MBy` |
+| `:gigabyte` | `GBy` |
+| `:kibibyte` | `KiBy` |
+| `:mebibyte` | `MiBy` |
+| `:gibibyte` | `GiBy` |
+| `:bit` | `bit` |
+| `:kilobit` | `kbit` |
+| `:megabit` | `Mbit` |
+| `:percent` | `%` |
+| `:unit` | `1` |
+| `:hertz` | `Hz` |
+| `:celsius` | `Cel` |
+| `:fahrenheit` | `[degF]` |
+| `:kelvin` | `K` |
+| `:meter`, `:metre` | `m` |
+| `:watt` | `W` |
+| `:kilowatt` | `kW` |
+| `:joule` | `J` |
+| `:pascal` | `Pa` |
 
 It returns `{:ok, code}`, `{:error, :native}` for `:native` — a measurement in the VM's native time unit has no fixed size, and a definition converts it first (`unit: {:native, :millisecond}`) — and `{:error, {:unknown, atom}}` for any other atom, so a misspelt unit is refused rather than turned into an annotation. `:unit` is `Telemetry.Metrics`' own default, the dimensionless `1`. (`Telemetry.Metrics` converts `:kilobyte` by 1,000, which is UCUM's `kBy`.)
 
