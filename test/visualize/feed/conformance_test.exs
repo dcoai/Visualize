@@ -63,12 +63,16 @@ defmodule Visualize.Feed.ConformanceTest do
 
   defp telemetry_feed do
     server =
-      start_supervised!(
-        {Telemetry,
-         metrics: [last_value("vis_conformance.sample.value", tags: [:host])],
-         every: nil,
-         clock: fn -> @t0 end}
-      )
+      start_supervised!({Telemetry,
+       metrics: [
+         # Facts from the definition (D-160): the kit holds a fact-carrying schema too.
+         last_value("vis_conformance.sample.value",
+           tags: [:host],
+           reporter_options: [visualize: [polarity: :higher_is_better, bounds: [0, 100]]]
+         )
+       ],
+       every: nil,
+       clock: fn -> @t0 end})
 
     for v <- 1..6, do: :telemetry.execute(@event, %{value: v}, %{host: "a"})
     # A call after the events, from the process that emitted them, so they are collected.

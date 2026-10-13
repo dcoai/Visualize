@@ -5,9 +5,10 @@ defmodule Visualize.Feed.Telemetry do
 
   `start_link(metrics: definitions)` attaches one handler for the definitions' events and
   collects. A definition is read by its fields — `name`, `event_name`, `measurement`,
-  `tags`, `tag_values`, `keep`, `unit`, `description` — and its struct's name, so this
-  library takes no dependency on `telemetry_metrics`. `:telemetry` itself is optional:
-  without it the module compiles and the provider is never started.
+  `tags`, `tag_values`, `keep`, `unit`, `description`, `reporter_options` — and its
+  struct's name, so this library takes no dependency on `telemetry_metrics`.
+  `:telemetry` itself is optional: without it the module compiles and the provider is
+  never started.
 
   Each metric is a feed (`feeds/1`, `feed/2`) whose rows are `%{t: DateTime, value: v}`
   plus the metric's tags, and whose schema says so: `t` the window field, a `:time` field
@@ -16,6 +17,19 @@ defmodule Visualize.Feed.Telemetry do
   code (`Visualize.Unit.from_telemetry/1`) with the quantity it implies, each tag a
   category. A counter's value is the count so far for its tags and a sum's the running
   total; a last value's, a summary's and a distribution's the measurement.
+
+  `value` says how it was measured (D-160): its `metric_kind` is `:counter` for a counter
+  or a sum and `:gauge` for every other kind. The definition's
+  `reporter_options[:visualize]` adds what only the application knows of it — exactly
+  `polarity`, `bounds`, `target` and `metric_kind`, the last overriding the inference:
+
+      summary("http.request.duration",
+        unit: {:native, :millisecond},
+        reporter_options: [visualize: [polarity: :lower_is_better, bounds: [0, nil], target: 250]]
+      )
+
+  The schema checks them, and any other key is refused: an invalid fact stops `start_link/1`
+  with `{:telemetry_facts, metric, errors}`, the metric named as `feeds/1` keys it.
 
   The collector stamps every row on receipt with its own clock, strictly increasing, and
   keeps the newest `keep:` rows of each metric. It honours a window of `DateTime` bounds
@@ -44,6 +58,19 @@ defmodule Visualize.Feed.Telemetry do
     Telemetry.Metrics.Summary => :summary,
     Telemetry.Metrics.Distribution => :distribution
   }
+
+  # The `value` field's metric kind, by the definition's kind: a counter's and a sum's
+  # rows are running totals, every other kind's rows a measurement.
+  @metric_kinds %{
+    counter: :counter,
+    sum: :counter,
+    last_value: :gauge,
+    summary: :gauge,
+    distribution: :gauge
+  }
+
+  # The facts `reporter_options[:visualize]` may say of `value` (D-160).
+  @facts [:polarity, :bounds, :target, :metric_kind]
 
   # How long a feed's call waits for the collector before answering `{:error, :timeout}`.
   @call_timeout 5_000
@@ -181,13 +208,28 @@ defmodule Visualize.Feed.Telemetry do
     clock = opts[:clock] || fn -> System.os_time(:microsecond) end
     Process.flag(:trap_exit, true)
 
-    shared = opts[:metrics] |> Enum.map(&dotted/1) |> Enum.frequencies()
+    # Every metric is made before the handler is attached: a definition whose facts are
+    # invalid stops the collector with nothing attached.
+    case metrics(opts[:metrics]) do
+      {:ok, metrics} -> {:ok, attach(metrics, opts, clock)}
+      {:error, reason} -> {:stop, reason}
+    end
+  end
 
-    metrics =
-      opts[:metrics]
-      |> Enum.with_index()
-      |> Map.new(fn {definition, index} -> {index, metric(definition, shared)} end)
+  defp metrics(definitions) do
+    shared = definitions |> Enum.map(&dotted/1) |> Enum.frequencies()
 
+    definitions
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, %{}}, fn {definition, index}, {:ok, metrics} ->
+      case metric(definition, shared) do
+        {:ok, m} -> {:cont, {:ok, Map.put(metrics, index, m)}}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp attach(metrics, opts, clock) do
     events =
       Enum.group_by(
         Enum.sort(metrics),
@@ -206,52 +248,84 @@ defmodule Visualize.Feed.Telemetry do
     started = clock.()
     if opts[:every], do: Process.send_after(self(), :flush, opts[:every])
 
-    {:ok,
-     %{
-       id: id,
-       metrics: metrics,
-       names: Map.new(metrics, fn {index, m} -> {m.name, index} end),
-       subscribers: %{},
-       keep: opts[:keep],
-       every: opts[:every],
-       clock: clock,
-       last: started,
-       started: started
-     }}
+    %{
+      id: id,
+      metrics: metrics,
+      names: Map.new(metrics, fn {index, m} -> {m.name, index} end),
+      subscribers: %{},
+      keep: opts[:keep],
+      every: opts[:every],
+      clock: clock,
+      last: started,
+      started: started
+    }
   end
 
   defp dotted(definition), do: Enum.map_join(definition.name, ".", &to_string/1)
 
   # A metric's feed is its dotted name; two definitions of one name (a summary and a
-  # counter of `duration`) are each keyed by their kind as well.
+  # counter of `duration`) are each keyed by their kind as well. A schema the
+  # definition's facts make invalid is the metric's startup error, named.
   defp metric(%struct{} = definition, shared) do
     kind = Map.fetch!(@kinds, struct)
     dotted = dotted(definition)
     name = if shared[dotted] > 1, do: "#{dotted}:#{kind}", else: dotted
 
-    %{
-      definition: definition,
-      kind: kind,
-      name: name,
-      schema: schema(kind, dotted, definition),
-      rows: :queue.new(),
-      count: 0,
-      fresh: [],
-      totals: %{},
-      coverage: nil
-    }
+    case schema(kind, dotted, definition) do
+      {:ok, schema} ->
+        {:ok,
+         %{
+           definition: definition,
+           kind: kind,
+           name: name,
+           schema: schema,
+           rows: :queue.new(),
+           count: 0,
+           fresh: [],
+           totals: %{},
+           coverage: nil
+         }}
+
+      {:error, errors} ->
+        {:error, {:telemetry_facts, name, errors}}
+    end
   end
 
   defp schema(kind, name, definition) do
-    value =
-      %{type: :number, label: Map.get(definition, :description) || name}
-      |> Map.merge(measure_of(kind, definition.unit))
+    with {:ok, facts} <- facts(definition) do
+      value =
+        %{type: :number, label: Map.get(definition, :description) || name}
+        |> Map.merge(measure_of(kind, definition.unit))
+        |> Map.put(:metric_kind, Map.fetch!(@metric_kinds, kind))
+        |> Map.merge(facts)
 
-    tags = Map.new(definition.tags, &{&1, %{type: :category}})
+      tags = Map.new(definition.tags, &{&1, %{type: :category}})
 
-    tags
-    |> Map.merge(%{t: %{type: :time, label: "Time"}, value: value})
-    |> Schema.new!()
+      tags
+      |> Map.merge(%{t: %{type: :time, label: "Time"}, value: value})
+      |> Schema.new()
+    end
+  end
+
+  # The facts the application says of `value`, in `reporter_options[:visualize]` (a
+  # keyword list, as a reporter's options are): exactly `@facts`,
+  # any other key refused as the schema refuses a key it does not know. Their values are
+  # the schema's to check.
+  defp facts(definition) do
+    facts =
+      (Map.get(definition, :reporter_options) || [])
+      |> Keyword.get(:visualize, [])
+
+    if Keyword.keyword?(facts),
+      do: known(Map.new(facts)),
+      else: {:error, [{[:value], {:type, :description}}]}
+  end
+
+  defp known(facts) do
+    case facts |> Map.keys() |> Enum.reject(&(&1 in @facts)) |> Enum.sort() do
+      [] -> {:ok, facts}
+      unknown -> {:error, Enum.map(unknown, &{[:value, &1], :unknown_key})}
+    end
   end
 
   # A counter counts events, whatever unit its definition gives; a unit the mapping

@@ -43,6 +43,30 @@ release it merely follows.
 - **`Visualize.Data.Schema.compatibility/2`** (#605, D-159) says whether one schema's rows
   read as another's: `:ok`, or `{:error, [{field, reason}]}` with the reasons above. A
   connector can call it before combining two feeds.
+- **A `Telemetry.Metrics` definition can carry the facts of its feed's `value`** (#608,
+  D-160). `Visualize.Feed.Telemetry` reads `reporter_options[:visualize]`, which takes
+  exactly `polarity`, `bounds`, `target` and `metric_kind`:
+  `summary("panel.load.duration", unit: {:native, :millisecond}, reporter_options:
+  [visualize: [polarity: :lower_is_better, bounds: [0, nil], target: 250]])` gives a
+  schema whose `value` says so. Put a store's facts there and a `Feed.Combine` of the live
+  feed in front of the store's history shows them, since the combination describes itself
+  with its first feed's schema. Any other key (`label`, `unit`, a typo) or an invalid value
+  (`polarity: :up`) stops the collector at startup: `start_link/1` answers
+  `{:error, {:telemetry_facts, metric, errors}}`, `metric` named as `feeds/1` keys it and
+  `errors` the schema's `{path, reason}` faults (an unknown key is
+  `{[:value, key], :unknown_key}`). The label is still the definition's `description`,
+  and the unit its `unit`.
+
+### Changed
+
+- **Every `Visualize.Feed.Telemetry` schema now says its `value`'s `metric_kind`, so every
+  such schema has a new version** (#608, D-160). *Affects* code that pinned or stored a
+  Telemetry feed's schema version, and code that matched its `value` description exactly.
+  *Before:* `value` had a `type`, a `label` and, when the unit mapped, a `unit` and a
+  `quantity`. *After:* it also has `metric_kind`, inferred from the definition: `:counter`
+  for a `counter` or a `sum` (its rows are running totals), `:gauge` for a `last_value`, a
+  `summary` or a `distribution`; `reporter_options[:visualize][:metric_kind]` overrides it.
+  *Instead:* read the version from `Visualize.Feed.describe/1` rather than storing it.
 
 ## [0.4.1] — 2026-10-13
 
