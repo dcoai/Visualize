@@ -20,6 +20,8 @@ defmodule Visualize.Data.Schema do
   schema has the same version on every node and under every release, and any change of
   content is a new version. A `Visualize.Data.Delivery` names the version its rows were
   produced under; `Visualize.Data.Schema.Cache` holds schemas by `{feed, version}`.
+  Schemas of different versions may still describe the same data in different words,
+  and `compatibility/2` says when one's rows read as the other's (D-159).
 
   ## Examples
 
@@ -172,6 +174,61 @@ defmodule Visualize.Data.Schema do
   def fetch(%__MODULE__{} = schema, name, key) when is_atom(key) do
     with {:ok, description} <- fetch(schema, name), do: Map.fetch(description, key)
   end
+
+  @typedoc "Why a field of one schema cannot read another's rows (spec/08 §10.1, D-159)."
+  @type incompatibility :: :missing | {:type, atom(), atom()} | {:unit, term(), term()}
+
+  @doc """
+  Whether `other`'s rows read as `schema`'s (spec/08 §10.1, D-159): for each field of
+  `schema`, `other` has a field of the same name compared as strings, of the same type,
+  and for a `:number` field a unit that converts into `schema`'s — two absent units
+  agree, one absent facing a present one does not. `{:error, faults}` lists every fault,
+  `field` spelt as `schema` spells it, ordered by its name as a string. Labels and facts
+  are not compared, and `other`'s extra fields are not faults.
+
+      iex> live = Visualize.Data.Schema.new!(%{t: %{type: :time}, value: %{type: :number, unit: "ms"}})
+      iex> history = Visualize.Data.Schema.new!(%{"t" => %{type: :time}, "value" => %{type: :number, unit: "s", label: "Load"}})
+      iex> Visualize.Data.Schema.compatibility(live, history)
+      :ok
+      iex> bytes = Visualize.Data.Schema.new!(%{"value" => %{type: :number, unit: "By"}})
+      iex> Visualize.Data.Schema.compatibility(live, bytes)
+      {:error, [{:t, :missing}, {:value, {:unit, "ms", "By"}}]}
+  """
+  @spec compatibility(t(), t()) :: :ok | {:error, [{name(), incompatibility()}, ...]}
+  def compatibility(%__MODULE__{fields: fields}, %__MODULE__{} = other) do
+    faults =
+      fields
+      |> Enum.sort_by(fn {name, _description} -> to_string(name) end)
+      |> Enum.flat_map(fn {name, description} ->
+        case fetch(other, name) do
+          {:ok, theirs} -> compatible(name, description, theirs)
+          :error -> [{name, :missing}]
+        end
+      end)
+
+    if faults == [], do: :ok, else: {:error, faults}
+  end
+
+  defp compatible(name, %{type: ours}, %{type: theirs}) when ours != theirs,
+    do: [{name, {:type, ours, theirs}}]
+
+  defp compatible(name, %{type: :number} = ours, theirs) do
+    case {Map.get(ours, :unit), Map.get(theirs, :unit)} do
+      {same, same} ->
+        []
+
+      {to, from} when to == nil or from == nil ->
+        [{name, {:unit, to, from}}]
+
+      {to, from} ->
+        case Unit.conversion(from, to) do
+          {:ok, _conversion} -> []
+          {:error, _reason} -> [{name, {:unit, to, from}}]
+        end
+    end
+  end
+
+  defp compatible(_name, _ours, _theirs), do: []
 
   # The key of `fields` spelled as `name` is in the other spelling; never creates an atom.
   defp other_spelling(_fields, name) when is_atom(name), do: Atom.to_string(name)
