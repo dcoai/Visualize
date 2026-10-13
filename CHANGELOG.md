@@ -12,8 +12,8 @@ All notable changes to Visualize are recorded here, following
 
 ## [0.4.1] — 2026-10-13
 
-`mix.exs` reads `0.4.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
-release it merely follows.
+Pressure is shown in its own convention under a unit system: barometric readings in inches of
+mercury for US viewers, blood pressure in mm[Hg] everywhere.
 
 ### Changed
 
