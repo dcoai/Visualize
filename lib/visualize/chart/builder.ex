@@ -227,6 +227,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          context: :inspect,
          library_open: true,
          context_width: 400,
+         graph_size: nil,
          collapsed: MapSet.new(),
          guessed: MapSet.new(),
          expanded_layers: MapSet.new(),
@@ -553,6 +554,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 selected={@entry.label}
                 steps={@steps}
                 target={@myself}
+                size={@graph_size}
+                box={@id <> "-box"}
               />
               <ThemeSheet.sheet
                 :if={@theme_mode}

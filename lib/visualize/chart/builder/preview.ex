@@ -27,8 +27,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Board.State
     alias Visualize.Chart
-    alias Visualize.Chart.{Template, Validator}
+    alias Visualize.Chart.{Frame, Template, Validator}
     alias Visualize.Data.{Delivery, Table}
+    alias Visualize.IR.Path
 
     # The fault panel's box: the cell-state drawing is responsive, so this is its aspect.
     @fault_size {600, 160}
@@ -58,6 +59,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:target, :any, default: nil, doc: "the `phx-target` of a step's button")
 
+    attr(:size, :any,
+      default: nil,
+      doc:
+        "the `{width, height}` the design is drawn at — the graph's measured box — or `nil` for the render's default (spec/14 §18.4)"
+    )
+
+    attr(:box, :string,
+      default: nil,
+      doc:
+        "the id of the box the chart sits in, which hosts `ResizeHook` and reports `graph_size` to `target`; `nil` draws the chart bare (spec/14 §18.4)"
+    )
+
     @doc """
     Renders the preview pane (spec/10 §15.3).
 
@@ -77,16 +90,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <ul :if={@errors != []} class="vis-builder-errors">
           <li :for={line <- @errors} class="vis-builder-error">{line}</li>
         </ul>
-        <svg
-          :if={@chart}
-          class="vis-builder-chart"
-          width={@width}
-          height={@height}
-          role="img"
-          viewBox={"0 0 #{@width} #{@height}"}
-          data-builder-selected={@selected}
-          data-builder-frame={"#{@width} #{@height} #{@margin.top} #{@margin.right} #{@margin.bottom} #{@margin.left}"}
-        >{@chart}</svg>
+        <div
+          :if={@chart && @box}
+          id={@box}
+          class="vis-builder-box"
+          phx-hook="ResizeHook"
+          data-resize-event="graph_size"
+          data-resize-target={@target}
+        >
+          <.chart chart={@chart} width={@width} height={@height} selected={@selected} frames={@frames} />
+        </div>
+        <.chart :if={@chart && !@box} chart={@chart} width={@width} height={@height} selected={@selected} frames={@frames} />
         <ol :if={@steps != []} class="vis-builder-steps">
           <li :for={{step, i} <- Enum.with_index(@steps, 1)} class="vis-builder-step">
             <button
@@ -99,6 +113,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </li>
         </ol>
       </div>
+      """
+    end
+
+    attr(:chart, :any, required: true)
+    attr(:width, :any, required: true)
+    attr(:height, :any, required: true)
+    attr(:selected, :string, required: true)
+    attr(:frames, :string, required: true)
+
+    # The chart's `<svg>` shell, at the size it was drawn at; `data-builder-frames` is every
+    # frame's pixel box and margins in drawing order, which the graph's hook reads a point
+    # against (spec/10 §16.2).
+    defp chart(assigns) do
+      ~H"""
+      <svg
+        class="vis-builder-chart"
+        width={@width}
+        height={@height}
+        role="img"
+        viewBox={"0 0 #{@width} #{@height}"}
+        data-builder-selected={@selected}
+        data-builder-frames={@frames}
+      >{@chart}</svg>
       """
     end
 
@@ -138,16 +175,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    defp applied(%{design: design, sources: sources, vars: vars, theme: theme}) do
-      case Chart.apply(design, sources: sources, vars: vars, theme: theme) do
-        {:ok, %{frames: %{main: %{size: size, margin: margin}}} = applied} ->
+    # Every frame of the design is drawn, whatever it is called, at the size the graph was
+    # measured at (spec/14 §18.4, #386).
+    defp applied(%{design: design, sources: sources, vars: vars, theme: theme} = assigns) do
+      {width, height} = size = assigns[:size] || Frame.default_size()
+
+      case Chart.apply(design, sources: sources, vars: vars, theme: theme, size: size) do
+        {:ok, %{frames: frames} = applied} ->
           %{
             chart: Phoenix.HTML.raw(Chart.render(applied, paths: true)),
             fault: nil,
             errors: [],
-            width: size.width,
-            height: size.height,
-            margin: margin
+            width: width,
+            height: height,
+            frames: frames_attribute(frames)
           }
 
         {:error, errors} ->
@@ -157,10 +198,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
             errors: Enum.map(errors, &Validator.format/1),
             width: 0,
             height: 0,
-            margin: %{top: 0, right: 0, bottom: 0, left: 0}
+            frames: ""
           }
       end
     end
+
+    @doc false
+    # Every realised frame as `name x y w h top right bottom left` in pixels, frames joined
+    # by `;`, in drawing order — `z`, then name, the last on top (spec/14 §4.7, spec/10
+    # §16.2).
+    @spec frames_attribute(%{atom() => Frame.t()}) :: String.t()
+    def frames_attribute(frames) do
+      frames
+      |> Map.values()
+      |> Enum.sort_by(&{&1.z, to_string(&1.name)})
+      |> Enum.map_join(";", fn %Frame{box: [x, y, w, h], size: size, margin: m} = frame ->
+        Enum.map_join(
+          [
+            frame.name,
+            x * size.width,
+            y * size.height,
+            w * size.width,
+            h * size.height,
+            m.top,
+            m.right,
+            m.bottom,
+            m.left
+          ],
+          " ",
+          &word/1
+        )
+      end)
+    end
+
+    defp word(name) when is_atom(name), do: Atom.to_string(name)
+    defp word(n) when is_number(n), do: Path.format_number(n)
 
     # A binding the type check refuses, never applied: the cell-state panel and every
     # fault beneath it (spec/14 §18.4, D-153).
@@ -173,7 +245,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         errors: Enum.map(errors, &Validator.format/1),
         width: 0,
         height: 0,
-        margin: %{top: 0, right: 0, bottom: 0, left: 0}
+        frames: ""
       }
     end
 

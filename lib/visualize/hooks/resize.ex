@@ -27,6 +27,9 @@ defmodule Visualize.Hooks.Resize do
   - `data-resize-event` - event name to push (default: "resize")
   - `data-resize-debounce` - milliseconds the size must hold before it is pushed
     (default: 150)
+  - `data-resize-target` - the `phx-target` the event is pushed to with `pushEventTo`, so
+    a LiveComponent can host the hook, as the chart builder's graph does (spec/14 §18.4);
+    absent, the event goes to the LiveView
   """
 
   @doc """
@@ -37,6 +40,9 @@ defmodule Visualize.Hooks.Resize do
     export const ResizeHook = {
       mounted() {
         this.eventName = this.el.dataset.resizeEvent || 'resize';
+        // A component hosts the hook by naming itself: the push then reaches it and not the
+        // LiveView (spec/10 §10.2), as BuilderHook's data-builder-target does.
+        this.target = this.el.dataset.resizeTarget || null;
         this.debounce = parseInt(this.el.dataset.resizeDebounce, 10) || 150;
         this.pending = null;
         this.timer = null;
@@ -47,7 +53,7 @@ defmodule Visualize.Hooks.Resize do
         // with the last size (spec/14 §21.6): the page that sizes the chart compiles it.
         this.motion = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
           ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-        this.onMotion = () => { if (this.last) this.pushEvent(this.eventName, this.payload(this.last)); };
+        this.onMotion = () => { if (this.last) this.push(this.payload(this.last)); };
         if (this.motion) this.motion.addEventListener('change', this.onMotion);
 
         if (typeof ResizeObserver === 'undefined') return;
@@ -72,7 +78,12 @@ defmodule Visualize.Hooks.Resize do
           return;
         }
         this.last = size;
-        this.pushEvent(this.eventName, this.payload(size));
+        this.push(this.payload(size));
+      },
+
+      push(payload) {
+        if (this.target) this.pushEventTo(this.target, this.eventName, payload);
+        else this.pushEvent(this.eventName, payload);
       },
 
       payload(size) {

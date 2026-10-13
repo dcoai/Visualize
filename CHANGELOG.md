@@ -31,6 +31,29 @@ release it merely follows.
   The page puts the window in its URL and applies it with `Visualize.Board.Server.window/2`
   (or `brush/2`, to keep the board's debounce of rapid re-brushes). The default, `:server`,
   behaves as before.
+- **The builder draws a chart at the size of its graph** (#613, D-162). The graph measures
+  itself and the preview applies the design with `size:` at that measurement, so a person
+  sees the chart as a container of that size would show it; resizing the window redraws it
+  with the same fractions. A drop on the graph is read in the frame under the pointer, at
+  that frame's own margins.
+- **`ResizeHook` takes `data-resize-target`**, the `phx-target` it pushes to with
+  `pushEventTo`, so a LiveComponent can host it. Without it the hook pushes to the
+  LiveView, as before.
+- **`Visualize.Chart.Frame.box_of/3`**: a frame node's box as fractions of the render's
+  size, its `cell` resolved over the design's `layout` — the reading `Frame.new/2` makes,
+  for a tool that needs to know where a frame is drawn without realising it.
+
+### Fixed
+
+- **The builder no longer crashes on a design whose frames are not called `main`**
+  (#613). Opening a multi-frame chart — the demo's *Load* or *Context* template — raised in
+  the preview; every frame is now drawn.
+
+### Changed
+
+- **The builder's chart carries `data-builder-frames`**, every frame's pixel box and
+  margins, in place of the one frame's `data-builder-frame` (spec/10 §16.2). A host that
+  read the old attribute from the builder's markup reads the new one.
 
 ## [0.5.0] — 2026-10-13
 

@@ -124,11 +124,163 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp plain(_other), do: %{}
 
+    @typedoc "Where a frame is drawn in the graph: its pixel box, its size and its margin."
+    @type frame_geometry :: %{
+            name: atom(),
+            x: number(),
+            y: number(),
+            size: %{width: number(), height: number()},
+            margin: map()
+          }
+
+    @typedoc "A point on the graph read in the frame under it (spec/14 §18.16)."
+    @type spot :: %{
+            frame: atom(),
+            point: {number(), number()},
+            geometry: %{size: map(), margin: map()}
+          }
+
+    @doc """
+    Every frame of a design as the graph draws it at `size` (spec/14 §18.4, §18.16): its
+    name, its pixel box (`x`, `y`, `size`) and its margin, in drawing order — `z`, then
+    name, so the last is the one on top (§4.7). The box is `Visualize.Chart.Frame.box_of/3`
+    of the frame, its cell resolved over the design's layout; a frame whose placement does
+    not read yet is drawn over the whole box, as it would be with none. A design with no
+    frame is one frame named as `Visualize.Chart.Fragment.frame_name/1` names it.
+
+        iex> design = %{frames: %{history: %{box: [0, 0, 0.5, 1]}, now: %{box: [0.5, 0, 0.5, 1], margin: %{left: 10}}}}
+        iex> for f <- Visualize.Chart.Builder.Place.frames(design, {800, 400}), do: {f.name, f.x, f.size.width, f.margin.left}
+        [{:history, 0.0, 400.0, 40}, {:now, 400.0, 400.0, 10}]
+    """
+    @spec frames(map(), {number(), number()}) :: [frame_geometry()]
+    def frames(design, {width, height}) do
+      layout = if is_map(design), do: Map.get(design, :layout), else: nil
+      layout = if is_map(layout) and not is_struct(layout), do: layout, else: nil
+
+      design
+      |> frame_nodes()
+      |> Enum.sort_by(fn {name, node} -> {z(node), to_string(name)} end)
+      |> Enum.map(fn {name, node} ->
+        [x, y, w, h] =
+          if placeable?(node, layout),
+            do: Frame.box_of(node, layout, {width, height}),
+            else: [0, 0, 1, 1]
+
+        %{
+          name: name,
+          x: x * width * 1.0,
+          y: y * height * 1.0,
+          size: %{width: w * width * 1.0, height: h * height * 1.0},
+          margin: Map.merge(Schema.default(:frame, :margin), plain(Map.get(node, :margin)))
+        }
+      end)
+    end
+
+    defp frame_nodes(design) do
+      case is_map(design) && Map.get(design, :frames) do
+        frames when is_map(frames) and map_size(frames) > 0 and not is_struct(frames) ->
+          for {name, node} <- frames, do: {name, if(plain_map?(node), do: node, else: %{})}
+
+        _none ->
+          [{Fragment.frame_name(design), %{}}]
+      end
+    end
+
+    defp plain_map?(node), do: is_map(node) and not is_struct(node)
+
+    defp z(node) do
+      case Map.get(node, :z) do
+        z when is_integer(z) -> z
+        _none -> 0
+      end
+    end
+
+    # Whether a frame's placement reads, so resolving it cannot raise: a box of four
+    # numbers, or a cell (and span) of whole numbers on a layout of positive weights.
+    defp placeable?(node, layout) do
+      case {Map.get(node, :cell), Map.get(node, :box)} do
+        {nil, nil} -> true
+        {nil, [x, y, w, h]} -> Enum.all?([x, y, w, h], &is_number/1)
+        {[c, r], nil} when is_integer(c) and is_integer(r) -> span?(node) and weights?(layout)
+        _other -> false
+      end
+    end
+
+    defp span?(node) do
+      case Map.get(node, :span) do
+        nil -> true
+        [a, d] -> is_integer(a) and is_integer(d) and a > 0 and d > 0
+        _other -> false
+      end
+    end
+
+    defp weights?(nil), do: true
+
+    defp weights?(layout) do
+      Enum.all?([:columns, :rows], fn key ->
+        case Map.get(layout, key) do
+          nil -> true
+          weights when is_list(weights) -> Enum.all?(weights, &(is_number(&1) and &1 > 0))
+          _other -> false
+        end
+      end) and is_number(Map.get(layout, :gap, 0))
+    end
+
+    @doc """
+    A point on the graph, in chart coordinates, read in the frame under it (spec/14
+    §18.16): the topmost frame whose box holds the point — else the nearest — with the
+    point in that frame's own coordinates and the frame's size and margin, which `region/2`
+    classifies.
+
+        iex> design = %{frames: %{history: %{box: [0, 0, 0.5, 1]}, now: %{box: [0.5, 0, 0.5, 1]}}}
+        iex> spot = Visualize.Chart.Builder.Place.spot(design, {800, 400}, {500, 390})
+        iex> {spot.frame, spot.point, Visualize.Chart.Builder.Place.region(spot.point, spot.geometry)}
+        {:now, {100.0, 390.0}, :bottom}
+    """
+    @spec spot(map(), {number(), number()}, {number(), number()}) :: spot()
+    def spot(design, size, {px, py}) do
+      frames = frames(design, size)
+
+      frame =
+        frames
+        |> Enum.reverse()
+        |> Enum.find(fn f ->
+          px >= f.x and px <= f.x + f.size.width and py >= f.y and py <= f.y + f.size.height
+        end) || Enum.min_by(frames, &distance(&1, {px, py}))
+
+      %{
+        frame: frame.name,
+        point: {px - frame.x, py - frame.y},
+        geometry: %{size: frame.size, margin: frame.margin}
+      }
+    end
+
+    # How far a point lies outside a frame's box; zero inside it.
+    defp distance(f, {px, py}) do
+      dx = max(max(f.x - px, px - (f.x + f.size.width)), 0)
+      dy = max(max(f.y - py, py - (f.y + f.size.height)), 0)
+      dx * dx + dy * dy
+    end
+
+    # A point given bare is read in the design's frame at the render's default size, as
+    # the graph drew it before it measured anything.
+    defp spotted(%{point: _, geometry: _} = spot, _design), do: spot
+
+    defp spotted({_x, _y} = point, design),
+      do: %{frame: Fragment.frame_name(design), point: point, geometry: geometry(design)}
+
+    # A reading of the point against the geometry of the frame it is in.
+    defp at(point, design, read) do
+      %{point: local, geometry: geometry} = spotted(point, design)
+      read.(local, geometry)
+    end
+
     @doc """
     What a component becomes in a region of the composed design, dropped at a point:
     `{:sites, sites}` — lowest first, so an axis's scale comes before the axis — or
     `{:legend, node}` for the frame's legend, or `{:error, :no_scale}` for a legend on a
-    design with no ordinal scale.
+    design with no ordinal scale. The point is a `spot/3` — read in the frame under it —
+    or a bare point, read in the design's frame at the render's default size.
 
         iex> design = %{frames: %{main: %{scales: %{x: %{kind: :linear}}}}}
         iex> Visualize.Chart.Builder.Place.node(:axis, :bottom, design, {0, 0})
@@ -138,7 +290,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> Visualize.Chart.Builder.Place.node(:legend, :plot, design, {0, 0})
         {:error, :no_scale}
     """
-    @spec node(component(), region(), map(), {number(), number()}) ::
+    @spec node(component(), region(), map(), {number(), number()} | spot()) ::
             {:sites, [site()]} | {:legend, map()} | {:error, :no_scale}
     def node(:axis, region, design, _point) do
       {scale, side} =
@@ -165,7 +317,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           :bottom -> {:axis, :x}
           :left -> {:axis, :y}
           :right -> {:frame, :top_right}
-          :plot -> {:frame, corner(point, geometry(design))}
+          :plot -> {:frame, at(point, design, &corner/2)}
         end
 
       {:sites, [%{kind: :label, body: %{anchor: anchor, text: ["Label"]}, key: nil}]}
@@ -177,7 +329,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {:error, :no_scale}
 
         scale ->
-          position = if region == :plot, do: position(point, geometry(design)), else: region
+          position = if region == :plot, do: at(point, design, &position/2), else: region
           {:legend, %{scale: scale, position: position}}
       end
     end
@@ -290,7 +442,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     kind with no placement. An axis whose orientation changes takes the scale its new side
     reads — the one another axis on that orientation reads, else `x` or `y` — since a
     scale's range is set by its name (§4.3); a scale the design lacks is brought as a drop
-    brings it, `{:ok, body, [scale_site]}`.
+    brings it, `{:ok, body, [scale_site]}`. The point is a `spot/3` or a bare point, as
+    `node/4` reads one.
 
         iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :top, {0, 0})
         {:ok, %{scale: :x, side: :top}}
@@ -303,7 +456,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> Visualize.Chart.Builder.Place.moved(:mark, %{type: :line}, :top, {0, 0})
         :unmovable
     """
-    @spec moved(atom(), map(), region(), {number(), number()}, map()) ::
+    @spec moved(atom(), map(), region(), {number(), number()} | spot(), map()) ::
             {:ok, map()} | {:ok, map(), [site()]} | :same | :unmovable
     def moved(kind, body, region, point, design \\ %{})
 
@@ -330,13 +483,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def moved(:axis, _body, :plot, _point, _design), do: :same
 
     def moved(:legend, body, :plot, point, design),
-      do: rewritten(body, :position, position(point, geometry(design)))
+      do: rewritten(body, :position, at(point, design, &position/2))
 
     def moved(:legend, body, region, _point, _design),
       do: rewritten(body, :position, region)
 
     def moved(:label, body, :plot, point, design),
-      do: rewritten(body, :anchor, {:frame, corner(point, geometry(design))})
+      do: rewritten(body, :anchor, {:frame, at(point, design, &corner/2)})
 
     def moved(:label, body, region, _point, _design) do
       current = Map.get(body, :anchor)

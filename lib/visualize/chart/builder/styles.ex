@@ -261,6 +261,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
       overflow: auto;
     }
 
+    /* The graph is the box (spec/14 §18.4): the preview fills the graph and the box fills
+       the preview above its steps, so the box's size is the column's and never the chart's
+       — the chart is drawn at what the box measures, and an <svg> that sized its own box
+       would be measuring itself. */
+    .vis-builder .vis-builder-graph {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .vis-builder .vis-builder-graph > .vis-builder-preview {
+      flex: 1 1 auto;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .vis-builder .vis-builder-box {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .vis-builder .vis-builder-box > .vis-builder-chart {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      margin: 0;
+      border: 0;
+    }
+
     /* The graph selects (spec/14 §18.16): the innermost drawn node under the pointer is
        outlined, and the open node — marked by the hook — steadier than hover. */
     .vis-builder .vis-builder-graph [data-node] {

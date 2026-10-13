@@ -152,7 +152,7 @@ defmodule Visualize.Chart.Frame do
 
     # The frame's own pixel box is its fractions of the render's (spec/14 §4.2, #383), and
     # its plot is that less its margins: `size` stays the design's, which is the root's.
-    [_bx, _by, bw, bh] = box = box(node, chart.layout, size)
+    [_bx, _by, bw, bh] = box = box_of(node, chart.layout, size)
 
     plot = %{
       width: bw * size.width - margin.left - margin.right,
@@ -530,6 +530,23 @@ defmodule Visualize.Chart.Frame do
     mine = mine(nodes, name, chart)
     for {node, i} <- Enum.with_index(nodes), node in mine, do: i
   end
+
+  @doc """
+  A frame node's box as fractions of the render's size (spec/14 §4.2): its `box`, or the
+  share of the design's `layout` its `cell` and `span` take (§2.8). This is the one place
+  a cell resolves; `new/2` reads it, and so does a tool that must know where a frame is
+  drawn without realising it (§18.16). `size` is `{width, height}` or `%{width, height}`,
+  which the gap is taken out of. Raises `ArgumentError` for a malformed box or cell, as
+  `new/2` does.
+
+      iex> Visualize.Chart.Frame.box_of(%{box: [0.5, 0, 0.5, 1]}, nil, {600, 400})
+      [0.5, 0, 0.5, 1]
+
+      iex> Visualize.Chart.Frame.box_of(%{cell: [1, 0]}, %{columns: [3, 1]}, {600, 400})
+      [0.75, 0.0, 0.25, 1.0]
+  """
+  @spec box_of(map(), map() | nil, {number(), number()} | map()) :: [number()]
+  def box_of(node, layout, size), do: box(node, layout, size(size))
 
   # A frame's pixel box is its fractions of the render's (spec/14 §4.2).
   defp box(node, layout, size) do
