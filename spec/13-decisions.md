@@ -1550,3 +1550,24 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - A schema that named a unit visualize does not read, or a quantity outside the list, is now refused. That includes a symbol such as `"KB"` or `"°C"`. Such a schema could not draw its measure on an axis before either, since resolving the measure raised.
 - `Visualize.Feed.Signals`, `Visualize.Feed.Telemetry` and every example's schema already pass, and the tests hold them to it.
 - The seam comment at `Schema.unit/2` is gone. The unit check is one call to `Unit.parse/1`.
+
+## 158. D-158 — A unit system picks a pressure's unit within its convention
+
+**Context.** #598, found by metresis#433 while moving metresis's units onto visualize's vocabulary. D-155's unit systems show a quantity in the family its table names for the system, and `:pressure` had one table: `Pa`, `kPa`, `MPa` for `:metric` and `[psi]` for `:us` and `:uk`. So a catalog's barometric `hPa` became `[psi]` for a US viewer, `mbar` became `kPa`, and a blood pressure in `mm[Hg]` became `kPa` or `[psi]`, a number no clinician reads. Pressure is one dimension read in several conventions, and a viewer's system chooses within a convention, not across them.
+
+**Decision.**
+- **Conventions are a fact of the quantity table.** A quantity holds its display families per convention, as data in `Visualize.Quantity.Facts`: each convention has its system-tagged ladders and the codes it claims, its ladders' members and any it holds without a ladder. Every quantity but `:pressure` has one convention, its former flat list, so none of them changes.
+- **`:pressure` has three** (spec/05 §4.2): **gauge** — `metric: Pa kPa MPa`, `us: [psi]`, `uk: [psi]`, also claiming `bar` — first, so that a unit of no convention keeps today's display; **barometric** — `metric: hPa`, `us: [in_i'Hg]`, `uk: hPa`, also claiming `mbar`; and **clinical** — `mm[Hg]` in every system, so no system moves it.
+- **Exact code first, then shape.** `hPa`, `Pa` and `kPa` are one shape, as are `mbar` and `bar`, so the shape that picks a family (D-138) cannot pick a convention. A unit's convention is the first that claims its exact code, else the first claiming a code of its shape (`dPa` is gauge), else the first. Then the system picks within it as before, and `:as_posted` keeps the unit's own ladder inside its convention.
+- **`bar` stays out of the metric ladder.** It is a gauge unit, but adding it would turn 300 kPa into `3 bar` for every metric viewer, which nothing here argues for. A stored `bar` is still shown in `bar` under `:as_posted`.
+
+**Rejected.**
+- Splitting pressure into a quantity per use (blood pressure, barometric pressure): they measure one dimension and convert, and a quantity per use is an enum of uses.
+- Leaving it to each host: that is the duplicate table #589 removed.
+- Extending conventions to energy (food `[Cal]` against `kW.h`) and volume now: a follow-up when a host shows a real case.
+
+**Consequences.**
+- Under `:us`, `hPa` and `mbar` are shown in `[in_i'Hg]` where they were `[psi]`; under `:metric`, `mbar` in `hPa` where it was `kPa`, and `[in_i'Hg]` in `hPa`; `mm[Hg]` keeps its unit in every system. Gauge units (`Pa`, `kPa`, `MPa`, `[psi]`) display as before.
+- Under `:as_posted`, `hPa` stays `hPa` at every magnitude; it was rescaled into `kPa` with `Pa` and `MPa`.
+- `family/2` and `family/3` of a pressure answer its convention's ladder. Every other quantity's answers are unchanged, and the tests hold them to origin's.
+- Shipping it to metresis needs a visualize patch release.
