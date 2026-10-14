@@ -142,7 +142,11 @@ defmodule Visualize.Chart.Schema.Frame do
         style_stack(),
         :style,
         default: :label
-      )
+      ),
+      # A top or bottom legend wraps to the plot's width, and a label can be cut to a
+      # count of characters, the full text kept (§4.5, D-169).
+      spec(:wrap, :boolean, :geometry, default: true),
+      spec(:max_label, :integer, :geometry, range: {1, 80, 1})
     ]
   end
 

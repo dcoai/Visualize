@@ -1310,9 +1310,11 @@ defmodule Visualize.Chart.FrameTest do
         })
       end
 
-      assert_raise ArgumentError, ~r/in the top margin, which is 4/, fn ->
+      # A top or bottom margin grows to its rows instead: one row, 12 + 8 (D-169).
+      grown =
         legend_frame(%{position: :top, inside: false}, %{top: 4, right: 20, bottom: 20, left: 20})
-      end
+
+      assert grown.margin.top == 20
 
       # Inside, the margin is no concern.
       assert %Frame{} =

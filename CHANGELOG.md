@@ -55,9 +55,24 @@ release it merely follows.
   feed declares at its last row. `Visualize.Chart.apply/2` refuses it over a feed that
   declares no identity, or over plain rows, with `{:identity_required, slot}` at the mark,
   rather than guess which rows are about one thing.
+- **A legend can cut long labels** (#630, D-169). `max_label: n` on a `:legend` node cuts
+  every entry label longer than `n` characters to `n − 1` and "…", at any position. The
+  entry keeps the full name as an SVG `<title>` and an `aria-label`, so hovering and screen
+  readers still give it, and `data-series` is unchanged.
+- **`Visualize.Chart.Frame.legend_extent/1`** returns the box a frame's legend takes,
+  `%{width:, height:}`, so a host laying out around a chart can ask rather than repeat the
+  text estimate.
 
 ### Changed
 
+- **A top or bottom legend wraps instead of spilling past the plot** (#630, D-169). Its
+  entries flow onto rows 16 apart, each centred on the plot, where before one row wider
+  than the plot was clipped at both edges. In the margin (`inside: false`), the top or
+  bottom margin grows to hold the rows, and the plot gets that much shorter, where before a
+  margin too small raised. A legend that already fitted renders exactly as before.
+  `wrap: false` keeps one row and raises `ArgumentError` when it is too wide, and a single
+  entry wider than the plot raises too, naming the width needed: give the legend a
+  `max_label`.
 - **A pick on a board reads the declared identity first.** Over a feed whose schema declares
   identity, `Visualize.Board.Server.pick/4` answers it — `{field, value}`, or a map for a
   composite identity — rather than the mark's `series` field or the first `:category`

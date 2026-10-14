@@ -1,9 +1,10 @@
 defmodule Visualize.Chart.Frame.Legend do
   @moduledoc false
   # The legend of a frame (spec/14 §4.5): one entry per tick of the realised scale, a
-  # swatch in the scale's colour beside the value's label, stacked or in a row at one of
+  # swatch in the scale's colour beside the value's label, stacked or in rows at one of
   # the eight positions inside the plot area — or, with `inside: false`, in the margin the
-  # position names (#136).
+  # position names (#136). A top or bottom legend wraps to the plot's width, and in its
+  # margin grows that margin to hold its rows (#630, D-169).
 
   alias Visualize.{Axis, Scale, Theme}
   alias Visualize.Chart.Frame
@@ -15,7 +16,7 @@ defmodule Visualize.Chart.Frame.Legend do
   @row 16
   @inset 8
   @right [:top_right, :bottom_right, :right]
-  @left [:top_left, :bottom_left, :left]
+  @horizontal [:top, :bottom]
 
   @doc false
   # The legend group, or `[]` when the frame has no legend; stamped `frames.<name>.legend` when
@@ -26,40 +27,112 @@ defmodule Visualize.Chart.Frame.Legend do
   def generate(%{legend: nil}, _mode, _paths?), do: []
 
   def generate(frame, mode, paths?) do
-    node = frame.legend
-    scale = Map.fetch!(frame.scales, node.scale)
-    style_node = Style.node(frame.styles, Map.get(node, :style, Schema.default(:legend, :style)))
-    style = Style.resolve(style_node, frame.theme, mode)
-    title = text(Map.get(node, :title, []))
-    position = Map.get(node, :position, Schema.default(:legend, :position))
-    inside? = Map.get(node, :inside, Schema.default(:legend, :inside))
-    entries = entries(scale, node, frame.theme, mode)
-    font_size = font_size(style_node, frame.theme)
-    # Outside there is room, so every position reads swatch-then-label (spec/14 §4.5).
-    right? = inside? and position in @right
-    horizontal? = position in [:top, :bottom]
-
-    rows =
-      if horizontal?,
-        do: row(entries, title, font_size, style),
-        else: stack(entries, title, right?, style)
-
-    count = length(entries) + if(title, do: 1, else: 0)
-
-    {x, y} =
-      if inside?,
-        do: origin(position, frame.plot, count, rows),
-        else: outside(position, frame.plot, count, rows, width(entries, title, font_size))
-
-    group_style = Map.take(style, [:font_family, :font_size, :opacity])
+    layout = layout(frame.legend, frame.scales, frame.plot.width, frame.styles, frame.theme, mode)
+    {x, y} = place(layout, frame.plot)
 
     [
-      Element.group(elem(rows, 0),
-        style: Map.put(group_style, :class, "legend"),
+      Element.group(layout.elements,
+        style: Map.put(layout.group_style, :class, "legend"),
         transform: Transform.translate(x, y)
       )
       |> Frame.stamp([:frames, frame.name, :legend], paths?)
     ]
+  end
+
+  @doc false
+  # The box the legend is laid out in, `%{width:, height:}` (spec/14 §4.5, D-169): the
+  # widest row and its rows for a top or bottom legend, the estimated width and its rows
+  # for a stacked one; the 8 between it and the plot is not counted.
+  @spec extent(map()) :: %{width: number(), height: number()}
+  def extent(%{legend: nil}), do: %{width: 0, height: 0}
+
+  def extent(frame),
+    do:
+      layout(frame.legend, frame.scales, frame.plot.width, frame.styles, frame.theme, :literal).extent
+
+  @doc false
+  # The margin a frame takes for its legend (spec/14 §4.5, D-169): the given one, with a top
+  # or bottom margin `inside: false` grown to the legend's rows when it is smaller. Raises
+  # `ArgumentError` for what cannot be fitted — a side margin narrower than the legend's
+  # estimated width, a row too wide for the plot with `wrap: false`, a single cell wider
+  # than the plot — naming the side and the size needed.
+  @spec fit!(map() | nil, map(), map(), map(), map(), Theme.t()) :: map()
+  def fit!(nil, _scales, margin, _plot, _styles, _theme), do: margin
+
+  def fit!(node, scales, margin, plot, styles, theme) do
+    layout = layout(node, scales, plot.width, styles, theme, :literal)
+
+    cond do
+      layout.inside? ->
+        margin
+
+      layout.position in @horizontal ->
+        needs = layout.extent.height + @inset
+
+        if Map.fetch!(margin, layout.position) < needs,
+          do: Map.put(margin, layout.position, needs),
+          else: margin
+
+      true ->
+        side = if layout.position in @right, do: :right, else: :left
+        needs = @inset + layout.extent.width
+        room = Map.fetch!(margin, side)
+
+        if room < needs do
+          raise ArgumentError,
+                "the legend at #{inspect(layout.position)} outside the plot needs #{needs} in the " <>
+                  "#{side} margin, which is #{room} (spec/14 §4.5)"
+        end
+
+        margin
+    end
+  end
+
+  # -- layout ---------------------------------------------------------------------------
+
+  # The legend laid out against the plot's width: its elements, where it sits and its
+  # extent. The one place every question about the legend's shape is answered, so the
+  # frame's margin and the drawing cannot disagree.
+  defp layout(node, scales, plot_width, styles, theme, mode) do
+    style_node = Style.node(styles, Map.get(node, :style, Schema.default(:legend, :style)))
+    style = Style.resolve(style_node, theme, mode)
+    title = text(Map.get(node, :title, []))
+    position = Map.get(node, :position, Schema.default(:legend, :position))
+    inside? = Map.get(node, :inside, Schema.default(:legend, :inside))
+    entries = entries(Map.fetch!(scales, node.scale), node, theme, mode)
+    font_size = font_size(style_node, theme)
+
+    base = %{
+      position: position,
+      inside?: inside?,
+      group_style: Map.take(style, [:font_family, :font_size, :opacity])
+    }
+
+    if position in @horizontal do
+      wrap? = Map.get(node, :wrap, Schema.default(:legend, :wrap))
+
+      {elements, rows, widest} =
+        rows(entries, title, font_size, style, plot_width, wrap?, position)
+
+      Map.merge(base, %{
+        elements: elements,
+        rows: rows,
+        width: widest,
+        extent: %{width: widest, height: (rows - 1) * @row + @swatch}
+      })
+    else
+      # Outside there is room, so every position reads swatch-then-label (spec/14 §4.5).
+      right? = inside? and position in @right
+      count = length(entries) + if(title, do: 1, else: 0)
+      width = width(entries, title, font_size)
+
+      Map.merge(base, %{
+        elements: stack(entries, title, right?, style),
+        rows: count,
+        width: width,
+        extent: %{width: width, height: if(count == 0, do: 0, else: (count - 1) * @row + @swatch)}
+      })
+    end
   end
 
   defp text(text) do
@@ -82,18 +155,36 @@ defmodule Visualize.Chart.Frame.Legend do
   # -- entries --------------------------------------------------------------------------
 
   # One entry per tick: the value, its label with the legend's prefix and unit around it
-  # (spec/14 §4.5, #135), and its swatch.
+  # (spec/14 §4.5, #135) cut to `max_label` (D-169), the full label when it was cut, and
+  # its swatch.
   defp entries(scale, node, theme, mode) do
     prefix = Map.get(node, :prefix) || ""
     unit = Map.get(node, :unit) || ""
+    max_label = Map.get(node, :max_label, Schema.default(:legend, :max_label))
 
     scale
     |> Scale.ticks(5)
     |> Enum.with_index(1)
     |> Enum.map(fn {value, i} ->
-      label = prefix <> Axis.default_label(value) <> unit
-      {value, label, swatch(Scale.apply(scale, value), i, theme, mode)}
+      {label, full} = cut(prefix <> Axis.default_label(value) <> unit, max_label)
+      {value, label, full, swatch(Scale.apply(scale, value), i, theme, mode)}
     end)
+  end
+
+  # A label longer than `max_label` characters is its first `max_label − 1` and "…"; the
+  # full text is kept for the entry's title and `aria-label` (spec/14 §4.5, D-169).
+  defp cut(label, nil), do: {label, nil}
+
+  defp cut(label, max) when is_integer(max) and max >= 1 do
+    if String.length(label) > max,
+      do: {String.slice(label, 0, max - 1) <> "…", label},
+      else: {label, nil}
+  end
+
+  defp cut(_label, max) do
+    raise ArgumentError,
+          "a legend's max_label is a count of characters of at least 1, not #{inspect(max)} " <>
+            "(spec/14 §4.5)"
   end
 
   defp swatch(colour, i, theme, mode) do
@@ -108,119 +199,167 @@ defmodule Visualize.Chart.Frame.Legend do
   defp colour?(value, theme) when is_atom(value), do: value in Theme.slots(theme)
   defp colour?(_value, _theme), do: false
 
+  # An entry's group: the swatch and the label, with the full label as its first child and
+  # its `aria-label` when `max_label` cut it (D-169).
+  defp item({value, label, full, colour}, swatch_x, label_x, anchor, fill, at) do
+    named = if full, do: [Element.title(full)], else: []
+    attrs = if full, do: Map.put(series(value), "aria-label", full), else: series(value)
+
+    Element.group(
+      named ++
+        [
+          Element.rect(swatch_x, 0, @swatch, @swatch, %{fill: colour}),
+          Element.text(label,
+            x: label_x,
+            y: @swatch / 2,
+            dy: "0.32em",
+            style: Map.put(fill, :text_anchor, anchor)
+          )
+        ],
+      style: %{class: "legend-item"},
+      attrs: attrs,
+      transform: at
+    )
+  end
+
   # -- layouts --------------------------------------------------------------------------
 
   # Entries stacked downward; the right-hand layout puts the swatch at the origin's left
-  # and the label before it, so no text width is needed. Returns `{elements, width}`.
+  # and the label before it, so no text width is needed.
   defp stack(entries, title, right?, style) do
     fill = Map.take(style, [:fill])
     offset = if title, do: @row, else: 0
 
     title_element =
       if title,
-        do: [title(title, if(right?, do: :end, else: :start), fill)],
+        do: [title(title, 0, if(right?, do: :end, else: :start), fill)],
         else: []
 
     items =
-      Enum.with_index(entries, fn {value, label, colour}, i ->
-        Element.group(
-          [
-            Element.rect(if(right?, do: -@swatch, else: 0), 0, @swatch, @swatch, %{fill: colour}),
-            Element.text(label,
-              x: if(right?, do: -@gap, else: @gap),
-              y: @swatch / 2,
-              dy: "0.32em",
-              style: Map.put(fill, :text_anchor, if(right?, do: :end, else: :start))
-            )
-          ],
-          style: %{class: "legend-item"},
-          attrs: series(value),
-          transform: Transform.translate(0, offset + i * @row)
-        )
+      Enum.with_index(entries, fn entry, i ->
+        if right?,
+          do: item(entry, -@swatch, -@gap, :end, fill, Transform.translate(0, offset + i * @row)),
+          else: item(entry, 0, @gap, :start, fill, Transform.translate(0, offset + i * @row))
       end)
 
-    {title_element ++ items, 0}
+    title_element ++ items
   end
 
-  # Entries in one row, each as wide as its swatch, gap and estimated label; the title,
-  # when given, is the first cell. Returns `{elements, total width}`.
-  defp row(entries, title, font_size, style) do
+  # The title, when given, and the entries as cells in rows no wider than the plot (D-169):
+  # each cell as wide as its estimated text (an entry's swatch and gap before it), 8 between
+  # cells, a cell that would end past the plot starting the next row 16 below. One row is
+  # placed exactly as the single row was before wrapping; several are each centred on the
+  # widest. Returns `{elements, rows, widest row's width}`.
+  defp rows(entries, title, font_size, style, plot_width, wrap?, position) do
     fill = Map.take(style, [:fill])
-    title_width = if title, do: Text.width(title, font_size) + @inset, else: 0
+    title_cell = if title, do: [{:title, title, Text.width(title, font_size)}], else: []
+    entry_cells = Enum.map(entries, &{:entry, &1, Text.width(elem(&1, 1), font_size)})
+    cells = title_cell ++ entry_cells
 
-    {items, width} =
-      Enum.reduce(entries, {[], title_width}, fn {value, label, colour}, {acc, x} ->
-        item =
-          Element.group(
-            [
-              Element.rect(0, 0, @swatch, @swatch, %{fill: colour}),
-              Element.text(label,
-                x: @gap,
-                y: @swatch / 2,
-                dy: "0.32em",
-                style: Map.put(fill, :text_anchor, :start)
-              )
-            ],
-            style: %{class: "legend-item"},
-            attrs: series(value),
-            transform: Transform.translate(x, 0)
-          )
+    rows =
+      if wrap?,
+        do: wrap(cells, plot_width, position),
+        else: unwrapped(cells, plot_width, position)
 
-        {[item | acc], x + @gap + Text.width(label, font_size) + @inset}
+    laid = Enum.map(rows, &lay/1)
+    widest = laid |> Enum.map(&elem(&1, 1)) |> Enum.max(fn -> 0 end)
+    several? = length(laid) > 1
+
+    elements =
+      laid
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {{cells, width}, i} ->
+        shift = if several?, do: (widest - width) / 2, else: 0
+
+        Enum.map(cells, fn
+          {:title, title, x} ->
+            title(title, if(several?, do: x + shift, else: x), :start, fill)
+
+          {:entry, entry, x} ->
+            at = if several?, do: {x + shift, i * @row}, else: {x, 0}
+            item(entry, 0, @gap, :start, fill, Transform.translate(elem(at, 0), elem(at, 1)))
+        end)
       end)
 
-    title_element = if title, do: [title(title, :start, fill)], else: []
-    {title_element ++ Enum.reverse(items), max(width - @inset, 0)}
+    {elements, max(length(laid), 1), widest}
   end
+
+  # Each cell's x in its row, accumulated as the single row always was (the title's width
+  # and 8, an entry's 16, label and 8), and the row's width: the last cell's end.
+  defp lay(cells) do
+    {placed, x} =
+      Enum.map_reduce(cells, 0, fn
+        {:title, title, width}, x -> {{:title, title, x}, x + (width + @inset)}
+        {:entry, entry, label_width}, x -> {{:entry, entry, x}, x + @gap + label_width + @inset}
+      end)
+
+    {placed, max(x - @inset, 0)}
+  end
+
+  # Greedy rows: a cell joins the row unless it would end past the plot; a cell wider than
+  # the plot on its own cannot be placed at all (spec/14 §4.5, D-169).
+  defp wrap(cells, plot_width, position) do
+    cells
+    |> Enum.reduce([], fn cell, rows ->
+      width = cell_width(cell)
+
+      if width > plot_width do
+        raise ArgumentError,
+              "a #{cell_name(cell)} of the legend at #{inspect(position)} needs " <>
+                "#{round_to(width)} across the #{position} on its own, and the plot is " <>
+                "#{round_to(plot_width)} wide; #{remedy(cell)} (spec/14 §4.5)"
+      end
+
+      case rows do
+        [{row, end_x} | rest] when end_x + @inset + width <= plot_width ->
+          [{[cell | row], end_x + @inset + width} | rest]
+
+        _other ->
+          [{[cell], width} | rows]
+      end
+    end)
+    |> Enum.reverse()
+    |> Enum.map(fn {row, _end_x} -> Enum.reverse(row) end)
+  end
+
+  # `wrap: false`: one row, which must fit the plot (spec/14 §4.5, D-169).
+  defp unwrapped(cells, plot_width, position) do
+    {_placed, width} = lay(cells)
+
+    if width > plot_width do
+      raise ArgumentError,
+            "the legend at #{inspect(position)} with wrap: false needs #{round_to(width)} " <>
+              "across the #{position}, and the plot is #{round_to(plot_width)} wide " <>
+              "(spec/14 §4.5)"
+    end
+
+    [cells]
+  end
+
+  # A cell's own width, without the 8 after it: the title's text, an entry's swatch, gap
+  # and label.
+  defp cell_width({:title, _title, width}), do: width
+  defp cell_width({:entry, _entry, label_width}), do: @gap + label_width
+
+  defp cell_name({:title, _title, _width}), do: "title"
+  defp cell_name({:entry, _entry, _width}), do: "single entry"
+
+  defp remedy({:title, _title, _width}), do: "a shorter title fits"
+  defp remedy({:entry, _entry, _width}), do: "a max_label cuts its labels"
+
+  defp round_to(n) when is_integer(n), do: n
+  defp round_to(n), do: Float.round(n * 1.0, 1)
 
   # An entry names what it explains, the string a series path carries (spec/14 §4.5, D-77).
   defp series(value), do: %{"data-series" => to_string(value)}
 
-  defp title(title, anchor, fill) do
+  defp title(title, x, anchor, fill) do
     Element.text(title,
-      x: 0,
+      x: x,
       y: @swatch / 2,
       dy: "0.32em",
       style: Map.merge(fill, %{font_weight: :bold, text_anchor: anchor})
     )
-  end
-
-  @doc false
-  # The fault of a legend that does not fit the margin `inside: false` puts it in (spec/14
-  # §4.5): `ArgumentError` naming the margin and the size the legend needs — its estimated
-  # width for a side margin, the swatch and the inset for a top or bottom one. `:ok` for a
-  # legend inside the plot, or one that fits.
-  @spec check!(map() | nil, map(), map(), map(), Theme.t()) :: :ok
-  def check!(nil, _scales, _margin, _styles, _theme), do: :ok
-
-  def check!(node, scales, margin, styles, theme) do
-    if Map.get(node, :inside, Schema.default(:legend, :inside)) do
-      :ok
-    else
-      position = Map.get(node, :position, Schema.default(:legend, :position))
-      style_node = Style.node(styles, Map.get(node, :style, Schema.default(:legend, :style)))
-      title = text(Map.get(node, :title, []))
-      entries = entries(Map.fetch!(scales, node.scale), node, theme, :literal)
-      width = width(entries, title, font_size(style_node, theme))
-
-      {side, needs} =
-        cond do
-          position in @right -> {:right, @inset + width}
-          position in @left -> {:left, @inset + width}
-          position == :top -> {:top, @inset + @swatch}
-          true -> {:bottom, @inset + @swatch}
-        end
-
-      room = Map.fetch!(margin, side)
-
-      if room < needs do
-        raise ArgumentError,
-              "the legend at #{inspect(position)} outside the plot needs #{needs} in the " <>
-                "#{side} margin, which is #{room} (spec/14 §4.5)"
-      end
-
-      :ok
-    end
   end
 
   # The estimated width of a stacked legend: the swatch, the gap and the longest label
@@ -232,42 +371,48 @@ defmodule Visualize.Chart.Frame.Legend do
 
   # -- position -------------------------------------------------------------------------
 
-  # In the margin the position names, 8 out from the plot's edge (spec/14 §4.5, #136).
-  defp outside(:top_left, _plot, _rows, _layout, width), do: {-@inset - width, @inset}
-  defp outside(:top_right, plot, _rows, _layout, _width), do: {plot.width + @inset, @inset}
+  defp place(%{inside?: true} = layout, plot), do: origin(layout.position, plot, layout)
+  defp place(layout, plot), do: outside(layout.position, plot, layout)
 
-  defp outside(:bottom_left, plot, rows, _layout, width),
+  # In the margin the position names, 8 out from the plot's edge (spec/14 §4.5, #136); a
+  # top legend's last row and a bottom legend's first sit there (D-169).
+  defp outside(:top_left, _plot, %{width: width}), do: {-@inset - width, @inset}
+  defp outside(:top_right, plot, _layout), do: {plot.width + @inset, @inset}
+
+  defp outside(:bottom_left, plot, %{rows: rows, width: width}),
     do: {-@inset - width, plot.height - rows * @row}
 
-  defp outside(:bottom_right, plot, rows, _layout, _width),
+  defp outside(:bottom_right, plot, %{rows: rows}),
     do: {plot.width + @inset, plot.height - rows * @row}
 
-  defp outside(:left, plot, rows, _layout, width),
+  defp outside(:left, plot, %{rows: rows, width: width}),
     do: {-@inset - width, plot.height / 2 - rows * @row / 2}
 
-  defp outside(:right, plot, rows, _layout, _width),
+  defp outside(:right, plot, %{rows: rows}),
     do: {plot.width + @inset, plot.height / 2 - rows * @row / 2}
 
-  defp outside(:top, plot, _rows, {_, width}, _w),
-    do: {plot.width / 2 - width / 2, -@inset - @swatch}
+  defp outside(:top, plot, %{rows: rows, width: width}),
+    do: {plot.width / 2 - width / 2, -@inset - @swatch - (rows - 1) * @row}
 
-  defp outside(:bottom, plot, _rows, {_, width}, _w),
+  defp outside(:bottom, plot, %{width: width}),
     do: {plot.width / 2 - width / 2, plot.height + @inset}
 
-  defp origin(:top_left, _plot, _rows, _layout), do: {@inset, @inset}
-  defp origin(:top_right, plot, _rows, _layout), do: {plot.width - @inset, @inset}
-  defp origin(:bottom_left, plot, rows, _layout), do: {@inset, plot.height - @inset - rows * @row}
+  defp origin(:top_left, _plot, _layout), do: {@inset, @inset}
+  defp origin(:top_right, plot, _layout), do: {plot.width - @inset, @inset}
 
-  defp origin(:bottom_right, plot, rows, _layout),
+  defp origin(:bottom_left, plot, %{rows: rows}),
+    do: {@inset, plot.height - @inset - rows * @row}
+
+  defp origin(:bottom_right, plot, %{rows: rows}),
     do: {plot.width - @inset, plot.height - @inset - rows * @row}
 
-  defp origin(:left, plot, rows, _layout), do: {@inset, plot.height / 2 - rows * @row / 2}
+  defp origin(:left, plot, %{rows: rows}), do: {@inset, plot.height / 2 - rows * @row / 2}
 
-  defp origin(:right, plot, rows, _layout),
+  defp origin(:right, plot, %{rows: rows}),
     do: {plot.width - @inset, plot.height / 2 - rows * @row / 2}
 
-  defp origin(:top, plot, _rows, {_, width}), do: {plot.width / 2 - width / 2, @inset}
+  defp origin(:top, plot, %{width: width}), do: {plot.width / 2 - width / 2, @inset}
 
-  defp origin(:bottom, plot, _rows, {_, width}),
-    do: {plot.width / 2 - width / 2, plot.height - @inset - @swatch}
+  defp origin(:bottom, plot, %{rows: rows, width: width}),
+    do: {plot.width / 2 - width / 2, plot.height - @inset - @swatch - (rows - 1) * @row}
 end

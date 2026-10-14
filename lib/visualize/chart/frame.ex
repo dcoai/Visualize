@@ -144,16 +144,31 @@ defmodule Visualize.Chart.Frame do
   (spec/14 §5.4.3).
 
   Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, a
-  `system:` not of `Visualize.Quantity.systems/0`, a bound value a scale cannot take, or a legend in a margin that cannot hold it (spec/14
-  §4.5).
+  `system:` not of `Visualize.Quantity.systems/0`, a bound value a scale cannot take, a legend in a side margin that cannot hold it, a top or
+  bottom legend with a row or a single entry wider than the plot, or a `max_label` below 1
+  (spec/14 §4.5). A top or bottom legend in a margin too small for its rows grows that
+  margin, and the plot is that much shorter (D-169).
   """
   @spec new(Chart.t(), keyword()) :: t()
   def new(%Chart{} = chart, opts \\ []) do
-    sources = Keyword.get(opts, :sources, %{})
     {name, node} = frame_node(chart, Keyword.get(opts, :frame))
-    kind = node.kind
     size = size(Keyword.get(opts, :size, @default_size))
     margin = margin(Map.get(node, :margin, Schema.default(:frame, :margin)))
+    frame = realise(chart, opts, name, node, size, margin)
+
+    # A legend in a margin that cannot hold it is a fault here, not a clipped drawing; a top
+    # or bottom one grows its margin instead, and the frame is realised over the smaller plot
+    # (§4.5, D-169). The rows depend on the plot's width, which that leaves alone.
+    case Legend.fit!(frame.legend, frame.scales, margin, frame.plot, frame.styles, frame.theme) do
+      ^margin -> frame
+      grown -> realise(chart, opts, name, node, size, grown)
+    end
+  end
+
+  # The frame over one margin: its plot, projection, forces, panels and scales.
+  defp realise(chart, opts, name, node, size, margin) do
+    sources = Keyword.get(opts, :sources, %{})
+    kind = node.kind
 
     # The frame's own pixel box is its fractions of the render's (spec/14 §4.2, #383), and
     # its plot is that less its margins: `size` stays the design's, which is the root's.
@@ -202,10 +217,6 @@ defmodule Visualize.Chart.Frame do
         Keyword.get(opts, :domains, %{})
       )
 
-    legend = Map.get(node, :legend)
-    # A legend in a margin that cannot hold it is a fault here, not a clipped drawing (§4.5).
-    Legend.check!(legend, scales, margin, styles, theme)
-
     %__MODULE__{
       kind: kind,
       size: size,
@@ -216,7 +227,7 @@ defmodule Visualize.Chart.Frame do
       panels: panels,
       facet: facet,
       axes: Map.get(node, :axes, []),
-      legend: legend,
+      legend: Map.get(node, :legend),
       labels: mine(chart.labels, name, chart),
       marks: marks,
       name: name,
@@ -257,6 +268,17 @@ defmodule Visualize.Chart.Frame do
       when is_atom(name) and is_struct(scale) do
     %{frame | scales: Map.put(scales, name, scale)}
   end
+
+  @doc """
+  The box the frame's legend is laid out in, `%{width: w, height: h}` in user units, not
+  counting the 8 between it and the plot (spec/14 §4.5, D-169): the widest row and
+  (rows − 1) × 16 + 12 for a top or bottom legend, the estimated width and
+  (entries − 1) × 16 + 12 for a stacked one, the title counted as an entry. A frame with
+  no legend is `%{width: 0, height: 0}`. A host laying out around a chart asks it rather
+  than repeating the text estimate.
+  """
+  @spec legend_extent(t()) :: %{width: number(), height: number()}
+  def legend_extent(%__MODULE__{} = frame), do: Legend.extent(frame)
 
   @doc "The projection of a `:geo` frame (spec/14 §4.6), `nil` for any other kind."
   @spec projection(t()) :: Projection.t() | nil
