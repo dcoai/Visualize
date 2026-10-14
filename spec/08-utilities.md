@@ -581,7 +581,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 
 ### 7.7 The style palette
 
-**Implemented** (#621, work items #636 and #637, D-171). The colours of 7.1 and 7.5 are a palette: positions promise *distinct*, roles promise a meaning, and the theme renders both. `styles` carries the same design over to **whole styles** — fill, stroke and its width, dash, opacity, symbol, font — so a design can name a whole look by position, by meaning or by view state, and a theme swap restyles it.
+**Implemented** (#621, work items #636, #637 and #644, D-171). The colours of 7.1 and 7.5 are a palette: positions promise *distinct*, roles promise a meaning, and the theme renders both. `styles` carries the same design over to **whole styles** — fill, stroke and its width, dash, opacity, symbol, font — so a design can name a whole look by position, by meaning or by view state, and a theme swap restyles it.
 
 **Four groups, and a fixed set of names.**
 
@@ -639,7 +639,7 @@ The contracts bind what an entry *means*, not every key's type; a value of the w
 
 **Precedence.** As for colours (7.5): a design's `styles` entry of a palette name wins for that design — a state style included, so a design can restyle `:selected` for its own board — then the theme's entry, then the default theme's.
 
-**Assigning one.** A design names a palette style **by name** — a style reference at a site, in a stack or under `extends` resolves against the design's `styles` and then this palette ([14-declarative-chart](14-declarative-chart.md) §3.3, #637) — or **by data**, through an `:ordinal` or `:threshold` scale whose range is styles (`{:styles, :roles}`, `{:styles, :series}`, a list or a map of style names, a feed's `status`) laid per datum by a `{:scale, name, field}` entry of a mark's stack (spec/14 §3.6, §4.3). A stored theme carries its palette (spec/14 §9.3).
+**Assigning one.** A design names a palette style **by name** — a style reference at a site, in a stack or under `extends` resolves against the design's `styles` and then this palette ([14-declarative-chart](14-declarative-chart.md) §3.3, #637) — or **by data**, through a `{:field, f}` entry of a style stack whose value, read per datum, names the style (spec/14 §3.6, #644). A scale never ranges over styles (spec/14 §4.3). A stored theme carries its palette (spec/14 §9.3).
 
 **The furniture styles are spec/14 §3.3's built-in styles.** `:axis`, `:grid`, `:label` and `:title` are read from the theme a chart is drawn with, so a host theme that changes `:title`'s weight changes every title drawn under it; a design's `styles` entry of the same name still replaces one whole.
 

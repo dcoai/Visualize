@@ -36,7 +36,7 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   # -- line and area: one path per series ------------------------------------------------
 
-  # A path per series takes a style chosen by data from the series' first datum (spec/14
+  # A path per series takes a style named by data from the series' first datum (spec/14
   # §3.6): `own` is the mark's context with that datum's style, the mark's own otherwise.
   defp line(ctx) do
     baseline = Channels.baseline(ctx)
@@ -365,7 +365,7 @@ defmodule Visualize.Chart.Mark.Shapes do
       line = Element.set_style(line, stroke_style(ctx, row.datum))
 
       %{
-        element: %{group | children: [line | label_text(text, ctx)]},
+        element: %{group | children: [line | label_text(text, ctx, row.datum)]},
         datum: row.datum,
         style: %{},
         anchor: nil
@@ -395,7 +395,7 @@ defmodule Visualize.Chart.Mark.Shapes do
       rect = Element.set_style(rect, fill_style(ctx, row.datum))
 
       %{
-        element: %{group | children: [rect | label_text(text, ctx)]},
+        element: %{group | children: [rect | label_text(text, ctx, row.datum)]},
         datum: row.datum,
         style: %{},
         anchor: nil
@@ -406,8 +406,10 @@ defmodule Visualize.Chart.Mark.Shapes do
   defp label_accessor(%{label: nil}), do: nil
   defp label_accessor(%{label: label}), do: fn row -> Label.text(label.text, row.datum) end
 
-  defp label_text([], _ctx), do: []
-  defp label_text([text], ctx), do: [Element.set_style(text, Label.style(ctx))]
+  defp label_text([], _ctx, _datum), do: []
+
+  defp label_text([text], ctx, datum),
+    do: [Element.set_style(text, Label.style(ctx, datum))]
 
   # The stroke keys of the mark's style and its paint — the series' colour with a `series`
   # channel (spec/14 §5.6, D-126) — bound to the datum, replacing the generator's
@@ -517,7 +519,7 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   # -- symbol ----------------------------------------------------------------------------
 
-  # A symbol's glyph and size are its own datum's where a style is chosen by data (§3.6).
+  # A symbol's glyph and size are its own datum's where a style is named by data (§3.6).
   defp symbol(ctx) do
     rows = ctx |> Channels.pixels() |> Channels.placed([:x, :y])
 

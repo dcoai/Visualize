@@ -82,7 +82,7 @@ defmodule Visualize.Chart.Mark.Generic do
           nil -> row |> Map.get(:value) |> to_content()
         end
 
-      element = Label.element(ctx, {row.x, row.y}, nil, content, "mark-text")
+      element = Label.element(ctx, {row.x, row.y}, %{datum: row.datum}, content, "mark-text")
       %{element: element, datum: row.datum, style: %{}, anchor: {row.x, row.y}}
     end)
   end

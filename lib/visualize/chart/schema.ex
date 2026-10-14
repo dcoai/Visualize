@@ -178,9 +178,8 @@ defmodule Visualize.Chart.Schema do
   def scale_kinds, do: Frame.scale_kinds()
 
   @doc """
-  The type a style site takes (spec/14 §3.6): a reference, an inline node, or a list of
-  either; a mark's stack also takes `{:scale, name, field}`, a style chosen by data, which
-  the validator refuses at every other site (#637).
+  The type a style site takes (spec/14 §3.6): a reference, an inline node, a field binding
+  `{:field, f}` whose value per datum names a style (#644), or a list of those.
 
   Written once because five keys share it — `mark.style`, `label.style`, `mark_label.style`,
   `axis.style` and `legend.style` — and a sixth would otherwise be a sixth copy.
@@ -191,7 +190,7 @@ defmodule Visualize.Chart.Schema do
   """
   @spec style_stack() :: type()
   def style_stack do
-    entry = [{:ref, :style}, {:node, :style}, :style_scale]
+    entry = [{:ref, :style}, {:node, :style}, :field_ref]
     {:one_of, entry ++ [{:list, {:one_of, entry}}]}
   end
 
@@ -274,10 +273,8 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:adopted, v), do: match?({:frame, _f, _s}, v)
   defp shape?(:key_order, v), do: match?({:keys, keys} when is_list(keys), v)
   defp shape?(:ramp, v), do: match?({:ramp, name} when is_atom(name), v)
-  defp shape?(:styles, v), do: match?({:styles, set} when is_atom(set), v)
-  defp shape?(:style_scale, v), do: match?({:scale, _name, _field}, v)
-  # A reference is a name or an id; a style chosen by data beside one is not it (#637).
-  defp shape?({:ref, _}, {:scale, _name, _field}), do: false
+  # A reference is a name or an id; a field binding beside one is not it (#644).
+  defp shape?({:ref, _}, {:field, _field}), do: false
   defp shape?(:colour_map, v), do: is_map(v) and not is_struct(v)
   # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
   defp shape?({:enum, _}, v), do: is_atom(v)

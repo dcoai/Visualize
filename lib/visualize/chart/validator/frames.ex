@@ -85,18 +85,16 @@ defmodule Visualize.Chart.Validator.Frames do
     end
   end
 
-  @doc false
   # A scale as the node that declares it, read through any adoption (spec/14 §4.3): `nil`
   # for none, and for a cycle, which is reported where it closes.
-  @spec declared(term(), map(), list()) :: term()
-  def declared({:frame, f, s} = ref, frames, seen) when is_map(frames) do
+  defp declared({:frame, f, s} = ref, frames, seen) when is_map(frames) do
     if ref in seen,
       do: nil,
       else: declared(nested(Map.get(frames, f), [:scales, s]), frames, [ref | seen])
   end
 
-  def declared({:frame, _f, _s}, _frames, _seen), do: nil
-  def declared(node, _frames, _seen), do: node
+  defp declared({:frame, _f, _s}, _frames, _seen), do: nil
+  defp declared(node, _frames, _seen), do: node
 
   defp nested(map, []), do: map
   defp nested(map, [k | rest]) when is_map(map) and not is_struct(map), do: nested(map[k], rest)

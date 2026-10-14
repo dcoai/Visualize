@@ -60,8 +60,8 @@ defmodule Visualize.Chart.Mark do
   as `{key, colour}`, its options, inline label and tooltip node, the render mode, and
   its series values by position when it has a `series` channel (spec/14 §5.2, D-126), the
   keys a mark with an event writes on its elements (§5.7, D-170), its one-based position
-  among the marks, and the styles a stack laying `{:scale, name, field}` chooses by data
-  (§3.6, #637), `nil` for a stack that lays none.
+  among the marks, and the styles a stack's `{:field, f}` entries name by data (§3.6,
+  #644), `nil` for a stack that names none.
   """
   @type context :: %{
           frame: Frame.t(),
@@ -81,7 +81,7 @@ defmodule Visualize.Chart.Mark do
             %{frame: atom(), mark: non_neg_integer(), ordinals: %{map() => non_neg_integer()}}
             | nil,
           index: pos_integer(),
-          scaled: %{entries: [tuple()], table: map()} | nil
+          by_data: %{entries: [{:field, atom()}], names: map(), table: map()} | nil
         }
 
   @doc "As `generate/3` with `[]` options: no source bound, an empty mark group."
@@ -336,7 +336,7 @@ defmodule Visualize.Chart.Mark do
     end
   end
 
-  # An element's own style: the series' paint, then what a style chosen by its datum
+  # An element's own style: the series' paint, then what a style named by its datum
   # changes (spec/14 §3.6), under the generator's, then the bindings read from its datum
   # (spec/14 §3.4, §5.6); and its series' `data-series` (D-126).
   defp bind(%{element: element, datum: datum, style: style} = child, ctx) do
@@ -364,7 +364,7 @@ defmodule Visualize.Chart.Mark do
 
   # The stroke style of the bound elements (spec/14 §5.6): the mark's, or — a per-series
   # key — each child's own where its stack lays a style by data (§3.6).
-  defp strokes(_children, bound, %{scaled: nil} = ctx), do: Strokes.apply(bound, ctx)
+  defp strokes(_children, bound, %{by_data: nil} = ctx), do: Strokes.apply(bound, ctx)
 
   defp strokes(children, bound, ctx) do
     children

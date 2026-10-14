@@ -28,9 +28,8 @@ defmodule Visualize.Board.Cell do
   - **The selection** (spec/15 §13.2, D-151, D-171). A cell whose rows hold the board's
     selection draws its data in the palette's view states: its rows gain a
     `:"$vis_state"` column, `:selected` where the selection is and `:muted` elsewhere,
-    every frame an `:ordinal` scale of styles of that name, and each mark with `data`
-    ends its style stack with `{:scale, :"$vis_state", :"$vis_state"}`. A cell that does
-    not hold it draws as before.
+    and each mark with `data` ends its style stack with `{:field, :"$vis_state"}`, the
+    style the column names (#644). A cell that does not hold it draws as before.
   - **A pick**, `{:pick, from, ref, series, index}`, is answered to `from` as `{ref,
     reply}`: the row behind that keyboard point, its identity, item and frame, or `:error`.
   - **A click**, `{:event, from, ref, click}`, is answered the same way (spec/15 §9.2,
@@ -47,10 +46,9 @@ defmodule Visualize.Board.Cell do
   alias Visualize.Data.{Schema, Table}
   alias Visualize.Event
 
-  # The column a selection is drawn through, and the scale of styles of the same name that
-  # reads it: a view state of the palette per row (spec/15 §13.2, D-171).
+  # The column a selection is drawn through: the name of a view state of the palette per
+  # row (spec/15 §13.2, D-171).
   @state :"$vis_state"
-  @states [:selected, :muted]
 
   @doc false
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
@@ -257,13 +255,12 @@ defmodule Visualize.Board.Cell do
     end)
   end
 
-  # The style grammar's own style by data (spec/14 §3.6, D-171): a scale of styles over the
-  # state column in every frame, laid last in each data mark's stack, the column declared on
-  # every source that declares its fields. The names resolve as any palette name does, so
-  # a design's own `selected:` or `muted:` wins over the theme's.
-  defp stated(%Chart{marks: marks, sources: sources, frames: frames} = chart) do
-    entry = {:scale, @state, @state}
-    scale = %{kind: :ordinal, domain: @states, range: @states}
+  # The style grammar's own style by data (spec/14 §3.6, D-171, #644): the state column,
+  # whose value names the style, laid last in each data mark's stack, the column declared
+  # on every source that declares its fields. The names resolve as any palette name does,
+  # so a design's own `selected:` or `muted:` wins over the theme's.
+  defp stated(%Chart{marks: marks, sources: sources} = chart) do
+    entry = {:field, @state}
 
     marks =
       Enum.map(marks, fn
@@ -277,13 +274,7 @@ defmodule Visualize.Board.Cell do
         pair -> pair
       end)
 
-    frames =
-      frames &&
-        Map.new(frames, fn {name, frame} ->
-          {name, Map.update(frame, :scales, %{@state => scale}, &Map.put(&1, @state, scale))}
-        end)
-
-    %{chart | marks: marks, sources: sources, frames: frames}
+    %{chart | marks: marks, sources: sources}
   end
 
   # The row behind a keyboard point, without the state column, its identity — the one its

@@ -163,17 +163,17 @@ defmodule Visualize.Chart.Style do
   # right, the later winning (§3.6). A bare reference is a stack of one by definition, and an
   # inline node is an entry like any other. The empty node when nothing declares it.
   #
-  # A `{:scale, name, field}` entry (§3.6) lays nothing here: it is a style per datum, and
+  # A `{:field, f}` entry (§3.6) lays nothing here: it is a style named per datum, and
   # `node/3` lays it.
   @spec node(%{atom() => map()}, entry | [entry] | nil) :: map()
-        when entry: atom() | map() | {:scale, atom(), atom()}
+        when entry: atom() | map() | {:field, atom()}
   def node(styles, stack), do: node(styles, stack, &no_style/1)
 
   @doc false
-  # `node/2` with each `{:scale, name, field}` entry laid where it stands: `pick` answers the
-  # style name the entry picks — for one datum, the mark's to read (spec/14 §3.6) — or `nil`
-  # to lay nothing.
-  @spec node(%{atom() => map()}, term(), ({:scale, atom(), atom()} -> atom() | nil)) :: map()
+  # `node/2` with each `{:field, f}` entry laid where it stands: `pick` answers the style
+  # name the entry names — for one datum, the site's to read (spec/14 §3.6) — or `nil` to
+  # lay nothing.
+  @spec node(%{atom() => map()}, term(), ({:field, atom()} -> atom() | nil)) :: map()
   def node(_styles, nil, _pick), do: %{}
   def node(_styles, %Var{name: name}, _pick), do: unresolved!(name)
 
@@ -183,7 +183,7 @@ defmodule Visualize.Chart.Style do
     end)
   end
 
-  def node(styles, {:scale, _name, _field} = entry, pick) do
+  def node(styles, {:field, _field} = entry, pick) do
     case pick.(entry) do
       nil -> %{}
       name -> flatten(styles, name, [])
@@ -197,9 +197,9 @@ defmodule Visualize.Chart.Style do
   def node(styles, name, _pick), do: flatten(styles, name, [])
 
   @doc false
-  # The `{:scale, name, field}` entries of a stack, in order (spec/14 §3.6).
-  @spec scaled(term()) :: [{:scale, atom(), atom()}]
-  def scaled(stack), do: stack |> List.wrap() |> Enum.filter(&match?({:scale, _, _}, &1))
+  # The `{:field, f}` entries of a stack, in order (spec/14 §3.6).
+  @spec by_data(term()) :: [{:field, atom()}]
+  def by_data(stack), do: stack |> List.wrap() |> Enum.filter(&match?({:field, _}, &1))
 
   defp no_style(_entry), do: nil
 

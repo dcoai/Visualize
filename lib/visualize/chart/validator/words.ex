@@ -43,27 +43,9 @@ defmodule Visualize.Chart.Validator.Words do
       ":ordinal scale has (spec/14 §4.3)"
   end
 
-  def words({:style_range, kind}) do
-    "is a range of styles on a #{inspect(kind)} scale; styles are an :ordinal or a " <>
-      ":threshold scale's range, its categories or its bands (spec/14 §4.3)"
-  end
-
-  def words({:style_colour, name}) do
-    "reads scale #{inspect(name)} as colour, and it ranges over styles: a style name that " <>
-      "is no theme slot has no colour to paint; give the colour scale colours, and lay the " <>
-      "styles through a {:scale, name, field} stack entry (spec/14 §3.6)"
-  end
-
-  def words({:style_scale, name}) do
-    "names scale #{inspect(name)}, which does not range over styles: it must be an " <>
-      ":ordinal or a :threshold scale whose range is {:styles, :roles}, {:styles, :series}, " <>
-      "a list or a map of style names, or a feed's status (spec/14 §3.6)"
-  end
-
   def words({:polarity, :range}) do
-    "orders a ramp or the roles, and this scale ranges over neither: give range: " <>
-      "{:ramp, name} or {:styles, :roles}, or leave a :sequential or :diverging scale's " <>
-      "range :auto (spec/14 §4.3)"
+    "orders a ramp, and this scale does not range over one: give range: {:ramp, name}, " <>
+      "or leave a :sequential or :diverging scale's range :auto (spec/14 §4.3)"
   end
 
   def words({:tiles, :projection, what}) do
@@ -297,8 +279,6 @@ defmodule Visualize.Chart.Validator.Words do
   end
 
   defp type_words(:ramp), do: "{:ramp, name} with name one of #{list(Theme.ramp_names())}"
-  defp type_words(:styles), do: "{:styles, :roles} or {:styles, :series}"
-  defp type_words(:style_scale), do: "{:scale, name, field}, a scale and a field name"
   defp type_words(:size), do: "a number or a theme slot"
   defp type_words(:font), do: "a font string or a theme slot"
   defp type_words(:slot), do: "a theme slot"

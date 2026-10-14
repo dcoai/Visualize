@@ -9,7 +9,6 @@ defmodule Visualize.Chart.Frame.Scales do
   alias Visualize.{Data, Scale, Theme}
   alias Visualize.Data.Table
   alias Visualize.Scale.{Band, Color, Ordinal, Power, Symlog}
-  alias Visualize.Theme.Palette
 
   @discrete [:ordinal, :band, :quantize, :quantile, :threshold]
   @continuous [:linear, :log, :power, :sqrt, :symlog, :radial, :quantize, :threshold]
@@ -350,13 +349,7 @@ defmodule Visualize.Chart.Frame.Scales do
           offset_scale(mark, family) in inferring,
           do: {offset_scale(mark, family), column(rows, field)}
 
-    # A style chosen by data names its scale as a channel does (spec/14 §3.6, #637).
-    scaled =
-      for {:scale, name, field} <- Style.scaled(Map.get(mark, :style)),
-          name in inferring,
-          do: {name, column(rows, field)}
-
-    channels ++ colours ++ offsets ++ scaled
+    channels ++ colours ++ offsets
   end
 
   defp values(%Var{name: name}, _rows), do: Style.unresolved!(name)
@@ -385,9 +378,6 @@ defmodule Visualize.Chart.Frame.Scales do
       case get(node, :range) do
         {:ramp, ramp} ->
           {domain, over_ramp(kind, name, ramp, domain, theme, worth)}
-
-        {:styles, set} ->
-          {domain, styles(kind, name, set, domain, theme, worth)}
 
         %{} = colours when not is_struct(colours) ->
           pinned(kind, name, colours, domain)
@@ -674,43 +664,6 @@ defmodule Visualize.Chart.Frame.Scales do
   end
 
   defp placed({:ramp, ramp, t}, worth), do: {:ramp, ramp, worth.(t)}
-
-  # A range of styles (spec/14 §4.3, #637): the names a style stack lays per datum, one per
-  # category of an ordinal scale or per band of a threshold one. The roles stand where
-  # `{:ramp, :status}` would put their colours, placed by polarity and banded to the nearest
-  # role; the style series follow the domain's order, cycling over the theme's.
-  defp styles(kind, name, set, domain, theme, worth) when kind in [:ordinal, :threshold] do
-    n = if kind == :threshold, do: length(domain) + 1, else: length(domain)
-    styles(set, name, n, theme, worth)
-  end
-
-  defp styles(kind, name, set, _domain, _theme, _worth) do
-    raise ArgumentError,
-          "scale #{inspect(name)} (#{kind}) cannot range over {:styles, #{inspect(set)}}: " <>
-            "styles are an :ordinal or a :threshold scale's range"
-  end
-
-  defp styles(:roles, _name, n, _theme, worth),
-    do: Enum.map(positions(n), &banded(worth.(&1)))
-
-  defp styles(:series, _name, n, theme, _worth) do
-    series = Palette.series(theme.styles || %{})
-    Enum.map(0..(n - 1)//1, &Enum.at(series, rem(&1, length(series))))
-  end
-
-  defp styles(set, name, _n, _theme, _worth) do
-    raise ArgumentError,
-          "scale #{inspect(name)}: {:styles, #{inspect(set)}} is not a range of styles; the " <>
-            "sets are :roles and :series"
-  end
-
-  defp positions(n) when n <= 1, do: [0]
-  defp positions(n), do: Enum.map(0..(n - 1)//1, &(&1 / (n - 1)))
-
-  # The status role a position stands nearest: `:good` below a quarter, `:bad` above three.
-  defp banded(t) when t < 0.25, do: :good
-  defp banded(t) when t > 0.75, do: :bad
-  defp banded(_t), do: :warning
 
   defp spread(name, ramp, n) do
     known_ramp!(name, ramp)
