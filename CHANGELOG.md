@@ -29,21 +29,18 @@ release it merely follows.
   a state style changes something besides colour, neighbouring style series differ besides hue,
   text furniture names a font and a size, `:grid` has a stroke, no `extends`, no new names.
   `check/1` and `violations/1` now also report palette faults, under `{:style, name}`.
-- **Designs name palette styles, by name and by data** (#637, D-171). Every palette name is a
+- **Designs name palette styles, by name and by data** (#637, #644, D-171). Every palette name is a
   style reference: `style: :warning`, `style: [:node, :selected]` and `extends: :bad` draw the
   theme's whole look, and a design's own `styles` entry of the same name wins; a theme swap
-  restyles every mark that names one. `:ordinal` and `:threshold` scales take a range of styles —
-  `{:styles, :roles}` (the categories or bands spread over `:good`, `:warning`, `:bad`, flipped by
-  `polarity`), `{:styles, :series}` (`:style_1`, `:style_2`, … in domain order), lists and maps of
-  style names, or `fact(source, field, :status)` — and a mark's style stack lays one per datum
-  with `{:scale, name, field}`: `style: [:node, {:scale, :health, :state}]`. A path per series
-  takes its first datum's style; a reading the scale cannot place lays nothing. New validator
-  faults: `{:style_range, kind}` (a styles range on another scale kind), `{:style_scale, name}`
-  (a stack entry whose scale does not range over styles) and `{:invalid_for, kind}` for that
-  entry outside a mark's style, and `{:style_colour, name}` for a scale of styles read as colour
-  (the `color` scale, a legend's, a mark's `scales.color`, a `{:field, f}` fill or stroke) unless
-  every name in its range is also a theme slot. JSON writes them as `{"$styles": "roles"}` and
-  `{"$scale": ["health", "state"]}`.
+  restyles every mark that names one. A style stack also takes a field binding whose value names
+  the style: `style: {:field, :health}` or `style: [:node, {:field, :health}, %{stroke_width: 2}]`
+  draws each datum in the style its `health` names — an atom such as `:warning`, or the string
+  `"warning"` as a feed sends it — resolved against the design's `styles` and then the theme's
+  palette. A path per series takes its first datum's style, and a mark's inline label its
+  labelled datum's; a value that names no style, or `nil`, applies nothing and the mark keeps its
+  own look. Every style site accepts the binding (`mark`, `label`, `mark_label`, `axis`,
+  `legend`); where there is no datum it applies nothing. In JSON it is the usual
+  `{"$field": "health"}`.
 - **A stored theme carries its palette** (#637). An inline design theme and a
   `Visualize.Chart.Theme` document accept `styles`, each entry checked as a style node and by the
   palette's contracts (`{:contract, message}` at `[:theme, :styles, name]`), so a theme read back
@@ -61,8 +58,8 @@ release it merely follows.
 ### Changed
 
 - **A board's selection is drawn with the palette's `:selected` and `:muted`** (#638, D-171).
-  The data that hold the selection are drawn `:selected` and the rest `:muted`, through a scale of
-  styles in each mark's style stack, so a component restyles its board's selection by declaring
+  The data that hold the selection are drawn `:selected` and the rest `:muted`, through a field
+  entry that ends each data mark's style stack and names the state, so a component restyles its board's selection by declaring
   `selected:` or `muted:` in its `styles`, and a theme's entries apply otherwise. The built-in
   `:muted` fades as before (`opacity` 0.25); the built-in `:selected` is now `stroke_width: 2`
   alone, so a selected line or rule keeps its colour and draws heavier, and a bar, a point or a

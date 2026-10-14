@@ -1,20 +1,18 @@
 defmodule Visualize.Chart.Mark.Styled do
   @moduledoc false
-  # A mark's style, and a style chosen by data (spec/14 §3.6, #637, D-171).
+  # A mark's style, and a style named by data (spec/14 §3.6, #644, D-171).
   #
   # `parts/5` is what the element builders read of a style node: the node, its resolved
   # element style split into the static part and the `{:field, f}` bindings, and the paint.
-  # A mark whose stack holds `{:scale, name, field}` entries has one such set of parts per
-  # datum: `prepare/1` resolves them once for every distinct choice the mark's rows make,
-  # and `at/2` answers the mark's context with a datum's parts in place — the context as it
-  # is for a mark that lays no scale, so such a mark draws byte for byte as before. Who
-  # asks with which datum is §3.2's binding rule: an element-per-datum mark with each
-  # element's, a path-per-series mark with the series' first.
+  # A mark whose stack holds `{:field, f}` entries has one such set of parts per datum:
+  # `prepare/1` resolves them once for every distinct choice the mark's rows make, and
+  # `at/2` answers the mark's context with a datum's parts in place — the context as it is
+  # for a mark whose stack names no style by data, so such a mark draws byte for byte as
+  # before. Who asks with which datum is §3.2's binding rule: an element-per-datum mark with
+  # each element's, a path-per-series mark with the series' first.
 
   alias Visualize.Chart.Style
   alias Visualize.Data.Table
-  alias Visualize.Scale
-  alias Visualize.Scale.Ordinal
   alias Visualize.Theme
 
   @stroked [:line, :rule]
@@ -34,42 +32,45 @@ defmodule Visualize.Chart.Mark.Styled do
   end
 
   @doc false
-  # The context with `scaled`: `nil` for a mark whose stack lays no scale, else its entries
-  # and the parts of every distinct choice its rows make, keyed by the choice.
+  # The context with `by_data`: `nil` for a mark whose stack names no style by data, else
+  # its entries, the names a value may spell, and the parts of every distinct choice its
+  # rows make, keyed by the choice.
   @spec prepare(map()) :: map()
   def prepare(ctx) do
-    case Style.scaled(Map.get(ctx.mark, :style)) do
+    case Style.by_data(Map.get(ctx.mark, :style)) do
       [] ->
-        Map.put(ctx, :scaled, nil)
+        Map.put(ctx, :by_data, nil)
 
       entries ->
+        names = names(ctx.frame.styles)
+
         table =
           ctx.rows
-          |> Enum.map(&picks(entries, &1, ctx.frame))
+          |> Enum.map(&picks(entries, &1, names))
           |> Enum.uniq()
           |> Map.new(&{&1, chosen(ctx, entries, &1)})
 
-        Map.put(ctx, :scaled, %{entries: entries, table: table})
+        Map.put(ctx, :by_data, %{entries: entries, names: names, table: table})
     end
   end
 
   @doc false
   # The context with the datum's parts in place of the mark's.
   @spec at(map(), term()) :: map()
-  def at(%{scaled: nil} = ctx, _datum), do: ctx
+  def at(%{by_data: nil} = ctx, _datum), do: ctx
 
-  def at(%{scaled: %{entries: entries, table: table}} = ctx, datum) do
-    picks = picks(entries, datum, ctx.frame)
+  def at(%{by_data: %{entries: entries, names: names, table: table}} = ctx, datum) do
+    picks = picks(entries, datum, names)
     parts = Map.get_lazy(table, picks, fn -> chosen(ctx, entries, picks) end)
     Map.merge(ctx, parts)
   end
 
   @doc false
   # What a datum's parts change on its element over the mark's group: every resolved key
-  # that differs from the mark's own, and the paint when it does — nothing for a mark that
-  # lays no scale.
+  # that differs from the mark's own, and the paint when it does — nothing for a mark whose
+  # stack names no style by data.
   @spec over(map(), map()) :: map()
-  def over(%{scaled: nil}, _own), do: %{}
+  def over(%{by_data: nil}, _own), do: %{}
 
   def over(ctx, own) do
     changed =
@@ -81,30 +82,42 @@ defmodule Visualize.Chart.Mark.Styled do
     case own.paint do
       {_key, {:field, _}} -> changed
       paint when paint == ctx.paint -> changed
-      {key, colour} -> Map.put_new(changed, key, colour)
+      {key, color} -> Map.put_new(changed, key, color)
     end
   end
 
-  # The style name each entry picks for the datum, in the entries' order.
-  defp picks(entries, datum, frame), do: Enum.map(entries, &pick(&1, datum, frame))
+  @doc false
+  # The style node of a stack at a site that has a datum (spec/14 §3.6): each `{:field, f}`
+  # entry laid with the style the datum's value names, read against `styles`; a datum of
+  # `nil` lays none.
+  @spec node(%{atom() => map()}, term(), map() | nil) :: map()
+  def node(styles, stack, nil), do: Style.node(styles, stack)
 
-  # The scale's output for the datum's reading, or `nil` to lay nothing: a missing scale or
-  # reading, and a reading an ordinal scale's domain does not hold — its `unknown` is a
-  # colour scale's neutral, never a style (spec/14 §3.6).
-  defp pick({:scale, name, field}, datum, frame) do
-    with %{} = scale <- Map.get(frame.scales, name),
-         reading when reading != nil <- Table.get(datum, field),
-         true <- placed?(scale, reading),
-         style when is_atom(style) and style != nil <- Scale.apply(scale, reading) do
-      style
-    else
-      _none -> nil
+  def node(styles, stack, datum) do
+    case Style.by_data(stack) do
+      [] ->
+        Style.node(styles, stack)
+
+      _entries ->
+        names = names(styles)
+        Style.node(styles, stack, &pick(&1, datum, names))
     end
   end
 
-  defp placed?(%Ordinal{domain: domain}, reading), do: reading in domain
+  # The names a value may give for a style: each name as itself and as its text, so a
+  # feed's `"warning"` names `:warning` without the value being made into an atom.
+  defp names(styles) do
+    Enum.reduce(Map.keys(styles), %{}, fn name, names ->
+      names |> Map.put(name, name) |> Map.put(Atom.to_string(name), name)
+    end)
+  end
 
-  defp placed?(_scale, _reading), do: true
+  # The style name each entry names for the datum, in the entries' order.
+  defp picks(entries, datum, names), do: Enum.map(entries, &pick(&1, datum, names))
+
+  # The style the datum's value names, or `nil` to lay nothing: a missing value, and one
+  # that names no declared style and no palette entry (spec/14 §3.6).
+  defp pick({:field, field}, datum, names), do: Map.get(names, Table.get(datum, field))
 
   defp chosen(ctx, entries, picks) do
     chosen = entries |> Enum.zip(picks) |> Map.new()

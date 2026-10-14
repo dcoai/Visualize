@@ -1,11 +1,12 @@
 defmodule Visualize.Chart.Mark.Label do
   @moduledoc false
   # A mark's inline label (spec/14 §5.5): one text per element at its anchor point, in the
-  # label's style, `{:field, f}` read from the datum.
+  # label's style, `{:field, f}` read from the datum — a style stack's `{:field, f}` entry
+  # too, naming the style (§3.6, #644).
 
   alias Visualize.Chart.Frame.{Defs, Position}
   alias Visualize.Chart.Label.Polar
-  alias Visualize.Chart.Mark.Series
+  alias Visualize.Chart.Mark.{Series, Styled}
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.Chart.Text
   alias Visualize.Color
@@ -33,11 +34,16 @@ defmodule Visualize.Chart.Mark.Label do
   end
 
   @doc false
-  # The label's resolved style.
-  @spec style(map()) :: map()
-  def style(%{label: label, frame: frame, mode: mode}) do
-    name = Map.get(label || %{}, :style, Schema.default(:mark_label, :style))
-    Style.resolve(Style.node(frame.styles, name), frame.theme, mode)
+  # The label's resolved style, for the datum it labels when there is one.
+  @spec style(map(), map() | nil) :: map()
+  def style(%{label: label, frame: frame, mode: mode}, datum \\ nil) do
+    Style.resolve(node(frame, label || %{}, datum), frame.theme, mode)
+  end
+
+  # The label's style node: its stack, a `{:field, f}` entry naming a style by the datum.
+  defp node(frame, label, datum) do
+    stack = Map.get(label, :style, Schema.default(:mark_label, :style))
+    Styled.node(frame.styles, stack, datum)
   end
 
   @doc false
@@ -53,7 +59,7 @@ defmodule Visualize.Chart.Mark.Label do
           element(
             ctx,
             point,
-            Map.take(child, [:bounds, :radii, :span, :extent, :under]),
+            Map.take(child, [:bounds, :radii, :span, :extent, :under, :datum]),
             text(label.text, datum),
             "mark-label"
           ),
@@ -90,10 +96,9 @@ defmodule Visualize.Chart.Mark.Label do
     shape = shape || %{}
     bounds = Map.get(shape, :bounds)
     label = ctx.label || %{}
-    style = style(%{ctx | label: label})
-
-    style_node =
-      Style.node(frame.styles, Map.get(label, :style, Schema.default(:mark_label, :style)))
+    datum = Map.get(shape, :datum)
+    style = style(%{ctx | label: label}, datum)
+    style_node = node(frame, label, datum)
 
     anchor = Map.get(label, :anchor, default_anchor(ctx))
     dx = Map.get(label, :dx, 0)
@@ -158,12 +163,25 @@ defmodule Visualize.Chart.Mark.Label do
   def under(children, _bound, %{label: nil}), do: children
 
   def under(children, bound, %{label: label, frame: frame} = ctx) do
-    node = Style.node(frame.styles, Map.get(label, :style, Schema.default(:mark_label, :style)))
+    stack = Map.get(label, :style, Schema.default(:mark_label, :style))
 
-    if Enum.any?([:fill, :stroke], &(Map.get(node, &1) == :contrast)),
-      do: Enum.zip_with(children, bound, &Map.put(&1, :under, under(&2, ctx))),
-      else: children
+    case Style.by_data(stack) do
+      [] ->
+        if contrast?(node(frame, label, nil)),
+          do: Enum.zip_with(children, bound, &Map.put(&1, :under, under(&2, ctx))),
+          else: children
+
+      # A style named by data inks each label by its own datum's style (§3.6).
+      _entries ->
+        Enum.zip_with(children, bound, fn child, element ->
+          if contrast?(node(frame, label, child.datum)),
+            do: Map.put(child, :under, under(element, ctx)),
+            else: child
+        end)
+    end
   end
+
+  defp contrast?(node), do: Enum.any?([:fill, :stroke], &(Map.get(node, &1) == :contrast))
 
   @doc false
   # The colour under a mark's label (spec/14 §5.5, D-123): the fill its element is drawn

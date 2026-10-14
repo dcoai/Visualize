@@ -18,7 +18,7 @@ defmodule Visualize.Chart.Validator do
 
   """
 
-  alias Visualize.Chart.{Fact, Migration, Schema, Style, Text, Var}
+  alias Visualize.Chart.{Fact, Migration, Schema, Text, Var}
   alias Visualize.Chart.Validator.{Domain, Frames, Palette, Words}
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
@@ -63,9 +63,6 @@ defmodule Visualize.Chart.Validator do
           | {:brush, :frame_kind | :x_scale, atom() | nil}
           | {:colour_map, atom()}
           | {:polarity, :range}
-          | {:style_range, atom()}
-          | {:style_scale, atom()}
-          | {:style_colour, atom()}
           | {:tiles, :projection, atom()}
           | {:tiles, :attribution | :url | :subdomains}
           | {:outside_domain, atom(), number() | {:column, atom(), :number | :text | :time}}
@@ -86,16 +83,11 @@ defmodule Visualize.Chart.Validator do
   # The plot's four corners and its centre (spec/14 §6.3, #489).
   @frame_points [:top_left, :top_right, :bottom_left, :bottom_right, :center]
   @not_names [nil, true, false]
-  @default_slots Theme.slots(Theme.default())
 
   @doc "`:ok`, or every fault of the design ordered by path."
   @spec validate(term()) :: :ok | {:error, [error(), ...]}
   def validate(map) when is_map(map) and not is_struct(map) do
-    ctx = context(map)
-    styles = Style.all(if(is_map(map[:styles]), do: map[:styles], else: %{}))
-    colourless = Palette.colour_faults(map, styles, &colourless?(&1, ctx))
-
-    case node(:design, map, [], ctx) ++ cycles(map) ++ Domain.faults(map) ++ colourless do
+    case node(:design, map, [], context(map)) ++ cycles(map) ++ Domain.faults(map) do
       [] -> :ok
       errors -> {:error, Enum.sort_by(errors, &elem(&1, 0))}
     end
@@ -268,7 +260,6 @@ defmodule Visualize.Chart.Validator do
       # §3.3, #637): a theme the validator cannot see says how many style series it has.
       styles: union(declared(map[:styles]), Palette.names(theme)),
       open_series: theme == :unknown,
-      style_site: nil,
       paints: declared(map[:defs] || %{}),
       sources: source_fields(map[:sources]),
       vars: declared(map[:vars]),
@@ -457,9 +448,7 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp held(:scale, map, path, _ctx) do
-    sweep(map, path) ++
-      zone(map, path) ++
-      colour_map(map, path) ++ polarity(map, path) ++ Palette.style_range(map, path)
+    sweep(map, path) ++ zone(map, path) ++ colour_map(map, path) ++ polarity(map, path)
   end
 
   defp held(:axis, %{radius: radius}, path, _ctx) when is_number(radius) and radius <= 0,
@@ -518,8 +507,6 @@ defmodule Visualize.Chart.Validator do
   defp polarity(%{polarity: polarity} = scale, path) when is_atom(polarity) and polarity != nil do
     case {Map.get(scale, :kind), Map.get(scale, :range, :auto)} do
       {_kind, {:ramp, _name}} -> []
-      # The roles as styles are ordered as the status ramp is (§4.3, #637).
-      {_kind, {:styles, :roles}} -> []
       {kind, :auto} when kind in [:sequential, :diverging] -> []
       {_kind, %Var{}} -> []
       {_kind, %Fact{}} -> []
@@ -745,11 +732,6 @@ defmodule Visualize.Chart.Validator do
     end)
   end
 
-  # A style site says which node it stands on: a style chosen by data is a mark's alone
-  # (spec/14 §3.6, #637).
-  defp check_key(kind, %{key: :style} = spec, v, path, ctx),
-    do: check(spec.type, v, path, %{ctx | style_site: kind})
-
   defp check_key(_kind, spec, v, path, ctx), do: check(spec.type, v, path, ctx)
 
   # -- types ----------------------------------------------------------------------------
@@ -880,36 +862,11 @@ defmodule Visualize.Chart.Validator do
   end
 
   # A map of colours (spec/14 §4.3, D-143): each category's colour as a style takes one,
-  # checked at the category's own path — or a style name, which a stack entry lays (#637).
+  # checked at the category's own path.
   defp check(:colour_map, map, path, ctx) when is_map(map) and not is_struct(map) do
     Enum.flat_map(map, fn {category, colour} ->
-      case check(:colour, colour, path ++ [category], ctx) do
-        [] -> []
-        faults -> if style_name?(colour, ctx), do: [], else: faults
-      end
+      check(:colour, colour, path ++ [category], ctx)
     end)
-  end
-
-  defp check(:styles, {:styles, set}, path, _ctx) do
-    if set in [:roles, :series], do: [], else: [{path, {:type, :styles}}]
-  end
-
-  # A style chosen by data (spec/14 §3.6, #637): a mark's stack only; its scale is the
-  # mark's frame's and ranges over styles, and its field is the mark's source's.
-  defp check(:style_scale, {:scale, name, field}, path, ctx) do
-    cond do
-      not (name?(name) and name?(field)) ->
-        [{path, {:type, :style_scale}}]
-
-      ctx.style_site not in [:mark, nil] ->
-        [{path, {:invalid_for, ctx.style_site}}]
-
-      true ->
-        case ref(:scale, name, path, ctx) do
-          [] -> ref(:field, field, path, ctx) ++ style_scale(name, path, ctx)
-          faults -> faults ++ ref(:field, field, path, ctx)
-        end
-    end
   end
 
   defp check(:size, v, _path, _ctx) when is_number(v), do: []
@@ -1044,45 +1001,6 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp ref(kind, name, path, ctx), do: ref_in(kind, name, path, ctx)
-
-  # A style name with no colour to paint, which a scale read as colour cannot carry: a style
-  # the design may reference that is no theme slot (spec/14 §3.6, #637).
-  defp colourless?(name, ctx) do
-    slot? =
-      case ctx.slots do
-        %MapSet{} = slots ->
-          MapSet.member?(slots, name)
-
-        :unknown ->
-          name in @default_slots or Regex.match?(~r/^series_[1-9]\d*$/, Atom.to_string(name))
-      end
-
-    not slot? and match?(%MapSet{}, ctx.styles) and style_name?(name, ctx)
-  end
-
-  # Whether a value is a style name the design may reference (spec/14 §3.3).
-  defp style_name?(name, ctx) when is_atom(name) do
-    case ctx.styles do
-      :unknown -> name?(name)
-      %MapSet{} = set -> MapSet.member?(set, name) or (ctx.open_series and Palette.series?(name))
-    end
-  end
-
-  defp style_name?(_name, _ctx), do: false
-
-  # The scale a stack entry names, read through any adoption to the node that declares it,
-  # ranges over styles; a variable, or a frame the walk cannot see, is not judged here.
-  defp style_scale(name, path, ctx) do
-    case Frames.declared(nested(ctx.frame_node, [:scales, name]), ctx.frame_nodes, []) do
-      %{} = node when not is_struct(node) ->
-        if Palette.styles?(node, &style_name?(&1, ctx)),
-          do: [],
-          else: [{path, {:style_scale, name}}]
-
-      _unseen ->
-        []
-    end
-  end
 
   defp ref_in(kind, name, path, ctx) do
     case Map.fetch!(ctx, plural(kind)) do
