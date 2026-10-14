@@ -43,7 +43,8 @@ defmodule Visualize.Theme.Palette do
                [
                  hover: %{stroke: :text, stroke_width: 2},
                  focused: %{stroke: :text, stroke_width: 2, stroke_dasharray: "4 2"},
-                 selected: %{stroke: :text, stroke_width: 2, stroke_style: :outside},
+                 # Heavier only (#638): no colour of its own to paint over a stroked mark's.
+                 selected: %{stroke_width: 2},
                  active: %{stroke: :text, stroke_width: 3},
                  disabled: %{opacity: 0.4, stroke_dasharray: "2 2"},
                  # The board's dim of today (spec/15 §13.2), so a muted row looks as it did.

@@ -64,10 +64,10 @@ release it merely follows.
   The data that hold the selection are drawn `:selected` and the rest `:muted`, through a scale of
   styles in each mark's style stack, so a component restyles its board's selection by declaring
   `selected:` or `muted:` in its `styles`, and a theme's entries apply otherwise. The built-in
-  `:muted` fades as before (`opacity` 0.25); the built-in `:selected` now outlines what the
-  selection holds — a 2-pixel stroke in the theme's text colour outside a bar or a point, and the
-  same stroke on a selected line, in place of its series colour. A cell that does not show the
-  selection draws as before.
+  `:muted` fades as before (`opacity` 0.25); the built-in `:selected` is now `stroke_width: 2`
+  alone, so a selected line or rule keeps its colour and draws heavier, and a bar, a point or a
+  text draws as before. Declare your own `selected:` for an outline. A cell that does not show
+  the selection draws as before.
 
 - **The built-in styles `:axis`, `:grid`, `:label` and `:title` come from the chart's theme**
   (spec/14 §3.3). Under the built-in themes they are the same nodes as before and every chart

@@ -407,28 +407,23 @@ defmodule Visualize.Board.InteractionTest do
       assert Server.select(board, {:k, "p"}) == :ok
       drawn = views_until([:a, :c], &(&1.svg != nil and dims(&1.svg) > 0))
 
-      # The line p takes :selected's stroke and width; q is :muted, its own colour faded.
+      # The line p is heavier in its own colour; q is :muted, its own colour faded.
       [p] = Regex.run(~r/<path[^>]*data-series="p"[^>]*>/, drawn.a.svg)
-      assert p =~ ~s{stroke="var(--vis-text, #333333)"}
       assert p =~ ~s(stroke-width="2")
+      assert p =~ ~s{stroke="var(--vis-series-1, }
+      refute p =~ "opacity" or p =~ "--vis-text"
       [q] = Regex.run(~r/<path[^>]*data-series="q"[^>]*>/, drawn.a.svg)
       assert q =~ ~s(opacity="0.25")
-      refute q =~ "--vis-text"
 
-      # p's points are outlined outside their edge: the fill alone, then the outline, masked.
-      outlines =
-        Regex.scan(~r/<circle[^>]*data-series="p"[^>]*mask="url[(]#vis-mask-[^>]*>/, drawn.a.svg)
+      # No outline anywhere: :selected has no colour or stroke style of its own, so the
+      # points and the bar with no stroke draw as they are (#638).
+      refute drawn.a.svg =~ "vis-mask-" or drawn.a.svg =~ "--vis-text"
+      refute drawn.c.svg =~ "vis-mask-"
 
-      assert length(outlines) == 4
+      for [point] <- Regex.scan(~r/<circle[^>]*data-series="p"[^>]*>/, drawn.a.svg),
+          do: refute(point =~ "stroke=\"" or point =~ "opacity")
 
-      for [outline] <- outlines,
-          do:
-            assert(
-              outline =~ ~s{stroke="var(--vis-text, #333333)"} and outline =~ ~s(fill="none")
-            )
-
-      # The bar p, linked through `name`, is outlined; the bar r fades.
-      assert [_] = Regex.scan(~r/<rect[^>]*mask="url[(]#vis-mask-[^>]*>/, drawn.c.svg)
+      # The bar p, linked through `name`, draws as itself; the bar r fades.
       assert dims(drawn.c.svg) == 1
     end
 
