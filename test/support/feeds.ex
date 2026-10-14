@@ -295,6 +295,119 @@ defmodule Visualize.Test.Feeds do
     end
   end
 
+  defmodule Fleet do
+    @moduledoc """
+    A fleet of cars as a feed, for the box window (spec/08 §11.1, D-168): rows
+    `%{t, car, x, y}` over ticks `0..11`, three cars a tick, `t` its numeric window field
+    and `car` its declared identity. Honouring (`honours: true`, the default), it names
+    `[:window, :region, :latest]` and answers a box itself, by its own code rather than
+    `Visualize.Feed.Window`'s, so the two can be held to the same rows; otherwise it names
+    `[:window]` and leaves the region and `latest` to `Visualize.Feed.finish/3`. A flaw
+    breaks one rule of an honouring feed: `:region_overrun` ignores the region,
+    `:latest_twice` ignores `latest`, `:stale_latest` serves each car's first row.
+    """
+    @behaviour Visualize.Feed
+
+    alias Visualize.Data.{Delivery, Schema}
+
+    defstruct honours: true, flaw: nil
+
+    @last 11
+    @cars ["a", "b", "c"]
+
+    @doc "The fleet's feed: `honours:` (`true`) and `flaw:` (`nil`)."
+    def new(opts \\ []) do
+      opts = Keyword.validate!(opts, honours: true, flaw: nil)
+      true = opts[:flaw] in [nil, :region_overrun, :latest_twice, :stale_latest]
+      struct!(__MODULE__, opts)
+    end
+
+    @doc "The fleet's schema."
+    def schema do
+      Schema.new!(%{
+        t: %{type: :number, window: true},
+        car: %{type: :category, identity: true},
+        x: %{type: :number},
+        y: %{type: :number}
+      })
+    end
+
+    @doc "Every row the fleet holds, in tick order, the cars in order within a tick."
+    def rows do
+      for t <- 0..@last,
+          {car, i} <- Enum.with_index(@cars),
+          do: %{t: t, car: car, x: rem(t * 3 + i * 5, 10), y: rem(t * 7 + i * 2, 10)}
+    end
+
+    @impl true
+    def describe(%__MODULE__{honours: honours}) do
+      supports = if honours, do: [:window, :region, :latest], else: [:window]
+      {Schema.version(schema()), schema(), supports}
+    end
+
+    @impl true
+    def fetch(%__MODULE__{} = feed, window, _budget) do
+      case span(window) do
+        {:ok, from, to} ->
+          lo = max(from || 0, 0)
+          hi = min(to || @last, @last)
+          rows = Enum.filter(rows(), &(&1.t >= lo and &1.t <= hi))
+          rows = if feed.honours, do: honoured(rows, window, feed.flaw), else: rows
+          {:ok, Delivery.new(rows, window: [lo, hi], schema: Schema.version(schema()))}
+
+        :error ->
+          {:error, {:window, window}}
+      end
+    end
+
+    defp span(nil), do: {:ok, nil, nil}
+
+    defp span([from, to])
+         when (is_number(from) or is_nil(from)) and (is_number(to) or is_nil(to)),
+         do: {:ok, from, to}
+
+    defp span(%{} = box) do
+      case Map.get(box, :ranges, %{}) |> Enum.find(fn {f, _r} -> to_string(f) == "t" end) do
+        nil -> {:ok, nil, nil}
+        {_t, range} -> span(range)
+      end
+    end
+
+    defp span(_window), do: :error
+
+    defp honoured(rows, %{} = box, flaw) do
+      # A range over a field the fleet does not have keeps nothing.
+      ranges =
+        for {f, r} <- Map.get(box, :ranges, %{}), to_string(f) != "t", do: {to_string(f), r}
+
+      rows =
+        if flaw == :region_overrun, do: rows, else: Enum.filter(rows, &in_ranges?(&1, ranges))
+
+      if Map.get(box, :latest, false) and flaw != :latest_twice,
+        do: last_of_each(rows, flaw),
+        else: rows
+    end
+
+    defp honoured(rows, _window, _flaw), do: rows
+
+    defp in_ranges?(row, ranges) do
+      Enum.all?(ranges, fn {field, [from, to]} ->
+        value = Enum.find_value(row, fn {k, v} -> if Atom.to_string(k) == field, do: v end)
+        value != nil and (from == nil or value >= from) and (to == nil or value <= to)
+      end)
+    end
+
+    defp last_of_each(rows, flaw) do
+      pick =
+        if flaw == :stale_latest,
+          do: &Enum.min_by(&1, fn r -> r.t end),
+          else: &Enum.max_by(&1, fn r -> r.t end)
+
+      kept = rows |> Enum.group_by(& &1.car) |> Enum.map(fn {_car, rs} -> pick.(rs) end)
+      Enum.filter(rows, &(&1 in kept))
+    end
+  end
+
   @doc "A scripted feed and its agent, linked to the test."
   @spec scripted(keyword()) :: {Scripted.t(), pid()}
   def scripted(opts) do

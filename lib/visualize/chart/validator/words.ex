@@ -108,6 +108,12 @@ defmodule Visualize.Chart.Validator.Words do
       "it is read through needs #{a_type(expected)}"
   end
 
+  # A mark that keeps each entity's latest row (spec/14 §7.3, D-168).
+  def words({:identity_required, slot}) do
+    "the mark keeps each entity's latest row of slot #{inspect(slot)}, and its feed " <>
+      "declares no identity (identity: true on the fields that name an entity)"
+  end
+
   def words({:no_schema, slot}) do
     "slot #{inspect(slot)} needs its feed's schema — it requires attributes or the design " <>
       "reads facts of it — and its source is not a delivery naming a schema version"

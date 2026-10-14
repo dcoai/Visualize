@@ -7,6 +7,7 @@ defmodule Visualize.Chart.Transform.Data do
   alias Visualize.Chart.Schema
   alias Visualize.Data
   alias Visualize.Data.{FFT, Table}
+  alias Visualize.Feed.Window
   alias Visualize.Shape.Stack
 
   # A window's units, each the seconds it names: an extent of time, never a calendar
@@ -123,6 +124,7 @@ defmodule Visualize.Chart.Transform.Data do
 
   # The rows whose reading lies in the half-open span `[now − from, now − to)`, so two
   # windows that share a bound do not share a row. An absent bound is open at that end.
+  # With `latest`, each identity's last row of them (D-168).
   defp window(node, rows, ctx) do
     field = Map.fetch!(node, :field)
 
@@ -140,8 +142,34 @@ defmodule Visualize.Chart.Transform.Data do
         lo = lower(Map.get(node, :from), now)
         hi = upper(Map.get(node, :to), now)
 
-        for {row, at} <- read, at_or_after?(at, lo), within?(at, hi), do: row
+        selected = for {row, at} <- read, at_or_after?(at, lo), within?(at, hi), do: {row, at}
+        latest(selected, Map.get(node, :latest, false), Map.get(ctx, :schema))
     end
+  end
+
+  defp latest(selected, off, _schema) when off in [false, nil],
+    do: Enum.map(selected, &elem(&1, 0))
+
+  # Each identity the slot's feed declares, never an inferred one (spec/14 §5.4.1, D-168).
+  defp latest(selected, true, %Data.Schema{} = schema) do
+    identity!(schema)
+
+    selected
+    |> Window.latest_rows(&elem(&1, 1), &Data.Schema.identity(schema, elem(&1, 0)))
+    |> Enum.map(&elem(&1, 0))
+  end
+
+  defp latest(_selected, true, nil) do
+    raise ArgumentError,
+          "transform :window: latest needs the schema of its source, whose declared " <>
+            "identity it groups by (spec/14 §5.4.1)"
+  end
+
+  defp identity!(schema) do
+    Data.Schema.identity(schema) != [] ||
+      raise ArgumentError,
+            "transform :window: latest over a source whose schema declares no identity " <>
+              "(spec/14 §5.4.1)"
   end
 
   # The instant the durations are measured back from: the caller's `now:` when it gave

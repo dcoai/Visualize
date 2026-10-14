@@ -31,6 +31,30 @@ release it merely follows.
   field to value as well as `{field, value}`, each field read through the board's `links`;
   a cell shows it when one row holds every field's value. A one-field map is held as the
   pair. The header reads it as `Selected: host mx1, iface eth0`.
+- **A feed window may be a box, and may ask for each entity's latest row** (#626, D-168).
+  Besides `nil` and `[from, to]`, a window may be
+  `%{ranges: %{t: [from, to], x: [0, 640], y: [0, 480]}, latest: true}`: ranges over any
+  `:time` or `:number` field (ends inclusive, `nil` open), and `latest: true` for each
+  declared identity's last row within them — at or before the end of the window field's
+  range, or the present when it is unranged. `latest` needs a schema that declares identity
+  and has a window field. `[from, to]` is still accepted and means exactly what it did: the
+  window field's range. Use it with `Visualize.Feed.Monitor.new(feeds, window: box)`,
+  `Monitor.window/2` or `Visualize.Feed.finish(delivery, schema, window: box)`.
+  - `Visualize.Feed.Window.box/2` gives any window as its box, `range/2` reads one field's
+    range of any window, `check/2` holds a box to a schema (`{:window, :inverted}`,
+    `{:window, :unknown_field}`, `{:invalid_for, type}`, `{:window, :no_identity}`, …,
+    each at its path), and `latest_rows/3` keeps each identity's last row.
+  - `supports` may name `:region` and `:latest`. A feed that names neither is still asked
+    for the box, and visualize trims and reduces for it, so opting in is only for speed.
+  - The conformance kit takes boxes among `windows:`, holds a `:region` feed's rows to its
+    ranges (`{:region_row, …}`) and a `:latest` feed to one row per identity, the last
+    (`{:latest_twice, …}`, `{:not_latest, …}`); a probe box the schema refuses is
+    `{:probe, window, faults}`.
+- **A mark can draw each entity's current state.** A `:window` data step takes
+  `latest: true` (`Build.window(data, :t, latest: true)`), keeping each identity the slot's
+  feed declares at its last row. `Visualize.Chart.apply/2` refuses it over a feed that
+  declares no identity, or over plain rows, with `{:identity_required, slot}` at the mark,
+  rather than guess which rows are about one thing.
 
 ### Changed
 
@@ -46,6 +70,17 @@ release it merely follows.
   different things.
 - **The conformance kit checks identity.** Of a feed that declares identity, a row with no
   value for a declared field is the `:deliveries` finding `{:no_identity, request, field}`.
+- **`Visualize.Feed.capabilities/0` is `[:window, :region, :latest, :budget, :push]`.** A
+  provider may now be asked a box (above) in place of `[from, to]`; one that reads its
+  window field's range through `Visualize.Feed.Window.range/2` answers both. The kit's
+  `:errors` check fetches one box over a field no schema has, which a feed must answer with
+  a delivery or an error, not a raise. `Feed.Signals`, `Feed.Telemetry` and `Feed.Combine`
+  serve a box by its window field's range and name neither new capability.
+- **`Visualize.Feed.finish/3` raises `ArgumentError` for a box its schema cannot answer**,
+  and a `Visualize.Feed.Monitor` shows such a feed `{:down, {:window, faults}}` without
+  asking it. `nil` and `[from, to]` windows are never refused.
+- **`Visualize.Chart.Frame.new/2` takes `schemas:`**, the slots' schemas a `latest` step
+  reads; `apply/2` and a compiled chart pass them, so nothing changes for a caller of those.
 
 ## [0.5.1] — 2026-10-13
 

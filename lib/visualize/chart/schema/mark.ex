@@ -73,7 +73,7 @@ defmodule Visualize.Chart.Schema.Mark do
     {:sum, [:field], [:by, :as]},
     {:sort, [:field], [:order]},
     {:take, [:n], [:side]},
-    {:window, [:field], [:from, :to]},
+    {:window, [:field], [:from, :to, :latest]},
     {:spectrum, [:field], [:time, :every, :samples, :window, :detrend, :as]},
     {:lttb, [:fields, :n], []},
     {:m4, [:fields, :width], []},
@@ -226,7 +226,9 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:width, @count_or_plot, :geometry),
       spec(:side, {:enum, [:end, :start]}, :geometry, default: :end),
       spec(:from, {:list, :term}, :geometry),
-      spec(:to, {:list, :term}, :geometry)
+      spec(:to, {:list, :term}, :geometry),
+      # Each identity's last row, by the slot's declared identity (spec/14 §5.4.1, D-168).
+      spec(:latest, :boolean, :binding, default: false)
     ]
   end
 

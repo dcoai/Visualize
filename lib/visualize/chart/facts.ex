@@ -89,9 +89,19 @@ defmodule Visualize.Chart.Facts do
     reads = Types.reads(map)
     {schemas, cache} = typed(reads, contract, entries, schemas, cache, describe)
 
+    # A mark that keeps each identity's latest row needs the identity its feed declares
+    # (spec/14 §7.3, D-168).
+    following = following(map)
+
+    {schemas, cache, unresolved} =
+      followed(following, contract, entries, schemas, cache, describe)
+
     errors =
       errors ++
-        missing(map, schemas) ++ disagreements(slots, schemas) ++ Types.faults(reads, schemas)
+        missing(map, schemas) ++
+        disagreements(slots, schemas) ++
+        Types.faults(reads, schemas) ++
+        unresolved ++ identity_required(following, schemas, unresolved)
 
     case Enum.sort_by(errors, &elem(&1, 0)) do
       [] ->
@@ -128,6 +138,61 @@ defmodule Visualize.Chart.Facts do
         end
     end
   end
+
+  # Every mark whose data has a `:window` step asking `latest`, with the slot it reads.
+  defp following(map) do
+    case Map.get(map, :marks) do
+      marks when is_list(marks) ->
+        for {%{data: %{source: slot, transforms: steps}}, i} <- Enum.with_index(marks),
+            is_list(steps),
+            Enum.any?(steps, &match?(%{op: :window, latest: true}, &1)),
+            do: {i, slot}
+
+      _none ->
+        []
+    end
+  end
+
+  # The schema of each slot a `latest` mark reads, resolved as a typed slot's is. A source
+  # that is no delivery naming a version has no schema and declares nothing, which the
+  # refusal says; a version that does not resolve is reported as the contract's is.
+  defp followed(following, contract, entries, schemas, cache, describe) do
+    slots = following |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+
+    for slot <- slots,
+        not is_map_key(schemas, slot),
+        {:ok, entry} <- [Map.fetch(entries, slot)],
+        reduce: {schemas, cache, []} do
+      {schemas, cache, errors} ->
+        case schema(slot, entry, cache, describe) do
+          {:ok, schema, cache} ->
+            {Map.put(schemas, slot, schema), cache, errors}
+
+          {:error, {_path, {:no_schema, _slot}}, cache} ->
+            {schemas, cache, errors}
+
+          # The contract already reported it.
+          {:error, _error, cache} when is_map_key(contract, slot) ->
+            {schemas, cache, errors}
+
+          {:error, error, cache} ->
+            {schemas, cache, [error | errors]}
+        end
+    end
+  end
+
+  # `{:identity_required, slot}` at each `latest` mark over a slot whose schema declares
+  # no identity, or that has none — never at one whose version did not resolve, which is
+  # its own fault.
+  defp identity_required(following, schemas, unresolved) do
+    for {i, slot} <- following,
+        not Enum.any?(unresolved, &match?({[:sources, ^slot], _reason}, &1)),
+        declares_none?(Map.get(schemas, slot)),
+        do: {[:marks, i], {:identity_required, slot}}
+  end
+
+  defp declares_none?(nil), do: true
+  defp declares_none?(schema), do: Schema.identity(schema) == []
 
   # An unbound slot is binding's fault, reported there; it never reaches this step.
   defp schema(_slot, nil, _cache, _describe), do: :unbound

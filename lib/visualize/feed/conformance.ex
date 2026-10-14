@@ -45,7 +45,7 @@ defmodule Visualize.Feed.Conformance do
 
   alias Visualize.Data.{Delivery, Schema, Table}
   alias Visualize.Feed
-  alias Visualize.Feed.Conformance.Words
+  alias Visualize.Feed.Conformance.{Box, Words}
   alias Visualize.Feed.Window
 
   @checks [:describe, :deliveries, :supports, :push, :errors, :unsubscribe]
@@ -66,7 +66,8 @@ defmodule Visualize.Feed.Conformance do
     [:not, :a_time],
     [~U[2000-01-01 00:00:00Z], ~U[2000-01-02 00:00:00Z]],
     [0, 1],
-    [0, ~U[2000-01-01 00:00:00Z]]
+    [0, ~U[2000-01-01 00:00:00Z]],
+    %{ranges: %{"no such field" => [0, 1]}, latest: true}
   ]
 
   @spans %{second: 1, minute: 60, hour: 3600, day: 86_400, week: 604_800}
@@ -172,6 +173,8 @@ defmodule Visualize.Feed.Conformance do
       if supports -- Feed.capabilities() == [] and
            Enum.uniq(supports) == supports do
         window_honoured(feed, supports, Feed.window_field(schema), o) ++
+          Box.region(&fetched(feed, &1, o), supports, schema, o) ++
+          Box.latest(&fetched(feed, &1, o), supports, schema, o) ++
           budget_honoured(feed, supports, o) ++ push_honoured(feed, supports, o)
       else
         [{:supports, supports}]
@@ -281,7 +284,14 @@ defmodule Visualize.Feed.Conformance do
 
   # -- one probe of the deliveries check -----------------------------------------------------
 
-  defp probe(feed, request, {version, schema, supports}, o) do
+  defp probe(feed, {window, _budget} = request, {_version, schema, _supports} = described, o) do
+    case Window.check(window, schema) do
+      :ok -> probed(feed, request, described, o)
+      {:error, faults} -> [{:probe, window, faults}]
+    end
+  end
+
+  defp probed(feed, request, {version, schema, supports}, o) do
     with {:ok, delivery, rows} <- fetched(feed, request, o) do
       time = Feed.window_field(schema)
       served = delivery.window
@@ -473,8 +483,15 @@ defmodule Visualize.Feed.Conformance do
        when budget != nil or by != nil or served == nil or time == nil,
        do: []
 
-  defp complete(feed, request, %Delivery{window: [_from, to] = served}, rows, time, o) do
-    case open(feed, to, o) do
+  defp complete(
+         feed,
+         {window, _budget} = request,
+         %Delivery{window: [_from, to] = served},
+         rows,
+         time,
+         o
+       ) do
+    case open(feed, window, time, to, o) do
       {:ok, open} ->
         span = intersect(served, open.window)
         held = MapSet.new(rows)
@@ -493,10 +510,28 @@ defmodule Visualize.Feed.Conformance do
   end
 
   # `capped` is true only with a shortfall, and false only when the feed held nothing
-  # between the asked `from` and where it served from.
-  defp capped(_feed, {nil, _budget}, _delivery, _rows, _time, _o), do: []
-  defp capped(_feed, {[nil, _to], _budget}, _delivery, _rows, _time, _o), do: []
-  defp capped(_feed, _request, _delivery, _rows, nil, _o), do: []
+  # between the asked `from` and where it served from. Of a box, the asked window is its
+  # window field's range (spec/08 §12.3, D-168).
+  defp capped(feed, {%{} = box, budget} = request, delivery, rows, time, o) when time != nil do
+    case Window.range(box, time) do
+      [_from, _to] = range ->
+        Enum.map(capped(feed, {range, budget}, delivery, rows, time, o, box), fn
+          {:capped, _request, served} -> {:capped, request, served}
+          {:uncapped, _request, count} -> {:uncapped, request, count}
+          finding -> finding
+        end)
+
+      _none ->
+        []
+    end
+  end
+
+  defp capped(feed, request, delivery, rows, time, o),
+    do: capped(feed, request, delivery, rows, time, o, nil)
+
+  defp capped(_feed, {nil, _budget}, _delivery, _rows, _time, _o, _box), do: []
+  defp capped(_feed, {[nil, _to], _budget}, _delivery, _rows, _time, _o, _box), do: []
+  defp capped(_feed, _request, _delivery, _rows, nil, _o, _box), do: []
 
   defp capped(
          _feed,
@@ -504,7 +539,8 @@ defmodule Visualize.Feed.Conformance do
          %Delivery{capped: true, window: served},
          _rows,
          _time,
-         _o
+         _o,
+         _box
        ) do
     case served do
       [start, _end] when start != nil ->
@@ -517,10 +553,10 @@ defmodule Visualize.Feed.Conformance do
     end
   end
 
-  defp capped(feed, {[from, to], _budget} = request, %Delivery{} = delivery, rows, time, o) do
+  defp capped(feed, {[from, to], _budget} = request, %Delivery{} = delivery, rows, time, o, box) do
     start = start(delivery, rows, time)
 
-    case open(feed, later(end_of(delivery.window), to), o) do
+    case open(feed, box || [from, to], time, later(end_of(delivery.window), to), o) do
       {:ok, open} ->
         before =
           Enum.count(open.rows, fn row ->
@@ -565,15 +601,24 @@ defmodule Visualize.Feed.Conformance do
   defp intersect(window, nil), do: window
   defp intersect([f1, t1], [f2, t2]), do: [later(f1, f2), earlier(t1, t2)]
 
-  # The open fetch, `[nil, to]` with no budget, read and well formed.
-  defp open(feed, to, o) do
-    request = {[nil, to], nil}
+  # The open fetch, `[nil, to]` with no budget, read and well formed: of a box, the box
+  # with its window field's range opened at `from`, its region and `latest` kept.
+  defp open(feed, window, time, to, o) do
+    request = {opened(window, time, to), nil}
 
     case fetched(feed, request, o) do
       {:ok, delivery, rows} -> {:ok, %{delivery | rows: rows}}
       faults -> faults
     end
   end
+
+  defp opened(%{} = box, time, to) do
+    ranges = Map.get(box, :ranges, %{})
+    others = Map.reject(ranges, fn {field, _range} -> to_string(field) == to_string(time) end)
+    Map.put(box, :ranges, Map.put(others, time, [nil, to]))
+  end
+
+  defp opened(_window, _time, to), do: [nil, to]
 
   # `reduced_by` agrees with the rows served with the budget and without it.
   defp reduced(_feed, {_window, nil} = request, %Delivery{reduced_by: :feed}, _rows, _s, _t, _o),
@@ -658,7 +703,7 @@ defmodule Visualize.Feed.Conformance do
   # -- the supports check --------------------------------------------------------------------
 
   defp window_honoured(feed, supports, time, o) do
-    bounded = for [_from, _to] = w <- o.windows, w != [nil, nil], do: w
+    bounded = for w <- o.windows, bounded?(Window.range(w, time)), do: w
 
     cond do
       :window not in supports ->
@@ -675,7 +720,12 @@ defmodule Visualize.Feed.Conformance do
     end
   end
 
-  defp window_kept(feed, {window, _budget} = request, time, o) do
+  defp bounded?([from, to]), do: from != nil or to != nil
+  defp bounded?(_none), do: false
+
+  defp window_kept(feed, {asked, _budget} = request, time, o) do
+    window = Window.range(asked, time)
+
     case fetched(feed, request, o) do
       {:ok, delivery, rows} ->
         served =

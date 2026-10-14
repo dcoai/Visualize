@@ -452,7 +452,10 @@ defmodule Visualize.Chart do
          {:ok, sources} <- Template.bind(chart, pool),
          {:ok, chart, described} <- Facts.apply(chart, pool, cache, opts[:describe]),
          :ok <- Validator.validate(to_map(chart)) do
-      shared = [sources: sources] ++ Keyword.take(opts, [:theme, :now, :size, :system])
+      shared =
+        [sources: sources, schemas: described.schemas] ++
+          Keyword.take(opts, [:theme, :now, :size, :system])
+
       frames = realise_frames(chart, shared)
 
       frame = frames |> Map.values() |> Enum.min_by(& &1.name)

@@ -44,6 +44,7 @@ defmodule Visualize.Feed.Telemetry do
   @compile {:no_warn_undefined, :telemetry}
 
   alias Visualize.Data.{Delivery, Schema}
+  alias Visualize.Feed.Window
   alias Visualize.{Quantity, Unit}
 
   @enforce_keys [:server, :metric]
@@ -112,7 +113,7 @@ defmodule Visualize.Feed.Telemetry do
 
   @impl Visualize.Feed
   def fetch(%__MODULE__{server: server, metric: metric}, window, _budget),
-    do: call(server, {:fetch, metric, window})
+    do: call(server, {:fetch, metric, Window.range(window, :t)})
 
   @impl Visualize.Feed
   def subscribe(%__MODULE__{server: server, metric: metric}, pid) when is_pid(pid),
