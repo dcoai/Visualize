@@ -929,8 +929,12 @@ defmodule Visualize.Chart.MarkTest do
 
       assert group.attrs == %{
                "data-tooltip-template" => "{k}: {v}",
-               "data-tooltip-event" => "point_click"
+               "data-tooltip-event" => "point_click",
+               "data-frame" => "main",
+               "data-mark" => "0"
              }
+
+      assert Enum.map(group.children, & &1.attrs["data-row"]) == ~w(0 1 2 3)
 
       assert Enum.map(group.children, & &1.attrs["data-datum"]) == List.duplicate("v k", 4)
       assert Enum.map(group.children, & &1.attrs["data-datum-v"]) == ~w(4 9 2 7)
@@ -942,6 +946,39 @@ defmodule Visualize.Chart.MarkTest do
       [first | _] = generate(%{type: :circle, channels: %{x: :t, y: :v}, tooltip: %{}}).children
       assert first.attrs["data-datum"] == "hi hi2 k lo lo2 t v"
       assert first.attrs["data-datum-hi2"] == "6"
+      # Without an event no element is keyed: the markup is as it was (D-170).
+      refute Map.has_key?(first.attrs, "data-row")
+    end
+
+    test "a keyed mark counts its rows after its transforms, a series path by its first row" do
+      group =
+        generate(%{
+          type: :line,
+          data: %{source: :primary, transforms: [%{op: :sort, field: :v}]},
+          channels: %{x: :t, y: :v, series: :k},
+          tooltip: %{fields: [:k, :v], event: "line_click"}
+        })
+
+      # Sorted by v the rows are 2 (k0), 4 (k0), 7 (k1), 9 (k1): k0's path starts at 0, k1's at 2.
+      assert Enum.map(group.children, & &1.attrs["data-row"]) == ~w(0 2)
+      assert group.attrs["data-tooltip-event"] == "line_click"
+    end
+
+    test "a facet's panel keeps the ordinals of every realised row (D-170)" do
+      facet = %{
+        kind: :facet,
+        margin: %{top: 0, right: 0, bottom: 0, left: 0},
+        facet: %{by: :k, columns: 2},
+        scales: %{x: %{kind: :linear, domain: [0, 3]}, y: %{kind: :linear, domain: [0, 10]}}
+      }
+
+      mark = %{type: :circle, channels: %{x: :t, y: :v}, tooltip: %{event: :point_click}}
+      chart = chart(mark, %{frames: %{main: facet}})
+      frame = Frame.new(chart, sources: @sources, size: {300, 200})
+      [panel0, panel1] = Frame.generate(frame, sources: @sources).children
+      rows = fn panel -> Enum.map(hd(panel.children).children, & &1.attrs["data-row"]) end
+      assert rows.(panel0) == ~w(0 2)
+      assert rows.(panel1) == ~w(1 3)
     end
 
     test "a transformed row's own columns are fields, and a per-series path carries its first row" do

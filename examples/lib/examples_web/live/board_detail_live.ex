@@ -27,6 +27,10 @@ defmodule ExamplesWeb.BoardDetailLive do
     {:noreply, socket}
   end
 
+  # The board's events — a selection made or cleared — are the board's own here (D-170).
+  def handle_info({:visualize_event, "detail-board", %Visualize.Event{}}, socket),
+    do: {:noreply, socket}
+
   @impl true
   def render(assigns) do
     ~H"""

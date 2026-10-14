@@ -62,9 +62,60 @@ release it merely follows.
 - **`Visualize.Chart.Frame.legend_extent/1`** returns the box a frame's legend takes,
   `%{width:, height:}`, so a host laying out around a chart can ask rather than repeat the
   text estimate.
+- **`Visualize.Event`, the one shape of every interaction** (#627, D-170). A host receives
+  each interaction as `{:visualize_event, id, %Visualize.Event{}}`, `id` the delivering
+  component's id, with every field always present: `event`, `cell`, `frame`, `item`,
+  `path`, `row`, `at`, `value` and `modifiers`. An event a design declares is named by a
+  string — a mark's tooltip `event` may be written `:point_click` or `"point_click"`, and
+  arrives as `"point_click"` — and the events the runtime raises are atoms (`:drill`,
+  `:brush`, `:select`). `row` is the row the clicked element was drawn from, resolved on the
+  server and typed as the source holds it (a `DateTime` stays a `DateTime`); `item` is
+  `{mark id or type, identity}` by the declared identity, else the inference a pick uses,
+  else `nil`; `at` is the pointer in the frame's plot area; `modifiers` are `:shift`,
+  `:alt`, `:ctrl` and `:meta`. `Visualize.Event.decode/1` and `resolve/3` are public, with
+  `declared/1`, `name/1`, `identity/3` and `item/2`.
+- **`Visualize.Components.Chart`**, a LiveComponent for a chart whose marks declare
+  events: `<.live_component module={Visualize.Components.Chart} id="sales" chart={@applied} />`
+  over a `%Visualize.Chart.Applied{}` (`render:` takes `Chart.render/2`'s options,
+  `tooltip_class:` the hook's class). It draws the chart inside `TooltipHook`, resolves a
+  click to the row drawn and sends the page the event. A click on a drawing it no longer
+  holds, a name the mark does not declare or a row it does not have is dropped.
+- **A board sends `:select` when its selection changes**, `value: %{identity: identity |
+  nil}`, so a page can keep the selection in its URL as `brush: :host` lets it keep the
+  window.
+- `Visualize.Board.Server.event/3` resolves a cell's click against the frame the cell holds;
+  `Visualize.Board.Server.pick/4` answers `item:` and `frame:` beside `row:` and
+  `identity:`; a `Visualize.Board.View` carries `drawn`, the token of its drawing; and
+  `Visualize.Chart.Compiled.rows/3` gives a mark's rows as a tick draws them.
+- A mark whose `tooltip` names an `event` writes `data-frame` and `data-mark` on its group
+  and `data-row` on each element it draws. A mark without one renders exactly as before.
 
 ### Changed
 
+- **Breaking: every interaction is one `Visualize.Event`** (#627, D-170). The four shapes a
+  host used to handle are removed, not sent beside the new one, and `TooltipHook` no longer
+  pushes a mark's declared event with the datum's strings: it pushes one wire event,
+  `visualize_event`, which `Visualize.Components.Chart` or a board's cell resolves.
+  Migrate as follows:
+
+  | Before | After |
+  |---|---|
+  | `handle_event("point_click", %{"series" => s, "hour" => h}, socket)` — a plain chart under `TooltipHook`, string values | render the chart with `<.live_component module={Visualize.Components.Chart} id="chart" chart={@applied} />`, then `handle_info({:visualize_event, "chart", %Visualize.Event{event: "point_click", row: %{series: s, hour: h}}}, socket)` — typed values |
+  | `handle_info({:visualize_board_event, id, %{cell: cell, event: "event_open", fields: %{"id" => id_string}}}, socket)` | `handle_info({:visualize_event, id, %Visualize.Event{event: "event_open", cell: cell, row: %{id: id}}}, socket)` |
+  | `handle_info({:visualize_board_drill, id, %{cell: cell, board: ref, vars: vars}}, socket)` | `handle_info({:visualize_event, id, %Visualize.Event{event: :drill, cell: cell, value: %{board: ref, vars: vars}}}, socket)` — `row` is the picked row |
+  | `handle_info({:visualize_board_brush, id, %{domain: [from, to] \| nil}}, socket)` | `handle_info({:visualize_event, id, %Visualize.Event{event: :brush, value: %{domain: [from, to] \| nil}}}, socket)` |
+  | (no message: the selection was only `{:board, info}`'s `selection`) | `handle_info({:visualize_event, id, %Visualize.Event{event: :select, value: %{identity: identity}}}, socket)` on every change: `identity` is `{field, value}`, `%{field => value}` for a composite identity, or `nil` when cleared |
+
+  A board page now receives `:select` on every pick that selects, so a page that matches
+  only the events it uses needs a clause that ignores the rest:
+  `def handle_info({:visualize_event, _id, %Visualize.Event{}}, socket), do: {:noreply, socket}`.
+  The D-161 options keep their names: `brush: :server | :host` and `data-tooltip-target`.
+  A mark naming its event `pick` is still never forwarded from a board.
+- **A string where a design takes a name or another node reads as the string it is.** So that
+  a tooltip `event` may be a string, a string given for a key typed "a name or …" — a
+  design's `theme`, a scale's `range`, a step's `as` — is now reported as not of the key's
+  type, `{:type, {:one_of, types}}`, rather than as not a name, `{:type, :name}`. Such a
+  design was refused before and is refused still.
 - **A top or bottom legend wraps instead of spilling past the plot** (#630, D-169). Its
   entries flow onto rows 16 apart, each centred on the plot, where before one row wider
   than the plot was clipped at both edges. In the margin (`inside: false`), the top or

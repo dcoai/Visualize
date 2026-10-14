@@ -215,26 +215,54 @@ defmodule Visualize.Board.Server do
   end
 
   @doc """
-  The row behind a cell's keyboard point, `{series, index}` (spec/10 §17.2), and its
-  identity (spec/15 §13.2): `{:ok, %{row: row, identity: identity | nil}}`, the identity
-  `{field, value}`, or a map for a composite one the slot's schema declares (D-167), or
+  The row behind a cell's keyboard point, `{series, index}` (spec/10 §17.2), its identity
+  (spec/15 §13.2), its item and its frame: `{:ok, %{row: row, identity: identity | nil,
+  item: item | nil, frame: name}}`, the identity `{field, value}`, or a map for a composite
+  one the slot's schema declares (D-167), the item as a `Visualize.Event`'s (D-170), or
   `:error` for a cell that is not running or a point it does not have.
 
   The board answers the cell's process and the caller asks it, so a pick never holds the
   board; a cell that dies meanwhile answers `:error`.
   """
   @spec pick(GenServer.server(), atom(), non_neg_integer(), non_neg_integer()) ::
-          {:ok, %{row: map(), identity: Board.identity() | nil}} | :error
+          {:ok,
+           %{
+             row: map(),
+             identity: Board.identity() | nil,
+             item: Visualize.Event.item() | nil,
+             frame: atom()
+           }}
+          | :error
   def pick(board, cell, series, index) do
+    ask(board, cell, &{:pick, &1, &2, series, index})
+  end
+
+  @doc """
+  A click a cell's `TooltipHook` pushed, as `Visualize.Event.decode/1` read it, resolved by
+  the cell's process against the drawing it holds (spec/15 §9.2, D-170):
+  `{:ok, %Visualize.Event{}}` with the cell, the declared name, the row as its mark drew
+  it, typed, and its item — or `:error` for a cell that is not running, a click on a
+  drawing it no longer holds, a key it has no row for, a name the mark does not declare,
+  or the cell's own `pick`. Asked as `pick/4` asks, never holding the board.
+  """
+  @spec event(GenServer.server(), atom(), Visualize.Event.click()) ::
+          {:ok, Visualize.Event.t()} | :error
+  def event(board, cell, %{event: _, mark: _, row: _} = click) do
+    ask(board, cell, &{:event, &1, &2, click})
+  end
+
+  # A question put to a cell's process from the caller's: the board names the process,
+  # and the cell answers under the caller's reference.
+  defp ask(board, cell, message) do
     case GenServer.call(board, {:cell, cell}) do
-      pid when is_pid(pid) -> ask(pid, series, index)
+      pid when is_pid(pid) -> ask(pid, message)
       nil -> :error
     end
   end
 
-  defp ask(pid, series, index) do
+  defp ask(pid, message) do
     ref = Process.monitor(pid)
-    send(pid, {:pick, self(), ref, series, index})
+    send(pid, message.(self(), ref))
 
     receive do
       {^ref, reply} ->

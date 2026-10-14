@@ -137,10 +137,22 @@ defmodule ExamplesWeb.BoardLiveTest do
 
   test "a drill the component resolved is followed to the detail board" do
     {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
-    target = %{cell: :services, board: :detail, vars: %{service: "db"}}
+
+    drill = %Visualize.Event{
+      event: :drill,
+      cell: :services,
+      row: %{name: "db"},
+      value: %{board: :detail, vars: %{service: "db"}}
+    }
 
     assert {:noreply, %{redirected: {:live, :redirect, %{to: "/board/detail?service=db"}}}} =
-             BoardLive.handle_info({:visualize_board_drill, "demo-board", target}, socket)
+             BoardLive.handle_info({:visualize_event, "demo-board", drill}, socket)
+
+    # A selection change is the board's own: the page stays where it is.
+    select = %Visualize.Event{event: :select, value: %{identity: {:service, "db"}}}
+
+    assert {:noreply, %{redirected: nil}} =
+             BoardLive.handle_info({:visualize_event, "demo-board", select}, socket)
   end
 
   test "the detail board shows one service, its variable filtering both cells" do

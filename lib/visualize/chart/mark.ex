@@ -58,7 +58,8 @@ defmodule Visualize.Chart.Mark do
   What the element builders see of a mark: the frame, the mark node, its rows, its
   resolved style split into the static part and the `{:field, f}` bindings, its paint
   as `{key, colour}`, its options, inline label and tooltip node, the render mode, and
-  its series values by position when it has a `series` channel (spec/14 §5.2, D-126).
+  its series values by position when it has a `series` channel (spec/14 §5.2, D-126), and
+  the keys a mark with an event writes on its elements (§5.7, D-170).
   """
   @type context :: %{
           frame: Frame.t(),
@@ -73,7 +74,10 @@ defmodule Visualize.Chart.Mark do
           options: map(),
           label: map() | nil,
           tooltip: map() | nil,
-          series: %{term() => pos_integer()} | nil
+          series: %{term() => pos_integer()} | nil,
+          keys:
+            %{frame: atom(), mark: non_neg_integer(), ordinals: %{map() => non_neg_integer()}}
+            | nil
         }
 
   @doc "As `generate/3` with `[]` options: no source bound, an empty mark group."
@@ -106,7 +110,8 @@ defmodule Visualize.Chart.Mark do
     sources = Keyword.get(opts, :sources, %{})
     mode = Keyword.get(opts, :resolve, :css)
     index = Keyword.get_lazy(opts, :index, fn -> position(frame, mark) end)
-    rows = frame |> rows(mark, sources) |> panel(frame, Keyword.fetch(opts, :panel))
+    realised = rows(frame, mark, sources)
+    rows = panel(realised, frame, Keyword.fetch(opts, :panel))
     style_node = Style.node(frame.styles, Map.get(mark, :style))
     {static, bound} = split(Style.resolve(style_node, frame.theme, mode))
 
@@ -125,7 +130,7 @@ defmodule Visualize.Chart.Mark do
       tooltip: node(mark, :tooltip)
     }
 
-    ctx = Map.put(ctx, :series, Series.index(ctx))
+    ctx = Map.merge(ctx, %{series: Series.index(ctx), keys: keys(ctx, realised)})
 
     children = if type in @shapes, do: Shapes.elements(ctx), else: Generic.elements(ctx)
     # Every element and label a series draws names it (spec/14 §5.6, D-126).
@@ -253,29 +258,63 @@ defmodule Visualize.Chart.Mark do
     )
   end
 
-  # The group's `data-tooltip-template` and `data-tooltip-event` (spec/14 §5.7).
+  # The group's `data-tooltip-template` and `data-tooltip-event` (spec/14 §5.7), and the
+  # frame's name and the mark's position when it keys its elements (D-170).
   defp tooltip_attrs(%{tooltip: nil}), do: %{}
 
-  defp tooltip_attrs(%{tooltip: tooltip}) do
+  defp tooltip_attrs(%{tooltip: tooltip} = ctx) do
     for {key, name} <- [template: "data-tooltip-template", event: "data-tooltip-event"],
         value = Map.get(tooltip, key),
         value != nil,
-        into: %{},
+        into: key_attrs(ctx.keys),
         do: {name, to_string(value)}
   end
+
+  defp key_attrs(nil), do: %{}
+
+  defp key_attrs(%{frame: frame, mark: position}),
+    do: %{"data-frame" => to_string(frame), "data-mark" => Integer.to_string(position)}
+
+  # What a mark with an event keys its elements by (spec/14 §5.7, D-170): its frame's name,
+  # its position among the frame's marks, and each datum's ordinal in the mark's realised
+  # rows — all of them, before a facet's panel is taken, as `rows/3` gives them. Equal rows
+  # are one row to a click, so the first ordinal names them. `nil` for a mark without an
+  # event, or one drawn outside its frame's marks, which cannot be resolved.
+  defp keys(%{tooltip: %{event: event}, frame: frame, mark: mark}, rows) when event != nil do
+    case Enum.find_index(frame.marks, &(&1 == mark)) do
+      nil ->
+        nil
+
+      position ->
+        ordinals = rows |> Enum.with_index() |> Enum.reverse() |> Map.new()
+        %{frame: frame.name, mark: position, ordinals: ordinals}
+    end
+  end
+
+  defp keys(_ctx, _rows), do: nil
 
   # The datum attributes of spec/10 §12.2 on an element: the tooltip's fields read from
   # the datum, or every column of the datum in sorted order when it names none.
   defp datum_attrs(element, _datum, %{tooltip: nil}), do: element
 
-  defp datum_attrs(element, datum, %{tooltip: tooltip}) do
+  defp datum_attrs(element, datum, %{tooltip: tooltip} = ctx) do
     fields =
       case Map.get(tooltip, :fields, []) do
         [] -> datum |> Map.keys() |> Enum.sort() |> Enum.map(&{&1, Map.get(datum, &1)})
         fields -> Enum.map(fields, &{&1, Table.get(datum, &1)})
       end
 
-    Element.datum(element, fields)
+    element |> Element.datum(fields) |> row_key(datum, ctx.keys)
+  end
+
+  # The datum's ordinal in the mark's realised rows, as `data-row` (D-170).
+  defp row_key(element, _datum, nil), do: element
+
+  defp row_key(element, datum, %{ordinals: ordinals}) do
+    case Map.fetch(ordinals, datum) do
+      {:ok, ordinal} -> Element.put_attr(element, "data-row", Integer.to_string(ordinal))
+      :error -> element
+    end
   end
 
   # The paint: the style's value for the paint key, else the theme's series colour for

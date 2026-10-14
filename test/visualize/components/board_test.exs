@@ -15,6 +15,7 @@ defmodule Visualize.Components.BoardTest do
   alias Visualize.Components.Board, as: Component
   alias Visualize.Components.Board.Cell
   alias Visualize.Data.Schema
+  alias Visualize.Event
   alias Visualize.Test.Feeds
 
   @moduletag :capture_log
@@ -26,6 +27,22 @@ defmodule Visualize.Components.BoardTest do
       main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}
     },
     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
+  }
+
+  # A line with its points, whose click is an event, and a mark that names its event
+  # `pick`, which the cell keeps for itself (spec/15 §9.2, D-170).
+  @points %{
+    @line
+    | marks: [
+        %{type: :line, data: :primary, channels: %{x: :t, y: :v}},
+        %{
+          type: :circle,
+          data: :primary,
+          channels: %{x: :t, y: :v},
+          tooltip: %{fields: [:v], event: :event_open}
+        },
+        %{type: :circle, data: :primary, channels: %{x: :t, y: :v}, tooltip: %{event: "pick"}}
+      ]
   }
 
   @t0 ~U[2026-10-11 12:00:00Z]
@@ -42,7 +59,7 @@ defmodule Visualize.Components.BoardTest do
     })
   end
 
-  defp server do
+  defp server(design \\ @line) do
     schema = Schema.new!(%{t: %{type: :time}, v: %{type: :number}})
     rows = for i <- 0..9, do: %{t: DateTime.add(@t0, i * 60), v: i}
     {feed, agent} = Feeds.scripted(schema: schema, rows: rows)
@@ -53,7 +70,7 @@ defmodule Visualize.Components.BoardTest do
     {:ok, pid} =
       Server.start(sup,
         board: board(),
-        store: %{{:composite, 1} => @line},
+        store: %{{:composite, 1} => design},
         binding: Binding.new(%{{:latency, :primary} => :f, {:errors, :primary} => :f}),
         feeds: %{f: feed},
         tick: nil,
@@ -73,6 +90,31 @@ defmodule Visualize.Components.BoardTest do
       end
 
     view
+  end
+
+  # The newest live view of a cell drawn after the drawing `before` (`nil` for any): a click
+  # carries the token of the drawing on screen, which is the last one drawn. A pick is a
+  # round trip to the cell's process, so every view it sent before answering is already
+  # here, and the mailbox is drained without waiting.
+  defp latest_view(board, cell, before \\ nil) do
+    view = next_view(cell, before)
+    _ = Server.pick(board, cell, 0, 0)
+    drain(cell, view)
+  end
+
+  defp next_view(cell, before) do
+    case live_view(cell) do
+      %View{drawn: ^before} -> next_view(cell, before)
+      view -> view
+    end
+  end
+
+  defp drain(cell, view) do
+    receive do
+      {:visualize_board, _, {:cell, ^cell, %View{state: :live} = newer}} -> drain(cell, newer)
+    after
+      0 -> view
+    end
   end
 
   describe "the board (spec/15 §9.1)" do
@@ -160,7 +202,7 @@ defmodule Visualize.Components.BoardTest do
       [_, myself] = Regex.run(~r/data-keyboard-target="([^"]+)"/, html)
 
       assert html =~
-               ~s(<div id="ops-latency-tooltip" phx-hook="TooltipHook" data-tooltip-target="#{myself}">)
+               ~s(<div id="ops-latency-tooltip" phx-hook="TooltipHook" data-tooltip-target="#{myself}" data-tooltip-drawn="#{view.drawn}">)
 
       assert html =~ ~r/id="ops-latency-keys".*id="ops-latency-tooltip".*<svg/s
 
@@ -172,20 +214,82 @@ defmodule Visualize.Components.BoardTest do
       refute cell_html(%View{cell: :a, state: :loading, size: {1, 1}, note: "x"}) =~ "TooltipHook"
     end
 
-    test "a mark's click on a cell reaches the page as :visualize_board_event (D-161)" do
+    test "a mark's click on a cell reaches the page as one Visualize.Event, its row typed (D-170)" do
+      board = server(@points)
+      {:ok, _info} = Server.subscribe(board)
+      view = latest_view(board, :latency)
+      assert view.drawn != nil
+      assert view.svg =~ ~s(data-frame="main" data-mark="1" data-tooltip-event="event_open")
+      assert view.svg =~ ~s(data-row="2")
+
       socket = %Socket{
-        assigns: %{__changed__: %{}, id: "ops-latency", cell: :latency, board_id: "ops"}
+        assigns: %{
+          __changed__: %{},
+          id: "ops-latency",
+          cell: :latency,
+          board_id: "ops",
+          server: board
+        }
       }
 
-      fields = %{"id" => "42", "t" => "2026-10-11T12:01:00Z"}
-      assert {:noreply, _} = Cell.handle_event("event_open", fields, socket)
+      click = fn params ->
+        Map.merge(
+          %{
+            "event" => "event_open",
+            "frame" => "main",
+            "mark" => 1,
+            "row" => 2,
+            "drawn" => view.drawn
+          },
+          params
+        )
+      end
 
-      assert_received {:visualize_board_event, "ops",
-                       %{cell: :latency, event: "event_open", fields: ^fields}}
+      assert {:noreply, _} =
+               Cell.handle_event(
+                 "visualize_event",
+                 click.(%{"at" => %{"x" => 140, "y" => 70}, "modifiers" => ["alt"]}),
+                 socket
+               )
 
-      # `pick` is the cell's own: a malformed one is not forwarded as a mark's event.
+      t2 = DateTime.add(@t0, 120)
+
+      assert_received {:visualize_event, "ops",
+                       %Event{
+                         event: "event_open",
+                         cell: :latency,
+                         frame: :main,
+                         row: %{t: ^t2, v: 2},
+                         item: nil,
+                         path: [],
+                         at: %{x: _, y: _},
+                         value: %{},
+                         modifiers: [:alt]
+                       }}
+
+      # A click on a drawing the cell no longer holds, a name the mark does not declare, a
+      # row the drawing does not have, the cell's own `pick`, or params of another shape:
+      # nothing reaches the page.
+      Cell.handle_event("visualize_event", click.(%{"drawn" => "0"}), socket)
+      Cell.handle_event("visualize_event", click.(%{"event" => "nope"}), socket)
+      Cell.handle_event("visualize_event", click.(%{"row" => 99}), socket)
+      Cell.handle_event("visualize_event", click.(%{"event" => "pick", "mark" => 2}), socket)
+      Cell.handle_event("visualize_event", %{"event" => "event_open"}, socket)
+      Cell.handle_event("event_open", %{"id" => "42"}, socket)
       Cell.handle_event("pick", %{"series" => "a", "index" => "b"}, socket)
+      refute_received {:visualize_event, _, _}
       refute_received {:visualize_board_event, _, _}
+
+      # The cell draws a new frame: a click on the one before is dropped, not resolved
+      # against the new drawing; a click on the new one resolves.
+      :ok = Server.resize(board, 700)
+      newer = latest_view(board, :latency, view.drawn)
+      refute newer.drawn == view.drawn
+      Cell.handle_event("visualize_event", click.(%{}), socket)
+      refute_received {:visualize_event, _, _}
+
+      Cell.handle_event("visualize_event", click.(%{"drawn" => newer.drawn}), socket)
+      assert_received {:visualize_event, "ops", %Event{event: "event_open", row: %{v: 2}}}
     end
 
     test "every state renders in a cell: alone where there is no chart, a banner over one" do
@@ -289,7 +393,9 @@ defmodule Visualize.Components.BoardTest do
 
       from = DateTime.from_unix!(ms + 60_000, :millisecond)
       to = DateTime.from_unix!(ms + 300_000, :millisecond)
-      assert_received {:visualize_board_brush, "ops", %{domain: [^from, ^to]}}
+
+      assert_received {:visualize_event, "ops",
+                       %Event{event: :brush, cell: nil, row: nil, value: %{domain: [^from, ^to]}}}
 
       # The board's window is untouched until the page applies it.
       info = Server.info(board)
@@ -301,7 +407,7 @@ defmodule Visualize.Components.BoardTest do
       assert Server.info(board).moved
 
       Component.handle_event("reset_window", %{}, socket)
-      assert_received {:visualize_board_brush, "ops", %{domain: nil}}
+      assert_received {:visualize_event, "ops", %Event{event: :brush, value: %{domain: nil}}}
       assert Server.info(board).window == {from, to}
       assert Server.info(board).moved
 
@@ -309,7 +415,37 @@ defmodule Visualize.Components.BoardTest do
       Component.handle_event("brush", %{"x0" => 1, "x1" => 9}, socket)
       Component.handle_event("brush", %{"domain" => [ms + 9, ms + 1]}, socket)
       Component.handle_event("brush_clear", %{}, socket)
+      refute_received {:visualize_event, _, _}
       refute_received {:visualize_board_brush, _, _}
+    end
+
+    test "a change of the board's selection reaches the page as :select (D-170)" do
+      info = %{window: nil, zone: "Etc/UTC", now: @t0, width: 900, sync: nil, selection: nil}
+      socket = %{socket(self()) | assigns: %{socket(self()).assigns | info: info}}
+
+      # The selection held when the page subscribed is not a change.
+      assert {:ok, socket} = Component.update(%{info: info}, socket)
+      refute_received {:visualize_event, _, _}
+
+      picked = %{info | selection: {:service, "api"}}
+      assert {:ok, socket} = Component.update(%{info: picked}, socket)
+
+      assert_received {:visualize_event, "ops",
+                       %Event{event: :select, cell: nil, value: %{identity: {:service, "api"}}}}
+
+      # Another message about the board that keeps the selection sends nothing.
+      assert {:ok, socket} = Component.update(%{info: %{picked | width: 640}}, socket)
+      refute_received {:visualize_event, _, _}
+
+      composite = %{info | selection: %{host: "mx1", iface: "eth0"}}
+      assert {:ok, socket} = Component.update(%{info: composite}, socket)
+      identity = %{host: "mx1", iface: "eth0"}
+
+      assert_received {:visualize_event, "ops",
+                       %Event{event: :select, value: %{identity: ^identity}}}
+
+      assert {:ok, _socket} = Component.update(%{info: info}, socket)
+      assert_received {:visualize_event, "ops", %Event{event: :select, value: %{identity: nil}}}
     end
 
     test "the brush assign defaults to :server and refuses anything else" do

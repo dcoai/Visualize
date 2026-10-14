@@ -16,18 +16,24 @@ defmodule ExamplesWeb.InteractionLiveTest do
   """
   use ExUnit.Case, async: true
 
+  import Phoenix.ConnTest, only: [build_conn: 0, init_test_session: 2, html_response: 2]
+
   alias ExamplesWeb.InteractionLive
+
+  @endpoint ExamplesWeb.Endpoint
   alias Visualize.Backend.CanvasBinary.Decoder
 
   # The page's own size, and a narrower one.
   @sizes [{720, 380}, {480, 320}]
 
+  # The page as LiveView first renders it, its tooltip chart a live component (D-170), at
+  # the size the session names.
   defp page(size) do
-    size
-    |> InteractionLive.build()
-    |> Map.merge(%{picked: nil, hovered: nil, hidden: %{}, __changed__: %{}})
-    |> InteractionLive.render()
-    |> Phoenix.LiveViewTest.rendered_to_string()
+    build_conn()
+    |> Plug.Conn.put_private(:phoenix_endpoint, @endpoint)
+    |> init_test_session(%{})
+    |> Phoenix.LiveView.Controller.live_render(InteractionLive, session: %{"size" => size})
+    |> html_response(200)
   end
 
   # The opening tag of the element with `id`, and the markup after it.
@@ -154,6 +160,41 @@ defmodule ExamplesWeb.InteractionLiveTest do
       assert chart =~ ~r/<path\b[^>]*data-series="#{s}"/
       assert chart =~ ~s(class="legend-item" data-series="#{s}")
     end
+  end
+
+  test "a click on a point reaches the page as one Visualize.Event, its row typed (D-170)" do
+    {tag, rest} = page({720, 380}) |> element("tooltip-chart")
+    assert tag =~ ~s(phx-hook="TooltipHook")
+    assert tag =~ ~r/data-tooltip-drawn="\d+"/
+    assert rest =~ ~s(data-frame="main" data-mark="1" data-tooltip-event="point_click")
+
+    # The component resolves a point's key against the chart it drew: the circles' rows
+    # are the page's rows, the fifth beta at hour 1.
+    %{applied: applied} = InteractionLive.build({720, 380})
+
+    click = %{
+      event: "point_click",
+      frame: "main",
+      mark: 1,
+      row: 4,
+      drawn: nil,
+      at: nil,
+      modifiers: []
+    }
+
+    assert {:ok, %Visualize.Event{row: %{series: "beta", hour: 1, value: value} = row} = event} =
+             Visualize.Event.resolve(click, applied)
+
+    assert is_float(value)
+    assert event.item == {:circle, "beta"}
+
+    socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, picked: nil}}
+
+    assert {:noreply, %{assigns: %{picked: {"beta", 1, ^value}}}} =
+             InteractionLive.handle_info(
+               {:visualize_event, "tooltip-chart", %{event | row: row}},
+               socket
+             )
   end
 
   # Every demo's panel, its heading and the id of the chart it holds (#505); the code

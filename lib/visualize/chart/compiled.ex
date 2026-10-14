@@ -412,6 +412,27 @@ defmodule Visualize.Chart.Compiled do
     {group, compiled}
   end
 
+  @doc """
+  The realised rows of the frame's mark at `index` as a tick over the sources draws it
+  (spec/14 §5.7, D-170): the frame realised as `step/3` realises it and a viewport's
+  window taken, so a `data-row` ordinal the mark wrote counts in these rows. `[]` for an
+  index the frame has no mark at. A mark that eases keeps its rows' positions (§12.5), so
+  the rows here are the ones the eased elements stand for, at their own values.
+  """
+  @spec rows(t(), map(), non_neg_integer()) :: [map()]
+  def rows(%__MODULE__{chart: chart} = compiled, sources, index)
+      when is_map(sources) and is_integer(index) and index >= 0 do
+    case Enum.at(chart.marks, index) do
+      nil ->
+        []
+
+      mark ->
+        sources = sources!(compiled, sources)
+        {frame, hi} = realise(compiled, sources, nil)
+        Mark.rows(frame, mark, mark_sources(compiled, frame, mark, sources, hi))
+    end
+  end
+
   # Where this plot's group sits: its margins, out of its own box (spec/14 §4.2) — the
   # design's own translate for a frame that fills the box, as every single-frame design's
   # does.

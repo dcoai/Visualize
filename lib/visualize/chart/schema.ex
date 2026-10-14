@@ -276,6 +276,8 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:colour_map, v), do: is_map(v) and not is_struct(v)
   # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
   defp shape?({:enum, _}, v), do: is_atom(v)
+  # A name is an atom, so a string beside one is read as the string it is (D-170).
+  defp shape?(:name, v), do: is_atom(v)
   defp shape?(:term, _), do: true
   defp shape?(_atomic, v), do: is_atom(v) or is_tuple(v) or is_binary(v)
 

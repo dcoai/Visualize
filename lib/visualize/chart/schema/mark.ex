@@ -266,7 +266,7 @@ defmodule Visualize.Chart.Schema.Mark do
     [
       spec(:fields, {:list, :field}, :binding, default: []),
       spec(:template, :string, :content),
-      spec(:event, :name, :binding)
+      spec(:event, {:one_of, [:name, :string]}, :binding)
     ]
   end
 
