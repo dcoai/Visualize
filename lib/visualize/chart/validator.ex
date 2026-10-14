@@ -18,7 +18,7 @@ defmodule Visualize.Chart.Validator do
 
   """
 
-  alias Visualize.Chart.{Fact, Migration, Schema, Text, Var}
+  alias Visualize.Chart.{Fact, Migration, Schema, Style, Text, Var}
   alias Visualize.Chart.Validator.{Domain, Frames, Palette, Words}
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
@@ -65,6 +65,7 @@ defmodule Visualize.Chart.Validator do
           | {:polarity, :range}
           | {:style_range, atom()}
           | {:style_scale, atom()}
+          | {:style_colour, atom()}
           | {:tiles, :projection, atom()}
           | {:tiles, :attribution | :url | :subdomains}
           | {:outside_domain, atom(), number() | {:column, atom(), :number | :text | :time}}
@@ -85,11 +86,16 @@ defmodule Visualize.Chart.Validator do
   # The plot's four corners and its centre (spec/14 §6.3, #489).
   @frame_points [:top_left, :top_right, :bottom_left, :bottom_right, :center]
   @not_names [nil, true, false]
+  @default_slots Theme.slots(Theme.default())
 
   @doc "`:ok`, or every fault of the design ordered by path."
   @spec validate(term()) :: :ok | {:error, [error(), ...]}
   def validate(map) when is_map(map) and not is_struct(map) do
-    case node(:design, map, [], context(map)) ++ cycles(map) ++ Domain.faults(map) do
+    ctx = context(map)
+    styles = Style.all(if(is_map(map[:styles]), do: map[:styles], else: %{}))
+    colourless = Palette.colour_faults(map, styles, &colourless?(&1, ctx))
+
+    case node(:design, map, [], ctx) ++ cycles(map) ++ Domain.faults(map) ++ colourless do
       [] -> :ok
       errors -> {:error, Enum.sort_by(errors, &elem(&1, 0))}
     end
@@ -1038,6 +1044,21 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp ref(kind, name, path, ctx), do: ref_in(kind, name, path, ctx)
+
+  # A style name with no colour to paint, which a scale read as colour cannot carry: a style
+  # the design may reference that is no theme slot (spec/14 §3.6, #637).
+  defp colourless?(name, ctx) do
+    slot? =
+      case ctx.slots do
+        %MapSet{} = slots ->
+          MapSet.member?(slots, name)
+
+        :unknown ->
+          name in @default_slots or Regex.match?(~r/^series_[1-9]\d*$/, Atom.to_string(name))
+      end
+
+    not slot? and match?(%MapSet{}, ctx.styles) and style_name?(name, ctx)
+  end
 
   # Whether a value is a style name the design may reference (spec/14 §3.3).
   defp style_name?(name, ctx) when is_atom(name) do

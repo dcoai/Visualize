@@ -40,7 +40,9 @@ release it merely follows.
   takes its first datum's style; a reading the scale cannot place lays nothing. New validator
   faults: `{:style_range, kind}` (a styles range on another scale kind), `{:style_scale, name}`
   (a stack entry whose scale does not range over styles) and `{:invalid_for, kind}` for that
-  entry outside a mark's style. JSON writes them as `{"$styles": "roles"}` and
+  entry outside a mark's style, and `{:style_colour, name}` for a scale of styles read as colour
+  (the `color` scale, a legend's, a mark's `scales.color`, a `{:field, f}` fill or stroke) unless
+  every name in its range is also a theme slot. JSON writes them as `{"$styles": "roles"}` and
   `{"$scale": ["health", "state"]}`.
 - **A stored theme carries its palette** (#637). An inline design theme and a
   `Visualize.Chart.Theme` document accept `styles`, each entry checked as a style node and by the

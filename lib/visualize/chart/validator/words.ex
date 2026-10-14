@@ -48,6 +48,12 @@ defmodule Visualize.Chart.Validator.Words do
       ":threshold scale's range, its categories or its bands (spec/14 §4.3)"
   end
 
+  def words({:style_colour, name}) do
+    "reads scale #{inspect(name)} as colour, and it ranges over styles: a style name that " <>
+      "is no theme slot has no colour to paint; give the colour scale colours, and lay the " <>
+      "styles through a {:scale, name, field} stack entry (spec/14 §3.6)"
+  end
+
   def words({:style_scale, name}) do
     "names scale #{inspect(name)}, which does not range over styles: it must be an " <>
       ":ordinal or a :threshold scale whose range is {:styles, :roles}, {:styles, :series}, " <>

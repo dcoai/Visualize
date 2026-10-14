@@ -594,6 +594,85 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
     end
   end
 
+  describe "a scale of styles read as colour" do
+    defp scale(design, name, node), do: put_in(design, [:frames, :main, :scales, name], node)
+
+    test "the color scale ranging over styles is a fault at its range" do
+      for range <- [{:styles, :roles}, {:styles, :series}, [:good, :muted], %{"a" => :style_2}] do
+        design = scale(design(%{}), :color, %{kind: :ordinal, range: range})
+
+        assert {[:frames, :main, :scales, :color, :range], {:style_colour, :color}} in errors(
+                 design
+               ),
+               inspect(range)
+      end
+    end
+
+    test "an adopted color scale is a fault at the adoption" do
+      design =
+        design(%{}, %{
+          frames: %{
+            main: %{
+              kind: :cartesian,
+              margin: @margin,
+              scales: %{
+                x: %{kind: :linear},
+                y: %{kind: :linear},
+                color: {:frame, :other, :health}
+              }
+            },
+            other: %{
+              kind: :cartesian,
+              scales: %{health: %{kind: :ordinal, range: {:styles, :roles}}}
+            }
+          },
+          marks: []
+        })
+
+      assert {[:frames, :main, :scales, :color], {:style_colour, :color}} in errors(design)
+    end
+
+    test "a legend on a scale of styles is a fault at the legend's scale" do
+      design = put_in(design(%{}), [:frames, :main, :legend], %{scale: :health})
+      assert {[:frames, :main, :legend, :scale], {:style_colour, :health}} in errors(design)
+    end
+
+    test "a mark renaming color to a scale of styles is a fault at its scales.color" do
+      design = design(%{scales: %{color: :health}})
+      assert {[:marks, 0, :scales, :color], {:style_colour, :health}} in errors(design)
+    end
+
+    test "a colour binding through a scale of styles is a fault at the mark's style" do
+      binding = design(%{scales: %{color: :health}, style: %{fill: {:field, :state}}})
+      assert {[:marks, 0, :style], {:style_colour, :health}} in errors(binding)
+
+      named =
+        design(%{style: [:tinted]}, %{styles: %{tinted: %{stroke: {:field, :state}}}})
+        |> scale(:color, %{kind: :ordinal, range: [:muted, :bad]})
+
+      assert {[:marks, 0, :style], {:style_colour, :color}} in errors(named)
+    end
+
+    test "a list or a map of style names that are slots reads as colours" do
+      for range <- [[:good, :warning, :bad], %{"a" => :info, "b" => :axis}] do
+        design =
+          design(%{style: %{fill: {:field, :state}}})
+          |> scale(:color, %{kind: :ordinal, range: range})
+          |> put_in([:frames, :main, :legend], %{scale: :color})
+
+        assert Validator.validate(design) == :ok, inspect(range)
+      end
+
+      # A scale of styles nothing reads as colour is not a fault.
+      assert Validator.validate(design(%{style: [{:scale, :health, :state}]})) == :ok
+    end
+
+    test "is worded" do
+      assert Validator.format({[:marks, 0, :style], {:style_colour, :health}}) =~
+               "reads scale :health as colour"
+    end
+  end
+
   defp role("up"), do: :good
   defp role("degraded"), do: :warning
   defp role("down"), do: :bad
