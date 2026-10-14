@@ -115,7 +115,11 @@ defmodule Visualize.ChartGen do
   # -- theme, sources, vars, styles ---------------------------------------------------
 
   defp theme do
-    one_of([constant(:default), constant(:dark), constant(Map.from_struct(Theme.dark()))])
+    one_of([
+      constant(:default),
+      constant(:dark),
+      constant(Visualize.Chart.Theme.node(Theme.dark()))
+    ])
   end
 
   defp theme_struct(:default), do: Theme.default()
