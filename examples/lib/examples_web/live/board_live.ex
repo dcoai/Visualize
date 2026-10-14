@@ -19,6 +19,7 @@ defmodule ExamplesWeb.BoardLive do
 
   alias ExamplesWeb.{Highlight, Panel}
   alias Visualize.Board.Server
+  alias Visualize.Event
 
   @windows [{"1 min", 60}, {"5 min", 300}, {"15 min", 900}]
 
@@ -34,10 +35,18 @@ defmodule ExamplesWeb.BoardLive do
     {:noreply, socket}
   end
 
-  # A drill the component resolved from the clicked bar (spec/15 §13.3): the page follows it.
-  def handle_info({:visualize_board_drill, "demo-board", %{board: :detail, vars: vars}}, socket) do
+  # A drill the component resolved from the clicked bar (spec/15 §13.3, D-170): the page
+  # follows it. Every other event of the board's — a selection made or cleared — is the
+  # board's own business here, and the page ignores it.
+  def handle_info(
+        {:visualize_event, "demo-board",
+         %Event{event: :drill, value: %{board: :detail, vars: vars}}},
+        socket
+      ) do
     {:noreply, push_navigate(socket, to: "/board/detail?" <> URI.encode_query(vars))}
   end
+
+  def handle_info({:visualize_event, "demo-board", %Event{}}, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("window", %{"last" => last}, socket) do
@@ -143,10 +152,16 @@ defmodule ExamplesWeb.BoardLive do
       {:noreply, socket}
     end
 
-    # A drill-down the component resolved; the page knows where it leads.
-    def handle_info({:visualize_board_drill, "ops", %{board: :detail, vars: vars}}, socket) do
+    # Every interaction arrives as one Visualize.Event. A drill-down the component
+    # resolved: the page knows where it leads. Any other event — a selection — it ignores.
+    def handle_info(
+          {:visualize_event, "ops", %Visualize.Event{event: :drill, value: %{board: :detail, vars: vars}}},
+          socket
+        ) do
       {:noreply, push_navigate(socket, to: "/board/detail?" <> URI.encode_query(vars))}
     end
+
+    def handle_info({:visualize_event, "ops", _event}, socket), do: {:noreply, socket}
     '''
   end
 end

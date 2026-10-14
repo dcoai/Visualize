@@ -68,36 +68,47 @@ defmodule Visualize.Hooks.TooltipTest do
     assert js =~ "document.elementFromPoint(touch.clientX, touch.clientY)"
   end
 
-  test "a click pushes the fields only when a data-tooltip-event names the event" do
+  test "a click pushes one wire event, visualize_event, and never the datum's strings (D-170)" do
     js = Tooltip.js_hook()
     assert js =~ "this.nearest(el, 'data-tooltip-event')"
     assert js =~ "if (!event) return;"
-    assert js =~ "else this.pushEvent(event, this.fields(el).values);"
+    assert js =~ "if (mark === null || row === null) return;"
+    assert js =~ "else this.pushEvent('visualize_event', payload);"
+    assert js =~ "if (target) this.pushEventTo(target, 'visualize_event', payload);"
     assert length(String.split(js, "pushEvent(")) == 2
+    refute js =~ "this.fields(el).values)"
   end
 
-  test "a click's event goes to the component data-tooltip-target names (D-161)" do
+  test "the payload is the element's key, the drawing's token, the pointer and the modifiers" do
     js = Tooltip.js_hook()
-    assert js =~ "const target = this.el.dataset.tooltipTarget;"
-    assert js =~ "if (target) this.pushEventTo(target, event, this.fields(el).values);"
+    assert js =~ "frame: this.nearest(el, 'data-frame'),"
+    assert js =~ "mark: parseInt(mark, 10),"
+    assert js =~ "row: parseInt(row, 10),"
+    assert js =~ "drawn: this.el.dataset.tooltipDrawn || null,"
+    assert js =~ "['shift', 'alt', 'ctrl', 'meta'].filter((key) => e[key + 'Key'])"
+    assert js =~ "pt.matrixTransform(svg.getScreenCTM().inverse())"
   end
 
   @tag :js
-  test "executed: a click goes to data-tooltip-target, else to the LiveView (D-161)" do
+  test "executed: a keyed click goes to data-tooltip-target, else to the LiveView (D-161, D-170)" do
     assert {:ok, %{"log" => log}} =
              Visualize.JsHooks.run("""
              const chart = (attrs) => {
-               const dot = Stub.markup('circle', {'data-datum': 'id t', 'data-datum-id': '42', 'data-datum-t': '1'});
-               const mark = Stub.markup('g', {class: 'mark', 'data-tooltip-event': 'event_open'}, [dot]);
-               const el = Stub.markup('div', attrs, [Stub.markup('svg', {}, [mark])]);
+               const dot = Stub.markup('circle', {'data-datum': 'id t', 'data-datum-id': '42', 'data-datum-t': '1', 'data-row': '3'});
+               const bare = Stub.markup('circle', {'data-datum': 'id', 'data-datum-id': '43'});
+               const mark = Stub.markup('g', {class: 'mark', 'data-tooltip-event': 'event_open', 'data-frame': 'main', 'data-mark': '1'}, [dot, bare]);
+               const svg = Stub.markup('svg', {viewBox: '0 0 200 100'}, [mark]);
+               svg.rect = {left: 10, top: 20, width: 400, height: 200};
+               const el = Stub.markup('div', attrs, [svg]);
                Stub.mount(TooltipHook, el);
-               return {el, dot, mark};
+               return {el, dot, bare, mark};
              };
-             const cell = chart({id: 'cell-tooltip', 'data-tooltip-target': '4'});
+             const cell = chart({id: 'cell-tooltip', 'data-tooltip-target': '4', 'data-tooltip-drawn': '17'});
              Stub.mark('targeted');
              // The stub does not bubble: a click reaches the hook's element, its target the node.
-             Stub.fire(cell.el, 'click', {target: cell.dot});
+             Stub.fire(cell.el, 'click', {target: cell.dot, clientX: 110, clientY: 70, shiftKey: true, metaKey: true});
              Stub.fire(cell.el, 'click', {target: cell.mark});
+             Stub.fire(cell.el, 'click', {target: cell.bare});
              const page = chart({id: 'page-tooltip'});
              Stub.mark('untargeted');
              Stub.fire(page.el, 'click', {target: page.dot});
@@ -109,10 +120,23 @@ defmodule Visualize.Hooks.TooltipTest do
           do: {p["target"], p["name"], p["payload"]}
     end
 
-    fields = %{"id" => "42", "t" => "1"}
-    # The mark's group is no datum element: only the dot's click pushes.
-    assert pushes.("targeted") == [{"4", "event_open", fields}]
-    assert pushes.("untargeted") == [{nil, "event_open", fields}]
+    # The mark's group is no datum element, and a datum without data-row has no key: only
+    # the keyed dot's click pushes, in the chart's user units (half the client pixels).
+    assert pushes.("targeted") == [
+             {"4", "visualize_event",
+              %{
+                "event" => "event_open",
+                "frame" => "main",
+                "mark" => 1,
+                "row" => 3,
+                "drawn" => "17",
+                "at" => %{"x" => 50, "y" => 25},
+                "modifiers" => ["shift", "meta"]
+              }}
+           ]
+
+    assert [{nil, "visualize_event", %{"drawn" => nil, "at" => nil, "modifiers" => []}}] =
+             pushes.("untargeted")
   end
 
   test "the bundle carries the hook once and exports it" do

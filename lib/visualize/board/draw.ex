@@ -159,7 +159,8 @@ defmodule Visualize.Board.Draw do
       note: note,
       crosshair: crosshair,
       keyboard: keyboard,
-      frames: frames
+      frames: frames,
+      drawn: Map.get(drawn, :token)
     }
   end
 

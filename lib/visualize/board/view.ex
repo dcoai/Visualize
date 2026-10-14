@@ -9,7 +9,9 @@ defmodule Visualize.Board.View do
   `:live`, and `nil` when it is. `crosshair` and `keyboard` are the attribute maps of
   `CrosshairHook` and `KeyboardHook` for the frame (spec/10 §13.2, §17.2), `%{}` where
   there are none; `size` is the cell's box and `frames` the chart frames its process
-  has drawn.
+  has drawn. `drawn` is the token of the drawing `svg` is, new at each frame the process
+  draws, which a click carries back so the cell resolves it against that drawing alone
+  (spec/15 §9.2, D-170); `nil` without one, and for a snapshot's view.
   """
 
   @enforce_keys [:cell, :state, :size]
@@ -22,7 +24,8 @@ defmodule Visualize.Board.View do
     note: nil,
     crosshair: %{},
     keyboard: %{},
-    frames: 0
+    frames: 0,
+    drawn: nil
   ]
 
   @type t :: %__MODULE__{
@@ -34,6 +37,7 @@ defmodule Visualize.Board.View do
           note: String.t() | nil,
           crosshair: %{String.t() => String.t()},
           keyboard: %{String.t() => String.t()},
-          frames: non_neg_integer()
+          frames: non_neg_integer(),
+          drawn: String.t() | nil
         }
 end

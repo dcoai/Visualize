@@ -4,7 +4,9 @@ defmodule ExamplesWeb.InteractionLive do
   `TooltipHook` reading the datum attributes its marks carry (spec/10 §12) and
   `CrosshairHook` snapping to the arrays `Visualize.Hooks.Crosshair.attrs/3` wrote once
   (spec/10 §13) — over the SVG and over the same chart on a binary canvas — and
-  `LegendHook` hiding a series from its legend entry (spec/10 §14).
+  `LegendHook` hiding a series from its legend entry (spec/10 §14). The tooltip's chart is
+  drawn through `Visualize.Components.Chart`, so a click on a point reaches this page as
+  one `Visualize.Event` with the point's row, typed (spec/10 §19, D-170).
 
   Each demo is one `ExamplesWeb.Panel` — its heading, its explanation and its chart
   together — and the chart's legend sits in the frame's right margin, beside the plot
@@ -14,6 +16,7 @@ defmodule ExamplesWeb.InteractionLive do
 
   alias ExamplesWeb.{Highlight, Panel}
   alias Visualize.Chart
+  alias Visualize.Event
   alias Visualize.Hooks.Crosshair
   alias Visualize.Theme
 
@@ -41,22 +44,24 @@ defmodule ExamplesWeb.InteractionLive do
   @design %{
     version: 2,
     sources: %{primary: %{fields: [:hour, :series, :value]}},
-    frames: %{main: %{
-      kind: :cartesian,
-      # The right margin holds the legend (#505): `inside: false` puts it there, beside the
-      # plot and never over a series; its estimated width is 67 of the 96.
-      margin: %{top: 30, right: 96, bottom: 40, left: 50},
-      scales: %{
-        x: %{kind: :linear, domain: [0, 23]},
-        y: %{kind: :linear, domain: [0, :auto], nice: true},
-        color: %{kind: :ordinal}
-      },
-      axes: [
-        %{scale: :x, side: :bottom, ticks: 12, grid: true},
-        %{scale: :y, side: :left, ticks: 5, grid: true}
-      ],
-      legend: %{scale: :color, position: :top_right, inside: false, title: ["series"]}
-    }},
+    frames: %{
+      main: %{
+        kind: :cartesian,
+        # The right margin holds the legend (#505): `inside: false` puts it there, beside the
+        # plot and never over a series; its estimated width is 67 of the 96.
+        margin: %{top: 30, right: 96, bottom: 40, left: 50},
+        scales: %{
+          x: %{kind: :linear, domain: [0, 23]},
+          y: %{kind: :linear, domain: [0, :auto], nice: true},
+          color: %{kind: :ordinal}
+        },
+        axes: [
+          %{scale: :x, side: :bottom, ticks: 12, grid: true},
+          %{scale: :y, side: :left, ticks: 5, grid: true}
+        ],
+        legend: %{scale: :color, position: :top_right, inside: false, title: ["series"]}
+      }
+    },
     marks: [
       %{
         type: :line,
@@ -83,12 +88,18 @@ defmodule ExamplesWeb.InteractionLive do
     labels: [%{anchor: :title, text: ["Hover a point; click one to send it to the LiveView"]}]
   }
 
-  def mount(_params, _session, socket) do
-    {:ok, socket |> assign(build(@size)) |> assign(picked: nil, hovered: nil, hidden: %{})}
+  # The page at its one size; a session may name another, as its tests draw it at two (#507).
+  def mount(_params, session, socket) do
+    size = Map.get(session, "size", @size)
+    {:ok, socket |> assign(build(size)) |> assign(picked: nil, hovered: nil, hidden: %{})}
   end
 
-  def handle_event("point_click", %{"series" => series, "hour" => hour, "value" => value}, socket) do
-    {:noreply, assign(socket, picked: {series, hour, value})}
+  # A click on a point, resolved by the chart's component to the row drawn (D-170).
+  def handle_info(
+        {:visualize_event, "tooltip-chart", %Event{event: "point_click", row: row}},
+        socket
+      ) do
+    {:noreply, assign(socket, picked: {row.series, row.hour, row.value})}
   end
 
   def handle_event("hover", %{"index" => index}, socket) do
@@ -100,7 +111,8 @@ defmodule ExamplesWeb.InteractionLive do
   end
 
   @doc """
-  The chart once, realised at `size` (`{width, height}`): its SVG, the same frame on a
+  The chart once, realised at `size` (`{width, height}`): the applied chart, which
+  `Visualize.Components.Chart` draws and resolves a click against, its SVG, the same frame on a
   binary canvas with literal paints, and the crosshair's arrays for the line mark (the
   first). Every size the page shows — the SVG's `viewBox`, the canvas's `data-width` and
   `data-height`, the arrays' `data-size` — is the realised frame's, so the crosshair's
@@ -118,8 +130,11 @@ defmodule ExamplesWeb.InteractionLive do
       end)
 
     %{
+      applied: applied,
+      title: @title,
       svg: Chart.render(applied, root: true, title: @title),
-      binary: Chart.render(applied, root: true, title: @title, backend: :canvas, format: :binary_base64),
+      binary:
+        Chart.render(applied, root: true, title: @title, backend: :canvas, format: :binary_base64),
       crosshair: Crosshair.attrs(applied.frame, applied.sources),
       colors: "[" <> colours <> "]",
       width: width,
@@ -139,27 +154,36 @@ defmodule ExamplesWeb.InteractionLive do
       <a href="/" class="back-link"><span>&larr;</span> Back to Gallery</a>
 
       <p class="tab-pages">
-        Also under this tab: the <a href="/dashboard">Synced dashboard</a> — one crosshair and one brush across three panels — and a <a href="/board">Live board</a>, eight cells over live feeds, each its own process, whose services drill down to a <a href="/board/detail">detail board</a>.
+        Also under this tab: the <a href="/dashboard">Synced dashboard</a>
+        — one crosshair and one brush across three panels — and a <a href="/board">Live board</a>, eight cells over live feeds, each its own process, whose services drill down to a <a href="/board/detail">detail board</a>.
       </p>
 
       <div class="panels panels-row" style={panel_width()}>
         <Panel.panel id="panel-tooltip">
           <:title>Tooltip</:title>
           <p class="panel-note">
-            Every point carries its datum as <code>data-datum-*</code> attributes, written by
-            the mark's <code>tooltip</code> node; <code>TooltipHook</code> formats them with
-            the mark's template. Clicking a point pushes <code>point_click</code>.
+            Every point carries its datum as <code>data-datum-*</code>
+            attributes, written by
+            the mark's <code>tooltip</code>
+            node; <code>TooltipHook</code>
+            formats them with
+            the mark's template. The chart is a <code>Visualize.Components.Chart</code>:
+            clicking a point sends this page <code>point_click</code>
+            as a <code>Visualize.Event</code>, with the point's row as the chart drew it.
           </p>
 
           <div class="chart-container">
-            <div id="tooltip-chart" phx-hook="TooltipHook" data-tooltip-class="vis-tooltip">
-              <%= Phoenix.HTML.raw(@svg) %>
-            </div>
+            <.live_component
+              module={Visualize.Components.Chart}
+              id="tooltip-chart"
+              chart={@applied}
+              render={[title: @title]}
+            />
           </div>
 
           <p :if={@picked} class="picked">
-            <% {series, hour, value} = @picked %>
-            Clicked: <strong><%= series %></strong> at <%= hour %>:00, value <%= value %>
+            <% {series, hour, value} = @picked %> Clicked: <strong>{series}</strong>
+            at {hour}:00, value {value}
           </p>
           <p :if={!@picked} class="picked">No point clicked yet.</p>
         </Panel.panel>
@@ -167,10 +191,12 @@ defmodule ExamplesWeb.InteractionLive do
         <Panel.panel id="panel-crosshair-svg">
           <:title>Crosshair over the SVG</:title>
           <p class="panel-note">
-            <code>Visualize.Hooks.Crosshair.attrs/3</code> wrote the line mark's x pixels and
-            each series' y pixels once, as <code>data-xs</code> and <code>data-ys</code>;
-            <code>CrosshairHook</code> snaps to the nearest x by binary search and pushes
-            <code>hover</code> with the index when it changes.
+            <code>Visualize.Hooks.Crosshair.attrs/3</code>
+            wrote the line mark's x pixels and
+            each series' y pixels once, as <code>data-xs</code>
+            and <code>data-ys</code>; <code>CrosshairHook</code>
+            snaps to the nearest x by binary search and pushes <code>hover</code>
+            with the index when it changes.
           </p>
 
           <div class="chart-container">
@@ -181,11 +207,11 @@ defmodule ExamplesWeb.InteractionLive do
               data-crosshair-event="hover"
               data-crosshair-colors={@colors}
             >
-              <%= Phoenix.HTML.raw(@svg) %>
+              {Phoenix.HTML.raw(@svg)}
             </div>
           </div>
 
-          <p :if={@hovered} class="picked">Hovered index: <strong><%= @hovered %></strong></p>
+          <p :if={@hovered} class="picked">Hovered index: <strong>{@hovered}</strong></p>
           <p :if={!@hovered} class="picked">Move over the plot to see the hovered index.</p>
         </Panel.panel>
 
@@ -197,7 +223,12 @@ defmodule ExamplesWeb.InteractionLive do
           </p>
 
           <div class="chart-container">
-            <div id="crosshair-canvas" phx-hook="CrosshairHook" {@crosshair} data-crosshair-colors={@colors}>
+            <div
+              id="crosshair-canvas"
+              phx-hook="CrosshairHook"
+              {@crosshair}
+              data-crosshair-colors={@colors}
+            >
               <div
                 id="crosshair-canvas-chart"
                 phx-hook="CanvasBinaryChart"
@@ -216,23 +247,27 @@ defmodule ExamplesWeb.InteractionLive do
           <:title>Legend toggling</:title>
           <p class="panel-note">
             Every legend entry and every element a series draws, its line and each of its
-            points, carry the same <code>data-series</code>: both marks have the
-            <code>series</code> channel. <code>LegendHook</code> hides a series with
-            <code>display="none"</code> when its
+            points, carry the same <code>data-series</code>: both marks have the <code>series</code>
+            channel. <code>LegendHook</code>
+            hides a series with <code>display="none"</code>
+            when its
             entry is clicked and pushes <code>legend_toggle</code>. The hidden set survives a
             patch: the LiveView re-renders on every event and the series stays hidden.
           </p>
 
           <div class="chart-container">
             <div id="legend-chart" phx-hook="LegendHook" data-legend-event="legend_toggle">
-              <%= Phoenix.HTML.raw(@svg) %>
+              {Phoenix.HTML.raw(@svg)}
             </div>
           </div>
 
           <p class="picked">
             Hidden on the server's record:
-            <strong><%= @hidden |> Enum.filter(fn {_, h} -> h end) |> Enum.map(&elem(&1, 0)) |> Enum.join(", ") %></strong>
-            <%= if Enum.all?(@hidden, fn {_, h} -> not h end), do: "none" %>
+            <strong>{@hidden
+            |> Enum.filter(fn {_, h} -> h end)
+            |> Enum.map(&elem(&1, 0))
+            |> Enum.join(", ")}</strong>
+            {if Enum.all?(@hidden, fn {_, h} -> not h end), do: "none"}
           </p>
         </Panel.panel>
 
@@ -280,10 +315,15 @@ defmodule ExamplesWeb.InteractionLive do
                    event: :point_click}}
     ]
 
-    # The tooltip reads the attributes the mark wrote; nothing is fetched on hover.
+    # The tooltip reads the attributes the mark wrote; nothing is fetched on hover. A click
+    # reaches the page as one Visualize.Event, its row resolved on the server.
     ~H"""
-    <div id="chart" phx-hook="TooltipHook">{raw(svg)}</div>
+    <.live_component module={Visualize.Components.Chart} id="chart" chart={applied} />
     """
+
+    def handle_info({:visualize_event, "chart", %Visualize.Event{event: "point_click", row: row}}, socket) do
+      {:noreply, assign(socket, picked: row)}
+    end
 
     # The legend's entries and every element of a series share data-series; the hook joins them.
     ~H"""

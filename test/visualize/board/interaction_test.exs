@@ -406,7 +406,9 @@ defmodule Visualize.Board.InteractionTest do
       views_until([:a, :c], live())
 
       # Series "q" is the keyboard's second series of cell a; its third point.
-      assert {:ok, %{row: row, identity: {:k, "q"}}} = Server.pick(board, :a, 1, 2)
+      assert {:ok, %{row: row, identity: {:k, "q"}, item: {:line, "q"}, frame: :main}} =
+               Server.pick(board, :a, 1, 2)
+
       assert %{k: "q", v: 3, t: %DateTime{}} = row
 
       # A bar names no series: the schema's category field is its identity.
@@ -458,8 +460,20 @@ defmodule Visualize.Board.InteractionTest do
 
       Cell.handle_event("pick", %{"series" => 0, "index" => 1}, cell.(:c))
 
-      assert_received {:visualize_board_drill, "ops",
-                       %{cell: :c, board: :detail, vars: %{service: "r"}}}
+      # The drill reaches the page as one event, with the picked row and its item (D-170).
+      assert_received {:visualize_event, "ops",
+                       %Visualize.Event{
+                         event: :drill,
+                         cell: :c,
+                         frame: :main,
+                         item: {:rect, "r"},
+                         path: [{:rect, "r"}],
+                         row: %{name: "r", v: 6},
+                         value: %{board: :detail, vars: %{service: "r"}}
+                       }}
+
+      # None of the old messages is sent.
+      refute_received {:visualize_board_drill, _, _}
 
       # The drill did not select.
       assert Server.info(board).selection == {:k, "p"}

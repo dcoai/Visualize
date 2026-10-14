@@ -6,9 +6,14 @@ defmodule Visualize.Hooks.Tooltip do
   that draws it — `Visualize.IR.Element.datum/2`, or a mark's `tooltip` node
   (spec/14 §5.7) — and the hook reads them from the element under the pointer (D-75). A
   `data-tooltip-template` on the element or an ancestor formats the text with `{field}`
-  placeholders; without one the tooltip lists `field: value` per line. A click pushes the
-  fields to the LiveView only when a `data-tooltip-event` names the event, or to the
-  component `data-tooltip-target` names, as a board's cell names itself (spec/15 §9.1).
+  placeholders; without one the tooltip lists `field: value` per line.
+
+  A click on a datum of a mark whose `tooltip` names an `event` pushes one wire event,
+  `visualize_event`, with the element's key — its frame, its mark's position and its
+  row's ordinal — the drawing's `data-tooltip-drawn` token, the pointer and the modifiers
+  (spec/10 §12.3, D-170), to the component `data-tooltip-target` names, else to the
+  LiveView. `Visualize.Components.Chart` and a board's cell are those components: they
+  resolve the click to the row drawn and send the page a `Visualize.Event`.
 
   In a sync group (spec/10 §4.3, §12.4) the hook publishes the pointer's x in domain units
   on the group's bus, and shows the datum element nearest to another member's hover.
@@ -16,14 +21,13 @@ defmodule Visualize.Hooks.Tooltip do
   ## Usage
 
       <svg id="chart" phx-hook="TooltipHook">
-        <g class="mark mark-circle" data-tooltip-template="{t}: {v}" data-tooltip-event="point_click">
+        <g class="mark mark-circle" data-tooltip-template="{t}: {v}">
           <circle cx="10" cy="20" r="3" data-datum="t v" data-datum-t="1" data-datum-v="4"/>
         </g>
       </svg>
 
-      def handle_event("point_click", %{"t" => t, "v" => v}, socket) do
-        {:noreply, assign(socket, picked: {t, v})}
-      end
+  A chart whose marks declare events is rendered through `Visualize.Components.Chart`,
+  which mounts the hook itself.
 
   ## Configuration
 
@@ -32,12 +36,16 @@ defmodule Visualize.Hooks.Tooltip do
     (default: "vis-tooltip")
   - `data-tooltip-target` - the `phx-target` a click's event goes to with `pushEventTo`;
     unset, it goes to the LiveView (D-161)
+  - `data-tooltip-drawn` - the holder's token for the drawing on screen, sent with a click
+    (D-170)
 
   Data attributes on the elements, written by the server (spec/10 §12.2):
   - `data-datum` - the field names, space-separated, in order
   - `data-datum-<field>` - the value of each field, `_` in the name as `-`
   - `data-tooltip-template` - the text with `{field}` placeholders; the nearest wins
-  - `data-tooltip-event` - the event a click pushes; absent, nothing is pushed
+  - `data-tooltip-event` - the declared event a click delivers; absent, nothing is pushed
+  - `data-frame`, `data-mark` - on a mark's group with an event: its frame and position
+  - `data-row` - on each datum element of such a mark: the row's ordinal in its rows
   """
 
   @doc """
@@ -209,15 +217,41 @@ defmodule Visualize.Hooks.Tooltip do
         this.tip.style.display = 'none';
       },
 
+      // A click on a keyed datum of a mark with an event (spec/10 §12.3, D-170): one wire
+      // event with the element's key, the drawing's token, the pointer and the modifiers,
+      // never the datum's strings; the server resolves the row.
       handleClick(e) {
         const el = this.datumElement(e.target);
         if (!el) return;
         const event = this.nearest(el, 'data-tooltip-event');
         if (!event) return;
+        const mark = this.nearest(el, 'data-mark');
+        const row = el.getAttribute('data-row');
+        if (mark === null || row === null) return;
+        const payload = {
+          event: event,
+          frame: this.nearest(el, 'data-frame'),
+          mark: parseInt(mark, 10),
+          row: parseInt(row, 10),
+          drawn: this.el.dataset.tooltipDrawn || null,
+          at: this.at(el, e),
+          modifiers: ['shift', 'alt', 'ctrl', 'meta'].filter((key) => e[key + 'Key'])
+        };
         // To the component data-tooltip-target names, else to the LiveView (D-161).
         const target = this.el.dataset.tooltipTarget;
-        if (target) this.pushEventTo(target, event, this.fields(el).values);
-        else this.pushEvent(event, this.fields(el).values);
+        if (target) this.pushEventTo(target, 'visualize_event', payload);
+        else this.pushEvent('visualize_event', payload);
+      },
+
+      // The pointer in the user units of the element's nearest <svg>, null without one.
+      at(el, e) {
+        const svg = el.closest('svg');
+        if (!svg || typeof e.clientX !== 'number' || typeof e.clientY !== 'number') return null;
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+        return { x: p.x, y: p.y };
       },
 
       destroyed() {

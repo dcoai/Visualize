@@ -30,7 +30,11 @@ defmodule Visualize.Board.Cell do
     selection is and `0.25` elsewhere, and each mark with `data` ends its style stack with
     `%{opacity: {:field, :"$vis_dim"}}`. A cell that does not hold it draws as before.
   - **A pick**, `{:pick, from, ref, series, index}`, is answered to `from` as `{ref,
-    reply}`: the row behind that keyboard point and its identity, or `:error`.
+    reply}`: the row behind that keyboard point, its identity, item and frame, or `:error`.
+  - **A click**, `{:event, from, ref, click}`, is answered the same way (spec/15 §9.2,
+    D-170): the `Visualize.Event` of a click on the drawing the cell holds, its row read
+    from the rows each mark drew at the last frame, or `:error`. Each frame drawn has a
+    token of its own, the view's `drawn`, and a click carrying another is dropped.
   """
 
   use GenServer, restart: :temporary
@@ -39,6 +43,7 @@ defmodule Visualize.Board.Cell do
   alias Visualize.Chart
   alias Visualize.Chart.{Compiled, Summary}
   alias Visualize.Data.{Schema, Table}
+  alias Visualize.Event
 
   # The column a selection is drawn through, and how far the data it does not hold fade.
   @dim :"$vis_dim"
@@ -75,6 +80,8 @@ defmodule Visualize.Board.Cell do
       compiled: nil,
       compiled_from: nil,
       pickable: nil,
+      shown: nil,
+      token: nil,
       applied: nil,
       summary: nil,
       svg: nil,
@@ -129,6 +136,12 @@ defmodule Visualize.Board.Cell do
     {:noreply, state}
   end
 
+  # A click (spec/15 §9.2, D-170): resolved against the drawing held, answered likewise.
+  def handle_info({:event, from, ref, click}, state) do
+    send(from, {ref, clicked(state, click)})
+    {:noreply, state}
+  end
+
   # Every later data message behind this one, the newest kept (spec/15 §8.3).
 
   defp newest(slots, now) do
@@ -150,7 +163,16 @@ defmodule Visualize.Board.Cell do
   defp draw(state) do
     cond do
       not Draw.drawable?(state.slots) ->
-        %{state | svg: nil, attrs: {%{}, %{}}, pickable: nil, fault: nil, drawn: nil}
+        %{
+          state
+          | svg: nil,
+            attrs: {%{}, %{}},
+            pickable: nil,
+            shown: nil,
+            token: nil,
+            fault: nil,
+            drawn: nil
+        }
 
       state.drawn == drawn_from(state) ->
         state
@@ -165,7 +187,15 @@ defmodule Visualize.Board.Cell do
             step(state, sources)
 
           {:error, errors} ->
-            %{state | svg: nil, attrs: {%{}, %{}}, pickable: nil, fault: {:apply, errors}}
+            %{
+              state
+              | svg: nil,
+                attrs: {%{}, %{}},
+                pickable: nil,
+                shown: nil,
+                token: nil,
+                fault: {:apply, errors}
+            }
         end
     end
   end
@@ -245,9 +275,9 @@ defmodule Visualize.Board.Cell do
     %{chart | marks: marks, sources: sources}
   end
 
-  # The row behind a keyboard point, without the dim column, and its identity: the one its
-  # slot's schema declares (D-167), else — when it declares none — the mark's series field,
-  # else the first `:category` field of its slot's schema the row holds.
+  # The row behind a keyboard point, without the dim column, its identity — the one its
+  # slot's schema declares (D-167), else the inference of `Visualize.Event.identity/3` —
+  # its item and its frame.
   defp picked(%{pickable: nil}, _series, _index), do: :error
 
   defp picked(state, series, index)
@@ -255,8 +285,15 @@ defmodule Visualize.Board.Cell do
     with %{points: points} <- Enum.at(Summary.points(state.pickable), series),
          %{row: row, mark: mark} <- Enum.at(points, index) do
       row = Map.delete(row, @dim)
+      identity = Event.identity(mark, row, schema_of(state, mark))
 
-      {:ok, %{row: row, identity: identity(state, mark, row)}}
+      {:ok,
+       %{
+         row: row,
+         identity: identity,
+         item: Event.item(mark, identity),
+         frame: state.pickable.frame.name
+       }}
     else
       _none -> :error
     end
@@ -264,24 +301,31 @@ defmodule Visualize.Board.Cell do
 
   defp picked(_state, _series, _index), do: :error
 
-  defp identity(state, mark, row) do
-    case schema_of(state, mark) do
-      %Schema{} = schema ->
-        case Schema.identity(schema) do
-          [] -> series_identity(mark, row) || category_identity(schema, row)
-          fields -> declared_identity(fields, Schema.identity(schema, row))
-        end
+  # A click on the drawing the cell holds (D-170): its token must be the frame's, its
+  # frame one of the cell's compiled frames, its mark one that declares its name — never
+  # the cell's own `pick` — and its ordinal a row of the rows that mark drew.
+  defp clicked(%{token: token} = state, %{drawn: token, event: name} = click)
+       when token != nil and name != "pick" do
+    with {frame, compiled} <- compiled_frame(state.compiled, click.frame),
+         mark when is_map(mark) <- Enum.at(compiled.chart.marks, click.mark) do
+      rows = Compiled.rows(compiled, state.shown, click.mark)
+      origin = {compiled.margin.left + compiled.box.x, compiled.margin.top + compiled.box.y}
 
-      nil ->
-        series_identity(mark, row)
+      Event.build(click, mark, rows, schema_of(state, mark), frame, origin,
+        cell: state.name,
+        row: &Map.delete(&1, @dim)
+      )
+    else
+      _none -> :error
     end
   end
 
-  # The declared identity as a selection names it: the pair for one field, the map for
-  # several, `nil` for a row that lacks it — never a guess in its place.
-  defp declared_identity(_fields, nil), do: nil
-  defp declared_identity([field], value), do: {field, value}
-  defp declared_identity(_fields, values), do: values
+  defp clicked(_state, _click), do: :error
+
+  defp compiled_frame(compiled, name) when is_list(compiled) and is_binary(name),
+    do: Enum.find(compiled, fn {frame, _compiled} -> to_string(frame) == name end)
+
+  defp compiled_frame(_compiled, _name), do: nil
 
   defp schema_of(state, mark) do
     with slot when is_atom(slot) <- slot_of(mark),
@@ -292,32 +336,9 @@ defmodule Visualize.Board.Cell do
     end
   end
 
-  defp series_identity(mark, row) do
-    case mark |> Map.get(:channels, %{}) |> Map.get(:series) do
-      {:field, field} when is_atom(field) -> identity(field, row)
-      field when is_atom(field) and field not in [nil, true, false] -> identity(field, row)
-      _other -> nil
-    end
-  end
-
-  defp category_identity(%Schema{fields: fields}, row) do
-    fields
-    |> Enum.filter(fn {_name, field} -> Map.get(field, :type) == :category end)
-    |> Enum.map(&elem(&1, 0))
-    |> Enum.sort()
-    |> Enum.find_value(&identity(&1, row))
-  end
-
   defp slot_of(%{data: %{source: slot}}), do: slot
   defp slot_of(%{data: slot}), do: slot
   defp slot_of(_mark), do: nil
-
-  defp identity(field, row) do
-    case Table.get(row, field) do
-      nil -> nil
-      value -> {field, value}
-    end
-  end
 
   defp step(state, sources) do
     at = System.monotonic_time(:millisecond)
@@ -331,6 +352,8 @@ defmodule Visualize.Board.Cell do
         svg: svg,
         attrs: attrs,
         pickable: pickable,
+        shown: sources,
+        token: Integer.to_string(System.unique_integer([:positive, :monotonic])),
         fault: nil,
         drawn: drawn_from(state),
         frames: state.frames + 1

@@ -33,25 +33,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
     opens that target, and in any other it selects the datum's `{field, value}` across the
     board. The header shows the selection and *Clear selection*; Escape clears it too.
 
-    The component does not navigate. A drill is sent to the page's process as
-    `{:visualize_board_drill, id, %{cell: cell, board: ref, vars: vars}}`, and the page,
-    which knows its routes, follows it:
+    ## Events (spec/15 §9.2, D-170)
 
-        def handle_info({:visualize_board_drill, "ops", %{board: :detail, vars: vars}}, socket) do
+    Everything the page is sent is one `Visualize.Event`, as
+    `{:visualize_event, id, %Visualize.Event{}}`, `id` this component's:
+
+      * a mark's declared event — a click on a datum whose mark's `tooltip` names an
+        `event` (spec/14 §5.7) — with the cell, and the row as the mark drew it, typed,
+        resolved by the cell's process against the drawing it holds;
+      * `:drill`, `value: %{board: ref, vars: vars}`, when a pick in a cell with a `drill`
+        resolves its target, with the picked row;
+      * `:brush`, `value: %{domain: [from, to] | nil}`, under `brush: :host`;
+      * `:select`, `value: %{identity: identity | nil}`, whenever the board's selection
+        changes.
+
+    The component does not navigate. The page, which knows its routes, follows a drill:
+
+        def handle_info({:visualize_event, "ops", %Visualize.Event{event: :drill, value: %{board: :detail, vars: vars}}}, socket) do
           {:noreply, push_navigate(socket, to: "/detail?" <> URI.encode_query(vars))}
         end
-
-    A click on a datum whose mark's `tooltip` names an `event` (spec/14 §5.7) is sent the
-    same way, as `{:visualize_board_event, id, %{cell: cell, event: event, fields: fields}}`,
-    `fields` the strings the cell's `TooltipHook` read (D-161).
 
     ## A host-owned window (`brush: :host`, D-161)
 
     A page that keeps the window in its URL takes the brush itself. A brush, pushed once
-    when its drag ends, is sent to the page as
-    `{:visualize_board_brush, id, %{domain: [from, to]}}`, the ends UTC `DateTime`s, and
-    the header's *Reset window* as `{:visualize_board_brush, id, %{domain: nil}}`; the
-    component calls no window function. The page updates its URL and applies the window
+    when its drag ends, is sent to the page as the `:brush` event with
+    `value: %{domain: [from, to]}`, the ends UTC `DateTime`s, and the header's
+    *Reset window* with `value: %{domain: nil}`; the component calls no window function. The page updates its URL and applies the window
     with `Visualize.Board.Server.window/2` — `%{from: from, to: to}`, or its own default
     for `nil` — which is never debounced; `Visualize.Board.Server.brush/2` takes the same
     window and debounces rapid re-brushes, if the page would rather.
@@ -75,6 +82,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Board
     alias Visualize.Board.{Server, State}
     alias Visualize.Components.Board.Cell
+    alias Visualize.Event
 
     @doc "The DOM and component id of a board's cell."
     @spec cell_id(String.t(), atom()) :: String.t()
@@ -102,6 +110,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @impl true
     def update(%{info: info} = assigns, socket) when not is_map_key(assigns, :board) do
+      selected(socket.assigns, info)
       {:ok, assign(socket, info: info, width: info.width)}
     end
 
@@ -116,6 +125,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       {:ok, subscribe(socket)}
     end
+
+    # A change of the board's selection is the page's to know (spec/15 §9.2, D-170), so a
+    # host can keep it in its URL; the selection held when the page subscribed is not one.
+    defp selected(%{info: %{selection: before}, id: id}, %{selection: now}) when before != now do
+      send(self(), {:visualize_event, id, %Event{event: :select, value: %{identity: now}}})
+    end
+
+    defp selected(_assigns, _info), do: :ok
 
     defp brush_mode(mode) when mode in [:server, :host], do: mode
 
@@ -171,7 +188,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A window chosen on the board: the board process sets it, or the page is told
     # (spec/15 §9.2). `nil` is the undo, the window the board was started with.
     defp brushed(%{brush: :host, id: id}, domain) do
-      send(self(), {:visualize_board_brush, id, %{domain: domain}})
+      send(self(), {:visualize_event, id, %Event{event: :brush, value: %{domain: domain}}})
     end
 
     defp brushed(%{server: server}, [from, to]),
@@ -272,18 +289,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       cell with no view yet shows `:loading`.
 
       Its chart's `KeyboardHook` pushes `pick` here (spec/15 §13): the board answers the
-      row behind the point, and the cell opens its `drill` target through the page, or
-      selects the datum's identity across the board.
+      row behind the point, and the cell opens its `drill` target through the page, as the
+      `:drill` event, or selects the datum's identity across the board.
 
-      Its chart's `TooltipHook` pushes a mark's `data-tooltip-event` here too (D-161), and
-      the cell sends it to the page as `{:visualize_board_event, board_id, %{cell:, event:,
-      fields:}}`. Every event other than `pick` is a mark's.
+      Its chart's `TooltipHook` pushes a mark's click here as `visualize_event` (D-161,
+      D-170), carrying the view's `drawn` token: the cell's process resolves it against the
+      drawing it holds (`Visualize.Board.Server.event/3`), and the page is sent the
+      resolved `Visualize.Event`. A click it cannot resolve sends nothing.
       """
 
       use Phoenix.LiveComponent
 
       alias Visualize.Board
       alias Visualize.Board.{Server, State}
+      alias Visualize.Event
 
       @impl true
       def mount(socket), do: {:ok, assign(socket, view: nil)}
@@ -296,41 +315,53 @@ if Code.ensure_loaded?(Phoenix.Component) do
           when is_integer(series) and series >= 0 and is_integer(index) and index >= 0 do
         %{server: server, cell: cell, board: board} = socket.assigns
 
-        with {:ok, %{row: row, identity: identity}} <- Server.pick(server, cell, series, index) do
-          picked(Board.drill(board, cell, row), identity, socket.assigns)
+        with {:ok, point} <- Server.pick(server, cell, series, index) do
+          picked(Board.drill(board, cell, point.row), point, socket.assigns)
         end
 
         {:noreply, socket}
       end
 
-      # `pick` is the cell's own, whatever its params: a mark naming its event `pick` is
-      # never forwarded (spec/15 §9.2).
       def handle_event("pick", _params, socket), do: {:noreply, socket}
 
-      # A mark's click, its datum's fields as the hook read them, is the page's (D-161).
-      def handle_event(event, fields, socket) when is_map(fields) do
-        %{board_id: board_id, cell: cell} = socket.assigns
+      # A mark's click, resolved by the cell's process against the drawing it holds, is the
+      # page's (spec/15 §9.2, D-161, D-170); a click it cannot resolve — another drawing's,
+      # an undeclared name, the cell's own `pick` — sends nothing.
+      def handle_event("visualize_event", params, socket) do
+        %{server: server, cell: cell, board_id: board_id} = socket.assigns
 
-        send(
-          self(),
-          {:visualize_board_event, board_id, %{cell: cell, event: event, fields: fields}}
-        )
+        with {:ok, click} <- Event.decode(params),
+             {:ok, event} <- Server.event(server, cell, click) do
+          send(self(), {:visualize_event, board_id, event})
+        end
 
         {:noreply, socket}
       end
 
+      def handle_event(_event, _params, socket), do: {:noreply, socket}
+
       # A drill goes to the page, which knows its routes; a datum with an identity is the
       # board's selection; a datum with neither does nothing (spec/15 §13.2, §13.3).
-      defp picked({:ok, target}, _identity, assigns) do
-        send(
-          self(),
-          {:visualize_board_drill, assigns.board_id, Map.put(target, :cell, assigns.cell)}
-        )
+      defp picked({:ok, target}, point, assigns) do
+        event = %Event{
+          event: :drill,
+          cell: assigns.cell,
+          frame: point.frame,
+          item: point.item,
+          path: List.wrap(point.item),
+          row: point.row,
+          value: target
+        }
+
+        send(self(), {:visualize_event, assigns.board_id, event})
       end
 
-      defp picked(:none, nil, _assigns), do: :ok
-      defp picked(:none, identity, assigns), do: Server.select(assigns.server, identity)
-      defp picked({:error, _errors}, _identity, _assigns), do: :ok
+      defp picked(:none, %{identity: nil}, _assigns), do: :ok
+
+      defp picked(:none, %{identity: identity}, assigns),
+        do: Server.select(assigns.server, identity)
+
+      defp picked({:error, _errors}, _point, _assigns), do: :ok
 
       @impl true
       def render(assigns) do
@@ -349,6 +380,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 (view == nil && State.render(:loading, assigns.theme, {300, 150})),
             crosshair: (view && view.crosshair) || %{},
             keyboard: (view && view.keyboard) || %{},
+            drawn: view && view.drawn,
             label: label(assigns.title, assigns.cell, state)
           )
 
@@ -381,7 +413,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 data-keyboard-target={@myself}
                 {@keyboard}
               >
-                <div id={"#{@id}-tooltip"} phx-hook="TooltipHook" data-tooltip-target={@myself}>
+                <div
+                  id={"#{@id}-tooltip"}
+                  phx-hook="TooltipHook"
+                  data-tooltip-target={@myself}
+                  data-tooltip-drawn={@drawn}
+                >
                   {Phoenix.HTML.raw(@svg)}
                 </div>
               </div>
