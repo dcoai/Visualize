@@ -47,16 +47,15 @@
 # Every job restores through the store: CI keeps no GitLab runner cache (#588), so `pulled`,
 # `missing` and `rebuilt N` in each job's summary measure depdep itself.
 #
-# Depdep lives in a private project, so the URL has to carry credentials, and what is
-# available differs between a developer's machine and a CI container: a developer has an
-# ssh key, a job has CI_JOB_TOKEN and no key. With no DEPDEP_* variables set, depdep says
-# so and exits 0, so a pipeline never depends on the store being reachable.
-url =
-  case System.get_env("CI_JOB_TOKEN") do
-    nil -> "git@gitlab.conet.yarina.org:dco-tek/depdep.git"
-    token -> "https://gitlab-ci-token:#{token}@gitlab.conet.yarina.org/dco-tek/depdep.git"
-  end
-
-Mix.install([{:depdep, git: url, tag: "v0.12.0"}])
+# v0.12.0 is also the first release on hex.pm (#634), so depdep now comes from there rather
+# than from a git tag. The git form needed credentials (a CI_JOB_TOKEN URL in a job, an ssh
+# key on a developer's machine) and this project on depdep's job-token allowlist, whose
+# absence fails as a 403 that reads like a bad store credential. A tag is also not a stable
+# identity under a persisted Mix.install cache: a tag moved upstream keeps serving its old
+# content with no warning. A hex version is a pure function of the line below. The range
+# floats over patch releases only, because depdep moves its key schema and its metrics
+# profile on minors, and crossing one should be a decision. With no DEPDEP_* variables set,
+# depdep says so and exits 0, so a pipeline never depends on the store being reachable.
+Mix.install([{:depdep, "~> 0.12.0"}])
 
 Depdep.CLI.main(System.argv())
