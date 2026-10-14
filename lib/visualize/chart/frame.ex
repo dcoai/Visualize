@@ -183,7 +183,7 @@ defmodule Visualize.Chart.Frame do
     schemas = Keyword.get(opts, :schemas, %{})
     system = system(Keyword.get(opts, :system, :as_posted))
     theme = theme(chart.theme, Keyword.get(opts, :theme))
-    styles = Style.all(chart.styles)
+    styles = Style.all(chart.styles, theme)
     projection = projection(kind, node, plot, sources)
     marks = mine(chart.marks, name, chart)
 

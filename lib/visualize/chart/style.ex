@@ -32,6 +32,8 @@ defmodule Visualize.Chart.Style do
   @colour_keys [:fill, :stroke]
   @size_keys [:stroke_width, :opacity, :fill_opacity, :stroke_opacity, :font_size, :symbol_size]
   @font_keys [:font_family]
+  # The built-in styles of spec/14 §3.3, `Visualize.Chart.Schema.builtin_styles/0`.
+  @builtin [:axis, :grid, :label, :title]
   @element_keys [
     :fill,
     :stroke,
@@ -139,25 +141,19 @@ defmodule Visualize.Chart.Style do
     do: Map.put(acc, key, colour(colour, theme, mode))
 
   @doc false
-  # The built-in style nodes of spec/14 §3.3, as an author would declare them.
-  @spec builtin(atom()) :: map()
-  def builtin(:axis) do
-    %{stroke: :axis, fill: :text, font_family: :font_family, font_size: :font_size}
-  end
-
-  def builtin(:grid), do: %{stroke: :grid}
-  def builtin(:label), do: %{fill: :text, font_family: :font_family, font_size: :label_size}
-
-  def builtin(:title) do
-    Map.merge(builtin(:label), %{font_size: :title_size, font_weight: :bold})
+  # The built-in style nodes of spec/14 §3.3, as an author would declare them: the theme's
+  # furniture styles of those names (spec/08 §7.7, D-171), the default theme's by default.
+  @spec builtin(atom(), Theme.t()) :: map()
+  def builtin(name, theme \\ Theme.default()) when name in @builtin do
+    Theme.style(theme, name)
   end
 
   @doc false
-  # The declared styles over the built-in four: a declared name replaces a built-in one
-  # whole (spec/14 §3.3).
-  @spec all(map()) :: %{atom() => map()}
-  def all(declared) do
-    Map.merge(Map.new([:axis, :grid, :label, :title], &{&1, builtin(&1)}), declared)
+  # The declared styles over the built-in four, read from the theme: a declared name
+  # replaces a built-in one whole (spec/14 §3.3).
+  @spec all(map(), Theme.t()) :: %{atom() => map()}
+  def all(declared, theme \\ Theme.default()) do
+    Map.merge(Map.new(@builtin, &{&1, builtin(&1, theme)}), declared)
   end
 
   @doc false

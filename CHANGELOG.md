@@ -15,6 +15,30 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.6.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Added
+
+- **A style palette in the theme** (#636, D-171). `%Visualize.Theme{}` has a `styles` field: whole
+  looks under fixed names, as the colours already were — style series `:style_1` … `:style_n`
+  (`{:style, i}` cycles), the five roles, the view states `:hover`, `:focused`, `:selected`,
+  `:active`, `:disabled`, `:muted`, `:emphasis` and `:breakpoint`, and the furniture styles
+  `:axis`, `:grid`, `:label`, `:title`, `:caption`, `:value` and `:annotation`. Every built-in
+  theme defines all of them; `Visualize.Theme.style/2` reads one (the default theme's entry where
+  a theme lacks it) and `style_names/1` lists them. `Visualize.Theme.new/1` and `merge/2` take
+  `styles:` and merge it key by key, and refuse an entry that breaks its contract with an
+  `ArgumentError` naming the theme, the entry and the term: a role paints only with its own role,
+  a state style changes something besides colour, neighbouring style series differ besides hue,
+  text furniture names a font and a size, `:grid` has a stroke, no `extends`, no new names.
+  Designs cannot name palette styles yet (#637); `check/1` and `violations/1` now also report
+  palette faults, under `{:style, name}`.
+
+### Changed
+
+- **The built-in styles `:axis`, `:grid`, `:label` and `:title` come from the chart's theme**
+  (spec/14 §3.3). Under the built-in themes they are the same nodes as before and every chart
+  renders byte for byte as it did; a host theme built with `styles:` can now restyle its titles,
+  labels, axes or grid for every chart drawn under it. A design's own `styles` entry of the same
+  name still wins.
+
 ## [0.6.0] — 2026-10-14
 
 The contracts a scene builds on, settled before more is built over the old shapes. A feed can

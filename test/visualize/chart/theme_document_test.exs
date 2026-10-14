@@ -32,12 +32,14 @@ defmodule Visualize.Chart.ThemeDocumentTest do
       end
     end
 
-    test "the map form is stamped with the current version and holds every field" do
+    test "the map form is stamped with the current version and holds every field but styles" do
       %{version: version, theme: node} = Document.to_map(@house)
       assert version == Visualize.Chart.Migration.current()
       assert node.ramps == @house.ramps
       assert node.roles == @house.roles
-      assert Map.keys(node) |> Enum.sort() == Map.keys(Map.from_struct(@house)) |> Enum.sort()
+      # The stored form does not carry the style palette yet (spec/08 §7.1, D-171).
+      fields = @house |> Map.from_struct() |> Map.delete(:styles) |> Map.keys()
+      assert Map.keys(node) |> Enum.sort() == Enum.sort(fields)
     end
 
     test "the JSON form is the stamped fragment document" do

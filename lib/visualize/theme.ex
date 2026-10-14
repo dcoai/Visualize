@@ -29,6 +29,16 @@ defmodule Visualize.Theme do
   lightness direction, a neutral midpoint — when a theme is built by `new/1` or `merge/2`,
   and a theme that breaks one raises `ArgumentError` naming the ramp and the term broken.
 
+  ## Whole styles: the style palette
+
+  `styles` carries the same design over to whole styles (spec/08 §7.7, D-171): style series
+  `:style_1` … `:style_n`, which `{:style, i}` cycles over; the five roles as whole looks;
+  the view states `:hover`, `:focused`, `:selected`, `:active`, `:disabled`, `:muted`,
+  `:emphasis` and `:breakpoint`; and the furniture styles `:axis`, `:grid`, `:label`,
+  `:title`, `:caption`, `:value` and `:annotation`. Entries are flat style nodes written in
+  slots, the names are the library's, and each entry is held to its group's contract when a
+  theme is built. `style/2` reads one, the default theme's where the theme lacks it.
+
   ## Examples
 
       iex> Visualize.Theme.resolve(Visualize.Theme.default(), :axis, :css)
@@ -45,7 +55,7 @@ defmodule Visualize.Theme do
   """
 
   alias Visualize.{Backend, Color}
-  alias Visualize.Theme.Contract
+  alias Visualize.Theme.{Contract, Palette}
 
   @light_series ~w(#3b6fa8 #d9730d #c8373b #2f8f86 #3f8a37 #a8891a #8f5f99 #c9527f #8a6a4f #6f7480)
   @dark_series ~w(#7fb3e6 #f7a35c #f47c7c #6fd3c8 #86d67c #f2d15b #c99bd6 #ffb3c1 #cfa98b #b7bcc6)
@@ -78,6 +88,7 @@ defmodule Visualize.Theme do
             surface: "#eef2f6",
             ramps: @light_ramps,
             roles: @light_roles,
+            styles: Palette.builtin(),
             font_family: "sans-serif",
             font_size: 10,
             label_size: 12,
@@ -92,6 +103,12 @@ defmodule Visualize.Theme do
   @typedoc "A position along a ramp: `t` in `0..1`, clamped."
   @type ramp_position :: {:ramp, ramp_name(), number()}
 
+  @typedoc """
+  A name of the style palette (spec/08 §7.7): `:style_k`, a role, a state or a furniture
+  name, or `{:style, i}` for the i-th style series entry, cycling.
+  """
+  @type style_name :: atom() | {:style, pos_integer()}
+
   @typedoc "How a slot renders: a CSS reference with fallback, or the stored value."
   @type mode :: :css | :literal
 
@@ -105,6 +122,7 @@ defmodule Visualize.Theme do
           surface: String.t(),
           ramps: %{optional(ramp_name()) => [String.t()]},
           roles: %{optional(:info | :neutral) => String.t()},
+          styles: %{optional(atom()) => map()},
           font_family: String.t(),
           font_size: number(),
           label_size: number(),
@@ -233,17 +251,100 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  `default/0` with the given fields replaced; `ramps` and `roles` are merged key by key.
+  The palette entry `name` as a flat style node (spec/08 §7.7): the theme's own, or the
+  default theme's entry of that name, whole, where the theme lacks it.
 
-  An unknown field raises `KeyError`; an empty `series`, or a ramp or role that breaks its
-  contract (spec/08 §7.5), raises `ArgumentError`.
+  `name` is an atom of `style_names/1`, or `{:style, i}` for the i-th style series entry,
+  cycling over the theme's style series. In a role's entry `:cue` becomes the role's dash
+  and glyph (`cue/1`), and a solid dash leaves the key out. Any other name raises
+  `ArgumentError`.
+
+      iex> Visualize.Theme.style(Visualize.Theme.default(), :warning)
+      %{fill: :warning, stroke: :warning, stroke_dasharray: "6 3", symbol: :triangle}
+      iex> Visualize.Theme.style(Visualize.Theme.dark(), {:style, 12}) == Visualize.Theme.style(Visualize.Theme.dark(), :style_2)
+      true
+      iex> Visualize.Theme.style(Visualize.Theme.default(), :muted)
+      %{opacity: 0.25}
+
+  """
+  @spec style(t(), style_name()) :: map()
+  def style(%__MODULE__{} = theme, {:style, i}) when is_integer(i) and i >= 1 do
+    series = theme |> own_styles() |> Palette.series()
+    style(theme, Enum.at(series, rem(i - 1, length(series))))
+  end
+
+  def style(%__MODULE__{} = theme, name) when is_atom(name) do
+    if name not in style_names(theme) do
+      raise ArgumentError,
+            "unknown palette style #{inspect(name)} of theme #{inspect(theme.name)}; see " <>
+              "Visualize.Theme.style_names/1"
+    end
+
+    entry = Map.get(own_styles(theme), name) || Map.fetch!(Palette.builtin(), name)
+    cued(name, entry)
+  end
+
+  def style(%__MODULE__{} = theme, name) do
+    raise ArgumentError,
+          "a palette style is a name of Visualize.Theme.style_names/1 or {:style, i}, " <>
+            "i a positive integer; theme #{inspect(theme.name)} got #{inspect(name)}"
+  end
+
+  @doc """
+  The theme's palette names (spec/08 §7.7): its style series `:style_1` … `:style_n` — the
+  default theme's ten when it has none of its own — then the roles, the state styles and
+  the furniture styles.
+
+      iex> Visualize.Theme.default() |> Visualize.Theme.style_names() |> Enum.drop(10)
+      [:good, :warning, :bad, :info, :neutral, :hover, :focused, :selected, :active, :disabled, :muted, :emphasis, :breakpoint, :axis, :grid, :label, :title, :caption, :value, :annotation]
+
+  """
+  @spec style_names(t()) :: [atom(), ...]
+  def style_names(%__MODULE__{} = theme) do
+    theme |> own_styles() |> Palette.series() |> Palette.names()
+  end
+
+  defp own_styles(%__MODULE__{styles: styles}) when is_map(styles), do: styles
+  defp own_styles(%__MODULE__{}), do: %{}
+
+  # A role's `:cue` is its dash and glyph; a solid dash is no key.
+  defp cued(name, entry) do
+    if name in @role_slots do
+      %{glyph: glyph, dash: dash} = cue(name)
+
+      Enum.reduce(entry, %{}, fn
+        {:symbol, :cue}, acc -> Map.put(acc, :symbol, glyph)
+        {:stroke_dasharray, :cue}, acc -> put_cue_dash(acc, dash)
+        {key, value}, acc -> Map.put(acc, key, value)
+      end)
+    else
+      entry
+    end
+  end
+
+  defp put_cue_dash(acc, nil), do: acc
+  defp put_cue_dash(acc, dash), do: Map.put(acc, :stroke_dasharray, dash)
+
+  @doc """
+  `default/0` with the given fields replaced; `ramps`, `roles` and `styles` are merged key by
+  key.
+
+  An unknown field raises `KeyError`; an empty `series`, or a ramp, role or palette style
+  that breaks its contract (spec/08 §7.5, §7.7), raises `ArgumentError`.
   """
   @spec new(keyword() | map()) :: t()
   def new(fields), do: merge(default(), fields)
 
   @doc """
-  The theme with the given fields replaced, `ramps` and `roles` merged key by key over the
-  theme's own; the checks of `new/1` apply.
+  The theme with the given fields replaced, `ramps`, `roles` and `styles` merged key by key
+  over the theme's own; the checks of `new/1` apply.
+
+      iex> theme = Visualize.Theme.new(name: :house, styles: %{muted: %{opacity: 0.4}})
+      iex> Visualize.Theme.style(theme, :muted)
+      %{opacity: 0.4}
+      iex> Visualize.Theme.new(name: :house, styles: %{bad: %{fill: :good}})
+      ** (ArgumentError) theme :house: style :bad breaks its contract: a role style paints with its own role, so fill must be :bad or absent; got :good
+
   """
   @spec merge(t(), keyword() | map()) :: t()
   def merge(%__MODULE__{} = theme, fields) do
@@ -265,19 +366,21 @@ defmodule Visualize.Theme do
   end
 
   @doc false
-  # The theme with the fields replaced, `ramps` and `roles` merged over the theme's own,
-  # and nothing checked: `merge/2`'s first half, and what the validator measures.
+  # The theme with the fields replaced, `ramps`, `roles` and `styles` merged over the theme's
+  # own, and nothing checked: `merge/2`'s first half, and what the validator measures.
   @spec build(t(), keyword() | map()) :: t()
   def build(%__MODULE__{} = theme, fields) do
     fields = Map.new(fields)
     {ramps, fields} = Map.pop(fields, :ramps, %{})
     {roles, fields} = Map.pop(fields, :roles, %{})
+    {styles, fields} = Map.pop(fields, :styles, %{})
     theme = struct!(theme, fields)
 
     %{
       theme
       | ramps: merged(theme.ramps, ramps, :ramps),
-        roles: merged(theme.roles, roles, :roles)
+        roles: merged(theme.roles, roles, :roles),
+        styles: merged(theme.styles, styles, :styles)
     }
   end
 
@@ -289,9 +392,10 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  `:ok`, or `{:error, subject, message}` for the first ramp or role of the theme that
-  breaks its meaning contract (spec/08 §7.5) — `subject` is `{:ramp, name}` or
-  `{:role, name}` and `message` names the term broken with the values measured.
+  `:ok`, or `{:error, subject, message}` for the first ramp, role or palette style of the
+  theme that breaks its contract (spec/08 §7.5, §7.7) — `subject` is `{:ramp, name}`,
+  `{:role, name}` or `{:style, name}` and `message` names the term broken with the values
+  measured. Ramps and roles are read first, then the palette.
 
   The check `new/1` and `merge/2` raise on, for a caller that reports instead.
 
@@ -303,14 +407,15 @@ defmodule Visualize.Theme do
       true
 
   """
-  @spec check(t()) :: :ok | {:error, {:ramp | :role, atom()}, String.t()}
-  def check(%__MODULE__{ramps: ramps, roles: roles})
+  @spec check(t()) :: :ok | {:error, {:ramp | :role | :style, atom()}, String.t()}
+  def check(%__MODULE__{ramps: ramps, roles: roles} = theme)
       when is_map(ramps) and is_map(roles) do
-    Contract.check(ramps, roles)
+    with :ok <- Contract.check(ramps, roles), do: Palette.check(own_styles(theme))
   end
 
   @doc """
-  Every ramp and role of the theme that breaks its meaning contract (spec/08 §7.5), as
+  Every ramp, role and palette style of the theme that breaks its contract (spec/08 §7.5,
+  §7.7), as
   `{subject, message}` in the order `check/1` reads them — the contract run on each alone,
   so a theme editor names every fault where it is and not only the first (spec/14 §20.4).
 
@@ -321,8 +426,9 @@ defmodule Visualize.Theme do
       []
 
   """
-  @spec violations(t()) :: [{{:ramp | :role, atom()}, String.t()}]
-  def violations(%__MODULE__{ramps: ramps, roles: roles}) when is_map(ramps) and is_map(roles) do
+  @spec violations(t()) :: [{{:ramp | :role | :style, atom()}, String.t()}]
+  def violations(%__MODULE__{ramps: ramps, roles: roles} = theme)
+      when is_map(ramps) and is_map(roles) do
     ramp_faults =
       for name <- ordered(ramps, Contract.ramps()),
           {:error, subject, message} <- [Contract.check(Map.take(ramps, [name]), %{})],
@@ -333,7 +439,7 @@ defmodule Visualize.Theme do
           {:error, subject, message} <- [Contract.check(%{}, Map.take(roles, [name]))],
           do: {subject, message}
 
-    ramp_faults ++ role_faults
+    ramp_faults ++ role_faults ++ Palette.violations(own_styles(theme))
   end
 
   # The names of a map in the contract's order, then any it does not know, sorted.
