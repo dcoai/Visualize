@@ -1782,3 +1782,27 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - The conformance kit takes boxes among its `windows:` probes; it holds a `:region` feed's rows to its ranges, and a `:latest` feed to at most one row per identity, the last within the box. A probe box the schema refuses is `{:probe, window, faults}`, the kit run's fault.
 - The applied chart's schemas reach the frame (`Frame.new/2`'s `schemas:`) and a compiled chart, so a `latest` step reads the declared identity on every tick.
 - The board's window is unchanged: it is the shorthand, the window field's range of every feed it applies to.
+
+## 169. D-169 — A top or bottom legend wraps to its plot, and its margin grows to hold it
+
+**Context.** #623, work item #630. A `:top` or `:bottom` legend was one row centred on the plot's width, whatever its width. A row wider than the plot spilled past both edges and the SVG clipped what was past them: on metresis's cn2 instance a six-series legend sat at `translate(-1173.6,-20)` on a 532-wide plot. §4.5 already promised that a legend is never clipped silently, but its check for a top or bottom legend counted only the height.
+
+**Decision.**
+- **A top or bottom legend wraps** (`wrap`, `:boolean`, `:geometry`, default `true`). The title and the entries flow in order, a cell that would end past the plot's width starts a row 16 below, and each row is centred on its own. A legend that fits one row is that row, unchanged.
+- **A top or bottom margin grows to hold its rows.** In the margin, the frame takes the larger of the given margin and the legend's need, (rows − 1) × 16 + 12 + 8, from the plot's height, and realises itself once more with it. This replaces the height raise for those two sides: whether rows fit a margin is a question the library can answer by making room, and only it knows the row count. The rows depend on the plot's width alone, which the growth leaves alone, so one more pass is all it takes.
+- **What cannot be fitted still raises**, naming the side and the width needed: with `wrap: false`, a row wider than the plot; with wrapping, one cell wider than the plot on its own. A side margin keeps its width raise, since a vertical list does not narrow by wrapping.
+- **A label can be cut** (`max_label`, `:integer` characters, `:geometry`, default `nil`), at every position, to `max_label − 1` characters and `…`. The entry keeps the full text as a `<title>` child and an `aria-label`, so hover and a screen reader still give it, and every width the layout estimates reads the cut label.
+- **The extent is exposed, not set.** `Visualize.Chart.Frame.legend_extent/1` returns the legend's box, `%{width:, height:}`, for a host that lays out around a chart.
+
+**Rejected.**
+- **A margin setting the host computes.** The host would repeat the text estimate to know the rows; the library has it.
+- **Raising when the rows outgrow the top or bottom margin.** It leaves the author to guess a number the library knows.
+- **Capping the entries ("+k more").** It hides series a reader may be looking for.
+- **Cutting the legend's title by `max_label`.** The title is one string the author wrote for the space; a title too wide raises like any cell.
+- **Wrapping side legends into columns.** They are vertical lists; their width is their longest label, which `max_label` addresses.
+
+**Consequences.**
+- A legend that fits — in one row, and in the margin it was given — renders byte for byte as before; no golden of such a chart moves.
+- A chart whose top or bottom legend wraps in a margin draws a shorter plot than its margin asked for, and its scales, axes and marks follow the plot.
+- A label with more characters than `max_label` shows `…`, and its entry gains a `<title>` and an `aria-label`; `data-series` and `LegendHook` are unchanged.
+- metresis (#464) can stop sizing its legend margins by hand and read `legend_extent/1` where it lays out around a chart.
