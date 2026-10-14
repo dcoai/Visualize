@@ -2,7 +2,7 @@ defmodule Visualize.Board.InteractionTest do
   @moduledoc """
   Interaction across a board's cells (spec/15 §13, #545, D-151): a brush sets every
   cell's window through the board and re-asks the feeds, debounced; a selection is
-  `{field, value}` read through `links` and drawn as a per-datum `opacity` in every cell
+  `{field, value}` read through `links` and drawn as the palette's `:selected` and `:muted` in every cell
   that shows it; a drill target is validated data whose variables come from the picked
   datum.
   """
@@ -399,6 +399,59 @@ defmodule Visualize.Board.InteractionTest do
       board_info_until(&(&1.selection == nil))
       cleared = views_until([:a, :b, :c], &(&1.svg != nil and dims(&1.svg) == 0))
       assert map_size(cleared) == 3
+    end
+
+    test "the selection is the palette's :selected, the rest :muted (#638, D-171)" do
+      {board, _agents} = start()
+      views_until([:a, :c], live())
+      assert Server.select(board, {:k, "p"}) == :ok
+      drawn = views_until([:a, :c], &(&1.svg != nil and dims(&1.svg) > 0))
+
+      # The line p takes :selected's stroke and width; q is :muted, its own colour faded.
+      [p] = Regex.run(~r/<path[^>]*data-series="p"[^>]*>/, drawn.a.svg)
+      assert p =~ ~s{stroke="var(--vis-text, #333333)"}
+      assert p =~ ~s(stroke-width="2")
+      [q] = Regex.run(~r/<path[^>]*data-series="q"[^>]*>/, drawn.a.svg)
+      assert q =~ ~s(opacity="0.25")
+      refute q =~ "--vis-text"
+
+      # p's points are outlined outside their edge: the fill alone, then the outline, masked.
+      outlines =
+        Regex.scan(~r/<circle[^>]*data-series="p"[^>]*mask="url[(]#vis-mask-[^>]*>/, drawn.a.svg)
+
+      assert length(outlines) == 4
+
+      for [outline] <- outlines,
+          do:
+            assert(
+              outline =~ ~s{stroke="var(--vis-text, #333333)"} and outline =~ ~s(fill="none")
+            )
+
+      # The bar p, linked through `name`, is outlined; the bar r fades.
+      assert [_] = Regex.scan(~r/<rect[^>]*mask="url[(]#vis-mask-[^>]*>/, drawn.c.svg)
+      assert dims(drawn.c.svg) == 1
+    end
+
+    test "a design's own :selected and :muted win over the theme's (#638)" do
+      styled =
+        Map.put(@series, :styles, %{
+          selected: %{stroke: :bad, stroke_width: 5},
+          muted: %{opacity: 0.5, stroke_dasharray: "2 2"}
+        })
+
+      {board, _agents} = start(store: Map.put(@store, {:composite, 1}, styled))
+      views_until([:a], live())
+      assert Server.select(board, {:k, "p"}) == :ok
+
+      %{a: view} =
+        views_until([:a], &(&1.svg != nil and &1.svg =~ ~s(opacity="0.5")))
+
+      [p] = Regex.run(~r/<path[^>]*data-series="p"[^>]*>/, view.svg)
+      assert p =~ ~s{stroke="var(--vis-bad,}
+      assert p =~ ~s(stroke-width="5")
+      [q] = Regex.run(~r/<path[^>]*data-series="q"[^>]*>/, view.svg)
+      assert q =~ ~s(opacity="0.5") and q =~ ~s(stroke-dasharray="2 2")
+      assert dims(view.svg) == 0
     end
 
     test "a pick answers the row behind a keyboard point and its identity" do

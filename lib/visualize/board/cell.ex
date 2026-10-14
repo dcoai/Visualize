@@ -25,10 +25,12 @@ defmodule Visualize.Board.Cell do
   `{:data, slots, now}`, `{:now, now}`, `{:size, size}`, `{:component, chart, vars}`,
   `{:selection, selection}` and `{:subscribers, pids, newcomer}`.
 
-  - **The selection** (spec/15 §13.2, D-151). A cell whose rows hold the board's selection
-    draws every other datum dimmed: its rows gain a `:"$vis_dim"` column, `nil` where the
-    selection is and `0.25` elsewhere, and each mark with `data` ends its style stack with
-    `%{opacity: {:field, :"$vis_dim"}}`. A cell that does not hold it draws as before.
+  - **The selection** (spec/15 §13.2, D-151, D-171). A cell whose rows hold the board's
+    selection draws its data in the palette's view states: its rows gain a
+    `:"$vis_state"` column, `:selected` where the selection is and `:muted` elsewhere,
+    every frame an `:ordinal` scale of styles of that name, and each mark with `data`
+    ends its style stack with `{:scale, :"$vis_state", :"$vis_state"}`. A cell that does
+    not hold it draws as before.
   - **A pick**, `{:pick, from, ref, series, index}`, is answered to `from` as `{ref,
     reply}`: the row behind that keyboard point, its identity, item and frame, or `:error`.
   - **A click**, `{:event, from, ref, click}`, is answered the same way (spec/15 §9.2,
@@ -45,9 +47,10 @@ defmodule Visualize.Board.Cell do
   alias Visualize.Data.{Schema, Table}
   alias Visualize.Event
 
-  # The column a selection is drawn through, and how far the data it does not hold fade.
-  @dim :"$vis_dim"
-  @dimmed 0.25
+  # The column a selection is drawn through, and the scale of styles of the same name that
+  # reads it: a view state of the palette per row (spec/15 §13.2, D-171).
+  @state :"$vis_state"
+  @states [:selected, :muted]
 
   @doc false
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
@@ -229,16 +232,16 @@ defmodule Visualize.Board.Cell do
   # -- the selection (spec/15 §13.2) --------------------------------------------------------
 
   # The sources and the chart a selection is drawn with: when a row of any slot holds it,
-  # every row gains the dim column and every mark with data reads its opacity from it;
-  # otherwise the sources and the chart as they were.
+  # every row gains the state column and every mark with data lays the view state it
+  # names; otherwise the sources and the chart as they were.
   defp selected(%{selection: [_ | _] = selection} = state, sources) do
     if Enum.any?(sources, fn {_slot, d} -> Enum.any?(d.rows, &holds?(&1, selection)) end) do
-      dim = fn row ->
-        Map.put(row, @dim, if(holds?(row, selection), do: nil, else: @dimmed))
+      put = fn row ->
+        Map.put(row, @state, if(holds?(row, selection), do: :selected, else: :muted))
       end
 
-      {Map.new(sources, fn {slot, d} -> {slot, %{d | rows: Enum.map(d.rows, dim)}} end),
-       dimmed(state.chart)}
+      {Map.new(sources, fn {slot, d} -> {slot, %{d | rows: Enum.map(d.rows, put)}} end),
+       stated(state.chart)}
     else
       {sources, state.chart}
     end
@@ -254,28 +257,36 @@ defmodule Visualize.Board.Cell do
     end)
   end
 
-  # The style grammar's own per-datum binding (spec/14 §3.2, §3.6): an `opacity` read from
-  # the dim column, last in each data mark's stack, the column declared on every source
-  # that declares its fields.
-  defp dimmed(%Chart{marks: marks, sources: sources} = chart) do
-    node = %{opacity: {:field, @dim}}
+  # The style grammar's own style by data (spec/14 §3.6, D-171): a scale of styles over the
+  # state column in every frame, laid last in each data mark's stack, the column declared on
+  # every source that declares its fields. The names resolve as any palette name does, so
+  # a design's own `selected:` or `muted:` wins over the theme's.
+  defp stated(%Chart{marks: marks, sources: sources, frames: frames} = chart) do
+    entry = {:scale, @state, @state}
+    scale = %{kind: :ordinal, domain: @states, range: @states}
 
     marks =
       Enum.map(marks, fn
-        %{data: _} = mark -> Map.update(mark, :style, [node], &(List.wrap(&1) ++ [node]))
+        %{data: _} = mark -> Map.update(mark, :style, [entry], &(List.wrap(&1) ++ [entry]))
         mark -> mark
       end)
 
     sources =
       Map.new(sources || %{}, fn
-        {slot, %{fields: [_ | _] = fields} = node} -> {slot, %{node | fields: fields ++ [@dim]}}
+        {slot, %{fields: [_ | _] = fields} = node} -> {slot, %{node | fields: fields ++ [@state]}}
         pair -> pair
       end)
 
-    %{chart | marks: marks, sources: sources}
+    frames =
+      frames &&
+        Map.new(frames, fn {name, frame} ->
+          {name, Map.update(frame, :scales, %{@state => scale}, &Map.put(&1, @state, scale))}
+        end)
+
+    %{chart | marks: marks, sources: sources, frames: frames}
   end
 
-  # The row behind a keyboard point, without the dim column, its identity — the one its
+  # The row behind a keyboard point, without the state column, its identity — the one its
   # slot's schema declares (D-167), else the inference of `Visualize.Event.identity/3` —
   # its item and its frame.
   defp picked(%{pickable: nil}, _series, _index), do: :error
@@ -284,7 +295,7 @@ defmodule Visualize.Board.Cell do
        when is_integer(series) and series >= 0 and is_integer(index) and index >= 0 do
     with %{points: points} <- Enum.at(Summary.points(state.pickable), series),
          %{row: row, mark: mark} <- Enum.at(points, index) do
-      row = Map.delete(row, @dim)
+      row = Map.delete(row, @state)
       identity = Event.identity(mark, row, schema_of(state, mark))
 
       {:ok,
@@ -313,7 +324,7 @@ defmodule Visualize.Board.Cell do
 
       Event.build(click, mark, rows, schema_of(state, mark), frame, origin,
         cell: state.name,
-        row: &Map.delete(&1, @dim)
+        row: &Map.delete(&1, @state)
       )
     else
       _none -> :error

@@ -37,6 +37,8 @@ defmodule Visualize.Hooks.Crosshair do
   - `data-plot` - `left,top,width,height` of the plot area inside the chart
   - `data-size` - `width,height` of the chart; absent, the chart element's own size. Over
     a canvas, the canvas's `data-width`/`data-height` are this size, from the same frame
+  - `data-vis-hover` - the palette's `:hover`, resolved for the frame: a JSON object of SVG
+    attributes laid over each marker (spec/10 §4.4); absent, a marker is its fill alone
 
   Set by the host:
   - `data-crosshair-event` - the event pushed with `{index}` when the nearest index
@@ -48,6 +50,7 @@ defmodule Visualize.Hooks.Crosshair do
 
   alias Visualize.Chart.{Frame, Mark}
   alias Visualize.Chart.Mark.Channels
+  alias Visualize.Hooks.States
   alias Visualize.IR.Path
 
   @doc "As `attrs/3` with no options: the first mark."
@@ -55,7 +58,9 @@ defmodule Visualize.Hooks.Crosshair do
   def attrs(%Frame{} = frame, sources), do: attrs(frame, sources, [])
 
   @doc """
-  The data attributes of spec/10 §13.2 for one mark of the frame, computed once.
+  The data attributes of spec/10 §13.2 for one mark of the frame, computed once, with the
+  markers' style — the palette's `:hover` as the frame's design and theme resolve it
+  (§4.4) — and the frame's sync attributes when it is a sync group's.
 
   ## Options
 
@@ -93,6 +98,7 @@ defmodule Visualize.Hooks.Crosshair do
         numbers([frame.margin.left, frame.margin.top, frame.plot.width, frame.plot.height]),
       "data-size" => numbers([frame.size.width, frame.size.height])
     }
+    |> Map.merge(States.attrs(frame, :hover))
     |> Map.merge(Frame.sync_attrs(frame))
   end
 
@@ -177,6 +183,7 @@ defmodule Visualize.Hooks.Crosshair do
         this.eventName = ds.crosshairEvent || null;
         this.color = ds.crosshairColor || '#666';
         this.colors = ds.crosshairColors ? JSON.parse(ds.crosshairColors) : [];
+        this.hover = ds.visHover ? JSON.parse(ds.visHover) : {};
         this.build();
         VisualizeSync.attach(this);
       },
@@ -197,7 +204,14 @@ defmodule Visualize.Hooks.Crosshair do
             return marker;
           });
         }
-        this.markers.forEach((marker, i) => marker.setAttribute('fill', this.colors[i] || this.color));
+        // Each marker is its series' fill with the server's :hover laid over it (spec/10
+        // §4.4); a key the style no longer gives is removed, so no attribute is the fill alone.
+        this.markers.forEach((marker, i) => {
+          (this.hovered || []).forEach((name) => marker.removeAttribute(name));
+          marker.setAttribute('fill', this.colors[i] || this.color);
+          Object.keys(this.hover).forEach((name) => marker.setAttribute(name, this.hover[name]));
+        });
+        this.hovered = Object.keys(this.hover);
       },
 
       // The pointer in chart units: the chart's rectangle scaled to its viewBox, with the

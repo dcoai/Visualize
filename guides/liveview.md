@@ -485,8 +485,12 @@ Visualize.Chart.render(tooltip_chart, root: true) =~ ~s(data-datum="t v")
 ```
 
 ```heex
-<div id="tooltip-chart" phx-hook="TooltipHook">{Phoenix.HTML.raw(@svg)}</div>
+<div id="tooltip-chart" phx-hook="TooltipHook" {@hover}>{Phoenix.HTML.raw(@svg)}</div>
 ```
+
+`@hover` is `Visualize.Hooks.Tooltip.attrs(tooltip_chart.frame)`, the theme's `:hover` style
+resolved for the chart. With it, the hook also outlines the point under the pointer in that
+style; leave it out and the hook shows the tooltip alone.
 
 With `event:`, a click on a point pushes that event with the fields as strings, here
 `handle_event("point_click", %{"t" => "4", "v" => "..."}, socket)`.
@@ -500,8 +504,11 @@ positions once as attributes:
 ```elixir
 crosshair = Visualize.Hooks.Crosshair.attrs(applied.frame, applied.sources)
 Map.keys(crosshair)
-#=> ["data-plot", "data-size", "data-xs", "data-ys"]
+#=> ["data-plot", "data-size", "data-vis-hover", "data-xs", "data-ys"]
 ```
+
+`data-vis-hover` is the theme's `:hover` style, which the markers are drawn in. Declare
+`hover:` in the design's `styles` to draw them your own way.
 
 ```heex
 <div id="crosshair-chart" phx-hook="CrosshairHook" {@crosshair} data-crosshair-event="hover">

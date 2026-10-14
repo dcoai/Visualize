@@ -55,7 +55,8 @@ defmodule Visualize.Hooks.CrosshairTest do
                "data-xs" => "[0,90,180,270]",
                "data-ys" => "[[120,20,160,180]]",
                "data-plot" => "40,10,270,200",
-               "data-size" => "340,220"
+               "data-size" => "340,220",
+               "data-vis-hover" => ~s({"stroke":"#333333","stroke-width":"2"})
              }
     end
 
@@ -91,6 +92,25 @@ defmodule Visualize.Hooks.CrosshairTest do
       end
     end
 
+    test "the markers' style is the palette's :hover, a design's own winning (#638)" do
+      chart =
+        Chart.from_map!(%{
+          version: 2,
+          sources: %{primary: %{fields: [:t, :v]}},
+          styles: %{hover: %{stroke: :warning, stroke_width: 1.5, stroke_dasharray: [2, 1]}},
+          frames: %{
+            main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}
+          },
+          marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
+        })
+
+      frame = Frame.new(chart, sources: @sources, size: {340, 220})
+
+      assert Crosshair.attrs(frame, @sources)["data-vis-hover"] ==
+               ~s({"stroke":"#{Visualize.Theme.resolve(Visualize.Theme.default(), :warning, :literal)}",) <>
+                 ~s("stroke-width":"1.5","stroke-dasharray":"2 1"})
+    end
+
     test "an unbound source gives empty arrays; a facet frame raises" do
       frame = frame([%{type: :line, data: :primary, channels: %{x: :t, y: :v}}])
       assert Crosshair.attrs(frame, %{})["data-xs"] == "[]"
@@ -112,6 +132,36 @@ defmodule Visualize.Hooks.CrosshairTest do
         |> Frame.new(sources: @sources, size: {340, 220})
 
       assert_raise ArgumentError, ~r/facet/, fn -> Crosshair.attrs(facet, @sources) end
+    end
+  end
+
+  describe "CrosshairHook executed (#638)" do
+    @describetag :js
+
+    test "each marker is its series' fill with data-vis-hover laid over it; absent, the fill alone" do
+      attrs = %{
+        "data-xs" => "[0,10]",
+        "data-ys" => "[[5,6],[7,8]]",
+        "data-plot" => "0,0,100,100",
+        "data-crosshair-colors" => ~s(["#111111","#222222"]),
+        "data-vis-hover" => ~s({"stroke":"#333333","stroke-width":"2"})
+      }
+
+      assert {:ok, %{"report" => r}} =
+               Visualize.JsHooks.run("""
+               const look = (hook) => hook.markers.map((m) =>
+                 ['fill', 'stroke', 'stroke-width'].map((name) => m.getAttribute(name)));
+               const el = Stub.markup('div', Object.assign({id: 'x'}, #{Jason.encode!(attrs)}), [Stub.markup('svg')]);
+               const hook = Stub.mount(CrosshairHook, el);
+               const report = {styled: look(hook)};
+               delete el.dataset.visHover;
+               hook.updated();
+               report.dropped = look(hook);
+               Stub.done(report);
+               """)
+
+      assert r["styled"] == [["#111111", "#333333", "2"], ["#222222", "#333333", "2"]]
+      assert r["dropped"] == [["#111111", nil, nil], ["#222222", nil, nil]]
     end
   end
 

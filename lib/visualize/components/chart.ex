@@ -4,8 +4,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     A chart whose marks declare events, in LiveView (spec/10 §19, D-170).
 
     A `Phoenix.LiveComponent` over a `%Visualize.Chart.Applied{}`. It renders the chart's
-    SVG inside `TooltipHook`, holds the drawing and a token for it, and resolves a click on
-    a mark's datum to the row that was drawn. The page receives the click as one
+    SVG inside `TooltipHook`, the datum under the pointer outlined as the palette's
+    `:hover` (`Visualize.Hooks.Tooltip.attrs/1`), holds the drawing and a token for it, and
+    resolves a click on a mark's datum to the row that was drawn. The page receives the
+    click as one
     `Visualize.Event`:
 
         <.live_component module={Visualize.Components.Chart} id="sales" chart={@applied} />
@@ -33,9 +35,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart
     alias Visualize.Chart.Applied
     alias Visualize.Event
+    alias Visualize.Hooks.Tooltip
 
     @impl true
-    def mount(socket), do: {:ok, assign(socket, drawing: nil, drawn: nil, svg: nil)}
+    def mount(socket), do: {:ok, assign(socket, drawing: nil, drawn: nil, svg: nil, hover: %{})}
 
     @impl true
     def update(%{id: id, chart: %Applied{} = chart} = assigns, socket) do
@@ -57,7 +60,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assign(socket,
         drawing: drawing,
         drawn: Integer.to_string(System.unique_integer([:positive, :monotonic])),
-        svg: Chart.render(chart, [root: true] ++ render_opts)
+        svg: Chart.render(chart, [root: true] ++ render_opts),
+        hover: Tooltip.attrs(chart.frame)
       )
     end
 
@@ -84,6 +88,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         data-tooltip-target={@myself}
         data-tooltip-drawn={@drawn}
         data-tooltip-class={@tooltip_class}
+        {@hover}
       >
         {Phoenix.HTML.raw(@svg)}
       </div>
