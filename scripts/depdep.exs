@@ -29,6 +29,11 @@
 # and restored before `mix deps.get`, so it is not cloned (depdep #163–#165). Keys are
 # unchanged again; the first run after this pin pushes the new source objects.
 #
+# v0.12.0 (#631) adds `depdep.bootstrap`: what a job pays to clone and compile depdep
+# before anything can be restored, the one cost the store cannot cache. Keys and the
+# schema (v3) are unchanged: no refill. It ships metrics profile version 4, and every
+# consumer still on v0.11.0 writes version 3 back over it, so the fleet moves together.
+#
 # A restore Mix still refuses is counted as a miss and recompiled, and the summary ends
 # `rebuilt N`. If N is not 0, `--explain-rebuilt` (v0.8.0) names which input the manifest
 # disagrees on.
@@ -52,6 +57,6 @@ url =
     token -> "https://gitlab-ci-token:#{token}@gitlab.conet.yarina.org/dco-tek/depdep.git"
   end
 
-Mix.install([{:depdep, git: url, tag: "v0.11.0"}])
+Mix.install([{:depdep, git: url, tag: "v0.12.0"}])
 
 Depdep.CLI.main(System.argv())
