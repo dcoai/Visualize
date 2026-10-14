@@ -119,6 +119,32 @@ defmodule Visualize.Feed.Conformance.Words do
     do:
       "asked for at most #{budget} rows (window #{inspect(window)}), the feed names :budget and served #{count}"
 
+  def words({:no_probe, :region}),
+    do:
+      "the feed names :region, and windows: has no box ranging a field other than the window field"
+
+  def words({:no_probe, :latest}),
+    do: "the feed names :latest, and windows: has no box with latest: true"
+
+  def words({:probe, window, faults}),
+    do:
+      "the probe window #{inspect(window)} is not one the feed's schema can answer " <>
+        "(#{inspect(faults)}); the kit's windows: are the run's to fix"
+
+  def words({:region_row, request, field, value}),
+    do:
+      "#{request(request)}: the feed names :region and served a row whose #{inspect(field)} " <>
+        "is #{inspect(value)}, outside the range asked"
+
+  def words({:latest_twice, request, identity}),
+    do:
+      "#{request(request)}: the feed names :latest and served more than one row of #{inspect(identity)}"
+
+  def words({:not_latest, request, identity}),
+    do:
+      "#{request(request)}: the feed names :latest and served a row of #{inspect(identity)} " <>
+        "older than its last within the box"
+
   def words({:push_refused, reason}),
     do: "the feed names :push, and subscribe/2 answered {:error, #{inspect(reason)}}"
 

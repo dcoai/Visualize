@@ -168,9 +168,12 @@ defmodule Visualize.Feed.Combine do
   @impl Feed
   def fetch(%__MODULE__{feeds: feeds}, window, budget) do
     with {:ok, {version, schema, _supports}, readings} <- resolve(feeds) do
-      [from, to] = window || [nil, nil]
+      time = Feed.window_field(schema)
+      # A box is routed by its window field's range alone; its region and `latest` are
+      # finished over the union (spec/08 §11.5, D-168).
+      [from, to] = Window.range(window, time) || [nil, nil]
       parts = Enum.zip(feeds, readings)
-      route(parts, Feed.window_field(schema), from, to, budget, [], true, version)
+      route(parts, time, from, to, budget, [], true, version)
     end
   end
 

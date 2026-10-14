@@ -26,6 +26,8 @@ defmodule Visualize.Feed.Signals do
   @behaviour Visualize.Feed
 
   alias Visualize.Data.{Delivery, Schema}
+  alias Visualize.Feed
+  alias Visualize.Feed.Window
   alias Visualize.Signals
 
   @enforce_keys [:signal, :schema]
@@ -85,7 +87,9 @@ defmodule Visualize.Feed.Signals do
   def fetch(%__MODULE__{} = feed, window, _budget) do
     now = present(feed)
 
-    case span(window, now, feed.signal) do
+    # A box is served by its tick's range; its region and `latest` are the monitor's to
+    # finish (spec/08 §11.6, D-168).
+    case span(Window.range(window, Feed.window_field(feed.schema)), now, feed.signal) do
       {:ok, from, to} ->
         first = max(from, to - feed.limit + 1)
         rows = Signals.rows(feed.signal, first, to)

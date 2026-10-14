@@ -5,10 +5,12 @@ defmodule Visualize.Feed do
 
   A feed is a struct whose module implements this behaviour. `describe/1` answers the
   feed's schema, its version and `supports`, the capabilities it honours among
-  `[:window, :budget, :push]`; `fetch/3` answers a `Visualize.Data.Delivery` for a window
-  and a budget; `subscribe/2` and `unsubscribe/2` are for a feed that pushes. **Only rows
-  are required.** A window and a budget are requests: where a feed does not honour one,
-  `finish/3` trims and reduces for it and the delivery records `reduced_by: :visualize`.
+  `[:window, :region, :latest, :budget, :push]`; `fetch/3` answers a
+  `Visualize.Data.Delivery` for a window and a budget; `subscribe/2` and `unsubscribe/2`
+  are for a feed that pushes. **Only rows are required.** A window — `nil`, `[from, to]`
+  or a box of ranges that may ask for each identity's latest row (spec/08 §11.1, D-168) —
+  and a budget are requests: where a feed does not honour one, `finish/3` trims and
+  reduces for it, and a budget reduction records `reduced_by: :visualize`.
   Every callback answers `{:error, reason}` rather than raising, so a feed that is down is
   a value a cell shows.
 
@@ -32,16 +34,19 @@ defmodule Visualize.Feed do
   alias Visualize.Data.{Delivery, Schema, Table}
   alias Visualize.Feed.Window
 
-  @capabilities [:window, :budget, :push]
+  @capabilities [:window, :region, :latest, :budget, :push]
 
   @typedoc "A feed: a struct whose module implements `Visualize.Feed`."
   @type t :: struct()
 
   @typedoc "What a feed honours (spec/08 §11.1)."
-  @type capability :: :window | :budget | :push
+  @type capability :: :window | :region | :latest | :budget | :push
 
-  @typedoc "`nil`, or `[from, to]` over the feed's window field, either bound `nil` for open."
-  @type window :: Window.t()
+  @typedoc """
+  `nil`, `[from, to]` over the feed's window field, either bound `nil` for open, or a box of
+  ranges that may ask for each identity's latest row (spec/08 §11.1, D-168).
+  """
+  @type window :: Window.t() | %{optional(:ranges) => map(), optional(:latest) => boolean()}
 
   @typedoc "`nil`, or the most rows a cell wants."
   @type budget :: pos_integer() | nil
@@ -61,7 +66,7 @@ defmodule Visualize.Feed do
 
   @optional_callbacks subscribe: 2, unsubscribe: 2
 
-  @doc "The three capabilities a feed may honour, in the order of spec/08 §11.1."
+  @doc "The five capabilities a feed may honour, in the order of spec/08 §11.1."
   @spec capabilities() :: [capability(), ...]
   def capabilities, do: @capabilities
 
@@ -154,35 +159,100 @@ defmodule Visualize.Feed do
   end
 
   @doc """
-  A delivery finished for a request (spec/08 §11.2): trimmed to `window:` when
-  `supports:` lacks `:window` and the schema has a window field, and reduced to `budget:`
-  by `reduce:` (`:lttb` or `:m4`) when `supports:` lacks `:budget` and there are more
-  rows than the budget, recording `reduced_by: :visualize`. A delivery that needs
-  neither comes back as it is.
+  A delivery finished for a request (spec/08 §11.2), each part where `supports:` lacks it:
+  trimmed to the window field's range of `window:` (`:window`) and to a box's other ranges
+  (`:region`), reduced to each identity's latest row (`:latest`, spec/08 §11.1), and
+  reduced to `budget:` by `reduce:` (`:lttb` or `:m4`) when there are more rows than the
+  budget (`:budget`), recording `reduced_by: :visualize`. A delivery that needs none of
+  them comes back as it is.
+
+  Raises `ArgumentError` for a box `Visualize.Feed.Window.check/2` refuses against the
+  schema: the request is the caller's.
   """
   @spec finish(Delivery.t(), Schema.t(), keyword()) :: Delivery.t()
   def finish(%Delivery{} = delivery, %Schema{} = schema, opts) do
     opts = Keyword.validate!(opts, supports: [], window: nil, budget: nil, reduce: :lttb)
+    box = box!(opts[:window], schema)
+    supports = opts[:supports]
 
     delivery
-    |> trim(schema, opts[:window], :window in opts[:supports])
-    |> reduce(schema, opts[:budget], opts[:reduce], :budget in opts[:supports])
+    |> trim(schema, box, :window in supports)
+    |> region(schema, box, :region in supports)
+    |> latest(schema, box, :latest in supports)
+    |> reduce(schema, opts[:budget], opts[:reduce], :budget in supports)
+  end
+
+  defp box!(window, schema) do
+    case Window.check(window, schema) do
+      :ok ->
+        Window.box(window, schema)
+
+      {:error, faults} ->
+        raise ArgumentError,
+              "a window the schema cannot answer: #{inspect(faults)} (spec/08 §11.1)"
+    end
   end
 
   defp trim(delivery, _schema, nil, _honoured), do: delivery
-  defp trim(delivery, _schema, _window, true), do: delivery
+  defp trim(delivery, _schema, _box, true), do: delivery
 
-  # A window of the other kind than the window field asks for the feed's own span, so it
-  # trims nothing (spec/08 §11.2).
-  defp trim(delivery, schema, window, false) do
+  # The window field's range; a schema with none cannot be trimmed by one (spec/08 §11.2).
+  defp trim(delivery, schema, box, false) do
     field = window_field(schema)
 
-    if field != nil and Window.applies?(window, window_type(schema)) do
-      rows = delivery |> Table.rows() |> Window.trim(field, window)
-      %{delivery | rows: rows, window: Window.intersect(delivery.window, window)}
-    else
-      delivery
+    case field && Window.range(box, field) do
+      [_from, _to] = range ->
+        rows = delivery |> Table.rows() |> Window.trim(field, range)
+        %{delivery | rows: rows, window: Window.intersect(delivery.window, range)}
+
+      _none ->
+        delivery
     end
+  end
+
+  # Every range but the window field's (spec/08 §11.2).
+  defp region(delivery, _schema, nil, _honoured), do: delivery
+  defp region(delivery, _schema, _box, true), do: delivery
+
+  defp region(delivery, schema, %{ranges: ranges}, false) do
+    time = window_field(schema)
+
+    others =
+      for {field, range} <- ranges,
+          time == nil or to_string(field) != to_string(time),
+          do: {field, range}
+
+    case others do
+      [] ->
+        delivery
+
+      others ->
+        rows =
+          Enum.reduce(others, Table.rows(delivery), fn {f, r}, rows -> Window.trim(rows, f, r) end)
+
+        %{delivery | rows: rows}
+    end
+  end
+
+  # Each identity's last row by the window field (spec/08 §11.1).
+  defp latest(delivery, _schema, nil, _honoured), do: delivery
+  defp latest(delivery, _schema, %{latest: false}, _honoured), do: delivery
+  defp latest(delivery, _schema, _box, true), do: delivery
+
+  defp latest(delivery, schema, %{latest: true}, false) do
+    time = window_field(schema)
+
+    rows =
+      delivery
+      |> Table.rows()
+      |> Window.latest_rows(&place(&1, time), &Schema.identity(schema, &1))
+
+    %{delivery | rows: rows}
+  end
+
+  defp place(row, time) do
+    value = Table.get(row, time)
+    if Window.time?(value), do: Window.position(value)
   end
 
   defp reduce(delivery, _schema, nil, _method, _honoured), do: delivery

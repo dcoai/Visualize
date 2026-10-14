@@ -62,6 +62,7 @@ defmodule Visualize.Chart.Frame do
             design_styles: %{},
             defs: %{},
             now: nil,
+            schemas: %{},
             system: :as_posted,
             name: nil,
             domains: %{},
@@ -95,6 +96,7 @@ defmodule Visualize.Chart.Frame do
           design_styles: %{atom() => map()},
           defs: %{atom() => map()},
           now: term() | nil,
+          schemas: %{atom() => Visualize.Data.Schema.t()},
           system: Visualize.Quantity.system(),
           name: atom() | nil,
           domains: %{atom() => term()},
@@ -129,6 +131,9 @@ defmodule Visualize.Chart.Frame do
       spec/14 §4.2); a design records none
     * `:now` - the instant a `:window` step measures its durations back from (spec/14
       §5.4.1); without it each such step takes the newest reading of its own column
+    * `:schemas` - the schema of each slot by name, whose declared identity a `:window`
+      step's `latest` reads (spec/14 §5.4.1, D-168); `Visualize.Chart.apply/2` passes the
+      applied chart's (default `%{}`)
     * `:system` - the unit system every axis shows its measure in, `:metric`, `:us`, `:uk`
       or `:as_posted` (default): the viewer's, never the design's (spec/14 §4.4, D-156)
     * `:warm` - the force layouts a compiled chart carries between ticks (spec/14 §12.5,
@@ -160,6 +165,7 @@ defmodule Visualize.Chart.Frame do
     }
 
     now = Keyword.get(opts, :now)
+    schemas = Keyword.get(opts, :schemas, %{})
     system = system(Keyword.get(opts, :system, :as_posted))
     theme = theme(chart.theme, Keyword.get(opts, :theme))
     styles = Style.all(chart.styles)
@@ -171,14 +177,16 @@ defmodule Visualize.Chart.Frame do
       Force.layouts(
         marks,
         sources,
-        context(kind, plot, projection, now, %{}),
+        context(kind, plot, projection, now, schemas, %{}),
         Keyword.get(opts, :warm, %{})
       )
 
-    panels = panels(kind, node, chart, sources, context(kind, plot, projection, now, forces))
+    panels =
+      panels(kind, node, chart, sources, context(kind, plot, projection, now, schemas, forces))
+
     facet = facet(kind, node, panels)
     scale_plot = if facet, do: panel_plot(plot, facet.columns, panels), else: plot
-    ctx = context(kind, scale_plot, projection, now, forces)
+    ctx = context(kind, scale_plot, projection, now, schemas, forces)
 
     scales =
       Scales.realise(
@@ -225,6 +233,7 @@ defmodule Visualize.Chart.Frame do
       design_styles: chart.styles,
       defs: chart.defs,
       now: now,
+      schemas: schemas,
       system: system,
       forces: forces
     }
@@ -470,12 +479,13 @@ defmodule Visualize.Chart.Frame do
   def centre(_kind, plot), do: [plot.width / 2, plot.height / 2]
 
   # What a mark's pipeline sees of the frame (spec/14 §5.4).
-  defp context(kind, plot, projection, now, forces) do
+  defp context(kind, plot, projection, now, schemas, forces) do
     %{
       size: [plot.width, plot.height],
       centre: centre(kind, plot),
       projection: projection,
       now: now,
+      schemas: schemas,
       forces: forces
     }
   end

@@ -80,6 +80,7 @@ defmodule Visualize.Chart.Compiled do
     motions: %{},
     moving: %{},
     forces: %{},
+    schemas: %{},
     versions: %{}
   ]
 
@@ -141,6 +142,7 @@ defmodule Visualize.Chart.Compiled do
           motions: %{non_neg_integer() => map()},
           moving: %{non_neg_integer() => map()},
           forces: forces(),
+          schemas: %{atom() => Visualize.Data.Schema.t()},
           versions: %{atom() => String.t() | nil}
         }
 
@@ -192,7 +194,9 @@ defmodule Visualize.Chart.Compiled do
       # (spec/14 §12.5, D-132).
       forces: Force.warm(frame.forces),
       # The schema versions its facts were read from: another one recompiles (§12.1).
-      versions: applied.versions
+      versions: applied.versions,
+      # The slots' schemas, whose declared identity a `latest` step reads (D-168).
+      schemas: frame.schemas
     }
 
     # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
@@ -664,9 +668,10 @@ defmodule Visualize.Chart.Compiled do
   # A tick re-realises the frame, and must do it at the size the chart was compiled at
   # (spec/14 §4.2, #427): a design records none, so the compiled chart is where it lives.
   # Its force layouts start from the ones the chart carries (§12.5, D-132).
-  defp realise_opts(%{theme: theme, system: system, size: size, forces: forces}, sources) do
+  defp realise_opts(%{theme: theme, system: system, size: size, forces: forces} = c, sources) do
     [
       sources: sources,
+      schemas: c.schemas,
       theme: theme,
       system: system,
       size: {size.width, size.height},

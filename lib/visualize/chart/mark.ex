@@ -154,6 +154,7 @@ defmodule Visualize.Chart.Mark do
       centre: Frame.centre(frame.kind, plot),
       projection: frame.projection,
       now: frame.now,
+      schemas: frame.schemas,
       forces: frame.forces
     }
 

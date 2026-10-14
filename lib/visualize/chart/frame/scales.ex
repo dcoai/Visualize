@@ -291,6 +291,7 @@ defmodule Visualize.Chart.Frame.Scales do
           projection: ctx.projection,
           sources: sources,
           now: Map.get(ctx, :now),
+          schema: ctx |> Map.get(:schemas, %{}) |> Map.get(source_name(mark.data)),
           forces: Map.get(ctx, :forces, %{})
         )
 

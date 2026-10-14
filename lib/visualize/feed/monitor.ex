@@ -114,11 +114,32 @@ defmodule Visualize.Feed.Monitor do
   end
 
   defp step(monitor, name, now) do
-    monitor
-    |> described(name, now)
-    |> fetched(name, now)
-    |> drained(name, now)
-    |> finished(name, now)
+    monitor = described(monitor, name, now)
+
+    case refused(monitor.window, monitor.entries[name].schema) do
+      nil ->
+        monitor
+        |> fetched(name, now)
+        |> drained(name, now)
+        |> finished(name, now)
+
+      faults ->
+        entry = monitor.entries[name]
+        down = %{entry | status: {:down, {:window, faults}}, held: nil, out: nil, pending: []}
+        put_entry(monitor, name, down)
+    end
+  end
+
+  # A box the feed's schema cannot answer is not asked (spec/08 §11.4, D-168): the feed is
+  # down with the faults until a window that holds is set. A feed not yet described, and a
+  # window that is no box, are never refused here.
+  defp refused(_window, nil), do: nil
+
+  defp refused(window, schema) do
+    case Window.check(window, schema) do
+      :ok -> nil
+      {:error, faults} -> faults
+    end
   end
 
   # -- 1. describe and subscribe ----------------------------------------------------------
@@ -422,16 +443,20 @@ defmodule Visualize.Feed.Monitor do
     entries =
       Map.new(monitor.entries, fn {name, entry} ->
         asked = request(window, entry.schema)
-        moved? = asked != request(monitor.window, entry.schema)
-        {name, %{entry | refetch: entry.refetch or (moved? and not covers?(entry, asked))}}
+        was = request(monitor.window, entry.schema)
+        moved? = asked != was
+
+        {name, %{entry | refetch: entry.refetch or (moved? and not covers?(entry, was, asked))}}
       end)
 
     %{monitor | window: window, entries: entries}
   end
 
   # The window a feed is asked (spec/08 §11.2): the monitor's where it applies to the
-  # feed's window field, or the feed has none or is not yet described; else `nil`.
+  # feed's window field, or the feed has none or is not yet described; else `nil`. A box
+  # is asked as it is (§11.1), checked against the schema before it is (`step/3`).
   defp request(window, nil), do: window
+  defp request(%{} = box, _schema), do: box
 
   defp request(window, schema) do
     case Feed.window_type(schema) do
@@ -440,12 +465,53 @@ defmodule Visualize.Feed.Monitor do
     end
   end
 
-  defp covers?(%{ref: nil}, _window), do: false
+  # Whether a push feed's holding answers the new window without a fetch (spec/08 §11.4):
+  # its window field's range starts within what it holds, and a box's other ranges and its
+  # `latest` are the old one's — under `latest`, with a `to` no earlier, since a holding of
+  # the latest rows cannot give the rows an earlier `to` would make the latest.
+  defp covers?(%{ref: nil}, _was, _asked), do: false
+  defp covers?(%{schema: nil}, _was, _asked), do: false
 
-  defp covers?(%{held: %Delivery{window: [held, _]}}, [from, _]) when held != nil and from != nil,
-    do: Window.compare(from, held) != :lt
+  defp covers?(%{schema: schema} = entry, was, asked) do
+    time = Feed.window_field(schema)
+    old = Window.box(was, schema)
+    new = Window.box(asked, schema)
 
-  defp covers?(_entry, _window), do: false
+    same_rest?(old, new, time) and to_kept?(old, new, time) and
+      from_held?(entry, Window.range(new, time))
+  end
+
+  defp from_held?(%{held: %Delivery{window: [held, _]}}, [from, _])
+       when held != nil and from != nil,
+       do: Window.compare(from, held) != :lt
+
+  defp from_held?(_entry, _range), do: false
+
+  defp same_rest?(old, new, time), do: rest(old, time) == rest(new, time)
+
+  defp rest(nil, _time), do: {%{}, false}
+
+  defp rest(%{ranges: ranges, latest: latest}, time) do
+    {Map.new(for {f, r} <- ranges, to_string(f) != to_string(time), do: {to_string(f), r}),
+     latest}
+  end
+
+  defp to_kept?(%{latest: true} = old, new, time) do
+    case {end_of(old, time), end_of(new, time)} do
+      {_old, nil} -> true
+      {nil, _new} -> false
+      {old, new} -> Window.compare(new, old) != :lt
+    end
+  end
+
+  defp to_kept?(_old, _new, _time), do: true
+
+  defp end_of(box, time) do
+    case Window.range(box, time) do
+      [_from, to] -> to
+      _none -> nil
+    end
+  end
 
   @doc """
   Every feed fetched again at the next tick, push feeds included, whatever it holds

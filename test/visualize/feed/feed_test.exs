@@ -36,7 +36,7 @@ defmodule Visualize.FeedTest do
       signals = Visualize.Feed.Signals.new(Visualize.Signals.new(:sine, [:t, :v]))
       assert Feed.subscribe(signals, self()) == {:error, :no_push}
       assert Feed.unsubscribe(signals, make_ref()) == :ok
-      assert Feed.capabilities() == [:window, :budget, :push]
+      assert Feed.capabilities() == [:window, :region, :latest, :budget, :push]
     end
 
     test "errors are values, and a describer answers by name" do

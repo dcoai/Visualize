@@ -18,11 +18,11 @@ defmodule Visualize.Feed.ConformanceTest do
   # -- the providers ---------------------------------------------------------------------
 
   # Windows before the signal's start, past its present tick (30) and beyond its limit (10),
-  # so one is capped.
+  # so one is capped, and a box ranging its tick (D-168).
   use Conformance,
     name: "Signals",
     feed: Signals.new(Visualize.Signals.new(:discrete, [:t, :n], window: 3), tick: 30, limit: 10),
-    windows: [nil, [4, 12], [-5, 8], [nil, 6], [25, nil], [0, 100]]
+    windows: [nil, [4, 12], [-5, 8], [nil, 6], [25, nil], [0, 100], %{ranges: %{t: [4, 12]}}]
 
   # A feed whose schema uses every quantity, each in its base unit with a metric kind and
   # bounds (spec/05 §4.2, D-155): the kit holds no quantity, unit or new key against it.
@@ -54,7 +54,14 @@ defmodule Visualize.Feed.ConformanceTest do
   use Conformance,
     name: "Telemetry",
     feed: telemetry_feed(),
-    windows: [nil, [at(-10), at(3)], [at(2), at(4)], [at(3), nil], [nil, at(2)]],
+    windows: [
+      nil,
+      [at(-10), at(3)],
+      [at(2), at(4)],
+      [at(3), nil],
+      [nil, at(2)],
+      %{ranges: %{t: [at(2), at(4)]}}
+    ],
     push: fn feed ->
       :telemetry.execute(@event, %{value: 7}, %{host: "b"})
       Telemetry.flush(feed.server)
