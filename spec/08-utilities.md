@@ -596,7 +596,7 @@ A theme chooses only **how many style series** it has, `:style_1` to `:style_n` 
 
 **An entry is a flat style node written in slots.** Its keys are the style keys of spec/14 §3.1, and its values are written as a design writes them — `fill: :bad`, `stroke: {:series, 3}`, `font_size: :label_size` — never as literal colours where a slot says the same, so an entry follows its theme's colours and a stylesheet (7.3). In a role's entry `stroke_dasharray: :cue` and `symbol: :cue` take the role's cue (7.5, D-142): `style/2` replaces `:cue` with the role's dash and glyph, and leaves the key out where the dash is solid. An entry is **flat**: it may not use `extends`. A design's own style may still `extends: :warning`, since a palette name is a style reference (spec/14 §3.3, #637), but the palette is the end of every chain, so a theme never makes a cycle a design cannot see.
 
-**Entries may be partial.** A series or a role entry is usually whole; a state entry gives a few keys, because it is laid over whatever the object already looks like through the style stack (spec/14 §3.6). The default `:selected` adds an outline to any object, and the default `:muted` is `opacity: 0.25`, the board's dim of today (spec/15 §13.2).
+**Entries may be partial.** A series or a role entry is usually whole; a state entry gives a few keys, because it is laid over whatever the object already looks like through the style stack (spec/14 §3.6). The default `:selected` is `stroke_width: 2` alone — a stroked mark keeps its own paint and draws heavier, and a mark with no stroke of its own draws as it is (#638) — and the default `:muted` is `opacity: 0.25`, the board's dim of today (spec/15 §13.2).
 
 **The built-in palette.** `default/0`, `dark/0`, `colour_safe/0` and `print/0` each define every name, with the same entries: written in slots, the entries take each theme's own colours, so one palette serves all four.
 
@@ -606,7 +606,7 @@ A theme chooses only **how many style series** it has, `:style_1` to `:style_n` 
 | `:good` … `:neutral` | `fill` and `stroke` the role, `stroke_dasharray: :cue`, `symbol: :cue` |
 | `:hover` | `stroke: :text`, `stroke_width: 2` |
 | `:focused` | `stroke: :text`, `stroke_width: 2`, `stroke_dasharray: "4 2"` |
-| `:selected` | `stroke: :text`, `stroke_width: 2`, `stroke_style: :outside` |
+| `:selected` | `stroke_width: 2` (#638: no stroke colour and no `stroke_style`, so it never paints over a mark's own stroke) |
 | `:active` | `stroke: :text`, `stroke_width: 3` |
 | `:disabled` | `opacity: 0.4`, `stroke_dasharray: "2 2"` |
 | `:muted` | `opacity: 0.25` |
