@@ -1757,3 +1757,28 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - Boards over feeds that declare no identity pick, select and highlight exactly as before.
 - `Schema.attributes/0` has thirteen keys; `{:identity, a, b}` joins the compatibility reasons `Combine` reports.
 - The examples' service feeds declare their `service` and `name` fields as identity, so the board demo's picks read the declaration rather than the inference.
+
+## 168. D-168 — A feed window is a box over ranges, and may ask for each identity's latest row
+
+**Context.** #622, work item #626. A window was `nil | [from, to]` over a feed's one window field (spec/08 §11.2, D-154). The scenes umbrella (#620) needs a feed asked for a *region* — the cars within a map's view — and for each entity's *current state*, and metresis will build on whatever shape the request has, so the shape is settled before either. Identity is declared since D-167, so "each entity" has a meaning that is not a guess. The schema already has a `bounds` fact (spec/08 §10.1), a display hint that never filters, so the window's map cannot use that word for "filter".
+
+**Decision.**
+- **A window may be a box**, `%{ranges: %{field => [from, to]}, latest: boolean}`. Any `:time` or `:number` field may be ranged, ends inclusive, `nil` open; `[from, to]` stays as shorthand for the window field's range and `nil` as no window, so every existing feed, monitor and board asks as before. A shorthand that does not apply to the window field is still the feed's own span (D-154); a box is checked instead.
+- **`latest: true`** is, of the rows the ranges select, each identity's row with the greatest window field — so at or before the end of the window field's range, or the present when it is unranged — ties to the later row, rows of `nil` identity or time dropped. One function, `Feed.Window.latest_rows/3`, does it for a feed and for a design. It needs a declared identity and a window field.
+- **`:region` and `:latest` join `supports`.** A feed that lacks them is still asked for the box, and `Feed.finish/3` trims to every range and reduces to the latest rows, so a provider opts in only for speed. Signals, Telemetry and Combine name neither; Combine routes by the window field's range alone, since a part's other fields may be in its own units and a part's latest rows are not the union's.
+- **A box is checked against the schema it is asked of**, `Feed.Window.check/2`, every fault at its path, with the board's own words where they are the same fault (`{:window, :inverted}`) and the schema's where they are (`{:invalid_for, type}`, `{:type, type}`, `:unknown_key`). `finish/3` raises for a box that does not hold — the request is the caller's — and the monitor checks before asking, showing the feed `{:down, {:window, faults}}`.
+- **The monitor finishes a box into its holding**, region and `latest` included, so a live feed asked for the latest rows holds one row per entity however much it pushes; a push feed refetches when a box moves in a way its holding cannot answer — its other ranges or `latest` changed, or under `latest` an earlier `to`.
+- **A design asks for the latest rows on its `:window` step** (`latest: true`, spec/14 §5.4.1), the mark's own window. `Visualize.Chart.apply/2` refuses it over a slot whose feed declares no identity: `{:identity_required, source}` at the mark. The step is given the slot's schema through the pipeline's context.
+
+**Rejected.**
+- **`bounds` as the box's key.** The schema's `bounds` is a display hint that never filters; one word meaning "filter" in a request and "never filter" in a description invites the wrong reading.
+- **Checking the shorthand.** A board asks one window of instants of feeds over ticks too, and D-154 made that "the feed's own span", not a fault. The shorthand keeps that meaning; only a box, which no existing caller writes, is strict.
+- **A feed contract for "gone".** Dropping the entities whose latest row says they left is a `:filter` after the latest rows; the feed never knows what gone means.
+- **Inferring the identity for `latest`.** An inferred identity silently merges two entities or splits one. A pick and a click, which are one-offs, still infer (D-167); following entities over time does not.
+- **The refusal for marks that declare events.** A mark's tooltip `event` exists today over sources with no identity, and a click is a one-off (#622's acceptance); the refusal is for `latest` now, and transitions, bindings and keyed dynamic items join it when #620 adds them.
+
+**Consequences.**
+- `Feed.capabilities/0` is `[:window, :region, :latest, :budget, :push]`. A provider that is asked a box and reads only its window field's range, through `Feed.Window.range/2`, is correct; one that names `:region` or `:latest` is held to them by the conformance kit.
+- The conformance kit takes boxes among its `windows:` probes; it holds a `:region` feed's rows to its ranges, and a `:latest` feed to at most one row per identity, the last within the box. A probe box the schema refuses is `{:probe, window, faults}`, the kit run's fault.
+- The applied chart's schemas reach the frame (`Frame.new/2`'s `schemas:`) and a compiled chart, so a `latest` step reads the declared identity on every tick.
+- The board's window is unchanged: it is the shorthand, the window field's range of every feed it applies to.
