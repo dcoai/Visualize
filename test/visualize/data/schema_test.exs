@@ -45,7 +45,7 @@ defmodule Visualize.Data.SchemaTest do
       assert {:ok, %Schema{fields: @full}} = Schema.new(@full)
     end
 
-    test "the twelve keys are the vocabulary" do
+    test "the thirteen keys are the vocabulary" do
       assert Schema.attributes() ==
                [
                  :type,
@@ -59,7 +59,8 @@ defmodule Visualize.Data.SchemaTest do
                  :continuity,
                  :window,
                  :metric_kind,
-                 :bounds
+                 :bounds,
+                 :identity
                ]
 
       assert Map.keys(@full.latency) -- Schema.attributes() == []
@@ -352,6 +353,68 @@ defmodule Visualize.Data.SchemaTest do
     end
   end
 
+  describe "identity (spec/08 §10.1, D-167)" do
+    test "one field, or several, may declare it; a :category, :text or :number one" do
+      for type <- [:category, :text, :number] do
+        assert {:ok, schema} = Schema.new(%{id: %{type: type, identity: true}})
+        assert Schema.identity(schema) == [:id]
+      end
+
+      assert {:ok, schema} =
+               Schema.new(%{
+                 "iface" => %{type: :category, identity: true},
+                 host: %{type: :category, identity: true},
+                 t: %{type: :time},
+                 bytes: %{type: :number}
+               })
+
+      assert Schema.identity(schema) == [:host, "iface"]
+    end
+
+    test "never on a :time field, and only a boolean" do
+      assert faults(%{t: %{type: :time, identity: true}}) ==
+               [{[:t, :identity], {:invalid_for, :time}}]
+
+      assert faults(%{id: %{type: :category, identity: "yes"}}) ==
+               [{[:id, :identity], {:type, :boolean}}]
+
+      assert Schema.format_error({[:t, :identity], {:invalid_for, :time}}) ==
+               "t.identity: is not a key a :time field takes"
+    end
+
+    test "false is absent: one schema, one version, and nothing declared" do
+      said = Schema.new!(%{id: %{type: :category, identity: false}})
+      unsaid = Schema.new!(%{id: %{type: :category}})
+
+      assert said == unsaid
+      assert Schema.identity(said) == []
+      assert Schema.fetch(said, :id, :identity) == :error
+    end
+
+    test "a row's identity: bare for one field, a map for several, nil when it lacks one" do
+      none = Schema.new!(%{name: %{type: :category}})
+      one = Schema.new!(%{"car" => %{type: :number, identity: true}, x: %{type: :number}})
+
+      two =
+        Schema.new!(%{
+          host: %{type: :category, identity: true},
+          iface: %{type: :category, identity: true}
+        })
+
+      assert Schema.identity(none, %{name: "api"}) == nil
+      assert Schema.identity(one, %{car: 7, x: 1.5}) == 7
+      assert Schema.identity(one, %{"car" => 7}) == 7
+      assert Schema.identity(one, %{x: 1.5}) == nil
+
+      assert Schema.identity(two, %{"host" => "mx1", iface: "eth0"}) == %{
+               host: "mx1",
+               iface: "eth0"
+             }
+
+      assert Schema.identity(two, %{host: "mx1", iface: nil}) == nil
+    end
+  end
+
   describe "compatibility/2 (spec/08 §10.1, D-159)" do
     @live Schema.new!(%{
             t: %{type: :time, label: "Time"},
@@ -408,6 +471,23 @@ defmodule Visualize.Data.SchemaTest do
                {:error, [{:v, {:unit, "{iso4217:USD}", "{iso4217:EUR}"}}]}
 
       assert Schema.compatibility(usd, usd) == :ok
+    end
+
+    test "identity: different declared fields are a fault, whichever schema declares (D-167)" do
+      host = %{type: :category, identity: true}
+      hosts = Schema.new!(%{host: host, v: %{type: :number}})
+      bare = Schema.new!(%{host: %{type: :category}, v: %{type: :number}})
+      ifaces = Schema.new!(%{"host" => host, "iface" => host, "v" => %{type: :number}})
+
+      assert Schema.compatibility(hosts, hosts) == :ok
+      assert Schema.compatibility(hosts, bare) == {:error, [{:host, {:identity, true, false}}]}
+      assert Schema.compatibility(bare, hosts) == {:error, [{:host, {:identity, false, true}}]}
+      # Extra fields are not faults, but an extra identity field is.
+      assert Schema.compatibility(hosts, ifaces) ==
+               {:error, [{"iface", {:identity, false, true}}]}
+
+      assert Schema.compatibility(ifaces, hosts) ==
+               {:error, [{"iface", :missing}]}
     end
   end
 

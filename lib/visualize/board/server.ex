@@ -83,7 +83,7 @@ defmodule Visualize.Board.Server do
           now: DateTime.t() | nil,
           width: number(),
           sync: String.t() | nil,
-          selection: {atom(), term()} | nil,
+          selection: Board.identity() | nil,
           moved: boolean(),
           cells: %{atom() => %{pid: pid() | nil, state: State.t(), restarts: non_neg_integer()}}
         }
@@ -196,26 +196,35 @@ defmodule Visualize.Board.Server do
   def reset_window(board), do: GenServer.call(board, :reset_window)
 
   @doc """
-  The board's selection (spec/15 §13.2): `{field, value}`, its field read through the
-  board's `links`, or `nil` to clear it. Every cell is sent it, and every subscriber the
-  board's info. `:ok`.
+  The board's selection (spec/15 §13.2): `{field, value}`, or a map from field to value
+  for a composite identity (D-167), each field read through the board's `links`, or `nil`
+  to clear it. A map of one field is held as its pair. Every cell is sent it, and every
+  subscriber the board's info. `:ok`.
   """
-  @spec select(GenServer.server(), {atom(), term()} | nil) :: :ok
+  @spec select(GenServer.server(), Board.identity() | nil) :: :ok
   def select(board, nil), do: GenServer.call(board, {:select, nil})
 
-  def select(board, {field, _value} = identity) when is_atom(field),
+  def select(board, {field, _value} = identity) when is_atom(field) or is_binary(field),
     do: GenServer.call(board, {:select, identity})
+
+  def select(board, identity) when is_map(identity) and map_size(identity) == 1,
+    do: select(board, identity |> Map.to_list() |> hd())
+
+  def select(board, identity) when is_map(identity) and map_size(identity) > 1 do
+    GenServer.call(board, {:select, identity})
+  end
 
   @doc """
   The row behind a cell's keyboard point, `{series, index}` (spec/10 §17.2), and its
-  identity (spec/15 §13.2): `{:ok, %{row: row, identity: {field, value} | nil}}`, or
+  identity (spec/15 §13.2): `{:ok, %{row: row, identity: identity | nil}}`, the identity
+  `{field, value}`, or a map for a composite one the slot's schema declares (D-167), or
   `:error` for a cell that is not running or a point it does not have.
 
   The board answers the cell's process and the caller asks it, so a pick never holds the
   board; a cell that dies meanwhile answers `:error`.
   """
   @spec pick(GenServer.server(), atom(), non_neg_integer(), non_neg_integer()) ::
-          {:ok, %{row: map(), identity: {atom(), term()} | nil}} | :error
+          {:ok, %{row: map(), identity: Board.identity() | nil}} | :error
   def pick(board, cell, series, index) do
     case GenServer.call(board, {:cell, cell}) do
       pid when is_pid(pid) -> ask(pid, series, index)
@@ -387,8 +396,14 @@ defmodule Visualize.Board.Server do
   def handle_call({:select, identity}, _from, state) do
     selection =
       case identity do
-        nil -> nil
-        {field, value} -> {Board.link(state.board, field), value}
+        nil ->
+          nil
+
+        {field, value} ->
+          {Board.link(state.board, field), value}
+
+        fields ->
+          Map.new(fields, fn {field, value} -> {Board.link(state.board, field), value} end)
       end
 
     state = %{state | selection: selection}
@@ -485,11 +500,18 @@ defmodule Visualize.Board.Server do
     turn(%{state | board: %{state.board | window: window}, monitor: monitor})
   end
 
-  # The selection as a cell reads it: the fields that may hold it and the value.
+  # The selection as a cell reads it: for each of its fields, the fields that may hold it
+  # and the value, all of which a row must hold (D-167).
   defp selection_for(%{selection: nil}), do: nil
 
   defp selection_for(%{selection: {field, value}, board: board}),
-    do: %{fields: Board.linked(board, field), value: value}
+    do: [%{fields: Board.linked(board, field), value: value}]
+
+  defp selection_for(%{selection: fields, board: board}) do
+    fields
+    |> Enum.sort_by(fn {field, _value} -> to_string(field) end)
+    |> Enum.map(fn {field, value} -> %{fields: Board.linked(board, field), value: value} end)
+  end
 
   # -- a turn -------------------------------------------------------------------------------
 

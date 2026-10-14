@@ -917,7 +917,7 @@ source(:primary, [:t, :latency, :state],
 )
 ```
 
-The keys are the slot's own fields: a field `requires` names that `fields` does not list is `{:undeclared, :field, field}` at `[:sources, name, :requires, field]`, as for `types`. The values are lists of the attributes of `Visualize.Data.Schema.attributes/0`, checked as an enumeration. It is a map of lists, not a list of pairs, because the JSON form (§11) has no tuples. A slot with no `requires` and no fact read of it states no contract, and binds as it always has.
+The keys are the slot's own fields: a field `requires` names that `fields` does not list is `{:undeclared, :field, field}` at `[:sources, name, :requires, field]`, as for `types`. The values are lists of the attributes of `Visualize.Data.Schema.attributes/0`, checked as an enumeration. `:identity` among them requires the feed to declare the field part of its identity (spec/08 §10.1, D-167), since a schema keeps `identity` only when it is `true`: `requires: %{car: [:identity]}` is how a design that follows entities says it needs to know which rows are about the same one. It is a map of lists, not a list of pairs, because the JSON form (§11) has no tuples. A slot with no `requires` and no fact read of it states no contract, and binds as it always has.
 
 **A fact: `Visualize.Chart.fact/3`.** `fact(source, field, key)` is `%Visualize.Chart.Fact{source: source, field: field, key: key}`: the attribute `key` of `field` in the schema bound to slot `source`. It is a term allowed wherever a value can appear, as a variable is (§7.1), and in a text as the hole `#{fact(:source, :field, :key)}`. So an axis title, a tick unit and an ordinal domain read the feed:
 

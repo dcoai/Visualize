@@ -1735,3 +1735,25 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 **Consequences.**
 - A layout's frames are rearranged on the graph and stay a layout; changing the weights afterwards still moves them.
 - A drag of a celled frame can never produce a cell off the grid; a hand-crafted push of one is refused with a notice.
+
+## 167. D-167 — Identity is declared in the schema, and a pick reads it before it guesses
+
+**Context.** #622, work item #625. The scenes umbrella (#620) and metresis both need to know which rows are about the same thing: a car across frames, a service across cells, each entity's latest row (#626). Until now nothing said so. A board inferred identity at pick time (spec/15 §13.2): the mark's `series` field, else the schema's first `:category` field. That guess is harmless for a one-off pick a person sees, and wrong for anything that follows entities, since two entities that share a colour merge and one whose label changes splits.
+
+**Decision.**
+- **`identity: true` is a field fact** (spec/08 §10.1), the thirteenth description key, on a `:category`, `:text` or `:number` field and never a `:time` one (`{:invalid_for, :time}`). It is a boolean; `new/1` drops `identity: false`, so false and absent are one schema of one version, and `requires: [:identity]` (spec/14 §7.4) means "declared".
+- **Several fields together are one composite identity.** `Schema.identity/1` is the declared fields, ordered by name as a string; `Schema.identity/2` a row's identity value: bare for one field, a map keyed as the schema spells the fields for several, `nil` when none is declared or the row lacks one of them. It is the one function everything that groups by entity calls, `latest` (#626) first.
+- **Compatibility compares identity** (D-159's one exception to "facts are not compared"): a field either schema declares as identity that the other does not is `{:identity, a, b}`, `a` and `b` booleans, so a `Combine` of a live feed and a history that count different things is refused rather than reduced wrongly.
+- **Conformance holds rows to it**: every row of every delivery of a feed that declares identity has a non-`nil` value for each declared field, `{:no_identity, request, field}` otherwise. That a later schema version keeps the same identity fields cannot be seen in one run, and compatibility covers the case where it matters.
+- **A pick reads the declared identity first**, `{field, value}` for one field and a map for several, and infers as before only when the slot's schema declares none. A declared identity the row lacks is `nil`, never a guess. A selection is the pair or the map; a one-field map is held as the pair. Each field is read through `links`, and a cell holds a composite selection when one row has every field's value at once.
+
+**Rejected.**
+- **Declaring identity on the design** (a mark's `key:`). Which rows are about one thing is the feed's knowledge, as its units are, and every design over the feed would have to repeat it.
+- **Identity as a list of fields at the schema's top level.** A schema is a map of field descriptions and nothing else; a field fact keeps the content hash, the codec and `requires` as they are.
+- **Falling back to inference when a declared identity is missing from a row.** The feed declared what names a row; a row without it is the feed's fault, which conformance reports, and a guess would hide it.
+- **Refusing a pick over a source without declared identity.** Plain charts and existing boards pick by inference today, and a pick is visible; the refusal belongs to what tracks entities over time (#626).
+
+**Consequences.**
+- Boards over feeds that declare no identity pick, select and highlight exactly as before.
+- `Schema.attributes/0` has thirteen keys; `{:identity, a, b}` joins the compatibility reasons `Combine` reports.
+- The examples' service feeds declare their `service` and `name` fields as identity, so the board demo's picks read the declaration rather than the inference.

@@ -53,6 +53,11 @@ defmodule Visualize.Feed.Conformance.Words do
       "#{request(request)}: a row's window field holds #{inspect(value)}, not a value of its type " <>
         "(an instant for :time, a number for :number)"
 
+  def words({:no_identity, request, field}),
+    do:
+      "#{request(request)}: a row has no value for #{inspect(field)}, which the schema " <>
+        "declares part of its identity; every row says what it is about"
+
   def words({:not_an_instant, request, field, value}),
     do:
       "#{request(request)}: the :time field #{inspect(field)} holds #{inspect(value)}, not an " <>

@@ -255,6 +255,22 @@ defmodule Visualize.Feed.CombineTest do
                {:error, {:combine_schema, [{1, :panel, :missing}]}}
     end
 
+    test "a later feed counting other entities is refused: its identity differs (D-167)" do
+      {live, _} = telemetry()
+
+      by_panel =
+        Schema.new!(%{
+          "t" => %{type: :time},
+          "value" => %{type: :number, unit: "ms"},
+          "panel" => %{type: :category, identity: true}
+        })
+
+      {history, _} = Feeds.scripted(schema: by_panel)
+
+      assert Feed.describe(Combine.new([live, history])) ==
+               {:error, {:combine_schema, [{1, :panel, {:identity, false, true}}]}}
+    end
+
     test "a later feed windowing over another field is refused, since routing asks it over its own" do
       {live, _} = store(50..100, :live)
       other = Schema.new!(%{"t" => %{type: :number}, "v" => %{type: :number, window: true}})

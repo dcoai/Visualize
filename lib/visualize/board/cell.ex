@@ -201,11 +201,10 @@ defmodule Visualize.Board.Cell do
   # The sources and the chart a selection is drawn with: when a row of any slot holds it,
   # every row gains the dim column and every mark with data reads its opacity from it;
   # otherwise the sources and the chart as they were.
-  defp selected(%{selection: %{fields: fields, value: value}} = state, sources)
-       when value != nil do
-    if Enum.any?(sources, fn {_slot, d} -> Enum.any?(d.rows, &holds?(&1, fields, value)) end) do
+  defp selected(%{selection: [_ | _] = selection} = state, sources) do
+    if Enum.any?(sources, fn {_slot, d} -> Enum.any?(d.rows, &holds?(&1, selection)) end) do
       dim = fn row ->
-        Map.put(row, @dim, if(holds?(row, fields, value), do: nil, else: @dimmed))
+        Map.put(row, @dim, if(holds?(row, selection), do: nil, else: @dimmed))
       end
 
       {Map.new(sources, fn {slot, d} -> {slot, %{d | rows: Enum.map(d.rows, dim)}} end),
@@ -217,7 +216,13 @@ defmodule Visualize.Board.Cell do
 
   defp selected(state, sources), do: {sources, state.chart}
 
-  defp holds?(row, fields, value), do: Enum.any?(fields, &(Table.get(row, &1) == value))
+  # A row holds a selection when, for each of its fields, one of the fields linked to it
+  # has that field's value: every field at once for a composite identity (D-167).
+  defp holds?(row, selection) do
+    Enum.all?(selection, fn %{fields: fields, value: value} ->
+      value != nil and Enum.any?(fields, &(Table.get(row, &1) == value))
+    end)
+  end
 
   # The style grammar's own per-datum binding (spec/14 §3.2, §3.6): an `opacity` read from
   # the dim column, last in each data mark's stack, the column declared on every source
@@ -240,8 +245,9 @@ defmodule Visualize.Board.Cell do
     %{chart | marks: marks, sources: sources}
   end
 
-  # The row behind a keyboard point, without the dim column, and its identity: the mark's
-  # series field, else the first `:category` field of its slot's schema the row holds.
+  # The row behind a keyboard point, without the dim column, and its identity: the one its
+  # slot's schema declares (D-167), else — when it declares none — the mark's series field,
+  # else the first `:category` field of its slot's schema the row holds.
   defp picked(%{pickable: nil}, _series, _index), do: :error
 
   defp picked(state, series, index)
@@ -250,14 +256,41 @@ defmodule Visualize.Board.Cell do
          %{row: row, mark: mark} <- Enum.at(points, index) do
       row = Map.delete(row, @dim)
 
-      {:ok,
-       %{row: row, identity: series_identity(mark, row) || category_identity(state, mark, row)}}
+      {:ok, %{row: row, identity: identity(state, mark, row)}}
     else
       _none -> :error
     end
   end
 
   defp picked(_state, _series, _index), do: :error
+
+  defp identity(state, mark, row) do
+    case schema_of(state, mark) do
+      %Schema{} = schema ->
+        case Schema.identity(schema) do
+          [] -> series_identity(mark, row) || category_identity(schema, row)
+          fields -> declared_identity(fields, Schema.identity(schema, row))
+        end
+
+      nil ->
+        series_identity(mark, row)
+    end
+  end
+
+  # The declared identity as a selection names it: the pair for one field, the map for
+  # several, `nil` for a row that lacks it — never a guess in its place.
+  defp declared_identity(_fields, nil), do: nil
+  defp declared_identity([field], value), do: {field, value}
+  defp declared_identity(_fields, values), do: values
+
+  defp schema_of(state, mark) do
+    with slot when is_atom(slot) <- slot_of(mark),
+         %{schema: %Schema{} = schema} <- Map.get(state.slots || %{}, slot) do
+      schema
+    else
+      _none -> nil
+    end
+  end
 
   defp series_identity(mark, row) do
     case mark |> Map.get(:channels, %{}) |> Map.get(:series) do
@@ -267,17 +300,12 @@ defmodule Visualize.Board.Cell do
     end
   end
 
-  defp category_identity(state, mark, row) do
-    with slot when is_atom(slot) <- slot_of(mark),
-         %{schema: %Schema{fields: fields}} <- Map.get(state.slots || %{}, slot) do
-      fields
-      |> Enum.filter(fn {_name, field} -> Map.get(field, :type) == :category end)
-      |> Enum.map(&elem(&1, 0))
-      |> Enum.sort()
-      |> Enum.find_value(&identity(&1, row))
-    else
-      _none -> nil
-    end
+  defp category_identity(%Schema{fields: fields}, row) do
+    fields
+    |> Enum.filter(fn {_name, field} -> Map.get(field, :type) == :category end)
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.sort()
+    |> Enum.find_value(&identity(&1, row))
   end
 
   defp slot_of(%{data: %{source: slot}}), do: slot

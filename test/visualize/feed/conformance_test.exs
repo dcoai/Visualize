@@ -112,12 +112,26 @@ defmodule Visualize.Feed.ConformanceTest do
     no_window_field: {:describe, :no_window_field},
     stamp_as_number: {:deliveries, :not_an_instant},
     misspelt_unit: {:describe, :measure},
+    no_identity: {:deliveries, :no_identity},
     keeps_pushing: {:unsubscribe, :pushed_after_unsubscribe}
   ]
 
   describe "the kit's negatives" do
     test "an honest feed passes every check" do
       assert Conformance.check(Broken.new(), [{:down, Broken.new(:down)} | @opts]) == []
+    end
+
+    test "a feed that declares identity and names it in every row passes (D-167)" do
+      assert Conformance.check(Broken.new(:identified), @opts) == []
+    end
+
+    test "a row without its declared identity is a finding naming the field (D-167)" do
+      findings = Conformance.check(:deliveries, Broken.new(:no_identity), @opts)
+
+      assert {:deliveries, {:no_identity, _request, :unit} = reason} =
+               Enum.find(findings, &match?({_, {:no_identity, _, _}}, &1))
+
+      assert Conformance.format({:deliveries, reason}) =~ "no value for :unit"
     end
 
     test "a measure the vocabulary refuses is its own finding, naming the field (D-157)" do
@@ -129,7 +143,8 @@ defmodule Visualize.Feed.ConformanceTest do
     end
 
     test "every flaw is expected to fail a check, and every check is failed by a flaw" do
-      assert Enum.sort(Keyword.keys(@expected)) == Enum.sort(Broken.flaws() -- [:down])
+      assert Enum.sort(Keyword.keys(@expected)) ==
+               Enum.sort(Broken.flaws() -- [:down, :identified])
 
       assert @expected |> Keyword.values() |> Enum.map(&elem(&1, 0)) |> Enum.uniq() |> Enum.sort() ==
                Enum.sort(Conformance.checks())

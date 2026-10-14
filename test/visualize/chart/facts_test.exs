@@ -249,6 +249,22 @@ defmodule Visualize.Chart.FactsTest do
       assert line =~ ":unit"
     end
 
+    test "requiring identity is requiring it declared: false is not enough (D-167)" do
+      d = put_in(design(), [:sources, :primary, :requires], %{state: [:identity]})
+      declared = schema(put_in(@latency, [:state, :identity], true))
+
+      assert {:ok, _applied} = apply_with(d, declared)
+
+      for undeclared <- [@latency, put_in(@latency, [:state, :identity], false)] do
+        assert apply_with(d, schema(undeclared)) ==
+                 {:error,
+                  [
+                    {[:sources, :primary, :requires, :state],
+                     {:missing_attribute, :primary, :state, :identity}}
+                  ]}
+      end
+    end
+
     test "a fact of an attribute the schema lacks is reported where it stands" do
       s = schema(Map.update!(@latency, :state, &Map.delete(&1, :order)))
       d = design() |> put_in([:sources, :primary, :requires], %{})

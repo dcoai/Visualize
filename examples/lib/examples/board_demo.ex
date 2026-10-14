@@ -420,7 +420,7 @@ defmodule Examples.BoardDemo.Services do
     schema =
       Schema.new!(%{
         t: %{type: :time, label: "Time"},
-        service: %{type: :category, label: "Service"},
+        service: %{type: :category, label: "Service", identity: true},
         value: %{type: :number, label: "Rate", continuity: 3 * @every}
       })
 
@@ -473,7 +473,11 @@ defmodule Examples.BoardDemo.Latest do
 
   def new do
     %__MODULE__{
-      schema: Schema.new!(%{name: %{type: :category, label: "Service"}, value: %{type: :number}})
+      schema:
+        Schema.new!(%{
+          name: %{type: :category, label: "Service", identity: true},
+          value: %{type: :number}
+        })
     }
   end
 
