@@ -12,6 +12,8 @@ Visualize reaches the browser through Phoenix LiveView in three ways: HEEx funct
 |---|---|---|
 | `Visualize.Components` | `Phoenix.Component` is loaded (the host has `phoenix_live_view`) | Line, bar, horizontal bar, pie, scatter, area and stacked bar chart components |
 | `Visualize.Components.Tree` | `Phoenix.Component` is loaded (the host has `phoenix_live_view`) | Tree, treemap and sunburst components |
+| `Visualize.Components.Chart` | `Phoenix.Component` is loaded | A chart whose marks declare events: its SVG under `TooltipHook`, a click resolved to the row drawn and sent to the page as a `Visualize.Event` (19) |
+| `Visualize.Event` | always | The one shape of every interaction event, and the decoding and resolution of a click (19) |
 | `Visualize.Hooks` | always | JS bundle, install path, helper re-exports |
 | `Visualize.Hooks.Zoom` | always | `ZoomHook` JS and transform helpers |
 | `Visualize.Hooks.Brush` | always | `BrushHook` JS and selection helpers |
@@ -559,7 +561,10 @@ The tooltip needs no round trip because the server writes each datum's fields on
 | `data-datum` | every element that carries a datum | the field names, space-separated, in the order the fields were given — the order the tooltip lists them in |
 | `data-datum-<field>` | the same element, one per field | the field's name with every `_` as `-` after `data-datum-`, and `to_string/1` of the value; a `nil` value writes no attribute, and the template reads it as `""` |
 | `data-tooltip-template` | the element or any ancestor of it up to the hook element — a mark's group | the tooltip's text with `{field}` placeholders; the nearest one to the element wins |
-| `data-tooltip-event` | likewise | the event pushed on click; absent, a click pushes nothing |
+| `data-tooltip-event` | likewise | the declared event a click delivers (19); absent, a click pushes nothing |
+| `data-frame` | a mark's group, with `data-tooltip-event` | the name of the frame the mark is drawn in |
+| `data-mark` | likewise | the mark's zero-based position among its frame's marks |
+| `data-row` | every element that carries a datum, under a mark with an event | the datum's zero-based ordinal in the mark's realised rows ([14-declarative-chart](14-declarative-chart.md) §5.7) |
 
 `Visualize.IR.Element.datum/2` takes the element and the fields as a map or a keyword list of `{field, value}` — a map's fields are written in `Enum.sort/1` order, a keyword list's in its own — and merges the attributes over the element's `attrs` under string keys (`"data-datum"`, `"data-datum-v"`), which `Visualize.SVG.Renderer.attribute_name/1` prints as given (spec/09 §2.4); an existing attribute of the same name is replaced. A field is an atom or a string; the value is any term `to_string/1` accepts, so a `DateTime` prints in ISO 8601 and a float with its decimals — the formatting a chart wants is the template's job, or the server's before it builds the map.
 
@@ -570,11 +575,12 @@ Attach with `phx-hook="TooltipHook"` and an `id` on the `<svg>`, or on any ances
 | Attribute | Default | Meaning |
 |---|---|---|
 | `data-tooltip-class` | `"vis-tooltip"` | the class of the tooltip element the hook creates, for a stylesheet |
-| `data-tooltip-target` | unset | the `phx-target` a click's event goes to with `pushEventTo`, as a board's cell names its own component (spec/15 §9.1, D-161); unset, it goes to the LiveView. Read at each click, so a patch may change it |
+| `data-tooltip-target` | unset | the `phx-target` a click's event goes to with `pushEventTo`, as a board's cell and `Visualize.Components.Chart` name their own component (spec/15 §9.1, D-161, 19); unset, it goes to the LiveView. Read at each click, so a patch may change it |
+| `data-tooltip-drawn` | unset | the holder's token for the drawing on screen (19, D-170), sent with a click; `null` when unset. Read at each click, so it is always the token of the SVG the click landed on |
 
 On `mounted()` the hook creates one `<div>` with that class, `position: absolute`, `pointer-events: none`, `white-space: pre` and `display: none`, appends it to `document.body`, and binds `mousemove`, `mouseleave`, `touchmove`, `touchend` and `click` on the element, each handler bound once and kept on the hook (D-47). On a move the *datum element* is the event target's nearest ancestor-or-self with `data-datum` (`closest`); none under the pointer hides the tooltip. Otherwise the text is built without a round trip: with a `data-tooltip-template` on the datum element or an ancestor of it — the nearest wins, searched no further than the hook element — every `{field}` becomes that field's `data-datum-<field>` value (`_` as `-`), `""` when the element has no such attribute; without a template, one line per field of `data-datum` in its order, `field: value`, joined with newlines. The text is set with `textContent`, never as markup, so a value is never interpreted. The tooltip is shown at 12 CSS pixels right of and below the pointer's page position, flipped to the left of the pointer when its width would cross the viewport's right edge and above it when its height would cross the bottom. A touch move uses its first touch; `touchend` and `mouseleave` hide. In a sync group (4.3) every move also publishes the pointer's x, and `touchend` and `mouseleave` publish a clear.
 
-A click on a datum element whose nearest `data-tooltip-event` is set pushes `pushEvent(event, fields)`, or `pushEventTo(target, event, fields)` when the hook element carries `data-tooltip-target`, with one key per field of `data-datum` and the attribute strings as values, arriving as `handle_event("point_click", %{"t" => "2024-01-01T00:00:00Z", "v" => "4"}, socket)` — strings, since the attributes are strings; the server parses what it needs. A click elsewhere, or without an event, pushes nothing. `updated()` re-reads the sync group (4.3). `destroyed()` removes the five listeners with the kept references, and the bus listener, and removes the tooltip element from the document. `test/visualize/hooks/tooltip_test.exs` holds the source to this shape.
+A click on a datum element whose nearest `data-tooltip-event` is set, and which carries `data-row` under a nearest `data-mark`, pushes **one wire event, `visualize_event`** (#627, D-170): `pushEventTo(target, "visualize_event", payload)` when the hook element carries `data-tooltip-target`, else `pushEvent("visualize_event", payload)`. The payload is `{event, frame, mark, row, drawn, at, modifiers}`: `event` the nearest `data-tooltip-event`; `frame` the nearest `data-frame`, `null` without one; `mark` and `row` the nearest `data-mark` and the element's `data-row` as integers; `drawn` the hook element's `data-tooltip-drawn`, `null` without one; `at` the pointer in the user units of the element's nearest `<svg>` (`createSVGPoint` through `getScreenCTM().inverse()`), `{x, y}`, or `null` where there is no such `<svg>`; and `modifiers` the names of the held keys among `"shift"`, `"alt"`, `"ctrl"` and `"meta"`, in that order. **The hook sends no datum string**: the row is the server's to resolve, from the key, against the drawing it holds (19). A click elsewhere, without an event, or on an element without a key, pushes nothing. `updated()` re-reads the sync group (4.3). `destroyed()` removes the five listeners with the kept references, and the bus listener, and removes the tooltip element from the document. `test/visualize/hooks/tooltip_test.exs` holds the source to this shape.
 
 ### 12.4 In a sync group
 
@@ -842,3 +848,69 @@ Attach with `phx-hook="BoardHook"` and an `id` on the board's container. The cel
 - **The selection** (spec/15 §13.2, #545). Before the cell keys are read, an **Escape** whose target is anywhere in the container, a cell or a chart inside one, pushes `pushEventTo(this.el, clearEvent, {})` while the container carries `data-board-selection`, and nothing when it does not. It does not call `preventDefault()`, so the chart's own hook still hands focus back to the cell: one Escape inside a chart clears the selection and returns focus.
 
 `destroyed()` removes the listener with the kept reference, disconnects the observer and clears a pending push. `test/visualize/hooks/board_test.exs` executes it under the harness of spec/12 §6, over cells carrying `data-vis-cell`.
+
+## 19. Visualize.Event and Visualize.Components.Chart
+
+**Implemented** (#627, D-170). Every interaction the library delivers to a host is one value, a `%Visualize.Event{}`, sent to the page's process as `{:visualize_event, id, event}`. A plain chart's mark click arrives so through `Visualize.Components.Chart`, and a board's click, drill, brush and selection through `Visualize.Components.Board` (spec/15 §9.2).
+
+### 19.1 The event
+
+| Field | Value |
+|---|---|
+| `event` | the name: a string for an event a design declares (a mark's tooltip `event`, [14-declarative-chart](14-declarative-chart.md) §5.7, an atom there delivered as its string), an atom for an event the runtime raises — `:drill`, `:brush`, `:select` (spec/15 §9.2) |
+| `cell` | the board cell's name; `nil` outside a board, and for an event of the whole board (`:brush`, `:select`) |
+| `frame` | the name of the design's frame the item was drawn in; `nil` where there is none |
+| `item` | `{mark, identity}`: `mark` the mark's `id`, else its type; `identity` the source's declared identity of the row (spec/08 §10.1, D-167), bare for one field and a map for several, else the inference a board's pick uses (the mark's `series` field, else the first `:category` field of the slot's schema, spec/15 §13.2); `nil` when the row names nothing, or where there is no row |
+| `path` | the items from the innermost out to the frame: `[item]`, or `[]` without one |
+| `row` | the row the clicked element was drawn from, typed as the source holds it — a `DateTime` a `DateTime` — or the picked row of a drill; `nil` where there is none |
+| `at` | the pointer in the frame's plot area, `%{x, y}` in pixels from its top-left; `nil` where there was no pointer |
+| `value` | the event's data: `%{}` for a declared event; `%{board, vars}` for `:drill`, `%{domain}` for `:brush`, `%{identity}` for `:select` |
+| `modifiers` | the keys held, `[]` or a list of `:shift`, `:alt`, `:ctrl` and `:meta` in that order |
+
+Every field is always present. An event is a value: it holds no pid and no closure.
+
+### 19.2 The wire and the resolution
+
+`TooltipHook` pushes a click as `visualize_event` with the key of the element (12.3): the declared name, the frame's name, the mark's position, the row's ordinal, the drawing's token, the pointer and the modifiers. The server turns it into an event in two public steps, so a host that holds a chart's drawing itself can do what the component does:
+
+- **`Visualize.Event.decode(params)`** reads the wire's params into a click map, `{:ok, click}`, or `:error` for params of any other shape. It creates no atom: the frame stays the string it was sent as, a modifier outside the four is dropped.
+- **`Visualize.Event.resolve(click, applied, opts)`** resolves a click against the `%Visualize.Chart.Applied{}` that was drawn: `{:ok, event}`, or `:error` when the click's `drawn` is not the `drawn:` option (the token of the drawing held, `nil` by default), when the applied chart has no frame of that name, no mark at that position, or no row at that ordinal of the mark's realised rows (`Visualize.Chart.Mark.rows/3` over the applied chart's sources), or when that mark declares no event of that name. `cell:` sets the event's `cell`. The row is the realised row, so it is the row the element was drawn from, and `at` is the pointer less the frame's box and margins.
+
+**A click is resolved against the drawing it landed on, or dropped** (D-170). Each holder keeps a token for its drawing, written on the hook element as `data-tooltip-drawn` in the same patch as the SVG, and new at each drawing. A click carrying another token was made on a drawing the holder no longer holds: it is dropped, never resolved against the newer rows, where its ordinal may name another row. An undeclared name, a key the drawing lacks, or params of another shape are dropped as well, so the client cannot invent an event, a row or a name.
+
+### 19.3 `Visualize.Components.Chart`
+
+A `Phoenix.LiveComponent`, compiled when `Phoenix.Component` is loaded:
+
+```heex
+<.live_component module={Visualize.Components.Chart} id="sales" chart={@applied} />
+```
+
+| Assign | Default | Meaning |
+|---|---|---|
+| `id` | required | the component's id, its hook element's DOM id, and the `id` of the events it sends |
+| `chart` | required | the `%Visualize.Chart.Applied{}` drawn, from `Visualize.Chart.apply/2` |
+| `render` | `[]` | options for `Visualize.Chart.render/2` (`title:`, `description:`, `responsive:` …); the SVG is always a root |
+| `tooltip_class` | `"vis-tooltip"` | the hook's `data-tooltip-class` |
+
+It renders the chart's SVG, `Visualize.Chart.render(chart, [root: true] ++ render)`, inside a `<div phx-hook="TooltipHook">` carrying `data-tooltip-target` naming the component and `data-tooltip-drawn`, its token for the drawing. A new `chart` or `render` is a new drawing with a new token; an update with the same ones keeps both. It handles one event, `visualize_event`: `decode/1`, then `resolve/3` with its drawing and token, then `send(self(), {:visualize_event, id, event})` to the page's process, whose one clause takes it:
+
+```elixir
+def handle_info({:visualize_event, "sales", %Visualize.Event{event: "point_click", row: row}}, socket) do
+  {:noreply, assign(socket, picked: row)}
+end
+```
+
+A click it cannot resolve sends nothing. A chart whose marks declare no event needs no component: it renders as SVG as before, under a `TooltipHook` of the page's own for its tooltips.
+
+### 19.4 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Event.decode/1` | `decode(params)`: the wire's `visualize_event` params as a click, `{:ok, %{event, frame, mark, row, drawn, at, modifiers}}`, or `:error` (19.2). |
+| `Visualize.Event.resolve/2` | As `resolve/3` with `[]` options. |
+| `Visualize.Event.resolve/3` | `resolve(click, applied, opts)`: the click resolved against the drawing of an applied chart, `{:ok, %Visualize.Event{}}` or `:error`; `drawn:` and `cell:` (19.2). |
+| `Visualize.Event.declared/1` | The event names a chart's marks declare, as strings, sorted and unique: from a `%Visualize.Chart{}` or a `%Visualize.Chart.Applied{}`. |
+| `Visualize.Event.name/1` | A declared name, an atom or a string, as the event's string. |
+| `Visualize.Event.identity/3` | `identity(mark, row, schema)`: the row's identity in the board's selection form — `{field, value}`, a map for a composite declared identity, or `nil` — by the declared identity, else the inference (spec/15 §13.2); `schema` a `Visualize.Data.Schema` or `nil`. |
+| `Visualize.Event.item/2` | `item(mark, identity)`: `{mark's id or type, identity}` with the identity bare for one field, or `nil` for a `nil` identity (19.1). |
