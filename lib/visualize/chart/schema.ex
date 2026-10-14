@@ -179,7 +179,8 @@ defmodule Visualize.Chart.Schema do
 
   @doc """
   The type a style site takes (spec/14 §3.6): a reference, an inline node, or a list of
-  either.
+  either; a mark's stack also takes `{:scale, name, field}`, a style chosen by data, which
+  the validator refuses at every other site (#637).
 
   Written once because five keys share it — `mark.style`, `label.style`, `mark_label.style`,
   `axis.style` and `legend.style` — and a sixth would otherwise be a sixth copy.
@@ -190,8 +191,8 @@ defmodule Visualize.Chart.Schema do
   """
   @spec style_stack() :: type()
   def style_stack do
-    {:one_of,
-     [{:ref, :style}, {:node, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]}
+    entry = [{:ref, :style}, {:node, :style}, :style_scale]
+    {:one_of, entry ++ [{:list, {:one_of, entry}}]}
   end
 
   @doc "The style names every design declares (spec/14 §3.3)."
@@ -273,6 +274,10 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:adopted, v), do: match?({:frame, _f, _s}, v)
   defp shape?(:key_order, v), do: match?({:keys, keys} when is_list(keys), v)
   defp shape?(:ramp, v), do: match?({:ramp, name} when is_atom(name), v)
+  defp shape?(:styles, v), do: match?({:styles, set} when is_atom(set), v)
+  defp shape?(:style_scale, v), do: match?({:scale, _name, _field}, v)
+  # A reference is a name or an id; a style chosen by data beside one is not it (#637).
+  defp shape?({:ref, _}, {:scale, _name, _field}), do: false
   defp shape?(:colour_map, v), do: is_map(v) and not is_struct(v)
   # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
   defp shape?({:enum, _}, v), do: is_atom(v)
@@ -373,6 +378,9 @@ defmodule Visualize.Chart.Schema do
       # theme names only what it changes, the rest the default's.
       spec(:ramps, {:map, {:list, :string}}, :style, default: theme.ramps),
       spec(:roles, {:map, :string}, :style, default: theme.roles),
+      # The style palette, a palette name to its entry (spec/08 §7.7, spec/14 §2.5, #637):
+      # an inline theme names only the entries it changes, the rest the default's.
+      spec(:styles, {:map, {:node, :style}}, :style, default: theme.styles),
       spec(:font_family, :string, :style, default: theme.font_family),
       spec(:font_size, :number, :style, default: theme.font_size, range: {6, 72, 1}),
       spec(:label_size, :number, :style, default: theme.label_size, range: {6, 72, 1}),

@@ -28,8 +28,24 @@ release it merely follows.
   `ArgumentError` naming the theme, the entry and the term: a role paints only with its own role,
   a state style changes something besides colour, neighbouring style series differ besides hue,
   text furniture names a font and a size, `:grid` has a stroke, no `extends`, no new names.
-  Designs cannot name palette styles yet (#637); `check/1` and `violations/1` now also report
-  palette faults, under `{:style, name}`.
+  `check/1` and `violations/1` now also report palette faults, under `{:style, name}`.
+- **Designs name palette styles, by name and by data** (#637, D-171). Every palette name is a
+  style reference: `style: :warning`, `style: [:node, :selected]` and `extends: :bad` draw the
+  theme's whole look, and a design's own `styles` entry of the same name wins; a theme swap
+  restyles every mark that names one. `:ordinal` and `:threshold` scales take a range of styles —
+  `{:styles, :roles}` (the categories or bands spread over `:good`, `:warning`, `:bad`, flipped by
+  `polarity`), `{:styles, :series}` (`:style_1`, `:style_2`, … in domain order), lists and maps of
+  style names, or `fact(source, field, :status)` — and a mark's style stack lays one per datum
+  with `{:scale, name, field}`: `style: [:node, {:scale, :health, :state}]`. A path per series
+  takes its first datum's style; a reading the scale cannot place lays nothing. New validator
+  faults: `{:style_range, kind}` (a styles range on another scale kind), `{:style_scale, name}`
+  (a stack entry whose scale does not range over styles) and `{:invalid_for, kind}` for that
+  entry outside a mark's style. JSON writes them as `{"$styles": "roles"}` and
+  `{"$scale": ["health", "state"]}`.
+- **A stored theme carries its palette** (#637). An inline design theme and a
+  `Visualize.Chart.Theme` document accept `styles`, each entry checked as a style node and by the
+  palette's contracts (`{:contract, message}` at `[:theme, :styles, name]`), so a theme read back
+  draws as the theme that was written.
 
 ### Changed
 

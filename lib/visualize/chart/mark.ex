@@ -42,7 +42,7 @@ defmodule Visualize.Chart.Mark do
 
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Scales
-  alias Visualize.Chart.Mark.{Bend, Generic, Label, Series, Shapes, Strokes, Tiles}
+  alias Visualize.Chart.Mark.{Bend, Generic, Label, Series, Shapes, Strokes, Styled, Tiles}
   alias Visualize.Chart.{Style, Var}
   alias Visualize.Data.Table
   alias Visualize.IR.{Element, Transform}
@@ -58,8 +58,10 @@ defmodule Visualize.Chart.Mark do
   What the element builders see of a mark: the frame, the mark node, its rows, its
   resolved style split into the static part and the `{:field, f}` bindings, its paint
   as `{key, colour}`, its options, inline label and tooltip node, the render mode, and
-  its series values by position when it has a `series` channel (spec/14 §5.2, D-126), and
-  the keys a mark with an event writes on its elements (§5.7, D-170).
+  its series values by position when it has a `series` channel (spec/14 §5.2, D-126), the
+  keys a mark with an event writes on its elements (§5.7, D-170), its one-based position
+  among the marks, and the styles a stack laying `{:scale, name, field}` chooses by data
+  (§3.6, #637), `nil` for a stack that lays none.
   """
   @type context :: %{
           frame: Frame.t(),
@@ -77,7 +79,9 @@ defmodule Visualize.Chart.Mark do
           series: %{term() => pos_integer()} | nil,
           keys:
             %{frame: atom(), mark: non_neg_integer(), ordinals: %{map() => non_neg_integer()}}
-            | nil
+            | nil,
+          index: pos_integer(),
+          scaled: %{entries: [tuple()], table: map()} | nil
         }
 
   @doc "As `generate/3` with `[]` options: no source bound, an empty mark group."
@@ -113,22 +117,21 @@ defmodule Visualize.Chart.Mark do
     realised = rows(frame, mark, sources)
     rows = panel(realised, frame, Keyword.fetch(opts, :panel))
     style_node = Style.node(frame.styles, Map.get(mark, :style))
-    {static, bound} = split(Style.resolve(style_node, frame.theme, mode))
 
-    ctx = %{
-      frame: frame,
-      mark: mark,
-      type: type,
-      rows: rows,
-      mode: mode,
-      style_node: style_node,
-      static: static,
-      bound: bound,
-      paint: paint(type, style_node, index, frame.theme, mode),
-      options: options(mark),
-      label: label(mark),
-      tooltip: node(mark, :tooltip)
-    }
+    ctx =
+      %{
+        frame: frame,
+        mark: mark,
+        type: type,
+        rows: rows,
+        mode: mode,
+        index: index,
+        options: options(mark),
+        label: label(mark),
+        tooltip: node(mark, :tooltip)
+      }
+      |> Map.merge(Styled.parts(style_node, type, index, frame.theme, mode))
+      |> Styled.prepare()
 
     ctx = Map.merge(ctx, %{series: Series.index(ctx), keys: keys(ctx, realised)})
 
@@ -136,7 +139,7 @@ defmodule Visualize.Chart.Mark do
     # Every element and label a series draws names it (spec/14 §5.6, D-126).
     children = children |> Series.annotate(ctx) |> bent(ctx)
     bound = Enum.map(children, &bind(&1, ctx))
-    elements = Strokes.apply(bound, ctx)
+    elements = strokes(children, bound, ctx)
     # A label inked by contrast reads its element's bound fill (spec/14 §5.5, D-123).
     labelled = Label.under(children, bound, ctx)
 
@@ -212,11 +215,6 @@ defmodule Visualize.Chart.Mark do
   end
 
   defp panel(rows, _frame, _panel), do: rows
-
-  defp split(style) do
-    {bound, static} = Enum.split_with(style, fn {_key, value} -> match?({:field, _}, value) end)
-    {Map.new(static), Map.new(bound)}
-  end
 
   defp options(mark) do
     case Map.get(mark, :options, %{}) do
@@ -317,18 +315,6 @@ defmodule Visualize.Chart.Mark do
     end
   end
 
-  # The paint: the style's value for the paint key, else the theme's series colour for
-  # the mark's position (spec/14 §5.6). A `{:field, f}` there is bound per element.
-  defp paint(type, style_node, index, theme, mode) do
-    key = if type in @stroked, do: :stroke, else: :fill
-
-    case Map.get(style_node, key) do
-      nil -> {key, Theme.resolve(theme, {:series, index}, mode)}
-      {:field, _} = ref -> {key, ref}
-      value -> {key, Style.value(key, value, theme, mode)}
-    end
-  end
-
   # The group's style: the static part, the paint (a bound one stays per element), and
   # `fill: :none` for a stroked type the style leaves unfilled.
   defp group_style(%{type: type, static: static, paint: {key, colour}} = ctx) do
@@ -350,27 +336,42 @@ defmodule Visualize.Chart.Mark do
     end
   end
 
-  # An element's own style: the series' paint under the generator's, then the bindings
-  # read from its datum (spec/14 §3.4, §5.6); and its series' `data-series` (D-126).
+  # An element's own style: the series' paint, then what a style chosen by its datum
+  # changes (spec/14 §3.6), under the generator's, then the bindings read from its datum
+  # (spec/14 §3.4, §5.6); and its series' `data-series` (D-126).
   defp bind(%{element: element, datum: datum, style: style} = child, ctx) do
-    bound = Style.bind(ctx.bound, datum, ctx.frame, ctx.mode)
+    own = Styled.at(ctx, datum)
+    bound = Style.bind(own.bound, datum, own.frame, own.mode)
 
     paint =
-      case ctx.paint do
-        {key, {:field, _} = ref} -> Style.bind(%{key => ref}, datum, ctx.frame, ctx.mode)
+      case own.paint do
+        {key, {:field, _} = ref} -> Style.bind(%{key => ref}, datum, own.frame, own.mode)
         _ -> %{}
       end
 
     element
     |> Element.set_style(
       child
-      |> Series.paint(ctx)
+      |> Series.paint(own)
+      |> Map.merge(Styled.over(ctx, own))
       |> Map.merge(style)
       |> Map.merge(paint)
       |> Map.merge(bound)
     )
     |> Series.stamp(Map.get(child, :series))
     |> datum_attrs(datum, ctx)
+  end
+
+  # The stroke style of the bound elements (spec/14 §5.6): the mark's, or — a per-series
+  # key — each child's own where its stack lays a style by data (§3.6).
+  defp strokes(_children, bound, %{scaled: nil} = ctx), do: Strokes.apply(bound, ctx)
+
+  defp strokes(children, bound, ctx) do
+    children
+    |> Enum.zip(bound)
+    |> Enum.flat_map(fn {child, element} ->
+      Strokes.apply([element], Styled.at(ctx, child.datum))
+    end)
   end
 
   # In a polar frame every ordinary mark is laid out in (angle, r) and bent around the

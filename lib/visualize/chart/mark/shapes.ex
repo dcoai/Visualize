@@ -6,7 +6,7 @@ defmodule Visualize.Chart.Mark.Shapes do
   # `%{element, datum, style, anchor}` — the element, the datum it was drawn from, the
   # element's own style over the generator's, and the inline label's anchor point.
 
-  alias Visualize.Chart.Mark.{Channels, Label, Series}
+  alias Visualize.Chart.Mark.{Channels, Label, Series, Styled}
   alias Visualize.Chart.Style
   alias Visualize.Data.Table
   alias Visualize.IR.{Element, Transform}
@@ -36,8 +36,9 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   # -- line and area: one path per series ------------------------------------------------
 
+  # A path per series takes a style chosen by data from the series' first datum (spec/14
+  # §3.6): `own` is the mark's context with that datum's style, the mark's own otherwise.
   defp line(ctx) do
-    filled? = filled?(ctx)
     baseline = Channels.baseline(ctx)
 
     ctx
@@ -45,6 +46,8 @@ defmodule Visualize.Chart.Mark.Shapes do
     |> series(ctx, [:x, :y])
     |> closed(ctx)
     |> Enum.flat_map(fn rows ->
+      ctx = first(ctx, rows)
+
       path =
         Line.new()
         |> Line.x(:x)
@@ -58,7 +61,7 @@ defmodule Visualize.Chart.Mark.Shapes do
       # A filled line is the area under it (spec/14 §5.6): the area to the baseline first,
       # then the line itself, unfilled. The series' paint and `data-series` are the mark's
       # (`Visualize.Chart.Mark.Series`), as on every type.
-      if filled? do
+      if filled?(ctx) do
         [
           child(under(rows, baseline, ctx), rows, %{class: "line-fill", stroke: :none}, anchor),
           child(Element.path(path), rows, %{fill: :none}, anchor)
@@ -105,6 +108,8 @@ defmodule Visualize.Chart.Mark.Shapes do
     |> series(ctx, [:x0, :x1, :y0, :y1])
     |> closed(ctx)
     |> Enum.map(fn rows ->
+      ctx = first(ctx, rows)
+
       path =
         Area.new()
         |> Area.x0(:x0)
@@ -123,17 +128,24 @@ defmodule Visualize.Chart.Mark.Shapes do
   # plus the sweep, so the closing segment runs forward round the ring — by the `closed`
   # option, else on a full turn over a categorical angle; a closed curve closes itself.
   defp closed(series, ctx) do
-    if closed?(ctx) and not closed_curve?(ctx) do
+    if closed?(ctx) do
       turn = turn(ctx)
 
       Enum.map(series, fn
-        [first | _] = rows -> rows ++ [wrapped(first, turn)]
-        empty -> empty
+        [first | _] = rows ->
+          if closed_curve?(first(ctx, rows)), do: rows, else: rows ++ [wrapped(first, turn)]
+
+        empty ->
+          empty
       end)
     else
       series
     end
   end
+
+  # The context a path draws with: its series' first datum's style (spec/14 §3.6).
+  defp first(ctx, [row | _]), do: Styled.at(ctx, row.datum)
+  defp first(ctx, []), do: ctx
 
   defp closed?(%{frame: frame} = ctx) do
     case option(ctx, :closed, nil) do
@@ -400,7 +412,9 @@ defmodule Visualize.Chart.Mark.Shapes do
   # The stroke keys of the mark's style and its paint — the series' colour with a `series`
   # channel (spec/14 §5.6, D-126) — bound to the datum, replacing the generator's
   # `current_color`.
-  defp stroke_style(%{static: static, paint: {:stroke, paint}} = ctx, datum) do
+  defp stroke_style(ctx, datum) do
+    %{static: static, paint: {:stroke, paint}} = ctx = Styled.at(ctx, datum)
+
     static
     |> Map.take(@stroke_keys)
     |> Map.put(:stroke, Series.over(ctx, datum, paint))
@@ -408,7 +422,9 @@ defmodule Visualize.Chart.Mark.Shapes do
     |> Style.bind(datum, ctx.frame, ctx.mode)
   end
 
-  defp fill_style(%{static: static, paint: {:fill, paint}} = ctx, datum) do
+  defp fill_style(ctx, datum) do
+    %{static: static, paint: {:fill, paint}} = ctx = Styled.at(ctx, datum)
+
     static
     |> Map.take([:fill, :fill_opacity])
     |> Map.put(:fill, Series.over(ctx, datum, paint))
@@ -420,6 +436,7 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   defp percentile_band(ctx) do
     rows = Channels.pixels(ctx)
+    ctx = first(ctx, rows)
     inner? = Channels.has?(ctx, :inner_lo) and Channels.has?(ctx, :inner_hi)
     outer? = Channels.has?(ctx, :outer_lo) and Channels.has?(ctx, :outer_hi)
 
@@ -500,13 +517,17 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   # -- symbol ----------------------------------------------------------------------------
 
+  # A symbol's glyph and size are its own datum's where a style is chosen by data (§3.6).
   defp symbol(ctx) do
-    %{style_node: style_node, frame: frame} = ctx
-    type = Map.get(style_node, :symbol, :circle)
-    size = Style.value(:symbol_size, Map.get(style_node, :symbol_size, 64), frame.theme, :literal)
     rows = ctx |> Channels.pixels() |> Channels.placed([:x, :y])
 
     Enum.map(rows, fn row ->
+      %{style_node: style_node, frame: frame} = Styled.at(ctx, row.datum)
+      type = Map.get(style_node, :symbol, :circle)
+
+      size =
+        Style.value(:symbol_size, Map.get(style_node, :symbol_size, 64), frame.theme, :literal)
+
       path =
         Symbol.new()
         |> Symbol.type(glyph(type, row.datum, frame))
