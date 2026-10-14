@@ -248,13 +248,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp window_text(%{window: window, zone: zone}), do: Board.window_text(window, zone)
     defp window_text(_info), do: nil
 
-    # The selection as a person reads it: the field and the value.
-    defp selection_text(%{selection: {field, value}}) do
-      text = if String.Chars.impl_for(value), do: to_string(value), else: inspect(value)
-      "#{field} #{text}"
+    # The selection as a person reads it: the field and the value, a composite one's
+    # fields in name order (spec/15 §9.2, D-167).
+    defp selection_text(%{selection: {field, value}}), do: "#{field} #{value_text(value)}"
+
+    defp selection_text(%{selection: %{} = fields}) do
+      fields
+      |> Enum.sort_by(fn {field, _value} -> to_string(field) end)
+      |> Enum.map_join(", ", fn {field, value} -> "#{field} #{value_text(value)}" end)
     end
 
     defp selection_text(_info), do: nil
+
+    defp value_text(value),
+      do: if(String.Chars.impl_for(value), do: to_string(value), else: inspect(value))
 
     defmodule Cell do
       @moduledoc """

@@ -109,6 +109,12 @@ defmodule Visualize.Board do
   @typedoc "A fault: the path from the board to the value, and why (spec/14 §10.1)."
   @type error :: {list(), term()}
 
+  @typedoc """
+  What a selection names (spec/15 §13.2): `{field, value}`, or a map from field to value
+  for an identity the schema declares over several fields (spec/08 §10.1, D-167).
+  """
+  @type identity :: {atom() | String.t(), term()} | %{(atom() | String.t()) => term()}
+
   @doc "The board's width in grid columns: `12` (spec/15 §1.4)."
   @spec columns() :: pos_integer()
   def columns, do: Validator.columns()

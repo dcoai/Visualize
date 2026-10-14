@@ -15,6 +15,38 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.5.2-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Added
+
+- **A feed declares which rows are about the same thing** (#625, D-167). A schema field may
+  say `identity: true` — on a `:category`, `:text` or `:number` field, never a `:time` one
+  (`{:invalid_for, :time}`) — and several fields together are one composite identity:
+  `%{host: %{type: :category, identity: true}, iface: %{type: :category, identity: true}}`.
+  `Visualize.Data.Schema.identity/1` lists the declared fields, and
+  `Visualize.Data.Schema.identity/2` gives a row's identity: the bare value for one field,
+  a map such as `%{host: "mx1", iface: "eth0"}` for several, `nil` when none is declared or
+  the row lacks one. `identity: false` is the same schema, and the same version, as saying
+  nothing. `Schema.attributes/0` has thirteen keys, so a slot can
+  `requires: %{car: [:identity]}`.
+- **Board selections may be composite.** `Visualize.Board.Server.select/2` takes a map from
+  field to value as well as `{field, value}`, each field read through the board's `links`;
+  a cell shows it when one row holds every field's value. A one-field map is held as the
+  pair. The header reads it as `Selected: host mx1, iface eth0`.
+
+### Changed
+
+- **A pick on a board reads the declared identity first.** Over a feed whose schema declares
+  identity, `Visualize.Board.Server.pick/4` answers it — `{field, value}`, or a map for a
+  composite identity — rather than the mark's `series` field or the first `:category`
+  field, and a row that lacks a declared field selects nothing. Boards over feeds that
+  declare no identity pick exactly as before. The board's `{:board, info}` `selection` may
+  now be a map.
+- **`Visualize.Data.Schema.compatibility/2` compares identity.** A field one schema declares
+  as identity and the other does not is `{:identity, a, b}`, even a field only the other
+  schema has, so `Visualize.Feed.Combine` refuses a live feed and a history that count
+  different things.
+- **The conformance kit checks identity.** Of a feed that declares identity, a row with no
+  value for a declared field is the `:deliveries` finding `{:no_identity, request, field}`.
+
 ## [0.5.1] — 2026-10-13
 
 Board cells show their marks' tooltips and pass a mark's click to the page, and a page may own

@@ -291,6 +291,7 @@ defmodule Visualize.Feed.Conformance do
           fields(rows, request, schema) ++
           times(rows, request, time, Feed.window_type(schema)) ++
           instants(rows, request, schema, time) ++
+          identities(rows, request, schema) ++
           outside(rows, request, time, served) ++
           resolution(rows, request, schema, time, delivery.resolution)
 
@@ -420,6 +421,14 @@ defmodule Visualize.Feed.Conformance do
         row = Enum.find(rows, &(not instant_or_nil?(Table.get(&1, field)))),
         row != nil,
         do: {:not_an_instant, request, field, Table.get(row, field)}
+  end
+
+  # Every row has a value for each field the schema declares identity (spec/08 §12.3,
+  # D-167): a row that does not say what it is about cannot be grouped with its entity.
+  defp identities(rows, request, schema) do
+    for field <- Schema.identity(schema),
+        Enum.any?(rows, &(Table.get(&1, field) == nil)),
+        do: {:no_identity, request, field}
   end
 
   defp instant_or_nil?(nil), do: true

@@ -108,7 +108,9 @@ defmodule Visualize.Test.Feeds do
       :ticks_as_time,
       :no_window_field,
       :stamp_as_number,
-      :misspelt_unit
+      :misspelt_unit,
+      :identified,
+      :no_identity
     ]
 
     @last 19
@@ -226,6 +228,14 @@ defmodule Visualize.Test.Feeds do
 
       fields = %{t: t, v: %{type: :number, label: label}}
       fields = if flaw == :stamp_as_number, do: Map.put(fields, :at, %{type: :time}), else: fields
+
+      # Rows about two units, which `:identified` names in every row and `:no_identity`
+      # leaves out of some (D-167).
+      fields =
+        if flaw in [:identified, :no_identity],
+          do: Map.put(fields, :unit, %{type: :category, identity: true}),
+          else: fields
+
       misspelt(Schema.new!(fields), flaw)
     end
 
@@ -237,6 +247,9 @@ defmodule Visualize.Test.Feeds do
     defp misspelt(schema, _flaw), do: schema
 
     defp row(t, v, :stamp_as_number), do: %{t: t, v: v, at: t}
+    defp row(t, v, :identified), do: %{t: t, v: v, unit: if(rem(t, 2) == 0, do: "a", else: "b")}
+    defp row(t, v, :no_identity) when rem(t, 3) == 0, do: %{t: t, v: v}
+    defp row(t, v, :no_identity), do: row(t, v, :identified)
     defp row(t, v, _flaw), do: %{t: t, v: v}
 
     defp bounds(nil), do: {:ok, nil, nil}

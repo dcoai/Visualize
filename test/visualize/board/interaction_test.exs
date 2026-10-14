@@ -506,4 +506,138 @@ defmodule Visualize.Board.InteractionTest do
       refute html =~ "Reset window"
     end
   end
+
+  describe "declared identity (spec/15 §13.2, D-167)" do
+    # A series per interface, `s`, over rows that declare who they are about: a host and
+    # an interface together.
+    @interfaces %{
+      version: 2,
+      sources: %{primary: %{fields: [:t, :v, :s, :host, :iface]}},
+      frames: %{
+        main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}
+      },
+      marks: [
+        %{type: :line, data: :primary, channels: %{x: :t, y: :v, series: :s}},
+        %{type: :circle, data: :primary, channels: %{x: :t, y: :v, series: :s}}
+      ]
+    }
+
+    defp interface_rows do
+      fn window, _budget ->
+        from = if window, do: hd(window), else: @t0
+
+        rows =
+          for i <- 0..3, host <- ["mx1", "mx2"], iface <- ["eth0", "eth1"] do
+            %{
+              t: DateTime.add(from, i * 60),
+              v: i + 1,
+              s: "#{host}/#{iface}",
+              host: host,
+              iface: iface
+            }
+          end
+
+        {rows, []}
+      end
+    end
+
+    defp start_identified(schema) do
+      {feed, _agent} = scripted(schema: schema, rows: interface_rows())
+
+      value =
+        Board.from_map!(%{
+          window: %{last: 3600},
+          links: %{node: :host},
+          cells: %{a: %{x: 0, y: 0, w: 6, h: 3, ref: {:composite, 3}}}
+        })
+
+      sup = start_supervised!(Supervisor.child_spec(Visualize.Board.Supervisor, id: make_ref()))
+
+      {:ok, board} =
+        Server.start(sup,
+          board: value,
+          store: %{{:composite, 3} => @interfaces},
+          binding: Binding.new(%{{:a, :primary} => :f}),
+          feeds: %{f: feed},
+          tick: nil,
+          debounce: 0,
+          clock: fn -> DateTime.add(@t0, 3600) end
+        )
+
+      {:ok, _info} = Server.subscribe(board)
+      views_until([:a], live())
+      board
+    end
+
+    @fields %{
+      t: %{type: :time},
+      v: %{type: :number},
+      s: %{type: :category},
+      host: %{type: :category},
+      iface: %{type: :category}
+    }
+
+    test "one declared field is picked before the series inference would be" do
+      board = start_identified(Schema.new!(put_in(@fields, [:host, :identity], true)))
+
+      # Series 0 is "mx1/eth0"; inference would have said `{:s, "mx1/eth0"}`.
+      assert {:ok, %{identity: {:host, "mx1"}}} = Server.pick(board, :a, 0, 0)
+    end
+
+    test "with no declared identity, inference picks as before" do
+      board = start_identified(Schema.new!(@fields))
+      assert {:ok, %{identity: {:s, "mx1/eth0"}}} = Server.pick(board, :a, 0, 0)
+    end
+
+    test "a composite identity is picked as a map, and selects only the rows holding all of it" do
+      schema =
+        @fields
+        |> put_in([:host, :identity], true)
+        |> put_in([:iface, :identity], true)
+        |> Schema.new!()
+
+      board = start_identified(schema)
+
+      assert {:ok, %{row: row, identity: identity}} = Server.pick(board, :a, 0, 0)
+      assert identity == %{host: "mx1", iface: "eth0"}
+      assert %{host: "mx1", iface: "eth0"} = row
+
+      assert Server.select(board, identity) == :ok
+      assert board_info_until(&(&1.selection == identity)).selection == identity
+
+      # Three of the four interfaces dim: their paths and four points each. A selection of
+      # the host alone would keep mx1's eth1 too.
+      %{a: view} = views_until([:a], &(&1.svg != nil and dims(&1.svg) > 0))
+      assert dims(view.svg) == 15
+
+      assert Server.select(board, {:host, "mx1"}) == :ok
+      %{a: view} = views_until([:a], &(&1.svg != nil and dims(&1.svg) == 10))
+      assert dims(view.svg) == 10
+    end
+
+    test "a map of one field is the pair; links read each field of a map" do
+      board = start_identified(Schema.new!(@fields))
+
+      assert Server.select(board, %{host: "mx1"}) == :ok
+      assert Server.info(board).selection == {:host, "mx1"}
+
+      assert Server.select(board, %{node: "mx2", iface: "eth1"}) == :ok
+      assert Server.info(board).selection == %{host: "mx2", iface: "eth1"}
+    end
+
+    test "the header reads a composite selection field by field" do
+      info = %{
+        window: {@t0, DateTime.add(@t0, 600)},
+        zone: "Etc/UTC",
+        now: @t0,
+        width: 1200,
+        sync: nil,
+        selection: %{iface: "eth0", host: "mx1"},
+        moved: false
+      }
+
+      html = render_component(Component, id: "ops", server: self(), board: board(), info: info)
+      assert html =~ "Selected: host mx1, iface eth0"
+    end
+  end
 end

@@ -4,8 +4,8 @@ defmodule Visualize.Data.Schema do
 
   A schema maps a field — named as the feed's rows name it, an atom or a string — to a
   **description**: its `type`, and as much of `unit`, `quantity`, `label`, `order`,
-  `status`, `polarity`, `target`, `continuity`, `window`, `metric_kind` and `bounds` as
-  the feed knows. It says what
+  `status`, `polarity`, `target`, `continuity`, `window`, `metric_kind`, `bounds` and
+  `identity` as the feed knows. It says what
   the numbers *are*, whoever draws them, and never how they are drawn: a description has
   no colour key, since colour is the theme's to choose from the meaning (#533). A `:time`
   field holds instants; a feed whose clock is a number describes it `:number` and
@@ -14,7 +14,9 @@ defmodule Visualize.Data.Schema do
   quantity's additivity allows, and where its values lie, `bounds: [min, max]`, a display
   hint over its quantity's (D-155). A `unit` is a UCUM code `Visualize.Unit` reads and a
   `quantity` one of `Visualize.Quantity.all/0`, and when both are given the unit measures
-  the quantity (D-157).
+  the quantity (D-157). A field whose value names the thing a row is about says
+  `identity: true`, several such fields together naming it (D-167); `identity/2` gives a
+  row's identity under the schema.
 
   A schema is identified by its `version`, a content hash (spec/08 §10.2): the same
   schema has the same version on every node and under every release, and any change of
@@ -41,6 +43,7 @@ defmodule Visualize.Data.Schema do
 
   """
 
+  alias Visualize.Data.Table
   alias Visualize.{Quantity, Unit}
 
   @enforce_keys [:fields, :version]
@@ -62,7 +65,8 @@ defmodule Visualize.Data.Schema do
           optional(:continuity) => number(),
           optional(:window) => boolean(),
           optional(:metric_kind) => :gauge | :counter | :rate,
-          optional(:bounds) => [number() | nil]
+          optional(:bounds) => [number() | nil],
+          optional(:identity) => boolean()
         }
 
   @type t :: %__MODULE__{fields: %{name() => description()}, version: String.t()}
@@ -82,7 +86,8 @@ defmodule Visualize.Data.Schema do
     :continuity,
     :window,
     :metric_kind,
-    :bounds
+    :bounds,
+    :identity
   ]
   @types [:time, :number, :category, :text]
   @polarities [:higher_is_better, :lower_is_better, :neutral]
@@ -94,13 +99,15 @@ defmodule Visualize.Data.Schema do
   @numeric [:unit, :quantity, :polarity, :target, :metric_kind, :bounds]
   @categorical [:order, :status]
   @clocks [:time, :number]
+  # `identity` names a thing, which a `:time` field never does: it says when (D-167).
+  @identities [:category, :text, :number]
 
   # The first line of the canonical encoding, naming the encoding itself (spec/08 §10.2).
   @encoding "visualize.schema/1\n"
 
   @not_names [nil, true, false]
 
-  @doc "The twelve description keys, `:type` first (spec/08 §10.1)."
+  @doc "The thirteen description keys, `:type` first (spec/08 §10.1)."
   @spec attributes() :: [atom(), ...]
   def attributes, do: @attributes
 
@@ -125,8 +132,12 @@ defmodule Visualize.Data.Schema do
         duplicates(Map.keys(fields)) ++ windows(fields)
 
     case Enum.sort_by(errors, &elem(&1, 0)) do
-      [] -> {:ok, %__MODULE__{fields: fields, version: hash(fields)}}
-      errors -> {:error, errors}
+      [] ->
+        fields = Map.new(fields, fn {name, d} -> {name, declared(d)} end)
+        {:ok, %__MODULE__{fields: fields, version: hash(fields)}}
+
+      errors ->
+        {:error, errors}
     end
   end
 
@@ -175,8 +186,60 @@ defmodule Visualize.Data.Schema do
     with {:ok, description} <- fetch(schema, name), do: Map.fetch(description, key)
   end
 
+  @doc """
+  The fields the schema declares `identity: true`, as it spells them, ordered by name as a
+  string; `[]` when it declares none (spec/08 §10.1, D-167).
+
+      iex> schema = Visualize.Data.Schema.new!(%{
+      ...>   iface: %{type: :category, identity: true},
+      ...>   host: %{type: :category, identity: true},
+      ...>   bytes: %{type: :number}
+      ...> })
+      iex> Visualize.Data.Schema.identity(schema)
+      [:host, :iface]
+  """
+  @spec identity(t()) :: [name()]
+  def identity(%__MODULE__{fields: fields}) do
+    for({name, %{identity: true}} <- fields, do: name)
+    |> Enum.sort_by(&to_string/1)
+  end
+
+  @doc """
+  A row's identity under the schema (spec/08 §10.1, D-167): the bare value of the one
+  identity field, a map from field to value, keyed as the schema spells them, for several,
+  and `nil` when the schema declares none or the row has no value for one of them. Each
+  field is read by either spelling of its name.
+
+      iex> one = Visualize.Data.Schema.new!(%{id: %{type: :category, identity: true}, x: %{type: :number}})
+      iex> Visualize.Data.Schema.identity(one, %{"id" => "frog-1", "x" => 3})
+      "frog-1"
+      iex> two = Visualize.Data.Schema.new!(%{host: %{type: :category, identity: true},
+      ...>   iface: %{type: :category, identity: true}})
+      iex> Visualize.Data.Schema.identity(two, %{host: "mx1", iface: "eth0", bytes: 9})
+      %{host: "mx1", iface: "eth0"}
+      iex> Visualize.Data.Schema.identity(two, %{host: "mx1"})
+      nil
+  """
+  @spec identity(t(), map()) :: term()
+  def identity(%__MODULE__{} = schema, row) when is_map(row) do
+    case identity(schema) do
+      [] -> nil
+      [field] -> Table.get(row, field)
+      fields -> composite(fields, row)
+    end
+  end
+
+  defp composite(fields, row) do
+    values = Map.new(fields, &{&1, Table.get(row, &1)})
+    if Enum.any?(values, fn {_field, value} -> value == nil end), do: nil, else: values
+  end
+
   @typedoc "Why a field of one schema cannot read another's rows (spec/08 §10.1, D-159)."
-  @type incompatibility :: :missing | {:type, atom(), atom()} | {:unit, term(), term()}
+  @type incompatibility ::
+          :missing
+          | {:type, atom(), atom()}
+          | {:unit, term(), term()}
+          | {:identity, boolean(), boolean()}
 
   @doc """
   Whether `other`'s rows read as `schema`'s (spec/08 §10.1, D-159): for each field of
@@ -184,7 +247,10 @@ defmodule Visualize.Data.Schema do
   and for a `:number` field a unit that converts into `schema`'s — two absent units
   agree, one absent facing a present one does not. `{:error, faults}` lists every fault,
   `field` spelt as `schema` spells it, ordered by its name as a string. Labels and facts
-  are not compared, and `other`'s extra fields are not faults.
+  are not compared, and `other`'s extra fields are not faults — except identity (D-167):
+  a field one schema declares `identity: true` and the other does not is `{:identity, a,
+  b}`, `a` and `b` whether each declares it, even a field only `other` has, since
+  `other`'s rows read as `schema`'s would merge the things `other` tells apart.
 
       iex> live = Visualize.Data.Schema.new!(%{t: %{type: :time}, value: %{type: :number, unit: "ms"}})
       iex> history = Visualize.Data.Schema.new!(%{"t" => %{type: :time}, "value" => %{type: :number, unit: "s", label: "Load"}})
@@ -193,20 +259,42 @@ defmodule Visualize.Data.Schema do
       iex> bytes = Visualize.Data.Schema.new!(%{"value" => %{type: :number, unit: "By"}})
       iex> Visualize.Data.Schema.compatibility(live, bytes)
       {:error, [{:t, :missing}, {:value, {:unit, "ms", "By"}}]}
+      iex> hosts = Visualize.Data.Schema.new!(%{host: %{type: :category, identity: true}})
+      iex> ifaces = Visualize.Data.Schema.new!(%{host: %{type: :category, identity: true},
+      ...>   iface: %{type: :category, identity: true}})
+      iex> Visualize.Data.Schema.compatibility(hosts, ifaces)
+      {:error, [{:iface, {:identity, false, true}}]}
   """
   @spec compatibility(t(), t()) :: :ok | {:error, [{name(), incompatibility()}, ...]}
-  def compatibility(%__MODULE__{fields: fields}, %__MODULE__{} = other) do
-    faults =
-      fields
-      |> Enum.sort_by(fn {name, _description} -> to_string(name) end)
-      |> Enum.flat_map(fn {name, description} ->
+  def compatibility(%__MODULE__{fields: fields} = schema, %__MODULE__{} = other) do
+    ours =
+      Enum.flat_map(fields, fn {name, description} ->
         case fetch(other, name) do
-          {:ok, theirs} -> compatible(name, description, theirs)
-          :error -> [{name, :missing}]
+          {:ok, theirs} ->
+            compatible(name, description, theirs) ++ same_identity(name, description, theirs)
+
+          :error ->
+            [{name, :missing}]
         end
       end)
 
-    if faults == [], do: :ok, else: {:error, faults}
+    # An identity field only `other` has: its rows tell apart what `schema`'s do not.
+    theirs =
+      for name <- identity(other),
+          fetch(schema, name) == :error,
+          do: {name, {:identity, false, true}}
+
+    case Enum.sort_by(ours ++ theirs, fn {name, _reason} -> to_string(name) end) do
+      [] -> :ok
+      faults -> {:error, faults}
+    end
+  end
+
+  defp same_identity(name, ours, theirs) do
+    case {Map.get(ours, :identity, false), Map.get(theirs, :identity, false)} do
+      {same, same} -> []
+      {a, b} -> [{name, {:identity, a, b}}]
+    end
   end
 
   defp compatible(name, %{type: ours}, %{type: theirs}) when ours != theirs,
@@ -311,6 +399,9 @@ defmodule Visualize.Data.Schema do
   defp key(name, type, :window, _value) when type in @types and type not in @clocks,
     do: [{[name, :window], {:invalid_for, type}}]
 
+  defp key(name, type, :identity, _value) when type in @types and type not in @identities,
+    do: [{[name, :identity], {:invalid_for, type}}]
+
   defp key(name, _type, :unit, value), do: unit(value, [name, :unit])
 
   defp key(name, _type, :quantity, value) when not is_atom(value) or value in @not_names,
@@ -358,6 +449,15 @@ defmodule Visualize.Data.Schema do
   defp key(name, _type, :window, value) do
     if is_boolean(value), do: [], else: [{[name, :window], {:type, :boolean}}]
   end
+
+  defp key(name, _type, :identity, value) do
+    if is_boolean(value), do: [], else: [{[name, :identity], {:type, :boolean}}]
+  end
+
+  # `identity: false` is the description that says nothing, kept as that one schema
+  # (spec/08 §10.1, D-167).
+  defp declared(%{identity: false} = description), do: Map.delete(description, :identity)
+  defp declared(description), do: description
 
   # A unit is a UCUM code `Visualize.Unit` reads (spec/05 §4.1, D-157).
   defp unit(value, path) when is_binary(value) and value != "" do
