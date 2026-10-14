@@ -48,8 +48,26 @@ release it merely follows.
   `Visualize.Chart.Theme` document accept `styles`, each entry checked as a style node and by the
   palette's contracts (`{:contract, message}` at `[:theme, :styles, name]`), so a theme read back
   draws as the theme that was written.
+- **The hooks draw hover and focus from the palette** (#638, D-171). `Visualize.Hooks.Crosshair.attrs/3`
+  writes `data-vis-hover` and `Visualize.Hooks.Keyboard.attrs/1` writes `data-vis-focused`: the
+  palette's `:hover` and `:focused` as the chart's design and theme resolve them, a design's own
+  `styles` entry of the name winning. `CrosshairHook`'s markers and `KeyboardHook`'s focus ring
+  draw with them — by default a 2-pixel ring in the theme's text colour, the focus ring dashed.
+  New `Visualize.Hooks.Tooltip.attrs/1` gives `TooltipHook` the same `data-vis-hover`, with which
+  it outlines the datum it shows; `Visualize.Components.Chart` writes it, so its charts now
+  outline the hovered datum. A hook element without the attribute — markup a host writes by
+  hand — draws exactly as before.
 
 ### Changed
+
+- **A board's selection is drawn with the palette's `:selected` and `:muted`** (#638, D-171).
+  The data that hold the selection are drawn `:selected` and the rest `:muted`, through a scale of
+  styles in each mark's style stack, so a component restyles its board's selection by declaring
+  `selected:` or `muted:` in its `styles`, and a theme's entries apply otherwise. The built-in
+  `:muted` fades as before (`opacity` 0.25); the built-in `:selected` is now `stroke_width: 2`
+  alone, so a selected line or rule keeps its colour and draws heavier, and a bar, a point or a
+  text draws as before. Declare your own `selected:` for an outline. A cell that does not show
+  the selection draws as before.
 
 - **The built-in styles `:axis`, `:grid`, `:label` and `:title` come from the chart's theme**
   (spec/14 §3.3). Under the built-in themes they are the same nodes as before and every chart

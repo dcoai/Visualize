@@ -27,6 +27,9 @@ defmodule Visualize.Hooks.Keyboard do
   - `data-keyboard-name` - the chart's name
   - `data-keyboard-points` - per series, `{"name", "points": [[x, y, readout], …]}`
   - `data-size` - `width,height` of the chart
+  - `data-vis-focused` - the palette's `:focused`, resolved for the chart's frame: a JSON
+    object of SVG attributes laid over the focus marker's own (spec/10 §4.4); absent, the
+    marker is a 2-pixel `currentColor` ring
 
   Set by the host:
   - `data-keyboard-event` - the event pushed with `{series, index}` when the focused point
@@ -39,11 +42,13 @@ defmodule Visualize.Hooks.Keyboard do
   """
 
   alias Visualize.Chart.{Applied, Summary}
+  alias Visualize.Hooks.States
   alias Visualize.IR.Path
 
   @doc """
   The data attributes of spec/10 §17.2 for an applied chart, computed once: its name, its
-  points by series with their readouts and positions, and its size.
+  points by series with their readouts and positions, its size, and the focus marker's
+  style, the palette's `:focused` as the chart's design and theme resolve it (§4.4).
   """
   @spec attrs(Applied.t()) :: %{String.t() => String.t()}
   def attrs(%Applied{frame: frame} = applied) do
@@ -59,6 +64,7 @@ defmodule Visualize.Hooks.Keyboard do
       "data-keyboard-points" => "[" <> series <> "]",
       "data-size" => "#{number(frame.size.width)},#{number(frame.size.height)}"
     }
+    |> Map.merge(States.attrs(frame, :focused))
   end
 
   defp number(nil), do: "null"
@@ -103,9 +109,6 @@ defmodule Visualize.Hooks.Keyboard do
         this.overlay.style.display = 'none';
         this.marker = this.svg('circle', 'vis-keyboard-marker');
         this.marker.setAttribute('r', 6);
-        this.marker.setAttribute('fill', 'none');
-        this.marker.setAttribute('stroke', 'currentColor');
-        this.marker.setAttribute('stroke-width', 2);
         this.overlay.appendChild(this.marker);
         document.body.appendChild(this.overlay);
         this.at = null;
@@ -153,7 +156,19 @@ defmodule Visualize.Hooks.Keyboard do
           'aria-label': this.name + ', chart: arrow keys move between points'
         };
         this.own.forEach((name) => this.el.setAttribute(name, own[name]));
+        this.focusStyle(ds.visFocused);
         if (this.at) this.at = this.clamp(this.at.series, this.at.index);
+      },
+
+      // The marker's look: a 2-pixel ring in currentColor, with the server's :focused laid
+      // over it (spec/10 §4.4); set again after every patch, so a key the style no longer
+      // gives returns to its default and no attribute leaves it as it always was.
+      focusStyle(focused) {
+        const style = Object.assign({ fill: 'none', stroke: 'currentColor', 'stroke-width': '2' },
+          focused ? JSON.parse(focused) : {});
+        (this.styled || []).forEach((name) => this.marker.removeAttribute(name));
+        this.styled = Object.keys(style);
+        this.styled.forEach((name) => this.marker.setAttribute(name, style[name]));
       },
 
       clamp(series, index) {

@@ -68,13 +68,18 @@ defmodule Visualize.Components.ChartTest do
   test "renders the SVG inside TooltipHook targeted at itself, with the drawing's token" do
     html = render_component(Component, id: "sales", chart: applied(), render: [title: "Sales"])
 
-    assert [_, target, drawn] =
+    assert [_, target, drawn, hover] =
              Regex.run(
-               ~r/<div id="sales" phx-hook="TooltipHook" data-tooltip-target="([^"]+)" data-tooltip-drawn="([^"]+)" data-tooltip-class="vis-tooltip">/,
+               ~r/<div id="sales" phx-hook="TooltipHook" data-tooltip-target="([^"]+)" data-tooltip-drawn="([^"]+)" data-tooltip-class="vis-tooltip" data-vis-hover="([^"]+)">/,
                html
              )
 
     assert target != "" and drawn != ""
+
+    # The palette's :hover, resolved for the chart's frame (spec/10 §4.4, #638).
+    assert hover ==
+             "{&quot;stroke&quot;:&quot;#333333&quot;,&quot;stroke-width&quot;:&quot;2&quot;}"
+
     assert html =~ "<title id=\"vis-"
     assert html =~ ">Sales</title>"
     assert html =~ ~s(data-frame="main" data-mark="0" data-tooltip-event="point_click")

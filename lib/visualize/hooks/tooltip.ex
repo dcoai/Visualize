@@ -38,6 +38,8 @@ defmodule Visualize.Hooks.Tooltip do
     unset, it goes to the LiveView (D-161)
   - `data-tooltip-drawn` - the holder's token for the drawing on screen, sent with a click
     (D-170)
+  - `data-vis-hover` - the palette's `:hover`, from `attrs/1`: the datum element shown is
+    outlined in it (spec/10 §4.4); absent, nothing is outlined
 
   Data attributes on the elements, written by the server (spec/10 §12.2):
   - `data-datum` - the field names, space-separated, in order
@@ -47,6 +49,25 @@ defmodule Visualize.Hooks.Tooltip do
   - `data-frame`, `data-mark` - on a mark's group with an event: its frame and position
   - `data-row` - on each datum element of such a mark: the row's ordinal in its rows
   """
+
+  alias Visualize.Chart.Frame
+  alias Visualize.Hooks.States
+
+  @doc """
+  The hook element's `data-vis-hover` for a realised frame (spec/10 §12.1, §4.4): the
+  palette's `:hover` as the frame's design and theme resolve it, in `:literal` mode, as a
+  JSON object of SVG attributes the hook outlines the datum element it shows with.
+
+  ## Examples
+
+      iex> chart = Visualize.Chart.from_map!(%{version: 2, frames: %{main: %{kind: :cartesian}}})
+      iex> frame = Visualize.Chart.Frame.new(chart, size: {100, 100})
+      iex> Visualize.Hooks.Tooltip.attrs(frame)
+      %{"data-vis-hover" => ~s({"stroke":"#333333","stroke-width":"2"})}
+
+  """
+  @spec attrs(Frame.t()) :: %{String.t() => String.t()}
+  def attrs(%Frame{} = frame), do: States.attrs(frame, :hover)
 
   @doc """
   Returns the JavaScript source of `TooltipHook`.
@@ -62,6 +83,8 @@ defmodule Visualize.Hooks.Tooltip do
         this.tip.style.whiteSpace = 'pre';
         this.tip.style.display = 'none';
         document.body.appendChild(this.tip);
+        this.outline = null;
+        this.readHover();
 
         // Each handler is bound once and kept on the hook, so destroyed() removes the
         // same references it added; onSync is the sync bus's listener (spec/10 §4.3).
@@ -80,9 +103,56 @@ defmodule Visualize.Hooks.Tooltip do
         this.el.addEventListener('click', this.onClick);
       },
 
-      // The sync group is re-read after every patch.
+      // The sync group and the hover's style are re-read after every patch.
       updated() {
         VisualizeSync.attach(this);
+        this.readHover();
+      },
+
+      // The hover's style (spec/10 §4.4): with data-vis-hover the datum element shown is
+      // outlined, the server's :hover laid over a 2-pixel currentColor rectangle; without
+      // it nothing is drawn, as before. The overlay is made on the first style to draw.
+      readHover() {
+        const raw = this.el.dataset.visHover;
+        this.hover = raw ? JSON.parse(raw) : null;
+        if (!this.hover) {
+          if (this.outline) this.outline.style.display = 'none';
+          return;
+        }
+        if (!this.outline) {
+          const ns = 'http://www.w3.org/2000/svg';
+          this.outline = document.createElementNS(ns, 'svg');
+          this.outline.setAttribute('class', 'vis-tooltip-hover');
+          Object.assign(this.outline.style, {
+            position: 'absolute', pointerEvents: 'none', overflow: 'visible', display: 'none'
+          });
+          this.outlineRect = document.createElementNS(ns, 'rect');
+          this.outline.appendChild(this.outlineRect);
+          document.body.appendChild(this.outline);
+        }
+        const style = Object.assign({ fill: 'none', stroke: 'currentColor', 'stroke-width': '2' }, this.hover);
+        (this.outlined || []).forEach((name) => this.outlineRect.removeAttribute(name));
+        this.outlined = Object.keys(style);
+        this.outlined.forEach((name) => this.outlineRect.setAttribute(name, style[name]));
+      },
+
+      // The outline around a datum element's bounding rectangle, in page coordinates, padded
+      // by its stroke width and 2 pixels so it surrounds the element rather than covering it.
+      outlineAt(el) {
+        if (!this.hover || !this.outline) return;
+        const box = el.getBoundingClientRect();
+        const pad = 2 + (parseFloat(this.outlineRect.getAttribute('stroke-width')) || 0);
+        Object.assign(this.outline.style, {
+          left: (box.left + window.scrollX - pad) + 'px',
+          top: (box.top + window.scrollY - pad) + 'px',
+          width: (box.width + 2 * pad) + 'px',
+          height: (box.height + 2 * pad) + 'px',
+          display: 'block'
+        });
+        this.outlineRect.setAttribute('x', pad);
+        this.outlineRect.setAttribute('y', pad);
+        this.outlineRect.setAttribute('width', box.width);
+        this.outlineRect.setAttribute('height', box.height);
       },
 
       // The datum element: the target's nearest ancestor-or-self carrying data-datum,
@@ -211,10 +281,12 @@ defmodule Visualize.Hooks.Tooltip do
         const y = pageY + 12 + height > bottom ? pageY - 12 - height : pageY + 12;
         this.tip.style.left = x + 'px';
         this.tip.style.top = y + 'px';
+        this.outlineAt(el);
       },
 
       hide() {
         this.tip.style.display = 'none';
+        if (this.outline) this.outline.style.display = 'none';
       },
 
       // A click on a keyed datum of a mark with an event (spec/10 §12.3, D-170): one wire
@@ -262,6 +334,7 @@ defmodule Visualize.Hooks.Tooltip do
         this.el.removeEventListener('click', this.onClick);
         VisualizeSync.detach(this);
         if (this.tip.parentNode) this.tip.parentNode.removeChild(this.tip);
+        if (this.outline && this.outline.parentNode) this.outline.parentNode.removeChild(this.outline);
       }
     };
     """

@@ -5,6 +5,8 @@ defmodule Visualize.Hooks.TooltipTest do
   alias Visualize.Hooks
   alias Visualize.Hooks.Tooltip
 
+  doctest Tooltip
+
   @listeners ~w(mousemove mouseleave touchmove touchend click)
 
   test "the tooltip element is created on mount with the configured class and removed on destroy" do
@@ -137,6 +139,68 @@ defmodule Visualize.Hooks.TooltipTest do
 
     assert [{nil, "visualize_event", %{"drawn" => nil, "at" => nil, "modifiers" => []}}] =
              pushes.("untargeted")
+  end
+
+  test "attrs/1 is the palette's :hover for the frame, a design's own winning (#638)" do
+    design = fn styles ->
+      %{version: 2, styles: styles, frames: %{main: %{kind: :cartesian}}}
+      |> Visualize.Chart.from_map!()
+      |> Visualize.Chart.Frame.new(size: {100, 100})
+    end
+
+    assert Tooltip.attrs(design.(%{})) ==
+             %{"data-vis-hover" => ~s({"stroke":"#333333","stroke-width":"2"})}
+
+    # A binding has no datum in the overlay and is left out; :none is the word.
+    hover = %{fill: :none, stroke: {:field, :v}, stroke_width: 4, stroke_linecap: :round}
+
+    assert Tooltip.attrs(design.(%{hover: hover})) ==
+             %{
+               "data-vis-hover" => ~s({"fill":"none","stroke-width":"4","stroke-linecap":"round"})
+             }
+  end
+
+  @tag :js
+  test "executed: data-vis-hover outlines the datum shown; absent, nothing is drawn (#638)" do
+    assert {:ok, %{"report" => r}} =
+             Visualize.JsHooks.run("""
+             const chart = (attrs) => {
+               const dot = Stub.markup('circle', {'data-datum': 'v', 'data-datum-v': '4'});
+               dot.rect = {left: 40, top: 30, width: 10, height: 6};
+               const el = Stub.markup('div', attrs, [Stub.markup('svg', {}, [dot])]);
+               return {el, dot, hook: Stub.mount(TooltipHook, el)};
+             };
+             const outlines = () => document.body.querySelectorAll('.vis-tooltip-hover').length;
+             const styled = chart({id: 'a', 'data-vis-hover': '{"stroke":"#c23238","stroke-width":"3"}'});
+             Stub.fire(styled.el, 'mousemove', {target: styled.dot, pageX: 45, pageY: 33, clientX: 45});
+             const o = styled.hook.outline;
+             const rect = styled.hook.outlineRect;
+             const report = {
+               shown: [o.style.display, o.style.left, o.style.top, o.style.width, o.style.height],
+               rect: ['x', 'y', 'width', 'height', 'fill', 'stroke', 'stroke-width'].map((n) => rect.getAttribute(n))
+             };
+             Stub.fire(styled.el, 'mouseleave', {});
+             report.left = o.style.display;
+             // A patch that drops the attribute draws no outline again.
+             delete styled.el.dataset.visHover;
+             styled.hook.updated();
+             Stub.fire(styled.el, 'mousemove', {target: styled.dot, pageX: 45, pageY: 33, clientX: 45});
+             report.dropped = o.style.display;
+             const bare = chart({id: 'b'});
+             Stub.fire(bare.el, 'mousemove', {target: bare.dot, pageX: 45, pageY: 33, clientX: 45});
+             report.bare = [bare.hook.outline, outlines()];
+             styled.hook.destroyed();
+             report.removed = outlines();
+             Stub.done(report);
+             """)
+
+    # Padded by the stroke width and 2 pixels around the dot's 10 by 6 box at (40, 30).
+    assert r["shown"] == ["block", "35px", "25px", "20px", "16px"]
+    assert r["rect"] == ["5", "5", "10", "6", "none", "#c23238", "3"]
+    assert r["left"] == "none"
+    assert r["dropped"] == "none"
+    assert r["bare"] == [nil, 1]
+    assert r["removed"] == 0
   end
 
   test "the bundle carries the hook once and exports it" do

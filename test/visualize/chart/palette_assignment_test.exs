@@ -114,7 +114,8 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
 
       assert group.style.fill == "#111111"
       assert group.style.stroke_width == 2
-      assert group.style.stroke == lit(Theme.default(), :text)
+      # The built-in :selected is heavier only (#638): no stroke colour of its own.
+      refute Map.has_key?(group.style, :stroke)
     end
 
     test "a design style extends a palette entry" do

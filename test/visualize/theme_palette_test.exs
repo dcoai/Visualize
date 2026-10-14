@@ -51,9 +51,12 @@ defmodule Visualize.ThemePaletteTest do
       end
     end
 
-    test "the default :muted is the board's dim and :selected adds an outline" do
-      assert Theme.style(Theme.default(), :muted) == %{opacity: 0.25}
-      assert Theme.style(Theme.default(), :selected).stroke_style == :outside
+    test "the default :muted is the board's dim and :selected is heavier only (#638)" do
+      for theme <- [Theme.default(), Theme.dark(), Theme.colour_safe(), Theme.print()] do
+        assert Theme.style(theme, :muted) == %{opacity: 0.25}
+        # No colour and no outline of its own, so a stroked mark keeps its paint.
+        assert Theme.style(theme, :selected) == %{stroke_width: 2}
+      end
     end
 
     test "no two of the ten style series share both symbol and dash" do

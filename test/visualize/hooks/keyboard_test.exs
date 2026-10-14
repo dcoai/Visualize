@@ -13,10 +13,11 @@ defmodule Visualize.Hooks.KeyboardTest do
   alias Visualize.Chart
   alias Visualize.Hooks.Keyboard
 
-  defp applied do
+  defp applied(styles \\ %{}) do
     design = %{
       version: 2,
       meta: %{name: "Rain"},
+      styles: styles,
       sources: %{s: %{fields: [:t, :mm, :city]}},
       frames: %{
         main: %{
@@ -71,6 +72,18 @@ defmodule Visualize.Hooks.KeyboardTest do
       assert length(points) == 1000
       assert hd(points).text == "v, 1 of 2500: t 0, v 0"
       assert List.last(points).text == "v, 2500 of 2500: t 2,499, v 0"
+    end
+
+    test "the focus marker's style is the palette's :focused, a design's own winning (#638)" do
+      # The built-in :focused, resolved in :literal mode (spec/10 §4.4).
+      assert Keyboard.attrs(applied())["data-vis-focused"] ==
+               ~s({"stroke":"#333333","stroke-width":"2","stroke-dasharray":"4 2"})
+
+      # A design's entry of the name replaces the theme's whole; a binding has no datum here.
+      focused = %{stroke: :bad, stroke_width: 3, opacity: 0.5, fill: {:field, :mm}}
+
+      assert Keyboard.attrs(applied(%{focused: focused}))["data-vis-focused"] ==
+               ~s({"stroke":"#c23238","stroke-width":"3","opacity":"0.5"})
     end
 
     test "a point in a polar frame is read and not placed" do
@@ -193,6 +206,34 @@ defmodule Visualize.Hooks.KeyboardTest do
              ]
 
       assert %{"on" => "cell", "kind" => "focus"} in log
+    end
+
+    test "the focus marker draws data-vis-focused over its defaults; absent, as before (#638)" do
+      json = Jason.encode!(Keyboard.attrs(applied(%{focused: %{stroke: :bad, stroke_width: 3}})))
+
+      assert {:ok, %{"report" => r}} =
+               run("""
+               const look = (marker) => ['fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'r']
+                 .map((name) => marker.getAttribute(name));
+               const mount = (attrs) => {
+                 const chart = Stub.markup('svg', {viewBox: '0 0 220 120'});
+                 const el = Stub.markup('div', Object.assign({id: 'keys'}, attrs), [chart]);
+                 return {el, hook: Stub.mount(KeyboardHook, el)};
+               };
+               const styled = mount(#{json});
+               const report = {styled: look(styled.hook.marker)};
+               // A patch that drops the attribute returns the marker to its defaults.
+               delete styled.el.dataset.visFocused;
+               styled.hook.updated();
+               report.dropped = look(styled.hook.marker);
+               const bare = mount({'data-keyboard-points': '[]'});
+               report.bare = look(bare.hook.marker);
+               Stub.done(report);
+               """)
+
+      assert r["styled"] == ["none", "#c23238", "3", nil, "6"]
+      assert r["dropped"] == ["none", "currentColor", "2", nil, "6"]
+      assert r["bare"] == ["none", "currentColor", "2", nil, "6"]
     end
 
     test "Enter at the reached point and a click pick a point, to the target (spec/15 §13.2)" do
