@@ -1858,6 +1858,7 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - **Literal colours in the built-in entries.** Written in slots, one palette serves every built-in theme and a stylesheet still switches it (spec/08 §7.3).
 - **The scale's `unknown` for a reading outside a styles scale's domain.** On a colour scale it is the theme's `:axis` colour (D-122), which read as a style name is the axis's whole look — fonts and all — laid on a datum nobody classified. A reading the scale cannot place lays nothing, and the rest of the stack draws it.
 - **A separate scale kind, or a separate key, for styles.** An `:ordinal` or `:threshold` scale already maps categories and bands to values; whether those values are colours or styles is decided by who reads them, a colour key or a stack entry, so a map of roles serves both.
+- **`{:style, i}` as a style reference in a design.** In a design `{:style, n}` is a store id (spec/14 §19.2, D-100): `Visualize.Chart.Refs` replaces it with the stored style's body, and a missing one is a mask. It cannot also mean the n-th style series without making every stored reference ambiguous and turning a missing id into a palette entry. A site names a position as `:style_k`, and `{:styles, :series}` assigns positions by data; `{:style, i}` stays an argument of `Visualize.Theme.style/2`, a theme function, and is no design reference.
 - **Interpolating roles.** A ramp's colours blend; whole styles do not, so `{:styles, :roles}` bands `t` to the nearest role rather than mixing two looks.
 
 **Consequences.**
