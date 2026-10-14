@@ -10,10 +10,16 @@ All notable changes to Visualize are recorded here, following
 > [`spec/`](https://github.com/dcoai/Visualize/blob/main/spec/README.md), which is the
 > source of truth for that and is not restated here.
 
-## [Unreleased]
+## [0.6.0] — 2026-10-14
 
-`mix.exs` reads `0.5.2-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
-release it merely follows.
+The contracts a scene builds on, settled before more is built over the old shapes. A feed can
+declare which of its rows are about one entity, and a window can ask for a region and for
+each entity's latest row. Every interaction a chart or a board reports now arrives as one
+`Visualize.Event`. Top and bottom legends wrap to the plot. **Upgrading from 0.5:** replace
+`{:visualize_board_event | :visualize_board_drill | :visualize_board_brush, …}` and a plain
+chart's tooltip `handle_event` with `{:visualize_event, id, %Visualize.Event{}}` (the table
+under *Changed*), and give a board page a catch-all clause for the events it ignores, since
+`:select` is now sent on every selection change. `[from, to]` and `nil` windows are unchanged.
 
 ### Added
 
@@ -1837,7 +1843,7 @@ the meaning of a patch.
   discipline — tagged ticks, restart keeps the state, alpha is clamped — under an ExTLA
   model that is checked in CI (D-14).
 
-[Unreleased]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/compare/v0.5.1...main
+[0.6.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.6.0
 [0.5.1]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.5.1
 [0.5.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.5.0
 [0.4.1]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.4.1
