@@ -1832,3 +1832,29 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - A host migrates its `handle_event` for a mark's event to `handle_info({:visualize_event, id, %Visualize.Event{event: "…"}}, socket)`, rendering the chart through `Visualize.Components.Chart`; a board page matches `{:visualize_event, id, %Visualize.Event{event: :drill | :brush | :select | "…"}}` (CHANGELOG, 0.6.0).
 - `Visualize.Board.Server.pick/4` answers `item` and `frame` beside `row` and `identity`, and a view carries its `drawn` token.
 - `Visualize.Chart.Compiled.rows/3` gives a mark's rows as a compiled chart's tick draws them, which is what a board resolves a click against.
+
+## 171. D-171 — The theme carries a palette of whole styles, with the colour palette's contracts
+
+**Context.** #621, work item #636. The theme's colours are a palette (spec/08 §7.1, §7.5, D-135): positions promise *distinct*, roles promise a meaning, contracts keep the meaning fixed, and the theme renders it. Whole styles had none of that. Four built-in styles came from the theme's slots (spec/14 §3.3), each role carried a glyph and a dash (D-142), and everything else was spelt out key by key in each design's `styles`, where no theme could reach it. A status drawn as a whole look, a category kept apart without hue, and what "selected" or "muted" looks like had no home a theme could restyle — and #620's interaction states need exactly the last.
+
+**Decision.**
+- **`%Visualize.Theme{}` gains `styles`**, a map from a palette name to a style node, in four groups: style series `:style_1` … `:style_n` (`{:style, i}` cycles), style roles `:good` … `:neutral`, state styles `:hover`, `:focused`, `:selected`, `:active`, `:disabled`, `:muted`, `:emphasis`, `:breakpoint`, and furniture styles `:axis`, `:grid`, `:label`, `:title`, `:caption`, `:value`, `:annotation` (spec/08 §7.7).
+- **The names are a fixed set.** A theme chooses how many style series it has and how every entry looks; it cannot add a name.
+- **Entries are flat style nodes written in slots.** No `extends`; `:cue` on a role's dash or symbol takes the role's cue.
+- **Contracts are checked when a theme is built**, by `new/1` and `merge/2`, raising `ArgumentError` naming the theme, the entry and the term: a role paints with its own role; a state style changes a non-hue key (stroke width, outline, opacity, dash or effect); neighbouring style series, the wrap included, differ in a non-hue key; a text furniture entry resolves a font family and a size; `:grid` resolves a stroke.
+- **A missing name falls back to the default theme's entry, whole**, as a missing ramp or role does.
+- **The four built-in styles of spec/14 §3.3 are the furniture styles of the chart's theme.** The built-in themes' four are the nodes they always were, so nothing drawn under a built-in theme moves.
+- **`Visualize.Theme.style/2` and `style_names/1`** read the palette.
+
+**Rejected.**
+- **`:grid` as a text style.** It draws lines, not text; the group is furniture, and the font contract binds its text entries only.
+- **Open names, as `styles` in a design are.** A design that names `:selected` must mean the same thing on every theme; a theme-only name would be a design entry living in the wrong place.
+- **`extends` inside the palette.** A chain inside the theme is a cycle or an override a design cannot see; flat entries read the same wherever they are used, and a design's style may still extend one.
+- **Merging a missing entry key by key over the default's.** A partial entry laid over another theme's entry is a look neither theme chose. Entries fall back whole.
+- **Literal colours in the built-in entries.** Written in slots, one palette serves every built-in theme and a stylesheet still switches it (spec/08 §7.3).
+
+**Consequences.**
+- A host theme can restyle the furniture: a heavier `:title` in its theme changes every title drawn under it, and a design's own `:title` still wins.
+- `check/1` and `violations/1` report palette faults under `{:style, name}`, after the ramps and roles.
+- The stored theme document (spec/14 §9.3) does not carry `styles` yet: a theme read back has the default palette.
+- #637 assigns palette styles by name and by data, #638 draws view states from them, and #639 shows the palette in the builder; until then no design names a palette entry beyond the four built-ins.

@@ -443,7 +443,7 @@ A source names its columns with atoms or strings and a caller writes accessors i
 
 ### 7.1 Struct and slots
 
-`%Visualize.Theme{name, series, axis, grid, text, background, surface, ramps, roles, font_family, font_size, label_size, title_size}`. `name` is an atom naming the theme (`:default`, `:dark`, `:colour_safe`, `:print`, or the consumer's own); `series` is a non-empty list of colour strings; `axis`, `grid`, `text`, `background` and `surface` are colour strings; `ramps` maps each of the four ramp names of 7.5 to its list of anchor colour strings; `roles` maps `:info` and `:neutral` to a colour string each (7.5); `font_family` is a CSS font-family string; the three sizes are numbers in user units (pixels). Every field is plain data — strings, numbers, atoms, lists and maps — so a theme can be stored and compared as a value. Its stored form — a versioned document read back through the same gates as a design — is `Visualize.Chart.Theme` (spec/14 §9.3, D-139).
+`%Visualize.Theme{name, series, axis, grid, text, background, surface, ramps, roles, styles, font_family, font_size, label_size, title_size}`. `name` is an atom naming the theme (`:default`, `:dark`, `:colour_safe`, `:print`, or the consumer's own); `series` is a non-empty list of colour strings; `axis`, `grid`, `text`, `background` and `surface` are colour strings; `ramps` maps each of the four ramp names of 7.5 to its list of anchor colour strings; `roles` maps `:info` and `:neutral` to a colour string each (7.5); `styles` maps each name of the style palette to its style node (7.7); `font_family` is a CSS font-family string; the three sizes are numbers in user units (pixels). Every field is plain data — strings, numbers, atoms, lists and maps — so a theme can be stored and compared as a value. Its stored form — a versioned document read back through the same gates as a design — is `Visualize.Chart.Theme` (spec/14 §9.3, D-139); it does not yet carry `styles`, so a theme read back from one has the default palette.
 
 A *slot* names one value of a theme:
 
@@ -496,7 +496,7 @@ The ramps of both palettes were chosen in CIE LCh to meet the contracts of 7.5 w
 
 **The print theme.** `print/0` is paper (spec/15 §12.4, D-150): `default/0` with the name `:print`, a white `background` and a white `surface` (`#ffffff`), so a printer lays no ink under the data, near-black `text` (`#111111`) and `axis` (`#333333`), a `grid` of `#c8c8c8`, dark enough to survive a photocopy, and the colour-safe theme's `status` ramp. A printed page is read in whatever light and by whatever eyes it reaches, often in greyscale, where the status ramp's falling lightness and each role's glyph carry the order without hue. Its series and its other ramps and roles are the default's, so it passes every contract of 7.5.
 
-`surface` is a step off the background towards the grid — a cool grey on the light theme, a step above `#1b1e24` on the dark — so a field reads as a plane under the data without becoming a data colour. `new/1` is `default/0` with the given keyword fields replaced, so a host theme that names no `surface` takes the light one, as it takes every other field it leaves out; `merge/2` replaces the fields of any theme. `ramps` and `roles` are merged key by key rather than replaced, so `new(ramps: %{status: […]})` keeps the default's other three ramps and `merge(dark(), roles: %{info: …})` keeps the dark `neutral`. An unknown field raises `KeyError`; an empty `series` raises `ArgumentError`; a ramp or role that breaks its contract raises `ArgumentError` (7.5). `builtin/1` is the built-in theme of a name — `:default`, `:dark`, `:colour_safe` or `:print` — or `nil`, and is what a design's `theme: name` resolves through (spec/14 §2.5).
+`surface` is a step off the background towards the grid — a cool grey on the light theme, a step above `#1b1e24` on the dark — so a field reads as a plane under the data without becoming a data colour. `new/1` is `default/0` with the given keyword fields replaced, so a host theme that names no `surface` takes the light one, as it takes every other field it leaves out; `merge/2` replaces the fields of any theme. `ramps`, `roles` and `styles` are merged key by key rather than replaced, so `new(ramps: %{status: […]})` keeps the default's other three ramps, `merge(dark(), roles: %{info: …})` keeps the dark `neutral`, and `new(styles: %{selected: …})` keeps every other palette entry. An unknown field raises `KeyError`; an empty `series` raises `ArgumentError`; a ramp, role or palette style that breaks its contract raises `ArgumentError` (7.5, 7.7). `builtin/1` is the built-in theme of a name — `:default`, `:dark`, `:colour_safe` or `:print` — or `nil`, and is what a design's `theme: name` resolves through (spec/14 §2.5).
 
 ### 7.3 Resolution
 
@@ -544,9 +544,9 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 
 **Contracts are checked when a theme is constructed.** `new/1` and `merge/2` — and so an inline theme in a design (spec/14 §2.5) — check every ramp and role and raise `ArgumentError` naming the theme, the ramp or role, and the term it breaks: `theme :house: ramp :status breaks its contract: lightness must change one way along the ramp, by at least 3 L* a step (its ends say it falls); anchor 2 "#e0a030" (L* 70.8) moves 10.7 L* the wrong way from anchor 1 "#4ca34b" (L* 60.2)`. A ramp name not of the four, a role key not `:info` or `:neutral` — `:good`, `:warning` and `:bad` included, with a message saying to set `status` — a ramp of fewer than two anchors, and an anchor `Visualize.Color.parse/1` cannot read are refused the same way. `check/1` is the same check returning `{:error, subject, message}`, `subject` `{:ramp, name}` or `{:role, name}`, for a caller that reports rather than raises — the validator (spec/14 §10.1). `violations/1` runs it on each ramp and role alone and lists every one that breaks, for a caller that shows each fault where it is — the theme editor (spec/14 §20.4). The built-in themes hold every contract, and `test/visualize/theme_ramps_test.exs` holds them to it. A struct written literally, `%Visualize.Theme{…}`, is not checked: it is the escape hatch, as the contrast floors of 7.4 are not checked on a host's theme.
 
-**Fallback.** A theme that lacks a ramp or a role — a struct whose `ramps` or `roles` map leaves a key out — takes the **default theme's**, never a series colour: a series colour carries no meaning, so falling back to one would break the very promise the ramp exists to keep.
+**Fallback.** A theme that lacks a ramp or a role — a struct whose `ramps` or `roles` map leaves a key out — takes the **default theme's**, never a series colour: a series colour carries no meaning, so falling back to one would break the very promise the ramp exists to keep. A palette style follows the same rule (7.7): a theme whose `styles` leaves a name out takes the default theme's entry of that name, whole.
 
-**Precedence.** Where a colour comes from, highest first: a **literal** the design writes, or the **design's colour scale** (`range: [...]`, `range: {:ramp, name}`, spec/14 §4.3) — both deliberate choices; then the **theme's** rendering of a role or a ramp position the design names; then the theme's default. A feed's schema, when it comes (#531), sits between the last two: it names meanings, and the theme renders them.
+**Precedence.** Where a colour comes from, highest first: a **literal** the design writes, or the **design's colour scale** (`range: [...]`, `range: {:ramp, name}`, spec/14 §4.3) — both deliberate choices; then the **theme's** rendering of a role or a ramp position the design names; then the theme's default. Whole styles rank the same way (7.7): a design's `styles` entry of a palette name beats the theme's entry of that name, and the theme's entry beats the default theme's. A feed's schema, when it comes (#531), sits between the last two: it names meanings, and the theme renders them.
 
 **Cues** (#560, D-142). Every role also carries a glyph and a dash, `cue/1`, which the library fixes as it fixes the hue order — `:good` a `:circle` and a solid stroke, `:warning` a `:triangle` and `"6 3"`, `:bad` a `:cross` and `"2 3"`, `:info` a `:square` and `"8 3 2 3"`, `:neutral` a `:diamond` and `"1 4"` — so a status reads without its hue ([14-declarative-chart](14-declarative-chart.md) §21.7).
 
@@ -559,14 +559,16 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 | `Visualize.Theme.colour_safe/0` | The colour-vision-safe variant of the light theme of 7.2. |
 | `Visualize.Theme.print/0` | The print theme of 7.2: white paper, dark ink, the colour-safe status ramp (spec/15 §12.4). |
 | `Visualize.Theme.builtin/1` | `builtin(name)`: the built-in theme of `:default`, `:dark`, `:colour_safe` or `:print`, else `nil` (7.2). |
-| `Visualize.Theme.new/1` | `default/0` with the given keyword fields replaced, `ramps` and `roles` merged; contracts checked (7.2, 7.5). |
-| `Visualize.Theme.merge/2` | The theme with the given keyword fields replaced, `ramps` and `roles` merged; contracts checked (7.2, 7.5). |
-| `Visualize.Theme.check/1` | `:ok`, or `{:error, subject, message}` for the first ramp or role that breaks its contract (7.5). |
-| `Visualize.Theme.violations/1` | Every ramp and role that breaks its contract, `{subject, message}` each, in the order `check/1` reads them: the contract run on each alone, so a theme editor names every fault and not only the first (7.5, spec/14 §20.4). |
+| `Visualize.Theme.new/1` | `default/0` with the given keyword fields replaced, `ramps`, `roles` and `styles` merged; contracts checked (7.2, 7.5, 7.7). |
+| `Visualize.Theme.merge/2` | The theme with the given keyword fields replaced, `ramps`, `roles` and `styles` merged; contracts checked (7.2, 7.5, 7.7). |
+| `Visualize.Theme.check/1` | `:ok`, or `{:error, subject, message}` for the first ramp, role or palette style that breaks its contract (7.5, 7.7). |
+| `Visualize.Theme.violations/1` | Every ramp, role and palette style that breaks its contract, `{subject, message}` each, in the order `check/1` reads them: the contract run on each alone, so a theme editor names every fault and not only the first (7.5, 7.7, spec/14 §20.4). |
 | `Visualize.Theme.ramp/3` | `ramp(theme, name, t)`: the literal colour at `t` along the named ramp, Lab-interpolated, `t` clamped to `0..1`; the default theme's ramp when the theme lacks it (7.5). |
 | `Visualize.Theme.ramp_names/0` | `[:status, :thermal, :diverging, :sequential]` (7.5). |
 | `Visualize.Theme.role_names/0` | `[:good, :warning, :bad, :info, :neutral]` (7.5). |
 | `Visualize.Theme.cue/1` | `cue(role)`: `%{glyph: symbol_type, dash: String.t() \| nil}`, the role's glyph and dash (`nil` solid) of 7.5; raises `ArgumentError` for anything but a role. |
+| `Visualize.Theme.style/2` | `style(theme, name)`: the palette entry `name` — an atom of `style_names/1`, or `{:style, i}` cycling over the style series — as a flat style node, the default theme's entry when the theme lacks it, `:cue` replaced by the role's cue; raises `ArgumentError` for any other name (7.7). |
+| `Visualize.Theme.style_names/1` | The theme's palette names: `:style_1` … `:style_n`, then the roles, the state styles and the furniture styles, each group in the order of 7.7. |
 | `Visualize.Theme.slots/1` | The theme's slot names in the order of 7.1. |
 | `Visualize.Theme.colour_slots/1` | The theme's colour slots alone — the series, then axis, grid, text, background and surface, then the five roles — for a control that offers a colour as a slot (spec/14 §19.10). |
 | `Visualize.Theme.series_slot/2` | `series_slot(theme, i)`: the `:series_k` atom the positive index `i` cycles to (7.1). |
@@ -576,6 +578,68 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 | `Visualize.Theme.ink/2` | `ink(theme, under)`: the literal of `text` or `background`, whichever contrasts more with `under`, else black or white when neither reaches 4.5:1 (7.3). |
 | `Visualize.Theme.stylesheet/1` | The `.vis-theme-<name>` rule declaring every slot (7.3). |
 
+
+### 7.7 The style palette
+
+**Implemented** (#621, work item #636, D-171). The colours of 7.1 and 7.5 are a palette: positions promise *distinct*, roles promise a meaning, and the theme renders both. `styles` carries the same design over to **whole styles** — fill, stroke and its width, dash, opacity, symbol, font — so a design can name a whole look by position, by meaning or by view state, and a theme swap restyles it.
+
+**Four groups, and a fixed set of names.**
+
+| Group | Names | Promises |
+|---|---|---|
+| style series | `:style_1` … `:style_n`; `{:style, i}` cycles over them as `{:series, i}` cycles over `series` | distinct whole looks for categories: a series colour plus a dash, a marker or a weight that differs between neighbours, so categories stay apart without hue |
+| style roles | `:good`, `:warning`, `:bad`, `:info`, `:neutral` | a meaning as a whole style: the role's colour on fill and stroke, and its cue (7.5) |
+| state styles | `:hover`, `:focused`, `:selected`, `:active`, `:disabled`, `:muted`, `:emphasis`, `:breakpoint` | what a view state looks like, laid over an object's own look |
+| furniture styles | `:axis`, `:grid`, `:label`, `:title`, `:caption`, `:value`, `:annotation` | the chart's furniture: the axis's lines and tick labels, the grid's lines, and the font, size, weight and colour of each kind of text |
+
+A theme chooses only **how many style series** it has, `:style_1` to `:style_n` with no gap, and how each entry looks. It cannot add a name: the names are the library's, as the ramps and roles are, so a design that names one reads the same on every theme. `style_names/1` lists a theme's names — its style series, then the roles, the state styles and the furniture styles, each in the order of the table. The palette's names are style names, not slots: `:axis` the style and `:axis` the colour slot are different things, as the built-in style and the slot always were (spec/14 §3.3).
+
+**An entry is a flat style node written in slots.** Its keys are the style keys of spec/14 §3.1, and its values are written as a design writes them — `fill: :bad`, `stroke: {:series, 3}`, `font_size: :label_size` — never as literal colours where a slot says the same, so an entry follows its theme's colours and a stylesheet (7.3). In a role's entry `stroke_dasharray: :cue` and `symbol: :cue` take the role's cue (7.5, D-142): `style/2` replaces `:cue` with the role's dash and glyph, and leaves the key out where the dash is solid. An entry is **flat**: it may not use `extends`. A design's own style may still `extends: :warning` once palette names are style references, but the palette is the end of every chain, so a theme never makes a cycle a design cannot see.
+
+**Entries may be partial.** A series or a role entry is usually whole; a state entry gives a few keys, because it is laid over whatever the object already looks like through the style stack (spec/14 §3.6). The default `:selected` adds an outline to any object, and the default `:muted` is `opacity: 0.25`, the board's dim of today (spec/15 §13.2).
+
+**The built-in palette.** `default/0`, `dark/0`, `colour_safe/0` and `print/0` each define every name, with the same entries: written in slots, the entries take each theme's own colours, so one palette serves all four.
+
+| Name | Entry |
+|---|---|
+| `:style_1` … `:style_10` | `fill` and `stroke` `{:series, k}`, `stroke_width` `1.5`, and the `symbol` and the `stroke_dasharray` below |
+| `:good` … `:neutral` | `fill` and `stroke` the role, `stroke_dasharray: :cue`, `symbol: :cue` |
+| `:hover` | `stroke: :text`, `stroke_width: 2` |
+| `:focused` | `stroke: :text`, `stroke_width: 2`, `stroke_dasharray: "4 2"` |
+| `:selected` | `stroke: :text`, `stroke_width: 2`, `stroke_style: :outside` |
+| `:active` | `stroke: :text`, `stroke_width: 3` |
+| `:disabled` | `opacity: 0.4`, `stroke_dasharray: "2 2"` |
+| `:muted` | `opacity: 0.25` |
+| `:emphasis` | `stroke_width: 3`, `font_weight: :bold` |
+| `:breakpoint` | `stroke: :bad`, `stroke_width: 2`, `stroke_dasharray: "6 2 2 2"` |
+| `:axis` | `stroke: :axis`, `fill: :text`, `font_family: :font_family`, `font_size: :font_size` |
+| `:grid` | `stroke: :grid` |
+| `:label` | `fill: :text`, `font_family: :font_family`, `font_size: :label_size` |
+| `:title` | as `:label` with `font_size: :title_size`, `font_weight: :bold` |
+| `:caption` | `fill: :text`, `font_family: :font_family`, `font_size: :font_size`, `font_style: :italic` |
+| `:value` | `fill: :text`, `font_family: :font_family`, `font_size: :title_size`, `font_weight: :medium` |
+| `:annotation` | `fill: :text`, `font_family: :font_family`, `font_size: :font_size` |
+
+The ten style series take the symbols `:circle`, `:square`, `:triangle`, `:diamond`, `:cross`, `:star`, `:wye`, then `:circle`, `:square`, `:triangle` again, and the dashes solid (no key), `"8 3"`, `"3 3"`, `"8 3 3 3"`, `"1 3"`, then the same five again: seven symbols against five dashes, so no two of the ten share both, and every neighbour — `:style_10` beside `:style_1` too — differs in its symbol. A dash on a style series is drawn only where the object has a stroke, and a symbol only where the mark draws symbols; a category still reads by the one it has. The four furniture entries `:axis`, `:grid`, `:label` and `:title` are exactly spec/14 §3.3's built-in styles of before, so a chart drawn under any built-in theme renders as it did.
+
+**Contracts, checked when a theme is built.** The library fixes what an entry means and a theme tunes how it looks. `new/1` and `merge/2` check every entry the theme holds and raise `ArgumentError` naming the theme, the entry and the term it breaks — `theme :house: style :bad breaks its contract: a role style paints with its own role, so fill must be :bad or absent; got :good` — and `check/1` and `violations/1` report the same faults under the subject `{:style, name}`, after the ramps and roles. Each holds:
+
+- **A name of the palette.** A name not of the four groups, or `:style_k` with a gap below it (`:style_3` without `:style_2`), is refused: a theme cannot add a name.
+- **A flat style node.** An entry is a map, and has no `extends`.
+- **`:cue` only where it means something:** on `stroke_dasharray` or `symbol` of a role's entry.
+- **A style role paints with its own role.** Its `fill` and its `stroke` are each the role — or, for a status role, its status ramp position, `{:ramp, :status, 0 | 0.5 | 1}` (7.3) — or absent. A role whose look carried another role's colour would say two meanings at once.
+- **A state style is distinguishable without hue.** It changes at least one of stroke width (`stroke_width`), outline (`stroke_style` other than `:single`), opacity (`opacity`, `fill_opacity` or `stroke_opacity` other than `1`), dash (`stroke_dasharray`, not empty) or effect (`effect` other than `:none`) — never only a colour. A state then reads in greyscale and for a colour-blind reader, which #546 began for statuses.
+- **Neighbouring style series differ in a non-hue key.** `:style_k` and `:style_k+1`, and the last and `:style_1`, since `{:style, i}` cycles, differ in at least one key besides `fill` and `stroke`. A style series of one entry has itself for a neighbour and fails; a theme that wants style series has at least two.
+- **A text furniture entry resolves a font.** `:axis`, `:label`, `:title`, `:caption`, `:value` and `:annotation` each give a `font_family` — a string, or the slot `:font_family` — and a `font_size` — a positive number, or one of the size slots `:font_size`, `:label_size` and `:title_size`.
+- **`:grid` resolves a stroke.** Its `stroke` is a colour other than `:none`: a grid with no line is not a grid.
+
+The contracts bind what an entry *means*, not every key's type; a value of the wrong type for its key is the style grammar's to refuse where the entry is drawn (spec/14 §3.2). A struct written literally, `%Visualize.Theme{…}`, is not checked, as for ramps (7.5).
+
+**Fallback.** A theme whose `styles` leaves a name out takes the **default theme's entry of that name, whole** — never a key-by-key merge, since a partial entry laid over another theme's would be a look neither theme chose. A theme with no `:style_k` at all takes the default's ten; a theme with its own style series has exactly its own, and `:style_k` beyond them is not a name of that theme.
+
+**Precedence.** As for colours (7.5): a design's `styles` entry of a palette name wins for that design — a state style included, so a design can restyle `:selected` for its own board — then the theme's entry, then the default theme's.
+
+**The furniture styles are spec/14 §3.3's built-in styles.** `:axis`, `:grid`, `:label` and `:title` are read from the theme a chart is drawn with, so a host theme that changes `:title`'s weight changes every title drawn under it; a design's `styles` entry of the same name still replaces one whole.
 
 ## 8. Signals
 
