@@ -3,7 +3,8 @@ defmodule Visualize.Chart.Theme do
   A theme as a document: stored, shipped and read back as a value (spec/14 §9.3, D-139).
 
   A theme document is the inline `:theme` node of a design (§2.5) — every field of
-  `Visualize.Theme`, its `ramps` and `roles` whole — stamped with the schema version. It
+  `Visualize.Theme`, its `ramps`, `roles` and style palette `styles` whole — stamped with
+  the schema version. It
   has no schema of its own: the theme node is a node of the design schema, so it is
   versioned by `Visualize.Chart.Migration.current/0` and read under the one policy every
   document of this library keeps (§9.1, D-137).
@@ -15,8 +16,9 @@ defmodule Visualize.Chart.Theme do
       (`to_json/1`), as `Visualize.Chart.Fragment.to_json/1` writes it
 
   Reading one back runs, in order: the version gate, the `depth` and `items` limits
-  (`limits:`, §9.2), the migration of §9, per-kind validity — which reports a ramp or role
-  that breaks its meaning contract (spec/08 §7.5) — and then builds the theme. Every fault
+  (`limits:`, §9.2), the migration of §9, per-kind validity — which reports a ramp, role or
+  palette entry that breaks its contract (spec/08 §7.5, §7.7) — and then builds the theme.
+  Every fault
   is `{path, reason}` in the validator's shape, so `Visualize.Chart.Validator.format/1`
   words all of them.
 
@@ -49,13 +51,17 @@ defmodule Visualize.Chart.Theme do
     :surface,
     :ramps,
     :roles,
+    :styles,
     :font_family,
     :font_size,
     :label_size,
     :title_size
   ]
 
-  @doc "The theme as the `:theme` node of spec/14 §2.5: every field, `ramps` and `roles` whole."
+  @doc """
+  The theme as the `:theme` node of spec/14 §2.5: every field, `ramps`, `roles` and `styles`
+  whole.
+  """
   @spec node(Theme.t()) :: map()
   def node(%Theme{} = theme), do: Map.take(theme, @fields)
 

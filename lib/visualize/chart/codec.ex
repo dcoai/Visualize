@@ -49,10 +49,17 @@ defmodule Visualize.Chart.Codec do
     pairs =
       map
       |> Enum.sort_by(fn {category, _colour} -> category end)
-      |> Enum.map(fn {category, colour} -> [term(category), value(:colour, colour)] end)
+      |> Enum.map(fn {category, colour} -> [term(category), mapped(colour)] end)
 
     %{"$colours" => pairs}
   end
+
+  # A range of styles (spec/14 §4.3, §11.2, #637), and a style chosen by data in a mark's
+  # stack (§3.6).
+  defp value(:styles, {:styles, set}) when is_atom(set), do: %{"$styles" => Atom.to_string(set)}
+
+  defp value(:style_scale, {:scale, name, field}) when is_atom(name) and is_atom(field),
+    do: %{"$scale" => [Atom.to_string(name), Atom.to_string(field)]}
 
   defp value({:node, kind}, v) when is_map(v) and not is_struct(v), do: node(kind, v)
   defp value({:list, t}, v) when is_list(v), do: Enum.map(v, &value(t, &1))
@@ -99,6 +106,19 @@ defmodule Visualize.Chart.Codec do
     do: %{"$keys" => Enum.map(keys, &value(:name, &1))}
 
   defp value(_type, v), do: term(v)
+
+  # A map's value as a colour, unless it is a style name that is no theme slot — `:muted`, a
+  # style the design declares — which is written as the atom it is, so it never reads back
+  # as a colour string (spec/14 §11.2, #637).
+  defp mapped(name) when is_atom(name) and name not in [nil, true, false, :none, :contrast] do
+    string = Atom.to_string(name)
+
+    if Regex.match?(@series_slot, string) or name in @fixed_slots,
+      do: string,
+      else: term(name)
+  end
+
+  defp mapped(colour), do: value(:colour, colour)
 
   defp category(:auto), do: "auto"
   defp category(v), do: term(v)
@@ -199,6 +219,19 @@ defmodule Visualize.Chart.Codec do
         Map.new(pairs, fn [category, colour] -> {read_term(category), read(:colour, colour)} end),
       else: v
   end
+
+  # Only the two sets are read as atoms; any other word is left for the validator to name.
+  defp read(:styles, %{"$styles" => set} = v) when map_size(v) == 1 do
+    case set do
+      "roles" -> {:styles, :roles}
+      "series" -> {:styles, :series}
+      _other -> v
+    end
+  end
+
+  defp read(:style_scale, %{"$scale" => [name, field]} = v)
+       when map_size(v) == 1 and is_binary(name) and is_binary(field),
+       do: {:scale, String.to_atom(name), String.to_atom(field)}
 
   defp read(:ramp, %{"$ramp" => name} = v) when map_size(v) == 1 do
     case ramp_name(name) do
@@ -355,6 +388,14 @@ defmodule Visualize.Chart.Codec do
   defp json_shape?(:adopted, v), do: is_map(v) and is_map_key(v, "$adopted") and map_size(v) == 1
   defp json_shape?(:key_order, v), do: is_map(v) and is_map_key(v, "$keys") and map_size(v) == 1
   defp json_shape?(:ramp, v), do: is_map(v) and is_map_key(v, "$ramp") and map_size(v) == 1
+  defp json_shape?(:styles, v), do: is_map(v) and is_map_key(v, "$styles") and map_size(v) == 1
+
+  defp json_shape?(:style_scale, v),
+    do: is_map(v) and map_size(v) == 1 and is_list(Map.get(v, "$scale"))
+
+  # A reference is a string or an id; a tagged object of any other kind beside one is not it.
+  defp json_shape?({:ref, _}, v) when is_map(v),
+    do: map_size(v) == 1 and is_map_key(v, "$id")
 
   defp json_shape?(:colour_map, v),
     do: is_map(v) and is_map_key(v, "$colours") and map_size(v) == 1

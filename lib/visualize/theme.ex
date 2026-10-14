@@ -304,6 +304,19 @@ defmodule Visualize.Theme do
     theme |> own_styles() |> Palette.series() |> Palette.names()
   end
 
+  @doc false
+  # Every palette entry of the theme by name, each as `style/2` answers it: what a chart
+  # drawn with the theme resolves a style reference against (spec/14 §3.3, #637).
+  @spec palette(t()) :: %{atom() => map()}
+  def palette(%__MODULE__{} = theme) do
+    own = own_styles(theme)
+    builtin = Palette.builtin()
+
+    theme
+    |> style_names()
+    |> Map.new(&{&1, cued(&1, Map.get(own, &1) || Map.fetch!(builtin, &1))})
+  end
+
   defp own_styles(%__MODULE__{styles: styles}) when is_map(styles), do: styles
   defp own_styles(%__MODULE__{}), do: %{}
 

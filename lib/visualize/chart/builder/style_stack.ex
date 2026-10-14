@@ -67,6 +67,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{index: index, name: "local", local: true, default: default?}
     end
 
+    # A style chosen by data names its scale and field (spec/14 §3.6, #637).
+    defp row({:scale, scale, field}, index, default?) do
+      %{index: index, name: "#{scale}.#{field}", local: false, default: default?}
+    end
+
     defp row(one, index, default?) do
       %{index: index, name: to_string(one), local: false, default: default?}
     end

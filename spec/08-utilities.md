@@ -581,7 +581,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 
 ### 7.7 The style palette
 
-**Implemented** (#621, work item #636, D-171). The colours of 7.1 and 7.5 are a palette: positions promise *distinct*, roles promise a meaning, and the theme renders both. `styles` carries the same design over to **whole styles** — fill, stroke and its width, dash, opacity, symbol, font — so a design can name a whole look by position, by meaning or by view state, and a theme swap restyles it.
+**Implemented** (#621, work items #636 and #637, D-171). The colours of 7.1 and 7.5 are a palette: positions promise *distinct*, roles promise a meaning, and the theme renders both. `styles` carries the same design over to **whole styles** — fill, stroke and its width, dash, opacity, symbol, font — so a design can name a whole look by position, by meaning or by view state, and a theme swap restyles it.
 
 **Four groups, and a fixed set of names.**
 
@@ -594,7 +594,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 
 A theme chooses only **how many style series** it has, `:style_1` to `:style_n` with no gap, and how each entry looks. It cannot add a name: the names are the library's, as the ramps and roles are, so a design that names one reads the same on every theme. `style_names/1` lists a theme's names — its style series, then the roles, the state styles and the furniture styles, each in the order of the table. The palette's names are style names, not slots: `:axis` the style and `:axis` the colour slot are different things, as the built-in style and the slot always were (spec/14 §3.3).
 
-**An entry is a flat style node written in slots.** Its keys are the style keys of spec/14 §3.1, and its values are written as a design writes them — `fill: :bad`, `stroke: {:series, 3}`, `font_size: :label_size` — never as literal colours where a slot says the same, so an entry follows its theme's colours and a stylesheet (7.3). In a role's entry `stroke_dasharray: :cue` and `symbol: :cue` take the role's cue (7.5, D-142): `style/2` replaces `:cue` with the role's dash and glyph, and leaves the key out where the dash is solid. An entry is **flat**: it may not use `extends`. A design's own style may still `extends: :warning` once palette names are style references, but the palette is the end of every chain, so a theme never makes a cycle a design cannot see.
+**An entry is a flat style node written in slots.** Its keys are the style keys of spec/14 §3.1, and its values are written as a design writes them — `fill: :bad`, `stroke: {:series, 3}`, `font_size: :label_size` — never as literal colours where a slot says the same, so an entry follows its theme's colours and a stylesheet (7.3). In a role's entry `stroke_dasharray: :cue` and `symbol: :cue` take the role's cue (7.5, D-142): `style/2` replaces `:cue` with the role's dash and glyph, and leaves the key out where the dash is solid. An entry is **flat**: it may not use `extends`. A design's own style may still `extends: :warning`, since a palette name is a style reference (spec/14 §3.3, #637), but the palette is the end of every chain, so a theme never makes a cycle a design cannot see.
 
 **Entries may be partial.** A series or a role entry is usually whole; a state entry gives a few keys, because it is laid over whatever the object already looks like through the style stack (spec/14 §3.6). The default `:selected` adds an outline to any object, and the default `:muted` is `opacity: 0.25`, the board's dim of today (spec/15 §13.2).
 
@@ -638,6 +638,8 @@ The contracts bind what an entry *means*, not every key's type; a value of the w
 **Fallback.** A theme whose `styles` leaves a name out takes the **default theme's entry of that name, whole** — never a key-by-key merge, since a partial entry laid over another theme's would be a look neither theme chose. A theme with no `:style_k` at all takes the default's ten; a theme with its own style series has exactly its own, and `:style_k` beyond them is not a name of that theme.
 
 **Precedence.** As for colours (7.5): a design's `styles` entry of a palette name wins for that design — a state style included, so a design can restyle `:selected` for its own board — then the theme's entry, then the default theme's.
+
+**Assigning one.** A design names a palette style **by name** — a style reference at a site, in a stack or under `extends` resolves against the design's `styles` and then this palette ([14-declarative-chart](14-declarative-chart.md) §3.3, #637) — or **by data**, through an `:ordinal` or `:threshold` scale whose range is styles (`{:styles, :roles}`, `{:styles, :series}`, a list or a map of style names, a feed's `status`) laid per datum by a `{:scale, name, field}` entry of a mark's stack (spec/14 §3.6, §4.3). A stored theme carries its palette (spec/14 §9.3).
 
 **The furniture styles are spec/14 §3.3's built-in styles.** `:axis`, `:grid`, `:label` and `:title` are read from the theme a chart is drawn with, so a host theme that changes `:title`'s weight changes every title drawn under it; a design's `styles` entry of the same name still replaces one whole.
 

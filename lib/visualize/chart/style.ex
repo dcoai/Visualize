@@ -149,11 +149,12 @@ defmodule Visualize.Chart.Style do
   end
 
   @doc false
-  # The declared styles over the built-in four, read from the theme: a declared name
-  # replaces a built-in one whole (spec/14 §3.3).
+  # The declared styles over the theme's whole palette, the built-in four among it: a
+  # declared name replaces a palette entry whole, so every palette name is a style
+  # reference a design may override (spec/14 §3.3, #637, D-171).
   @spec all(map(), Theme.t()) :: %{atom() => map()}
   def all(declared, theme \\ Theme.default()) do
-    Map.merge(Map.new(@builtin, &{&1, builtin(&1, theme)}), declared)
+    theme |> Theme.palette() |> Map.merge(declared)
   end
 
   @doc false
@@ -161,19 +162,46 @@ defmodule Visualize.Chart.Style do
   # keys first, the child's over them (spec/14 §3.5) — and the entries then cascaded left to
   # right, the later winning (§3.6). A bare reference is a stack of one by definition, and an
   # inline node is an entry like any other. The empty node when nothing declares it.
-  @spec node(%{atom() => map()}, entry | [entry] | nil) :: map() when entry: atom() | map()
-  def node(_styles, nil), do: %{}
-  def node(_styles, %Var{name: name}), do: unresolved!(name)
+  #
+  # A `{:scale, name, field}` entry (§3.6) lays nothing here: it is a style per datum, and
+  # `node/3` lays it.
+  @spec node(%{atom() => map()}, entry | [entry] | nil) :: map()
+        when entry: atom() | map() | {:scale, atom(), atom()}
+  def node(styles, stack), do: node(styles, stack, &no_style/1)
 
-  def node(styles, stack) when is_list(stack) do
-    Enum.reduce(stack, %{}, fn entry, resolved -> Map.merge(resolved, node(styles, entry)) end)
+  @doc false
+  # `node/2` with each `{:scale, name, field}` entry laid where it stands: `pick` answers the
+  # style name the entry picks — for one datum, the mark's to read (spec/14 §3.6) — or `nil`
+  # to lay nothing.
+  @spec node(%{atom() => map()}, term(), ({:scale, atom(), atom()} -> atom() | nil)) :: map()
+  def node(_styles, nil, _pick), do: %{}
+  def node(_styles, %Var{name: name}, _pick), do: unresolved!(name)
+
+  def node(styles, stack, pick) when is_list(stack) do
+    Enum.reduce(stack, %{}, fn entry, resolved ->
+      Map.merge(resolved, node(styles, entry, pick))
+    end)
+  end
+
+  def node(styles, {:scale, _name, _field} = entry, pick) do
+    case pick.(entry) do
+      nil -> %{}
+      name -> flatten(styles, name, [])
+    end
   end
 
   # An inline node is already the style: only its own `extends` needs flattening, and it is
   # looked up under no name, so nothing can reach it and no cycle can start here.
-  def node(styles, inline) when is_map(inline), do: inline_node(styles, inline)
+  def node(styles, inline, _pick) when is_map(inline), do: inline_node(styles, inline)
 
-  def node(styles, name), do: flatten(styles, name, [])
+  def node(styles, name, _pick), do: flatten(styles, name, [])
+
+  @doc false
+  # The `{:scale, name, field}` entries of a stack, in order (spec/14 §3.6).
+  @spec scaled(term()) :: [{:scale, atom(), atom()}]
+  def scaled(stack), do: stack |> List.wrap() |> Enum.filter(&match?({:scale, _, _}, &1))
+
+  defp no_style(_entry), do: nil
 
   defp inline_node(styles, inline) do
     case Map.fetch(inline, :extends) do

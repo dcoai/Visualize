@@ -100,6 +100,7 @@ defmodule Visualize.Chart.SpecExamplesTest do
   # rather than covered or skipped without anyone saying so.
   @evaluated [
     {"3.6 Composition at a site: the style stack", 1},
+    {"3.6 Composition at a site: the style stack", 2},
     {"7.4 Schemas: the contract and the facts", 1},
     {"7.4 Schemas: the contract and the facts", 2},
     {"16.2 The design and its declarations", 1},

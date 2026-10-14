@@ -301,9 +301,12 @@ defmodule Visualize.ThemePaletteTest do
       weight
     end
 
-    test "Schema.builtin_styles/0 still answers the four" do
+    test "Schema.builtin_styles/0 still answers the four, among the palette a design reaches" do
       assert Schema.builtin_styles() == [:axis, :grid, :label, :title]
-      assert Style.all(%{}) |> Map.keys() |> Enum.sort() == Enum.sort(Schema.builtin_styles())
+      # Every palette name is a style reference (spec/14 §3.3, #637).
+      names = Style.all(%{}) |> Map.keys() |> Enum.sort()
+      assert names == Enum.sort(Visualize.Theme.style_names(Visualize.Theme.default()))
+      assert Enum.all?(Schema.builtin_styles(), &(&1 in names))
     end
 
     test "the frame reads them from its theme, and every built-in theme's are today's" do

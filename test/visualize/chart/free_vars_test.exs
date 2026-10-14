@@ -64,14 +64,16 @@ defmodule Visualize.Chart.FreeVarsTest do
       assert expects == %{
                colour: :colour,
                opts: {:node, :curve_opts},
-               # A style site admits a reference, an inline node, or a list of either
-               # (spec/14 §3.6); the expectation is the whole type, as it is for any key.
+               # A style site admits a reference, an inline node, a style chosen by data, or
+               # a list of those (spec/14 §3.6); the expectation is the whole type, as it is
+               # for any key.
                style:
                  {:one_of,
                   [
                     {:ref, :style},
                     {:node, :style},
-                    {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}
+                    :style_scale,
+                    {:list, {:one_of, [{:ref, :style}, {:node, :style}, :style_scale]}}
                   ]},
                options: {:node, :options},
                part: :text,
