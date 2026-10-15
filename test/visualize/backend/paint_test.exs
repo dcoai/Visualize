@@ -504,8 +504,8 @@ defmodule Visualize.Backend.PaintTest do
       assert_in_delta :math.sqrt(t["a"] * t["a"] + t["b"] * t["b"]) * 32, 8, 1.0e-9
     end
 
-    @tag :js
-    @tag :resvg
+    # Both node and resvg (test_helper, #652).
+    @tag :js_resvg
     test "the canvas pattern is the SVG pattern, pixel for pixel" do
       for pattern <- [:lines, :crosshatch] do
         fill = hatch(pattern, "#ffffff")
