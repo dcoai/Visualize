@@ -40,6 +40,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:vars, :map, default: %{}, doc: "the values the design's variables take")
     attr(:theme, :any, default: nil, doc: "a `Visualize.Theme`, `nil` for the design's own")
 
+    attr(:generators, :list,
+      default: [],
+      doc: "host generator modules the design may call (spec/14 §3.13, §18.2)"
+    )
+
     attr(:catalog, :map,
       default: nil,
       doc: "the connector catalog: a slot bound to one of its feeds is typed by its schema"
@@ -182,7 +187,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp applied(%{design: design, sources: sources, vars: vars, theme: theme} = assigns) do
       {width, height} = size = assigns[:size] || Frame.default_size()
 
-      case Chart.apply(design, sources: sources, vars: vars, theme: theme, size: size) do
+      case Chart.apply(design,
+             sources: sources,
+             vars: vars,
+             theme: theme,
+             size: size,
+             generators: Map.get(assigns, :generators, [])
+           ) do
         {:ok, %{frames: frames} = applied} ->
           %{
             chart: Phoenix.HTML.raw(Chart.render(applied, paths: true)),

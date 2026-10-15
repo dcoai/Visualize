@@ -39,6 +39,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Stack,
       Steps,
       Store,
+      StyleStack,
       Themes,
       Variables
     }
@@ -104,7 +105,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
         chips: chips(children, entry, assigns.facet),
         page: page(nodes, entry, layer, errors, owned, assigns),
         needs: needs(errors),
-        style_site: style_site(entry, at(layer, entry.path)),
+        style_site:
+          entry
+          |> style_site(at(layer, entry.path))
+          |> offers(design, at(layer, entry.path), assigns),
         open_style: open_style(entry),
         variables: variables(layers, design),
         sites: Stack.sites(assigns.uses, assigns.labels, fetch),
@@ -112,6 +116,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         site: site(assigns, fetch),
         refs: refs(design, assigns.store, palette_theme),
         palette_theme: palette_theme,
+        look: look(kind, design, entry, Map.put(assigns, :theme, preview_theme), errors),
         colour: colour(assigns, entry, at(layer, entry.path), design),
         defs: Map.get(design, :defs, %{}),
         pool: assigns |> pool() |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort(),
@@ -248,6 +253,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp literals(list) when is_list(list), do: Enum.flat_map(list, &literals/1)
     defp literals(_other), do: []
 
+    # The selected element's look explained (spec/14 §18.9, §17.3, #686): `explain/2` of the
+    # preview's chart at the node that draws it, for a node that draws one and a design
+    # that applies; else nothing.
+    @styled [:mark, :mark_label, :label, :axis, :legend]
+
+    defp look(:composite, design, %{kind: kind, path: path}, assigns, []) when kind in @styled do
+      case Chart.apply(design,
+             sources: pool(assigns),
+             vars: assigns.bindings,
+             theme: assigns.theme,
+             generators: Map.get(assigns, :generators, [])
+           ) do
+        {:ok, applied} -> Chart.explain(applied, at: path)
+        {:error, _errors} -> nil
+      end
+    end
+
+    defp look(_kind, _design, _entry, _assigns, _errors), do: nil
+
     # The theme the wells show colours through, built unchecked: a theme being edited may
     # break a contract for a moment, and the editor says so rather than the render raising
     # (spec/14 §20.4).
@@ -292,7 +316,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       # A binding of the wrong type is a fault, never applied (spec/14 §18.4, D-153).
       layer =
         with [] <- Preview.type_faults(design, pool, assigns[:catalog]) do
-          case Chart.apply(design, sources: pool, vars: vars, theme: theme) do
+          case Chart.apply(design,
+                 sources: pool,
+                 vars: vars,
+                 theme: theme,
+                 generators: Map.get(assigns, :generators, [])
+               ) do
             {:ok, _applied} -> []
             {:error, errors} -> errors
           end
@@ -532,6 +561,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp drawn_by(:mark, %{type: type}) when is_atom(type), do: type
     defp drawn_by(kind, _node) when kind in [:label, :mark_label], do: :text
     defp drawn_by(_kind, _node), do: nil
+
+    # What a site's stack may add beyond names (§18.18, #686): its data's columns for a
+    # field entry, the generators the builder knows for a generator entry.
+    defp offers(nil, _design, _node, _assigns), do: nil
+
+    defp offers(site, design, node, assigns) do
+      Map.merge(site, %{
+        columns: StyleStack.columns(design, node, pool(assigns)),
+        generators: StyleStack.generators(Map.get(assigns, :generators, []))
+      })
+    end
 
     defp variables(layers, design) do
       declared = design |> Map.get(:vars, %{}) |> Map.keys()

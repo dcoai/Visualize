@@ -2159,3 +2159,8 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - **References are grouped**: a style select and the stack's Add offer the design's names, the palette's groups and the library's ids as `<optgroup>`s.
 - **The context panel resolves names against the design's theme**, not the default theme (#639's finding).
 - *Rejected:* overriding with an empty node, which would replace the theme's look with nothing; and writing the override into the selected layer (the old §18.14, #639's draft).
+
+**Amended by #686** (work item 5 of #655). **Every stack entry is made in the builder; an element's look is explained in the inspector.**
+- **The style stack panel makes every entry §3.6 allows**: names (grouped, #685), `{:field, f}` from the site's data columns, `generate(name, args)` from the generators the builder knows (its `generators` assign and the host's configuration, checked for arity), and the local node; each row says what it is. Rows move by drag and by `ArrowUp`/`ArrowDown`; the local entry stays last.
+- **The inspector explains the selected element's look** with `Visualize.Chart.explain/2` of the preview's chart: per part, the chain of contributions with their layer, container, style and `extends` path, field and value, generators and their results, and the keys set.
+- *Rejected:* a text box for a whole stack. The panel's rows already are the stack; a literal for the whole would be a second editor of the same value. *Rejected:* explaining with a sample datum. A field entry would then show one row's choice as if it were the element's; the inspector says a field entry is per row instead.

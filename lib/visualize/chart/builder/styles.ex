@@ -1524,6 +1524,73 @@ if Code.ensure_loaded?(Phoenix.Component) do
       font-size: 11px;
     }
 
+    /* An element's look explained (spec/14 §18.9, #686): a block per part, its chain of
+       contributions lowest first, each its layer, where it came from and what it set. */
+    .vis-builder-look {
+      margin: 0 0 var(--vis-builder-gap);
+    }
+
+    .vis-builder-look-part {
+      margin: 0 0 8px;
+      padding: 6px 8px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+    }
+
+    .vis-builder-look-undrawn {
+      opacity: 0.6;
+      border-style: dashed;
+    }
+
+    .vis-builder-look-name {
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .vis-builder-look-note {
+      color: var(--vis-builder-muted);
+      font-weight: 400;
+    }
+
+    .vis-builder-look-value,
+    .vis-builder-look-set {
+      font-family: var(--vis-builder-mono);
+      font-size: 11px;
+    }
+
+    .vis-builder-look-chain {
+      margin: 4px 0 0;
+      padding-left: 16px;
+    }
+
+    .vis-builder-look-link {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: baseline;
+    }
+
+    .vis-builder-look-layer {
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .vis-builder-look-from,
+    .vis-builder-look-field,
+    .vis-builder-look-generator {
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+    }
+
+    /* The stack's + field and + generator (spec/14 §18.18, #686). */
+    .vis-builder-style-args {
+      min-width: 0;
+      flex: 1 1 8em;
+      font-family: var(--vis-builder-mono);
+      font-size: 12px;
+    }
+
     .vis-builder-palette-empty {
       margin: 0 0 8px;
       color: var(--vis-builder-muted);

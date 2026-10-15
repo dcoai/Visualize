@@ -17,6 +17,19 @@ release it merely follows.
 
 ### Added
 
+- **The builder makes every style stack entry and explains an element's look** (#686,
+  D-178). The style stack panel adds, beside a name, a `{:field, f}` entry from the site's
+  data columns (**+ field**) and a `generate(name, args)` entry from the generators the
+  builder knows (**+ generator**, with its arguments as a list); each row says what kind of
+  entry it is, and a focused row moves with the arrow keys as well as by drag (the local
+  style stays last). The builder takes a `generators` assign — your generator modules,
+  beside `config :visualize, generators:` — and its preview applies with them. With a mark,
+  a label, an axis or the legend selected, the inspector opens with **why it looks as it
+  does**: for each part of its style, the chain of contributions from
+  `Visualize.Chart.explain/2` — theme root, defaults, the mark's series color, named
+  styles and their `extends`, field and generator entries, states, the local edit — with
+  the keys each set, and whether the element's kind draws the part.
+
 - **The builder's palette panel is back, with the theme's palette** (#685, D-178). Beneath
   the design's styles the panel lists the palette of the theme the chart is drawn with, in
   five groups — style series, roles, states, furniture and modifiers — each entry drawn as
