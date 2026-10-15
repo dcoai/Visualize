@@ -3,7 +3,7 @@ defmodule Visualize.Chart.Theme do
   A theme as a document: stored, shipped and read back as a value (spec/14 §9.3, D-139).
 
   A theme document is the inline `:theme` node of a design (§2.5) — every field of
-  `Visualize.Theme`, its `ramps`, `roles` and style palette `styles` whole — stamped with
+  `Visualize.Theme`, its `ramps`, `colors` and style palette `styles` whole — stamped with
   the schema version. It
   has no schema of its own: the theme node is a node of the design schema, so it is
   versioned by `Visualize.Chart.Migration.current/0` and read under the one policy every
@@ -50,7 +50,7 @@ defmodule Visualize.Chart.Theme do
     :background,
     :surface,
     :ramps,
-    :roles,
+    :colors,
     :styles,
     :font_family,
     :font_size,
@@ -59,7 +59,7 @@ defmodule Visualize.Chart.Theme do
   ]
 
   @doc """
-  The theme as the `:theme` node of spec/14 §2.5: every field, `ramps`, `roles` and `styles`
+  The theme as the `:theme` node of spec/14 §2.5: every field, `ramps`, `colors` and `styles`
   whole.
   """
   @spec node(Theme.t()) :: map()

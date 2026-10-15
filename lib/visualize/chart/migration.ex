@@ -117,6 +117,8 @@ defmodule Visualize.Chart.Migration do
   """
   @spec legacy_type(atom(), atom()) :: Schema.type() | nil
   def legacy_type(:design, :frame), do: {:node, :frame}
+  # The role colors of before #663, which `canonical/1` folds into the color table.
+  def legacy_type(:theme, :roles), do: {:map, :colour}
   # Version 2's flat style keys and gradient words, which the 2 → 3 step moves (D-172).
   def legacy_type(:style, key), do: flat_type(key)
   def legacy_type(kind, :kind) when kind in [:paint, :gradient], do: {:enum, [:linear, :radial]}
@@ -175,6 +177,18 @@ defmodule Visualize.Chart.Migration do
   # own (spec/14 §3.1, §9, D-172), before the node is walked by its schema.
   defp node(:style, map, text?) when is_map(map) and not is_struct(map),
     do: walk(:style, Parts.normalize(map), text?)
+
+  # A theme's role colors are names of its color table (spec/08 §7.1, #663, D-135): `roles`
+  # is read into `colors`, which wins where both name a color.
+  defp node(:theme, %{roles: roles} = map, text?) when is_map(roles) and not is_struct(roles) do
+    colors =
+      case Map.get(map, :colors) do
+        own when is_map(own) and not is_struct(own) -> Map.merge(roles, own)
+        _none -> roles
+      end
+
+    walk(:theme, map |> Map.delete(:roles) |> Map.put(:colors, colors), text?)
+  end
 
   defp node(kind, map, text?)
        when kind in [:paint, :gradient] and is_map(map) and not is_struct(map),

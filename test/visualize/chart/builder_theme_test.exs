@@ -446,7 +446,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
     test "info and neutral are colours of their own" do
       socket = new_theme() |> edit("roles.info", "#2255aa") |> edit("roles.neutral", "#777777")
       theme = Themes.effective(theme_node(socket), nil)
-      assert theme.roles == %{info: "#2255aa", neutral: "#777777"}
+      assert Map.take(theme.colors, [:info, :neutral]) == %{info: "#2255aa", neutral: "#777777"}
     end
   end
 

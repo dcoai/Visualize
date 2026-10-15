@@ -17,6 +17,13 @@ release it merely follows.
 
 ### Added
 
+- **A color table on every theme** (#663, D-173). `color(:red)` is the theme's red: names are
+  looked up in the theme's own `colors`, then the default theme's, then the CSS named colors, and
+  the furniture (`:text`, `:axis`, …) and `:series_k` are names too. The built-in themes name
+  their hues `:red`, `:amber`, `:green`, `:blue` and `:gray`; `:dark`'s are lighter.
+  `Visualize.Theme.new(colors: %{brand: "#123456"})` adds a name. A name resolves as a slot does,
+  `var(--vis-red, #c23238)`, and `stylesheet/1` declares the theme's own names.
+  `Visualize.Theme.color_names/1` lists the table.
 - **Typed colors and their transforms** (#662, D-173). `Visualize.Color` builds colors as data:
   `color(:red)` and `ramp(:thermal, 0.7)` name a color, and `intensity/2`, `blend/1`, `alpha/2`,
   `lighten/2`, `darken/2`, `saturate/2` and `contrast/1` derive one from others. Each takes the
@@ -69,6 +76,13 @@ release it merely follows.
 
 ### Changed
 
+- **Role colors are names in the theme's color table** (#663, D-135 amended). `%Visualize.Theme{}`
+  has no `roles` field: `:info` and `:neutral` are entries of `colors`, and `:good`, `:warning`
+  and `:bad` are the entries `{:ramp, :status, 0 | 0.5 | 1}`, so they still follow `status`.
+  `roles:` given to `new/1` or `merge/2`, and a `roles` key in an inline or stored theme, is read
+  as `colors`. A theme may now set `:good`, `:warning` or `:bad` itself, which used to be refused.
+  A contract fault on a color is reported under `{:color, name}` and at `[:theme, :colors, name]`,
+  where it was `{:role, name}` and `[:theme, :roles, name]`.
 - **A style is written in compound parts; designs are schema version 3** (#657, #649, D-172).
   A style holds `fill`, `stroke`, `font`, `text`, `effect`, `marker` and `curve` as parts, beside
   `opacity`, `blend` and `class`:

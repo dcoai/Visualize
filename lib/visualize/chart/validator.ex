@@ -388,18 +388,18 @@ defmodule Visualize.Chart.Validator do
         do: {path ++ [key, name], {:undeclared, :field, name}}
   end
 
-  # An inline theme's ramps, roles and palette entries hold their contracts (spec/08 §7.5,
+  # An inline theme's ramps, colors and palette entries hold their contracts (spec/08 §7.5,
   # §7.7, D-135, D-171): measured once the keys they are read with are well typed, so a
   # type fault is not reported twice, and only the first breach, as construction refuses
   # at the first.
   defp held(:theme, map, path, _ctx) do
     with ramps when is_map(ramps) <- Map.get(map, :ramps, %{}),
-         roles when is_map(roles) <- Map.get(map, :roles, %{}),
+         colors when is_map(colors) <- Map.get(map, :colors, %{}),
          styles when is_map(styles) and not is_struct(styles) <- Map.get(map, :styles, %{}),
          true <- Enum.all?(ramps, fn {_, v} -> is_list(v) and Enum.all?(v, &is_binary/1) end),
-         true <- Enum.all?(roles, fn {_, v} -> is_binary(v) end),
+         true <- Enum.all?(colors, fn {_, v} -> is_binary(v) or Visualize.Color.value?(v) end),
          true <- Enum.all?(styles, fn {_, v} -> is_map(v) and not is_struct(v) end),
-         theme = Theme.build(Theme.default(), Map.take(map, [:ramps, :roles, :styles])),
+         theme = Theme.build(Theme.default(), Map.take(map, [:ramps, :colors, :styles])),
          {:error, {kind, name}, message} <- Theme.check(theme) do
       [{path ++ [plural(kind), name], {:contract, message}}]
     else
@@ -1154,7 +1154,7 @@ defmodule Visualize.Chart.Validator do
   defp plural(:slot), do: :slots
   defp plural(:frame), do: :frames
   defp plural(:ramp), do: :ramps
-  defp plural(:role), do: :roles
+  defp plural(:color), do: :colors
 
   # The URL policy of §10.3 (#660): the fault names the field and the reason, never the URL.
   defp policy(%{url: url} = map, path, ctx) when is_binary(url) do

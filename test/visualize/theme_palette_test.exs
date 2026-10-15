@@ -314,14 +314,14 @@ defmodule Visualize.ThemePaletteTest do
     test "violations/1 names every breaking entry, after the ramps and roles" do
       theme = %{
         Theme.default()
-        | roles: %{neutral: "#ff0000"},
+        | colors: Map.put(Theme.default().colors, :neutral, "#ff0000"),
           styles: %{bad: %{fill: :good}, hover: %{stroke: :bad}, sparkle: %{}}
       }
 
       assert theme |> Theme.violations() |> Enum.map(&elem(&1, 0)) ==
-               [{:role, :neutral}, {:style, :bad}, {:style, :hover}, {:style, :sparkle}]
+               [{:color, :neutral}, {:style, :bad}, {:style, :hover}, {:style, :sparkle}]
 
-      assert {:error, {:role, :neutral}, _} = Theme.check(theme)
+      assert {:error, {:color, :neutral}, _} = Theme.check(theme)
     end
   end
 

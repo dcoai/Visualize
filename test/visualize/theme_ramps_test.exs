@@ -24,7 +24,8 @@ defmodule Visualize.ThemeRampsTest do
         assert theme.ramps |> Map.keys() |> Enum.sort() ==
                  Enum.sort([:status, :thermal, :diverging, :sequential])
 
-        assert theme.roles |> Map.keys() |> Enum.sort() == [:info, :neutral]
+        # The roles are names by use in the color table (spec/08 §7.1, #663).
+        for role <- Theme.role_names(), do: assert(Map.has_key?(theme.colors, role))
       end
     end
 
@@ -119,11 +120,11 @@ defmodule Visualize.ThemeRampsTest do
     end
 
     test "roles: info is a blue, neutral is neutral" do
-      assert {:error, {:role, :neutral}, _} =
-               Theme.check(%{Theme.default() | roles: %{neutral: "#3b6fa8"}})
+      assert {:error, {:color, :neutral}, _} =
+               Theme.check(Theme.build(Theme.default(), colors: %{neutral: "#3b6fa8"}))
 
-      assert {:error, {:role, :info}, _} =
-               Theme.check(%{Theme.default() | roles: %{info: "#c23238"}})
+      assert {:error, {:color, :info}, _} =
+               Theme.check(Theme.build(Theme.default(), roles: %{info: "#c23238"}))
     end
 
     test "what is not a ramp, a role or a colour" do
@@ -131,8 +132,18 @@ defmodule Visualize.ThemeRampsTest do
         Theme.new(ramps: %{heat: ~w(#fff #000)})
       end
 
-      assert_raise ArgumentError, ~r/role :good .* status ramp's position 0/, fn ->
-        Theme.new(roles: %{good: "#00ff00"})
+      assert_raise ArgumentError,
+                   ~r/color :good breaks its contract: "nope" is not a colour/,
+                   fn ->
+                     Theme.new(colors: %{good: "nope"})
+                   end
+
+      assert_raise ArgumentError, ~r/color :mine breaks its contract: names :nope/, fn ->
+        Theme.new(colors: %{mine: {:color, :nope}})
+      end
+
+      assert_raise ArgumentError, ~r/color :a breaks its contract: reaches itself/, fn ->
+        Theme.new(colors: %{a: {:color, :b}, b: {:color, :a}})
       end
 
       assert_raise ArgumentError, ~r/needs at least two anchors/, fn ->
@@ -203,7 +214,7 @@ defmodule Visualize.ThemeRampsTest do
 
   describe "fallback is the default theme's, never a series colour" do
     test "a struct that lacks a ramp or a role" do
-      bare = %{Theme.dark() | ramps: %{}, roles: %{}}
+      bare = %{Theme.dark() | ramps: %{}, colors: %{}}
       assert Theme.ramp(bare, :status, 0) == Theme.ramp(Theme.default(), :status, 0)
 
       assert Theme.resolve(bare, :info, :literal) ==
@@ -218,7 +229,7 @@ defmodule Visualize.ThemeRampsTest do
       assert theme.ramps.sequential == ~w(#fff5eb #fd8d3c #8c2d04)
 
       night = Theme.merge(Theme.dark(), roles: %{info: "#5e95d3"})
-      assert night.roles == %{info: "#5e95d3", neutral: Theme.dark().roles.neutral}
+      assert night.colors == %{Theme.dark().colors | info: "#5e95d3"}
       assert night.ramps == Theme.dark().ramps
     end
   end
@@ -392,8 +403,12 @@ defmodule Visualize.ThemeRampsTest do
       assert message =~ "good (0) must be green or blue"
       assert Validator.format(error) =~ "theme.ramps.status: breaks its contract: good (0)"
 
-      roles = Map.put(status_design({:ramp, :status}), :theme, %{roles: %{good: "#00ff00"}})
-      assert {:error, [{[:theme, :roles, :good], {:contract, _}}]} = Validator.validate(roles)
+      colors = Map.put(status_design({:ramp, :status}), :theme, %{colors: %{info: "#c23238"}})
+      assert {:error, [{[:theme, :colors, :info], {:contract, _}}]} = Validator.validate(colors)
+
+      # The role colors of before #663 are read as the color table, silently.
+      roles = Map.put(status_design({:ramp, :status}), :theme, %{roles: %{info: "#c23238"}})
+      assert {:error, [{[:theme, :colors, :info], {:contract, _}}]} = Validator.validate(roles)
     end
 
     test "theme: :colour_safe is built in, and its roles are slots" do

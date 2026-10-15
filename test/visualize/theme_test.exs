@@ -136,8 +136,10 @@ defmodule Visualize.ThemeTest do
       assert String.starts_with?(css, ".vis-theme-dark {\n  --vis-series-1: #7fb3e6;\n")
       assert css =~ "\n  --vis-background: #1b1e24;\n"
       assert css =~ "\n  --vis-font-family: sans-serif;\n"
-      assert String.ends_with?(css, "  --vis-title-size: 16px;\n}\n")
-      assert length(String.split(css, "\n  --vis-")) == 1 + length(Theme.slots(Theme.dark()))
+      assert css =~ "\n  --vis-title-size: 16px;\n"
+      # Then the theme's own color names that are not slots, in name order (#663).
+      assert String.ends_with?(css, "  --vis-green: #4f924c;\n  --vis-red: #ff8f8a;\n}\n")
+      assert length(String.split(css, "\n  --vis-")) == 1 + length(Theme.slots(Theme.dark())) + 5
     end
   end
 
