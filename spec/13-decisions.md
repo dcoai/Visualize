@@ -2115,3 +2115,27 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - `%Visualize.Chart.Frame{}` gains `generated`, the runtime; `Visualize.Chart.Compiled` carries it.
 - spec/14 §3.7's layer 6 is implemented; every layer of the precedence order now is.
 - #655's builder shows a generator as a stack entry and a color, and #643's stored-source generators, when they come, are a second kind of registration behind the same stored call.
+
+## 178. D-178 — The builder edits a style in its parts: a section per part, the paint's type first, a control named by its path, a write that is only what was set; a named style is a site of the design
+
+**Context.** #655, part 7 of the set shaped from Research #641 ("The style grammar, reshaped"), work item #682. After parts 1–6 a style is compound parts (D-172) with typed colors (D-173), defaults and units (D-174), paints on every backend (D-175), motion (D-176) and generators (D-177), but the builder still edited the 29 flat keys of version 2 through a hidden schema kind (`describe(:flat_style)` behind `Builder.FormSchema`), its fill as a "fill style" that declared a gradient under `defs`. Two rules of spec/14 also disagreed: §18.14 wrote a created style into the selected layer, §19.11 said a declaration in place is values and a name is the library's. #655's acceptance settled the second: an override writes `styles.<name>` in the design, never into a layer (modification 2).
+
+**Decision.**
+- **One section per part.** A `:style` node's form is the whole element's keys, then one fieldset per compound part in the schema's order — fill, stroke, font, text, effect, marker, curve, transition, animation, enter, exit — each part's controls its own kind's keys (`Schema.describe/1` of `:paint`, `:stroke`, …), a node-typed key a nested fieldset and a list of nodes rows. The form keeps no list of style keys.
+- **The paint's `type` is its first control** and decides which keys follow; choosing one replaces what only the old type meant, by §3.5's merge rule, and a gradient chosen over a color starts from it (two stops, 0.8 to 0.1).
+- **A control is named by its path** (`stroke.width`, `fill.stops.1.color`, `transition.fill.duration`) and read back through the schema (`StyleForm.locate/2`), never through a table of names; the suffixes `.slot`, `.range`, `.other` keep their meaning.
+- **A write is the part it is in, computed from the node it lands in** — the layer's node, or the site's local style — so a local edit holds only what was set (`%{stroke: %{width: 7}}`). A node found in the flat keys is rewritten in its parts by its first edit, so no stored node mixes the two forms.
+- **A part the element does not draw is grayed** with a note where the form knows the element's kind (a mark's site, a label); a named style, shared between kinds, grays nothing.
+- **The hidden flat-key form is removed**: `Builder.FormSchema`, `Builder.Fills` and the key spec's `group` (with `Schema.group/2` and `groups/1`) go. `:flat_style` stays described for the migration, which reads it.
+- **A named style is a site of the design.** Creating one is a style site keyed by the name at the chart's top level, never a write into the selected layer's fragment; an existing name is opened, not redeclared. §18.14 and §19.11 now say the same.
+
+**Rejected.**
+- **A form per flat key mapped onto parts.** It would keep the 29-key vocabulary in the builder forever and hide what a part is: a paint's type, which no flat key has.
+- **Writing the resolved part into the local style.** It would copy the entries beneath into the site, so a later change to the named style would no longer show through.
+- **Writing a created style into the selected layer** (the old §18.14). The layer may be the library's, its fragment gains a declaration a person did not place, and a declaration in place is supposed to be visible as a site (§19.11).
+- **Graying a named style's parts by the kinds that use it.** A style is shared; the set of kinds naming it changes with every edit elsewhere.
+
+**Consequences.**
+- Builder goldens change where a style form is drawn; chart goldens do not.
+- A gradient written by the builder is a paint in place (§3.2), not a `defs` entry named for the style.
+- #683–#686 build on the form: the color picker and its transform chain, units and the defaults editor, the palette panel, the stack editor and explain in the inspector.
