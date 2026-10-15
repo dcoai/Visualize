@@ -86,6 +86,12 @@ defmodule Visualize.Chart.Style.Parts do
   def flat_keys, do: @flat_keys
 
   @doc false
+  # The element keys the fill and the stroke project to (spec/14 §3.1): every key a backend
+  # paints an element with, which the canvas parity test holds each canvas to (#675).
+  @spec paint_keys() :: [atom(), ...]
+  def paint_keys, do: for({key, {part, _}} <- @flat, part in @paints, do: key) |> Enum.sort()
+
+  @doc false
   # Whether a node carries a flat key: none of the current shape's keys share a name with
   # one except `fill`, `stroke`, `curve` and `effect`, which are flat — a shorthand — when
   # their value is what the flat key took: a colour, or a curve's or an effect's name. Any

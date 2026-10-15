@@ -217,7 +217,7 @@ defmodule Visualize.Backend.PaintTest do
     end
 
     test "a version the decoder does not know is refused" do
-      assert_raise ArgumentError, ~r/version 3/, fn -> Decoder.decode(<<0x00, 3>>) end
+      assert_raise ArgumentError, ~r/version 4/, fn -> Decoder.decode(<<0x00, 4>>) end
     end
   end
 

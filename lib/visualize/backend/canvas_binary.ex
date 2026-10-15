@@ -34,6 +34,7 @@ defmodule Visualize.Backend.CanvasBinary do
   | `effect` | `0x52` | `kind:u8 radius:f32`, and for a shadow `dx dy:f32` and its RGBA colour |
   | `motion` | `0x53` | `length:u16` then the UTF-8 JSON of a motion span's arguments, `[id, box, transitions]` |
   | `motion_end` | `0x54` | the motion span ends |
+  | `paint_state` | `0x55` | version 3: `flags:u8`, then the fill's and the stroke's alpha (f32), the cap and the join (u8), the dash (`count:u8` and f32 lengths) the flags select |
 
   The point-list record is used only for a path that is one `M` followed by `L`
   commands, and the cubic run only for one `M` followed by `C` commands — the shapes
@@ -50,6 +51,11 @@ defmodule Visualize.Backend.CanvasBinary do
   paint by index (bits 5 and 6), and each element drawn with one has a `box` record before
   its draws. A stream without a paint is version 1, byte for byte.
 
+  A style that sets a paint's opacity, a cap, a join or a dash makes the stream **version 3**
+  (spec/09 §4.3.17, D-180): its style record is followed by a `paint_state` record, which
+  the hook keeps as state that `save` and `restore` scope. A stream without one is as it
+  was.
+
   ## Performance
 
   Binary encoding reduces payload size by ~80% compared to JSON and eliminates
@@ -61,6 +67,7 @@ defmodule Visualize.Backend.CanvasBinary do
   Requires the `nx` package to be installed.
   """
 
+  alias Visualize.Backend.Canvas
   alias Visualize.Backend.CanvasBinary.{Opcodes, PathEncoder, SVG}
   alias Visualize.Color
   alias Visualize.IR.{Element, Motion, Paint, Path, Transform}
@@ -453,7 +460,8 @@ defmodule Visualize.Backend.CanvasBinary do
     {flags, parts} = paint_field(style[:fill], 0x20, paints, {flags, parts})
     {flags, parts} = paint_field(style[:stroke], 0x40, paints, {flags, parts})
 
-    <<Opcodes.style()::8, flags::8>> <> IO.iodata_to_binary(parts) <> effect_record(style)
+    <<Opcodes.style()::8, flags::8>> <>
+      IO.iodata_to_binary(parts) <> effect_record(style) <> paint_state_record(style)
   end
 
   # Version 2: a shadow's radius, offset and colour, or a blur's radius, after the style record
@@ -471,6 +479,48 @@ defmodule Visualize.Backend.CanvasBinary do
     do: <<Opcodes.effect()::8, 0x02::8, style[:effect_radius] || 3::little-float-32>>
 
   defp effect_record(_style), do: <<>>
+
+  @caps %{butt: 0, round: 1, square: 2}
+  @joins %{miter: 0, round: 1, bevel: 2}
+
+  # Version 3: what a fill or a stroke paints with beyond the style record — each paint's
+  # own opacity, the cap, the join and the dash — after the style record, each field under
+  # its flag bit (spec/09 §4.3.17, #675, D-180); nothing for a style that sets none.
+  defp paint_state_record(style) do
+    fields = [
+      {0x01, alpha(style[:fill_opacity])},
+      {0x02, alpha(style[:stroke_opacity])},
+      {0x04, with(c when is_integer(c) <- Map.get(@caps, style[:stroke_linecap]), do: <<c::8>>)},
+      {0x08,
+       with(j when is_integer(j) <- Map.get(@joins, style[:stroke_linejoin]), do: <<j::8>>)},
+      {0x10, dash(Canvas.dash(style[:stroke_dasharray]))}
+    ]
+
+    case for {bit, bytes} <- fields, is_binary(bytes), do: {bit, bytes} do
+      [] ->
+        <<>>
+
+      set ->
+        flags = Enum.reduce(set, 0, fn {bit, _}, acc -> acc ||| bit end)
+
+        IO.iodata_to_binary([
+          <<Opcodes.paint_state()::8, flags::8>> | Enum.map(set, &elem(&1, 1))
+        ])
+    end
+  end
+
+  defp alpha(a) when is_number(a), do: <<a::little-float-32>>
+  defp alpha(_absent), do: nil
+
+  defp dash(pattern) when is_list(pattern) and length(pattern) < 256,
+    do:
+      IO.iodata_to_binary([<<length(pattern)::8>> | Enum.map(pattern, &<<&1::little-float-32>>)])
+
+  defp dash(_absent), do: nil
+
+  # Whether a tree's styles set what only a `paint_state` record carries.
+  defp paint_state?(%Element{style: style, children: children}),
+    do: paint_state_record(style) != <<>> or Enum.any?(children, &paint_state?/1)
 
   # The draw records of an element under its effective style, with the box its paints are
   # built over first when it draws one (spec/09 §4.3.13).
@@ -512,13 +562,22 @@ defmodule Visualize.Backend.CanvasBinary do
     ctx = %{precision: precision, paints: Map.new(paints)}
     body = do_encode_element(element, ctx, %{})
 
-    case {paints, effects?(element) or spans?(element)} do
-      {[], false} ->
+    # The least version whose records the stream uses (spec/09 §4.2): 3 with a paint's
+    # state (D-180), 2 with a paint, an effect or a motion span (D-175), else 1.
+    version =
+      cond do
+        paint_state?(element) -> 3
+        paints != [] or effects?(element) or spans?(element) -> 2
+        true -> 1
+      end
+
+    case version do
+      1 ->
         body
 
-      _version_2 ->
+      version ->
         IO.iodata_to_binary([
-          <<Opcodes.version()::8, 2::8>>,
+          <<Opcodes.version()::8, version::8>>,
           Enum.map(paints, &paint_record/1),
           body
         ])
