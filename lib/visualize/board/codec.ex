@@ -14,6 +14,8 @@ defmodule Visualize.Board.Codec do
 
   alias Visualize.Board.Validator
   alias Visualize.Chart.Codec
+  alias Visualize.Chart.Codec.Tags
+  require Tags
 
   @stamp "$version"
   @datum "$datum"
@@ -50,7 +52,7 @@ defmodule Visualize.Board.Codec do
   end
 
   defp drill_var({name, {:datum, field}}) when is_atom(field),
-    do: {name(name), %{@datum => Atom.to_string(field)}}
+    do: {name(name), Tags.tag("$datum", Atom.to_string(field))}
 
   defp drill_var({name, value}), do: {name(name), Codec.encode_term(value)}
 
@@ -60,8 +62,9 @@ defmodule Visualize.Board.Codec do
 
   defp plain(value), do: Codec.encode_term(value)
 
-  defp name(key) when is_atom(key), do: Atom.to_string(key)
-  defp name(key), do: to_string(key)
+  # A name that starts with `$` is written with one more, as a design's keys are (D-182).
+  defp name(key) when is_atom(key), do: key |> Atom.to_string() |> Tags.escape()
+  defp name(key), do: key |> to_string() |> Tags.escape()
 
   # -- decode ---------------------------------------------------------------------------
 
@@ -146,6 +149,6 @@ defmodule Visualize.Board.Codec do
 
   defp known(key, _keys), do: key
 
-  defp atom(key) when is_binary(key), do: String.to_atom(key)
+  defp atom(key) when is_binary(key), do: key |> Tags.unescape() |> String.to_atom()
   defp atom(key), do: key
 end

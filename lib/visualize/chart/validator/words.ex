@@ -261,6 +261,10 @@ defmodule Visualize.Chart.Validator.Words do
   def words(:not_required), do: "binds a slot that no cell's component declares"
 
   def words({:json, message}), do: "JSON does not parse: #{message}"
+
+  # A tag the one table does not read (spec/14 §11.2, D-182).
+  def words({:unknown_tag, tag}), do: "#{inspect(tag)} is not a tag this library reads"
+  def words({:retired_tag, tag, why}), do: "#{inspect(tag)} #{why}"
   def words({:missing_dependency, :jason}), do: "needs the optional dependency Jason"
 
   # A theme document that only names a theme (spec/14 §9.3, D-139).

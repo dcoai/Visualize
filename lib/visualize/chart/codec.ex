@@ -9,7 +9,9 @@ defmodule Visualize.Chart.Codec do
   # its tagged term and read back as itself, and no map clause on either side descends
   # into one, so the walk cannot rebuild a struct as a plain map or a map as a struct.
 
+  alias Visualize.Chart.Codec.Tags
   alias Visualize.Chart.{Fact, Fragment, Migration, Schema, Use, Var}
+  require Tags
   alias Visualize.Theme
 
   @fixed_slots Theme.default() |> Theme.slots() |> Enum.reject(&(&1 in [:series_1]))
@@ -51,38 +53,45 @@ defmodule Visualize.Chart.Codec do
 
   defp part?(v), do: is_map(v) and not is_struct(v)
 
-  defp key(k) when is_atom(k), do: Atom.to_string(k)
-  defp key(k), do: to_string(k)
+  # A key that starts with `$` is written with one more, so data never spells a tag (D-182).
+  defp key(k) when is_atom(k), do: k |> Atom.to_string() |> Tags.escape()
+  defp key(k), do: k |> to_string() |> Tags.escape()
 
-  defp value(_type, %Var{name: name}), do: %{"$var" => Atom.to_string(name)}
+  defp value(_type, %Var{name: name}), do: Tags.tag("$var", Atom.to_string(name))
   defp value(_type, %Fact{} = fact), do: term(fact)
-  defp value(_type, {:field, f}) when is_atom(f), do: %{"$field" => Atom.to_string(f)}
+  defp value(_type, {:field, f}) when is_atom(f), do: Tags.tag("$field", Atom.to_string(f))
 
   # A generator call (spec/14 §3.13, §11.2, #654): its name, then its arguments as terms.
   defp value(_type, {:generate, name, args}) when is_atom(name) and is_list(args),
-    do: %{"$generate" => [Atom.to_string(name), Enum.map(args, &term/1)]}
+    do: Tags.tag("$generate", [Atom.to_string(name), Enum.map(args, &term/1)])
 
-  defp value(:colour, {:paint, name}) when is_atom(name), do: %{"$paint" => Atom.to_string(name)}
+  defp value(:colour, {:paint, name}) when is_atom(name),
+    do: Tags.tag("$paint", Atom.to_string(name))
 
   # A ramp position, and a whole ramp as a colour scale's range (spec/14 §11.2, #533).
   defp value(:colour, {:ramp, name, t}) when is_atom(name) and is_number(t),
-    do: %{"$ramp" => [Atom.to_string(name), t]}
+    do: Tags.tag("$ramp", [Atom.to_string(name), t])
 
-  defp value(:ramp, {:ramp, name}) when is_atom(name), do: %{"$ramp" => Atom.to_string(name)}
+  defp value(:ramp, {:ramp, name}) when is_atom(name), do: Tags.tag("$ramp", Atom.to_string(name))
 
   # A typed color (spec/14 §11.2, #664): a name, a transform with its color first, a blend's
   # list, the contrast ink over a color or over what is under.
-  defp value(:colour, {:color, name}) when is_atom(name), do: %{"$color" => Atom.to_string(name)}
+  defp value(:colour, {:color, name}) when is_atom(name),
+    do: Tags.tag("$color", Atom.to_string(name))
 
   defp value(:colour, {op, c, t}) when op in @unary and is_number(t),
-    do: %{"$#{op}" => [value(:colour, c), t]}
+    do: Tags.tag("$#{op}", [value(:colour, c), t])
 
   defp value(:colour, {:blend, list}) when is_list(list),
-    do: %{"$blend" => Enum.map(list, &value(:colour, &1))}
+    do: Tags.tag("$blend", Enum.map(list, &value(:colour, &1)))
 
   # A theme's pinned steps, `[step, colour]` pairs in step order (spec/14 §11.2, #667).
   defp value(:theme_colour, steps) when is_map(steps) and not is_struct(steps),
-    do: %{"$steps" => steps |> Enum.sort() |> Enum.map(fn {n, c} -> [n, value(:colour, c)] end)}
+    do:
+      Tags.tag(
+        "$steps",
+        steps |> Enum.sort() |> Enum.map(fn {n, c} -> [n, value(:colour, c)] end)
+      )
 
   defp value(:theme_colour, v), do: value(:colour, v)
 
@@ -90,8 +99,8 @@ defmodule Visualize.Chart.Codec do
   defp value(:counterpart, nil), do: nil
   defp value(:counterpart, name) when is_atom(name), do: Atom.to_string(name)
 
-  defp value(:colour, {:contrast, :under}), do: %{"$contrast" => "under"}
-  defp value(:colour, {:contrast, c}), do: %{"$contrast" => value(:colour, c)}
+  defp value(:colour, {:contrast, :under}), do: Tags.tag("$contrast", "under")
+  defp value(:colour, {:contrast, c}), do: Tags.tag("$contrast", value(:colour, c))
 
   # A map of colours as `[category, colour]` pairs in the categories' term order (spec/14
   # §11.2, D-143): an object's keys are strings, and a category need not be one.
@@ -101,7 +110,7 @@ defmodule Visualize.Chart.Codec do
       |> Enum.sort_by(fn {category, _colour} -> category end)
       |> Enum.map(fn {category, colour} -> [term(category), value(:colour, colour)] end)
 
-    %{"$colours" => pairs}
+    Tags.tag("$colours", pairs)
   end
 
   defp value({:node, kind}, v) when is_map(v) and not is_struct(v), do: node(kind, v)
@@ -125,66 +134,64 @@ defmodule Visualize.Chart.Codec do
   defp value({:ref, _}, v) when is_atom(v), do: Atom.to_string(v)
   defp value({:ref, _}, {kind, n} = id) when is_atom(kind) and is_integer(n), do: term(id)
   defp value(:slot, v) when is_atom(v), do: Atom.to_string(v)
-  defp value(:slot, {:series, i}), do: %{"$series" => i}
+  defp value(:slot, {:series, i}), do: Tags.tag("$series", i)
   defp value(type, v) when type in [:size, :channel] and is_atom(v), do: Atom.to_string(v)
 
   # A unit value (spec/14 §3.9, §11.2, #651): the number and the unit's name.
   defp value(type, {n, unit}) when type in [:size, :length] and is_number(n) and is_atom(unit),
-    do: %{"$unit" => [n, Atom.to_string(unit)]}
+    do: Tags.tag("$unit", [n, Atom.to_string(unit)])
 
   # A channel at its scale's own end (spec/14 §5.2, §11.2, #554).
   defp value(:channel, {:scale, which}) when which in [:min, :max],
-    do: %{"$scale" => Atom.to_string(which)}
+    do: Tags.tag("$scale", Atom.to_string(which))
 
-  defp value(type, {:series, i}) when type in [:colour, :size, :font], do: %{"$series" => i}
+  defp value(type, {:series, i}) when type in [:colour, :size, :font], do: Tags.tag("$series", i)
   defp value(:extent, :auto), do: "auto"
   defp value(:extent, v) when is_list(v), do: Enum.map(v, &category/1)
   defp value(:text, v) when is_binary(v), do: v
   defp value(:text, v) when is_list(v), do: Enum.map(v, &value(:term, &1))
   defp value(:anchor, v) when is_atom(v), do: Atom.to_string(v)
-  defp value(:anchor, {:axis, s}) when is_atom(s), do: %{"$axis" => Atom.to_string(s)}
-  defp value(:anchor, {:frame, c}) when is_atom(c), do: %{"$frame" => Atom.to_string(c)}
-  defp value(:anchor, {:data, [x, y]}), do: %{"$data" => [term(x), term(y)]}
+  defp value(:anchor, {:axis, s}) when is_atom(s), do: Tags.tag("$axis", Atom.to_string(s))
+  defp value(:anchor, {:frame, c}) when is_atom(c), do: Tags.tag("$frame", Atom.to_string(c))
+  defp value(:anchor, {:data, [x, y]}), do: Tags.tag("$data", [term(x), term(y)])
 
   defp value(:adopted, {:frame, f, s}) when is_atom(f) and is_atom(s),
-    do: %{"$adopted" => [Atom.to_string(f), Atom.to_string(s)]}
+    do: Tags.tag("$adopted", [Atom.to_string(f), Atom.to_string(s)])
 
   defp value(:key_order, {:keys, keys}) when is_list(keys),
-    do: %{"$keys" => Enum.map(keys, &value(:name, &1))}
+    do: Tags.tag("$keys", Enum.map(keys, &value(:name, &1)))
 
   defp value(_type, v), do: term(v)
 
   defp category(:auto), do: "auto"
   defp category(v), do: term(v)
 
-  defp term(%Var{name: name}), do: %{"$var" => Atom.to_string(name)}
+  defp term(%Var{name: name}), do: Tags.tag("$var", Atom.to_string(name))
 
   # A schema fact (spec/14 §7.4, §11.2): the slot, the field and the attribute.
   defp term(%Fact{source: s, field: f, key: k}),
-    do: %{"$fact" => Enum.map([s, f, k], &Atom.to_string/1)}
+    do: Tags.tag("$fact", Enum.map([s, f, k], &Atom.to_string/1))
 
   defp term(%Use{id: {:use, n}} = use) do
-    %{
-      "$use" => %{
-        "id" => n,
-        "ref" => if(use.ref, do: term(use.ref)),
-        "mask" => if(use.mask == :all, do: "all", else: Enum.map(use.mask, &term/1)),
-        "vars" => term(use.vars),
-        "local" => term(use.local),
-        "key" => if(use.key, do: Atom.to_string(use.key)),
-        "origin" => if(use.origin, do: term(use.origin))
-      }
-    }
+    Tags.tag("$use", %{
+      "id" => n,
+      "ref" => if(use.ref, do: term(use.ref)),
+      "mask" => if(use.mask == :all, do: "all", else: Enum.map(use.mask, &term/1)),
+      "vars" => term(use.vars),
+      "local" => term(use.local),
+      "key" => if(use.key, do: Atom.to_string(use.key)),
+      "origin" => if(use.origin, do: term(use.origin))
+    })
   end
 
   defp term({kind, n} = id) when is_atom(kind) and is_integer(n) and n > 0 do
-    if kind in Fragment.kinds(), do: %{"$id" => [Atom.to_string(kind), n]}, else: id
+    if kind in Fragment.kinds(), do: Tags.tag("$id", [Atom.to_string(kind), n]), else: id
   end
 
-  defp term({:field, f}) when is_atom(f), do: %{"$field" => Atom.to_string(f)}
-  defp term(%DateTime{} = dt), do: %{"$time" => DateTime.to_iso8601(dt)}
+  defp term({:field, f}) when is_atom(f), do: Tags.tag("$field", Atom.to_string(f))
+  defp term(%DateTime{} = dt), do: Tags.tag("$time", DateTime.to_iso8601(dt))
   defp term(v) when is_number(v) or is_binary(v) or is_boolean(v) or is_nil(v), do: v
-  defp term(v) when is_atom(v), do: %{"$atom" => Atom.to_string(v)}
+  defp term(v) when is_atom(v), do: Tags.tag("$atom", Atom.to_string(v))
   defp term(v) when is_list(v), do: Enum.map(v, &term/1)
 
   defp term(v) when is_map(v) and not is_struct(v) do
@@ -226,7 +233,7 @@ defmodule Visualize.Chart.Codec do
 
   defp json_part?(v), do: is_map(v)
 
-  defp atom(k) when is_binary(k), do: String.to_atom(k)
+  defp atom(k) when is_binary(k), do: k |> Tags.unescape() |> String.to_atom()
   defp atom(k), do: k
 
   defp read(_type, %{"$var" => name} = v) when map_size(v) == 1 and is_binary(name),
@@ -278,8 +285,10 @@ defmodule Visualize.Chart.Codec do
   defp read(:colour, %{"$contrast" => c} = v) when map_size(v) == 1,
     do: {:contrast, read(:colour, c)}
 
-  # A transform's tag; any other one-key `$` object is left as the object it is, which is no
-  # color, so the validator refuses it rather than a color be read as data (#645's rule).
+  # A transform's tag. Any other one-key `$` object is left as the object it is, which is
+  # no color, for the validator to refuse: a known tag out of place, or, from a document
+  # before version 3, one the table does not have (an unknown tag is refused by the reader in
+  # any later one, D-182).
   defp read(:colour, %{} = v) when map_size(v) == 1 do
     case Map.to_list(v) do
       [{"$" <> op, [c, t]}] when is_number(t) ->

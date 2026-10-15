@@ -281,6 +281,19 @@ release it merely follows.
 
 ### Changed
 
+- **A JSON document's unknown or retired `$` tag is refused, not read as data** (#645,
+  D-182). `Chart.from_json/2`, `Board.from_json/2`, `Board.Snapshot.from_json/2` and
+  `Chart.Fragment.from_json/2` hold a document to the one table of tags before decoding it:
+  a one-key object whose key starts with a single `$` is always a tag, and one the library
+  does not read — a misspelling such as `{"$feild": …}`, or a tag from a newer release — is
+  `{:error, [{path, {:unknown_tag, tag}}]}` at the object's path; the retired `$styles` is
+  `{:retired_tag, "$styles", why}`. `Fragment.from_json/2` returns these as
+  `{:error, {:tags, errors}}`. Before, such an object loaded silently as a plain map. **Data
+  whose map keys start with `$`** — a variable's default, a `:const` value, a board's
+  variable names — is now written with the key escaped as `$$…` and read back as it was, so
+  a value like `%{"$atom" => "x"}` no longer comes back as the atom `:x`. A version 2
+  document (0.6.x) reads exactly as before.
+
 - **The builder edits a style in its parts** (#682, D-178). A style's form is the whole
   element's keys (`extends`, `opacity`, `blend`, `class`), then one section per part —
   fill, stroke, font, text, effect, marker, curve, transition, animation, enter, exit — each

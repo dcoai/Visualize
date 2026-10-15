@@ -1638,7 +1638,7 @@ The resolution, binding and schema faults are reported by `Visualize.Chart.apply
 
 ### 11.2 Tagged terms
 
-**Implemented.** Terms JSON has no form for are objects with one `$`-prefixed key, and nothing else in a design starts a key with `$`:
+**Implemented.** Terms JSON has no form for are objects with one `$`-prefixed key — a **tag** — and nothing else in a document starts a key with a single `$` (below, an escape for data whose keys do):
 
 | Term | JSON |
 |---|---|
@@ -1669,10 +1669,20 @@ The resolution, binding and schema faults are reported by `Visualize.Chart.apply
 | a slot name as a colour, before #664 | the name as a string, `"bad"`, read as the slot and canonicalized to `{:color, :bad}`; any other string is a literal colour, so `"red"` stays CSS's red |
 | `:auto` in an extent | `"auto"` (so a category spelled `"auto"` reads back as `:auto`) |
 | a `DateTime` | `{"$time": "2026-09-08T00:00:00Z"}` (ISO 8601, UTC) |
+| `{:style, 3}`, an id of a fragment's kind (§19.2) | `{"$id": ["style", 3]}`, the kind and the number; a kind a fragment cannot have is left as the object it is, never made into an atom |
+| a `%Visualize.Chart.Use{}` site (§19.3) | `{"$use": {"id": n, "ref": …, "mask": …, "vars": …, "local": …, "key": …, "origin": …}}`, its fields as terms (#465) |
 | an atom in a `:term` position | `{"$atom": "series_1"}` |
 | `nil` | `null` |
 
-**An unknown tag in a color position is refused** (#664, following #645's rule for these tags): a one-key `$` object the codec does not know is read as the object it is, which is no color, and the validator reports `{:type, :colour}` at its path — never a color read as data. Everything else — numbers, strings, booleans, lists, maps — is its JSON self. `from_json(to_json(chart))` is `chart` for every valid chart. Every term a design may hold that JSON has no form for has a row here: a tuple a validator accepts in any position without one would make `to_json/1` fail on a valid chart, so the gallery holds every design to the round trip (#554).
+**One table of tags, and an unknown tag is refused** (#645, D-182). `Visualize.Chart.Codec.Tags` is the one list of every tag the JSON documents of this library write — this table's, a board's `$datum` ([15-boards](15-boards.md) §2.2), a snapshot's `$absent` ([15-boards](15-boards.md) §12.3) and the `$version` stamp — and of the tags they no longer write. An encoder writes a tag only through the table, so a tag cannot be written that the reader does not know. Every JSON reader — `Visualize.Chart.from_json/2`, `Visualize.Chart.Fragment.from_json/2` and `read_json/2`, `Visualize.Board.from_json/2` and `Visualize.Board.Snapshot.from_json/2` — holds the parsed document to the table after the version gate and the limits (§9.1, §9.2) and before a key is decoded:
+
+- **A one-key object whose key starts with a single `$` is always a tag.** One the table does not have — a misspelling, `"$feild"`, or a tag of a newer library — is `{:unknown_tag, tag}` at the object's path, which `Visualize.Chart.Validator.format/1` words as `frames.main.scales.x.range: "$feild" is not a tag this library reads`. It is never read as data.
+- **A retired tag is refused with what replaced it**: `{:retired_tag, tag, why}`. `$styles`, a range of palette styles (#637), was removed by #644 — a style site names a style by data through `{:field, f}` (§3.13). `$scale` is not retired: a channel at its scale's own end is written with it.
+- **A renamed tag is read as its new name**, so a stored document keeps reading after a rename: the table maps the old spelling to the new and the reader rewrites it before decoding. The writer writes only the new.
+- **Data whose keys start with `$` is escaped.** A term is any value (`:term` positions: a variable's `default`, a `:const` channel's `value`, a use site's `vars` and `local`, a board's variables), and a map in one may have a key `"$price"` or `:"$vis_state"`. Every map key the codecs write that starts with `$` is written with one more, `"$$price"`, and a key that starts with `$$` is read with one fewer; so a data map that spells a tag, `%{"$atom" => "x"}`, round-trips as itself and is never read as the atom `:x`.
+- **A document before version 3 reads as it always did.** One written before the escape existed has unescaped `$` keys in its data, so in it a one-key object the table does not have is the data it was then, not an error; a known or retired tag is read or refused as in version 3.
+
+`from_json(to_json(chart))` is `chart` for every valid chart. An unknown tag in a color position is no longer left for the validator to call a non-color (#664): the reader refuses it first, at the same path. Everything else — numbers, strings, booleans, lists, maps — is its JSON self. `from_json(to_json(chart))` is `chart` for every valid chart. Every term a design may hold that JSON has no form for has a row here: a tuple a validator accepts in any position without one would make `to_json/1` fail on a valid chart, so the gallery holds every design to the round trip (#554).
 
 ## 12. Compilation
 

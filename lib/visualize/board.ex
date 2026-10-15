@@ -42,6 +42,7 @@ defmodule Visualize.Board do
 
   alias Visualize.Board.{Codec, Validator}
   alias Visualize.Chart
+  alias Visualize.Chart.Codec.Tags
   alias Visualize.Chart.{Limits, Migration, Types}
   alias Visualize.Chart.Validator, as: ChartValidator
   alias Visualize.Chart.Validator.Words
@@ -210,7 +211,8 @@ defmodule Visualize.Board do
     {stamp, term} = Map.pop(term, Codec.stamp())
 
     with :ok <- stamped(stamp),
-         :ok <- Validator.done(Limits.structure(term, limits)) do
+         :ok <- Validator.done(Limits.structure(term, limits)),
+         {:ok, term} <- Tags.read(term, stamp) do
       map = Codec.decode(term)
       read(if stamp == nil, do: map, else: Map.put(map, :version, stamp))
     end
