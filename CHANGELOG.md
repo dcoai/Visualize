@@ -24,7 +24,11 @@ release it merely follows.
   of `shade(color(:red), n)`; its page shows automatic dark mode — the design under no
   theme beside `color_scheme: false`, with a switch to preview either scheme. *Paints*
   (`/chart/paints`) draws in-place linear and radial gradients, a crosshatch in `pt`
-  sizes, a shadow and translucent paints, on SVG and on the canvas.
+  sizes, a shadow and translucent paints, on SVG and on the canvas. *Composition*
+  (`/chart/composition`) stacks palette names and modifiers (`[:warning, :outline]`,
+  `[:style_3, :thick]`, `[:bad, :dashed]`), derives a style with `extends`, sets
+  `defaults` on the design, on a frame and per mark kind, sizes in `pt`, `mm`, `em` and
+  `pct`, and draws a `non_scaling` stroke that its page's zoom panel keeps a hairline.
 
 - **The builder makes every style stack entry and explains an element's look** (#686,
   D-178). The style stack panel adds, beside a name, a `{:field, f}` entry from the site's

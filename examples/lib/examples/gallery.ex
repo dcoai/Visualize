@@ -64,7 +64,9 @@ defmodule Examples.Gallery do
     {Examples.Charts.IncrementalLine, "incremental_line"},
     # The style grammar of 0.7.0 (#705): typed colors and their transforms, paints
     {Examples.Charts.ColorsChart, "colors"},
-    {Examples.Charts.PaintsChart, "paints"}
+    {Examples.Charts.PaintsChart, "paints"},
+    # Palette modifiers, style lists, extends, defaults, units, a non-scaling stroke
+    {Examples.Charts.CompositionChart, "composition"}
   ]
 
   @by_slug Map.new(@charts, fn {module, slug} -> {slug, module} end)

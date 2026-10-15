@@ -53,7 +53,8 @@ defmodule ExamplesWeb.ChartLive do
     "hexbin",
     "spectrum",
     "colors",
-    "paints"
+    "paints",
+    "composition"
   ]
 
   # The page's own state — what the viewer chose about the page, kept from chart to chart
@@ -238,6 +239,9 @@ defmodule ExamplesWeb.ChartLive do
   # A panel's own event (spec/14 §12.6, #705): the panel the params name takes it.
   def handle_event("chart_panel", params, socket),
     do: {:noreply, update(socket, :panels, &ExamplesWeb.ChartPanels.event(&1, params))}
+
+  # The zoom panel's hook reports each settled transform; nothing here depends on it.
+  def handle_event("chart_zoom", _params, socket), do: {:noreply, socket}
 
   def handle_event("change_palette", %{"palette" => palette_key}, socket) do
     palette =
