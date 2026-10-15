@@ -14,7 +14,7 @@ defmodule Visualize.Chart.Builder.PlaceTest do
   @frame %{size: %{width: 400, height: 200}, margin: %{top: 20, right: 20, bottom: 30, left: 40}}
   @design %{
     frames: %{
-      main: Map.merge(@frame, %{scales: %{x: %{kind: :linear}, colour: %{kind: :ordinal}}})
+      main: Map.merge(@frame, %{scales: %{x: %{kind: :linear}, color: %{kind: :ordinal}}})
     }
   }
 
@@ -78,22 +78,22 @@ defmodule Visualize.Chart.Builder.PlaceTest do
 
     test "a legend takes the first ordinal scale and the nearest of the eight positions" do
       assert Place.node(:legend, :top, @design, {0, 0}) ==
-               {:legend, %{scale: :colour, position: :top}}
+               {:legend, %{scale: :color, position: :top}}
 
       assert Place.node(:legend, :left, @design, {0, 0}) ==
-               {:legend, %{scale: :colour, position: :left}}
+               {:legend, %{scale: :color, position: :left}}
 
       assert Place.node(:legend, :plot, @design, {56, 43}) ==
-               {:legend, %{scale: :colour, position: :top_left}}
+               {:legend, %{scale: :color, position: :top_left}}
 
       assert Place.node(:legend, :plot, @design, {310, 43}) ==
-               {:legend, %{scale: :colour, position: :top}}
+               {:legend, %{scale: :color, position: :top}}
 
       assert Place.node(:legend, :plot, @design, {564, 195}) ==
-               {:legend, %{scale: :colour, position: :right}}
+               {:legend, %{scale: :color, position: :right}}
 
       assert Place.node(:legend, :plot, @design, {564, 358}) ==
-               {:legend, %{scale: :colour, position: :bottom_right}}
+               {:legend, %{scale: :color, position: :bottom_right}}
 
       assert Place.node(
                :legend,

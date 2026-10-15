@@ -299,7 +299,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    The node with one more series colour: the default palette's colour at the next position,
+    The node with one more series color: the default palette's colour at the next position,
     cycling, so a new series is distinct from its neighbours.
     """
     @spec series_added(map()) :: map()

@@ -170,14 +170,14 @@ defmodule Visualize.Theme do
           light: atom() | nil
         }
 
-  @colour_slots [:axis, :grid, :text, :background, :surface]
+  @color_slots [:axis, :grid, :text, :background, :surface]
   # Where the status roles stand on the status ramp, by default (spec/08 §7.5).
   @status_roles [good: 0, warning: 0.5, bad: 1]
   @role_slots [:good, :warning, :bad, :info, :neutral]
   # WCAG AA for normal text.
   @aa 4.5
   @size_slots [:font_size, :label_size, :title_size]
-  @fixed_slots @colour_slots ++ @role_slots ++ [:font_family] ++ @size_slots
+  @fixed_slots @color_slots ++ @role_slots ++ [:font_family] ++ @size_slots
   @builtin [:default, :dark, :color_safe, :print]
 
   @doc "The light theme: dark text and axes on white (spec/08 §7.2)."
@@ -679,9 +679,9 @@ defmodule Visualize.Theme do
   The theme's colour slots — the series, then axis, grid, text, background and surface,
   then the five roles (spec/08 §7.1).
   """
-  @spec colour_slots(t()) :: [atom(), ...]
-  def colour_slots(%__MODULE__{series: series}) do
-    Enum.map(1..length(series)//1, &series_atom/1) ++ @colour_slots ++ @role_slots
+  @spec color_slots(t()) :: [atom(), ...]
+  def color_slots(%__MODULE__{series: series}) do
+    Enum.map(1..length(series)//1, &series_atom/1) ++ @color_slots ++ @role_slots
   end
 
   @doc """
@@ -695,7 +695,7 @@ defmodule Visualize.Theme do
   """
   @spec color_names(t()) :: [atom(), ...]
   def color_names(%__MODULE__{} = theme) do
-    (colour_slots(theme) ++
+    (color_slots(theme) ++
        Map.keys(own_colors(theme)) ++ Map.keys(@light_colors) ++ @css_names)
     |> Enum.uniq()
     |> Enum.sort()
@@ -905,7 +905,7 @@ defmodule Visualize.Theme do
       %{} = steps when not is_struct(steps) ->
         for {n, literal} <- Enum.sort(steps),
             n != 500,
-            do: "#{property(slot)}-#{n}: #{css_value(:colour, literal)};"
+            do: "#{property(slot)}-#{n}: #{css_value(:color, literal)};"
 
       _other ->
         []
@@ -930,7 +930,7 @@ defmodule Visualize.Theme do
     "@media (forced-colors: active) {\n  .vis-theme-#{name} {\n" <> lines <> "\n  }\n}\n"
   end
 
-  defp value(theme, slot) when slot in @colour_slots, do: {:colour, Map.fetch!(theme, slot)}
+  defp value(theme, slot) when slot in @color_slots, do: {:color, Map.fetch!(theme, slot)}
   defp value(theme, :font_family), do: {:font, theme.font_family}
   defp value(theme, slot) when slot in @size_slots, do: {:size, Map.fetch!(theme, slot)}
 
@@ -939,7 +939,7 @@ defmodule Visualize.Theme do
 
     case series_index(slot) do
       k when is_integer(k) and k >= 1 and k <= n ->
-        {:colour, Enum.at(series, k - 1)}
+        {:color, Enum.at(series, k - 1)}
 
       _ ->
         if lookup(theme, slot) == nil,
@@ -948,7 +948,7 @@ defmodule Visualize.Theme do
               ArgumentError,
               "unknown theme slot #{inspect(slot)}; see Visualize.Theme.slots/1 and color_names/1"
             ),
-          else: {:colour, table_literal(theme, slot, [])}
+          else: {:color, table_literal(theme, slot, [])}
     end
   end
 
@@ -1011,7 +1011,7 @@ defmodule Visualize.Theme do
     end
   end
 
-  # An entry of the theme's own `colors` is a colour: a string `Visualize.Color.parse/1`
+  # An entry of the theme's own `colors` is a color: a string `Visualize.Color.parse/1`
   # reads, or a color value whose names are the table's and do not reach the entry again.
   defp entry(theme, name) do
     value = Map.fetch!(own_colors(theme), name)
@@ -1031,7 +1031,7 @@ defmodule Visualize.Theme do
 
       true ->
         {:error,
-         "#{inspect(value)} is not a colour: a color string or a color value " <>
+         "#{inspect(value)} is not a color: a color string or a color value " <>
            "(spec/08 §1.9)"}
     end
   end

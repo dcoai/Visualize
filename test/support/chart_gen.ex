@@ -132,7 +132,7 @@ defmodule Visualize.ChartGen do
   # A colour (spec/14 §3.2, #664): a colour slot written bare, as a host's code may, or
   # typed, or a transform of colours, every one canonicalized to its typed form on read.
   defp colour_slot(theme) do
-    name = member_of(Theme.colour_slots(theme_struct(theme)) ++ [:red, :steelblue])
+    name = member_of(Theme.color_slots(theme_struct(theme)) ++ [:red, :steelblue])
     unit = float(min: 0.0, max: 1.0)
     typed = map(name, &{:color, &1})
 
@@ -182,7 +182,7 @@ defmodule Visualize.ChartGen do
     stop =
       fixed_map(%{
         offset: float(min: 0.0, max: 1.0),
-        colour: with_var([member_of(@colours), colour_slot(theme)], vars)
+        color: with_var([member_of(@colours), colour_slot(theme)], vars)
       })
       |> bind(fn stop ->
         optional_map(%{opacity: float(min: 0.0, max: 1.0)}) |> map(&Map.merge(stop, &1))
@@ -196,7 +196,7 @@ defmodule Visualize.ChartGen do
       |> bind(fn g ->
         optional_map(%{
           angle: integer(0..360),
-          centre: list_of(float(min: 0.0, max: 1.0), length: 2),
+          center: list_of(float(min: 0.0, max: 1.0), length: 2),
           radius: float(min: 0.0, max: 1.0)
         })
         |> map(&Map.merge(g, &1))

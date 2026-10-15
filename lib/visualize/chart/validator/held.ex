@@ -176,7 +176,7 @@ defmodule Visualize.Chart.Validator.Held do
   # and a continuous scale has none.
   defp colour_map(%{kind: kind, range: %{} = range}, path)
        when is_atom(kind) and kind != :ordinal and not is_struct(range),
-       do: [{path ++ [:range], {:colour_map, kind}}]
+       do: [{path ++ [:range], {:color_map, kind}}]
 
   defp colour_map(_scale, _path), do: []
 

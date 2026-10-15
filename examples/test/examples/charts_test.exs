@@ -353,7 +353,7 @@ defmodule Examples.ChartsTest do
     end
   end
 
-  test "the palette option is the theme, so every chart recolours" do
+  test "the palette option is the theme, so every chart recolors" do
     for module <- charts() do
       assert module.render(palette: :sunrise) =~ "#ffd098"
       refute module.render(palette: :sunrise) =~ "#3b6fa8"

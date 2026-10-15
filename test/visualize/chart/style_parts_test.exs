@@ -208,7 +208,9 @@ defmodule Visualize.Chart.StylePartsTest do
         defs: %{
           fade: %{
             kind: :radial,
+            # spelling: allow — version 2's stop word.
             stops: [%{offset: 0, colour: :series_1}, %{offset: 1, colour: "#fff"}],
+            # spelling: allow — version 2's paint word.
             centre: [0.4, 0.4]
           }
         },
@@ -258,7 +260,7 @@ defmodule Visualize.Chart.StylePartsTest do
         "version": 2,
         "frames": {"main": {"kind": "cartesian"}},
         "defs": {"fade": {"kind": "linear", "stops": [
-          {"offset": 0, "colour": "series_1"}, {"offset": 1, "colour": "#fff"}]}},
+          {"offset": 0, "color": "series_1"}, {"offset": 1, "color": "#fff"}]}},
         "styles": {
           "s": {"stroke": {"$series": 2}, "stroke_width": 2, "font_weight": "bold",
                 "curve": "step", "fill": {"$paint": "fade"}, "text_anchor": "end"}

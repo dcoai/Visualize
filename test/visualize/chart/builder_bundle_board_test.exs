@@ -127,7 +127,7 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
   # Each cell rendered, through the theme its store holds under the name.
   defp rendered(board, store) do
     {:ok, theme} = Store.theme(store, :ocean)
-    {:ok, applied, _cache} = Board.realise(board, store_fetch(store), @pools, theme: theme)
+    {:ok, applied, _cache} = Board.realize(board, store_fetch(store), @pools, theme: theme)
     Map.new(applied, fn {cell, done} -> {cell, Visualize.Chart.render(done)} end)
   end
 

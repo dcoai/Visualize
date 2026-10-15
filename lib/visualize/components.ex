@@ -362,7 +362,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns =
         assign(assigns,
           slices: slices,
-          centre: {fmt(drawn.plot.width / 2), fmt(drawn.plot.height / 2)},
+          center: {fmt(drawn.plot.width / 2), fmt(drawn.plot.height / 2)},
           stroke: arcs.style.stroke,
           stroke_width: arcs.style.stroke_width,
           theme: drawn.theme,
@@ -375,7 +375,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
         <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
-        <g transform={"translate(#{elem(@centre, 0)}, #{elem(@centre, 1)})"}>
+        <g transform={"translate(#{elem(@center, 0)}, #{elem(@center, 1)})"}>
           <%= for slice <- @slices do %>
             <path d={slice.d} fill={slice.fill} stroke={@stroke} stroke-width={@stroke_width} {@transition} />
             <%= for label <- slice.labels do %>

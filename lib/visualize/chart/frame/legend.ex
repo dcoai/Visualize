@@ -201,7 +201,7 @@ defmodule Visualize.Chart.Frame.Legend do
 
   defp swatch(colour, i, theme, mode) do
     if colour?(colour, theme),
-      do: Style.colour(colour, theme, mode),
+      do: Style.color(colour, theme, mode),
       else: Theme.resolve(theme, {:series, i}, mode)
   end
 

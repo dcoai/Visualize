@@ -178,7 +178,7 @@ defmodule Visualize.Chart.Mark do
 
     ctx = %{
       size: [plot.width, plot.height],
-      centre: Frame.centre(frame.kind, plot),
+      center: Frame.center(frame.kind, plot),
       projection: frame.projection,
       now: frame.now,
       schemas: frame.schemas,
@@ -432,10 +432,10 @@ defmodule Visualize.Chart.Mark do
 
   defp bent(children, _ctx), do: children
 
-  # A centred mark's group about the frame's centre: the point a `:chord` step's paths are
+  # A centred mark's group about the frame's center: the point a `:chord` step's paths are
   # drawn about too (spec/14 §5.6, #488). A polar frame's group is already there.
   defp centre(group, %{type: type, frame: %{kind: kind, plot: plot}}) when type in @centred do
-    case Frame.centre(kind, plot) do
+    case Frame.center(kind, plot) do
       [0, 0] -> group
       [x, y] -> Element.set_transform(group, Transform.translate(x, y))
     end

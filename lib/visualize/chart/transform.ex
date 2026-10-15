@@ -32,7 +32,7 @@ defmodule Visualize.Chart.Transform do
   @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, the bound sources for a graph's node table, the instant a `:window` measures back from, the rows' slot's schema, and the realisation's force layouts."
   @type context :: %{
           size: [number()],
-          centre: [number()],
+          center: [number()],
           projection: Projection.t() | nil,
           sources: map(),
           now: term() | nil,
@@ -52,7 +52,7 @@ defmodule Visualize.Chart.Transform do
     * `:size` - the `[width, height]` the layouts and the geo algorithms default to, and
       whose width an `:lttb` step's `n: :plot` and an `:m4` step's `width: :plot` read
       (default `[1, 1]`)
-    * `:centre` - the `[x, y]` a `:chord` step's paths are about: the point an `:arc`
+    * `:center` - the `[x, y]` a `:chord` step's paths are about: the point an `:arc`
       mark is about, which the frame passes (spec/14 §5.4.3, #488); `size` sets the
       chord's radius, never its centre (default the middle of `:size`)
     * `:projection` - the `%Visualize.Geo.Projection{}` a `:projection` step maps through
@@ -85,7 +85,7 @@ defmodule Visualize.Chart.Transform do
 
     %{
       size: size,
-      centre: Keyword.get(opts, :centre, [w / 2, h / 2]),
+      center: Keyword.get(opts, :center, [w / 2, h / 2]),
       projection: Keyword.get(opts, :projection),
       sources: Keyword.get(opts, :sources, %{}),
       now: Keyword.get(opts, :now),

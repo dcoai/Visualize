@@ -103,7 +103,7 @@ defmodule Visualize.Chart.Compiled do
   @type reason :: :data | :facet | {:inferred, [atom()]}
 
   @typedoc "The frame's drawing order: regions, and a centred group of regions in a polar frame."
-  @type layout :: [region() | {:centred, [region()]}]
+  @type layout :: [region() | {:centered, [region()]}]
 
   @typedoc """
   The warm force layouts of spec/14 §12.5 (D-132): per graph, each node's position and
@@ -360,7 +360,7 @@ defmodule Visualize.Chart.Compiled do
   @spec render(t(), map()) :: map()
   def render(%__MODULE__{} = compiled, sources) when is_map(sources) do
     sources = sources!(compiled, sources)
-    {frame, hi} = realise(compiled, sources, nil)
+    {frame, hi} = realize(compiled, sources, nil)
     drawn = drawn(compiled, frame, sources, hi, true)
     canvas = layer(compiled, drawn, :canvas, false)
 
@@ -385,7 +385,7 @@ defmodule Visualize.Chart.Compiled do
   @spec svg(t(), map()) :: String.t()
   def svg(%__MODULE__{} = compiled, sources) when is_map(sources) do
     sources = sources!(compiled, sources)
-    {frame, hi} = realise(compiled, sources, nil)
+    {frame, hi} = realize(compiled, sources, nil)
     children = moving(layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true))
 
     Element.group(compiled.defs ++ children,
@@ -407,7 +407,7 @@ defmodule Visualize.Chart.Compiled do
   def step(%__MODULE__{} = compiled, sources, opts \\ []) when is_map(sources) do
     sources = sources!(compiled, sources)
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
-    {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
+    {frame, hi} = realize(compiled, sources, Keyword.get(opts, :now))
     compiled = %{compiled | forces: Force.warm(frame.forces)}
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
 
@@ -440,7 +440,7 @@ defmodule Visualize.Chart.Compiled do
 
       mark ->
         sources = sources!(compiled, sources)
-        {frame, hi} = realise(compiled, sources, nil)
+        {frame, hi} = realize(compiled, sources, nil)
         Mark.rows(frame, mark, mark_sources(compiled, frame, mark, sources, hi))
     end
   end
@@ -545,7 +545,7 @@ defmodule Visualize.Chart.Compiled do
   def tick(%__MODULE__{} = compiled, sources, opts) when is_map(sources) do
     sources = sources!(compiled, sources)
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
-    {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
+    {frame, hi} = realize(compiled, sources, Keyword.get(opts, :now))
     compiled = %{compiled | forces: Force.warm(frame.forces)}
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
     format = format(compiled)
@@ -633,17 +633,17 @@ defmodule Visualize.Chart.Compiled do
   # window's upper end given — what a run passes every tick — the scale's domain is known
   # before the frame is built, so it is given rather than inferred over the window's rows
   # and then replaced (spec/14 §4.3, #409).
-  defp realise(%{chart: chart, viewport: nil} = compiled, sources, _now) do
-    {Frame.new(chart, realise_opts(compiled, sources)), nil}
+  defp realize(%{chart: chart, viewport: nil} = compiled, sources, _now) do
+    {Frame.new(chart, realize_opts(compiled, sources)), nil}
   end
 
-  defp realise(%{chart: chart, viewport: window} = compiled, sources, now) when now != nil do
-    opts = [domains: Window.domains(window, now)] ++ realise_opts(compiled, sources)
+  defp realize(%{chart: chart, viewport: window} = compiled, sources, now) when now != nil do
+    opts = [domains: Window.domains(window, now)] ++ realize_opts(compiled, sources)
     {Frame.new(chart, opts), now}
   end
 
-  defp realise(%{chart: chart, viewport: window} = compiled, sources, now) do
-    frame = Frame.new(chart, realise_opts(compiled, sources))
+  defp realize(%{chart: chart, viewport: window} = compiled, sources, now) do
+    frame = Frame.new(chart, realize_opts(compiled, sources))
     hi = Window.hi(window, chart, frame, sources, now)
     {window_frame(window, chart, frame, sources, now), hi}
   end
@@ -668,7 +668,7 @@ defmodule Visualize.Chart.Compiled do
       compiled
     else
       compiled = %{compiled | chart: %{chart | frames: %{name => node}}}
-      frame = Frame.new(compiled.chart, realise_opts(compiled, sources))
+      frame = Frame.new(compiled.chart, realize_opts(compiled, sources))
 
       regions =
         Enum.map(compiled.regions, fn
@@ -701,7 +701,7 @@ defmodule Visualize.Chart.Compiled do
   # A tick re-realises the frame, and must do it at the size the chart was compiled at
   # (spec/14 §4.2, #427): a design records none, so the compiled chart is where it lives.
   # Its force layouts start from the ones the chart carries (§12.5, D-132).
-  defp realise_opts(%{theme: theme, system: system, size: size, forces: forces} = c, sources) do
+  defp realize_opts(%{theme: theme, system: system, size: size, forces: forces} = c, sources) do
     [
       sources: sources,
       schemas: c.schemas,
@@ -855,7 +855,7 @@ defmodule Visualize.Chart.Compiled do
     end
 
     Enum.flat_map(layout, fn
-      {:centred, inner} ->
+      {:centered, inner} ->
         case Enum.flat_map(inner, pick) do
           [] when not always_centred? -> []
           elements -> [Furniture.centred(%{plot: plot}, elements)]

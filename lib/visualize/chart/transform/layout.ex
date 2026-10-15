@@ -209,7 +209,7 @@ defmodule Visualize.Chart.Transform.Layout do
     # the ribbons meet the ring however either step is sized (spec/14 §5.4.3, #488).
     [w, h] = Map.get(node, :size, ctx.size)
     r = min(w, h) / 2
-    [cx, cy] = ctx.centre
+    [cx, cy] = ctx.center
     centre = Transform.translate(cx, cy)
 
     case Map.get(node, :output, :groups) do

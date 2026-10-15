@@ -66,7 +66,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         >
           <span class="vis-builder-theme-ramp-name">{ramp.name} <span class="vis-builder-theme-ramp-meaning">{ramp.meaning}</span></span>
           <div class="vis-builder-theme-strip" role="img" aria-label={"#{ramp.name}, as drawn"}>
-            <span :for={colour <- ramp.colours} style={"background: #{colour}"}></span>
+            <span :for={colour <- ramp.colors} style={"background: #{colour}"}></span>
             <span
               :for={{role, at} <- ramp.markers}
               class="vis-builder-theme-marker"
@@ -91,8 +91,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <input
                 type="color"
                 name={"ramps.#{ramp.name}.#{i}"}
-                value={hex(anchor.colour)}
-                title={anchor.colour}
+                value={hex(anchor.color)}
+                title={anchor.color}
                 aria-label={"#{ramp.name} anchor #{i + 1}"}
               />
               <span class="vis-builder-theme-l">L* {anchor.l}</span>
@@ -129,8 +129,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <input
               type="color"
               name={"roles.#{role.name}"}
-              value={hex(role.colour)}
-              title={role.colour}
+              value={hex(role.color)}
+              title={role.color}
               disabled={role.note != nil}
             />
           </label>
@@ -150,7 +150,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{
         name: name,
         meaning: Map.fetch!(@meanings, name),
-        colours: colours,
+        colors: colours,
         seen: Enum.map(colours, &seen(&1, vision)),
         lightness: Enum.map(colours, &grey/1),
         anchors:
@@ -173,7 +173,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       for colour <- shown do
         %{
-          colour: colour,
+          color: colour,
           l: colour |> Color.parse() |> Color.to_lab() |> Map.fetch!(:l) |> round()
         }
       end
@@ -195,7 +195,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           %{
             name: role,
             where: "status at #{at}",
-            colour: Theme.resolve(drawn, role, :literal),
+            color: Theme.resolve(drawn, role, :literal),
             note:
               if(role == :warning and rem(length(status), 2) == 0,
                 do: "status has no anchor at 0.5 — add an anchor to set it"
@@ -209,7 +209,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           %{
             name: role,
             where: if(role == :info, do: "a blue", else: "no hue"),
-            colour: Theme.resolve(drawn, role, :literal),
+            color: Theme.resolve(drawn, role, :literal),
             note: nil,
             fault: Map.get(faults, {:color, role})
           }

@@ -222,7 +222,7 @@ defmodule Visualize.Chart.BuilderTest do
       # Neither the design's own root nor vars is a root tab (§18.13): a declaration is
       # the variable panel's, and the panel opens from the tab that ends the row (#363).
       # The sources root wears the word *data* (#372); its value stays the design key.
-      assert tabs(html, "vis-builder-node") == ~w(frame data styles marks labels variables colour)
+      assert tabs(html, "vis-builder-node") == ~w(frame data styles marks labels variables color)
 
       assert html =~
                ~s(title="data of the chart" aria-label="data" data-builder-bind-root="sources" phx-click="select_root" phx-value-root="sources")
@@ -2374,11 +2374,11 @@ defmodule Visualize.Chart.BuilderTest do
 
       # A hex is itself, none is hatched, unset is empty, a slot the theme lacks has no colour.
       theme = Visualize.Theme.default()
-      assert Editor.well("#123456", theme) == %{colour: "#123456", none?: false, word: "#123456"}
-      assert Editor.well(:none, theme) == %{colour: nil, none?: true, word: "none"}
-      assert Editor.well(nil, theme) == %{colour: nil, none?: false, word: nil}
-      assert Editor.well(:nonsense, theme) == %{colour: nil, none?: false, word: "nonsense"}
-      assert Editor.well({:series, 2}, theme).colour == Enum.at(theme.series, 1)
+      assert Editor.well("#123456", theme) == %{color: "#123456", none?: false, word: "#123456"}
+      assert Editor.well(:none, theme) == %{color: nil, none?: true, word: "none"}
+      assert Editor.well(nil, theme) == %{color: nil, none?: false, word: nil}
+      assert Editor.well(:nonsense, theme) == %{color: nil, none?: false, word: "nonsense"}
+      assert Editor.well({:series, 2}, theme).color == Enum.at(theme.series, 1)
 
       # The chooser's controls still write the same key: a slot is the atom, a hex the
       # string, blank removes — a part's colour as any key.
@@ -2636,7 +2636,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       # A colour picked leaves the context on the chooser; selecting the site brings the
       # layer's context — and the source list — back.
-      {:noreply, s} = Builder.handle_event("context", %{"panel" => "colour"}, s)
+      {:noreply, s} = Builder.handle_event("context", %{"panel" => "color"}, s)
 
       refute BuilderFixture.render(s) =~
                ~s(class="vis-builder-pool" role="radiogroup" aria-label="a source of the pool")
@@ -3055,10 +3055,10 @@ defmodule Visualize.Chart.BuilderTest do
       refute html =~ ~s(phx-value-panel="inspect")
 
       # The node row ends with the variables tab and the colour toggle.
-      assert tabs(html, "vis-builder-node") == ~w(frame data styles marks labels variables colour)
+      assert tabs(html, "vis-builder-node") == ~w(frame data styles marks labels variables color)
 
       assert html =~
-               ~s(class="vis-builder-node vis-builder-node-colour" title="colour — the picker for the selected node" aria-label="colour" aria-pressed="false" phx-click="context" phx-value-panel="colour")
+               ~s(class="vis-builder-node vis-builder-node-color" title="colour — the picker for the selected node" aria-label="color" aria-pressed="false" phx-click="context" phx-value-panel="color")
 
       # The signals and the font panel are under their roots now (#314): a stale click on
       # one is a no-op.
@@ -3074,15 +3074,15 @@ defmodule Visualize.Chart.BuilderTest do
 
       # Pressed: the picker in place of the page, the root still open, the toggle pressed
       # and now offering the way back.
-      {:noreply, colour} = Builder.handle_event("context", %{"panel" => "colour"}, s)
-      assert colour.assigns.context == :colour
+      {:noreply, colour} = Builder.handle_event("context", %{"panel" => "color"}, s)
+      assert colour.assigns.context == :color
       html = BuilderFixture.render(colour)
       assert html =~ ~s(class="vis-builder-picker")
       refute html =~ ~s(class="vis-builder-layer-context")
       assert html =~ ~r/vis-builder-node-open[^>]*aria-label="styles"/
 
       assert html =~
-               ~s(class="vis-builder-node vis-builder-node-colour vis-builder-node-open" title="colour — back to the node&#39;s form" aria-label="colour" aria-pressed="true" phx-click="context" phx-value-panel="inspect")
+               ~s(class="vis-builder-node vis-builder-node-color vis-builder-node-open" title="colour — back to the node&#39;s form" aria-label="color" aria-pressed="true" phx-click="context" phx-value-panel="inspect")
 
       {:noreply, back} = Builder.handle_event("context", %{"panel" => "inspect"}, colour)
       assert back.assigns.context == :inspect
@@ -3091,7 +3091,7 @@ defmodule Visualize.Chart.BuilderTest do
       # A colour field still opens the picker — a part's colour by its path; the variables
       # tab its panel.
       {:noreply, field} = Builder.handle_event("select_field", %{"field" => "stroke.color"}, s)
-      assert field.assigns.context == :colour
+      assert field.assigns.context == :color
 
       {:noreply, vars} = Builder.handle_event("context", %{"panel" => "variables"}, s)
       html = BuilderFixture.render(vars)
@@ -3107,16 +3107,16 @@ defmodule Visualize.Chart.BuilderTest do
            socket: s
          } do
       {:noreply, s} = Builder.handle_event("select_field", %{"field" => "stroke.color"}, s)
-      assert s.assigns.context == :colour
+      assert s.assigns.context == :color
       html = BuilderFixture.render(s)
 
       assert html =~ ~s(<form id="b-picker" class="vis-builder-picker" phx-change="edit")
-      assert html =~ ~s(data-builder-scope="colour")
+      assert html =~ ~s(data-builder-scope="color")
       assert html =~ ~s(<h3 class="vis-builder-context-title">stroke.color</h3>)
 
-      for slot <- Visualize.Theme.colour_slots(Visualize.Theme.default()) do
+      for slot <- Visualize.Theme.color_slots(Visualize.Theme.default()) do
         assert html =~ ~s(name="stroke.color.slot" value="#{slot}")
-        assert html =~ ~s(draggable="true" data-builder-colour="#{slot}")
+        assert html =~ ~s(draggable="true" data-builder-color="#{slot}")
       end
 
       # The color table by name, grouped by use; each patch titled with its color.
@@ -3124,11 +3124,11 @@ defmodule Visualize.Chart.BuilderTest do
                ~s(class="vis-builder-swatch vis-builder-swatch-on" title="series_1 · #3b6fa8")
 
       for group <- ["series", "roles", "furniture", "the theme&#39;s colors", "CSS names"] do
-        assert html =~ ~s(<summary class="vis-builder-colour-group-title">#{group}</summary>)
+        assert html =~ ~s(<summary class="vis-builder-color-group-title">#{group}</summary>)
       end
 
       assert length(Regex.scan(~r/class="vis-builder-hue"/, html)) >= 35
-      assert html =~ ~s(<input type="color" name="stroke.color" class="vis-builder-colour")
+      assert html =~ ~s(<input type="color" name="stroke.color" class="vis-builder-color")
       refute html =~ "stroke.color.var"
 
       # The patches come before the hues and the picker.
@@ -3151,7 +3151,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       # With no colour field selected the panel shows the colours and writes nothing.
       {:noreply, off} = Builder.handle_event("select_field", %{"field" => "stroke.width"}, s)
-      {:noreply, off} = Builder.handle_event("context", %{"panel" => "colour"}, off)
+      {:noreply, off} = Builder.handle_event("context", %{"panel" => "color"}, off)
       html = BuilderFixture.render(off)
       assert html =~ "click a colour well to set it here"
       assert html =~ ~s(disabled)
@@ -3163,15 +3163,15 @@ defmodule Visualize.Chart.BuilderTest do
       assert s.assigns.field == nil
 
       {:noreply, s} =
-        Builder.handle_event("drop_colour", %{"field" => "stroke.color", "colour" => "axis"}, s)
+        Builder.handle_event("drop_color", %{"field" => "stroke.color", "color" => "axis"}, s)
 
       assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color]) ==
                {:color, :axis}
 
       {:noreply, s} =
         Builder.handle_event(
-          "drop_colour",
-          %{"field" => "stroke.color", "colour" => "#abcdef"},
+          "drop_color",
+          %{"field" => "stroke.color", "color" => "#abcdef"},
           s
         )
 
@@ -3179,7 +3179,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert BuilderFixture.render(s) =~ ~s(--vis-builder-swatch: #abcdef" title="#abcdef")
 
       {:noreply, refused} =
-        Builder.handle_event("drop_colour", %{"field" => "stroke.width", "colour" => "axis"}, s)
+        Builder.handle_event("drop_color", %{"field" => "stroke.width", "color" => "axis"}, s)
 
       assert refused.assigns.notice == "stroke.width is not a colour"
       assert get_in(hd(refused.assigns.uses).local, [:styles, :series, :stroke, :width]) == 2
@@ -5163,7 +5163,7 @@ defmodule Visualize.Chart.BuilderTest do
       [nodes, _] = String.split(nodes, "</nav>", parts: 2)
 
       # The variables tab and the colour toggle end the row (#366).
-      assert Enum.take(tabs(nodes, "vis-builder-node"), -2) == ~w(variables colour)
+      assert Enum.take(tabs(nodes, "vis-builder-node"), -2) == ~w(variables color)
 
       # `ticks` and `unit` have defaults; `accent` has neither a default nor a binding.
       unbound = Variables.unbound(BuilderFixture.layers(s), BuilderFixture.design(s), %{})
@@ -5457,7 +5457,7 @@ defmodule Visualize.Chart.BuilderTest do
       s = BuilderFixture.socket(BuilderFixture.layers(), store: BuilderFixture.Library)
 
       states =
-        for context <- [:inspect, :sources, :colour, :font, :variables],
+        for context <- [:inspect, :sources, :color, :font, :variables],
             label <- ["frame", "marks[0]", "sources.primary", "styles.series", "labels[0]"],
             selected <- [0, 2] do
           {:noreply, s1} =
@@ -5523,7 +5523,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, chained} =
         Builder.handle_event(
-          "colour_chain",
+          "color_chain",
           %{"_target" => ["stroke.color.step"], "stroke.color.step" => "alpha"},
           chained
         )

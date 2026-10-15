@@ -352,7 +352,7 @@ defmodule Visualize.Chart.FactsTest do
     end
 
     test "requires names the slot's own fields and known attributes" do
-      d = put_in(design(), [:sources, :primary, :requires], %{latency: [:colour], other: [:unit]})
+      d = put_in(design(), [:sources, :primary, :requires], %{latency: [:color], other: [:unit]})
       {:error, errors} = Chart.from_map(d)
 
       assert {[:sources, :primary, :requires, :other], {:undeclared, :field, :other}} in errors
@@ -364,7 +364,7 @@ defmodule Visualize.Chart.FactsTest do
       bad = [
         {fact(:nope, :latency, :unit), {:undeclared, :source, :nope}},
         {fact(:primary, :nope, :unit), {:undeclared_field, :primary, :nope}},
-        {fact(:primary, :latency, :colour), {:enum, Schema.attributes()}}
+        {fact(:primary, :latency, :color), {:enum, Schema.attributes()}}
       ]
 
       for {f, reason} <- bad do

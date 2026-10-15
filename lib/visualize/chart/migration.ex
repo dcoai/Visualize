@@ -118,13 +118,15 @@ defmodule Visualize.Chart.Migration do
   @spec legacy_type(atom(), atom()) :: Schema.type() | nil
   def legacy_type(:design, :frame), do: {:node, :frame}
   # The role colors of before #663, which `canonical/1` folds into the color table.
-  def legacy_type(:theme, :roles), do: {:map, :colour}
+  def legacy_type(:theme, :roles), do: {:map, :color}
   # Version 2's flat style keys and gradient words, which the 2 → 3 step moves (D-172).
   def legacy_type(:style, key), do: flat_type(key)
   def legacy_type(kind, :kind) when kind in [:paint, :gradient], do: {:enum, [:linear, :radial]}
+  # spelling: allow — version 2's paint word.
   def legacy_type(kind, :centre) when kind in [:paint, :gradient], do: {:list, :number}
   def legacy_type(:stop, :offset), do: :number
-  def legacy_type(:stop, :colour), do: :colour
+  # spelling: allow — version 2's stop word.
+  def legacy_type(:stop, :colour), do: :color
   def legacy_type(_kind, _key), do: nil
 
   @doc """
@@ -240,12 +242,12 @@ defmodule Visualize.Chart.Migration do
   end
 
   defp value(:text, parts, true) when is_list(parts), do: Text.unparse(parts)
-  defp value(:colour, v, _text?), do: colour(v)
+  defp value(:color, v, _text?), do: colour(v)
   # A theme's pinned steps are colour strings as they are (#667).
-  defp value(:theme_colour, v, _text?) when is_map(v) and not is_struct(v), do: v
-  defp value(:theme_colour, v, _text?), do: colour(v)
+  defp value(:theme_color, v, _text?) when is_map(v) and not is_struct(v), do: v
+  defp value(:theme_color, v, _text?), do: colour(v)
 
-  defp value(:colour_map, v, _text?) when is_map(v) and not is_struct(v),
+  defp value(:color_map, v, _text?) when is_map(v) and not is_struct(v),
     do: Map.new(v, fn {category, c} -> {category, colour(c)} end)
 
   defp value({:node, kind}, v, text?) when is_map(v) and not is_struct(v),

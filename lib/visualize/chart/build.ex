@@ -156,7 +156,7 @@ defmodule Visualize.Chart.Build do
   defp stop(%{} = stop), do: stop
 
   @doc """
-  The value a `:colour` key takes to refer to a gradient of `defs` (spec/14 §3.2).
+  The value a `:color` key takes to refer to a gradient of `defs` (spec/14 §3.2).
 
       iex> Visualize.Chart.Build.paint(:area)
       {:paint, :area}

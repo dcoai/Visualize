@@ -35,7 +35,7 @@ defmodule Visualize.Chart.FreeVarsTest do
                name: :accent,
                default: :series_1,
                required: false,
-               uses: [%{path: [:styles, :series, :stroke], expects: :colour, layer: 0}]
+               uses: [%{path: [:styles, :series, :stroke], expects: :color, layer: 0}]
              }
 
       assert entry([@house, @panel], :unit).default == nil
@@ -52,7 +52,7 @@ defmodule Visualize.Chart.FreeVarsTest do
 
     test "the expectation is the schema's type at the path" do
       design = %{
-        styles: %{s: %{stroke: Chart.var(:colour), curve_opts: Chart.var(:opts)}},
+        styles: %{s: %{stroke: Chart.var(:color), curve_opts: Chart.var(:opts)}},
         marks: [%{type: :line, data: :p, style: Chart.var(:style), options: Chart.var(:options)}],
         labels: [%{anchor: :title, text: ["a ", Chart.var(:part)]}],
         frames: %{main: %{scales: %{x: %{kind: :linear, domain: Chart.var(:domain)}}}},
@@ -62,7 +62,7 @@ defmodule Visualize.Chart.FreeVarsTest do
       expects = for v <- free(design), use <- v.uses, into: %{}, do: {v.name, use.expects}
 
       assert expects == %{
-               colour: :colour,
+               color: :color,
                opts: {:node, :curve_opts},
                # A style site admits a reference, an inline node, a generator, a field
                # naming a style by data, or a list of those (spec/14 §3.6, §3.13); the

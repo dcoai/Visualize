@@ -12,8 +12,8 @@ defmodule Visualize.Board.Snapshot do
   the rows it showed, to be looked at. A snapshot is never imported into a store.
 
   Take one from a running board with `Visualize.Board.Server.snapshot/1`, or purely from
-  the board, the store and the cells' pools with `realise/4`, the snapshot form of
-  `Visualize.Board.realise/4`. `Visualize.Board.Export` draws it as one SVG document, a
+  the board, the store and the cells' pools with `realize/4`, the snapshot form of
+  `Visualize.Board.realize/4`. `Visualize.Board.Export` draws it as one SVG document, a
   PNG or printed pages.
 
   The value has a map form (`to_map/1`, `from_map/2`) and a JSON form (`to_json/1`,
@@ -82,7 +82,7 @@ defmodule Visualize.Board.Snapshot do
   # -- taking one ---------------------------------------------------------------------------
 
   @doc false
-  # A snapshot of what a board holds (spec/15 §12.2): the runtime's and `realise/4`'s one
+  # A snapshot of what a board holds (spec/15 §12.2): the runtime's and `realize/4`'s one
   # constructor. `cells` maps a name to its `chart`, `vars`, `slots` and `crashed` reason
   # as the holder has them; each slot is normalised here — rows as a list, a status as one
   # of the four a snapshot keeps, a down reason and a crash as their words — so a snapshot
@@ -130,31 +130,31 @@ defmodule Visualize.Board.Snapshot do
   defp crashed(reason) when is_binary(reason), do: reason
   defp crashed(reason), do: inspect(reason, limit: 5, printable_limit: 200)
 
-  @doc "As `realise/4` with `[]` options."
-  @spec realise(Board.t(), Board.store(), %{atom() => map()}) ::
+  @doc "As `realize/4` with `[]` options."
+  @spec realize(Board.t(), Board.store(), %{atom() => map()}) ::
           {:ok, t()} | {:error, [Board.error(), ...]}
-  def realise(board, store, pools), do: realise(board, store, pools, [])
+  def realize(board, store, pools), do: realize(board, store, pools, [])
 
   @doc """
-  A snapshot of a board realised purely (spec/15 §6, §12.2): `Visualize.Board.realise/4`
+  A snapshot of a board realised purely (spec/15 §6, §12.2): `Visualize.Board.realize/4`
   over the same arguments, every fault of it as it reports them, and on success each
   cell's prepared component, its variables and its pool's sources as deliveries, with the
   schema application found for each slot.
 
-  The options are `realise/4`'s — `width:` (default `1200`), `theme:` (default
+  The options are `realize/4`'s — `width:` (default `1200`), `theme:` (default
   `Visualize.Theme.default/0`), `now:`, `schemas:`, `describe:` and `limits:`. With `now:`
   the window is the board's resolved at it; without, a fixed window is kept and a trailing
   one resolves to `nil`.
   """
-  @spec realise(Board.t(), Board.store(), %{atom() => map()}, keyword()) ::
+  @spec realize(Board.t(), Board.store(), %{atom() => map()}, keyword()) ::
           {:ok, t()} | {:error, [Board.error(), ...]}
-  def realise(%Board{} = board, store, pools, opts) do
+  def realize(%Board{} = board, store, pools, opts) do
     theme = Keyword.get_lazy(opts, :theme, &Visualize.Theme.default/0)
     width = Keyword.get(opts, :width, 1200)
     now = Keyword.get(opts, :now)
     opts = Keyword.merge(opts, theme: theme, width: width)
 
-    with {:ok, applied, _cache} <- Board.realise(board, store, pools, opts),
+    with {:ok, applied, _cache} <- Board.realize(board, store, pools, opts),
          {:ok, components} <-
            Board.components(board, store, Keyword.take(opts, [:limits, :generators])) do
       cells =

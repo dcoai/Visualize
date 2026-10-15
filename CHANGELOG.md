@@ -295,6 +295,24 @@ release it merely follows.
   `{"$colours": …}` → `{"$colors": …}`.
   <!-- spelling: end -->
 
+- **American spelling: the released British names are renamed, with no deprecated
+  aliases** (#642, D-183). Change these names where your code calls or matches them:
+
+  <!-- spelling: allow -->
+  | Before | After |
+  |---|---|
+  | `Visualize.Board.realise/3`, `realise/4` | `Visualize.Board.realize/3`, `realize/4` |
+  | `Visualize.Board.Snapshot.realise/3`, `realise/4` | `Visualize.Board.Snapshot.realize/3`, `realize/4` |
+  | `Visualize.Color.Vision.recolour/2` | `Visualize.Color.Vision.recolor/2` |
+  | `Visualize.Theme.colour_slots/1` | `Visualize.Theme.color_slots/1` |
+  | `{:type, :colour}`, `{:type, :colour_map}`, `{:type, :theme_colour}` (validator faults) | `{:type, :color}`, `{:type, :color_map}`, `{:type, :theme_color}` |
+  | `{:colour_map, kind}` (validator fault) | `{:color_map, kind}` |
+  | `{:colour_key, key}` (feed schema fault) | `{:color_key, key}` |
+  | `Visualize.Chart.Transform.apply/3`'s `centre:` | `center:` |
+  | `Visualize.Chart.Builder.Place.new_frame/3`'s `:centre` | `:center` |
+  | the builder's `colour_chain` and `drop_colour` events, `:colour` panel and glyph, `vis-builder-colour*` classes and `data-builder-colour` attribute | `color_chain`, `drop_color`, `:color`, `vis-builder-color*`, `data-builder-color` |
+  <!-- spelling: end -->
+
 - **A JSON document's unknown or retired `$` tag is refused, not read as data** (#645,
   D-182). `Chart.from_json/2`, `Board.from_json/2`, `Board.Snapshot.from_json/2` and
   `Chart.Fragment.from_json/2` hold a document to the one table of tags before decoding it:

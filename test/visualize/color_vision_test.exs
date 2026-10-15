@@ -102,13 +102,13 @@ defmodule Visualize.Color.VisionTest do
     end
   end
 
-  test "recolour rewrites every colour literal of a text and nothing else" do
+  test "recolor rewrites every colour literal of a text and nothing else" do
     svg =
       ~s|<g fill="#ff0000" style="stroke: #f00"><rect fill="url(#bad)" id="abc"/><text>#ff0000</text></g>|
 
-    assert Vision.recolour(svg, :protanopia) ==
+    assert Vision.recolor(svg, :protanopia) ==
              ~s|<g fill="#6d5f00" style="stroke: #6d5f00"><rect fill="url(#bad)" id="abc"/><text>#ff0000</text></g>|
 
-    assert Vision.recolour(svg, :none) == svg
+    assert Vision.recolor(svg, :none) == svg
   end
 end

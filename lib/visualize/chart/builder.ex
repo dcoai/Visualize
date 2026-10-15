@@ -103,7 +103,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 Events.Tree,
                 Events.Form,
                 Events.Variables,
-                Events.Colour,
+                Events.Color,
                 Events.Graph
               ] ++ Modes.all()
 
@@ -620,14 +620,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
               >{Phoenix.HTML.raw(Glyphs.icon(:variables))}<span :if={@variables_tab.needs > 0} class="vis-builder-node-badge">{@variables_tab.needs}</span></button>
               <button
                 type="button"
-                class={"vis-builder-node vis-builder-node-colour" <> if(@context == :colour, do: " vis-builder-node-open", else: "")}
-                title={if(@context == :colour, do: "colour — back to the node's form", else: "colour — the picker for the selected node")}
-                aria-label="colour"
-                aria-pressed={to_string(@context == :colour)}
+                class={"vis-builder-node vis-builder-node-color" <> if(@context == :color, do: " vis-builder-node-open", else: "")}
+                title={if(@context == :color, do: "colour — back to the node's form", else: "colour — the picker for the selected node")}
+                aria-label="color"
+                aria-pressed={to_string(@context == :color)}
                 phx-click="context"
-                phx-value-panel={if(@context == :colour, do: "inspect", else: "colour")}
+                phx-value-panel={if(@context == :color, do: "inspect", else: "color")}
                 phx-target={@myself}
-              >{Phoenix.HTML.raw(Glyphs.icon(:colour))}</button>
+              >{Phoenix.HTML.raw(Glyphs.icon(:color))}</button>
             </nav>
             <Themes.panel
               :if={@context == :inspect and @theme_mode}
@@ -719,7 +719,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   selected={@field}
                   selected_node={@entry.label}
                   found={@find_hit}
-                  theme={@colour.theme}
+                  theme={@color.theme}
                   defs={@defs}
                   pool={@pool}
                   hidden={if(@source_defaults, do: [], else: [:default])}
@@ -780,7 +780,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 selected={@field}
                 selected_node={@entry.label}
                 found={@find_hit}
-                theme={@colour.theme}
+                theme={@color.theme}
                 defs={@defs}
                 pool={@pool}
                 hidden={if(@source_defaults, do: [], else: [:default])}
@@ -832,14 +832,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
               target={@myself}
             />
             <Picker.panel
-              :if={@context == :colour}
+              :if={@context == :color}
               id={@id <> "-picker"}
-              key={@colour.key}
-              spec={@colour.spec}
-              value={@colour.value}
-              groups={@colour.groups}
-              theme={@colour.theme}
-              recent={@colour.recent}
+              key={@color.key}
+              spec={@color.spec}
+              value={@color.value}
+              groups={@color.groups}
+              theme={@color.theme}
+              recent={@color.recent}
               target={@myself}
             />
             <Fonts.panel
@@ -875,7 +875,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 node={get_in(@site.use.local, [:composite, :defaults]) || %{}}
                 event="edit_defaults"
                 refs={@refs}
-                theme={@colour.theme}
+                theme={@color.theme}
                 defs={@defs}
                 target={@myself}
               />

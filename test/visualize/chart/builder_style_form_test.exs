@@ -110,8 +110,8 @@ defmodule Visualize.Chart.Builder.StyleFormTest do
       # A stop's color by a patch and by the chooser; the angle by its scrubber.
       {:noreply, s} =
         Builder.handle_event(
-          "drop_colour",
-          %{"field" => "fill.stops.1.color", "colour" => "axis"},
+          "drop_color",
+          %{"field" => "fill.stops.1.color", "color" => "axis"},
           s
         )
 
@@ -127,7 +127,7 @@ defmodule Visualize.Chart.Builder.StyleFormTest do
       {:noreply, picked} =
         Builder.handle_event("select_field", %{"field" => "fill.stops.1.color"}, s)
 
-      assert picked.assigns.context == :colour
+      assert picked.assigns.context == :color
       html = BuilderFixture.render(picked)
       assert html =~ ~s(<h3 class="vis-builder-context-title">fill.stops.1.color</h3>)
       assert html =~ ~s(name="fill.stops.1.color.slot" value="axis" checked)

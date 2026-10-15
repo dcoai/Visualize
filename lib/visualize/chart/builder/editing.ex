@@ -117,7 +117,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         refs: refs(design, assigns.store, palette_theme),
         palette_theme: palette_theme,
         look: look(kind, design, entry, Map.put(assigns, :theme, preview_theme), errors),
-        colour: colour(assigns, entry, at(layer, entry.path), design),
+        color: colour(assigns, entry, at(layer, entry.path), design),
         defs: Map.get(design, :defs, %{}),
         pool: assigns |> pool() |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort(),
         bound_pool: pool(assigns),
@@ -217,18 +217,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp colour(%{field: field}, entry, node, design) do
       theme = design |> Map.get(:theme, :default) |> theme()
 
-      # The selected field, when it is a colour: a key of the node, or a part's key by its
+      # The selected field, when it is a color: a key of the node, or a part's key by its
       # path (`stroke.color`, `fill.stops.0.color`, §18.7).
       located =
         case field && Editor.locate(entry.kind, field) do
-          %{spec: %{type: :colour}} = located -> located
+          %{spec: %{type: :color}} = located -> located
           _other -> nil
         end
 
       %{
         theme: theme,
         key: located && field,
-        spec: (located && located.spec) || %{type: :colour, range: nil},
+        spec: (located && located.spec) || %{type: :color, range: nil},
         value: located && Editor.value_at(entry.kind, node, located.path),
         groups: Picker.groups(theme),
         recent: recent_colours(design)

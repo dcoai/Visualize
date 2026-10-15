@@ -97,13 +97,13 @@ defmodule Visualize.Color.Vision do
   `#rrggbb` — an SVG's fills and strokes, a style's colours. A `#` that is a reference,
   `url(#id)`, is left alone, and so is everything that is not a colour; `:none` is the text.
 
-      iex> Visualize.Color.Vision.recolour(~s|<rect fill="#ff0000" mask="url(#bad)"/>|, :protanopia)
+      iex> Visualize.Color.Vision.recolor(~s|<rect fill="#ff0000" mask="url(#bad)"/>|, :protanopia)
       ~s|<rect fill="#6d5f00" mask="url(#bad)"/>|
   """
-  @spec recolour(String.t(), deficiency() | :none) :: String.t()
-  def recolour(text, :none) when is_binary(text), do: text
+  @spec recolor(String.t(), deficiency() | :none) :: String.t()
+  def recolor(text, :none) when is_binary(text), do: text
 
-  def recolour(text, deficiency) when is_binary(text) and deficiency in @deficiencies do
+  def recolor(text, deficiency) when is_binary(text) and deficiency in @deficiencies do
     Regex.replace(
       ~r/(?<=["':\s,])#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9A-Za-z_-])/,
       text,
@@ -116,7 +116,7 @@ defmodule Visualize.Color.Vision do
     )
   end
 
-  def recolour(text, other) when is_binary(text), do: unknown!(other)
+  def recolor(text, other) when is_binary(text), do: unknown!(other)
 
   # The sRGB transfer function of IEC 61966-2-1, and its inverse.
   defp decode(c) when c <= 0.04045, do: c / 12.92

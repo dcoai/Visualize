@@ -188,7 +188,7 @@ defmodule Visualize.Chart.OverlaysTest do
       assert incident.style.fill == role(Theme.default(), :bad, :css)
     end
 
-    test "the series keep their colours: the overlay reads a colour scale of its own (D-143)" do
+    test "the series keep their colors: the overlay reads a colour scale of its own (D-143)" do
       [line] = group(apply!(design())) |> find("mark mark-line")
       strokes = for path <- line.children, do: path.style.stroke
 
@@ -445,7 +445,7 @@ defmodule Visualize.Chart.OverlaysTest do
         })
 
       assert {:error, errors} = Validator.validate(design)
-      assert {[:frames, :main, :scales, :severity, :range], {:colour_map, :linear}} in errors
+      assert {[:frames, :main, :scales, :severity, :range], {:color_map, :linear}} in errors
       assert {[:frames, :main, :scales, :worth, :polarity], {:polarity, :range}} in errors
 
       formatted = Enum.map(errors, &Validator.format/1)
@@ -456,7 +456,7 @@ defmodule Visualize.Chart.OverlaysTest do
     test "a colour in a map is checked as a style's colour is, at the category's path" do
       design = put_in(design(), [:frames, :main, :scales, :severity, :range], %{"x" => 7})
       assert {:error, errors} = Validator.validate(design)
-      assert {[:frames, :main, :scales, :severity, :range, "x"], {:type, :colour}} in errors
+      assert {[:frames, :main, :scales, :severity, :range, "x"], {:type, :color}} in errors
     end
 
     test "polarity on a sequential scale's own ramp is accepted" do

@@ -71,7 +71,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     The inline SVG of a control's icon — `:eye` and `:eye_off` for the layer toggle, `:lock`
-    for a library layer and `:lock_open` for one unlocked from it (spec/14 §18.8), `:inspect`, `:colour` and `:variables` for the
+    for a library layer and `:lock_open` for one unlocked from it (spec/14 §18.8), `:inspect`, `:color` and `:variables` for the
     panel row, and a root's name (a string) for the node row (§18.13, #314) — in
     `currentColor`, 18px, hidden from readers since the control names itself.
 
@@ -80,7 +80,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec icon(atom() | String.t()) :: String.t()
     def icon(name)
-        when name in [:eye, :eye_off, :lock, :lock_open, :inspect, :colour, :variables] do
+        when name in [:eye, :eye_off, :lock, :lock_open, :inspect, :color, :variables] do
       ~s|<svg class="vis-builder-icon vis-builder-icon-#{name}" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">#{icon_inner(name)}</svg>|
     end
 
@@ -114,7 +114,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       do:
         ~s|<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9 H16 M8 13 H16 M8 17 H12"/>|
 
-    defp icon_inner(:colour),
+    defp icon_inner(:color),
       do:
         ~s|<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="14" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="13" r="1.5" fill="currentColor" stroke="none"/>|
 

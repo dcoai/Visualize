@@ -290,18 +290,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     A new frame dropped on the graph at a point (spec/14 §18.16, #616): a fresh name —
     `main` in a design with none, else the first free `frame_<n>` from 2 — and a box a
     quarter of the graph, half its width and half its height, centred on the point and
-    kept inside, as fractions rounded to four places. `:centre` is the graph's centre,
+    kept inside, as fractions rounded to four places. `:center` is the graph's centre,
     where the keyboard twin and *+ frame* place one.
 
         iex> design = %{frames: %{main: %{}, frame_2: %{}}}
         iex> Visualize.Chart.Builder.Place.new_frame(design, {800, 400}, {700, 100})
         {:frame_3, [0.5, 0, 0.5, 0.5]}
-        iex> Visualize.Chart.Builder.Place.new_frame(%{}, {800, 400}, :centre)
+        iex> Visualize.Chart.Builder.Place.new_frame(%{}, {800, 400}, :center)
         {:main, [0.25, 0.25, 0.5, 0.5]}
     """
-    @spec new_frame(map(), {number(), number()}, {number(), number()} | :centre) ::
+    @spec new_frame(map(), {number(), number()}, {number(), number()} | :center) ::
             {atom(), [number()]}
-    def new_frame(design, {width, height}, :centre),
+    def new_frame(design, {width, height}, :center),
       do: new_frame(design, {width, height}, {width / 2, height / 2})
 
     def new_frame(design, {width, height}, {x, y}) do

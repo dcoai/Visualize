@@ -459,7 +459,7 @@ defmodule Visualize.Feed.CombineTest do
       {:ok, d} = Feed.fetch(feed, nil, nil)
       assert d.rows == Visualize.Signals.rows(signal, 30)
       assert {:ok, %{type: :number, unit: "ms", label: "A"}} = Schema.fetch(feed.schema, :a)
-      assert_raise ArgumentError, fn -> Signals.new(signal, describe: %{a: %{colour: "red"}}) end
+      assert_raise ArgumentError, fn -> Signals.new(signal, describe: %{a: %{color: "red"}}) end
     end
 
     test "a clocked feed reads its tick from the clock" do

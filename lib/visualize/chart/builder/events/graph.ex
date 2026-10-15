@@ -85,7 +85,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def handle_event("component_key", %{"key" => key, "component" => word}, socket) do
       case {key, Place.component(word)} do
         {insert, {:ok, :frame}} when insert in ["Insert", "i", "Enter", " "] ->
-          {:noreply, added_frame(socket, :centre, nil)}
+          {:noreply, added_frame(socket, :center, nil)}
 
         {insert, {:ok, component}} when insert in ["Insert", "i", "Enter", " "] ->
           {:noreply, placed(socket, component, Place.home(component), keyed_spot(socket))}
@@ -247,7 +247,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # *+ frame* on the frames root: a new frame at the graph's centre (#616).
     def handle_event("add_frame", _params, socket),
-      do: {:noreply, added_frame(socket, :centre, nil)}
+      do: {:noreply, added_frame(socket, :center, nil)}
 
     # -- placing a component (spec/14 §18.16) ------------------------------------------------
 
@@ -576,7 +576,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp dropped_at(%{"x" => _} = params),
       do: {number(Map.get(params, "x")), number(Map.get(params, "y"))}
 
-    defp dropped_at(_params), do: :centre
+    defp dropped_at(_params), do: :center
 
     defp spotted_frame(_design, %{frame: frame}), do: frame
     defp spotted_frame(design, _point), do: Fragment.frame_of(design, nil)

@@ -69,7 +69,7 @@ defmodule Visualize.Shape.BandTest do
         Band.new()
         |> Band.x0(:a)
         |> Band.x1(:b)
-        |> Band.fill(:colour)
+        |> Band.fill(:color)
         |> Band.generate([%{a: 0, b: 10}])
 
       assert absent.style == %{class: "band"}

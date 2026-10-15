@@ -257,13 +257,13 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
 
     defp pools, do: %{a: %{primary: board_rows()}}
 
-    test "realise/4 applies every cell in it" do
-      {:ok, applied, _cache} = Board.realise(board(), @store, pools(), system: :us)
+    test "realize/4 applies every cell in it" do
+      {:ok, applied, _cache} = Board.realize(board(), @store, pools(), system: :us)
       assert applied.a.frame.system == :us
     end
 
     test "a snapshot is drawn in the reader's system, and an export with it" do
-      {:ok, snapshot} = Snapshot.realise(board(), @store, pools(), now: DateTime.add(@t0, 600))
+      {:ok, snapshot} = Snapshot.realize(board(), @store, pools(), now: DateTime.add(@t0, 600))
 
       assert %{a: %View{svg: kg}} = Snapshot.views(snapshot)
       assert %{a: %View{svg: lb}} = Snapshot.views(snapshot, system: :us)

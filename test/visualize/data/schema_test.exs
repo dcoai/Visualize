@@ -101,12 +101,13 @@ defmodule Visualize.Data.SchemaTest do
     end
 
     test "a colour key is refused, whatever its value, and says why" do
+      # spelling: allow — either spelling is refused.
       for key <- [:color, :colour, :colors, :colours, :palette, :fill, :stroke] do
         assert faults(%{s: %{key => %{"ok" => :good}, :type => :category}}) ==
-                 [{[:s, key], {:colour_key, key}}]
+                 [{[:s, key], {:color_key, key}}]
       end
 
-      line = Schema.format_error({[:s, :colors], {:colour_key, :colors}})
+      line = Schema.format_error({[:s, :colors], {:color_key, :colors}})
       assert line =~ "s.colors"
       assert line =~ "never"
       assert line =~ "status"
@@ -220,7 +221,7 @@ defmodule Visualize.Data.SchemaTest do
 
     test "every fault is reported, by path" do
       errors = faults(%{a: %{}, b: %{type: :number, fill: "#000"}})
-      assert errors == [{[:a, :type], :required}, {[:b, :fill], {:colour_key, :fill}}]
+      assert errors == [{[:a, :type], :required}, {[:b, :fill], {:color_key, :fill}}]
     end
 
     test "new!/1 raises with every fault formatted" do
@@ -656,7 +657,7 @@ defmodule Visualize.Data.SchemaTest do
             [capped: :yes],
             [reduced_by: :host],
             [schema: :ab],
-            [colour: "red"]
+            [color: "red"]
           ] do
         assert_raise ArgumentError, fn -> Delivery.new(@rows, bad) end
       end

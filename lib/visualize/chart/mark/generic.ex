@@ -95,7 +95,7 @@ defmodule Visualize.Chart.Mark.Generic do
   defp value_fill(_ctx, nil), do: %{}
 
   defp value_fill(%{frame: frame, mode: mode}, colour) do
-    if Style.colour?(colour), do: %{fill: Style.colour(colour, frame.theme, mode)}, else: %{}
+    if Style.color?(colour), do: %{fill: Style.color(colour, frame.theme, mode)}, else: %{}
   end
 
   # -- circle --------------------------------------------------------------------------

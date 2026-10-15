@@ -13,7 +13,7 @@ defmodule Visualize.Board do
   The board is a value. `from_map/2` and `to_map/1` are exact inverses, and `from_json/2`
   and `to_json/1` the same round trip over JSON, stamped `"$version"` and read under the
   version policy and sanity limits of spec/14 §9.1–9.2. `validate/1` checks a board alone
-  and `validate/3` given a store; `realise/4` applies every cell, purely. The processes
+  and `validate/3` given a store; `realize/4` applies every cell, purely. The processes
   that keep a board live are the runtime's (#540).
 
   ## Examples
@@ -552,10 +552,10 @@ defmodule Visualize.Board do
 
   # -- realising (spec/15 §6) --------------------------------------------------------------
 
-  @doc "As `realise/4` with `[]` options."
-  @spec realise(t(), store(), %{atom() => map()}) ::
+  @doc "As `realize/4` with `[]` options."
+  @spec realize(t(), store(), %{atom() => map()}) ::
           {:ok, %{atom() => Chart.Applied.t()}, Cache.t()} | {:error, [error(), ...]}
-  def realise(board, store, pools), do: realise(board, store, pools, [])
+  def realize(board, store, pools), do: realize(board, store, pools, [])
 
   @doc """
   Every cell applied, purely (spec/15 §6): `{:ok, %{cell => applied}, cache}`, or every
@@ -583,9 +583,9 @@ defmodule Visualize.Board do
       maps the cell's slot to its feed through its binding
     * `:limits` - the limits each component's design is read under
   """
-  @spec realise(t(), store(), %{atom() => map()}, keyword()) ::
+  @spec realize(t(), store(), %{atom() => map()}, keyword()) ::
           {:ok, %{atom() => Chart.Applied.t()}, Cache.t()} | {:error, [error(), ...]}
-  def realise(%__MODULE__{} = board, store, pools, opts) when is_map(pools) do
+  def realize(%__MODULE__{} = board, store, pools, opts) when is_map(pools) do
     with {:ok, components} <- components(board, store, opts) do
       apply_cells(board, components, pools, opts)
     end
@@ -641,7 +641,7 @@ defmodule Visualize.Board do
   `sync` set and the cell's true, the board's group is written into its
   `interaction.sync`; the board's zone is written into every `:time` scale that names no
   zone of its own (spec/15 §1.5); and `vars` is the cascade of spec/15 §5 narrowed to the
-  variables the component declares. `realise/4` applies each; the runtime applies each in
+  variables the component declares. `realize/4` applies each; the runtime applies each in
   its cell's process (spec/15 §8).
   """
   @spec components(t(), store(), keyword()) ::

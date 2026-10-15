@@ -207,7 +207,7 @@ defmodule Visualize.Chart.Builder.Chain do
 
       iex> theme = Visualize.Theme.default()
       iex> [base, step] = Visualize.Chart.Builder.Chain.rows({:alpha, "#ff0000", 0.5}, theme)
-      iex> {base.word, base.colour, step.word, step.colour}
+      iex> {base.word, base.color, step.word, step.color}
       {"#ff0000", "#ff0000", "alpha", "#ff000080"}
   """
   @spec rows(term(), Theme.t() | nil) :: [map()]
@@ -220,7 +220,7 @@ defmodule Visualize.Chart.Builder.Chain do
       word: word(base),
       amount: nil,
       span: nil,
-      colour: resolved(base, theme),
+      color: resolved(base, theme),
       operands: operands(base)
     }
 
@@ -237,7 +237,7 @@ defmodule Visualize.Chart.Builder.Chain do
            word: to_string(op),
            amount: amount,
            span: if(amount, do: span(op)),
-           colour: resolved(acc, theme),
+           color: resolved(acc, theme),
            operands: []
          }, acc}
       end)

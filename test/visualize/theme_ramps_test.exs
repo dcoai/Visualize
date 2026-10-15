@@ -261,7 +261,7 @@ defmodule Visualize.ThemeRampsTest do
                [{:ramp, :status, 0.0}, {:ramp, :status, 0.5}, {:ramp, :status, 1.0}]
 
       for {state, role} <- [{"ok", :good}, {"degraded", :warning}, {"down", :bad}] do
-        assert Style.colour(Scale.apply(scale, state), frame.theme, :css) ==
+        assert Style.color(Scale.apply(scale, state), frame.theme, :css) ==
                  Theme.resolve(frame.theme, role, :css)
       end
 
@@ -381,7 +381,7 @@ defmodule Visualize.ThemeRampsTest do
       end
 
       for fill <- [{:ramp, :heat, 0.3}, {:ramp, :status, 2}] do
-        assert {:error, [{[:styles, :by_state, :fill, :color], {:type, :colour}}]} =
+        assert {:error, [{[:styles, :by_state, :fill, :color], {:type, :color}}]} =
                  Validator.validate(put_in(design, [:styles, :by_state, :fill], fill))
       end
 

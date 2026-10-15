@@ -76,7 +76,7 @@ defmodule Visualize.Board.ExportTest do
     board = Keyword.get_lazy(opts, :board, &board/0)
 
     {:ok, snapshot} =
-      Snapshot.realise(
+      Snapshot.realize(
         board,
         @store,
         pools(board),
@@ -246,7 +246,7 @@ defmodule Visualize.Board.ExportTest do
         c: %{primary: rows(3)}
       }
 
-      {:ok, snapshot} = Snapshot.realise(board, @store, pools, now: @t0)
+      {:ok, snapshot} = Snapshot.realize(board, @store, pools, now: @t0)
       {:ok, json} = Snapshot.to_json(snapshot)
       assert {:ok, ^snapshot} = Snapshot.from_json(json)
       assert snapshot.cells.a.slots.primary.delivery.rows == pools.a.primary
@@ -257,7 +257,7 @@ defmodule Visualize.Board.ExportTest do
       board = Board.from_map!(%{cells: %{a: %{x: 0, y: 0, w: 6, h: 3, ref: {:composite, 1}}}})
       pools = %{a: %{uptime: rows(5)}}
 
-      {:ok, snapshot} = Snapshot.realise(board, %{{:composite, 1} => design}, pools)
+      {:ok, snapshot} = Snapshot.realize(board, %{{:composite, 1} => design}, pools)
       assert snapshot.cells.a.slots.primary.delivery.rows == rows(5)
       assert Snapshot.views(snapshot).a.state == :live
     end
@@ -298,7 +298,7 @@ defmodule Visualize.Board.ExportTest do
 
     test "a realise that fails is the snapshot's failure, under each cell" do
       assert {:error, [{[:cells, :a, :sources, :primary], {:unbound, :source, :primary}} | _]} =
-               Snapshot.realise(board(), @store, %{})
+               Snapshot.realize(board(), @store, %{})
     end
   end
 
@@ -413,7 +413,7 @@ defmodule Visualize.Board.ExportTest do
       board = board()
 
       {:ok, snapshot} =
-        Snapshot.realise(
+        Snapshot.realize(
           board,
           @viewer_store,
           pools(board),

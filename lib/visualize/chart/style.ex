@@ -123,7 +123,7 @@ defmodule Visualize.Chart.Style do
 
   defp put_reading(acc, key, reading, frame, mode) when key in @colour_keys do
     case Map.get(frame.scales, :color) do
-      nil -> Map.put(acc, key, colour(reading, frame.theme, mode))
+      nil -> Map.put(acc, key, color(reading, frame.theme, mode))
       scale -> put_colour(acc, key, Scale.apply(scale, reading), frame.theme, mode)
     end
   end
@@ -162,7 +162,7 @@ defmodule Visualize.Chart.Style do
   defp put_colour(acc, key, nil, _theme, _mode), do: Map.put(acc, key, :none)
 
   defp put_colour(acc, key, colour, theme, mode),
-    do: Map.put(acc, key, colour(colour, theme, mode))
+    do: Map.put(acc, key, color(colour, theme, mode))
 
   @doc false
   # The built-in style nodes of spec/14 §3.3, as an author would declare them: the theme's
@@ -257,7 +257,7 @@ defmodule Visualize.Chart.Style do
   # `node/2` with each `{:field, f}` entry laid where it stands: `pick` answers the style
   # name the entry names — for one datum, the site's to read (spec/14 §3.6) — or `nil` to
   # lay nothing. A generator is `pick`'s too (§3.13): `{:generate, name, args}` as an entry
-  # answers the style it returned, and `{:colour, call}` for a call at a color the color it
+  # answers the style it returned, and `{:leaf, call}` for a call at a color the color it
   # returned — `nil` for either lays nothing, the leaf's key left unset.
   #
   # The entries merge in their parts (`merge/2`), and the result is projected onto the flat
@@ -367,7 +367,7 @@ defmodule Visualize.Chart.Style do
   # An inline node is already the style: only its own `extends` needs laying under it, and
   # a color generator in it its result (§3.13).
   defp lay(styles, inline, pick, seen) when is_map(inline) do
-    inline = inline |> Parts.normalize() |> Generated.leaf_resolve(&pick.({:colour, &1}))
+    inline = inline |> Parts.normalize() |> Generated.leaf_resolve(&pick.({:leaf, &1}))
 
     case Map.fetch(inline, :extends) do
       :error -> inline
@@ -429,17 +429,17 @@ defmodule Visualize.Chart.Style do
 
   @doc false
   # A colour a scale yields, resolved when it is a theme slot (spec/14 §4.3).
-  @spec colour(term(), Theme.t(), Theme.mode()) :: term()
-  def colour(value, theme, mode), do: slot_or(value, theme, mode)
+  @spec color(term(), Theme.t(), Theme.mode()) :: term()
+  def color(value, theme, mode), do: slot_or(value, theme, mode)
 
   @doc false
   # Whether a value is a colour an element can be painted with: a string, `:none`, a typed
   # color (spec/08 §1.9), or a bare name as a scale or a component may still give one.
-  @spec colour?(term()) :: boolean()
-  def colour?(value) when is_binary(value) or value == :none, do: true
-  def colour?({:ramp, name, t}), do: is_atom(name) and is_number(t)
-  def colour?(value) when is_tuple(value), do: Visualize.Color.value?(value)
-  def colour?(value), do: is_atom(value) and value not in [nil, true, false]
+  @spec color?(term()) :: boolean()
+  def color?(value) when is_binary(value) or value == :none, do: true
+  def color?({:ramp, name, t}), do: is_atom(name) and is_number(t)
+  def color?(value) when is_tuple(value), do: Visualize.Color.value?(value)
+  def color?(value), do: is_atom(value) and value not in [nil, true, false]
 
   @doc false
   # The name a colour reads from the theme's table, when it is one name: `:bad` for
