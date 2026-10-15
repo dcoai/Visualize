@@ -2151,3 +2151,11 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - **A defaults node is the style form's**: its parts, then one fieldset per mark kind it has an entry for, kinds added from a select and dropped by ×. A design's and a frame's are edited on the frame's page; a layer's or a group's in the site's context, written into the composite's own `defaults`.
 - **The builder composes a group's defaults as the flattening does**: `Stack.placed/2` lays a group's `defaults` under what its objects place, so the preview matches what Save stores and Deploy flattens.
 - *Rejected:* all fourteen mark kinds shown open in every defaults node. A node with an entry for one kind would be a page of empty fieldsets; an entry is added when it is wanted.
+
+**Amended by #685** (work item 4 of #655; the redo of #639). **The palette panel in parts, and palette names resolved in the design's theme.**
+- **The panel lists the theme's palette beneath the design's styles**, in spec/08 §7.7's five groups — style series, roles, states, furniture, modifiers — each entry previewed as a sample shape, its stroke and an `Aa` label resolved through the theme the preview draws with; states and modifiers over a neutral sample.
+- **A shadowed entry is marked** on both rows; selecting it opens the design's entry.
+- **Override writes `styles.<name>` in the design**: a style site keyed by the name holding the theme's entry, as §18.14 creates a style — the acceptance's rule, here applied.
+- **References are grouped**: a style select and the stack's Add offer the design's names, the palette's groups and the library's ids as `<optgroup>`s.
+- **The context panel resolves names against the design's theme**, not the default theme (#639's finding).
+- *Rejected:* overriding with an empty node, which would replace the theme's look with nothing; and writing the override into the selected layer (the old §18.14, #639's draft).

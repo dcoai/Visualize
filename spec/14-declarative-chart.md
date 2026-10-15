@@ -2877,7 +2877,7 @@ The tab strip is a view of `Visualize.Chart.Builder.Editor.nodes/1` and of nothi
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.Builder.Palette.panel/1` | the palette: the declared styles, and the form that adds one |
+| `Visualize.Chart.Builder.Palette.panel/1` | the palette: the declared styles, the form that adds one, and the theme's palette beneath them in its groups (#685, below) |
 | `Visualize.Chart.Builder.Palette.names/1` | the style names a design declares, in name order |
 
 The palette is a view of the **stacked** design, because the stack is what a mark's reference resolves against: a style the house layer declares is available to a mark in the panel layer, and a palette that showed only the selected layer's styles would be lying about what a mark may name. Each row is the name, what the style declares, and a swatch — shown only where the style names a colour outright, since a stroke given as a theme slot such as `:series_1` has no colour until the theme resolves it, and a guessed swatch is worse than none.
@@ -2887,6 +2887,21 @@ The palette is a view of the **stacked** design, because the stack is what a mar
 **Selecting** one opens the node that owns it, in the layer that declares it — the highest such layer, which is the one whose value the stack takes, the same rule the inspector follows (§18.9). This is why the palette can be a view of the stack and still get a person to an editable node.
 
 **A reference becomes a choice.** `Visualize.Chart.Builder.Editor.panel/1` takes a `refs` assign — the names a `{:ref, kind}` may take, by kind — and renders a select over them instead of a text box wherever it has them. `Visualize.Chart.Builder.Editor.widget/1` is unchanged and stays a function of the type alone, which is the property that makes it total over the schema (§18.6); the panel is what narrows a reference when it happens to know the names. A kind the caller knows no names for is still a text box, so the editor remains renderable over any node with no palette at all.
+
+**The theme's palette** (#685, D-178; the redo of #639). A style reference resolves against the design's `styles` and then the **palette of the theme the chart is drawn with** (§3.3, spec/08 §7.7), so the palette panel shows that palette beneath the design's own styles, in spec/08 §7.7's groups and their order: **style series** (`:style_1` … `:style_n`, as many as the theme has), **roles**, **states**, **furniture** and **modifiers**. The theme is the one the preview draws with: the host's `theme` assign where it gives one, else the design's own, built as the preview builds it (§20, `Visualize.Chart.Builder.Themes.effective/2`), so a design whose theme restyles an entry shows the restyled entry.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Chart.Builder.Palette.groups/2` | the style names a reference may take, grouped: the design's own, then the theme's palette group by group, a name the design declares only under the design |
+| `Visualize.Chart.Builder.Palette.preview/3` | a palette entry's preview: the literal attributes of its sample shape, of its stroke and of its label |
+
+**A preview, not a swatch.** A whole style has no single color, so each palette entry is drawn as a small picture: a **sample shape**, a rectangle carrying the entry's fill, stroke, its width, dash and opacities; the same **stroke** again as a short line beside it, since a dash round a shape filled in its own color cannot be seen and the style series are told apart by their dashes; and a **label**, `Aa`, in the entry's text color, family, size, weight and slant. The entry is in its parts (spec/08 §7.7); it is resolved through the theme in `:literal` mode (`Visualize.Chart.Style.resolve/3`) — the preview sits in the builder's own markup, outside any chart's custom properties — and projected onto the attributes it draws; a paint the picture cannot draw, a gradient or a hatch, is left out. A key the entry leaves unset is the sample's own: no fill on the shape, the theme's text color, family and label size on the label. A **state** entry, which says only what changes, is laid over a neutral sample — the theme's `:neutral` at 0.35 fill opacity, stroked 1 wide — and a **modifier**, which changes one thing, over the same sample, so `:thick` shows a thick neutral stroke and `:italic` a slanted label.
+
+**Shadowing.** A design's `styles` entry of a palette name replaces the theme's entry whole for that design (spec/08 §7.7, Precedence). The name is listed under the design's styles, as any declared one is, marked *shadows the theme's*; its palette row stays in its group so the groups stay whole, marked **overridden by the design** (`vis-builder-palette-entry-shadowed`), and selecting it opens the design's entry, since that is what a reference to the name now draws.
+
+**Overriding** writes `styles.<name>` in the design, never into a layer (§18.14 above, §19.11, D-178). Selecting an unshadowed palette row marks it (`choose_palette_style`) and offers **Override in the design** (`override_style`): a style site keyed by the name at the chart's top level, holding the theme's entry as `Visualize.Theme.style/2` answers it — an empty node would replace the entry whole with nothing, so the first effect would be to lose the look being overridden — selected, its node opened. The design's row then shadows the palette's.
+
+**A reference offers the palette, grouped.** `Visualize.Chart.Builder.Editor.panel/1`'s `refs` takes, for a kind, a list of names or a list of `{group, names}` pairs; a grouped kind is a select with one `<optgroup>` per non-empty group. The builder passes `:style` as `Palette.groups/2` of the design and the theme, then the store's style ids under *library*, so a mark's `style`, a style's `extends` and the stack's **Add** (§18.18) offer every name a reference may resolve, each once, under the group whose entry it resolves to. The other kinds stay flat lists. A value a select cannot show — a stack of several entries, an inline node — is the literal box instead, so nothing the field holds is hidden; §18.18 is where a stack is edited.
 
 ### 18.15 A root tab is one page of sections
 
@@ -3109,7 +3124,7 @@ Focus follows a moved layer because the rows are re-rendered by position: the bu
 | `Visualize.Chart.Builder.StyleStack.panel/1` | the stack at a site: its entries, and the controls that change them |
 | `Visualize.Chart.Builder.StyleStack.entries/2` | a `style` value as the rows to draw, whatever shape it takes |
 | `Visualize.Chart.Schema.style_stack/0` | the type a style site takes, written once |
-| `Visualize.Chart.Builder.StyleStack.choices/1` | the names an entry may take: what the design declares, and the built-in four |
+| `Visualize.Chart.Builder.StyleStack.choices/2` | `choices(design, theme)`: the names an entry may take, grouped — what the design declares, then the theme's palette (§18.14, #685) |
 
 **A row per entry, whatever the value's shape.** `entries/2` is total over §3.6's three shapes: a bare reference is one row, an inline node is one row, a list is a row each. A site with no `style` key at all is the empty stack, and the schema's default for that site — `:axis` for an axis, `:label` for a label and a legend — is shown as the row it will resolve as, marked as a default rather than as something the design says.
 
@@ -3117,13 +3132,13 @@ Each row offers what a layer row offers and for the same reasons: **select** it,
 
 **The local row.** An inline entry is drawn as `local` and is the row an edit lands in. There is at most one, it is the last entry, and it is **created on first edit** (D-98) — so a site that has never been edited directly shows references only, and the local row appears when it is needed rather than sitting empty in every document.
 
-**Adding.** A control offers the style names the stacked design declares (§18.14) and the four built-in names, and appends the chosen one. Appending rather than inserting is the useful default — a style added to a site is nearly always meant to win — and dragging moves it if it was not.
+**Adding.** A control offers the style names the stacked design declares (§18.14) and the theme's palette, grouped as `Palette.groups/2` groups them (#685) — the four built-in names were the palette's furniture before there was a palette — and appends the chosen one. Appending rather than inserting is the useful default — a style added to a site is nearly always meant to win — and dragging moves it if it was not.
 
 **One hook, many stacks.** `Visualize.Hooks.Builder` already reorders a list by dragging (§18.10, §18.17), and a style stack is a list. The hook's queries are scoped to its own element, so a second stack on the page is a second instance with no knowledge of the first; what the component needs is to know *which* stack a `reorder` came from. The hook therefore reads `data-builder-scope` from its element and returns it in the payload, absent for the layer stack and `"style"` for a style stack. This is why the layer stack needed no change: an absent scope means what it always meant.
 
 ### 18.19 The context panel over a style
 
-Beneath the stack of §18.18 sits the style the site actually renders as: the entries cascaded **in their parts** (`Visualize.Chart.Style.compound/3`, before any projection onto the element keys), shown in the compound form of §18.7 with the control §18.6 chooses for each key. It is `Visualize.Chart.Builder.Editor.panel/1` at kind `:style` over the resolved node, which is why it needs no list of style keys of its own — a key added to a part's kind appears here with no edit. The form knows the site's element kind, so the parts it does not draw are grayed (§18.7).
+Beneath the stack of §18.18 sits the style the site actually renders as: the entries cascaded **in their parts** (`Visualize.Chart.Style.compound/3`, before any projection onto the element keys), shown in the compound form of §18.7 with the control §18.6 chooses for each key. It is `Visualize.Chart.Builder.Editor.panel/1` at kind `:style` over the resolved node, which is why it needs no list of style keys of its own — a key added to a part's kind appears here with no edit. The form knows the site's element kind, so the parts it does not draw are grayed (§18.7). **Palette names resolve against the design's own theme** (#685): the styles a name in the stack reaches are the design's over the palette of the theme the preview draws with — the host's, else the design's — never the default theme's, so a stack naming `:warning` shows the warning look the chart will draw.
 
 **Every edit lands in the local style.** A field changed here writes into the site's inline entry, creating it when there is none (D-98), and writes only the key changed, in its part: the local style holds `%{stroke: %{width: 7}}`, never a copy of the resolved stroke, so what the entries beneath it say still shows through every key the local style does not (§18.7). It never writes into a named entry: editing a mark that references `:series` must not restyle every other mark that references the same name, and a panel that wrote to the resolved node would do exactly that. This is the whole reason the local style exists, and it is why the panel edits through its own event rather than the editor's.
 
@@ -3131,8 +3146,8 @@ Beneath the stack of §18.18 sits the style the site actually renders as: the en
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.Builder.StyleStack.resolved/2` | the site's stack cascaded in its parts, as the panel shows it |
-| `Visualize.Chart.Builder.StyleStack.origins/2` | which entry supplied each key of the resolved style, by path: `:opacity`, `"stroke.width"` |
+| `Visualize.Chart.Builder.StyleStack.resolved/3` | `resolved(design, stack, theme)`: the site's stack cascaded in its parts against the design's styles over that theme's palette, as the panel shows it |
+| `Visualize.Chart.Builder.StyleStack.origins/3` | `origins(design, stack, theme)`: which entry supplied each key of the resolved style, by path: `:opacity`, `"stroke.width"` |
 
 The panel is shown when an entry of the stack is selected, and hidden otherwise: a site's resolved style is a question about the site, and asking it costs a click so that the column is not a wall of nineteen controls for every node that happens to have a style.
 
