@@ -129,6 +129,26 @@ defmodule Visualize.ChartGen do
     ])
   end
 
+  # A colour (spec/14 §3.2, #664): a colour slot written bare, as a host's code may, or
+  # typed, or a transform of colours, every one canonicalized to its typed form on read.
+  defp colour_slot(theme) do
+    name = member_of(Theme.colour_slots(theme_struct(theme)) ++ [:red, :steelblue])
+    unit = float(min: 0.0, max: 1.0)
+    typed = map(name, &{:color, &1})
+
+    one_of([
+      name,
+      typed,
+      map(integer(1..12), &{:series, &1}),
+      map({member_of([:intensity, :alpha, :lighten, :darken, :saturate]), typed, unit}, & &1),
+      map(
+        list_of(one_of([typed, member_of(@colours)]), min_length: 1, max_length: 3),
+        &{:blend, &1}
+      ),
+      map(typed, &{:contrast, &1})
+    ])
+  end
+
   # A source's `types` names only its fields (#369): the fields are drawn first and a type
   # is given to a subset of them.
   defp sources do
@@ -162,7 +182,7 @@ defmodule Visualize.ChartGen do
     stop =
       fixed_map(%{
         offset: float(min: 0.0, max: 1.0),
-        colour: with_var([member_of(@colours), slot(theme)], vars)
+        colour: with_var([member_of(@colours), colour_slot(theme)], vars)
       })
       |> bind(fn stop ->
         optional_map(%{opacity: float(min: 0.0, max: 1.0)}) |> map(&Map.merge(stop, &1))
@@ -190,7 +210,7 @@ defmodule Visualize.ChartGen do
 
     colour =
       with_var(
-        [member_of(@colours), constant(:none), slot(theme), field_ref(@fields)] ++ paints,
+        [member_of(@colours), constant(:none), colour_slot(theme), field_ref(@fields)] ++ paints,
         vars
       )
 

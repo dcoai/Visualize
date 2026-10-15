@@ -222,12 +222,12 @@ defmodule Visualize.Chart.StylePartsTest do
 
       assert v3.defs.fade == %{
                type: :radial,
-               stops: [%{at: 0, color: :series_1}, %{at: 1, color: "#fff"}],
+               stops: [%{at: 0, color: {:color, :series_1}}, %{at: 1, color: "#fff"}],
                center: [0.4, 0.4]
              }
 
       assert v3.styles.s == %{
-               stroke: %{type: :solid, color: :series_1, width: 2},
+               stroke: %{type: :solid, color: {:color, :series_1}, width: 2},
                fill: %{type: :paint, name: :fade}
              }
 
@@ -246,7 +246,7 @@ defmodule Visualize.Chart.StylePartsTest do
 
       assert Validator.validate(design) == :ok
       chart = Chart.from_map!(design)
-      assert chart.styles.s == %{stroke: %{type: :solid, color: :series_1, width: 2}}
+      assert chart.styles.s == %{stroke: %{type: :solid, color: {:color, :series_1}, width: 2}}
 
       # A fault in a flat key is reported at the part it means.
       assert {:error, [{[:styles, :s, :stroke, :width], {:type, :size}}]} =
@@ -275,7 +275,11 @@ defmodule Visualize.Chart.StylePartsTest do
                text: %{anchor: :end}
              }
 
-      assert chart.defs.fade.stops == [%{at: 0, color: :series_1}, %{at: 1, color: "#fff"}]
+      assert chart.defs.fade.stops == [
+               %{at: 0, color: {:color, :series_1}},
+               %{at: 1, color: "#fff"}
+             ]
+
       {:ok, back} = Chart.to_json(chart)
       assert Chart.from_json(back) == {:ok, chart}
     end

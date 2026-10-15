@@ -28,8 +28,18 @@ defmodule Visualize.Color.Typed do
   def value?({:ramp, name, t}), do: name?(name) and unit?(t)
   def value?({op, c, t}) when op in @unary, do: value?(c) and unit?(t)
   def value?({:blend, [_ | _] = list}), do: Enum.all?(list, &value?/1)
+  def value?({:contrast, :under}), do: true
   def value?({:contrast, c}), do: value?(c)
   def value?(_other), do: false
+
+  @doc false
+  # Whether a term is tagged as a typed color, whatever its operands: what a paint's
+  # shorthand is read as, so a malformed one is reported as the colour it tries to be.
+  @spec tagged?(term()) :: boolean()
+  def tagged?(v) when is_tuple(v) and tuple_size(v) in [2, 3],
+    do: elem(v, 0) in [:color, :blend, :contrast | @unary]
+
+  def tagged?(_v), do: false
 
   @doc false
   # Whether a value is computed (a transform) rather than looked up.
@@ -38,6 +48,42 @@ defmodule Visualize.Color.Typed do
   def transform?({:blend, _list}), do: true
   def transform?({:contrast, _c}), do: true
   def transform?(_value), do: false
+
+  @doc false
+  # The names a color value reads from the theme's color table, operands included, in
+  # order: what the validator checks against the table (spec/14 §3.2).
+  @spec names(term()) :: [atom()]
+  def names({:color, name}), do: [name]
+  def names({op, c, _t}) when op in @unary, do: names(c)
+  def names({:blend, list}) when is_list(list), do: Enum.flat_map(list, &names/1)
+  def names({:contrast, c}), do: names(c)
+  def names(_other), do: []
+
+  @doc false
+  # The literal strings among a value's operands that no transform could compute from:
+  # strings `Visualize.Color.parse/1` does not read. A literal that is the whole value is a
+  # CSS colour as written and is never computed, so it is not among them.
+  @spec unreadable(term()) :: [String.t()]
+  def unreadable(value) do
+    if transform?(value), do: value |> operands() |> Enum.reject(&readable?/1), else: []
+  end
+
+  defp operands(v) when is_binary(v), do: [v]
+  defp operands({op, c, _t}) when op in @unary, do: operands(c)
+  defp operands({:blend, list}) when is_list(list), do: Enum.flat_map(list, &operands/1)
+  defp operands({:contrast, c}), do: operands(c)
+  defp operands(_other), do: []
+
+  @hex ~r/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+
+  # A literal `parse/1` reads, checked without letting a malformed hex digit raise in it.
+  defp readable?(literal) do
+    trimmed = String.trim(literal)
+
+    if String.starts_with?(trimmed, "#"),
+      do: Regex.match?(@hex, trimmed),
+      else: Color.parse(trimmed) != nil
+  end
 
   @doc false
   @spec name?(term()) :: boolean()
@@ -57,6 +103,9 @@ defmodule Visualize.Color.Typed do
   def resolve({:color, name}, theme, mode), do: Theme.resolve(theme, name, mode)
   def resolve({:series, _} = slot, theme, mode), do: Theme.resolve(theme, slot, mode)
   def resolve({:ramp, _, _} = position, theme, mode), do: Theme.resolve(theme, position, mode)
+  # The ink over whatever is under the text; with nothing known under it, the background's
+  # (spec/14 §3.2). A mark's inline label inks against its element instead (§5.5).
+  def resolve({:contrast, :under}, theme, _mode), do: Theme.ink(theme, nil)
   def resolve({:contrast, c}, theme, _mode), do: ink(c, theme)
 
   def resolve(value, theme, _mode) when is_tuple(value) do
@@ -92,6 +141,7 @@ defmodule Visualize.Color.Typed do
     do: polar(c, theme, fn {l, ch, h} -> {l, ch + (@full_chroma - ch) * t, h} end)
 
   def compute({:blend, list}, theme), do: blend(list, theme)
+  def compute({:contrast, :under}, theme), do: theme |> Theme.ink(nil) |> parsed!() |> oklab()
   def compute({:contrast, c}, theme), do: c |> ink(theme) |> parsed!() |> oklab()
   def compute(value, theme), do: value |> resolve(theme, :literal) |> parsed!() |> oklab()
 

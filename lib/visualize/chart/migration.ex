@@ -156,7 +156,7 @@ defmodule Visualize.Chart.Migration do
   `canonical/1` of a node of `kind` alone: a fragment of that kind (spec/14 §19.6).
 
       iex> Visualize.Chart.Migration.canonical(%{fill: :red, fill_opacity: 0.5}, :style)
-      %{fill: %{type: :solid, color: :red, opacity: 0.5}}
+      %{fill: %{type: :solid, color: {:color, :red}, opacity: 0.5}}
   """
   @spec canonical(map(), Schema.kind()) :: map()
   def canonical(map, kind) when is_map(map), do: node(kind, map, true)
@@ -206,6 +206,10 @@ defmodule Visualize.Chart.Migration do
   defp walk(_kind, value, _text?), do: value
 
   defp value(:text, parts, true) when is_list(parts), do: Text.unparse(parts)
+  defp value(:colour, v, _text?), do: colour(v)
+
+  defp value(:colour_map, v, _text?) when is_map(v) and not is_struct(v),
+    do: Map.new(v, fn {category, c} -> {category, colour(c)} end)
 
   defp value({:node, kind}, v, text?) when is_map(v) and not is_struct(v),
     do: node(kind, v, text?)
@@ -223,4 +227,23 @@ defmodule Visualize.Chart.Migration do
   end
 
   defp value(_type, v, _text?), do: v
+
+  # A colour position holds a typed color (spec/14 §3.2, #664, D-173): a bare atom is the
+  # name it can only mean there, `:contrast` the ink over what is under, and a transform's
+  # operands are colours too. `:none` is the one bare word a paint's place keeps.
+  @unary Visualize.Color.Typed.unary()
+
+  defp colour(:none), do: :none
+  defp colour(:contrast), do: {:contrast, :under}
+  # A palette entry's `:cue` is its own word, left for the palette contract to judge.
+  defp colour(:cue), do: :cue
+
+  defp colour(name) when is_atom(name) and name not in [nil, true, false],
+    do: {:color, name}
+
+  defp colour({op, c, t}) when op in @unary, do: {op, colour(c), t}
+  defp colour({:blend, list}) when is_list(list), do: {:blend, Enum.map(list, &colour/1)}
+  defp colour({:contrast, :under} = ink), do: ink
+  defp colour({:contrast, c}), do: {:contrast, colour(c)}
+  defp colour(v), do: v
 end

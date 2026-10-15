@@ -19,7 +19,7 @@ defmodule Visualize.Chart.Validator do
   """
 
   alias Visualize.Chart.{Fact, Migration, Schema, Text, Urls, Var}
-  alias Visualize.Chart.Validator.{Domain, Frames, Palette, Words}
+  alias Visualize.Chart.Validator.{Colors, Domain, Frames, Palette, Words}
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
@@ -80,6 +80,7 @@ defmodule Visualize.Chart.Validator do
   @type error :: {path(), reason()}
 
   @frame_anchors [:title, :subtitle, :caption]
+  @typed_colours [:color, :intensity, :alpha, :lighten, :darken, :saturate, :blend, :contrast]
   # The plot's four corners and its centre (spec/14 §6.3, #489).
   @frame_points [:top_left, :top_right, :bottom_left, :bottom_right, :center]
   @not_names [nil, true, false]
@@ -206,6 +207,7 @@ defmodule Visualize.Chart.Validator do
         sources: :unknown,
         vars: :unknown,
         slots: :unknown,
+        colors: :unknown,
         partial?: true
     }
   end
@@ -294,6 +296,7 @@ defmodule Visualize.Chart.Validator do
       sources: source_fields(map[:sources]),
       vars: declared(map[:vars]),
       slots: theme_slots(theme),
+      colors: theme_colors(theme),
       mark_type: nil,
       op: nil,
       transform_keys: [],
@@ -352,6 +355,9 @@ defmodule Visualize.Chart.Validator do
   defp theme_slots(:unknown), do: :unknown
   defp theme_slots(theme), do: MapSet.new(Theme.slots(theme))
 
+  defp theme_colors(:unknown), do: :unknown
+  defp theme_colors(theme), do: MapSet.new(Theme.color_names(theme))
+
   # -- nodes ----------------------------------------------------------------------------
 
   defp node(kind, map, path, ctx) do
@@ -396,7 +402,7 @@ defmodule Visualize.Chart.Validator do
     with ramps when is_map(ramps) <- Map.get(map, :ramps, %{}),
          colors when is_map(colors) <- Map.get(map, :colors, %{}),
          styles when is_map(styles) and not is_struct(styles) <- Map.get(map, :styles, %{}),
-         true <- Enum.all?(ramps, fn {_, v} -> is_list(v) and Enum.all?(v, &is_binary/1) end),
+         true <- Enum.all?(ramps, fn {_, v} -> is_list(v) and Enum.all?(v, &anchor?/1) end),
          true <- Enum.all?(colors, fn {_, v} -> is_binary(v) or Visualize.Color.value?(v) end),
          true <- Enum.all?(styles, fn {_, v} -> is_map(v) and not is_struct(v) end),
          theme = Theme.build(Theme.default(), Map.take(map, [:ramps, :colors, :styles])),
@@ -930,6 +936,11 @@ defmodule Visualize.Chart.Validator do
       else: [{path, {:type, :colour}}]
   end
 
+  # A typed color (spec/14 §3.2, spec/08 §1.9, #664): its shape, its literal operands and
+  # every name it reads from the theme's color table.
+  defp check(:colour, v, path, ctx) when is_tuple(v) and elem(v, 0) in @typed_colours,
+    do: Colors.check(v, path, ctx.colors)
+
   defp check(:colour, v, path, ctx), do: slot_or(:colour, v, path, ctx)
 
   defp check(:ramp, {:ramp, name}, path, _ctx) do
@@ -1038,6 +1049,9 @@ defmodule Visualize.Chart.Validator do
   defp slot?(v), do: name?(v)
 
   defp name?(v), do: is_atom(v) and v not in @not_names
+
+  # A ramp's anchor is a colour string or a name of the theme's table (spec/08 §7.5, #664).
+  defp anchor?(anchor), do: is_binary(anchor) or match?({:color, name} when is_atom(name), anchor)
 
   # `:auto` is a bound, so only a two-element list may carry it (spec/14 §1.4).
   defp extent?(list) do

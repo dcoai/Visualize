@@ -190,8 +190,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ramps =
         for name <- Theme.ramp_names(), into: %{} do
-          anchors = Map.get(theme.ramps || %{}, name)
-          {name, if(drawable_ramp?(anchors), do: anchors, else: Map.fetch!(default.ramps, name))}
+          # Anchors drawn as the strings they name in the theme's table (spec/08 §7.5, #664).
+          anchors = literals(theme, Map.get(theme.ramps || %{}, name))
+          fallback = literals(default, Map.fetch!(default.ramps, name))
+          {name, if(drawable_ramp?(anchors), do: anchors, else: fallback)}
         end
 
       # The color table's own entries that read, over the default's (spec/08 §7.1, #663).
@@ -228,6 +230,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp drawable_ramp?([_, _ | _] = anchors), do: Enum.all?(anchors, &colour?/1)
     defp drawable_ramp?(_anchors), do: false
+
+    defp literals(theme, anchors) when is_list(anchors), do: Theme.anchor_literals(theme, anchors)
+    defp literals(_theme, other), do: other
 
     defp colour?(value), do: Themes.readable?(value)
 

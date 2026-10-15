@@ -429,12 +429,13 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
       end
     end
 
-    test "a style name in a map range is an undeclared slot, a role a colour" do
+    test "a style name in a map range is an undeclared color, a role a colour" do
       node = %{kind: :ordinal, range: %{"down" => :bad, "maint" => :muted}}
       design = put_in(design(%{}), [:frames, :main, :scales, :health], node)
 
       assert errors(design) == [
-               {[:frames, :main, :scales, :health, :range, "maint"], {:undeclared, :slot, :muted}}
+               {[:frames, :main, :scales, :health, :range, "maint"],
+                {:undeclared, :color, :muted}}
              ]
     end
 

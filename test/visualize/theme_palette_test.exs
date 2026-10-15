@@ -18,6 +18,8 @@ defmodule Visualize.ThemePaletteTest do
   @furniture [:axis, :grid, :label, :title, :caption, :value, :annotation]
   @modifiers [:bold, :italic, :thin, :thick, :dashed, :dotted, :outline]
 
+  # A palette entry holds its colors typed (spec/08 §7.7, #664): a name is `{:color, name}`.
+  defp solid(colour) when is_atom(colour), do: %{type: :solid, color: {:color, colour}}
   defp solid(colour), do: %{type: :solid, color: colour}
 
   defp refusal(fields) do
@@ -61,7 +63,12 @@ defmodule Visualize.ThemePaletteTest do
 
         # Projected, they are the flat nodes they always were (D-172).
         assert Style.project(Theme.style(theme, :axis)) ==
-                 %{stroke: :axis, fill: :text, font_family: :font_family, font_size: :font_size}
+                 %{
+                   stroke: {:color, :axis},
+                   fill: {:color, :text},
+                   font_family: :font_family,
+                   font_size: :font_size
+                 }
       end
     end
 
@@ -100,7 +107,7 @@ defmodule Visualize.ThemePaletteTest do
       # The bad look's outline alone: its dashed stroke, no fill (spec/14 §3.6).
       outline = Style.node(Style.all(%{}), [:bad, :outline])
       assert outline.fill == :none
-      assert outline.stroke == :bad and outline.stroke_dasharray == Theme.cue(:bad).dash
+      assert outline.stroke == {:color, :bad} and outline.stroke_dasharray == Theme.cue(:bad).dash
     end
   end
 
@@ -109,7 +116,7 @@ defmodule Visualize.ThemePaletteTest do
       for theme <- @themes, role <- @roles do
         entry = Theme.style(theme, role)
         cue = Theme.cue(role)
-        assert entry.fill == solid(role) and entry.stroke.color == role
+        assert entry.fill == solid(role) and entry.stroke.color == {:color, role}
         assert entry.marker.shape == cue.glyph
         assert Map.get(entry.stroke, :dash) == cue.dash
       end
@@ -184,7 +191,7 @@ defmodule Visualize.ThemePaletteTest do
     test "a role paints with its own role, or a status role's ramp position" do
       assert refusal(styles: %{bad: %{fill: :good}}) ==
                "theme :house: style :bad breaks its contract: a role style paints with its own " <>
-                 "role, so fill.color must be :bad or absent; got :good"
+                 "role, so fill.color must be :bad or absent; got {:color, :good}"
 
       assert refusal(styles: %{info: %{stroke: %{color: "#3b6fa8", width: 2}}}) =~
                ~r/style :info .*stroke.color must be :info or absent; got "#3b6fa8"/
@@ -204,7 +211,7 @@ defmodule Visualize.ThemePaletteTest do
       message = refusal(styles: %{hover: %{stroke: :bad}})
       assert message =~ "theme :house: style :hover breaks its contract"
       assert message =~ "a state style must read without hue"
-      assert message =~ "got %{stroke: %{type: :solid, color: :bad}}"
+      assert message =~ "got %{stroke: %{type: :solid, color: {:color, :bad}}}"
 
       # A value that leaves the object as it is changes nothing.
       for neutral <- [
@@ -280,7 +287,7 @@ defmodule Visualize.ThemePaletteTest do
       assert refusal(styles: %{grid: %{stroke: :none}}) =~ "got stroke.color: :none"
 
       assert Theme.new(styles: %{grid: %{stroke: %{color: :axis, width: 0.5}}}).styles.grid.stroke ==
-               %{type: :solid, color: :axis, width: 0.5}
+               %{type: :solid, color: {:color, :axis}, width: 0.5}
     end
 
     test "an entry is flat: no extends" do

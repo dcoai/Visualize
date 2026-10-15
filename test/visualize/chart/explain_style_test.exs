@@ -63,7 +63,7 @@ defmodule Visualize.Chart.ExplainStyleTest do
 
     # The value is the merge of the chain: the local width over the warning stroke.
     assert parts.stroke.value.width == 1
-    assert parts.stroke.value.color == :warning
+    assert parts.stroke.value.color == {:color, :warning}
 
     # A marker the rect does not draw is still explained, as not drawn.
     assert parts.marker.drawn == false

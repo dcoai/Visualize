@@ -445,7 +445,7 @@ defmodule Visualize.Chart.Schema do
       # The meaning-bearing ramps (spec/08 §7.5, #533) and the theme's own color table, the
       # roles' colors among it (§7.1, #663); an inline theme names only what it changes, the
       # rest the default's.
-      spec(:ramps, {:map, {:list, :string}}, :style, default: theme.ramps),
+      spec(:ramps, {:map, {:list, :colour}}, :style, default: theme.ramps),
       spec(:colors, {:map, :colour}, :style, default: theme.colors),
       # The style palette, a palette name to its entry (spec/08 §7.7, spec/14 §2.5, #637):
       # an inline theme names only the entries it changes, the rest the default's.

@@ -32,7 +32,9 @@ defmodule Visualize.Chart.BuildTest do
         # The stored designs are version 2, in flat style keys: the 2 -> 3 step's rewrite
         # of the styles into their parts (D-172) is what a pipeline builds today.
         stored = name |> Designs.design() |> Map.put(:version, 3) |> Migration.parts(:design)
-        assert built == stored
+        # A pipeline writes a color as the bare name a host's code gives it; the design is
+        # read with it typed (#664, D-173), as the stored one is.
+        assert Migration.parts(built, :design) == stored
         assert {:ok, _chart} = Chart.from_map(built)
       end
     end

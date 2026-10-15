@@ -142,7 +142,8 @@ defmodule Visualize.Chart.Style do
         scale -> Scale.apply(scale, reading)
       end
 
-    if mapped in Theme.role_names(), do: mapped
+    name = colour_name(mapped)
+    if name in Theme.role_names(), do: name
   end
 
   defp put_colour(acc, key, nil, _theme, _mode), do: Map.put(acc, key, :none)
@@ -336,6 +337,10 @@ defmodule Visualize.Chart.Style do
   # The contrast ink with nothing under the text: the background's, a literal in both modes
   # (§3.2, D-123). A mark's inline label resolves it against its element instead (§5.5).
   def value(key, :contrast, theme, _mode) when key in @colour_keys, do: Theme.ink(theme, nil)
+
+  def value(key, {:contrast, :under}, theme, _mode) when key in @colour_keys,
+    do: Theme.ink(theme, nil)
+
   # The weight words CSS lacks are their numbers; normal and bold are CSS's own (§3.4).
   def value(:font_weight, :light, _theme, _mode), do: 300
   def value(:font_weight, :medium, _theme, _mode), do: 500
@@ -350,15 +355,34 @@ defmodule Visualize.Chart.Style do
   def colour(value, theme, mode), do: slot_or(value, theme, mode)
 
   @doc false
-  # Whether a value is a colour an element can be painted with: a string, `:none`, a
-  # theme slot or a ramp position.
+  # Whether a value is a colour an element can be painted with: a string, `:none`, a typed
+  # color (spec/08 §1.9), or a bare name as a scale or a component may still give one.
   @spec colour?(term()) :: boolean()
   def colour?(value) when is_binary(value) or value == :none, do: true
-  def colour?({:series, i}), do: is_integer(i) and i >= 1
   def colour?({:ramp, name, t}), do: is_atom(name) and is_number(t)
+  def colour?(value) when is_tuple(value), do: Visualize.Color.value?(value)
   def colour?(value), do: is_atom(value) and value not in [nil, true, false]
 
+  @doc false
+  # The name a colour reads from the theme's table, when it is one name: `:bad` for
+  # `{:color, :bad}` and for a bare `:bad`; `nil` for anything else.
+  @spec colour_name(term()) :: atom() | nil
+  def colour_name({:color, name}) when is_atom(name), do: name
+  def colour_name(name) when is_atom(name) and name not in [nil, true, false, :none], do: name
+  def colour_name(_other), do: nil
+
   defp slot_or(:none, _theme, _mode), do: :none
+  # A typed color (spec/08 §1.9, D-173), a name or a transform, through its one door.
+  defp slot_or({:color, _} = colour, theme, mode),
+    do: Visualize.Color.resolve(colour, theme, mode)
+
+  defp slot_or({:contrast, :under}, theme, _mode), do: Theme.ink(theme, nil)
+
+  defp slot_or(value, theme, mode)
+       when is_tuple(value) and elem(value, 0) != :series and elem(value, 0) != :ramp do
+    if Visualize.Color.value?(value), do: Visualize.Color.resolve(value, theme, mode), else: value
+  end
+
   defp slot_or({:series, _} = slot, theme, mode), do: Theme.resolve(theme, slot, mode)
   # A ramp position, a meaning the theme renders (spec/14 §3.2, D-135).
   defp slot_or({:ramp, _, _} = position, theme, mode), do: Theme.resolve(theme, position, mode)

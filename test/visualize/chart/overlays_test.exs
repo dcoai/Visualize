@@ -487,7 +487,7 @@ defmodule Visualize.Chart.OverlaysTest do
       {:ok, json} = Chart.to_json(chart)
 
       assert json =~
-               ~s("$colours":[[3,"#123456"],[{"$atom":"warn"},{"$ramp":["status",0.5]}],["critical","bad"]])
+               ~s("$colours":[[3,"#123456"],[{"$atom":"warn"},{"$ramp":["status",0.5]}],["critical",{"$color":"bad"}]])
 
       assert {:ok, ^chart} = Chart.from_json(json)
     end

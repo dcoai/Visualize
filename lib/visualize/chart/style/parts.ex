@@ -95,6 +95,7 @@ defmodule Visualize.Chart.Style.Parts do
   def colour?({:ramp, _name, _t}), do: true
   def colour?({:field, _f}), do: true
   def colour?({:paint, _name}), do: true
+  def colour?(value) when is_tuple(value), do: Visualize.Color.Typed.tagged?(value)
   def colour?(value), do: var?(value)
 
   defp var?(value), do: is_struct(value, Visualize.Chart.Var)
