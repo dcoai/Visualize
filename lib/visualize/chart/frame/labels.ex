@@ -65,7 +65,11 @@ defmodule Visualize.Chart.Frame.Labels do
             transform: Map.get(placement, :transform)
           )
           |> Polar.rotate(rotation)
-          |> Position.apply(style_node, outward(frame, node.anchor))
+          |> Position.apply(
+            style_node,
+            outward(frame, node.anchor),
+            {frame.plot.width, frame.plot.height}
+          )
         ]
     end
   end

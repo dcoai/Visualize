@@ -488,6 +488,25 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   # -- symbol ----------------------------------------------------------------------------
 
+  # A marker size in `pct` is the side of the square of the area, a percentage of the
+  # mark's band — its `x` scale's, else its `y` scale's (spec/14 §3.9).
+  defp symbol_size({n, :pct}, ctx) when is_number(n) do
+    band =
+      Enum.find_value([:x, :y], fn channel ->
+        case Channels.scale(ctx, channel) do
+          %Scale.Band{} = scale -> Scale.Band.bandwidth(scale)
+          _other -> nil
+        end
+      end) ||
+        raise ArgumentError,
+              "a #{ctx.type} mark's marker size in pct needs a :band scale on its x or y " <>
+                "(spec/14 §3.9)"
+
+    :math.pow(n / 100 * band, 2)
+  end
+
+  defp symbol_size(size, _ctx), do: size
+
   # A symbol's glyph and size are its own datum's where a style is named by data (§3.6).
   defp symbol(ctx) do
     rows = ctx |> Channels.pixels() |> Channels.placed([:x, :y])
@@ -497,7 +516,9 @@ defmodule Visualize.Chart.Mark.Shapes do
       type = Map.get(style_node, :symbol, :circle)
 
       size =
-        Style.value(:symbol_size, Map.get(style_node, :symbol_size, 64), frame.theme, :literal)
+        :symbol_size
+        |> Style.value(Map.get(style_node, :symbol_size, 64), frame.theme, :literal)
+        |> symbol_size(ctx)
 
       path =
         Symbol.new()

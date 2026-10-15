@@ -18,7 +18,8 @@ defmodule Visualize.Hooks.Canvas do
       push_event(socket, "canvas_commands", %{commands: Visualize.Render.to_canvas_string(el, format: :json)})
 
   Every command of the `:json` output names a Canvas 2D method (`set_*` commands assign
-  the property), so the hook needs no path helpers (D-37).
+  the property), so the hook needs no path helpers (D-37) — but `nonScalingLineWidth`, the
+  width divided by the scale of the current transform (spec/09 §3.3.3, spec/14 §3.9).
   """
 
   @doc """
@@ -67,6 +68,10 @@ defmodule Visualize.Hooks.Canvas do
           JSON.parse(commands).forEach(({cmd, args}) => {
             if (cmd.startsWith('set_')) {
               ctx[cmd.slice(4)] = args[0];
+            } else if (cmd === 'nonScalingLineWidth') {
+              // A stroke that keeps its width on screen (spec/09 §3.3.3).
+              const t = ctx.getTransform();
+              ctx.lineWidth = args[0] / Math.sqrt(Math.abs(t.a * t.d - t.b * t.c));
             } else {
               ctx[cmd](...args);
             }

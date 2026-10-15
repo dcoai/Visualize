@@ -52,7 +52,7 @@ defmodule Visualize.Chart.Style.Parts do
   # stroke's line do not, and stay.
   @kept %{
     fill: [:opacity],
-    stroke: [:opacity, :width, :dash, :join, :cap, :placement],
+    stroke: [:opacity, :width, :dash, :join, :cap, :placement, :non_scaling],
     effect: [],
     curve: []
   }
@@ -375,6 +375,10 @@ defmodule Visualize.Chart.Style.Parts do
 
       {:placement, p}, acc ->
         Map.put(acc, :stroke_style, Map.get(@stroke_styles, p, p))
+
+      # A stroke kept its width on screen (spec/14 §3.9, #651); `false` is the default.
+      {:non_scaling, true}, acc ->
+        Map.put(acc, :vector_effect, :non_scaling_stroke)
 
       {_geometry, _value}, acc ->
         acc

@@ -83,6 +83,17 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:path, attrs, [], nil)
   end
 
+  # `vector-effect` does not inherit (spec/09 §2.5, spec/14 §3.9): a group's is written on
+  # each child that does not set its own, never on the group.
+  defp do_render_element(%Element{type: :group, style: %{vector_effect: effect} = style} = group) do
+    children =
+      Enum.map(group.children, fn child ->
+        %{child | style: Map.put_new(child.style, :vector_effect, effect)}
+      end)
+
+    do_render_element(%{group | style: Map.delete(style, :vector_effect), children: children})
+  end
+
   defp do_render_element(%Element{
          type: :group,
          children: children,
@@ -345,6 +356,7 @@ defmodule Visualize.Backend.SVG do
       {:stroke_linecap, v} -> {:stroke_linecap, Atom.to_string(v)}
       {:stroke_linejoin, v} -> {:stroke_linejoin, Atom.to_string(v)}
       {:dominant_baseline, v} when is_atom(v) -> {:dominant_baseline, Atom.to_string(v)}
+      {:vector_effect, :non_scaling_stroke} -> {:vector_effect, "non-scaling-stroke"}
       {k, v} -> {k, v}
     end)
     |> Map.new()

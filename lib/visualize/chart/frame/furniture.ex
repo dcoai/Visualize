@@ -297,7 +297,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     own = Map.get(node, :defaults)
 
     if name == :axis and not Map.has_key?(frame.design_styles, :axis) and
-         Defaults.at(frame, own, nil) == %{} do
+         Defaults.at(frame, own, nil).style == %{} do
       element
     else
       style_node = style(frame, name, own)

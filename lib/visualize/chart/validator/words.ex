@@ -158,6 +158,11 @@ defmodule Visualize.Chart.Validator.Words do
   def words(:unknown_key), do: "is not a key of this node"
   def words({:type, type}), do: "must be #{type_words(type)}"
 
+  def words({:no_box, key}),
+    do: "a pct needs a box, and a #{key} has none: write it in pt, px, mm or em (spec/14 §3.9)"
+
+  def words({:no_unit, key}), do: "an #{key} is a fraction from 0 to 1, not a length"
+
   def words({:ref_kind, wanted, given}),
     do: "is a #{given} id where a #{wanted} was expected"
 
@@ -309,7 +314,8 @@ defmodule Visualize.Chart.Validator.Words do
         ", or a map of pinned steps, an integer in 0..1000 to a colour string"
 
   defp type_words(:ramp), do: "{:ramp, name} with name one of #{list(Theme.ramp_names())}"
-  defp type_words(:size), do: "a number or a theme slot"
+  defp type_words(:size), do: "a number, a theme slot or a unit value such as pt(12)"
+  defp type_words(:length), do: "a number or a unit value such as mm(2)"
   defp type_words(:font), do: "a font string or a theme slot"
   defp type_words(:slot), do: "a theme slot"
   defp type_words(:term), do: "a JSON-representable term"

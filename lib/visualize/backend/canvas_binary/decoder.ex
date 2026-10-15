@@ -109,6 +109,8 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
     {width, rest} = if (flags &&& 0x04) != 0, do: f32(rest), else: {nil, rest}
     {opacity, rest} = if (flags &&& 0x08) != 0, do: f32(rest), else: {nil, rest}
     style = %{fill: fill, stroke: stroke, stroke_width: width, opacity: opacity}
+    # Bit 4: a width that does not scale (spec/09 §4.3.5).
+    style = if (flags &&& 0x10) != 0, do: Map.put(style, :non_scaling, true), else: style
     decode(rest, [{:style, style} | acc])
   end
 

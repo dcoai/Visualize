@@ -123,6 +123,10 @@ defmodule Visualize.Chart.Codec do
   defp value(:slot, {:series, i}), do: %{"$series" => i}
   defp value(type, v) when type in [:size, :channel] and is_atom(v), do: Atom.to_string(v)
 
+  # A unit value (spec/14 §3.9, §11.2, #651): the number and the unit's name.
+  defp value(type, {n, unit}) when type in [:size, :length] and is_number(n) and is_atom(unit),
+    do: %{"$unit" => [n, Atom.to_string(unit)]}
+
   # A channel at its scale's own end (spec/14 §5.2, §11.2, #554).
   defp value(:channel, {:scale, which}) when which in [:min, :max],
     do: %{"$scale" => Atom.to_string(which)}
@@ -324,6 +328,15 @@ defmodule Visualize.Chart.Codec do
        when type in [:slot, :colour, :size, :font] and map_size(v) == 1,
        do: {:series, i}
 
+  # A unit is one of the library's, so no atom is made from a document (spec/14 §11.2).
+  defp read(type, %{"$unit" => [n, unit]} = v)
+       when type in [:size, :length] and map_size(v) == 1 and is_number(n) do
+    case Enum.find(Visualize.Units.units(), &(Atom.to_string(&1) == unit)) do
+      nil -> v
+      found -> {n, found}
+    end
+  end
+
   # Only the two ends are read as atoms; any other is left for the validator to name.
   defp read(:channel, %{"$scale" => which} = v) when map_size(v) == 1 do
     case which do
@@ -458,6 +471,7 @@ defmodule Visualize.Chart.Codec do
   defp json_shape?(:boolean, v), do: is_boolean(v)
   defp json_shape?(:string, v), do: is_binary(v)
   defp json_shape?(:size, v), do: is_number(v) or is_binary(v) or tagged?(v)
+  defp json_shape?(:length, v), do: is_number(v) or tagged?(v)
   defp json_shape?(:channel, v), do: is_number(v) or is_binary(v) or tagged?(v)
   defp json_shape?(:term, _), do: true
   defp json_shape?(_atomic, v), do: is_binary(v) or tagged?(v)

@@ -7,12 +7,47 @@ const Stub = (() => {
   let ids = 0, now = 0, timerIds = 0;
   const timers = new Map();
 
-  // Every context method is a recorder; every assignment is recorded and kept.
+  // The 2D context's current transform, as a browser keeps it (#651): `getTransform()`
+  // answers it, and the calls that change it — each still recorded — change it.
+  const multiply = (m, n) => ({
+    a: m.a * n.a + m.c * n.b, b: m.b * n.a + m.d * n.b,
+    c: m.a * n.c + m.c * n.d, d: m.b * n.c + m.d * n.d,
+    e: m.a * n.e + m.c * n.f + m.e, f: m.b * n.e + m.d * n.f + m.f,
+  });
+  const identity = () => ({a: 1, b: 0, c: 0, d: 1, e: 0, f: 0});
+
+  function transforms(state, name, args) {
+    const [x, y] = args;
+    switch (name) {
+      case 'save': state.stack.push({...state.m}); break;
+      case 'restore': state.m = state.stack.pop() || state.m; break;
+      case 'resetTransform': state.m = identity(); break;
+      case 'setTransform':
+        state.m = args.length === 1 ? {...args[0]} :
+          {a: args[0], b: args[1], c: args[2], d: args[3], e: args[4], f: args[5]};
+        break;
+      case 'translate': state.m = multiply(state.m, {a: 1, b: 0, c: 0, d: 1, e: x, f: y}); break;
+      case 'scale': state.m = multiply(state.m, {a: x, b: 0, c: 0, d: y, e: 0, f: 0}); break;
+      case 'rotate': {
+        const [cos, sin] = [Math.cos(x), Math.sin(x)];
+        state.m = multiply(state.m, {a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0});
+        break;
+      }
+      case 'transform':
+        state.m = multiply(state.m, {a: args[0], b: args[1], c: args[2], d: args[3], e: args[4], f: args[5]});
+        break;
+    }
+  }
+
+  // Every context method is a recorder; every assignment is recorded and kept. The
+  // transform is tracked beside, and `getTransform()` reads it without being recorded.
   function context(canvas) {
     const props = {};
+    const state = {m: identity(), stack: []};
     return new Proxy(props, {
-      get: (_t, name) => name in props ? props[name] :
-        (...args) => { log.push({on: canvas.id, kind: 'call', name, args}); },
+      get: (_t, name) => name === 'getTransform' ? () => ({...state.m}) :
+        name in props ? props[name] :
+        (...args) => { transforms(state, name, args); log.push({on: canvas.id, kind: 'call', name, args}); },
       set: (_t, name, value) => {
         props[name] = value;
         log.push({on: canvas.id, kind: 'set', name, value});
