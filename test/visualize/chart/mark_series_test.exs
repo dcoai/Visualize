@@ -25,7 +25,7 @@ defmodule Visualize.Chart.MarkSeriesTest do
     Chart.from_map!(
       Map.merge(
         %{
-          version: 2,
+          version: 3,
           sources: %{primary: %{fields: [:t, :v, :k, :c]}},
           frames: %{
             main: %{
@@ -90,21 +90,15 @@ defmodule Visualize.Chart.MarkSeriesTest do
       assert Enum.map(group.children, &series/1) == ["k0", nil, "k0", "k1"]
     end
 
-    test "a line's path and the area under a filled line carry it, as before" do
+    test "a line's path carries it; a fill on a line draws no area (#659)" do
       group =
         generate(
           %{type: :line, channels: %{x: :t, y: :v, series: :k}, style: :filled},
           %{styles: %{filled: %{fill: "#eeeeee"}}}
         )
 
-      assert [
-               %{style: %{class: "line-fill", stroke: :none}} = fill0,
-               %{style: %{fill: :none, stroke: stroke0}} = line0,
-               fill1,
-               line1
-             ] = group.children
-
-      assert Enum.map([fill0, line0, fill1, line1], &series/1) == ~w(k0 k0 k1 k1)
+      assert [%{style: %{stroke: stroke0}} = line0, line1] = group.children
+      assert Enum.map([line0, line1], &series/1) == ~w(k0 k1)
       assert stroke0 == slot(1)
     end
 

@@ -89,7 +89,16 @@ release it merely follows.
   validation fault. A board now lays its selection's view state before a mark's trailing
   inline style, so a local edit still wins over `:selected`/`:muted`
   (`Visualize.Chart.Style.with_state/2`).
-- **New in `Visualize.Chart.Style`**: `normalize/1` (any spelling to the stored parts),
+- **Each mark kind draws only its own parts; a line no longer draws a fill** (#659, D-172).
+  A line or a rule draws its stroke; areas, bars, rects, arcs, bands, circles and paths their
+  fill and an outline; a symbol also its marker; a text and a label the font and text
+  placement. A part a mark does not draw is ignored — so `style: :bad` on a line is the bad
+  dashed stroke with no area under it, and a `font` on a bar writes nothing. **Draw the area
+  under a line as an `:area` mark beneath it** with the same channels. A stored version 2
+  design whose line had a fill is migrated to exactly that, the marks it moves keeping their
+  series colour; with a `series` channel the migrated area paints each series in its own
+  colour, as an area does.
+- **New in `Visualize.Chart.Style`**: `drawn/2`, `normalize/1` (any spelling to the stored parts),
   `merge/2` (the part-by-part merge) and `project/1` (the parts as the flat element keys).
   `Visualize.Chart.Migration.current/0` is `3`, with `canonical/2`, `parts/2` and
   `flat_type/1`; boards, themes and fragments are stamped version 3, and a version 2 document

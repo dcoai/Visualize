@@ -121,7 +121,12 @@ defmodule Visualize.Chart.Mark.Styled do
 
   defp chosen(ctx, entries, picks) do
     chosen = entries |> Enum.zip(picks) |> Map.new()
-    node = Style.node(ctx.frame.styles, Map.get(ctx.mark, :style), &Map.get(chosen, &1))
+
+    node =
+      ctx.frame.styles
+      |> Style.node(Map.get(ctx.mark, :style), &Map.get(chosen, &1))
+      |> Style.drawn(ctx.type)
+
     parts(node, ctx.type, ctx.index, ctx.frame.theme, ctx.mode)
   end
 

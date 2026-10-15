@@ -211,6 +211,21 @@ defmodule Visualize.Chart.Style do
   @spec project(map()) :: map()
   def project(node), do: Parts.project(node)
 
+  @doc """
+  A projected style node with the keys of the parts a mark of `type` does not draw taken
+  out (spec/14 §5.6, D-172): a line and a rule draw the stroke, the closed kinds the fill
+  and an outline, a symbol its marker too, a text and a label the font and the text
+  placement. A part a kind does not draw is ignored, never an error: styles are shared.
+
+      iex> node = %{stroke: :bad, stroke_width: 2, fill: :bad, symbol: :cross}
+      iex> Visualize.Chart.Style.drawn(node, :line)
+      %{stroke: :bad, stroke_width: 2}
+      iex> Visualize.Chart.Style.drawn(node, :rect)
+      %{stroke: :bad, stroke_width: 2, fill: :bad}
+  """
+  @spec drawn(map(), atom()) :: map()
+  def drawn(node, type), do: Parts.drawn(node, type)
+
   @doc false
   # The style node of a **stack** with every entry's `extends` chain flattened — the parent's
   # keys first, the child's over them (spec/14 §3.5) — and the entries then cascaded left to

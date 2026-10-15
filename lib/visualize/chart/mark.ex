@@ -116,7 +116,7 @@ defmodule Visualize.Chart.Mark do
     index = Keyword.get_lazy(opts, :index, fn -> position(frame, mark) end)
     realised = rows(frame, mark, sources)
     rows = panel(realised, frame, Keyword.fetch(opts, :panel))
-    style_node = Style.node(frame.styles, Map.get(mark, :style))
+    style_node = frame.styles |> Style.node(Map.get(mark, :style)) |> Style.drawn(type)
 
     ctx =
       %{
