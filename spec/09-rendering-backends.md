@@ -172,6 +172,8 @@ Output per format:
 
 Each element produces, in order, its *setup* (transform commands per 3.3.4, then style setup per 3.3.3), its *geometry*, and its *apply* commands (3.3.3). "T" is `transform_commands(element.transform)`, "S" is `style_setup_commands(element.style)`, "A" is `style_apply_commands(element.style)`.
 
+**A leaf's setup is its own** (#679, D-179). Every element below other than `:group` and `:root` is a *leaf*. A leaf whose setup — T and S, or T and the text style for a `:text` — is not empty is drawn inside a `{:save, []}` … `{:restore, []}` pair: `{:save, []}`, the setup, the geometry and the apply commands, `{:restore, []}`. So its transform, its colours, its alpha, its blend, its effect and its font are never the state its next sibling draws in, and the sibling draws where and how SVG draws it — in its own transform and the state of the groups above it. A leaf whose setup is empty writes neither command, so a chart's unstyled, untransformed leaves (the paths of a mark whose style is its group's) cost nothing. The rows of the table give the commands inside the pair.
+
 | IR type | Commands |
 |---|---|
 | `:path` | T, S, `{:beginPath, []}`, `path_data/1` (3.3.2), A |
@@ -183,9 +185,9 @@ Each element produces, in order, its *setup* (transform commands per 3.3.4, then
 | `:polyline` | T, S, `{:beginPath, []}`, `moveTo` first point then `lineTo` each remaining point, A; no commands for an empty or missing `points` list |
 | `:polygon` | as `:polyline` plus `{:closePath, []}` after the last `lineTo` |
 | `:text` | T, text style (3.3.3), `{:fillText, [content or "", x, y]}` with `x`/`y` from attrs defaulting to `0` |
-| `:group` | `{:save, []}`, T, S, children's commands, `{:restore, []}` |
+| `:group` | `{:save, []}`, T, S, children's commands, `{:restore, []}` — always, its setup empty or not |
 | `:root` | children's commands only |
-| `:image` | T, `{:drawImage, [href, x, y, width, height]}` |
+| `:image` | T, `{:drawImage, [href, x, y, width, height]}` — scoped as any leaf when T is not empty |
 | `:defs`, `:clip_path`, `:linear_gradient`, `:radial_gradient`, `:pattern`, `:stop`, `:title`, `:desc`, `:style` | nothing |
 
 A `:group`'s style setup is emitted after its transform, inside the `save`/`restore` pair, so that children without their own style inherit fill, stroke and line width through Canvas state — and the `fill`/`stroke` calls that end a child's path are decided by its *effective* style, its own over the groups' above it, since a state that is set but never applied draws nothing (#231); `Visualize.Backend.Hybrid` relies on this when it wraps a list of dynamic elements in a styled group (6.3) (D-37).
@@ -525,12 +527,14 @@ The span the last `motion` record began ends. One byte.
 
 | IR type | Records |
 |---|---|
-| `:path` | transform (if non-nil with ≥1 operation), style (if the style map is non-empty), the path record (4.5), then `fill` if the *effective* style's `fill` is set and not `:none`, then `stroke` if its `stroke` is set and not `:none` — the effective style being the element's own over the styles of the groups above it, nearest last (#231) |
+| `:path` | transform (if non-nil with ≥1 operation), style (if the style map is non-empty), the path record (4.5), then `fill` if the *effective* style's `fill` is set and not `:none`, then `stroke` if its `stroke` is set and not `:none` — the effective style being the element's own over the styles of the groups above it, nearest last (#231); with a transform or a style record, all of it between `save` and `restore` (below) |
 | `:circle` | transform, style, `circles` with one entry from `attrs.cx/cy/r`, draw records as above |
 | `:rect` | transform, style, `rects` with one entry from `attrs.x/y/width/height`, draw records as above |
 | `:group` | `save`, transform (if any), style (if the style map is non-empty — it sets the state the children draw in, scoped by the `save`/`restore`), each child's records, `restore` (#231) |
 | `:root` | each child's records, nothing else |
 | any other type | nothing (zero bytes) |
+
+**A leaf's records are its own** (#679, D-179), as a leaf's commands are (3.3.1): a `:path`, `:circle` or `:rect` — and a type encoded as the path it is — that writes a `transform` or a `style` record is written between a `save` and a `restore`, so neither the transform nor the state the style record sets (the colours, the width, the alpha, a paint, an effect) reaches the element after it; one that writes neither has no `save`. A reader needs nothing new: it scopes the fill and stroke paints with `save` and `restore` already (4.3.5).
 
 **Paints** (#652, D-175). When any `:fill` or `:stroke` in the tree's styles is a `Visualize.IR.Paint`, or any `:effect` a shadow or a blur (#674), the stream begins with `version` 2 and one `paint` record per distinct paint (4.3.11, 4.3.12); a style that holds a paint sets bit 5 or 6 with the paint's index in place of the RGBA field; and every element whose effective fill or stroke is a paint gets a `box` record between its geometry and its draw records (4.3.13). An element drawn as the path it is — a `:line`, `:ellipse`, `:polyline`, `:polygon` — takes the box of the shape it was.
 
