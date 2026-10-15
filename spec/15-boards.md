@@ -242,20 +242,20 @@ Why this order: a board variable is the dashboard's choice (the service, the reg
 
 ## 6. Realising a board
 
-`Visualize.Board.realise/4` resolves every cell to an applied chart, purely: no process and no feed. It takes the board, the store, the **pools** by cell (§4.4) and options, and returns `{:ok, applied, cache}` or `{:error, errors}`. `applied` maps each cell's name to its `%Visualize.Chart.Applied{}` (spec/14 §14.10), and `cache` is the schema cache grown by every cell. For each cell, in name order:
+`Visualize.Board.realize/4` resolves every cell to an applied chart, purely: no process and no feed. It takes the board, the store, the **pools** by cell (§4.4) and options, and returns `{:ok, applied, cache}` or `{:error, errors}`. `applied` maps each cell's name to its `%Visualize.Chart.Applied{}` (spec/14 §14.10), and `cache` is the schema cache grown by every cell. For each cell, in name order:
 
 - the component is resolved as §3.2 says;
 - its variables are the cascade of §5, narrowed to the ones the component declares;
 - with the board's `sync` set and the cell's `sync` true, the board's group is written into the design's `interaction.sync` (§1.5);
 - it is applied with `Visualize.Chart.apply/2`: `sources:` the cell's pool, `size:` the cell's box at `width:` (§1.6), and `theme:`, `now:`, `system:`, `schemas:`, `describe:`, `generators:` and `assigns:` as given (spec/14 §3.13, #654). The schema cache is threaded from cell to cell, so a version one cell has described is not described again. `describe:` is called with the `{cell, slot}` being described, which the connector maps to its feed through its binding.
 
-The options are `width:` (the board's container width in pixels, `1200` by default), `theme:`, `now:`, `system:` (the viewer's unit system, spec/14 §4.4, D-156), `schemas:`, `describe:`, `limits:`, `generators:` (the generator modules each component's names are checked against and its frames call, spec/14 §3.13) and `assigns:` (the host's assigns every generator's context carries, `%{}` by default). `realise/3` is `realise/4` with no options.
+The options are `width:` (the board's container width in pixels, `1200` by default), `theme:`, `now:`, `system:` (the viewer's unit system, spec/14 §4.4, D-156), `schemas:`, `describe:`, `limits:`, `generators:` (the generator modules each component's names are checked against and its frames call, spec/14 §3.13) and `assigns:` (the host's assigns every generator's context carries, `%{}` by default). `realize/3` is `realize/4` with no options.
 
 Every fault of every cell is reported, each under its cell: `[:cells, name | path]`, with `path` application's own. A slot with no source in its cell's pool is therefore `{:unbound, :source, slot}` at `[:cells, name, :sources, slot]`, the same path the binding check uses (§4.3). The board's own faults (§3) come first. A board that does not validate alone is refused before any cell is resolved.
 
-**The first three steps are `Visualize.Board.components/3`**: `components(board, store, opts)` resolves every cell's component, writes the board's group and zone into it, and narrows the cascade to the variables it declares, giving `{:ok, %{cell => %{chart: chart, vars: vars}}}` — a `%Visualize.Chart{}` and the variables to apply it with — or `{:error, errors}` with the board's faults, alone and given the store, exactly as `realise/4` reports them. `realise/4` is `components/3` followed by the application, and the runtime (§8) prepares its cells with `components/3` and applies each one in the cell's own process. Its options are `limits:` and `generators:`, which `validate/3` and `required_sources/3` take too: every component is read with both.
+**The first three steps are `Visualize.Board.components/3`**: `components(board, store, opts)` resolves every cell's component, writes the board's group and zone into it, and narrows the cascade to the variables it declares, giving `{:ok, %{cell => %{chart: chart, vars: vars}}}` — a `%Visualize.Chart{}` and the variables to apply it with — or `{:error, errors}` with the board's faults, alone and given the store, exactly as `realize/4` reports them. `realize/4` is `components/3` followed by the application, and the runtime (§8) prepares its cells with `components/3` and applies each one in the cell's own process. Its options are `limits:` and `generators:`, which `validate/3` and `required_sources/3` take too: every component is read with both.
 
-`realise/4` is what makes a board testable as a value, and it is the step the runtime takes per cell (#540): a cell process applies its component at its box's size, then compiles and renders it. The window (§1.5) is not applied to the component here. It is what the runtime asks the feeds for, and a cell's rows arrive already windowed (spec/08 §10.4).
+`realize/4` is what makes a board testable as a value, and it is the step the runtime takes per cell (#540): a cell process applies its component at its box's size, then compiles and renders it. The window (§1.5) is not applied to the component here. It is what the runtime asks the feeds for, and a cell's rows arrive already windowed (spec/08 §10.4).
 
 ## 7. Functions
 
@@ -286,8 +286,8 @@ Every fault of every cell is reported, each under its cell: `[:cells, name | pat
 | `Visualize.Board.required_sources/3` | Every cell's slots through the store, keyed `{cell, slot}`, each with `fields`, `types` and its `requires` contract (§4.1); `limits:` for the components' designs. |
 | `Visualize.Board.components/2` | As `components/3` with `[]` options. |
 | `Visualize.Board.components/3` | Every cell's component prepared, purely: `{:ok, %{cell => %{chart, vars}}}` with the group and the zone written and the variables narrowed, or every fault (§6). |
-| `Visualize.Board.realise/3` | As `realise/4` with `[]` options. |
-| `Visualize.Board.realise/4` | Every cell applied, purely: `{:ok, %{cell => applied}, cache}`, or every fault under its cell (§6). |
+| `Visualize.Board.realize/3` | As `realize/4` with `[]` options. |
+| `Visualize.Board.realize/4` | Every cell applied, purely: `{:ok, %{cell => applied}, cache}`, or every fault under its cell (§6). |
 | `Visualize.Board.link/2` | `link(board, field)`: the name a field links to through `links`, or the field itself (§13.2). |
 | `Visualize.Board.linked/2` | `linked(board, field)`: every field name that links to the same name as `field`, itself included (§13.2). |
 | `Visualize.Board.drill/3` | `drill(board, cell, row)`: the cell's drill target with its variables taken from the row, `{:ok, %{board: ref, vars: vars}}`; `:none` for a cell with no `drill`; `{:error, errors}` for a datum with no value for a field it names (§13.3). |
@@ -653,7 +653,7 @@ Then the entries are imported through the store's own `import/2`, which issues e
 ```
 running board ─ Server.snapshot/1 ─┐
                                    ├─ %Snapshot{} ─┬─ Export.svg/2 ─ Export.png/2
-board + store + pools ─ realise/4 ─┘   (JSON)      └─ Export.pages/2 ─ Export.html/2
+board + store + pools ─ realize/4 ─┘   (JSON)      └─ Export.pages/2 ─ Export.html/2
 ```
 
 ### 12.1 The board as one document
@@ -688,7 +688,7 @@ A **snapshot** (`%Visualize.Board.Snapshot{}`) is a board frozen at one instant,
 **Taking one.**
 
 - `Visualize.Board.Server.snapshot(board)` freezes a running board (§8): its board, now, resolved window, width and theme, every cell's prepared component and variables, the slots the board last sent each cell, and the reason of any cell that has crashed. It is a call to the board process, which already holds all of this. No cell is called, so a slow cell does not hold the snapshot.
-- `Visualize.Board.Snapshot.realise(board, store, pools, opts)` freezes a board purely. It is `Visualize.Board.realise/4` (§6) over the same arguments, refused with every fault as `realise/4` reports them. On success each cell's slots are the sources application bound them to, by the slot's name or its default (spec/14 §7.2), as deliveries (a delivery as it is, any other source as its rows), with the schema that application found for each slot and the status `:live`. Its options are `realise/4`'s. With `now:` the window is the board's resolved at it. Without, a fixed window is kept and a trailing one is `nil`.
+- `Visualize.Board.Snapshot.realize(board, store, pools, opts)` freezes a board purely. It is `Visualize.Board.realize/4` (§6) over the same arguments, refused with every fault as `realize/4` reports them. On success each cell's slots are the sources application bound them to, by the slot's name or its default (spec/14 §7.2), as deliveries (a delivery as it is, any other source as its rows), with the schema that application found for each slot and the status `:live`. Its options are `realize/4`'s. With `now:` the window is the board's resolved at it. Without, a fixed window is kept and a trailing one is `nil`.
 
 A snapshot keeps only what its codecs write: each delivery's rows as a list, each status as `:loading`, `:live`, `:stale` or `{:down, words}`, a down reason as the words a state prints for it (`Feed down: …`), and a crash's reason as its inspected text. So a snapshot that has been through JSON is equal to the one written (§12.3).
 
@@ -733,8 +733,8 @@ A snapshot follows the version policy of spec/14 §9.1 (D-137) and the board's c
 | `Visualize.Board.Export.pages/2` | One SVG document per page, of the paper's size, in the print theme by default (§12.4). |
 | `Visualize.Board.Export.html/1` | As `html/2` with `[]` options. |
 | `Visualize.Board.Export.html/2` | The pages in one HTML document with an `@page` rule of the paper's size (§12.4). |
-| `Visualize.Board.Snapshot.realise/3` | As `realise/4` with `[]` options. |
-| `Visualize.Board.Snapshot.realise/4` | A snapshot of a board realised purely: `Visualize.Board.realise/4`'s faults, or `{:ok, snapshot}` (§12.2). |
+| `Visualize.Board.Snapshot.realize/3` | As `realize/4` with `[]` options. |
+| `Visualize.Board.Snapshot.realize/4` | A snapshot of a board realised purely: `Visualize.Board.realize/4`'s faults, or `{:ok, snapshot}` (§12.2). |
 | `Visualize.Board.Snapshot.views/1` | As `views/2` with `[]` options: the snapshot's width and theme. |
 | `Visualize.Board.Snapshot.views/2` | Every cell drawn, purely, as the cell process draws the same data: `%{name => %Visualize.Board.View{}}`; `width:`, `theme:`, `system:`, `generators:` and `assigns:` (§12.2, D-156, D-181). |
 | `Visualize.Board.Snapshot.to_map/1` | The snapshot as plain data (§12.3). |

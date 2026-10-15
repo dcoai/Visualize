@@ -17,7 +17,7 @@ This document specifies the general-purpose modules used across the library: `Vi
 - Hex: `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`. Short digits are doubled; an alpha byte becomes `opacity = a / 255`. Any other length after `#` returns `nil`; a non-hex digit raises `ArgumentError`.
 - `rgb(r, g, b)` and `rgba(r, g, b, a)`: integer channels, optional decimal alpha, arbitrary whitespace around separators. Percentages are not accepted. A non-matching string returns `nil`.
 - `hsl(h, s, l)` and `hsla(h, s, l, a)`: decimal components, `%` optional on `s` and `l`. A non-matching string returns `nil`.
-- Named colours: the 148 CSS colour keywords (the 147 classic names plus `rebeccapurple`, with both `gray` and `grey` spellings). Unknown names return `nil`.
+- Named colors: the 148 CSS colour keywords (the 147 classic names plus `rebeccapurple`, with both `gray` and `grey` spellings). Unknown names return `nil`.
 
 `named/1` returns the lower-case hex string for a keyword (case-insensitively) or `nil`; `named_colors/0` returns the keyword list in unspecified order.
 
@@ -116,7 +116,7 @@ Each row sums to 1, so every grey is its own simulation — a property the tests
 | `Visualize.Color.Vision.deficiencies/0` | `[:protanopia, :deuteranopia, :tritanopia]` |
 | `Visualize.Color.Vision.matrix/1` | the deficiency's 3×3 matrix as three rows, from the table above |
 | `Visualize.Color.Vision.simulate/2` | `simulate(colour, deficiency)`: a `%Visualize.Color{}` as the deficiency sees it, opacity kept; `:none` is the colour; any other atom raises `ArgumentError` |
-| `Visualize.Color.Vision.recolour/2` | `recolour(text, deficiency)`: every `#rrggbb` and `#rgb` colour literal in a text — an SVG's attribute values, a style — replaced by its simulation as `#rrggbb`; a `#` that is a reference, `url(#id)`, is left alone |
+| `Visualize.Color.Vision.recolor/2` | `recolor(text, deficiency)`: every `#rrggbb` and `#rgb` colour literal in a text — an SVG's attribute values, a style — replaced by its simulation as `#rrggbb`; a `#` that is a reference, `url(#id)`, is left alone |
 
 ### 1.9 Typed colors and their transforms
 
@@ -606,7 +606,11 @@ Both palettes are ten hues in the order of d3's `category10` — blue, orange, r
 
 The ramps of both palettes were chosen in CIE LCh to meet the contracts of 7.5 with room: on the light theme the status roles step down in lightness from 60 to 56 to 45 L*, each at 3:1 or better on white, and on the dark theme up from 55 to 66 to 72 L*, so the role that must be noticed, `:bad`, is the one furthest from the page on both.
 
-**The colour-vision-safe theme.** `color_safe/0` is `default/0` with the name `:color_safe` (spelled `:colour_safe` before #642; a stored design that names it so is read as `:color_safe`, spec/14 §9) and one ramp changed: `status` runs **blue → orange → red**, `#5996d6 #cd6012 #b92931`, in place of green → amber → red. Red against green is the distinction the commonest colour-vision deficiencies lose (about one man in twelve), and blue against orange survives all three of them; the lightness still falls by 6 L* or more at each step (60, 54, 42), each at 3:1 or better on white, so a reader who sees no hue at all still reads the order. Its other ramps are the default's — blue against red (`thermal`) and orange against purple (`diverging`) already survive — and so is its categorical `series`: a palette that is both colour-vision-safe and holds 3:1 on white (7.4) has too few hues to be a ten-colour palette, and the series promise *distinct*, never a meaning. Safety is a whole theme, chosen once, not a switch on one ramp, so every role and ramp position a design names follows it with no change to the design.
+**The colour-vision-safe theme.** `color_safe/0` is `default/0` with the name `:color_safe` and one ramp changed: `status` runs **blue → orange → red**, `#5996d6 #cd6012 #b92931`, in place of green → amber → red. Red against green is the distinction the commonest colour-vision deficiencies lose (about one man in twelve), and blue against orange survives all three of them; the lightness still falls by 6 L* or more at each step (60, 54, 42), each at 3:1 or better on white, so a reader who sees no hue at all still reads the order. Its other ramps are the default's — blue against red (`thermal`) and orange against purple (`diverging`) already survive — and so is its categorical `series`: a palette that is both colour-vision-safe and holds 3:1 on white (7.4) has too few hues to be a ten-colour palette, and the series promise *distinct*, never a meaning. Safety is a whole theme, chosen once, not a switch on one ramp, so every role and ramp position a design names follows it with no change to the design.
+
+<!-- spelling: allow -->
+Before #642 the theme was spelled `:colour_safe`; a stored design that names it so is read as `:color_safe` (spec/14 §9, D-183).
+<!-- spelling: end -->
 
 **The print theme.** `print/0` is paper (spec/15 §12.4, D-150): `default/0` with the name `:print`, a white `background` and a white `surface` (`#ffffff`), so a printer lays no ink under the data, near-black `text` (`#111111`) and `axis` (`#333333`), a `grid` of `#c8c8c8`, dark enough to survive a photocopy, and the colour-safe theme's `status` ramp. A printed page is read in whatever light and by whatever eyes it reaches, often in greyscale, where the status ramp's falling lightness and each role's glyph carry the order without hue. Its series and its other ramps and roles are the default's, so it passes every contract of 7.5. **Its role styles are hatched** (#652, work item #673, D-175): the five entries of 7.7 keep the default's stroke, dash and marker, and the fills of four are hatches of the role's colour on no background, so an area that means something keeps its meaning on a grayscale copy — `:good` lines at 45°, `:warning` lines at 135°, `:bad` a crosshatch at 45°, `:info` dots, each with a `spacing` of 6 and a `width` of 1 (spec/14 §3.1); `:neutral` keeps its solid fill. Every other palette entry is the default's. The role contracts of 7.7 read a hatch's `color` as they read a solid paint's, so its lines reach 3:1 against the paper.
 
@@ -660,7 +664,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 
 **Contracts are checked when a theme is constructed.** `new/1` and `merge/2` — and so an inline theme in a design (spec/14 §2.5) — check every ramp and role and raise `ArgumentError` naming the theme, the ramp or role, and the term it breaks: `theme :house: ramp :status breaks its contract: lightness must change one way along the ramp, by at least 3 L* a step (its ends say it falls); anchor 2 "#e0a030" (L* 70.8) moves 10.7 L* the wrong way from anchor 1 "#4ca34b" (L* 60.2)`. A ramp name not of the four, a ramp of fewer than two anchors, an anchor `Visualize.Color.parse/1` cannot read, and a `colors` entry that is neither a color string `parse/1` reads nor a color value of §1.9 are refused the same way. `check/1` is the same check returning `{:error, subject, message}`, `subject` `{:ramp, name}` or `{:color, name}`, for a caller that reports rather than raises — the validator (spec/14 §10.1). `violations/1` runs it on each ramp and color alone and lists every one that breaks, for a caller that shows each fault where it is — the theme editor (spec/14 §20.4). The built-in themes hold every contract, and `test/visualize/theme_ramps_test.exs` holds them to it. A struct written literally, `%Visualize.Theme{…}`, is not checked: it is the escape hatch, as the contrast floors of 7.4 are not checked on a host's theme.
 
-**Fallback.** A theme that lacks a ramp or a color name — a struct whose `ramps` or `colors` map leaves a key out — takes the **default theme's**, never a series colour: a series colour carries no meaning, so falling back to one would break the very promise the ramp exists to keep. A palette style follows the same rule (7.7): a theme whose `styles` leaves a name out takes the default theme's entry of that name, whole.
+**Fallback.** A theme that lacks a ramp or a color name — a struct whose `ramps` or `colors` map leaves a key out — takes the **default theme's**, never a series color: a series colour carries no meaning, so falling back to one would break the very promise the ramp exists to keep. A palette style follows the same rule (7.7): a theme whose `styles` leaves a name out takes the default theme's entry of that name, whole.
 
 **Precedence.** Where a colour comes from, highest first: a **literal** the design writes, or the **design's colour scale** (`range: [...]`, `range: {:ramp, name}`, spec/14 §4.3) — both deliberate choices; then the **theme's** rendering of a role or a ramp position the design names; then the theme's default. Whole styles rank the same way (7.7): a design's `styles` entry of a palette name beats the theme's entry of that name, and the theme's entry beats the default theme's. A feed's schema, when it comes (#531), sits between the last two: it names meanings, and the theme renders them.
 
@@ -688,7 +692,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 | `Visualize.Theme.style_names/1` | The theme's palette names: `:style_1` … `:style_n`, then the roles, the state styles and the furniture styles, each group in the order of 7.7. |
 | `Visualize.Theme.slots/1` | The theme's slot names in the order of 7.1. |
 | `Visualize.Theme.color_names/1` | Every name of the theme's color table (7.1): its colour slots, its own and the default theme's `colors`, and the CSS named colors, sorted. |
-| `Visualize.Theme.colour_slots/1` | The theme's colour slots alone — the series, then axis, grid, text, background and surface, then the five roles — for a control that offers a colour as a slot (spec/14 §19.10). |
+| `Visualize.Theme.color_slots/1` | The theme's colour slots alone — the series, then axis, grid, text, background and surface, then the five roles — for a control that offers a colour as a slot (spec/14 §19.10). |
 | `Visualize.Theme.series_slot/2` | `series_slot(theme, i)`: the `:series_k` atom the positive index `i` cycles to (7.1). |
 | `Visualize.Theme.resolve/3` | The slot's or color name's value as a literal or as a CSS reference with the literal fallback; a ramp position `{:ramp, name, t}` as its literal, a status role's position as the role (7.3). |
 | `Visualize.Theme.css_name/1` | The custom-property name of a slot atom or a color table name (7.3). |
@@ -888,7 +892,7 @@ Two keys are checked here only as far as this library owns them:
 - **`status`**'s roles are the theme's vocabulary (#533: `:good`, `:warning`, `:bad`, `:info`, `:neutral`), whose names are meanings every theme must honour. They are carried here as atoms and not checked against a list, so a role #533 adds needs no change to the schema. When the description also gives `order`, every state `status` names MUST be one of `order`'s.
 - **`continuity`** is carried for the cell that draws a feed (#531 §3: gaps follow it); no mark reads it yet.
 
-**No colour.** A schema describes meaning, and colour is the theme's to choose from it (#533, #531's revision of 2026-10-11): a key `color`, `colour`, `colors`, `colours`, `palette`, `fill` or `stroke` in a description is the fault `{:colour_key, key}`, whose line says so and names the keys that carry the meaning instead (`status`, `order`, `polarity`, `quantity`). A literal colour is something only a design writes, as a deliberate choice; data never does.
+**No colour.** A schema describes meaning, and colour is the theme's to choose from it (#533, #531's revision of 2026-10-11): a key `color`, `colour`, `colors`, `colours`, `palette`, `fill` or `stroke` in a description is the fault `{:color_key, key}`, whose line says so and names the keys that carry the meaning instead (`status`, `order`, `polarity`, `quantity`). A literal colour is something only a design writes, as a deliberate choice; data never does.
 
 The faults of `new/1`:
 
@@ -899,7 +903,7 @@ The faults of `new/1`:
 | `{:duplicate_field, other}` | at `[name]`: the field is named twice, as an atom and as the string that spells it (`:v` and `"v"`), which are one column (6.2); reported at the later of the two by term order |
 | `{:type, :description}` | at `[name]`: the description is not a map |
 | `:unknown_key` | at `[name, key]`: a key that is not one of the thirteen |
-| `{:colour_key, key}` | at `[name, key]`: a colour, which a schema never names |
+| `{:color_key, key}` | at `[name, key]`: a colour, which a schema never names |
 | `:required` | at `[name, :type]`: the description gives no `type` |
 | `{:enum, allowed}` | at `[name, :type]`, `[name, :polarity]` or `[name, :metric_kind]`: a value not among the allowed |
 | `{:unit, code, reason}` | at `[name, :unit]`: a string `Visualize.Unit.parse/1` does not read, with its reason (D-157) |
