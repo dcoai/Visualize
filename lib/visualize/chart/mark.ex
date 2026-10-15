@@ -344,6 +344,9 @@ defmodule Visualize.Chart.Mark do
       )
     )
     |> Map.put(:class, class(ctx))
+    # An animation is each element's, run about its own box (spec/14 §3.11): the elements
+    # carry it, and the group none.
+    |> Map.delete(:animation)
   end
 
   defp class(%{type: type, style_node: style_node}) do

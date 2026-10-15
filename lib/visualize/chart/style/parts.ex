@@ -43,7 +43,7 @@ defmodule Visualize.Chart.Style.Parts do
   @flat_keys Map.keys(@flat) ++ [:margin_x, :margin_y, :curve_opts]
 
   # The motion parts merge key by key too (spec/14 §3.10, #653).
-  @parts [:fill, :stroke, :font, :text, :effect, :marker, :curve, :transition]
+  @parts [:fill, :stroke, :font, :text, :effect, :marker, :curve, :transition, :animation]
   @paints [:fill, :stroke]
   @paint_types [:none, :solid, :linear, :radial, :hatch, :paint]
   @gradients [:linear, :radial]

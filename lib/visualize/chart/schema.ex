@@ -71,6 +71,7 @@ defmodule Visualize.Chart.Schema do
     :curve,
     :style_transition,
     :part_transition,
+    :style_animation,
     :stop,
     :label,
     :layout,
@@ -460,6 +461,17 @@ defmodule Visualize.Chart.Schema do
 
   defp design_node(:part_transition), do: part_transition_keys()
 
+  # A style's animation (spec/14 §3.11): a built-in's name or the host's, and how it runs.
+  defp design_node(:style_animation) do
+    [
+      spec(:name, {:one_of, [{:enum, [:pulse, :blink, :shake, :spin]}, :string]}, :style),
+      spec(:duration, :number, :style, range: {0, 10_000, 100}),
+      spec(:easing, {:enum, Visualize.Ease.names()}, :style),
+      spec(:iterations, {:one_of, [:number, {:enum, [:infinite]}]}, :style),
+      spec(:delay, :number, :style)
+    ]
+  end
+
   defp design_node(:theme) do
     theme = Theme.default()
 
@@ -586,7 +598,9 @@ defmodule Visualize.Chart.Schema do
       spec(:marker, {:node, :marker}, :style),
       spec(:curve, {:node, :curve}, :style),
       # How a change of the look is reached (spec/14 §3.10, #653).
-      spec(:transition, {:node, :style_transition}, :style)
+      spec(:transition, {:node, :style_transition}, :style),
+      # A motion run while the style holds (spec/14 §3.11, #653).
+      spec(:animation, {:node, :style_animation}, :style)
     ]
   end
 

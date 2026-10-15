@@ -74,6 +74,7 @@ defmodule Visualize.Chart.Validator.Words do
     do: "a font family may not hold <, >, /, ;, {, }, \\ or a control character"
 
   def words({:unsafe, :class}), do: "must be CSS class names separated by spaces"
+  def words({:unsafe, :animation}), do: "must be one CSS identifier: keyframes the host defines"
   def words({:tiles, :subdomains}), do: "must name a subdomain for the url's {s}"
   def words(:sweep), do: "must be within a turn, and not zero"
   def words(:radius), do: "must be positive"

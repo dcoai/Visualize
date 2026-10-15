@@ -196,10 +196,10 @@ defmodule Visualize.Chart.StyleMotionTest do
       json = Chart.render(applied(design()), backend: :canvas, format: :json)
 
       assert json =~
-               ~s|{"cmd":"motion","args":["main.1.state=ok",[-4.5135,-4.5135,9.027,9.027],[]]}|
+               ~s|{"cmd":"motion","args":["main.1.state=ok",[-4.5135,345.4865,9.027,9.027],[]]}|
 
       assert json =~
-               ~s|{"cmd":"motion","args":["main.1.state=error",[-4.5135,-4.5135,9.027,9.027],[["fill",400,[0,1]]]]}|
+               ~s|{"cmd":"motion","args":["main.1.state=error",[535.4865,-4.5135,9.027,9.027],[["fill",400,[0,1]]]]}|
 
       assert length(String.split(json, ~s|{"cmd":"motionEnd","args":[]}|)) == 3
     end
@@ -218,8 +218,8 @@ defmodule Visualize.Chart.StyleMotionTest do
       spans = for {:motion, json} <- records, do: json
 
       assert spans == [
-               ~s|["main.1.state=ok",[-4.5135,-4.5135,9.027,9.027],[]]|,
-               ~s|["main.1.state=error",[-4.5135,-4.5135,9.027,9.027],[["fill",400,[0,1]]]]|
+               ~s|["main.1.state=ok",[-4.5135,345.4865,9.027,9.027],[]]|,
+               ~s|["main.1.state=error",[535.4865,-4.5135,9.027,9.027],[["fill",400,[0,1]]]]|
              ]
 
       assert Enum.count(records, &(&1 == :motion_end)) == 2
@@ -230,6 +230,113 @@ defmodule Visualize.Chart.StyleMotionTest do
       records = tree |> CanvasBinary.encode_element!() |> Decoder.decode()
       refute Enum.any?(records, &match?({:version, _}, &1))
       refute Enum.any?(records, &match?({:motion, _}, &1))
+    end
+  end
+
+  describe "animation (#677)" do
+    defp pulsing(animation),
+      do: design(%{error: %{fill: Visualize.Color.color(:red), animation: animation}})
+
+    test "validates a built-in or a CSS identifier, and names a negative time or count" do
+      assert :ok = Validator.validate(pulsing(%{name: :pulse, duration: 1200}))
+      assert :ok = Validator.validate(pulsing(%{name: "wiggle-2", iterations: 3, delay: 100}))
+
+      assert {:error, errors} =
+               Validator.validate(
+                 pulsing(%{name: "x;}</style>", delay: -1, iterations: -2, duration: -5})
+               )
+
+      at = [:styles, :error, :animation]
+      assert {at ++ [:name], {:unsafe, :animation}} in errors
+      assert {at ++ [:delay], :negative} in errors
+      assert {at ++ [:iterations], :negative} in errors
+      assert {at ++ [:duration], :negative} in errors
+
+      name_at = at ++ [:name]
+      assert {:error, [{^name_at, _}]} = Validator.validate(pulsing(%{name: :wobble}))
+    end
+
+    test "resolves with its defaults; without a name, or of no iteration, it is no key" do
+      resolve = &Style.resolve(%{animation: &1}, @theme, :css)
+
+      assert resolve.(%{name: :pulse}) == %{
+               animation: %{
+                 name: :pulse,
+                 duration: 1000,
+                 easing: :linear,
+                 iterations: :infinite,
+                 delay: 0
+               }
+             }
+
+      assert resolve.(%{duration: 300}) == %{}
+      assert resolve.(%{name: :blink, iterations: 0}) == %{}
+    end
+
+    test ":css wraps the element in a group of the animation's class, with the keyframes and the reduced-motion rule" do
+      svg = Chart.render(applied(pulsing(%{name: :pulse, duration: 1200})))
+
+      [class] =
+        Regex.run(~r/<g class="(vis-animation-[0-9a-z]+)"><path/, svg, capture: :all_but_first)
+
+      assert svg =~
+               "@keyframes vis-pulse { 0% { opacity: 1; } 50% { opacity: 0.35; } 100% { opacity: 1; } }"
+
+      assert svg =~
+               ".#{class} { animation: vis-pulse 1200ms linear 0ms infinite; transform-box: fill-box; transform-origin: center; }"
+
+      assert svg =~
+               ~s|@media (prefers-reduced-motion: reduce) { [class*="vis-animation-"] { animation: none !important; } }</style>|
+
+      # The transitions' rule is written only where a transition is.
+      refute svg =~ "vis-transition-"
+      # The row that does not animate is not wrapped.
+      refute svg =~ ~s|<g class="vis-animation-[0-9a-z]+"><path d="[^"]*" data-series="ok"|
+    end
+
+    test "a host's keyframes are named as they are, and a name that is no identifier is refused" do
+      svg = Chart.render(applied(pulsing(%{name: "wiggle", duration: 600, iterations: 2})))
+      assert svg =~ "animation: wiggle 600ms linear 0ms 2;"
+      refute svg =~ "@keyframes"
+
+      bad =
+        Visualize.IR.Element.group([],
+          style: %{
+            animation: %{name: "a}b", duration: 1, easing: :linear, iterations: 1, delay: 0}
+          }
+        )
+
+      assert_raise ArgumentError, ~r/not a CSS identifier/, fn ->
+        Visualize.Chart.Frame.Motion.apply(bad, :css)
+      end
+    end
+
+    test "a mark's own animation is each element's: the group carries none" do
+      d =
+        design(%{})
+        |> put_in([:marks, Access.at(0), :style], %{
+          fill: "#0000ff",
+          animation: %{name: :spin, duration: 2000}
+        })
+
+      svg = Chart.render(applied(d))
+      assert length(Regex.scan(~r/<g class="vis-animation-/, svg)) == 2
+      assert svg =~ ~s|<g class="mark mark-symbol" fill="#0000ff">|
+      assert svg =~ "@keyframes vis-spin { 0% { rotate: 0deg; } 100% { rotate: 360deg; } }"
+    end
+
+    test "the motion span carries the animation and a built-in's keyframes; a host's none" do
+      json =
+        Chart.render(applied(pulsing(%{name: :blink, iterations: 3})),
+          backend: :canvas,
+          format: :json
+        )
+
+      assert json =~
+               ~s|[],["blink",1000,[0,1],3,0,[[0,1,null,null,null,null],[0.4999,1,null,null,null,null],[0.5,0,null,null,null,null],[1,0,null,null,null,null]]]]}|
+
+      json = Chart.render(applied(pulsing(%{name: "wiggle"})), backend: :canvas, format: :json)
+      assert json =~ ~s|["wiggle",1000,[0,1],null,0,null]|
     end
   end
 

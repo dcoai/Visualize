@@ -37,15 +37,83 @@ defmodule Visualize.Hooks.Motion do
           window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       },
 
-      // A span from the motion command's arguments, [id, box, [[property, duration, samples]]].
-      open(state, args) {
-        const [id, box, list] = args;
+      // A span from the motion command's arguments, [id, box, [[property, duration, samples]],
+      // animation]: the context saved, and a running animation's motion applied about the
+      // element's box (#677).
+      open(state, ctx, args) {
+        const [id, box, list, animation] = args;
         const transitions = {};
         (list || []).forEach(([property, duration, samples]) => { transitions[property] = [duration, samples]; });
-        state.span = { id, box, transitions };
+        state.span = { id, box, transitions, alpha: 1 };
+        ctx.save();
+        const v = animation && !state.reduced ? this.animate(state, id, animation) : null;
+        if (!v) return;
+        if (v.x || v.y) ctx.translate(v.x, v.y);
+        if (box && (v.rotate || v.scale !== 1)) {
+          const cx = box[0] + box[2] / 2, cy = box[1] + box[3] / 2;
+          ctx.translate(cx, cy);
+          if (v.rotate) ctx.rotate(v.rotate * Math.PI / 180);
+          if (v.scale !== 1) ctx.scale(v.scale, v.scale);
+          ctx.translate(-cx, -cy);
+        }
+        state.span.alpha = v.opacity;
       },
 
-      close(state) { state.span = null; },
+      close(state, ctx) {
+        if (state.span) ctx.restore();
+        state.span = null;
+      },
+
+      // The host's keyframes by name: [[offset, {opacity, x, y, rotate, scale}], ...] (#677).
+      registered: new Map(),
+      register(name, frames) {
+        const props = ['opacity', 'x', 'y', 'rotate', 'scale'];
+        this.registered.set(name, frames.map(([offset, values]) =>
+          [offset, ...props.map((p) => (values && values[p] !== undefined ? values[p] : null))]));
+      },
+
+      // An animation's values now, or null while it waits for its delay or once it is done:
+      // [name, duration, samples, iterations, delay, keyframes], started the first time the
+      // identity was drawn with it.
+      animate(state, id, animation) {
+        const [name, duration, samples, iterations, delay, own] = animation;
+        const key = id + '\u0000animation';
+        const sig = name + '\u0000' + duration + '\u0000' + iterations + '\u0000' + delay;
+        state.seen.add(key);
+        let run = state.shown.get(key);
+        if (!run || run.sig !== sig) {
+          run = { sig, start: state.now };
+          state.shown.set(key, run);
+        }
+        const frames = own || this.registered.get(name);
+        if (!frames || !(duration > 0)) return null;
+        const t = state.now - run.start - delay;
+        if (t < 0) { state.active = true; return null; }
+        const n = Math.floor(t / duration);
+        if (iterations !== null && n >= iterations) return null;
+        state.active = true;
+        return this.keyframed(frames, (t - n * duration) / duration, samples);
+      },
+
+      // Each property between the two keyframes about p that name it, the segment eased; a
+      // property no keyframe names is the element's own.
+      keyframed(frames, p, samples) {
+        const identity = [1, 0, 0, 0, 1];
+        const out = {};
+        ['opacity', 'x', 'y', 'rotate', 'scale'].forEach((name, k) => {
+          const named = frames.filter((f) => f[k + 1] !== null && f[k + 1] !== undefined)
+            .map((f) => [f[0], f[k + 1]]);
+          if (named.length === 0) { out[name] = identity[k]; return; }
+          if (named[0][0] > 0) named.unshift([0, identity[k]]);
+          if (named[named.length - 1][0] < 1) named.push([1, identity[k]]);
+          let i = 0;
+          for (let j = 0; j < named.length - 1; j++) if (named[j][0] <= p) i = j;
+          const [a, b] = [named[i], named[i + 1]];
+          const local = b[0] > a[0] ? (p - a[0]) / (b[0] - a[0]) : 1;
+          out[name] = a[1] + (b[1] - a[1]) * this.ease(samples, local);
+        });
+        return out;
+      },
 
       // After a replay: forget what was not drawn; whether anything still moves.
       end(state) {
@@ -68,7 +136,9 @@ defmodule Visualize.Hooks.Motion do
         const put = [];
         for (const [prop, part] of this.props[op]) {
           const target = ctx[prop];
-          const shown = this.value(state, span.id + '\u0000' + op + '\u0000' + prop, target, span.transitions[part]);
+          let shown = this.value(state, span.id + '\u0000' + op + '\u0000' + prop, target, span.transitions[part]);
+          // An animation's opacity is a factor of the element's alpha (#677).
+          if (prop === 'globalAlpha' && span.alpha !== 1) shown = shown * span.alpha;
           if (shown !== target) { put.push([prop, target]); ctx[prop] = shown; }
         }
         fn();

@@ -26,12 +26,22 @@ defmodule Visualize.Chart.Mark.Identity do
       |> Enum.with_index()
       |> Enum.map(fn {{element, child}, i} ->
         text = text(Event.identity(ctx.mark, Map.get(child, :datum) || %{}, schema), i)
-        Element.put_attr(element, "data-vis-id", prefix <> text)
+
+        element
+        |> Element.put_attr("data-vis-id", prefix <> text)
+        |> animated(ctx.static)
       end)
     else
       elements
     end
   end
+
+  # The mark's own animation on an element that has none of its own: an animation is each
+  # element's, run about its own box (spec/14 §3.11).
+  defp animated(element, %{animation: animation}),
+    do: %{element | style: Map.put_new(element.style, :animation, animation)}
+
+  defp animated(element, _static), do: element
 
   # Whether the mark moves: its own style carries a motion part, or its stack names a style
   # by data and any style the frame knows — the design's, the theme's palette — carries one.

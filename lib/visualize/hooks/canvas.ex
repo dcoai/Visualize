@@ -82,9 +82,9 @@ defmodule Visualize.Hooks.Canvas do
           this.parsed.forEach(({cmd, args}) => {
             if (cmd === 'motion') {
               // A motion span (spec/09 §3.3.5): its fills and strokes drawn at the shown values.
-              VisualizeMotion.open(motion, args);
+              VisualizeMotion.open(motion, ctx, args);
             } else if (cmd === 'motionEnd') {
-              VisualizeMotion.close(motion);
+              VisualizeMotion.close(motion, ctx);
             } else if (cmd === 'fill' || cmd === 'stroke') {
               VisualizeMotion.draw(motion, ctx, cmd, () => ctx[cmd](...args));
             } else if (cmd.startsWith('set_')) {

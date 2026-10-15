@@ -42,7 +42,8 @@ const Stub = (() => {
   // Every context method is a recorder; every assignment is recorded and kept. The
   // transform is tracked beside, and `getTransform()` reads it without being recorded.
   function context(canvas) {
-    const props = {};
+    // A context starts with the values a browser's does (#653): a motion reads them as targets.
+    const props = {globalAlpha: 1, lineWidth: 1, fillStyle: "#000000", strokeStyle: "#000000"};
     const state = {m: identity(), stack: []};
     return new Proxy(props, {
       get: (_t, name) => name === 'getTransform' ? () => ({...state.m}) :

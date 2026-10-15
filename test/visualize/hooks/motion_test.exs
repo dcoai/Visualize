@@ -189,4 +189,92 @@ defmodule Visualize.Hooks.MotionTest do
 
     assert length(times) == 1
   end
+
+  describe "animations (#677)" do
+    # One 10×20 rect at (0, 0) naming its identity, drawn with `animation`.
+    defp animated(animation) do
+      animation = Map.merge(%{easing: :linear, iterations: :infinite, delay: 0}, animation)
+
+      Visualize.IR.Element.rect(0, 0, 10, 20, %{fill: "#336699", animation: animation})
+      |> Visualize.IR.Element.put_attr("data-vis-id", "a")
+      |> Visualize.Backend.Canvas.render_element(format: :json)
+      |> IO.iodata_to_binary()
+    end
+
+    defp running(commands, opts \\ []) do
+      """
+      window.matchMedia = (q) => ({ matches: #{Keyword.get(opts, :reduced, false)} });
+      #{Keyword.get(opts, :before, "")}
+      const el = Stub.element({commands: #{Jason.encode!(commands)}}, 600, 400);
+      const hook = Stub.mount(CanvasChart, el);
+      Stub.advance(#{Keyword.get(opts, :for, 1000)});
+      Stub.done({});
+      """
+    end
+
+    # The alpha each fill was drawn at: what was set before it, 1 when nothing was.
+    defp alphas(log) do
+      log |> at_draws("globalAlpha", "fill") |> Enum.map(&(&1 || 1))
+    end
+
+    defp calls(log, name),
+      do: for(%{"kind" => "call", "name" => ^name, "args" => a} <- log, do: a)
+
+    test "a pulse fades the alpha to 0.35 and back, and repeats while it holds" do
+      assert {:ok, %{"log" => log}} =
+               run(running(animated(%{name: :pulse, duration: 400}), for: 1000))
+
+      alphas = alphas(log)
+      # Drawn every frame for the whole second: an infinite animation keeps the loop.
+      assert length(alphas) > 60
+      assert Enum.min(alphas) >= 0.35 and Enum.min(alphas) < 0.4
+      assert hd(alphas) == 1
+      # Each iteration: down to its middle, back up by its end.
+      {first, _} = Enum.split(alphas, 26)
+      assert Enum.any?(first, &(&1 < 0.4)) and List.last(first) > 0.9
+    end
+
+    test "a blink of two iterations stops after them and draws the element as it is" do
+      assert {:ok, %{"log" => log}} =
+               run(running(animated(%{name: :blink, duration: 200, iterations: 2})))
+
+      alphas = alphas(log)
+      assert length(alphas) < 30
+      assert Enum.member?(alphas, 0)
+      assert List.last(alphas) == 1
+    end
+
+    test "a spin turns about the centre of the element's box" do
+      assert {:ok, %{"log" => log}} = run(running(animated(%{name: :spin, duration: 400})))
+
+      angles = for [a] <- calls(log, "rotate"), do: a
+      assert length(angles) > 20
+      assert Enum.any?(angles, &(&1 > 3 and &1 < 3.3))
+      assert [5, 10] in calls(log, "translate")
+      assert [-5, -10] in calls(log, "translate")
+    end
+
+    test "a host's registered keyframes run, and an unregistered name runs nothing" do
+      wiggle = animated(%{name: "wiggle", duration: 400})
+
+      register =
+        "VisualizeMotion.register('wiggle', [[0, {x: 0}], [0.5, {x: 4}], [1, {x: 0}]]);"
+
+      assert {:ok, %{"log" => log}} = run(running(wiggle, before: register))
+      xs = for [x, 0] <- calls(log, "translate"), do: x
+      assert Enum.max(xs) > 3.5 and Enum.max(xs) <= 4
+
+      assert {:ok, %{"log" => log}} = run(running(wiggle))
+      assert calls(log, "translate") == []
+      assert length(alphas(log)) == 1
+    end
+
+    test "a reader who prefers reduced motion sees no animation, and no frame is asked for" do
+      assert {:ok, %{"log" => log}} =
+               run(running(animated(%{name: :spin, duration: 400}), reduced: true))
+
+      assert calls(log, "rotate") == []
+      assert length(alphas(log)) == 1
+    end
+  end
 end

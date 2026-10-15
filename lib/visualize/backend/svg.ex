@@ -374,7 +374,7 @@ defmodule Visualize.Backend.SVG do
   defp effects(style) do
     # A line height is the frame's to apply (spec/14 §7.1), never an attribute; a motion is
     # a class the frame wrote in `:css`, and in any other SVG the end state (spec/09 §2.5).
-    style = Map.drop(style, [:line_height, :transition])
+    style = Map.drop(style, [:line_height, :transition, :animation])
     {blend, style} = Map.pop(style, :blend)
     {effect, style} = Map.pop(style, :effect)
     {radius, style} = Map.pop(style, :effect_radius)

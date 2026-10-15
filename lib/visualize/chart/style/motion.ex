@@ -1,6 +1,6 @@
 defmodule Visualize.Chart.Style.Motion do
   @moduledoc false
-  # A style's motion parts resolved for the element (spec/14 §3.10, D-176).
+  # A style's motion parts resolved for the element (spec/14 §3.10, §3.11, D-176).
   #
   # `transition/1` reads a `transition` part — `duration` and `easing` for the fill, the
   # stroke and the opacity, or an entry per property — as the list of `{property, duration,
@@ -16,7 +16,7 @@ defmodule Visualize.Chart.Style.Motion do
   @doc false
   # The element keys a motion part projects to.
   @spec keys() :: [atom(), ...]
-  def keys, do: [:transition]
+  def keys, do: [:transition, :animation]
 
   @doc false
   # Whether a resolved element style carries motion.
@@ -37,6 +37,29 @@ defmodule Visualize.Chart.Style.Motion do
   end
 
   def transition(_node), do: []
+
+  @doc false
+  # An `animation` part as the element carries it (spec/14 §3.11): its five keys with the
+  # defaults in place; `nil` for a part without a name, or that runs no iteration.
+  @spec animation(term()) :: map() | nil
+  def animation(%{name: name} = node)
+      when not is_struct(node) and ((is_atom(name) and name != nil) or is_binary(name)) do
+    case Map.get(node, :iterations) || :infinite do
+      n when n == 0 ->
+        nil
+
+      iterations ->
+        %{
+          name: name,
+          duration: Map.get(node, :duration) || 1000,
+          easing: Map.get(node, :easing) || :linear,
+          iterations: iterations,
+          delay: Map.get(node, :delay) || 0
+        }
+    end
+  end
+
+  def animation(_node), do: nil
 
   defp entry(node, property, whole?) do
     case Map.get(node, property) do

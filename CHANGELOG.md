@@ -17,6 +17,18 @@ release it merely follows.
 
 ### Added
 
+- **Style animations** (#677, D-176). `animation: %{name: :pulse, duration: 1200}` runs a
+  motion while the style holds — `:pulse`, `:blink`, `:shake`, `:spin`, or a string naming
+  the host's own keyframes — with `easing`, `iterations` (`:infinite` by default) and
+  `delay`. A state's style carries it, so `error: %{fill: color(:bad), animation: %{name:
+  :pulse}}` pulses exactly the rows in error. `:css` SVG wraps each animated element in a
+  `<g class="vis-animation-…">` and writes the built-ins' `@keyframes` once per frame; the
+  canvas hooks run the same keyframes, which the motion span now carries, and
+  `VisualizeMotion.register/2` gives a canvas the host's. `prefers-reduced-motion: reduce`
+  stops every animation, and a design cannot override it. A host's keyframes name must be
+  a CSS identifier (`{:unsafe, :animation}`). On a canvas every element of a moving mark is
+  now drawn inside a `save`/`restore`, so its own transform no longer reaches its siblings.
+
 - **Style transitions** (#676, D-176). A style may say how its look changes:
   `transition: %{duration: 200, easing: :cubic_out}` moves the fill, the stroke and the
   opacity, `transition: %{fill: %{duration: 400}}` the fill alone, along a
