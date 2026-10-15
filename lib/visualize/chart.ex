@@ -843,6 +843,9 @@ defmodule Visualize.Chart do
       (spec/14 §21.1): `true` (default) for `Visualize.Chart.Summary.text/1`, a string
       for the caller's own, `false` for none
     * `:responsive` - the root's, as `Visualize.IR.Element.root/3` takes it
+    * `:color_scheme` - `false` to leave out the root's automatic dark mode: in `:css`
+      output, under the implicit default theme, the root carries a `<style>` that switches
+      to the theme's dark counterpart when the viewer prefers it (spec/08 §7.3, #668)
   """
   @spec generate(Applied.t(), keyword()) :: Element.t()
   def generate(
@@ -858,14 +861,32 @@ defmodule Visualize.Chart do
       description =
         Keyword.get_lazy(opts, :description, fn -> meta_text(Map.get(meta, :description)) end)
 
+      title = Keyword.get_lazy(opts, :title, fn -> title(meta, summary, applied) end)
+      description = described(description, summary)
+
       Element.root(frame.size.width, frame.size.height,
-        title: Keyword.get_lazy(opts, :title, fn -> title(meta, summary, applied) end),
-        description: described(description, summary),
+        title: title,
+        description: description,
         responsive: Keyword.get(opts, :responsive, false),
-        children: [group]
+        children:
+          scheme(applied, Element.label_ids(nil, title, description).root, opts) ++ [group]
       )
     else
       group
+    end
+  end
+
+  # The root's automatic dark mode (spec/08 §7.3, spec/14 §4.7, #668): in `:css` output, the
+  # rule that switches to the theme's counterpart, scoped to the root, while the theme is
+  # the implicit default — the design's `:default` and no theme of the host's own.
+  defp scheme(%Applied{chart: chart, frame: frame}, id, opts) do
+    auto? =
+      Keyword.get(opts, :resolve, :css) == :css and Keyword.get(opts, :color_scheme, true) and
+        chart.theme == :default and frame.theme == Visualize.Theme.default() and id != nil
+
+    case auto? && Visualize.Theme.color_scheme(frame.theme, "#" <> id) do
+      css when is_binary(css) -> [Element.stylesheet(css)]
+      _none -> []
     end
   end
 
@@ -969,7 +990,15 @@ defmodule Visualize.Chart do
       Keyword.pop_lazy(opts, :resolve, fn -> Visualize.Theme.mode(opts[:backend]) end)
 
     {ours, rest} =
-      Keyword.split(opts, [:paths, :root, :title, :description, :summary, :responsive])
+      Keyword.split(opts, [
+        :paths,
+        :root,
+        :title,
+        :description,
+        :summary,
+        :responsive,
+        :color_scheme
+      ])
 
     applied
     |> generate([resolve: mode] ++ ours)

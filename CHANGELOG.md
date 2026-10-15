@@ -17,6 +17,16 @@ release it merely follows.
 
 ### Added
 
+- **Automatic dark mode** (#668, D-173). A chart rendered as a root `<svg>` in `:css` mode under
+  the implicit default theme now carries a `<style>` that switches to the dark theme when the
+  viewer's system prefers dark (`@media (prefers-color-scheme: dark)`, scoped to the chart). It
+  needs no host code, and colors derived with `color-mix` follow. A theme declares its counterpart
+  with the new `dark` and `light` fields; `default/0` and `dark/0` pair with each other, and a
+  theme from `new/1` has none unless given. The switch is off when the host passes a theme of its
+  own, when the design names a theme other than `:default`, with `color_scheme: false` to
+  `Visualize.Chart.generate/2` or `render/2`, and in `:literal` output.
+  `Visualize.Theme.color_scheme/2` returns the rule, and `Visualize.IR.Element.stylesheet/1`
+  builds the new `:style` IR element, which only the SVG backend writes.
 - **`shade(c, n)`, a color's tints and shades by step** (#667, D-173). `Visualize.Color.shade/2`
   takes a step from 0 to 1000 in the designers' convention: 500 is the color, 0 near white and
   1000 near black. For example, `shade(color(:red), 100)` is a pale red background and

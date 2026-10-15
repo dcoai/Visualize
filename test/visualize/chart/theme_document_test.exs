@@ -39,7 +39,9 @@ defmodule Visualize.Chart.ThemeDocumentTest do
       assert node.colors == @house.colors
       assert node.colors.info == "#2f5d8a"
       assert node.styles == @house.styles
-      assert Map.keys(node) |> Enum.sort() == Map.keys(Map.from_struct(@house)) |> Enum.sort()
+      # Every field but a counterpart the theme does not declare (#668).
+      assert Map.keys(node) |> Enum.sort() ==
+               (Map.keys(Map.from_struct(@house)) -- [:dark, :light]) |> Enum.sort()
     end
 
     test "the JSON form is the stamped fragment document" do

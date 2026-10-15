@@ -69,6 +69,7 @@ Each `IR.Element` type maps to exactly one tag. "attrs" is `element.attrs`, "sty
 | `:text` | `text` | attrs, style, transform | `element.content` as escaped text, then the children — its `tspan`s when it has lines |
 | `:tspan` | `tspan` | attrs | `element.content` as escaped text |
 | `:title`, `:desc` | same name | attrs (the `id`) | `element.content` as escaped text |
+| `:style` | `style` | none | `element.content`, a stylesheet, as escaped text (a root's automatic dark mode, spec/08 §7.3, #668) |
 | `:defs` | `defs` | none | children |
 | `:clip_path` | `clipPath` | attrs verbatim | children |
 | `:linear_gradient` | `linearGradient` | attrs verbatim | children |
@@ -181,7 +182,7 @@ Each element produces, in order, its *setup* (transform commands per 3.3.4, then
 | `:group` | `{:save, []}`, T, S, children's commands, `{:restore, []}` |
 | `:root` | children's commands only |
 | `:image` | T, `{:drawImage, [href, x, y, width, height]}` |
-| `:defs`, `:clip_path`, `:linear_gradient`, `:radial_gradient`, `:stop`, `:title`, `:desc` | nothing |
+| `:defs`, `:clip_path`, `:linear_gradient`, `:radial_gradient`, `:stop`, `:title`, `:desc`, `:style` | nothing |
 
 A `:group`'s style setup is emitted after its transform, inside the `save`/`restore` pair, so that children without their own style inherit fill, stroke and line width through Canvas state — and the `fill`/`stroke` calls that end a child's path are decided by its *effective* style, its own over the groups' above it, since a state that is set but never applied draws nothing (#231); `Visualize.Backend.Hybrid` relies on this when it wraps a list of dynamic elements in a styled group (6.3) (D-37).
 
@@ -428,7 +429,7 @@ The path `M x0,y0` followed by `count` absolute cubic curves `C x1,y1 x2,y2 x,y`
 | `:root` | each child's records, nothing else |
 | any other type | nothing (zero bytes) |
 
-An element's `clip` (spec/02 §2.1) has no record: the element is encoded as it is, unclipped, so an inside or outside stroke (spec/14 §5.6) draws single on the binary stream. The geometric types that are not paths are encoded **as the path they are** (#269): a `:line` as `M x1 y1 L x2 y2`; a `:polyline` as a move to its first point and a line to each of the rest; a `:polygon` the same, closed; an `:ellipse` as four cubic Bézier quarter-arcs about its centre with the control distance κ = 0.5522847 of each radius, closed — each with the element's style and transform as a `:path` gets them, through the same record and form selection (§4.5), so a `:line` is byte for byte the two-point `Visualize.IR.Path` with the same style. Elements of type `:text`, `:title`, `:desc`, `:image`, `:defs`, `:clip_path`, gradients, filters and `:stop` are dropped from the binary stream, and a `:blend` or an `:effect` in a style has no record. A basemap's tiles (spec/14 §5.2, #475) are `:image` elements and are dropped with them, and the stream has no image record (D-120): a compiled chart draws the tiles as SVG in a backdrop the page stacks beneath the canvas (spec/14 §12.3, §12.4, #476), so a canvas track sits over them with nothing in the stream to fetch, order or wait for. Text has no binary representation by design; before #269 the four geometric types above were dropped silently as well, so an axis's tick lines drew nothing on a binary canvas.
+An element's `clip` (spec/02 §2.1) has no record: the element is encoded as it is, unclipped, so an inside or outside stroke (spec/14 §5.6) draws single on the binary stream. The geometric types that are not paths are encoded **as the path they are** (#269): a `:line` as `M x1 y1 L x2 y2`; a `:polyline` as a move to its first point and a line to each of the rest; a `:polygon` the same, closed; an `:ellipse` as four cubic Bézier quarter-arcs about its centre with the control distance κ = 0.5522847 of each radius, closed — each with the element's style and transform as a `:path` gets them, through the same record and form selection (§4.5), so a `:line` is byte for byte the two-point `Visualize.IR.Path` with the same style. Elements of type `:text`, `:title`, `:desc`, `:style`, `:image`, `:defs`, `:clip_path`, gradients, filters and `:stop` are dropped from the binary stream, and a `:blend` or an `:effect` in a style has no record. A basemap's tiles (spec/14 §5.2, #475) are `:image` elements and are dropped with them, and the stream has no image record (D-120): a compiled chart draws the tiles as SVG in a backdrop the page stacks beneath the canvas (spec/14 §12.3, §12.4, #476), so a canvas track sits over them with nothing in the stream to fetch, order or wait for. Text has no binary representation by design; before #269 the four geometric types above were dropped silently as well, so an axis's tick lines drew nothing on a binary canvas.
 
 ### 4.5 Path form selection
 

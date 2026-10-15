@@ -81,6 +81,10 @@ defmodule Visualize.Chart.Codec do
 
   defp value(:theme_colour, v), do: value(:colour, v)
 
+  # A theme's counterpart (spec/08 §7.3, #668): its name, or `null` for none.
+  defp value(:counterpart, nil), do: nil
+  defp value(:counterpart, name) when is_atom(name), do: Atom.to_string(name)
+
   defp value(:colour, {:contrast, :under}), do: %{"$contrast" => "under"}
   defp value(:colour, {:contrast, c}), do: %{"$contrast" => value(:colour, c)}
 
@@ -241,6 +245,8 @@ defmodule Visualize.Chart.Codec do
   end
 
   defp read(:theme_colour, v), do: read(:colour, v)
+
+  defp read(:counterpart, name) when is_binary(name), do: String.to_atom(name)
 
   defp read(:colour, %{"$color" => name} = v) when map_size(v) == 1 and is_binary(name) do
     if Regex.match?(@colour_word, name), do: {:color, String.to_atom(name)}, else: v

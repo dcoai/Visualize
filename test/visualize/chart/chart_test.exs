@@ -171,7 +171,7 @@ defmodule Visualize.ChartTest do
   end
 
   describe "generate/2 and render/2 with root: (spec/14 §4.7, #131)" do
-    defp applied(meta) do
+    defp applied(meta, opts \\ []) do
       design = %{
         version: 2,
         meta: meta,
@@ -181,7 +181,10 @@ defmodule Visualize.ChartTest do
       }
 
       {:ok, applied} =
-        Chart.apply(design, sources: %{s: [%{x: 1, y: 2}, %{x: 2, y: 3}]}, size: {300, 200})
+        Chart.apply(
+          design,
+          [sources: %{s: [%{x: 1, y: 2}, %{x: 2, y: 3}]}, size: {300, 200}] ++ opts
+        )
 
       applied
     end
@@ -202,8 +205,25 @@ defmodule Visualize.ChartTest do
       assert length(String.split(svg, "<svg ")) == 2
 
       root = Chart.generate(applied, root: true)
-      assert root.type == :root and length(root.children) == 3
+      # Title, description, the automatic dark mode (#668), the group.
+      assert root.type == :root and length(root.children) == 4
       assert Chart.generate(applied) == List.last(root.children)
+    end
+
+    test "under the implicit default theme the root follows the viewer's color scheme (#668)" do
+      applied = applied(%{name: "Rain"})
+      svg = Chart.render(applied, root: true)
+      [_, id] = Regex.run(~r/<svg [^>]*id="(vis-[a-z0-9]+)"/, svg)
+      dark = Visualize.Theme.color_scheme(Visualize.Theme.default(), "#" <> id)
+      assert svg =~ "<style>" <> dark <> "</style>"
+      assert dark =~ "@media (prefers-color-scheme: dark)" and dark =~ "--vis-axis: #a0a4ab;"
+
+      # Off when asked, in :literal output, and under a theme the host or design chose.
+      refute Chart.render(applied, root: true, color_scheme: false) =~ "<style>"
+      refute Chart.render(applied, root: true, resolve: :literal) =~ "<style>"
+
+      chosen = applied(%{name: "Rain"}, theme: Visualize.Theme.new(name: :house))
+      refute Chart.render(chosen, root: true) =~ "<style>"
     end
 
     test "an empty meta is named by the kind and described by the summary; the options override them" do

@@ -124,7 +124,11 @@ defmodule Visualize.Theme do
             font_family: "sans-serif",
             font_size: 10,
             label_size: 12,
-            title_size: 16
+            title_size: 16,
+            # The built-in theme standing for this one in a dark or a light color scheme
+            # (spec/08 §7.3, #668).
+            dark: nil,
+            light: nil
 
   @typedoc "One of the four ramps whose meaning the library fixes (spec/08 §7.5)."
   @type ramp_name :: :status | :thermal | :diverging | :sequential
@@ -158,7 +162,9 @@ defmodule Visualize.Theme do
           font_family: String.t(),
           font_size: number(),
           label_size: number(),
-          title_size: number()
+          title_size: number(),
+          dark: atom() | nil,
+          light: atom() | nil
         }
 
   @colour_slots [:axis, :grid, :text, :background, :surface]
@@ -173,7 +179,7 @@ defmodule Visualize.Theme do
 
   @doc "The light theme: dark text and axes on white (spec/08 §7.2)."
   @spec default() :: t()
-  def default, do: %__MODULE__{}
+  def default, do: %__MODULE__{dark: :dark}
 
   @doc "The dark theme: light text and axes on `#1b1e24` (spec/08 §7.2)."
   @spec dark() :: t()
@@ -187,7 +193,8 @@ defmodule Visualize.Theme do
       background: "#1b1e24",
       surface: "#23272f",
       ramps: @dark_ramps,
-      colors: @dark_colors
+      colors: @dark_colors,
+      light: :default
     }
   end
 
@@ -397,7 +404,8 @@ defmodule Visualize.Theme do
   that breaks its contract (spec/08 §7.5, §7.7), raises `ArgumentError`.
   """
   @spec new(keyword() | map()) :: t()
-  def new(fields), do: merge(default(), fields)
+  # A theme of its own declares no counterpart unless its fields give one (spec/08 §7.3).
+  def new(fields), do: merge(%{default() | dark: nil}, fields)
 
   @doc """
   The theme with the given fields replaced, `ramps`, `colors` and `styles` merged key by key
@@ -825,17 +833,51 @@ defmodule Visualize.Theme do
   """
   @spec stylesheet(t()) :: String.t()
   def stylesheet(%__MODULE__{name: name} = theme) do
-    lines =
-      for slot <-
-            slots(theme) ++ ((own_colors(theme) |> Map.keys() |> Enum.sort()) -- slots(theme)) do
-        {kind, value} = value(theme, slot)
-        ["  #{property(slot)}: #{css_value(kind, value)};" | pinned_lines(theme, slot)]
-      end
-
     ".vis-theme-#{name} {\n" <>
-      Enum.join(List.flatten(lines), "\n") <>
+      Enum.map_join(declarations(theme), "\n", &("  " <> &1)) <>
       "\n}\n" <>
       forced_colors(name)
+  end
+
+  @doc """
+  The rule that switches a chart to the theme's counterpart in the viewer's color scheme
+  (spec/08 §7.3, #668): `@media (prefers-color-scheme: dark)` — `light` for a theme that
+  declares a light counterpart — around `selector` declaring every property of the built-in
+  counterpart as `stylesheet/1` writes them. `nil` for a theme with no counterpart, or one
+  that is not a built-in theme.
+
+      iex> css = Visualize.Theme.color_scheme(Visualize.Theme.default(), "#chart")
+      iex> String.starts_with?(css, "@media (prefers-color-scheme: dark) {") and css =~ "--vis-series-1: #7fb3e6;"
+      true
+      iex> Visualize.Theme.color_scheme(Visualize.Theme.colour_safe(), "#chart")
+      nil
+
+  """
+  @spec color_scheme(t(), String.t()) :: String.t() | nil
+  def color_scheme(%__MODULE__{} = theme, selector) when is_binary(selector) do
+    {scheme, counterpart} =
+      if theme.dark, do: {"dark", theme.dark}, else: {"light", theme.light}
+
+    case counterpart && builtin(counterpart) do
+      %__MODULE__{} = other ->
+        "@media (prefers-color-scheme: #{scheme}) {\n  #{selector} {\n" <>
+          Enum.map_join(declarations(other), "\n", &("    " <> &1)) <> "\n  }\n}\n"
+
+      _none ->
+        nil
+    end
+  end
+
+  # One `--vis-<name>: value;` per slot, then per own color and each step it pins.
+  defp declarations(theme) do
+    for slot <- slots(theme) ++ ((own_colors(theme) |> Map.keys() |> Enum.sort()) -- slots(theme)),
+        line <- declaration(theme, slot),
+        do: line
+  end
+
+  defp declaration(theme, slot) do
+    {kind, value} = value(theme, slot)
+    ["#{property(slot)}: #{css_value(kind, value)};" | pinned_lines(theme, slot)]
   end
 
   # A name's pinned steps other than 500, each its own property: `--vis-red-100` (#667).
@@ -844,7 +886,7 @@ defmodule Visualize.Theme do
       %{} = steps when not is_struct(steps) ->
         for {n, literal} <- Enum.sort(steps),
             n != 500,
-            do: "  #{property(slot)}-#{n}: #{css_value(:colour, literal)};"
+            do: "#{property(slot)}-#{n}: #{css_value(:colour, literal)};"
 
       _other ->
         []

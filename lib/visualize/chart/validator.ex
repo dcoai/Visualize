@@ -960,6 +960,12 @@ defmodule Visualize.Chart.Validator do
     if name in Theme.ramp_names(), do: [], else: [{path, {:type, :ramp}}]
   end
 
+  # A theme's counterpart in a color scheme (spec/08 §7.3, #668): a name, or `nil` for none.
+  defp check(:counterpart, v, _path, _ctx) when v == nil or (is_atom(v) and not is_boolean(v)),
+    do: []
+
+  defp check(:counterpart, _v, path, _ctx), do: [{path, {:type, :counterpart}}]
+
   # A theme's color (spec/08 §7.1, #667): a colour, or the steps it pins of a name.
   defp check(:theme_colour, map, path, _ctx) when is_map(map) and not is_struct(map),
     do: Colors.steps(map, path)

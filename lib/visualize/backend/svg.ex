@@ -132,7 +132,7 @@ defmodule Visualize.Backend.SVG do
 
   # A title or desc is its content, escaped, under its attrs (the id); no style (D-56).
   defp do_render_element(%Element{type: type, attrs: attrs, content: content})
-       when type in [:title, :desc] do
+       when type in [:title, :desc, :style] do
     render_svg_tag(type, attrs, [], content || "")
   end
 
