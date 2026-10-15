@@ -47,6 +47,7 @@ defmodule Visualize.Chart.ExplainStyleTest do
     # The palette's series style, the declared style through its `extends`, the style the
     # datum's `health` names, the view state, then the local edit (spec/14 §3.7).
     assert chain(parts, :stroke) == [
+             {:theme, nil},
              {:palette, :style_2},
              {:style, :heavy},
              {:field, :warning},
@@ -54,7 +55,7 @@ defmodule Visualize.Chart.ExplainStyleTest do
              {:local, nil}
            ]
 
-    [_palette, heavy, field, state, local] = parts.stroke.chain
+    [_root, _palette, heavy, field, state, local] = parts.stroke.chain
     assert heavy.via == [:bad]
     assert heavy.set.width == 4
     assert field.field == {:field, :health} and field.value == "warning"
@@ -74,7 +75,11 @@ defmodule Visualize.Chart.ExplainStyleTest do
     marks = [%{type: :line, data: :s, channels: %{x: :x, y: :y}, style: [{:field, :health}]}]
     %{parts: parts} = Chart.explain(applied(marks), at: [:marks, 0])
 
-    assert [%{layer: :mark, set: %{type: :solid, color: {:series, 1}}}] = parts.stroke.chain
+    assert [
+             %{layer: :theme, container: :theme},
+             %{layer: :mark, set: %{type: :solid, color: {:series, 1}}}
+           ] =
+             parts.stroke.chain
   end
 
   test "labels, a mark's inline label and an axis explain their own stacks" do
@@ -91,14 +96,14 @@ defmodule Visualize.Chart.ExplainStyleTest do
     applied = applied(marks, %{}, labels)
 
     %{kind: :text, parts: parts} = Chart.explain(applied, at: [:marks, 0, :label])
-    assert chain(parts, :font) == [{:palette, :label}, {:palette, :bold}]
+    assert chain(parts, :font) == [{:theme, nil}, {:palette, :label}, {:palette, :bold}]
     assert parts.font.value.weight == :bold
 
     %{kind: :text, parts: title} = Chart.explain(applied, at: [:labels, 0])
-    assert chain(title, :font) == [{:palette, :title}]
+    assert chain(title, :font) == [{:theme, nil}, {:palette, :title}]
 
     %{kind: :axis, parts: axis} = Chart.explain(applied, at: [:frames, :main, :axes, 0])
-    assert chain(axis, :stroke) == [{:palette, :axis}]
+    assert chain(axis, :stroke) == [{:theme, nil}, {:palette, :axis}]
     assert axis.stroke.drawn
   end
 end

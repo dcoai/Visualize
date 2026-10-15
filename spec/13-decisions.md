@@ -1971,3 +1971,25 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - `:literal` output uses the theme it was given.
 
 *Rejected:* `light-dark()` in every fallback. It would rewrite every `var(--vis-…, literal)` the library has ever written, every golden with it, for a property only 2024 browsers read. *Rejected:* emitting the rule under an explicit theme. A declaration on the `<svg>` beats an ancestor's theme class (D-55), so a host that chose a theme, in Elixir or in CSS, must not have it overridden by the viewer's preference. A host that switches by class keeps doing so, and is the one case the library cannot see; `color_scheme: false` is its switch.
+
+## 174. D-174 — Defaults are inherited from containers, nearest last, over a theme root that is every part
+
+**Context.** #651, part 3 of the set shaped from Research #641 ("The style grammar, reshaped"), work item #670. After D-172 a style says only what it changes, so something has to say the rest: the width of a stroke given only a colour, the family of a font given only a size. That came from the mark's own behaviour and the backends' initial values, nowhere a design or a theme could reach, so "every stroke here is 2 wide" was a style named at every mark. #641 settled that any container may declare defaults, that the theme supplies the root, and the precedence order (D-172, amended by #658) gave them layers 1 to 3.
+
+**Decision.**
+- **A `:defaults` node** holds a style's parts (`fill`, `stroke`, `font`, `text`, `effect`, `marker`, `curve`, `opacity`, `blend`) and one entry per mark type but `:text`, of the same parts (spec/14 §3.8). It has no `extends` and no `class`.
+- **Containers.** The design and each frame carry `defaults`; a composite — a layer or a group of the builder's tree — carries them beside its `uses`, and `Composite.flatten/2` writes them onto each mark, label, axis and frame it places, under the node's own. A mark, a label and an axis therefore carry `defaults` too: the flat design keeps the scoping as data.
+- **Resolution is container by container, nearest last**: the theme's own defaults, the design's, the frame's, the element's own; each container lays its part defaults and then its entry for the element's kind, by the merge rule; the site's stack is laid over all of it. A mark takes its type's entry; a text, a label, an axis and a legend take the part defaults alone. The `:text` mark has no entry: `text` is the part's key in a style, and the parts only a text draws, `font` and `text`, reach every text already.
+- **The theme's root is every part**: `Visualize.Theme.defaults/1` is the library's base — a 1-wide, butt-capped, miter-joined stroke, opacities 1, the theme's font family and size, no effect, a 64-square circle marker, a linear curve — under the theme's own `defaults` field. **The base is never written onto an element**: it is what an absent key already draws, so writing it would change every golden and no drawing. A theme's own `defaults` are laid.
+- **`explain/2` shows layers 1 to 3**: `:theme` under every part, `:defaults` and `:kind` with the container that gave them.
+
+**Rejected.**
+- **Layers 2 and 3 as two global layers**, every container's part defaults under every container's kind entries. Then a design's `line:` entry would beat a frame's "every stroke 3 wide", and the farther container would win over the nearer; #641 asks for the nearest ancestor's default.
+- **A layer's and a group's defaults as an inline style at the head of each placed mark's stack.** It would sit at layer 4, beat the design's and the frame's kind entries for the wrong reason, be read as the site's local edit by `with_state/2` when the stack held nothing else, and be explained as a style nobody wrote.
+- **Writing the base onto every element** so the root is visible in the output. Every chart's bytes would change for no change in what is drawn, and a text that takes its font from the page would be pinned to the theme's.
+- **Mark-kind entries for the furniture** (`axis:`, `legend:`). The furniture has named styles already (§3.3); an entry per furniture kind would be a second way to say the same thing.
+
+**Consequences.**
+- A design without `defaults`, under a theme without them, draws byte for byte as before.
+- A default is under every style, the furniture's named styles included: a default font family reaches a text whose style names none.
+- The next work item of #651 amends this decision with units and non-scaling sizes, which resolve against what these layers give.

@@ -1,13 +1,14 @@
 defmodule Visualize.Chart.Style.Explain do
   @moduledoc false
   # Where each part of an element's style came from (spec/14 §17.3, #661, D-172): the
-  # stack the element is drawn with, entry by entry, each entry's style laid by the same
-  # resolution the frame uses (`Visualize.Chart.Style.compound/3`) and recorded with its
-  # layer of the precedence order (§3.7), its name, the names it was reached through and,
-  # for a style named by data, the field and its reading.
+  # defaults its containers lay — the theme's root first, every part defined (§3.8, D-174)
+  # — then the stack the element is drawn with, entry by entry, each entry's style laid by
+  # the same resolution the frame uses (`Visualize.Chart.Style.compound/3`) and recorded
+  # with its layer of the precedence order (§3.7), its container or its name, the names it
+  # was reached through and, for a style named by data, the field and its reading.
 
   alias Visualize.Chart.Style
-  alias Visualize.Chart.Style.Parts
+  alias Visualize.Chart.Style.{Defaults, Parts}
   alias Visualize.Data.Table
   alias Visualize.Theme.Palette
 
@@ -16,7 +17,18 @@ defmodule Visualize.Chart.Style.Explain do
 
   @typedoc "One contribution to a part."
   @type link :: %{
-          layer: :mark | :palette | :style | :field | :state | :inline | :local,
+          layer:
+            :theme
+            | :defaults
+            | :kind
+            | :mark
+            | :palette
+            | :style
+            | :field
+            | :state
+            | :inline
+            | :local,
+          container: term(),
           style: atom() | nil,
           via: [atom()],
           field: {:field, atom()} | nil,
@@ -28,8 +40,11 @@ defmodule Visualize.Chart.Style.Explain do
   # The parts of the style `stack` lays for an element of `kind`, read against `styles`
   # (declared over the palette) where `declared` are the design's own names; `datum` reads
   # the field entries, and `series` is the mark's own paint for its position, or `nil`.
-  @spec parts(map(), [atom()], term(), atom(), map() | nil, term()) :: %{atom() => map()}
-  def parts(styles, declared, stack, kind, datum, series) do
+  # `containers` are the element's, farthest first, each `{name, defaults node}`, the
+  # theme's root first.
+  @spec parts(map(), [atom()], term(), atom(), map() | nil, term(), [{term(), map() | nil}]) ::
+          %{atom() => map()}
+  def parts(styles, declared, stack, kind, datum, series, containers) do
     names = names(styles)
     pick = fn {:field, field} -> datum && Map.get(names, Table.get(datum, field)) end
     entries = List.wrap(stack)
@@ -42,6 +57,7 @@ defmodule Visualize.Chart.Style.Explain do
         contribution(entry, i == last, styles, declared, pick, datum)
       end)
       |> with_paint(kind, series)
+      |> then(&(defaults(containers, kind) ++ &1))
 
     value = Enum.reduce(links, %{}, fn {_link, node}, acc -> Parts.merge(acc, node) end)
 
@@ -88,7 +104,24 @@ defmodule Visualize.Chart.Style.Explain do
   defp contribution(_other, _last?, _styles, _declared, _pick, _datum), do: []
 
   defp link(layer, style, via, field, value),
-    do: %{layer: layer, style: style, via: via, field: field, value: value}
+    do: %{layer: layer, container: nil, style: style, via: via, field: field, value: value}
+
+  # Layers 1 to 3 (§3.7, §3.8): each container's part defaults, then its entry for the
+  # element's kind — the theme's part defaults are its root, `:theme`.
+  defp defaults(containers, kind) do
+    entry_kind = if kind in Defaults.kinds(), do: kind
+
+    for {container, what, node} <- Defaults.contributions(containers, entry_kind) do
+      layer =
+        cond do
+          what == :kind -> :kind
+          container == :theme -> :theme
+          true -> :defaults
+        end
+
+      {%{link(layer, nil, [], nil, nil) | container: container}, node}
+    end
+  end
 
   # The style laid as the frame lays it, in its parts.
   defp lay(styles, entry, pick), do: Style.compound(styles, entry, pick)

@@ -19,7 +19,7 @@ defmodule Visualize.Chart.Validator do
   """
 
   alias Visualize.Chart.{Fact, Migration, Schema, Text, Urls, Var}
-  alias Visualize.Chart.Validator.{Colors, Domain, Frames, Palette, Words}
+  alias Visualize.Chart.Validator.{Colors, Defaults, Domain, Frames, Palette, Words}
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
@@ -95,7 +95,7 @@ defmodule Visualize.Chart.Validator do
   @frame_points [:top_left, :top_right, :bottom_left, :bottom_right, :center]
   @not_names [nil, true, false]
   # A style and its parts, any of whose values may be a channel binding (spec/14 §3.2).
-  @style_kinds [:style, :paint, :stroke, :font, :text_layout, :effect, :marker, :curve]
+  @style_kinds ~w(style defaults kind_defaults paint stroke font text_layout effect marker curve)a
 
   @doc "`:ok`, or every fault of the design ordered by path; URLs under the application's policy."
   @spec validate(term()) :: :ok | {:error, [error(), ...]}
@@ -144,12 +144,13 @@ defmodule Visualize.Chart.Validator do
   @spec validate(term(), atom()) :: :ok | {:error, [error(), ...]}
   def validate(map, :design), do: validate(map)
 
-  def validate(%{composite: %{uses: uses, vars: vars}} = map, :composite)
+  def validate(%{composite: %{uses: uses, vars: vars} = composite} = map, :composite)
       when is_list(uses) and is_map(vars) and map_size(map) == 1 do
     uses
     |> Enum.with_index()
     |> Enum.reject(fn {use, _index} -> is_struct(use, Visualize.Chart.Use) end)
     |> Enum.map(fn {_use, index} -> {[:composite, :uses, index], {:type, :use}} end)
+    |> Kernel.++(Defaults.composite(composite, &validate/2))
     |> case do
       [] -> :ok
       errors -> {:error, errors}

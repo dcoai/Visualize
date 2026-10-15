@@ -6,6 +6,7 @@ defmodule Visualize.Chart.Frame.Scales do
   # area by the scale's name, and the unit domain when nothing is bound (D-60).
 
   alias Visualize.Chart.{Schema, Style, Transform, Var}
+  alias Visualize.Chart.Style.Defaults
   alias Visualize.{Data, Scale, Theme}
   alias Visualize.Data.Table
   alias Visualize.Scale.{Band, Color, Ordinal, Power, Symlog}
@@ -90,7 +91,9 @@ defmodule Visualize.Chart.Frame.Scales do
           into: MapSet.new(),
           do: name
 
-    columns = columns(marks, kind, sources, styles, ctx, inferring)
+    # A colour field a mark's defaults bind is read as its style's is (spec/14 §3.8).
+    containers = [theme.defaults, design.defaults, Map.get(frame, :defaults)]
+    columns = columns(marks, kind, sources, {styles, containers}, ctx, inferring)
 
     scales =
       Map.new(nodes, fn {name, node} ->
@@ -321,6 +324,14 @@ defmodule Visualize.Chart.Frame.Scales do
     end
   end
 
+  # A mark's style over the defaults its containers lay (spec/14 §3.8).
+  defp style_node(mark, {styles, containers}) do
+    containers
+    |> Kernel.++([Map.get(mark, :defaults)])
+    |> Defaults.layer(Map.get(mark, :type))
+    |> Style.over(styles, Map.get(mark, :style))
+  end
+
   # Whether a domain is inferred: `:auto`, or an extent with `:auto` at an end.
   defp infers?(:auto), do: true
   defp infers?([lo, hi]), do: lo == :auto or hi == :auto
@@ -340,7 +351,7 @@ defmodule Visualize.Chart.Frame.Scales do
     colours =
       for key <- [:fill, :stroke],
           colour in inferring,
-          {:field, field} <- [Map.get(Style.node(styles, Map.get(mark, :style)), key)],
+          {:field, field} <- [Map.get(style_node(mark, styles), key)],
           do: {colour, column(rows, field)}
 
     # An offset field's values are its offset scale's domain (spec/14 §4.3).

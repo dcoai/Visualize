@@ -26,8 +26,8 @@ The three nouns of the design are the *theme* (visual constants as named slots, 
 | Level | Nodes | Node kinds (§14.2) |
 |---|---|---|
 | 1 | the design | `:design` |
-| 2 | meta, sources, vars, theme, styles, defs, layout, interaction, frames, marks, labels | `:meta`, `:source`, `:var`, `:theme`, `:style`, `:paint`, `:layout`, `:interaction`, `:frame`, `:mark`, `:label` |
-| 3 | size, margin, scales, axes, legend, projection, facet, viewport; a mark's data, channels, scales, offset, options, inline label, tooltip and tiles; a style's parts (§3.1); a paint's stops | `:size`, `:margin`, `:scale`, `:axis`, `:legend`, `:projection`, `:facet`, `:viewport`, `:data`, `:channels`, `:mark_scales`, `:mark_offset`, `:options`, `:mark_label`, `:tooltip`, `:tiles`, `:paint`, `:stroke`, `:font`, `:text_layout`, `:effect`, `:marker`, `:curve`, `:stop` |
+| 2 | meta, sources, vars, theme, styles, defs, defaults, layout, interaction, frames, marks, labels | `:meta`, `:source`, `:var`, `:theme`, `:style`, `:paint`, `:defaults`, `:layout`, `:interaction`, `:frame`, `:mark`, `:label` |
+| 3 | size, margin, scales, axes, legend, projection, facet, viewport; a mark's data, channels, scales, offset, options, inline label, tooltip and tiles; a style's parts (§3.1); a paint's stops; a frame's, a mark's, a label's and an axis's defaults, and a container's defaults for one mark kind (§3.8) | `:size`, `:margin`, `:scale`, `:axis`, `:legend`, `:projection`, `:facet`, `:viewport`, `:data`, `:channels`, `:mark_scales`, `:mark_offset`, `:options`, `:mark_label`, `:tooltip`, `:tiles`, `:paint`, `:stroke`, `:font`, `:text_layout`, `:effect`, `:marker`, `:curve`, `:stop`, `:defaults`, `:kind_defaults` |
 | 4 | tick specs; an axis's measure; a projection's fit; transforms; text parts; the stops of a gradient written in a style | `:ticks`, `:measure`, `:fit`, `:transform`, `:stop`, and the `text` type of §1.4 |
 
 Collections are lists (`marks`, `axes`, `labels`, `transforms`); named declarations are maps keyed by name (`sources`, `vars`, `styles`, `scales`). A name is an atom. Marks reference scales, styles and sources by name, never by nesting: that is what makes fragments composable (§8) and the map diffable.
@@ -109,6 +109,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `theme` | `{:one_of, [:name, {:node, :theme}]}` | `:style` | `:default` | `:override` |
 | `styles` | `{:map, style entry}` — a node, a name or a list (§2.6) | `:style` | `%{}` | `:union` |
 | `defs` | `{:map, {:node, :paint}}` | `:style` | `%{}` | `:union` |
+| `defaults` | `{:node, :defaults}` | `:style` | `nil` | `:override` |
 | `layout` | `{:node, :layout}` | `:geometry` | `%{}` | `:override` |
 | `interaction` | `{:node, :interaction}` | `:binding` | `%{}` | `:override` |
 | `frames` | `{:map, {:node, :frame}}` | `:geometry` | required | `:deep` |
@@ -225,7 +226,7 @@ A `frame` that names no frame of the design is `{:undeclared, :frame, name}`, as
 
 ### 3.1 Keys: a style in compound parts
 
-**Implemented** (#649, work item #657, D-172). A `:style` node holds its look in **compound parts**, each a node of its own, beside three keys that are the whole element's. Every key is `:style` and `:override`, and every one is optional with no default: an absent key is decided by the theme and the mark at compilation (§12), never by the schema.
+**Implemented** (#649, work item #657, D-172). A `:style` node holds its look in **compound parts**, each a node of its own, beside three keys that are the whole element's. Every key is `:style` and `:override`, and every one is optional with no default: an absent key is decided by the defaults the element inherits (§3.8), the theme and the mark at compilation (§12), never by the schema.
 
 ```elixir
 %{
@@ -409,20 +410,79 @@ A design whose stack holds no field entry draws byte for byte as before: the per
 
 ### 3.7 Precedence
 
-**Implemented** for the layers that exist (#658, D-172). The look of an element is laid from these layers, each over the ones before it by the merge rule (§3.5), lowest first:
+**Implemented** for every layer but generator results (#658, #670, D-172, D-174). The look of an element is laid from these layers, each over the ones before it by the merge rule (§3.5), lowest first:
 
 | | Layer | Where it comes from |
 |---|---|---|
-| 1 | theme root defaults | the theme (#651) |
-| 2 | container defaults | a design's, frame's, layer's or group's `defaults` (#651) |
-| 3 | mark-kind defaults | `defaults` for one mark kind (#651) |
+| 1 | theme root defaults | the theme's `defaults` over the library's base (§3.8, [08-utilities](08-utilities.md) §7.1) |
+| 2 | container defaults | the part defaults of the design's, the frame's, and the element's layers' and groups' `defaults` (§3.8) |
+| 3 | mark-kind defaults | a container's `defaults` entry for the element's kind (§3.8) |
 | 4 | named and stacked styles, with `extends` | the site's stack: names, lists and inline nodes, each through its `extends` (§3.5, §3.6); the theme's palette under a name the design does not declare (§3.3) |
 | 5 | the field-chosen style | a `{:field, f}` entry, the style the datum's value names (§3.6) |
 | 6 | generator results | #654 |
 | 7 | view states | `:hover`, `:focused`, `:selected`, `:muted`: a board's selection (spec/15 §13.2), the hooks' markers (spec/10 §4.4) |
 | 8 | the site's local inline edit | the inline node a stack ends with (§3.6) |
 
-**View states sit above data styles**, so feedback stays visible over whatever the data chose, and **the local edit sits above everything**, so an edit made at a site is what that site shows. A stack an author writes is laid in the order written, a field entry where it stands (§3.6); the order above is the one the library keeps where it adds a layer itself. A board puts its selection's state entry after the stack's names and field entries and **before** a trailing inline node (`Visualize.Chart.Style.with_state/2`), and a resolved state is laid over the element's own look and never under it. Layers 1–3 and 6 belong to the parts that bring them (#651, #654); until then a mark's own default — the series' paint of §5.6 — is what lies under layer 4.
+**View states sit above data styles**, so feedback stays visible over whatever the data chose, and **the local edit sits above everything**, so an edit made at a site is what that site shows. A stack an author writes is laid in the order written, a field entry where it stands (§3.6); the order above is the one the library keeps where it adds a layer itself. A board puts its selection's state entry after the stack's names and field entries and **before** a trailing inline node (`Visualize.Chart.Style.with_state/2`), and a resolved state is laid over the element's own look and never under it. Layers 2 and 3 are laid **container by container, nearest last** (§3.8): within one container its kind entry is over its part defaults, and a nearer container's part defaults are over a farther one's kind entry. Layer 6 belongs to #654. A mark's own paint — the series' colour of §5.6 — is what the theme's root gives a mark when no layer above sets its paint key.
+
+### 3.8 Defaults: inherited by container and mark kind
+
+**Implemented** (#651, work item #670, D-174). A style says what it changes. What it does not say — the width of a stroke given only a colour, the family of a font given only a size — comes from **defaults**, inherited from the containers the element sits in, so a design says "every stroke here is 2 wide" in one place:
+
+```elixir
+%{
+  version: 3,
+  sources: %{load: %{fields: [:t, :v, :host]}},
+  defaults: %{
+    stroke: %{width: 2, cap: :round},
+    font:   %{family: "Inter", size: 12},
+    line:   %{stroke: %{width: 1.5}},       # every line in this design
+    rect:   %{stroke: :none}                # and no outline on a rect
+  },
+  frames: %{main: %{kind: :cartesian, defaults: %{font: %{size: 11}}}},
+  marks: [%{type: :line, data: :load, channels: %{x: :t, y: :v, series: :host}}]
+}
+```
+
+**A `:defaults` node** holds the parts of a style (§3.1) — `fill`, `stroke`, `font`, `text`, `effect`, `marker`, `curve`, `opacity` and `blend`, each typed as the style's key of that name, shorthands normalized on load as a style's are — and one key per **mark type** (§5.2) but `:text`, each a `:kind_defaults` node of the same parts, which applies to the elements of that kind alone. `text` is the part — where a text sits on its point — as in a style, so the `:text` mark has no entry of its own: the parts only a text draws, `font` and `text`, already reach every text and nothing else (§5.6). A defaults node has no `extends` and no `class`: it is not a style that can be named, derived or stacked, and a class is a statement about one site. `bar` is not a mark type; a bar is a `:rect`.
+
+**Containers.** Four things hold defaults:
+
+| Container | Where its `defaults` are written |
+|---|---|
+| the design | `defaults` (§2.1) |
+| a frame | `frames.<f>.defaults` (§4.1) |
+| a layer, and a group of the builder's tree | the composite's own `defaults`, beside its `uses` and `vars` (§19.6) |
+| the theme | its root defaults ([08-utilities](08-utilities.md) §7.1): layer 1, under every container |
+
+A layer and a group are composites (§18.8, §19.6), and a composite is flattened into a design that has no layers. So `Visualize.Chart.Composite.flatten/2` writes a composite's defaults onto **what it places**: each mark, label and axis gets them as its own `defaults` (§5.1, §6.1, §4.4), and a frame as its frame's `defaults`, the composite's under what the node already has, by the merge rule. A group inside a layer is flattened first and the layer's laid under it, so the group's are the nearer. A flat design therefore carries the scoping as data, and a mark's, a label's or an axis's own `defaults` read as "the layers and groups this came from"; a hand-written design may set them too.
+
+**Resolution.** An element's defaults are its containers' in order, farthest first: the theme's own `defaults`, the design's, the frame the element is drawn in, and the element's own. For each container its **part defaults** are laid, then its **entry for the element's kind** over them, each by the merge rule (§3.5) over what the containers before it laid; the site's stack (§3.6) is then laid over the result. So within one container a kind entry wins over the part defaults, a nearer container wins over a farther one, and every style wins over every default:
+
+- A mark of type `t` takes the `t` entry. A `:text` mark, a mark's inline label (§5.5) and a frame label (§6) take the part defaults alone, the labels through the mark's or the label's own containers. An axis — its line, ticks, tick labels and grid — and a legend take the part defaults alone.
+- The mark-kind rule of §5.6 still holds: a part a kind does not draw is ignored, whether a default or a style gave it. A design default `fill` is drawn by a bar and ignored by a line.
+- A paint given only partly (`stroke: %{width: 2}`) leaves the paint's colour to the layer below, so a mark with no stroke colour from any layer keeps its series colour (§5.6). A default `stroke: color(:gray)` is the colour of every mark of a stroked kind that names none, its series colour included: a default is the colour, the series colour only the theme's last word.
+- `:none` is no paint whether a style or a default says it, and a style's paint over it draws again.
+- A furniture style — `:axis`, `:label`, `:title`, … (§3.3) — is a named style, layer 4, and wins over a default: the built-in `:label` names `font: %{family: :font_family, size: :label_size}`, so a default `font` family reaches a frame label only where its style does not name one. A design that wants every text in one face sets the theme's `font_family` or restyles the furniture.
+
+**The theme's root defaults are every part, defined.** `Visualize.Theme.defaults/1` answers the root of a theme: the library's **base** — what an element that carries no value for a key already draws — under the theme's own `defaults` field:
+
+| Part | Base |
+|---|---|
+| `fill` | `%{opacity: 1}` |
+| `stroke` | `%{opacity: 1, width: 1, join: :miter, cap: :butt, placement: :center}` |
+| `font` | `%{family: :font_family, size: :font_size, weight: :normal, style: :normal, line_height: 1.2}` |
+| `text` | `%{offset: [0, 0], angle: 0}` |
+| `effect` | `%{type: :none, radius: 3}` |
+| `marker` | `%{shape: :circle, size: 64}` |
+| `curve` | `%{type: :linear}` |
+| `opacity`, `blend` | `1`, `:normal` |
+
+So `stroke: color(:blue)` is a blue stroke 1 wide with butt caps unless a container says otherwise, and `explain/2` (§17.3) shows that root under every part. **The base is never written onto an element.** For a fill, a stroke, an effect, a marker and a curve it is what the backends and the mark generators already draw when the key is absent — SVG's and the canvas's initial values, and the generators' `:circle`, `64` and `:linear` — so writing it would change every chart's bytes and no chart's drawing. The font is the theme's family and size: what the built-in themes' canvas draws by default (`10px sans-serif`), and what every furniture text names through its style (§3.3); an SVG text whose style names no font takes the page's, as it always has. A paint's colour and a text's anchor and baseline have no base: the mark's series colour (§5.6) and each placement's own (§6.3) decide them. A theme's own `defaults` are laid as layer 1, under the design's: a house theme that draws every stroke 1.5 wide says so once.
+
+**Nothing changes for a design without defaults.** No container's `defaults` and no theme `defaults` lay nothing, so every design drawn before this section draws byte for byte as it did.
+
+**Validation.** A defaults node is checked by its schema: each part as the style's key of that name is (§3.1, §3.2) — a colour name against the theme's table, a slot against its slots — and a key that is neither a part nor a mark type is `:unknown_key` at its path. A `{:field, f}` at a key is accepted as in a style (§3.2): it binds per datum where the element has one.
 
 ## 4. The frame
 
@@ -447,6 +507,7 @@ A design with one frame names it whatever it likes; the migration of an older de
 | `span` | `{:list, :integer}` | `:geometry` | `nil` | `:override` |
 | `z` | `:integer` | `:geometry` | `0` | `:override` |
 | `background` | `:colour` | `:style` | `nil` | `:override` |
+| `defaults` | `{:node, :defaults}` | `:style` | `nil` | `:override` |
 
 ### 4.2 Size and margin
 
@@ -535,6 +596,7 @@ A `:transition` node has `duration` (`:number`, `:geometry`, `300`, milliseconds
 | `radius` | `:number` | `:geometry` | `nil` | `:override` — an axis on `angle`: where its arc is drawn, a fraction of `R` when ≤ 1, else user units; `R` when absent (#390) |
 | `at` | `:number` | `:geometry` | `nil` | `:override` — an axis on `r`: the direction of its spoke, degrees clockwise from 12 o'clock, in place of `side` (#390) |
 | `style` | `{:ref, :style}` | `:style` | `:axis` | `:override` |
+| `defaults` | `{:node, :defaults}` | `:style` | `nil` — the defaults of the layers and groups it was placed from (§3.8) | `:override` |
 
 `ticks` as an integer is the count hint, as a list the explicit values, as a `:ticks` node both with the sizes: `count` (`:integer`, `:geometry`), `values` (`{:list, :term}`, `:content`), `size_inner` and `size_outer` (`:number`, `:geometry`, `6`) and `padding` (`:number`, `:geometry`, `3`) — the setters of [05-axes-and-formatting](05-axes-and-formatting.md) §1.2 by name. Explicit values beat the count, and the count beats the derived count.
 
@@ -615,7 +677,7 @@ Every entry's group carries `data-series`, `to_string/1` of the entry's value �
 
 ### 4.7 The frame struct and its rendering
 
-**Implemented.** `%Visualize.Chart.Frame{}` is the realised frame: `kind`; `size`, the `{width, height}` the caller gave as `size:` or the `{600, 400}` default (§4.2) — the design has none — and `margin` with the schema's defaults filled; `plot`, `%{width, height}` of the plot area; `scales`, the realised structs by name (§4.3); `projection`, a `%Visualize.Geo.Projection{}` in a `:geo` frame and `nil` otherwise; `panels`, the facet values of §4.6, `[]` in any other kind, and `facet`, `%{by, columns}` with the effective column count in a `:facet` frame and `nil` otherwise; `domains`, the extents the frame was realised with rather than inferring — a shared scale's (§4.3) or a window's (§12.5) — `%{}` when it inferred everything; `axes`, `legend`, `labels` and `marks` as the design gives them; `theme`, the `%Visualize.Theme{}` the design names — a built-in name or an inline `:theme` node — or the `theme:` option of `new/2`, which is taken for any name and required for one that is neither built-in nor inline; and `styles`, the declared styles over the built-in four (§3.3); `sync`, the design's sync group when this frame is the one the group reads (§2.9), `nil` otherwise; and `brush`, the design's brush kind (`:x`) when this frame is the brush frame (§2.9, #565), `nil` otherwise.
+**Implemented.** `%Visualize.Chart.Frame{}` is the realised frame: `kind`; `size`, the `{width, height}` the caller gave as `size:` or the `{600, 400}` default (§4.2) — the design has none — and `margin` with the schema's defaults filled; `plot`, `%{width, height}` of the plot area; `scales`, the realised structs by name (§4.3); `projection`, a `%Visualize.Geo.Projection{}` in a `:geo` frame and `nil` otherwise; `panels`, the facet values of §4.6, `[]` in any other kind, and `facet`, `%{by, columns}` with the effective column count in a `:facet` frame and `nil` otherwise; `domains`, the extents the frame was realised with rather than inferring — a shared scale's (§4.3) or a window's (§12.5) — `%{}` when it inferred everything; `axes`, `legend`, `labels` and `marks` as the design gives them; `theme`, the `%Visualize.Theme{}` the design names — a built-in name or an inline `:theme` node — or the `theme:` option of `new/2`, which is taken for any name and required for one that is neither built-in nor inline; and `styles`, the declared styles over the built-in four (§3.3); `defaults`, the defaults nodes its elements inherit, farthest first — the theme's own, the design's and the frame's (§3.8); `sync`, the design's sync group when this frame is the one the group reads (§2.9), `nil` otherwise; and `brush`, the design's brush kind (`:x`) when this frame is the brush frame (§2.9, #565), `nil` otherwise.
 
 **A design renders its frames in `z` order** (#383): one group per frame, `<g class="frame frame-<name>" transform="translate(x, y)" data-node="frames.<name>">` at the frame's own pixel box (§4.2), holding that frame's furniture, its marks and its labels; a `background` is a rect at the frame's box under them. Ties in `z` are broken by name, so the drawing order of a design is a property of the design and not of the order a map happens to enumerate in. `Visualize.Chart.Applied` holds `frames`, the realised frames by name, beside the chart and its sources.
 
@@ -660,6 +722,7 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 | `tiles` | `{:node, :tiles}` | `:content` | `nil` (required of `:tiles`, §5.2) | `:override` |
 | `id` | `:name` | `:content` | `nil` | `:override` |
 | `frame` | `{:ref, :frame}` | `:binding` | `nil` | `:override` |
+| `defaults` | `{:node, :defaults}` | `:style` | `nil` — the defaults of the layers and groups it was placed from (§3.8) | `:override` |
 
 `frame` is the frame the mark is drawn in (#383), **required when the design has more than one** and the single frame's when it has one — the validator reports a mark without one in a multi-frame design as `:required` and a name the design does not declare as `{:undeclared, :frame, name}`. A scale name resolves **inside the mark's frame**, so `history` and `now` may both declare `x` or `r` and each mark reads its own; that is what makes two plots over one source two frames rather than two designs.
 
@@ -966,6 +1029,7 @@ The group is returned untranslated. `Visualize.Chart.Frame.generate/2` places ev
 | `rotate` | `{:one_of, [:number, {:enum, [:tangent, :radial]}]}` | `:geometry` | `nil` | `:override` |
 | `id` | `:name` | `:content` | `nil` | `:override` |
 | `frame` | `{:ref, :frame}` | `:binding` | `nil` | `:override` |
+| `defaults` | `{:node, :defaults}` | `:style` | `nil` — the defaults of the layers and groups it was placed from (§3.8) | `:override` |
 
 `frame` is the frame the label belongs to (#383), on the same rule as a mark's (§5.1): required when the design has more than one, the single frame's when it has one. A label's `{:axis, s}` and `{:data, [x, y]}` anchors read **its own frame's** scales.
 
@@ -1813,6 +1877,7 @@ A style is looked up by name among the declared styles and then the palette of t
 | `Visualize.Chart.Build.layout/1` | `layout(opts)`: `%{layout: node}`, the grid of §2.8 — `columns`, `rows`, `gap` — that a frame's `cell` places it on. |
 | `Visualize.Chart.Build.interaction/1` | `interaction(opts)`: `%{interaction: node}`, the `:interaction` node of §2.9 — `sync:` the group, `frame:` the frame whose `x` it reads. |
 | `Visualize.Chart.Build.theme/1` | `theme(theme)`: `%{theme: theme}`, a theme name or an inline `:theme` node (§2.5). |
+| `Visualize.Chart.Build.defaults/1` | `defaults(node)`: `%{defaults: node}`, the design's `:defaults` node (§3.8, #651). |
 | `Visualize.Chart.Build.cartesian/0` | As `cartesian/1` with `[]`. |
 | `Visualize.Chart.Build.cartesian/1` | `cartesian(opts)`: `%{frames: %{main: %{kind: :cartesian}}}`; `opts` are the frame's remaining keys (§4.1). A frame carries no size — the render gives it (§4.2). |
 | `Visualize.Chart.Build.cartesian/2` | `cartesian(name, opts)`: the same frame under `name` (§4.1, #383) — `%{frames: %{name => %{kind: :cartesian}}}` — which is how a design of several frames is built. |
@@ -2092,6 +2157,8 @@ The `cartesian()` fragment is the frame (§16.3) that makes the declarations a d
 
 `Visualize.Chart.Build.var/2` and `Visualize.Chart.var/1` are different functions and are not confusable: the first *declares* a variable and its default under `vars` (§2.4) and belongs to the builder; the second *builds* the `%Visualize.Chart.Var{}` term that uses one (§7.1) and belongs to the chart. They differ in module and in arity, so a module that imports both reads `var(:unit, "%")` for the declaration and `var(:unit)` for the use, and neither import shadows the other.
 
+**Defaults** (#651, D-174). `defaults/1` is the design's `defaults` (§3.8) as a fragment, `%{defaults: node}`, so a house sheet sets "every stroke 2 wide" beside its styles; a frame's, a mark's, a label's and an axis's are the `defaults:` option of the function that builds the node — `cartesian(defaults: %{font: %{size: 11}})`.
+
 ### 16.3 The frame
 
 **Implemented.** A frame is assembled from fragments, never from one call: the kind comes from the kind's own function — `cartesian/1` for the design's one frame, `cartesian/2` for one it names (§4.1, #383) — and each scale, axis and legend is its own fragment, which is what lets a standard axis pair or a house frame size compose with a chart's own scales.
@@ -2241,9 +2308,9 @@ It answers `%{at: path, kind: kind, state: state, parts: parts}`, `kind` the mar
 |---|---|
 | `value` | the part as resolved: the merge of every contribution below by the rule of §3.5 |
 | `drawn` | whether the kind draws the part (§5.6); a part a kind ignores is still explained |
-| `chain` | the contributions to it, lowest first, each `%{layer, style, via, field, value, set}` |
+| `chain` | the contributions to it, lowest first, each `%{layer, container, style, via, field, value, set}` |
 
-A contribution's `layer` is its layer of §3.7: `:mark` for the mark's own paint, the theme's series colour for its position, which lies under every style when none gives one (§5.6); `:palette` for a palette entry the design does not declare (§3.3); `:style` for a style the design declares, by name or in a list; `:field` for the style a datum's value named, with `field` the `{:field, f}` and `value` the datum's reading; `:state` for a view state, laid by `state:` or named by a field whose value is a state; `:inline` for an inline node of the stack; and `:local` for the inline node a stack ends with, the site's local edit (§3.6). `style` is the style's name where the contribution has one, `via` the names the style reached it through — its `extends` chain and the names in its lists, in the order they were laid — and `set` the keys of the part this contribution wrote, which the ones above it may have overwritten. Nothing is drawn and nothing is validated: like `explain/1` it is a reading of what the frame resolves, by the same resolution, so it cannot drift from it.
+A contribution's `layer` is its layer of §3.7: `:theme` for the theme's root defaults (§3.8), which every part has, so every part's chain begins there; `:defaults` for a container's part defaults and `:kind` for its entry for the element's kind, with `container` naming it — `:theme`, `:design`, `{:frame, f}`, or `:site` for the element's own, its layers' and groups' (§3.8) — and `nil` on every other layer; `:mark` for the mark's own paint, the theme's series colour for its position, which lies under every style when none gives one (§5.6); `:palette` for a palette entry the design does not declare (§3.3); `:style` for a style the design declares, by name or in a list; `:field` for the style a datum's value named, with `field` the `{:field, f}` and `value` the datum's reading; `:state` for a view state, laid by `state:` or named by a field whose value is a state; `:inline` for an inline node of the stack; and `:local` for the inline node a stack ends with, the site's local edit (§3.6). `style` is the style's name where the contribution has one, `via` the names the style reached it through — its `extends` chain and the names in its lists, in the order they were laid — and `set` the keys of the part this contribution wrote, which the ones above it may have overwritten. Nothing is drawn and nothing is validated: like `explain/1` it is a reading of what the frame resolves, by the same resolution, so it cannot drift from it.
 
 ## 18. The builder component
 
@@ -2940,6 +3007,8 @@ A composite is a fragment whose content is a list of use sites and its own `vars
 | more than one root (a host-seeded layer, an imported document) | cascades as a layer of the stack, as §18 always did | — |
 
 A name-keyed site with no key is reported — `keyless: [use id]` beside `missing` — and its body is not placed. The report is what the builder shows and what Deploy refuses on.
+
+**A composite's `defaults` reach what it places** (#651, D-174). A composite may carry `defaults` beside `uses` and `vars` — a `:defaults` node (§3.8) — and that is how a layer or a group of the builder's tree says "every stroke in here is 2 wide". The design it flattens to has no layers, so flatten writes them onto each node the composite's sites place: a mark, a label and an axis take them under their own `defaults`, and a frame under its frame's, by the merge rule (§3.5) — the composite's farther, the node's nearer. A composite nested in another is flattened first, so its defaults are nearer than the outer's. A composite without `defaults` flattens exactly as before.
 
 **A composite placed under a key lands its frames as that key** (#384). A saved chart is a composite of frames, marks, labels and the rest, and a design that composes one wants it *as a frame of its own* rather than merged into whatever the host called its frames. So a composite site keyed `gauge` renames what it carries: a composite of **one** frame lands as `frames.gauge`, and one of **several** as `frames.gauge_<name>`, keeping its own names apart under the key. Its marks and labels are **retargeted** — each `frame` rewritten to the name its frame landed under, and a mark that said none in a composite of one frame given that one, since the frame it belonged to was implicit there and is not here (§5.1) — and an adoption inside it (`{:frame, f, s}`, §4.3) follows the rename, so a saved pair of frames that shared an axis still shares it. A mark's or a label's **`id` takes the key too** (`gauge_needle`), because an id is its identity in the cascade (§8.2): without that, two copies of one saved chart would merge into one and the second gauge would draw an empty dial. Nothing else moves: the use ids, the masks and the bindings are what they were, and a **keyless** composite keeps its own frame names and ids, which is what a host-seeded layer and an imported document have always done.
 

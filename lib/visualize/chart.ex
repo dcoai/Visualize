@@ -74,6 +74,7 @@ defmodule Visualize.Chart do
     :theme,
     :styles,
     :defs,
+    :defaults,
     :layout,
     :interaction,
     :frames,
@@ -88,6 +89,7 @@ defmodule Visualize.Chart do
             theme: :default,
             styles: %{},
             defs: %{},
+            defaults: nil,
             layout: %{},
             interaction: %{},
             frames: nil,
@@ -102,6 +104,7 @@ defmodule Visualize.Chart do
           theme: atom() | map(),
           styles: %{atom() => map()},
           defs: %{atom() => map()},
+          defaults: map() | nil,
           layout: map(),
           interaction: map(),
           frames: %{atom() => map()} | nil,
@@ -214,6 +217,11 @@ defmodule Visualize.Chart do
 
   @doc "The design map of a chart: every design-level key, nested nodes as stored."
   @spec to_map(t()) :: map()
+  # A design that declares no defaults carries no key for them (spec/14 §3.8), so its map
+  # and its JSON are what they were before defaults existed.
+  def to_map(%__MODULE__{defaults: nil} = chart),
+    do: chart |> Map.from_struct() |> Map.delete(:defaults)
+
   def to_map(%__MODULE__{} = chart), do: Map.from_struct(chart)
 
   @doc """
@@ -657,7 +665,7 @@ defmodule Visualize.Chart do
       iex> {:ok, applied} = Visualize.Chart.apply(design, sources: %{s: [%{x: 0, y: 1, k: "a"}]})
       iex> %{parts: %{stroke: stroke, fill: fill}} = Visualize.Chart.explain(applied, at: [:marks, 0])
       iex> Enum.map(stroke.chain, &{&1.layer, &1.style, &1.via})
-      [{:style, :base, [:bad]}]
+      [{:theme, nil, []}, {:style, :base, [:bad]}]
       iex> stroke.value.width
       3
       iex> fill.drawn
@@ -667,7 +675,7 @@ defmodule Visualize.Chart do
   def explain(%Applied{} = applied, opts) do
     at = Keyword.fetch!(opts, :at)
     state = Keyword.get(opts, :state)
-    {stack, kind, frame, series} = explained(applied, at)
+    {stack, kind, frame, series, own} = explained(applied, at)
     stack = if state, do: Visualize.Chart.Style.with_state(stack, state), else: stack
     declared = Map.keys(applied.chart.styles || %{})
 
@@ -678,42 +686,62 @@ defmodule Visualize.Chart do
         stack,
         kind,
         Keyword.get(opts, :datum),
-        series
+        series,
+        containers(applied, frame, own)
       )
 
     %{at: at, kind: kind, state: state, parts: parts}
   end
 
-  # The stack, the kind, the frame and the mark's own paint of the node at a path.
+  # The stack, the kind, the frame, the mark's own paint and the node's own defaults of the
+  # node at a path.
   defp explained(applied, [:marks, i]) do
     mark = Enum.at(applied.chart.marks, i)
     frame = mark_frame(applied, mark)
     position = Enum.find_index(frame.marks, &(&1 == mark)) || 0
-    {Map.get(mark, :style), mark.type, frame, {:series, position + 1}}
+    {Map.get(mark, :style), mark.type, frame, {:series, position + 1}, Map.get(mark, :defaults)}
   end
 
   defp explained(applied, [:marks, i, :label]) do
     mark = Enum.at(applied.chart.marks, i)
     label = Map.get(mark, :label) || %{}
     stack = Map.get(label, :style, Schema.default(:mark_label, :style))
-    {stack, :text, mark_frame(applied, mark), nil}
+    {stack, :text, mark_frame(applied, mark), nil, Map.get(mark, :defaults)}
   end
 
   defp explained(applied, [:labels, i]) do
     label = Enum.at(applied.chart.labels, i)
     default = if label.anchor == :title, do: :title, else: Schema.default(:label, :style)
     frame = Map.get(applied.frames, Map.get(label, :frame)) || applied.frame
-    {Map.get(label, :style, default), :text, frame, nil}
+    {Map.get(label, :style, default), :text, frame, nil, Map.get(label, :defaults)}
   end
 
   defp explained(applied, [:frames, name, :axes, i]) do
     axis = applied.chart.frames |> Map.fetch!(name) |> Map.get(:axes, []) |> Enum.at(i)
-    {Map.get(axis, :style, Schema.default(:axis, :style)), :axis, applied.frames[name], nil}
+    stack = Map.get(axis, :style, Schema.default(:axis, :style))
+    {stack, :axis, applied.frames[name], nil, Map.get(axis, :defaults)}
   end
 
   defp explained(applied, [:frames, name, :legend]) do
     legend = applied.chart.frames |> Map.fetch!(name) |> Map.get(:legend) || %{}
-    {Map.get(legend, :style, Schema.default(:legend, :style)), :legend, applied.frames[name], nil}
+    stack = Map.get(legend, :style, Schema.default(:legend, :style))
+    {stack, :legend, applied.frames[name], nil, nil}
+  end
+
+  # The element's containers, farthest first (spec/14 §3.8): the theme's root — every part,
+  # with the theme's own entries per kind — the design's, the frame's and its own.
+  defp containers(applied, frame, own) do
+    theme = frame.theme
+    kinds = Visualize.Chart.Style.Defaults.kinds()
+    root = theme.defaults |> Map.take(kinds) |> Map.merge(Visualize.Theme.defaults(theme))
+    frame_node = Map.get(applied.chart.frames || %{}, frame.name) || %{}
+
+    [
+      {:theme, root},
+      {:design, applied.chart.defaults},
+      {{:frame, frame.name}, Map.get(frame_node, :defaults)},
+      {:site, own}
+    ]
   end
 
   defp mark_frame(applied, mark),

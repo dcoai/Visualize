@@ -90,17 +90,18 @@ defmodule Visualize.Chart.Mark.Styled do
   # The style node of a stack at a site that has a datum (spec/14 §3.6): each `{:field, f}`
   # entry laid with the style the datum's value names, read against `styles`; a datum of
   # `nil` lays none.
-  @spec node(%{atom() => map()}, term(), map() | nil) :: map()
-  def node(styles, stack, nil), do: Style.node(styles, stack)
+  # Laid over `base`, the style the site's containers lay (spec/14 §3.8).
+  @spec node(%{atom() => map()}, term(), map() | nil, map()) :: map()
+  def node(styles, stack, nil, base), do: Style.over(base, styles, stack)
 
-  def node(styles, stack, datum) do
+  def node(styles, stack, datum, base) do
     case Style.by_data(stack) do
       [] ->
-        Style.node(styles, stack)
+        Style.over(base, styles, stack)
 
       _entries ->
         names = names(styles)
-        Style.node(styles, stack, &pick(&1, datum, names))
+        Style.node(styles, stack, &pick(&1, datum, names), base)
     end
   end
 
@@ -124,7 +125,7 @@ defmodule Visualize.Chart.Mark.Styled do
 
     node =
       ctx.frame.styles
-      |> Style.node(Map.get(ctx.mark, :style), &Map.get(chosen, &1))
+      |> Style.node(Map.get(ctx.mark, :style), &Map.get(chosen, &1), ctx.base)
       |> Style.drawn(ctx.type)
 
     parts(node, ctx.type, ctx.index, ctx.frame.theme, ctx.mode)

@@ -17,6 +17,22 @@ release it merely follows.
 
 ### Added
 
+- **Inherited style defaults** (#670, D-174). A design and a frame take `defaults`: a style's
+  parts that every element inside inherits under its own style, and an entry per mark type, so
+  "every stroke here is 2 wide, every line 1.5" is said once:
+  `defaults: %{stroke: %{width: 2}, line: %{stroke: %{width: 1.5}}}`. A nearer container wins
+  over a farther one, a mark type's entry over the same container's parts, and any style over
+  every default. A partial paint keeps the series color (`stroke: %{width: 2}` only widens it),
+  and a default paint is the color of every mark that names none. Defaults also reach mark
+  labels, frame labels, axes and legends, under their named styles. A composite (a layer or a
+  group in the builder) takes `defaults` beside `uses`, and `Visualize.Chart.Composite.flatten/2`
+  writes them onto the marks, labels, axes and frames it places, which therefore take
+  `defaults` too. A theme's new `defaults` field is laid under every design's, and
+  `Visualize.Theme.defaults/1` answers a theme's root with every part defined (a 1-wide butt-capped
+  stroke, the theme's font, …). `Visualize.Chart.explain/2` shows the theme, container and kind
+  layers in each part's chain, each link with a new `container` key, and `Build.defaults/1`
+  builds the fragment. A design or a theme without defaults renders byte for byte as before and
+  carries no `defaults` key in its map or JSON.
 - **Automatic dark mode** (#668, D-173). A chart rendered as a root `<svg>` in `:css` mode under
   the implicit default theme now carries a `<style>` that switches to the dark theme when the
   viewer's system prefers dark (`@media (prefers-color-scheme: dark)`, scoped to the chart). It

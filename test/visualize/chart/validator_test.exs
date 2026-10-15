@@ -52,6 +52,7 @@ defmodule Visualize.Chart.ValidatorTest do
         angle: 180
       }
     },
+    defaults: %{stroke: %{width: 2, cap: :round}, line: %{stroke: %{width: 1.5}}},
     layout: %{columns: [1], rows: [1], gap: 4},
     interaction: %{sync: "dash", frame: :main},
     frames: %{
@@ -145,6 +146,8 @@ defmodule Visualize.Chart.ValidatorTest do
     theme: [:theme],
     style: [:styles, :series],
     paint: [:defs, :fade],
+    defaults: [:defaults],
+    kind_defaults: [:defaults, :line],
     stroke: [:styles, :series, :stroke],
     curve: [:styles, :series, :curve],
     font: [:styles, :muted, :font],

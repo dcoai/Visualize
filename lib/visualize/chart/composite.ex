@@ -26,6 +26,7 @@ defmodule Visualize.Chart.Composite do
 
   alias Visualize.Chart
   alias Visualize.Chart.{Fragment, Refs, Use}
+  alias Visualize.Chart.Style.Defaults
 
   # The kinds a document keys by name (§19.3).
   @named [:style, :scale, :source, :var, :gradient]
@@ -95,6 +96,9 @@ defmodule Visualize.Chart.Composite do
     end)
     |> case do
       {:ok, resolved, missing} ->
+        # The composite's defaults reach what its sites place (spec/14 §3.8, §19.6, #651).
+        defaults = Map.get(composite, :defaults)
+        resolved = Enum.map(resolved, fn {use, c} -> {use, scope(c, defaults)} end)
         {layers, keyless} = resolved |> Enum.reverse() |> placed()
         {:ok, Chart.stack(base ++ layers), %{missing: missing, keyless: keyless}}
 
@@ -133,6 +137,47 @@ defmodule Visualize.Chart.Composite do
 
   defp kind_of({kind, _body}), do: kind
   defp kind_of(nil), do: nil
+
+  # A site's contribution with the composite's defaults under what each node it places
+  # already inherits (spec/14 §3.8, §19.6): a mark, a label and an axis take them as their
+  # own `defaults`, a whole frame — one that says its kind — as its frame's, and a frame
+  # that only carries axes passes them to its axes. A composite without defaults changes
+  # nothing.
+  defp scope(contribution, nil), do: contribution
+
+  defp scope(%{} = contribution, defaults) when not is_struct(contribution) do
+    Map.new(contribution, fn
+      {kind, node} when kind in [:mark, :label, :axis] -> {kind, under(node, defaults)}
+      {list, nodes} when list in [:marks, :labels] -> {list, all_under(nodes, defaults)}
+      {:frames, frames} -> {:frames, frames(frames, defaults)}
+      other -> other
+    end)
+  end
+
+  defp scope(contribution, _defaults), do: contribution
+
+  defp frames(frames, defaults) when is_map(frames) and not is_struct(frames) do
+    Map.new(frames, fn
+      {name, %{kind: _} = frame} when not is_struct(frame) ->
+        {name, under(frame, defaults)}
+
+      {name, frame} when is_map(frame) and not is_struct(frame) ->
+        {name, Map.update(frame, :axes, [], &all_under(&1, defaults))}
+
+      other ->
+        other
+    end)
+  end
+
+  defp frames(frames, _defaults), do: frames
+
+  defp all_under(nodes, defaults) when is_list(nodes), do: Enum.map(nodes, &under(&1, defaults))
+  defp all_under(nodes, _defaults), do: nodes
+
+  defp under(node, defaults) when is_map(node) and not is_struct(node),
+    do: Map.put(node, :defaults, Defaults.merge(defaults, Map.get(node, :defaults)))
+
+  defp under(node, _defaults), do: node
 
   defp place_one({use, contribution}, {layers, keyless}) do
     case place(contribution, use) do

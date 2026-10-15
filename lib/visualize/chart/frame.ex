@@ -41,7 +41,7 @@ defmodule Visualize.Chart.Frame do
   alias Visualize.{Chart, Theme}
   alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Scales}
   alias Visualize.Chart.{Mark, Schema, Style, Validator, Var}
-  alias Visualize.Chart.Style.Parts
+  alias Visualize.Chart.Style.{Defaults, Parts}
   alias Visualize.Chart.Transform.Force
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
@@ -61,6 +61,7 @@ defmodule Visualize.Chart.Frame do
             theme: nil,
             styles: %{},
             design_styles: %{},
+            defaults: [],
             defs: %{},
             now: nil,
             schemas: %{},
@@ -95,6 +96,7 @@ defmodule Visualize.Chart.Frame do
           theme: Theme.t(),
           styles: %{atom() => map()},
           design_styles: %{atom() => map()},
+          defaults: [map() | nil],
           defs: %{atom() => map()},
           now: term() | nil,
           schemas: %{atom() => Visualize.Data.Schema.t()},
@@ -160,7 +162,7 @@ defmodule Visualize.Chart.Frame do
     # A legend in a margin that cannot hold it is a fault here, not a clipped drawing; a top
     # or bottom one grows its margin instead, and the frame is realised over the smaller plot
     # (§4.5, D-169). The rows depend on the plot's width, which that leaves alone.
-    case Legend.fit!(frame.legend, frame.scales, margin, frame.plot, frame.styles, frame.theme) do
+    case Legend.fit!(frame, margin) do
       ^margin -> frame
       grown -> realise(chart, opts, name, node, size, grown)
     end
@@ -243,7 +245,8 @@ defmodule Visualize.Chart.Frame do
       theme: theme,
       styles: styles,
       design_styles: chart.styles,
-      defs: Map.merge(chart.defs, inline_paints(chart, styles)),
+      defaults: [theme.defaults, chart.defaults, Map.get(node, :defaults)],
+      defs: Map.merge(chart.defs, inline_paints(chart, styles, theme)),
       now: now,
       schemas: schemas,
       system: system,
@@ -253,9 +256,9 @@ defmodule Visualize.Chart.Frame do
 
   # The gradients the design's styles write inline (spec/14 §3.2, D-172), held beside the
   # declared paints so the frame draws both alike: the named styles, the palette among
-  # them, and every style node written at a site — a mark's and its label's, a label's, an
-  # axis's and a legend's.
-  defp inline_paints(chart, styles) do
+  # them, every style node written at a site — a mark's and its label's, a label's, an
+  # axis's and a legend's — and every defaults node (spec/14 §3.8).
+  defp inline_paints(chart, styles, theme) do
     sites =
       Enum.flat_map(chart.marks, fn mark ->
         stack(mark) ++ stack(Map.get(mark, :label))
@@ -266,11 +269,23 @@ defmodule Visualize.Chart.Frame do
             stack(Map.get(frame, :legend))
         end)
 
-    Parts.inline_paints(Map.values(styles) ++ sites)
+    defaults =
+      Defaults.nodes(
+        [theme.defaults, chart.defaults] ++
+          Enum.map(chart.marks ++ chart.labels, &Map.get(&1, :defaults)) ++
+          Enum.flat_map(Map.values(chart.frames || %{}), fn frame ->
+            [Map.get(frame, :defaults) | Enum.map(List.wrap(Map.get(frame, :axes)), &defaults/1)]
+          end)
+      )
+
+    Parts.inline_paints(Map.values(styles) ++ sites ++ defaults)
   end
 
   defp stack(%{style: stack}) when is_map(stack) or is_list(stack), do: List.wrap(stack)
   defp stack(_node), do: []
+
+  defp defaults(node) when is_map(node), do: Map.get(node, :defaults)
+  defp defaults(_node), do: nil
 
   @doc "The realised scales by name: the escape hatch (spec/14 §4.3)."
   @spec scales(t()) :: %{atom() => struct()}
@@ -820,7 +835,8 @@ defmodule Visualize.Chart.Frame do
   def panels(%__MODULE__{kind: :facet, facet: %{columns: columns}} = frame, mode, sources, paths?) do
     panel = panel_plot(frame.plot, columns, frame.panels)
     inner = %{frame | plot: panel}
-    style = Style.resolve(Style.node(frame.styles, :label), frame.theme, mode)
+    base = Defaults.at(frame, nil, :text)
+    style = Style.resolve(Style.over(base, frame.styles, :label), frame.theme, mode)
 
     Enum.with_index(frame.panels, fn value, i ->
       x = rem(i, columns) * panel.width

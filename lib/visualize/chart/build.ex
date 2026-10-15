@@ -188,6 +188,17 @@ defmodule Visualize.Chart.Build do
   @spec theme(atom() | map()) :: fragment()
   def theme(theme), do: %{theme: theme}
 
+  @doc """
+  The design's `defaults` (spec/14 §3.8, §16.2): a style's parts every element inherits
+  under its style, and an entry per mark type. A frame's, a mark's, a label's and an axis's
+  are their functions' `defaults:` option.
+
+      iex> Visualize.Chart.Build.defaults(%{stroke: %{width: 2}, line: %{stroke: %{width: 1.5}}})
+      %{defaults: %{stroke: %{width: 2}, line: %{stroke: %{width: 1.5}}}}
+  """
+  @spec defaults(map()) :: fragment()
+  def defaults(defaults) when is_map(defaults), do: %{defaults: defaults}
+
   # -- the frame (spec/14 §16.3) ----------------------------------------------------------
 
   @doc "As `cartesian/2` under the name `:main`, with no options."

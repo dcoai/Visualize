@@ -39,9 +39,19 @@ defmodule Visualize.Chart.ThemeDocumentTest do
       assert node.colors == @house.colors
       assert node.colors.info == "#2f5d8a"
       assert node.styles == @house.styles
-      # Every field but a counterpart the theme does not declare (#668).
+      # Every field but a counterpart the theme does not declare (#668) and root defaults it
+      # does not set (#651).
       assert Map.keys(node) |> Enum.sort() ==
-               (Map.keys(Map.from_struct(@house)) -- [:dark, :light]) |> Enum.sort()
+               (Map.keys(Map.from_struct(@house)) -- [:dark, :light, :defaults]) |> Enum.sort()
+    end
+
+    test "a theme's own root defaults travel in its document (spec/14 §3.8, #651)" do
+      defaults = %{stroke: %{width: 1.5}, line: %{curve: %{type: :step}}}
+      theme = Visualize.Theme.merge(@house, defaults: defaults)
+      assert %{theme: %{defaults: ^defaults}} = Document.to_map(theme)
+      assert Document.from_map(Document.to_map(theme)) == {:ok, theme}
+      assert {:ok, json} = Document.to_json(theme)
+      assert Document.from_json(json) == {:ok, theme}
     end
 
     test "the JSON form is the stamped fragment document" do

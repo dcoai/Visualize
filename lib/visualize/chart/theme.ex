@@ -52,6 +52,7 @@ defmodule Visualize.Chart.Theme do
     :ramps,
     :colors,
     :styles,
+    :defaults,
     :font_family,
     :font_size,
     :label_size,
@@ -65,10 +66,15 @@ defmodule Visualize.Chart.Theme do
   whole.
   """
   @spec node(Theme.t()) :: map()
-  # A counterpart the theme does not declare is no key (spec/08 §7.3, #668).
-  def node(%Theme{} = theme),
-    do:
-      theme |> Map.take(@fields) |> Map.reject(fn {k, v} -> k in [:dark, :light] and v == nil end)
+  # A counterpart the theme does not declare is no key (spec/08 §7.3, #668), nor are root
+  # defaults it does not set (spec/14 §3.8, #651).
+  def node(%Theme{} = theme) do
+    theme
+    |> Map.take(@fields)
+    |> Map.reject(fn {k, v} ->
+      (k in [:dark, :light] and v == nil) or (k == :defaults and v == %{})
+    end)
+  end
 
   @doc "`%{theme: node}`: what the builder's store keeps, a fragment of kind `:theme` (§19.8)."
   @spec fragment(Theme.t()) :: %{theme: map()}

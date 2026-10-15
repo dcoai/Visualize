@@ -52,7 +52,9 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:cell, {:list, :integer}, :geometry),
       spec(:span, {:list, :integer}, :geometry),
       spec(:z, :integer, :geometry, default: 0),
-      spec(:background, :colour, :style)
+      spec(:background, :colour, :style),
+      # What the frame's elements inherit under their styles (spec/14 §3.8, #651).
+      spec(:defaults, {:node, :defaults}, :style)
     ]
   end
 
@@ -105,7 +107,9 @@ defmodule Visualize.Chart.Schema.Frame do
         style_stack(),
         :style,
         default: :axis
-      )
+      ),
+      # The defaults of the layers and groups it was placed from (spec/14 §3.8, #651).
+      spec(:defaults, {:node, :defaults}, :style)
     ]
   end
 

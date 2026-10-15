@@ -250,6 +250,21 @@ defmodule Visualize.Chart.Style do
   def node(styles, stack, pick), do: styles |> compound(stack, pick) |> Parts.project()
 
   @doc false
+  # `node/3` laid over `base`, the style an element's containers lay under every style it
+  # names (spec/14 §3.7, §3.8, D-174), in its parts. An empty base lays nothing, so a design
+  # without defaults resolves exactly as `node/3` does.
+  @spec node(%{atom() => map()}, term(), ({:field, atom()} -> atom() | nil), map()) :: map()
+  def node(styles, stack, pick, base) when map_size(base) == 0, do: node(styles, stack, pick)
+
+  def node(styles, stack, pick, base),
+    do: base |> Parts.merge(compound(styles, stack, pick)) |> Parts.project()
+
+  @doc false
+  # `node/2` laid over `base` (`node/4`).
+  @spec over(map(), %{atom() => map()}, term()) :: map()
+  def over(base, styles, stack), do: node(styles, stack, &no_style/1, base)
+
+  @doc false
   # `node/3` before the projection: the stack's style in its parts. A list stacks left to
   # right wherever it stands — at the site, as a named style's entry, under `extends`
   # (spec/14 §3.6, #658) — and `seen` carries the names on the way, so a style that reaches
