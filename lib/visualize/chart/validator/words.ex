@@ -55,6 +55,25 @@ defmodule Visualize.Chart.Validator.Words do
 
   def words({:tiles, :attribution}), do: "must say something: the attribution is drawn"
   def words({:tiles, :url}), do: "must hold each of {z}, {x} and {y}"
+
+  # A URL the policy refuses, named by its field and reason and never quoted (§10.3).
+  def words({:url, :relative}), do: "the URL is refused: it has no scheme"
+
+  def words({:url, :scheme}),
+    do:
+      "the URL's scheme is refused: only https (and http when the host allows it) and image data"
+
+  def words({:url, :http}), do: "the URL is refused: http is not allowed by this host; use https"
+
+  def words({:url, :data_type}),
+    do: "the URL's data is refused: only image/png, image/jpeg or image/webp"
+
+  def words({:url, :host}), do: "the URL's host is not one this host allows"
+
+  def words({:unsafe, :font_family}),
+    do: "a font family may not hold <, >, /, ;, {, }, \\ or a control character"
+
+  def words({:unsafe, :class}), do: "must be CSS class names separated by spaces"
   def words({:tiles, :subdomains}), do: "must name a subdomain for the url's {s}"
   def words(:sweep), do: "must be within a turn, and not zero"
   def words(:radius), do: "must be positive"

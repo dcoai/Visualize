@@ -98,6 +98,16 @@ release it merely follows.
   design whose line had a fill is migrated to exactly that, the marks it moves keeping their
   series colour; with a `series` channel the migrated area paints each series in its own
   colour, as an area does.
+- **Designs are treated as untrusted input** (#660, D-172). A font family holding `<`, `>`,
+  `/`, `;`, `{`, `}`, `\` or a control character is a `{:unsafe, :font_family}` validation
+  fault, and a `class` must be CSS class names (`{:unsafe, :class}`). A canvas now escapes
+  its font string and `<` in every string it writes into JavaScript, and
+  `Visualize.Theme.stylesheet/1` writes CSS-breaking characters as escapes. A tiles `url`
+  is checked when a design is validated: `https:` passes, `http:` only with
+  `config :visualize, urls: [http: true]`, `data:` only as a PNG, JPEG or WebP image; any
+  other scheme or a relative URL is `{:url, reason}`, and `urls: [hosts: [...]]` (config, or
+  `from_map/2`/`from_json/2`'s `urls:` option, which can only be stricter) limits the hosts.
+  **A design with an `http:` tiles URL now needs the config.**
 - **New in `Visualize.Chart.Style`**: `drawn/2`, `normalize/1` (any spelling to the stored parts),
   `merge/2` (the part-by-part merge) and `project/1` (the parts as the flat element keys).
   `Visualize.Chart.Migration.current/0` is `3`, with `canonical/2`, `parts/2` and
