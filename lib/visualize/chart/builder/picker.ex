@@ -405,7 +405,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       kind = ref_kind(spec.type)
       by_id = Map.new(entries, &{&1.id, &1})
 
-      for choice <- Map.get(refs, kind, []) do
+      names =
+        Enum.flat_map(Map.get(refs, kind, []), fn
+          {group, names} when is_binary(group) -> names
+          name -> [name]
+        end)
+
+      for choice <- names do
         case choice do
           {^kind, _n} = id ->
             entry = Map.get(by_id, id)

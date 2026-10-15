@@ -21,7 +21,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.{Schema, Style}
+    alias Visualize.Chart.Builder.Palette
+    alias Visualize.Chart.Style
+    alias Visualize.Theme
 
     @typedoc "One row of the stack: what it is, what to call it, and where it sits."
     @type entry :: %{
@@ -77,40 +79,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    The names a style entry may take: what the stacked design declares, and the built-in
-    four (spec/14 §3.3, §18.14).
+    The names a style entry may take, grouped (spec/14 §18.14, §18.18, #685): what the
+    stacked design declares, then the theme's palette group by group — the built-in four
+    are its furniture.
 
-        iex> Visualize.Chart.Builder.StyleStack.choices(%{styles: %{series: %{}}})
-        [:axis, :grid, :label, :series, :title]
+        iex> choices = Visualize.Chart.Builder.StyleStack.choices(%{styles: %{series: %{}}}, Visualize.Theme.default())
+        iex> hd(choices)
+        {"design", [:series]}
+        iex> {"furniture", furniture} = List.keyfind(choices, "furniture", 0)
+        iex> Enum.all?([:axis, :grid, :label, :title], &(&1 in furniture))
+        true
     """
-    @spec choices(map()) :: [atom()]
-    def choices(design) do
-      declared =
-        case Map.get(design, :styles) do
-          map when is_map(map) -> Map.keys(map)
-          _absent -> []
-        end
-
-      (declared ++ Schema.builtin_styles()) |> Enum.uniq() |> Enum.sort()
-    end
+    @spec choices(map(), Theme.t()) :: [{String.t(), [atom()]}]
+    def choices(design, %Theme{} = theme), do: Palette.groups(design, theme)
 
     @doc """
     The site's stack cascaded in its parts, as the panel shows it (spec/14 §18.19, D-178).
 
-    The design's declared styles over the theme's palette, then the entries resolved left
+    The design's declared styles over the palette of `theme` — the design's own, the one
+    its chart is drawn with (#685) — then the entries resolved left
     to right by §3.6 and merged part by part by §3.5 — `Visualize.Chart.Style`'s own rule,
     asked here for one site, before any projection onto the element keys. A field entry
     and a generator lay nothing, since the panel has no datum to read.
 
         iex> design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
-        iex> Visualize.Chart.Builder.StyleStack.resolved(design, [:series, %{stroke: %{width: 5}}])
+        iex> Visualize.Chart.Builder.StyleStack.resolved(design, [:series, %{stroke: %{width: 5}}], Visualize.Theme.default())
         %{stroke: %{type: :solid, color: "#111", width: 5}}
     """
-    @spec resolved(map(), term()) :: map()
-    def resolved(design, value) do
+    @spec resolved(map(), term(), Theme.t()) :: map()
+    def resolved(design, value, %Theme{} = theme) do
       design
       |> Map.get(:styles, %{})
-      |> Style.all()
+      |> Style.all(theme)
       |> Style.compound(value, fn _entry -> nil end)
     end
 
@@ -123,12 +123,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `Visualize.Chart.explain/1`'s question asked at a site: which style said this.
 
         iex> design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}, faded: %{opacity: 0.5}}}
-        iex> Visualize.Chart.Builder.StyleStack.origins(design, [:series, :faded, %{stroke: %{width: 5}}])
+        iex> Visualize.Chart.Builder.StyleStack.origins(design, [:series, :faded, %{stroke: %{width: 5}}], Visualize.Theme.default())
         %{:opacity => "faded", "stroke.color" => "series", "stroke.type" => "series", "stroke.width" => "local"}
     """
-    @spec origins(map(), term()) :: %{(atom() | String.t()) => String.t()}
-    def origins(design, value) do
-      styles = design |> Map.get(:styles, %{}) |> Style.all()
+    @spec origins(map(), term(), Theme.t()) :: %{(atom() | String.t()) => String.t()}
+    def origins(design, value, %Theme{} = theme) do
+      styles = design |> Map.get(:styles, %{}) |> Style.all(theme)
 
       value
       |> List.wrap()
@@ -157,6 +157,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:value, :any, default: nil, doc: "the site's `style` value, in any shape of §3.6")
     attr(:fallback, :atom, default: nil, doc: "the schema's default for this site")
     attr(:design, :map, default: %{}, doc: "the stacked design, for the names on offer")
+
+    attr(:theme, :any,
+      default: nil,
+      doc: "the theme whose palette is on offer; the default's when nil"
+    )
+
     attr(:open, :integer, default: nil, doc: "the entry the context panel is on")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
     attr(:class, :string, default: nil, doc: "appended to the panel's class")
@@ -171,7 +177,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns =
         assigns
         |> assign(:entries, entries(assigns.value, assigns.fallback))
-        |> assign(:choices, choices(assigns.design))
+        |> assign(:choices, choices(assigns.design, assigns.theme || Theme.default()))
 
       ~H"""
       <div class={class(@class)}>
@@ -211,7 +217,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </ol>
         <form id={@id <> "-add"} class="vis-builder-style-add" phx-submit="add_style_entry" phx-target={@target}>
           <select name="name" class="vis-builder-style-choice">
-            <option :for={name <- @choices} value={name}>{name}</option>
+            <optgroup :for={{group, names} <- @choices} label={group}>
+              <option :for={name <- names} value={name}>{name}</option>
+            </optgroup>
           </select>
           <button type="submit" class="vis-builder-style-append">Add style</button>
         </form>

@@ -930,7 +930,11 @@ defmodule Visualize.Chart.BuilderTest do
     test "every field names the entry its value came from" do
       design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
 
-      assert StyleStack.origins(design, [:series, %{stroke: %{width: 5}}]) ==
+      assert StyleStack.origins(
+               design,
+               [:series, %{stroke: %{width: 5}}],
+               Visualize.Theme.default()
+             ) ==
                %{
                  "stroke.type" => "series",
                  "stroke.color" => "series",
@@ -938,7 +942,10 @@ defmodule Visualize.Chart.BuilderTest do
                }
 
       # A key nothing sets is named by nothing.
-      refute Map.has_key?(StyleStack.origins(design, [:series]), :opacity)
+      refute Map.has_key?(
+               StyleStack.origins(design, [:series], Visualize.Theme.default()),
+               :opacity
+             )
 
       # The panel shows each name beside its field.
       html = at_node("marks[0]", selected: 2, style_entry: 0)
@@ -953,7 +960,11 @@ defmodule Visualize.Chart.BuilderTest do
     test "the resolved style is the cascade in its parts, and the panel is a view of it" do
       design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
 
-      assert StyleStack.resolved(design, [:series, %{stroke: %{width: 5}}]) ==
+      assert StyleStack.resolved(
+               design,
+               [:series, %{stroke: %{width: 5}}],
+               Visualize.Theme.default()
+             ) ==
                %{stroke: %{type: :solid, color: "#111", width: 5}}
     end
   end
