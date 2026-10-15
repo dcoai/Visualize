@@ -416,7 +416,8 @@ defmodule Visualize.Backend.Canvas do
               :fe_gaussian_blur,
               :tspan,
               :title,
-              :desc
+              :desc,
+              :style
             ] do
     []
   end

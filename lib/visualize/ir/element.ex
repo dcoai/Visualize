@@ -62,6 +62,7 @@ defmodule Visualize.IR.Element do
           | :root
           | :title
           | :desc
+          | :style
 
   @type style :: %{
           optional(:fill) => String.t() | :none | :current_color,
@@ -316,6 +317,17 @@ defmodule Visualize.IR.Element do
   """
   @spec desc(String.t()) :: t()
   def desc(text) when is_binary(text), do: new(:desc, content: text)
+
+  @doc """
+  A `:style` with the given stylesheet as content: a root's automatic dark mode (spec/08
+  §7.3, #668). Only the SVG backend writes it; a canvas draws nothing for it.
+
+      iex> Visualize.IR.Element.stylesheet("svg { color: red }").type
+      :style
+
+  """
+  @spec stylesheet(String.t()) :: t()
+  def stylesheet(css) when is_binary(css), do: new(:style, content: css)
 
   @doc """
   Creates a root SVG element, `role="img"`.

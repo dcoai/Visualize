@@ -299,6 +299,8 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:colour_map, v), do: is_map(v) and not is_struct(v)
   # A theme's color: a colour, or the steps it pins of a name (spec/08 §7.1, #667).
   defp shape?(:theme_colour, _v), do: true
+  # A theme's counterpart in a color scheme: a theme's name, or `nil` for none (#668).
+  defp shape?(:counterpart, v), do: is_atom(v)
   # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
   defp shape?({:enum, _}, v), do: is_atom(v)
   # A name is an atom, so a string beside one is read as the string it is (D-170).
@@ -455,7 +457,11 @@ defmodule Visualize.Chart.Schema do
       spec(:font_family, :string, :style, default: theme.font_family),
       spec(:font_size, :number, :style, default: theme.font_size, range: {6, 72, 1}),
       spec(:label_size, :number, :style, default: theme.label_size, range: {6, 72, 1}),
-      spec(:title_size, :number, :style, default: theme.title_size, range: {6, 72, 1})
+      spec(:title_size, :number, :style, default: theme.title_size, range: {6, 72, 1}),
+      # The built-in theme standing for this one in a dark or a light color scheme
+      # (spec/08 §7.3, #668).
+      spec(:dark, :counterpart, :style, default: theme.dark),
+      spec(:light, :counterpart, :style, default: theme.light)
     ]
   end
 

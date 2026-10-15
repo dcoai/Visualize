@@ -301,6 +301,8 @@ defmodule Visualize.Chart.Validator.Words do
       "contrast() — a transform of colors with every number in 0..1, or a paint"
   end
 
+  defp type_words(:counterpart), do: "a theme's name, or nil for none"
+
   defp type_words(:theme_colour),
     do:
       type_words(:colour) <>

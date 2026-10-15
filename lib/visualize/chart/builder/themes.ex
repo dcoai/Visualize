@@ -169,7 +169,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def effective(%{} = node, _store) when not is_struct(node) do
-      Theme.build(Theme.default(), Map.take(node, @fields))
+      # A theme of its own declares no counterpart unless the node says so (spec/08 §7.3).
+      Theme.build(%{Theme.default() | dark: nil}, Map.take(node, @fields))
     end
 
     def effective(_value, _store), do: Theme.default()
