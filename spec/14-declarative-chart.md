@@ -436,7 +436,12 @@ A design whose stack holds no field entry draws byte for byte as before: the per
 **A generator in the stack: a style computed at render** (#654, D-177). A stack entry MAY be a generator call `generate(:name, args)`, stored `{:generate, name, args}`: the style a host's generator returns for those arguments (§3.13). It is laid **where it stands**, as a field entry is, alone or in a list:
 
 ```elixir
-[style: generate(:tenant_style, [{:field, :tenant}]), style: [:message, generate(:tenant_style, [{:field, :tenant}]), %{stroke: %{width: 2}}]]
+import Visualize.Generators, only: [generate: 2]
+
+[
+  style: generate(:tenant_style, [{:field, :tenant}]),
+  style: [:message, generate(:tenant_style, [{:field, :tenant}]), %{stroke: %{width: 2}}]
+]
 ```
 
 Its result is a style — a name, a node or a list of them — and is laid as that style would be. Its field arguments are read from the datum by the same binding rule as a field entry's; where there is no datum they read `nil`, and a generator whose arguments are all literals draws the same everywhere, a frame label, an axis and a legend included. A result that is no style lays nothing (§3.13).
@@ -675,12 +680,17 @@ A host's exit keyframes run on SVG as a CSS animation of the copy's wrapper, `fo
 ```elixir
 import Visualize.Generators, only: [generate: 2]
 
-style: [:message, generate(:tenant_style, [{:field, :tenant}])]  # {:generate, :tenant_style, [{:field, :tenant}]}
-fill:  generate(:brand_color, [{:field, :tenant}])                 # a paint's color
+[
+  # stored as {:generate, :tenant_style, [{:field, :tenant}]}
+  style: [:message, generate(:tenant_style, [{:field, :tenant}])],
+  # a paint's color
+  fill: generate(:brand_color, [{:field, :tenant}])
+]
 ```
 
 **Defined in a host module**, as ordinary Elixir a host tests with ExUnit:
 
+<!-- not run: a host's module, calling the host's own MyApp.Tenants -->
 ```elixir
 defmodule MyApp.Generators do
   use Visualize.Generators
@@ -699,12 +709,12 @@ end
 - **Registration is by module** (#654's acceptance, modification 2): `config :visualize, generators: [MyApp.Generators]` for the whole host, and `generators: [MyApp.Generators]` on the options that read and draw a chart — `Visualize.Chart.from_map/2`, `from_json/2`, `apply/2`, `compile/2`, and a board's `realise/4`, `components/3` and `Visualize.Board.Server` (spec/15 §6, §8). The registry is the options' modules then the configuration's; a name two modules define at one arity is an `ArgumentError`, as is a module without `__generators__/0`. Host-compiled code is trusted: a design names a generator, never code.
 - **Arguments** are a list. Each is a literal term — an atom, a number, a string, a list or a map of them — or a field binding `{:field, f}`, read from the datum by §3.2's binding rule (an element's datum, a series' first), `nil` where there is no datum.
 - **The context** is the last argument: `%{theme: theme, vars: vars, assigns: assigns}` — the `%Visualize.Theme{}` the frame resolved, the values of the design's variables at application (each declared variable's given value, else its default), and the `assigns:` the host passed to `apply/2` (default `%{}`): the viewer's, in a LiveView. A board passes its own `assigns:` to every cell.
-- **Typed results.** A generator in a style position — a stack entry (§3.6) — returns a **style**: a name the frame knows (the design's `styles` or the theme's palette, §3.3), a style node, or a list of them, checked as a `styles` entry is (§2.6) against the frame's theme, its color names included. A generator in a `:colour` position (§3.2) — a paint's `color`, a gradient stop's, an effect's, or a paint written short, `fill: generate(…)` — returns a **typed color** (D-173, spec/08 §1.9), or `:none`, no paint; its names are checked against the theme's color table. A result that is anything else is a **fault at that site and applies nothing**: the layers under it show through, and the fault is logged at `:warning` as `<path>: generator <name> returned no style` (or `no color`) with the result's own fault, the path the site's — `marks[0].style`, `frames.main.axes[1].style`. A wrong-typed result never crashes the render. A style result may not hold a generator itself, nor a gradient written in place (the frame holds its gradients before it draws, §3.2); either is such a fault.
+- **Typed results.** A generator in a style position — a stack entry (§3.6) — returns a **style**: a name the frame knows (the design's `styles` or the theme's palette, §3.3), a style node, or a list of them, checked as a `styles` entry is (§2.6) against the frame's theme, its color names included. A generator in a `:colour` position (§3.2) — a solid paint's `color`, or a paint written short, `fill: generate(…)`, and an effect's `color` — returns a **typed color** (D-173, spec/08 §1.9), or `:none`, no paint; its names are checked against the theme's color table. A result that is anything else is a **fault at that site and applies nothing**: the layers under it show through, and the fault is logged at `:warning` as `<path>: generator <name> returned no style` (or `no color`) with the result's own fault, the path the site's — `marks[0].style`, `frames.main.axes[1].style`. A wrong-typed result never crashes the render. A style result may not hold a generator itself, nor a gradient written in place (the frame holds its gradients before it draws, §3.2); either is such a fault.
 - **A generator that raises is a bug and surfaces as one** (#654's acceptance, modification 1). Nothing rescues it: the render raises with the generator's own exception, as any host function's. "Never crashes the render" covers what a generator returns, not what it raises.
 - **Caching.** A generator is called once per distinct `(name, arguments)` within a site's drawing — a mark's rows, one furniture element — and the context is fixed within a render, so a generator must be pure in its arguments and context. A mark of a thousand messages from two tenants calls `tenant_style` twice.
 - **Precedence.** A generator entry is layer 6 of §3.7: an author's stack lays it where it is written, above a field entry before it; a board's state entry goes after it and a trailing local edit over it. A color generator in a part takes the layer of the style that holds it.
 - **Where it resolves.** At every site the frame draws — a mark and its inline label per datum, a frame label, an axis and a legend once, with no datum. Where the library reads a style without drawing it — the color domain's inference, the type inference, the builder's stack panel — a generator lays nothing, as a field entry does there.
-- **Validation** (§10.1). When the chart is built, each `{:generate, name, args}` is checked against the registry the read was given (#654's acceptance, modification 2): a name no registered module defines is `{:undeclared, :generator, name}`, and a name that is registered but not for this many arguments is `{:arity, :generator, name, n}`, `n` the arguments given; `name` must be an atom and `args` a list (`{:type, :generator}`), each argument a term or a field binding checked as any field binding is. A fragment validated alone (§19.8) does not check names, as it does not check its references. A generator is accepted in a style position and in a `:colour` position; anywhere else it is the position's type fault.
+- **Validation** (§10.1). When the chart is built, each `{:generate, name, args}` is checked against the registry the read was given (#654's acceptance, modification 2): a name no registered module defines is `{:undeclared, :generator, name}`, and a name that is registered but not for this many arguments is `{:arity, :generator, name, n}`, `n` the arguments given; `name` must be an atom and `args` a list (`{:type, :generator}`), each argument a term or a field binding checked as any field binding is. A fragment validated alone (§19.8) does not check names, as it does not check its references. A generator is accepted at a site's stack and in a solid paint's or an effect's `color` within a style a site reaches; anywhere else — a gradient's stops or a gradient paint's `color` (`{:invalid_for, type}`), `defs`, a theme, a `defaults` node, a scale's range — it is the position's type fault, since nothing there is laid by a frame that calls it.
 - **JSON** (§11.2): `{"$generate": [name, [arg, …]]}`, the arguments as terms.
 - **Explained** (§17.3): `explain/2` attributes each generator's result at its layer.
 - **Not here:** generators written as stored source text, which need #643's checked compile path (an AST allowlist and a bounded process).
@@ -2304,6 +2314,7 @@ The scale functions, one per kind of §4.3. The name carries the `_scale` suffix
 | `Visualize.Generators.defgenerator/2` | `defgenerator name(arg, …, ctx) do … end`: a public `def` of that head, recorded under `__generators__/0`; a generator defined in several clauses, as any function may be, is listed once; a head with no parameter — none for the context — is a `CompileError` |
 | `Visualize.Generators.generate/1` | As `generate/2` with `[]` arguments. |
 | `Visualize.Generators.generate/2` | `generate(name, args)`: the stored call `{:generate, name, args}`; an `ArgumentError` for a name that is not an atom or `args` that is not a list |
+| `Visualize.Generators.registry/0` | As `registry/1` with no modules: the configuration's alone. |
 | `Visualize.Generators.registry/1` | `registry(modules)`: `%{{name, arity} => module}` of the modules given and then `config :visualize, generators:`; an `ArgumentError` for a module without `__generators__/0`, or a `{name, arity}` two modules define |
 
 ## 15. Presets

@@ -75,7 +75,8 @@ defmodule Visualize.Chart.Frame do
             background: nil,
             sync: nil,
             brush: nil,
-            forces: %{}
+            forces: %{},
+            generated: nil
 
   @typedoc "A frame kind of spec/14 §4.1."
   @type kind :: :cartesian | :polar | :geo | :facet
@@ -110,7 +111,8 @@ defmodule Visualize.Chart.Frame do
           background: term() | nil,
           sync: String.t() | nil,
           brush: :x | nil,
-          forces: map()
+          forces: map(),
+          generated: struct() | nil
         }
 
   # The size a frame is realised at when the caller gives none (spec/14 §4.2): a static
@@ -141,6 +143,9 @@ defmodule Visualize.Chart.Frame do
       or `:as_posted` (default): the viewer's, never the design's (spec/14 §4.4, D-156)
     * `:warm` - the force layouts a compiled chart carries between ticks (spec/14 §12.5,
       D-132); every `:force` step is cold without it (default `%{}`)
+    * `:generated` - the generators the frame calls, their registry, the design's variables
+      and the host's assigns (spec/14 §3.13), as `Visualize.Chart.apply/2` builds them;
+      without it a generator is looked up in `config :visualize, generators:` alone
 
   Each distinct `:force` step of the frame's marks is laid out once, before any domain is
   inferred, and held in `forces`: every pipeline that reaches the step reads that layout
@@ -250,7 +255,8 @@ defmodule Visualize.Chart.Frame do
       now: now,
       schemas: schemas,
       system: system,
-      forces: forces
+      forces: forces,
+      generated: Keyword.get(opts, :generated)
     }
   end
 

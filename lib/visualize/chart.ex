@@ -62,6 +62,7 @@ defmodule Visualize.Chart do
   }
 
   alias Visualize.Chart.Frame.Scales
+  alias Visualize.Chart.Style.Generated
   alias Visualize.Data.Schema.Cache
 
   alias Visualize.IR.{Element, Transform}
@@ -168,6 +169,10 @@ defmodule Visualize.Chart do
   its inputs and holds the number. Raises `ArgumentError` for a name that is not a limit
   or a value that is not a positive integer.
 
+  `generators:` names the generator modules (`Visualize.Generators`, spec/14 §3.13) the
+  design's generator names are checked against, beside `config :visualize, generators:`;
+  a name neither defines is `{:undeclared, :generator, name}`.
+
       iex> Visualize.Chart.from_map(%{version: 4, frames: %{main: %{}}})
       {:error, [{[:version], {:newer_schema, 4, 3}}]}
   """
@@ -177,16 +182,16 @@ defmodule Visualize.Chart do
 
     with :ok <- readable(map),
          :ok <- within(Limits.structure(map, limits)) do
-      read(map, limits, Keyword.get(opts, :urls, []))
+      read(map, limits, Keyword.take(opts, [:urls, :generators]))
     end
   end
 
   # The steps after the document's structure is known to be within its limits: shared
   # by `from_json/2`, which checks the structure on the parsed JSON before decoding it.
-  defp read(map, limits, urls) do
+  defp read(map, limits, checks) do
     with {:ok, map} <- Migration.migrate(map),
          :ok <- within(Limits.counts(map, limits)),
-         :ok <- Validator.validate(map, :design, urls: urls) do
+         :ok <- Validator.validate(map, :design, checks) do
       {:ok, struct(__MODULE__, Map.take(map, @design_keys))}
     end
   end
@@ -225,7 +230,8 @@ defmodule Visualize.Chart do
   def to_map(%__MODULE__{} = chart), do: Map.from_struct(chart)
 
   @doc """
-  The chart of a JSON document (spec/14 §11), with `limits:` as `from_map/2` takes them.
+  The chart of a JSON document (spec/14 §11), with `limits:`, `urls:` and `generators:` as
+  `from_map/2` takes them.
 
   The parsed document's `"version"` is checked, and its nesting and the size of its lists
   and maps held to the limits, **before** the codec decodes a key (spec/14 §9.1, §9.2): a
@@ -244,7 +250,7 @@ defmodule Visualize.Chart do
         {:ok, term} ->
           with :ok <- readable(term),
                :ok <- within(Limits.structure(term, limits)) do
-            read(Codec.decode(term), limits, Keyword.get(opts, :urls, []))
+            read(Codec.decode(term), limits, Keyword.take(opts, [:urls, :generators]))
           end
 
         {:error, error} ->
@@ -424,6 +430,11 @@ defmodule Visualize.Chart do
       (default empty), read for every slot whose contract is not empty (spec/14 §7.4)
     * `:describe` - `(feed -> {:ok, schema} | {:error, reason})`, asked once for a
       version the cache lacks (default `nil`)
+    * `:generators` - the generator modules (`Visualize.Generators`, spec/14 §3.13) the
+      design's names are checked against and its frames call, beside
+      `config :visualize, generators:` (default `[]`)
+    * `:assigns` - the host's assigns, the viewer's, which every generator's context
+      carries (default `%{}`)
 
   Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does, for a value a scale
   cannot take or a theme name it cannot resolve.
@@ -456,12 +467,21 @@ defmodule Visualize.Chart do
 
     cache = Keyword.get_lazy(opts, :schemas, &Cache.new/0)
 
-    with {:ok, chart} <- Template.resolve(chart, vars),
-         {:ok, sources} <- Template.bind(chart, pool),
-         {:ok, chart, described} <- Facts.apply(chart, pool, cache, opts[:describe]),
-         :ok <- Validator.validate(to_map(chart)) do
+    modules = Keyword.get(opts, :generators, [])
+
+    with {:ok, resolved} <- Template.resolve(chart, vars),
+         {:ok, sources} <- Template.bind(resolved, pool),
+         {:ok, resolved, described} <- Facts.apply(resolved, pool, cache, opts[:describe]),
+         :ok <- Validator.validate(to_map(resolved), :design, generators: modules) do
+      # What a generator's context carries (spec/14 §3.13): the variables' values at
+      # application — each given value, else its default — and the host's assigns.
+      generated =
+        Generated.new(modules, values(chart, vars), Keyword.get(opts, :assigns, %{}))
+
+      chart = resolved
+
       shared =
-        [sources: sources, schemas: described.schemas] ++
+        [sources: sources, schemas: described.schemas, generated: generated] ++
           Keyword.take(opts, [:theme, :now, :size, :system])
 
       frames = realise_frames(chart, shared)
@@ -477,7 +497,18 @@ defmodule Visualize.Chart do
   end
 
   def apply(map, opts) when is_map(map) do
-    with {:ok, chart} <- from_map(map), do: __MODULE__.apply(chart, opts)
+    with {:ok, chart} <- from_map(map, Keyword.take(opts, [:generators])),
+         do: __MODULE__.apply(chart, opts)
+  end
+
+  # Each variable's value at application: the one given, else its declared default.
+  defp values(%__MODULE__{vars: declared}, given) do
+    defaults =
+      for {name, node} <- declared || %{}, is_map(node), into: %{} do
+        {name, Map.get(node, :default)}
+      end
+
+    Map.merge(defaults, Map.take(given, Map.keys(defaults)))
   end
 
   # Every frame realised, and a scale adopted from another frame realised again over one
@@ -654,9 +685,11 @@ defmodule Visualize.Chart do
   explained — `[:marks, i]`, `[:marks, i, :label]`, `[:labels, i]`,
   `[:frames, f, :axes, i]` or `[:frames, f, :legend]`; `datum:` the element's datum, which
   a `{:field, f}` entry reads; `state:` a view state laid at its layer (§3.7). The answer is
-  `%{at, kind, state, parts}`, `parts` each part's `value`, whether the kind draws it
-  (`drawn`), and its `chain` of contributions, lowest first: each
-  `%{layer, style, via, field, value, set}`.
+  `%{at, kind, state, parts, generators}`, `parts` each part's `value`, whether the kind
+  draws it (`drawn`), and its `chain` of contributions, lowest first: each
+  `%{layer, style, via, field, value, set, generators}`. A generator (§3.13) is called as
+  the frame calls it, and `generators` lists each it called — `%{name, args, at, result,
+  layer}`, `result` `{:fault, reason}` for one that applied nothing.
 
       iex> design = %{version: 3, sources: %{s: %{fields: [:x, :y, :k]}},
       ...>   styles: %{base: %{extends: :bad, stroke: %{width: 3}}},
@@ -679,7 +712,7 @@ defmodule Visualize.Chart do
     stack = if state, do: Visualize.Chart.Style.with_state(stack, state), else: stack
     declared = Map.keys(applied.chart.styles || %{})
 
-    parts =
+    {parts, generators} =
       Visualize.Chart.Style.Explain.parts(
         frame.styles,
         declared,
@@ -687,10 +720,11 @@ defmodule Visualize.Chart do
         kind,
         Keyword.get(opts, :datum),
         series,
-        containers(applied, frame, own)
+        containers(applied, frame, own),
+        frame
       )
 
-    %{at: at, kind: kind, state: state, parts: parts}
+    %{at: at, kind: kind, state: state, parts: parts, generators: generators}
   end
 
   # The stack, the kind, the frame, the mark's own paint and the node's own defaults of the
@@ -802,7 +836,7 @@ defmodule Visualize.Chart do
   Each is compiled over its own realised frame and the marks and labels that say it.
 
   An applied chart is compiled as it is; a chart or a design map is applied first with
-  the `sources:`, `vars:`, `theme:`, `size:`, `now:` and `system:` options of `apply/2`, and its errors are this
+  the `sources:`, `vars:`, `theme:`, `size:`, `now:`, `system:`, `generators:` and `assigns:` options of `apply/2`, and its errors are this
   function's. The compiler's own options are `:ceiling`, the point count above which
   `render: :auto` leaves SVG for the canvas (default `1000`, spec/00 §3.2), and `:motion`,
   `:full` (default) or `:reduce`: a reader who asks for less motion gets every transition
@@ -843,7 +877,9 @@ defmodule Visualize.Chart do
                :now,
                :system,
                :schemas,
-               :describe
+               :describe,
+               :generators,
+               :assigns
              ])
            ) do
       compile(applied, opts)

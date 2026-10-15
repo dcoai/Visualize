@@ -13,4 +13,8 @@ config :logger, :console,
 
 config :phoenix, :json_library, Jason
 
+# The host's generators (spec/14 §3.13): the tenant chat's styles and brand colors,
+# computed when a chart is drawn (`Examples.Tenants`, #654).
+config :visualize, generators: [Examples.Tenants.Generators]
+
 import_config "#{config_env()}.exs"

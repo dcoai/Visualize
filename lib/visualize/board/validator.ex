@@ -335,12 +335,13 @@ defmodule Visualize.Board.Validator do
   @doc false
   # Each cell's component as a chart, or the faults that kept it from being read, by path
   # under the cell's ref: the entry fetched, flattened through the same store and read
-  # through `Visualize.Chart.from_map/2` with the board reader's limits.
+  # through `Visualize.Chart.from_map/2` with the board reader's options: its `limits:` and
+  # the `generators:` its names are checked against (spec/14 §3.13).
   @spec components(map(), (term() -> {:ok, map()} | :error), keyword()) ::
           {%{atom() => Chart.t()}, [Validator.error()]}
-  def components(cells, fetch, limits) do
+  def components(cells, fetch, read) do
     Enum.reduce(Enum.sort(cells), {%{}, []}, fn {name, cell}, {charts, errors} ->
-      case component(cell.ref, fetch, limits) do
+      case component(cell.ref, fetch, read) do
         {:ok, chart} ->
           {Map.put(charts, name, chart), errors}
 
@@ -351,14 +352,14 @@ defmodule Visualize.Board.Validator do
     end)
   end
 
-  defp component(ref, fetch, limits) do
+  defp component(ref, fetch, read) do
     case fetch.(ref) do
       :error ->
         {:error, [{[], {:dangling, ref}}]}
 
       {:ok, fragment} ->
         case Composite.flatten(fragment, fetch) do
-          {:ok, flat, _report} -> Chart.from_map(flat, limits: limits)
+          {:ok, flat, _report} -> Chart.from_map(flat, read)
           {:error, {:cycle, chain}} -> {:error, [{[], {:cycle, chain}}]}
         end
     end

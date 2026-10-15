@@ -179,7 +179,23 @@ defmodule Visualize.Chart.Validator.Words do
   def words({:undeclared, :color, name}),
     do: "color #{inspect(name)} is not a name of the theme's color table"
 
+  def words({:undeclared, :generator, name}) do
+    "generator #{inspect(name)} is not defined by a registered generator module " <>
+      "(config :visualize, generators:, or the generators: option)"
+  end
+
   def words({:undeclared, kind, name}), do: "#{kind} #{inspect(name)} is not declared"
+
+  def words({:arity, :generator, name, n}) do
+    "generator #{inspect(name)} is registered, but not for #{n} argument#{if n == 1, do: "", else: "s"} " <>
+      "and the context"
+  end
+
+  # A generator's result at render (spec/14 §3.13): what it returned instead.
+  def words({:generated, kind, name, reason}) do
+    "generator #{inspect(name)} returned no #{kind} (#{words(reason)}); it applies nothing"
+  end
+
   def words({:invalid_for, type}), do: "is not read by #{inspect(type)}"
 
   def words({:unsupported_version, v}) do
@@ -292,6 +308,10 @@ defmodule Visualize.Chart.Validator.Words do
   defp type_words(:name), do: "a name (an atom)"
   defp type_words(:field), do: "a field name"
   defp type_words(:field_ref), do: "{:field, name}"
+
+  defp type_words(:generator),
+    do: "generate(name, args): a name (an atom) and a list of terms and {:field, name}"
+
   defp type_words(:fact), do: "fact(source, field, key), each a name"
   defp type_words(:key_order), do: "{:keys, [name, …]}, the series keys bottom first"
   defp type_words(:channel), do: "a field name, a number or {:field, name}"

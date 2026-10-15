@@ -52,7 +52,10 @@ defmodule Visualize.Board.Draw do
       size: size,
       theme: theme,
       system: system,
-      schemas: schemas
+      schemas: schemas,
+      # The board's generators and assigns (spec/14 §3.13, spec/15 §8.3).
+      generators: Map.get(cell, :generators, []),
+      assigns: Map.get(cell, :assigns, %{})
     ]
 
     options = if now, do: Keyword.put(options, :now, now), else: options

@@ -19,7 +19,18 @@ defmodule Visualize.Chart.Validator do
   """
 
   alias Visualize.Chart.{Fact, Migration, Schema, Text, Urls, Var}
-  alias Visualize.Chart.Validator.{Colors, Defaults, Domain, Frames, Palette, Units, Words}
+
+  alias Visualize.Chart.Validator.{
+    Colors,
+    Defaults,
+    Domain,
+    Frames,
+    Generators,
+    Palette,
+    Units,
+    Words
+  }
+
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
@@ -39,7 +50,10 @@ defmodule Visualize.Chart.Validator do
           | :unknown_key
           | {:type, Schema.type()}
           | {:enum, [atom()]}
-          | {:undeclared, :scale | :style | :source | :var | :field | :slot | :paint, term()}
+          | {:undeclared, :scale | :style | :source | :var | :field | :slot | :paint | :generator,
+             term()}
+          | {:arity, :generator, atom(), non_neg_integer()}
+          | {:generated, :style | :color, atom(), term()}
           | {:ref_kind, atom(), atom()}
           | {:invalid_for, atom()}
           | {:unsupported_version, term()}
@@ -100,31 +114,41 @@ defmodule Visualize.Chart.Validator do
   # A style and its parts, any of whose values may be a channel binding (spec/14 §3.2).
   @style_kinds ~w(style defaults kind_defaults paint stroke font text_layout effect marker curve)a
 
-  @doc "`:ok`, or every fault of the design ordered by path; URLs under the application's policy."
+  @doc """
+  `:ok`, or every fault of the design ordered by path; URLs under the application's policy,
+  generator names against the application's `config :visualize, generators:`.
+  """
   @spec validate(term()) :: :ok | {:error, [error(), ...]}
-  def validate(map) when is_map(map) and not is_struct(map), do: design(map, Urls.policy())
+  def validate(map) when is_map(map) and not is_struct(map),
+    do: design(map, Urls.policy(), [])
 
   def validate(_), do: {:error, [{[], {:type, {:node, :design}}}]}
 
   @doc """
   `validate/1` of a design with the URL policy of a read (spec/14 §10.3): the
   application's `config :visualize, urls: [...]` made stricter by `urls:` — `http: true`
-  only where the application allows `http:`, a `hosts` list within the application's.
+  only where the application allows `http:`, a `hosts` list within the application's —
+  and every generator's name checked against the modules of `generators:` and the
+  application's `config :visualize, generators:` (spec/14 §3.13).
 
       iex> design = %{version: 3, frames: %{main: %{kind: :cartesian}}}
       iex> Visualize.Chart.Validator.validate(design, :design, urls: [hosts: ["tile.example"]])
       :ok
   """
   @spec validate(term(), :design, keyword()) :: :ok | {:error, [error(), ...]}
-  def validate(map, :design, opts) when is_map(map) and not is_struct(map),
-    do: design(map, Urls.policy(Keyword.get(opts, :urls, [])))
+  def validate(map, :design, opts) when is_map(map) and not is_struct(map) do
+    urls = Urls.policy(Keyword.get(opts, :urls, []))
+    design(map, urls, Keyword.get(opts, :generators, []))
+  end
 
   def validate(_map, :design, _opts), do: {:error, [{[], {:type, {:node, :design}}}]}
 
-  defp design(map, urls) do
+  defp design(map, urls, modules) do
     # Read in the shape this library writes: a style's flat keys are its parts (§3.1, §9).
     map = Migration.parts(map, :design)
-    ctx = Map.put(context(map), :urls, urls)
+    # The registry is built only for a design that names a generator (spec/14 §3.13).
+    registry = if Generators.present?(map), do: Visualize.Generators.registry(modules), else: %{}
+    ctx = context(map) |> Map.put(:urls, urls) |> Map.put(:generators, registry)
 
     case node(:design, map, [], ctx) ++ cycles(map) ++ Domain.faults(map) do
       [] -> :ok
@@ -226,6 +250,12 @@ defmodule Visualize.Chart.Validator do
     }
   end
 
+  @doc false
+  # A value checked as `type` in a fragment's context with `known` laid over it (§19.8):
+  # what a generator's result is held to (`Visualize.Chart.Validator.Generators`).
+  @spec check_open(Schema.type(), term(), map()) :: [error()]
+  def check_open(type, value, known), do: check(type, value, [], Map.merge(open_context(), known))
+
   @doc "One error as `path: reason` in words; the path in `marks[1].channels.y` form."
   @spec format(error()) :: String.t()
   def format({path, reason}), do: "#{format_path(path)}: #{Words.words(reason)}"
@@ -317,7 +347,10 @@ defmodule Visualize.Chart.Validator do
       fields: :unknown,
       datum?: false,
       channel_keys: [],
-      partial?: false
+      partial?: false,
+      # The registry generator names are checked against (spec/14 §3.13): a design's is
+      # given, a fragment's is not known, and where no generator goes it is `:refused`.
+      generators: :unknown
     }
   end
 
@@ -528,6 +561,12 @@ defmodule Visualize.Chart.Validator do
   defp held(kind, map, path, _ctx) when kind in @motion_kinds,
     do: Visualize.Chart.Validator.Motion.check(map, path)
 
+  # A color generator draws a solid paint: a gradient's colors are its stops, which the frame
+  # holds in its `defs` before it draws (spec/14 §3.13).
+  defp held(kind, %{type: type, color: {:generate, _, _}}, path, _ctx)
+       when kind in [:paint, :stroke] and type != :solid,
+       do: [{path ++ [:color], {:invalid_for, type}}]
+
   defp held(_kind, _map, _path, _ctx), do: []
 
   # The angle scale's sweep is a turn at most and never nothing; an axis's radius is
@@ -585,6 +624,11 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp enter(:label, map, ctx), do: %{in_frame(ctx, map[:frame]) | datum?: false}
+
+  # A generator is a site's and its styles' (spec/14 §3.13): a theme and a defaults node are
+  # laid without a frame to call it.
+  defp enter(kind, _map, ctx) when kind in [:theme, :defaults, :kind_defaults],
+    do: %{ctx | generators: :refused}
 
   defp enter(:channels, map, ctx), do: %{ctx | channel_keys: Map.keys(map)}
 
@@ -759,6 +803,11 @@ defmodule Visualize.Chart.Validator do
   defp check_key(kind, _spec, {:field, _} = ref, path, ctx) when kind in @style_kinds,
     do: check(:field_ref, ref, path, ctx)
 
+  # A color generator (spec/14 §3.13): a paint's `color` and an effect's.
+  defp check_key(kind, %{key: :color}, {:generate, _, _} = call, path, ctx)
+       when kind in [:paint, :stroke, :effect],
+       do: generator(call, path, ctx, :colour)
+
   defp check_key(:design, %{key: :version}, v, path, _ctx) when is_integer(v) do
     cond do
       v == Migration.current() -> []
@@ -776,7 +825,7 @@ defmodule Visualize.Chart.Validator do
         gradient(paint, at)
       end
 
-    check(spec.type, defs, path, ctx) ++ List.flatten(gradients)
+    check(spec.type, defs, path, %{ctx | generators: :refused}) ++ List.flatten(gradients)
   end
 
   # Strings a style or a theme sends to SVG, CSS or a canvas hold only what their contexts
@@ -885,6 +934,9 @@ defmodule Visualize.Chart.Validator do
   defp check(:field_ref, {:field, f}, path, ctx) when is_atom(f) do
     if name?(f), do: ref(:field, f, path, ctx), else: [{path, {:type, :field_ref}}]
   end
+
+  # A generator as a stack entry (spec/14 §3.6, §3.13).
+  defp check(:generator, v, path, ctx), do: generator(v, path, ctx, :generator)
 
   defp check(:channel, v, _path, _ctx) when is_number(v), do: []
   defp check(:channel, v, path, ctx) when is_atom(v), do: check(:field, v, path, ctx)
@@ -1033,6 +1085,18 @@ defmodule Visualize.Chart.Validator do
         else: [{path ++ [:stops], :required}]
 
     type ++ stops
+  end
+
+  # A generator call's faults: its shape, its name against the registry and each argument
+  # — a term, or a field binding checked as any is. Where no generator goes the call is the
+  # position's own type fault.
+  defp generator(_call, path, %{generators: :refused}, type), do: [{path, {:type, type}}]
+
+  defp generator(call, path, ctx, _type) do
+    Generators.faults(call, path, ctx.generators, fn
+      {:field, _} = ref, at -> check(:field_ref, ref, at, ctx)
+      arg, at -> if term?(arg), do: [], else: [{at, {:type, :generator}}]
+    end)
   end
 
   defp text_part(part, _path, _ctx) when is_binary(part), do: []

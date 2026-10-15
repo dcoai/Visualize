@@ -50,6 +50,11 @@ defmodule Visualize.Board.Server do
     * `:system` - the unit system every cell's measures are shown in, `:metric`, `:us`,
       `:uk` or `:as_posted` (default); a viewer's preference, so a host serving several
       runs a board per system (spec/14 §4.4, D-156)
+    * `:generators` - the generator modules (spec/14 §3.13) every cell's component is read
+      with and every cell's frames call, beside `config :visualize, generators:`
+      (default `[]`)
+    * `:assigns` - the host's assigns every generator's context carries: the viewer's, so
+      a host whose generators read the viewer runs a board per viewer (default `%{}`)
     * `:width` - the container width in pixels until a `resize/2` (default `1200`)
     * `:tick` - the data rate, milliseconds between turns; `nil` turns only on `tick/1`
       (default `1000`)
@@ -123,6 +128,8 @@ defmodule Visualize.Board.Server do
         feeds: %{},
         theme: Visualize.Theme.default(),
         system: :as_posted,
+        generators: [],
+        assigns: %{},
         width: 1200,
         tick: 1000,
         budget: nil,
@@ -132,10 +139,12 @@ defmodule Visualize.Board.Server do
 
     board = Keyword.fetch!(opts, :board)
     store = Keyword.fetch!(opts, :store)
-    limits = Keyword.take(opts, [:limits])
+    limits = Keyword.take(opts, [:limits, :generators])
 
     with {:ok, components} <-
-           board_check(Board.components(board, store, Keyword.take(opts, [:limits, :boards]))),
+           board_check(
+             Board.components(board, store, Keyword.take(opts, [:limits, :boards, :generators]))
+           ),
          {:ok, required} <- board_check(Board.required_sources(board, store, limits)),
          :ok <- feeds_check(opts[:binding], opts[:feeds]) do
       needs =
@@ -334,6 +343,8 @@ defmodule Visualize.Board.Server do
         :feeds,
         :theme,
         :system,
+        :generators,
+        :assigns,
         :width,
         :tick,
         :max_heap,
@@ -449,7 +460,9 @@ defmodule Visualize.Board.Server do
   def handle_call({:vars, vars}, _from, state) do
     board = %{state.board | vars: Map.merge(state.board.vars, vars)}
 
-    case Board.components(board, state.store, limits: state.limits, boards: state.boards) do
+    read = [limits: state.limits, boards: state.boards, generators: state.generators]
+
+    case Board.components(board, state.store, read) do
       {:ok, components} ->
         for {name, %{chart: chart, vars: v}} <- components,
             components[name] != state.components[name],
@@ -627,6 +640,8 @@ defmodule Visualize.Board.Server do
        size: size(box),
        theme: state.theme,
        system: state.system,
+       generators: state.generators,
+       assigns: state.assigns,
        title: Map.get(cell, :title),
        stale_after: state.board.stale_after,
        subscribers: Map.keys(state.subscribers),

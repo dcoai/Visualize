@@ -57,6 +57,11 @@ defmodule Visualize.Chart.Codec do
   defp value(_type, %Var{name: name}), do: %{"$var" => Atom.to_string(name)}
   defp value(_type, %Fact{} = fact), do: term(fact)
   defp value(_type, {:field, f}) when is_atom(f), do: %{"$field" => Atom.to_string(f)}
+
+  # A generator call (spec/14 §3.13, §11.2, #654): its name, then its arguments as terms.
+  defp value(_type, {:generate, name, args}) when is_atom(name) and is_list(args),
+    do: %{"$generate" => [Atom.to_string(name), Enum.map(args, &term/1)]}
+
   defp value(:colour, {:paint, name}) when is_atom(name), do: %{"$paint" => Atom.to_string(name)}
 
   # A ramp position, and a whole ramp as a colour scale's range (spec/14 §11.2, #533).
@@ -231,6 +236,15 @@ defmodule Visualize.Chart.Codec do
 
   defp read(_type, %{"$field" => f} = v) when map_size(v) == 1 and is_binary(f),
     do: {:field, String.to_atom(f)}
+
+  # A generator's name is made an atom only when it is plain words; any other shape is left
+  # as the object it is, for the validator to refuse (#645's rule).
+  defp read(_type, %{"$generate" => [name, args]} = v)
+       when map_size(v) == 1 and is_binary(name) and is_list(args) do
+    if Regex.match?(@colour_word, name),
+      do: {:generate, String.to_atom(name), Enum.map(args, &read_term/1)},
+      else: v
+  end
 
   defp read(:colour, %{"$paint" => name} = v) when map_size(v) == 1 and is_binary(name),
     do: {:paint, String.to_atom(name)}

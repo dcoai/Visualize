@@ -196,7 +196,8 @@ defmodule Visualize.Chart.Schema do
 
   @doc """
   The type a style site takes (spec/14 §3.6): a reference, an inline node, a field binding
-  `{:field, f}` whose value per datum names a style (#644), or a list of those.
+  `{:field, f}` whose value per datum names a style (#644), a generator call
+  `{:generate, name, args}` whose result is a style (§3.13, #654), or a list of those.
 
   Written once because five keys share it — `mark.style`, `label.style`, `mark_label.style`,
   `axis.style` and `legend.style` — and a sixth would otherwise be a sixth copy.
@@ -207,7 +208,7 @@ defmodule Visualize.Chart.Schema do
   """
   @spec style_stack() :: type()
   def style_stack do
-    entry = [{:ref, :style}, {:node, :style}, :field_ref]
+    entry = [{:ref, :style}, {:node, :style}, :generator, :field_ref]
     {:one_of, entry ++ [{:list, {:one_of, entry}}]}
   end
 
@@ -304,6 +305,8 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:ramp, v), do: match?({:ramp, name} when is_atom(name), v)
   # A reference is a name or an id; a field binding beside one is not it (#644).
   defp shape?({:ref, _}, {:field, _field}), do: false
+  defp shape?({:ref, _}, {:generate, _name, _args}), do: false
+  defp shape?(:generator, v), do: match?({:generate, _, _}, v)
   defp shape?(:colour_map, v), do: is_map(v) and not is_struct(v)
   # A theme's color: a colour, or the steps it pins of a name (spec/08 §7.1, #667).
   defp shape?(:theme_colour, _v), do: true

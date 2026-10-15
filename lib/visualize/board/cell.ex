@@ -71,6 +71,8 @@ defmodule Visualize.Board.Cell do
       size: Keyword.fetch!(opts, :size),
       theme: Keyword.fetch!(opts, :theme),
       system: Keyword.get(opts, :system, :as_posted),
+      generators: Keyword.get(opts, :generators, []),
+      assigns: Keyword.get(opts, :assigns, %{}),
       title: Keyword.get(opts, :title),
       stale_after: Keyword.get(opts, :stale_after),
       subscribers: Keyword.get(opts, :subscribers, []),

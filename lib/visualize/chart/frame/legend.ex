@@ -9,7 +9,7 @@ defmodule Visualize.Chart.Frame.Legend do
   alias Visualize.{Axis, Scale, Theme}
   alias Visualize.Chart.Frame
   alias Visualize.Chart.{Schema, Style, Text, Var}
-  alias Visualize.Chart.Style.Defaults
+  alias Visualize.Chart.Style.{Defaults, Generated}
   alias Visualize.IR.{Element, Transform}
 
   @swatch 12
@@ -98,11 +98,15 @@ defmodule Visualize.Chart.Frame.Legend do
   # frame's margin and the drawing cannot disagree.
   # The frame's styles, and the defaults its containers lay under the legend's style: the
   # part defaults alone, a legend being furniture (spec/14 §3.8).
-  defp styles(frame), do: {frame.styles, Defaults.at(frame, nil, nil)}
+  # A generator in the legend's style is resolved with no datum (spec/14 §3.13).
+  defp styles(frame) do
+    pick = Generated.pick(frame, [:frames, Map.get(frame, :name), :legend, :style])
+    {frame.styles, Defaults.at(frame, nil, nil), pick}
+  end
 
-  defp layout(node, scales, plot_width, {styles, base}, theme, mode) do
+  defp layout(node, scales, plot_width, {styles, base, pick}, theme, mode) do
     stack = Map.get(node, :style, Schema.default(:legend, :style))
-    style_node = Style.over(base, styles, stack)
+    style_node = Style.over(base, styles, stack, pick)
     style = Style.resolve(style_node, theme, mode)
     title = text(Map.get(node, :title, []))
     position = Map.get(node, :position, Schema.default(:legend, :position))
