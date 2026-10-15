@@ -294,7 +294,7 @@ defmodule Visualize.Chart.Builder.Chain do
       is_atom(value) ->
         resolved({:color, value}, theme)
 
-      Enum.all?(Typed.names(value), &(&1 in Theme.color_names(theme))) ->
+      Enum.all?(Typed.names(value), &Theme.color_name?(theme, &1)) ->
         Color.resolve(value, theme, :literal)
 
       true ->

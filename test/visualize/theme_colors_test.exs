@@ -35,6 +35,25 @@ defmodule Visualize.ThemeColorsTest do
     end
   end
 
+  # The membership test builds no list, and so may not drift from the list it stands for
+  # (#704, D-184): every name of every built-in theme's table, a theme's own name, and the
+  # words beside the table — a series past the theme's count, a palette name, a string.
+  test "color_name?/2 answers exactly color_names/1's membership" do
+    house = Theme.new(name: :house, colors: %{brand: "#123456"})
+
+    for theme <- [house | Enum.map([:default, :dark, :color_safe, :print], &Theme.builtin/1)] do
+      names = Theme.color_names(theme)
+      assert Enum.all?(names, &Theme.color_name?(theme, &1))
+
+      beside = [:"series_#{length(theme.series) + 1}", :series_0, :series_01, :thick, :nope]
+      refute Enum.any?(beside, &Theme.color_name?(theme, &1))
+      refute Theme.color_name?(theme, "red")
+    end
+
+    assert Theme.color_name?(house, :brand)
+    refute Theme.color_name?(Theme.default(), :brand)
+  end
+
   test "an entry may be a color value that resolves through the same table" do
     theme = Theme.new(colors: %{accent: color(:red), wash: {:intensity, color(:red), 0.5}})
     assert Color.resolve(color(:accent), theme, :css) == "var(--vis-accent, #c23238)"
