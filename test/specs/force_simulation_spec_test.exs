@@ -1,6 +1,6 @@
 defmodule Visualize.Specs.ForceSimulationTest do
   @moduledoc """
-  `Visualize.Specs.ForceSimulation` (spec/06 §9.4, spec/12 §5): the intended timer
+  `Visualize.Specs.ForceSimulation` (spec/06 §8.5, spec/12 §5): the intended timer
   discipline verifies exhaustively, and each defect the code shipped with is FOUND by the
   checker when its switch is flipped — a model that could not see the bugs would prove
   nothing about the fix.

@@ -1,6 +1,6 @@
 defmodule Visualize.Specs.ForceSimulation do
   @moduledoc """
-  The timer discipline of `Visualize.Layout.Force.Simulation` (spec/06 §9.4), as a model.
+  The timer discipline of `Visualize.Layout.Force.Simulation` (spec/06 §8.5), as a model.
 
   What is abstracted: nodes, links and forces are gone; `alpha` is a three-valued `heat`
   (`0` below `alpha_min`, `1` and `2` above) and `alpha_target` is `target_hot` (at or above

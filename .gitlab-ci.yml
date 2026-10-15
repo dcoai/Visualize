@@ -115,6 +115,15 @@ verify:headings:
   script:
     - mix vis.headings
 
+# Every spec/NN §id citation names a heading (spec/12 §3, #648).
+verify:citations:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: dev
+  script:
+    - mix vis.citations
+
 verify:models:
   extends: .elixir
   stage: verify
