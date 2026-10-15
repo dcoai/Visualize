@@ -80,7 +80,17 @@ defmodule Visualize.Chart.Validator do
   @type error :: {path(), reason()}
 
   @frame_anchors [:title, :subtitle, :caption]
-  @typed_colours [:color, :intensity, :alpha, :lighten, :darken, :saturate, :blend, :contrast]
+  @typed_colours [
+    :color,
+    :intensity,
+    :alpha,
+    :lighten,
+    :darken,
+    :saturate,
+    :shade,
+    :blend,
+    :contrast
+  ]
   # The plot's four corners and its centre (spec/14 §6.3, #489).
   @frame_points [:top_left, :top_right, :bottom_left, :bottom_right, :center]
   @not_names [nil, true, false]
@@ -403,7 +413,10 @@ defmodule Visualize.Chart.Validator do
          colors when is_map(colors) <- Map.get(map, :colors, %{}),
          styles when is_map(styles) and not is_struct(styles) <- Map.get(map, :styles, %{}),
          true <- Enum.all?(ramps, fn {_, v} -> is_list(v) and Enum.all?(v, &Colors.anchor?/1) end),
-         true <- Enum.all?(colors, fn {_, v} -> is_binary(v) or Visualize.Color.value?(v) end),
+         true <-
+           Enum.all?(colors, fn {_, v} ->
+             is_binary(v) or is_map(v) or Visualize.Color.value?(v)
+           end),
          true <- Enum.all?(styles, fn {_, v} -> is_map(v) and not is_struct(v) end),
          theme = Theme.build(Theme.default(), Colors.measured(map)),
          {:error, {kind, name}, message} <- Theme.check(theme) do
@@ -946,6 +959,12 @@ defmodule Visualize.Chart.Validator do
   defp check(:ramp, {:ramp, name}, path, _ctx) do
     if name in Theme.ramp_names(), do: [], else: [{path, {:type, :ramp}}]
   end
+
+  # A theme's color (spec/08 §7.1, #667): a colour, or the steps it pins of a name.
+  defp check(:theme_colour, map, path, _ctx) when is_map(map) and not is_struct(map),
+    do: Colors.steps(map, path)
+
+  defp check(:theme_colour, v, path, ctx), do: check(:colour, v, path, ctx)
 
   # A map of colours (spec/14 §4.3, D-143): each category's colour as a style takes one,
   # checked at the category's own path.

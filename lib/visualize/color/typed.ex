@@ -11,13 +11,23 @@ defmodule Visualize.Color.Typed do
 
   # The transforms that take a color and one number in `0..1`.
   @unary [:intensity, :alpha, :lighten, :darken, :saturate]
+  # Every transform of a color and one number: the five above, and `shade` on 0..1000.
+  @ops @unary ++ [:shade]
   @not_names [nil, true, false]
   # CSS's 100% chroma in `oklch()`: where `saturate` moves chroma toward.
   @full_chroma 0.4
+  # Where `shade` moves lightness toward, either side of its base (#667).
+  @near_white 0.97
+  @near_black 0.2
 
   @doc false
   @spec unary() :: [atom(), ...]
   def unary, do: @unary
+
+  @doc false
+  # Every transform of a color and one number, `shade` among them.
+  @spec ops() :: [atom(), ...]
+  def ops, do: @ops
 
   @doc false
   # Whether a term is a color value of spec/08 §1.9, its operands included.
@@ -26,6 +36,7 @@ defmodule Visualize.Color.Typed do
   def value?({:color, name}), do: name?(name)
   def value?({:series, i}), do: is_integer(i) and i >= 1
   def value?({:ramp, name, t}), do: name?(name) and unit?(t)
+  def value?({:shade, c, n}), do: value?(c) and is_number(n) and n >= 0 and n <= 1000
   def value?({op, c, t}) when op in @unary, do: value?(c) and unit?(t)
   def value?({:blend, [_ | _] = list}), do: Enum.all?(list, &value?/1)
   def value?({:contrast, :under}), do: true
@@ -37,14 +48,14 @@ defmodule Visualize.Color.Typed do
   # shorthand is read as, so a malformed one is reported as the colour it tries to be.
   @spec tagged?(term()) :: boolean()
   def tagged?(v) when is_tuple(v) and tuple_size(v) in [2, 3],
-    do: elem(v, 0) in [:color, :blend, :contrast | @unary]
+    do: elem(v, 0) in [:color, :blend, :contrast | @ops]
 
   def tagged?(_v), do: false
 
   @doc false
   # Whether a value is computed (a transform) rather than looked up.
   @spec transform?(term()) :: boolean()
-  def transform?({op, _c, _t}) when op in @unary, do: true
+  def transform?({op, _c, _t}) when op in @ops, do: true
   def transform?({:blend, _list}), do: true
   def transform?({:contrast, _c}), do: true
   def transform?(_value), do: false
@@ -54,7 +65,7 @@ defmodule Visualize.Color.Typed do
   # order: what the validator checks against the table (spec/14 §3.2).
   @spec names(term()) :: [atom()]
   def names({:color, name}), do: [name]
-  def names({op, c, _t}) when op in @unary, do: names(c)
+  def names({op, c, _t}) when op in @ops, do: names(c)
   def names({:blend, list}) when is_list(list), do: Enum.flat_map(list, &names/1)
   def names({:contrast, c}), do: names(c)
   def names(_other), do: []
@@ -69,7 +80,7 @@ defmodule Visualize.Color.Typed do
   end
 
   defp operands(v) when is_binary(v), do: [v]
-  defp operands({op, c, _t}) when op in @unary, do: operands(c)
+  defp operands({op, c, _t}) when op in @ops, do: operands(c)
   defp operands({:blend, list}) when is_list(list), do: Enum.flat_map(list, &operands/1)
   defp operands({:contrast, c}), do: operands(c)
   defp operands(_other), do: []
@@ -144,6 +155,18 @@ defmodule Visualize.Color.Typed do
   def compute({:saturate, c, t}, theme),
     do: polar(c, theme, fn {l, ch, h} -> {l, ch + (@full_chroma - ch) * t, h} end)
 
+  # A step the theme pins of a name is that color; any other is on the curve (#667).
+  def compute({:shade, c, n}, theme) do
+    case pinned(c, n, theme) do
+      nil ->
+        {toward, u, k} = curve(n)
+        polar(c, theme, fn {l, ch, h} -> {l + (toward - l) * u, ch * k, h} end)
+
+      literal ->
+        literal |> parsed!() |> oklab()
+    end
+  end
+
   def compute({:blend, list}, theme), do: blend(list, theme)
   def compute({:contrast, :under}, theme), do: theme |> Theme.ink(nil) |> parsed!() |> oklab()
   def compute({:contrast, c}, theme), do: c |> ink(theme) |> parsed!() |> oklab()
@@ -153,6 +176,21 @@ defmodule Visualize.Color.Typed do
     {lab, alpha} = compute(c, theme)
     {lab |> OK.to_lch() |> fun.() |> OK.from_lch(), alpha}
   end
+
+  @doc false
+  # The one curve of `shade/2` (spec/08 §1.9, #667), both modes': for step `n` in 0..1000,
+  # the lightness it moves toward (0.97, near white, below 500; 0.2, near black, above), the
+  # fraction `u = |n − 500| / 500` of the way it moves, and the factor `1 − u²` on chroma.
+  @spec curve(number()) :: {float(), float(), float()}
+  def curve(n) do
+    u = abs(n - 500) / 500
+    {if(n < 500, do: @near_white, else: @near_black), u, 1 - u * u}
+  end
+
+  # The step a theme pins of a name's scale, `nil` for a step it does not pin or a color
+  # that is not a name.
+  defp pinned({:color, name}, n, theme), do: Theme.step(theme, name, n)
+  defp pinned(_c, _n, _theme), do: nil
 
   # CSS Color 5's `color-mix` over any number of colours: weights normalized, OKLab averaged
   # with premultiplied alpha, and a sum of weights below 1 multiplying the alpha.
@@ -237,6 +275,21 @@ defmodule Visualize.Color.Typed do
 
   defp css({:saturate, c, t}, theme),
     do: "oklch(from #{css(c, theme)} l calc(c + (#{@full_chroma} - c) * #{num(t)}) h / alpha)"
+
+  defp css({:shade, c, n}, theme) do
+    case {pinned(c, n, theme), c} do
+      _base when n == 500 ->
+        css(c, theme)
+
+      {nil, _c} ->
+        {toward, u, k} = curve(n)
+        sign = if toward > 0.5, do: "l + (#{num(toward)} - l)", else: "l - (l - #{num(toward)})"
+        "oklch(from #{css(c, theme)} calc(#{sign} * #{num(u)}) calc(c * #{num(k)}) h / alpha)"
+
+      {literal, {:color, name}} ->
+        "var(--vis-#{name |> Atom.to_string() |> String.replace("_", "-")}-#{n}, #{literal})"
+    end
+  end
 
   defp css({:blend, list}, theme) do
     weighted =

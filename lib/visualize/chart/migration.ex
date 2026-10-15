@@ -207,6 +207,9 @@ defmodule Visualize.Chart.Migration do
 
   defp value(:text, parts, true) when is_list(parts), do: Text.unparse(parts)
   defp value(:colour, v, _text?), do: colour(v)
+  # A theme's pinned steps are colour strings as they are (#667).
+  defp value(:theme_colour, v, _text?) when is_map(v) and not is_struct(v), do: v
+  defp value(:theme_colour, v, _text?), do: colour(v)
 
   defp value(:colour_map, v, _text?) when is_map(v) and not is_struct(v),
     do: Map.new(v, fn {category, c} -> {category, colour(c)} end)
@@ -231,7 +234,7 @@ defmodule Visualize.Chart.Migration do
   # A colour position holds a typed color (spec/14 §3.2, #664, D-173): a bare atom is the
   # name it can only mean there, `:contrast` the ink over what is under, and a transform's
   # operands are colours too. `:none` is the one bare word a paint's place keeps.
-  @unary Visualize.Color.Typed.unary()
+  @unary Visualize.Color.Typed.ops()
 
   defp colour(:none), do: :none
   defp colour(:contrast), do: {:contrast, :under}

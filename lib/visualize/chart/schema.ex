@@ -297,6 +297,8 @@ defmodule Visualize.Chart.Schema do
   # A reference is a name or an id; a field binding beside one is not it (#644).
   defp shape?({:ref, _}, {:field, _field}), do: false
   defp shape?(:colour_map, v), do: is_map(v) and not is_struct(v)
+  # A theme's color: a colour, or the steps it pins of a name (spec/08 §7.1, #667).
+  defp shape?(:theme_colour, _v), do: true
   # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
   defp shape?({:enum, _}, v), do: is_atom(v)
   # A name is an atom, so a string beside one is read as the string it is (D-170).
@@ -446,7 +448,7 @@ defmodule Visualize.Chart.Schema do
       # roles' colors among it (§7.1, #663); an inline theme names only what it changes, the
       # rest the default's.
       spec(:ramps, {:map, {:list, :colour}}, :style, default: theme.ramps),
-      spec(:colors, {:map, :colour}, :style, default: theme.colors),
+      spec(:colors, {:map, :theme_colour}, :style, default: theme.colors),
       # The style palette, a palette name to its entry (spec/08 §7.7, spec/14 §2.5, #637):
       # an inline theme names only the entries it changes, the rest the default's.
       spec(:styles, {:map, style_entry()}, :style, default: theme.styles),

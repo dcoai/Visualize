@@ -43,6 +43,16 @@ defmodule Visualize.Chart.Validator.Colors do
     end)
   end
 
+  @doc false
+  # A theme's pinned steps (spec/08 §7.1, #667): integer steps to colour strings, whose
+  # meaning — 500 among them, each in 0..1000, each a colour — the theme's contract holds.
+  @spec steps(map(), list()) :: [{list(), term()}]
+  def steps(map, path) do
+    if Enum.all?(map, fn {n, c} -> is_integer(n) and is_binary(c) end),
+      do: [],
+      else: [{path, {:type, :theme_colour}}]
+  end
+
   defp undeclared(_value, _path, :unknown), do: []
 
   defp undeclared(value, path, names) do

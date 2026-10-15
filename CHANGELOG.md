@@ -17,6 +17,14 @@ release it merely follows.
 
 ### Added
 
+- **`shade(c, n)`, a color's tints and shades by step** (#667, D-173). `Visualize.Color.shade/2`
+  takes a step from 0 to 1000 in the designers' convention: 500 is the color, 0 near white and
+  1000 near black. For example, `shade(color(:red), 100)` is a pale red background and
+  `shade(color(:red), 700)` a dark red border. Steps are computed in OKLCH on one curve that keeps
+  the hue and eases the chroma toward the ends. A theme may pin steps from a brand's tokens with
+  `colors: %{red: %{500 => "#d62728", 100 => "#fde8e8"}}`. A pinned step is its own custom
+  property (`--vis-red-100`), which `stylesheet/1` declares, and in JSON pinned steps are
+  `{"$steps": [[100, "#fde8e8"], [500, "#d62728"]]}`.
 - **Color transforms follow a stylesheet's theme switch** (#665, D-173). On the SVG backend
   (`:css` mode), a transform is written as the CSS that computes it rather than a fixed literal:
   `intensity` and `blend` as `color-mix(in oklab, …)`, and `alpha`, `lighten`, `darken` and

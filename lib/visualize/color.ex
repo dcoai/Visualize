@@ -683,7 +683,7 @@ defmodule Visualize.Color do
           | {:color, atom()}
           | {:series, pos_integer()}
           | {:ramp, atom(), number()}
-          | {:intensity | :alpha | :lighten | :darken | :saturate, value(), number()}
+          | {:intensity | :alpha | :lighten | :darken | :saturate | :shade, value(), number()}
           | {:blend, [value(), ...]}
           | {:contrast, value() | :under}
 
@@ -807,6 +807,29 @@ defmodule Visualize.Color do
   @spec contrast(value()) :: value()
   def contrast(c) do
     if Typed.value?(c), do: {:contrast, c}, else: raise(ArgumentError, operand(:contrast, c))
+  end
+
+  @doc """
+  The step `n` of `c`'s scale, `n` in `0..1000` as designers number them (spec/08 §1.9):
+  500 is `c`, 0 near white and 1000 near black, on one OKLCH curve that keeps the hue and
+  eases the chroma toward the ends. A step the theme pins of a name is the pinned color.
+
+      iex> Visualize.Color.color(:red) |> Visualize.Color.shade(100)
+      {:shade, {:color, :red}, 100}
+
+  """
+  @spec shade(value(), number()) :: value()
+  def shade(c, n) do
+    cond do
+      not Typed.value?(c) ->
+        raise ArgumentError, operand(:shade, c)
+
+      not (is_number(n) and n >= 0 and n <= 1000) ->
+        raise ArgumentError, "shade: a step in 0..1000, got: #{inspect(n)}"
+
+      true ->
+        {:shade, c, n}
+    end
   end
 
   @doc """
