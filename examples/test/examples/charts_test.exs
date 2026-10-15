@@ -62,7 +62,10 @@ defmodule Examples.ChartsTest do
     Examples.Charts.WorldMap,
     Examples.Charts.DayNightGps,
     Examples.Charts.Globe,
-    Examples.Charts.GpsTrack
+    Examples.Charts.GpsTrack,
+    # The style grammar of 0.7.0 (#705).
+    Examples.Charts.ColorsChart,
+    Examples.Charts.PaintsChart
   ]
 
   # Converted and deterministic: these hold the golden.
@@ -101,7 +104,9 @@ defmodule Examples.ChartsTest do
     Examples.Charts.Globe,
     Examples.Charts.GpsTrack,
     Examples.Charts.HexbinChart,
-    Examples.Charts.SpectrumChart
+    Examples.Charts.SpectrumChart,
+    Examples.Charts.ColorsChart,
+    Examples.Charts.PaintsChart
   ]
 
   # Converted, but asserted on rather than recorded: seeded at compile time, or — the
@@ -353,10 +358,21 @@ defmodule Examples.ChartsTest do
     end
   end
 
+  # The charts that color by names of the theme's table — `color(:blue)`, `color(:info)` —
+  # rather than by its series (#705): a palette that changes only the series leaves a name
+  # as it is, so these recolor under a theme that changes the names, the dark one.
+  @named_colors [Examples.Charts.ColorsChart, Examples.Charts.PaintsChart]
+
   test "the palette option is the theme, so every chart recolors" do
-    for module <- charts() do
+    for module <- charts() -- @named_colors do
       assert module.render(palette: :sunrise) =~ "#ffd098"
       refute module.render(palette: :sunrise) =~ "#3b6fa8"
+    end
+
+    for module <- @named_colors do
+      assert module.render([]) =~ "#3b6fa8"
+      assert module.render(palette: :dark) =~ "#7fb3e6"
+      refute module.render(palette: :dark) =~ "#3b6fa8"
     end
   end
 

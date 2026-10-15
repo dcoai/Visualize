@@ -17,6 +17,15 @@ release it merely follows.
 
 ### Added
 
+- **The examples app shows this release's colors and paints** (#705). Two gallery charts
+  are written in the new grammar, as references to copy: *Colors* (`/chart/colors`) draws
+  `color(:blue)` through `intensity`, `lighten`, `darken`, `blend` and `alpha`, a role, a
+  ramp position and a CSS name, each tile's text in the `contrast()` ink, and the steps
+  of `shade(color(:red), n)`; its page shows automatic dark mode — the design under no
+  theme beside `color_scheme: false`, with a switch to preview either scheme. *Paints*
+  (`/chart/paints`) draws in-place linear and radial gradients, a crosshatch in `pt`
+  sizes, a shadow and translucent paints, on SVG and on the canvas.
+
 - **The builder makes every style stack entry and explains an element's look** (#686,
   D-178). The style stack panel adds, beside a name, a `{:field, f}` entry from the site's
   data columns (**+ field**) and a `generate(name, args)` entry from the generators the
