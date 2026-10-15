@@ -102,6 +102,7 @@ A colour value reaches the SVG backend already resolved for `:css` (spec/08 §1.
 |---|---|---|
 | `:fill`, `:stroke` | `:none` | `"none"` |
 | `:fill`, `:stroke` | `:current_color` | `"currentColor"` |
+| `:fill`, `:stroke` | a `Visualize.IR.Paint` (spec/02 §2.1) | `"url(#<id>)"`, in either mode: the gradient is the `:defs` element the producer wrote under that id (#652) |
 | `:text_anchor` | `:start`, `:middle`, `:end` | `"start"`, `"middle"`, `"end"` |
 | `:stroke_linecap`, `:stroke_linejoin` | any atom | `Atom.to_string/1` |
 | `:dominant_baseline` | any atom | `Atom.to_string/1` |
@@ -176,7 +177,7 @@ Each element produces, in order, its *setup* (transform commands per 3.3.4, then
 | `:rect` | T, S, `{:beginPath, []}`, `{:rect, [x, y, width, height]}`, A — `attrs` MUST contain `:x`, `:y`, `:width`, `:height` |
 | `:circle` | T, S, `{:beginPath, []}`, `{:arc, [cx, cy, r, 0, 2π]}`, A — `attrs` MUST contain `:cx`, `:cy`, `:r` |
 | `:ellipse` | T, S, `{:beginPath, []}`, `{:ellipse, [cx, cy, rx, ry, 0, 0, 2π]}`, A |
-| `:line` | T, S, `{:beginPath, []}`, `{:moveTo, [x1, y1]}`, `{:lineTo, [x2, y2]}`, `{:stroke, []}` — always stroked regardless of style |
+| `:line` | T, S, `{:beginPath, []}`, `{:moveTo, [x1, y1]}`, `{:lineTo, [x2, y2]}`, `{:stroke, []}` — always stroked regardless of style, a paint stroke drawn as below |
 | `:polyline` | T, S, `{:beginPath, []}`, `moveTo` first point then `lineTo` each remaining point, A; no commands for an empty or missing `points` list |
 | `:polygon` | as `:polyline` plus `{:closePath, []}` after the last `lineTo` |
 | `:text` | T, text style (3.3.3), `{:fillText, [content or "", x, y]}` with `x`/`y` from attrs defaulting to `0` |
@@ -219,6 +220,20 @@ Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outp
 
 `style_apply_commands/1` emits `{:fill, []}` when `:fill` is present and not `:none`, then `{:stroke, []}` when `:stroke` is present and not `:none`.
 
+**A paint is drawn, not set** (#652, D-175). A `:fill` or `:stroke` that is a `Visualize.IR.Paint` (spec/02 §2.1) emits no `set_fillStyle`/`set_strokeStyle` in the setup: a canvas gradient lives in absolute coordinates, so it is built for each element over that element's own box, SVG's `objectBoundingBox`, where the element is drawn. Where the *effective* style (own over the groups', 3.3.1) holds a paint, the `{:fill, []}` or `{:stroke, []}` of the apply commands is replaced by the paint's draw, taken over the element's tight bounding box `{x, y, w, h}` (`Visualize.IR.Paint.bounds/1`) and wrapped in `{:save, []}` … `{:restore, []}`, so the gradient never becomes the state a later sibling inherits:
+
+| Paint | Fill | Stroke |
+|---|---|---|
+| `:linear` `x1 y1 x2 y2` | `{:linearGradient, ["fill", x0, y0, x1', y1', stops]}`, `{:fill, []}` | the same with `"stroke"` and `{:stroke, []}` |
+| `:radial` `cx cy r` | `{:transform, [w, 0, 0, h, x, y]}`, `{:radialGradient, ["fill", cx, cy, r, stops]}`, `{:fill, []}` | `{:radialGradient, ["stroke", x + cx·w, y + cy·h, r·√(w·h), stops]}`, `{:stroke, []}` |
+
+- **A linear gradient is mapped exactly.** In box units the gradient's value at a point `u` is `t = ((u − u₁)·d) / (d·d)` with `d = u₂ − u₁`; the box maps `u` to the user point `p = (x + uₓ·w, y + u_y·h)`, an affine map, so `t` is affine in `p` too and its isolines stay parallel — SVG's skew on a box that is not square included. Its gradient in user units is `g = (dₓ/w, d_y/h) / (d·d)`, so the canvas gradient runs from `P₀ = (x + x1·w, y + y1·h)`, where `t = 0`, to `P₁ = P₀ + g / |g|²`, where `t = 1`: `x0 y0 x1' y1'` above.
+- **A radial fill is drawn in box units.** A radial gradient in `objectBoundingBox` units is an ellipse on a box that is not square, which no `createRadialGradient` is; but the fill takes its paint in the transform current when `fill()` runs, and the path was fixed in user units when it was built, so the box transform set between the two draws the ellipse exactly. **A radial stroke is the one approximation:** the same transform would scale the line's width unevenly, so a stroke is drawn with the circle of the same area, centred where the ellipse is — exact on a square box.
+- **A box without area draws nothing.** SVG renders no `objectBoundingBox` paint on an element whose box has no width or no height — an axis-aligned line, a flat path — so neither does a canvas: the fill or stroke is left out.
+- `stops` is a list `[[at, colour], …]` in `at` order, each colour the stop's resolved through `Visualize.Color.parse/1` with the stop's opacity multiplied into its alpha, written `rgba(r,g,b,a)`; a colour it cannot read is opaque black, as a binary colour is (4.6).
+- `linearGradient` and `radialGradient` are, with `nonScalingLineWidth`, the commands that name no Canvas 2D method: each sets `<target>Style` to the gradient `createLinearGradient(x0, y0, x1, y1)` or `createRadialGradient(cx, cy, 0, cx, cy, r)` builds, its focus its centre, with `addColorStop(at, colour)` for each stop.
+- **A text filled with a paint takes its first stop's colour** (`set_fillStyle`), the one fallback left: the server cannot measure a text's box, and a canvas text is rare — a compiled chart draws its texts as SVG (spec/14 §12.3).
+
 **An absent fill is not `:none`** (#487, D-122). An element with no `:fill` in its own style or any group's above it fills nothing here, while the SVG backend writes no `fill` attribute and the SVG initial value, black, paints it: the two backends agree on `:none` and disagree on absence. Neither backend papers over it — the IR is the caller's, and a hand-built SVG path relies on the initial value — so a producer that must draw the same on both says `:none`. The declarative layer does: a mark element whose colour reading is missing carries `fill: :none` (spec/14 §3.4).
 
 
@@ -242,11 +257,11 @@ A `nil` transform or one with no operations emits nothing. Otherwise one command
 
 ### 3.4 JavaScript serialisation
 
-Each command becomes one statement. `set_*` commands become property assignments (`ctx.fillStyle = 'red';`, `ctx.lineWidth = 2;`, `ctx.globalAlpha = 0.5;`, `ctx.font = '12px serif';`, `ctx.textAlign = 'center';`). `beginPath`, `closePath`, `fill`, `stroke`, `save`, `restore` become the parameterless call. `moveTo`, `lineTo`, `bezierCurveTo`, `quadraticCurveTo`, `arc`, `ellipse`, `rect`, `translate`, `rotate`, `scale`, `transform` become the same-named call with formatted (1.3) arguments separated by `, `; a boolean argument prints as `true`/`false`. `rotate_around` becomes `ctx.translate(cx, cy); ctx.rotate(a); ctx.translate(-cx, -cy);`. `nonScalingLineWidth` becomes `ctx.lineWidth = w / (function(t){return Math.sqrt(Math.abs(t.a*t.d-t.b*t.c));})(ctx.getTransform());`. `{:clip, []}` becomes `ctx.clip();` and `{:clip, ["evenodd"]}` `ctx.clip('evenodd');`. `fillText` becomes `ctx.fillText('text', x, y);` with `\`, `'` and newline escaped in the text. `drawImage` becomes an immediately-invoked function that creates an `Image`, captures `ctx.getTransform()`, and in `onload` saves the context, restores that transform, calls `ctx.drawImage(img, x, y, w, h)` and restores — the load is asynchronous, the draw lands where the statement ran. No command is emitted as a comment (D-37); a command tuple the serialiser does not know raises `FunctionClauseError`.
+Each command becomes one statement. `set_*` commands become property assignments (`ctx.fillStyle = 'red';`, `ctx.lineWidth = 2;`, `ctx.globalAlpha = 0.5;`, `ctx.font = '12px serif';`, `ctx.textAlign = 'center';`). `beginPath`, `closePath`, `fill`, `stroke`, `save`, `restore` become the parameterless call. `moveTo`, `lineTo`, `bezierCurveTo`, `quadraticCurveTo`, `arc`, `ellipse`, `rect`, `translate`, `rotate`, `scale`, `transform` become the same-named call with formatted (1.3) arguments separated by `, `; a boolean argument prints as `true`/`false`. `rotate_around` becomes `ctx.translate(cx, cy); ctx.rotate(a); ctx.translate(-cx, -cy);`. `nonScalingLineWidth` becomes `ctx.lineWidth = w / (function(t){return Math.sqrt(Math.abs(t.a*t.d-t.b*t.c));})(ctx.getTransform());`. `linearGradient` becomes `ctx.fillStyle = (function(g){g.addColorStop(at, 'colour'); …; return g;})(ctx.createLinearGradient(x0, y0, x1, y1));` — `strokeStyle` for a `"stroke"` target, one `addColorStop` per stop — and `radialGradient` the same around `ctx.createRadialGradient(cx, cy, 0, cx, cy, r)` (3.3.3, #652). `{:clip, []}` becomes `ctx.clip();` and `{:clip, ["evenodd"]}` `ctx.clip('evenodd');`. `fillText` becomes `ctx.fillText('text', x, y);` with `\`, `'` and newline escaped in the text. `drawImage` becomes an immediately-invoked function that creates an `Image`, captures `ctx.getTransform()`, and in `onload` saves the context, restores that transform, calls `ctx.drawImage(img, x, y, w, h)` and restores — the load is asynchronous, the draw lands where the statement ran. No command is emitted as a comment (D-37); a command tuple the serialiser does not know raises `FunctionClauseError`.
 
 ### 3.5 JSON serialisation
 
-The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<name>","args":[<values>]}` with the command atom's name as the string. Values: binaries are quoted with `\`, `"`, newline, carriage return and tab escaped; numbers are formatted per 1.3; `true`/`false` are the JSON literals; other atoms are quoted names; anything else is quoted `to_string/1`. No whitespace is emitted.
+The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<name>","args":[<values>]}` with the command atom's name as the string. Values: binaries are quoted with `\`, `"`, newline, carriage return and tab escaped; numbers are formatted per 1.3; `true`/`false` are the JSON literals; a list is a JSON array of its values (a gradient's stops, 3.3.3); other atoms are quoted names; anything else is quoted `to_string/1`. No whitespace is emitted.
 
 ### 3.6 Root wrapper
 
@@ -268,7 +283,7 @@ The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<n
 | `Visualize.Backend.CanvasBinary.encode_element!/1` | `encode_element!(element, [])`. |
 | `Visualize.Backend.CanvasBinary.encode_element!/2` | As `encode_element/2` but returns the binary directly and raises `RuntimeError` when Nx is absent. |
 | `Visualize.Backend.CanvasBinary.to_base64/1` | Standard Base64 (`Base.encode64/1`, padded) of a binary, for embedding in an HTML attribute or a LiveView event payload. |
-| `Visualize.Backend.CanvasBinary.Decoder.decode/1` | The reference decoder (#270): the records of a stream in order — the path records with their commands, `circles`, `rects`, `style` (with `non_scaling: true` when bit 4 is set, §4.3.5), `transform`, `save`/`restore`/`fill`/`stroke`, and the `0x60` records of §5 as `{:incremental, mode, dx, dy, viewport, regions}` and `{:full_redraw, viewport, records}` with the viewport as `{x, y, w, h}` — written against the record layouts this section states, not against the encoder, so `decode(encode(x))` is a round trip (D-36). Raises on an unknown opcode or a truncated record. It is the executing guard a consumer runs over its own streams under test; the JavaScript executor of spec/10 §12 reads the same layouts. |
+| `Visualize.Backend.CanvasBinary.Decoder.decode/1` | The reference decoder (#270): the records of a stream in order — the path records with their commands, `circles`, `rects`, `style` (with `non_scaling: true` when bit 4 is set and `fill_paint:`/`stroke_paint:` with the index when bit 5 or 6 is, §4.3.5), `transform`, the version 2 records `{:version, v}`, `{:paint, index, paint}` and `{:box, {x, y, w, h}}` (§4.3.11–4.3.13), `save`/`restore`/`fill`/`stroke`, and the `0x60` records of §5 as `{:incremental, mode, dx, dy, viewport, regions}` and `{:full_redraw, viewport, records}` with the viewport as `{x, y, w, h}` — written against the record layouts this section states, not against the encoder, so `decode(encode(x))` is a round trip (D-36). Raises on an unknown opcode or a truncated record. It is the executing guard a consumer runs over its own streams under test; the JavaScript executor of spec/10 §12 reads the same layouts. |
 | `Visualize.Backend.CanvasBinary.Decoder.decode_path/1` | The one path record of a stream as a `Visualize.IR.Path`. |
 
 ### 4.2 Stream model and opcodes
@@ -292,6 +307,11 @@ Opcodes (`Visualize.Backend.CanvasBinary.Opcodes`, internal macros so they can a
 | `restore` | `0x31` | `ctx.restore()` |
 | `fill` | `0x40` | `ctx.fill()` on the current path |
 | `stroke` | `0x41` | `ctx.stroke()` on the current path |
+| `version` | `0x00` | The stream's version, version 2 and later (4.3.11) |
+| `paint` | `0x50` | A paint defined for the stream, version 2 (4.3.12) |
+| `box` | `0x51` | The box the next draw's paint is built over, version 2 (4.3.13) |
+
+**Stream versions** (#652, D-175). The records above `version` are **version 1**, the stream as it was before paints. **Version 2** adds `version`, `paint` and `box`, and bits 5 and 6 of the style record. A stream that uses none of them is a version 1 stream, byte for byte the same as before, and the encoder writes it so: only a stream that draws a paint carries the version 2 records, and it begins with the record `0x00 0x02`. So a version 1 decoder — a page still running an older hook — reads every stream it could read before, and on a version 2 stream it throws at the first byte, an unknown opcode `0x00`, rather than drawing a gradient as black; a version 2 decoder reads both. A stream is still a concatenation of records with no header: two streams concatenated, as `render_scene/2` does (3.2), are one stream, each part declaring its own version and defining its own paints before it uses them. A `version` record may stand anywhere and states the version of the records after it; a decoder MUST refuse a version it does not know.
 
 No other opcode is defined by this module. `0x60` is defined by `Visualize.Backend.CanvasIncremental` (section 5) and encloses streams of these records. The module's doc comment carries the same table, and `test/visualize/backend/canvas_binary_test.exs` holds it to `Opcodes`. `test/support/canvas_binary_decoder.ex` is a decoder written from this section, not from the encoder, and the same test file proves `decode(encode(path))` over random paths (D-36).
 
@@ -364,6 +384,10 @@ The encoders always write `count = 1`; the decoder begins one path holding every
 | 2 | `0x04` | stroke width, little-endian f32 | 4 |
 | 3 | `0x08` | global alpha 0–1, little-endian f32 | 4 |
 | 4 | `0x10` | the stroke width does not scale: set only with bit 2 (spec/14 §3.9, #651); the reader divides the width by `√|a·d − b·c|` of the transform current when it reads the record | 0 |
+| 5 | `0x20` | version 2: the fill is the paint of this index, `index:u16` (4.3.12); never set with bit 0 | 2 |
+| 6 | `0x40` | version 2: the stroke is the paint of this index, `index:u16`; never set with bit 1 | 2 |
+
+The two paint fields follow the four of version 1, so a version 1 record reads exactly as it did. A reader keeps the fill and the stroke as state that `save` and `restore` scope as they scope the context: a fill colour (bit 0) replaces a fill paint and a fill paint (bit 5) a fill colour, and likewise for the stroke. A `fill` or `stroke` record drawn while a paint is the fill or the stroke draws that paint over the box of the last `box` record (4.3.13), as 3.3.3 draws it.
 
 Alpha `a` is 0–255. The IR encoder emits a style record whenever `element.style` is non-empty, even if it sets no flags; the SVG encoder (4.7) omits the record when `flags` would be `0`. The SVG encoder never sets bit 3.
 
@@ -418,6 +442,38 @@ The `path_cubic` record of 4.3.2 with every f64 argument a little-endian f32: th
 
 The path `M x0,y0` followed by `count` absolute cubic curves `C x1,y1 x2,y2 x,y`, every coordinate a little-endian f32 and no sub-opcode per curve: `1 + 4 + 8 + 24·count` bytes, against `5 + 9 + 25·count` for the same path as `path_cubic32` and `5 + 9 + 49·count` as `path_cubic`. It is the shape the cubic curve generators of spec/04 §5 emit — `Visualize.Shape.Curve.monotone_x/1`, `monotone_y/1`, `cardinal/2`, `catmull_rom/2` and `natural/1` produce one `M` then `C`s and nothing else — so a curved line mark is one run. `basis/1` is the one cubic generator that is not: it opens with an `L` to its first control point and closes with an `L` to the last point, so a basis curve stays a command stream (4.3.9), one byte per curve larger than a run. The decoder MUST begin a path, `moveTo` the start point and `bezierCurveTo` each curve in order, leaving the path open; it MUST accept any `count`, though the encoder writes the record only for one curve or more (4.5). There is no f64 form: under `precision: :f64` the same path is a `path_cubic` record (D-74).
 
+#### 4.3.11 `version` (0x00)
+
+```
+0x00  version:u8
+```
+
+The version of the records that follow (4.2): `2` is the one the encoder writes, first in a stream that draws a paint. A decoder MUST raise on a version it does not know; the reference decoder knows `1` and `2`.
+
+#### 4.3.12 `paint` (0x50)
+
+```
+0x50  index:u16  kind:u8  geometry  count:u8  stop₀ … stop(count-1)
+stop = at:f32 r:u8 g:u8 b:u8 a:u8
+```
+
+Defines the paint `index` for the rest of the stream, replacing any earlier paint of that index. The geometry is in box units (spec/02 §2.1), every value a little-endian f32:
+
+| `kind` | Paint | Geometry | Bytes |
+|---|---|---|---|
+| `0x01` | linear gradient | `x1 y1 x2 y2` | 16 |
+| `0x02` | radial gradient, focus at the centre | `cx cy r` | 12 |
+
+A stop is its offset `at` from 0 to 1 and its colour as RGBA bytes, the stop's opacity multiplied into the alpha (4.6), in `at` order: `5 + 1 + geometry + 1 + 8·count` bytes in all. The encoder writes each distinct paint of the tree once, after the `version` record and before every other record, indexed from `0` in the order the tree first uses them (D-175) — so a hundred bars of one gradient carry it once and refer to it by two bytes each — and a paint the stream draws is always defined before the record that refers to it.
+
+#### 4.3.13 `box` (0x51)
+
+```
+0x51  x:f32  y:f32  w:f32  h:f32
+```
+
+The bounding box, in the element's user units, of the element whose draw records follow: `Visualize.IR.Paint.bounds/1` of the element, its tight box (spec/02 §2.1). A reader builds the fill's or the stroke's paint over it when a `fill` or `stroke` record draws one (3.3.3: a linear gradient mapped into user units, a radial fill under the box transform, a radial stroke as the circle of the same area, nothing on a box without area), saving and restoring the context around the draw so the gradient is never state. The encoder writes it after the geometry record and before the draw records of every element whose effective fill or stroke is a paint, and nowhere else.
+
 ### 4.4 Encoding IR elements
 
 `encode_element/1` on an `IR.Element` writes, per type:
@@ -430,6 +486,8 @@ The path `M x0,y0` followed by `count` absolute cubic curves `C x1,y1 x2,y2 x,y`
 | `:group` | `save`, transform (if any), style (if the style map is non-empty — it sets the state the children draw in, scoped by the `save`/`restore`), each child's records, `restore` (#231) |
 | `:root` | each child's records, nothing else |
 | any other type | nothing (zero bytes) |
+
+**Paints** (#652, D-175). When any `:fill` or `:stroke` in the tree's styles is a `Visualize.IR.Paint`, the stream begins with `version` 2 and one `paint` record per distinct paint (4.3.11, 4.3.12); a style that holds a paint sets bit 5 or 6 with the paint's index in place of the RGBA field; and every element whose effective fill or stroke is a paint gets a `box` record between its geometry and its draw records (4.3.13). An element drawn as the path it is — a `:line`, `:ellipse`, `:polyline`, `:polygon` — takes the box of the shape it was.
 
 An element's `clip` (spec/02 §2.1) has no record: the element is encoded as it is, unclipped, so an inside or outside stroke (spec/14 §5.6) draws single on the binary stream. The geometric types that are not paths are encoded **as the path they are** (#269): a `:line` as `M x1 y1 L x2 y2`; a `:polyline` as a move to its first point and a line to each of the rest; a `:polygon` the same, closed; an `:ellipse` as four cubic Bézier quarter-arcs about its centre with the control distance κ = 0.5522847 of each radius, closed — each with the element's style and transform as a `:path` gets them, through the same record and form selection (§4.5), so a `:line` is byte for byte the two-point `Visualize.IR.Path` with the same style. Elements of type `:text`, `:title`, `:desc`, `:style`, `:image`, `:defs`, `:clip_path`, gradients, filters and `:stop` are dropped from the binary stream, and a `:blend` or an `:effect` in a style has no record. A basemap's tiles (spec/14 §5.2, #475) are `:image` elements and are dropped with them, and the stream has no image record (D-120): a compiled chart draws the tiles as SVG in a backdrop the page stacks beneath the canvas (spec/14 §12.3, §12.4, #476), so a canvas track sits over them with nothing in the stream to fetch, order or wait for. Text has no binary representation by design; before #269 the four geometric types above were dropped silently as well, so an axis's tick lines drew nothing on a binary canvas.
 
@@ -447,7 +505,7 @@ The default is f32 because the stream carries canvas coordinates, which are pixe
 
 ### 4.6 Colour parsing (IR encoder)
 
-A binary style colour is parsed by `Visualize.Color.parse/1` (spec/08) and written as `Visualize.Color.to_rgba/1` gives it, the opacity scaled to 0–255 and rounded: every syntax that function accepts — `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()` with any decimal alpha, `hsl()`, `hsla()` and the CSS colour names — resolves; a binary it cannot parse and any non-binary value (`:current_color` included) yields opaque black `{0, 0, 0, 255}` (D-36).
+A binary style colour is parsed by `Visualize.Color.parse/1` (spec/08) and written as `Visualize.Color.to_rgba/1` gives it, the opacity scaled to 0–255 and rounded: every syntax that function accepts — `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()` with any decimal alpha, `hsl()`, `hsla()` and the CSS colour names — resolves; a binary it cannot parse and any non-binary value (`:current_color` included) yields opaque black `{0, 0, 0, 255}` (D-36). A `Visualize.IR.Paint` is not a colour: it is written as a reference to its `paint` record (4.4), and each of its stops is parsed by this rule with the stop's opacity multiplied into the alpha.
 
 ### 4.7 Encoding SVG elements (`Visualize.Backend.CanvasBinary.SVG`)
 
@@ -518,7 +576,7 @@ Regions with zero or negative width or height are removed. The function does not
 - `dx`, `dy`: the offset as little-endian f32.
 - `vx`, `vy`, `vw`, `vh`: the viewport — the rectangle of the canvas that scrolls — as little-endian f32 (D-106, #294). `encode_incremental/4` writes its `viewport:` option, `{0, 0, width, height}` when the caller gives none.
 - `region_count`: `length(region_elements)`, 0–3. `encode_incremental/4` raises `ArgumentError` for more than three regions — `exposed_regions/2` never yields more than two, and the byte is never written unchecked (D-38).
-- Each region: `x:f32 y:f32 w:f32 h:f32 data_length:u32 data`, where `data` is `CanvasBinary.encode_element!/1` of the element and `data_length = byte_size(data)`.
+- Each region: `x:f32 y:f32 w:f32 h:f32 data_length:u32 data`, where `data` is `CanvasBinary.encode_element!/1` of the element and `data_length = byte_size(data)`. Each region's `data` is a whole stream, so one that draws a paint carries its own `version` and `paint` records (4.2): a decoder replays it with no state from the regions before it.
 
 The decoder MUST copy the viewport's pixels alone, shifted by `(−dx, −dy)` and clipped to the viewport, then clear and replay each region's stream clipped to its bounds. A pixel outside the viewport is never touched by a scroll frame (D-106): the High-Performance page's plot scrolls inside a margin that holds the axes, and a copy of the whole canvas carried the plot's leftmost columns into that margin every frame, where nothing cleared them — the y axis disappeared under the smear of everything that had scrolled off the plot (#294).
 

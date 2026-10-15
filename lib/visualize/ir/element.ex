@@ -65,8 +65,8 @@ defmodule Visualize.IR.Element do
           | :style
 
   @type style :: %{
-          optional(:fill) => String.t() | :none | :current_color,
-          optional(:stroke) => String.t() | :none | :current_color,
+          optional(:fill) => String.t() | :none | :current_color | Visualize.IR.Paint.t(),
+          optional(:stroke) => String.t() | :none | :current_color | Visualize.IR.Paint.t(),
           optional(:stroke_width) => number(),
           optional(:stroke_linecap) => :butt | :round | :square,
           optional(:stroke_linejoin) => :miter | :round | :bevel,

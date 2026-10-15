@@ -114,6 +114,41 @@ defmodule Visualize.Hooks.CanvasBinary do
       ctx.ellipse(cx, cy, rx, ry, phi, theta1, theta1 + dtheta, fS === 0);
     }
 
+    // A gradient as ctx[target + 'Style'] (spec/10 §8.1, #652): a linear one from
+    // [x0, y0, x1, y1], a radial one [cx, cy, r] about its focus at its centre, with one
+    // addColorStop per [at, colour].
+    export function visualizeGradient(ctx, target, kind, g, stops) {
+      const gradient = kind === 'linear' ?
+        ctx.createLinearGradient(g[0], g[1], g[2], g[3]) :
+        ctx.createRadialGradient(g[0], g[1], 0, g[0], g[1], g[2]);
+      stops.forEach(([at, colour]) => gradient.addColorStop(at, colour));
+      ctx[target + 'Style'] = gradient;
+    }
+
+    // The current path's fill or stroke (op) drawn with a paint in box units over a box
+    // [x, y, w, h], as spec/09 §3.3.3 maps it: a linear gradient exactly into user units, a
+    // radial fill under the box transform, a radial stroke the circle of the same area;
+    // nothing on a box without area. In a save/restore, so the gradient is never state.
+    export function drawVisualizePaint(ctx, op, paint, box) {
+      const [x, y, w, h] = box;
+      if (!(w > 0 && h > 0)) return;
+      const g = paint.geometry;
+      ctx.save();
+      if (paint.kind === 'linear') {
+        const dx = g[2] - g[0], dy = g[3] - g[1], dd = dx * dx + dy * dy;
+        const gx = dx / w / dd, gy = dy / h / dd, gg = gx * gx + gy * gy;
+        const x0 = x + g[0] * w, y0 = y + g[1] * h;
+        visualizeGradient(ctx, op, 'linear', [x0, y0, x0 + gx / gg, y0 + gy / gg], paint.stops);
+      } else if (op === 'fill') {
+        ctx.transform(w, 0, 0, h, x, y);
+        visualizeGradient(ctx, op, 'radial', g, paint.stops);
+      } else {
+        visualizeGradient(ctx, op, 'radial', [x + g[0] * w, y + g[1] * h, g[2] * Math.sqrt(w * h)], paint.stops);
+      }
+      ctx[op]();
+      ctx.restore();
+    }
+
     // One coordinate of a path record: 8 bytes (f64) or 4 (f32), little-endian.
     function readCoord(view, offset, width) {
       return width === 4 ? view.getFloat32(offset, true) : view.getFloat64(offset, true);
@@ -305,6 +340,11 @@ defmodule Visualize.Hooks.CanvasBinary do
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
       let offset = startOffset || 0;
       const maxOffset = endOffset === undefined ? bytes.length : endOffset;
+      // Version 2 (spec/09 §4.2): the stream's paints, the fill and stroke paint as state that
+      // save and restore scope, and the box the next draw's paint is built over.
+      const paints = [];
+      const scopes = [];
+      let fillPaint = null, strokePaint = null, box = null;
 
       while (offset < maxOffset) {
         const cmd = bytes[offset++];
@@ -373,10 +413,12 @@ defmodule Visualize.Hooks.CanvasBinary do
           case 0x10: { // style
             const flags = bytes[offset++];
             if (flags & 0x01) { // fill colour
+              fillPaint = null;
               const r = bytes[offset++], g = bytes[offset++], b = bytes[offset++], a = bytes[offset++];
               ctx.fillStyle = `rgba(${r},${g},${b},${a / 255})`;
             }
             if (flags & 0x02) { // stroke colour
+              strokePaint = null;
               const r = bytes[offset++], g = bytes[offset++], b = bytes[offset++], a = bytes[offset++];
               ctx.strokeStyle = `rgba(${r},${g},${b},${a / 255})`;
             }
@@ -393,6 +435,14 @@ defmodule Visualize.Hooks.CanvasBinary do
             if (flags & 0x08) { // global alpha
               ctx.globalAlpha = view.getFloat32(offset, true);
               offset += 4;
+            }
+            if (flags & 0x20) { // version 2: the fill is a paint
+              fillPaint = paints[view.getUint16(offset, true)];
+              offset += 2;
+            }
+            if (flags & 0x40) { // version 2: the stroke is a paint
+              strokePaint = paints[view.getUint16(offset, true)];
+              offset += 2;
             }
             break;
           }
@@ -425,18 +475,51 @@ defmodule Visualize.Hooks.CanvasBinary do
 
           case 0x30: // save
             ctx.save();
+            scopes.push([fillPaint, strokePaint]);
             break;
 
           case 0x31: // restore
             ctx.restore();
+            [fillPaint, strokePaint] = scopes.pop() || [null, null];
             break;
 
-          case 0x40: // fill
-            ctx.fill();
+          case 0x40: // fill, with the fill paint over the box when there is one
+            if (fillPaint) drawVisualizePaint(ctx, 'fill', fillPaint, box);
+            else ctx.fill();
             break;
 
           case 0x41: // stroke
-            ctx.stroke();
+            if (strokePaint) drawVisualizePaint(ctx, 'stroke', strokePaint, box);
+            else ctx.stroke();
+            break;
+
+          case 0x00: { // version (spec/09 §4.3.11)
+            const version = bytes[offset++];
+            if (version > 2) throw new Error('Unknown canvas binary stream version ' + version + ' at offset ' + (offset - 2));
+            break;
+          }
+
+          case 0x50: { // paint: a gradient in box units, defined for the stream (§4.3.12)
+            const index = view.getUint16(offset, true);
+            const kind = bytes[offset + 2];
+            offset += 3;
+            if (kind !== 0x01 && kind !== 0x02) throw new Error('Unknown canvas binary paint kind 0x' + kind.toString(16) + ' at offset ' + (offset - 1));
+            const geometry = [];
+            for (let i = 0; i < (kind === 0x01 ? 4 : 3); i++, offset += 4) geometry.push(view.getFloat32(offset, true));
+            const stops = [];
+            const count = bytes[offset++];
+            for (let i = 0; i < count; i++, offset += 8) {
+              const r = bytes[offset + 4], g = bytes[offset + 5], b = bytes[offset + 6], a = bytes[offset + 7];
+              stops.push([view.getFloat32(offset, true), `rgba(${r},${g},${b},${a / 255})`]);
+            }
+            paints[index] = {kind: kind === 0x01 ? 'linear' : 'radial', geometry, stops};
+            break;
+          }
+
+          case 0x51: // box: what the next draw's paint is built over (§4.3.13)
+            box = [view.getFloat32(offset, true), view.getFloat32(offset + 4, true),
+                   view.getFloat32(offset + 8, true), view.getFloat32(offset + 12, true)];
+            offset += 16;
             break;
 
           default:

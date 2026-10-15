@@ -2,13 +2,14 @@ defmodule Visualize.Chart.Frame.Defs do
   @moduledoc false
   # The frame's `defs` (spec/14 §2.7, §3.2): one element first in the frame's group
   # holding every gradient the design declares or a style writes inline, and one filter
-  # per effect the tree uses, and every `{:paint, name}` in the tree's styles resolved —
-  # `url(#id)` for the SVG output, the first stop's colour for a canvas. A gradient written
-  # inline is held under the name `Visualize.Chart.Style.Parts.paint_name/1` gives it, a
-  # string, beside the declared ones (D-172).
+  # per effect the tree uses, and every `{:paint, name}` in the tree's styles resolved to
+  # the paint itself, a `Visualize.IR.Paint` every backend draws — SVG as `url(#id)`, a
+  # canvas as a gradient over each element's box (#652, D-175). A gradient written inline
+  # is held under the name `Visualize.Chart.Style.Parts.paint_name/1` gives it, a string,
+  # beside the declared ones (D-172).
 
   alias Visualize.Chart.{Schema, Style, Var}
-  alias Visualize.IR.Element
+  alias Visualize.IR.{Element, Paint}
 
   @doc false
   # The `defs` element holding the design's gradients and the filters the tree's effects
@@ -19,7 +20,7 @@ defmodule Visualize.Chart.Frame.Defs do
 
     gradients =
       for {name, node} <- Enum.sort_by(defs, fn {name, _} -> name end) do
-        gradient(id(prefix, name), node, theme, mode)
+        node |> paint(id(prefix, name), theme, mode) |> Paint.definition()
       end
 
     case gradients ++ filters(tree) do
@@ -53,7 +54,7 @@ defmodule Visualize.Chart.Frame.Defs do
   end
 
   @doc false
-  # The tree with every `{:paint, name}` in a style resolved for the mode.
+  # The tree with every `{:paint, name}` in a style resolved to its paint for the mode.
   @spec resolve(Element.t(), map(), atom()) :: Element.t()
   def resolve(element, %{defs: defs}, _mode) when map_size(defs) == 0, do: element
 
@@ -61,7 +62,7 @@ defmodule Visualize.Chart.Frame.Defs do
     prefix = prefix(defs)
 
     walk(element, fn %Element{style: style} = el ->
-      %{el | style: Map.new(style, fn {k, v} -> {k, paint(v, defs, prefix, theme, mode)} end)}
+      %{el | style: Map.new(style, fn {k, v} -> {k, value(v, defs, prefix, theme, mode)} end)}
     end)
   end
 
@@ -69,25 +70,22 @@ defmodule Visualize.Chart.Frame.Defs do
     fun.(%{element | children: Enum.map(children, &walk(&1, fun))})
   end
 
-  defp paint({:paint, name}, defs, prefix, theme, mode) do
+  defp value({:paint, name}, defs, prefix, theme, mode) do
     case Map.fetch(defs, name) do
-      {:ok, node} when mode == :literal ->
-        [first | _] = stops(node)
-        Style.colour(colour(first), theme, :literal)
-
-      {:ok, _node} ->
-        "url(##{id(prefix, name)})"
+      {:ok, node} ->
+        paint(node, id(prefix, name), theme, mode)
 
       :error ->
         raise ArgumentError, "paint #{inspect(name)} is not declared under defs (spec/14 §2.7)"
     end
   end
 
-  defp paint(value, _defs, _prefix, _theme, _mode), do: value
+  defp value(value, _defs, _prefix, _theme, _mode), do: value
 
   @doc false
-  # A paint's colour as a canvas draws it — its first stop's, a literal (spec/14 §3.2) — for
-  # what reads the colour an element is filled with (§5.5); `nil` for an undeclared name.
+  # A paint's first stop's colour, a literal (spec/14 §5.5): the one colour that stands for
+  # a gradient where one colour must — what a label's ink is chosen against; `nil` for an
+  # undeclared name.
   @spec literal(atom() | String.t(), map()) :: String.t() | nil
   def literal(name, %{defs: defs, theme: theme}) do
     case Map.fetch(defs, name) do
@@ -100,41 +98,29 @@ defmodule Visualize.Chart.Frame.Defs do
     end
   end
 
-  # -- the gradient element ---------------------------------------------------------------
+  # -- the paint --------------------------------------------------------------------------
 
-  defp gradient(id, node, theme, mode) do
+  # The node as the paint every backend draws: its geometry in box units derived from the
+  # words a person wrote (spec/14 §2.7), its stops' colours resolved for the mode.
+  defp paint(node, id, theme, mode) do
     stops =
       for stop <- stops(node) do
-        Element.stop(
-          "#{round(Map.fetch!(stop, :at) * 100)}%",
-          Style.colour(colour(stop), theme, mode),
-          opacity: Map.get(stop, :opacity, Schema.default(:stop, :opacity))
-        )
+        {Map.fetch!(stop, :at) * 1.0, Style.colour(colour(stop), theme, mode),
+         Map.get(stop, :opacity, Schema.default(:stop, :opacity))}
       end
 
-    case Map.fetch!(node, :type) do
-      :linear ->
-        angle = Map.get(node, :angle, Schema.default(:paint, :angle)) * :math.pi() / 180
-        {sx, cx} = {:math.sin(angle) / 2, :math.cos(angle) / 2}
+    %Paint{id: id, type: Map.fetch!(node, :type), geometry: geometry(node), stops: stops}
+  end
 
-        id
-        |> Element.linear_gradient(
-          x1: tidy(0.5 - sx),
-          y1: tidy(0.5 + cx),
-          x2: tidy(0.5 + sx),
-          y2: tidy(0.5 - cx),
-          stops: stops
-        )
-        |> Element.set_attrs(%{gradient_units: "objectBoundingBox"})
+  defp geometry(%{type: :linear} = node) do
+    angle = Map.get(node, :angle, Schema.default(:paint, :angle)) * :math.pi() / 180
+    {sx, cx} = {:math.sin(angle) / 2, :math.cos(angle) / 2}
+    %{x1: tidy(0.5 - sx), y1: tidy(0.5 + cx), x2: tidy(0.5 + sx), y2: tidy(0.5 - cx)}
+  end
 
-      :radial ->
-        [cx, cy] = Map.get(node, :center, Schema.default(:paint, :center))
-        r = Map.get(node, :radius, Schema.default(:paint, :radius))
-
-        id
-        |> Element.radial_gradient(cx: cx, cy: cy, r: r, fx: cx, fy: cy, stops: stops)
-        |> Element.set_attrs(%{gradient_units: "objectBoundingBox"})
-    end
+  defp geometry(%{type: :radial} = node) do
+    [cx, cy] = Map.get(node, :center, Schema.default(:paint, :center))
+    %{cx: cx, cy: cy, r: Map.get(node, :radius, Schema.default(:paint, :radius))}
   end
 
   defp stops(node) do

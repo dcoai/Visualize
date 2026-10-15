@@ -32,4 +32,10 @@ defmodule Visualize.Backend.CanvasBinary.Opcodes do
   defmacro fill, do: 0x40
   @doc false
   defmacro stroke, do: 0x41
+  @doc false
+  defmacro version, do: 0x00
+  @doc false
+  defmacro paint, do: 0x50
+  @doc false
+  defmacro box, do: 0x51
 end

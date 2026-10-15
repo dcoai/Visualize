@@ -10,7 +10,10 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
     `{:path32, [{x, y}]}`, `{:path_cubic32, [command]}` for the f32 records (D-73), and
     `{:cubic_run, {x0, y0}, [{x1, y1, x2, y2, x, y}]}` for the cubic run (D-74)
   - `{:circles, [{cx, cy, r}]}`, `{:rects, [{x, y, w, h}]}`
-  - `{:style, %{fill:, stroke:, stroke_width:, opacity:}}` (`nil` for an absent field)
+  - `{:style, %{fill:, stroke:, stroke_width:, opacity:}}` (`nil` for an absent field), with `fill_paint:`
+    and `stroke_paint:` indexes under bits 5 and 6
+  - the version 2 records `{:version, v}`, `{:paint, index, %{type:, geometry: [f32], stops:
+    [{at, {r, g, b, a}}]}}` and `{:box, {x, y, w, h}}` (spec/09 §4.3.11–4.3.13)
   - `{:transform, :translate, {tx, ty}}`, `{:transform, :translate_scale, {tx, ty, sx, sy}}`,
     `{:transform, :matrix, {a, b, c, d, e, f}}`
   - `:save`, `:restore`, `:fill`, `:stroke`
@@ -111,6 +114,9 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
     style = %{fill: fill, stroke: stroke, stroke_width: width, opacity: opacity}
     # Bit 4: a width that does not scale (spec/09 §4.3.5).
     style = if (flags &&& 0x10) != 0, do: Map.put(style, :non_scaling, true), else: style
+    # Bits 5 and 6, version 2: the fill and the stroke as paint indexes (spec/09 §4.3.5).
+    {style, rest} = paint_index(flags, 0x20, :fill_paint, style, rest)
+    {style, rest} = paint_index(flags, 0x40, :stroke_paint, style, rest)
     decode(rest, [{:style, style} | acc])
   end
 
@@ -130,6 +136,27 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
          acc
        ),
        do: decode(rest, [{:transform, :matrix, {a, b, c, d, e, f}} | acc])
+
+  # Version 2 (spec/09 §4.3.11–4.3.13): the version, a paint, a box.
+  defp decode(<<0x00, version::8, rest::binary>>, acc) when version in [1, 2],
+    do: decode(rest, [{:version, version} | acc])
+
+  defp decode(<<0x00, version::8, _rest::binary>>, _acc),
+    do: raise(ArgumentError, "canvas binary stream version #{version} is not known")
+
+  defp decode(<<0x50, index::little-16, kind::8, rest::binary>>, acc) do
+    {type, arity} = Map.fetch!(%{0x01 => {:linear, 4}, 0x02 => {:radial, 3}}, kind)
+    {geometry, <<count::8, rest::binary>>} = floats(32, rest, arity)
+    {stops, rest} = take(rest, count, &stop/1)
+    decode(rest, [{:paint, index, %{type: type, geometry: geometry, stops: stops}} | acc])
+  end
+
+  defp decode(
+         <<0x51, x::little-float-32, y::little-float-32, w::little-float-32, h::little-float-32,
+           rest::binary>>,
+         acc
+       ),
+       do: decode(rest, [{:box, {x, y, w, h}} | acc])
 
   defp decode(<<0x30, rest::binary>>, acc), do: decode(rest, [:save | acc])
   defp decode(<<0x31, rest::binary>>, acc), do: decode(rest, [:restore | acc])
@@ -190,6 +217,20 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
            rest::binary>>
        ),
        do: {{x, y, w, h}, rest}
+
+  defp stop(<<at::little-float-32, r::8, g::8, b::8, a::8, rest::binary>>),
+    do: {{at, {r, g, b, a}}, rest}
+
+  defp paint_index(flags, bit, key, style, rest) do
+    import Bitwise
+
+    if (flags &&& bit) != 0 do
+      <<index::little-16, rest::binary>> = rest
+      {Map.put(style, key, index), rest}
+    else
+      {style, rest}
+    end
+  end
 
   defp rgba(<<r::8, g::8, b::8, a::8, rest::binary>>), do: {{r, g, b, a}, rest}
   defp f32(<<v::little-float-32, rest::binary>>), do: {v, rest}

@@ -36,7 +36,7 @@ defmodule Visualize.Backend.Canvas do
 
   alias Visualize.Backend.Canvas.Arc
   alias Visualize.Backend.CanvasBinary
-  alias Visualize.IR.{Element, Path, Transform}
+  alias Visualize.IR.{Element, Paint, Path, Transform}
 
   @type output_format :: :js | :json | :commands | :binary | :binary_base64
 
@@ -71,7 +71,7 @@ defmodule Visualize.Backend.Canvas do
       style_setup_commands(style) ++
         [{:beginPath, []}] ++
         commands ++
-        style_apply_commands(style)
+        style_apply_commands(style, Element.path(path, style))
 
     format_output(full_commands, format)
   end
@@ -206,13 +206,15 @@ defmodule Visualize.Backend.Canvas do
   end
 
   defp element_to_commands(
-         %Element{type: :path, path: path, style: style, transform: transform},
+         %Element{type: :path, path: path, style: style, transform: transform} = element,
          inherited
        ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     path_cmds = path_data(path)
 
-    setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(Map.merge(inherited, style))
+    setup ++
+      [{:beginPath, []}] ++
+      path_cmds ++ style_apply_commands(Map.merge(inherited, style), element)
   end
 
   defp element_to_commands(
@@ -221,7 +223,7 @@ defmodule Visualize.Backend.Canvas do
            attrs: attrs,
            style: style,
            transform: transform
-         },
+         } = element,
          inherited
        ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
@@ -229,7 +231,7 @@ defmodule Visualize.Backend.Canvas do
 
     setup ++
       [{:beginPath, []}, {:rect, [x, y, w, h]}] ++
-      style_apply_commands(Map.merge(inherited, style))
+      style_apply_commands(Map.merge(inherited, style), element)
   end
 
   defp element_to_commands(
@@ -238,7 +240,7 @@ defmodule Visualize.Backend.Canvas do
            attrs: attrs,
            style: style,
            transform: transform
-         },
+         } = element,
          inherited
        ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
@@ -246,7 +248,7 @@ defmodule Visualize.Backend.Canvas do
 
     setup ++
       [{:beginPath, []}, {:arc, [cx, cy, r, 0, 2 * :math.pi()]}] ++
-      style_apply_commands(Map.merge(inherited, style))
+      style_apply_commands(Map.merge(inherited, style), element)
   end
 
   defp element_to_commands(
@@ -255,7 +257,7 @@ defmodule Visualize.Backend.Canvas do
            attrs: attrs,
            style: style,
            transform: transform
-         },
+         } = element,
          inherited
        ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
@@ -263,7 +265,7 @@ defmodule Visualize.Backend.Canvas do
 
     setup ++
       [{:beginPath, []}, {:ellipse, [cx, cy, rx, ry, 0, 0, 2 * :math.pi()]}] ++
-      style_apply_commands(Map.merge(inherited, style))
+      style_apply_commands(Map.merge(inherited, style), element)
   end
 
   defp element_to_commands(
@@ -272,8 +274,8 @@ defmodule Visualize.Backend.Canvas do
            attrs: attrs,
            style: style,
            transform: transform
-         },
-         _inherited
+         } = element,
+         inherited
        ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{x1: x1, y1: y1, x2: x2, y2: y2} = attrs
@@ -282,9 +284,8 @@ defmodule Visualize.Backend.Canvas do
       [
         {:beginPath, []},
         {:moveTo, [x1, y1]},
-        {:lineTo, [x2, y2]},
-        {:stroke, []}
-      ]
+        {:lineTo, [x2, y2]}
+      ] ++ stroke_commands(Map.get(Map.merge(inherited, style), :stroke), element)
   end
 
   defp element_to_commands(
@@ -293,7 +294,7 @@ defmodule Visualize.Backend.Canvas do
            attrs: attrs,
            style: style,
            transform: transform
-         },
+         } = element,
          inherited
        ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
@@ -308,7 +309,9 @@ defmodule Visualize.Backend.Canvas do
           []
       end
 
-    setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(Map.merge(inherited, style))
+    setup ++
+      [{:beginPath, []}] ++
+      path_cmds ++ style_apply_commands(Map.merge(inherited, style), element)
   end
 
   defp element_to_commands(
@@ -317,7 +320,7 @@ defmodule Visualize.Backend.Canvas do
            attrs: attrs,
            style: style,
            transform: transform
-         },
+         } = element,
          inherited
        ) do
     setup = transform_commands(transform) ++ style_setup_commands(style)
@@ -334,7 +337,9 @@ defmodule Visualize.Backend.Canvas do
           []
       end
 
-    setup ++ [{:beginPath, []}] ++ path_cmds ++ style_apply_commands(Map.merge(inherited, style))
+    setup ++
+      [{:beginPath, []}] ++
+      path_cmds ++ style_apply_commands(Map.merge(inherited, style), element)
   end
 
   # A text of several lines (spec/14 §7.1) is one fillText per tspan, each `dy` em below
@@ -515,6 +520,7 @@ defmodule Visualize.Backend.Canvas do
         nil -> cmds
         :none -> cmds
         :current_color -> cmds ++ [{:set_fillStyle, ["currentColor"]}]
+        %Paint{} -> cmds
         color -> cmds ++ [{:set_fillStyle, [to_string(color)]}]
       end
 
@@ -523,6 +529,7 @@ defmodule Visualize.Backend.Canvas do
         nil -> cmds
         :none -> cmds
         :current_color -> cmds ++ [{:set_strokeStyle, ["currentColor"]}]
+        %Paint{} -> cmds
         color -> cmds ++ [{:set_strokeStyle, [to_string(color)]}]
       end
 
@@ -583,26 +590,50 @@ defmodule Visualize.Backend.Canvas do
     cmds
   end
 
-  defp style_apply_commands(style) when map_size(style) == 0, do: []
+  defp style_apply_commands(style, _element) when map_size(style) == 0, do: []
 
-  defp style_apply_commands(style) do
-    cmds = []
+  defp style_apply_commands(style, element),
+    do: fill_commands(style[:fill], element) ++ stroke_commands(style[:stroke], element)
 
-    cmds =
-      case style[:fill] do
-        nil -> cmds
-        :none -> cmds
-        _ -> cmds ++ [{:fill, []}]
-      end
+  defp fill_commands(fill, _element) when fill in [nil, :none], do: []
+  defp fill_commands(%Paint{} = paint, element), do: paint_commands(paint, :fill, element)
+  defp fill_commands(_colour, _element), do: [{:fill, []}]
 
-    cmds =
-      case style[:stroke] do
-        nil -> cmds
-        :none -> cmds
-        _ -> cmds ++ [{:stroke, []}]
-      end
+  defp stroke_commands(stroke, _element) when stroke in [nil, :none], do: []
+  defp stroke_commands(%Paint{} = paint, element), do: paint_commands(paint, :stroke, element)
+  defp stroke_commands(_colour, _element), do: [{:stroke, []}]
 
-    cmds
+  # A paint is drawn over the element's own box, inside a save/restore so the gradient is
+  # never state a sibling inherits; a box without area draws nothing, as SVG draws no
+  # bounding-box paint on one (spec/09 §3.3.3, D-175).
+  defp paint_commands(paint, op, element) do
+    case Paint.bounds(element) do
+      {_x, _y, w, h} = box when w > 0 and h > 0 ->
+        [{:save, []}] ++ gradient_commands(paint, op, box) ++ [{op, []}, {:restore, []}]
+
+      _no_area ->
+        []
+    end
+  end
+
+  # A linear gradient maps exactly into user units; a radial fill is drawn under the box
+  # transform, which only the paint sees, and a radial stroke — which that transform would
+  # widen unevenly — is the circle of the same area.
+  defp gradient_commands(%Paint{type: :linear} = paint, op, box) do
+    {x0, y0, x1, y1} = Paint.linear_line(paint, box)
+    [{:linearGradient, [Atom.to_string(op), x0, y0, x1, y1, Paint.canvas_stops(paint)]}]
+  end
+
+  defp gradient_commands(%Paint{type: :radial, geometry: g} = paint, :fill, {x, y, w, h}) do
+    [
+      {:transform, [w, 0, 0, h, x, y]},
+      {:radialGradient, ["fill", g.cx, g.cy, g.r, Paint.canvas_stops(paint)]}
+    ]
+  end
+
+  defp gradient_commands(%Paint{type: :radial, geometry: g} = paint, :stroke, {x, y, w, h}) do
+    r = g.r * :math.sqrt(w * h)
+    [{:radialGradient, ["stroke", x + g.cx * w, y + g.cy * h, r, Paint.canvas_stops(paint)]}]
   end
 
   defp text_style_commands(style) do
@@ -636,6 +667,7 @@ defmodule Visualize.Backend.Canvas do
         nil -> cmds
         :none -> cmds
         :current_color -> cmds ++ [{:set_fillStyle, ["currentColor"]}]
+        %Paint{} = paint -> cmds ++ [{:set_fillStyle, [Paint.first_colour(paint)]}]
         color -> cmds ++ [{:set_fillStyle, [to_string(color)]}]
       end
 
@@ -667,6 +699,19 @@ defmodule Visualize.Backend.Canvas do
       " / (function(t){return Math.sqrt(Math.abs(t.a*t.d-t.b*t.c));})(ctx.getTransform());"
     ]
   end
+
+  # A gradient as one self-contained statement (spec/09 §3.4): a `:js` script runs with no
+  # library beside it.
+  defp command_to_js_line({:linearGradient, [target, x0, y0, x1, y1, stops]}),
+    do: gradient_js(target, ["ctx.createLinearGradient(", js_args([x0, y0, x1, y1]), ")"], stops)
+
+  defp command_to_js_line({:radialGradient, [target, cx, cy, r, stops]}),
+    do:
+      gradient_js(
+        target,
+        ["ctx.createRadialGradient(", js_args([cx, cy, 0, cx, cy, r]), ")"],
+        stops
+      )
 
   defp command_to_js_line({:set_lineCap, [cap]}), do: ["ctx.lineCap = '", cap, "';"]
   defp command_to_js_line({:set_lineJoin, [join]}), do: ["ctx.lineJoin = '", join, "';"]
@@ -824,6 +869,17 @@ defmodule Visualize.Backend.Canvas do
     ]
   end
 
+  defp gradient_js(target, create, stops) do
+    adds =
+      Enum.map(stops, fn [at, colour] ->
+        ["g.addColorStop(", format_num(at), ", '", escape_js(colour), "');"]
+      end)
+
+    ["ctx.", target, "Style = (function(g){", adds, "return g;})(", create, ");"]
+  end
+
+  defp js_args(args), do: args |> Enum.map(&format_num/1) |> Enum.intersperse(", ")
+
   defp commands_to_json(commands) do
     encoded =
       commands
@@ -856,6 +912,10 @@ defmodule Visualize.Backend.Canvas do
   defp encode_json_value(v) when is_number(v), do: format_num(v)
   defp encode_json_value(v) when is_boolean(v), do: Atom.to_string(v)
   defp encode_json_value(v) when is_atom(v), do: ["\"", Atom.to_string(v), "\""]
+
+  defp encode_json_value(v) when is_list(v),
+    do: ["[", v |> Enum.map(&encode_json_value/1) |> Enum.intersperse(","), "]"]
+
   defp encode_json_value(v), do: ["\"", to_string(v), "\""]
 
   defp escape_json_string(str) do
