@@ -442,10 +442,11 @@ defmodule Visualize.Chart.Schema do
       spec(:text, :string, :style, default: theme.text),
       spec(:background, :string, :style, default: theme.background),
       spec(:surface, :string, :style, default: theme.surface),
-      # The meaning-bearing ramps and the two free roles (spec/08 §7.5, #533); an inline
-      # theme names only what it changes, the rest the default's.
+      # The meaning-bearing ramps (spec/08 §7.5, #533) and the theme's own color table, the
+      # roles' colors among it (§7.1, #663); an inline theme names only what it changes, the
+      # rest the default's.
       spec(:ramps, {:map, {:list, :string}}, :style, default: theme.ramps),
-      spec(:roles, {:map, :string}, :style, default: theme.roles),
+      spec(:colors, {:map, :colour}, :style, default: theme.colors),
       # The style palette, a palette name to its entry (spec/08 §7.7, spec/14 §2.5, #637):
       # an inline theme names only the entries it changes, the rest the default's.
       spec(:styles, {:map, style_entry()}, :style, default: theme.styles),

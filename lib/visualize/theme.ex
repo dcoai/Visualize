@@ -6,6 +6,10 @@ defmodule Visualize.Theme do
   colours, `:axis`, `:grid`, `:text`, `:background` and `:surface` — the plane the data is laid
   on, between the background and the grid — the five **roles** `:good`, `:warning`, `:bad`,
   `:info` and `:neutral`, and `:font_family`, `:font_size`, `:label_size` and `:title_size`.
+  Its colors are one **color table** (spec/08 §7.1, D-173): the theme's own `colors` — its
+  hues, such as `:red`, and names by use, the roles among them — over the default theme's
+  and the CSS named colors, with the furniture and the series as names too, so
+  `Visualize.Color.color(:red)` is the theme's red.
   Nothing in the library carries a colour literal; every axis, mark and component reads its
   values through `resolve/3`, in the mode its render target needs:
 
@@ -24,8 +28,8 @@ defmodule Visualize.Theme do
   caution → bad), `:thermal` (cold → neutral → hot), `:diverging` (below → at → above a
   midpoint) and `:sequential` (less → more) — each a list of anchor colours interpolated
   in CIE Lab. `{:ramp, name, t}` is the colour at `t` in `0..1`, and the status roles are
-  fixed points on the status ramp: `:good` is `{:ramp, :status, 0}`, `:warning` is `0.5`
-  and `:bad` is `1`. Every ramp and role is checked against its contract — hue order,
+  by default fixed points on the status ramp: the table holds `:good` as
+  `{:ramp, :status, 0}`, `:warning` as `0.5` and `:bad` as `1`. Every ramp and role is checked against its contract — hue order,
   lightness direction, a neutral midpoint — when a theme is built by `new/1` or `merge/2`,
   and a theme that breaks one raises `ArgumentError` naming the ramp and the term broken.
 
@@ -79,8 +83,32 @@ defmodule Visualize.Theme do
   # Blue → orange → red: the status order survives the commonest colour-vision deficiencies.
   @safe_status ~w(#5996d6 #cd6012 #b92931)
 
-  @light_roles %{info: "#3b6fa8", neutral: "#6f7480"}
-  @dark_roles %{info: "#7fb3e6", neutral: "#b7bcc6"}
+  # The theme's own part of its color table (spec/08 §7.1, #663): its status hues, the hues
+  # of `:info` and `:neutral`, and the five roles by use — the status three as their
+  # positions on the status ramp, so a role and its position never disagree (D-135).
+  @by_use %{good: {:ramp, :status, 0}, warning: {:ramp, :status, 0.5}, bad: {:ramp, :status, 1}}
+  @light_colors Map.merge(@by_use, %{
+                  red: "#c23238",
+                  amber: "#bd7407",
+                  green: "#4ca34b",
+                  blue: "#3b6fa8",
+                  gray: "#6f7480",
+                  info: "#3b6fa8",
+                  neutral: "#6f7480"
+                })
+  @dark_colors Map.merge(@by_use, %{
+                 red: "#ff8f8a",
+                 amber: "#db8e1c",
+                 green: "#4f924c",
+                 blue: "#7fb3e6",
+                 gray: "#b7bcc6",
+                 info: "#7fb3e6",
+                 neutral: "#b7bcc6"
+               })
+  # The CSS named colors, the table's base (spec/08 §1.2, §7.1).
+  @css_names Enum.map(Color.named_colors(), &String.to_atom/1)
+  # A name a theme adds is written into CSS as a custom property: plain words only.
+  @css_word ~r/^[a-z][a-z0-9_]*$/
 
   defstruct name: :default,
             series: @light_series,
@@ -90,7 +118,7 @@ defmodule Visualize.Theme do
             background: "#ffffff",
             surface: "#eef2f6",
             ramps: @light_ramps,
-            roles: @light_roles,
+            colors: @light_colors,
             styles: Palette.builtin(),
             font_family: "sans-serif",
             font_size: 10,
@@ -124,7 +152,7 @@ defmodule Visualize.Theme do
           background: String.t(),
           surface: String.t(),
           ramps: %{optional(ramp_name()) => [String.t()]},
-          roles: %{optional(:info | :neutral) => String.t()},
+          colors: %{optional(atom()) => String.t() | Color.value()},
           styles: %{optional(atom()) => map()},
           font_family: String.t(),
           font_size: number(),
@@ -133,7 +161,7 @@ defmodule Visualize.Theme do
         }
 
   @colour_slots [:axis, :grid, :text, :background, :surface]
-  # The status roles stand on the status ramp; the rest are the theme's `roles`.
+  # Where the status roles stand on the status ramp, by default (spec/08 §7.5).
   @status_roles [good: 0, warning: 0.5, bad: 1]
   @role_slots [:good, :warning, :bad, :info, :neutral]
   # WCAG AA for normal text.
@@ -158,7 +186,7 @@ defmodule Visualize.Theme do
       background: "#1b1e24",
       surface: "#23272f",
       ramps: @dark_ramps,
-      roles: @dark_roles
+      colors: @dark_colors
     }
   end
 
@@ -361,7 +389,7 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  `default/0` with the given fields replaced; `ramps`, `roles` and `styles` are merged key by
+  `default/0` with the given fields replaced; `ramps`, `colors` and `styles` are merged key by
   key.
 
   An unknown field raises `KeyError`; an empty `series`, or a ramp, role or palette style
@@ -371,7 +399,7 @@ defmodule Visualize.Theme do
   def new(fields), do: merge(default(), fields)
 
   @doc """
-  The theme with the given fields replaced, `ramps`, `roles` and `styles` merged key by key
+  The theme with the given fields replaced, `ramps`, `colors` and `styles` merged key by key
   over the theme's own; the checks of `new/1` apply.
 
       iex> theme = Visualize.Theme.new(name: :house, styles: %{muted: %{opacity: 0.4}})
@@ -401,20 +429,22 @@ defmodule Visualize.Theme do
   end
 
   @doc false
-  # The theme with the fields replaced, `ramps`, `roles` and `styles` merged over the theme's
+  # The theme with the fields replaced, `ramps`, `colors` and `styles` merged over the theme's
   # own, and nothing checked: `merge/2`'s first half, and what the validator measures.
   @spec build(t(), keyword() | map()) :: t()
   def build(%__MODULE__{} = theme, fields) do
     fields = Map.new(fields)
     {ramps, fields} = Map.pop(fields, :ramps, %{})
+    # The role colors of before #663 are names of the color table (spec/08 §7.1, D-135).
     {roles, fields} = Map.pop(fields, :roles, %{})
+    {colors, fields} = Map.pop(fields, :colors, %{})
     {styles, fields} = Map.pop(fields, :styles, %{})
     theme = struct!(theme, fields)
 
     %{
       theme
       | ramps: merged(theme.ramps, ramps, :ramps),
-        roles: merged(theme.roles, roles, :roles),
+        colors: theme.colors |> merged(roles, :roles) |> merged(colors, :colors),
         styles: theme.styles |> merged(styles, :styles) |> normalized()
     }
   end
@@ -432,10 +462,11 @@ defmodule Visualize.Theme do
     do: Map.new(styles, fn {name, entry} -> {name, Style.normalize(entry)} end)
 
   @doc """
-  `:ok`, or `{:error, subject, message}` for the first ramp, role or palette style of the
-  theme that breaks its contract (spec/08 §7.5, §7.7) — `subject` is `{:ramp, name}`,
-  `{:role, name}` or `{:style, name}` and `message` names the term broken with the values
-  measured. Ramps and roles are read first, then the palette.
+  `:ok`, or `{:error, subject, message}` for the first ramp, color or palette style of the
+  theme that breaks its contract (spec/08 §7.1, §7.5, §7.7) — `subject` is `{:ramp, name}`,
+  `{:color, name}` or `{:style, name}` and `message` names the term broken with the values
+  measured. Ramps are read first, then the color table's entries and the `:info` and
+  `:neutral` contracts, then the palette.
 
   The check `new/1` and `merge/2` raise on, for a caller that reports instead.
 
@@ -447,39 +478,52 @@ defmodule Visualize.Theme do
       true
 
   """
-  @spec check(t()) :: :ok | {:error, {:ramp | :role | :style, atom()}, String.t()}
-  def check(%__MODULE__{ramps: ramps, roles: roles} = theme)
-      when is_map(ramps) and is_map(roles) do
-    with :ok <- Contract.check(ramps, roles), do: Palette.check(own_styles(theme))
+  @spec check(t()) :: :ok | {:error, {:ramp | :color | :style, atom()}, String.t()}
+  def check(%__MODULE__{ramps: ramps} = theme) when is_map(ramps) do
+    case violations(theme) do
+      [] -> :ok
+      [{subject, message} | _] -> {:error, subject, message}
+    end
   end
 
   @doc """
-  Every ramp, role and palette style of the theme that breaks its contract (spec/08 §7.5,
+  Every ramp, color and palette style of the theme that breaks its contract (spec/08 §7.5,
   §7.7), as
   `{subject, message}` in the order `check/1` reads them — the contract run on each alone,
   so a theme editor names every fault where it is and not only the first (spec/14 §20.4).
 
-      iex> theme = %{Visualize.Theme.default() | ramps: %{status: ~w(#c23238 #bd7407 #4ca34b)}, roles: %{neutral: "#ff0000"}}
+      iex> theme = Visualize.Theme.build(Visualize.Theme.default(), ramps: %{status: ~w(#c23238 #bd7407 #4ca34b)}, colors: %{neutral: "#ff0000"})
       iex> theme |> Visualize.Theme.violations() |> Enum.map(&elem(&1, 0))
-      [{:ramp, :status}, {:role, :neutral}]
+      [{:ramp, :status}, {:color, :neutral}]
       iex> Visualize.Theme.violations(Visualize.Theme.dark())
       []
 
   """
-  @spec violations(t()) :: [{{:ramp | :role | :style, atom()}, String.t()}]
-  def violations(%__MODULE__{ramps: ramps, roles: roles} = theme)
-      when is_map(ramps) and is_map(roles) do
+  @spec violations(t()) :: [{{:ramp | :color | :style, atom()}, String.t()}]
+  def violations(%__MODULE__{ramps: ramps} = theme) when is_map(ramps) do
+    colors = own_colors(theme)
+
     ramp_faults =
       for name <- ordered(ramps, Contract.ramps()),
           {:error, subject, message} <- [Contract.check(Map.take(ramps, [name]), %{})],
           do: {subject, message}
 
+    # Each entry of the table is a color; then `:info` and `:neutral` hold their contracts.
+    entry_faults =
+      for name <- colors |> Map.keys() |> Enum.sort(),
+          {:error, message} <- [entry(theme, name)],
+          do: {{:color, name}, message}
+
+    broken = Enum.map(entry_faults, fn {{:color, name}, _} -> name end)
+
     role_faults =
-      for name <- ordered(roles, Contract.roles()),
-          {:error, subject, message} <- [Contract.check(%{}, Map.take(roles, [name]))],
+      for name <- Contract.roles(),
+          Map.has_key?(colors, name) and name not in broken,
+          roles = %{name => table_literal(theme, name, [])},
+          {:error, subject, message} <- [Contract.check(%{}, roles)],
           do: {subject, message}
 
-    ramp_faults ++ role_faults ++ Palette.violations(own_styles(theme))
+    ramp_faults ++ entry_faults ++ role_faults ++ Palette.violations(own_styles(theme))
   end
 
   # The names of a map in the contract's order, then any it does not know, sorted.
@@ -558,6 +602,23 @@ defmodule Visualize.Theme do
     Enum.map(1..length(series)//1, &series_atom/1) ++ @colour_slots ++ @role_slots
   end
 
+  @doc """
+  Every name of the theme's color table (spec/08 §7.1): its colour slots, its own and the
+  default theme's `colors`, and the CSS named colors, sorted.
+
+      iex> names = Visualize.Theme.color_names(Visualize.Theme.default())
+      iex> Enum.all?([:red, :amber, :bad, :axis, :series_3, :steelblue], &(&1 in names))
+      true
+
+  """
+  @spec color_names(t()) :: [atom(), ...]
+  def color_names(%__MODULE__{} = theme) do
+    (colour_slots(theme) ++
+       Map.keys(own_colors(theme)) ++ Map.keys(@light_colors) ++ @css_names)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   @doc "The `:series_k` slot the positive index `i` cycles to over the theme's series."
   @spec series_slot(t(), pos_integer()) :: atom()
   def series_slot(%__MODULE__{series: series}, i) when is_integer(i) and i >= 1 do
@@ -582,8 +643,11 @@ defmodule Visualize.Theme do
     resolve(theme, series_slot(theme, i), mode)
   end
 
+  # A status role's position resolves as the role while the table holds the role there.
   def resolve(%__MODULE__{} = theme, {:ramp, :status, t}, mode) when is_number(t) do
-    case Enum.find(@status_roles, fn {_role, at} -> at == t end) do
+    case Enum.find(@status_roles, fn {role, at} ->
+           at == t and lookup(theme, role) == {:ramp, :status, at}
+         end) do
       {role, _at} -> resolve(theme, role, mode)
       nil -> ramp(theme, :status, t)
     end
@@ -598,17 +662,34 @@ defmodule Visualize.Theme do
 
   def resolve(%__MODULE__{} = theme, slot, :css) when is_atom(slot) do
     {kind, value} = value(theme, slot)
-    "var(#{css_name(slot)}, #{css_value(kind, value)})"
+    "var(#{property(slot)}, #{css_value(kind, value)})"
   end
 
-  @doc "The custom-property name of a slot atom: `--vis-` and the slot with `_` as `-`."
+  @doc """
+  The custom-property name of a slot atom or a color table name: `--vis-` and the name with
+  `_` as `-` (spec/08 §7.3). A slot, a CSS named color or a name of the default theme's
+  table; any other atom raises `ArgumentError`.
+  """
   @spec css_name(atom()) :: String.t()
   def css_name(slot) when slot in @fixed_slots, do: "--vis-" <> hyphenated(slot)
 
   def css_name(slot) when is_atom(slot) do
+    known? = slot in @css_names or Map.has_key?(@light_colors, slot)
+
     case series_index(slot) do
       k when is_integer(k) and k >= 1 -> "--vis-" <> hyphenated(slot)
+      _ when known? -> "--vis-" <> hyphenated(slot)
       _ -> raise ArgumentError, "unknown theme slot #{inspect(slot)}; see Visualize.Theme.slots/1"
+    end
+  end
+
+  # The property of a name `value/2` found: a theme's own name is written as one when it is
+  # plain words, so a stylesheet can never be broken out of through a name (#660).
+  defp property(slot) do
+    cond do
+      slot in @fixed_slots or series_index(slot) != nil -> css_name(slot)
+      Regex.match?(@css_word, Atom.to_string(slot)) -> "--vis-" <> hyphenated(slot)
+      true -> raise ArgumentError, "a color name is lower-case words, got #{inspect(slot)}"
     end
   end
 
@@ -690,9 +771,10 @@ defmodule Visualize.Theme do
   @spec stylesheet(t()) :: String.t()
   def stylesheet(%__MODULE__{name: name} = theme) do
     lines =
-      for slot <- slots(theme) do
+      for slot <-
+            slots(theme) ++ ((own_colors(theme) |> Map.keys() |> Enum.sort()) -- slots(theme)) do
         {kind, value} = value(theme, slot)
-        "  #{css_name(slot)}: #{css_value(kind, value)};"
+        "  #{property(slot)}: #{css_value(kind, value)};"
       end
 
     ".vis-theme-#{name} {\n" <> Enum.join(lines, "\n") <> "\n}\n"
@@ -702,14 +784,7 @@ defmodule Visualize.Theme do
   defp value(theme, :font_family), do: {:font, theme.font_family}
   defp value(theme, slot) when slot in @size_slots, do: {:size, Map.fetch!(theme, slot)}
 
-  defp value(theme, slot) when slot in [:good, :warning, :bad],
-    do: {:colour, ramp(theme, :status, Keyword.fetch!(@status_roles, slot))}
-
-  # A theme that lacks a role takes the default theme's, never a series colour (§7.5).
-  defp value(theme, slot) when slot in [:info, :neutral],
-    do: {:colour, Map.get(theme.roles || %{}, slot) || Map.fetch!(@light_roles, slot)}
-
-  defp value(%{series: series}, slot) do
+  defp value(%{series: series} = theme, slot) do
     n = length(series)
 
     case series_index(slot) do
@@ -717,9 +792,89 @@ defmodule Visualize.Theme do
         {:colour, Enum.at(series, k - 1)}
 
       _ ->
-        raise ArgumentError, "unknown theme slot #{inspect(slot)}; see Visualize.Theme.slots/1"
+        if lookup(theme, slot) == nil,
+          do:
+            raise(
+              ArgumentError,
+              "unknown theme slot #{inspect(slot)}; see Visualize.Theme.slots/1 and color_names/1"
+            ),
+          else: {:colour, table_literal(theme, slot, [])}
     end
   end
+
+  # -- the color table (spec/08 §7.1, #663) -------------------------------------------
+
+  defp own_colors(%__MODULE__{colors: colors}) when is_map(colors), do: colors
+  defp own_colors(%__MODULE__{}), do: %{}
+
+  # A name's entry: the theme's own, the default theme's — a theme that lacks a role takes
+  # the default's, never a series colour (§7.5) — or the CSS named color's hex; `nil` when
+  # the table has no such name.
+  defp lookup(theme, name) do
+    Map.get(own_colors(theme), name) || Map.get(@light_colors, name) ||
+      if(name in @css_names, do: Color.named(Atom.to_string(name)))
+  end
+
+  # A name's literal. `seen` carries the names on the way, so an entry that reaches itself
+  # through another name raises rather than loops; `violations/1` reports it first.
+  defp table_literal(theme, name, seen) do
+    if name in seen do
+      raise ArgumentError, "color #{inspect(name)} reaches itself through the color table"
+    end
+
+    case lookup(theme, name) do
+      literal when is_binary(literal) -> literal
+      {:ramp, ramp, t} -> ramp(theme, ramp, t)
+      {:color, other} -> table_literal(theme, other, [name | seen])
+      value -> Color.resolve(value, theme, :literal)
+    end
+  end
+
+  # An entry of the theme's own `colors` is a colour: a string `Visualize.Color.parse/1`
+  # reads, or a color value whose names are the table's and do not reach the entry again.
+  defp entry(theme, name) do
+    value = Map.fetch!(own_colors(theme), name)
+
+    cond do
+      not Regex.match?(@css_word, Atom.to_string(name)) ->
+        {:error, "a color name is lower-case letters, digits and _, starting with a letter"}
+
+      is_binary(value) ->
+        if Color.parse(value), do: :ok, else: {:error, "#{inspect(value)} is not a colour"}
+
+      Color.value?(value) ->
+        names_resolve(theme, value, [name])
+
+      true ->
+        {:error,
+         "#{inspect(value)} is not a colour: a color string or a color value " <>
+           "(spec/08 §1.9)"}
+    end
+  end
+
+  defp names_resolve(theme, {:color, other}, seen) do
+    cond do
+      other in seen -> {:error, "reaches itself through #{inspect(other)}"}
+      lookup(theme, other) == nil -> {:error, "names #{inspect(other)}, which is not a color"}
+      true -> names_resolve(theme, lookup(theme, other), [other | seen])
+    end
+  end
+
+  defp names_resolve(_theme, {:ramp, name, _t}, _seen) do
+    if name in Contract.ramps(),
+      do: :ok,
+      else: {:error, "names the ramp #{inspect(name)}, which is not a ramp"}
+  end
+
+  defp names_resolve(theme, {:blend, list}, seen),
+    do: Enum.find_value(list, :ok, &error_or_nil(names_resolve(theme, &1, seen)))
+
+  defp names_resolve(theme, {_op, c, _t}, seen), do: names_resolve(theme, c, seen)
+  defp names_resolve(theme, {:contrast, c}, seen), do: names_resolve(theme, c, seen)
+  defp names_resolve(_theme, _value, _seen), do: :ok
+
+  defp error_or_nil(:ok), do: nil
+  defp error_or_nil(error), do: error
 
   defp css_value(:size, n), do: "#{n}px"
   defp css_value(_kind, value) when is_binary(value), do: css_escape(value)

@@ -24,7 +24,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @chrome [:background, :surface, :text, :axis, :grid]
     @sizes [:font_size, :label_size, :title_size]
-    @fields [:name, :series | @chrome] ++ [:ramps, :roles, :font_family | @sizes]
+    @fields [:name, :series | @chrome] ++ [:ramps, :colors, :font_family | @sizes]
 
     attr(:id, :string, required: true, doc: "the panel's id")
 
@@ -225,11 +225,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # A status role is set by the colour at its fixed position: the anchor that stands there
-    # (spec/14 §20.4); `:warning` has none on an even ramp. `:info` and `:neutral` are colours.
+    # (spec/14 §20.4); `:warning` has none on an even ramp. `:info` and `:neutral` are colours
+    # of the theme's color table (spec/08 §7.1, #663).
     def change(node, "roles." <> role, value) when role in ["info", "neutral"] do
       with {:ok, colour} <- colour(value) do
-        roles = node |> Map.get(:roles, %{}) |> Map.put(String.to_existing_atom(role), colour)
-        {:ok, Map.put(node, :roles, roles)}
+        colors = node |> Map.get(:colors, %{}) |> Map.put(String.to_existing_atom(role), colour)
+        {:ok, Map.put(node, :colors, colors)}
       end
     end
 

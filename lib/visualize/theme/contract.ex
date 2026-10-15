@@ -36,10 +36,9 @@ defmodule Visualize.Theme.Contract do
   # `:ok`, or `{:error, subject, message}` for the first ramp or role that breaks its
   # contract. A hue contract is read at the positions a design reads — 0, 0.5 and 1 —
   # through the theme's own Lab interpolation, not only at the anchors.
-  @spec check(map(), map()) :: :ok | {:error, {:ramp | :role, atom()}, String.t()}
+  @spec check(map(), map()) :: :ok | {:error, {:ramp | :color, atom()}, String.t()}
   def check(ramps, roles) when is_map(ramps) and is_map(roles) do
     with :ok <- names(ramps, @ramps, :ramp),
-         :ok <- names(roles, @roles, :role),
          :ok <- each(ramps, &ramp/2) do
       each(roles, &role/2)
     end
@@ -50,19 +49,10 @@ defmodule Visualize.Theme.Contract do
       nil ->
         :ok
 
-      name when kind == :role and name in [:good, :warning, :bad] ->
-        {:error, {:role, name},
-         "is the status ramp's #{status_position(name)}, not a colour of its own; set " <>
-           "ramps.status to change it"}
-
       name ->
         {:error, {kind, name}, "is not a #{kind} of a theme; the #{kind}s are #{list(allowed)}"}
     end
   end
-
-  defp status_position(:good), do: "position 0"
-  defp status_position(:warning), do: "position 0.5"
-  defp status_position(:bad), do: "position 1"
 
   # Ramps and roles in the order of the spec, so the first fault reported is stable.
   defp each(map, fun) do
@@ -296,18 +286,18 @@ defmodule Visualize.Theme.Contract do
   defp role(name, colour) do
     case is_binary(colour) && Color.parse(colour) do
       %Color{} = parsed -> role_contract(name, Color.to_hcl(parsed))
-      _ -> {:error, {:role, name}, "#{inspect(colour)} is not a colour"}
+      _ -> {:error, {:color, name}, "#{inspect(colour)} is not a colour"}
     end
   end
 
   defp role_contract(:info, lch) do
     cond do
       lch.c < @chromatic ->
-        {:error, {:role, :info},
+        {:error, {:color, :info},
          "must be a blue, at least #{@chromatic} C*, but its chroma is #{round1(lch.c)} C*"}
 
       hue_region(lch.h) != :blue ->
-        {:error, {:role, :info},
+        {:error, {:color, :info},
          "must be a blue, but its hue is #{round1(lch.h)}°, in #{hue_region(lch.h)} (the regions: #{bands()})"}
 
       true ->
@@ -319,7 +309,7 @@ defmodule Visualize.Theme.Contract do
     if lch.c <= @neutral,
       do: :ok,
       else:
-        {:error, {:role, :neutral},
+        {:error, {:color, :neutral},
          "must be neutral, at most #{@neutral} C*, but its chroma is #{round1(lch.c)} C*"}
   end
 

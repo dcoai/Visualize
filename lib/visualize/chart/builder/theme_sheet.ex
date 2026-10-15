@@ -194,11 +194,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {name, if(drawable_ramp?(anchors), do: anchors, else: Map.fetch!(default.ramps, name))}
         end
 
-      roles =
-        for name <- [:info, :neutral], into: %{} do
-          colour = Map.get(theme.roles || %{}, name)
-          {name, if(colour?(colour), do: colour, else: Map.fetch!(default.roles, name))}
-        end
+      # The color table's own entries that read, over the default's (spec/08 §7.1, #663).
+      colors =
+        Map.merge(
+          default.colors,
+          Map.filter(theme.colors || %{}, fn {_name, value} ->
+            colour?(value) or (not is_binary(value) and Visualize.Color.value?(value))
+          end)
+        )
 
       chrome =
         for slot <- [:background, :surface, :text, :axis, :grid], into: %{} do
@@ -214,7 +217,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       theme
       |> Map.merge(chrome)
-      |> Map.merge(%{ramps: ramps, roles: roles, series: series})
+      |> Map.merge(%{ramps: ramps, colors: colors, series: series})
     end
 
     defp seen(colour, :none), do: colour

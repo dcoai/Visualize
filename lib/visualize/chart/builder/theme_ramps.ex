@@ -203,7 +203,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             where: if(role == :info, do: "a blue", else: "no hue"),
             colour: Theme.resolve(drawn, role, :literal),
             note: nil,
-            fault: Map.get(faults, {:role, role})
+            fault: Map.get(faults, {:color, role})
           }
         end
 
